@@ -1118,13 +1118,19 @@ class TelegramPoller:
                 return
 
             if selected_style == "skip":
-                # Bỏ qua không viết AI Caption
+                # Bỏ qua không viết AI Caption, giữ nguyên caption gốc (bỏ tag [AI_GENERATE])
                 job.status = "DRAFT"
-                job.caption = "(Skip AI) Caption trống."
+                if job.caption and "[AI_GENERATE]" in job.caption:
+                    job.caption = job.caption.replace("[AI_GENERATE]", "").strip()
                 db.commit()
+                
                 self.client.answer_callback_query(callback_id, "⏭️ Đã bỏ qua AI Caption.")
                 self.client.edit_message_reply_markup(message_id, reply_markup=None)
-                self.client.send_message(f"⏭️ <b>Bỏ qua AI Caption cho Job #{job_id}</b> (bởi {user_name})")
+                self.client.send_message(f"⏭️ <b>Bỏ qua AI Caption cho Job #{job_id}</b> (bởi {user_name}). Đang gửi bản nháp gốc để duyệt...")
+                
+                # Gọi ngay Notifier để gửi nút Approve/Cancel (không chạy qua AI nữa)
+                from app.services.notifier import NotifierService
+                NotifierService.notify_draft_ready(job)
                 return
 
             job.ai_style = selected_style
