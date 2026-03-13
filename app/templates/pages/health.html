@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Health</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8" hx-get="/health/ui" hx-trigger="every 15s"
+        hx-swap="outerHTML">
+        <div class="mb-8 flex items-center justify-between">
+            <a href="/"
+                class="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800 transition-colors">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                Dashboard
+            </a>
+        </div>
+        <div class="mb-8 flex items-center justify-between">
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <svg class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                System Health
+            </h1>
+            <div class="text-sm text-gray-500 flex items-center gap-2">
+                <span class="relative flex h-3 w-3">
+                    {% if health.status == 'ok' %}
+                    <span
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    {% else %}
+                    <span
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    {% endif %}
+                </span>
+                <span>Auto-updating</span>
+            </div>
+        </div>
+
+        {% if health.status != 'ok' %}
+        <div class="rounded-md bg-red-50 p-4 mb-6 shadow-sm border border-red-100">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                        fill="currentColor" aria-hidden="true">
+                        <path fill-rule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-red-800">System Degraded</h3>
+                    <div class="mt-2 text-sm text-red-700">
+                        <ul role="list" class="list-disc space-y-1 pl-5">
+                            {% for reason in health.reasons %}
+                            <li>{{ reason }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <!-- Worker Card -->
+            <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-indigo-50 rounded-md p-3">
+                            <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Worker Status</dt>
+                                <dd>
+                                    <div class="text-lg font-medium text-gray-900 flex items-center gap-2 mt-1">
+                                        {{ health.worker.status }}
+                                        {% if health.worker.status == 'RUNNING' and health.worker.heartbeat_age_seconds
+                                        < 60 %} <span
+                                            class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                                            Alive</span>
+                                            {% else %}
+                                            <span
+                                                class="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">Stale</span>
+                                            {% endif %}
+                                    </div>
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-5 py-3 text-xs text-gray-500 flex justify-between border-t border-gray-100">
+                    <span>Heartbeat: {{ health.worker.heartbeat_age_seconds }}s ago</span>
+                    <span class="text-indigo-600 font-medium">⏱ Uptime: {{ health.worker.uptime_hours }}h</span>
+                    {% if health.worker.safe_mode %}
+                    <span class="text-yellow-600 font-semibold flex items-center gap-1"><svg class="w-3 h-3" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
+                            </path>
+                        </svg> Safe Mode</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Jobs Card -->
+            <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-blue-50 rounded-md p-3">
+                            <svg class="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Job Queue State</dt>
+                                <dd>
+                                    <div class="text-lg font-medium text-gray-900 mt-1">
+                                        {{ health.jobs.running }} Running
+                                        {% if health.jobs.orphans > 0 %}
+                                        <span
+                                            class="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10 ml-2">{{
+                                            health.jobs.orphans }} Orphans</span>
+                                        {% endif %}
+                                    </div>
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-5 py-3 text-xs text-gray-500 border-t border-gray-100">
+                    Failed (last 24h): <strong
+                        class="{% if health.jobs.failed_24h > 10 %}text-red-600{% else %}text-gray-700{% endif %}">{{
+                        health.jobs.failed_24h }}</strong>
+                </div>
+            </div>
+
+            <!-- Accounts Card -->
+            <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+                <div class="p-5">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 bg-purple-50 rounded-md p-3">
+                            <svg class="h-6 w-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        </div>
+                        <div class="ml-5 w-0 flex-1">
+                            <dl>
+                                <dt class="text-sm font-medium text-gray-500 truncate">Account Breakers</dt>
+                                <dd>
+                                    <div class="text-lg font-medium text-gray-900 mt-1">
+                                        {{ health.accounts.disabled_or_invalid }} Blocked
+                                    </div>
+                                </dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-5 py-3 text-xs text-gray-500 flex justify-between border-t border-gray-100">
+                    <span>Accounts requiring attention</span>
+                    <a href="/" class="text-indigo-600 hover:text-indigo-900">Manage</a>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Metrics Overview Card -->
+        <div class="mt-6 bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+            <div class="px-5 py-4 border-b border-gray-200">
+                <h3 class="text-sm leading-6 font-medium text-gray-900">📊 Metrics Overview</h3>
+            </div>
+            <div class="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-6">
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">Total Views (24h)</dt>
+                    <dd class="mt-1 text-lg font-semibold text-emerald-600">{{ "{:,}".format(health.metrics.total_views)
+                        }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">Total Clicks</dt>
+                    <dd class="mt-1 text-lg font-semibold text-amber-600">{{ "{:,}".format(health.metrics.total_clicks)
+                        }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">Avg Views/Post</dt>
+                    <dd class="mt-1 text-lg font-semibold text-blue-600">{{ health.metrics.avg_views_per_post }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">Posts Checked</dt>
+                    <dd class="mt-1 text-lg font-semibold text-gray-700">{{ health.metrics.posts_checked }}</dd>
+                </div>
+            </div>
+        </div>
+
+        <!-- Per-Account 7-Day Rolling Stats -->
+        <div class="mt-6 bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+            <div class="px-5 py-4 border-b border-gray-200">
+                <h3 class="text-sm leading-6 font-medium text-gray-900">👤 Account Performance (7 ngày)</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Done</th>
+                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Failed</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Success Rate
+                            </th>
+                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Breaker</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for acc in health.accounts.details %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ acc.name }}</td>
+                            <td class="px-4 py-2 text-sm text-gray-500">{{ acc.platform }}</td>
+                            <td class="px-4 py-2">
+                                {% if acc.is_active and acc.login_status == 'ACTIVE' %}
+                                <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">ACTIVE</span>
+                                {% elif not acc.is_active %}
+                                <span class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">DISABLED</span>
+                                {% else %}
+                                <span class="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-700">{{
+                                    acc.login_status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-2 text-sm text-center text-green-600 font-semibold">{{ acc.done_7d }}
+                            </td>
+                            <td class="px-4 py-2 text-sm text-center text-red-500 font-semibold">{{ acc.failed_7d }}
+                            </td>
+                            <td class="px-4 py-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden max-w-[100px]">
+                                        <div class="h-full rounded-full {% if acc.success_rate >= 80 %}bg-green-500{% elif acc.success_rate >= 50 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                                            style="width: {{ acc.success_rate }}%"></div>
+                                    </div>
+                                    <span class="text-xs font-medium text-gray-700">{{ acc.success_rate }}%</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-2 text-center">
+                                {% if acc.circuit_breaker >= 3 %}
+                                <span class="text-red-500 font-bold text-xs">🔴 {{ acc.circuit_breaker }}</span>
+                                {% elif acc.circuit_breaker >= 1 %}
+                                <span class="text-yellow-500 font-medium text-xs">🟡 {{ acc.circuit_breaker }}</span>
+                                {% else %}
+                                <span class="text-green-500 text-xs">🟢 0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- HW Card Span -->
+        <div class="mt-6 bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+            <div class="px-5 py-4 border-b border-gray-200">
+                <h3 class="text-sm leading-6 font-medium text-gray-900">System Resources</h3>
+            </div>
+            <div class="px-5 py-4 flex gap-8 flex-wrap">
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">CPU Usage</dt>
+                    <dd class="mt-1 text-sm text-gray-900 font-semibold {% if health.system.cpu_percent > 85 %}text-red-600{% elif health.system.cpu_percent > 60 %}text-amber-500{% endif %}">{{ health.system.cpu_percent }}%</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">System RAM</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.sys_memory_used_gb }} / {{ health.system.sys_memory_total_gb }} GB <span class="text-xs text-gray-400">({{ health.system.sys_memory_percent }}%)</span></dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">Disk (Root)</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.disk_used_gb }} / {{ health.system.disk_total_gb }} GB <span class="text-xs text-gray-400">({{ health.system.disk_percent }}%)</span></dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">Worker Process RAM</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.memory_mb }} MB</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">Playwright Processes</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.browser_processes }}</dd>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</body>
+
+</html>

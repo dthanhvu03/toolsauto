@@ -1,0 +1,49 @@
+<!-- Full table body fragment returned on polling -->
+<tbody id="jobs-table-body"
+    hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page|default(1) }}"
+    hx-trigger="every 5s" hx-swap="outerHTML">
+    {% for job in jobs %}
+    {% include 'fragments/job_row.html' %}
+    {% else %}
+    <tr>
+        <td colspan="8" class="px-4 py-4 text-center text-gray-500">No jobs found for this filter.</td>
+    </tr>
+    {% endfor %}
+
+    <!-- Pagination Footer Row -->
+    <tr class="bg-gray-50 border-t">
+        <td colspan="8" class="px-4 py-3">
+            <div class="flex items-center justify-between">
+                <span class="text-xs text-gray-500">
+                    {{ total_jobs|default(0) }} total · Page {{ current_page|default(1) }} of {{ total_pages|default(1)
+                    }}
+                </span>
+                <div class="flex gap-2">
+                    {% if current_page|default(1) > 1 %}
+                    <button
+                        hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page - 1 }}"
+                        hx-target="#jobs-table-body" hx-swap="outerHTML"
+                        class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50">
+                        ← Prev
+                    </button>
+                    {% endif %}
+                    {% if current_page|default(1) < total_pages|default(1) %} <button
+                        hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page + 1 }}"
+                        hx-target="#jobs-table-body" hx-swap="outerHTML"
+                        class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50">
+                        Next →
+                        </button>
+                        {% endif %}
+                </div>
+            </div>
+        </td>
+    </tr>
+</tbody>
+
+<script>
+    // Update total badge in header
+    (function () {
+        const badge = document.getElementById('job-total-badge');
+        if (badge) badge.textContent = '{{ total_jobs|default(0) }} jobs';
+    })();
+</script>

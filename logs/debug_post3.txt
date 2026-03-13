@@ -1,0 +1,4 @@
+Dialog HTML dump:
+<input type="hidden" value="AfijCzVqyWhwgTncKP8" name="h"><input type="hidden" value="mb" name="ref">
+
+Buttons in dialog:

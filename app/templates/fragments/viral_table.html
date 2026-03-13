@@ -1,0 +1,36 @@
+<div class="bg-white p-6 rounded-lg shadow-md mb-8">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold flex items-center gap-2">
+            <svg class="w-6 h-6 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Viral Content Scraped (Tự động cào)
+        </h2>
+        <button class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded" hx-get="/viral/table"
+            hx-target="#viral-table-body" hx-swap="innerHTML">
+            Refresh
+        </button>
+    </div>
+
+    <div class="overflow-x-auto max-h-80 overflow-y-auto">
+        <table class="min-w-full table-fixed border-collapse">
+            <thead class="sticky top-0 bg-gray-50 z-10">
+                <tr class="border-b">
+                    <th class="w-16 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                    <th class="w-[38%] px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tiêu đề / URL</th>
+                    <th class="w-36 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Lượt Views</th>
+                    <th class="w-52 px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Nguồn thu thập
+                        (Account)</th>
+                    <th class="w-64 px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái AI</th>
+                    <th class="w-20 px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="viral-table-body" class="bg-white" hx-get="/viral/table" hx-trigger="load, every 30s">
+                <!-- HTMX will poll and inject rows here -->
+                <tr>
+                    <td colspan="6" class="p-4 text-center text-sm text-gray-500">Đang tải dữ liệu Viral...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>

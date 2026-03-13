@@ -1,0 +1,41 @@
+<div id="accounts-table-container">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">Accounts Management</h2>
+
+        <!-- Quick Add Form -->
+        <form hx-post="/accounts/create" hx-target="#accounts-table-container" hx-swap="outerHTML"
+            class="flex space-x-2">
+            <select name="platform"
+                class="border border-gray-300 rounded px-3 py-1 text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                <option value="facebook">facebook</option>
+                <option value="instagram">instagram</option>
+            </select>
+            <input type="text" name="name" placeholder="Profile Name (e.g. MyPage)" required
+                class="border border-gray-300 rounded px-3 py-1 text-sm focus:ring-blue-500 focus:border-blue-500">
+            <button type="submit"
+                class="bg-green-600 hover:bg-green-700 text-white font-medium py-1 px-4 rounded text-sm outline-none">
+                Add Account
+            </button>
+        </form>
+    </div>
+
+    <div class="overflow-x-auto shadow rounded-lg mb-8">
+        <table class="w-full text-left border-collapse bg-white">
+            <thead class="bg-gray-50 border-b">
+                <tr class="text-sm font-medium text-gray-500">
+                    <th class="p-3">ID</th>
+                    <th class="p-3">Profile Name</th>
+                    <th class="p-3">Automation</th>
+                    <th class="p-3">Session State</th>
+                    <th class="p-3 w-72">Limits & Settings</th>
+                    <th class="p-3 text-right">Controls</th>
+                </tr>
+            </thead>
+            <tbody id="accounts-table-body" hx-get="/accounts/table" hx-trigger="load, every 10s" hx-swap="innerHTML">
+                {% for account in accounts %}
+                {% include "fragments/account_row.html" %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
