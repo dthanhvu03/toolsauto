@@ -217,9 +217,16 @@ class NotifierService:
         caption_preview = html_mod.escape((job.caption or "").strip())
         account_name = html_mod.escape(job.account.name if job.account else "Unknown")
 
+        # Hiển thị keyword SEO nếu có
+        keywords_str = ""
+        if hasattr(job, '_ai_keywords') and job._ai_keywords:
+            kw_escaped = html_mod.escape(", ".join(job._ai_keywords))
+            keywords_str = f"🔑 <b>SEO Keywords:</b> <i>{kw_escaped}</i>\n\n"
+
         msg = (
             f"📝 <b>AI Caption sẵn sàng — Chờ duyệt!</b>\n"
             f"📋 Job #{job.id} | {job.platform} ({account_name})\n\n"
+            f"{keywords_str}"
             f"✍️ <i>{caption_preview}</i>\n"
         )
 
