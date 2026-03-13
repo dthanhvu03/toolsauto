@@ -86,6 +86,10 @@ def process_draft_job(db: Session):
                 
             job.caption = final_text
             job.status = "DRAFT"
+            
+            # Pass AI generated keywords to notifier temporarily
+            job._ai_keywords = ai_result.get("keywords", [])
+            
             db.commit()
             logger.info("[Job %s] AI Generation complete. Awaiting user approval.", job.id)
             NotifierService.notify_draft_ready(job)
