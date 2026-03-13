@@ -1,2 +1,0 @@
-Testing notify for Job 198 with video: /home/vu/toolsauto/content/reup/tiktok/viral_17_tikwm_reup.mp4
-Notification sent!
