@@ -190,7 +190,10 @@ class ContentOrchestrator:
         if is_image:
             logger.info("Bước 1/3: Đầu vào là Ảnh, bỏ qua tạo Collage và Transcript...")
             target_image = video_path
-            prompt_intro = "Hãy phân tích Hình ảnh được cung cấp để viết CAPTION BÁN HÀNG. Chú ý đọc và hiểu các Text/Chữ có sẵn trong ảnh, tập trung vào trọng tâm sản phẩm."
+            
+            # Thay đổi chữ BÁN HÀNG tương ứng với style
+            intro_action = "viết CAPTION BÁN HÀNG" if style == "sales" else "viết CAPTION"
+            prompt_intro = f"Hãy phân tích Hình ảnh được cung cấp để {intro_action}. Chú ý đọc và hiểu các Text/Chữ có sẵn trong ảnh, tập trung vào trọng tâm sản phẩm."
         else:
             logger.info("Bước 1/3: Đầu vào là Video, trích xuất 6 khung hình Collage...")
             target_image = self.extract_keyframes_collage(video_path)
@@ -208,13 +211,18 @@ class ContentOrchestrator:
                 transcript = transcript[:max_tlen].rsplit(" ", 1)[0]
                 logger.info("Transcript cắt ngắn còn %d ký tự (max %d)", len(transcript), max_tlen)
 
-            prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) và kết hợp với Audio Transcript đính kèm bên dưới để viết CAPTION BÁN HÀNG.
+            intro_action = "viết CAPTION BÁN HÀNG" if style == "sales" else "viết CAPTION"
+            prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) và kết hợp với Audio Transcript đính kèm bên dưới để {intro_action}.
 CHÚ Ý QUAN TRỌNG: TRONG ẢNH CÓ THỂ CÓ CHỮ (SUBTITLE). BẠN NÊN ƯU TIÊN ĐỌC CÁC CHỮ ĐÓ.
 
 Audio Transcript (có thể bắt chữ bị sai do giọng AI), hãy tham khảo kết hợp với Hình ảnh:
 "{transcript if transcript else '(Video không có giọng nói)'}" """
 
         # Define dynamic sections based on style
+        # Default assume NO sales for non-sales styles
+        sales_rules = ""
+        seo_rules = ""
+
         if style == "sales":
             style_guide = "tập trung vào lợi ích sản phẩm, kích thích mua hàng, có CTA rõ ràng"
             tone_of_voice = "Cân bằng sự thân thiện và tính cụ thể. Có cấu trúc review rõ (Mở - Trải nghiệm thực - Kết). Xoáy sâu vào Pain-point (nỗi đau) của khách hàng để chốt sale."
@@ -222,25 +230,38 @@ Audio Transcript (có thể bắt chữ bị sai do giọng AI), hãy tham khả
 - Tiêu đề (Hook) in hoa hoặc kẹp giữa biểu tượng (Ví dụ: 🔥 [TIÊU ĐỀ] 🔥) để dừng ngón tay người dùng.
 - Xuống dòng thoáng mắt (mỗi câu 1 dòng).
 - Sử dụng ít Emoji (2-4 cái cho cả bài), đúng ngữ cảnh."""
+            sales_rules = """[ACCESSTRADE CONVERSION TIPS (LAST-CLICK OPTIMIZED)]
+- Tạo hiệu ứng FOMO ở cuối bài: Nhấn mạnh số lượng giới hạn, ưu đãi kết thúc trong ngày, voucher xịn.
+- Kêu gọi hành động (CTA): Kết thúc caption bằng câu kêu gọi bình luận từ khóa liên quan đến sản phẩm. AI tự phân tích sản phẩm và chọn từ khóa phù hợp nhất. Ví dụ: 💬 Bình luận "[TỪ KHÓA SẢN PHẨM]" để nhận link ưu đãi!
+- TUYỆT ĐỐI KHÔNG chèn link URL vào trong caption. Chỉ kêu gọi bình luận từ khóa."""
+            seo_rules = """[SEO OPTIMIZATION]
+- Chèn khéo léo 2-3 từ khóa tìm kiếm (search volume cao) trực tiếp vào tự nhiên trong ngữ cảnh của câu, thay vì chỉ nhồi nhét ở cuối bài.
+- Sử dụng các cụm từ khóa mở rộng (long-tail keywords) mà khách hàng thường gõ khi tìm giải pháp cho vấn đề của họ."""
+
         elif style == "short":
-            style_guide = "cực kỳ ngắn gọn, gây tò mò tức thì, độ vọt cao"
+            style_guide = "cực kỳ ngắn gọn, gây tò mò tức thì, độ vọt cao. KHÔNG LÀM DÀI DÒNG QUẢNG CÁO BÁN HÀNG."
             tone_of_voice = "Nhịp siêu nhanh, thẳng thắn, không giải thích dài dòng. Dứt khoát và gợi sự tò mò mạnh mẽ."
             formatting_rules = """- TIÊU CHÍ TỐI THƯỢNG: CỰC KỲ NGẮN GỌN. Người dùng lướt Reel/Shorts không thích đọc dài.
-- Giữ bài viết ĐÚNG 1-2 dòng (dưới 150 ký tự). Đi thẳng vào trọng tâm, loại bỏ mọi từ ngữ thừa thãi.
-- Chỉ cần 1 câu Hook cực gắt và 1 câu Call-to-action."""
+- Giữ bài viết ĐÚNG 1-2 dòng (dưới 100 ký tự). Đi thẳng vào trọng tâm, loại bỏ mọi từ ngữ thừa thãi.
+- Chỉ cần một câu nói vu vơ, hài hước nảy ra từ video. KHÔNG CẦN CHỐT SALE. Tuyệt đối không viết lan man."""
+
         elif style == "daily":
-            style_guide = "đời thường, tâm sự, kể chuyện, mộc mạc, không quảng cáo"
+            style_guide = "đời thường, tâm sự, kể chuyện, mộc mạc. TUYỆT ĐỐI KHÔNG BÁN HÀNG."
             tone_of_voice = "Như một người bạn đang tâm sự mỏng, chia sẻ câu chuyện hàng ngày. Giọng điệu chân thành, gần gũi, tuyệt đối KHÔNG mang hơi hướm quảng cáo phô trương."
             formatting_rules = """- TIÊU CHÍ: Kể chuyện (Storytelling) nhẹ nhàng, mộc mạc.
 - Khoảng 3-5 dòng, hành văn tự nhiên như văn nói.
 - Hạn chế tối đa dùng icon/emoji loè loẹt.
-- Không cần in hoa tiêu đề. Cứ viết tự nhiên như đang viết status cá nhân."""
+- Không cần in hoa tiêu đề. Cứ viết tự nhiên như đang viết status cá nhân.
+- TUYỆT ĐỐI KHÔNG DÙNG KÊU GỌI HÀNH ĐỘNG MUA HÀNG HAY CMT."""
+
         elif style == "humor":
-            style_guide = "hài hước, châm biếm, bắt trend mạng xã hội"
+            style_guide = "hài hước, châm biếm, bắt trend mạng xã hội. CHỈ GIẢI TRÍ, KHÔNG BÁN HÀNG."
             tone_of_voice = "Giọng Gen Z, dí dỏm, lầy lội, dùng từ ngữ trending mạng xã hội, mang tính giải trí cao."
             formatting_rules = """- TIÊU CHÍ: Giải trí, gây cười, đọc xong là muốn share/tag bạn bè.
 - Viết khoảng 2-4 dòng. Cấu trúc punchline (câu chốt bất ngờ).
-- Dùng nhiều emoji lầy lội (😂, 🤡, 💀, 💅)."""
+- Dùng nhiều emoji lầy lội (😂, 🤡, 💀, 💅).
+- TUYỆT ĐỐI KHÔNG CHỐT SALE HAY KÊU GỌI ĐỂ LẠI BÌNH LUẬN XIN LINK."""
+
         else: # default fallback
             style_guide = "ngắn gọn, hấp dẫn"
             tone_of_voice = "Ngắn gọn, rành mạch, không sáo rỗng."
@@ -276,17 +297,10 @@ Bạn là một Chuyên gia Digital Marketing & Copywriter thực chiến tại 
 [FACEBOOK ADS COMPLIANCE & BEST PRACTICES]
 - TUYỆT ĐỐI KHÔNG dùng từ ngữ quy chụp thuộc tính cá nhân (Ví dụ: CẤM nói "Bạn đang bị mụn?", "Bạn đang béo?"). Hãy chuyển sang góc nhìn khách quan (Ví dụ: "Giải quyết tình trạng mụn...", "Mẹo giúp vóc dáng thon gọn...").
 - TUYỆT ĐỐI KHÔNG đưa ra các cam kết tuyệt đối, sai sự thật (đặc biệt mảng Sức khỏe, Tài chính - YMYL).
-- Với Reel/Video: Đoạn Hook (3 giây đầu / 3 dòng đầu caption) phải đánh trúng Pain-point (nỗi đau) hoặc có yếu tố gây tò mò cực mạnh thay vì giới thiệu thương hiệu dài dòng.
-- Cấu trúc chung cho Short Video/Post: Hook (kéo sự chú ý) -> Proof (bằng chứng/lợi ích) -> Offer (ưu đãi) -> CTA (chốt hạ).
 
-[ACCESSTRADE CONVERSION TIPS (LAST-CLICK OPTIMIZED)]
-- Tạo hiệu ứng FOMO ở cuối bài: Nhấn mạnh số lượng giới hạn, ưu đãi kết thúc trong ngày, voucher xịn.
-- Kêu gọi hành động (CTA): Kết thúc caption bằng câu kêu gọi bình luận từ khóa liên quan đến sản phẩm. AI tự phân tích sản phẩm và chọn từ khóa phù hợp nhất. Ví dụ: 💬 Bình luận "[TỪ KHÓA SẢN PHẨM]" để nhận link ưu đãi!
-- TUYỆT ĐỐI KHÔNG chèn link URL vào trong caption. Chỉ kêu gọi bình luận từ khóa.
+{sales_rules}
 
-[SEO OPTIMIZATION]
-- Chèn khéo léo 2-3 từ khóa tìm kiếm (search volume cao) trực tiếp vào tự nhiên trong ngữ cảnh của câu, thay vì chỉ nhồi nhét ở cuối bài.
-- Sử dụng các cụm từ khóa mở rộng (long-tail keywords) mà khách hàng thường gõ khi tìm giải pháp cho vấn đề của họ.
+{seo_rules}
 
 [FORMATTING RULES]
 {formatting_rules}
@@ -304,7 +318,7 @@ Tuyệt đối KHÔNG ĐƯA RA CÁC LỰA CHỌN (Option 1, Option 2...). CHỈ 
 YÊU CẦU ĐẦU RA (BẮT BUỘC TRẢ VỀ CHÍNH XÁC ĐỊNH DẠNG JSON SAU, KHÔNG THÊM BẤT KỲ CHỮ NÀO BÊN NGOÀI KHỐI JSON):
 ```json
 {{{{
-  "caption": "[TIÊU ĐỀ BÀI VIẾT] ...nội dung bài viết... 💬 Bình luận "[TỪ KHÓA]" để nhận link ưu đãi!",
+  "caption": "điền nội dung caption phù hợp với quy tắc ở trên vào đây",
   "hashtags": ["#Tag1", "#Tag2", "#Tag3", "#Tag4", "#Tag5"],
   "keywords": ["keyword 1", "keyword 2", "keyword 3"]
 }}}}
