@@ -259,11 +259,16 @@ Tùy thuộc vào tệp khách hàng tôi yêu cầu, hãy áp dụng đúng Ton
 - Kêu gọi hành động (CTA): Kết thúc caption bằng câu kêu gọi bình luận từ khóa liên quan đến sản phẩm. AI tự phân tích sản phẩm và chọn từ khóa phù hợp nhất. Ví dụ: 💬 Bình luận "[TỪ KHÓA SẢN PHẨM]" để nhận link ưu đãi!
 - TUYỆT ĐỐI KHÔNG chèn link URL vào trong caption. Chỉ kêu gọi bình luận từ khóa.
 
+[SEO OPTIMIZATION]
+- Chèn khéo léo 2-3 từ khóa tìm kiếm (search volume cao) trực tiếp vào tự nhiên trong ngữ cảnh của câu, thay vì chỉ nhồi nhét ở cuối bài.
+- Sử dụng các cụm từ khóa mở rộng (long-tail keywords) mà khách hàng thường gõ khi tìm giải pháp cho vấn đề của họ.
+
 [FORMATTING RULES]
+- TIÊU CHÍ TỐI THƯỢNG: CỰC KỲ NGẮN GỌN. Người dùng lướt Reel/Shorts không thích đọc dài.
+- Giữ bài viết chỉ khoảng 3-4 dòng (150-250 ký tự). Đi thẳng vào trọng tâm, loại bỏ mọi từ ngữ thừa thãi, sáo rỗng.
 - Tiêu đề (Hook) in hoa hoặc kẹp giữa biểu tượng (Ví dụ: 🔥 [TIÊU ĐỀ] 🔥) để dừng ngón tay người dùng (thumb-stop).
-- Xuống dòng thoáng mắt (ngắn gọn 2-3 câu mỗi đoạn, không viết khối chữ dính liền).
-- Có sử dụng gạch đầu dòng (bullet points) hoặc icon (-) khi liệt kê tính năng/lợi ích.
-- Sử dụng Emoji có chọn lọc (3-7 cái cho cả bài), đúng ngữ cảnh, không lạm dụng.
+- Xuống dòng thoáng mắt (mỗi câu 1 dòng).
+- Sử dụng ít Emoji (2-4 cái cho cả bài), đúng ngữ cảnh, không lạm dụng.
 """
 
         output_rules = f"""[OUTPUT INSTRUCTIONS]
@@ -271,7 +276,7 @@ BẠN THỰC THI NHIỆM VỤ NÀY NHƯ MỘT API TRẢ VỀ DỮ LIỆU THUẦN
 Tuyệt đối KHÔNG ĐƯA RA CÁC LỰA CHỌN (Option 1, Option 2...). CHỈ VIẾT DUY NHẤT 1 BÀI HOÀN CHỈNH TỐT NHẤT. Bắt đầu viết ngay lập tức bằng JSON.
 
 [GIỚI HẠN ĐỘ DÀI]
-- Caption phải dài từ 300 đến {config.MAX_CAPTION_LENGTH} ký tự. KHÔNG ĐƯỢC vượt quá {config.MAX_CAPTION_LENGTH} ký tự.
+- Caption CỰC KỲ NGẮN, lý tưởng từ 150 đến 250 ký tự. KHÔNG ĐƯỢC vượt quá {{config.MAX_CAPTION_LENGTH}} ký tự. Càng ngắn gọn, súc tích càng tốt.
 - Hashtags: 3 đến {config.MAX_HASHTAGS} hashtags.
 - Keywords: 3 đến {config.MAX_KEYWORDS} keywords.
 
