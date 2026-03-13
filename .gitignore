@@ -21,3 +21,24 @@ data/
 *.log
 __pycache__/
 .agents/
+
+# Test & Debug files
+test_*.py
+debug_*.py
+run_manual_test.py
+*.png
+test_out*.txt
+tests/
+scripts/debug_*.py
+scripts/test_*.py
+scripts/demo_*.sh
+tikwm.json
+
+# Generated Data & State
+*.pid
+profiles/
+app.db
+reels_body.html
+reels_texts.json
+metadata*.json
+gemini_cookies.json
