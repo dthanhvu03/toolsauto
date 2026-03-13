@@ -133,9 +133,10 @@ class Job(Base):
     caption = Column(String)
     schedule_ts = Column(Integer, index=True)
     target_page = Column(String, nullable=True) # Override account-level target_page if set
+    ai_style = Column(String, default="short", nullable=True) # Style of caption AI should generate
     
     # State tracking
-    status = Column(String, default="PENDING", index=True) # DRAFT, PENDING, RUNNING, DONE, FAILED
+    status = Column(String, default="PENDING", index=True) # AWAITING_STYLE, DRAFT, PENDING, RUNNING, DONE, FAILED
     is_approved = Column(Boolean, default=False) # True if user explicitly approved DRAFT
     tries = Column(Integer, default=0)
     max_tries = Column(Integer, default=3)

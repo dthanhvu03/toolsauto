@@ -214,11 +214,39 @@ CHÚ Ý QUAN TRỌNG: TRONG ẢNH CÓ THỂ CÓ CHỮ (SUBTITLE). BẠN NÊN ƯU
 Audio Transcript (có thể bắt chữ bị sai do giọng AI), hãy tham khảo kết hợp với Hình ảnh:
 "{transcript if transcript else '(Video không có giọng nói)'}" """
 
-        style_guide = {
-            "general": "ngắn gọn, hấp dẫn, dùng emoji vừa phải",
-            "affiliate": "kích thích tò mò, có CTA mua hàng, dùng từ khoá SEO",
-            "fun": "vui vẻ, dí dỏm, dùng nhiều emoji, giọng Gen Z",
-        }.get(style, "ngắn gọn, hấp dẫn")
+        # Define dynamic sections based on style
+        if style == "sales":
+            style_guide = "tập trung vào lợi ích sản phẩm, kích thích mua hàng, có CTA rõ ràng"
+            tone_of_voice = "Cân bằng sự thân thiện và tính cụ thể. Có cấu trúc review rõ (Mở - Trải nghiệm thực - Kết). Xoáy sâu vào Pain-point (nỗi đau) của khách hàng để chốt sale."
+            formatting_rules = """- TIÊU CHÍ: Viết khoảng 4-5 dòng, tập trung nêu bật lợi ích và đẩy cảm xúc mua hàng.
+- Tiêu đề (Hook) in hoa hoặc kẹp giữa biểu tượng (Ví dụ: 🔥 [TIÊU ĐỀ] 🔥) để dừng ngón tay người dùng.
+- Xuống dòng thoáng mắt (mỗi câu 1 dòng).
+- Sử dụng ít Emoji (2-4 cái cho cả bài), đúng ngữ cảnh."""
+        elif style == "short":
+            style_guide = "cực kỳ ngắn gọn, gây tò mò tức thì, độ vọt cao"
+            tone_of_voice = "Nhịp siêu nhanh, thẳng thắn, không giải thích dài dòng. Dứt khoát và gợi sự tò mò mạnh mẽ."
+            formatting_rules = """- TIÊU CHÍ TỐI THƯỢNG: CỰC KỲ NGẮN GỌN. Người dùng lướt Reel/Shorts không thích đọc dài.
+- Giữ bài viết ĐÚNG 1-2 dòng (dưới 150 ký tự). Đi thẳng vào trọng tâm, loại bỏ mọi từ ngữ thừa thãi.
+- Chỉ cần 1 câu Hook cực gắt và 1 câu Call-to-action."""
+        elif style == "daily":
+            style_guide = "đời thường, tâm sự, kể chuyện, mộc mạc, không quảng cáo"
+            tone_of_voice = "Như một người bạn đang tâm sự mỏng, chia sẻ câu chuyện hàng ngày. Giọng điệu chân thành, gần gũi, tuyệt đối KHÔNG mang hơi hướm quảng cáo phô trương."
+            formatting_rules = """- TIÊU CHÍ: Kể chuyện (Storytelling) nhẹ nhàng, mộc mạc.
+- Khoảng 3-5 dòng, hành văn tự nhiên như văn nói.
+- Hạn chế tối đa dùng icon/emoji loè loẹt.
+- Không cần in hoa tiêu đề. Cứ viết tự nhiên như đang viết status cá nhân."""
+        elif style == "humor":
+            style_guide = "hài hước, châm biếm, bắt trend mạng xã hội"
+            tone_of_voice = "Giọng Gen Z, dí dỏm, lầy lội, dùng từ ngữ trending mạng xã hội, mang tính giải trí cao."
+            formatting_rules = """- TIÊU CHÍ: Giải trí, gây cười, đọc xong là muốn share/tag bạn bè.
+- Viết khoảng 2-4 dòng. Cấu trúc punchline (câu chốt bất ngờ).
+- Dùng nhiều emoji lầy lội (😂, 🤡, 💀, 💅)."""
+        else: # default fallback
+            style_guide = "ngắn gọn, hấp dẫn"
+            tone_of_voice = "Ngắn gọn, rành mạch, không sáo rỗng."
+            formatting_rules = """- TIÊU CHÍ TỐI THƯỢNG: CỰC KỲ NGẮN GỌN.
+- Giữ bài viết chỉ khoảng 3-4 dòng (150-250 ký tự). Đi thẳng vào trọng tâm.
+- Xuống dòng thoáng mắt (mỗi câu 1 dòng)."""
 
         # Bóc tách Tiêu đề gốc nạp vào Context nếu có
         import re
@@ -243,10 +271,7 @@ Bạn là một Chuyên gia Digital Marketing & Copywriter thực chiến tại 
 {prompt_intro}
 
 [TARGET AUDIENCE TONE OF VOICE]
-Tùy thuộc vào tệp khách hàng tôi yêu cầu, hãy áp dụng đúng Tone giọng:
-- Nếu là Gen Z (13-28 tuổi) hoặc phong cách "fun": Nhịp nhanh, dùng teen-code rải rác hợp lý (khum, chằm Zn, slay...), nhiều emoji, sử dụng "storytelling" (kể chuyện) ngắn gọn, bắt trend, KHÔNG nói giáo điều.
-- Nếu là Millennials (29-44 tuổi) hoặc "affiliate": Cân bằng sự thân thiện và tính cụ thể. Có cấu trúc review rõ (Mở - Trải nghiệm thực - Kết). Hài hước châm biếm nhẹ nhàng, xoáy vào việc giải quyết pain-point. Dùng từ khóa SEO.
-- Nếu là Gen X (45-60 tuổi) hoặc "general": Lập luận rõ ràng, dựa trên kinh nghiệm, thẳng thắn, không dùng tiếng lóng mạng, dùng câu dứt khoát, đề cao uy tín và social proof. Tôn trọng và lịch sự.
+{tone_of_voice}
 
 [FACEBOOK ADS COMPLIANCE & BEST PRACTICES]
 - TUYỆT ĐỐI KHÔNG dùng từ ngữ quy chụp thuộc tính cá nhân (Ví dụ: CẤM nói "Bạn đang bị mụn?", "Bạn đang béo?"). Hãy chuyển sang góc nhìn khách quan (Ví dụ: "Giải quyết tình trạng mụn...", "Mẹo giúp vóc dáng thon gọn...").
@@ -264,11 +289,7 @@ Tùy thuộc vào tệp khách hàng tôi yêu cầu, hãy áp dụng đúng Ton
 - Sử dụng các cụm từ khóa mở rộng (long-tail keywords) mà khách hàng thường gõ khi tìm giải pháp cho vấn đề của họ.
 
 [FORMATTING RULES]
-- TIÊU CHÍ TỐI THƯỢNG: CỰC KỲ NGẮN GỌN. Người dùng lướt Reel/Shorts không thích đọc dài.
-- Giữ bài viết chỉ khoảng 3-4 dòng (150-250 ký tự). Đi thẳng vào trọng tâm, loại bỏ mọi từ ngữ thừa thãi, sáo rỗng.
-- Tiêu đề (Hook) in hoa hoặc kẹp giữa biểu tượng (Ví dụ: 🔥 [TIÊU ĐỀ] 🔥) để dừng ngón tay người dùng (thumb-stop).
-- Xuống dòng thoáng mắt (mỗi câu 1 dòng).
-- Sử dụng ít Emoji (2-4 cái cho cả bài), đúng ngữ cảnh, không lạm dụng.
+{formatting_rules}
 """
 
         output_rules = f"""[OUTPUT INSTRUCTIONS]
