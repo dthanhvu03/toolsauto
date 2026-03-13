@@ -45,6 +45,11 @@ class TelegramPoller:
         self._callback_handlers = {
             "approve": self._handle_approve,
             "cancel": self._handle_cancel,
+            "style_sales": self._handle_style,
+            "style_short": self._handle_style,
+            "style_daily": self._handle_style,
+            "style_humor": self._handle_style,
+            "style_skip": self._handle_style,
         }
 
         # Bot command registry
@@ -203,7 +208,7 @@ class TelegramPoller:
 
         handler = self._callback_handlers.get(action)
         if handler:
-            handler(callback_id=callback_id, job_id=job_id,
+            handler(callback_id=callback_id, action=action, job_id=job_id,
                     message_id=message_id, user_name=user_name)
         else:
             self.client.answer_callback_query(callback_id, f"⚠️ Action '{action}' không hỗ trợ")
@@ -1027,7 +1032,7 @@ class TelegramPoller:
 
     # ─── Callback Handlers (Inline Buttons) ──────
 
-    def _handle_approve(self, callback_id: str, job_id: int, message_id: int, user_name: str):
+    def _handle_approve(self, callback_id: str, action: str, job_id: int, message_id: int, user_name: str):
         """User click ✅ Approve → DRAFT → PENDING."""
         from app.database.core import SessionLocal
         from app.database.models import Job
@@ -1058,7 +1063,7 @@ class TelegramPoller:
             self.client.edit_message_reply_markup(message_id, reply_markup=None)
             self.client.send_message(f"✅ <b>Đã duyệt Job #{job_id}</b> (bởi {user_name})")
 
-    def _handle_cancel(self, callback_id: str, job_id: int, message_id: int, user_name: str):
+    def _handle_cancel(self, callback_id: str, action: str, job_id: int, message_id: int, user_name: str):
         """User click ❌ Cancel → DRAFT/PENDING → CANCELLED."""
         from app.database.core import SessionLocal
         from app.database.models import Job
@@ -1088,3 +1093,45 @@ class TelegramPoller:
             self.client.answer_callback_query(callback_id, f"❌ Job #{job_id} đã bị hủy!")
             self.client.edit_message_reply_markup(message_id, reply_markup=None)
             self.client.send_message(f"❌ <b>Đã hủy Job #{job_id}</b> (bởi {user_name})")
+
+    def _handle_style(self, callback_id: str, action: str, job_id: int, message_id: int, user_name: str):
+        """User click Style selection → AWAITING_STYLE → DRAFT."""
+        from app.database.core import SessionLocal
+        from app.database.models import Job
+        
+        # Extract the style from the action (e.g. style_sales -> sales)
+        selected_style = action.split("_")[1]
+
+        with SessionLocal() as db:
+            job = db.query(Job).filter(Job.id == job_id).first()
+
+            if not job:
+                self.client.answer_callback_query(callback_id, f"❌ Job #{job_id} không tồn tại!")
+                return
+
+            if job.status != "AWAITING_STYLE":
+                self.client.answer_callback_query(
+                    callback_id,
+                    f"ℹ️ Job #{job_id} đang ở trạng thái {job.status}, không thể đổi style."
+                )
+                self.client.edit_message_reply_markup(message_id, reply_markup=None)
+                return
+
+            if selected_style == "skip":
+                # Bỏ qua không viết AI Caption
+                job.status = "DRAFT"
+                job.caption = "(Skip AI) Caption trống."
+                db.commit()
+                self.client.answer_callback_query(callback_id, "⏭️ Đã bỏ qua AI Caption.")
+                self.client.edit_message_reply_markup(message_id, reply_markup=None)
+                self.client.send_message(f"⏭️ <b>Bỏ qua AI Caption cho Job #{job_id}</b> (bởi {user_name})")
+                return
+
+            job.ai_style = selected_style
+            job.status = "DRAFT"
+            db.commit()
+
+            logger.info("[Telegram] Job #%d style set to '%s' by %s", job_id, selected_style, user_name)
+            self.client.answer_callback_query(callback_id, f"✅ Đã chọn phong cách: {selected_style.upper()}")
+            self.client.edit_message_reply_markup(message_id, reply_markup=None)
+            self.client.send_message(f"✅ <b>Đã chọn phong cách {selected_style.upper()} cho Job #{job_id}</b> (thực hiện bởi {user_name}).\nAI đang tiến hành viết nội dung...")

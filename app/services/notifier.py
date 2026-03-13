@@ -242,6 +242,38 @@ class NotifierService:
             cls._broadcast_with_buttons(msg, buttons)
 
     @classmethod
+    def notify_style_selection(cls, job):
+        """Thông báo khi video viral mới được bốc về, yêu cầu user chọn style Caption."""
+        account_name = html_mod.escape(job.account.name if job.account else "Unknown")
+        
+        msg = (
+            f"🎬 <b>Video mới đã sẵn sàng!</b>\n"
+            f"📋 Job #{job.id} | {job.platform} ({account_name})\n\n"
+            f"🤖 Bạn muốn AI viết Caption theo phong cách nào?\n"
+            f"<i>(Nếu không chọn, AI sẽ tự động viết kiểu NGẮN GỌN sau 30 phút)</i>"
+        )
+        
+        buttons = [
+            [
+                {"text": "💰 Bán hàng (Sales)", "callback_data": f"style_sales:{job.id}"},
+                {"text": "⚡ Ngắn gọn (Short)", "callback_data": f"style_short:{job.id}"}
+            ],
+            [
+                {"text": "☕ Đời thường (Daily)", "callback_data": f"style_daily:{job.id}"},
+                {"text": "😂 Hài hước (Humor)", "callback_data": f"style_humor:{job.id}"}
+            ],
+            [
+                {"text": "⏭️ Bỏ qua (Skip AI)", "callback_data": f"style_skip:{job.id}"}
+            ]
+        ]
+        
+        video_path = job.processed_media_path or job.media_path
+        if video_path and os.path.exists(video_path):
+            cls._broadcast_video(video_path, msg, buttons)
+        else:
+            cls._broadcast_with_buttons(msg, buttons)
+
+    @classmethod
     def notify_account_invalid(cls, account_name: str, reason: str = ""):
         """Thông báo khi account bị vô hiệu hóa."""
         msg = (

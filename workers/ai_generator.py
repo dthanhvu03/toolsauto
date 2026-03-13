@@ -75,7 +75,8 @@ def process_draft_job(db: Session):
             user_context = user_context.replace("Context:", "", 1).strip()
             
         orchestrator = ContentOrchestrator()
-        ai_result = orchestrator.generate_caption(target_video, style="general", context=user_context)
+        ai_style = getattr(job, "ai_style", "short") or "short"
+        ai_result = orchestrator.generate_caption(target_video, style=ai_style, context=user_context)
         
         if ai_result and ai_result.get("caption"):
             final_text = ai_result["caption"].strip()
@@ -145,6 +146,33 @@ def _check_gemini_circuit(db):
         except Exception:
             pass
 
+def _auto_style_default(db):
+    """If a job has been AWAITING_STYLE for > 30 minutes, default to 'short' and move to DRAFT."""
+    from app.database.models import Job
+    import time
+    
+    threshold_ts = int(time.time()) - 1800 # 30 mins
+    
+    jobs_to_update = db.query(Job).filter(
+        Job.status == "AWAITING_STYLE",
+        Job.created_at < threshold_ts
+    ).all()
+    
+    if jobs_to_update:
+        logger.info("Auto-defaulting %d AWAITING_STYLE jobs to 'short' (30m timeout passed)", len(jobs_to_update))
+        for j in jobs_to_update:
+            j.ai_style = "short"
+            j.status = "DRAFT"
+            
+            # Optionally notify that it was auto-selected
+            from app.services.notifier import NotifierService
+            account_name = j.account.name if j.account else "Unknown"
+            try:
+                NotifierService._broadcast(f"⏳ <b>Hết thời gian chờ (30 phút)</b>\nJob #{j.id} ({account_name}) đã tự động được chọn phong cách: NGẮN GỌN (SHORT).\nAI đang tiến hành viết nội dung...")
+            except Exception:
+                pass
+        db.commit()
+
 def run_loop():
     """Main AI Generator loop."""
     global RUNNING, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME
@@ -190,6 +218,9 @@ def run_loop():
                 if state.worker_status == "PAUSED":
                     time.sleep(60)
                     continue
+                
+                # Check for jobs that need auto-defaulting because user didn't respond to telegram style selection
+                _auto_style_default(db)
                 
                 found_job = process_draft_job(db)
                 

@@ -452,7 +452,7 @@ def _process_viral_materials(db):
                 account_id=target_account.id,
                 media_path=media_path,
                 caption=caption_metadata,
-                status="DRAFT",
+                status="AWAITING_STYLE",
                 schedule_ts=int(time.time()) + random.randint(300, 3600),
                 target_page=mat.target_page
             )
@@ -461,8 +461,11 @@ def _process_viral_materials(db):
             _clear_material_error(mat)
             db.commit()
 
-            logger.info("[VIRAL] Created DRAFT Job #%s from %s material #%s → acc '%s'",
+            logger.info("[VIRAL] Created AWAITING_STYLE Job #%s from %s material #%s → acc '%s'",
                         new_job.id, mat.platform, mat.id, target_account.name)
+            
+            from app.services.notifier import NotifierService
+            NotifierService.notify_style_selection(new_job)
 
         except subprocess.TimeoutExpired:
             reason = "yt-dlp timed out while fetching media."
