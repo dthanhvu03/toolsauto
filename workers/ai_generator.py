@@ -154,6 +154,17 @@ def run_loop():
 
     logger.info("AI Worker started. Press Ctrl+C to stop.")
     
+    # ─── MANGAGE STUCK JOBS ON STARTUP ───
+    try:
+        from app.database.models import Job
+        with SessionLocal() as db:
+            stuck_jobs = db.query(Job).filter(Job.status == "AI_PROCESSING").update({"status": "DRAFT"})
+            if stuck_jobs > 0:
+                logger.info("Reset %d stuck jobs from AI_PROCESSING to DRAFT on startup.", stuck_jobs)
+            db.commit()
+    except Exception as e:
+        logger.error("Failed to reset stuck AI jobs on startup: %s", e)
+    
     register_signals()
     logger.info("Entering AI polling loop. Tick=60s")
     
