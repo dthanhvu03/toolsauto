@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automation Dashboard</title>
+    <!-- Tailwind for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX for interactions -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+            <h1 class="text-3xl font-bold">Personal Automation Dashboard</h1>
+            <a href="/health"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 hover:shadow transition-all">
+                <svg class="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
+                System Health
+            </a>
+        </div>
+
+        <!-- Worker Control Panel -->
+        {% include 'fragments/worker_status.html' %}
+
+        <!-- Create Manual Job Panel -->
+        {% include 'fragments/create_job_form.html' %}
+
+        <!-- Multi-Account Login & Control Panel -->
+        <div class="mt-8 mb-8">
+            {% include 'fragments/accounts_table.html' %}
+        </div>
+
+        <!-- Viral Scraped Content Panel -->
+        {% include 'fragments/viral_table.html' %}
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold">Job Queue</h2>
+                <span id="job-total-badge" class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded"></span>
+            </div>
+
+            <!-- Filter Tabs -->
+            <div id="filter-tabs" class="flex gap-1 mb-4 border-b border-gray-200 pb-2">
+                <button onclick="filterJobs('active', this)"
+                    class="filter-tab px-3 py-1.5 text-sm rounded-t font-medium bg-indigo-600 text-white">Active</button>
+                <button onclick="filterJobs('all', this)"
+                    class="filter-tab px-3 py-1.5 text-sm rounded-t font-medium text-gray-600 hover:bg-gray-100">All</button>
+                <button onclick="filterJobs('DRAFT', this)"
+                    class="filter-tab px-3 py-1.5 text-sm rounded-t font-medium text-gray-600 hover:bg-gray-100">Drafts</button>
+                <button onclick="filterJobs('PENDING', this)"
+                    class="filter-tab px-3 py-1.5 text-sm rounded-t font-medium text-gray-600 hover:bg-gray-100">Pending</button>
+                <button onclick="filterJobs('DONE', this)"
+                    class="filter-tab px-3 py-1.5 text-sm rounded-t font-medium text-gray-600 hover:bg-gray-100">Done</button>
+                <button onclick="filterJobs('FAILED', this)"
+                    class="filter-tab px-3 py-1.5 text-sm rounded-t font-medium text-gray-600 hover:bg-gray-100">Failed</button>
+            </div>
+
+            <script>
+                window._currentFilter = 'active';
+                function filterJobs(status, btn) {
+                    window._currentFilter = status;
+                    // Update tab styles
+                    document.querySelectorAll('.filter-tab').forEach(t => {
+                        t.classList.remove('bg-indigo-600', 'text-white');
+                        t.classList.add('text-gray-600');
+                    });
+                    btn.classList.add('bg-indigo-600', 'text-white');
+                    btn.classList.remove('text-gray-600');
+                    // Fetch filtered table
+                    htmx.ajax('GET', '/jobs/table?status=' + status + '&page=1', { target: '#jobs-table-body', swap: 'outerHTML' });
+                }
+            </script>
+
+            <!-- Polling the table body every 10s as per doc -->
+            <div class="overflow-x-auto">
+                <table class="min-w-full table-auto border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 border-b">
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tries</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Metrics</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Error</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    {% include 'fragments/jobs_table.html' %}
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

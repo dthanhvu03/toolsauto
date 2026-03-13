@@ -1,0 +1,242 @@
+<!-- as per 13_HTML_PARTIAL_CONTRACTS.md -->
+
+<tr id="job-{{ job.id }}" class="border-b transition duration-150 hover:bg-gray-50">
+    <td class="px-4 py-2 text-sm text-gray-900 font-mono align-top pt-3">
+        #{{ job.id }}
+        {% set evidence = get_job_evidence(job) %}
+        {% if evidence %}
+        <div class="mt-2 relative inline-block group/drm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500 cursor-help" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <!-- Tooltip -->
+            <div
+                class="absolute left-full top-0 ml-2 bg-gray-900 border border-gray-700 text-gray-100 text-xs rounded-lg shadow-xl w-72 p-3 z-[100] invisible opacity-0 transition-opacity duration-200 group-hover/drm:visible group-hover/drm:opacity-100 pointer-events-none flex flex-col gap-3">
+
+                <!-- Video / pHash Section -->
+                {% if evidence.phash_signatures %}
+                <div>
+                    <div class="font-bold text-indigo-400 mb-1 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clip-rule="evenodd"></path>
+                        </svg>
+                        DRM: Image pHash
+                    </div>
+                    <div class="text-gray-400 mb-2 truncate border-b border-gray-700 pb-2"
+                        title="{{ evidence.filename }}">
+                        File: {{ evidence.filename }}</div>
+                    <div class="grid grid-cols-[40px_1fr] gap-x-2 gap-y-1 font-mono text-[10px]">
+                        {% for ts, hash in evidence.phash_signatures.items() %}
+                        <span class="text-gray-500 text-right">{{ ts }}</span>
+                        <span class="text-emerald-400 break-all select-all pointer-events-auto">{{ hash }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Audio Fingerprint Section -->
+                {% if evidence.audio and evidence.audio.fingerprint %}
+                <div class="border-t border-gray-700 pt-2">
+                    <div class="font-bold text-amber-500 mb-1 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3">
+                            </path>
+                        </svg>
+                        DRM: Audio Chromaprint
+                    </div>
+                    <div class="text-gray-400 text-[10px] mb-1">
+                        Lấy mẫu: {{ evidence.audio.duration }}s | {{ evidence.audio.sample_rate }}Hz | {{
+                        evidence.audio.channels }}ch
+                    </div>
+                    <div
+                        class="font-mono text-[9px] text-emerald-400 break-all select-all pointer-events-auto max-h-24 overflow-y-auto leading-tight custom-scrollbar pr-1">
+                        {{ evidence.audio.fingerprint }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2 text-sm align-top pt-3">
+        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+            {% if job.status == 'DONE' %} bg-green-100 text-green-800 
+            {% elif job.status == 'PENDING' %} bg-gray-100 text-gray-800 
+            {% elif job.status == 'DRAFT' %} bg-yellow-100 text-yellow-800 
+            {% elif job.status == 'AI_PROCESSING' %} bg-purple-100 text-purple-800 
+            {% elif job.status == 'RUNNING' %} bg-blue-100 text-blue-800 
+            {% elif job.status == 'FAILED' %} bg-red-100 text-red-800 
+            {% elif job.status == 'CANCELLED' %} bg-stone-200 text-stone-600 
+            {% endif %}">
+            {{ job.status }}
+        </span>
+    </td>
+    <td class="px-4 py-2 text-sm align-top pt-3">
+        {% if job.account %}
+        <span class="text-gray-500">{{ job.platform }}</span>
+        <span class="text-gray-400">({{ job.account.name }})</span>
+        {% else %}
+        <span class="text-gray-400">{{ job.platform }}</span>
+        <span class="text-red-400 italic text-xs">(Deleted Account)</span>
+        {% endif %}
+        {% if job.target_page %}
+        <div class="mt-1 text-[10px] text-indigo-500 truncate max-w-[120px]" title="{{ job.target_page }}">
+            🚩 {{ job.target_page.split('facebook.com/')[-1] if 'facebook.com/' in job.target_page else job.target_page
+            }}
+        </div>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2 text-sm text-gray-700 whitespace-nowrap align-top pt-3">
+        {{ job.schedule_ts | format_time }}
+    </td>
+    <td class="px-4 py-2 text-sm text-gray-500 align-top pt-3">{{ job.tries }}/{{ job.max_tries }}</td>
+    <td class="px-4 py-2 text-sm align-top pt-3">
+        {% if job.status == 'DONE' %}
+        <div class="flex flex-col gap-1 text-xs">
+            {% if job.post_url %}
+            <a href="{{ job.post_url }}" target="_blank"
+                class="text-blue-500 hover:text-blue-700 truncate max-w-[120px] block" title="{{ job.post_url }}">🔗
+                Post</a>
+            {% endif %}
+            {% if job.view_24h is not none %}
+            <span class="text-emerald-600 font-semibold">👁 {{ "{:,}".format(job.view_24h) }} views</span>
+            {% elif job.metrics_checked %}
+            <span class="text-gray-400">👁 0 views</span>
+            {% else %}
+            <span class="text-gray-300 italic">⏳ Chờ quét</span>
+            {% endif %}
+            {% if job.click_count and job.click_count > 0 %}
+            <span class="text-amber-600 font-semibold">🖱 {{ job.click_count }} clicks</span>
+            {% endif %}
+            {% if job.tracking_code %}
+            <span class="text-gray-400 font-mono text-[10px]" title="/r/{{ job.tracking_code }}">📎 {{ job.tracking_code
+                }}</span>
+            {% endif %}
+        </div>
+        {% else %}
+        <span class="text-gray-300">-</span>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2 text-sm max-w-xs align-top pt-3" title="{{ job.last_error }}">
+        {% if job.status == 'DRAFT' %}
+        <form hx-post="/jobs/{{ job.id }}/caption" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            class="flex flex-col gap-1 w-full max-w-md">
+            <textarea name="caption" rows="4"
+                class="text-xs border border-gray-300 rounded p-1 w-full text-gray-700 bg-yellow-50 focus:ring-1 focus:ring-indigo-500 whitespace-pre-wrap">{{ job.caption }}</textarea>
+            <div class="flex justify-start">
+                <button type="submit" class="text-[10px] text-gray-500 hover:text-indigo-600 underline"
+                    onclick="this.textContent='Saving...'">Save Caption Edit</button>
+            </div>
+        </form>
+        {% else %}
+        <span class="text-red-500 truncate block">{{ job.last_error or '-' }}</span>
+        {% endif %}
+    </td>
+    <td class="px-4 py-2 text-sm font-medium align-top pt-2">
+        {% if job.status == 'DRAFT' %}
+        <button hx-post="/jobs/{{ job.id }}/approve" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            onclick="this.textContent='...'; this.disabled=true;"
+            class="block w-24 text-center text-white hover:bg-indigo-700 bg-indigo-600 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition font-bold mb-2">
+            Approve
+        </button>
+        <button hx-post="/jobs/{{ job.id }}/cancel" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            onclick="this.textContent='...'; this.disabled=true;"
+            class="block w-24 text-center text-red-600 hover:text-red-900 bg-red-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition">
+            Delete Draft
+        </button>
+
+        {% elif job.status == 'FAILED' %}
+        <button hx-post="/jobs/{{ job.id }}/retry" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            onclick="this.textContent='...'; this.disabled=true;"
+            class="block w-24 text-center text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition mb-1">
+            Retry
+        </button>
+        <button hx-post="/jobs/{{ job.id }}/reset-draft" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            hx-confirm="Reset job #{{ job.id }} về DRAFT?" onclick="this.textContent='...'; this.disabled=true;"
+            class="block w-24 text-center text-amber-600 hover:text-amber-900 bg-amber-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition">
+            ↩ Reset DRAFT
+        </button>
+
+        {% elif job.status == 'PENDING' %}
+        {# Cooldown indicator — shows remaining wait time if account is cooling down #}
+        {% if job.account and job.account.last_post_ts %}
+        {% set elapsed = now - job.account.last_post_ts %}
+        {% set remaining = job.account.cooldown_seconds - elapsed %}
+        {% if remaining > 0 %}
+        <div class="mb-2 flex items-center gap-1 text-orange-500 text-xs font-medium"
+            title="Account đang cooldown, job sẽ tự chạy khi hết thời gian chờ">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Cooldown: {{ (remaining / 60)|int }}m{{ (remaining % 60)|int }}s
+        </div>
+        {% endif %}
+        {% endif %}
+        <button hx-post="/jobs/{{ job.id }}/force-run" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            onclick="this.textContent='...'; this.disabled=true;"
+            class="block w-24 text-center text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition mb-1">
+            Force Run
+        </button>
+        <button hx-post="/jobs/{{ job.id }}/cancel" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            onclick="this.textContent='...'; this.disabled=true;"
+            class="block w-24 text-center text-red-600 hover:text-red-900 bg-red-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition mb-2">
+            Cancel
+        </button>
+        <form hx-post="/jobs/{{ job.id }}/reschedule" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            class="flex flex-col gap-1 items-start text-xs border-t border-gray-100 pt-2 w-28">
+            <input type="date" name="new_date" required value="{{ job.schedule_ts | date_only }}"
+                class="border border-gray-200 rounded px-1 py-0.5 w-full bg-gray-50 text-gray-700">
+            <input type="time" name="new_time" required value="{{ job.schedule_ts | time_only }}"
+                class="border border-gray-200 rounded px-1 py-0.5 w-full bg-gray-50 text-gray-700">
+            <button type="submit"
+                class="bg-gray-100 border border-gray-200 text-gray-700 hover:bg-gray-200 px-2 py-1 rounded w-full shadow-sm">Reschedule</button>
+        </form>
+
+        {% elif job.status == 'AI_PROCESSING' %}
+        <span class="text-purple-500 text-xs flex items-center gap-1 mb-2">
+            <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                </path>
+            </svg>
+            🤖 AI Đang Viết...
+        </span>
+        <button hx-post="/jobs/{{ job.id }}/reset-draft" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+            hx-confirm="Reset job #{{ job.id }} về DRAFT?" onclick="this.textContent='...'; this.disabled=true;"
+            class="block w-24 text-center text-amber-600 hover:text-amber-900 bg-amber-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition">
+            ↩ Reset DRAFT
+        </button>
+
+        {% elif job.status == 'RUNNING' %}
+        <span class="text-blue-400 text-xs flex items-center gap-1">
+            <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                </path>
+            </svg>
+            Publishing...
+        </span>
+
+        {% elif job.status == 'CANCELLED' %}
+        <span class="text-stone-300 text-xs block w-24 text-center">--</span>
+
+        {% else %}
+        {# DONE — optionally link to external post #}
+        {% if job.external_post_id and not job.external_post_id.startswith('safe_mode') %}
+        <span class="text-green-400 text-xs">✓ Posted</span>
+        {% else %}
+        <span class="text-gray-300 text-xs text-center block w-24">--</span>
+        {% endif %}
+        {% endif %}
+    </td>
+</tr>

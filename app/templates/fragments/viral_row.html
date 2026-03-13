@@ -1,0 +1,43 @@
+<tr id="viral-{{ item.id }}" class="border-b text-sm hover:bg-gray-50">
+    <td class="p-3 align-top text-gray-500 font-mono text-xs">{{ item.id }}</td>
+    <td class="p-3 align-top">
+        <a href="{{ item.url }}" target="_blank"
+            class="text-blue-600 hover:text-blue-800 underline truncate block max-w-xs" title="{{ item.url }}">
+            {{ item.title or item.url }}
+        </a>
+    </td>
+    <td class="p-3 align-top font-medium text-purple-700">
+        {{ "{:,}".format(item.views) }}
+    </td>
+    <td class="p-3 align-top text-gray-600 text-xs text-center">
+        {{ account_name }}
+    </td>
+    <td class="p-3 align-top">
+        {% if item.status == 'NEW' %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Mới
+            quét</span>
+        {% elif item.status == 'FAILED' %}
+        <div class="max-w-full" title="{{ item.last_error or '' }}">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                FAILED
+            </span>
+            <div class="mt-1 block max-w-[240px] truncate text-[11px] leading-4 text-red-600">
+                {{ item.last_error or 'Unknown error' }}
+            </div>
+        </div>
+        {% else %}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">{{
+            item.status }}</span>
+        {% endif %}
+    </td>
+    <td class="p-3 align-top text-right">
+        <button class="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"
+            hx-post="/viral/{{ item.id }}/delete" hx-target="#viral-{{ item.id }}" hx-swap="outerHTML"
+            title="Xóa link này">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </button>
+    </td>
+</tr>

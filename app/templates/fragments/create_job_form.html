@@ -1,0 +1,412 @@
+<div id="create-job-form-container" class="bg-white p-6 rounded-lg shadow-md mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Bulk Upload Jobs</h2>
+        <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Max 50 files</span>
+    </div>
+
+    {% if error %}
+    <div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
+        <strong class="font-bold">Error:</strong>
+        <span class="block sm:inline">{{ error }}</span>
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div class="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded relative" id="success-alert">
+        <strong class="font-bold">Success!</strong>
+        <span class="block sm:inline">{{ bulk_success_count }} Jobs enqueued into the orchestrator.</span>
+        <script>
+            setTimeout(() => { const el = document.getElementById('success-alert'); if (el) el.remove(); }, 5000);
+            htmx.trigger('#jobs-table-body', 'refresh');
+        </script>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Account</label>
+            <select id="bulk-account-select" required onchange="recalculateSchedules()"
+                class="w-full border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+                <option value="" disabled selected>Select Account...</option>
+                {% for acc in accounts %}
+                <option value="{{ acc.id }}" data-last-post="{{ acc.last_post_ts or 0 }}"
+                    data-cooldown="{{ acc.cooldown_seconds }}">
+                    {{ acc.name }} ({{ acc.platform }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Base Start Time (Local)</label>
+            <input type="datetime-local" id="bulk-start-time" required onchange="recalculateSchedules()"
+                class="w-full border border-gray-300 rounded px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500">
+            <script>
+                // Defaults to current time
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                document.getElementById('bulk-start-time').value = now.toISOString().slice(0, 16);
+            </script>
+        </div>
+    </div>
+
+    <!-- Drag and Drop Zone -->
+    <div id="drop-zone"
+        class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50 hover:bg-gray-100 transition cursor-pointer mb-6">
+        <svg class="mx-auto h-12 w-12 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+        <p class="text-sm font-medium text-gray-700">Drop videos/images or folders here</p>
+        <p class="text-xs text-gray-500 mt-1">Or click to browse</p>
+        <input type="file" id="file-input" multiple accept="video/*,image/*" class="hidden">
+    </div>
+
+    <!-- Global Controls (Hidden until files added) -->
+    <div id="bulk-controls" class="hidden mb-4 bg-gray-50 p-4 rounded border border-gray-200">
+        <div class="mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Global Caption</label>
+            <div class="flex gap-2">
+                <input type="text" id="global-caption" placeholder="Caption to apply to all files..."
+                    class="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm">
+                <button type="button" onclick="applyGlobalCaption()"
+                    class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-1.5 rounded text-sm transition">
+                    Apply All
+                </button>
+            </div>
+        </div>
+        <div class="flex items-center">
+            <input id="bulk-randomize-caption" type="checkbox" value="true"
+                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer">
+            <label for="bulk-randomize-caption" class="ml-2 block text-sm text-gray-900 cursor-pointer">
+                Randomize Captions (Appends unique salt to each)
+            </label>
+        </div>
+        <div class="mt-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Affiliate URL <span
+                    class="text-gray-400 font-normal">(optional — redirect target for click tracking)</span></label>
+            <input type="text" id="bulk-affiliate-url" placeholder="https://example.com/offer?ref=123"
+                class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+        <div class="mt-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Target Page <span
+                    class="text-gray-400 font-normal">(tùy chọn — ghi đè Fanpage cho toàn bộ files đợt
+                    này)</span></label>
+            <div class="flex gap-2">
+                <select id="bulk-target-page"
+                    class="w-2/3 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="" selected>Cá nhân / Mặc định</option>
+                </select>
+                <input type="text" id="bulk-target-page-manual" placeholder="Hoặc nhập URL thủ công..."
+                    class="w-1/3 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Chọn trang tĩnh từ dropdown hoặc điền link nếu không thấy.</p>
+        </div>
+        <div class="mt-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Auto Comment <span
+                    class="text-gray-400 font-normal">(tùy chọn — comment tự động sau khi đăng, delay 2-5
+                    phút)</span></label>
+            <textarea id="bulk-auto-comment" rows="2" placeholder="Paste link tracking hoặc viết comment tùy ý...
+Ví dụ: https://vercel-redirect-xxx.vercel.app/r/abc123"
+                class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+            <p class="text-xs text-gray-400 mt-1">Nếu chỉ paste link, hệ thống sẽ tự wrap với CTA ngẫu nhiên.</p>
+        </div>
+    </div>
+
+    <!-- Preview Table -->
+    <div id="preview-table-container" class="hidden overflow-x-auto mb-4 border border-gray-200 rounded-lg">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                        File</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/4">
+                        Caption</th>
+                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">
+                        Schedule</th>
+                    <th class="px-3 py-2"></th>
+                </tr>
+            </thead>
+            <tbody id="preview-body" class="bg-white divide-y divide-gray-200">
+                <!-- Rows injected via JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Submit Area -->
+    <div class="flex items-center justify-between border-t border-gray-100 pt-4">
+        <span id="file-counter" class="text-sm text-gray-500 font-medium">0 files queued</span>
+        <button type="button" id="bulk-enqueue-btn" disabled onclick="submitBulkJobs()"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded shadow-sm transition focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center gap-2 opacity-50 cursor-not-allowed">
+            Enqueue Bulk Jobs
+        </button>
+    </div>
+
+    <!-- Core Bulk Upload Engine JS -->
+    <script>
+        (function () {
+            // State
+            const MAX_FILES = 50;
+            let fileQueue = []; // Array of JS File objects
+
+            // DOM Elements
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+            const previewEl = document.getElementById('preview-table-container');
+            const controlsEl = document.getElementById('bulk-controls');
+            const tbody = document.getElementById('preview-body');
+            const enqueueBtn = document.getElementById('bulk-enqueue-btn');
+            const fileCounter = document.getElementById('file-counter');
+            const accountSelect = document.getElementById('bulk-account-select');
+            const startTimeInput = document.getElementById('bulk-start-time');
+            const affiliateInput = document.getElementById('bulk-affiliate-url');
+            const autoCommentInput = document.getElementById('bulk-auto-comment');
+
+            // --- Auto Comment Generator ---
+            // Automatically suggest a tracking link structure when affiliate URL is entered
+            affiliateInput.addEventListener('input', (e) => {
+                const url = e.target.value.trim();
+                if (url && !autoCommentInput.value.trim()) {
+                    autoCommentInput.value = "{tracking_url}";
+                } else if (!url && autoCommentInput.value.trim() === "{tracking_url}") {
+                    autoCommentInput.value = "";
+                }
+            });
+
+            // --- Load Managed Pages on Account Select ---
+            accountSelect.addEventListener('change', async (e) => {
+                const accId = e.target.value;
+                if (accId) {
+                    try {
+                        const res = await fetch(`/accounts/${accId}/pages`);
+                        const html = await res.text();
+                        document.getElementById('bulk-target-page').innerHTML = html;
+                    } catch (err) {
+                        console.error("Failed to load managed pages:", err);
+                    }
+                }
+            });
+
+            // --- Drag & Drop Handlers ---
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-indigo-500', 'bg-indigo-50');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
+            });
+            dropZone.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-indigo-500', 'bg-indigo-50');
+                await handleDrop(e);
+            });
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(Array.from(e.target.files));
+            });
+
+            // --- File Extractor (Recursively read folders) ---
+            async function handleDrop(e) {
+                const items = e.dataTransfer.items;
+                const newFiles = [];
+
+                async function readEntry(entry) {
+                    if (entry.isFile) {
+                        const file = await new Promise(resolve => entry.file(resolve));
+                        if (file.type.startsWith('video/') || file.type.startsWith('image/')) {
+                            newFiles.push(file);
+                        }
+                    } else if (entry.isDirectory) {
+                        const dirReader = entry.createReader();
+                        const entries = await new Promise(resolve => dirReader.readEntries(resolve));
+                        for (const currEntry of entries) {
+                            await readEntry(currEntry);
+                        }
+                    }
+                }
+
+                if (items) {
+                    for (let i = 0; i < items.length; i++) {
+                        const item = items[i];
+                        if (item.kind === 'file') {
+                            const entry = item.webkitGetAsEntry();
+                            if (entry) await readEntry(entry);
+                        }
+                    }
+                }
+
+                handleFiles(newFiles);
+            }
+
+            // --- View & State Logic ---
+            function handleFiles(files) {
+                // Cap at MAX_FILES
+                const spaceLeft = MAX_FILES - fileQueue.length;
+                const toAdd = files.slice(0, spaceLeft);
+                if (files.length > spaceLeft) {
+                    alert(`You can only queue a maximum of ${MAX_FILES} files. Remaining files were ignored.`);
+                }
+
+                fileQueue = [...fileQueue, ...toAdd];
+                renderTable();
+            }
+
+            window.removeFileFromQueue = function (index) {
+                fileQueue.splice(index, 1);
+                renderTable();
+            };
+
+            window.applyGlobalCaption = function () {
+                const val = document.getElementById('global-caption').value;
+                document.querySelectorAll('.row-caption').forEach(input => input.value = val);
+            };
+
+            function renderTable() {
+                if (fileQueue.length === 0) {
+                    previewEl.classList.add('hidden');
+                    controlsEl.classList.add('hidden');
+                    enqueueBtn.disabled = true;
+                    enqueueBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    fileCounter.innerText = "0 files queued";
+                    return;
+                }
+
+                previewEl.classList.remove('hidden');
+                controlsEl.classList.remove('hidden');
+                enqueueBtn.disabled = false;
+                enqueueBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                fileCounter.innerText = `${fileQueue.length} files queued`;
+
+                tbody.innerHTML = '';
+                fileQueue.forEach((file, index) => {
+                    // Khôi phục logic lấy SEO context từ tên file
+                    let rawName = file.name.split('.').slice(0, -1).join('.');
+                    let baseName = rawName.replace(/[-_\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+                    if (baseName.length > 0) {
+                        baseName = baseName.charAt(0).toUpperCase() + baseName.slice(1);
+                    }
+
+                    // Tạo "Stealth Salt" - một ID ngẫu nhiên nhưng nhìn tự nhiên
+                    // Dùng dạng số thứ tự ảo hoặc mã sản phẩm ảo: vd #v1042 #id4829
+                    let randomNum = Math.floor(1000 + Math.random() * 9000); // 4 chữ số
+                    let stealthSalt = `#v${randomNum}`;
+
+                    // Giữ baseName lại để làm Gợi ý (Context) cho AI lúc gọi prompt
+                    let seoCaption = `[AI_GENERATE]\nContext: ${baseName}\n\n${stealthSalt}`;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                    <td class="px-3 py-2 text-xs text-gray-900 font-medium truncate max-w-[150px]" title="${file.name}">
+                        ${file.name}
+                        <div class="text-gray-400 font-normal mt-0.5">${(file.size / 1024 / 1024).toFixed(1)} MB</div>
+                    </td>
+                    <td class="px-3 py-2">
+                        <textarea id="caption-${index}" rows="4" class="row-caption w-full text-xs box-border border-gray-300 rounded px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500">${seoCaption}</textarea>
+                    </td>
+                    <td class="px-3 py-2">
+                        <input type="datetime-local" id="time-${index}" 
+                            class="row-time w-full text-xs border border-gray-300 rounded px-2 py-1 focus:ring-indigo-500 focus:border-indigo-500">
+                    </td>
+                    <td class="px-3 py-2 text-right">
+                        <button onclick="removeFileFromQueue(${index})" class="text-red-500 hover:text-red-700 text-xs font-semibold p-1">✕</button>
+                    </td>
+                `;
+                    tbody.appendChild(tr);
+                });
+
+                // Initial auto-spacing
+                recalculateSchedules();
+            }
+
+            // --- Auto-Spacing Engine ---
+            window.recalculateSchedules = function () {
+                if (fileQueue.length === 0) return;
+
+                const startStr = startTimeInput.value;
+                if (!startStr) return;
+
+                // Get Account Settings
+                const selectedOpt = accountSelect.options[accountSelect.selectedIndex];
+                if (!selectedOpt || !selectedOpt.value) return; // No account selected yet
+
+                const cooldownSec = parseInt(selectedOpt.getAttribute('data-cooldown') || 1800, 10);
+                const lastPostTs = parseInt(selectedOpt.getAttribute('data-last-post') || 0, 10);
+
+                const clientBaseMs = new Date(startStr).getTime();
+                const nowMs = Date.now();
+
+                // Simulate equivalent backend projection
+                // If base time is already violating cooldown, we must push it up iteratively
+                let currentValidTs = lastPostTs;
+
+                fileQueue.forEach((_, index) => {
+                    const targetInput = document.getElementById(`time-${index}`);
+
+                    // For the very first row, base is startStr. For subsequent, base is previous row's calc ms
+                    let intendedTs = index === 0 ? Math.floor(clientBaseMs / 1000) : (currentValidTs + cooldownSec);
+
+                    // Safety enforce against last valid state
+                    let spacingRequiredTs = currentValidTs > 0 ? currentValidTs + cooldownSec : intendedTs;
+
+                    let finalizedTs = Math.max(intendedTs, spacingRequiredTs);
+
+                    currentValidTs = finalizedTs; // record for next iteration
+
+                    // Convert back to local datetime-local string
+                    const dt = new Date(finalizedTs * 1000);
+                    dt.setMinutes(dt.getMinutes() - dt.getTimezoneOffset());
+                    targetInput.value = dt.toISOString().slice(0, 16);
+                });
+            };
+
+            // --- Submission engine ---
+            window.submitBulkJobs = async function () {
+                if (!accountSelect.value) {
+                    alert("Please select an Account first.");
+                    return;
+                }
+                if (!startTimeInput.value) {
+                    alert("Please select a Base Start Time.");
+                    return;
+                }
+
+                enqueueBtn.disabled = true;
+                enqueueBtn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Uploading Batch...';
+
+                const formData = new FormData();
+                const targetPageSelect = document.getElementById('bulk-target-page').value;
+                const targetPageManual = document.getElementById('bulk-target-page-manual').value.trim();
+                const targetPageFinal = targetPageManual ? targetPageManual : targetPageSelect;
+
+                formData.append('account_id', accountSelect.value);
+                formData.append('randomize_caption', document.getElementById('bulk-randomize-caption').checked);
+                formData.append('affiliate_url', document.getElementById('bulk-affiliate-url').value || '');
+                formData.append('auto_comment_text', document.getElementById('bulk-auto-comment').value || '');
+                formData.append('target_page', targetPageFinal);
+
+                fileQueue.forEach((file, index) => {
+                    formData.append('media_files', file);
+                    formData.append('captions', document.getElementById(`caption-${index}`).value);
+                    formData.append('schedule_times', document.getElementById(`time-${index}`).value);
+                });
+
+                try {
+                    const response = await fetch('/jobs/bulk_create', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const htmlText = await response.text();
+                    // We physically swap the parent container DOM with the response
+                    document.getElementById('create-job-form-container').outerHTML = htmlText;
+                } catch (err) {
+                    alert("Network error occurred during bulk upload.");
+                    console.error(err);
+                    enqueueBtn.disabled = false;
+                    enqueueBtn.innerHTML = 'Enqueue Bulk Jobs';
+                }
+            };
+
+        })();
+    </script>
+</div>
