@@ -73,14 +73,20 @@
                 <input type="time" name="sleep_end_time" value="{{ account.sleep_end_time or '' }}"
                     class="border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-400">
             </div>
-            <div class="flex items-center space-x-2 text-xs text-gray-500 mt-1">
-                <span
-                    title="Bỏ trống thì đăng lên Profile. Nhập URL hoặc Link của Facebook Page để đăng lên Page.">Target
-                    Page:</span>
-                <input type="text" name="target_page" value="{{ account.target_page or '' }}"
-                    placeholder="https://facebook.com/tencuapage"
-                    class="flex-1 border rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                    style="min-width:140px; max-width:220px;">
+            <div class="flex flex-col items-start space-y-1 text-xs text-gray-500 mt-1 w-full relative group">
+                <div class="flex items-center space-x-2 w-full">
+                    <span title="Dùng dropdown để chọn hoặc kéo thả/nhập link thủ công" class="w-[70px]">Target:</span>
+                    <input list="pages-{{ account.id }}" type="text" name="target_page"
+                        value="{{ account.target_page or '' }}" placeholder="Trống = Cá nhân. Hoặc chọn/paste link..."
+                        class="flex-1 border rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        style="min-width:140px;">
+                    <datalist id="pages-{{ account.id }}">
+                        <option value="">Cá nhân / Mặc định</option>
+                        {% for page in account.managed_pages_list %}
+                        <option value="{{ page.url }}">{{ page.name }}</option>
+                        {% endfor %}
+                    </datalist>
+                </div>
             </div>
             <div class="flex items-start space-x-2 text-xs text-gray-500 mt-1">
                 <span class="pt-1 mt-0.5" title="Mỗi dòng 1 link Facebook Page/Group đối thủ">Đối thủ:</span>
