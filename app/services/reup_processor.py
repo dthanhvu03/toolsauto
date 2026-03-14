@@ -188,8 +188,8 @@ class ReupProcessor:
 
         cmd += [
             "-c:v", "libx264",
-            "-crf", "23",
-            "-preset", "fast",
+            "-crf", "26",
+            "-preset", "ultrafast",
             "-c:a", "aac",
             "-b:a", "128k",
             "-movflags", "+faststart",
@@ -197,6 +197,28 @@ class ReupProcessor:
         ]
 
         logger.info("[ReupProcessor] Filters: %s", vf)
+
+        def _fast_trim_fallback() -> ReupResult:
+            """Emergency fast trim without re-encoding to enforce Reels limit."""
+            if duration <= cls.MAX_REELS_DURATION:
+                return ReupResult(success=False, error="Fallback not needed (<=90s)")
+            
+            logger.info("[ReupProcessor] Ejecuting emergency fast-trim for video > 90s...")
+            trim_cmd = [
+                "ffmpeg", "-y", "-i", input_path,
+                "-t", str(cls.MAX_REELS_DURATION),
+                "-c", "copy",
+                temp_path
+            ]
+            try:
+                subprocess.run(trim_cmd, capture_output=True, timeout=60)
+                if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+                    os.rename(temp_path, output_path)
+                    logger.info("[ReupProcessor] Fast-trim successful.")
+                    return ReupResult(success=True, output_path=output_path)
+            except Exception as fe:
+                logger.error("[ReupProcessor] Fast-trim failed: %s", fe)
+            return ReupResult(success=False, error="Both processing and fast-trim failed")
 
         try:
             result = subprocess.run(
@@ -208,11 +230,11 @@ class ReupProcessor:
                 logger.error("[ReupProcessor] FFmpeg failed: %s", error[:200])
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
-                return ReupResult(success=False, error=error[:200])
+                return _fast_trim_fallback() if duration > cls.MAX_REELS_DURATION else ReupResult(success=False, error=error[:200])
 
             # Validate output
             if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
-                return ReupResult(success=False, error="FFmpeg produced empty output")
+                return _fast_trim_fallback() if duration > cls.MAX_REELS_DURATION else ReupResult(success=False, error="FFmpeg produced empty output")
 
             # Atomic rename
             os.rename(temp_path, output_path)
@@ -228,10 +250,11 @@ class ReupProcessor:
             return ReupResult(success=True, output_path=output_path)
 
         except subprocess.TimeoutExpired:
+            logger.warning("[ReupProcessor] FFmpeg timeout (>5 min)")
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-            return ReupResult(success=False, error="FFmpeg timeout (>5 min)")
+            return _fast_trim_fallback() if duration > cls.MAX_REELS_DURATION else ReupResult(success=False, error="FFmpeg timeout (>5 min)")
         except Exception as e:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-            return ReupResult(success=False, error=str(e))
+            return _fast_trim_fallback() if duration > cls.MAX_REELS_DURATION else ReupResult(success=False, error=str(e))
