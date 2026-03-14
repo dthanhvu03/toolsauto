@@ -16,7 +16,7 @@ SELECTORS = {
     },
     "switch_menu": {
         "switch_now_button": "div[role=\"button\"]:has-text(\"Switch now\"), div[role=\"button\"]:has-text(\"Chuyển ngay\")",
-        "account_menu_button": "svg[aria-label=\"Tài khoản của bạn\"], svg[aria-label=\"Your profile\"]",
+        "account_menu_button": "div[aria-label=\"Tài khoản của bạn\"], div[aria-label=\"Your profile\"], div[role=\"banner\"] div[role=\"button\"] image, div[role=\"banner\"] div[role=\"button\"] img",
         "see_all_profiles": "div[role=\"button\"]:has-text(\"Xem tất cả trang cá nhân\"), div[role=\"button\"]:has-text(\"See all profiles\")",
         "target_profile_btn": "div[role=\"dialog\"] *[role=\"button\"][aria-label*=\"{target_page_name}\"], div[role=\"dialog\"] *[role=\"radio\"][aria-label*=\"{target_page_name}\"], div[role=\"dialog\"] *[role=\"link\"][aria-label*=\"{target_page_name}\"], div[role=\"dialog\"] div[role=\"button\"]:has-text(\"{target_page_name}\"), div[role=\"dialog\"] div[role=\"radio\"]:has-text(\"{target_page_name}\")",
         "any_profile_btn": "div[role=\"dialog\"] div[role=\"button\"]"
