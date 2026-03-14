@@ -27,7 +27,7 @@ FFMPEG_WATERMARK_OPACITY = float(os.getenv("FFMPEG_WATERMARK_OPACITY", "0.4"))  
 
 # VideoProtector (DRM)
 DRM_ENABLED = os.getenv("DRM_ENABLED", "true").lower() == "true"
-DRM_WATERMARK_TEXT = os.getenv("DRM_WATERMARK_TEXT", "xyzt08")
+DRM_WATERMARK_TEXT = os.getenv("DRM_WATERMARK_TEXT", "z")
 
 # Directory Settings
 CONTENT_DIR = BASE_DIR / "content"
