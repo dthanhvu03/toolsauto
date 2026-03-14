@@ -989,11 +989,17 @@ class TelegramPoller:
             # Clean URL: Xóa query string và dấu '/' ở cuối để tránh lỗi trùng lặp do khác query string
             clean_url = url.split("?")[0].rstrip("/")
 
-            # Check trùng
-            existing = db.query(ViralMaterial).filter(ViralMaterial.url == clean_url).first()
-            if existing:
+            # Check trùng cùng account + cùng page + đang chờ xử lý → chặn double-click
+            existing_pending = db.query(ViralMaterial).filter(
+                ViralMaterial.url == clean_url,
+                ViralMaterial.status.in_(["NEW", "REUP"]),
+                ViralMaterial.scraped_by_account_id == target_account_id,
+                ViralMaterial.target_page == target_page_url,
+            ).first()
+            if existing_pending:
                 self.client.send_message(
-                    f"ℹ️ URL này đã có trong hệ thống (ID #{existing.id}, status: {existing.status})."
+                    f"ℹ️ URL này đang chờ xử lý cho cùng account/page (ID #{existing_pending.id}, status: {existing_pending.status}).\n"
+                    f"Hãy đợi xử lý xong hoặc dùng account/page khác."
                 )
                 return
 

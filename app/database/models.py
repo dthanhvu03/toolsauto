@@ -223,7 +223,7 @@ class ViralMaterial(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     platform = Column(String, default="facebook", index=True)
-    url = Column(String, unique=True, index=True)
+    url = Column(String, index=True)
     title = Column(String, nullable=True)
     views = Column(Integer, default=0, index=True)
     scraped_by_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
