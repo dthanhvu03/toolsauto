@@ -690,7 +690,7 @@ class FacebookAdapter(AdapterInterface):
 
         try:
             # 1. Open the top right account menu
-            account_menu_btn = self.page.locator('div[role="banner"] div[role="button"]').last
+            account_menu_btn = self.page.locator(SELECTORS["switch_menu"]["account_menu_button"]).last
             if not self._is_visible(account_menu_btn):
                 logger.warning("FacebookAdapter: Account menu button not visible.")
                 return False
@@ -1426,9 +1426,9 @@ class FacebookAdapter(AdapterInterface):
         try:
             # 1. Click top-right avatar image
             avatar_selectors = [
+                SELECTORS["switch_menu"]["account_menu_button"],
                 'div[role="banner"] image', 
-                'div[role="banner"] img',
-                SELECTORS["switch_menu"]["account_menu_button"]
+                'div[role="banner"] img'
             ]
             
             avatar_btn = None
@@ -1443,7 +1443,7 @@ class FacebookAdapter(AdapterInterface):
                 logger.warning("FacebookAdapter: Could not find avatar menu icon.")
                 return False
 
-            avatar_btn.click()
+            self._click_locator(avatar_btn, "avatar menu", timeout=5000)
             self.page.wait_for_timeout(2000)
 
             # 2. Look for "Xem tất cả trang cá nhân" or direct Page name
