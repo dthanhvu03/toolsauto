@@ -403,15 +403,27 @@ def _process_viral_materials(db):
             # --- Check if downloaded file is actually a video ---
             _, ext = os.path.splitext(media_path)
             if ext.lower() not in ALLOWED_VIDEO_EXTS:
-                reason = f"Downloaded media is not a video file ({ext.lower() or 'unknown'}); likely slideshow/audio-only."
-                logger.error("[VIRAL] %s path=%s", reason, media_path)
+                logger.warning("[VIRAL] Downloaded media is not a video file (%s). Path: %s", ext.lower(), media_path)
                 try:
                     os.remove(media_path)
                 except OSError:
                     pass
-                _mark_material_failed(db, mat, reason)
-                continue
+                
+                # Try TikWM fallback for TikTok if it hasn't been used yet
+                if mat.platform == "tiktok" and not fallback_used_successfully:
+                    logger.warning("[VIRAL] Attempting TikWM fallback because yt-dlp downloaded a non-video file...")
+                    fallback_filename = f"viral_{mat.id}_tikwm.mp4"
+                    fallback_path = os.path.join(platform_dir, fallback_filename)
+                    if _download_tiktok_fallback(mat.url, fallback_path):
+                        fallback_used_successfully = True
+                        media_path = fallback_path
+                        logger.info("[VIRAL] Downloaded (tikwm fallback after non-video dl): %s", media_path)
 
+                if not fallback_used_successfully:
+                    reason = f"Downloaded media is not a video file ({ext.lower() or 'unknown'}); likely slideshow/audio-only."
+                    logger.error("[VIRAL] %s path=%s", reason, media_path)
+                    _mark_material_failed(db, mat, reason)
+                    continue
 
             # === Post-processing: watermark removal + anti-duplicate ===
             from app.services.reup_processor import ReupProcessor
