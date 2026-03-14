@@ -33,7 +33,7 @@ def get_jobs_table(
     
     # Status filter
     if status == "active":
-        query = query.filter(Job.status.in_(["PENDING", "RUNNING", "AI_PROCESSING"]))
+        query = query.filter(Job.status.in_(["AWAITING_STYLE", "DRAFT", "PENDING", "RUNNING", "AI_PROCESSING"]))
     elif status in ("DRAFT", "PENDING", "RUNNING", "DONE", "FAILED", "CANCELLED"):
         query = query.filter(Job.status == status)
     # else "all" → no filter
