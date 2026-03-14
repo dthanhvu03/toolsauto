@@ -986,8 +986,11 @@ class TelegramPoller:
                     self.client.send_message(f"❌ Account <b>{account.name}</b> không quản lý Page nào có tên chứa '{target_page_arg}'.\nVui lòng cung cấp link URL chính xác hoặc dùng Sync Pages trên Dashboard.")
                     return
 
+            # Clean URL: Xóa query string và dấu '/' ở cuối để tránh lỗi trùng lặp do khác query string
+            clean_url = url.split("?")[0].rstrip("/")
+
             # Check trùng
-            existing = db.query(ViralMaterial).filter(ViralMaterial.url == url).first()
+            existing = db.query(ViralMaterial).filter(ViralMaterial.url == clean_url).first()
             if existing:
                 self.client.send_message(
                     f"ℹ️ URL này đã có trong hệ thống (ID #{existing.id}, status: {existing.status})."
@@ -995,7 +998,7 @@ class TelegramPoller:
                 return
 
             mat = ViralMaterial(
-                url=url,
+                url=clean_url,
                 platform=platform,
                 views=0,
                 title=f"Manual reup via Telegram",
