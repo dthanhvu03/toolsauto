@@ -13,6 +13,7 @@ from app.utils.human_behavior import human_type, human_scroll, pre_post_delay
 import json
 import unicodedata
 from collections import deque
+from app.adapters.facebook.selectors import SELECTORS
 
 logger = logging.getLogger(__name__)
 
@@ -384,9 +385,22 @@ class FacebookAdapter(AdapterInterface):
             return None
 
         origin_url = self.page.url
-        if self._try_entry_labels(self.PAGE_REELS_LABELS, origin_url, "page"):
-            return "direct_reels"
+        logger.info("FacebookAdapter: Navigating to page reels entry from %s", origin_url)
 
+        # 1. Direct URL navigation is most reliable for Fanpages
+        # Since we are already switched to the Fanpage context, we can just go to the global create URL
+        create_url = "https://www.facebook.com/reels/create"
+        logger.info("FacebookAdapter: Trying direct navigation to Fanpage create reel url: %s", create_url)
+        try:
+            self.page.goto(create_url, wait_until="domcontentloaded")
+            self.page.wait_for_timeout(5000)
+            # Check if we landed on a reels creation surface
+            if self._looks_like_publish_surface(self.page):
+                return "direct_reels"
+        except Exception as e:
+            logger.warning("FacebookAdapter: Direct navigation to reels/create failed: %s", e)
+
+        # 2. Fallback to selectors (which are more specific than labels)
         page_selectors = (
             'a[href*="/reels/create"]',
             'a[href*="/reel/create"]',
@@ -394,6 +408,11 @@ class FacebookAdapter(AdapterInterface):
         )
         if self._try_entry_selectors(page_selectors, origin_url, "page"):
             return "direct_reels"
+
+        # 3. Fallback to labels (risky: might open Reel player instead of composer)
+        if self._try_entry_labels(self.PAGE_REELS_LABELS, origin_url, "page"):
+            return "direct_reels"
+            
         return None
 
     def _select_file_input(self, surface: Page | Locator, media_path: str) -> Locator | None:
@@ -523,6 +542,12 @@ class FacebookAdapter(AdapterInterface):
                 human_type(self.page, caption)
                 if self.page:
                     self.page.wait_for_timeout(800)
+                    try:
+                        os.makedirs("/home/vu/toolsauto/logs", exist_ok=True)
+                        self.page.screenshot(path="/home/vu/toolsauto/logs/debug_caption_typed.png")
+                        logger.info("FacebookAdapter: Saved debug screenshot of typed caption.")
+                    except:
+                        pass
                 logger.info("FacebookAdapter: Caption typed into active publish surface.")
                 return True
             except Exception as e:
@@ -749,23 +774,35 @@ class FacebookAdapter(AdapterInterface):
         try:
             # 1. Navigation & Page Context Switch
             if target_page_url:
-                logger.info("FacebookAdapter: Target Page specified. Navigating to %s", target_page_url)
+                target_page_name = None
+                if job.account and getattr(job.account, 'managed_pages_list', None):
+                    for p in job.account.managed_pages_list:
+                        p_url = p.get("url", "")
+                        if p_url and (p_url in target_page_url or target_page_url in p_url):
+                            target_page_name = p.get("name")
+                            break
+                        if "?id=" in target_page_url and "?id=" in p_url:
+                            if target_page_url.split("?id=")[1].split("&")[0] == p_url.split("?id=")[1].split("&")[0]:
+                                target_page_name = p.get("name")
+                                break
+                                
+                logger.info("FacebookAdapter: Target Page specified. Navigating to %s (Name: %s)", target_page_url, target_page_name)
                 if not target_page_url.startswith("http"):
                     target_page_url = "https://" + target_page_url
                 self.page.goto(target_page_url, wait_until="domcontentloaded")
                 self.page.wait_for_timeout(4000)
 
-                switch_btn = self.page.locator(
-                    'div[role="button"]:has-text("Switch now"), '
-                    'div[role="button"]:has-text("Chuyển ngay")'
-                ).first
+                switch_btn = self.page.locator(SELECTORS["switch_menu"]["switch_now_button"]).first
                 if self._is_visible(switch_btn):
                     logger.info("FacebookAdapter: Found 'Switch now' button for the Page. Clicking...")
                     self._click_locator(switch_btn, "page switch button", timeout=10000)
                     self.page.wait_for_timeout(5000)
                     logger.info("FacebookAdapter: Switched to Page context successfully.")
                 else:
-                    logger.info("FacebookAdapter: No 'Switch now' button found on the Page. Assuming already switched or direct post allowed.")
+                    logger.info("FacebookAdapter: No 'Switch now' button found on the Page. Attempting context switch via avatar menu...")
+                    switched = self._switch_to_page_context(target_page_name)
+                    if not switched:
+                        logger.warning("FacebookAdapter: Avatar menu switch failed or unnecessary. Assuming already switched.")
             else:
                 logger.info("FacebookAdapter: Navigating to www.facebook.com (Personal Profile)")
                 self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
@@ -1377,7 +1414,7 @@ class FacebookAdapter(AdapterInterface):
             logger.warning("FacebookAdapter: Failed to post comment: %s", e)
             return PublishResult(ok=False, error=f"Comment failed: {e}", is_fatal=False)
 
-    def _switch_to_page_context(self):
+    def _switch_to_page_context(self, target_page_name: str = None) -> bool:
         """
         Switch current context to become the Fanpage.
         Uses the top-right avatar menu as proven in test_switch.py.
@@ -1391,8 +1428,7 @@ class FacebookAdapter(AdapterInterface):
             avatar_selectors = [
                 'div[role="banner"] image', 
                 'div[role="banner"] img',
-                'div[aria-label="Tài khoản của bạn"]',
-                'div[aria-label="Your profile"]'
+                SELECTORS["switch_menu"]["account_menu_button"]
             ]
             
             avatar_btn = None
@@ -1411,20 +1447,53 @@ class FacebookAdapter(AdapterInterface):
             self.page.wait_for_timeout(2000)
 
             # 2. Look for "Xem tất cả trang cá nhân" or direct Page name
-            see_all = self.page.get_by_text("Xem tất cả trang cá nhân", exact=False).first
-            if see_all.count() == 0:
-                see_all = self.page.get_by_text("See all profiles", exact=False).first
+            see_all = self.page.locator(SELECTORS["switch_menu"]["see_all_profiles"]).first
 
             if see_all.count() > 0 and see_all.is_visible():
                 see_all.click()
                 self.page.wait_for_timeout(2000)
                 
-            # 3. Find the first selectable profile in the list (usually the target page)
+            # 3. Find the target profile in the list
+            if target_page_name:
+                logger.info("FacebookAdapter: Looking for exact profile name '%s' in switch menu...", target_page_name)
+                
+                # Robustly find any button/radio/link that has text OR aria-label containing the target page name
+                profile_btn_selector = SELECTORS["switch_menu"]["target_profile_btn"].format(target_page_name=target_page_name)
+                profile_btn = self.page.locator(profile_btn_selector).first
+                
+                if profile_btn.count() > 0:
+                    logger.info("FacebookAdapter: Clicking explicit profile match for '%s'...", target_page_name)
+                    # Scroll into view required if the list is long
+                    profile_btn.scroll_into_view_if_needed()
+                    try:
+                        profile_btn.click(timeout=5000)
+                    except Exception:
+                        logger.info("FacebookAdapter: Normal click timed out, attempting force click...")
+                        profile_btn.click(force=True)
+                    self.page.wait_for_timeout(8000)
+                    logger.info("FacebookAdapter: Switch command sent.")
+                    return True
+                else:
+                    logger.warning("FacebookAdapter: Target profile '%s' not found. Dumping HTML for debugging...", target_page_name)
+                    try:
+                        body_html = self.page.evaluate("document.body.innerHTML")
+                        safe_name = target_page_name.replace(' ', '_').lower()
+                        with open(f"/home/vu/toolsauto/tests/fb_switch_menu_{safe_name}.html", "w", encoding="utf-8") as f:
+                            f.write(body_html)
+                    except Exception as e:
+                        logger.error("Failed to dump HTML: %s", e)
+                    logger.warning("FacebookAdapter: Falling back to first available...")
+                    
+            # Fallback
             # Find all profile items in the dialog
-            profile_items = self.page.locator('div[role="dialog"] div[role="button"]').all()
+            profile_items = self.page.locator(SELECTORS["switch_menu"]["any_profile_btn"]).all()
             if profile_items:
                 logger.info("FacebookAdapter: Clicking first available profile in switch menu...")
-                profile_items[0].click()
+                try:
+                    profile_items[0].click(timeout=5000)
+                except Exception:
+                    logger.info("FacebookAdapter: Normal click timed out, attempting force click...")
+                    profile_items[0].click(force=True)
                 self.page.wait_for_timeout(8000) # Switch can take time
                 logger.info("FacebookAdapter: Switch command sent.")
                 return True
