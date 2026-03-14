@@ -236,9 +236,18 @@ class NotifierService:
         ]]
         
         video_path = job.processed_media_path or job.media_path
+        sent_video = False
         if video_path and os.path.exists(video_path):
-            cls._broadcast_video(video_path, msg, buttons)
-        else:
+            try:
+                file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
+                if file_size_mb <= 50:
+                    cls._broadcast_video(video_path, msg, buttons)
+                    sent_video = True
+                else:
+                    logger.warning("NotifierService: Video %.1fMB exceeds 50MB Telegram limit.", file_size_mb)
+            except Exception as e:
+                logger.warning("NotifierService: Video send failed (%s), falling back to text.", e)
+        if not sent_video:
             cls._broadcast_with_buttons(msg, buttons)
 
     @classmethod
@@ -268,9 +277,18 @@ class NotifierService:
         ]
         
         video_path = job.processed_media_path or job.media_path
+        sent_video = False
         if video_path and os.path.exists(video_path):
-            cls._broadcast_video(video_path, msg, buttons)
-        else:
+            try:
+                file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
+                if file_size_mb <= 50:
+                    cls._broadcast_video(video_path, msg, buttons)
+                    sent_video = True
+                else:
+                    logger.warning("NotifierService: Video %.1fMB exceeds 50MB Telegram limit.", file_size_mb)
+            except Exception as e:
+                logger.warning("NotifierService: Video send failed (%s), falling back to text.", e)
+        if not sent_video:
             cls._broadcast_with_buttons(msg, buttons)
 
     @classmethod
