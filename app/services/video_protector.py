@@ -33,11 +33,16 @@ class VideoProtector:
         - Opacity: 30% (white@0.3)
         - Movement: Sine/Cosine based on time (t)
         """
+        # Escape for FFmpeg drawtext:
+        # Colons need to be escaped as \:
+        # Single quotes within a single-quoted string need to be escaped by breaking out, escaping, and going back in '\''
+        safe_text = text.replace("'", "'\\''").replace(":", "\\:")
+        
         # x = w/2 + (w/3)*sin(t/2)
         # y = h/2 + (h/3)*cos(t/3)
         # This creates a non-repeating Lissajous-like curve
         return (
-            f"drawtext=text='{text}':fontcolor=white@0.3:fontsize=(h/25):"
+            f"drawtext=text='{safe_text}':fontcolor=white@0.3:fontsize=(h/25):"
             f"x='(w-text_w)/2 + (w/3)*sin(t/2)':"
             f"y='(h-text_h)/2 + (h/3)*cos(t/3)'"
         )
