@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -86,7 +87,7 @@ def update_account_limits(
     sleep_start_time: str = Form(""),
     sleep_end_time: str = Form(""),
     competitor_urls: str = Form(""),
-    target_page: str = Form(""),
+    target_pages: List[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     try:
@@ -96,7 +97,7 @@ def update_account_limits(
             sleep_start_time=sleep_start_time,
             sleep_end_time=sleep_end_time,
             competitor_urls=competitor_urls,
-            target_page=target_page
+            target_pages=target_pages or [],
         )
     except ValueError:
         account = AccountService.get_account(db, account_id)

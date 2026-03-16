@@ -101,7 +101,7 @@ class AccountService:
         return account
 
     @staticmethod
-    def update_limits(db: Session, account_id: int, daily_limit: int, cooldown_seconds: int, niche_topics: str = "", sleep_start_time: str = "", sleep_end_time: str = "", competitor_urls: str = "", target_page: str = "") -> Account:
+    def update_limits(db: Session, account_id: int, daily_limit: int, cooldown_seconds: int, niche_topics: str = "", sleep_start_time: str = "", sleep_end_time: str = "", competitor_urls: str = "", target_pages: list[str] | None = None) -> Account:
         import json as _json
         if not (0 <= daily_limit <= 200):
             raise ValueError("daily_limit must be between 0 and 200.")
@@ -114,7 +114,10 @@ class AccountService:
             
         account.daily_limit = daily_limit
         account.cooldown_seconds = cooldown_seconds
-        account.target_page = target_page.strip() if target_page else None
+
+        # Multi-target pages
+        pages = [p.strip() for p in (target_pages or []) if p and p.strip()]
+        account.target_pages_list = pages
         
         account.sleep_start_time = sleep_start_time.strip() if sleep_start_time else None
         account.sleep_end_time = sleep_end_time.strip() if sleep_end_time else None
@@ -129,13 +132,27 @@ class AccountService:
         else:
             account.niche_topics = None
             
-        # Process competitor_urls: convert newline or comma-separated to JSON array
+        # Process competitor_urls: parse "url → target_page" lines into JSON objects
         raw_urls = (competitor_urls or "").strip()
         if raw_urls:
-            if not raw_urls.startswith("["):
-                urls = [u.strip() for u in raw_urls.replace('\n', ',').split(",") if u.strip()]
-                raw_urls = _json.dumps(urls, ensure_ascii=False)
-            account.competitor_urls = raw_urls
+            if raw_urls.startswith("["):
+                account.competitor_urls = raw_urls
+            else:
+                entries = []
+                for line in raw_urls.replace('\r', '').split('\n'):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if ' → ' in line:
+                        url_part, tp_part = line.split(' → ', 1)
+                        url_part = url_part.strip()
+                        tp_part = tp_part.strip() or None
+                        if tp_part == "None":
+                            tp_part = None
+                        entries.append({"url": url_part, "target_page": tp_part})
+                    else:
+                        entries.append({"url": line, "target_page": None})
+                account.competitor_urls = _json.dumps(entries, ensure_ascii=False) if entries else None
         else:
             account.competitor_urls = None
         
