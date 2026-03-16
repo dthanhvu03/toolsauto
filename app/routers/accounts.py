@@ -88,6 +88,7 @@ def update_account_limits(
     sleep_end_time: str = Form(""),
     competitor_urls: str = Form(""),
     target_pages: List[str] = Form(None),
+    page_niches: str = Form(""),
     db: Session = Depends(get_db)
 ):
     try:
@@ -98,6 +99,7 @@ def update_account_limits(
             sleep_end_time=sleep_end_time,
             competitor_urls=competitor_urls,
             target_pages=target_pages or [],
+            page_niches=page_niches or "",
         )
     except ValueError:
         account = AccountService.get_account(db, account_id)
