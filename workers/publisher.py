@@ -97,6 +97,29 @@ def process_single_job(db: Session):
     if not job:
         return False
         
+    # Enforce Daily Limit (per-page logic)
+    if job.account and job.account.daily_limit > 0:
+        from datetime import datetime, time as time_obj
+        from zoneinfo import ZoneInfo
+        import app.config as app_config
+        today_start = int(datetime.combine(datetime.now(ZoneInfo(app_config.TIMEZONE)).date(), time_obj.min).timestamp())
+        
+        # Count DONE jobs today for this SPECIFIC target_page
+        posted_today = db.query(Job).filter(
+            Job.account_id == job.account_id,
+            Job.target_page == job.target_page,
+            Job.status == "DONE",
+            Job.finished_at >= today_start
+        ).count()
+        
+        if posted_today >= job.account.daily_limit:
+            logger.info("[Job %s] Daily limit (%s) reached for page '%s'. Requeuing for tomorrow.", 
+                        job.id, job.account.daily_limit, job.target_page or "default")
+            job.status = "PENDING"
+            job.schedule_ts = today_start + 86400 + 3600 # Tomorrow 1 AM
+            db.commit()
+            return True
+
     # Xin ý kiến giấc ngủ (Human Rest Cycle)
     if job.account and getattr(job.account, 'is_sleeping', False):
         logger.info("[Job %s] Account '%s' is SLEEPING (%s - %s). Postponing job for 10 minutes.", 

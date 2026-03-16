@@ -459,6 +459,12 @@ def _process_viral_materials(db):
             safe_title = (mat.title or "").replace('"', "'").strip()
             caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###" if safe_title else f"[AI_GENERATE] Context: Video {mat.platform} {mat.views} views."
 
+            # Resolve target page: explicit from material, or round-robin from account
+            resolved_target = mat.target_page
+            if not resolved_target and target_account.target_pages_list:
+                resolved_target = target_account.pick_next_target_page(db)
+                logger.info("[VIRAL] Round-robin → page '%s' for acc '%s'", resolved_target, target_account.name)
+
             new_job = Job(
                 platform="facebook",
                 account_id=target_account.id,
@@ -466,7 +472,7 @@ def _process_viral_materials(db):
                 caption=caption_metadata,
                 status="AWAITING_STYLE",
                 schedule_ts=int(time.time()) + random.randint(300, 3600),
-                target_page=mat.target_page
+                target_page=resolved_target
             )
             db.add(new_job)
             mat.status = "DRAFTED"
@@ -520,15 +526,28 @@ def _scrape_tiktok_competitors(db):
     tiktok_channels = []
     for acc in accounts:
         try:
-            urls = _json.loads(acc.competitor_urls) if acc.competitor_urls else []
-            if not isinstance(urls, list):
-                urls = [str(urls)]
+            data = _json.loads(acc.competitor_urls) if acc.competitor_urls else []
+            if not isinstance(data, list):
+                data = [{"url": str(data), "target_page": None}]
         except (_json.JSONDecodeError, TypeError):
-            urls = [u.strip() for u in (acc.competitor_urls or "").split(",") if u.strip()]
+            data = [{"url": u.strip(), "target_page": None}
+                    for u in (acc.competitor_urls or "").split(",") if u.strip()]
 
-        for url in urls:
-            if "tiktok.com/@" in url.lower():
-                tiktok_channels.append((acc.id, url))
+        for entry in data:
+            if isinstance(entry, dict):
+                url = entry.get("url", "")
+                tp_raw = entry.get("target_page") or entry.get("target_pages")
+            else:
+                url = str(entry)
+                tp_raw = None
+            if "tiktok.com/@" not in url.lower():
+                continue
+            # Support both single string and list of pages
+            if isinstance(tp_raw, list):
+                for tp in tp_raw:
+                    tiktok_channels.append((acc.id, url, tp))
+            else:
+                tiktok_channels.append((acc.id, url, tp_raw))
 
     if not tiktok_channels:
         logger.info("[TIKTOK] No TikTok competitor URLs found in any account.")
@@ -539,7 +558,7 @@ def _scrape_tiktok_competitors(db):
     scraper = TikTokScraper()
     total_found = 0
 
-    for account_id, channel_url in tiktok_channels:
+    for account_id, channel_url, channel_target_page in tiktok_channels:
         # Hỗ trợ truyền threshold vào URL (ví dụ: https://www.tiktok.com/@channel?min_views=50000)
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(channel_url)
@@ -550,10 +569,13 @@ def _scrape_tiktok_competitors(db):
         videos = scraper.scrape_channel(clean_url, max_videos=10, min_views=custom_min_views)
 
         for vid in videos:
-            # Check trùng
-            existing = db.query(ViralMaterial).filter(
-                ViralMaterial.url == vid["url"]
-            ).first()
+            # Check trùng per url+target_page (same video can go to different pages)
+            dup_filter = [ViralMaterial.url == vid["url"]]
+            if channel_target_page:
+                dup_filter.append(ViralMaterial.target_page == channel_target_page)
+            else:
+                dup_filter.append(ViralMaterial.target_page.is_(None))
+            existing = db.query(ViralMaterial).filter(*dup_filter).first()
             if existing:
                 continue
 
@@ -563,6 +585,7 @@ def _scrape_tiktok_competitors(db):
                 title=vid.get("title", "")[:200],
                 views=vid.get("view_count", 0),
                 scraped_by_account_id=account_id,
+                target_page=channel_target_page,
                 status="NEW",
             )
             db.add(mat)
@@ -640,6 +663,104 @@ def _purge_zombies():
     except OSError as e:
         logger.warning("Failed to purge zombies: %s", e)
 
+# ── Competitor Discovery (chạy 24h/lần, ban đêm) ──────────────────────
+_last_discovery_ts: float = 0
+DISCOVERY_INTERVAL_SEC = 86400  # 24 giờ
+DISCOVERY_NIGHT_START = 2   # 2 AM
+DISCOVERY_NIGHT_END = 5     # 5 AM
+DISCOVERY_MAX_KEYWORDS = 3
+DISCOVERY_DELAY_BETWEEN_SEC = 600  # 10 phút giữa mỗi keyword
+
+
+def _run_competitor_discovery(db):
+    """Scan TikTok hashtags to discover new competitor channels.
+
+    Runs once per 24h, during nighttime hours (02:00-05:00).
+    Picks 2-3 random keywords per account, delays 10min between searches.
+    """
+    global _last_discovery_ts
+    import random
+    import datetime
+    from zoneinfo import ZoneInfo
+
+    now = time.time()
+    if (now - _last_discovery_ts) < DISCOVERY_INTERVAL_SEC:
+        return
+
+    try:
+        tz = ZoneInfo(config.TIMEZONE)
+    except Exception:
+        tz = ZoneInfo("Asia/Ho_Chi_Minh")
+    current_hour = datetime.datetime.now(tz).hour
+    if not (DISCOVERY_NIGHT_START <= current_hour < DISCOVERY_NIGHT_END):
+        return
+
+    _last_discovery_ts = now
+    logger.info("[DISCOVERY] Starting nightly competitor discovery scan...")
+
+    from app.database.models import Account
+    from app.services.discovery_scraper import DiscoveryScraper
+
+    accounts = db.query(Account).filter(
+        Account.is_active == True,
+        Account.niche_topics != None,
+    ).all()
+
+    if not accounts:
+        logger.info("[DISCOVERY] No accounts with niche_topics found.")
+        return
+
+    scraper = DiscoveryScraper()
+    total_found = 0
+
+    for acc in accounts:
+        keywords = []
+        try:
+            import json as _json
+            raw = acc.niche_topics
+            if raw and raw.strip().startswith("["):
+                keywords = _json.loads(raw)
+            elif raw:
+                keywords = [k.strip() for k in raw.split(",") if k.strip()]
+        except Exception:
+            continue
+
+        if not keywords:
+            continue
+
+        selected = random.sample(keywords, min(DISCOVERY_MAX_KEYWORDS, len(keywords)))
+        logger.info("[DISCOVERY] Account '%s': scanning %d/%d keywords: %s",
+                    acc.name, len(selected), len(keywords), selected)
+
+        for kw in selected:
+            if not RUNNING:
+                return
+            try:
+                found = scraper.discover_for_keyword(kw, acc.id, db)
+                total_found += found
+                logger.info("[DISCOVERY] Keyword '%s' for '%s': %d new channels", kw, acc.name, found)
+            except Exception as e:
+                logger.error("[DISCOVERY] Error scanning keyword '%s': %s", kw, str(e)[:200])
+
+            if DISCOVERY_DELAY_BETWEEN_SEC > 0 and RUNNING:
+                logger.info("[DISCOVERY] Sleeping %ds before next keyword...", DISCOVERY_DELAY_BETWEEN_SEC)
+                time.sleep(DISCOVERY_DELAY_BETWEEN_SEC)
+
+    if total_found > 0:
+        logger.info("[DISCOVERY] Nightly scan complete. %d new channels discovered.", total_found)
+        try:
+            NotifierService._broadcast(
+                f"🔍 *Competitor Discovery*\n"
+                f"🌙 Quét đêm hoàn tất\n"
+                f"✅ Phát hiện {total_found} kênh đối thủ mới!\n"
+                f"📋 Xem trên Dashboard để duyệt."
+            )
+        except Exception:
+            pass
+    else:
+        logger.info("[DISCOVERY] Nightly scan complete. No new channels above threshold.")
+
+
 def run_loop():
     """Main Maintenance loop."""
     global RUNNING, CURRENT_POLLER
@@ -680,7 +801,14 @@ def run_loop():
                 # 2. Check 24h Metrics for published posts
                 MetricsChecker.check_pending(db)
                 
-                # 3. Daily Summary Report
+                # 3. Recover crashed/stale jobs (Self-healing)
+                logger.info("Checking for crashed/stale jobs to recover...")
+                from app.services.queue import QueueService
+                recovered = QueueService.recover_crashed_jobs(db, config.WORKER_CRASH_THRESHOLD_SECONDS)
+                if recovered > 0:
+                    logger.warning(f"Self-healing: Recovered {recovered} stale jobs.")
+                
+                # 4. Daily Summary Report
                 _check_daily_summary(db)
                 
                 # 4. Process viral materials → DRAFT jobs
@@ -691,6 +819,9 @@ def run_loop():
                 
                 # 6. Purge Zombie Chrome processes (hourly)
                 _purge_zombies()
+                
+                # 7. Competitor Discovery (nightly, 24h interval)
+                _run_competitor_discovery(db)
                 
             if RUNNING:
                 # Sleep for 5 minutes between maintenance sweeps
