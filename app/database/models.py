@@ -31,6 +31,7 @@ class Account(Base):
     
     # Idle Engagement – Niche/Topic keywords (JSON string, e.g. '["thời trang","decor"]')
     niche_topics = Column(String, nullable=True)
+    page_niches = Column(String, nullable=True)  # JSON mapping page_url -> [niches]
 
     # Human Rest Cycle (Ngủ đông)
     sleep_start_time = Column(String, nullable=True) # e.g. "23:00"
@@ -137,6 +138,60 @@ class Account(Base):
                 result.setdefault("_unassigned", []).append(str(item))
 
         return {k: "\n".join(v) for k, v in result.items()}
+
+    @property
+    def page_niches_map(self) -> dict[str, list[str]]:
+        """Return mapping page_url -> [niche1, niche2,...]."""
+        import json
+        if not self.page_niches:
+            return {}
+        try:
+            data = json.loads(self.page_niches)
+        except Exception:
+            return {}
+
+        result: dict[str, list[str]] = {}
+        # Support both dict {url: [..]} and list[{'page_url':..., 'niches':[...]}]
+        if isinstance(data, dict):
+            for url, niches in data.items():
+                if not url:
+                    continue
+                if isinstance(niches, list):
+                    cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                else:
+                    cleaned = [str(n).strip() for n in str(niches).split(",") if str(n).strip()]
+                if cleaned:
+                    result[str(url)] = cleaned
+        elif isinstance(data, list):
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                url = str(item.get("page_url") or "").strip()
+                if not url:
+                    continue
+                niches = item.get("niches") or []
+                if not isinstance(niches, list):
+                    niches = [niches]
+                cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                if cleaned:
+                    result[url] = cleaned
+        return result
+
+    @page_niches_map.setter
+    def page_niches_map(self, data: dict[str, list[str]]):
+        """Set page_niches from mapping; normalizes to list[{page_url, niches}]."""
+        import json
+        normalized = []
+        for url, niches in (data or {}).items():
+            url = str(url).strip()
+            if not url:
+                continue
+            if not isinstance(niches, list):
+                niches = [niches]
+            cleaned = [str(n).strip() for n in niches if str(n).strip()]
+            if cleaned:
+                normalized.append({"page_url": url, "niches": cleaned})
+        self.page_niches = json.dumps(normalized, ensure_ascii=False) if normalized else None
 
     @property
     def target_pages_list(self) -> list[str]:
