@@ -1459,17 +1459,23 @@ class FacebookAdapter(AdapterInterface):
                 
                 # Robustly find any button/radio/link that has text OR aria-label containing the target page name
                 profile_btn_selector = SELECTORS["switch_menu"]["target_profile_btn"].format(target_page_name=target_page_name)
-                profile_btn = self.page.locator(profile_btn_selector).first
+                profile_btns = self.page.locator(profile_btn_selector).all()
                 
-                if profile_btn.count() > 0:
+                visible_btn = None
+                for btn in profile_btns:
+                    if btn.is_visible():
+                        visible_btn = btn
+                        break
+                
+                if visible_btn:
                     logger.info("FacebookAdapter: Clicking explicit profile match for '%s'...", target_page_name)
                     # Scroll into view required if the list is long
-                    profile_btn.scroll_into_view_if_needed()
+                    visible_btn.scroll_into_view_if_needed()
                     try:
-                        profile_btn.click(timeout=5000)
+                        visible_btn.click(timeout=5000)
                     except Exception:
                         logger.info("FacebookAdapter: Normal click timed out, attempting force click...")
-                        profile_btn.click(force=True)
+                        visible_btn.click(force=True)
                     self.page.wait_for_timeout(8000)
                     logger.info("FacebookAdapter: Switch command sent.")
                     return True
@@ -1482,10 +1488,11 @@ class FacebookAdapter(AdapterInterface):
                             f.write(body_html)
                     except Exception as e:
                         logger.error("Failed to dump HTML: %s", e)
-                    logger.warning("FacebookAdapter: Falling back to first available...")
                     
-            # Fallback
-            # Find all profile items in the dialog
+                    logger.error("FacebookAdapter: Could not find explicitly requested profile '%s'. Aborting switch.", target_page_name)
+                    return False
+                    
+            # Fallback ONLY if no target_page_name was specified (e.g. just switch to ANY page)
             profile_items = self.page.locator(SELECTORS["switch_menu"]["any_profile_btn"]).all()
             if profile_items:
                 logger.info("FacebookAdapter: Clicking first available profile in switch menu...")
