@@ -46,9 +46,25 @@
                     vid/tuần<br>
                     ⚡ Điểm xếp hạng: <span class="text-red-600 font-bold text-sm">{{ "%.1f"|format(ch.score) }}</span>
                 </p>
-                <div class="mt-2 text-[10px]">
-                    <span class="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded border border-blue-200">Kho lưu (Acc):
+                <div class="mt-2 text-[10px] space-y-1">
+                    <span class="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded border border-blue-200 inline-block">Kho lưu (Acc):
                         <b>{{ ch.account.name if ch.account else 'None' }}</b></span>
+                    {% if ch.account and ch.account.page_niches_map %}
+                    <div class="text-[10px] text-gray-600 bg-white/60 border border-dashed border-gray-200 rounded px-1.5 py-1">
+                        <span class="font-semibold text-gray-700">Niche theo Page:</span>
+                        <ul class="mt-0.5 space-y-0.5">
+                            {% for url, niches in ch.account.page_niches_map.items() %}
+                            <li class="flex items-start gap-1">
+                                <span class="text-[9px] text-gray-400 mt-0.5">•</span>
+                                <span class="truncate" title="{{ url }}">
+                                    <span class="font-medium">{{ url }}</span>
+                                    {% if niches %} — <span class="italic">{{ ', '.join(niches) }}</span>{% endif %}
+                                </span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -59,8 +75,12 @@
                         class="border border-yellow-300 rounded px-1.5 py-1 text-xs flex-1 truncate bg-white focus:outline-none focus:ring-1 focus:ring-yellow-500">
                         <option value="">-- Thuộc về Page Mặc định --</option>
                         {% if ch.account and ch.account.managed_pages_list %}
+                        {% set page_niches = ch.account.page_niches_map %}
                         {% for page in ch.account.managed_pages_list %}
-                        <option value="{{ page.url }}">{{ page.name }}</option>
+                        {% set niches = ', '.join(page_niches.get(page.url, [])) %}
+                        <option value="{{ page.url }}">
+                            {{ page.name }}{% if niches %} — {{ niches }}{% endif %}
+                        </option>
                         {% endfor %}
                         {% endif %}
                     </select>

@@ -101,7 +101,18 @@ class AccountService:
         return account
 
     @staticmethod
-    def update_limits(db: Session, account_id: int, daily_limit: int, cooldown_seconds: int, niche_topics: str = "", sleep_start_time: str = "", sleep_end_time: str = "", competitor_urls: str = "", target_pages: list[str] | None = None) -> Account:
+    def update_limits(
+        db: Session,
+        account_id: int,
+        daily_limit: int,
+        cooldown_seconds: int,
+        niche_topics: str = "",
+        sleep_start_time: str = "",
+        sleep_end_time: str = "",
+        competitor_urls: str = "",
+        target_pages: list[str] | None = None,
+        page_niches: str = "",
+    ) -> Account:
         import json as _json
         if not (0 <= daily_limit <= 200):
             raise ValueError("daily_limit must be between 0 and 200.")
@@ -155,10 +166,55 @@ class AccountService:
                 account.competitor_urls = _json.dumps(entries, ensure_ascii=False) if entries else None
         else:
             account.competitor_urls = None
-        
+
+        # Process page_niches: JSON mapping page_url -> [niches]
+        raw_page_niches = (page_niches or "").strip()
+        if raw_page_niches:
+            try:
+                data = _json.loads(raw_page_niches)
+            except Exception:
+                data = {}
+            # Normalize to dict[str, list[str]] before assigning
+            mapping: dict[str, list[str]] = {}
+            if isinstance(data, dict):
+                for url, niches in data.items():
+                    if not url:
+                        continue
+                    if not isinstance(niches, list):
+                        niches = [niches]
+                    cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                    if cleaned:
+                        mapping[str(url).strip()] = cleaned
+            elif isinstance(data, list):
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    url = str(item.get("page_url") or "").strip()
+                    if not url:
+                        continue
+                    niches = item.get("niches") or []
+                    if not isinstance(niches, list):
+                        niches = [niches]
+                    cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                    if cleaned:
+                        mapping[url] = cleaned
+            account.page_niches_map = mapping
+        else:
+            account.page_niches = None
+
         db.commit()
         db.refresh(account)
-        logger.info(f"Updated limits for account {account_id}: daily_limit={daily_limit}, cooldown={cooldown_seconds}, niche={account.niche_topics}, sleep={account.sleep_start_time}-{account.sleep_end_time}, competitors={account.competitor_urls}")
+        logger.info(
+            "Updated limits for account %s: daily_limit=%s, cooldown=%s, niche=%s, sleep=%s-%s, competitors=%s, page_niches=%s",
+            account_id,
+            daily_limit,
+            cooldown_seconds,
+            account.niche_topics,
+            account.sleep_start_time,
+            account.sleep_end_time,
+            account.competitor_urls,
+            account.page_niches,
+        )
         return account
 
     @staticmethod
