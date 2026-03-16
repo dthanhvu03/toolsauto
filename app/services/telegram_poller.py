@@ -267,7 +267,7 @@ class TelegramPoller:
             "/retry &lt;id&gt; — Retry 1 job\n"
             "/cancel &lt;id&gt; — Hủy job + xóa file\n"
             "\n🕵️ <b>Đối thủ & Reup:</b>\n"
-            "/spy &lt;acc&gt; &lt;url&gt; — Thêm link đối thủ\n"
+            "/spy &lt;acc&gt; &lt;url&gt; [page] — Thêm link đối thủ (+ target page)\n"
             "/reup &lt;url&gt; — Reup video (TikTok/YT/FB)\n"
             "\n⚙️ <b>Worker:</b>\n"
             "/status — Trạng thái worker\n"
@@ -844,20 +844,24 @@ class TelegramPoller:
             )
 
     def _cmd_spy(self, args=None):
-        """Thêm link đối thủ cho account. Usage: /spy <account_name> <competitor_url>"""
+        """Thêm link đối thủ cho account. Usage: /spy <account_name> <url> [target_page]"""
         if not args or len(args) < 2:
             self.client.send_message(
-                "⚠️ Cú pháp: <code>/spy TenAcc https://facebook.com/doithu</code>\n"
-                "Ví dụ: <code>/spy NgocVi https://facebook.com/shopee.vn</code>"
+                "⚠️ Cú pháp: <code>/spy TenAcc URL [TargetPage]</code>\n"
+                "Ví dụ:\n"
+                "<code>/spy NgocVi https://tiktok.com/@doithu</code>\n"
+                "<code>/spy NgocVi https://tiktok.com/@doithu https://facebook.com/mypage</code>"
             )
             return
 
         account_name = args[0]
         competitor_url = args[1]
+        target_page = args[2] if len(args) > 2 else None
 
-        # Validate URL cơ bản
         if not competitor_url.startswith("http"):
             competitor_url = "https://" + competitor_url
+        if target_page and not target_page.startswith("http"):
+            target_page = "https://" + target_page
 
         import json
         from app.database.core import SessionLocal
@@ -869,30 +873,51 @@ class TelegramPoller:
                 self.client.send_message(f"❌ Account <b>{account_name}</b> không tồn tại.")
                 return
 
-            # Parse existing competitor_urls (JSON list or empty)
             existing = []
             if account.competitor_urls:
                 try:
                     existing = json.loads(account.competitor_urls)
                     if not isinstance(existing, list):
-                        existing = [str(existing)]
+                        existing = [{"url": str(existing), "target_page": None}]
                 except (json.JSONDecodeError, TypeError):
-                    existing = [u.strip() for u in account.competitor_urls.split(",") if u.strip()]
+                    existing = [{"url": u.strip(), "target_page": None}
+                                for u in account.competitor_urls.split(",") if u.strip()]
 
-            if competitor_url in existing:
-                self.client.send_message(f"ℹ️ Link này đã có trong danh sách đối thủ của <b>{account_name}</b>.")
+            # Normalize legacy string entries to dict format
+            existing = [
+                e if isinstance(e, dict) else {"url": str(e), "target_page": None}
+                for e in existing
+            ]
+
+            existing_urls = [e.get("url") for e in existing]
+            if competitor_url in existing_urls:
+                if target_page:
+                    for e in existing:
+                        if e.get("url") == competitor_url:
+                            e["target_page"] = target_page
+                    account.competitor_urls = json.dumps(existing, ensure_ascii=False)
+                    db.commit()
+                    self.client.send_message(
+                        f"🔄 Cập nhật target page cho đối thủ <b>{account_name}</b>:\n"
+                        f"🔗 {competitor_url}\n"
+                        f"📄 → {target_page}"
+                    )
+                else:
+                    self.client.send_message(f"ℹ️ Link này đã có trong danh sách đối thủ của <b>{account_name}</b>.")
                 return
 
-            existing.append(competitor_url)
+            existing.append({"url": competitor_url, "target_page": target_page})
             account.competitor_urls = json.dumps(existing, ensure_ascii=False)
             db.commit()
 
+            page_info = f"\n📄 Target: {target_page}" if target_page else ""
             self.client.send_message(
                 f"✅ Đã thêm đối thủ cho <b>{account_name}</b>:\n"
-                f"🔗 {competitor_url}\n"
+                f"🔗 {competitor_url}{page_info}\n"
                 f"📋 Tổng: {len(existing)} link đối thủ"
             )
-            logger.info("[Telegram] /spy: Added competitor '%s' to account '%s'", competitor_url, account_name)
+            logger.info("[Telegram] /spy: Added competitor '%s' (target=%s) to account '%s'",
+                        competitor_url, target_page, account_name)
 
     def _cmd_reup(self, args=None):
         """Reup video từ URL bất kỳ. Usage: /reup [AccName] <url> [TargetPage]"""
@@ -1003,6 +1028,13 @@ class TelegramPoller:
                 )
                 return
 
+            # Round-robin: if no target page specified, pick from account's target_pages
+            resolved_target = target_page_url
+            rr_used = False
+            if not resolved_target and account and account.target_pages_list:
+                resolved_target = account.pick_next_target_page(db)
+                rr_used = True
+
             mat = ViralMaterial(
                 url=clean_url,
                 platform=platform,
@@ -1010,7 +1042,7 @@ class TelegramPoller:
                 title=f"Manual reup via Telegram",
                 status="REUP",
                 scraped_by_account_id=target_account_id,
-                target_page=target_page_url,
+                target_page=resolved_target,
             )
             db.add(mat)
             db.commit()
@@ -1027,8 +1059,9 @@ class TelegramPoller:
                 f"{emoji} Platform: <b>{platform}</b>",
                 f"👤 Account:{acc_label}"
             ]
-            if target_page_url:
-                msg_lines.append(f"🚩 Target Page: {target_page_url}")
+            if resolved_target:
+                rr_label = " (round-robin 🔄)" if rr_used else ""
+                msg_lines.append(f"🚩 Target Page: {resolved_target}{rr_label}")
                 
             msg_lines.extend([
                 f"🔗 {url}",

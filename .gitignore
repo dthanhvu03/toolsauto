@@ -42,3 +42,25 @@ reels_body.html
 reels_texts.json
 metadata*.json
 gemini_cookies.json
+
+# Inter-agent communication (internal only)
+.comms/
+
+# Cursor IDE
+.cursor/
+
+# Debug/Temp files
+bio_debug.html
+bio_buttons.txt
+parse_buttons.py
+rename_pages_wizard.py
+sync_new_names.py
+update_bios_wizard.py
+logs/fb/
+
+# Processed content (runtime data)
+content/processed/
+content/reup/tiktok/*.info.json
+content/reup/tiktok/*.part
+content/reup/tiktok/test_vid.mp4
+content/thumbnails/*_collage.jpg

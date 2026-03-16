@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, Index
 from sqlalchemy.orm import relationship
 import time
 
@@ -19,7 +19,8 @@ class Account(Base):
     
     # Isolated Profile details
     profile_path = Column(String, unique=True, nullable=True)
-    target_page = Column(String, nullable=True) # Page URL or ID to post to (instead of personal profile)
+    target_page = Column(String, nullable=True) # Legacy single page (kept for backward compat)
+    target_pages = Column(String, nullable=True) # JSON array of page URLs for multi-target round-robin
     
     # Login Lifecycle Machine
     login_status = Column(String, default="NEW", index=True) # NEW, LOGGING_IN, ACTIVE, INVALID
@@ -89,18 +90,99 @@ class Account(Base):
 
     @property
     def competitor_urls_list(self) -> str:
-        """Helper to convert JSON string back to comma-separated string for UI."""
+        """Format competitor_urls JSON for UI textarea (legacy flat display)."""
         import json
         if not self.competitor_urls:
             return ""
-        if str(self.competitor_urls).startswith("["):
-            try:
-                lst = json.loads(self.competitor_urls)
-                if isinstance(lst, list):
-                    return "\n".join(str(i) for i in lst)
-            except Exception:
-                pass
-        return self.competitor_urls
+        try:
+            data = json.loads(self.competitor_urls)
+            if not isinstance(data, list):
+                return str(self.competitor_urls)
+        except Exception:
+            return self.competitor_urls
+
+        lines = []
+        for item in data:
+            if isinstance(item, dict):
+                url = item.get("url", "")
+                tp = item.get("target_page")
+                lines.append(f"{url} → {tp}" if tp else url)
+            else:
+                lines.append(str(item))
+        return "\n".join(lines)
+
+    @property
+    def competitor_urls_grouped(self) -> dict:
+        """Group competitor URLs by target_page for per-page UI textareas.
+
+        Returns dict: {page_url: "url1\\nurl2", "_unassigned": "url3\\nurl4"}
+        """
+        import json
+        result: dict[str, list[str]] = {}
+        if not self.competitor_urls:
+            return {}
+        try:
+            data = json.loads(self.competitor_urls)
+            if not isinstance(data, list):
+                return {}
+        except Exception:
+            return {}
+
+        for item in data:
+            if isinstance(item, dict):
+                url = item.get("url", "")
+                tp = item.get("target_page") or "_unassigned"
+                result.setdefault(tp, []).append(url)
+            else:
+                result.setdefault("_unassigned", []).append(str(item))
+
+        return {k: "\n".join(v) for k, v in result.items()}
+
+    @property
+    def target_pages_list(self) -> list[str]:
+        """Parse target_pages JSON string into a list of page URLs."""
+        import json
+        if not self.target_pages:
+            return [self.target_page] if self.target_page else []
+        try:
+            data = json.loads(self.target_pages)
+            if isinstance(data, list):
+                return [str(u) for u in data if u]
+        except Exception:
+            pass
+        return [self.target_page] if self.target_page else []
+
+    @target_pages_list.setter
+    def target_pages_list(self, pages: list[str]):
+        """Set target_pages from a list of URLs."""
+        import json
+        cleaned = [p.strip() for p in pages if p and p.strip()]
+        self.target_pages = json.dumps(cleaned, ensure_ascii=False) if cleaned else None
+        self.target_page = cleaned[0] if cleaned else None
+
+    def pick_next_target_page(self, db) -> str | None:
+        """Round-robin: pick the target page that was posted to least recently."""
+        pages = self.target_pages_list
+        if not pages:
+            return self.target_page
+        if len(pages) == 1:
+            return pages[0]
+
+        from sqlalchemy import desc
+        last_job = db.query(Job).filter(
+            Job.account_id == self.id,
+            Job.target_page.in_(pages),
+            Job.status.in_(["DONE", "PENDING", "RUNNING", "AWAITING_STYLE", "DRAFT"]),
+        ).order_by(desc(Job.id)).first()
+
+        if not last_job or not last_job.target_page:
+            return pages[0]
+
+        try:
+            last_idx = pages.index(last_job.target_page)
+            return pages[(last_idx + 1) % len(pages)]
+        except ValueError:
+            return pages[0]
 
     @property
     def is_sleeping(self) -> bool:
@@ -235,3 +317,26 @@ class ViralMaterial(Base):
     
     created_at = Column(Integer, default=now_ts)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
+
+
+class DiscoveredChannel(Base):
+    """Kênh TikTok đối thủ phát hiện tự động qua hashtag search."""
+    __tablename__ = "discovered_channels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    channel_url = Column(String, nullable=False)
+    channel_name = Column(String, nullable=True)
+    keyword_used = Column(String, nullable=True)
+    follower_count = Column(Integer, default=0)
+    video_count = Column(Integer, default=0)
+    avg_views = Column(Integer, default=0)
+    post_frequency = Column(Float, default=0.0)  # videos per week
+    score = Column(Float, default=0.0, index=True)  # avg_views * post_frequency / 1000
+    status = Column(String, default="NEW", index=True)  # NEW, APPROVED, IGNORED
+
+    discovered_at = Column(Integer, default=now_ts)
+    created_at = Column(Integer, default=now_ts)
+    updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
+
+    account = relationship("Account")
