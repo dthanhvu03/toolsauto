@@ -114,7 +114,7 @@ def process_draft_job(db: Session):
             db.commit()
             GEMINI_CONSECUTIVE_FAILURES += 1
             error_msg_template = (
-                f"🚨 *GEMINI RPA FAILED*\n"
+                f"🚨 <b>GEMINI RPA FAILED</b>\n"
                 f"❌ Job ID: {job.id}\n"
                 f"⚠️ Error: Gemini không phản hồi sau 3 lần thử retry.\n"
                 f"🛑 Trạng thái: Đã kẹt ở FAILED (Cần xử lý tay)."
@@ -138,7 +138,7 @@ def _check_gemini_circuit(db):
         GEMINI_CIRCUIT_RESET_TIME = time.time() + 3600
         try:
             NotifierService._broadcast(
-                "🚨 *CRITICAL ALERT: GEMINI CIRCUIT BREAKER OPEN* 🚨\n\n"
+                "🚨 <b>CRITICAL ALERT: GEMINI CIRCUIT BREAKER OPEN</b> 🚨\n\n"
                 "Worker AI Generator đã ngưng hoạt động vì lỗi Gemini liên tục (3 lần).\n"
                 "👉 Hãy kiểm tra lại cookies hoặc reload trình duyệt để lấy cookie mới.\n"
                 "⏱ Hệ thống sẽ tự thử lại sau 1 GIỜ."

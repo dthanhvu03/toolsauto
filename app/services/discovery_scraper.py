@@ -16,6 +16,8 @@ import subprocess
 import time
 from urllib.parse import quote
 
+from app.services.yt_dlp_path import yt_dlp_binary
+
 logger = logging.getLogger(__name__)
 
 SCORE_THRESHOLD = 50
@@ -33,7 +35,7 @@ class DiscoveryScraper:
         url = f"https://www.tiktok.com/tag/{quote(tag)}"
 
         cmd = [
-            "yt-dlp",
+            yt_dlp_binary(),
             "--flat-playlist",
             "--dump-json",
             "--playlist-end", str(max_results),

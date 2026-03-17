@@ -39,6 +39,17 @@ def ensure_runtime_schema():
         if "last_error" not in columns:
             conn.execute(text("ALTER TABLE viral_materials ADD COLUMN last_error VARCHAR"))
 
+        # system_state.viral_min_views (ngưỡng view quét TikTok)
+        if "system_state" in tables:
+            ss_cols = {
+                row[1]
+                for row in conn.execute(text("PRAGMA table_info(system_state)")).fetchall()
+            }
+            if "viral_min_views" not in ss_cols:
+                conn.execute(text("ALTER TABLE system_state ADD COLUMN viral_min_views INTEGER"))
+            if "viral_max_videos_per_channel" not in ss_cols:
+                conn.execute(text("ALTER TABLE system_state ADD COLUMN viral_max_videos_per_channel INTEGER"))
+
 def get_db():
     db = SessionLocal()
     try:

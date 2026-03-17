@@ -1,15 +1,43 @@
 <div class="bg-white p-6 rounded-lg shadow-md mb-8">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h2 class="text-xl font-semibold flex items-center gap-2">
             <svg class="w-6 h-6 text-pink-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             Viral Content Scraped (Tự động cào)
         </h2>
-        <button class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded" hx-get="/viral/table"
-            hx-target="#viral-table-body" hx-swap="innerHTML">
-            Refresh
-        </button>
+        <div id="viral-settings" class="flex items-center gap-3 flex-wrap">
+            <label class="text-sm text-gray-600 flex items-center gap-2">
+                Ngưỡng view tối thiểu:
+                <input type="number" name="viral_min_views" value="{{ viral_min_views | default(10000) }}"
+                    min="500" max="10000000" step="500"
+                    class="w-24 border border-gray-300 rounded px-2 py-1 text-sm">
+                <span class="text-gray-400 text-xs">views</span>
+            </label>
+            <label class="text-sm text-gray-600 flex items-center gap-2">
+                Số video tối đa mỗi kênh:
+                <input type="number" name="viral_max_videos_per_channel" value="{{ viral_max_videos | default(50) }}"
+                    min="0" max="500" placeholder="0 = lấy hết"
+                    class="w-20 border border-gray-300 rounded px-2 py-1 text-sm"
+                    title="0 = lấy tối đa (cap 500)">
+            </label>
+            <button type="button" hx-post="/viral/settings" hx-include="#viral-settings [name='viral_min_views'], #viral-settings [name='viral_max_videos_per_channel']" hx-target="#viral-settings" hx-swap="outerHTML"
+                class="text-sm bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded">Lưu</button>
+        </div>
+        <div class="flex items-center gap-2">
+            <button class="text-sm bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded font-medium shadow-sm transition-colors"
+                hx-post="/viral/force-scan" hx-target="#viral-table-body" hx-swap="innerHTML"
+                hx-indicator="#viral-scan-indicator"
+                hx-on::before-request="this.disabled=true; this.textContent='⏳ Đang quét...';"
+                hx-on::after-request="this.disabled=false; this.textContent='⚡ Quét ngay';">
+                ⚡ Quét ngay
+            </button>
+            <span id="viral-scan-indicator" class="htmx-indicator text-amber-600 text-xs">Đang quét...</span>
+            <button class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded" hx-get="/viral/table"
+                hx-target="#viral-table-body" hx-swap="innerHTML">
+                Refresh
+            </button>
+        </div>
     </div>
 
     <div class="overflow-x-auto max-h-80 overflow-y-auto">

@@ -59,6 +59,10 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "5967314745")
 # Redirect Service (Vercel)
 VERCEL_REDIRECT_URL = os.getenv("VERCEL_REDIRECT_URL", "https://vercel-redirect-rho-three.vercel.app")
 
+# Viral scan (TikTok competitor)
+VIRAL_MIN_VIEWS = int(os.getenv("VIRAL_MIN_VIEWS", "10000"))  # Ngưỡng view tối thiểu
+VIRAL_MAX_VIDEOS_PER_CHANNEL = int(os.getenv("VIRAL_MAX_VIDEOS_PER_CHANNEL", "50"))  # Số video tối đa mỗi kênh (0 = lấy hết, nên ≤ 200)
+
 # Rate Limiting & Safety
 MAX_CONCURRENT_ACCOUNTS = int(os.getenv("MAX_CONCURRENT_ACCOUNTS", "2"))
 POST_DELAY_MIN_SEC = int(os.getenv("POST_DELAY_MIN_SEC", "30"))
