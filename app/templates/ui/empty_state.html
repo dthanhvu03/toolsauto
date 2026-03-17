@@ -1,0 +1,13 @@
+{# Usage:
+  {% include 'ui/empty_state.html' with context %}
+  expects: title, subtitle(optional)
+#}
+<div class="app-card">
+  <div class="app-card-body text-center">
+    <div class="text-sm font-semibold text-slate-900">{{ title }}</div>
+    {% if subtitle %}
+      <div class="mt-1 text-sm text-slate-600">{{ subtitle }}</div>
+    {% endif %}
+  </div>
+</div>
+

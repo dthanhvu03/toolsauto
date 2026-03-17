@@ -60,6 +60,14 @@ def process_draft_job(db: Session):
         
     CURRENT_JOB_ID = job.id
     logger.info("[Job %s] Claimed DRAFT for AI Generation", job.id)
+    try:
+        NotifierService._broadcast(
+            f"🤖 <b>AI đang xử lý</b>\n"
+            f"📋 Job #{job.id} | {job.platform} ({job.account.name if job.account else 'Unknown'})\n"
+            f"⏳ Trạng thái: AI_PROCESSING"
+        )
+    except Exception:
+        pass
     
     try:
         from app.services.content_orchestrator import ContentOrchestrator
@@ -94,6 +102,14 @@ def process_draft_job(db: Session):
             db.commit()
             logger.info("[Job %s] AI Generation complete. Awaiting user approval.", job.id)
             NotifierService.notify_draft_ready(job)
+            try:
+                NotifierService._broadcast(
+                    f"✅ <b>AI đã trả lời xong</b>\n"
+                    f"📋 Job #{job.id}\n"
+                    f"🟡 Đang chờ anh duyệt (DRAFT)"
+                )
+            except Exception:
+                pass
             
             # Khởi động lại đếm lỗi trên thành công
             GEMINI_CONSECUTIVE_FAILURES = 0
@@ -195,6 +211,9 @@ def run_loop():
     
     register_signals()
     logger.info("Entering AI polling loop. Tick=60s")
+    # Adaptive idle backoff to reduce DB polling when no draft jobs
+    idle_sleep = int(os.getenv("AI_IDLE_SLEEP_BASE_SEC", "30"))
+    idle_sleep_cap = int(os.getenv("AI_IDLE_SLEEP_CAP_SEC", "120"))
     
     while RUNNING:
         try:
@@ -225,8 +244,10 @@ def run_loop():
                 found_job = process_draft_job(db)
                 
             if not found_job and RUNNING:
-                # We can afford to wait a bit longer for AI drafts, e.g. 60 seconds
-                time.sleep(60)
+                time.sleep(idle_sleep)
+                idle_sleep = min(idle_sleep * 2, idle_sleep_cap)
+            else:
+                idle_sleep = int(os.getenv("AI_IDLE_SLEEP_BASE_SEC", "30"))
                 
         except Exception:
             logger.exception("AI Worker encountered a core loop error. Will retry.")

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TikTok Links</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 p-8">
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold">TikTok Links</h1>
+        <p class="text-sm text-gray-600">Theo dõi nhanh kênh đối thủ & video viral TikTok (filter, phân nhóm, copy nhanh).</p>
+      </div>
+      <div class="flex gap-2">
+        <a href="/" class="px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">
+          ← Dashboard
+        </a>
+      </div>
+    </div>
+
+    <!-- Tabs + Filters -->
+    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-6">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex gap-1">
+          <a href="/tiktok-links?tab=viral{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if min_views %}&min_views={{ min_views }}{% endif %}"
+             class="px-3 py-1.5 text-sm rounded font-medium {% if tab != 'competitors' %}bg-gray-900 text-white{% else %}bg-gray-100 text-gray-800 hover:bg-gray-200{% endif %}">
+            Viral TikTok
+          </a>
+          <a href="/tiktok-links?tab=competitors{% if q %}&q={{ q }}{% endif %}"
+             class="px-3 py-1.5 text-sm rounded font-medium {% if tab == 'competitors' %}bg-gray-900 text-white{% else %}bg-gray-100 text-gray-800 hover:bg-gray-200{% endif %}">
+            Kênh đối thủ
+          </a>
+        </div>
+        <div class="text-xs text-gray-500">
+          Viral: {{ viral_total }} | Competitors: {{ competitor_total }}
+        </div>
+      </div>
+
+      <form method="get" action="/tiktok-links" class="mt-4">
+        <input type="hidden" name="tab" value="{{ tab }}">
+        <div class="flex items-end gap-3 flex-wrap">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Search</label>
+            <input name="q" value="{{ q }}" placeholder="URL / @handle / account / page..." class="w-full md:w-[520px] border border-gray-300 rounded px-3 py-2 text-sm" />
+          </div>
+          {% if tab != 'competitors' %}
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Status</label>
+            <select name="status" class="border border-gray-300 rounded px-3 py-2 text-sm">
+              <option value="" {% if not status %}selected{% endif %}>All</option>
+              <option value="NEW" {% if status=='NEW' %}selected{% endif %}>NEW</option>
+              <option value="DRAFTED" {% if status=='DRAFTED' %}selected{% endif %}>DRAFTED</option>
+              <option value="FAILED" {% if status=='FAILED' %}selected{% endif %}>FAILED</option>
+              <option value="REUP" {% if status=='REUP' %}selected{% endif %}>REUP</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Min views</label>
+            <input name="min_views" type="number" min="0" step="500" value="{{ min_views }}" class="w-32 border border-gray-300 rounded px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Per page</label>
+            <select name="per_page" class="border border-gray-300 rounded px-3 py-2 text-sm">
+              <option value="100" {% if per_page==100 %}selected{% endif %}>100</option>
+              <option value="200" {% if per_page==200 %}selected{% endif %}>200</option>
+              <option value="500" {% if per_page==500 %}selected{% endif %}>500</option>
+            </select>
+          </div>
+          {% endif %}
+          <button class="text-sm bg-gray-900 hover:bg-black text-white px-4 py-2 rounded">Apply</button>
+          <button type="button" id="copyAll" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded">Copy all visible</button>
+          <span id="stat" class="text-xs text-gray-500"></span>
+        </div>
+      </form>
+    </div>
+
+    {% if tab == 'competitors' %}
+    <!-- Competitor Channels (grouped) -->
+    <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Kênh đối thủ (TikTok @) — theo Target Page</h2>
+        <span class="text-xs text-gray-500">{{ competitor_total }} links</span>
+      </div>
+
+      {% for tp, accmap in competitor_groups.items() %}
+      <div class="border border-gray-200 rounded-lg mb-4 overflow-hidden">
+        <div class="bg-gray-50 px-4 py-3 flex items-center justify-between">
+          <div class="text-sm font-semibold text-gray-800">
+            {% if tp != '_unassigned' %}
+              Target: <span class="font-mono text-xs text-gray-700">{{ tp }}</span>
+              {% set meta = page_index.get(tp, {}) %}
+              {% if meta.get('name') %}
+                <span class="ml-2 text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100">{{ meta.get('name') }}</span>
+              {% endif %}
+              {% if meta.get('niches') %}
+                <span class="ml-2 text-xs text-gray-500">Niches: {{ meta.get('niches')|join(', ') }}</span>
+              {% endif %}
+            {% else %}
+              Target: <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-100">_unassigned</span>
+            {% endif %}
+          </div>
+          <button class="copyGroup text-xs bg-gray-900 hover:bg-black text-white px-2 py-1 rounded"
+                  data-copy-group="tp:{{ tp }}">Copy group</button>
+        </div>
+        <div class="p-4">
+          {% for acc_name, urls in accmap.items() %}
+          <div class="mb-3">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-sm font-medium text-gray-900">{{ acc_name }}</div>
+              <button class="copyGroup text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
+                      data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Copy account</button>
+            </div>
+            <div class="grid md:grid-cols-2 gap-2">
+              {% for u in urls %}
+              <div class="row flex items-center justify-between gap-2 border border-gray-100 rounded px-3 py-2"
+                   data-hay="{{ (tp ~ ' ' ~ acc_name ~ ' ' ~ u) | lower }}">
+                <a class="text-blue-600 hover:underline break-all text-sm" href="{{ u }}" target="_blank" rel="noreferrer">{{ u }}</a>
+                <button class="copyOne text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
+                        data-copy="{{ u }}">Copy</button>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+      {% if competitor_total == 0 %}
+      <div class="p-6 text-center text-sm text-gray-500">Chưa có kênh TikTok đối thủ nào.</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if tab != 'competitors' %}
+    <!-- Viral TikTok -->
+    <div class="bg-white p-6 rounded-lg shadow-md">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold">Video viral TikTok</h2>
+        <span class="text-xs text-gray-500">Showing {{ viral_rows|length }} / {{ viral_total }}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-auto border-collapse">
+          <thead>
+            <tr class="bg-gray-50 border-b">
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Views</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Page</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Niches</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">URL</th>
+              <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Copy</th>
+            </tr>
+          </thead>
+          <tbody id="virals" class="bg-white">
+            {% for v in viral_rows %}
+            <tr class="row border-b text-sm hover:bg-gray-50"
+                data-hay="{{ ((v.status or '') ~ ' ' ~ (v.views or 0) ~ ' ' ~ (v.target_page or '') ~ ' ' ~ (v.url or '') ~ ' ' ~ (v.last_error or '')) | lower }}">
+              <td class="px-3 py-2">
+                <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700"
+                      title="{{ v.last_error or '' }}">{{ v.status }}</span>
+              </td>
+              <td class="px-3 py-2 text-gray-800">{{ (v.views or 0) | int }}</td>
+              <td class="px-3 py-2">
+                {% if v.target_page %}
+                  {% set purl = v.target_page.rstrip('/') %}
+                  {% set meta = page_index.get(purl, {}) %}
+                  {% if meta.get('name') %}
+                    <span class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100"
+                          title="{{ v.target_page }}">{{ meta.get('name') }}</span>
+                  {% else %}
+                    <span class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100"
+                          title="{{ v.target_page }}">{{ v.target_page }}</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-100"
+                        title="Chưa gán page (unassigned)">_unassigned</span>
+                {% endif %}
+              </td>
+              <td class="px-3 py-2 text-gray-700">
+                {% if v.target_page %}
+                  {% set purl = v.target_page.rstrip('/') %}
+                  {% set meta = page_index.get(purl, {}) %}
+                  {% if meta.get('niches') %}
+                    <span class="text-xs">{{ meta.get('niches')|join(', ') }}</span>
+                  {% else %}
+                    -
+                  {% endif %}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td class="px-3 py-2 text-gray-700">
+                {% if v.created_at %}
+                  {% set age_s = (request.state.now_ts or 0) - (v.created_at or 0) %}
+                  {% if age_s < 3600 %}
+                    {{ (age_s // 60) | int }}m
+                  {% elif age_s < 86400 %}
+                    {{ (age_s // 3600) | int }}h
+                  {% else %}
+                    {{ (age_s // 86400) | int }}d
+                  {% endif %}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td class="px-3 py-2">
+                <a class="text-blue-600 hover:underline break-all" href="{{ v.url }}" target="_blank" rel="noreferrer">{{ v.url }}</a>
+              </td>
+              <td class="px-3 py-2 text-right">
+                <button class="copyOne text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
+                        data-copy="{{ v.url }}">Copy</button>
+              </td>
+            </tr>
+            {% endfor %}
+            {% if viral_rows|length == 0 %}
+            <tr><td colspan="7" class="p-4 text-center text-sm text-gray-500">Không có video nào theo filter hiện tại.</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
+        <div class="text-xs text-gray-500">Page {{ page }} / {{ total_pages }}</div>
+        <div class="flex gap-2">
+          {% if page > 1 %}
+          <a class="px-3 py-1.5 text-sm rounded bg-gray-100 hover:bg-gray-200"
+             href="/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page-1 }}">← Prev</a>
+          {% endif %}
+          {% if page < total_pages %}
+          <a class="px-3 py-1.5 text-sm rounded bg-gray-100 hover:bg-gray-200"
+             href="/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page+1 }}">Next →</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <script>
+    const stat = document.getElementById('stat');
+    const copyAll = document.getElementById('copyAll');
+
+    function visibleRows() {
+      return Array.from(document.querySelectorAll('.row')).filter(r => !r.classList.contains('hidden'));
+    }
+
+    function updateStat() {
+      const total = document.querySelectorAll('.row').length;
+      const vis = visibleRows().length;
+      stat.textContent = `Showing ${vis}/${total}`;
+    }
+
+    async function copyText(txt) {
+      try {
+        await navigator.clipboard.writeText(txt);
+      } catch (e) {
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+    }
+
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.copyOne');
+      if (btn) {
+        const txt = btn.getAttribute('data-copy') || '';
+        if (!txt) return;
+        await copyText(txt);
+        btn.textContent = 'Copied';
+        setTimeout(() => btn.textContent = 'Copy', 900);
+        return;
+      }
+
+      const g = e.target.closest('.copyGroup');
+      if (g) {
+        const key = g.getAttribute('data-copy-group') || '';
+        if (!key) return;
+        const urls = [];
+        // group copy uses DOM: collect links within the nearest container
+        const box = g.closest('.border') || document;
+        box.querySelectorAll('[data-copy]').forEach(b => {
+          const u = b.getAttribute('data-copy');
+          if (u) urls.push(u);
+        });
+        await copyText(urls.join('\\n'));
+        g.textContent = 'Copied';
+        setTimeout(() => g.textContent = g.classList.contains('bg-gray-900') ? 'Copy group' : 'Copy account', 900);
+      }
+    });
+
+    copyAll.addEventListener('click', async () => {
+      const urls = visibleRows()
+        .map(r => r.querySelector('[data-copy]'))
+        .filter(Boolean)
+        .map(b => b.getAttribute('data-copy'))
+        .filter(Boolean);
+      await copyText(urls.join('\\n'));
+      copyAll.textContent = 'Copied';
+      setTimeout(() => copyAll.textContent = 'Copy all visible', 900);
+    });
+
+    updateStat();
+  </script>
+</body>
+</html>
+

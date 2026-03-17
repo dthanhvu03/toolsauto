@@ -1,0 +1,18 @@
+{# Usage:
+  {% include 'ui/badge.html' with context %}
+  expects: text, tone (green|amber|red|blue|slate|default), extra_class (optional), title (optional)
+#}
+{% set _tone = tone|default('default') %}
+{% set _tone_class = '' %}
+{% if _tone == 'green' %}{% set _tone_class = 'app-badge-green' %}
+{% elif _tone == 'amber' %}{% set _tone_class = 'app-badge-amber' %}
+{% elif _tone == 'red' %}{% set _tone_class = 'app-badge-red' %}
+{% elif _tone == 'blue' %}{% set _tone_class = 'app-badge-blue' %}
+{% elif _tone == 'slate' %}{% set _tone_class = 'app-badge-slate' %}
+{% else %}{% set _tone_class = '' %}
+{% endif %}
+
+<span class="app-badge {{ _tone_class }} {{ extra_class|default('') }}" {% if title %}title="{{ title }}"{% endif %}>
+  {{ text }}
+</span>
+

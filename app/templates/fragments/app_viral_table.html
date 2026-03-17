@@ -1,0 +1,40 @@
+<div id="viral-table" class="border border-[var(--border)] rounded-lg overflow-hidden">
+  <div class="px-4 py-3 bg-gray-50 border-b border-[var(--border)] flex items-center justify-between">
+    <div class="text-xs text-[var(--muted)]">
+      {{ total|default(0) }} total · Page {{ page }} / {{ total_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page > 1 %}
+        <button class="app-btn h-9"
+                onclick="window.refreshViral({{ page - 1 }})">← Prev</button>
+      {% endif %}
+      {% if page < total_pages %}
+        <button class="app-btn h-9"
+                onclick="window.refreshViral({{ page + 1 }})">Next →</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <table class="min-w-full table-fixed border-collapse">
+    <thead class="bg-white">
+      <tr class="border-b border-[var(--border)] text-xs text-gray-500">
+        <th class="w-16 px-4 py-2 text-left uppercase">ID</th>
+        <th class="w-[38%] px-4 py-2 text-left uppercase">Title / URL</th>
+        <th class="w-36 px-4 py-2 text-left uppercase">Views</th>
+        <th class="w-52 px-4 py-2 text-center uppercase">Account</th>
+        <th class="w-64 px-4 py-2 text-left uppercase">Status</th>
+        <th class="w-20 px-4 py-2 text-right uppercase">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="bg-white">
+      {% for row in items %}
+        {% set item = row.item %}
+        {% set account_name = row.account_name %}
+        {% include 'fragments/viral_row.html' %}
+      {% else %}
+        <tr><td colspan="6" class="p-4 text-center text-sm text-[var(--muted)]">No results.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+

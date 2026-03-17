@@ -58,6 +58,7 @@ class TelegramPoller:
             "/pause": self._cmd_pause,
             "/resume": self._cmd_resume,
             "/health": self._cmd_health,
+            "/queue": self._cmd_queue,
             "/jobs": self._cmd_jobs,
             "/drafts": self._cmd_drafts,
             "/help": self._cmd_help,
@@ -264,6 +265,7 @@ class TelegramPoller:
             "🤖 <b>Auto Publisher Bot</b>\n"
             "━━━━━━━━━━━━━━━━━━\n"
             "\n📋 <b>Jobs:</b>\n"
+            "/queue — Tổng quan queue nhanh\n"
             "/jobs — Danh sách jobs đang chờ\n"
             "/drafts — Xem & duyệt DRAFT jobs\n"
             "/done — 5 bài đăng gần nhất\n"
@@ -289,6 +291,38 @@ class TelegramPoller:
             "/stats — Thống kê hôm nay\n"
             "/help — Hiện menu này"
         )
+        self.client.send_message(msg)
+
+    def _cmd_queue(self):
+        """Tổng quan queue nhanh: counts theo status + viral NEW."""
+        from app.database.core import SessionLocal
+        from app.database.models import Job, ViralMaterial
+
+        with SessionLocal() as db:
+            # Jobs
+            rows = db.execute(
+                __import__("sqlalchemy").text(
+                    "SELECT status, COUNT(*) FROM jobs GROUP BY status ORDER BY status"
+                )
+            ).fetchall()
+            counts = {str(s): int(c) for s, c in rows}
+
+            # Viral
+            v_new = db.query(ViralMaterial).filter(ViralMaterial.status == "NEW").count()
+            v_failed = db.query(ViralMaterial).filter(ViralMaterial.status == "FAILED").count()
+
+        msg = "📦 <b>Queue Summary</b>\n━━━━━━━━━━━━━━━━━━\n"
+        # High-signal statuses first
+        for k in ["PENDING", "RUNNING", "DRAFT", "AI_PROCESSING", "AWAITING_STYLE", "FAILED", "DONE", "CANCELLED"]:
+            if k in counts:
+                msg += f"• {k}: <b>{counts[k]}</b>\n"
+        # Any other statuses
+        for k, v in counts.items():
+            if k not in {"PENDING","RUNNING","DRAFT","AI_PROCESSING","AWAITING_STYLE","FAILED","DONE","CANCELLED"}:
+                msg += f"• {k}: <b>{v}</b>\n"
+        msg += "\n🎵 <b>Viral</b>\n"
+        msg += f"• NEW: <b>{v_new}</b>\n"
+        msg += f"• FAILED: <b>{v_failed}</b>\n"
         self.client.send_message(msg)
 
     def _cmd_status(self):
