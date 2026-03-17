@@ -11,8 +11,24 @@ from app.main_templates import templates
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 @router.get("/table", response_class=HTMLResponse)
-def get_accounts_table(request: Request, db: Session = Depends(get_db)):
+def get_accounts_table(request: Request, q: str = "", db: Session = Depends(get_db)):
     accounts = AccountService.list_accounts(db)
+    q = (q or "").strip().lower()
+    if q:
+        filtered = []
+        for a in accounts:
+            hay = " ".join([
+                str(getattr(a, "name", "") or ""),
+                str(getattr(a, "platform", "") or ""),
+                str(getattr(a, "target_page", "") or ""),
+                str(getattr(a, "target_pages", "") or ""),
+                str(getattr(a, "niche_topics", "") or ""),
+                str(getattr(a, "page_niches", "") or ""),
+                str(getattr(a, "competitor_urls", "") or ""),
+            ]).lower()
+            if q in hay:
+                filtered.append(a)
+        accounts = filtered
     now = int(time.time())
     html_content = ""
     for account in accounts:

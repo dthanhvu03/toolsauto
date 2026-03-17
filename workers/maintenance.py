@@ -29,6 +29,92 @@ YT_DLP_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
+MAINT_VIRAL_LIMIT = int(os.getenv("MAINT_VIRAL_LIMIT", "3"))
+MAINT_SKIP_HEAVY_WHEN_PENDING = int(os.getenv("MAINT_SKIP_HEAVY_WHEN_PENDING", "10"))
+
+ALERT_COOLDOWN_SEC = int(os.getenv("ALERT_COOLDOWN_SEC", "600"))  # 10 phút
+ALERT_PENDING_THRESHOLD = int(os.getenv("ALERT_PENDING_THRESHOLD", "10"))
+ALERT_DRAFT_THRESHOLD = int(os.getenv("ALERT_DRAFT_THRESHOLD", "20"))
+ALERT_VIRAL_NEW_THRESHOLD = int(os.getenv("ALERT_VIRAL_NEW_THRESHOLD", "50"))
+ALERT_RAM_PCT_THRESHOLD = float(os.getenv("ALERT_RAM_PCT_THRESHOLD", "85"))
+ALERT_CHROME_PROC_THRESHOLD = int(os.getenv("ALERT_CHROME_PROC_THRESHOLD", "20"))
+
+_last_alert_ts: dict[str, float] = {}
+
+
+def _pending_backlog(db: Session) -> int:
+    """Count jobs that indicate backlog; used to decide whether to skip heavy maintenance tasks."""
+    from app.database.models import Job
+    return db.query(Job).filter(
+        Job.status.in_(["PENDING", "RUNNING", "DRAFT", "AI_PROCESSING", "AWAITING_STYLE"])
+    ).count()
+
+
+def _should_alert(key: str) -> bool:
+    now = time.time()
+    last = _last_alert_ts.get(key, 0)
+    if (now - last) >= ALERT_COOLDOWN_SEC:
+        _last_alert_ts[key] = now
+        return True
+    return False
+
+
+def _maybe_alert_queue_and_resources(db: Session) -> None:
+    """Send Telegram alerts for queue congestion and system resource pressure (best-effort, cooldown)."""
+    try:
+        from app.database.models import Job, ViralMaterial
+
+        pending = db.query(Job).filter(Job.status == "PENDING").count()
+        drafts = db.query(Job).filter(Job.status == "DRAFT").count()
+        ai = db.query(Job).filter(Job.status == "AI_PROCESSING").count()
+        running = db.query(Job).filter(Job.status == "RUNNING").count()
+        viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == "NEW").count()
+
+        if (
+            pending >= ALERT_PENDING_THRESHOLD
+            or drafts >= ALERT_DRAFT_THRESHOLD
+            or viral_new >= ALERT_VIRAL_NEW_THRESHOLD
+        ):
+            if _should_alert("queue"):
+                NotifierService._broadcast(
+                    "🚦 <b>Queue đang cao</b>\n"
+                    f"• PENDING: <b>{pending}</b>\n"
+                    f"• RUNNING: <b>{running}</b>\n"
+                    f"• DRAFT: <b>{drafts}</b>\n"
+                    f"• AI_PROCESSING: <b>{ai}</b>\n"
+                    f"• Viral NEW: <b>{viral_new}</b>\n"
+                    "Gợi ý: /queue để xem tổng quan."
+                )
+    except Exception:
+        pass
+
+    # System pressure alerts (RAM/Chrome count)
+    try:
+        import psutil
+
+        vm = psutil.virtual_memory()
+        ram_pct = float(vm.percent)
+        chrome_count = 0
+        try:
+            chrome_count = sum(
+                1
+                for p in psutil.process_iter(["name"])
+                if "chrome" in (p.info.get("name") or "").lower()
+                or "playwright" in (p.info.get("name") or "").lower()
+            )
+        except Exception:
+            chrome_count = 0
+
+        if ram_pct >= ALERT_RAM_PCT_THRESHOLD or chrome_count >= ALERT_CHROME_PROC_THRESHOLD:
+            if _should_alert("resources"):
+                NotifierService._broadcast(
+                    "🧠 <b>Áp lực tài nguyên cao</b>\n"
+                    f"• RAM: <b>{ram_pct:.1f}%</b>\n"
+                    f"• Chrome/Playwright: <b>{chrome_count}</b>\n"
+                    "Gợi ý: giảm backlog, hoặc tắt idle engagement khi bận."
+                )
+    except Exception:
+        pass
 
 def _resolve_yt_dlp_binary() -> str:
     """Prefer PATH, fallback to the project's venv binary."""
@@ -253,9 +339,10 @@ def _process_viral_materials(db):
     """
     from app.database.models import ViralMaterial, Job, Account
 
+    limit_n = max(0, int(MAINT_VIRAL_LIMIT))
     materials = db.query(ViralMaterial).filter(
         ViralMaterial.status.in_(["NEW", "REUP"])
-    ).order_by(ViralMaterial.views.desc()).limit(3).all()
+    ).order_by(ViralMaterial.views.desc()).limit(limit_n).all()
 
     if not materials:
         return
@@ -720,18 +807,29 @@ def run_loop():
                 
                 # 4. Daily Summary Report
                 _check_daily_summary(db)
-                
-                # 4. Process viral materials → DRAFT jobs
-                _process_viral_materials(db)
-                
-                # 5. Auto-discover TikTok competitor videos (hourly)
-                _scrape_tiktok_competitors(db)
-                
-                # 6. Purge Zombie Chrome processes (hourly)
+
+                # Alerts (queue pressure + resources) with cooldown
+                _maybe_alert_queue_and_resources(db)
+
+                backlog = _pending_backlog(db)
+                if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:
+                    logger.info(
+                        "[MAINT] Backlog=%d >= %d. Skipping heavy tasks (viral ingest/tiktok scan/discovery) this sweep.",
+                        backlog,
+                        MAINT_SKIP_HEAVY_WHEN_PENDING,
+                    )
+                else:
+                    # 4. Process viral materials → DRAFT jobs (yt-dlp heavy)
+                    _process_viral_materials(db)
+                    
+                    # 5. Auto-discover TikTok competitor videos (hourly)
+                    _scrape_tiktok_competitors(db)
+                    
+                    # 7. Competitor Discovery (nightly, 24h interval)
+                    _run_competitor_discovery(db)
+
+                # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap
                 _purge_zombies()
-                
-                # 7. Competitor Discovery (nightly, 24h interval)
-                _run_competitor_discovery(db)
                 
             if RUNNING:
                 # Sleep for 5 minutes between maintenance sweeps

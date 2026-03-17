@@ -108,6 +108,38 @@ class QueueService:
         Finds RUNNING jobs where last_heartbeat_at is older than threshold
         and resets them to PENDING.
         """
+        # Collect affected IDs for observability (JobEvent)
+        try:
+            stale_running_ids = [
+                r[0]
+                for r in db.execute(
+                    text(
+                        """
+                        SELECT id FROM jobs
+                        WHERE status = 'RUNNING'
+                          AND last_heartbeat_at < (strftime('%s', 'now') - :threshold)
+                        """
+                    ),
+                    {"threshold": threshold_seconds},
+                ).fetchall()
+            ]
+            stale_ai_ids = [
+                r[0]
+                for r in db.execute(
+                    text(
+                        """
+                        SELECT id FROM jobs
+                        WHERE status = 'AI_PROCESSING'
+                          AND last_heartbeat_at < (strftime('%s', 'now') - :threshold)
+                        """
+                    ),
+                    {"threshold": threshold_seconds},
+                ).fetchall()
+            ]
+        except Exception:
+            stale_running_ids = []
+            stale_ai_ids = []
+
         # Recover stale RUNNING jobs -> PENDING
         sql_running = """
             UPDATE jobs
@@ -128,7 +160,71 @@ class QueueService:
               AND last_heartbeat_at < (strftime('%s', 'now') - :threshold)
         """
         result2 = db.execute(text(sql_ai), {"threshold": threshold_seconds})
-        
+
+        # Write JobEvent records for recovered jobs (best-effort)
+        try:
+            import time as _time
+            ts = int(_time.time())
+            if stale_running_ids:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO job_events (job_id, ts, level, message, meta_json)
+                        VALUES (:job_id, :ts, 'WARN', :msg, :meta)
+                        """
+                    ),
+                    [
+                        {
+                            "job_id": jid,
+                            "ts": ts,
+                            "msg": "Recovered stale RUNNING job → PENDING",
+                            "meta": f"threshold_seconds={threshold_seconds}",
+                        }
+                        for jid in stale_running_ids
+                    ],
+                )
+            if stale_ai_ids:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO job_events (job_id, ts, level, message, meta_json)
+                        VALUES (:job_id, :ts, 'WARN', :msg, :meta)
+                        """
+                    ),
+                    [
+                        {
+                            "job_id": jid,
+                            "ts": ts,
+                            "msg": "Recovered stale AI_PROCESSING job → DRAFT",
+                            "meta": f"threshold_seconds={threshold_seconds}",
+                        }
+                        for jid in stale_ai_ids
+                    ],
+                )
+        except Exception:
+            pass
+
+        recovered_total = result1.rowcount + result2.rowcount
+
+        # Telegram alert (best-effort, avoid spam by only sending when something recovered)
+        if recovered_total > 0:
+            try:
+                from app.services.notifier import NotifierService
+                ids_preview = []
+                if stale_running_ids:
+                    ids_preview.extend(stale_running_ids[:5])
+                if stale_ai_ids:
+                    ids_preview.extend(stale_ai_ids[:5])
+                suffix = f"\nIDs: {', '.join(str(i) for i in ids_preview)}" if ids_preview else ""
+                NotifierService._broadcast(
+                    "🧯 <b>Self-heal đã reset job kẹt</b>\n"
+                    f"• RUNNING→PENDING: <b>{len(stale_running_ids)}</b>\n"
+                    f"• AI_PROCESSING→DRAFT: <b>{len(stale_ai_ids)}</b>\n"
+                    f"threshold={threshold_seconds}s{suffix}"
+                )
+            except Exception:
+                pass
+
         db.commit()
-        return result1.rowcount + result2.rowcount
+        return recovered_total
 

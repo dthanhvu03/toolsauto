@@ -1,0 +1,133 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Viral • Auto Publisher{% endblock %}
+{% block page_title %}Viral{% endblock %}
+{% block page_subtitle %}Pagination + filter để không phải lướt dài.{% endblock %}
+
+{% block content %}
+  <div class="app-card p-4">
+    <div class="sticky top-[56px] lg:top-0 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 border-b border-slate-200 -mx-4 px-4 py-3 rounded-t-xl">
+      <div class="flex items-end justify-between gap-3 flex-wrap">
+        <div class="flex items-end gap-3 flex-wrap">
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Search URL</label>
+          <input id="vQ" class="app-input w-72 max-w-full" placeholder="tiktok.com / reel / ..." />
+        </div>
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Status</label>
+          <select id="vStatus" class="app-select">
+            <option value="">All</option>
+            <option value="NEW">NEW</option>
+            <option value="DRAFTED">DRAFTED</option>
+            <option value="FAILED">FAILED</option>
+            <option value="REUP">REUP</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Platform</label>
+          <select id="vPlatform" class="app-select">
+            <option value="">All</option>
+            <option value="tiktok">tiktok</option>
+            <option value="facebook">facebook</option>
+            <option value="youtube">youtube</option>
+            <option value="instagram">instagram</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
+          <input id="vMin" type="number" min="0" step="500" value="0" class="app-input w-32" />
+        </div>
+        <div>
+          <label class="block text-xs text-[var(--muted)] mb-1">Per page</label>
+          <select id="vPer" class="app-select">
+            <option value="50">50</option>
+            <option value="100" selected>100</option>
+            <option value="200">200</option>
+          </select>
+        </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button class="app-btn" id="vPresetNew">NEW</button>
+          <button class="app-btn" id="vPresetFailed">FAILED</button>
+          <button id="vApply" class="app-btn app-btn-primary">Apply</button>
+          <label class="inline-flex items-center gap-2 text-sm text-slate-700 select-none">
+            <input id="vAuto" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
+            Auto-refresh
+          </label>
+          <button id="vForceScan" class="app-btn border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  hx-post="/viral/force-scan" hx-target="#viral-table" hx-swap="outerHTML">Quét ngay</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 overflow-x-auto">
+      <div id="viral-table" hx-get="/app/viral/table?page=1&per_page=100" hx-trigger="load" hx-swap="outerHTML">
+        <div class="p-4 text-sm text-[var(--muted)]">Đang tải...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let viralAutoTimer = null;
+    function setViralQueryParams(next) {
+      const url = new URL(window.location.href);
+      Object.entries(next).forEach(([k, v]) => {
+        if (v === '' || v === null || v === undefined) url.searchParams.delete(k);
+        else url.searchParams.set(k, v);
+      });
+      window.history.replaceState({}, '', url.toString());
+    }
+    function initViralFromQuery() {
+      const url = new URL(window.location.href);
+      document.getElementById('vQ').value = url.searchParams.get('q') || '';
+      document.getElementById('vStatus').value = url.searchParams.get('status') || '';
+      document.getElementById('vPlatform').value = url.searchParams.get('platform') || '';
+      document.getElementById('vMin').value = url.searchParams.get('min_views') || '0';
+      document.getElementById('vPer').value = url.searchParams.get('per_page') || '100';
+      document.getElementById('vAuto').checked = (url.searchParams.get('auto') || '') === '1';
+    }
+    function buildViralUrl(page=1) {
+      const q = encodeURIComponent(document.getElementById('vQ').value || '');
+      const st = encodeURIComponent(document.getElementById('vStatus').value || '');
+      const pf = encodeURIComponent(document.getElementById('vPlatform').value || '');
+      const mv = encodeURIComponent(document.getElementById('vMin').value || '0');
+      const per = encodeURIComponent(document.getElementById('vPer').value || '100');
+      return `/app/viral/table?page=${page}&per_page=${per}&q=${q}&status=${st}&platform=${pf}&min_views=${mv}`;
+    }
+    function refreshViral(page=1){
+      setViralQueryParams({
+        q: document.getElementById('vQ').value || '',
+        status: document.getElementById('vStatus').value || '',
+        platform: document.getElementById('vPlatform').value || '',
+        min_views: document.getElementById('vMin').value || '0',
+        per_page: document.getElementById('vPer').value || '100',
+        page: String(page),
+        auto: document.getElementById('vAuto').checked ? '1' : '',
+      });
+      htmx.ajax('GET', buildViralUrl(page), { target: '#viral-table', swap: 'outerHTML' });
+    }
+    document.getElementById('vApply').addEventListener('click', () => refreshViral(1));
+    window.refreshViral = refreshViral;
+
+    document.getElementById('vPresetNew').addEventListener('click', () => {
+      document.getElementById('vStatus').value = 'NEW';
+      refreshViral(1);
+    });
+    document.getElementById('vPresetFailed').addEventListener('click', () => {
+      document.getElementById('vStatus').value = 'FAILED';
+      refreshViral(1);
+    });
+    document.getElementById('vAuto').addEventListener('change', () => {
+      if (viralAutoTimer) clearInterval(viralAutoTimer);
+      viralAutoTimer = null;
+      if (document.getElementById('vAuto').checked) {
+        viralAutoTimer = setInterval(() => refreshViral(parseInt(new URL(window.location.href).searchParams.get('page') || '1',10) || 1), 15000);
+      }
+      refreshViral(1);
+    });
+    initViralFromQuery();
+    const initPage = parseInt(new URL(window.location.href).searchParams.get('page') || '1', 10) || 1;
+    refreshViral(initPage);
+  </script>
+{% endblock %}
+
