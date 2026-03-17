@@ -232,6 +232,9 @@ def run_loop():
         db.commit()
         
     logger.info("Entering polling loop. Tick=%ss", WORKER_TICK_SECONDS)
+    # Adaptive idle backoff to reduce DB polling + CPU wakeups when queue is empty
+    idle_sleep = WORKER_TICK_SECONDS
+    idle_sleep_cap = int(os.getenv("PUBLISHER_IDLE_SLEEP_CAP_SEC", "60"))
     
     while RUNNING:
         try:
@@ -258,7 +261,11 @@ def run_loop():
             if not found_job and RUNNING:
                 with SessionLocal() as db_idle:
                     _maybe_idle_engagement(db_idle)
-                time.sleep(WORKER_TICK_SECONDS)
+                time.sleep(idle_sleep)
+                idle_sleep = min(idle_sleep * 2, idle_sleep_cap)
+            else:
+                # Reset backoff once we actually do work
+                idle_sleep = WORKER_TICK_SECONDS
                 
         except Exception:
             logger.exception("Publisher encountered a core loop error. Will retry.")
@@ -293,6 +300,20 @@ def _maybe_idle_engagement(db: Session):
 
     if not config.IDLE_ENGAGEMENT_ENABLED:
         return
+
+    # Auto-disable idle engagement when backlog is high (protect 8GB RAM machines)
+    try:
+        from app.database.models import Job
+        threshold = int(os.getenv("IDLE_ENGAGEMENT_DISABLE_WHEN_PENDING", "10"))
+        backlog = db.query(Job).filter(
+            Job.status.in_(["PENDING", "RUNNING", "DRAFT", "AI_PROCESSING", "AWAITING_STYLE"])
+        ).count()
+        if backlog >= threshold:
+            logger.info("[IDLE] Backlog=%d >= %d. Skipping idle engagement.", backlog, threshold)
+            return
+    except Exception:
+        # Never block publishing due to idle warmup checks
+        pass
 
     # Pick a random active Facebook account
     from app.database.models import Account

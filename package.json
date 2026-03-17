@@ -1,0 +1,31 @@
+{
+  "name": "toolsauto",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "build:css": "tailwindcss -i ./app/static/src/app.css -o ./app/static/app.css --minify",
+    "watch:css": "tailwindcss -i ./app/static/src/app.css -o ./app/static/app.css --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dthanhvu03/toolsauto.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dthanhvu03/toolsauto/issues"
+  },
+  "homepage": "https://github.com/dthanhvu03/toolsauto#readme",
+  "devDependencies": {
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.17"
+  }
+}

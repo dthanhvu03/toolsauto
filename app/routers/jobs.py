@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Form, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List
 import time
 import os
@@ -26,6 +27,7 @@ def get_jobs_table(
     status: str = "active",
     page: int = 1,
     per_page: int = 20,
+    q: str = "",
     db: Session = Depends(get_db)
 ):
     """HTMX fragment: Returns the full jobs table with filter + pagination."""
@@ -37,6 +39,22 @@ def get_jobs_table(
     elif status in ("DRAFT", "PENDING", "RUNNING", "DONE", "FAILED", "CANCELLED"):
         query = query.filter(Job.status == status)
     # else "all" → no filter
+
+    # Search filter (optional, backward compatible)
+    q = (q or "").strip()
+    if q:
+        # If numeric, treat as possible job id
+        if q.isdigit():
+            query = query.filter(Job.id == int(q))
+        else:
+            query = query.join(Account, Job.account_id == Account.id).filter(
+                or_(
+                    Account.name.ilike(f"%{q}%"),
+                    Job.target_page.ilike(f"%{q}%"),
+                    Job.caption.ilike(f"%{q}%"),
+                    Job.post_url.ilike(f"%{q}%"),
+                )
+            )
     
     total = query.count()
     total_pages = max(1, (total + per_page - 1) // per_page)
@@ -54,6 +72,7 @@ def get_jobs_table(
             "total_pages": total_pages,
             "total_jobs": total,
             "per_page": per_page,
+            "q": q,
             "now": int(time.time())
         }
     )

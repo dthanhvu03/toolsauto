@@ -1,0 +1,47 @@
+<div class="app-card p-5 mb-8">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div>
+      <div class="text-sm font-semibold text-gray-900">Queue / Backlog</div>
+      <div class="text-xs text-gray-500">Cập nhật mỗi 30s • Telegram: /queue</div>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      {% set text = 'PENDING: ' ~ counts.get('PENDING', 0) %}{% set tone='amber' %}{% include 'ui/badge.html' with context %}
+      {% set text = 'RUNNING: ' ~ counts.get('RUNNING', 0) %}{% set tone='blue' %}{% include 'ui/badge.html' with context %}
+      {% set text = 'DRAFT: ' ~ counts.get('DRAFT', 0) %}{% set tone='amber' %}{% include 'ui/badge.html' with context %}
+      {% set text = 'AI: ' ~ counts.get('AI_PROCESSING', 0) %}{% set tone='blue' %}{% include 'ui/badge.html' with context %}
+      {% set text = 'AWAITING_STYLE: ' ~ counts.get('AWAITING_STYLE', 0) %}{% set tone='amber' %}{% include 'ui/badge.html' with context %}
+    </div>
+  </div>
+
+  <div class="mt-4 grid md:grid-cols-3 gap-3">
+    <div class="border border-gray-100 rounded p-3">
+      <div class="text-xs text-gray-500">Done / Failed</div>
+      <div class="mt-1 text-sm text-gray-800">
+        DONE: <b>{{ counts.get('DONE', 0) }}</b> • FAILED: <b>{{ counts.get('FAILED', 0) }}</b> • CANCELLED: <b>{{ counts.get('CANCELLED', 0) }}</b>
+      </div>
+    </div>
+    <div class="border border-gray-100 rounded p-3">
+      <div class="text-xs text-gray-500">Viral</div>
+      <div class="mt-1 text-sm text-gray-800">
+        NEW: <b>{{ viral_new }}</b> • FAILED: <b>{{ viral_failed }}</b>
+      </div>
+    </div>
+    <div class="border border-gray-100 rounded p-3">
+      <div class="text-xs text-gray-500">Bottleneck gợi ý</div>
+      <div class="mt-1 text-sm text-gray-800">
+        {% if counts.get('PENDING', 0) > 0 and counts.get('RUNNING', 0) == 0 %}
+          Worker đang idle hoặc bị pause.
+        {% elif counts.get('DRAFT', 0) > 0 %}
+          Nhiều DRAFT: cần duyệt hoặc AI đang chậm.
+        {% elif counts.get('AI_PROCESSING', 0) > 0 %}
+          AI đang chạy: xem log AI_Generator.
+        {% elif viral_new > 0 %}
+          Viral NEW nhiều: Maintenance sẽ xử lý dần (có thể bị skip khi backlog cao).
+        {% else %}
+          Ổn định.
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+

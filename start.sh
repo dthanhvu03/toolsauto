@@ -1,68 +1,142 @@
 #!/bin/bash
-# start.sh - Kịch bản khởi động Auto Publisher Kiến Trúc Multi-Worker
-# Chạy 1 lệnh này sẽ tự động khởi động cả Web API và 3 chuyên viên Worker độc lập
+#
+# start.sh — Khởi động / dừng toàn bộ Auto Publisher (Web + 4 Worker).
+#   ./start.sh       — Khởi động (PM2 nếu có, không thì chạy 4 process nền).
+#   ./start.sh stop  — Dừng toàn bộ.
+#
+set -e
+cd "$(dirname "$0")"
+APP_DIR="$(pwd)"
 
-cd "$(dirname "$0")" || exit 1
-
+# ─── Colors ─────────────────────────────────────────────────────────────
+RED='\033[0;31m'
 GREEN='\033[0;32m'
-BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-magenta='\033[0;35m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-echo -e "${BLUE}=== Chuẩn bị môi trường ===${NC}"
+# ─── Help ───────────────────────────────────────────────────────────────
+usage() {
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  ./start.sh         Khởi động Web + 4 Worker (PM2 nếu có, không thì nền)"
+    echo "  ./start.sh stop    Dừng toàn bộ"
+    echo "  ./start.sh -h      Hiện trợ giúp"
+    echo ""
+    echo "Sau khi chạy: Web http://localhost:8000 | Telegram /status"
+}
 
-# Dọn dẹp tiến trình cũ (rác) nếu có
-echo "Đang dọn dẹp các tiến trình bot & browser cũ (nếu có)..."
-pkill -f "python workers/publisher.py" 2>/dev/null
-pkill -f "python workers/ai_generator.py" 2>/dev/null
-pkill -f "python workers/maintenance.py" 2>/dev/null
-pkill -f "python worker.py" 2>/dev/null
-pkill -f "uvicorn app.main:app" 2>/dev/null
-pkill -f "chrome|chromedriver" 2>/dev/null
-sleep 1
-
-if [ -d "venv" ]; then
-    source venv/bin/activate
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+    usage
+    exit 0
 fi
 
-# Ensure Python can find the 'app' module
-export PYTHONPATH="$(pwd)"
+# ─── Stop ───────────────────────────────────────────────────────────────
+if [ "${1:-}" = "stop" ]; then
+    echo -e "${YELLOW}Đang dừng Auto Publisher...${NC}"
+    if command -v pm2 &>/dev/null; then
+        pm2 delete FB_Publisher AI_Generator Maintenance Web_Dashboard 2>/dev/null || true
+        pm2 save 2>/dev/null || true
+    fi
+    [ -f "./stop.sh" ] && bash ./stop.sh || true
+    echo -e "${GREEN}Đã dừng.${NC}"
+    exit 0
+fi
 
-# 1. Khởi động Web API
-echo -e "${YELLOW}Khởi động Web API (FastAPI)...${NC}"
-uvicorn app.main:app --host 0.0.0.0 --port 8000 > web.log 2>&1 &
+# ─── Preflight ───────────────────────────────────────────────────────────
+echo -e "${BLUE}=== Auto Publisher — Khởi động ===${NC}"
+
+if [ ! -d "venv" ]; then
+    echo -e "${RED}Lỗi: Chưa có thư mục venv. Chạy: python -m venv venv && ./venv/bin/pip install -r requirements.txt${NC}"
+    exit 1
+fi
+
+VENV_PYTHON="$APP_DIR/venv/bin/python"
+if [ ! -x "$VENV_PYTHON" ]; then
+    echo -e "${RED}Lỗi: Không tìm thấy $VENV_PYTHON${NC}"
+    exit 1
+fi
+
+source venv/bin/activate
+export PYTHONPATH="$APP_DIR"
+
+# Kiểm tra port 8000 (tránh bind failed)
+if command -v ss &>/dev/null; then
+    if ss -tlnp 2>/dev/null | grep -q ':8000 '; then
+        echo -e "${YELLOW}Cảnh báo: Port 8000 đang được dùng. Dừng tiến trình cũ hoặc chạy ./start.sh stop trước.${NC}"
+    fi
+elif command -v lsof &>/dev/null; then
+    if lsof -i :8000 &>/dev/null; then
+        echo -e "${YELLOW}Cảnh báo: Port 8000 đang được dùng.${NC}"
+    fi
+fi
+
+# ─── Dọn tiến trình cũ (chỉ tiến trình của project, không kill Chrome hệ thống) ─
+echo "Dọn tiến trình cũ của project..."
+pm2 delete FB_Publisher AI_Generator Maintenance Web_Dashboard 2>/dev/null || true
+pkill -f "python workers/publisher.py" 2>/dev/null || true
+pkill -f "python workers/ai_generator.py" 2>/dev/null || true
+pkill -f "python workers/maintenance.py" 2>/dev/null || true
+pkill -f "python worker.py" 2>/dev/null || true
+pkill -f "uvicorn app.main:app" 2>/dev/null || true
+pkill -f "run_web.py" 2>/dev/null || true
+sleep 1
+
+# ─── Khởi động qua PM2 ────────────────────────────────────────────────────
+# Dùng bash -c 'unset DISPLAY; exec xvfb-run...' để PM2 không truyền DISPLAY=:0 → tránh Chrome mở cửa sổ thật
+if command -v pm2 &>/dev/null; then
+    echo -e "${YELLOW}Khởi động qua PM2...${NC}"
+    # Guardrails for 8GB RAM machines (override via env if needed)
+    PM2_MEM_PUBLISHER="${PM2_MEM_PUBLISHER:-1200M}"
+    PM2_MEM_AI="${PM2_MEM_AI:-900M}"
+    PM2_MEM_MAINT="${PM2_MEM_MAINT:-800M}"
+    PM2_MEM_WEB="${PM2_MEM_WEB:-500M}"
+
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/publisher.py'" \
+        --name "FB_Publisher" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_PUBLISHER"
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/ai_generator.py'" \
+        --name "AI_Generator" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_AI"
+    pm2 start "$VENV_PYTHON workers/maintenance.py" \
+        --name "Maintenance" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_MAINT"
+    pm2 start "$VENV_PYTHON run_web.py" \
+        --name "Web_Dashboard" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_WEB"
+    pm2 save
+    echo ""
+    echo -e "${GREEN}✅ Đã khởi động (PM2).${NC}"
+    echo "  pm2 status        — trạng thái"
+    echo "  pm2 logs         — log realtime"
+    echo "  pm2 restart all  — khởi động lại"
+    echo "  ./start.sh stop  — dừng"
+    echo -e "  ${CYAN}Web: http://localhost:8000${NC}"
+    exit 0
+fi
+
+# ─── Khởi động trực tiếp (không PM2) ─────────────────────────────────────
+echo -e "${YELLOW}Khởi động trực tiếp (không PM2)...${NC}"
+
+if ! command -v xvfb-run &>/dev/null; then
+    echo -e "${YELLOW}Cảnh báo: xvfb-run chưa cài. Worker Facebook/AI có thể mở cửa sổ trình duyệt.${NC}"
+    echo "  Cài: sudo apt install xvfb"
+fi
+
+$VENV_PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > web.log 2>&1 &
 WEB_PID=$!
-echo -e "Web API đang chạy (PID: $WEB_PID). Log: web.log"
 sleep 2
-
-# 2. Khởi động Publisher Worker (Có Xvfb cho Playwright Facebook)
-echo -e "${YELLOW}Khởi động Publisher Worker (Chuyên Đăng Bài)...${NC}"
-xvfb-run -a python workers/publisher.py > pub_worker.log 2>&1 &
+env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/publisher.py > pub_worker.log 2>&1 &
 PUB_PID=$!
-echo -e "Publisher đang chạy (PID: $PUB_PID). Log: pub_worker.log"
-
-# 3. Khởi động AI Generator Worker (Có Xvfb cho Selenium Gemini)
-echo -e "${YELLOW}Khởi động AI Generator Worker (Chuyên Mớm Prompt)...${NC}"
-xvfb-run -a python workers/ai_generator.py > ai_worker.log 2>&1 &
+env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/ai_generator.py > ai_worker.log 2>&1 &
 AI_PID=$!
-echo -e "AI Generator đang chạy (PID: $AI_PID). Log: ai_worker.log"
-
-# 4. Khởi động Maintenance Worker (Không cần UI/Xvfb)
-echo -e "${YELLOW}Khởi động Maintenance Worker (Chuyên Quét Dọn & Report)...${NC}"
-python workers/maintenance.py > maint_worker.log 2>&1 &
+$VENV_PYTHON workers/maintenance.py > maint_worker.log 2>&1 &
 MAINT_PID=$!
-echo -e "Maintenance đang chạy (PID: $MAINT_PID). Log: maint_worker.log"
+
+echo $WEB_PID > .run_web.pid
+echo $PUB_PID > .run_pub.pid
+echo $AI_PID > .run_ai.pid
+echo $MAINT_PID > .run_maint.pid
 
 echo ""
-echo -e "${GREEN}✅ HỆ THỐNG MULTI-WORKER ĐÃ KHỞI ĐỘNG XONG!${NC}"
-echo "========================================="
-echo "🌍 Truy cập Web: http://localhost:8000"
-echo "🤖 Telegram Bot: Dùng lệnh /status để kiểm tra"
-echo "========================================="
-
-# Lưu PID
-echo "$WEB_PID" > .run_web.pid
-echo "$PUB_PID" > .run_pub.pid
-echo "$AI_PID" > .run_ai.pid
-echo "$MAINT_PID" > .run_maint.pid
+echo -e "${GREEN}✅ Đã khởi động (4 process nền).${NC}"
+echo "  ./start.sh stop  — dừng"
+echo "  Log: web.log, pub_worker.log, ai_worker.log, maint_worker.log"
+echo -e "  ${CYAN}Web: http://localhost:8000${NC}"
+echo -e "${YELLOW}Gợi ý: Cài PM2 (sudo npm i -g pm2) rồi chạy lại ./start.sh để quản lý gọn hơn.${NC}"

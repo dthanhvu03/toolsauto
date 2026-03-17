@@ -1,0 +1,15 @@
+{# Usage:
+  {% include 'ui/skeleton.html' with context %}
+  expects: lines(optional, default 3)
+#}
+{% set _lines = (lines|default(3))|int %}
+<div class="app-card">
+  <div class="app-card-body">
+    <div class="animate-pulse space-y-3">
+      {% for _ in range(_lines) %}
+        <div class="h-3 rounded bg-slate-100"></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+

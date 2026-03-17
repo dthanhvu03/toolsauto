@@ -1,6 +1,6 @@
 <!-- Full table body fragment returned on polling -->
 <tbody id="jobs-table-body"
-    hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page|default(1) }}"
+    hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page|default(1) }}{% if q %}&q={{ q|urlencode }}{% endif %}"
     hx-trigger="every 5s" hx-swap="outerHTML">
     {% for job in jobs %}
     {% include 'fragments/job_row.html' %}
@@ -21,16 +21,16 @@
                 <div class="flex gap-2">
                     {% if current_page|default(1) > 1 %}
                     <button
-                        hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page - 1 }}"
+                        hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page - 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                         hx-target="#jobs-table-body" hx-swap="outerHTML"
-                        class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50">
+                        class="app-btn h-9">
                         ← Prev
                     </button>
                     {% endif %}
                     {% if current_page|default(1) < total_pages|default(1) %} <button
-                        hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page + 1 }}"
+                        hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page + 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}"
                         hx-target="#jobs-table-body" hx-swap="outerHTML"
-                        class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50">
+                        class="app-btn h-9">
                         Next →
                         </button>
                         {% endif %}

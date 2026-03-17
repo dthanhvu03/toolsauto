@@ -11,8 +11,19 @@ from app.services.viral_scan import run_tiktok_competitor_scan, get_default_min_
 router = APIRouter(prefix="/viral", tags=["viral"])
 
 
+# Số dòng tối đa hiển thị trên bảng Viral (không lọc status — hiển thị NEW + DRAFTED + FAILED)
+VIRAL_TABLE_LIMIT = 500
+
+
 def _render_viral_tbody(request: Request, db: Session, scan_message: str | None = None) -> str:
-    materials = db.query(ViralMaterial).order_by(ViralMaterial.views.desc()).limit(50).all()
+    # Không lọc status — lấy tất cả, sắp views giảm dần, giới hạn 500
+    materials = (
+        db.query(ViralMaterial)
+        .order_by(ViralMaterial.views.desc())
+        .limit(VIRAL_TABLE_LIMIT)
+        .all()
+    )
+    total_count = db.query(ViralMaterial).count()
     accounts = {acc.id: acc.name for acc in db.query(Account).all()}
     now = int(time.time())
     parts = []
@@ -20,6 +31,14 @@ def _render_viral_tbody(request: Request, db: Session, scan_message: str | None 
         parts.append(
             f'<tr class="bg-green-50 border-b">'
             f'<td colspan="6" class="p-3 text-sm text-green-800">{scan_message}</td></tr>'
+        )
+    # Dòng thông tin: đang hiển thị X / tổng Y
+    if total_count > 0:
+        showing = min(len(materials), VIRAL_TABLE_LIMIT)
+        parts.append(
+            f'<tr class="bg-gray-50 border-b"><td colspan="6" class="p-2 text-xs text-gray-500">'
+            f'Hiển thị {showing} / {total_count} video (sắp theo views giảm dần, tối đa {VIRAL_TABLE_LIMIT})'
+            f'</td></tr>'
         )
     for item in materials:
         acc_name = accounts.get(item.scraped_by_account_id, "Unknown")

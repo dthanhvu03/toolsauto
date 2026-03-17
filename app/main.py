@@ -33,8 +33,15 @@ app.include_router(health.router)
 app.include_router(telegram.router)
 app.include_router(viral.router)
 
-# Note: In an original larger setup we would serve static files, e.g.
-# app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# Static assets (SaaS UI CSS, etc.)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# Provide a tiny request-scoped timestamp for templates (used in TikTok Links Age column)
+@app.middleware("http")
+async def _inject_now_ts(request, call_next):
+    import time as _time
+    request.state.now_ts = int(_time.time())
+    return await call_next(request)
 
 if __name__ == "__main__":
     import uvicorn

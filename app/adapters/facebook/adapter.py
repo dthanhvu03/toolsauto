@@ -68,6 +68,31 @@ class FacebookAdapter(AdapterInterface):
     NEXT_BUTTON_LABELS = ("Tiếp", "Next")
     POST_BUTTON_LABELS = ("Đăng", "Post", "Đăng bài", "Publish", "Chia sẻ", "Share", "Đăng Thước phim")
 
+    _REEL_ID_RE = re.compile(r"/reel/(\d+)", re.IGNORECASE)
+
+    def _normalize_post_url(self, url: str | None) -> str | None:
+        """Return a stable, valid FB post URL (prefer reel with id), else None."""
+        if not url:
+            return None
+        u = str(url).strip()
+        if not u:
+            return None
+        # make absolute
+        if u.startswith("/"):
+            u = "https://www.facebook.com" + u
+        # drop query/fragments
+        u = u.split("#")[0].split("?")[0].rstrip("/")
+        # reject ambiguous reel root (e.g. https://www.facebook.com/reel/)
+        if u.endswith("/reel") or u.endswith("/reel/"):
+            return None
+        # accept reel with numeric id
+        if self._REEL_ID_RE.search(u):
+            return u
+        # accept videos/posts if they look non-trivial
+        if ("/videos/" in u or "/posts/" in u) and len(u) > 30:
+            return u
+        return None
+
     def _build_publish_details(self, flow_mode: str, entrypoint_used: str | None, **extra: Any) -> dict[str, Any]:
         details: dict[str, Any] = {
             "flow_mode": flow_mode,
@@ -1058,21 +1083,42 @@ class FacebookAdapter(AdapterInterface):
                     entrypoint_used,
                 )
 
-            self.page.wait_for_timeout(5000)
+            self.page.wait_for_timeout(10000)
 
             # ── Post-publish verification: scan for new reel ──
             profile_url = target_page_url if target_page_url else "https://www.facebook.com/me"
             post_url = None
             try:
-                if target_page_url:
-                    reels_tab_url = target_page_url.rstrip('/') + '/reels_tab' if '?' not in target_page_url else target_page_url + '&sk=reels_tab'
-                else:
-                    reels_tab_url = "https://www.facebook.com/me/reels_tab"
-                # Use the pre-computed publish_salt (always available since adapter auto-injects)
-                salt = publish_salt
-                logger.info("FacebookAdapter: Scanning profile for salt '%s' to extract post_url...", salt)
+                # Nhanh: nếu FB redirect sang trang reel mới thì dùng luôn URL hiện tại
+                try:
+                    current_url = self.page.url or ""
+                    normalized = self._normalize_post_url(current_url)
+                    if normalized:
+                        post_url = normalized
+                        logger.info("FacebookAdapter: post_url captured from current URL after post: %s", post_url)
+                except Exception:
+                    pass
+
+                if not post_url:
+                    if target_page_url:
+                        base_page = target_page_url.split("?")[0].rstrip("/")
+                        reels_tab_urls = [
+                            base_page + "/reels_tab",
+                            base_page + "/reels",
+                            base_page + "/videos",
+                        ]
+                    else:
+                        reels_tab_urls = [
+                            "https://www.facebook.com/me/reels_tab",
+                            "https://www.facebook.com/me/reels",
+                            "https://www.facebook.com/reel",
+                        ]
+                    salt = publish_salt
+                    logger.info("FacebookAdapter: Scanning profile for salt '%s' to extract post_url...", salt)
 
                 for attempt in range(4):
+                    if post_url:
+                        break
                     try:
                         self.page.goto(profile_url, wait_until="commit", timeout=15000)
                         self.page.wait_for_timeout(5000)
@@ -1109,46 +1155,80 @@ class FacebookAdapter(AdapterInterface):
                                             parent_text = parent.inner_text()
                                             if salt in parent_text:
                                                 href = link.get_attribute("href")
-                                                if href:
-                                                    post_url = href if href.startswith("http") else "https://www.facebook.com" + href
+                                                normalized = self._normalize_post_url(href)
+                                                if normalized:
+                                                    post_url = normalized
                                                     logger.info("FacebookAdapter: post_url captured via main feed: %s", post_url)
                                                     break
                                     except Exception:
                                         continue
+                                # Fallback: dùng JS tìm link /reel/ mà có ancestor chứa salt (không phụ thuộc class FB)
+                                if not post_url and full_text and salt in full_text:
+                                    found_href = self.page.evaluate("""
+                                        (salt) => {
+                                            const links = document.querySelectorAll('a[href*="/reel/"]');
+                                            for (const a of links) {
+                                                let el = a;
+                                                for (let i = 0; i < 20 && el; i++) {
+                                                    if (el.textContent && el.textContent.indexOf(salt) >= 0) {
+                                                        let h = a.getAttribute('href');
+                                                        return h ? (h.startsWith('http') ? h : 'https://www.facebook.com' + h) : null;
+                                                    }
+                                                    el = el.parentElement;
+                                                }
+                                            }
+                                            return null;
+                                        }
+                                    """, salt)
+                                    if found_href:
+                                        normalized = self._normalize_post_url(found_href)
+                                        if normalized:
+                                            post_url = normalized
+                                            logger.info("FacebookAdapter: post_url captured via main feed (JS fallback): %s", post_url)
                             if post_url:
                                 break
                         except Exception:
                             pass
 
-                    try:
-                        self.page.goto(reels_tab_url, wait_until="domcontentloaded", timeout=15000)
-                        self.page.wait_for_timeout(8000)
-                    except Exception:
-                        pass
-
-                    reel_links = self.page.locator('a').all()
                     unique_reels = []
-                    for link in reel_links:
+                    for reels_tab_url in reels_tab_urls:
                         try:
-                            href = link.get_attribute("href")
-                            if href and "/reel/" in href and len(href) > 20:
-                                clean_url = href.split("?")[0]
-                                if clean_url not in unique_reels:
-                                    unique_reels.append(clean_url)
+                            self.page.goto(reels_tab_url, wait_until="domcontentloaded", timeout=15000)
+                            self.page.wait_for_timeout(8000)
                         except Exception:
-                            pass
+                            continue
+                        reel_links = self.page.locator('a').all()
+                        for link in reel_links:
+                            try:
+                                href = link.get_attribute("href")
+                                if not href or len(href) < 20:
+                                    continue
+                                clean_url = href.split("?")[0]
+                                if "/reel/" in clean_url or "/videos/" in clean_url:
+                                    full = (clean_url if clean_url.startswith("http") else "https://www.facebook.com" + clean_url).rstrip("/")
+                                    normalized = self._normalize_post_url(full)
+                                    if normalized and normalized not in unique_reels:
+                                        unique_reels.append(normalized)
+                            except Exception:
+                                pass
+                        if unique_reels:
+                            logger.info("FacebookAdapter: Found %d reel/video links on %s", len(unique_reels), reels_tab_url)
+                            break
 
                     if salt:
-                        recent_reels = unique_reels[:3]
+                        recent_reels = unique_reels[:10]
                         for href in recent_reels:
                             full_url = href if href.startswith("http") else "https://www.facebook.com" + href
                             try:
                                 self.page.goto(full_url, wait_until="commit", timeout=15000)
                                 self.page.wait_for_timeout(5000)
                                 html_content = self.page.evaluate("document.body.innerHTML")
-                                if salt in html_content:
-                                    post_url = full_url.split("?")[0]
-                                    logger.info("FacebookAdapter: post_url captured via Reels tab deep dive: %s", post_url)
+                                text_content = self.page.evaluate("document.body.innerText")
+                                if salt in html_content or salt in (text_content or ""):
+                                    normalized = self._normalize_post_url(full_url)
+                                    if normalized:
+                                        post_url = normalized
+                                        logger.info("FacebookAdapter: post_url captured via Reels tab deep dive: %s", post_url)
                                     break
                             except Exception:
                                 continue
@@ -1158,9 +1238,11 @@ class FacebookAdapter(AdapterInterface):
                     else:
                         # No salt — check if a NEW reel appeared (not in pre_existing_reels)
                         for reel_url in unique_reels:
-                            clean = reel_url if reel_url.startswith("http") else "https://www.facebook.com" + reel_url
-                            if clean not in pre_existing_reels:
-                                post_url = clean
+                            normalized = self._normalize_post_url(reel_url)
+                            if not normalized:
+                                continue
+                            if normalized not in pre_existing_reels:
+                                post_url = normalized
                                 logger.info("FacebookAdapter: NEW reel detected (not in pre-existing set): %s", post_url)
                                 break
                         if post_url:

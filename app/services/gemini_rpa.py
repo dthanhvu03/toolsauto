@@ -2,19 +2,16 @@
 GeminiRPAService — Giao tiếp với Gemini Web UI qua UC Chrome + Selenium.
 Không cần API key. Dùng cookies từ login_gemini_bypass.py.
 
-Yêu cầu: chạy qua xvfb-run (Google chặn headless)
-
-Dùng:
-    from app.services.gemini_rpa import GeminiRPAService
-    svc = GeminiRPAService()
-    response = svc.ask("Phân tích video này...")
+Chạy headless: tự khởi động Xvfb trên :99 nếu DISPLAY=:0 để tránh mở cửa sổ Chrome thật.
 """
 import json
 import time
 import os
 import logging
 import functools
-import logging
+import subprocess
+import re
+import shutil
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -28,6 +25,100 @@ logger = logging.getLogger(__name__)
 
 COOKIE_PATH = "/home/vu/toolsauto/gemini_cookies.json"
 DEBUG_DIR = "/home/vu/toolsauto/debug_steps"
+
+# Xvfb đã khởi động trong process này (tránh gọi nhiều lần)
+_xvfb_process = None
+
+
+def _ensure_virtual_display() -> None:
+    """Nếu DISPLAY=:0 hoặc trống → khởi động Xvfb :99 và ép DISPLAY=:99 để Chrome không mở cửa sổ thật."""
+    global _xvfb_process
+    display = os.environ.get("DISPLAY", "").strip()
+    if display and display != ":0":
+        return
+    # Cần display ảo
+    os.environ["DISPLAY"] = ":99"
+    if _xvfb_process is not None:
+        return
+    try:
+        _xvfb_process = subprocess.Popen(
+            ["Xvfb", ":99", "-screen", "0", "1920x1080x24", "-ac"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        time.sleep(1.5)
+        if _xvfb_process.poll() is not None:
+            logger.warning("Xvfb :99 exited immediately, Chrome may use :0")
+            _xvfb_process = None
+        else:
+            logger.info("Started Xvfb on :99 for headless Gemini RPA")
+    except FileNotFoundError:
+        logger.warning("Xvfb not found. Install: sudo apt install xvfb. Chrome may open visible window.")
+        _xvfb_process = None
+    except Exception as e:
+        logger.warning("Could not start Xvfb: %s. Chrome may open visible window.", e)
+        _xvfb_process = None
+
+
+def _detect_chrome_major_version() -> int | None:
+    """
+    Detect installed Chrome/Chromium major version.
+    Needed to avoid ChromeDriver mismatch (common cause of Gemini RPA failures).
+    """
+    candidates = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+    for bin_name in candidates:
+        try:
+            out = subprocess.check_output([bin_name, "--version"], stderr=subprocess.STDOUT, text=True).strip()
+            # e.g. "Google Chrome 145.0.7632.116"
+            m = re.search(r"(\d+)\.", out)
+            if m:
+                return int(m.group(1))
+        except Exception:
+            continue
+    return None
+
+
+def _detect_chromedriver_major_version(driver_path: str) -> int | None:
+    """Detect chromedriver major version from `chromedriver --version` output."""
+    try:
+        out = subprocess.check_output([driver_path, "--version"], stderr=subprocess.STDOUT, text=True).strip()
+        # e.g. "ChromeDriver 145.0.7632.0 ..."
+        m = re.search(r"ChromeDriver\s+(\d+)\.", out)
+        if m:
+            return int(m.group(1))
+    except Exception:
+        return None
+    return None
+
+
+def _ensure_uc_driver_matches_browser(target_major: int) -> None:
+    """
+    undetected_chromedriver caches a patched driver at:
+    ~/.local/share/undetected_chromedriver/undetected_chromedriver
+    If it's for a different major version, UC can keep reusing it → SessionNotCreated.
+    We proactively remove the mismatched cache so UC re-downloads the correct version.
+    """
+    cache_root = os.path.expanduser("~/.local/share/undetected_chromedriver")
+    cached_driver = os.path.join(cache_root, "undetected_chromedriver")
+    if not os.path.exists(cached_driver):
+        return
+    cached_major = _detect_chromedriver_major_version(cached_driver)
+    if cached_major and cached_major != target_major:
+        logger.warning(
+            "Cached undetected_chromedriver major=%s mismatches Chrome major=%s. Removing cache to re-download.",
+            cached_major,
+            target_major,
+        )
+        try:
+            os.remove(cached_driver)
+        except Exception:
+            # If removal fails, fall back to nuking the cache directory.
+            try:
+                shutil.rmtree(cache_root, ignore_errors=True)
+            except Exception:
+                pass
+
 
 class GeminiMaxRetriesExceeded(Exception):
     """Exception ném ra khi Gemini RPA retry thất bại cả 3 lần."""
@@ -71,7 +162,13 @@ class GeminiRPAService:
 
     def __init__(self, cookie_path=COOKIE_PATH, max_retries=3):
         self.cookie_path = cookie_path
+        # inner-loop retries inside a single browser session
         self.max_retries = max_retries
+        # response wait timeout (seconds) — network/UI can be slow; make configurable
+        try:
+            self.response_timeout_sec = int(os.environ.get("GEMINI_RESPONSE_TIMEOUT_SEC", "180"))
+        except Exception:
+            self.response_timeout_sec = 180
 
     def ask(self, prompt: str) -> str | None:
         """Gửi prompt text → nhận response. Trả None nếu thất bại."""
@@ -86,9 +183,7 @@ class GeminiRPAService:
 
     @with_retry(max_retries=3, delay_sec=30)
     def _run_session(self, prompt: str, image_path: str | None = None) -> str | None:
-        """Mở browser, bơm cookies, gửi prompt (có hoặc không có ảnh)."""
-        import subprocess
-
+        """Mở browser, bơm cookies, gửi prompt (có hoặc không có ảnh). Luôn ép display ảo để không mở cửa sổ thật."""
         os.makedirs(DEBUG_DIR, exist_ok=True)
 
         if not os.path.exists(self.cookie_path):
@@ -97,7 +192,9 @@ class GeminiRPAService:
 
         cookies = json.load(open(self.cookie_path))
 
-        # Bỏ `--user-data-dir` để undetected_chromedriver tự tạo profile tạm trong /tmp (rất nhẹ, tự xoá khi quit)
+        # Luôn ép Chrome chạy trên display ảo (tự start Xvfb :99 nếu DISPLAY=:0)
+        _ensure_virtual_display()
+
         import undetected_chromedriver as uc
         opts = uc.ChromeOptions()
         opts.add_argument("--window-size=1920,1080")
@@ -106,17 +203,34 @@ class GeminiRPAService:
         opts.add_argument("--disable-gpu")
         
         try:
+            major = _detect_chrome_major_version()
+            if major:
+                logger.info("Detected Chrome major version: %s", major)
+                _ensure_uc_driver_matches_browser(major)
+            else:
+                logger.warning("Could not detect Chrome major version; UC may download mismatched chromedriver.")
             # Let undetected_chromedriver automatically manage the driver executable
             driver = uc.Chrome(
                 options=opts,
                 keep_alive=True,
                 use_subprocess=True,
-                version_main=145
+                # Pin driver major to the installed browser to prevent SessionNotCreated
+                **({"version_main": major} if major else {}),
             )
-            logger.info("Chrome started successfully (PID: %s)", os.getpid())
+            # Make webdriver commands more resilient to slow pages / large uploads
+            try:
+                driver.set_page_load_timeout(60)
+            except Exception:
+                pass
+            try:
+                driver.set_script_timeout(60)
+            except Exception:
+                pass
+            logger.info("Chrome started successfully")
         except Exception as e:
+            # IMPORTANT: raise so outer retry reports the true root cause (not "empty response")
             logger.error("Failed to initialize Chrome: %s", e)
-            return None
+            raise
 
         try:
             return self._execute(driver, cookies, prompt, image_path)
@@ -135,15 +249,22 @@ class GeminiRPAService:
         driver.get("https://gemini.google.com")
         time.sleep(2)
         for c in cookies:
-            try:
-                driver.add_cookie({
-                    "name": c["name"], "value": c["value"],
-                    "domain": c.get("domain", ".google.com"),
-                    "path": c.get("path", "/"),
-                    **({"expiry": int(c["expiry"])} if "expiry" in c else {}),
-                })
-            except Exception as e:
-                logger.warning("Lỗi thêm cookie %s: %s", c.get("name"), e)
+            # Occasionally webdriver becomes temporarily unresponsive; retry cookie add once.
+            for attempt in range(2):
+                try:
+                    driver.add_cookie({
+                        "name": c["name"], "value": c["value"],
+                        "domain": c.get("domain", ".google.com"),
+                        "path": c.get("path", "/"),
+                        **({"expiry": int(c["expiry"])} if "expiry" in c else {}),
+                    })
+                    break
+                except Exception as e:
+                    if attempt == 0:
+                        logger.warning("Lỗi thêm cookie %s (retrying once): %s", c.get("name"), e)
+                        time.sleep(0.8)
+                        continue
+                    logger.warning("Lỗi thêm cookie %s: %s", c.get("name"), e)
 
         # URL mặc định của Gemini (New Chat)
         driver.get("https://gemini.google.com/app")
@@ -199,7 +320,7 @@ class GeminiRPAService:
                 
             time.sleep(4)
 
-            # 3. Đợi response (max 120s)
+            # 3. Đợi response (default 180s, configurable)
             result = self._wait_response(driver, prompt, old_response_text)
             if result:
                 out_path = '/home/vu/.gemini/antigravity/brain/23eb6f02-4801-4635-8d17-491d2229b9ad/0301_final_gemini_ui.png'
@@ -305,7 +426,12 @@ class GeminiRPAService:
             raise e
 
     def _wait_response(self, driver, prompt, old_response_text=None) -> str | None:
-        return GeminiResponseParser.extract_new_response(driver, prompt, old_response_text)
+        return GeminiResponseParser.extract_new_response(
+            driver,
+            prompt,
+            old_response_text,
+            timeout_sec=self.response_timeout_sec,
+        )
 
 
 class GeminiResponseParser:
@@ -335,6 +461,8 @@ class GeminiResponseParser:
         end_time = time.time() + timeout_sec
         last_length = 0
         stable_count = 0  # Đếm số chu kỳ polling mà text không đổi để xác định Gemini viết xong
+        last_progress_ts = time.time()
+        max_total_sec = max(timeout_sec, 120)
         
         while time.time() < end_time:
             time.sleep(0.5)  # Polling nhanh thay vì 5s mỗi block
@@ -375,6 +503,14 @@ class GeminiResponseParser:
                     pass
             
             if not response_text:
+                # If Gemini is still generating (Stop button visible), give it more time up to a cap.
+                try:
+                    stop_btns = driver.find_elements(By.CSS_SELECTOR, 'button[aria-label*="Stop"], button[title*="Stop"]')
+                    if any(b.is_displayed() for b in stop_btns):
+                        if time.time() - last_progress_ts < 60 and (end_time - time.time()) < 15:
+                            end_time = min(time.time() + 30, last_progress_ts + max_total_sec)
+                except Exception:
+                    pass
                 continue
 
             # Lọc Noise & Chặn rỗng
@@ -400,6 +536,7 @@ class GeminiResponseParser:
             else:
                 last_length = len(clean_response)
                 stable_count = 0
+                last_progress_ts = time.time()
                 
             # Tuỳ chỉnh: nếu nó ra text dài và không tăng ký tự nữa trong 3 chu kỳ rưỡi (~1.5 giây), coi như nó viết xong
             if stable_count >= 3:
