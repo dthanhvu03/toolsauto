@@ -1,0 +1,20 @@
+{# Usage:
+  {% include 'ui/button.html' with context %}
+  expects: label, variant (primary|default), href (optional), type (optional), extra_class (optional)
+#}
+{% set _variant = variant|default('default') %}
+{% set _type = type|default('button') %}
+{% set _class = extra_class|default('') %}
+
+{% if href %}
+  <a href="{{ href }}"
+     class="app-btn {% if _variant == 'primary' %}app-btn-primary{% endif %} {{ _class }}">
+    {{ label }}
+  </a>
+{% else %}
+  <button type="{{ _type }}"
+          class="app-btn {% if _variant == 'primary' %}app-btn-primary{% endif %} {{ _class }}">
+    {{ label }}
+  </button>
+{% endif %}
+

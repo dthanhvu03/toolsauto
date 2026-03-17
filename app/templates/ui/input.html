@@ -1,0 +1,13 @@
+{# Usage:
+  {% include 'ui/input.html' with context %}
+  expects: name, value (optional), placeholder (optional), extra_class (optional), id (optional), type (optional)
+#}
+<input
+  {% if id %}id="{{ id }}"{% endif %}
+  name="{{ name }}"
+  type="{{ type|default('text') }}"
+  value="{{ value|default('') }}"
+  placeholder="{{ placeholder|default('') }}"
+  class="app-input {{ extra_class|default('') }}"
+/>
+

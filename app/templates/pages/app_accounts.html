@@ -1,0 +1,37 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Accounts • Auto Publisher{% endblock %}
+{% block page_title %}Accounts{% endblock %}
+{% block page_subtitle %}Search + quản lý nhanh, không cần lướt dài.{% endblock %}
+
+{% block content %}
+  <div class="bg-white border border-[var(--border)] rounded-lg p-4">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <input id="accQ" class="h-10 w-96 max-w-full border border-[var(--border)] rounded px-3 text-sm"
+               placeholder="Search: account, page, niche, competitor..." />
+        <button id="accSearchBtn" class="h-10 px-3 rounded bg-[var(--primary)] hover:bg-[var(--primaryHover)] text-white text-sm">Search</button>
+      </div>
+      <a href="/" class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm hover:bg-slate-50">Old view</a>
+    </div>
+
+    <div class="mt-4">
+      <div id="accountsTable" hx-get="/accounts/table" hx-trigger="load" hx-swap="innerHTML">
+        <div class="p-4 text-sm text-[var(--muted)]">Đang tải...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function refreshAccounts() {
+      const q = encodeURIComponent(document.getElementById('accQ').value || '');
+      const url = `/accounts/table?q=${q}`;
+      htmx.ajax('GET', url, { target: '#accountsTable', swap: 'innerHTML' });
+    }
+    document.getElementById('accSearchBtn').addEventListener('click', refreshAccounts);
+    document.getElementById('accQ').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') refreshAccounts();
+    });
+  </script>
+{% endblock %}
+

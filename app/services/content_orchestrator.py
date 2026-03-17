@@ -337,6 +337,35 @@ YÊU CẦU ĐẦU RA (BẮT BUỘC TRẢ VỀ CHÍNH XÁC ĐỊNH DẠNG JSON SA
             return result
 
         result = self._parse_response(response)
+
+        # Triệt để: nếu Gemini không trả đúng JSON schema → ép 1 vòng "self-repair" (không re-upload file).
+        # Điều kiện: response không hề chứa dấu hiệu JSON keys, hoặc parse ra caption rỗng.
+        looks_like_json = ("```json" in response) or ('"caption"' in response and '"hashtags"' in response)
+        if (not looks_like_json) or (not (result.get("caption") or "").strip()):
+            try:
+                repair_prompt = f"""Bạn vừa trả lời KHÔNG đúng định dạng. Hãy CHUYỂN nội dung dưới đây thành JSON đúng schema.
+
+YÊU CẦU:
+- CHỈ TRẢ VỀ DUY NHẤT JSON (không markdown, không giải thích, không text bên ngoài).
+- Schema:
+{{
+  "caption": "string",
+  "hashtags": ["#tag1", "#tag2", "#tag3"],
+  "keywords": ["kw1", "kw2", "kw3"]
+}}
+- Caption ngắn gọn, không vượt quá {getattr(config, "MAX_CAPTION_LENGTH", 300)} ký tự.
+
+NỘI DUNG CẦN CHUYỂN:
+\"\"\"{response}\"\"\""""
+                t1 = time.time()
+                repaired = self.gemini.ask(repair_prompt)
+                logger.info("Self-repair JSON xong (%.1fs)", time.time() - t1)
+                if repaired:
+                    repaired_result = self._parse_response(repaired)
+                    if (repaired_result.get("caption") or "").strip():
+                        result = repaired_result
+            except Exception as e:
+                logger.warning("Self-repair JSON failed: %s", e)
         logger.info("Hoàn tất: %s...", result["caption"][:50] if result["caption"] else "(empty)")
         return result
 
@@ -419,6 +448,41 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
         if kw_match:
             result["keywords"] = re.findall(r'"([^"]+)"', kw_match.group(1))
 
+        # Layer 4: Nếu Gemini không trả JSON (hay gặp) → rút caption từ plain text
+        if not result.get("caption"):
+            # Ưu tiên các dòng kiểu "Headline:" / "Caption:" nếu có
+            lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+            pick = ""
+            for ln in lines:
+                m = re.match(r"^(headline|caption)\s*:\s*(.+)$", ln, flags=re.IGNORECASE)
+                if m and m.group(2).strip():
+                    pick = m.group(2).strip()
+                    break
+            if not pick and lines:
+                pick = lines[0]
+
+            # Fallback hashtags từ text (#tag)
+            if not result.get("hashtags"):
+                tags = re.findall(r"(#\w+)", text or "")
+                if tags:
+                    # Deduplicate, keep order, enforce limit later in schema validation
+                    seen = set()
+                    uniq = []
+                    for t in tags:
+                        tl = t.lower()
+                        if tl in seen:
+                            continue
+                        seen.add(tl)
+                        uniq.append(t)
+                    result["hashtags"] = uniq
+
+            # Enforce length hard cap here to avoid overlong captions
+            try:
+                max_len = int(getattr(config, "MAX_CAPTION_LENGTH", 300))
+            except Exception:
+                max_len = 300
+            result["caption"] = (pick or "").strip()[:max_len]
+
         result = self._validate_schema(result)
         return result
 
@@ -477,5 +541,51 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
         keywords = data.get("keywords", [])
         if isinstance(keywords, list):
             result["keywords"] = [str(k).strip() for k in keywords if str(k).strip()][:config.MAX_KEYWORDS]
+
+        # Triệt để: nếu Gemini không trả keywords/hashtags → tự sinh tối thiểu từ caption
+        caption_src = result.get("caption", "")
+        if caption_src:
+            if not result["keywords"]:
+                stop = {
+                    # vi
+                    "và","là","của","cho","với","một","những","các","đang","đã","sẽ","thì","lại","này","đó",
+                    "khi","nếu","vì","từ","đến","trong","ngoài","trên","dưới","còn","rồi","mình","bạn","anh","chị",
+                    "em","tụi","chúng","ta","tôi","nó","họ","đây","kia","ấy","nha","nhé","ạ","ơi",
+                }
+                # lấy token đơn giản (chữ/số/underscore), ưu tiên từ dài
+                toks = re.findall(r"[0-9A-Za-zÀ-ỹ_]+", caption_src, flags=re.UNICODE)
+                cleaned = []
+                seen = set()
+                for t in toks:
+                    w = t.strip().lower()
+                    if len(w) < 4:
+                        continue
+                    if w in stop:
+                        continue
+                    if w in seen:
+                        continue
+                    seen.add(w)
+                    cleaned.append(t.strip())
+                    if len(cleaned) >= config.MAX_KEYWORDS:
+                        break
+                result["keywords"] = cleaned
+
+            if not result["hashtags"] and result["keywords"]:
+                tags = []
+                seen = set()
+                for kw in result["keywords"]:
+                    # hashtag: bỏ space, giữ chữ/số/underscore
+                    slug = re.sub(r"[^0-9A-Za-zÀ-ỹ_]+", "", kw, flags=re.UNICODE)
+                    if not slug:
+                        continue
+                    tag = "#" + slug
+                    tl = tag.lower()
+                    if tl in seen:
+                        continue
+                    seen.add(tl)
+                    tags.append(tag)
+                    if len(tags) >= config.MAX_HASHTAGS:
+                        break
+                result["hashtags"] = tags
 
         return result
