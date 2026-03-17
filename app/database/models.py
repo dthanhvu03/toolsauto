@@ -349,6 +349,8 @@ class SystemState(Base):
     worker_started_at = Column(Integer, nullable=True)  # Phase C: uptime tracking
     engagement_status = Column(String, nullable=True)    # IDLE / ENGAGING / None
     engagement_detail = Column(String, nullable=True)    # e.g. "scroll_news_feed on Nguyen Ngoc Vi"
+    viral_min_views = Column(Integer, nullable=True)    # Ngưỡng view tối thiểu khi quét TikTok (None = dùng config)
+    viral_max_videos_per_channel = Column(Integer, nullable=True)  # Số video tối đa mỗi kênh (None = dùng config)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
 
 class ViralMaterial(Base):

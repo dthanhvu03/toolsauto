@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 class BaseNotifier(ABC):
     """Interface cho mọi notification channel."""
 
+    def channel_key(self) -> Optional[str]:
+        """Optional: trả key để tránh đăng ký trùng (None = không dedup)."""
+        return None
+
     @abstractmethod
     def send(self, message: str) -> bool:
         """Gửi tin nhắn text. Trả True nếu thành công."""
@@ -58,6 +62,11 @@ class TelegramNotifier(BaseNotifier):
     def __init__(self, bot_token: str, chat_id: str):
         from app.services.telegram_client import TelegramClient
         self.client = TelegramClient(bot_token, chat_id)
+        self._chat_id = str(chat_id).strip()
+
+    def channel_key(self) -> str:
+        """Key để tránh đăng ký trùng (cùng 1 chat nhận 2 lần)."""
+        return f"telegram:{self._chat_id}"
 
     def send(self, message: str) -> bool:
         result = self.client.send_message(message)
@@ -131,7 +140,13 @@ class NotifierService:
 
     @classmethod
     def register(cls, channel: BaseNotifier):
-        """Đăng ký thêm 1 notification channel."""
+        """Đăng ký thêm 1 notification channel. Tránh trùng: cùng channel_key chỉ giữ 1."""
+        key = getattr(channel, "channel_key", None) and channel.channel_key()
+        if key:
+            for ch in cls._channels:
+                if getattr(ch, "channel_key", None) and ch.channel_key() == key:
+                    logger.debug("Notifier already registered for key %s, skip duplicate.", key)
+                    return
         cls._channels.append(channel)
         logger.info("Registered notifier: %s", type(channel).__name__)
 

@@ -247,7 +247,7 @@ def _check_daily_summary(db):
 def _process_viral_materials(db):
     """
     Downstream consumer cho bảng viral_materials.
-    - status='NEW' (từ scraper): đã qua filter views >= 10K, tải + tạo DRAFT.
+    - status='NEW' (từ scraper): đã qua filter views >= ngưỡng (cài đặt Viral), tải + tạo DRAFT.
     - status='REUP' (từ lệnh /reup): manual input, luôn xử lý bất kể views.
     Tải video vào content/reup/<platform>/ để phân loại rõ ràng.
     """
@@ -506,113 +506,35 @@ def _scrape_tiktok_competitors(db):
     Chỉ chạy mỗi 1 giờ để tránh rate limit TikTok.
     """
     global _last_tiktok_scrape_ts
-    import json as _json
-    from app.database.models import Account, ViralMaterial
-    from app.services.tiktok_scraper import TikTokScraper
+    from app.services.viral_scan import run_tiktok_competitor_scan
 
     now = time.time()
     if (now - _last_tiktok_scrape_ts) < TIKTOK_SCRAPE_INTERVAL_SEC:
-        return  # Chưa đến giờ
+        return
 
     _last_tiktok_scrape_ts = now
     logger.info("[TIKTOK] Running hourly TikTok competitor scan...")
 
-    # Lấy tất cả competitor_urls có chứa tiktok.com
-    accounts = db.query(Account).filter(
-        Account.is_active == True,
-        Account.competitor_urls != None,
-    ).all()
+    total_found, num_channels = run_tiktok_competitor_scan(db)
 
-    tiktok_channels = []
-    for acc in accounts:
-        try:
-            data = _json.loads(acc.competitor_urls) if acc.competitor_urls else []
-            if not isinstance(data, list):
-                data = [{"url": str(data), "target_page": None}]
-        except (_json.JSONDecodeError, TypeError):
-            data = [{"url": u.strip(), "target_page": None}
-                    for u in (acc.competitor_urls or "").split(",") if u.strip()]
-
-        for entry in data:
-            if isinstance(entry, dict):
-                url = entry.get("url", "")
-                tp_raw = entry.get("target_page") or entry.get("target_pages")
-            else:
-                url = str(entry)
-                tp_raw = None
-            if "tiktok.com/@" not in url.lower():
-                continue
-            # Support both single string and list of pages
-            if isinstance(tp_raw, list):
-                for tp in tp_raw:
-                    tiktok_channels.append((acc.id, url, tp))
-            else:
-                tiktok_channels.append((acc.id, url, tp_raw))
-
-    if not tiktok_channels:
-        logger.info("[TIKTOK] No TikTok competitor URLs found in any account.")
-        return
-
-    logger.info("[TIKTOK] Found %d TikTok channels to scan.", len(tiktok_channels))
-
-    scraper = TikTokScraper()
-    total_found = 0
-
-    for account_id, channel_url, channel_target_page in tiktok_channels:
-        # Hỗ trợ truyền threshold vào URL (ví dụ: https://www.tiktok.com/@channel?min_views=50000)
-        from urllib.parse import urlparse, parse_qs
-        parsed = urlparse(channel_url)
-        q_params = parse_qs(parsed.query)
-        custom_min_views = int(q_params.get("min_views", [10000])[0])
-        clean_url = channel_url.split("?")[0]
-
-        videos = scraper.scrape_channel(clean_url, max_videos=10, min_views=custom_min_views)
-
-        for vid in videos:
-            # Check trùng per url+target_page (same video can go to different pages)
-            dup_filter = [ViralMaterial.url == vid["url"]]
-            if channel_target_page:
-                dup_filter.append(ViralMaterial.target_page == channel_target_page)
-            else:
-                dup_filter.append(ViralMaterial.target_page.is_(None))
-            existing = db.query(ViralMaterial).filter(*dup_filter).first()
-            if existing:
-                continue
-
-            mat = ViralMaterial(
-                url=vid["url"],
-                platform="tiktok",
-                title=vid.get("title", "")[:200],
-                views=vid.get("view_count", 0),
-                scraped_by_account_id=account_id,
-                target_page=channel_target_page,
-                status="NEW",
-            )
-            db.add(mat)
-            total_found += 1
-
-        db.commit()
-
-    if total_found > 0:
-        logger.info("[TIKTOK] Added %d new viral TikTok videos to pipeline.", total_found)
-        try:
+    try:
+        if total_found > 0:
             NotifierService._broadcast(
-                f"🎵 *TikTok Auto-Discovery*\n"
-                f"🔍 Quét {len(tiktok_channels)} kênh đối thủ\n"
-                f"✅ Tìm thấy {total_found} video viral mới!"
+                f"🎵 <b>TikTok Auto-Discovery</b>\n"
+                f"🔍 Quét {num_channels} kênh đối thủ\n"
+                f"✅ Tìm thấy <b>{total_found}</b> video viral mới!"
             )
-        except Exception:
-            pass
-    else:
-        logger.info("[TIKTOK] Scan complete. 0 videos above 10K views threshold.")
-        try:
+        else:
+            from app.services.viral_scan import get_default_min_views
+            min_views = get_default_min_views(db)
             NotifierService._broadcast(
-                f"🎵 *TikTok Auto-Discovery*\n"
-                f"🔍 Quét {len(tiktok_channels)} kênh đối thủ\n"
-                f"📭 0 video đạt ngưỡng 10K views."
+                f"🎵 <b>TikTok Auto-Discovery</b>\n"
+                f"🔍 Quét {num_channels} kênh đối thủ\n"
+                f"📭 0 video đạt ngưỡng <b>{min_views:,}</b> views.\n"
+                f"Đổi ngưỡng: Dashboard → Viral hoặc /viral_settings"
             )
-        except Exception:
-            pass
+    except Exception:
+        pass
 
 def _download_tiktok_fallback(url: str, output_path: str) -> bool:
     """Fallback handler for TikTok using TikWM API when yt-dlp fails due to cookies/JS challenge."""
@@ -700,31 +622,19 @@ def _run_competitor_discovery(db):
 
     from app.database.models import Account
     from app.services.discovery_scraper import DiscoveryScraper
+    from app.services.account import get_discovery_keywords
 
-    accounts = db.query(Account).filter(
-        Account.is_active == True,
-        Account.niche_topics != None,
-    ).all()
+    accounts = db.query(Account).filter(Account.is_active == True).all()
 
     if not accounts:
-        logger.info("[DISCOVERY] No accounts with niche_topics found.")
+        logger.info("[DISCOVERY] No active accounts.")
         return
 
     scraper = DiscoveryScraper()
     total_found = 0
 
     for acc in accounts:
-        keywords = []
-        try:
-            import json as _json
-            raw = acc.niche_topics
-            if raw and raw.strip().startswith("["):
-                keywords = _json.loads(raw)
-            elif raw:
-                keywords = [k.strip() for k in raw.split(",") if k.strip()]
-        except Exception:
-            continue
-
+        keywords = get_discovery_keywords(acc)
         if not keywords:
             continue
 
@@ -750,10 +660,10 @@ def _run_competitor_discovery(db):
         logger.info("[DISCOVERY] Nightly scan complete. %d new channels discovered.", total_found)
         try:
             NotifierService._broadcast(
-                f"🔍 *Competitor Discovery*\n"
+                f"🔍 <b>Competitor Discovery</b>\n"
                 f"🌙 Quét đêm hoàn tất\n"
-                f"✅ Phát hiện {total_found} kênh đối thủ mới!\n"
-                f"📋 Xem trên Dashboard để duyệt."
+                f"✅ Phát hiện <b>{total_found}</b> kênh đối thủ mới!\n"
+                f"📋 Vào Dashboard → Kênh Đối Thủ Mới Khám Phá để duyệt."
             )
         except Exception:
             pass
