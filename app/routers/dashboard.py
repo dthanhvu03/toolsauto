@@ -6,6 +6,8 @@ import time
 from app.database.core import get_db
 from app.database.models import Job, Account, DiscoveredChannel
 from app.services.worker import WorkerService
+from app.services.account import get_discovery_keywords
+import app.config as config
 
 # Gắn FastAPI app state or custom dependencies later if needed.
 # Note: we need access to templates in routers. We'll import them from a shared location.
@@ -24,11 +26,25 @@ def index(request: Request, db: Session = Depends(get_db)):
     jobs = query.order_by(Job.schedule_ts.desc()).limit(per_page).all()
     accounts = db.query(Account).all()
     state = WorkerService.get_or_create_state(db)
+    viral_min_views = (
+        state.viral_min_views
+        if (state and getattr(state, "viral_min_views", None) is not None)
+        else getattr(config, "VIRAL_MIN_VIEWS", 10000)
+    )
+    viral_max_videos = (
+        state.viral_max_videos_per_channel
+        if (state and getattr(state, "viral_max_videos_per_channel", None) is not None)
+        else getattr(config, "VIRAL_MAX_VIDEOS_PER_CHANNEL", 50)
+    )
+    if viral_max_videos is None or viral_max_videos <= 0:
+        viral_max_videos = 50
     return templates.TemplateResponse(
-        "dashboard.html", 
+        "dashboard.html",
         {
             "request": request, "jobs": jobs, "accounts": accounts, "state": state, "now": int(time.time()),
-            "current_status": "active", "current_page": 1, "total_pages": total_pages, "total_jobs": total, "per_page": per_page
+            "current_status": "active", "current_page": 1, "total_pages": total_pages, "total_jobs": total, "per_page": per_page,
+            "viral_min_views": viral_min_views,
+            "viral_max_videos": viral_max_videos,
         }
     )
 
@@ -93,34 +109,22 @@ def reject_discovered_channel(channel_id: int, request: Request, db: Session = D
 
 @router.post("/discovery/force-scan", response_class=HTMLResponse)
 def force_discovery_scan(request: Request, db: Session = Depends(get_db)):
-    """Manually trigger competitor discovery scan for all active accounts (bypasses 2-5AM schedule)."""
+    """Manually trigger competitor discovery scan for all active accounts (bypasses 2-5AM schedule).
+    Uses per-page niches when set, else account-level niche_topics."""
     import random
     import logging
     logger = logging.getLogger(__name__)
 
     from app.services.discovery_scraper import DiscoveryScraper
 
-    accounts = db.query(Account).filter(
-        Account.is_active == True,
-        Account.niche_topics != None,
-    ).all()
+    accounts = db.query(Account).filter(Account.is_active == True).all()
 
     scraper = DiscoveryScraper()
     total_found = 0
     scan_log = []
 
     for acc in accounts:
-        import json as _json
-        keywords = []
-        try:
-            raw = acc.niche_topics
-            if raw and raw.strip().startswith("["):
-                keywords = _json.loads(raw)
-            elif raw:
-                keywords = [k.strip() for k in raw.split(",") if k.strip()]
-        except Exception:
-            continue
-
+        keywords = get_discovery_keywords(acc)
         if not keywords:
             continue
 

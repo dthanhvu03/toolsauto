@@ -72,6 +72,10 @@ class TelegramPoller:
             "/restart": self._cmd_restart,
             "/spy": self._cmd_spy,
             "/reup": self._cmd_reup,
+            # Viral & Discovery
+            "/viral": self._cmd_viral,
+            "/viral_settings": self._cmd_viral_settings,
+            "/discovery": self._cmd_discovery,
         }
 
     # ─── Lifecycle ────────────────────────────────
@@ -269,6 +273,10 @@ class TelegramPoller:
             "\n🕵️ <b>Đối thủ & Reup:</b>\n"
             "/spy &lt;acc&gt; &lt;url&gt; [page] — Thêm link đối thủ (+ target page)\n"
             "/reup &lt;url&gt; — Reup video (TikTok/YT/FB)\n"
+            "\n📡 <b>Viral & Discovery:</b>\n"
+            "/viral — Quét ngay kênh TikTok đối thủ → thêm video viral\n"
+            "/viral_settings [min_views] [max_videos] — Xem/đặt ngưỡng view & số video/kênh\n"
+            "/discovery — Quét ngay kênh đối thủ mới (hashtag/niche)\n"
             "\n⚙️ <b>Worker:</b>\n"
             "/status — Trạng thái worker\n"
             "/pause — Tạm dừng worker\n"
@@ -1071,6 +1079,120 @@ class TelegramPoller:
             
             self.client.send_message("\n".join(msg_lines))
             logger.info("[Telegram] /reup: Added '%s' (%s) as REUP material #%s, account=%s", url, platform, mat.id, account_name or "default")
+
+    def _cmd_viral(self, args=None):
+        """Quét ngay kênh TikTok đối thủ (tương đương nút Quét ngay trên Dashboard)."""
+        from app.database.core import SessionLocal
+        from app.services.viral_scan import run_tiktok_competitor_scan
+
+        self.client.send_message("⏳ Đang quét kênh TikTok đối thủ...")
+        try:
+            with SessionLocal() as db:
+                total_found, num_channels = run_tiktok_competitor_scan(db)
+            if num_channels == 0:
+                self.client.send_message("📭 Không có kênh TikTok đối thủ nào trong cấu hình account.\nThêm link kênh trong Dashboard → Accounts → Competitor URLs.")
+            elif total_found > 0:
+                self.client.send_message(
+                    f"✅ <b>Quét xong</b>\n"
+                    f"🔍 {num_channels} kênh → <b>{total_found}</b> video mới (≥ ngưỡng view).\n"
+                    f"Vào Dashboard → Viral Content để xem & xử lý."
+                )
+            else:
+                self.client.send_message(
+                    f"📭 Đã quét {num_channels} kênh. 0 video đạt ngưỡng view.\n"
+                    f"Thử hạ <b>Ngưỡng view tối thiểu</b> bằng /viral_settings."
+                )
+        except Exception as e:
+            self.client.send_message(f"❌ Lỗi quét: {str(e)[:200]}")
+            logger.exception("[Telegram] /viral failed")
+
+    def _cmd_viral_settings(self, args=None):
+        """Xem hoặc đặt ngưỡng view + số video tối đa mỗi kênh. Usage: /viral_settings [min_views] [max_videos]"""
+        from app.database.core import SessionLocal
+        from app.services.worker import WorkerService
+        from app.services.viral_scan import get_default_min_views, get_default_max_videos_per_channel
+        import app.config as config
+
+        with SessionLocal() as db:
+            state = WorkerService.get_or_create_state(db)
+            current_min = get_default_min_views(db)
+            current_max = get_default_max_videos_per_channel(db)
+            if state and getattr(state, "viral_max_videos_per_channel", None) == 0:
+                current_max_display = "0 (lấy hết, cap 500)"
+            else:
+                current_max_display = str(current_max)
+
+        if not args or len(args) == 0:
+            self.client.send_message(
+                f"📡 <b>Cài đặt quét Viral (TikTok)</b>\n"
+                f"• Ngưỡng view tối thiểu: <b>{current_min:,}</b>\n"
+                f"• Số video tối đa mỗi kênh: <b>{current_max_display}</b>\n\n"
+                f"Để đổi: <code>/viral_settings 2000 50</code>\n"
+                f"(min_views=2000, max_videos=50; 0 = lấy hết)"
+            )
+            return
+
+        try:
+            min_views = int(args[0]) if len(args) >= 1 else current_min
+            max_videos = int(args[1]) if len(args) >= 2 else current_max
+        except ValueError:
+            self.client.send_message("⚠️ Cú pháp: <code>/viral_settings [min_views] [max_videos]</code>\nVí dụ: /viral_settings 2000 50")
+            return
+
+        min_views = max(500, min(10_000_000, min_views))
+        max_videos = max(0, min(500, max_videos))
+
+        with SessionLocal() as db:
+            state = WorkerService.get_or_create_state(db)
+            state.viral_min_views = min_views
+            state.viral_max_videos_per_channel = max_videos
+            db.commit()
+
+        max_label = "0 (lấy hết)" if max_videos == 0 else str(max_videos)
+        self.client.send_message(
+            f"✅ Đã lưu cài đặt Viral:\n"
+            f"• Ngưỡng view: <b>{min_views:,}</b>\n"
+            f"• Số video/kênh: <b>{max_label}</b>"
+        )
+
+    def _cmd_discovery(self, args=None):
+        """Quét ngay kênh đối thủ mới (hashtag/niche) — tương đương Quét Ngay trên Discovery panel."""
+        import random
+        from app.database.core import SessionLocal
+        from app.database.models import Account
+        from app.services.account import get_discovery_keywords
+        from app.services.discovery_scraper import DiscoveryScraper
+
+        self.client.send_message("⏳ Đang quét kênh đối thủ mới (hashtag/niche)...")
+        try:
+            with SessionLocal() as db:
+                accounts = db.query(Account).filter(Account.is_active == True).all()
+                scraper = DiscoveryScraper()
+                total_found = 0
+                for acc in accounts:
+                    keywords = get_discovery_keywords(acc)
+                    if not keywords:
+                        continue
+                    selected = random.sample(keywords, min(2, len(keywords)))
+                    for kw in selected:
+                        try:
+                            total_found += scraper.discover_for_keyword(kw, acc.id, db)
+                        except Exception:
+                            pass
+            if total_found > 0:
+                self.client.send_message(
+                    f"✅ <b>Discovery quét xong</b>\n"
+                    f"🔍 Tìm thấy <b>{total_found}</b> kênh mới.\n"
+                    f"Vào Dashboard → Kênh Đối Thủ Mới Khám Phá để duyệt."
+                )
+            else:
+                self.client.send_message(
+                    "📭 Không tìm thấy kênh mới (hoặc yt-dlp hashtag đang lỗi).\n"
+                    "Đảm bảo account có Niche/Page Niche trong Dashboard."
+                )
+        except Exception as e:
+            self.client.send_message(f"❌ Lỗi discovery: {str(e)[:200]}")
+            logger.exception("[Telegram] /discovery failed")
 
     # ─── Callback Handlers (Inline Buttons) ──────
 
