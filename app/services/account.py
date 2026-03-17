@@ -10,6 +10,33 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def get_discovery_keywords(account: Account) -> List[str]:
+    """Lấy keywords cho discovery: ưu tiên niche theo Page, không có thì dùng niche cấp tài khoản."""
+    import json as _json
+    page_map = getattr(account, "page_niches_map", None) or {}
+    keywords = []
+    for _url, niches in (page_map or {}).items():
+        if isinstance(niches, list):
+            keywords.extend(n.strip() for n in niches if str(n).strip())
+        else:
+            keywords.extend(n.strip() for n in str(niches).split(",") if n and n.strip())
+    keywords = list(dict.fromkeys(k.strip() for k in keywords if k.strip()))
+    if keywords:
+        return keywords
+    raw = getattr(account, "niche_topics", None) or ""
+    if not raw:
+        return []
+    try:
+        if raw.strip().startswith("["):
+            keywords = _json.loads(raw)
+        else:
+            keywords = [k.strip() for k in raw.split(",") if k.strip()]
+        return [k for k in keywords if k]
+    except Exception:
+        return [k.strip() for k in raw.split(",") if k.strip()]
+
+
 def now_ts():
     return int(time.time())
 

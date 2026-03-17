@@ -334,8 +334,8 @@ def _maybe_idle_engagement(db: Session):
     try:
         c_count_text = f"\n🎯 Đối thủ: {len(competitor_urls)} links" if competitor_urls else ""
         NotifierService._broadcast(
-            f"🤖 *Idle Engagement*\n"
-            f"▶️ Bắt đầu nuôi tài khoản: *{account.name}*\n"
+            f"🤖 <b>Idle Engagement</b>\n"
+            f"▶️ Bắt đầu nuôi tài khoản: <b>{account.name}</b>\n"
             f"📋 Niche: {', '.join(niche_keywords) if niche_keywords else 'general'}{c_count_text}"
         )
     except Exception:
@@ -388,8 +388,8 @@ def _maybe_idle_engagement(db: Session):
             # Notify via Telegram — checkpoint
             try:
                 NotifierService._broadcast(
-                    f"🤖 *Idle Engagement*\n"
-                    f"🚨 *CHECKPOINT* — Tài khoản *{account.name}* bị khóa!\n"
+                    f"🤖 <b>Idle Engagement</b>\n"
+                    f"🚨 <b>CHECKPOINT</b> — Tài khoản <b>{account.name}</b> bị khóa!\n"
                     f"⛔ Action: {action_label}\n"
                     f"🔒 Đã cách ly tài khoản (INVALID)"
                 )
@@ -413,9 +413,9 @@ def _maybe_idle_engagement(db: Session):
                         links_text += f"\n...và {len(urls_list)-3} link khác"
 
                 NotifierService._broadcast(
-                    f"🤖 *Idle Engagement*\n"
+                    f"🤖 <b>Idle Engagement</b>\n"
                     f"✅ Hoàn tất: {action_label}\n"
-                    f"👤 Account: *{account.name}*"
+                    f"👤 Account: <b>{account.name}</b>"
                     f"{links_text}"
                 )
             except Exception:
@@ -425,9 +425,9 @@ def _maybe_idle_engagement(db: Session):
             # Notify Telegram — failed
             try:
                 NotifierService._broadcast(
-                    f"🤖 *Idle Engagement*\n"
+                    f"🤖 <b>Idle Engagement</b>\n"
                     f"⚠️ Thất bại: {action_label}\n"
-                    f"👤 Account: *{account.name}*\n"
+                    f"👤 Account: <b>{account.name}</b>\n"
                     f"❌ Lỗi: {result.get('error', 'Unknown')}"
                 )
             except Exception:

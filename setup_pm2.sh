@@ -31,8 +31,9 @@ VENV_PYTHON="$APP_DIR/venv/bin/python"
 # Export PYTHONPATH so the 'app' module can be resolved from anywhere
 export PYTHONPATH="$APP_DIR"
 
-pm2 start "xvfb-run -a $VENV_PYTHON workers/publisher.py" --name "FB_Publisher" --cwd "$APP_DIR" --update-env
-pm2 start "xvfb-run -a $VENV_PYTHON workers/ai_generator.py" --name "AI_Generator" --cwd "$APP_DIR" --update-env
+# Bỏ DISPLAY để trình duyệt chỉ chạy trên display ảo của xvfb, không hiện cửa sổ trên màn hình thật
+pm2 start "env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/publisher.py" --name "FB_Publisher" --cwd "$APP_DIR" --update-env
+pm2 start "env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/ai_generator.py" --name "AI_Generator" --cwd "$APP_DIR" --update-env
 pm2 start "$VENV_PYTHON workers/maintenance.py" --name "Maintenance" --cwd "$APP_DIR" --update-env
 pm2 start "$VENV_PYTHON run_web.py" --name "Web_Dashboard" --cwd "$APP_DIR" --update-env
 
