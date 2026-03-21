@@ -831,7 +831,41 @@ class FacebookAdapter(AdapterInterface):
                     logger.info("FacebookAdapter: No 'Switch now' button found on the Page. Attempting context switch via avatar menu...")
                     switched = self._switch_to_page_context(target_page_name)
                     if not switched:
-                        logger.warning("FacebookAdapter: Avatar menu switch failed or unnecessary. Assuming already switched.")
+                        logger.warning("FacebookAdapter: Avatar menu switch failed or unnecessary. Verifying active context...")
+                    
+                # ── Bulletproof Context Verification ──
+                # Ensure we don't accidentally post to the wrong page if the switch failed.
+                logger.info("FacebookAdapter: Verifying active context matches target page...")
+                self.page.goto("https://www.facebook.com/me", wait_until="domcontentloaded")
+                self.page.wait_for_timeout(3000)
+                active_url = self.page.url
+                
+                def normalize_for_compare(u):
+                    if not u: return ""
+                    base = u.split("?")[0].rstrip("/")
+                    if "id=" in u:
+                        pieces = u.split("id=")
+                        if len(pieces) > 1:
+                            base += "?id=" + pieces[1].split("&")[0]
+                    return base
+
+                norm_target = normalize_for_compare(target_page_url)
+                norm_active = normalize_for_compare(active_url)
+                
+                # We check `in` both ways to handle trailing slashes or minor domain differences
+                if norm_target and norm_active and (norm_target not in norm_active and norm_active not in norm_target):
+                    error_msg = f"Security abort: Active context ({norm_active}) does not match target page ({norm_target}). Preventing wrong-page post."
+                    logger.error("FacebookAdapter: %s", error_msg)
+                    return self._failure_result(
+                        job.id,
+                        "context_verification",
+                        error_msg,
+                        flow_mode,
+                        entrypoint_used,
+                        is_fatal=False
+                    )
+                else:
+                    logger.info("FacebookAdapter: Context verified successfully. Safe to proceed.")
             else:
                 logger.info("FacebookAdapter: Navigating to www.facebook.com (Personal Profile)")
                 self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
