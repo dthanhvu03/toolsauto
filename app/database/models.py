@@ -397,3 +397,35 @@ class DiscoveredChannel(Base):
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
 
     account = relationship("Account")
+
+
+class RuntimeSetting(Base):
+    """
+    Runtime config overrides stored in DB.
+
+    - key: setting identifier (whitelisted by app/services/settings.py)
+    - value: stored as string, cast using type on read
+    """
+
+    __tablename__ = "runtime_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True, nullable=False)
+    value = Column(String, nullable=True)
+    type = Column(String, nullable=False)  # int|float|bool|str|enum
+    updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
+    updated_by = Column(String, nullable=True)
+
+
+class RuntimeSettingAudit(Base):
+    """Append-only audit log for runtime settings changes."""
+
+    __tablename__ = "runtime_settings_audit"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ts = Column(Integer, default=now_ts, index=True)
+    key = Column(String, index=True, nullable=False)
+    old_value = Column(String, nullable=True)
+    new_value = Column(String, nullable=True)
+    action = Column(String, nullable=False)  # UPSERT|RESET
+    updated_by = Column(String, nullable=True)

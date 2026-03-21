@@ -1,0 +1,104 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Settings • Auto Publisher{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}Config runtime (đổi là có hiệu lực ngay, không cần restart).{% endblock %}
+
+{% block content %}
+  {% if message %}
+    <div class="app-card p-3 mb-4">
+      <div class="text-sm">
+        {% if message == 'saved' %}
+          ✅ Đã lưu setting.
+        {% elif message == 'reset' %}
+          ♻️ Đã reset setting về default.
+        {% elif message.startswith('bulk_saved_') %}
+          ✅ Bulk save xong: {{ message.replace('bulk_saved_', '').replace('_reset_', ' saved, ') }} reset.
+        {% else %}
+          {{ message }}
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" action="/app/settings/bulk-save" class="space-y-4">
+    <div class="app-card p-4 flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <div class="text-sm font-semibold">Runtime settings</div>
+        <div class="text-xs text-[var(--muted)]">Edit nhiều setting rồi bấm Save All để áp dụng ngay.</div>
+      </div>
+      <button type="submit" class="app-btn app-btn-primary h-10">Save All</button>
+    </div>
+
+    {% for section, specs in sections.items() %}
+      <div class="app-card p-4">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="text-base font-semibold">{{ section }}</div>
+          <button type="submit" class="app-btn h-9">Save All</button>
+        </div>
+
+        <div class="mt-3 overflow-x-auto border border-[var(--border)] rounded-lg">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50 text-slate-700">
+              <tr>
+                <th class="text-left font-semibold px-3 py-2 w-[34%]">Setting</th>
+                <th class="text-left font-semibold px-3 py-2 w-[22%]">Default</th>
+                <th class="text-left font-semibold px-3 py-2 w-[22%]">Effective</th>
+                <th class="text-left font-semibold px-3 py-2 w-[22%]">Override</th>
+                <th class="text-left font-semibold px-3 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[var(--border)]">
+              {% for spec in specs %}
+                {% set row = effective[spec.key] %}
+                {% set cur = (row.override if row.has_override else row.default) %}
+                <tr class="hover:bg-slate-50/60">
+                  <td class="px-3 py-2 align-top">
+                    <div class="font-medium">{{ row.title }}</div>
+                    <div class="text-xs text-[var(--muted)] font-mono">{{ row.key }} • {{ row.type }}</div>
+                    {% if row.min is not none or row.max is not none %}
+                      <div class="text-[11px] text-[var(--muted)]">
+                        {% if row.min is not none %}min={{ row.min }}{% endif %}
+                        {% if row.max is not none %}max={{ row.max }}{% endif %}
+                      </div>
+                    {% endif %}
+                  </td>
+                  <td class="px-3 py-2 align-top font-mono text-xs break-words">{{ row.default }}</td>
+                  <td class="px-3 py-2 align-top">
+                    {% if row.has_override %}
+                      <div class="inline-flex items-center px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs mb-1">Override</div>
+                    {% endif %}
+                    <div class="font-mono text-xs break-words">{{ cur }}</div>
+                  </td>
+                  <td class="px-3 py-2 align-top">
+                    {% if row.type == 'bool' %}
+                      <select name="{{ row.key }}" class="app-select h-9">
+                        <option value="true" {% if cur %}selected{% endif %}>true</option>
+                        <option value="false" {% if not cur %}selected{% endif %}>false</option>
+                      </select>
+                    {% elif row.type == 'enum' %}
+                      <select name="{{ row.key }}" class="app-select h-9">
+                        {% for c in row.choices %}
+                          <option value="{{ c }}" {% if c == cur %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                      </select>
+                    {% else %}
+                      <input name="{{ row.key }}" value="{{ cur }}" class="app-input h-9 w-56 font-mono" />
+                    {% endif %}
+                  </td>
+                  <td class="px-3 py-2 align-top whitespace-nowrap">
+                    <form method="post" action="/app/settings/reset" class="inline">
+                      <input type="hidden" name="key" value="{{ row.key }}" />
+                      <button type="submit" class="app-btn h-9" {% if not row.has_override %}disabled{% endif %}>Reset</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endfor %}
+  </form>
+{% endblock %}
+

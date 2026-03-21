@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.services.queue import QueueService
 from app.services.job import JobService
-from app.config import WORKER_TICK_SECONDS, WORKER_CRASH_THRESHOLD_SECONDS
+from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
 from app.services.worker import WorkerService
 from app.services.account import AccountService
@@ -82,6 +82,10 @@ def process_single_job(db: Session):
     global CURRENT_JOB_ID
     
     from app.database.models import Job
+    from app.services.settings import apply_runtime_overrides_to_config
+
+    # Apply runtime overrides (DB) to this process config
+    apply_runtime_overrides_to_config(db)
     from app.config import MAX_CONCURRENT_ACCOUNTS
     
     # Pre-check: Limit concurrent Facebook accounts
@@ -98,23 +102,35 @@ def process_single_job(db: Session):
         return False
         
     # Enforce Daily Limit (per-page logic)
-    if job.account and job.account.daily_limit > 0:
+    effective_daily_limit = 0
+    try:
+        # Runtime cap overrides account setting (if set)
+        effective_daily_limit = int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0)
+    except Exception:
+        effective_daily_limit = 0
+    if (not effective_daily_limit) and job.account:
+        effective_daily_limit = int(getattr(job.account, "daily_limit", 0) or 0)
+
+    if job.account and effective_daily_limit > 0:
         from datetime import datetime, time as time_obj
         from zoneinfo import ZoneInfo
         import app.config as app_config
         today_start = int(datetime.combine(datetime.now(ZoneInfo(app_config.TIMEZONE)).date(), time_obj.min).timestamp())
         
-        # Count DONE jobs today for this SPECIFIC target_page
-        posted_today = db.query(Job).filter(
-            Job.account_id == job.account_id,
+        # Count DONE jobs today for this SPECIFIC target_page.
+        # If POSTS_PER_PAGE_PER_DAY cap is enabled, enforce per-page across all accounts.
+        q = db.query(Job).filter(
             Job.target_page == job.target_page,
             Job.status == "DONE",
             Job.finished_at >= today_start
-        ).count()
+        )
+        if not int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0):
+            q = q.filter(Job.account_id == job.account_id)
+        posted_today = q.count()
         
-        if posted_today >= job.account.daily_limit:
+        if posted_today >= effective_daily_limit:
             logger.info("[Job %s] Daily limit (%s) reached for page '%s'. Requeuing for tomorrow.", 
-                        job.id, job.account.daily_limit, job.target_page or "default")
+                        job.id, effective_daily_limit, job.target_page or "default")
             job.status = "PENDING"
             job.schedule_ts = today_start + 86400 + 3600 # Tomorrow 1 AM
             db.commit()
@@ -133,6 +149,29 @@ def process_single_job(db: Session):
     logger.info("[Job %s] Claimed for account '%s' on %s", job.id, job.account.name, job.platform)
     
     try:
+        # Keep Job.last_heartbeat_at fresh while dispatch/publish is running.
+        # Otherwise QueueService.recover_crashed_jobs() may treat it as stale and reset RUNNING -> PENDING.
+        import threading
+        heartbeat_stop = threading.Event()
+        heartbeat_interval = max(20, min(60, int(WORKER_CRASH_THRESHOLD_SECONDS // 3)))
+
+        def _heartbeat_loop(job_id: int):
+            while not heartbeat_stop.is_set():
+                try:
+                    with SessionLocal() as hb_db:
+                        JobService.update_heartbeat(hb_db, job_id)
+                except Exception as hb_err:
+                    logger.warning("[Job %s] Heartbeat refresh failed: %s", job_id, hb_err)
+                # Wait with stop support
+                heartbeat_stop.wait(heartbeat_interval)
+
+        heartbeat_thread = threading.Thread(
+            target=_heartbeat_loop,
+            args=(job.id,),
+            daemon=True,
+        )
+        heartbeat_thread.start()
+
         # SAFETY GUARD: Never publish a job with un-processed AI placeholder
         if job.caption and "[AI_GENERATE]" in job.caption:
             logger.warning("[Job %s] BLOCKED: Caption still contains [AI_GENERATE]. Resetting to DRAFT.", job.id)
@@ -147,6 +186,11 @@ def process_single_job(db: Session):
         try:
             publish_result = Dispatcher.dispatch(job, db=db)
         finally:
+            heartbeat_stop.set()
+            try:
+                heartbeat_thread.join(timeout=5)
+            except Exception:
+                pass
             suicide_timer.cancel() # Cancel if finished normally
         
         
@@ -154,6 +198,8 @@ def process_single_job(db: Session):
             logger.info("[Job %s] Successfully published!", job.id)
             
             import random
+            # Re-apply overrides in case settings changed while publishing
+            apply_runtime_overrides_to_config(db)
             from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
             delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
             logger.info(f"[Job {job.id}] Nghỉ ngơi {delay_sec}s để giả lập người thật trước khi chốt Job...")
@@ -190,6 +236,10 @@ def process_single_job(db: Session):
                 NotifierService.notify_account_invalid(job.account.name, publish_result.error)
                 
     except Exception as e:
+        try:
+            heartbeat_stop.set()
+        except Exception:
+            pass
         logger.exception("[Job %s] Unhandled worker exception processing job: %s", job.id, e)
         JobService.mark_failed_or_retry(db, job, str(e), is_fatal=False)
         
@@ -231,9 +281,9 @@ def run_loop():
         state.worker_started_at = int(time.time())
         db.commit()
         
-    logger.info("Entering polling loop. Tick=%ss", WORKER_TICK_SECONDS)
+    logger.info("Entering polling loop. Tick=%ss", config.WORKER_TICK_SECONDS)
     # Adaptive idle backoff to reduce DB polling + CPU wakeups when queue is empty
-    idle_sleep = WORKER_TICK_SECONDS
+    idle_sleep = config.WORKER_TICK_SECONDS
     idle_sleep_cap = int(os.getenv("PUBLISHER_IDLE_SLEEP_CAP_SEC", "60"))
     
     while RUNNING:
@@ -251,7 +301,7 @@ def run_loop():
                     break
                     
                 if state.worker_status == "PAUSED":
-                    time.sleep(WORKER_TICK_SECONDS)
+                    time.sleep(config.WORKER_TICK_SECONDS)
                     continue
                     
                 config.SAFE_MODE = state.safe_mode
@@ -265,11 +315,11 @@ def run_loop():
                 idle_sleep = min(idle_sleep * 2, idle_sleep_cap)
             else:
                 # Reset backoff once we actually do work
-                idle_sleep = WORKER_TICK_SECONDS
+                idle_sleep = config.WORKER_TICK_SECONDS
                 
         except Exception:
             logger.exception("Publisher encountered a core loop error. Will retry.")
-            time.sleep(WORKER_TICK_SECONDS)
+            time.sleep(config.WORKER_TICK_SECONDS)
             
     logger.info("Publisher process completed gracefully.")
 
