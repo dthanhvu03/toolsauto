@@ -178,12 +178,35 @@ def process_draft_job(db: Session):
             GEMINI_INFRA_BACKOFF_LEVEL = 0
             GEMINI_NEXT_ALLOWED_TS = 0
         else:
-            job.status = "DRAFT"
-            job.last_error = "AI Generation returned empty result"
-            db.commit()
-            GEMINI_CONSECUTIVE_FAILURES += 1
-            logger.warning("[Job %s] AI Generation returned empty. Kept as DRAFT for retry. NOT notifying. Failures: %d/3", job.id, GEMINI_CONSECUTIVE_FAILURES)
-            _check_gemini_circuit(db)
+            try:
+                job.tries = int(job.tries or 0) + 1
+            except Exception:
+                job.tries = 1
+
+            if int(job.tries) <= 3:
+                job.status = "DRAFT"
+                job.last_error = f"AI Generation returned empty result (try {job.tries}/3)"
+                db.commit()
+                # Thêm backoff để không lặp vô cực
+                idx = min(GEMINI_INFRA_BACKOFF_LEVEL, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
+                backoff_sec = GEMINI_INFRA_BACKOFF_SCHEDULE_SEC[idx]
+                GEMINI_INFRA_BACKOFF_LEVEL = min(GEMINI_INFRA_BACKOFF_LEVEL + 1, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
+                GEMINI_NEXT_ALLOWED_TS = time.time() + backoff_sec
+                
+                logger.warning("[Job %s] AI Generation returned empty. Kept as DRAFT. Backoff %ss. Failures: %d/3", job.id, backoff_sec, job.tries)
+            else:
+                job.status = "FAILED"
+                job.last_error = "AI Generation returned empty repeatedly (>3). Mark FAILED."
+                db.commit()
+                logger.error("[Job %s] AI Generation empty exceeded retries. Mark FAILED.", job.id)
+                try:
+                    NotifierService._broadcast(
+                        f"🚨 <b>Lỗi AI Trả về Rỗng Liên Tục</b>\n"
+                        f"❌ Job #{job.id}\n"
+                        f"🛑 Đã quá 3 lần retry bị rỗng. Đánh dấu FAILED."
+                    )
+                except Exception:
+                    pass
         
     except Exception as e:
         logger.exception("[Job %s] Unhandled exception during AI Generation: %s", job.id, e)
