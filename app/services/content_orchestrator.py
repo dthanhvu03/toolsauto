@@ -16,6 +16,7 @@ import time
 import logging
 import json
 import re
+import math
 
 from app.services.gemini_rpa import GeminiRPAService
 import app.config as config
@@ -24,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 # ─── Configurable paths (từ app/config.py, không hard-code) ───
 THUMB_DIR = str(config.THUMB_DIR)
+
+
+class OutputContractViolation(Exception):
+    """Gemini did not return a valid JSON caption schema after repair attempts."""
+    pass
 
 
 class ContentOrchestrator:
@@ -76,6 +82,32 @@ class ContentOrchestrator:
         if not os.path.exists(video_path):
             return None
 
+        # Nếu file không có stream video (ví dụ bị nhãn .mp4 nhưng thực chất chỉ có audio)
+        # thì không thể tạo collage → trả None để pipeline fallback sang text-only.
+        try:
+            has_video = self._run_ffmpeg(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=index",
+                    "-of",
+                    "csv=p=0",
+                    video_path,
+                ],
+                timeout=10,
+                label="ffprobe-has-video",
+            )
+            if not (has_video.stdout or "").strip():
+                logger.warning("No video stream detected: %s", video_path)
+                return None
+        except Exception:
+            logger.warning("No video stream detected (ffprobe fail): %s", video_path)
+            return None
+
         fhash = self._file_hash(video_path)
         collage_path = os.path.join(THUMB_DIR, f"{fhash}_collage.jpg")
 
@@ -96,25 +128,72 @@ class ContentOrchestrator:
         except Exception:
             duration = 30.0  # fallback nếu ffprobe fail
 
-        # Tính 6 mốc thời gian phân bổ đều
-        pts = [duration * p for p in [0.10, 0.25, 0.40, 0.60, 0.75, 0.90]]
-
-        # FPS-based frame numbers (cần fps để tính)
+        total_frames = 0
         try:
-            fps_probe = self._run_ffmpeg(
-                ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
-                 "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0", video_path],
+            # nb_read_frames thường chính xác hơn nếu ffprobe hỗ trợ codec này
+            nb_probe = self._run_ffmpeg(
+                [
+                    "ffprobe",
+                    "-v",
+                    "quiet",
+                    "-count_frames",
+                    "-select_streams",
+                    "v:0",
+                    "-show_entries",
+                    "stream=nb_read_frames",
+                    "-of",
+                    "csv=p=0",
+                    video_path,
+                ],
                 timeout=10, label="ffprobe-fps"
             )
-            num, den = map(int, fps_probe.stdout.strip().split("/"))
-            fps = num / den
+            nb_txt = (nb_probe.stdout or "").strip()
+            total_frames = int(nb_txt) if nb_txt.isdigit() else 0
         except Exception:
-            fps = 30.0
+            total_frames = 0
 
-        frame_nums = [int(pt * fps) for pt in pts]
+        # Nếu không có nb_frames, ước lượng từ duration * fps
+        fps = 0.0
+        if total_frames <= 0:
+            try:
+                fps_probe = self._run_ffmpeg(
+                    [
+                        "ffprobe",
+                        "-v",
+                        "quiet",
+                        "-select_streams",
+                        "v:0",
+                        "-show_entries",
+                        "stream=r_frame_rate",
+                        "-of",
+                        "csv=p=0",
+                        video_path,
+                    ],
+                    timeout=10,
+                    label="ffprobe-fps",
+                )
+                num, den = map(int, fps_probe.stdout.strip().split("/"))
+                fps = num / den if den else 0.0
+            except Exception:
+                fps = 0.0
+
+            if fps <= 0:
+                fps = 30.0  # fallback nếu ffprobe fail
+
+            total_frames = int(max(1, math.floor(duration * fps)))
+
+        total_frames = max(1, total_frames)
+        step = max(1, total_frames // 6)  # đảm bảo select ra >= 6 frames khi total_frames đủ lớn
+        logger.info(
+            "Collage frames: duration=%.2fs fps=%.2f total_frames=%d step=%d",
+            duration,
+            fps,
+            total_frames,
+            step,
+        )
 
         # 1 lệnh FFmpeg: select 6 frame + tile 3x2
-        select_expr = "+".join([f"eq(n\\,{n})" for n in frame_nums])
+        select_expr = f"not(mod(n\\,{step}))"
         filter_str = f"select='{select_expr}',scale=400:-1,tile=3x2"
 
         cmd = [
@@ -129,7 +208,29 @@ class ContentOrchestrator:
             self._run_ffmpeg(cmd, timeout=60, label="ffmpeg-collage")
         except Exception as e:
             logger.error("FFmpeg Collage lỗi: %s", e)
-            return None
+            # Fallback: chỉ cần 1 frame (để job không bị kẹt retry vô hạn)
+            try:
+                ts = max(0.0, min(duration, duration * 0.55))
+                fallback_cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    str(ts),
+                    "-i",
+                    video_path,
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    "scale=400:-1",
+                    "-q:v",
+                    "2",
+                    collage_path,
+                ]
+                logger.warning("Collage fallback: chụp 1 frame tại t=%.2fs", ts)
+                self._run_ffmpeg(fallback_cmd, timeout=30, label="ffmpeg-collage-fallback")
+            except Exception as e2:
+                logger.error("FFmpeg Collage fallback vẫn fail: %s", e2)
+                return None
 
         # Validate output
         if not os.path.exists(collage_path) or os.path.getsize(collage_path) == 0:
@@ -197,13 +298,14 @@ class ContentOrchestrator:
         else:
             logger.info("Bước 1/3: Đầu vào là Video, trích xuất 6 khung hình Collage...")
             target_image = self.extract_keyframes_collage(video_path)
-            if not target_image:
-                logger.error("Không thể tạo hình ảnh Collage đại diện từ Video!")
-                return result
-
             logger.info("Bước 2/3: Chạy AI Whisper bóc tách âm thanh sang Text...")
             transcript = self.extract_transcript(video_path)
             logger.info("Transcript hoàn thành: %s ký tự", len(transcript))
+
+            if not transcript:
+                # Không có audio transcript thì dù có/không collage cũng không đủ data để tạo caption.
+                logger.error("Không có transcript từ media: %s", video_path)
+                return result
 
             # Truncate transcript to avoid diluting Gemini context
             max_tlen = config.MAX_TRANSCRIPT_LENGTH
@@ -212,11 +314,19 @@ class ContentOrchestrator:
                 logger.info("Transcript cắt ngắn còn %d ký tự (max %d)", len(transcript), max_tlen)
 
             intro_action = "viết CAPTION BÁN HÀNG" if style == "sales" else "viết CAPTION"
-            prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) và kết hợp với Audio Transcript đính kèm bên dưới để {intro_action}.
+            if target_image:
+                prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) và kết hợp với Audio Transcript đính kèm bên dưới để {intro_action}.
 CHÚ Ý QUAN TRỌNG: TRONG ẢNH CÓ THỂ CÓ CHỮ (SUBTITLE). BẠN NÊN ƯU TIÊN ĐỌC CÁC CHỮ ĐÓ.
 
 Audio Transcript (có thể bắt chữ bị sai do giọng AI), hãy tham khảo kết hợp với Hình ảnh:
 "{transcript if transcript else '(Video không có giọng nói)'}" """
+            else:
+                logger.warning("Fallback text-only (no collage possible): %s", video_path)
+                prompt_intro = f"""Không thể trích xuất được hình ảnh/video collage từ media này.
+Hãy dựa hoàn toàn vào Audio Transcript bên dưới để {intro_action}.
+
+Audio Transcript (có thể bắt chữ bị sai do giọng AI):
+"{transcript}" """
 
         # Define dynamic sections based on style
         # Default assume NO sales for non-sales styles
@@ -329,43 +439,37 @@ YÊU CẦU ĐẦU RA (BẮT BUỘC TRẢ VỀ CHÍNH XÁC ĐỊNH DẠNG JSON SA
 
         logger.info("Bước 3/3: Bắn Prompt và Ảnh lên Gemini RPA...")
         t0 = time.time()
-        response = self.gemini.ask_with_file(prompt, target_image)
+        if target_image:
+            response = self.gemini.ask_with_file(prompt, target_image)
+        else:
+            response = self.gemini.ask(prompt)
         logger.info("Gemini RPA xong (%.1fs)", time.time() - t0)
 
         if not response:
             logger.error("Gemini không phản hồi")
             return result
 
-        result = self._parse_response(response)
+        result = self._parse_response(response, strict_json=True)
 
         # Triệt để: nếu Gemini không trả đúng JSON schema → ép 1 vòng "self-repair" (không re-upload file).
         # Điều kiện: response không hề chứa dấu hiệu JSON keys, hoặc parse ra caption rỗng.
-        looks_like_json = ("```json" in response) or ('"caption"' in response and '"hashtags"' in response)
-        if (not looks_like_json) or (not (result.get("caption") or "").strip()):
+        if not self._is_valid_caption_schema_json(response):
             try:
-                repair_prompt = f"""Bạn vừa trả lời KHÔNG đúng định dạng. Hãy CHUYỂN nội dung dưới đây thành JSON đúng schema.
+                repair_prompt = self._build_repair_prompt(response)
 
-YÊU CẦU:
-- CHỈ TRẢ VỀ DUY NHẤT JSON (không markdown, không giải thích, không text bên ngoài).
-- Schema:
-{{
-  "caption": "string",
-  "hashtags": ["#tag1", "#tag2", "#tag3"],
-  "keywords": ["kw1", "kw2", "kw3"]
-}}
-- Caption ngắn gọn, không vượt quá {getattr(config, "MAX_CAPTION_LENGTH", 300)} ký tự.
-
-NỘI DUNG CẦN CHUYỂN:
-\"\"\"{response}\"\"\""""
                 t1 = time.time()
                 repaired = self.gemini.ask(repair_prompt)
                 logger.info("Self-repair JSON xong (%.1fs)", time.time() - t1)
                 if repaired:
-                    repaired_result = self._parse_response(repaired)
-                    if (repaired_result.get("caption") or "").strip():
+                    repaired_result = self._parse_response(repaired, strict_json=True)
+                    if self._is_valid_caption_schema_json(repaired):
                         result = repaired_result
             except Exception as e:
                 logger.warning("Self-repair JSON failed: %s", e)
+
+        # STRICT: fail-closed if still not valid JSON (do not let fallback fill garbage)
+        if not self._is_valid_caption_schema_json(json.dumps(result, ensure_ascii=False)):
+            raise OutputContractViolation("Gemini did not return valid JSON caption schema")
         logger.info("Hoàn tất: %s...", result["caption"][:50] if result["caption"] else "(empty)")
         return result
 
@@ -397,7 +501,7 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
 
     # ─── Fix F: Robust JSON Parser + Schema Validation ───
 
-    def _parse_response(self, text: str) -> dict:
+    def _parse_response(self, text: str, strict_json: bool = False) -> dict:
         """Parse response Gemini thành dict chuẩn — multi-layer: JSON → repair → regex."""
         logger.info("=========== RAW GEMINI RESPONSE ===========")
         logger.info(text)
@@ -448,8 +552,11 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
         if kw_match:
             result["keywords"] = re.findall(r'"([^"]+)"', kw_match.group(1))
 
-        # Layer 4: Nếu Gemini không trả JSON (hay gặp) → rút caption từ plain text
+        # Layer 4: Non-JSON fallback (DISABLED in strict_json mode)
         if not result.get("caption"):
+            if strict_json:
+                # Fail closed: do not guess caption from prose/options.
+                return self._validate_schema(result)
             # Ưu tiên các dòng kiểu "Headline:" / "Caption:" nếu có
             lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
             pick = ""
@@ -485,6 +592,56 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
 
         result = self._validate_schema(result)
         return result
+
+    @staticmethod
+    def _extract_json_candidate(text: str) -> str | None:
+        """Try to extract JSON text from a response (codefence or outermost braces)."""
+        if not text:
+            return None
+        m = re.search(r"```json\\s*\\n(.*?)\\n\\s*```", text, re.DOTALL | re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return text[start:end + 1].strip()
+        return None
+
+    def _is_valid_caption_schema_json(self, text: str) -> bool:
+        """Strict validator: must be JSON dict with caption (non-empty str) and list hashtags/keywords."""
+        cand = self._extract_json_candidate(text) or text
+        data = self._try_json_loads(cand)
+        if not isinstance(data, dict):
+            return False
+        caption = data.get("caption")
+        hashtags = data.get("hashtags")
+        keywords = data.get("keywords")
+        if not isinstance(caption, str) or not caption.strip():
+            return False
+        if not isinstance(hashtags, list) or not all(isinstance(x, (str, int, float, bool)) for x in hashtags):
+            return False
+        if not isinstance(keywords, list) or not all(isinstance(x, (str, int, float, bool)) for x in keywords):
+            return False
+        return True
+
+    def _build_repair_prompt(self, raw_response: str) -> str:
+        """Non-interactive repair prompt: convert raw response to required JSON schema only."""
+        max_len = getattr(config, "MAX_CAPTION_LENGTH", 300)
+        return f"""CHUYỂN ĐỔI NỘI DUNG THÀNH JSON.
+
+YÊU CẦU BẮT BUỘC:
+- CHỈ TRẢ VỀ DUY NHẤT JSON, KHÔNG markdown, KHÔNG giải thích, KHÔNG hỏi lại.
+- Không được trả Option 1/2/3.
+- JSON phải có đúng 3 keys: caption, hashtags, keywords.
+- caption: string tiếng Việt, ngắn gọn, không vượt quá {max_len} ký tự.
+- hashtags: array string (mỗi phần tử bắt đầu bằng #).
+- keywords: array string.
+
+OUTPUT JSON TEMPLATE:
+{{"caption":"...","hashtags":["#a","#b","#c"],"keywords":["k1","k2","k3"]}}
+
+NỘI DUNG ĐẦU VÀO (hãy chuyển sang JSON theo template, không thêm chữ ngoài JSON):
+{raw_response}"""
 
     @staticmethod
     def _try_json_loads(raw: str) -> dict | None:
