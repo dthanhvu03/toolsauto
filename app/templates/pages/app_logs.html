@@ -1,0 +1,356 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Logs • Auto Publisher{% endblock %}
+{% block page_title %}Logs{% endblock %}
+{% block page_subtitle %}Xem log các worker theo kiểu tail (auto-refresh 2s).{% endblock %}
+
+{% block content %}
+  <div class="app-card p-4">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="text-xs text-[var(--muted)]">Process</div>
+        <select id="procSel" class="app-select h-9">
+          {% for p in procs %}
+            <option value="{{ p }}" {% if p == default_proc %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+
+        <div class="text-xs text-[var(--muted)] ml-2">Type</div>
+        <div class="flex gap-1">
+          <button id="kindOut" type="button" class="app-btn h-9">out</button>
+          <button id="kindErr" type="button" class="app-btn h-9">error</button>
+        </div>
+
+        <div class="text-xs text-[var(--muted)] ml-2">Lines</div>
+        <select id="linesSel" class="app-select h-9">
+          {% for n in [200, 500, 1000] %}
+            <option value="{{ n }}" {% if n == default_lines %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+
+        <div class="text-xs text-[var(--muted)] ml-2">Level</div>
+        <select id="levelSel" class="app-select h-9">
+          <option value="">ALL</option>
+          <option value="ERROR">ERROR</option>
+          <option value="WARN">WARN</option>
+          <option value="INFO">INFO</option>
+          <option value="DEBUG">DEBUG</option>
+        </select>
+
+        <div class="text-xs text-[var(--muted)] ml-2">Window</div>
+        <select id="windowSel" class="app-select h-9">
+          <option value="0">ALL</option>
+          <option value="300">5m</option>
+          <option value="900" selected>15m</option>
+          <option value="3600">1h</option>
+        </select>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <input id="search" class="app-input h-9 w-56" placeholder="Search (server+local)..." />
+        <label class="text-xs text-[var(--muted)] inline-flex items-center gap-2">
+          <input id="realtimeChk" type="checkbox" class="h-4 w-4" checked />
+          Realtime
+        </label>
+        <button id="copyBtn" type="button" class="app-btn h-9">Copy</button>
+        <button id="pauseBtn" type="button" class="app-btn h-9">Pause</button>
+      </div>
+    </div>
+
+    <div class="mt-3 text-xs text-[var(--muted)] flex items-center justify-between">
+      <div id="meta">Auto-refresh: <span class="font-medium">ON</span> • Interval: 2s</div>
+      <div class="flex items-center gap-2">
+        <span id="statusDot" class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+        <span id="statusText">connected</span>
+      </div>
+    </div>
+
+    <div class="mt-3 border border-[var(--border)] rounded-lg bg-black text-slate-100 overflow-hidden">
+      <pre id="logBox" class="text-xs leading-5 p-3 overflow-auto" style="height: 70vh; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"></pre>
+    </div>
+  </div>
+
+  <script>
+    const procSel = document.getElementById('procSel');
+    const linesSel = document.getElementById('linesSel');
+    const kindOut = document.getElementById('kindOut');
+    const kindErr = document.getElementById('kindErr');
+    const search = document.getElementById('search');
+    const levelSel = document.getElementById('levelSel');
+    const realtimeChk = document.getElementById('realtimeChk');
+    const windowSel = document.getElementById('windowSel');
+    const copyBtn = document.getElementById('copyBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const logBox = document.getElementById('logBox');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+
+    let kind = {{ ("'" ~ default_kind ~ "'") | safe }};
+    let paused = false;
+    let timer = null;
+    let es = null;
+    let buf = [];
+    let lastTickAt = 0;
+
+    function setKind(next) {
+      kind = next;
+      if (kind === 'out') {
+        kindOut.classList.add('app-btn-primary');
+        kindErr.classList.remove('app-btn-primary');
+      } else {
+        kindErr.classList.add('app-btn-primary');
+        kindOut.classList.remove('app-btn-primary');
+      }
+    }
+    setKind(kind);
+
+    function buildUrl() {
+      const proc = procSel.value;
+      const lines = linesSel.value;
+      const url = new URL(window.location.origin + '/app/logs/tail');
+      url.searchParams.set('proc', proc);
+      url.searchParams.set('kind', kind);
+      url.searchParams.set('lines', lines);
+      return url.toString();
+    }
+
+    function buildStreamUrl() {
+      const proc = procSel.value;
+      const url = new URL(window.location.origin + '/app/logs/stream');
+      url.searchParams.set('proc', proc);
+      url.searchParams.set('kind', kind);
+      const lvl = (levelSel && levelSel.value) ? levelSel.value : '';
+      const q = (search.value || '').trim();
+      if (lvl) url.searchParams.set('level', lvl);
+      if (q) url.searchParams.set('q', q);
+      return url.toString();
+    }
+
+    function applySearch(text) {
+      const q = (search.value || '').trim().toLowerCase();
+      if (!q) return text;
+      // simple highlight by wrapping matches; keep it lightweight
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(esc, 'ig');
+      return text.replace(re, (m) => `<<${m}>>`);
+    }
+
+    function scrollToBottom() {
+      // Always follow tail (per user preference). Use rAF + timeout so it works reliably
+      // after large DOM updates/reflow in Chrome.
+      requestAnimationFrame(() => {
+        logBox.scrollTop = logBox.scrollHeight;
+      });
+      setTimeout(() => {
+        logBox.scrollTop = logBox.scrollHeight;
+      }, 0);
+    }
+
+    function currentMaxLines() {
+      const n = parseInt((linesSel && linesSel.value) ? linesSel.value : '200', 10);
+      return Number.isFinite(n) && n > 0 ? n : 200;
+    }
+
+    function currentWindowSec() {
+      const n = parseInt((windowSel && windowSel.value) ? windowSel.value : '0', 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    }
+
+    function clampBuffer() {
+      const maxLines = currentMaxLines();
+      if (buf.length > maxLines) buf = buf.slice(-maxLines);
+    }
+
+    function _parseLineTs(line) {
+      // Expect prefix like "2026-03-18T11:47:17" or "2026-03-18 11:47:17"
+      if (!line) return null;
+      const s = String(line);
+      const ts = s.slice(0, 19);
+      if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}$/.test(ts)) return null;
+      // Normalize to ISO
+      const iso = ts.replace(' ', 'T') + 'Z';
+      const ms = Date.parse(iso);
+      return Number.isFinite(ms) ? ms : null;
+    }
+
+    function applyWindowFilter(lines) {
+      const win = currentWindowSec();
+      if (!win) return lines;
+      const cutoff = Date.now() - win * 1000;
+      const out = [];
+      for (const ln of lines) {
+        const ms = _parseLineTs(ln);
+        if (ms === null) {
+          // keep lines without ts if we're already keeping some context
+          continue;
+        }
+        if (ms >= cutoff) out.push(ln);
+      }
+      return out;
+    }
+
+    function _firstNonEmptyLine(lines) {
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i] && String(lines[i]).trim()) return String(lines[i]);
+      }
+      return '';
+    }
+    function _lastNonEmptyLine(lines) {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i] && String(lines[i]).trim()) return String(lines[i]);
+      }
+      return '';
+    }
+
+    function updateMeta(mode) {
+      const m = document.getElementById('meta');
+      if (!m) return;
+      const rt = (realtimeChk && realtimeChk.checked && window.EventSource) ? 'ON' : 'OFF';
+      const first = _firstNonEmptyLine(buf);
+      const last = _lastNonEmptyLine(buf);
+      const firstTs = first.slice(0, 19);
+      const lastTs = last.slice(0, 19);
+      const win = currentWindowSec();
+      m.textContent = `Realtime: ${rt} • Mode: ${mode} • Lines: ${currentMaxLines()} • Window: ${win ? (win/60 + 'm') : 'ALL'} • Showing: ${buf.length} • From: ${firstTs} • To: ${lastTs}`;
+    }
+
+    function renderBuffer(mode = 'render') {
+      const text = buf.join('\n');
+      const marked = applySearch(text);
+      const html = marked
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/&lt;&lt;/g, '<mark class=\"bg-yellow-500/30 text-yellow-100\">')
+        .replace(/&gt;&gt;/g, '</mark>');
+      logBox.innerHTML = html;
+      scrollToBottom();
+      updateMeta(mode);
+    }
+
+    function resetBuffer() {
+      buf = [];
+    }
+
+    async function tick() {
+      if (paused) return;
+      const url = buildUrl();
+      lastTickAt = Date.now();
+      try {
+        const mode = (realtimeChk && realtimeChk.checked && window.EventSource) ? 'seed' : 'poll';
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        let text = await res.text();
+        // Keep empty lines so line counts match selection.
+        let raw = text.replace(/\r/g, '').split('\n');
+        if (raw.length && raw[raw.length - 1] === '') raw.pop();
+        const filtered = applyWindowFilter(raw);
+        buf = filtered;
+        clampBuffer();
+        renderBuffer(mode);
+        statusDot.classList.remove('bg-rose-500');
+        statusDot.classList.add('bg-emerald-500');
+        statusText.textContent = `connected (${mode}) • lines=${currentMaxLines()}`;
+      } catch (e) {
+        statusDot.classList.remove('bg-emerald-500');
+        statusDot.classList.add('bg-rose-500');
+        statusText.textContent = 'error: ' + (e && e.message ? e.message : e);
+      }
+    }
+
+    function stopStream() {
+      if (es) {
+        try { es.close(); } catch (e) {}
+        es = null;
+      }
+    }
+
+    function startStream() {
+      stopStream();
+      resetBuffer();
+      // seed initial content using tail API for quick context
+      tick();
+
+      const url = buildStreamUrl();
+      try {
+        es = new EventSource(url);
+      } catch (e) {
+        es = null;
+        return;
+      }
+      statusText.textContent = 'connecting (realtime)...';
+      es.onmessage = (ev) => {
+        if (paused) return;
+        const line = (ev && ev.data) ? String(ev.data) : '';
+        if (!line) return;
+        buf.push(line);
+        // Apply window filter on the fly by dropping old lines
+        const win = currentWindowSec();
+        if (win) {
+          const cutoff = Date.now() - win * 1000;
+          buf = buf.filter((ln) => {
+            const ms = _parseLineTs(ln);
+            return ms !== null && ms >= cutoff;
+          });
+        }
+        clampBuffer();
+        renderBuffer('realtime');
+        statusDot.classList.remove('bg-rose-500');
+        statusDot.classList.add('bg-emerald-500');
+        statusText.textContent = `connected (realtime) • lines=${currentMaxLines()}`;
+      };
+      es.onerror = () => {
+        statusDot.classList.remove('bg-emerald-500');
+        statusDot.classList.add('bg-rose-500');
+        statusText.textContent = 'realtime disconnected; fallback poll';
+        stopStream();
+        start();
+      };
+    }
+
+    function start() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(tick, 2000);
+      tick();
+    }
+
+    kindOut.addEventListener('click', () => { setKind('out'); start(); });
+    kindErr.addEventListener('click', () => { setKind('error'); start(); });
+    function restart() {
+      if (timer) { clearInterval(timer); timer = null; }
+      if (realtimeChk && realtimeChk.checked && window.EventSource) {
+        startStream();
+      } else {
+        stopStream();
+        start();
+      }
+    }
+
+    procSel.addEventListener('change', restart);
+    linesSel.addEventListener('change', () => {
+      // Immediately reflect the new clamp in UI, then restart to reseed with correct history.
+      clampBuffer();
+      renderBuffer('clamp');
+      restart();
+    });
+    if (levelSel) levelSel.addEventListener('change', restart);
+    if (windowSel) windowSel.addEventListener('change', restart);
+    search.addEventListener('input', () => {
+      // in realtime, query param q is server-side; restart stream to apply.
+      restart();
+    });
+    if (realtimeChk) realtimeChk.addEventListener('change', restart);
+    copyBtn.addEventListener('click', async () => {
+      const text = logBox.innerText || '';
+      try { await navigator.clipboard.writeText(text); } catch (e) {}
+    });
+    pauseBtn.addEventListener('click', () => {
+      paused = !paused;
+      pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+      if (!paused) restart();
+    });
+
+    restart();
+  </script>
+{% endblock %}
+

@@ -68,6 +68,11 @@ MAX_CONCURRENT_ACCOUNTS = int(os.getenv("MAX_CONCURRENT_ACCOUNTS", "2"))
 POST_DELAY_MIN_SEC = int(os.getenv("POST_DELAY_MIN_SEC", "30"))
 POST_DELAY_MAX_SEC = int(os.getenv("POST_DELAY_MAX_SEC", "90"))
 
+# Per-page daily throughput caps (runtime-overridable via app/settings)
+# 0 = disable cap (use account.daily_limit / no intake limit)
+POSTS_PER_PAGE_PER_DAY = int(os.getenv("POSTS_PER_PAGE_PER_DAY", "0"))
+REUP_VIDEOS_PER_PAGE_PER_DAY = int(os.getenv("REUP_VIDEOS_PER_PAGE_PER_DAY", "0"))
+
 # Ensure directories exist
 for d in [CONTENT_DIR, DONE_DIR, FAILED_DIR, REUP_DIR, PROFILES_DIR, LOGS_DIR]:
     d.mkdir(parents=True, exist_ok=True)
