@@ -474,11 +474,12 @@ class FacebookAdapter(AdapterInterface):
         candidates = [
             surface.get_by_role("button", name="Tiếp", exact=True).first,
             surface.get_by_role("button", name="Next", exact=True).first,
-            surface.get_by_role("button", name="Tiếp", exact=False).first,
+            # Removed exact=False for "Tiếp" to avoid clicking unclickable "Thẻ tiếp theo"
             surface.get_by_role("button", name="Next", exact=False).first,
             surface.locator('button:has-text("Tiếp")').first,
             surface.locator('button:has-text("Next")').first,
             surface.locator('div[role="button"][aria-label="Tiếp"], div[role="button"][aria-label="Next"]').first,
+            surface.locator('span[role="button"][aria-label="Tiếp"], span[role="button"][aria-label="Next"]').first,
             surface.get_by_text("Tiếp", exact=True).first,
             surface.get_by_text("Next", exact=True).first,
         ]
@@ -518,6 +519,8 @@ class FacebookAdapter(AdapterInterface):
             [
                 surface.locator('div[role="button"]:has-text("Đăng")').first,
                 surface.locator('div[role="button"]:has-text("Post")').first,
+                surface.locator('span[role="button"]:has-text("Đăng")').first,
+                surface.locator('span[role="button"]:has-text("Post")').first,
                 surface.locator('button:has-text("Đăng")').first,
                 surface.locator('button:has-text("Post")').first,
             ]
@@ -1032,13 +1035,8 @@ class FacebookAdapter(AdapterInterface):
                 logger.info("FacebookAdapter: Clicking Next/Tiếp at step %d...", step + 1)
                 if not self._click_locator(next_button, f"next button step {step + 1}", timeout=5000):
                     self._log_surface_inventory(surface, f"next_click_failed_{step + 1}")
-                    return self._failure_result(
-                        job.id,
-                        "navigate_next",
-                        "Failed to click the Next/Tiếp button.",
-                        flow_mode,
-                        entrypoint_used,
-                    )
+                    logger.warning("FacebookAdapter: Failed to click Next/Tiếp button but continuing. It might be a false positive (e.g. unclickable carousel arrow).")
+                    break
                 self.page.wait_for_timeout(3000)
 
                 if pre_next_caption and not caption_typed:
