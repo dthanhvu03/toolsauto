@@ -68,7 +68,8 @@ class FacebookAdapter(AdapterInterface):
     NEXT_BUTTON_LABELS = ("Tiếp", "Next")
     POST_BUTTON_LABELS = ("Đăng", "Post", "Đăng bài", "Publish", "Chia sẻ", "Share", "Đăng Thước phim")
 
-    _REEL_ID_RE = re.compile(r"/reel/(\d+)", re.IGNORECASE)
+    _REEL_ID_RE = re.compile(r"/reel/([a-zA-Z0-9_-]+)", re.IGNORECASE)
+    _SHARE_RE = re.compile(r"/share/[rv]/([a-zA-Z0-9_-]+)", re.IGNORECASE)
 
     def _normalize_post_url(self, url: str | None) -> str | None:
         """Return a stable, valid FB post URL (prefer reel with id), else None."""
@@ -85,8 +86,11 @@ class FacebookAdapter(AdapterInterface):
         # reject ambiguous reel root (e.g. https://www.facebook.com/reel/)
         if u.endswith("/reel") or u.endswith("/reel/"):
             return None
-        # accept reel with numeric id
+        # accept reel with numeric or alphanumeric id
         if self._REEL_ID_RE.search(u):
+            return u
+        # accept share links
+        if self._SHARE_RE.search(u):
             return u
         # accept videos/posts if they look non-trivial
         if ("/videos/" in u or "/posts/" in u) and len(u) > 30:
@@ -1146,7 +1150,7 @@ class FacebookAdapter(AdapterInterface):
                             full_text = self.page.evaluate("document.body.innerText")
                             if salt in full_text:
                                 all_links = self.page.locator(
-                                    'a[href*="/posts/"], a[href*="/reel/"], a[href*="/videos/"]'
+                                    'a[href*="/posts/"], a[href*="/reel/"], a[href*="/videos/"], a[href*="/share/r/"], a[href*="/share/v/"]'
                                 ).all()
                                 for link in all_links:
                                     try:
@@ -1162,11 +1166,11 @@ class FacebookAdapter(AdapterInterface):
                                                     break
                                     except Exception:
                                         continue
-                                # Fallback: dùng JS tìm link /reel/ mà có ancestor chứa salt (không phụ thuộc class FB)
+                                # Fallback: dùng JS tìm link /reel/ hoặc /share/ mà có ancestor chứa salt
                                 if not post_url and full_text and salt in full_text:
                                     found_href = self.page.evaluate("""
                                         (salt) => {
-                                            const links = document.querySelectorAll('a[href*="/reel/"]');
+                                            const links = document.querySelectorAll('a[href*="/reel/"], a[href*="/share/r/"], a[href*="/share/v/"]');
                                             for (const a of links) {
                                                 let el = a;
                                                 for (let i = 0; i < 20 && el; i++) {
@@ -1342,7 +1346,7 @@ class FacebookAdapter(AdapterInterface):
                 
                 post_url = None
                 all_links = self.page.locator(
-                    'a[href*="/posts/"], a[href*="/reel/"], a[href*="/videos/"]'
+                    'a[href*="/posts/"], a[href*="/reel/"], a[href*="/videos/"], a[href*="/share/r/"], a[href*="/share/v/"]'
                 ).all()
                 
                 for link in all_links:

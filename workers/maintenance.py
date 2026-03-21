@@ -370,6 +370,64 @@ def _process_viral_materials(db):
             os.makedirs(platform_dir, exist_ok=True)
             source_account = _get_download_source_account(db, mat)
 
+            # If this sweep is processing REUP materials, optionally cap intake per target_page/day.
+            # This prevents lag spikes by limiting how many REUP-derived jobs can enter the pipeline.
+            if (
+                mat.status == "REUP"
+                and int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0) > 0
+            ):
+                from datetime import datetime, time as time_obj
+                from zoneinfo import ZoneInfo
+                from app.database.models import Job, Account
+
+                # Resolve target account/page *without* downloading media
+                target_account = default_account
+                if mat.scraped_by_account_id:
+                    specified_acc = db.query(Account).filter(
+                        Account.id == mat.scraped_by_account_id,
+                        Account.is_active == True,
+                    ).first()
+                    if specified_acc:
+                        target_account = specified_acc
+
+                resolved_target = mat.target_page
+                if not resolved_target and target_account.target_pages_list:
+                    resolved_target = target_account.pick_next_target_page(db)
+
+                if resolved_target:
+                    today_start = int(
+                        datetime.combine(
+                            datetime.now(ZoneInfo(config.TIMEZONE)).date(),
+                            time_obj.min,
+                        ).timestamp()
+                    )
+
+                    cap = int(config.REUP_VIDEOS_PER_PAGE_PER_DAY)
+                    active_statuses = ["AWAITING_STYLE", "AI_PROCESSING", "DRAFT", "PENDING", "RUNNING"]
+
+                    active_today = db.query(Job).filter(
+                        Job.target_page == resolved_target,
+                        Job.status.in_(active_statuses),
+                        Job.created_at >= today_start,
+                    ).count()
+
+                    posted_today = db.query(Job).filter(
+                        Job.target_page == resolved_target,
+                        Job.status == "DONE",
+                        Job.finished_at >= today_start,
+                    ).count()
+
+                    if (active_today + posted_today) >= cap:
+                        logger.info(
+                            "[REUP CAP] Skip material #%s (%s) for page '%s': active+posted today=%s >= cap=%s",
+                            mat.id,
+                            mat.url,
+                            resolved_target,
+                            active_today + posted_today,
+                            cap,
+                        )
+                        continue
+
             preflight_cmd = _extend_yt_dlp_with_cookies([
                 yt_dlp_bin,
                 "--no-playlist",
@@ -781,6 +839,13 @@ def run_loop():
         try:
             with SessionLocal() as db:
                 state = WorkerService.get_or_create_state(db)
+
+                # Apply runtime overrides from DB (app/settings) so cap values take effect immediately.
+                try:
+                    from app.services.settings import apply_runtime_overrides_to_config
+                    apply_runtime_overrides_to_config(db)
+                except Exception:
+                    pass
                 
                 if state.pending_command in ("REQUEST_EXIT", "RESTART_REQUESTED"):
                     logger.warning(f"Received pending command: {state.pending_command}. Graceful exit requested.")

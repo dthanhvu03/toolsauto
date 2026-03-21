@@ -219,11 +219,11 @@ class GeminiRPAService:
             )
             # Make webdriver commands more resilient to slow pages / large uploads
             try:
-                driver.set_page_load_timeout(60)
+                driver.set_page_load_timeout(180)
             except Exception:
                 pass
             try:
-                driver.set_script_timeout(60)
+                driver.set_script_timeout(180)
             except Exception:
                 pass
             logger.info("Chrome started successfully")
@@ -323,10 +323,13 @@ class GeminiRPAService:
             # 3. Đợi response (default 180s, configurable)
             result = self._wait_response(driver, prompt, old_response_text)
             if result:
-                out_path = '/home/vu/.gemini/antigravity/brain/23eb6f02-4801-4635-8d17-491d2229b9ad/0301_final_gemini_ui.png'
+                out_path = os.path.join(DEBUG_DIR, 'gemini_ui_success.png')
                 try: 
                     driver.save_screenshot(out_path)
                     logger.info("Screenshot saved to %s", out_path)
+                    # Sau đó copy file này sang folder não hiện hành để hiển thị cho User dễ dàng hơn
+                    import shutil
+                    shutil.copy(out_path, '/home/vu/.gemini/antigravity/brain/8db896d9-274f-4f0b-8a1f-1260125f78bd/gemini_ui_success.png')
                 except Exception as e: 
                     logger.error("Lỗi save_screenshot: %s", e)
                 return result
@@ -351,10 +354,6 @@ class GeminiRPAService:
            Hỗ trợ ảnh, video, PDF (những định dạng Gemini hỗ trợ)."""
         logger.info("Upload file (Clipboard Paste): %s", os.path.basename(file_path))
         try:
-            import base64
-            with open(file_path, "rb") as f:
-                b64_data = base64.b64encode(f.read()).decode('utf-8')
-                
             mime_type = "application/octet-stream"
             lower_path = file_path.lower()
             if lower_path.endswith((".jpg", ".jpeg")):
@@ -370,15 +369,19 @@ class GeminiRPAService:
             elif lower_path.endswith(".pdf"):
                 mime_type = "application/pdf"
 
+            import base64
+            with open(file_path, "rb") as f:
+                b64_data = base64.b64encode(f.read()).decode("utf-8")
+
             paste_script = """
             var callback = arguments[arguments.length - 1]; // callback cho execute_async_script
             var b64Data = arguments[0];
             var mimeType = arguments[1];
             var filename = arguments[2];
 
-            // Dùng fetch api tối ưu để chuyển base64 thành Blob cực nhanh, không làm đơ trình duyệt với file to (10MB+)
+            // Dùng fetch api tối ưu để chuyển base64 thành Blob
             var dataUrl = "data:" + mimeType + ";base64," + b64Data;
-            
+
             fetch(dataUrl)
                 .then(res => res.blob())
                 .then(blob => {
@@ -406,9 +409,8 @@ class GeminiRPAService:
                     callback(false);
                 });
             """
-            
+
             logger.info("Đang bơm file vào clipboard trình duyệt qua Data URL (Fetch)...")
-            # Cần set timeout lâu hơn chút khi buffer file vài chục MB
             driver.set_script_timeout(30)
             success = driver.execute_async_script(paste_script, b64_data, mime_type, os.path.basename(file_path))
 

@@ -29,7 +29,42 @@ def ensure_runtime_schema():
                 text("SELECT name FROM sqlite_master WHERE type='table'")
             ).fetchall()
         }
+        # Runtime settings tables (used by workers too; create if missing)
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS runtime_settings (
+                  id INTEGER PRIMARY KEY,
+                  key VARCHAR NOT NULL UNIQUE,
+                  value VARCHAR,
+                  type VARCHAR NOT NULL,
+                  updated_at INTEGER,
+                  updated_by VARCHAR
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS runtime_settings_audit (
+                  id INTEGER PRIMARY KEY,
+                  ts INTEGER,
+                  key VARCHAR NOT NULL,
+                  old_value VARCHAR,
+                  new_value VARCHAR,
+                  action VARCHAR NOT NULL,
+                  updated_by VARCHAR
+                )
+                """
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_runtime_settings_key ON runtime_settings(key)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_runtime_settings_audit_key ON runtime_settings_audit(key)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_runtime_settings_audit_ts ON runtime_settings_audit(ts)"))
+
         if "viral_materials" not in tables:
+            # Nothing else to patch in fresh DB
             return
 
         columns = {
