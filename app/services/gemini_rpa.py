@@ -249,22 +249,28 @@ class GeminiRPAService:
         driver.get("https://gemini.google.com")
         time.sleep(2)
         for c in cookies:
+            domain = c.get("domain", "")
+            # Only allowed domains that can be set while browser is at gemini.google.com
+            if domain and domain not in [".google.com", "google.com", ".gemini.google.com", "gemini.google.com"]:
+                continue
+                
             # Occasionally webdriver becomes temporarily unresponsive; retry cookie add once.
             for attempt in range(2):
                 try:
                     driver.add_cookie({
                         "name": c["name"], "value": c["value"],
-                        "domain": c.get("domain", ".google.com"),
+                        "domain": domain if domain else ".google.com",
                         "path": c.get("path", "/"),
                         **({"expiry": int(c["expiry"])} if "expiry" in c else {}),
                     })
                     break
                 except Exception as e:
+                    err_msg = getattr(e, 'msg', str(e)).split('\n')[0]
                     if attempt == 0:
-                        logger.warning("Lỗi thêm cookie %s (retrying once): %s", c.get("name"), e)
+                        logger.warning("Lỗi thêm cookie %s (retrying once): %s", c.get("name"), err_msg)
                         time.sleep(0.8)
                         continue
-                    logger.warning("Lỗi thêm cookie %s: %s", c.get("name"), e)
+                    logger.warning("Lỗi thêm cookie %s: %s", c.get("name"), err_msg)
 
         # URL mặc định của Gemini (New Chat)
         driver.get("https://gemini.google.com/app")
