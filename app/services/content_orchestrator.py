@@ -302,25 +302,30 @@ class ContentOrchestrator:
             transcript = self.extract_transcript(video_path)
             logger.info("Transcript hoàn thành: %s ký tự", len(transcript))
 
-            if not transcript:
-                # Không có audio transcript thì dù có/không collage cũng không đủ data để tạo caption.
-                logger.error("Không có transcript từ media: %s", video_path)
-                return result
-
             # Truncate transcript to avoid diluting Gemini context
             max_tlen = config.MAX_TRANSCRIPT_LENGTH
-            if len(transcript) > max_tlen:
+            if transcript and len(transcript) > max_tlen:
                 transcript = transcript[:max_tlen].rsplit(" ", 1)[0]
                 logger.info("Transcript cắt ngắn còn %d ký tự (max %d)", len(transcript), max_tlen)
 
             intro_action = "viết CAPTION BÁN HÀNG" if style == "sales" else "viết CAPTION"
             if target_image:
-                prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) và kết hợp với Audio Transcript đính kèm bên dưới để {intro_action}.
+                if transcript:
+                    prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) và kết hợp với Audio Transcript đính kèm bên dưới để {intro_action}.
 CHÚ Ý QUAN TRỌNG: TRONG ẢNH CÓ THỂ CÓ CHỮ (SUBTITLE). BẠN NÊN ƯU TIÊN ĐỌC CÁC CHỮ ĐÓ.
 
 Audio Transcript (có thể bắt chữ bị sai do giọng AI), hãy tham khảo kết hợp với Hình ảnh:
-"{transcript if transcript else '(Video không có giọng nói)'}" """
+"{transcript}" """
+                else:
+                    logger.info("Video không có transcript (chỉ có nhạc nền). Dùng Hình ảnh làm đầu vào chính.")
+                    prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) để {intro_action}.
+CHÚ Ý QUAN TRỌNG: TRONG ẢNH CÓ THỂ CÓ CHỮ (SUBTITLE). BẠN NÊN ƯU TIÊN ĐỌC CÁC CHỮ ĐÓ.
+Video này không có giọng người nói (chỉ có nhạc nền hoặc cảnh hành động). Hãy phác thảo lại nội dung và thông điệp của video dựa trên các khung hình."""
             else:
+                if not transcript:
+                    logger.error("Không có cả hình ảnh lẫn transcript từ media: %s", video_path)
+                    return result
+                    
                 logger.warning("Fallback text-only (no collage possible): %s", video_path)
                 prompt_intro = f"""Không thể trích xuất được hình ảnh/video collage từ media này.
 Hãy dựa hoàn toàn vào Audio Transcript bên dưới để {intro_action}.
