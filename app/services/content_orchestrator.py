@@ -277,7 +277,8 @@ class ContentOrchestrator:
 
     # ─── Generate Caption (Pipeline chính) ───
 
-    def generate_caption(self, video_path: str, style: str = "general", context: str = "") -> dict:
+    def generate_caption(self, video_path: str, style: str = "general", context: str = "",
+                          page_name: str = "", page_niches: list | None = None) -> dict:
         """Pipeline Multimodal Decomposition: (Collage + Transcript) → Gemini → Caption."""
         result = {"caption": "", "hashtags": [], "keywords": []}
 
@@ -397,6 +398,11 @@ Audio Transcript (có thể bắt chữ bị sai do giọng AI):
             
         context_block = f"\n\n[INPUT VARIABLES]\n- Tên/Loại sản phẩm: Sản phẩm tương ứng trong ảnh/video\n- Phong cách/Tệp KH mục tiêu: {style_guide}"
 
+        # Page-aware context injection
+        if page_name or page_niches:
+            niches_str = ", ".join(page_niches) if page_niches else "chưa xác định"
+            context_block += f"\n- Fanpage đăng bài: {page_name or 'Không rõ'}\n- Lĩnh vực/Niche của page: {niches_str}"
+
         # ─── Fix G: Prompt placeholder trung tính, tránh ám thị domain sai ───
         mega_prompt = f"""# MEGA PROMPT: CHUYÊN GIA CONTENT FACEBOOK ADS & ACCESSTRADE
 
@@ -412,6 +418,12 @@ Bạn là một Chuyên gia Digital Marketing & Copywriter thực chiến tại 
 [FACEBOOK ADS COMPLIANCE & BEST PRACTICES]
 - TUYỆT ĐỐI KHÔNG dùng từ ngữ quy chụp thuộc tính cá nhân (Ví dụ: CẤM nói "Bạn đang bị mụn?", "Bạn đang béo?"). Hãy chuyển sang góc nhìn khách quan (Ví dụ: "Giải quyết tình trạng mụn...", "Mẹo giúp vóc dáng thon gọn...").
 - TUYỆT ĐỐI KHÔNG đưa ra các cam kết tuyệt đối, sai sự thật (đặc biệt mảng Sức khỏe, Tài chính - YMYL).
+
+[CHỐNG ẢO GIÁC - ANTI-HALLUCINATION RULES]
+- TUYỆT ĐỐI KHÔNG được bịa ra tên người, tên app, tên thương hiệu nào không xuất hiện trong hình ảnh/transcript.
+- KHÔNG được gọi tên riêng cá nhân (ví dụ: "Chào Vũ", "Bạn Lan ơi").
+- KHÔNG nhắc đến bất kỳ app, dịch vụ hoặc platform cụ thể nào (ví dụ: "Hoàn Xu", "Shopee", "Lazada") trừ khi xuất hiện RÕ RÀNG trong hình ảnh hoặc transcript.
+- Nội dung caption PHẢI PHÙ HỢP với lĩnh vực/niche của Fanpage đăng bài (xem INPUT VARIABLES bên dưới). Ví dụ: page Skincare thì viết về chăm sóc da, page Thời trang thì viết về quần áo.
 
 {sales_rules}
 
