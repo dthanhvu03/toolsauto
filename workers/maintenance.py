@@ -29,15 +29,20 @@ YT_DLP_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
-MAINT_VIRAL_LIMIT = int(os.getenv("MAINT_VIRAL_LIMIT", "3"))
 MAINT_SKIP_HEAVY_WHEN_PENDING = int(os.getenv("MAINT_SKIP_HEAVY_WHEN_PENDING", "10"))
 
 ALERT_COOLDOWN_SEC = int(os.getenv("ALERT_COOLDOWN_SEC", "600"))  # 10 phút
-ALERT_PENDING_THRESHOLD = int(os.getenv("ALERT_PENDING_THRESHOLD", "10"))
-ALERT_DRAFT_THRESHOLD = int(os.getenv("ALERT_DRAFT_THRESHOLD", "20"))
-ALERT_VIRAL_NEW_THRESHOLD = int(os.getenv("ALERT_VIRAL_NEW_THRESHOLD", "50"))
 ALERT_RAM_PCT_THRESHOLD = float(os.getenv("ALERT_RAM_PCT_THRESHOLD", "85"))
 ALERT_CHROME_PROC_THRESHOLD = int(os.getenv("ALERT_CHROME_PROC_THRESHOLD", "20"))
+
+
+def _get_runtime_int(db, key: str, fallback: int) -> int:
+    """Read a runtime setting from DB; fallback to config default."""
+    try:
+        from app.services import settings as runtime_settings
+        return int(runtime_settings.get_effective(db, key))
+    except Exception:
+        return fallback
 
 _last_alert_ts: dict[str, float] = {}
 
@@ -70,10 +75,14 @@ def _maybe_alert_queue_and_resources(db: Session) -> None:
         running = db.query(Job).filter(Job.status == "RUNNING").count()
         viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == "NEW").count()
 
+        th_pending = _get_runtime_int(db, "ALERT_PENDING_THRESHOLD", config.ALERT_PENDING_THRESHOLD)
+        th_drafts = _get_runtime_int(db, "ALERT_DRAFT_THRESHOLD", config.ALERT_DRAFT_THRESHOLD)
+        th_viral = _get_runtime_int(db, "ALERT_VIRAL_NEW_THRESHOLD", config.ALERT_VIRAL_NEW_THRESHOLD)
+
         if (
-            pending >= ALERT_PENDING_THRESHOLD
-            or drafts >= ALERT_DRAFT_THRESHOLD
-            or viral_new >= ALERT_VIRAL_NEW_THRESHOLD
+            pending >= th_pending
+            or drafts >= th_drafts
+            or viral_new >= th_viral
         ):
             if _should_alert("queue"):
                 NotifierService._broadcast(
@@ -312,6 +321,54 @@ def register_signals():
     signal.signal(signal.SIGINT, handle_sigterm)
     signal.signal(signal.SIGTERM, handle_sigterm)
 
+_last_orphan_cleanup_ts: float = 0
+
+def _cleanup_orphaned_virals(db: Session):
+    """
+    Check if any ViralMaterial with target_page is pointing to a deleted page.
+    If so, reset target_page to NULL so they get reassigned via round-robin.
+    Runs every 1 hour to save performance.
+    """
+    global _last_orphan_cleanup_ts
+    now = time.time()
+    if (now - _last_orphan_cleanup_ts) < 3600:
+        return
+        
+    _last_orphan_cleanup_ts = now
+    
+    try:
+        from app.database.models import Account, ViralMaterial
+        accounts = db.query(Account).filter(Account.is_active == True).all()
+        
+        active_pages = set()
+        for acc in accounts:
+            for p in (acc.managed_pages_list or []):
+                if p.get("url"):
+                    active_pages.add(p["url"])
+            for t in (acc.target_pages_list or []):
+                active_pages.add(t)
+                
+        if not active_pages:
+            return  # Safety fallback: don't cleanup if no active pages at all
+            
+        virals = db.query(ViralMaterial).filter(
+            ViralMaterial.status.in_(["NEW", "REUP"]),
+            ViralMaterial.target_page.isnot(None),
+            ViralMaterial.target_page != ""
+        ).all()
+        
+        orphans_fixed = 0
+        for v in virals:
+            if v.target_page not in active_pages:
+                v.target_page = None
+                orphans_fixed += 1
+                
+        if orphans_fixed > 0:
+            db.commit()
+            logger.info("🧹 Auto-Cleaned %d orphaned viral materials (target page deleted). Reset to round-robin.", orphans_fixed)
+    except Exception as e:
+        logger.error("Error cleaning orphaned virals: %s", e)
+
 def _check_daily_summary(db):
     """Gửi báo cáo tổng hợp ngày nếu đến giờ."""
     global _last_summary_date
@@ -339,7 +396,7 @@ def _process_viral_materials(db):
     """
     from app.database.models import ViralMaterial, Job, Account
 
-    limit_n = max(0, int(MAINT_VIRAL_LIMIT))
+    limit_n = max(1, _get_runtime_int(db, "MAINT_VIRAL_LIMIT", config.MAINT_VIRAL_LIMIT))
     materials = db.query(ViralMaterial).filter(
         ViralMaterial.status.in_(["NEW", "REUP"])
     ).order_by(ViralMaterial.views.desc()).limit(limit_n).all()
@@ -862,6 +919,9 @@ def run_loop():
                 
                 # 2. Check 24h Metrics for published posts
                 MetricsChecker.check_pending(db)
+                
+                # 2b. Cleanup orphaned virals (hourly)
+                _cleanup_orphaned_virals(db)
                 
                 # 3. Recover crashed/stale jobs (Self-healing)
                 logger.info("Checking for crashed/stale jobs to recover...")

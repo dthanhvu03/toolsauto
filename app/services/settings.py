@@ -281,6 +281,43 @@ SETTINGS: dict[str, SettingSpec] = {
         title="Redirect service URL",
         section="System",
     ),
+    # Maintenance: viral processing & alerting
+    "MAINT_VIRAL_LIMIT": SettingSpec(
+        key="MAINT_VIRAL_LIMIT",
+        type="int",
+        default_getter=_getattr_default("MAINT_VIRAL_LIMIT"),
+        title="Viral xử lý mỗi cycle",
+        section="Maintenance",
+        min=1,
+        max=50,
+    ),
+    "ALERT_PENDING_THRESHOLD": SettingSpec(
+        key="ALERT_PENDING_THRESHOLD",
+        type="int",
+        default_getter=_getattr_default("ALERT_PENDING_THRESHOLD"),
+        title="Alert: PENDING threshold",
+        section="Maintenance",
+        min=1,
+        max=500,
+    ),
+    "ALERT_DRAFT_THRESHOLD": SettingSpec(
+        key="ALERT_DRAFT_THRESHOLD",
+        type="int",
+        default_getter=_getattr_default("ALERT_DRAFT_THRESHOLD"),
+        title="Alert: DRAFT threshold",
+        section="Maintenance",
+        min=1,
+        max=500,
+    ),
+    "ALERT_VIRAL_NEW_THRESHOLD": SettingSpec(
+        key="ALERT_VIRAL_NEW_THRESHOLD",
+        type="int",
+        default_getter=_getattr_default("ALERT_VIRAL_NEW_THRESHOLD"),
+        title="Alert: Viral NEW threshold",
+        section="Maintenance",
+        min=1,
+        max=1000,
+    ),
 }
 
 

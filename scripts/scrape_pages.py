@@ -39,7 +39,7 @@ def scrape_pages_for_account(account_id: int, profile_path: str, account_name: s
     with sync_playwright() as pw:
         context = pw.chromium.launch_persistent_context(
             user_data_dir=profile_path,
-            headless=False,
+            headless=True,
             viewport={"width": 1280, "height": 720},
             args=[
                 "--disable-blink-features=AutomationControlled",
@@ -60,6 +60,25 @@ def scrape_pages_for_account(account_id: int, profile_path: str, account_name: s
                 logger.error("  ❌ Account not logged in! Skipping.")
                 return []
 
+            # Handle "Chuyển tài khoản" (Switch Account) page
+            # This appears when the browser profile is in a Page context instead of personal profile
+            # The "Tiếp tục" button may be an <input type="submit">, not a <button>
+            page_text = page.evaluate("() => document.body.innerText.substring(0, 500)")
+            if "Chuyển tài khoản" in page_text or "Switch account" in page_text:
+                logger.info("  ⚡ Detected 'Chuyển tài khoản' page — switching to personal profile...")
+                switch_btn = page.locator('input[type="submit"], button, [role="button"]').filter(has_text="Tiếp tục")
+                if switch_btn.count() == 0:
+                    switch_btn = page.locator('input[type="submit"], button, [role="button"]').filter(has_text="Continue")
+                if switch_btn.count() > 0:
+                    switch_btn.first.click()
+                    page.wait_for_timeout(5000)
+                    # After switching, navigate again to pages management
+                    logger.info("  ✅ Switched! Navigating to Pages management again...")
+                    page.goto("https://www.facebook.com/pages/?category=your_pages", wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(5000)
+                else:
+                    logger.warning("  ⚠️ Switch page detected but 'Tiếp tục' button not found")
+
             # Wait for page list to render
             page.wait_for_timeout(3000)
 
@@ -71,7 +90,10 @@ def scrape_pages_for_account(account_id: int, profile_path: str, account_name: s
             for link in page_links:
                 try:
                     href = link.get_attribute("href") or ""
-                    if not href or "/pages/" in href or "category" in href:
+                    if not href or href == "" or href == "#" or href.endswith("/pages/?category=your_pages"):
+                        continue
+
+                    if "notifications" in href.lower() or "settings" in href.lower():
                         continue
 
                     # Clean URL
