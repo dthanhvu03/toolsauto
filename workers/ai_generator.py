@@ -103,8 +103,26 @@ def process_draft_job(db: Session):
             
         orchestrator = ContentOrchestrator()
         ai_style = getattr(job, "ai_style", "short") or "short"
+
+        # Resolve page name & niches for page-aware caption generation
+        page_name = ""
+        page_niches = []
+        if job.target_page and job.account:
+            for p in (job.account.managed_pages_list or []):
+                if p.get("url") and job.target_page in p["url"]:
+                    page_name = p.get("name", "")
+                    break
+            pn_map = job.account.page_niches_map or {}
+            for p_url, niches in pn_map.items():
+                if job.target_page in p_url:
+                    page_niches = niches if isinstance(niches, list) else []
+                    break
+
         try:
-            ai_result = orchestrator.generate_caption(target_video, style=ai_style, context=user_context)
+            ai_result = orchestrator.generate_caption(
+                target_video, style=ai_style, context=user_context,
+                page_name=page_name, page_niches=page_niches,
+            )
         except OutputContractViolation as e:
             # Strict JSON mode: do not save prose/options. Retry later with backoff (max 3).
             idx = min(GEMINI_INFRA_BACKOFF_LEVEL, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
