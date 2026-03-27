@@ -1,36 +1,67 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TikTok Links</title>
+  <!-- Tailwind for styling -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+    rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Outfit', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    .font-display {
+      font-family: 'Outfit', sans-serif;
+    }
+  </style>
 </head>
 
-<body class="bg-gray-100 p-8">
+<body class="bg-gray-50/50 p-4 md:p-8 font-sans antialiased text-gray-900">
   <div class="max-w-6xl mx-auto">
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
       <div>
-        <h1 class="text-2xl font-bold">TikTok Links</h1>
-        <p class="text-sm text-gray-600">Theo dõi nhanh kênh đối thủ & video viral TikTok (filter, phân nhóm, copy nhanh).</p>
+        <h1 class="text-2xl md:text-3xl font-bold font-display text-gray-900">TikTok Links</h1>
+        <p class="text-sm text-gray-500 mt-1">Theo dõi nhanh kênh đối thủ & video viral TikTok (filter, phân nhóm, copy
+          nhanh).</p>
       </div>
       <div class="flex gap-2">
-        <a href="/" class="px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <a href="/"
+          class="px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">
           ← Dashboard
         </a>
       </div>
     </div>
 
     <!-- Tabs + Filters -->
-    <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-6">
+    <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-6 mb-8">
       <div class="flex items-center justify-between gap-3 flex-wrap">
-        <div class="flex gap-1">
+        <div class="flex gap-2">
           <a href="/tiktok-links?tab=viral{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if min_views %}&min_views={{ min_views }}{% endif %}"
-             class="px-3 py-1.5 text-sm rounded font-medium {% if tab != 'competitors' %}bg-gray-900 text-white{% else %}bg-gray-100 text-gray-800 hover:bg-gray-200{% endif %}">
+            class="px-4 py-2 text-sm rounded-lg font-medium transition-colors {% if tab != 'competitors' %}bg-indigo-600 text-white shadow-sm{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
             Viral TikTok
           </a>
           <a href="/tiktok-links?tab=competitors{% if q %}&q={{ q }}{% endif %}"
-             class="px-3 py-1.5 text-sm rounded font-medium {% if tab == 'competitors' %}bg-gray-900 text-white{% else %}bg-gray-100 text-gray-800 hover:bg-gray-200{% endif %}">
+            class="px-4 py-2 text-sm rounded-lg font-medium transition-colors {% if tab == 'competitors' %}bg-indigo-600 text-white shadow-sm{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
             Kênh đối thủ
           </a>
         </div>
@@ -43,13 +74,15 @@
         <input type="hidden" name="tab" value="{{ tab }}">
         <div class="flex items-end gap-3 flex-wrap">
           <div>
-            <label class="block text-xs text-gray-500 mb-1">Search</label>
-            <input name="q" value="{{ q }}" placeholder="URL / @handle / account / page..." class="w-full md:w-[520px] border border-gray-300 rounded px-3 py-2 text-sm" />
+            <label class="block text-xs font-medium text-gray-500 mb-1.5">Search</label>
+            <input name="q" value="{{ q }}" placeholder="URL / @handle / account / page..."
+              class="w-full md:w-[400px] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow" />
           </div>
           {% if tab != 'competitors' %}
           <div>
-            <label class="block text-xs text-gray-500 mb-1">Status</label>
-            <select name="status" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <label class="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+            <select name="status"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow">
               <option value="" {% if not status %}selected{% endif %}>All</option>
               <option value="NEW" {% if status=='NEW' %}selected{% endif %}>NEW</option>
               <option value="DRAFTED" {% if status=='DRAFTED' %}selected{% endif %}>DRAFTED</option>
@@ -58,20 +91,25 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">Min views</label>
-            <input name="min_views" type="number" min="0" step="500" value="{{ min_views }}" class="w-32 border border-gray-300 rounded px-3 py-2 text-sm" />
+            <label class="block text-xs font-medium text-gray-500 mb-1.5">Min views</label>
+            <input name="min_views" type="number" min="0" step="500" value="{{ min_views }}"
+              class="w-32 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow" />
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">Per page</label>
-            <select name="per_page" class="border border-gray-300 rounded px-3 py-2 text-sm">
+            <label class="block text-xs font-medium text-gray-500 mb-1.5">Per page</label>
+            <select name="per_page"
+              class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-shadow">
               <option value="100" {% if per_page==100 %}selected{% endif %}>100</option>
               <option value="200" {% if per_page==200 %}selected{% endif %}>200</option>
               <option value="500" {% if per_page==500 %}selected{% endif %}>500</option>
             </select>
           </div>
           {% endif %}
-          <button class="text-sm bg-gray-900 hover:bg-black text-white px-4 py-2 rounded">Apply</button>
-          <button type="button" id="copyAll" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded">Copy all visible</button>
+          <button
+            class="text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg shadow-sm transition-all hover:-translate-y-0.5">Apply</button>
+          <button type="button" id="copyAll"
+            class="text-sm font-medium bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg shadow-sm transition-all">Copy
+            all visible</button>
           <span id="stat" class="text-xs text-gray-500"></span>
         </div>
       </form>
@@ -90,20 +128,22 @@
         <div class="bg-gray-50 px-4 py-3 flex items-center justify-between">
           <div class="text-sm font-semibold text-gray-800">
             {% if tp != '_unassigned' %}
-              Target: <span class="font-mono text-xs text-gray-700">{{ tp }}</span>
-              {% set meta = page_index.get(tp, {}) %}
-              {% if meta.get('name') %}
-                <span class="ml-2 text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100">{{ meta.get('name') }}</span>
-              {% endif %}
-              {% if meta.get('niches') %}
-                <span class="ml-2 text-xs text-gray-500">Niches: {{ meta.get('niches')|join(', ') }}</span>
-              {% endif %}
+            Target: <span class="font-mono text-xs text-gray-700">{{ tp }}</span>
+            {% set meta = page_index.get(tp, {}) %}
+            {% if meta.get('name') %}
+            <span class="ml-2 text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100">{{
+              meta.get('name') }}</span>
+            {% endif %}
+            {% if meta.get('niches') %}
+            <span class="ml-2 text-xs text-gray-500">Niches: {{ meta.get('niches')|join(', ') }}</span>
+            {% endif %}
             {% else %}
-              Target: <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-100">_unassigned</span>
+            Target: <span
+              class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-100">_unassigned</span>
             {% endif %}
           </div>
           <button class="copyGroup text-xs bg-gray-900 hover:bg-black text-white px-2 py-1 rounded"
-                  data-copy-group="tp:{{ tp }}">Copy group</button>
+            data-copy-group="tp:{{ tp }}">Copy group</button>
         </div>
         <div class="p-4">
           {% for acc_name, urls in accmap.items() %}
@@ -111,15 +151,16 @@
             <div class="flex items-center justify-between mb-1">
               <div class="text-sm font-medium text-gray-900">{{ acc_name }}</div>
               <button class="copyGroup text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
-                      data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Copy account</button>
+                data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Copy account</button>
             </div>
             <div class="grid md:grid-cols-2 gap-2">
               {% for u in urls %}
               <div class="row flex items-center justify-between gap-2 border border-gray-100 rounded px-3 py-2"
-                   data-hay="{{ (tp ~ ' ' ~ acc_name ~ ' ' ~ u) | lower }}">
-                <a class="text-blue-600 hover:underline break-all text-sm" href="{{ u }}" target="_blank" rel="noreferrer">{{ u }}</a>
+                data-hay="{{ (tp ~ ' ' ~ acc_name ~ ' ' ~ u) | lower }}">
+                <a class="text-blue-600 hover:underline break-all text-sm" href="{{ u }}" target="_blank"
+                  rel="noreferrer">{{ u }}</a>
                 <button class="copyOne text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
-                        data-copy="{{ u }}">Copy</button>
+                  data-copy="{{ u }}">Copy</button>
               </div>
               {% endfor %}
             </div>
@@ -158,66 +199,61 @@
           <tbody id="virals" class="bg-white">
             {% for v in viral_rows %}
             <tr class="row border-b text-sm hover:bg-gray-50"
-                data-hay="{{ ((v.status or '') ~ ' ' ~ (v.views or 0) ~ ' ' ~ (v.target_page or '') ~ ' ' ~ (v.url or '') ~ ' ' ~ (v.last_error or '')) | lower }}">
+              data-hay="{{ ((v.status or '') ~ ' ' ~ (v.views or 0) ~ ' ' ~ (v.target_page or '') ~ ' ' ~ (v.url or '') ~ ' ' ~ (v.last_error or '')) | lower }}">
               <td class="px-3 py-2">
-                <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700"
-                      title="{{ v.last_error or '' }}">{{ v.status }}</span>
+                <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-700" title="{{ v.last_error or '' }}">{{
+                  v.status }}</span>
               </td>
               <td class="px-3 py-2 text-gray-800">{{ (v.views or 0) | int }}</td>
               <td class="px-3 py-2">
                 {% if v.target_page %}
-                  {% set purl = v.target_page.rstrip('/') %}
-                  {% set meta = page_index.get(purl, {}) %}
-                  {% if meta.get('name') %}
-                    <span class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100"
-                          title="{{ v.target_page }}">{{ meta.get('name') }}</span>
-                  {% else %}
-                    <span class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100"
-                          title="{{ v.target_page }}">{{ v.target_page }}</span>
-                  {% endif %}
+                {% set purl = v.target_page.rstrip('/') %}
+                {% set meta = page_index.get(purl, {}) %}
+                {% if meta.get('name') %}
+                <span class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100"
+                  title="{{ v.target_page }}">{{ meta.get('name') }}</span>
                 {% else %}
-                  <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-100"
-                        title="Chưa gán page (unassigned)">_unassigned</span>
+                <span class="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-800 border border-indigo-100"
+                  title="{{ v.target_page }}">{{ v.target_page }}</span>
+                {% endif %}
+                {% else %}
+                <span class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-100"
+                  title="Chưa gán page (unassigned)">_unassigned</span>
                 {% endif %}
               </td>
               <td class="px-3 py-2 text-gray-700">
                 {% if v.target_page %}
-                  {% set purl = v.target_page.rstrip('/') %}
-                  {% set meta = page_index.get(purl, {}) %}
-                  {% if meta.get('niches') %}
-                    <span class="text-xs">{{ meta.get('niches')|join(', ') }}</span>
-                  {% else %}
-                    -
-                  {% endif %}
+                {% set purl = v.target_page.rstrip('/') %}
+                {% set meta = page_index.get(purl, {}) %}
+                {% if meta.get('niches') %}
+                <span class="text-xs">{{ meta.get('niches')|join(', ') }}</span>
                 {% else %}
-                  -
+                -
+                {% endif %}
+                {% else %}
+                -
                 {% endif %}
               </td>
               <td class="px-3 py-2 text-gray-700">
                 {% if v.created_at %}
-                  {% set age_s = (request.state.now_ts or 0) - (v.created_at or 0) %}
-                  {% if age_s < 3600 %}
-                    {{ (age_s // 60) | int }}m
-                  {% elif age_s < 86400 %}
-                    {{ (age_s // 3600) | int }}h
-                  {% else %}
-                    {{ (age_s // 86400) | int }}d
-                  {% endif %}
-                {% else %}
-                  -
-                {% endif %}
-              </td>
+                {% set age_s = (request.state.now_ts or 0) - (v.created_at or 0) %}
+                {% if age_s < 3600 %} {{ (age_s // 60) | int }}m {% elif age_s < 86400 %} {{ (age_s // 3600) | int }}h
+                  {% else %} {{ (age_s // 86400) | int }}d {% endif %} {% else %} - {% endif %} </td>
               <td class="px-3 py-2">
-                <a class="text-blue-600 hover:underline break-all" href="{{ v.url }}" target="_blank" rel="noreferrer">{{ v.url }}</a>
+                <a class="text-blue-600 hover:underline break-all" href="{{ v.url }}" target="_blank"
+                  rel="noreferrer">{{ v.url }}</a>
               </td>
               <td class="px-3 py-2 text-right">
                 <button class="copyOne text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
-                        data-copy="{{ v.url }}">Copy</button>
+                  data-copy="{{ v.url }}">Copy</button>
               </td>
             </tr>
             {% endfor %}
             {% if viral_rows|length == 0 %}
-            <tr><td colspan="7" class="p-4 text-center text-sm text-gray-500">Không có video nào theo filter hiện tại.</td></tr>
+            <tr>
+              <td colspan="7" class="p-4 text-center text-sm text-gray-500">Không có video nào theo filter hiện tại.
+              </td>
+            </tr>
             {% endif %}
           </tbody>
         </table>
@@ -229,12 +265,13 @@
         <div class="flex gap-2">
           {% if page > 1 %}
           <a class="px-3 py-1.5 text-sm rounded bg-gray-100 hover:bg-gray-200"
-             href="/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page-1 }}">← Prev</a>
+            href="/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page-1 }}">←
+            Prev</a>
           {% endif %}
-          {% if page < total_pages %}
-          <a class="px-3 py-1.5 text-sm rounded bg-gray-100 hover:bg-gray-200"
-             href="/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page+1 }}">Next →</a>
-          {% endif %}
+          {% if page < total_pages %} <a class="px-3 py-1.5 text-sm rounded bg-gray-100 hover:bg-gray-200"
+            href="/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page+1 }}">
+            Next →</a>
+            {% endif %}
         </div>
       </div>
     </div>
@@ -312,5 +349,5 @@
     updateStat();
   </script>
 </body>
-</html>
 
+</html>
