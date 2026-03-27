@@ -492,11 +492,25 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
         logger.info("Bước 3/3: Bắn Prompt và Ảnh lên Gemini RPA...")
         t0 = time.time()
         # Gọi Gemini
-        raw_json = self.gemini.ask_with_file(prompt, target_image)
-        logger.info("Gemini RPA xong (%.1fs)", time.time() - t0)
+        raw_json = None
+        try:
+            raw_json = self.gemini.ask_with_file(prompt, target_image)
+            logger.info("Gemini RPA xong (%.1fs)", time.time() - t0)
+        except Exception as e:
+            logger.error("Lỗi cự tuyệt (Crash) từ Gemini RPA: %s", e)
 
+        # Lốp dự phòng (API Fallback)
         if not raw_json:
-            logger.error("Gemini không phản hồi")
+            logger.warning("⚠️ Gemini RPA thất bại (Cookie hết hạn hoặc timeout). Kích hoạt lốp dự phòng API Fallback...")
+            try:
+                from app.services.gemini_api import GeminiAPIService
+                api_fallback = GeminiAPIService()
+                raw_json = api_fallback.ask_with_file(prompt, target_image)
+            except Exception as api_err:
+                logger.error("Lỗi kích hoạt API Fallback: %s", api_err)
+                
+        if not raw_json:
+            logger.error("Cả 2 phương án AI (RPA và API) đều không phản hồi.")
             return result
         
         # Parse JSON

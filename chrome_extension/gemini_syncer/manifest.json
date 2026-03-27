@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Cookie Syncer",
+  "version": "1.0",
+  "description": "Syncs Gemini cookies from your local browser to the VPS seamlessly.",
+  "permissions": [
+    "cookies",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.google.com/*",
+    "*://gemini.google.com/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

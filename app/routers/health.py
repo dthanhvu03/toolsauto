@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException, Header
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 import time
@@ -99,6 +99,32 @@ def start_gemini_login():
     except Exception as e:
         logger.error("Failed to launch Chrome: %s", e)
         return HTMLResponse(f"<button id='gemini-badge' class='inline-flex items-center px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200'>Lỗi mở Chrome</button>")
+
+@router.post("/gemini/cookie-sync")
+async def cookie_sync(request: Request, x_api_secret: str = Header(None)):
+    """Receives Gemini cookies from the Chrome Extension to revive RPA instantly."""
+    import app.config as config
+    expected_secret = getattr(config, 'COOKIE_SYNC_SECRET', "vuxuandao2026") # Fallback secret
+    
+    if not x_api_secret or x_api_secret != expected_secret:
+        raise HTTPException(status_code=403, detail="Invalid API Secret")
+        
+    try:
+        cookies = await request.json()
+        if not isinstance(cookies, list):
+            raise HTTPException(status_code=400, detail="Cookies must be a JSON array")
+            
+        with open(COOKIE_PATH, "w") as f:
+            json.dump(cookies, f)
+            
+        if os.path.exists(INVALID_FLAG):
+            os.remove(INVALID_FLAG)
+            
+        logger.info("✅ Đã nhận và cập nhật Cookie Gemini mới từ Chrome Extension!")
+        return {"status": "success", "message": "Cookies synced successfully"}
+    except Exception as e:
+        logger.error("Lỗi khi xử lý cookie sync từ Extension: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/ui", response_class=HTMLResponse)
