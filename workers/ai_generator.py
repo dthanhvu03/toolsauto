@@ -328,9 +328,36 @@ def process_draft_job(db: Session):
                 NotifierService._broadcast(error_msg_template)
                 _check_gemini_circuit(db)
         else:
-            job.status = "DRAFT"
-            job.last_error = f"AI Generation Error: {e}"
-            db.commit()
+            try:
+                job.tries = int(job.tries or 0) + 1
+            except Exception:
+                job.tries = 1
+
+            if int(job.tries) <= 3:
+                job.status = "DRAFT"
+                job.last_error = f"AI Generation Error (try {job.tries}/3): {e}"
+                db.commit()
+                
+                idx = min(GEMINI_INFRA_BACKOFF_LEVEL, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
+                backoff_sec = GEMINI_INFRA_BACKOFF_SCHEDULE_SEC[idx]
+                GEMINI_INFRA_BACKOFF_LEVEL = min(GEMINI_INFRA_BACKOFF_LEVEL + 1, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
+                GEMINI_NEXT_ALLOWED_TS = time.time() + backoff_sec
+                
+                logger.warning("[Job %s] Unhandled exception during AI Generation: %s. Kept as DRAFT. Backoff %ss. Failures: %d/3", job.id, e, backoff_sec, job.tries)
+            else:
+                job.status = "FAILED"
+                job.last_error = f"AI Generation Error repeatedly (>3): {e}. Mark FAILED."
+                db.commit()
+                logger.error("[Job %s] AI Generation Error exceeded retries. Mark FAILED.", job.id)
+                try:
+                    NotifierService._broadcast(
+                        f"🚨 <b>Lỗi AI Generation Liên Tục</b>\n"
+                        f"❌ Job #{job.id}\n"
+                        f"🛑 Đã quá 3 lần retry bị lỗi. Đánh dấu FAILED.\n"
+                        f"⚠️ Lỗi: {str(e)[:100]}"
+                    )
+                except Exception:
+                    pass
     finally:
         CURRENT_JOB_ID = None
         

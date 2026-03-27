@@ -58,7 +58,7 @@ def main():
     options.add_argument("--window-size=1600,900")
     
     try:
-        driver = uc.Chrome(options=options)
+        driver = uc.Chrome(options=options, version_main=146)
     except Exception as e:
         logger.error(f"Lỗi khởi tạo Chrome: {e}")
         return
@@ -108,24 +108,18 @@ def main():
             logger.warning("Không lấy được cookie nào.")
             return
         
-        # Quay lại gemini để verify
-        driver.get("https://gemini.google.com/app")
-        time.sleep(3)
-
-        # Thử verify ngay lập tức bằng chính driver đang mở
-        if verify_cookies(driver):
-            with open(COOKIE_PATH, "w", encoding="utf-8") as f:
-                json.dump(all_cookies, f, indent=2)
-            logger.info("✅ Đã lưu %s cookies vào file: %s", len(all_cookies), COOKIE_PATH)
-            print("\nHOÀN TẤT! Bạn có thể đóng trình duyệt và chạy lại Tool.")
-        else:
-            print("\n❌ CẢNH BÁO: Cookies lấy được có vẻ không hoạt động.")
-            print("Hãy đảm bảo bạn đã đăng nhập thành công và nhìn thấy khung chat trước khi bấm Enter.")
-            retry = input("Bạn có muốn lưu đại không? (y/n): ")
-            if retry.lower() == 'y':
-                with open(COOKIE_PATH, "w", encoding="utf-8") as f:
-                    json.dump(all_cookies, f, indent=2)
-                logger.info("Đã lưu cookies theo yêu cầu (có thể không chạy được).")
+        # Gộp xong, lưu cookie luôn. Không cần verify lại vì đã pass vòng while ở trên.
+        with open(COOKIE_PATH, "w", encoding="utf-8") as f:
+            json.dump(all_cookies, f, indent=2)
+            
+        # Clear invalid flag khi có cookies mới hợp lệ
+        try:
+            os.remove("/home/vu/toolsauto/gemini_cookies_invalid")
+        except FileNotFoundError:
+            pass
+            
+        logger.info("✅ Đã lưu %s cookies vào file: %s", len(all_cookies), COOKIE_PATH)
+        print("\nHOÀN TẤT! Đã đóng trình duyệt tự động.")
 
     finally:
         logger.info("Đóng trình duyệt...")
