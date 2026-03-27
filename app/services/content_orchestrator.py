@@ -282,8 +282,8 @@ class ContentOrchestrator:
         """Pipeline Multimodal Decomposition: (Collage + Transcript) → Gemini → Caption."""
         result = {"caption": "", "hashtags": [], "keywords": []}
 
-        if not os.path.exists(video_path):
-            logger.error("File media không tồn tại: %s", video_path)
+        if not video_path or not os.path.exists(video_path):
+            logger.error("File media không tồn tại hoặc None: %s", video_path)
             return result
 
         ext = os.path.splitext(video_path)[1].lower()
@@ -395,6 +395,19 @@ Audio Transcript (có thể bắt chữ bị sai do giọng AI):
             prompt_intro += f"\n\n**[💡 QUAN TRỌNG: CẢM HỨNG VIRAL TỪ TIÊU ĐỀ GỐC CỦA VIDEO]**\n" \
                             f"Video này từng lọt top trending nhờ tiêu đề: \"{viral_title}\".\n" \
                             f"Hãy bám sát và biến tấu nội dung dựa trên ý chính của tiêu đề này (phóng đại thêm mức độ hấp dẫn, nhưng không copy y hệt)."
+
+        # Bóc tách BOOST_CONTEXT (Smart Boost cho FB page đang viral)
+        boost_match = re.search(r'### BOOST_CONTEXT:\s*(.*?)\s*###', context)
+        boost_context = boost_match.group(1) if boost_match else ""
+
+        if boost_context:
+            prompt_intro += (
+                f"\n\n**[🚀 AUTO-BOOST CONTEXT: PAGE ĐANG VIRAL]**\n"
+                f"{boost_context}\n"
+                f"Hãy viết caption PHẢI PHÙ HỢP với phong cách của page. "
+                f"QUAN TRỌNG: Thuật toán ưu tiên 'Completion Rate'. Do đó dòng caption đầu tiên (Hook) "
+                f"phải cực kỳ gây tò mò, giật gân, hoặc tranh cãi nhẹ để giữ chân người xem 15-20s đầu tiên!"
+            )
             
         context_block = f"\n\n[INPUT VARIABLES]\n- Tên/Loại sản phẩm: Sản phẩm tương ứng trong ảnh/video\n- Phong cách/Tệp KH mục tiêu: {style_guide}"
 
@@ -403,17 +416,37 @@ Audio Transcript (có thể bắt chữ bị sai do giọng AI):
             niches_str = ", ".join(page_niches) if page_niches else "chưa xác định"
             context_block += f"\n- Fanpage đăng bài: {page_name or 'Không rõ'}\n- Lĩnh vực/Niche của page: {niches_str}"
 
+        # ─── New V3 Component: Multi-Brain Intelligence Factory ───
+        from app.services.brain_factory import BrainFactory
+        
+        # Determine Primary Niche for Specialized Persona
+        primary_niche = "general"
+        if page_niches:
+            primary_niche = page_niches[0] # Pick the first niche as primary
+        elif "lamdep" in (page_name or "").lower() or "da_dep" in (page_name or "").lower():
+            primary_niche = "beauty" # Fallback detection from name
+        
+        brain_persona = BrainFactory.get_persona_prompt(primary_niche)
+        visual_hook_logic = BrainFactory.get_visual_hook_instruction()
+        algo_secrets = BrainFactory.get_engagement_secrets()
+
         # ─── Fix G: Prompt placeholder trung tính, tránh ám thị domain sai ───
         mega_prompt = f"""# MEGA PROMPT: CHUYÊN GIA CONTENT FACEBOOK ADS & ACCESSTRADE
+        
+[AI BRAIN SPECIALIZATION]
+{brain_persona}
 
 [ROLE]
 Bạn là một Chuyên gia Digital Marketing & Copywriter thực chiến tại Việt Nam lọt top 1% trong mảng Facebook Ads và Affiliate (Accesstrade). Nhiệm vụ của bạn là viết caption bán hàng, review sản phẩm hoặc kịch bản video ngắn cực kỳ thu hút, nhắm góc nhìn sâu sắc, tối ưu tỷ lệ chuyển đổi (CVR) và tuân thủ tuyệt đối quy định của Meta.
 
 [CONTEXT & MISSION]
 {prompt_intro}
+{visual_hook_logic}
 
 [TARGET AUDIENCE TONE OF VOICE]
 {tone_of_voice}
+
+{algo_secrets}
 
 [FACEBOOK ADS COMPLIANCE & BEST PRACTICES]
 - TUYỆT ĐỐI KHÔNG dùng từ ngữ quy chụp thuộc tính cá nhân (Ví dụ: CẤM nói "Bạn đang bị mụn?", "Bạn đang béo?"). Hãy chuyển sang góc nhìn khách quan (Ví dụ: "Giải quyết tình trạng mụn...", "Mẹo giúp vóc dáng thon gọn...").
@@ -447,33 +480,55 @@ YÊU CẦU ĐẦU RA (BẮT BUỘC TRẢ VỀ CHÍNH XÁC ĐỊNH DẠNG JSON SA
 {{{{
   "caption": "điền nội dung caption phù hợp với quy tắc ở trên vào đây",
   "hashtags": ["#Tag1", "#Tag2", "#Tag3", "#Tag4", "#Tag5"],
-  "keywords": ["keyword 1", "keyword 2", "keyword 3"]
+  "keywords": ["keyword 1", "keyword 2", "keyword 3"],
+  "reasoning": "giải thích ngắn gọn về chiến lược visual hook và persona đã chọn"
 }}}}
 ```
-"""
+
+Hãy bắt đầu viết JSON ngay bây giờ:"""
 
         prompt = mega_prompt + "\n\n" + context_block + "\n\n" + output_rules
 
         logger.info("Bước 3/3: Bắn Prompt và Ảnh lên Gemini RPA...")
         t0 = time.time()
-        if target_image:
-            response = self.gemini.ask_with_file(prompt, target_image)
-        else:
-            response = self.gemini.ask(prompt)
+        # Gọi Gemini
+        raw_json = self.gemini.ask_with_file(prompt, target_image)
         logger.info("Gemini RPA xong (%.1fs)", time.time() - t0)
 
-        if not response:
+        if not raw_json:
             logger.error("Gemini không phản hồi")
             return result
+        
+        # Parse JSON
+        import json as _json
+        try:
+            # Clean possible markdown wrap
+            clean_json = raw_json.strip()
+            if clean_json.startswith("```json"):
+                clean_json = clean_json.split("```json")[-1].split("```")[0].strip()
+            elif clean_json.startswith("```"):
+                clean_json = clean_json.split("```")[-1].split("```")[0].strip()
+            
+            data = _json.loads(clean_json)
+            result["caption"] = data.get("caption", "")
+            result["hashtags"] = data.get("hashtags", [])
+            result["keywords"] = data.get("keywords", [])
+            
+            # ─── New V4 Step: Save AI Strategic Reasoning ───
+            if hasattr(self, 'current_job') and self.current_job:
+                self.current_job.ai_reasoning = data.get("reasoning", "")
+                logger.info("AI Reasoning captured: %s", self.current_job.ai_reasoning)
 
-        result = self._parse_response(response, strict_json=True)
+        except Exception as e:
+            logger.error("Lỗi parse JSON từ Gemini: %s. Raw: %s", e, raw_json)
+            # Fallback to old parsing if new parsing fails
+            result = self._parse_response(raw_json, strict_json=True)
 
         # Triệt để: nếu Gemini không trả đúng JSON schema → ép 1 vòng "self-repair" (không re-upload file).
         # Điều kiện: response không hề chứa dấu hiệu JSON keys, hoặc parse ra caption rỗng.
-        if not self._is_valid_caption_schema_json(response):
+        if not self._is_valid_caption_schema_json(json.dumps(result, ensure_ascii=False)): # Use json.dumps to ensure it's a string representation of the result dict
             try:
-                repair_prompt = self._build_repair_prompt(response)
-
+                repair_prompt = self._build_repair_prompt(raw_json) # Use raw_json for repair
                 t1 = time.time()
                 repaired = self.gemini.ask(repair_prompt)
                 logger.info("Self-repair JSON xong (%.1fs)", time.time() - t1)
@@ -487,6 +542,32 @@ YÊU CẦU ĐẦU RA (BẮT BUỘC TRẢ VỀ CHÍNH XÁC ĐỊNH DẠNG JSON SA
         # STRICT: fail-closed if still not valid JSON (do not let fallback fill garbage)
         if not self._is_valid_caption_schema_json(json.dumps(result, ensure_ascii=False)):
             raise OutputContractViolation("Gemini did not return valid JSON caption schema")
+
+        # ─── Anti-Hallucination Guard: detect prompt echo-back ───
+        caption_lower = (result.get("caption") or "").lower()
+        HALLUCINATION_MARKERS = [
+            "chuyên gia content facebook ads",
+            "chuyên gia digital marketing",
+            "accesstrade đã sẵn sàng",
+            "hỗ trợ bạn tối ưu ngân sách",
+            "cho tôi thông tin",
+            "lên ngay dàn bài",
+            "bạn muốn vít ads",
+            "chiến dịch affiliate",
+            "tư duy a/b testing",
+            "chào vũ",
+        ]
+        hallucination_hits = sum(1 for m in HALLUCINATION_MARKERS if m in caption_lower)
+        if hallucination_hits >= 2:
+            logger.error(
+                "HALLUCINATION DETECTED (%d markers matched). Caption is prompt echo-back. Rejecting.",
+                hallucination_hits,
+            )
+            raise OutputContractViolation(
+                f"Gemini hallucinated prompt echo-back ({hallucination_hits} markers). "
+                f"Caption preview: {caption_lower[:120]}"
+            )
+
         logger.info("Hoàn tất: %s...", result["caption"][:50] if result["caption"] else "(empty)")
         return result
 

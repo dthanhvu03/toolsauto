@@ -45,6 +45,12 @@ def _get_runtime_int(db, key: str, fallback: int) -> int:
         return fallback
 
 _last_alert_ts: dict[str, float] = {}
+_last_insights_ts = 0
+_last_summary_ts = 0
+_last_discovery_ts = 0
+_last_boost_ts = 0
+
+STRATEGIC_BOOST_INTERVAL_SEC = 7200 # 2 giờ
 
 
 def _pending_backlog(db: Session) -> int:
@@ -364,10 +370,34 @@ def _cleanup_orphaned_virals(db: Session):
                 orphans_fixed += 1
                 
         if orphans_fixed > 0:
+            logger.info("🧹 Auto-Cleaned %d orphaned viral materials (target page deleted).", orphans_fixed)
+
+        # 2. Smart Cleanup: Tự động đào thải video ế (NEW > 48h)
+        import os
+        stale_threshold = int(time.time()) - (48 * 3600)
+        stale_virals = db.query(ViralMaterial).filter(
+            ViralMaterial.status == "NEW",
+            ViralMaterial.created_at < stale_threshold
+        ).all()
+        
+        stale_count = 0
+        for v in stale_virals:
+            if v.media_path and os.path.exists(v.media_path):
+                try:
+                    os.remove(v.media_path)
+                except Exception:
+                    pass
+            db.delete(v)
+            stale_count += 1
+            
+        if stale_count > 0:
+            logger.info("🗑️ Smart Cleanup: Đã xóa %d video ế (nằm kho quá 48h) để dọn dung lượng.", stale_count)
+
+        if orphans_fixed > 0 or stale_count > 0:
             db.commit()
-            logger.info("🧹 Auto-Cleaned %d orphaned viral materials (target page deleted). Reset to round-robin.", orphans_fixed)
+
     except Exception as e:
-        logger.error("Error cleaning orphaned virals: %s", e)
+        logger.error("Error cleaning orphaned/stale virals: %s", e)
 
 def _check_daily_summary(db):
     """Gửi báo cáo tổng hợp ngày nếu đến giờ."""
@@ -396,15 +426,66 @@ def _process_viral_materials(db):
     """
     from app.database.models import ViralMaterial, Job, Account
 
-    limit_n = max(1, _get_runtime_int(db, "MAINT_VIRAL_LIMIT", config.MAINT_VIRAL_LIMIT))
-    materials = db.query(ViralMaterial).filter(
-        ViralMaterial.status.in_(["NEW", "REUP"])
-    ).order_by(ViralMaterial.views.desc()).limit(limit_n).all()
+    # Use a fair per-account distribution rather than a global limit
+    # This prevents an account with 1M+ view videos from starving other accounts
+    active_accounts = db.query(Account.id).filter(Account.is_active == True).all()
+    active_acc_ids = [acc.id for acc in active_accounts]
+    
+    limit_per_acc = max(1, _get_runtime_int(db, "MAINT_VIRAL_LIMIT", config.MAINT_VIRAL_LIMIT)) // max(1, len(active_acc_ids))
+    if limit_per_acc < 2:
+        limit_per_acc = 2
+
+    materials = []
+    # First, always grab REUP materials (manual/boosted) since they are high priority
+    reups = db.query(ViralMaterial).filter(ViralMaterial.status == "REUP").all()
+    materials.extend(reups)
+    
+    # Then, fairly grab NEW materials per account and per target_page to prevent starvation
+    for acc_id in active_acc_ids:
+        acc = db.query(Account).filter(Account.id == acc_id).first()
+        if not acc:
+            continue
+            
+        # Determine all target pages this account is responsible for
+        pages = set()
+        if acc.target_pages_list:
+            pages.update(acc.target_pages_list)
+        if acc.target_page:
+            pages.add(acc.target_page)
+            
+        if not pages:
+            # Fallback for accounts without explicit target pages
+            acc_materials = db.query(ViralMaterial).filter(
+                ViralMaterial.status == "NEW",
+                ViralMaterial.scraped_by_account_id == acc_id
+            ).order_by(ViralMaterial.views.desc()).limit(limit_per_acc).all()
+            materials.extend(acc_materials)
+        else:
+            limit_per_page = max(1, limit_per_acc // len(pages))
+            for page_url in pages:
+                # Fetch top materials specifically for this page
+                page_materials = db.query(ViralMaterial).filter(
+                    ViralMaterial.status == "NEW",
+                    ViralMaterial.scraped_by_account_id == acc_id,
+                    ViralMaterial.target_page == page_url
+                ).order_by(ViralMaterial.views.desc()).limit(limit_per_page).all()
+                materials.extend(page_materials)
+                
+            # Allow fallback for videos scraped without a specific target_page
+            general_materials = db.query(ViralMaterial).filter(
+                ViralMaterial.status == "NEW",
+                ViralMaterial.scraped_by_account_id == acc_id,
+                ViralMaterial.target_page.is_(None)
+            ).order_by(ViralMaterial.views.desc()).limit(limit_per_acc).all()
+            materials.extend(general_materials)
+
+    # Sort the final combined list by views so the highest views across the picked batch get processed first
+    materials.sort(key=lambda m: (m.status != "REUP", -m.views))
 
     if not materials:
         return
 
-    logger.info("[VIRAL] Found %d materials to process.", len(materials))
+    logger.info("[VIRAL] Found %d materials to process (fair distribution).", len(materials))
 
     # Lấy account mặc định (fallback nếu material không chỉ định acc)
     default_account = db.query(Account).filter(
@@ -661,11 +742,84 @@ def _process_viral_materials(db):
             safe_title = (mat.title or "").replace('"', "'").strip()
             caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###" if safe_title else f"[AI_GENERATE] Context: Video {mat.platform} {mat.views} views."
 
-            # Resolve target page: explicit from material, or round-robin from account
+            # Inject BOOST_CONTEXT nếu material có target_page (từ Smart Boost hoặc manual reup)
             resolved_target = mat.target_page
-            if not resolved_target and target_account.target_pages_list:
-                resolved_target = target_account.pick_next_target_page(db)
-                logger.info("[VIRAL] Round-robin → page '%s' for acc '%s'", resolved_target, target_account.name)
+            if resolved_target and target_account:
+                try:
+                    from app.services.strategic import PageStrategicService
+                    page_niches = PageStrategicService._lookup_page_niches(db, target_account.id, resolved_target)
+                    top_posts_summary = PageStrategicService._get_top_posts_summary(db, resolved_target)
+                    if page_niches or top_posts_summary:
+                        niches_str = ",".join(page_niches) if page_niches else "general"
+                        boost_ctx = f"niche={niches_str}"
+                        if top_posts_summary:
+                            boost_ctx += f", top_posts=[{top_posts_summary}]"
+                        caption_metadata += f" ### BOOST_CONTEXT: {boost_ctx} ###"
+                except Exception as bc_err:
+                    logger.warning("[VIRAL] Could not build BOOST_CONTEXT: %s", bc_err)
+
+            # Resolve target page: always prioritize mat.target_page to prevent mixing niches
+            if mat.target_page:
+                resolved_target = mat.target_page
+            elif target_account.target_pages_list and len(target_account.target_pages_list) > 1:
+                # Check if all pages have the identical niches. If not, do NOT round-robin generic videos!
+                pages = target_account.target_pages_list
+                niche_map = target_account.page_niches_map or {}
+                
+                can_round_robin = True
+                if niche_map and pages:
+                    first_niche = set(niche_map.get(pages[0], []))
+                    for p in pages[1:]:
+                        if set(niche_map.get(p, [])) != first_niche:
+                            can_round_robin = False
+                            break
+                            
+                if can_round_robin:
+                    # Safe to distribute jobs evenly
+                    resolved_target = target_account.pick_next_target_page(db)
+                    logger.info("[VIRAL] Safe round-robin → page '%s' for acc '%s'", resolved_target, target_account.name)
+                else:
+                    # UNSAFE! Niches differ. Use Keyword Matching.
+                    title_lower = (mat.title or "").lower()
+                    best_page = pages[0]
+                    best_score = -1
+                    
+                    if title_lower and niche_map:
+                        for p in pages:
+                            niches = niche_map.get(p, [])
+                            score = 0
+                            for n in niches:
+                                n_lower = n.lower()
+                                if n_lower in title_lower:
+                                    score += 3
+                                words = n_lower.split()
+                                for w in words:
+                                    if len(w) > 3 and w in title_lower:
+                                        score += 1
+                            if score > best_score:
+                                best_score = score
+                                best_page = p
+                    
+                    if best_score > 0:
+                        resolved_target = best_page
+                        logger.info("[VIRAL] Keyword Match (score %d) → page '%s' for acc '%s'", best_score, resolved_target, target_account.name)
+                    else:
+                        resolved_target = pages[0]
+                        logger.info("[VIRAL] No keyword match. Locked generic video to primary page '%s' for acc '%s'", resolved_target, target_account.name)
+            elif target_account.target_pages_list:
+                resolved_target = target_account.target_pages_list[0]
+            else:
+                resolved_target = target_account.target_page
+
+            # Accelerated Freshness Pipeline (2026 Algo Upgrade)
+            # Nếu là Auto-Boost (có BOOST_CONTEXT) -> Đăng gần như ngay lập tức để bắt sóng
+            # Chú ý: Cần cộng thêm jitter (1-5 phút) để tránh bị Meta đánh cờ 'Spam/Bot' vì đăng quá chính xác.
+            if "BOOST_CONTEXT" in caption_metadata:
+                jitter = random.randint(60, 300)
+                calc_schedule = int(time.time()) + jitter
+                logger.info(f"[VIRAL] Using Accelerated Freshness scheduling for BOOST job (+{jitter}s)")
+            else:
+                calc_schedule = int(time.time()) + random.randint(300, 3600)
 
             new_job = Job(
                 platform="facebook",
@@ -673,7 +827,7 @@ def _process_viral_materials(db):
                 media_path=media_path,
                 caption=caption_metadata,
                 status="AWAITING_STYLE",
-                schedule_ts=int(time.time()) + random.randint(300, 3600),
+                schedule_ts=calc_schedule,
                 target_page=resolved_target
             )
             db.add(new_job)
@@ -795,6 +949,22 @@ DISCOVERY_NIGHT_END = 5     # 5 AM
 DISCOVERY_MAX_KEYWORDS = 3
 DISCOVERY_DELAY_BETWEEN_SEC = 600  # 10 phút giữa mỗi keyword
 
+# ── Page Insights Scraper (chạy 12h/lần) ──────────────────────────────
+_last_insights_ts: float = 0
+INSIGHTS_INTERVAL_SEC = 43200  # 12 giờ
+
+def _scrape_page_insights():
+    global _last_insights_ts
+    now = time.time()
+    if (now - _last_insights_ts) < INSIGHTS_INTERVAL_SEC:
+        return
+    _last_insights_ts = now
+    logger.info("🕒 Starting Page Insights Scraper...")
+    try:
+        subprocess.Popen([sys.executable, "scripts/scrape_insights.py"])
+    except Exception as e:
+        logger.error(f"Failed to start scrape_insights.py: {e}")
+
 
 def _run_competitor_discovery(db):
     """Scan TikTok hashtags to discover new competitor channels.
@@ -873,6 +1043,24 @@ def _run_competitor_discovery(db):
         logger.info("[DISCOVERY] Nightly scan complete. No new channels above threshold.")
 
 
+def _run_strategic_boost(db):
+    """
+    Autonomous Boosting: Detect exploding pages and trigger reups.
+    Runs every 2 hours.
+    """
+    global _last_boost_ts
+    now = time.time()
+    if (now - _last_boost_ts) < STRATEGIC_BOOST_INTERVAL_SEC:
+        return
+    _last_boost_ts = now
+    logger.info("🕒 Starting Autonomous Strategic Boosting Scan...")
+    try:
+        from app.services.strategic import PageStrategicService
+        PageStrategicService.run_auto_boost(db)
+    except Exception as e:
+        logger.error(f"[STRATEGIC] Auto-boost failed: {e}")
+
+
 def run_loop():
     """Main Maintenance loop."""
     global RUNNING, CURRENT_POLLER
@@ -932,6 +1120,9 @@ def run_loop():
                 
                 # 4. Daily Summary Report
                 _check_daily_summary(db)
+                
+                # 5. Autonomous Strategic Boosting (Auto-Push)
+                _run_strategic_boost(db)
 
                 # Alerts (queue pressure + resources) with cooldown
                 _maybe_alert_queue_and_resources(db)
@@ -955,6 +1146,9 @@ def run_loop():
 
                 # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap
                 _purge_zombies()
+                
+                # 8. Run Page Insights Scraper (12h interval)
+                _scrape_page_insights()
                 
             if RUNNING:
                 # Sleep for 5 minutes between maintenance sweeps
