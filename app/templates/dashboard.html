@@ -181,10 +181,9 @@
                                 Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="jobs-table-body" class="bg-white divide-y divide-gray-200"
-                        hx-get="/jobs/table?status=active&page=1" hx-trigger="every 10s" hx-swap="outerHTML">
-                        {% include 'fragments/jobs_table.html' %}
-                    </tbody>
+                    {% set current_status = 'active' %}
+                    {% set current_page = 1 %}
+                    {% include 'fragments/jobs_table.html' %}
                 </table>
             </div>
         </div>
