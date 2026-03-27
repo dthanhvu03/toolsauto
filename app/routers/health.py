@@ -86,9 +86,10 @@ def start_gemini_login():
     """Starts the login script on the server display."""
     try:
         env = os.environ.copy()
-        env["DISPLAY"] = ":0"
+        env["DISPLAY"] = ":99"
+        python_bin = str(config.BASE_DIR / "venv" / "bin" / "python")
         subprocess.Popen(
-            [sys.executable, "scripts/login_gemini_bypass.py"], 
+            [python_bin, "scripts/login_gemini_bypass.py"], 
             env=env, 
             cwd=str(config.BASE_DIR),
             start_new_session=True
