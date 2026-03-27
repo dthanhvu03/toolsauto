@@ -114,6 +114,12 @@ def scrape_pages_for_account(account_id: int, profile_path: str, account_name: s
                     if not name or len(name) > 100 or len(name) < 2:
                         continue
 
+                    # Filter out notifications and garbage
+                    if "chưa đọc" in name.lower() or "unread" in name.lower() or "bạn đang hoàn thành" in name.lower():
+                        continue
+                    if any(x in clean_url.lower() for x in ["/videos/", "/posts/", "/reel/", "/photo/", "/groups/"]):
+                        continue
+
                     # Skip non-page items and specific UI elements
                     skip_words = ["tạo", "create", "quảng cáo", "ads", "trang", "page", "xem thêm", "see more", "meta business suite", "hộp thư", "thông tin chi tiết"]
                     if any(w in name.lower() for w in skip_words) and len(name) < 20:
@@ -160,6 +166,11 @@ def scrape_pages_for_account(account_id: int, profile_path: str, account_name: s
                                 pass
 
                             if name and 2 < len(name) < 100:
+                                if "chưa đọc" in name.lower() or "unread" in name.lower() or "bạn đang hoàn thành" in name.lower():
+                                    continue
+                                if any(x in clean_url.lower() for x in ["/videos/", "/posts/", "/reel/", "/photo/", "/groups/"]):
+                                    continue
+                                
                                 # Additional global filters
                                 skip_urls = ["business.facebook.com", "/latest/", "/login", "/reg/", "/privacy/", "/about/", "/help/", "/policies/", "developers.facebook", "l.facebook.com", "/watch/", "/lite/", "/careers/"]
                                 skip_names = ["meta business suite", "hộp thư", "thông tin chi tiết", "inbox", "insights", "sign up", "log in", "messenger", "facebook lite", "video", "privacy policy", "privacy centre", "about", "developers", "careers", "cookies", "adchoices", "terms", "help"]
@@ -206,6 +217,11 @@ def scrape_pages_for_account(account_id: int, profile_path: str, account_name: s
 
                                 # This is likely a managed page name
                                 if 2 < len(text) < 100:
+                                    if "chưa đọc" in text.lower() or "unread" in text.lower() or "bạn đang hoàn thành" in text.lower():
+                                        continue
+                                    if "video ngắn" in text.lower() or "bình luận" in text.lower():
+                                        continue
+                                        
                                     # We don't have URL from switcher, we'll need to navigate
                                     pages_found.append({"name": text, "url": ""})
                                     logger.info("    📄 Found page (switcher): %s", text)
