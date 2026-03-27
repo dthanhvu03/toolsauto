@@ -18,13 +18,12 @@
                     </svg>
                 </button>
             </div>
-            <form id="account-name-edit-{{account.id}}" class="hidden flex flex-wrap items-center gap-1"
-                hx-post="/accounts/{{account.id}}/rename" hx-target="#account-{{account.id}}" hx-swap="outerHTML">
+            <div id="account-name-edit-{{account.id}}" class="hidden flex flex-wrap items-center gap-1">
                 <input id="account-name-input-{{account.id}}" type="text" name="name" value="{{ account.name }}"
-                    required
                     class="border border-gray-300 rounded px-2 py-0.5 text-xs w-28 focus:ring-1 focus:ring-indigo-500 outline-none">
-                <button type="submit" class="p-1 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                    title="Save">
+                <button type="button" hx-post="/accounts/{{account.id}}/rename" hx-target="#account-{{account.id}}"
+                    hx-swap="outerHTML" hx-include="#account-name-input-{{account.id}}"
+                    class="p-1 text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="Save">
                     <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                     </svg>
@@ -37,7 +36,7 @@
                             d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
-            </form>
+            </div>
             <div class="flex flex-wrap gap-1">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold
                     {% if account.platform == 'facebook' %}bg-blue-100 text-blue-700
