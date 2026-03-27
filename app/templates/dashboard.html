@@ -18,11 +18,12 @@
             <div class="flex items-center gap-2">
                 <!-- Gemini Badge -->
                 <div id="gemini-badge" hx-get="/health/gemini/ping" hx-trigger="load">
-                    <button class="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-500 animate-pulse">
+                    <button
+                        class="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-500 animate-pulse">
                         ⌛ Đang check Gemini...
                     </button>
                 </div>
-                
+
                 <a href="/app"
                     class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 border border-indigo-600 rounded-lg shadow-sm text-sm font-medium text-white hover:bg-indigo-700 hover:shadow transition-all">
                     SaaS UI (beta)
@@ -30,6 +31,14 @@
                 <a href="/tiktok-links"
                     class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 hover:shadow transition-all">
                     TikTok Links
+                </a>
+                <a href="/insights"
+                    class="inline-flex items-center gap-2 px-4 py-2 text-white bg-gradient-to-r from-green-500 to-teal-500 rounded-lg shadow-sm text-sm font-medium hover:from-green-600 hover:to-teal-600 hover:shadow transition-all">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                    </svg>
+                    Page Insights
                 </a>
                 <a href="/health"
                     class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 hover:shadow transition-all">
@@ -55,7 +64,8 @@
 
         <!-- Queue / Backlog Summary (auto-refresh) -->
         <div id="queue-panel" hx-get="/queue/panel" hx-trigger="load, every 30s" hx-swap="outerHTML">
-            <div class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-8 text-gray-500 text-sm animate-pulse">
+            <div
+                class="bg-white border border-gray-200 rounded-lg shadow-sm p-5 mb-8 text-gray-500 text-sm animate-pulse">
                 Đang tải Queue / Backlog...
             </div>
         </div>

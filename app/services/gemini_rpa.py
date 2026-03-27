@@ -278,6 +278,12 @@ class GeminiRPAService:
 
         if "signin" in driver.current_url.lower() or driver.find_elements(By.CSS_SELECTOR, ".sign-in-button, a[href*='ServiceLogin']"):
             logger.error("Cookie hết hạn! Vui lòng đăng nhập lại.")
+            # Ghi flag để UI dashboard hiển thị Expired ngay lập tức
+            try:
+                with open("/home/vu/toolsauto/gemini_cookies_invalid", "w") as f:
+                    f.write(str(int(time.time())))
+            except Exception:
+                pass
             raise Exception("Gemini cookies expired. Vui lòng đăng nhập lại (Chạy: python scripts/login_gemini_bypass.py)")
 
         # 2. Gửi prompt

@@ -75,9 +75,9 @@ REUP_VIDEOS_PER_PAGE_PER_DAY = int(os.getenv("REUP_VIDEOS_PER_PAGE_PER_DAY", "0"
 
 # Maintenance: viral processing & alert thresholds
 MAINT_VIRAL_LIMIT = int(os.getenv("MAINT_VIRAL_LIMIT", "10"))           # Số video viral xử lý mỗi cycle
-ALERT_PENDING_THRESHOLD = int(os.getenv("ALERT_PENDING_THRESHOLD", "10"))
-ALERT_DRAFT_THRESHOLD = int(os.getenv("ALERT_DRAFT_THRESHOLD", "20"))
-ALERT_VIRAL_NEW_THRESHOLD = int(os.getenv("ALERT_VIRAL_NEW_THRESHOLD", "50"))
+ALERT_PENDING_THRESHOLD = int(os.getenv("ALERT_PENDING_THRESHOLD", "30"))
+ALERT_DRAFT_THRESHOLD = int(os.getenv("ALERT_DRAFT_THRESHOLD", "50"))
+ALERT_VIRAL_NEW_THRESHOLD = int(os.getenv("ALERT_VIRAL_NEW_THRESHOLD", "500"))
 
 # Ensure directories exist
 for d in [CONTENT_DIR, DONE_DIR, FAILED_DIR, REUP_DIR, PROFILES_DIR, LOGS_DIR]:
