@@ -63,21 +63,47 @@
             </div>
         </div>
         {% endif %}
+
+        <!-- V4: Visible Intelligence Section -->
+        {% if job.brain_used or job.ai_reasoning %}
+        <div class="mt-2 relative inline-block group/brain">
+            <div
+                class="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 border border-indigo-200 rounded text-[9px] text-indigo-600 font-bold cursor-help shadow-sm hover:shadow-indigo-200/50 transition-all animate-pulse">
+                <span>🧠</span>
+                <span>{{ job.brain_used or 'SmartBrain' }}</span>
+            </div>
+            <!-- Tooltip Reasoning -->
+            <div
+                class="absolute left-0 top-full mt-1 bg-white border border-indigo-100 text-gray-700 text-[11px] rounded-lg shadow-2xl w-64 p-3 z-[110] invisible opacity-0 transition-opacity duration-200 group-hover/brain:visible group-hover/brain:opacity-100 pointer-events-none flex flex-col gap-2 ring-4 ring-indigo-500/10">
+                <div class="font-bold text-indigo-600 flex items-center gap-1 border-b border-indigo-50 pb-1">
+                    <span class="text-sm">🧠</span> Chiến Lược Phản Biện (AI Reasoning)
+                </div>
+                <div class="italic leading-relaxed">
+                    "{{ job.ai_reasoning or 'Chuyên gia AI đang phân phối nội dung dựa trên thuật toán viral mới nhất.'
+                    }}"
+                </div>
+                <div class="text-[9px] text-gray-400 mt-1 flex justify-between items-center">
+                    <span>Target: {{ job.brain_used }} Persona</span>
+                    <span class="px-1 bg-green-50 text-green-600 rounded">High Confidence</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </td>
     <td class="px-4 py-2 text-sm align-top pt-3">
         {% set text = job.status %}
         {% if job.status == 'DONE' %}
-          {% set tone = 'green' %}
+        {% set tone = 'green' %}
         {% elif job.status in ['PENDING','AWAITING_STYLE','DRAFT'] %}
-          {% set tone = 'amber' %}
+        {% set tone = 'amber' %}
         {% elif job.status in ['RUNNING','AI_PROCESSING'] %}
-          {% set tone = 'blue' %}
+        {% set tone = 'blue' %}
         {% elif job.status == 'FAILED' %}
-          {% set tone = 'red' %}
+        {% set tone = 'red' %}
         {% elif job.status == 'CANCELLED' %}
-          {% set tone = 'slate' %}
+        {% set tone = 'slate' %}
         {% else %}
-          {% set tone = 'default' %}
+        {% set tone = 'default' %}
         {% endif %}
         {% include 'ui/badge.html' with context %}
     </td>
