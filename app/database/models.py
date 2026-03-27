@@ -271,6 +271,8 @@ class Job(Base):
     schedule_ts = Column(Integer, index=True)
     target_page = Column(String, nullable=True) # Override account-level target_page if set
     ai_style = Column(String, default="short", nullable=True) # Style of caption AI should generate
+    brain_used = Column(String, nullable=True) # Specialized persona used (e.g., BeautyExpert)
+    ai_reasoning = Column(String, nullable=True) # Strategic reasoning behind this specific caption
     
     # State tracking
     status = Column(String, default="PENDING", index=True) # AWAITING_STYLE, DRAFT, PENDING, RUNNING, DONE, FAILED
@@ -429,3 +431,28 @@ class RuntimeSettingAudit(Base):
     new_value = Column(String, nullable=True)
     action = Column(String, nullable=False)  # UPSERT|RESET
     updated_by = Column(String, nullable=True)
+
+class PageInsight(Base):
+    """
+    Theo dõi tăng trưởng của Page theo thời gian (Time-series data).
+    Data này dùng để vẽ biểu đồ và bảng xếp hạng trên Dashboard Insights.
+    """
+    __tablename__ = "page_insights"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), index=True, nullable=True)
+    platform = Column(String, default="facebook", index=True)
+    page_url = Column(String, index=True, nullable=False)
+    page_name = Column(String, nullable=True)
+    
+    post_url = Column(String, index=True, nullable=False)
+    caption = Column(String, nullable=True)
+    published_date = Column(String, nullable=True)
+    
+    views = Column(Integer, default=0, index=True)
+    likes = Column(Integer, default=0)
+    comments = Column(Integer, default=0)
+    shares = Column(Integer, default=0)
+    
+    recorded_at = Column(Integer, default=now_ts, index=True) # Thời điểm cào data
+

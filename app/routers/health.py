@@ -37,12 +37,16 @@ def health_check_json(db: Session = Depends(get_db)):
         return {"status": "error", "error": str(e)}
 
 COOKIE_PATH = "/home/vu/toolsauto/gemini_cookies.json"
+INVALID_FLAG = "/home/vu/toolsauto/gemini_cookies_invalid"
 
 @router.get("/gemini/ping", response_class=HTMLResponse)
 def ping_gemini_ui():
     """Checks the gemini cookies and returns an HTMX badge."""
     is_valid = False
-    if os.path.exists(COOKIE_PATH):
+    # 1. Check flag file (runtime detection — ưu tiên cao nhất)
+    if os.path.exists(INVALID_FLAG):
+        is_valid = False  # Đã bị Google revoke ở runtime
+    elif os.path.exists(COOKIE_PATH):
         try:
             with open(COOKIE_PATH, "r") as f:
                 cookies = json.load(f)
