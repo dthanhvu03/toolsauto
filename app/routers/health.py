@@ -36,8 +36,11 @@ def health_check_json(db: Session = Depends(get_db)):
         logger.error(f"Health check failed: {e}")
         return {"status": "error", "error": str(e)}
 
-COOKIE_PATH = "/home/vu/toolsauto/gemini_cookies.json"
-INVALID_FLAG = "/home/vu/toolsauto/gemini_cookies_invalid"
+import app.config as config
+import sys
+
+COOKIE_PATH = str(config.BASE_DIR / "gemini_cookies.json")
+INVALID_FLAG = str(config.BASE_DIR / "gemini_cookies_invalid")
 
 @router.get("/gemini/ping", response_class=HTMLResponse)
 def ping_gemini_ui():
@@ -85,9 +88,9 @@ def start_gemini_login():
         env = os.environ.copy()
         env["DISPLAY"] = ":0"
         subprocess.Popen(
-            ["/home/vu/toolsauto/venv/bin/python", "scripts/login_gemini_bypass.py"], 
+            [sys.executable, "scripts/login_gemini_bypass.py"], 
             env=env, 
-            cwd="/home/vu/toolsauto",
+            cwd=str(config.BASE_DIR),
             start_new_session=True
         )
         return HTMLResponse('''
