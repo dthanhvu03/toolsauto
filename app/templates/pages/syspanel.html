@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Panel - Auto Publisher</title>
+    <!-- Tailwind for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX for interactions -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+
+<body class="bg-gray-100 p-8 min-h-screen">
+    <div class="max-w-4xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+            <h1 class="text-3xl font-bold flex items-center gap-3">
+                <a href="/" class="text-gray-400 hover:text-indigo-600 transition-colors" title="Back to Dashboard">
+                    <svg class="w-6 h-6 border-2 border-transparent rounded-full hover:border-indigo-600" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                </a>
+                ⚙️ System WebPanel
+            </h1>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                <div class="text-sm font-medium text-gray-500 mb-1">CPU Usage</div>
+                <div class="text-2xl font-bold text-gray-800">{{ cpu_percent }}%</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                <div class="text-sm font-medium text-gray-500 mb-1">RAM Usage</div>
+                <div class="text-2xl font-bold text-gray-800">{{ mem_used }} / {{ mem_total }} GB</div>
+                <div class="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                    <div class="bg-indigo-500 h-1.5 rounded-full" style="width: {{ mem_percent }}%"></div>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                <div class="text-sm font-medium text-gray-500 mb-1">Disk Usage</div>
+                <div class="text-2xl font-bold text-gray-800">{{ disk_used }} / {{ disk_total }} GB</div>
+                <div class="w-full bg-gray-200 rounded-full h-1.5 mt-2">
+                    <div class="bg-indigo-500 h-1.5 rounded-full" style="width: {{ disk_percent }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
+            <h2 class="text-lg font-semibold mb-4 text-gray-800">Server Actions</h2>
+            <div class="flex flex-wrap gap-4">
+                <button hx-post="/syspanel/cmd/git-pull" hx-target="#terminal-output" hx-swap="innerHTML"
+                    onclick="document.getElementById('terminal-output').innerHTML='<span class=\\'animate-pulse\\'>Running git pull...</span>';"
+                    class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition-all">
+                    ⬇️ Git Pull (Cập nhật)
+                </button>
+                <button hx-post="/syspanel/cmd/cleanup-db" hx-target="#terminal-output" hx-swap="innerHTML"
+                    onclick="document.getElementById('terminal-output').innerHTML='<span class=\\'animate-pulse\\'>Running DB Cleanup...</span>';"
+                    class="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition-all">
+                    🧹 Dọn Data Rác
+                </button>
+                <button hx-post="/syspanel/cmd/pm2-restart" hx-target="#terminal-output" hx-swap="innerHTML"
+                    onclick="document.getElementById('terminal-output').innerHTML='<span class=\\'animate-pulse\\'>Restarting system via PM2...</span>';"
+                    class="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg shadow-sm font-medium transition-all">
+                    ♻️ Restart PM2
+                </button>
+            </div>
+        </div>
+
+        <!-- Terminal Output -->
+        <div class="bg-[#1e1e1e] rounded-xl overflow-hidden shadow-inner border border-gray-800">
+            <div class="bg-[#2d2d2d] px-4 py-2 flex items-center gap-2 border-b border-gray-700">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <span class="text-xs text-gray-400 ml-2 font-mono">Terminal Output</span>
+            </div>
+            <div class="p-5 font-mono text-sm text-green-400 min-h-[200px] max-h-[400px] overflow-y-auto w-full">
+                <div id="terminal-output">Sẵn sàng nhận lệnh.</div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
