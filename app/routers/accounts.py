@@ -177,9 +177,13 @@ def sync_account_pages(account_id: int, request: Request, db: Session = Depends(
         return HTMLResponse(status_code=404)
         
     def _run_scraper(acc_id):
+        import sys
         script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "scrape_pages.py"))
         env = os.environ.copy()
-        subprocess.run([os.environ.get("VIRTUAL_ENV", "") + "/bin/python" if "VIRTUAL_ENV" in os.environ else "python", script_path, "--account", str(acc_id)], env=env)
+        env["DISPLAY"] = ":99"
+        # Use sys.executable so it always uses the correct venv Python, never bare 'python'
+        python_bin = str(__import__("app.config", fromlist=["BASE_DIR"]).BASE_DIR / "venv" / "bin" / "python")
+        subprocess.run([python_bin, script_path, "--account", str(acc_id)], env=env, cwd=str(__import__("app.config", fromlist=["BASE_DIR"]).BASE_DIR))
         
     # Run in background to avoid blocking the UI
     thread = threading.Thread(target=_run_scraper, args=(account_id,))
