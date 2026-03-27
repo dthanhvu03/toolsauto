@@ -1,38 +1,38 @@
 <div id="worker-status-panel"
-    class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6 flex flex-col sm:flex-row justify-between items-center w-full min-w-full"
+    class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-8 flex flex-col xl:flex-row justify-between xl:items-center w-full"
     hx-get="/worker/status" hx-trigger="every 5s">
-    <div class="flex-1 flex items-center gap-6 mb-4 sm:mb-0">
-        <div>
-            <h3 class="text-sm font-medium text-gray-500">Worker Status</h3>
-            <div class="flex items-center mt-1">
+    <div class="flex-1 flex flex-wrap items-center gap-4 xl:gap-6 mb-5 xl:mb-0">
+        <div class="min-w-[120px]">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Worker Status</h3>
+            <div class="flex items-center mt-1.5">
                 {% if state.worker_status == 'RUNNING' %}
                 <span class="flex h-3 w-3 relative mr-2">
                     <span
                         class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                     <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
-                <span class="text-lg font-bold text-gray-900">RUNNING</span>
+                <span class="text-base font-bold text-gray-900">RUNNING</span>
                 {% else %}
                 <span class="flex h-3 w-3 relative mr-2">
                     <span class="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
                 </span>
-                <span class="text-lg font-bold text-gray-900">PAUSED</span>
+                <span class="text-base font-bold text-gray-900">PAUSED</span>
                 {% endif %}
             </div>
         </div>
 
-        <div class="pl-4 border-l border-gray-200">
-            <h3 class="text-sm font-medium text-gray-500">Heartbeat</h3>
-            <p class="text-gray-900 mt-1">
+        <div class="pl-0 sm:pl-4 sm:border-l border-gray-100 min-w-[100px]">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Heartbeat</h3>
+            <p class="text-gray-900 mt-1.5 text-sm font-medium">
                 {% if state.heartbeat_at %}
                 {% set diff = now - state.heartbeat_at %}
                 {% if diff < 60 %} {{ diff }}s ago {% else %} {{ diff // 60 }}m ago {% endif %} {% else %} Never {%
                     endif %} </p>
         </div>
 
-        <div class="pl-4 border-l border-gray-200">
-            <h3 class="text-sm font-medium text-gray-500">Active Job</h3>
-            <p class="text-gray-900 mt-1 font-mono">
+        <div class="pl-0 sm:pl-4 sm:border-l border-gray-100 min-w-[100px]">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Job</h3>
+            <p class="text-gray-900 mt-1.5 font-mono text-sm font-medium">
                 {% if state.current_job_id %}
                 #{{ state.current_job_id }}
                 {% else %}
@@ -41,40 +41,44 @@
             </p>
         </div>
 
-        <div class="pl-4 border-l border-gray-200">
-            <h3 class="text-sm font-medium text-gray-500">Mode</h3>
-            <div class="mt-1 flex items-center">
+        <div class="pl-0 sm:pl-4 sm:border-l border-gray-100 min-w-[100px]">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Mode</h3>
+            <div class="mt-1.5 flex items-center">
                 {% if state.safe_mode %}
-                <span class="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">SAFE MODE</span>
+                <span
+                    class="px-2 py-1 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">SAFE
+                    MODE</span>
                 {% else %}
-                <span class="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">NORMAL</span>
+                <span
+                    class="px-2 py-1 rounded-md text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">NORMAL</span>
                 {% endif %}
             </div>
         </div>
 
-        <div class="pl-4 border-l border-gray-200">
-            <h3 class="text-sm font-medium text-gray-500">Engagement</h3>
-            <div class="mt-1">
+        <div class="pl-0 sm:pl-4 sm:border-l border-gray-100 min-w-[180px] flex-1">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Engagement</h3>
+            <div class="mt-1.5">
                 {% if state.engagement_status == 'ENGAGING' %}
-                <div class="flex items-center gap-1.5">
-                    <span class="flex h-2.5 w-2.5 relative">
+                <div class="flex items-center gap-2">
+                    <span class="flex h-2.5 w-2.5 relative shrink-0">
                         <span
                             class="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500"></span>
                     </span>
-                    <span class="text-xs font-medium text-purple-700 truncate" style="max-width:180px;"
+                    <span class="text-sm font-medium text-purple-700 truncate" style="max-width: 100%;"
                         title="{{ state.engagement_detail or '' }}">
                         {{ state.engagement_detail or 'Đang tương tác...' }}
                     </span>
                 </div>
                 {% else %}
-                <span class="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-500">Idle</span>
+                <span
+                    class="px-2 py-1 rounded-md text-xs font-medium bg-gray-50 text-gray-500 border border-gray-200">Idle</span>
                 {% endif %}
             </div>
         </div>
     </div>
 
-    <div class="flex items-center space-x-2">
+    <div class="flex flex-wrap items-center gap-2 mt-2 xl:mt-0">
         {% if state.worker_status == 'RUNNING' %}
         <button
             class="px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
