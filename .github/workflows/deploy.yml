@@ -1,0 +1,39 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Navigate to project folder
+            cd /home/${{ secrets.VPS_USER }}/toolsauto
+
+            # Fetch latest changes and reset
+            git fetch origin
+            git reset --hard origin/${{ github.ref_name }}
+
+            # Update Python dependencies
+            source venv/bin/activate
+            pip install -r requirements.txt
+
+            # Update Node dependencies (if package.json changed)
+            npm install || true
+
+            # Restart all PM2 workers
+            pm2 restart all
+            pm2 save
