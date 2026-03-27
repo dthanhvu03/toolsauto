@@ -137,6 +137,24 @@ def reset_account_failures(account_id: int, request: Request, db: Session = Depe
         {"request": request, "account": account, "now": int(time.time())}
     )
 
+@router.post("/{account_id}/rename", response_class=HTMLResponse)
+def rename_account(
+    account_id: int, 
+    request: Request, 
+    name: str = Form(...), 
+    db: Session = Depends(get_db)
+):
+    account = AccountService.get_account(db, account_id)
+    if account and name and name.strip():
+        account.name = name.strip()
+        db.commit()
+        db.refresh(account)
+        
+    return templates.TemplateResponse(
+        "fragments/account_row.html", 
+        {"request": request, "account": account, "now": int(time.time())}
+    )
+
 @router.post("/{account_id}/delete", response_class=HTMLResponse)
 def delete_account(account_id: int, request: Request, db: Session = Depends(get_db)):
     try:
