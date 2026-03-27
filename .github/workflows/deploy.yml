@@ -23,6 +23,10 @@ jobs:
             # Navigate to project folder
             cd /home/${{ secrets.VPS_USER }}/toolsauto
 
+            # Backup database before deploying
+            mkdir -p data/backups
+            cp data/auto_publisher.db data/backups/auto_publisher_$(date +%Y%m%d_%H%M%S).db || true
+
             # Fetch latest changes and reset
             git fetch origin
             git reset --hard origin/${{ github.ref_name }}
