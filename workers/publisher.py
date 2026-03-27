@@ -129,11 +129,33 @@ def process_single_job(db: Session):
         posted_today = q.count()
         
         if posted_today >= effective_daily_limit:
-            logger.info("[Job %s] Daily limit (%s) reached for page '%s'. Requeuing for tomorrow.", 
-                        job.id, effective_daily_limit, job.target_page or "default")
-            job.status = "PENDING"
-            job.schedule_ts = today_start + 86400 + 3600 # Tomorrow 1 AM
-            db.commit()
+            # Try to reassign to another page that still has quota
+            reassigned = False
+            if job.account and hasattr(job.account, 'target_pages_list'):
+                alt_pages = [p for p in (job.account.target_pages_list or []) if p != job.target_page]
+                for alt_page in alt_pages:
+                    alt_count = db.query(Job).filter(
+                        Job.target_page == alt_page,
+                        Job.status == "DONE",
+                        Job.finished_at >= today_start
+                    )
+                    if not int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0):
+                        alt_count = alt_count.filter(Job.account_id == job.account_id)
+                    if alt_count.count() < effective_daily_limit:
+                        logger.info("[Job %s] Page '%s' maxed out. Redirecting → '%s'",
+                                    job.id, job.target_page, alt_page)
+                        job.target_page = alt_page
+                        job.status = "PENDING"
+                        db.commit()
+                        reassigned = True
+                        break
+
+            if not reassigned:
+                logger.info("[Job %s] Daily limit (%s) reached for ALL pages. Requeuing for tomorrow.",
+                            job.id, effective_daily_limit)
+                job.status = "PENDING"
+                job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
+                db.commit()
             return True
 
     # Xin ý kiến giấc ngủ (Human Rest Cycle)

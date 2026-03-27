@@ -68,3 +68,4 @@ node_modules/
 content/thumbnails/*.mp3
 
 content/reup/
+*.db
