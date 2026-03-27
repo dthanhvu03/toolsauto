@@ -34,7 +34,7 @@
                         Controls</th>
                 </tr>
             </thead>
-            <tbody id="accounts-table-body" hx-get="/accounts/table" hx-trigger="load, every 10s" hx-swap="innerHTML">
+            <tbody id="accounts-table-body" hx-get="/accounts/table" hx-trigger="load, every 60s" hx-swap="innerHTML">
                 {% for account in accounts %}
                 {% include "fragments/account_row.html" %}
                 {% endfor %}
