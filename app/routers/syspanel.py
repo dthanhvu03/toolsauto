@@ -191,6 +191,60 @@ def frag_content_stats(request: Request):
     })
 
 
+@router.get("/fragments/gemini-cookies", response_class=HTMLResponse)
+def frag_gemini_cookies(request: Request):
+    cookie_path = os.path.join(APP_DIR, "gemini_cookies.json")
+    invalid_flag = os.path.join(APP_DIR, "gemini_cookies_invalid")
+
+    has_invalid_flag = os.path.exists(invalid_flag)
+    file_exists = os.path.exists(cookie_path)
+    cookies = []
+    file_size = 0
+    file_mtime = None
+    key_cookies = []
+    error = None
+
+    if file_exists:
+        try:
+            file_size = round(os.path.getsize(cookie_path) / 1024, 1)
+            mtime = os.path.getmtime(cookie_path)
+            file_mtime = datetime.fromtimestamp(mtime, tz=ZoneInfo(TIMEZONE)).strftime("%H:%M:%S %d/%m/%Y")
+            with open(cookie_path) as f:
+                cookies = json.load(f)
+            # Extract key cookies info
+            KEY_NAMES = ["__Secure-1PSID", "__Secure-1PSIDTS", "__Secure-3PSID", "SID", "HSID", "SSID", "APISID", "SAPISID"]
+            now_ts = time.time()
+            for c in cookies:
+                if c.get("name") in KEY_NAMES:
+                    expiry = c.get("expiry", 0)
+                    expired = expiry > 0 and expiry < now_ts
+                    exp_str = datetime.fromtimestamp(expiry, tz=ZoneInfo(TIMEZONE)).strftime("%d/%m/%Y") if expiry else "session"
+                    key_cookies.append({
+                        "name": c.get("name"),
+                        "domain": c.get("domain", ""),
+                        "expiry_str": exp_str,
+                        "expired": expired,
+                        "value_preview": (c.get("value") or "")[:20] + "…",
+                    })
+        except Exception as e:
+            error = str(e)
+
+    overall_ok = file_exists and not has_invalid_flag and len(cookies) > 0 and not error
+
+    return templates.TemplateResponse("fragments/syspanel/gemini_cookies.html", {
+        "request": request,
+        "file_exists": file_exists,
+        "has_invalid_flag": has_invalid_flag,
+        "file_size_kb": file_size,
+        "file_mtime": file_mtime,
+        "total_cookies": len(cookies),
+        "key_cookies": key_cookies,
+        "overall_ok": overall_ok,
+        "error": error,
+        "cookie_path": cookie_path,
+    })
+
+
 @router.get("/fragments/screenshots", response_class=HTMLResponse)
 def frag_screenshots(request: Request):
     shots = _get_screenshots()
@@ -386,3 +440,21 @@ def cmd_cancel_stuck():
         return _html_output(f"❌ Error: {e}")
     finally:
         db.close()
+
+
+@router.post("/cmd/clear-gemini-cookies", response_class=HTMLResponse)
+def cmd_clear_gemini_cookies():
+    """Delete Gemini cookie file and invalid flag."""
+    cookie_path = os.path.join(APP_DIR, "gemini_cookies.json")
+    invalid_flag = os.path.join(APP_DIR, "gemini_cookies_invalid")
+    msgs = []
+    if os.path.exists(cookie_path):
+        os.unlink(cookie_path)
+        msgs.append("✅ Đã xóa gemini_cookies.json")
+    else:
+        msgs.append("ℹ️ gemini_cookies.json không tồn tại")
+    if os.path.exists(invalid_flag):
+        os.unlink(invalid_flag)
+        msgs.append("✅ Đã xóa gemini_cookies_invalid flag")
+    return _html_output("\n".join(msgs))
+

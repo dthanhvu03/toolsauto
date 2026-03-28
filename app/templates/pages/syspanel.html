@@ -282,7 +282,24 @@
             </div>
         </div>
 
-        <!-- ─── 8. Screenshots ─────────────────────────────────────────────── -->
+        <!-- ─── 8. Gemini Cookies ───────────────────────────────────────────── -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-base font-semibold font-display text-gray-900">🍪 Gemini Cookie Status</h2>
+                <button hx-get="/syspanel/fragments/gemini-cookies" hx-target="#gemini-cookies-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                    ↻ Refresh
+                </button>
+            </div>
+            <div id="gemini-cookies-container" hx-get="/syspanel/fragments/gemini-cookies" hx-trigger="load"
+                hx-swap="innerHTML">
+                <div class="text-sm text-gray-400 animate-pulse">Loading cookie info...</div>
+            </div>
+        </div>
+
+        <!-- ─── 9. Screenshots ─────────────────────────────────────────────── -->
+
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-base font-semibold font-display text-gray-900">📷 Bot Screenshots</h2>
