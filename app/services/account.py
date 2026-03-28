@@ -251,9 +251,13 @@ class AccountService:
             raise ValueError(f"Account {account_id} not found.")
             
         account.consecutive_fatal_failures = 0
+        account.login_status = "ACTIVE"
+        account.login_error = None
+        account.is_active = True
+        
         db.commit()
         db.refresh(account)
-        logger.info(f"Reset consecutive_fatal_failures for account {account_id}")
+        logger.info(f"Full Rescue Reset performed for account {account_id}")
         return account
 
     @staticmethod
