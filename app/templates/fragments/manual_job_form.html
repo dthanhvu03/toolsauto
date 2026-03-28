@@ -1,86 +1,69 @@
 <form id="manual-job-form" hx-post="/jobs/manual/create" hx-encoding="multipart/form-data"
-    hx-target="#manual-job-response" hx-swap="innerHTML"
-    hx-on::after-request="document.getElementById('manualJobDialog').close(); window.refreshJobs && window.refreshJobs(1);"
-    class="flex flex-col">
+    hx-target="#manual-job-response" hx-swap="innerHTML" class="flex flex-col">
 
     <input type="hidden" name="account_id" id="manual-acc-id" value="{{ pages[0].account_id if pages else '' }}">
 
     {% if not pages %}
-    <!-- No active accounts -->
-    <div class="px-6 py-10 text-center">
-        <div class="text-4xl mb-3">⚠️</div>
-        <p class="font-semibold text-gray-700 mb-1">Không có tài khoản nào đang hoạt động</p>
-        <p class="text-sm text-gray-400">Vào <a href="/app/accounts" class="text-indigo-600 underline">Accounts</a> →
-            đăng nhập và kích hoạt tài khoản trước nhé!</p>
+    <div class="px-6 py-8 text-center">
+        <p class="text-2xl mb-2">⚠️</p>
+        <p class="font-semibold text-gray-700 text-sm mb-1">Không có tài khoản nào đang hoạt động</p>
+        <p class="text-xs text-gray-400">Vào <a href="/app/accounts" class="text-indigo-600 underline">Accounts</a> →
+            đăng nhập trước nhé!</p>
     </div>
     {% else %}
+    <div class="px-5 py-4 flex flex-col gap-4">
 
-    <!-- Scrollable body -->
-    <div class="px-6 py-5 flex flex-col gap-5 overflow-y-auto" style="max-height: 60vh">
-
-        <!-- Target Page selector -->
-        <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">🎯 Target Page</label>
+        <!-- Target Page -->
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">🎯 Target Page</label>
             <div class="relative">
                 <select name="target_page"
                     onchange="document.getElementById('manual-acc-id').value = this.options[this.selectedIndex].dataset.accId"
-                    class="w-full appearance-none bg-white border border-gray-200 rounded-xl px-4 py-3 pr-10 text-sm text-gray-800 font-medium shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition cursor-pointer">
+                    class="app-select w-full pr-8 appearance-none">
                     {% for p in pages %}
                     <option value="{{ p.page_url }}" data-acc-id="{{ p.account_id }}">
                         {{ p.page_name }} — {{ p.account_name }}
                     </option>
                     {% endfor %}
                 </select>
-                <div class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </div>
+                <span
+                    class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">▾</span>
             </div>
         </div>
 
         <!-- Media Upload -->
-        <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">📎 Media <span
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">📎 Media <span
                     class="text-gray-300 font-normal normal-case">(tùy chọn)</span></label>
-            <label for="media-upload" id="drop-zone"
-                class="flex flex-col items-center justify-center gap-2 w-full border-2 border-dashed border-gray-200 rounded-xl p-6 cursor-pointer bg-gray-50 hover:bg-indigo-50 hover:border-indigo-400 transition-all group">
-                <div id="drop-icon" class="text-3xl text-gray-300 group-hover:text-indigo-400 transition-colors">📁
-                </div>
-                <p id="drop-label" class="text-sm text-gray-400 group-hover:text-indigo-600 font-medium">Click hoặc kéo
-                    thả ảnh / video vào đây</p>
-                <p class="text-xs text-gray-300">MP4, MOV, JPG, PNG...</p>
+            <label for="media-upload"
+                class="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-200 rounded-lg p-5 cursor-pointer bg-gray-50 hover:bg-indigo-50 hover:border-indigo-400 transition-colors">
+                <span id="drop-icon" class="text-2xl">📁</span>
+                <span id="drop-label" class="text-xs text-gray-400">Click hoặc kéo thả ảnh / video vào đây</span>
                 <input type="file" name="media" id="media-upload" accept="image/*,video/*" class="hidden"
                     onchange="const f=this.files[0]; if(f){document.getElementById('drop-label').textContent=f.name; document.getElementById('drop-icon').textContent='✅';}">
             </label>
         </div>
 
-        <!-- Caption Textarea -->
-        <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1.5">💬 Caption <span
+        <!-- Caption -->
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">💬 Caption <span
                     class="text-gray-300 font-normal normal-case">(để trống → AI tự viết)</span></label>
-            <textarea name="caption" rows="3" placeholder="Nhập nội dung caption bạn muốn đăng..."
-                class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition resize-none placeholder-gray-300 shadow-sm"></textarea>
+            <textarea name="caption" rows="2" placeholder="Nhập nội dung caption muốn đăng..."
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:ring-1 focus:ring-indigo-400 outline-none resize-none placeholder-gray-300"></textarea>
         </div>
 
         <div id="manual-job-response"></div>
     </div>
 
     <!-- Footer -->
-    <div class="px-6 py-4 border-t border-gray-100 bg-gray-50/70 rounded-b-2xl flex items-center justify-between gap-3">
-        <p class="text-xs text-gray-400 flex items-center gap-1">
-            <span class="text-amber-500">⚡</span> Job sẽ được đưa lên <strong>đầu hàng chờ</strong>
-        </p>
+    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+        <p class="text-xs text-gray-400"><span class="text-amber-500">⚡</span> Ưu tiên tối đa</p>
         <div class="flex gap-2">
             <button type="button" onclick="document.getElementById('manualJobDialog').close()"
-                class="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 transition">
-                Hủy
-            </button>
-            <button type="submit" id="manual-submit-btn"
-                onclick="this.innerHTML='Đang xử lý...'; this.classList.add('opacity-60'); this.disabled=true;"
-                class="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-all hover:-translate-y-0.5">
-                🚀 Đăng ngay!
-            </button>
+                class="app-btn text-sm px-4">Hủy</button>
+            <button type="submit"
+                onclick="this.textContent='Đang xử lý...'; this.disabled=true; this.classList.add('opacity-60');"
+                class="app-btn app-btn-primary text-sm px-5">🚀 Đăng ngay!</button>
         </div>
     </div>
     {% endif %}
