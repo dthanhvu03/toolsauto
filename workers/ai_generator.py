@@ -118,10 +118,18 @@ def process_draft_job(db: Session):
                     page_niches = niches if isinstance(niches, list) else []
                     break
 
+        # Fetch available affiliate keywords from DB to let AI match products
+        try:
+            from app.database.models import AffiliateLink
+            aff_keywords = [link.keyword for link in db.query(AffiliateLink).all()]
+        except Exception:
+            aff_keywords = []
+
         try:
             ai_result = orchestrator.generate_caption(
                 target_video, style=ai_style, context=user_context,
                 page_name=page_name, page_niches=page_niches,
+                affiliate_keywords=aff_keywords
             )
         except OutputContractViolation as e:
             # Strict JSON mode: do not save prose/options. Retry later with backoff (max 3).
@@ -178,6 +186,23 @@ def process_draft_job(db: Session):
             
             # Pass AI generated keywords to notifier temporarily
             job._ai_keywords = ai_result.get("keywords", [])
+            
+            # Xử lý Affiliate Link Injector
+            matched_aff_kw = ai_result.get("affiliate_keyword")
+            if matched_aff_kw and matched_aff_kw in aff_keywords:
+                # Find the corresponding template
+                try:
+                    from app.database.models import AffiliateLink
+                    aff_link = db.query(AffiliateLink).filter(AffiliateLink.keyword == matched_aff_kw).first()
+                    if aff_link:
+                        # Thay thế placeholder [LINK] bằng URL thực tế
+                        comment_text = aff_link.comment_template.replace("[LINK]", aff_link.url)
+                        # Gán thẳng vào auto_comment_text của Job
+                        job.auto_comment_text = comment_text
+                        logger.info(f"[{job.id}] Auto-injected Affiliate Link for keyword: {matched_aff_kw}")
+                except Exception as e:
+                    logger.error(f"[{job.id}] Error attaching Affiliate Link: {e}")
+
             
             db.commit()
             logger.info("[Job %s] AI Generation complete. Awaiting user approval.", job.id)

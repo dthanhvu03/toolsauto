@@ -85,7 +85,7 @@ def get_job_row(job_id: int, request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404)
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/{job_id}/retry", response_class=HTMLResponse)
@@ -99,7 +99,7 @@ def retry_job(job_id: int, request: Request, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/{job_id}/reset-draft", response_class=HTMLResponse)
@@ -113,7 +113,7 @@ def reset_job_to_draft(job_id: int, request: Request, db: Session = Depends(get_
     job = db.query(Job).filter(Job.id == job_id).first()
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/{job_id}/cancel", response_class=HTMLResponse)
@@ -127,7 +127,7 @@ def cancel_job(job_id: int, request: Request, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/{job_id}/reschedule", response_class=HTMLResponse)
@@ -155,7 +155,7 @@ def reschedule_job(
     job = db.query(Job).filter(Job.id == job_id).first()
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/{job_id}/force-run", response_class=HTMLResponse)
@@ -169,7 +169,7 @@ def force_run_job(job_id: int, request: Request, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id).first()
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/{job_id}/approve", response_class=HTMLResponse)
@@ -183,7 +183,7 @@ def approve_job(job_id: int, request: Request, db: Session = Depends(get_db)):
         JobService._log_event(db, job_id, "INFO", "User approved AI Draft")
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/{job_id}/caption", response_class=HTMLResponse)
@@ -201,7 +201,7 @@ def update_job_caption(
         JobService._log_event(db, job_id, "INFO", "User edited Draft caption")
     return templates.TemplateResponse(
         "fragments/job_row.html", 
-        {"request": request, "job": job}
+        {"request": request, "job": job, "now": int(time.time())}
     )
 
 @router.post("/create", response_class=HTMLResponse)

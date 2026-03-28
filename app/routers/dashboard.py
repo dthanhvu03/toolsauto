@@ -52,13 +52,25 @@ def _tail_file(path: str, lines: int = 200) -> str:
     return "\n".join(parts[-lines:]) + ("\n" if not text.endswith("\n") else "")
 
 
-_PM2_LOG_DIR = Path("/home/vu/.pm2/logs")
+_PM2_LOG_DIR_ROOT = Path("/root/.pm2/logs")
+_PM2_LOG_DIR_USER = Path("/home/vu/.pm2/logs")
+
 _PM2_LOG_MAP: dict[str, dict[str, str]] = {
     "AI_Generator": {"out": "AI-Generator-out.log", "error": "AI-Generator-error.log"},
     "FB_Publisher": {"out": "FB-Publisher-out.log", "error": "FB-Publisher-error.log"},
     "Maintenance": {"out": "Maintenance-out.log", "error": "Maintenance-error.log"},
     "Web_Dashboard": {"out": "Web-Dashboard-out.log", "error": "Web-Dashboard-error.log"},
+    "ai-worker": {"out": "ai-worker-out.log", "error": "ai-worker-error.log"},
+    "publisher": {"out": "publisher-out.log", "error": "publisher-error.log"},
+    "maintenance": {"out": "maintenance-out.log", "error": "maintenance-error.log"},
+    "web": {"out": "web-out.log", "error": "web-error.log"},
 }
+
+def _get_log_path(fname: str) -> Path:
+    if _PM2_LOG_DIR_ROOT.exists():
+        p = _PM2_LOG_DIR_ROOT / fname
+        if p.exists(): return p
+    return _PM2_LOG_DIR_USER / fname
 
 
 _TS_PREFIX_RE = re.compile(
@@ -90,7 +102,7 @@ def _tail_all(kind: str, lines: int) -> str:
     merged: list[tuple[float | None, int, str]] = []
     for idx, proc in enumerate(_PM2_LOG_MAP.keys()):
         fname = _PM2_LOG_MAP[proc][kind]
-        path = str(_PM2_LOG_DIR / fname)
+        path = str(_get_log_path(fname))
         chunk = _tail_file(path, lines=lines)
         for raw_line in (chunk.splitlines() if chunk else []):
             line = f"[{proc}] {raw_line}"
@@ -468,6 +480,12 @@ def app_accounts(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("pages/app_accounts.html", {"request": request})
 
 
+@router.get("/app/pages", response_class=HTMLResponse)
+def app_pages(request: Request):
+    """SaaS UI: Target Pages CRUD editor."""
+    return templates.TemplateResponse("pages/app_pages.html", {"request": request})
+
+
 @router.get("/app/logs", response_class=HTMLResponse)
 def app_logs(request: Request):
     """SaaS UI: log viewer (PM2 logs)."""
@@ -475,7 +493,7 @@ def app_logs(request: Request):
         "pages/app_logs.html",
         {
             "request": request,
-            "default_proc": request.query_params.get("proc") or "AI_Generator",
+            "default_proc": request.query_params.get("proc") or "ai-worker",
             "default_kind": request.query_params.get("kind") or "out",
             "default_lines": int(request.query_params.get("lines") or 200),
             "procs": ["ALL", *list(_PM2_LOG_MAP.keys())],
@@ -484,7 +502,7 @@ def app_logs(request: Request):
 
 
 @router.get("/app/logs/tail", response_class=PlainTextResponse)
-def app_logs_tail(proc: str = "AI_Generator", kind: str = "out", lines: int = 200):
+def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200):
     """Return last N lines for whitelisted pm2 log files."""
     proc = (proc or "").strip()
     kind = (kind or "").strip()
@@ -495,7 +513,7 @@ def app_logs_tail(proc: str = "AI_Generator", kind: str = "out", lines: int = 20
     if kind not in ("out", "error"):
         return PlainTextResponse(f"[invalid kind] {kind}\n", status_code=400)
     fname = _PM2_LOG_MAP[proc][kind]
-    path = str(_PM2_LOG_DIR / fname)
+    path = str(_get_log_path(fname))
     return PlainTextResponse(_tail_file(path, lines=lines))
 
 
@@ -539,7 +557,7 @@ def _match_filters(line: str, level: str | None, q: str | None) -> bool:
 
 @router.get("/app/logs/stream")
 def app_logs_stream(
-    proc: str = "AI_Generator",
+    proc: str = "ai-worker",
     kind: str = "out",
     level: str = "",
     q: str = "",
@@ -569,7 +587,7 @@ def app_logs_stream(
             states: list[tuple[str, Path, int]] = []
             for p in _PM2_LOG_MAP.keys():
                 fname = _PM2_LOG_MAP[p][kind]
-                path = _PM2_LOG_DIR / fname
+                path = _get_log_path(fname)
                 try:
                     start_pos = path.stat().st_size
                 except Exception:
@@ -591,7 +609,7 @@ def app_logs_stream(
                     await asyncio.sleep(0.3)
         else:
             fname = _PM2_LOG_MAP[proc][kind]
-            path = _PM2_LOG_DIR / fname
+            path = _get_log_path(fname)
             try:
                 pos = path.stat().st_size
             except Exception:

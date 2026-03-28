@@ -1,0 +1,12 @@
+<div class="flex flex-col gap-3">
+    <p class="text-xs text-gray-500">Thay đổi đây sẽ ảnh hưởng ngay đến cách bot viết caption từ job tiếp theo.</p>
+    <form hx-post="/syspanel/persona" hx-target="#persona-result" hx-swap="innerHTML" class="flex flex-col gap-2">
+        <textarea name="system_prompt" rows="6"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-xs font-mono leading-relaxed focus:ring-2 focus:ring-indigo-500 outline-none resize-y bg-gray-50">{{ prompt }}</textarea>
+        <div id="persona-result"></div>
+        <button type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-lg text-sm shadow-sm transition-all hover:-translate-y-0.5 self-end">
+            💾 Lưu Persona
+        </button>
+    </form>
+</div>
