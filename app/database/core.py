@@ -133,6 +133,23 @@ def ensure_runtime_schema():
                 conn.execute(text("ALTER TABLE jobs ADD COLUMN brain_used VARCHAR"))
             if "ai_reasoning" not in j_cols:
                 conn.execute(text("ALTER TABLE jobs ADD COLUMN ai_reasoning TEXT"))
+        # Affiliate Links (Phase 4: Auto-Injector)
+        if "affiliate_links" not in tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS affiliate_links (
+                      id INTEGER PRIMARY KEY,
+                      keyword VARCHAR NOT NULL UNIQUE,
+                      url VARCHAR NOT NULL,
+                      comment_template VARCHAR NOT NULL,
+                      created_at INTEGER,
+                      updated_at INTEGER
+                    )
+                    """
+                )
+            )
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_affiliate_links_keyword ON affiliate_links(keyword)"))
 
 def get_db():
     db = SessionLocal()

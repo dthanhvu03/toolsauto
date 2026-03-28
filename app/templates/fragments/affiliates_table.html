@@ -1,0 +1,55 @@
+{% if links %}
+<div class="overflow-x-auto">
+    <table class="w-full text-left text-sm whitespace-nowrap">
+        <thead class="text-xs text-[var(--muted)] uppercase bg-gray-50/50">
+            <tr>
+                <th class="px-4 py-3 font-medium">Từ Khóa (Keyword)</th>
+                <th class="px-4 py-3 font-medium">Link Mua Hàng</th>
+                <th class="px-4 py-3 font-medium text-right">Thao tác</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for row in links %}
+            <tr class="hover:bg-gray-50/50 transition-colors group">
+                <td class="px-4 py-3 font-medium text-gray-800">
+                    <span class="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md text-xs border border-indigo-100">
+                        {{ row.keyword }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-gray-500 max-w-xs truncate" title="{{ row.comment_template }}">
+                    <a href="{{ row.url }}" target="_blank"
+                        class="text-indigo-600 hover:text-indigo-800 hover:underline">
+                        {{ row.url|truncate(40, true, '...') }}
+                    </a>
+                    <div class="text-[11px] text-gray-400 mt-0.5 truncate">{{ row.comment_template }}</div>
+                </td>
+                <td class="px-4 py-3 text-right">
+                    <div
+                        class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                            onclick="editAffiliate(this.dataset.id, this.dataset.kw, this.dataset.url, this.dataset.tpl)"
+                            data-id="{{ row.id }}" data-kw="{{ row.keyword }}" data-url="{{ row.url }}"
+                            data-tpl="{{ row.comment_template }}" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                            title="Sửa">
+                            ✏️
+                        </button>
+                        <button hx-delete="/affiliates/{{ row.id }}"
+                            hx-confirm="Xóa từ khóa '{{ row.keyword }}' khỏi kho Affilate?" hx-swap="none"
+                            class="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Xóa">
+                            🗑️
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="py-12 text-center">
+    <div class="text-4xl mb-3">🛍️</div>
+    <h3 class="text-gray-900 font-medium text-base mb-1">Kho Affiliate Trống</h3>
+    <p class="text-gray-500 text-sm max-w-sm mx-auto">Chưa có link Affiliate nào. Hãy thêm từ khóa và link bên form trái
+        để bot tự động buff sales.</p>
+</div>
+{% endif %}
