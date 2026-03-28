@@ -19,7 +19,7 @@ router = APIRouter(prefix="/syspanel", tags=["syspanel"])
 logger = logging.getLogger(__name__)
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PM2_LOG_DIR = os.path.expanduser("~/.pm2/logs")
+PM2_LOG_DIR = "/home/vu/.pm2/logs"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -268,7 +268,10 @@ def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "e
     if worker not in safe_workers:
         worker = "Web_Dashboard"
     log_type = "error" if log_type == "error" else "out"
-    log_file = os.path.join(PM2_LOG_DIR, f"{worker}-{log_type}.log")
+    # PM2 names the log files with the process name using dashes not underscores
+    # e.g. "AI_Generator" → "AI-Generator-out.log"
+    log_name = worker.replace("_", "-")
+    log_file = os.path.join(PM2_LOG_DIR, f"{log_name}-{log_type}.log")
     if os.path.exists(log_file):
         result = subprocess.run(f"tail -n {lines} '{log_file}'", shell=True, capture_output=True, text=True)
         content = result.stdout or "(empty)"
