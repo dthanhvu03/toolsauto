@@ -891,14 +891,16 @@ class FacebookAdapter(AdapterInterface):
             # Session Recovery: "Continue as XYZ" screen
             if not nav_present and not (login_btn and email_in):
                 logger.info("FacebookAdapter: Navigation missing, checking for 'Continue as' session recovery screen...")
-                # Try to find a button spanning text "Tiếp tục" or "Continue"
+                # Use exact text matching to avoid clicking invisible parent divs
                 recovery_btn = None
                 try:
                     candidates = [
-                        self.page.locator('div[role="button"]:has-text("Tiếp tục")').first,
-                        self.page.locator('div[role="button"]:has-text("Continue")').first,
-                        self.page.get_by_role("button", name="Tiếp tục", exact=False).first,
-                        self.page.get_by_role("button", name="Continue", exact=False).first,
+                        self.page.get_by_text("Tiếp tục", exact=True).first,
+                        self.page.get_by_text("Continue", exact=True).first,
+                        self.page.get_by_role("button", name="Tiếp tục", exact=True).first,
+                        self.page.get_by_role("button", name="Continue", exact=True).first,
+                        self.page.locator('div[role="button"]:text-is("Tiếp tục")').first,
+                        self.page.locator('div[role="button"]:text-is("Continue")').first,
                     ]
                     for candidate in candidates:
                         if self._is_visible(candidate):
@@ -907,8 +909,19 @@ class FacebookAdapter(AdapterInterface):
                             
                     if recovery_btn:
                         logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Clicking...")
-                        self._click_locator(recovery_btn, "session recovery button", timeout=5000)
+                        # Force click on the exact text node
+                        try:
+                            recovery_btn.click(force=True, timeout=5000)
+                        except Exception:
+                            self._click_locator(recovery_btn, "session recovery button", timeout=5000)
+                            
                         self.page.wait_for_timeout(8000)
+                        
+                        # Sometimes we need to explicitly reload or wait for redirect
+                        if "login" in self.page.url or "checkpoint" in self.page.url:
+                            self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+                            self.page.wait_for_timeout(5000)
+                            
                         # Re-check navigation after clicking
                         nav_present = self.page.locator('div[role="navigation"]').count() > 0
                         if nav_present:
