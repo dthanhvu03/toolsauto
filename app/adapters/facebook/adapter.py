@@ -1594,9 +1594,7 @@ class FacebookAdapter(AdapterInterface):
         try:
             # 1. Click top-right avatar image
             avatar_selectors = [
-                SELECTORS["switch_menu"]["account_menu_button"],
-                'div[role="banner"] image', 
-                'div[role="banner"] img'
+                SELECTORS["switch_menu"]["account_menu_button"]
             ]
             
             avatar_btn = None
