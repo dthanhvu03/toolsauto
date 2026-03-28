@@ -278,9 +278,10 @@ class ContentOrchestrator:
     # ─── Generate Caption (Pipeline chính) ───
 
     def generate_caption(self, video_path: str, style: str = "general", context: str = "",
-                          page_name: str = "", page_niches: list | None = None) -> dict:
+                          page_name: str = "", page_niches: list | None = None,
+                          affiliate_keywords: list = None) -> dict:
         """Pipeline Multimodal Decomposition: (Collage + Transcript) → Gemini → Caption."""
-        result = {"caption": "", "hashtags": [], "keywords": []}
+        result = {"caption": "", "hashtags": [], "keywords": [], "affiliate_keyword": ""}
 
         if not video_path or not os.path.exists(video_path):
             logger.error("File media không tồn tại hoặc None: %s", video_path)
@@ -462,6 +463,12 @@ Bạn là một Chuyên gia Digital Marketing & Copywriter thực chiến tại 
 
 {seo_rules}
 
+[AFFILIATE MATCHING INSTRUCTIONS]
+Hiện trong kho Affiliate của tôi đang cấu hình các từ khóa sản phẩm sau: {', '.join(affiliate_keywords) if affiliate_keywords else 'Chưa có từ khóa nào.'}
+Nếu bạn thấy hình ảnh hoặc nội dung transcript ĐỀ CẬP RÕ RÀNG đến các sản phẩm/từ khóa trên (dù là nhắc đến hoặc xuất hiện trực tiếp), hãy CHỌN 1 từ khóa phù hợp nhất để trả về trong trường "affiliate_keyword". Nếu KHÔNG CÓ sản phẩm nào trùng khớp trong kho, hãy trả về chuỗi rỗng "".
+Lưu ý: Chỉ chọn đúng 1 từ khóa chính xác nguyên văn nằm trong danh sách trên!
+
+
 [FORMATTING RULES]
 {formatting_rules}
 """
@@ -481,6 +488,7 @@ YÊU CẦU ĐẦU RA (BẮT BUỘC TRẢ VỀ CHÍNH XÁC ĐỊNH DẠNG JSON SA
   "caption": "điền nội dung caption phù hợp với quy tắc ở trên vào đây",
   "hashtags": ["#Tag1", "#Tag2", "#Tag3", "#Tag4", "#Tag5"],
   "keywords": ["keyword 1", "keyword 2", "keyword 3"],
+  "affiliate_keyword": "từ khóa từ danh sách kho, hoặc chuỗi rỗng nếu không khớp",
   "reasoning": "giải thích ngắn gọn về chiến lược visual hook và persona đã chọn"
 }}}}
 ```
@@ -527,6 +535,7 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
             result["caption"] = data.get("caption", "")
             result["hashtags"] = data.get("hashtags", [])
             result["keywords"] = data.get("keywords", [])
+            result["affiliate_keyword"] = data.get("affiliate_keyword", "")
             
             # ─── New V4 Step: Save AI Strategic Reasoning ───
             if hasattr(self, 'current_job') and self.current_job:
@@ -664,6 +673,11 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
         if kw_match:
             result["keywords"] = re.findall(r'"([^"]+)"', kw_match.group(1))
 
+        # Affiliate Keyword
+        aff_match = re.search(r'"affiliate_keyword"\s*:\s*"([^"]*)"', text, re.IGNORECASE)
+        if aff_match:
+            result["affiliate_keyword"] = aff_match.group(1)
+
         # Layer 4: Non-JSON fallback (DISABLED in strict_json mode)
         if not result.get("caption"):
             if strict_json:
@@ -734,6 +748,8 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
             return False
         if not isinstance(keywords, list) or not all(isinstance(x, (str, int, float, bool)) for x in keywords):
             return False
+        if not isinstance(data.get("affiliate_keyword", ""), str):
+            return False
         return True
 
     def _build_repair_prompt(self, raw_response: str) -> str:
@@ -744,13 +760,14 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
 YÊU CẦU BẮT BUỘC:
 - CHỈ TRẢ VỀ DUY NHẤT JSON, KHÔNG markdown, KHÔNG giải thích, KHÔNG hỏi lại.
 - Không được trả Option 1/2/3.
-- JSON phải có đúng 3 keys: caption, hashtags, keywords.
+- JSON phải có đúng 4 keys: caption, hashtags, keywords, affiliate_keyword.
 - caption: string tiếng Việt, ngắn gọn, không vượt quá {max_len} ký tự.
 - hashtags: array string (mỗi phần tử bắt đầu bằng #).
 - keywords: array string.
+- affiliate_keyword: string (chuỗi rỗng "" nếu không có).
 
 OUTPUT JSON TEMPLATE:
-{{"caption":"...","hashtags":["#a","#b","#c"],"keywords":["k1","k2","k3"]}}
+{{"caption":"...","hashtags":["#a","#b","#c"],"keywords":["k1","k2","k3"],"affiliate_keyword":""}}
 
 NỘI DUNG ĐẦU VÀO (hãy chuyển sang JSON theo template, không thêm chữ ngoài JSON):
 {raw_response}"""
