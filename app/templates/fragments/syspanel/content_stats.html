@@ -1,0 +1,24 @@
+<!-- fragments/syspanel/content_stats.html -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {% set folder_icons = {
+    'media': '🎬', 'video': '📹', 'done': '✅',
+    'failed': '❌', 'processed': '⚙️', 'reup': '🔁', 'thumbnails': '🖼️'
+    } %}
+    {% for folder, data in stats.items() %}
+    <div class="bg-white rounded-lg border border-gray-100 shadow-sm p-3">
+        <div class="flex items-center gap-2 mb-2">
+            <span class="text-lg">{{ folder_icons.get(folder, '📁') }}</span>
+            <span class="text-xs font-semibold text-gray-600 uppercase tracking-wide">{{ folder }}</span>
+        </div>
+        <div class="text-xl font-bold text-gray-800">{{ data.count }} <span
+                class="text-xs text-gray-400 font-normal">files</span></div>
+        <div class="text-xs text-gray-400 mt-0.5">
+            {% if data.size_gb >= 1 %}
+            {{ data.size_gb }} GB
+            {% else %}
+            {{ (data.size_gb * 1024) | round(0) | int }} MB
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
