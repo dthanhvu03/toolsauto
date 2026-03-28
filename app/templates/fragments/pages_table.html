@@ -1,0 +1,89 @@
+<div class="overflow-x-auto shadow-sm rounded-xl border border-gray-200 mb-8">
+    <table class="w-full text-left border-collapse bg-white divide-y divide-gray-200">
+        <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Account</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Page Name / URL</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                <th class="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-80">Configuration
+                </th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for p in pages %}
+            <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="p-3 align-top">
+                    <div class="font-medium text-sm text-gray-900">{{ p.account_name }}</div>
+                    <div class="text-[10px] text-gray-400 mt-0.5">ID: {{ p.account_id }} | {{ p.platform | capitalize }}
+                    </div>
+                </td>
+                <td class="p-3 align-top">
+                    <div class="font-semibold text-sm text-[var(--foreground)]">{{ p.name }}</div>
+                    <a href="{{ p.url }}" target="_blank"
+                        class="text-xs text-indigo-500 hover:text-indigo-700 underline truncate block max-w-[200px] mt-0.5"
+                        title="{{ p.url }}">{{ p.url }}</a>
+                </td>
+                <td class="p-3 align-top">
+                    {% if p.is_active %}
+                    <span
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">✅
+                        Bật</span>
+                    {% else %}
+                    <span
+                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-gray-500 ring-1 ring-gray-200">⏸
+                        Tắt</span>
+                    {% endif %}
+                </td>
+                <td class="p-3 align-top">
+                    <!-- Note: hx-swap="none" means no HTMX replacement on submit, since HX-Trigger header invokes a full reload -->
+                    <form hx-post="/pages/update" hx-swap="none"
+                        class="flex flex-col gap-2 bg-gray-50/80 p-2.5 rounded-lg border border-gray-200">
+                        <input type="hidden" name="account_id" value="{{ p.account_id }}">
+                        <input type="hidden" name="url" value="{{ p.url }}">
+
+                        <div class="flex items-center justify-between border-b border-gray-200 pb-2 mb-1">
+                            <label class="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-700">
+                                <input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}
+                                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shadow-sm cursor-pointer w-3.5 h-3.5">
+                                Active Target
+                            </label>
+                            <button type="submit" onclick="this.innerText='Lưu...'; this.classList.add('opacity-50')"
+                                class="text-[11px] font-semibold bg-indigo-600 text-white px-2.5 py-1 rounded shadow-sm hover:-translate-y-0.5 transition-all">Lưu
+                                lùi</button>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="text-[10px] font-semibold text-gray-500 w-[50px] shrink-0 uppercase tracking-wider">Niches:</span>
+                            <input type="text" name="niches" value="{{ p.niches }}" placeholder="gia đình, công nghệ..."
+                                class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-500 outline-none w-full shadow-sm bg-white">
+                        </div>
+
+                        <div class="flex items-start gap-2">
+                            <span
+                                class="text-[10px] font-semibold text-gray-500 w-[50px] shrink-0 mt-1 uppercase tracking-wider">Đối
+                                thủ:</span>
+                            <textarea name="competitors" rows="1" placeholder="Mỗi dòng 1 link TikTok"
+                                class="flex-1 border border-gray-300 rounded px-2 py-1 text-[11px] focus:ring-1 focus:ring-indigo-500 outline-none resize-y w-full shadow-sm font-mono bg-white">{{ p.competitors }}</textarea>
+                        </div>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="p-8 text-center bg-gray-50/50 rounded-b-xl">
+                    <div class="flex flex-col justify-center items-center gap-2">
+                        <svg class="w-10 h-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        <span class="text-sm font-medium text-gray-500">Không tìm thấy Fanpage nào</span>
+                        <p class="text-xs text-gray-400">Hãy vào Accounts > nhấn nút "Sync Pages" để AI móc danh sách từ
+                            Facebook về nhé!</p>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

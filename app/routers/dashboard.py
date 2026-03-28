@@ -480,6 +480,12 @@ def app_accounts(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("pages/app_accounts.html", {"request": request})
 
 
+@router.get("/app/pages", response_class=HTMLResponse)
+def app_pages(request: Request):
+    """SaaS UI: Target Pages CRUD editor."""
+    return templates.TemplateResponse("pages/app_pages.html", {"request": request})
+
+
 @router.get("/app/logs", response_class=HTMLResponse)
 def app_logs(request: Request):
     """SaaS UI: log viewer (PM2 logs)."""

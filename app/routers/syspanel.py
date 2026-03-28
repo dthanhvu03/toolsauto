@@ -582,3 +582,43 @@ def cmd_clear_gemini_cookies():
         msgs.append("✅ Đã xóa gemini_cookies_invalid flag")
     return _html_output("\n".join(msgs))
 
+
+# ─── Persona Tuner ────────────────────────────────────────────────────────────
+
+PERSONA_FILE = os.path.join(APP_DIR, "ai_persona.json")
+DEFAULT_PERSONA = (
+    "Bạn là chuyên gia content sáng tạo, viết tiếng Việt tự nhiên, gần gũi với người dùng Facebook Việt Nam. "
+    "Hãy viết caption hấp dẫn, giàu cảm xúc, phù hợp với chủ đề video, có thể dùng emoji vừa phải."
+)
+
+
+def _load_persona() -> str:
+    try:
+        if os.path.exists(PERSONA_FILE):
+            with open(PERSONA_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("system_prompt", DEFAULT_PERSONA)
+    except Exception:
+        pass
+    return DEFAULT_PERSONA
+
+
+@router.get("/persona", response_class=HTMLResponse)
+def get_persona(request: Request):
+    prompt = _load_persona()
+    return templates.TemplateResponse("fragments/syspanel/persona_tuner.html", {
+        "request": request,
+        "prompt": prompt,
+    })
+
+
+@router.post("/persona", response_class=HTMLResponse)
+def save_persona(system_prompt: str = Form("")):
+    try:
+        with open(PERSONA_FILE, "w", encoding="utf-8") as f:
+            json.dump({"system_prompt": system_prompt.strip()}, f, ensure_ascii=False, indent=2)
+        return _html_output("✅ Đã lưu Persona AI mới! Bot sẽ dùng giọng văn này từ job tiếp theo.")
+    except Exception as e:
+        return _html_output(f"❌ Lỗi: {e}")
+
+
