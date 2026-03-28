@@ -191,6 +191,16 @@
                         class="action-btn bg-blue-500 hover:bg-blue-600 text-white">
                         🔁 Retry All Failed
                     </button>
+                    <button hx-post="/syspanel/cmd/start-vnc" hx-target="#terminal-output" hx-swap="innerHTML"
+                        hx-on::before-request="terminalBusy('Starting VNC & WebSockets...')"
+                        class="action-btn bg-pink-500 hover:bg-pink-600 text-white">
+                        📺 Bật Livestream
+                    </button>
+                    <button hx-post="/syspanel/cmd/stop-vnc" hx-target="#terminal-output" hx-swap="innerHTML"
+                        hx-on::before-request="terminalBusy('Stopping VNC...')"
+                        class="action-btn bg-rose-600 hover:bg-rose-700 text-white">
+                        ⏹️ Tắt Stream
+                    </button>
                 </div>
             </div>
 

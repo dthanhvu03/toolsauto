@@ -388,6 +388,29 @@ def cmd_kill_chrome():
     return _html_output(f"$ pkill chrome\n{chrome_out}\n\n$ pkill Xvfb\n{xvfb_out}")
 
 
+@router.post("/cmd/start-vnc", response_class=HTMLResponse)
+def cmd_start_vnc():
+    # Kill existing to avoid port conflicts
+    run_cmd("pkill -f x11vnc; pkill -f websockify")
+    # Start x11vnc mapped to :99
+    cmd_vnc = "nohup x11vnc -display :99 -nopw -listen localhost -xkb -ncache 10 -shared -forever -bg > vnc.log 2>&1 &"
+    # Start websockify proxy
+    cmd_web = "nohup websockify --web /usr/share/novnc/ 6080 localhost:5900 > web.log 2>&1 &"
+    
+    out1 = run_cmd(cmd_vnc)
+    out2 = run_cmd(cmd_web)
+    
+    msg = f"✅ VNC Live Stream Started!\n\nLink: http://14.225.218.116:6080/vnc_lite.html\n\n[x11vnc]\n{out1}\n\n[websockify]\n{out2}"
+    return _html_output(msg)
+
+
+@router.post("/cmd/stop-vnc", response_class=HTMLResponse)
+def cmd_stop_vnc():
+    out_vnc = run_cmd("pkill -f x11vnc && echo 'x11vnc killed' || echo 'No x11vnc process found'")
+    out_web = run_cmd("pkill -f websockify && echo 'websockify killed' || echo 'No websockify process found'")
+    return _html_output(f"🛑 VNC Stream Stopped\n\n$ pkill x11vnc\n{out_vnc}\n\n$ pkill websockify\n{out_web}")
+
+
 @router.post("/cmd/cleanup-db", response_class=HTMLResponse)
 def cmd_cleanup_db():
     venv = "source venv/bin/activate && " if os.path.exists(os.path.join(APP_DIR, "venv")) else ""
