@@ -288,16 +288,42 @@ def frag_screenshots(request: Request):
 
 @router.get("/logs", response_class=HTMLResponse)
 def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "error", lines: int = 100):
-    safe_workers = ["FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard"]
+    # Bao gồm cả process names của root PM2 (production) và vu PM2 (dev)
+    safe_workers = [
+        "FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard",  # vu PM2
+        "publisher", "maintenance", "web", "ai", "worker",               # root PM2
+    ]
     if worker not in safe_workers:
         worker = "Web_Dashboard"
     log_type = "error" if log_type == "error" else "out"
     log_file = _get_pm2_log_path(worker, log_type)
+
+    content = None
     if os.path.exists(log_file):
+        # File readable bình thường
         result = subprocess.run(f"tail -n {lines} '{log_file}'", shell=True, capture_output=True, text=True)
         content = result.stdout or "(empty)"
     else:
-        content = f"Log file not found: {log_file}\n\nHint: chạy `pm2 jlist` để xem path thực tế."
+        # Thử đọc bằng sudo (cho /root/.pm2/logs/ không accessible từ user vu)
+        result = subprocess.run(
+            f"sudo tail -n {lines} '{log_file}' 2>/dev/null",
+            shell=True, capture_output=True, text=True, timeout=5
+        )
+        if result.stdout.strip():
+            content = result.stdout
+
+    if content is None:
+        # Liệt kê tất cả file log tìm được để debug
+        all_logs = []
+        for d in ["/home/vu/.pm2/logs", "/root/.pm2/logs"]:
+            try:
+                all_logs += [f"{d}/{f}" for f in os.listdir(d) if f.endswith(".log")]
+            except Exception:
+                all_logs.append(f"{d}: permission denied")
+        content = (
+            f"Log file not found or not readable: {log_file}\n\n"
+            f"Available log files:\n" + "\n".join(f"  {x}" for x in all_logs)
+        )
     escaped = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return HTMLResponse(f"<pre class='text-xs text-green-400 font-mono whitespace-pre-wrap leading-relaxed'>{escaped}</pre>")
 
