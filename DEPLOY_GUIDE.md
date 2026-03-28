@@ -336,3 +336,52 @@ Gửi tin nhắn cho Bot trên Telegram:
 | `/stats`       | Thống kê hiệu suất            |
 | `/viral`       | Quản lý viral scan            |
 | `/reup <url>`  | Reup video từ TikTok          |
+
+---
+
+## 12. Cẩm Nang Xử Lý Sự Cố (VPS Deployment Troubleshooting)
+
+> Tổng hợp các lỗi thực tế đụng phải khi đưa hệ thống từ Local lên Production VPS và cách đã fix.
+
+### 12.1. Lỗi sai đường dẫn thư mục (Hardcoded paths)
+
+- **Triệu chứng:** Không tìm thấy `gemini_cookies.json` hoặc log syspanel không tải được.
+- **Nguyên nhân:** Lúc code ở máy nhà, đường dẫn bị ghim chết thành `/home/vu/...`. Trên VPS chạy bằng `root`, gốc là `/root/toolsauto`.
+- **Cách fix:** Thay thế toàn bộ hardcode bằng biến động `BASE_DIR` tự bắt đường dẫn thư mục hiện hành.
+
+### 12.2. Thiếu thư mục chứa file (Vô gia cư)
+
+- **Triệu chứng:** Bot chập cheng không tải được video hay tạo profile Facebook, văng lỗi `FileNotFoundError`.
+- **Nguyên nhân:** Khởi tạo VPS mới từ Git không đi kèm các thư mục data như `content/profiles`, `content/processed`.
+- **Cách fix:** Viết thêm code logic tự động tạo thư mục rỗng nếu chưa tồn tại (`os.makedirs(..., exist_ok=True)`).
+
+### 12.3. Lỗi 409 Conflict ở mạng Telegram
+
+- **Triệu chứng:** Bot liên tục bắn log lỗi mạng Telegram 409 Conflict.
+- **Nguyên nhân:** Cấu hình chạy PM2 đa quy trình khiến nhiều worker `maintenance` cùng tranh nhau gọi (poll) lệnh từ một con Telegram Bot.
+- **Cách fix:** Khống chế số lượng worker làm nhiệm vụ lắng nghe Telegram về 1 mối duy nhất hoặc giới hạn instance PM2.
+
+### 12.4. Tràn RAM tử vong (OOM Crash Loop)
+
+- **Triệu chứng:** Worker `ai-worker` liên tục chết (`status: errored`), văng log `Killed`.
+- **Nguyên nhân:** Mô hình AI `faster-whisper (medium)` ngốn quá 2GB RAM. VPS dung lượng nhỏ xíu không chịu nổi nhiệt bung nóc.
+- **Cách fix:** Cài đặt giới hạn RAM trong cấu hình `ecosystem.config.js` (`max_memory_restart: '2.5G'`). Nếu vượt trần sẽ tự ép khởi động lại để cứu Server.
+
+### 12.5. Rào cản Facebook "Circuit Open" (Continue As)
+
+- **Triệu chứng:** Bot không chịu đăng bài, account văng về `INVALID` và báo lỗi `Circuit Open`.
+- **Nguyên nhân:** Facebook hiện trang _"Tiếp tục dưới tên (Continue as)"_ thay vì vô thẳng News Feed, khiến luồng đăng bài bị kẹt cứng (không tìm thấy Header Navigation).
+- **Cách fix:** Viết thêm nhánh code **Session Recovery** để tự dò tìm và ép táng siêu mạnh (force_click) vào đúng cái nút _"Tiếp tục"_ nhằm tự vượt qua rào.
+
+### 12.6. Lỗi Checkpoint Facebook ẩn (Đòi hỏi mật khẩu)
+
+- **Triệu chứng:** Cho dù bấm qua cửa ải Tiếp Tục, Facebook vẫn cạch mặt bắt gõ Mật khẩu để xác minh. Bot tự động thì không có pass.
+- **Cách fix:**
+  - Nâng cấp Nút **🔐 Login Đăng Nhập Thủ Công** trên Syspanel Web cho phép chạy thẳng với thông số máy Ảo `:99`.
+  - Kết nối song song **Livestream VNC** để User nhìn thấy màn hình đang bị kẹt ở đâu và tự nhảy vào gõ mật khẩu bằng tay vượt chốt. Mở cửa xong là Bot tự lấy lại cookie.
+
+### 12.7. Tính năng "Tẩy Trắng Cuộc Đời" và Truyền hình VNC
+
+- Nhờ qua các kiếp nạn trên, hệ thống giờ sở hữu giao diện Syspanel VIP siêu cấp:
+  1. Nút **Reset (Circuit Open)**: Tẩy rửa 1 click mọi án lưu đọng, reset bộ đếm fail về `0`, ép nick từ `INVALID` thành xanh lè `ACTIVE` và mở khóa Automation để đi tiếp. KHÔNG CẦN CHẠY LỆNH GÌ NỮA.
+  2. Nút **📺 Bật/Tắt Livestream VNC (NoVNC)** vào System Actions: Cấu hình `x11vnc` ngầm để live video VPS về cho Web không độ trễ. Click vào tab `vnc_lite.html`, xem Bot thao tác như đang làm phim Netflix. Dễ như chạy Grab!
