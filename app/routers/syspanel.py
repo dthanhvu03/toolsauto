@@ -446,7 +446,7 @@ def cmd_start_vnc():
     out1 = run_cmd(cmd_vnc)
     out2 = run_cmd(cmd_web)
     
-    msg = f"✅ VNC Live Stream Started!\n\nNhớ mở SSH Tunnel trên máy bạn bằng lệnh sau:\n`ssh -L 6080:localhost:6080 root@14.225.218.116 -N`\n\nLink xem: http://localhost:6080/vnc.html\n\n[x11vnc]\n{out1}\n\n[websockify]\n{out2}"
+    msg = f"✅ VNC Live Stream Started!\n\nLink: http://14.225.218.116:6080/vnc.html\n\n[x11vnc]\n{out1}\n\n[websockify]\n{out2}"
     return _html_output(msg)
 
 
