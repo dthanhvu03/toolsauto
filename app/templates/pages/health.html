@@ -5,11 +5,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Health</title>
+    <!-- Tailwind for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6,
+        .font-display {
+            font-family: 'Outfit', sans-serif;
+        }
+    </style>
 </head>
 
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-gray-50/50 min-h-screen font-sans antialiased text-gray-900">
     <div class="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8" hx-get="/health/ui" hx-trigger="every 15s"
         hx-swap="outerHTML">
         <div class="mb-8 flex items-center justify-between">
@@ -21,9 +49,9 @@
                 Dashboard
             </a>
         </div>
-        <div class="mb-8 flex items-center justify-between">
-            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <svg class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div class="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h1 class="text-2xl font-bold font-display text-gray-900 flex items-center gap-2">
+                <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                 </svg>
@@ -72,7 +100,8 @@
 
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <!-- Worker Card -->
-            <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+            <div
+                class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100 transition-all hover:shadow-md">
                 <div class="p-5">
                     <div class="flex items-center">
                         <div class="flex-shrink-0 bg-indigo-50 rounded-md p-3">
@@ -116,7 +145,8 @@
             </div>
 
             <!-- Jobs Card -->
-            <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+            <div
+                class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100 transition-all hover:shadow-md">
                 <div class="p-5">
                     <div class="flex items-center">
                         <div class="flex-shrink-0 bg-blue-50 rounded-md p-3">
@@ -150,7 +180,8 @@
             </div>
 
             <!-- Accounts Card -->
-            <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-100">
+            <div
+                class="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100 transition-all hover:shadow-md">
                 <div class="p-5">
                     <div class="flex items-center">
                         <div class="flex-shrink-0 bg-purple-50 rounded-md p-3">
@@ -180,9 +211,9 @@
         </div>
 
         <!-- Metrics Overview Card -->
-        <div class="mt-6 bg-white overflow-hidden shadow rounded-lg border border-gray-100">
-            <div class="px-5 py-4 border-b border-gray-200">
-                <h3 class="text-sm leading-6 font-medium text-gray-900">📊 Metrics Overview</h3>
+        <div class="mt-8 bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100">
+            <div class="px-6 py-5 border-b border-gray-100">
+                <h3 class="text-base leading-6 font-semibold font-display text-gray-900">📊 Metrics Overview</h3>
             </div>
             <div class="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-6">
                 <div>
@@ -209,25 +240,40 @@
         </div>
 
         <!-- Per-Account 7-Day Rolling Stats -->
-        <div class="mt-6 bg-white overflow-hidden shadow rounded-lg border border-gray-100">
-            <div class="px-5 py-4 border-b border-gray-200">
-                <h3 class="text-sm leading-6 font-medium text-gray-900">👤 Account Performance (7 ngày)</h3>
+        <div class="mt-8 bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100">
+            <div class="px-6 py-5 border-b border-gray-100">
+                <h3 class="text-base leading-6 font-semibold font-display text-gray-900">👤 Account Performance (7 ngày)
+                </h3>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
+                    <thead class="bg-gray-50 border-y border-gray-100">
                         <tr>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Done</th>
-                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Failed</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Success Rate
+                            <th
+                                class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Account</th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Platform</th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Status</th>
+                            <th
+                                class="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Done</th>
+                            <th
+                                class="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Failed</th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Success Rate
                             </th>
-                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Breaker</th>
+                            <th
+                                class="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Breaker</th>
                         </tr>
                     </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
+                    <tbody class="bg-white divide-y divide-gray-100">
                         {% for acc in health.accounts.details %}
                         <tr class="hover:bg-gray-50">
                             <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ acc.name }}</td>
@@ -272,22 +318,28 @@
         </div>
 
         <!-- HW Card Span -->
-        <div class="mt-6 bg-white overflow-hidden shadow rounded-lg border border-gray-100">
-            <div class="px-5 py-4 border-b border-gray-200">
-                <h3 class="text-sm leading-6 font-medium text-gray-900">System Resources</h3>
+        <div class="mt-8 mb-8 bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100">
+            <div class="px-6 py-5 border-b border-gray-100">
+                <h3 class="text-base leading-6 font-semibold font-display text-gray-900">Server Resources</h3>
             </div>
-            <div class="px-5 py-4 flex gap-8 flex-wrap">
+            <div class="px-6 py-5 flex flex-col sm:flex-row gap-8 flex-wrap">
                 <div>
                     <dt class="text-xs font-medium text-gray-500">CPU Usage</dt>
-                    <dd class="mt-1 text-sm text-gray-900 font-semibold {% if health.system.cpu_percent > 85 %}text-red-600{% elif health.system.cpu_percent > 60 %}text-amber-500{% endif %}">{{ health.system.cpu_percent }}%</dd>
+                    <dd
+                        class="mt-1 text-sm text-gray-900 font-semibold {% if health.system.cpu_percent > 85 %}text-red-600{% elif health.system.cpu_percent > 60 %}text-amber-500{% endif %}">
+                        {{ health.system.cpu_percent }}%</dd>
                 </div>
                 <div>
                     <dt class="text-xs font-medium text-gray-500">System RAM</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.sys_memory_used_gb }} / {{ health.system.sys_memory_total_gb }} GB <span class="text-xs text-gray-400">({{ health.system.sys_memory_percent }}%)</span></dd>
+                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.sys_memory_used_gb }} / {{
+                        health.system.sys_memory_total_gb }} GB <span class="text-xs text-gray-400">({{
+                            health.system.sys_memory_percent }}%)</span></dd>
                 </div>
                 <div>
                     <dt class="text-xs font-medium text-gray-500">Disk (Root)</dt>
-                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.disk_used_gb }} / {{ health.system.disk_total_gb }} GB <span class="text-xs text-gray-400">({{ health.system.disk_percent }}%)</span></dd>
+                    <dd class="mt-1 text-sm text-gray-900">{{ health.system.disk_used_gb }} / {{
+                        health.system.disk_total_gb }} GB <span class="text-xs text-gray-400">({{
+                            health.system.disk_percent }}%)</span></dd>
                 </div>
                 <div>
                     <dt class="text-xs font-medium text-gray-500">Worker Process RAM</dt>
