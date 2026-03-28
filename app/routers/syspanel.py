@@ -23,7 +23,12 @@ APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file
 
 def _get_pm2_log_path(worker: str, log_type: str) -> str:
     """Scan các thư mục PM2 log phổ biến — không dùng pm2 jlist (lỗi socket permission)."""
-    log_name = worker.replace("_", "-")
+    # PM2 log filename: dùng trực tiếp tên process nếu có dấu "-" (vd: ai-worker)
+    # Nếu không có "-", PM2 thay "_" bằng "-" (vd: FB_Publisher → FB-Publisher)
+    if "-" in worker:
+        log_name = worker  # giữ nguyên: ai-worker → ai-worker-out.log
+    else:
+        log_name = worker.replace("_", "-")  # FB_Publisher → FB-Publisher
     suffix = f"{log_name}-{log_type}.log"
 
     candidate_dirs = [
@@ -290,8 +295,8 @@ def frag_screenshots(request: Request):
 def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "error", lines: int = 100):
     # Bao gồm cả process names của root PM2 (production) và vu PM2 (dev)
     safe_workers = [
-        "FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard",  # vu PM2
-        "publisher", "maintenance", "web", "ai", "worker",               # root PM2
+        "FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard",       # vu PM2
+        "ai-worker", "publisher", "maintenance", "web", "ai", "worker",        # root PM2
     ]
     if worker not in safe_workers:
         worker = "Web_Dashboard"
