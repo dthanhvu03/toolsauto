@@ -1,0 +1,56 @@
+<!-- fragments/syspanel/metrics.html -->
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <!-- CPU -->
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-medium text-gray-500">CPU</span>
+            <span class="text-lg">⚡</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-800">{{ cpu }}%</div>
+        <div class="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full {{ cpu_color }} transition-all" style="width: {{ cpu }}%"></div>
+        </div>
+    </div>
+    <!-- RAM -->
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-medium text-gray-500">RAM</span>
+            <span class="text-lg">🧠</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-800">{{ mem_pct }}%</div>
+        <div class="text-xs text-gray-400 mt-0.5">{{ mem_used }} / {{ mem_total }} GB</div>
+        <div class="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full {{ mem_color }} transition-all" style="width: {{ mem_pct }}%"></div>
+        </div>
+    </div>
+    <!-- Disk -->
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-medium text-gray-500">Disk</span>
+            <span class="text-lg">💾</span>
+        </div>
+        <div class="text-2xl font-bold text-gray-800">{{ disk_pct }}%</div>
+        <div class="text-xs text-gray-400 mt-0.5">{{ disk_used }} / {{ disk_total }} GB</div>
+        <div class="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full {{ disk_color }} transition-all" style="width: {{ disk_pct }}%"></div>
+        </div>
+    </div>
+    <!-- Network -->
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-medium text-gray-500">Network</span>
+            <span class="text-lg">🌐</span>
+        </div>
+        <div class="text-sm font-bold text-emerald-600">↑ {{ net_sent_mb }} MB</div>
+        <div class="text-sm font-bold text-blue-600">↓ {{ net_recv_mb }} MB</div>
+    </div>
+    <!-- Uptime -->
+    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-medium text-gray-500">Uptime</span>
+            <span class="text-lg">🕐</span>
+        </div>
+        <div class="text-xl font-bold text-indigo-600">{{ uptime }}</div>
+        <div class="text-xs text-gray-400 mt-1">Server online</div>
+    </div>
+</div>
