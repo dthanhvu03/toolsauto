@@ -230,10 +230,19 @@
                 <div class="flex flex-wrap gap-2 sm:ml-auto items-center">
                     <select id="log-worker"
                         class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
-                        <option value="FB_Publisher">FB_Publisher</option>
-                        <option value="AI_Generator">AI_Generator</option>
-                        <option value="Maintenance">Maintenance</option>
-                        <option value="Web_Dashboard" selected>Web_Dashboard</option>
+                        <optgroup label="── Vu PM2 ──">
+                            <option value="FB_Publisher">FB_Publisher</option>
+                            <option value="AI_Generator">AI_Generator</option>
+                            <option value="Maintenance">Maintenance</option>
+                            <option value="Web_Dashboard" selected>Web_Dashboard</option>
+                        </optgroup>
+                        <optgroup label="── Root PM2 (production) ──">
+                            <option value="publisher">publisher</option>
+                            <option value="maintenance">maintenance</option>
+                            <option value="web">web</option>
+                            <option value="ai">ai</option>
+                            <option value="worker">worker</option>
+                        </optgroup>
                     </select>
                     <select id="log-type"
                         class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
