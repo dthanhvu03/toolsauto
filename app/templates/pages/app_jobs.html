@@ -5,112 +5,132 @@
 {% block page_subtitle %}Pagination + search, không cần lướt dài.{% endblock %}
 
 {% block content %}
-  <div class="app-card p-4">
-    <div class="flex items-center justify-between gap-3 flex-wrap">
-      <div class="flex gap-2 flex-wrap">
-        <button data-status="active" class="jobTab app-chip app-chip-active">Active</button>
-        <button data-status="all" class="jobTab app-chip">All</button>
-        <button data-status="DRAFT" class="jobTab app-chip">Draft</button>
-        <button data-status="PENDING" class="jobTab app-chip">Pending</button>
-        <button data-status="DONE" class="jobTab app-chip">Done</button>
-        <button data-status="FAILED" class="jobTab app-chip">Failed</button>
-      </div>
-      <div class="flex items-center gap-2">
-        <input id="jobQ" class="app-input w-80 max-w-full"
-               placeholder="Search: id, account, target page, caption..." />
-        <button id="jobSearchBtn" class="app-btn app-btn-primary">Search</button>
-        <span id="job-total-badge" class="app-badge"></span>
-      </div>
+<div class="app-card p-4">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div class="flex gap-2 flex-wrap">
+      <button data-status="active" class="jobTab app-chip app-chip-active">Active</button>
+      <button data-status="all" class="jobTab app-chip">All</button>
+      <button data-status="DRAFT" class="jobTab app-chip">Draft</button>
+      <button data-status="PENDING" class="jobTab app-chip">Pending</button>
+      <button data-status="DONE" class="jobTab app-chip">Done</button>
+      <button data-status="FAILED" class="jobTab app-chip">Failed</button>
     </div>
-
-    <div class="mt-4 overflow-x-auto">
-      <table class="min-w-full table-auto border-collapse">
-        <thead>
-          <tr class="bg-gray-50 border-b">
-            <th class="app-table-th">ID</th>
-            <th class="app-table-th">Status</th>
-            <th class="app-table-th">Platform</th>
-            <th class="app-table-th">Schedule</th>
-            <th class="app-table-th">Tries</th>
-            <th class="app-table-th">Metrics</th>
-            <th class="app-table-th">Error</th>
-            <th class="app-table-th">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="jobs-table-body" hx-get="/jobs/table?status=active&page=1&per_page=20" hx-trigger="load" hx-swap="outerHTML">
-          <tr><td colspan="8" class="p-4 text-sm text-gray-500">Đang tải...</td></tr>
-        </tbody>
-      </table>
+    <div class="flex items-center gap-2">
+      <input id="jobQ" class="app-input w-80 max-w-full" placeholder="Search: id, account, target page, caption..." />
+      <button id="jobSearchBtn" class="app-btn app-btn-primary">Search</button>
+      <span id="job-total-badge" class="app-badge"></span>
+      <button
+        onclick="document.getElementById('manualJobDialog').showModal(); htmx.ajax('GET', '/jobs/manual/form', {target:'#manual-job-modal-body', swap:'innerHTML'})"
+        class="ml-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-all hover:-translate-y-0.5 flex items-center gap-1.5">
+        🚀 <span>Đăng bài mới</span>
+      </button>
     </div>
   </div>
 
-  <script>
-    let currentStatus = 'active';
-    let currentQ = '';
-    let debounceTimer = null;
+  <!-- Manual Job Modal -->
+  <dialog id="manualJobDialog"
+    class="rounded-2xl shadow-2xl border border-gray-200 p-0 w-full max-w-lg backdrop:bg-black/40">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+      <h3 class="font-semibold text-gray-900 text-base">🚀 Tạo bài đăng khẩn cấp</h3>
+      <button onclick="document.getElementById('manualJobDialog').close()"
+        class="text-gray-400 hover:text-gray-700 text-xl leading-none">✕</button>
+    </div>
+    <div id="manual-job-modal-body" class="p-2">
+      <div class="p-6 text-sm text-gray-400 text-center">Đang tải form...</div>
+    </div>
+  </dialog>
 
-    function setQueryParams(next) {
-      const url = new URL(window.location.href);
-      Object.entries(next).forEach(([k, v]) => {
-        if (v === '' || v === null || v === undefined) url.searchParams.delete(k);
-        else url.searchParams.set(k, v);
-      });
-      window.history.replaceState({}, '', url.toString());
-    }
-    function initFromQuery() {
-      const url = new URL(window.location.href);
-      currentStatus = url.searchParams.get('status') || 'active';
-      currentQ = url.searchParams.get('q') || '';
-      const qEl = document.getElementById('jobQ');
-      if (qEl) qEl.value = currentQ;
-      document.querySelectorAll('.jobTab').forEach(t => {
-        const st = t.getAttribute('data-status');
-        if (st === currentStatus) {
-          t.classList.add('app-chip-active');
-          t.classList.remove('bg-white','text-slate-700');
-        } else {
-          t.classList.remove('app-chip-active');
-        }
-      });
-    }
-    function refreshJobs(page=1) {
-      const q = encodeURIComponent(currentQ || '');
-      setQueryParams({ status: currentStatus, q: currentQ, page: String(page) });
-      const url = `/jobs/table?status=${encodeURIComponent(currentStatus)}&page=${page}&per_page=20&q=${q}`;
-      htmx.ajax('GET', url, { target: '#jobs-table-body', swap: 'outerHTML' });
-    }
-    document.querySelectorAll('.jobTab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        currentStatus = btn.getAttribute('data-status');
-        document.querySelectorAll('.jobTab').forEach(t => t.classList.remove('app-chip-active'));
-        btn.classList.add('app-chip-active');
-        refreshJobs(1);
-      });
+
+  <div class="mt-4 overflow-x-auto">
+    <table class="min-w-full table-auto border-collapse">
+      <thead>
+        <tr class="bg-gray-50 border-b">
+          <th class="app-table-th">ID</th>
+          <th class="app-table-th">Status</th>
+          <th class="app-table-th">Platform</th>
+          <th class="app-table-th">Schedule</th>
+          <th class="app-table-th">Tries</th>
+          <th class="app-table-th">Metrics</th>
+          <th class="app-table-th">Error</th>
+          <th class="app-table-th">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="jobs-table-body" hx-get="/jobs/table?status=active&page=1&per_page=20" hx-trigger="load"
+        hx-swap="outerHTML">
+        <tr>
+          <td colspan="8" class="p-4 text-sm text-gray-500">Đang tải...</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  let currentStatus = 'active';
+  let currentQ = '';
+  let debounceTimer = null;
+
+  function setQueryParams(next) {
+    const url = new URL(window.location.href);
+    Object.entries(next).forEach(([k, v]) => {
+      if (v === '' || v === null || v === undefined) url.searchParams.delete(k);
+      else url.searchParams.set(k, v);
     });
-    document.getElementById('jobSearchBtn').addEventListener('click', () => {
-      currentQ = document.getElementById('jobQ').value || '';
-      refreshJobs(1);
-    });
-    document.getElementById('jobQ').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        currentQ = document.getElementById('jobQ').value || '';
-        refreshJobs(1);
+    window.history.replaceState({}, '', url.toString());
+  }
+  function initFromQuery() {
+    const url = new URL(window.location.href);
+    currentStatus = url.searchParams.get('status') || 'active';
+    currentQ = url.searchParams.get('q') || '';
+    const qEl = document.getElementById('jobQ');
+    if (qEl) qEl.value = currentQ;
+    document.querySelectorAll('.jobTab').forEach(t => {
+      const st = t.getAttribute('data-status');
+      if (st === currentStatus) {
+        t.classList.add('app-chip-active');
+        t.classList.remove('bg-white', 'text-slate-700');
+      } else {
+        t.classList.remove('app-chip-active');
       }
     });
-    document.getElementById('jobQ').addEventListener('input', () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        currentQ = document.getElementById('jobQ').value || '';
-        refreshJobs(1);
-      }, 450);
+  }
+  function refreshJobs(page = 1) {
+    const q = encodeURIComponent(currentQ || '');
+    setQueryParams({ status: currentStatus, q: currentQ, page: String(page) });
+    const url = `/jobs/table?status=${encodeURIComponent(currentStatus)}&page=${page}&per_page=20&q=${q}`;
+    htmx.ajax('GET', url, { target: '#jobs-table-body', swap: 'outerHTML' });
+  }
+  document.querySelectorAll('.jobTab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentStatus = btn.getAttribute('data-status');
+      document.querySelectorAll('.jobTab').forEach(t => t.classList.remove('app-chip-active'));
+      btn.classList.add('app-chip-active');
+      refreshJobs(1);
     });
-    // Let pagination buttons inside fragment call window.refreshJobs
-    window.refreshJobs = refreshJobs;
-    initFromQuery();
-    // If user lands with query params, load first page accordingly
-    const initUrl = new URL(window.location.href);
-    const initPage = parseInt(initUrl.searchParams.get('page') || '1', 10) || 1;
-    refreshJobs(initPage);
-  </script>
+  });
+  document.getElementById('jobSearchBtn').addEventListener('click', () => {
+    currentQ = document.getElementById('jobQ').value || '';
+    refreshJobs(1);
+  });
+  document.getElementById('jobQ').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      currentQ = document.getElementById('jobQ').value || '';
+      refreshJobs(1);
+    }
+  });
+  document.getElementById('jobQ').addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      currentQ = document.getElementById('jobQ').value || '';
+      refreshJobs(1);
+    }, 450);
+  });
+  // Let pagination buttons inside fragment call window.refreshJobs
+  window.refreshJobs = refreshJobs;
+  initFromQuery();
+  // If user lands with query params, load first page accordingly
+  const initUrl = new URL(window.location.href);
+  const initPage = parseInt(initUrl.searchParams.get('page') || '1', 10) || 1;
+  refreshJobs(initPage);
+</script>
 {% endblock %}
-
