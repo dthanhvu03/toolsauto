@@ -19,7 +19,28 @@ router = APIRouter(prefix="/syspanel", tags=["syspanel"])
 logger = logging.getLogger(__name__)
 
 APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PM2_LOG_DIR = "/home/vu/.pm2/logs"
+
+
+def _get_pm2_log_path(worker: str, log_type: str) -> str:
+    """Đọc path log file thực tế từ pm2 jlist — không hardcode."""
+    try:
+        result = subprocess.run("pm2 jlist", shell=True, capture_output=True, text=True, timeout=5)
+        data = json.loads(result.stdout)
+        for p in data:
+            if p.get("name") == worker:
+                env = p.get("pm2_env", {})
+                key = "pm_out_log_path" if log_type == "out" else "pm_err_log_path"
+                path = env.get(key, "")
+                if path:
+                    return path
+    except Exception:
+        pass
+    # fallback: guess từ HOME của process owner
+    owner = subprocess.run("pm2 jlist | python3 -c \"import sys,json; p=[x for x in json.load(sys.stdin) if x.get('name')=='" + worker + "']; print(p[0]['pm2_env'].get('HOME','')) if p else print('')\"",
+                           shell=True, capture_output=True, text=True).stdout.strip()
+    home = owner or os.path.expanduser("~")
+    log_name = worker.replace("_", "-")
+    return os.path.join(home, ".pm2", "logs", f"{log_name}-{log_type}.log")
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -268,15 +289,12 @@ def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "e
     if worker not in safe_workers:
         worker = "Web_Dashboard"
     log_type = "error" if log_type == "error" else "out"
-    # PM2 names the log files with the process name using dashes not underscores
-    # e.g. "AI_Generator" → "AI-Generator-out.log"
-    log_name = worker.replace("_", "-")
-    log_file = os.path.join(PM2_LOG_DIR, f"{log_name}-{log_type}.log")
+    log_file = _get_pm2_log_path(worker, log_type)
     if os.path.exists(log_file):
         result = subprocess.run(f"tail -n {lines} '{log_file}'", shell=True, capture_output=True, text=True)
         content = result.stdout or "(empty)"
     else:
-        content = f"Log file not found: {log_file}"
+        content = f"Log file not found: {log_file}\n\nHint: chạy `pm2 jlist` để xem path thực tế."
     escaped = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     return HTMLResponse(f"<pre class='text-xs text-green-400 font-mono whitespace-pre-wrap leading-relaxed'>{escaped}</pre>")
 
