@@ -888,6 +888,36 @@ class FacebookAdapter(AdapterInterface):
             email_in = self.page.locator('input[name="email"]').count() > 0
             nav_present = self.page.locator('div[role="navigation"]').count() > 0
 
+            # Session Recovery: "Continue as XYZ" screen
+            if not nav_present and not (login_btn and email_in):
+                logger.info("FacebookAdapter: Navigation missing, checking for 'Continue as' session recovery screen...")
+                # Try to find a button spanning text "Tiếp tục" or "Continue"
+                recovery_btn = None
+                try:
+                    candidates = [
+                        self.page.locator('div[role="button"]:has-text("Tiếp tục")').first,
+                        self.page.locator('div[role="button"]:has-text("Continue")').first,
+                        self.page.get_by_role("button", name="Tiếp tục", exact=False).first,
+                        self.page.get_by_role("button", name="Continue", exact=False).first,
+                    ]
+                    for candidate in candidates:
+                        if self._is_visible(candidate):
+                            recovery_btn = candidate
+                            break
+                            
+                    if recovery_btn:
+                        logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Clicking...")
+                        self._click_locator(recovery_btn, "session recovery button", timeout=5000)
+                        self.page.wait_for_timeout(8000)
+                        # Re-check navigation after clicking
+                        nav_present = self.page.locator('div[role="navigation"]').count() > 0
+                        if nav_present:
+                            logger.info("FacebookAdapter: Session successfully recovered!")
+                        else:
+                            logger.warning("FacebookAdapter: Clicked recovery but navigation still missing.")
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Error during session recovery click: %s", e)
+
             if (login_btn and email_in) or not nav_present:
                 logger.error("FacebookAdapter: Account is logged out or requires verification.")
                 return self._failure_result(
