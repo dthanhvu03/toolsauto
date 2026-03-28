@@ -1,0 +1,45 @@
+{% if items %}
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+    {% for item in items %}
+    <div class="relative group rounded-xl overflow-hidden border border-gray-100 bg-gray-50 shadow-sm hover:shadow-md transition-all"
+        data-media-card>
+        {% if item.kind == 'video' %}
+        <video src="{{ item.url }}" class="w-full h-36 object-cover bg-black" preload="none" muted loop
+            onmouseover="this.play()" onmouseout="this.pause(); this.currentTime=0"></video>
+        {% else %}
+        <img src="{{ item.url }}" class="w-full h-36 object-cover" alt="{{ item.name }}" loading="lazy">
+        {% endif %}
+
+        <!-- Overlay on hover -->
+        <div
+            class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-2">
+            <div class="text-white text-[10px] font-medium leading-tight max-w-[80%]">
+                <div class="truncate">{{ item.name }}</div>
+                <div class="text-white/70">{{ item.size_kb }} KB • {{ item.mtime_str }}</div>
+            </div>
+            <button onclick="galleryDelete('{{ item.folder }}', '{{ item.name }}', this)"
+                class="p-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors shrink-0" title="Xóa">
+                🗑️
+            </button>
+        </div>
+
+        <!-- Kind Badge -->
+        <div class="absolute top-2 left-2">
+            <span
+                class="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase
+                         {% if item.kind == 'video' %}bg-indigo-600 text-white{% else %}bg-emerald-600 text-white{% endif %}">
+                {{ item.kind }}
+            </span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+<div class="mt-4 text-xs text-gray-400 text-right">Hiển thị {{ items | length }} file trong <strong>{{ active_folder
+        }}</strong></div>
+{% else %}
+<div class="text-center py-16">
+    <div class="text-5xl mb-4">🖼️</div>
+    <p class="text-gray-500 font-medium">Thư mục <strong>{{ active_folder }}</strong> trống.</p>
+    <p class="text-xs text-gray-400 mt-1">Bot sẽ tự động tải media vào đây khi chạy.</p>
+</div>
+{% endif %}

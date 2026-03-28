@@ -1,0 +1,36 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Target Pages • Auto Publisher{% endblock %}
+{% block page_title %}Target Pages{% endblock %}
+{% block page_subtitle %}Quản lý Niche và Mức Độ Ưu Tiên cho từng Fanpage/Instagram.{% endblock %}
+
+{% block content %}
+<div class="bg-white border border-[var(--border)] rounded-lg p-4">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-2">
+            <input id="pageY" class="h-10 w-96 max-w-full border border-[var(--border)] rounded px-3 text-sm"
+                placeholder="Search: page name, url, niche..." />
+            <button id="pageSearchBtn"
+                class="h-10 px-3 rounded bg-[var(--primary)] hover:bg-[var(--primaryHover)] text-white text-sm">Search</button>
+        </div>
+    </div>
+
+    <div class="mt-6">
+        <div id="pagesTable" hx-get="/pages/table" hx-trigger="load, pagesChanged from:body" hx-swap="innerHTML">
+            <div class="p-4 text-sm text-[var(--muted)]">Đang tải danh sách Pages...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function refreshPages() {
+        const q = encodeURIComponent(document.getElementById('pageY').value || '');
+        const url = `/pages/table?q=${q}`;
+        htmx.ajax('GET', url, { target: '#pagesTable', swap: 'innerHTML' });
+    }
+    document.getElementById('pageSearchBtn').addEventListener('click', refreshPages);
+    document.getElementById('pageY').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') refreshPages();
+    });
+</script>
+{% endblock %}
