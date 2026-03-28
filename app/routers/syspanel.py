@@ -435,7 +435,7 @@ def cmd_kill_chrome():
 
 
 @router.post("/cmd/start-vnc", response_class=HTMLResponse)
-def cmd_start_vnc():
+def cmd_start_vnc(request: Request):
     # Kill existing to avoid port conflicts
     run_cmd("pkill -f x11vnc; pkill -f websockify")
     # Start x11vnc mapped to :99
@@ -446,7 +446,12 @@ def cmd_start_vnc():
     out1 = run_cmd(cmd_vnc)
     out2 = run_cmd(cmd_web)
     
-    msg = f"✅ VNC Live Stream Started!\n\nLink: http://14.225.218.116:6080/vnc.html\n\n[x11vnc]\n{out1}\n\n[websockify]\n{out2}"
+    # Get dynamic host (e.g. 14.225.218.116 or localhost)
+    host = request.client.host
+    if request.headers.get("host"):
+        host = request.headers["host"].split(":")[0]
+    
+    msg = f"✅ VNC Live Stream Started!\n\nLink: http://{host}:6080/vnc.html\n\n[x11vnc]\n{out1}\n\n[websockify]\n{out2}"
     return _html_output(msg)
 
 
