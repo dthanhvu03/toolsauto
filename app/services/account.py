@@ -300,6 +300,7 @@ class AccountService:
         
         env = os.environ.copy()
         env["PYTHONPATH"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        env["DISPLAY"] = ":99"
 
         # Non-blocking spawn using the exact same python executable (venv) as the running FastAPI app
         import sys
