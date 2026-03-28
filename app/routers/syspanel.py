@@ -22,25 +22,28 @@ APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file
 
 
 def _get_pm2_log_path(worker: str, log_type: str) -> str:
-    """Đọc path log file thực tế từ pm2 jlist — không hardcode."""
+    """Scan các thư mục PM2 log phổ biến — không dùng pm2 jlist (lỗi socket permission)."""
+    log_name = worker.replace("_", "-")
+    suffix = f"{log_name}-{log_type}.log"
+
+    candidate_dirs = [
+        "/home/vu/.pm2/logs",
+        os.path.expanduser("~/.pm2/logs"),
+        "/root/.pm2/logs",
+    ]
     try:
-        result = subprocess.run("pm2 jlist", shell=True, capture_output=True, text=True, timeout=5)
-        data = json.loads(result.stdout)
-        for p in data:
-            if p.get("name") == worker:
-                env = p.get("pm2_env", {})
-                key = "pm_out_log_path" if log_type == "out" else "pm_err_log_path"
-                path = env.get(key, "")
-                if path:
-                    return path
+        for entry in os.scandir("/home"):
+            if entry.is_dir():
+                candidate_dirs.append(f"/home/{entry.name}/.pm2/logs")
     except Exception:
         pass
-    # fallback: guess từ HOME của process owner
-    owner = subprocess.run("pm2 jlist | python3 -c \"import sys,json; p=[x for x in json.load(sys.stdin) if x.get('name')=='" + worker + "']; print(p[0]['pm2_env'].get('HOME','')) if p else print('')\"",
-                           shell=True, capture_output=True, text=True).stdout.strip()
-    home = owner or os.path.expanduser("~")
-    log_name = worker.replace("_", "-")
-    return os.path.join(home, ".pm2", "logs", f"{log_name}-{log_type}.log")
+
+    for d in candidate_dirs:
+        path = os.path.join(d, suffix)
+        if os.path.exists(path):
+            return path
+
+    return os.path.join(candidate_dirs[0], suffix)  # fallback — sẽ hiển thị error rõ ràng
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
