@@ -5,7 +5,7 @@ import random
 import re
 import traceback
 from typing import Any
-from app.config import SAFE_MODE, LOGS_DIR
+from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR
 from playwright.sync_api import sync_playwright, Playwright, BrowserContext, Page, Locator, TimeoutError
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.database.models import Job
@@ -835,7 +835,14 @@ class FacebookAdapter(AdapterInterface):
                     switched = self._switch_to_page_context(target_page_name)
                     if not switched:
                         logger.warning("FacebookAdapter: Avatar menu switch failed or unnecessary. Verifying active context...")
-                    
+
+                # Reload target page after switch so Facebook applies identity (slow VPS / delayed UI).
+                try:
+                    self.page.goto(target_page_url, wait_until="domcontentloaded")
+                    self.page.wait_for_timeout(5000)
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Post-switch reload of target page failed: %s", e)
+
                 # ── Bulletproof Context Verification ──
                 # Ensure we don't accidentally post to the wrong page if the switch failed.
                 logger.info("FacebookAdapter: Verifying active context matches target page...")
@@ -887,6 +894,49 @@ class FacebookAdapter(AdapterInterface):
             login_btn = self.page.locator('button[name="login"]').count() > 0
             email_in = self.page.locator('input[name="email"]').count() > 0
             nav_present = self.page.locator('div[role="navigation"]').count() > 0
+
+            # Session Recovery: "Continue as XYZ" screen
+            if not nav_present and not (login_btn and email_in):
+                logger.info("FacebookAdapter: Navigation missing, checking for 'Continue as' session recovery screen...")
+                # Use exact text matching to avoid clicking invisible parent divs
+                recovery_btn = None
+                try:
+                    candidates = [
+                        self.page.get_by_text("Tiếp tục", exact=True).first,
+                        self.page.get_by_text("Continue", exact=True).first,
+                        self.page.get_by_role("button", name="Tiếp tục", exact=True).first,
+                        self.page.get_by_role("button", name="Continue", exact=True).first,
+                        self.page.locator('div[role="button"]:text-is("Tiếp tục")').first,
+                        self.page.locator('div[role="button"]:text-is("Continue")').first,
+                    ]
+                    for candidate in candidates:
+                        if self._is_visible(candidate):
+                            recovery_btn = candidate
+                            break
+                            
+                    if recovery_btn:
+                        logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Clicking...")
+                        # Force click on the exact text node
+                        try:
+                            recovery_btn.click(force=True, timeout=5000)
+                        except Exception:
+                            self._click_locator(recovery_btn, "session recovery button", timeout=5000)
+                            
+                        self.page.wait_for_timeout(8000)
+                        
+                        # Sometimes we need to explicitly reload or wait for redirect
+                        if "login" in self.page.url or "checkpoint" in self.page.url:
+                            self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+                            self.page.wait_for_timeout(5000)
+                            
+                        # Re-check navigation after clicking
+                        nav_present = self.page.locator('div[role="navigation"]').count() > 0
+                        if nav_present:
+                            logger.info("FacebookAdapter: Session successfully recovered!")
+                        else:
+                            logger.warning("FacebookAdapter: Clicked recovery but navigation still missing.")
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Error during session recovery click: %s", e)
 
             if (login_btn and email_in) or not nav_present:
                 logger.error("FacebookAdapter: Account is logged out or requires verification.")
@@ -1575,26 +1625,46 @@ class FacebookAdapter(AdapterInterface):
             if target_page_name:
                 logger.info("FacebookAdapter: Looking for exact profile name '%s' in switch menu...", target_page_name)
                 
-                # Robustly find any button/radio/link that has text OR aria-label containing the target page name
-                profile_btn_selector = SELECTORS["switch_menu"]["target_profile_btn"].format(target_page_name=target_page_name)
-                profile_btns = self.page.locator(profile_btn_selector).all()
+                target_name_lower = target_page_name.lower().strip()
+                profile_items = self.page.locator('div[role="button"], div[role="menuitem"], div[role="radio"], div[role="menuitemradio"], div[role="link"]').all()
                 
-                visible_btn = None
-                for btn in profile_btns:
-                    if btn.is_visible():
-                        visible_btn = btn
-                        break
-                
-                if visible_btn:
-                    logger.info("FacebookAdapter: Clicking explicit profile match for '%s'...", target_page_name)
-                    # Scroll into view required if the list is long
-                    visible_btn.scroll_into_view_if_needed()
+                found_el = None
+                for el in profile_items:
+                    if not el.is_visible():
+                        continue
                     try:
-                        visible_btn.click(timeout=5000)
+                        text = el.inner_text().strip()
+                        if text and len(text) >= 2:
+                            # Normalize accents
+                            import unicodedata
+                            normalized = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
+                            normalized = normalized.replace('đ', 'd').replace('Đ', 'D').lower()
+                            
+                            target_norm = unicodedata.normalize('NFD', target_name_lower).encode('ascii', 'ignore').decode('utf-8')
+                            target_norm = target_norm.replace('đ', 'd').replace('Đ', 'D')
+                            
+                            if target_norm in normalized:
+                                found_el = el
+                                break
+                    except Exception:
+                        pass
+                
+                if found_el:
+                    logger.info("FacebookAdapter: Clicking explicit profile match for '%s'...", target_page_name)
+                    clickable = found_el.locator("xpath=ancestor::div[@role='button' or @role='menuitemradio' or @role='radio' or @role='menuitem' or @role='link']").first
+                    
+                    if self._is_visible(clickable):
+                        btn_to_click = clickable
+                    else:
+                        btn_to_click = found_el
+                        
+                    btn_to_click.scroll_into_view_if_needed()
+                    try:
+                        btn_to_click.click(timeout=5000)
                     except Exception:
                         logger.info("FacebookAdapter: Normal click timed out, attempting force click...")
-                        visible_btn.click(force=True)
-                    self.page.wait_for_timeout(8000)
+                        btn_to_click.click(force=True)
+                    self.page.wait_for_timeout(12000)
                     logger.info("FacebookAdapter: Switch command sent.")
                     return True
                 else:
@@ -1602,7 +1672,9 @@ class FacebookAdapter(AdapterInterface):
                     try:
                         body_html = self.page.evaluate("document.body.innerHTML")
                         safe_name = target_page_name.replace(' ', '_').lower()
-                        with open(f"/home/vu/toolsauto/tests/fb_switch_menu_{safe_name}.html", "w", encoding="utf-8") as f:
+                        dump_dir = BASE_DIR / "tests"
+                        dump_dir.mkdir(parents=True, exist_ok=True)
+                        with open(dump_dir / f"fb_switch_menu_{safe_name}.html", "w", encoding="utf-8") as f:
                             f.write(body_html)
                     except Exception as e:
                         logger.error("Failed to dump HTML: %s", e)
@@ -1619,7 +1691,7 @@ class FacebookAdapter(AdapterInterface):
                 except Exception:
                     logger.info("FacebookAdapter: Normal click timed out, attempting force click...")
                     profile_items[0].click(force=True)
-                self.page.wait_for_timeout(8000) # Switch can take time
+                self.page.wait_for_timeout(12000)  # Switch can take time (VPS / slow FB)
                 logger.info("FacebookAdapter: Switch command sent.")
                 return True
             

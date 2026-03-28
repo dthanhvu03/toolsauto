@@ -6,7 +6,37 @@
     <!-- Profile -->
     <td class="p-3 align-top">
         <div class="flex flex-col gap-1.5">
-            <span class="font-semibold text-gray-900">{{ account.name }}</span>
+            <div id="account-name-disp-{{account.id}}" class="group flex items-center gap-2">
+                <span class="font-semibold text-gray-900">{{ account.name }}</span>
+                <button type="button"
+                    onclick="document.getElementById('account-name-disp-{{account.id}}').classList.add('hidden'); document.getElementById('account-name-edit-{{account.id}}').classList.remove('hidden'); setTimeout(() => document.getElementById('account-name-input-{{account.id}}').focus(), 50);"
+                    class="hidden group-hover:block text-gray-400 hover:text-indigo-600 transition-colors"
+                    title="Rename Profile">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                </button>
+            </div>
+            <div id="account-name-edit-{{account.id}}" class="hidden flex flex-wrap items-center gap-1">
+                <input id="account-name-input-{{account.id}}" type="text" name="name" value="{{ account.name }}"
+                    class="border border-gray-300 rounded px-2 py-0.5 text-xs w-28 focus:ring-1 focus:ring-indigo-500 outline-none">
+                <button type="button" hx-post="/accounts/{{account.id}}/rename" hx-target="#account-{{account.id}}"
+                    hx-swap="outerHTML" hx-include="#account-name-input-{{account.id}}"
+                    class="p-1 text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="Save">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </button>
+                <button type="button"
+                    onclick="document.getElementById('account-name-edit-{{account.id}}').classList.add('hidden'); document.getElementById('account-name-disp-{{account.id}}').classList.remove('hidden');"
+                    class="p-1 text-gray-400 hover:bg-gray-100 rounded transition-colors" title="Cancel">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
             <div class="flex flex-wrap gap-1">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold
                     {% if account.platform == 'facebook' %}bg-blue-100 text-blue-700
@@ -72,12 +102,12 @@
             <div class="flex items-center gap-2 text-xs text-gray-600">
                 <span class="text-gray-500 font-medium">Limit:</span>
                 <input type="number" name="daily_limit" value="{{ account.daily_limit }}"
-                    class="w-14 border border-gray-200 rounded-md px-1.5 py-1 text-center text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent bg-gray-50">
+                    class="w-14 border border-gray-200 rounded-md px-1.5 py-1 text-center text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 transition-shadow">
                 <span class="text-gray-500 font-medium">Cooldown(s):</span>
                 <input type="number" name="cooldown_seconds" value="{{ account.cooldown_seconds }}"
-                    class="w-16 border border-gray-200 rounded-md px-1.5 py-1 text-center text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent bg-gray-50">
+                    class="w-16 border border-gray-200 rounded-md px-1.5 py-1 text-center text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 transition-shadow">
                 <button type="submit"
-                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3 py-1 rounded-md text-xs shadow-sm transition-all hover:shadow">Save</button>
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3 py-1 rounded-md text-xs shadow-sm transition-all hover:-translate-y-0.5">Save</button>
             </div>
 
             <!-- Niche Topics -->
@@ -85,7 +115,7 @@
                 <span class="font-medium">Niche:</span>
                 <input type="text" name="niche_topics" value="{{ account.niche_topics_list }}"
                     placeholder="thời trang, decor, ..."
-                    class="flex-1 border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent bg-gray-50"
+                    class="flex-1 border border-gray-200 rounded-md px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-shadow"
                     style="min-width:140px; max-width:220px;">
             </div>
 
@@ -94,10 +124,10 @@
                 <span title="Bot sẽ không đăng bài và không tương tác dạo trong khung giờ này" class="font-medium">Ngủ
                     đông:</span>
                 <input type="time" name="sleep_start_time" value="{{ account.sleep_start_time or '' }}"
-                    class="border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50">
+                    class="border border-gray-200 rounded-md px-1.5 py-1 outline-none focus:ring-2 focus:ring-indigo-500 bg-white transition-shadow">
                 <span class="text-gray-400">~</span>
                 <input type="time" name="sleep_end_time" value="{{ account.sleep_end_time or '' }}"
-                    class="border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50">
+                    class="border border-gray-200 rounded-md px-1.5 py-1 outline-none focus:ring-2 focus:ring-indigo-500 bg-white transition-shadow">
             </div>
 
             <!-- Target Pages & Competitor URLs -->
@@ -113,32 +143,32 @@
                         {% for page in account.managed_pages_list %}
                         {% set is_checked = page.url in account.target_pages_list %}
                         {% set niches_val = ', '.join(page_niches.get(page.url, [])) %}
-                        <div class="border rounded-lg px-2 py-1.5 transition-colors {% if is_checked %}bg-indigo-50 border-indigo-200 shadow-sm{% else %}bg-gray-50 border-gray-200{% endif %}"
+                        <div class="border rounded-lg px-2 py-2 transition-all duration-200 {% if is_checked %}bg-indigo-50/50 border-indigo-200 shadow-sm{% else %}bg-white border-gray-200{% endif %}"
                             data-page-block>
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" name="target_pages" value="{{ page.url }}" {% if is_checked
                                     %}checked{% endif %} onchange="toggleCompetitorBox(this)"
-                                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-400 h-3.5 w-3.5">
+                                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer">
                                 <span class="truncate font-medium text-gray-700" title="{{ page.url }}">{{ page.name
                                     }}</span>
                             </label>
-                            <div class="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span class="shrink-0">Niche:</span>
+                            <div class="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
+                                <span class="shrink-0 font-medium text-gray-400">Niche:</span>
                                 <input type="text" data-page-niche="{{ page.url }}" value="{{ niches_val }}"
-                                    placeholder="gia dụng, review đồ bếp"
-                                    class="flex-1 border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-transparent bg-white text-[11px]">
+                                    placeholder="gia dụng, đồ bếp..."
+                                    class="flex-1 border border-gray-200 rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-[11px] transition-shadow">
                             </div>
                             <textarea data-comp-page="{{ page.url }}" rows="2"
                                 placeholder="https://tiktok.com/@doithu (mỗi dòng 1 link)"
-                                class="w-full mt-1.5 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent font-mono resize-vertical bg-white"
+                                class="w-full mt-2 border border-gray-200 rounded-md px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono resize-y bg-white text-gray-600 transition-shadow"
                                 style="{% if not is_checked %}display:none;{% endif %}">{{ grouped.get(page.url, '') }}</textarea>
                         </div>
                         {% endfor %}
                         {% if grouped.get('_unassigned', '') %}
-                        <div class="border rounded-lg px-2 py-1.5 bg-amber-50 border-amber-200" data-page-block>
+                        <div class="border rounded-lg px-2 py-2 bg-amber-50 border-amber-200 shadow-sm" data-page-block>
                             <span class="text-amber-700 font-semibold text-[10px]">⚠️ Chưa gán Page:</span>
                             <textarea data-comp-page="_unassigned" rows="1"
-                                class="w-full mt-1 border border-amber-200 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 font-mono resize-vertical bg-white">{{ grouped.get('_unassigned', '') }}</textarea>
+                                class="w-full mt-1.5 border border-amber-200 rounded-md px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 font-mono resize-y bg-white transition-shadow">{{ grouped.get('_unassigned', '') }}</textarea>
                         </div>
                         {% endif %}
                         {% else %}
@@ -164,13 +194,13 @@
         <div class="flex flex-col gap-2 items-end">
             {% if not account.login_status or account.login_status in ['NEW', 'INVALID'] %}
             <button
-                class="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all hover:shadow"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all hover:-translate-y-0.5 outline-none"
                 onclick="this.innerText='Wait...'; this.classList.add('opacity-50', 'pointer-events-none');"
                 hx-post="/accounts/{{ account.id }}/start-login" hx-target="#account-{{ account.id }}"
                 hx-swap="outerHTML">🔐 Login</button>
             {% elif account.login_status == 'LOGGING_IN' %}
             <button
-                class="bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all hover:shadow animate-pulse"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all animate-pulse outline-none"
                 onclick="this.innerText='Checking...'; this.classList.add('opacity-50', 'pointer-events-none');"
                 hx-post="/accounts/{{ account.id }}/confirm-login" hx-target="#account-{{ account.id }}"
                 hx-swap="outerHTML">✅ Confirm</button>
@@ -178,15 +208,15 @@
 
             {% if account.login_status == 'ACTIVE' %}
             <button
-                class="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all hover:shadow"
+                class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all hover:-translate-y-0.5 outline-none"
                 onclick="this.innerText='Syncing...'; this.classList.add('opacity-50', 'pointer-events-none');"
                 hx-post="/accounts/{{ account.id }}/sync-pages" hx-target="#account-{{ account.id }}"
                 hx-swap="outerHTML" title="Tự động quét danh sách Fanpage">🔄 Sync Pages</button>
             <button
-                class="bg-white hover:bg-gray-50 text-gray-700 font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm ring-1 ring-gray-200 transition-all hover:shadow"
+                class="bg-white hover:bg-gray-50 text-gray-700 font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm border border-gray-200 transition-all hover:-translate-y-0.5 outline-none"
                 onclick="this.innerText='Pinging...'; this.classList.add('opacity-50', 'pointer-events-none');"
                 hx-post="/accounts/{{ account.id }}/validate-session" hx-target="#account-{{ account.id }}"
-                hx-swap="outerHTML">📶 Ping Session</button>
+                hx-swap="outerHTML">📶 Ping</button>
             {% endif %}
 
             {% if sync_started %}
@@ -226,11 +256,11 @@
             var ta = block.querySelector('textarea[data-comp-page]');
             if (ta) {
                 ta.style.display = cb.checked ? '' : 'none';
-                block.className = block.className.replace(/bg-\w+-50/g, '').replace(/border-\w+-200/g, '').replace(/shadow-\w+/g, '');
+                block.className = block.className.replace(/bg-\w+-50\/50/g, '').replace(/bg-\w+-50/g, '').replace(/bg-white/g, '').replace(/border-\w+-200/g, '').replace(/shadow-\w+/g, '');
                 if (cb.checked) {
-                    block.classList.add('bg-indigo-50', 'border-indigo-200', 'shadow-sm');
+                    block.classList.add('bg-indigo-50/50', 'border-indigo-200', 'shadow-sm');
                 } else {
-                    block.classList.add('bg-gray-50', 'border-gray-200');
+                    block.classList.add('bg-white', 'border-gray-200');
                 }
             }
         }

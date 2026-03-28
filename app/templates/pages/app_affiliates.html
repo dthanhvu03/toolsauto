@@ -1,0 +1,117 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Kho Affiliate • Auto Publisher{% endblock %}
+{% block page_title %}Kho Affiliate Links{% endblock %}
+{% block page_subtitle %}Quản lý thư viện Link Mua Hàng để AI làm chim mồi rải comment tự động.{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Form Thêm / Sửa Link -->
+    <div class="lg:col-span-1">
+        <div class="bg-white border border-[var(--border)] rounded-lg p-5 sticky top-20">
+            <h3 class="text-base font-semibold text-gray-800 mb-4" id="formTitle">Tạo Link Affiliate Mới</h3>
+
+            <form hx-post="/affiliates/save" hx-swap="none"
+                hx-on::after-request="if(event.detail.successful) this.reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới';"
+                class="space-y-4">
+
+                <input type="hidden" name="link_id" id="link_id" value="0">
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Từ Khóa (Keyword)</label>
+                    <input type="text" name="keyword" id="keyword" required
+                        placeholder="Ví dụ: áo thun, giày sneaker..."
+                        class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <p class="text-xs text-gray-500 mt-1">Dùng để AI nhận diện sản phẩm trong Video/Ảnh chụp.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Affiliate URL</label>
+                    <input type="url" name="url" id="url" required placeholder="https://shope.ee/..."
+                        class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Câu Bình Luận Mẫu</label>
+                    <textarea name="comment_template" id="comment_template" required rows="3"
+                        placeholder="Đang flashsale ae mua lẹ không hết: [LINK]"
+                        class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    <p class="text-xs text-gray-500 mt-1">Ghi rõ từ <b>[LINK]</b>. Hệ thống sẽ thay thế nó bằng URL bên
+                        trên.</p>
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" id="btnSubmit"
+                        class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded text-sm transition-colors">
+                        Thêm Mới
+                    </button>
+                    <button type="button"
+                        onclick="document.forms[0].reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới';"
+                        class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded text-sm transition-colors">
+                        Hủy
+                    </button>
+                </div>
+            </form>
+
+            <div id="formError" class="mt-4 text-sm text-red-600"></div>
+        </div>
+    </div>
+
+    <!-- Danh Sách Links -->
+    <div class="lg:col-span-2">
+        <div class="bg-white border border-[var(--border)] rounded-lg p-5">
+            <div class="flex items-center justify-between gap-3 mb-6">
+                <div class="relative w-full max-w-sm">
+                    <input id="searchKeyword" type="text" placeholder="Tìm theo từ khóa..."
+                        class="w-full border border-[var(--border)] rounded-full pl-4 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <button id="btnSearch"
+                        class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600">
+                        🔍
+                    </button>
+                </div>
+            </div>
+
+            <div id="affiliatesTable" hx-get="/affiliates/table" hx-trigger="load, affiliatesChanged from:body"
+                hx-swap="innerHTML">
+                <div class="p-8 text-center text-sm text-gray-400">Đang tải dữ liệu...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.body.addEventListener("htmx:responseError", function (evt) {
+        try {
+            const data = JSON.parse(evt.detail.xhr.response);
+            if (data.error) {
+                alert(data.error);
+            }
+        } catch (e) {
+            alert("Lỗi máy chủ.");
+        }
+    });
+
+    function doSearch() {
+        const q = encodeURIComponent(document.getElementById('searchKeyword').value || '');
+        htmx.ajax('GET', `/affiliates/table?q=${q}`, { target: '#affiliatesTable', swap: 'innerHTML' });
+    }
+
+    document.getElementById('btnSearch').addEventListener('click', doSearch);
+    document.getElementById('searchKeyword').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') doSearch();
+    });
+
+    // JS to populate the edit form when clicking "Edit" button in the table fragment
+    window.editAffiliate = function (id, keyword, url, template) {
+        document.getElementById('link_id').value = id;
+        document.getElementById('keyword').value = keyword;
+        document.getElementById('url').value = url;
+        document.getElementById('comment_template').value = template;
+
+        document.getElementById('formTitle').innerText = 'Chỉnh sửa Link: ' + keyword;
+        document.getElementById('btnSubmit').innerText = 'Lưu Thay Đổi';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+</script>
+{% endblock %}

@@ -23,8 +23,10 @@ from selenium.webdriver.chrome.options import Options
 
 logger = logging.getLogger(__name__)
 
-COOKIE_PATH = "/home/vu/toolsauto/gemini_cookies.json"
-DEBUG_DIR = "/home/vu/toolsauto/debug_steps"
+import app.config as config
+
+COOKIE_PATH = str(config.BASE_DIR / "gemini_cookies.json")
+DEBUG_DIR = str(config.BASE_DIR / "debug_steps")
 
 # Xvfb đã khởi động trong process này (tránh gọi nhiều lần)
 _xvfb_process = None
@@ -280,7 +282,8 @@ class GeminiRPAService:
             logger.error("Cookie hết hạn! Vui lòng đăng nhập lại.")
             # Ghi flag để UI dashboard hiển thị Expired ngay lập tức
             try:
-                with open("/home/vu/toolsauto/gemini_cookies_invalid", "w") as f:
+                invalid_path = str(config.BASE_DIR / "gemini_cookies_invalid")
+                with open(invalid_path, "w") as f:
                     f.write(str(int(time.time())))
             except Exception:
                 pass
@@ -317,7 +320,7 @@ class GeminiRPAService:
             time.sleep(1)
             
             try:
-                proof = "/home/vu/.gemini/antigravity/brain/2623c4e2-efc2-4973-873e-689d91eb1587/video_upload_proof.png"
+                proof = os.path.join(DEBUG_DIR, "video_upload_proof.png")
                 driver.save_screenshot(proof)
                 logger.info("Saved upload proof: %s", proof)
             except:
@@ -330,8 +333,6 @@ class GeminiRPAService:
             box.send_keys(Keys.RETURN)
             logger.info("Prompt submitted via Enter key")
                 
-            time.sleep(4)
-
             # 3. Đợi response (default 180s, configurable)
             result = self._wait_response(driver, prompt, old_response_text)
             if result:
@@ -339,9 +340,6 @@ class GeminiRPAService:
                 try: 
                     driver.save_screenshot(out_path)
                     logger.info("Screenshot saved to %s", out_path)
-                    # Sau đó copy file này sang folder não hiện hành để hiển thị cho User dễ dàng hơn
-                    import shutil
-                    shutil.copy(out_path, '/home/vu/.gemini/antigravity/brain/8db896d9-274f-4f0b-8a1f-1260125f78bd/gemini_ui_success.png')
                 except Exception as e: 
                     logger.error("Lỗi save_screenshot: %s", e)
                 return result

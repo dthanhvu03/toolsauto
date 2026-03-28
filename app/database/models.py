@@ -456,3 +456,17 @@ class PageInsight(Base):
     
     recorded_at = Column(Integer, default=now_ts, index=True) # Thời điểm cào data
 
+class AffiliateLink(Base):
+    """
+    Kho Link Affiliate cho tính năng "Máy Bơm Affiliate" (Auto-Injector).
+    Khi AI nhận diện được keyword trùng khớp trong video, bot sẽ tự bốc url & comment_template
+    để auto comment vào post.
+    """
+    __tablename__ = "affiliate_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    keyword = Column(String, unique=True, index=True, nullable=False) # e.g. "áo thun", "giày sneaker"
+    url = Column(String, nullable=False) # e.g. "https://shope.ee/..."
+    comment_template = Column(String, nullable=False) # e.g. "Đang sale mua ở đây nè: [LINK]"
+    created_at = Column(Integer, default=now_ts)
+    updated_at = Column(Integer, default=now_ts, onupdate=now_ts)

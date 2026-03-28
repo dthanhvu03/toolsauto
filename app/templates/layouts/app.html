@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,37 +13,58 @@
   <!-- Mobile topbar -->
   <div class="lg:hidden sticky top-0 z-40 bg-[var(--surface)] border-b border-[var(--border)]">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-      <button id="menuBtn" class="h-10 w-10 inline-flex items-center justify-center rounded border border-[var(--border)] bg-white">
+      <button id="menuBtn"
+        class="h-10 w-10 inline-flex items-center justify-center rounded border border-[var(--border)] bg-white">
         <span class="sr-only">Open menu</span>
         <svg class="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
       <div class="text-sm font-semibold">Auto Publisher</div>
-      <a href="/health" class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700">Health</a>
+      <a href="/health"
+        class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700">Health</a>
     </div>
   </div>
 
   <div class="min-h-screen lg:flex">
     <!-- Sidebar -->
-    <div id="sidebarOverlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden"></div>
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden cursor-pointer"
+      onclick="closeSidebar()"></div>
     <aside id="sidebar"
-           class="fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[var(--surface)] border-r border-[var(--border)] transform -translate-x-full lg:translate-x-0 transition-transform">
+      class="fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[var(--surface)] border-r border-[var(--border)] transform -translate-x-full lg:translate-x-0 transition-transform">
       <div class="h-16 px-5 flex items-center border-b border-[var(--border)]">
         <div class="font-bold tracking-tight">Auto Publisher</div>
       </div>
       <nav class="p-3 text-sm">
         {% set p = request.url.path %}
-        <a href="/app" class="nav-item block px-3 py-2 rounded {% if p == '/app' %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Overview</a>
-        <a href="/app/jobs" class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/jobs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Jobs</a>
-        <a href="/app/viral" class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/viral') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Viral</a>
-        <a href="/app/tiktok-links" class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/tiktok-links') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">TikTok Links</a>
-        <a href="/app/accounts" class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/accounts') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Accounts</a>
-        <a href="/app/logs" class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/logs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Logs</a>
-        <a href="/app/settings" class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Settings</a>
+        <a href="/app"
+          class="nav-item block px-3 py-2 rounded {% if p == '/app' %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Overview</a>
+        <a href="/app/jobs"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/jobs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Jobs</a>
+        <a href="/app/viral"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/viral') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Viral</a>
+        <a href="/app/tiktok-links"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/tiktok-links') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">TikTok
+          Links</a>
+        <a href="/app/accounts"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/accounts') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Accounts</a>
+        <a href="/app/pages"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/pages') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">📄
+          Pages</a>
+        <a href="/gallery/"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/gallery') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">🖼️
+          Gallery</a>
+        <a href="/app/logs"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/logs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Logs</a>
+        <a href="/affiliates"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/affiliates') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">🛒
+          Affiliates</a>
+        <a href="/app/settings"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Settings</a>
         <div class="mt-3 pt-3 border-t border-[var(--border)]">
-          <a href="/tiktok-links" class="block px-3 py-2 rounded hover:bg-slate-50 text-slate-700">TikTok Links (legacy)</a>
-          <a href="/" class="block px-3 py-2 rounded hover:bg-slate-50 text-slate-700">Old dashboard</a>
+          <a href="/tiktok-links" class="nav-item block px-3 py-2 rounded hover:bg-slate-50 text-slate-700">TikTok Links
+            (legacy)</a>
+          <a href="/" class="nav-item block px-3 py-2 rounded hover:bg-slate-50 text-slate-700">Old dashboard</a>
         </div>
       </nav>
     </aside>
@@ -56,7 +78,8 @@
             <div class="text-xs text-[var(--muted)]">{% block page_subtitle %}{% endblock %}</div>
           </div>
           <div class="flex items-center gap-2">
-            <a href="/health" class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700 hover:bg-slate-50">
+            <a href="/health"
+              class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700 hover:bg-slate-50">
               System Health
             </a>
           </div>
@@ -71,20 +94,33 @@
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     const btn = document.getElementById('menuBtn');
+
+    // Explicit global function for onclick
+    window.closeSidebar = function () {
+      if (sidebar) sidebar.classList.add('-translate-x-full');
+      if (overlay) overlay.classList.add('hidden');
+    };
+
     function openSidebar() {
-      sidebar.classList.remove('-translate-x-full');
-      overlay.classList.remove('hidden');
+      if (sidebar) sidebar.classList.remove('-translate-x-full');
+      if (overlay) overlay.classList.remove('hidden');
     }
-    function closeSidebar() {
-      sidebar.classList.add('-translate-x-full');
-      overlay.classList.add('hidden');
-    }
+
     if (btn) btn.addEventListener('click', openSidebar);
-    if (overlay) overlay.addEventListener('click', closeSidebar);
+
+    // Fallback: Bind to all links to ensure sidebar closes instantly on mobile tap
+    document.querySelectorAll('#sidebar a.nav-item').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth < 1024) {
+          window.closeSidebar();
+        }
+      });
+    });
+
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeSidebar();
+      if (e.key === 'Escape') window.closeSidebar();
     });
   </script>
 </body>
-</html>
 
+</html>

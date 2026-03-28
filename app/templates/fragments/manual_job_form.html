@@ -1,0 +1,70 @@
+<form id="manual-job-form" hx-post="/jobs/manual/create" hx-encoding="multipart/form-data"
+    hx-target="#manual-job-response" hx-swap="innerHTML" class="flex flex-col">
+
+    <input type="hidden" name="account_id" id="manual-acc-id" value="{{ pages[0].account_id if pages else '' }}">
+
+    {% if not pages %}
+    <div class="px-6 py-8 text-center">
+        <p class="text-2xl mb-2">⚠️</p>
+        <p class="font-semibold text-gray-700 text-sm mb-1">Không có tài khoản nào đang hoạt động</p>
+        <p class="text-xs text-gray-400">Vào <a href="/app/accounts" class="text-indigo-600 underline">Accounts</a> →
+            đăng nhập trước nhé!</p>
+    </div>
+    {% else %}
+    <div class="px-5 py-4 flex flex-col gap-4">
+
+        <!-- Target Page -->
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">🎯 Target Page</label>
+            <div class="relative">
+                <select name="target_page"
+                    onchange="document.getElementById('manual-acc-id').value = this.options[this.selectedIndex].dataset.accId"
+                    class="app-select w-full pr-8 appearance-none">
+                    {% for p in pages %}
+                    <option value="{{ p.page_url }}" data-acc-id="{{ p.account_id }}">
+                        {{ p.page_name }} — {{ p.account_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <span
+                    class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400 text-xs">▾</span>
+            </div>
+        </div>
+
+        <!-- Media Upload -->
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">📎 Media <span
+                    class="text-gray-300 font-normal normal-case">(tùy chọn)</span></label>
+            <label for="media-upload"
+                class="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-200 rounded-lg p-5 cursor-pointer bg-gray-50 hover:bg-indigo-50 hover:border-indigo-400 transition-colors">
+                <span id="drop-icon" class="text-2xl">📁</span>
+                <span id="drop-label" class="text-xs text-gray-400">Click hoặc kéo thả ảnh / video vào đây</span>
+                <input type="file" name="media" id="media-upload" accept="image/*,video/*" class="hidden"
+                    onchange="const f=this.files[0]; if(f){document.getElementById('drop-label').textContent=f.name; document.getElementById('drop-icon').textContent='✅';}">
+            </label>
+        </div>
+
+        <!-- Caption -->
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">💬 Caption <span
+                    class="text-gray-300 font-normal normal-case">(để trống → AI tự viết)</span></label>
+            <textarea name="caption" rows="2" placeholder="Nhập nội dung caption muốn đăng..."
+                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:ring-1 focus:ring-indigo-400 outline-none resize-none placeholder-gray-300"></textarea>
+        </div>
+
+        <div id="manual-job-response"></div>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+        <p class="text-xs text-gray-400"><span class="text-amber-500">⚡</span> Ưu tiên tối đa</p>
+        <div class="flex gap-2">
+            <button type="button" onclick="document.getElementById('manualJobDialog').close()"
+                class="app-btn text-sm px-4">Hủy</button>
+            <button type="submit"
+                onclick="this.textContent='Đang xử lý...'; this.disabled=true; this.classList.add('opacity-60');"
+                class="app-btn app-btn-primary text-sm px-5">🚀 Đăng ngay!</button>
+        </div>
+    </div>
+    {% endif %}
+</form>
