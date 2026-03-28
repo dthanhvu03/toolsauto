@@ -832,7 +832,9 @@ class FacebookAdapter(AdapterInterface):
                     logger.info("FacebookAdapter: Switched to Page context successfully.")
                 else:
                     logger.info("FacebookAdapter: No 'Switch now' button found on the Page. Attempting context switch via avatar menu...")
-                    switched = self._switch_to_page_context(target_page_name)
+                    switched = self._switch_to_page_context(
+                        target_page_name, target_page_url=target_page_url
+                    )
                     if not switched:
                         logger.warning("FacebookAdapter: Avatar menu switch failed or unnecessary. Verifying active context...")
 
@@ -1582,7 +1584,20 @@ class FacebookAdapter(AdapterInterface):
             logger.warning("FacebookAdapter: Failed to post comment: %s", e)
             return PublishResult(ok=False, error=f"Comment failed: {e}", is_fatal=False)
 
-    def _switch_to_page_context(self, target_page_name: str = None) -> bool:
+    @staticmethod
+    def _facebook_numeric_id_from_url(url: str) -> str | None:
+        """Extract profile/page numeric id from facebook URLs (profile.php?id=…)."""
+        if not url:
+            return None
+        m = re.search(r"[?&]id=(\d{5,})", url)
+        return m.group(1) if m else None
+
+    def _switch_to_page_context(
+        self,
+        target_page_name: str | None = None,
+        *,
+        target_page_url: str | None = None,
+    ) -> bool:
         """
         Switch current context to become the Fanpage.
         Uses the top-right avatar menu as proven in test_switch.py.
@@ -1618,8 +1633,79 @@ class FacebookAdapter(AdapterInterface):
             if see_all.count() > 0 and see_all.is_visible():
                 see_all.click()
                 self.page.wait_for_timeout(2000)
-                
-            # 3. Find the target profile in the list
+
+            dialog = self.page.locator('div[role="dialog"]').last
+
+            # 3a. Prefer href match (numeric id) — avoids wrong row / huge ancestor on force click.
+            page_id = self._facebook_numeric_id_from_url(target_page_url or "")
+            if page_id:
+                id_patterns = [
+                    f'a[href*="profile.php?id={page_id}"]',
+                    f'a[href*="id={page_id}"]',
+                    f'a[href*="{page_id}"]',
+                ]
+                for pattern in id_patterns:
+                    link = dialog.locator(pattern).first
+                    try:
+                        if link.count() > 0 and link.is_visible(timeout=2500):
+                            logger.info(
+                                "FacebookAdapter: Switching via menu link for page id %s...",
+                                page_id,
+                            )
+                            link.scroll_into_view_if_needed()
+                            try:
+                                link.click(timeout=8000)
+                            except Exception:
+                                logger.info(
+                                    "FacebookAdapter: Link click timed out, trying force..."
+                                )
+                                link.click(force=True)
+                            try:
+                                dialog.wait_for(state="hidden", timeout=15000)
+                            except Exception:
+                                logger.warning(
+                                    "FacebookAdapter: Switcher dialog still visible after id link click."
+                                )
+                            self.page.wait_for_timeout(3000)
+                            logger.info("FacebookAdapter: Switch command sent (id link).")
+                            return True
+                    except Exception:
+                        continue
+
+            # 3a2. FB "Chọn trang cá nhân" uses menuitemradio rows — more reliable than scanning all divs.
+            if target_page_name:
+                try:
+                    radios = dialog.get_by_role("menuitemradio").filter(
+                        has_text=re.compile(re.escape(target_page_name.strip()), re.IGNORECASE)
+                    )
+                    if radios.count() > 0:
+                        pick = radios.first
+                        if pick.is_visible(timeout=2500):
+                            logger.info(
+                                "FacebookAdapter: Clicking menuitemradio for '%s'...",
+                                target_page_name,
+                            )
+                            pick.scroll_into_view_if_needed()
+                            try:
+                                pick.click(timeout=8000)
+                            except Exception:
+                                pick.click(force=True)
+                            try:
+                                dialog.wait_for(state="hidden", timeout=15000)
+                            except Exception:
+                                logger.warning(
+                                    "FacebookAdapter: Switcher dialog still visible after "
+                                    "menuitemradio click; proceeding to verify via /me."
+                                )
+                            self.page.wait_for_timeout(3000)
+                            logger.info(
+                                "FacebookAdapter: Switch command sent (menuitemradio)."
+                            )
+                            return True
+                except Exception as e:
+                    logger.debug("FacebookAdapter: menuitemradio path skipped: %s", e)
+
+            # 3b. Find the target profile in the list (name match)
             if target_page_name:
                 logger.info("FacebookAdapter: Looking for exact profile name '%s' in switch menu...", target_page_name)
                 
@@ -1633,8 +1719,6 @@ class FacebookAdapter(AdapterInterface):
                     try:
                         text = el.inner_text().strip()
                         if text and len(text) >= 2:
-                            # Normalize accents
-                            import unicodedata
                             normalized = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
                             normalized = normalized.replace('đ', 'd').replace('Đ', 'D').lower()
                             
@@ -1649,8 +1733,11 @@ class FacebookAdapter(AdapterInterface):
                 
                 if found_el:
                     logger.info("FacebookAdapter: Clicking explicit profile match for '%s'...", target_page_name)
-                    clickable = found_el.locator("xpath=ancestor::div[@role='button' or @role='menuitemradio' or @role='radio' or @role='menuitem' or @role='link']").first
-                    
+                    # Nearest interactive ancestor — avoid outer dialog-sized role=button.
+                    clickable = found_el.locator(
+                        'xpath=ancestor::div[@role="button" or @role="menuitemradio" or @role="radio" or @role="menuitem" or @role="link"][1]'
+                    ).first
+
                     if self._is_visible(clickable):
                         btn_to_click = clickable
                     else:
@@ -1662,7 +1749,13 @@ class FacebookAdapter(AdapterInterface):
                     except Exception:
                         logger.info("FacebookAdapter: Normal click timed out, attempting force click...")
                         btn_to_click.click(force=True)
-                    self.page.wait_for_timeout(12000)
+                    try:
+                        dialog.wait_for(state="hidden", timeout=15000)
+                    except Exception:
+                        logger.warning(
+                            "FacebookAdapter: Switcher dialog still visible after row click."
+                        )
+                    self.page.wait_for_timeout(3000)
                     logger.info("FacebookAdapter: Switch command sent.")
                     return True
                 else:
