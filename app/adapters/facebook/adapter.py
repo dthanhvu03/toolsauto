@@ -1661,12 +1661,35 @@ class FacebookAdapter(AdapterInterface):
             return clickable
         return el
 
+    @staticmethod
+    def _fb_aria_switch_label_is_carousel_noise(al: str) -> bool:
+        """FB page cards use long labels starting with photo carousel verbs — not the real switch CTA."""
+        s = al.strip().lower()
+        noise_prefixes = (
+            "ảnh trước",
+            "ảnh sau",
+            "previous photo",
+            "previous image",
+            "next photo",
+            "next image",
+        )
+        return any(s.startswith(p) for p in noise_prefixes)
+
+    @staticmethod
+    def _fb_aria_switch_label_is_primary_switch_cta(al: str) -> bool:
+        """Prefer buttons whose accessible name starts with the real switch phrase."""
+        s = al.strip().lower()
+        return (
+            s.startswith("chuyển sang")
+            or s.startswith("switch to")
+            or s.startswith("switching to")
+        )
+
     def _try_click_switcher_aria_label(self, dialog: Locator, target_page_name: str) -> bool:
         """
         FB exposes 'Chuyển sang <Page>' / 'Switch to <Page>' on role=button — more reliable
         than has-text on duplicate rows (cover photo can intercept the first match).
-        Tries DOM-last match first: the first node in tree order is often a header/cover hit-area
-        that does not change posting identity on some builds.
+        Skips carousel-style labels; tries primary CTA first, then DOM-last within each tier.
         """
         if not self.page or not target_page_name:
             return False
@@ -1677,7 +1700,8 @@ class FacebookAdapter(AdapterInterface):
             candidates = dialog.locator('[role="button"]').all()
         except Exception:
             return False
-        to_try: list[Locator] = []
+        primary: list[Locator] = []
+        secondary: list[Locator] = []
         for el in candidates:
             try:
                 al = (el.get_attribute("aria-label") or "").strip()
@@ -1687,24 +1711,36 @@ class FacebookAdapter(AdapterInterface):
                 if tn_lower not in al_lower:
                     continue
                 if (
-                    "chuyển sang" in al_lower
-                    or "switch to" in al_lower
-                    or "switching to" in al_lower
+                    "chuyển sang" not in al_lower
+                    and "switch to" not in al_lower
+                    and "switching to" not in al_lower
                 ):
-                    to_try.append(el)
+                    continue
+                if self._fb_aria_switch_label_is_carousel_noise(al):
+                    continue
+                if self._fb_aria_switch_label_is_primary_switch_cta(al):
+                    primary.append(el)
+                else:
+                    secondary.append(el)
             except Exception:
                 continue
-        for el in reversed(to_try):
-            try:
-                el.scroll_into_view_if_needed(timeout=3000)
-                el.click(force=True, timeout=5000)
-                logger.info(
-                    "FacebookAdapter: Switch via aria-label (%s)",
-                    (el.get_attribute("aria-label") or "")[:100],
-                )
-                return True
-            except Exception:
-                continue
+        for tier_name, tier in (
+            ("primary-cta", primary),
+            ("secondary", secondary),
+        ):
+            for el in reversed(tier):
+                try:
+                    el.scroll_into_view_if_needed(timeout=3000)
+                    el.click(force=True, timeout=5000)
+                    full_al = (el.get_attribute("aria-label") or "").strip()
+                    logger.info(
+                        "FacebookAdapter: Switch via aria-label [%s] (%s)",
+                        tier_name,
+                        full_al[:120],
+                    )
+                    return True
+                except Exception:
+                    continue
         return False
 
     def _activate_profile_switcher_row(self, row: Locator, label: str) -> bool:
@@ -1865,12 +1901,13 @@ class FacebookAdapter(AdapterInterface):
             if target_page_name:
                 if self._try_click_switcher_aria_label(dialog, target_page_name):
                     try:
-                        dialog.wait_for(state="hidden", timeout=15000)
+                        # Short wait: wrong clicks (carousel) often leave dialog open; verify + 3a2b follow.
+                        dialog.wait_for(state="hidden", timeout=6000)
                     except Exception:
                         logger.warning(
                             "FacebookAdapter: Switcher dialog still visible after aria-label click."
                         )
-                    self.page.wait_for_timeout(5000)
+                    self.page.wait_for_timeout(2500)
                     if not target_page_url:
                         logger.info(
                             "FacebookAdapter: Switch command sent (aria-label switch button)."
