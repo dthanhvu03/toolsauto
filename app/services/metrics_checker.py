@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, select
 
 from app.database.models import Job, Account
-from app.config import TIMEZONE
+from app.config import TIMEZONE, CONTENT_PROFILES_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -112,11 +112,15 @@ class MetricsChecker:
             import os
             import re
             
-            # Use the account's existing profile to bypass the login wall
-            profile_dir = f"/home/vu/toolsauto/content/profiles/{job.account_id}"
-            # Backward compatibility check for old path
-            if not os.path.exists(profile_dir):
-                 profile_dir = f"/home/vu/toolsauto/content/profiles/facebook_{job.account_id}"
+            # Prefer DB path (same as publisher); never hardcode machine home.
+            profile_dir = None
+            acc = getattr(job, "account", None)
+            if acc and getattr(acc, "profile_path", None):
+                profile_dir = acc.profile_path
+            if not profile_dir or not os.path.isdir(profile_dir):
+                profile_dir = str(
+                    CONTENT_PROFILES_DIR / f"facebook_{getattr(job, 'account_id', 0)}"
+                )
 
             reel_id_match = re.search(r'/reel/(\d+)', job.post_url)
             if not reel_id_match:

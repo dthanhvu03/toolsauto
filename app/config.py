@@ -31,6 +31,10 @@ DRM_WATERMARK_TEXT = os.getenv("DRM_WATERMARK_TEXT", "z")
 
 # Directory Settings
 CONTENT_DIR = BASE_DIR / "content"
+# Chromium persistent contexts (FacebookAdapter, login bootstrap). NOT cwd-relative.
+CONTENT_PROFILES_DIR = Path(
+    os.getenv("CONTENT_PROFILES_DIR", str(CONTENT_DIR / "profiles"))
+).expanduser().resolve()
 DONE_DIR = CONTENT_DIR / "done"
 FAILED_DIR = CONTENT_DIR / "failed"
 REUP_DIR = CONTENT_DIR / "reup"
