@@ -1592,6 +1592,26 @@ class FacebookAdapter(AdapterInterface):
         m = re.search(r"[?&]id=(\d{5,})", url)
         return m.group(1) if m else None
 
+    def _switcher_row_has_page_id(self, row: Locator, page_id: str) -> bool:
+        """True if row subtree has href with id or FB inlined the numeric id in markup."""
+        if not page_id:
+            return False
+        try:
+            if row.locator(f'[href*="{page_id}"]').count() > 0:
+                return True
+            outer = row.evaluate("e => (e && e.outerHTML) ? e.outerHTML : ''")
+            return page_id in (outer or "")
+        except Exception:
+            return False
+
+    def _resolve_switcher_clickable(self, el: Locator) -> Locator:
+        clickable = el.locator(
+            'xpath=ancestor::div[@role="button" or @role="menuitemradio" or @role="radio" or @role="menuitem" or @role="link"][1]'
+        ).first
+        if self._is_visible(clickable):
+            return clickable
+        return el
+
     def _activate_profile_switcher_row(self, row: Locator, label: str) -> bool:
         """
         FB switcher rows often ignore Playwright hit-tests; try several input paths.
@@ -1724,13 +1744,29 @@ class FacebookAdapter(AdapterInterface):
                     page_id,
                 )
 
-            # 3a2b. Text-filtered radio rows — FB often has no usable accessible name for get_by_role(name=...).
+            # 3a2b. Text-filtered rows — FB may use menuitemradio, radio, or role=button rows.
             if target_page_name:
                 name_pat = re.compile(re.escape(target_page_name.strip()), re.IGNORECASE)
-                for row_sel in ('[role="menuitemradio"]', '[role="radio"]'):
+                for row_sel in (
+                    '[role="menuitemradio"]',
+                    '[role="radio"]',
+                    'div[role="button"]',
+                ):
                     rows = dialog.locator(row_sel).filter(has_text=name_pat)
                     cnt = rows.count()
                     if cnt == 0:
+                        logger.info(
+                            "FacebookAdapter: 3a2b zero %s rows matching '%s'.",
+                            row_sel,
+                            target_page_name,
+                        )
+                        continue
+                    if cnt > 12:
+                        logger.info(
+                            "FacebookAdapter: 3a2b skip %s (count=%s too many, likely false positives).",
+                            row_sel,
+                            cnt,
+                        )
                         continue
                     logger.info(
                         "FacebookAdapter: Switcher %s rows with text match for '%s': count=%s",
@@ -1743,9 +1779,9 @@ class FacebookAdapter(AdapterInterface):
                         for i in range(cnt):
                             r = rows.nth(i)
                             try:
-                                if r.locator(f'[href*="{page_id}"]').count() > 0:
+                                if self._switcher_row_has_page_id(r, page_id):
                                     if self._activate_profile_switcher_row(
-                                        r, f"href-{row_sel}-{i}"
+                                        r, f"id-{row_sel}-{i}"
                                     ):
                                         activated = True
                                         break
@@ -1872,10 +1908,10 @@ class FacebookAdapter(AdapterInterface):
                 if page_id and name_candidates:
                     for el in name_candidates:
                         try:
-                            if el.locator(f'[href*="{page_id}"]').count() > 0:
+                            if self._switcher_row_has_page_id(el, page_id):
                                 found_el = el
                                 logger.info(
-                                    "FacebookAdapter: Using name match row that contains href for page id %s.",
+                                    "FacebookAdapter: Using name match row containing page id %s (href or markup).",
                                     page_id,
                                 )
                                 break
@@ -1883,14 +1919,40 @@ class FacebookAdapter(AdapterInterface):
                             pass
                     if not found_el:
                         logger.warning(
-                            "FacebookAdapter: %s name matches but none contain href for id %s; "
-                            "using first match (may be wrong row).",
+                            "FacebookAdapter: %s name matches, page id %s not in href/markup; "
+                            "trying activate inner candidates (reverse order)...",
                             len(name_candidates),
                             page_id,
                         )
-                        found_el = name_candidates[0]
+                        for rev_i, el in enumerate(reversed(name_candidates)):
+                            c = self._resolve_switcher_clickable(el)
+                            if self._activate_profile_switcher_row(
+                                c, f"name-cand-rev-{rev_i}"
+                            ):
+                                try:
+                                    dialog.wait_for(state="hidden", timeout=15000)
+                                except Exception:
+                                    logger.warning(
+                                        "FacebookAdapter: Switcher dialog still visible after "
+                                        "multi-candidate activate."
+                                    )
+                                self.page.wait_for_timeout(3000)
+                                logger.info(
+                                    "FacebookAdapter: Switch command sent (multi-candidate %s).",
+                                    rev_i,
+                                )
+                                return True
+                        found_el = name_candidates[-1]
+                        logger.info(
+                            "FacebookAdapter: Using last name match as fallback click target "
+                            "(inner-most / list order)."
+                        )
                 elif name_candidates:
-                    found_el = name_candidates[0]
+                    found_el = name_candidates[-1]
+                    logger.info(
+                        "FacebookAdapter: No page id filter; using last of %s name matches.",
+                        len(name_candidates),
+                    )
                 
                 if found_el:
                     logger.info("FacebookAdapter: Clicking explicit profile match for '%s'...", target_page_name)
