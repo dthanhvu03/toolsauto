@@ -1632,6 +1632,44 @@ class FacebookAdapter(AdapterInterface):
             return clickable
         return el
 
+    def _try_click_switcher_aria_label(self, dialog: Locator, target_page_name: str) -> bool:
+        """
+        FB exposes 'Chuyển sang <Page>' / 'Switch to <Page>' on role=button — more reliable
+        than has-text on duplicate rows (cover photo can intercept the first match).
+        """
+        if not self.page or not target_page_name:
+            return False
+        tn_lower = target_page_name.strip().lower()
+        if not tn_lower:
+            return False
+        try:
+            candidates = dialog.locator('[role="button"]').all()
+        except Exception:
+            return False
+        for el in candidates:
+            try:
+                al = (el.get_attribute("aria-label") or "").strip()
+                if not al:
+                    continue
+                al_lower = al.lower()
+                if tn_lower not in al_lower:
+                    continue
+                if (
+                    "chuyển sang" in al_lower
+                    or "switch to" in al_lower
+                    or "switching to" in al_lower
+                ):
+                    el.scroll_into_view_if_needed(timeout=3000)
+                    el.click(force=True, timeout=5000)
+                    logger.info(
+                        "FacebookAdapter: Switch via aria-label (%s)",
+                        al[:100],
+                    )
+                    return True
+            except Exception:
+                continue
+        return False
+
     def _activate_profile_switcher_row(self, row: Locator, label: str) -> bool:
         """
         FB switcher rows often ignore Playwright hit-tests; try several input paths.
@@ -1648,18 +1686,19 @@ class FacebookAdapter(AdapterInterface):
                 return False
         except Exception:
             return False
+        # Cover images often intercept normal click — force first to avoid 8s timeout.
+        try:
+            row.click(force=True, timeout=5000)
+            logger.info("FacebookAdapter: Switcher row force click OK (%s)", label)
+            return True
+        except Exception as e:
+            logger.info("FacebookAdapter: Switcher row force click failed (%s): %s", label, e)
         try:
             row.click(timeout=8000)
             logger.info("FacebookAdapter: Switcher row normal click OK (%s)", label)
             return True
         except Exception as e:
             logger.info("FacebookAdapter: Switcher row normal click failed (%s): %s", label, e)
-        try:
-            row.click(force=True, timeout=8000)
-            logger.info("FacebookAdapter: Switcher row force click OK (%s)", label)
-            return True
-        except Exception as e:
-            logger.info("FacebookAdapter: Switcher row force click failed (%s): %s", label, e)
         try:
             row.evaluate("el => el.click()")
             logger.info("FacebookAdapter: Switcher row evaluate click OK (%s)", label)
@@ -1764,6 +1803,20 @@ class FacebookAdapter(AdapterInterface):
                     page_id,
                 )
 
+            if target_page_name:
+                if self._try_click_switcher_aria_label(dialog, target_page_name):
+                    try:
+                        dialog.wait_for(state="hidden", timeout=15000)
+                    except Exception:
+                        logger.warning(
+                            "FacebookAdapter: Switcher dialog still visible after aria-label click."
+                        )
+                    self.page.wait_for_timeout(3000)
+                    logger.info(
+                        "FacebookAdapter: Switch command sent (aria-label switch button)."
+                    )
+                    return True
+
             # 3a2b. Text-filtered rows — FB may use menuitemradio, radio, or role=button rows.
             if target_page_name:
                 name_pat = re.compile(re.escape(target_page_name.strip()), re.IGNORECASE)
@@ -1808,7 +1861,14 @@ class FacebookAdapter(AdapterInterface):
                             except Exception:
                                 pass
                     if not activated:
-                        for i in range(cnt):
+                        indices = list(range(cnt))
+                        if row_sel == "div[role=\"button\"]" and cnt >= 2:
+                            indices = list(range(cnt - 1, -1, -1))
+                            logger.info(
+                                "FacebookAdapter: 3a2b trying button row indices reversed (count=%s).",
+                                cnt,
+                            )
+                        for i in indices:
                             r = rows.nth(i)
                             try:
                                 if r.get_attribute("aria-checked") == "true":
