@@ -284,23 +284,33 @@ printf "protocol=https\nhost=github.com\n" | git credential reject
 
 ## 6. Cập Nhật Code Tự Động (CI/CD)
 
-Đã cài sẵn Github Actions. Chỉ cần thêm 3 Secrets trên Github:
+Workflow: **`.github/workflows/deploy.yml`**
+
+- **Khi nào chạy:** mỗi lần **push** lên nhánh **`main`** hoặc **`develop`**.
+- **Việc làm trên VPS (qua SSH):** backup DB → `git fetch` + `git reset --hard origin/<nhánh vừa push>` → `pip install` → `npm install` → `pm2 restart all`.
+
+Như vậy anh **không cần SSH vào VPS để `git pull`** mỗi khi deploy — chỉ cần **`git push origin develop`** (hoặc `main`) từ máy dev; Actions sẽ kéo code và restart PM2.
+
+**Mục §5** (Deploy key read-only để VPS `git pull` tay) vẫn hữu ích khi: sửa nhanh trên server, CI lỗi, hoặc cần pull khi không push.
+
+### 6.1. Secrets trên GitHub
 
 1. Vào `https://github.com/dthanhvu03/toolsauto/settings/secrets/actions`
-2. Bấm **New repository secret**, thêm lần lượt:
+2. **New repository secret**:
 
-| Secret Name   | Value                    |
-| ------------- | ------------------------ |
-| `VPS_HOST`    | `14.225.218.116`         |
-| `VPS_USER`    | `root`                   |
-| `VPS_SSH_KEY` | Nội dung Private Key SSH |
+| Secret Name        | Bắt buộc | Value / ghi chú |
+| ------------------ | -------- | ---------------- |
+| `VPS_HOST`         | Có       | IP VPS, vd. `14.225.218.116` |
+| `VPS_USER`         | Có       | User SSH, vd. `root` |
+| `VPS_SSH_KEY`      | Có       | **Private key** (toàn bộ nội dung file, kể cả `BEGIN`/`END`) |
+| `VPS_PROJECT_PATH` | Không    | Nếu code **không** nằm tại `/root/toolsauto` (root) hoặc `/home/<user>/toolsauto` — ghi đường dẫn tuyệt đối, vd. `/root/toolsauto` |
 
-> **Lưu ý:** Để dùng SSH Key, anh cần tạo cặp key trên VPS:
+> **SSH key cho CI:** Tạo cặp key **riêng cho deploy** (khác Deploy key pull-only ở §5):
 >
 > ```bash
-> ssh-keygen -t ed25519 -f ~/.ssh/deploy_key -N ""
-> cat ~/.ssh/deploy_key.pub >> ~/.ssh/authorized_keys
-> cat ~/.ssh/deploy_key   # Copy nội dung này làm VPS_SSH_KEY
+> ssh-keygen -t ed25519 -f ~/.ssh/github_actions_deploy -N ""
+> cat ~/.ssh/github_actions_deploy.pub >> ~/.ssh/authorized_keys
+> cat ~/.ssh/github_actions_deploy   # Copy toàn bộ → secret VPS_SSH_KEY
 > ```
 
 ---
