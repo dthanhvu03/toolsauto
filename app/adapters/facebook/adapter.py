@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import random
 import re
+from urllib.parse import urlparse
 import traceback
 from typing import Any
 from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR
@@ -863,9 +864,28 @@ class FacebookAdapter(AdapterInterface):
 
                 norm_target = normalize_for_compare(target_page_url)
                 norm_active = normalize_for_compare(active_url)
-                
-                # We check `in` both ways to handle trailing slashes or minor domain differences
-                if norm_target and norm_active and (norm_target not in norm_active and norm_active not in norm_target):
+
+                def _url_has_profile_path(url: str) -> bool:
+                    try:
+                        path = urlparse(url).path or ""
+                        return path not in ("", "/")
+                    except Exception:
+                        return True
+
+                # Target contained in active URL, or active (with real path, not bare facebook.com)
+                # contained in target — avoids false pass when active is only https://www.facebook.com
+                target_in_active = norm_target in norm_active
+                active_in_target = (
+                    norm_active in norm_target and _url_has_profile_path(active_url)
+                )
+                verified_ok = bool(
+                    norm_target and norm_active and (target_in_active or active_in_target)
+                )
+                page_tid = self._facebook_numeric_id_from_url(target_page_url or "")
+                if page_tid and page_tid in active_url:
+                    verified_ok = True
+
+                if norm_target and norm_active and not verified_ok:
                     error_msg = f"Security abort: Active context ({norm_active}) does not match target page ({norm_target}). Preventing wrong-page post."
                     logger.error("FacebookAdapter: %s", error_msg)
                     return self._failure_result(
