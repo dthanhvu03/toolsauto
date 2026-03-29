@@ -849,41 +849,9 @@ class FacebookAdapter(AdapterInterface):
                 # ── Bulletproof Context Verification ──
                 # Ensure we don't accidentally post to the wrong page if the switch failed.
                 logger.info("FacebookAdapter: Verifying active context matches target page...")
-                self.page.goto("https://www.facebook.com/me", wait_until="domcontentloaded")
-                self.page.wait_for_timeout(3000)
-                active_url = self.page.url
-                
-                def normalize_for_compare(u):
-                    if not u: return ""
-                    base = u.split("?")[0].rstrip("/")
-                    if "id=" in u:
-                        pieces = u.split("id=")
-                        if len(pieces) > 1:
-                            base += "?id=" + pieces[1].split("&")[0]
-                    return base
-
-                norm_target = normalize_for_compare(target_page_url)
-                norm_active = normalize_for_compare(active_url)
-
-                def _url_has_profile_path(url: str) -> bool:
-                    try:
-                        path = urlparse(url).path or ""
-                        return path not in ("", "/")
-                    except Exception:
-                        return True
-
-                # Target contained in active URL, or active (with real path, not bare facebook.com)
-                # contained in target — avoids false pass when active is only https://www.facebook.com
-                target_in_active = norm_target in norm_active
-                active_in_target = (
-                    norm_active in norm_target and _url_has_profile_path(active_url)
+                verified_ok, norm_active, norm_target = (
+                    self._verify_posting_context_matches_target(target_page_url or "")
                 )
-                verified_ok = bool(
-                    norm_target and norm_active and (target_in_active or active_in_target)
-                )
-                page_tid = self._facebook_numeric_id_from_url(target_page_url or "")
-                if page_tid and page_tid in active_url:
-                    verified_ok = True
 
                 if norm_target and norm_active and not verified_ok:
                     error_msg = f"Security abort: Active context ({norm_active}) does not match target page ({norm_target}). Preventing wrong-page post."
@@ -1612,6 +1580,67 @@ class FacebookAdapter(AdapterInterface):
         m = re.search(r"[?&]id=(\d{5,})", url)
         return m.group(1) if m else None
 
+    @staticmethod
+    def _normalize_fb_profile_url_for_compare(u: str) -> str:
+        if not u:
+            return ""
+        base = u.split("?")[0].rstrip("/")
+        if "id=" in u:
+            pieces = u.split("id=")
+            if len(pieces) > 1:
+                base += "?id=" + pieces[1].split("&")[0]
+        return base
+
+    def _urls_indicate_same_fb_page_context(self, target_page_url: str, active_url: str) -> bool:
+        norm_target = self._normalize_fb_profile_url_for_compare(target_page_url or "")
+        norm_active = self._normalize_fb_profile_url_for_compare(active_url or "")
+
+        def _url_has_profile_path(url: str) -> bool:
+            try:
+                path = urlparse(url).path or ""
+                return path not in ("", "/")
+            except Exception:
+                return True
+
+        target_in_active = norm_target in norm_active
+        active_in_target = (
+            norm_active in norm_target and _url_has_profile_path(active_url)
+        )
+        verified_ok = bool(
+            norm_target and norm_active and (target_in_active or active_in_target)
+        )
+        page_tid = self._facebook_numeric_id_from_url(target_page_url or "")
+        if page_tid and page_tid in active_url:
+            verified_ok = True
+        return verified_ok
+
+    def _verify_posting_context_matches_target(self, target_page_url: str) -> tuple[bool, str, str]:
+        """
+        Open /me and compare resolved profile URL to target page.
+        Returns (ok, norm_active, norm_target) for logging / error messages.
+        """
+        if not self.page:
+            return (
+                False,
+                "",
+                self._normalize_fb_profile_url_for_compare(target_page_url or ""),
+            )
+        try:
+            self.page.goto("https://www.facebook.com/me", wait_until="domcontentloaded")
+            self.page.wait_for_timeout(3000)
+            active_url = self.page.url
+        except Exception as e:
+            logger.warning("FacebookAdapter: /me check failed: %s", e)
+            return (
+                False,
+                "",
+                self._normalize_fb_profile_url_for_compare(target_page_url or ""),
+            )
+        nt = self._normalize_fb_profile_url_for_compare(target_page_url or "")
+        na = self._normalize_fb_profile_url_for_compare(active_url)
+        ok = self._urls_indicate_same_fb_page_context(target_page_url or "", active_url)
+        return (ok, na, nt)
+
     def _switcher_row_has_page_id(self, row: Locator, page_id: str) -> bool:
         """True if row subtree has href with id or FB inlined the numeric id in markup."""
         if not page_id:
@@ -1636,6 +1665,8 @@ class FacebookAdapter(AdapterInterface):
         """
         FB exposes 'Chuyển sang <Page>' / 'Switch to <Page>' on role=button — more reliable
         than has-text on duplicate rows (cover photo can intercept the first match).
+        Tries DOM-last match first: the first node in tree order is often a header/cover hit-area
+        that does not change posting identity on some builds.
         """
         if not self.page or not target_page_name:
             return False
@@ -1646,6 +1677,7 @@ class FacebookAdapter(AdapterInterface):
             candidates = dialog.locator('[role="button"]').all()
         except Exception:
             return False
+        to_try: list[Locator] = []
         for el in candidates:
             try:
                 al = (el.get_attribute("aria-label") or "").strip()
@@ -1659,13 +1691,18 @@ class FacebookAdapter(AdapterInterface):
                     or "switch to" in al_lower
                     or "switching to" in al_lower
                 ):
-                    el.scroll_into_view_if_needed(timeout=3000)
-                    el.click(force=True, timeout=5000)
-                    logger.info(
-                        "FacebookAdapter: Switch via aria-label (%s)",
-                        al[:100],
-                    )
-                    return True
+                    to_try.append(el)
+            except Exception:
+                continue
+        for el in reversed(to_try):
+            try:
+                el.scroll_into_view_if_needed(timeout=3000)
+                el.click(force=True, timeout=5000)
+                logger.info(
+                    "FacebookAdapter: Switch via aria-label (%s)",
+                    (el.get_attribute("aria-label") or "")[:100],
+                )
+                return True
             except Exception:
                 continue
         return False
@@ -1715,6 +1752,16 @@ class FacebookAdapter(AdapterInterface):
             logger.info("FacebookAdapter: Switcher row Enter failed (%s): %s", label, e)
         return False
 
+    def _reopen_profile_switch_dialog(self, avatar_btn: Locator) -> Locator:
+        """Re-open avatar menu → optional See all → return the profile switcher dialog."""
+        self._click_locator(avatar_btn, "avatar menu", timeout=5000)
+        self.page.wait_for_timeout(2000)
+        see_all = self.page.locator(SELECTORS["switch_menu"]["see_all_profiles"]).first
+        if see_all.count() > 0 and see_all.is_visible():
+            see_all.click()
+            self.page.wait_for_timeout(2000)
+        return self.page.locator('div[role="dialog"]').last
+
     def _switch_to_page_context(
         self,
         target_page_name: str | None = None,
@@ -1761,6 +1808,7 @@ class FacebookAdapter(AdapterInterface):
 
             # 3a. Prefer href match (numeric id) — FB often uses role=link or bare href, not only <a>.
             page_id = self._facebook_numeric_id_from_url(target_page_url or "")
+            id_had_visible_link = False
             if page_id:
                 id_patterns = [
                     f'a[href*="profile.php?id={page_id}"]',
@@ -1774,6 +1822,7 @@ class FacebookAdapter(AdapterInterface):
                     link = dialog.locator(pattern).first
                     try:
                         if link.count() > 0 and link.is_visible(timeout=2500):
+                            id_had_visible_link = True
                             logger.info(
                                 "FacebookAdapter: Switching via menu link for page id %s (%s)...",
                                 page_id,
@@ -1794,14 +1843,24 @@ class FacebookAdapter(AdapterInterface):
                                     "FacebookAdapter: Switcher dialog still visible after id link click."
                                 )
                             self.page.wait_for_timeout(3000)
-                            logger.info("FacebookAdapter: Switch command sent (id link).")
-                            return True
+                            if not target_page_url or self._verify_posting_context_matches_target(
+                                target_page_url
+                            )[0]:
+                                logger.info("FacebookAdapter: Switch command sent (id link).")
+                                return True
+                            logger.warning(
+                                "FacebookAdapter: Id link click did not verify posting context; "
+                                "reopening switcher for fallbacks."
+                            )
+                            dialog = self._reopen_profile_switch_dialog(avatar_btn)
+                            break
                     except Exception:
                         continue
-                logger.info(
-                    "FacebookAdapter: No visible href control for page id %s inside switcher dialog.",
-                    page_id,
-                )
+                if not id_had_visible_link:
+                    logger.info(
+                        "FacebookAdapter: No visible href control for page id %s inside switcher dialog.",
+                        page_id,
+                    )
 
             if target_page_name:
                 if self._try_click_switcher_aria_label(dialog, target_page_name):
@@ -1811,11 +1870,23 @@ class FacebookAdapter(AdapterInterface):
                         logger.warning(
                             "FacebookAdapter: Switcher dialog still visible after aria-label click."
                         )
-                    self.page.wait_for_timeout(3000)
-                    logger.info(
-                        "FacebookAdapter: Switch command sent (aria-label switch button)."
+                    self.page.wait_for_timeout(5000)
+                    if not target_page_url:
+                        logger.info(
+                            "FacebookAdapter: Switch command sent (aria-label switch button)."
+                        )
+                        return True
+                    ok_ctx, _, _ = self._verify_posting_context_matches_target(target_page_url)
+                    if ok_ctx:
+                        logger.info(
+                            "FacebookAdapter: Switch command sent (aria-label switch button)."
+                        )
+                        return True
+                    logger.warning(
+                        "FacebookAdapter: Aria-label switch did not verify posting context; "
+                        "reopening switcher for fallbacks."
                     )
-                    return True
+                    dialog = self._reopen_profile_switch_dialog(avatar_btn)
 
             # 3a2b. Text-filtered rows — FB may use menuitemradio, radio, or role=button rows.
             if target_page_name:
