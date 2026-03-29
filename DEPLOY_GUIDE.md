@@ -78,6 +78,7 @@ free -h   # Swap phải hiện 4.0Gi
 cd /root
 git clone https://github.com/dthanhvu03/toolsauto.git
 cd toolsauto
+# Khuyến nghị: sau khi cấu hình Deploy key SSH (mục 5), đổi origin sang git@github.com:... để pull không cần PAT.
 
 # Tạo môi trường ảo Python
 python3 -m venv venv
@@ -187,38 +188,129 @@ pm2 save
 
 ---
 
-## 5. Cập Nhật Code Mới (Thủ Công)
+## 5. Quy trình Git khuyến nghị (dev hay dùng)
+
+**Nguyên tắc:** Máy **dev** (hoặc CI) **push** lên GitHub; **VPS chỉ `git pull`**. Không cần Personal Access Token (PAT) có quyền **ghi** trên server — giảm rủi ro lộ token.
+
+| Vị trí        | Việc làm                          | Xác thực GitHub                          |
+| ------------- | --------------------------------- | ---------------------------------------- |
+| Máy dev       | `git push origin develop`         | PAT hoặc SSH key **tài khoản** của bạn   |
+| VPS           | `git pull origin develop`         | **Deploy key SSH (read-only)** hoặc PAT chỉ đọc |
+
+GitHub **không** cho dùng mật khẩu tài khoản cho `git push`/`pull` qua HTTPS; nếu dùng HTTPS trên VPS thì ô Password phải là **PAT** (fine-grained: repo đúng + **Contents: Read-only** nếu chỉ pull).
+
+### 5.1. Lần đầu: tạo SSH key trên VPS (chỉ để clone/pull)
+
+```bash
+ssh root@<IP_VPS>
+ssh-keygen -t ed25519 -C "toolsauto-vps-readonly" -f ~/.ssh/github_toolsauto_deploy -N ""
+chmod 600 ~/.ssh/github_toolsauto_deploy
+cat ~/.ssh/github_toolsauto_deploy.pub
+```
+
+Copy **toàn bộ** dòng `.pub` (bắt đầu bằng `ssh-ed25519 ...`).
+
+### 5.2. Thêm Deploy key trên GitHub (read-only)
+
+1. Mở repo: `https://github.com/dthanhvu03/toolsauto` → **Settings** → **Deploy keys** → **Add deploy key**.
+2. **Title:** ví dụ `vps-readonly`.
+3. Dán **public key** ở bước 5.1.
+4. **Không** tick **Allow write access** (chỉ cần pull).
+5. Save.
+
+### 5.3. Cấu hình SSH và remote (trên VPS)
+
+```bash
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+cat >> ~/.ssh/config << 'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/github_toolsauto_deploy
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+```
+
+Nếu repo đã clone bằng HTTPS, đổi sang SSH:
+
+```bash
+cd /root/toolsauto
+git remote set-url origin git@github.com:dthanhvu03/toolsauto.git
+ssh -T git@github.com
+# Kỳ vọng: "Hi dthanhvu03! You've successfully authenticated..."
+```
+
+### 5.4. Mỗi lần cập nhật code trên VPS
+
+Nhánh mặc định cho feature merge: **`develop`** (không dùng `main` trừ khi team thống nhất khác).
 
 ```bash
 ssh root@14.225.218.116
 cd /root/toolsauto
-git pull origin main
+git fetch origin
+git checkout develop
+git pull origin develop
 source venv/bin/activate
-pip install -r requirements.txt   # Chỉ cần nếu thêm thư viện mới
+pip install -r requirements.txt   # Chỉ khi requirements.txt đổi
 pm2 restart all
+```
+
+### 5.5. Máy dev: push (không làm trên VPS)
+
+Trên laptop/WSL (đã login GitHub):
+
+```bash
+cd /path/to/toolsauto
+git checkout develop
+git pull origin develop
+# ... sửa code, commit ...
+git push origin develop
+```
+
+Sau đó trên VPS chỉ cần lặp **mục 5.4**.
+
+### 5.6. Nếu bắt buộc pull bằng HTTPS trên VPS
+
+Dùng **PAT fine-grained**: chọn đúng repo `toolsauto`, **Contents: Read-only**. Username = `dthanhvu03`, password = PAT. Xóa credential cũ nếu bị 403:
+
+```bash
+printf "protocol=https\nhost=github.com\n" | git credential reject
 ```
 
 ---
 
+
 ## 6. Cập Nhật Code Tự Động (CI/CD)
 
-Đã cài sẵn Github Actions. Chỉ cần thêm 3 Secrets trên Github:
+Workflow: **`.github/workflows/deploy.yml`**
+
+- **Khi nào chạy:** mỗi lần **push** lên nhánh **`main`** hoặc **`develop`**.
+- **Việc làm trên VPS (qua SSH):** backup DB → `git fetch` + `git reset --hard origin/<nhánh vừa push>` → `pip install` → `npm install` → `pm2 restart all`.
+
+Như vậy anh **không cần SSH vào VPS để `git pull`** mỗi khi deploy — chỉ cần **`git push origin develop`** (hoặc `main`) từ máy dev; Actions sẽ kéo code và restart PM2.
+
+**Mục §5** (Deploy key read-only để VPS `git pull` tay) vẫn hữu ích khi: sửa nhanh trên server, CI lỗi, hoặc cần pull khi không push.
+
+### 6.1. Secrets trên GitHub
 
 1. Vào `https://github.com/dthanhvu03/toolsauto/settings/secrets/actions`
-2. Bấm **New repository secret**, thêm lần lượt:
+2. **New repository secret**:
 
-| Secret Name   | Value                    |
-| ------------- | ------------------------ |
-| `VPS_HOST`    | `14.225.218.116`         |
-| `VPS_USER`    | `root`                   |
-| `VPS_SSH_KEY` | Nội dung Private Key SSH |
+| Secret Name        | Bắt buộc | Value / ghi chú |
+| ------------------ | -------- | ---------------- |
+| `VPS_HOST`         | Có       | IP VPS, vd. `14.225.218.116` |
+| `VPS_USER`         | Có       | User SSH, vd. `root` |
+| `VPS_SSH_KEY`      | Có       | **Private key** (toàn bộ nội dung file, kể cả `BEGIN`/`END`) |
+| `VPS_PROJECT_PATH` | Không    | Nếu code **không** nằm tại `/root/toolsauto` (root) hoặc `/home/<user>/toolsauto` — ghi đường dẫn tuyệt đối, vd. `/root/toolsauto` |
 
-> **Lưu ý:** Để dùng SSH Key, anh cần tạo cặp key trên VPS:
+> **SSH key cho CI:** Tạo cặp key **riêng cho deploy** (khác Deploy key pull-only ở §5):
 >
 > ```bash
-> ssh-keygen -t ed25519 -f ~/.ssh/deploy_key -N ""
-> cat ~/.ssh/deploy_key.pub >> ~/.ssh/authorized_keys
-> cat ~/.ssh/deploy_key   # Copy nội dung này làm VPS_SSH_KEY
+> ssh-keygen -t ed25519 -f ~/.ssh/github_actions_deploy -N ""
+> cat ~/.ssh/github_actions_deploy.pub >> ~/.ssh/authorized_keys
+> cat ~/.ssh/github_actions_deploy   # Copy toàn bộ → secret VPS_SSH_KEY
 > ```
 
 ---

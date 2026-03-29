@@ -20,8 +20,15 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # Navigate to project folder
-            cd /home/${{ secrets.VPS_USER }}/toolsauto
+            # Project path: root home is /root, not /home/root
+            if [ -n "${{ secrets.VPS_PROJECT_PATH }}" ]; then
+              DEPLOY_PATH="${{ secrets.VPS_PROJECT_PATH }}"
+            elif [ "${{ secrets.VPS_USER }}" = "root" ]; then
+              DEPLOY_PATH="/root/toolsauto"
+            else
+              DEPLOY_PATH="/home/${{ secrets.VPS_USER }}/toolsauto"
+            fi
+            cd "$DEPLOY_PATH" || exit 1
 
             # Backup database before deploying
             mkdir -p data/backups
