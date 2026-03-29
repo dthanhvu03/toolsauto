@@ -6,6 +6,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 from app.database.models import Account, Job
+from app.config import CONTENT_PROFILES_DIR
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,8 @@ def now_ts():
     return int(time.time())
 
 class AccountService:
-    BASE_PROFILE_DIR = os.path.abspath("content/profiles")
+    # Same root publisher uses; override with env CONTENT_PROFILES_DIR on VPS if needed.
+    BASE_PROFILE_DIR = str(CONTENT_PROFILES_DIR)
 
     @staticmethod
     def get_login_url(platform: str) -> str:
@@ -105,6 +107,7 @@ class AccountService:
         
         # Now set exact profile path
         profile_path = os.path.join(cls.BASE_PROFILE_DIR, f"{platform}_{new_acc.id}")
+        profile_path = os.path.abspath(os.path.normpath(profile_path))
         os.makedirs(profile_path, exist_ok=True) # CRITICAL FIX: Physically provision directory
         
         new_acc.profile_path = profile_path

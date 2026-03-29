@@ -33,7 +33,23 @@ class FacebookAdapter(AdapterInterface):
             self.close_session()
             
         logger.info("FacebookAdapter: Opening persistent context at profile: %s", profile_path)
-        
+        if profile_path:
+            pp = profile_path.strip()
+            if not os.path.isdir(pp):
+                logger.warning(
+                    "FacebookAdapter: profile_path is missing or not a directory — "
+                    "Chromium may create an empty profile (login wall): %s",
+                    pp,
+                )
+            else:
+                default_data = os.path.join(pp, "Default")
+                if not os.path.isdir(default_data):
+                    logger.warning(
+                        "FacebookAdapter: No Chromium 'Default' profile under %s — "
+                        "session may not be logged in (wrong folder or fresh copy).",
+                        pp,
+                    )
+
         try:
             self.playwright = sync_playwright().start()
             self.context = self.playwright.chromium.launch_persistent_context(
