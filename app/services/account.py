@@ -73,7 +73,10 @@ class AccountService:
         login_button = page.locator('button[name="login"]').count()
         email_input = page.locator('input[name="email"]').count()
         nav_present = page.locator('div[role="navigation"]').count() > 0
-        return (login_button == 0 and email_input == 0) or nav_present
+        # Must see main nav — (no login fields) alone was false-positive on blank/guest shells.
+        if login_button > 0 or email_input > 0:
+            return False
+        return nav_present
 
     @classmethod
     def ensure_base_dir(cls):
