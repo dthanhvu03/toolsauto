@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, Index
 from sqlalchemy.orm import relationship
 import time
+from pathlib import Path
+from app.config import PROFILES_DIR, CONTENT_DIR
 
 from .core import Base
 
@@ -19,6 +21,29 @@ class Account(Base):
     
     # Isolated Profile details
     profile_path = Column(String, unique=True, nullable=True)
+
+    @property
+    def resolved_profile_path(self) -> str:
+        """
+        Dynamically resolves the absolute path to the profile.
+        If the stored path doesn't exist (e.g., moved to VPS), 
+        tries to find the same profile folder inside the current PROFILES_DIR.
+        """
+        if not self.profile_path:
+            return ""
+            
+        p = Path(self.profile_path)
+        if p.exists() and p.is_dir():
+            return str(p.absolute())
+            
+        # Rebase if missing
+        if p.is_absolute():
+            rebased = PROFILES_DIR / p.name
+            if rebased.exists() and rebased.is_dir():
+                return str(rebased.absolute())
+                
+        return self.profile_path
+
     target_page = Column(String, nullable=True) # Legacy single page (kept for backward compat)
     target_pages = Column(String, nullable=True) # JSON array of page URLs for multi-target round-robin
     
@@ -267,6 +292,26 @@ class Job(Base):
     platform = Column(String)
     account_id = Column(Integer, ForeignKey("accounts.id"))
     media_path = Column(String)
+
+    @property
+    def resolved_media_path(self) -> str:
+        if not self.media_path:
+            return ""
+        p = Path(self.media_path)
+        if p.exists():
+            return str(p.absolute())
+        # Rebase relative to CONTENT_DIR if missing
+        try:
+            # If path contains 'content/', try to rebase from there
+            if "content/" in self.media_path:
+                suffix = self.media_path.split("content/", 1)[1]
+                rebased = CONTENT_DIR / suffix
+                if rebased.exists():
+                    return str(rebased.absolute())
+        except Exception:
+            pass
+        return self.media_path
+
     caption = Column(String)
     schedule_ts = Column(Integer, index=True)
     target_page = Column(String, nullable=True) # Override account-level target_page if set
@@ -289,7 +334,25 @@ class Job(Base):
     dedupe_key = Column(String, nullable=True, index=True)  # hash(account_id + media_uuid) — prevents double-upload
     batch_id = Column(String, nullable=True, index=True) # UUID grouping bulk uploads
     processed_media_path = Column(String, nullable=True) # FFmpeg output path (preserves original)
-    
+
+    @property
+    def resolved_processed_media_path(self) -> str:
+        if not self.processed_media_path:
+            return ""
+        p = Path(self.processed_media_path)
+        if p.exists():
+            return str(p.absolute())
+        # Rebase relative to CONTENT_DIR if missing
+        try:
+            if "content/" in self.processed_media_path:
+                suffix = self.processed_media_path.split("content/", 1)[1]
+                rebased = CONTENT_DIR / suffix
+                if rebased.exists():
+                    return str(rebased.absolute())
+        except Exception:
+            pass
+        return self.processed_media_path
+
     # Post-Publish Metrics (Phase 14 & 17)
     post_url = Column(String, nullable=True)          # URL of the published post
     view_24h = Column(Integer, nullable=True)          # View count scraped most recently
@@ -364,7 +427,7 @@ class ViralMaterial(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     platform = Column(String, default="facebook", index=True)
-    url = Column(String, index=True)
+    url = Column(String, unique=True, index=True)
     title = Column(String, nullable=True)
     views = Column(Integer, default=0, index=True)
     scraped_by_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)

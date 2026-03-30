@@ -1,6 +1,6 @@
 from fastapi.templating import Jinja2Templates
 from zoneinfo import ZoneInfo
-from app.config import TIMEZONE
+from app.config import TIMEZONE, BASE_DIR
 import time
 import os
 
@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Shared templates instance for routers
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 
 def format_time(ts):
     if not ts: return "-"
@@ -53,7 +53,7 @@ def get_job_evidence(job):
             logger.error(f"Failed to read evidence cache: {e}")
             return None
             
-    path = job.processed_media_path or job.media_path
+    path = job.resolved_processed_media_path or job.resolved_media_path
     if not path:
         return None
         

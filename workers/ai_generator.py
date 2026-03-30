@@ -92,7 +92,7 @@ def process_draft_job(db: Session):
         from app.services.content_orchestrator import OutputContractViolation
         import re
         
-        target_video = job.processed_media_path if job.processed_media_path else job.media_path
+        target_video = job.resolved_processed_media_path if job.resolved_processed_media_path else job.resolved_media_path
         
         existing_salt_match = re.search(r'\[ref:[a-zA-Z0-9]+\]|#v\d{4}', job.caption or "")
         existing_salt = existing_salt_match.group(0) if existing_salt_match else ""

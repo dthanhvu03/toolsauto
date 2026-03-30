@@ -11,6 +11,7 @@ from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
 from app.services.worker import WorkerService
 from app.services.account import AccountService
+from app.services.system_monitor import SystemMonitorService
 import app.config as config
 from app.services.notifier import NotifierService
 
@@ -96,7 +97,16 @@ def process_single_job(db: Session):
     if running_fb_count >= MAX_CONCURRENT_ACCOUNTS:
         logger.info(f"⏳ Giới hạn an toàn: Đang có {running_fb_count}/{MAX_CONCURRENT_ACCOUNTS} acc FB chạy. Tạm dừng nhận job mới...")
         return False
-        
+
+    # Adaptive Throttling: Pause if system resources are under pressure
+    health = SystemMonitorService().check_health()
+    if health.get("ram_percent") and health["ram_percent"] > 90:
+        logger.warning(f"🛑 Hệ thống quá tải RAM ({health['ram_percent']}%). Tạm dừng claim job trong 60s...")
+        return False
+    if health.get("chrome_playwright_count") and health["chrome_playwright_count"] >= 15:
+        logger.warning(f"🛑 Quá nhiều trình duyệt đang mở ({health['chrome_playwright_count']}). Tạm dừng claim job...")
+        return False
+
     job = QueueService.claim_next_job(db)
     if not job:
         return False
@@ -270,14 +280,16 @@ def process_single_job(db: Session):
             db.refresh(job)
             if job.status in ["DONE", "FAILED"]:
                 # 1. Dọn file render qua xử lý
-                if job.processed_media_path and os.path.exists(job.processed_media_path):
-                    logger.info("[Job %s] Terminal state reached. Cleaning up processed media: %s", job.id, job.processed_media_path)
-                    os.remove(job.processed_media_path)
+                p_path = job.resolved_processed_media_path
+                if p_path and os.path.exists(p_path):
+                    logger.info("[Job %s] Terminal state reached. Cleaning up processed media: %s", job.id, p_path)
+                    os.remove(p_path)
                 
                 # 2. Dọn luôn file gốc mồ côi
-                if job.media_path and os.path.exists(job.media_path):
-                    logger.info("[Job %s] Terminal state reached. Cleaning up original media: %s", job.id, job.media_path)
-                    os.remove(job.media_path)
+                m_path = job.resolved_media_path
+                if m_path and os.path.exists(m_path):
+                    logger.info("[Job %s] Terminal state reached. Cleaning up original media: %s", job.id, m_path)
+                    os.remove(m_path)
                     
         except Exception as cleanup_err:
             logger.warning("[Job %s] Failed to clean up media file: %s", job.id, cleanup_err)
@@ -439,7 +451,7 @@ def _maybe_idle_engagement(db: Session):
     adapter = FacebookAdapter()
 
     try:
-        if not adapter.open_session(account.profile_path):
+        if not adapter.open_session(account.resolved_profile_path):
             logger.warning("[IDLE] Cannot open browser session for '%s'. Skipping.", account.name)
             return
 
