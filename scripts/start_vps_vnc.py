@@ -43,12 +43,15 @@ def main():
     time.sleep(1)
 
     # 3. Start x11vnc
+    print(f"Starting x11vnc on {display}...")
     vnc_cmd = f"nohup x11vnc -display {display} "
     if auth:
         vnc_cmd += f"-auth {auth} "
-    vnc_cmd += "-forever -shared -bg -rfbport 5900 > x11vnc.log 2>&1"
+        os.environ["XAUTHORITY"] = auth
     
-    print(f"Starting x11vnc on {display}...")
+    os.environ["DISPLAY"] = display
+    vnc_cmd += "-forever -shared -bg -rfbport 5900 -nopw -noxrecord -noxfixes -noxdamage > x11vnc.log 2>&1"
+    
     run(vnc_cmd)
     
     # 4. Start websockify
