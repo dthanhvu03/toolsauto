@@ -59,26 +59,28 @@ def main():
     novnc_paths = ["/usr/share/novnc/", "/usr/local/share/novnc/"]
     web_path = next((p for p in novnc_paths if os.path.exists(p)), "/usr/share/novnc/")
     
-    ws_cmd = f"nohup websockify --web {web_path} 6080 localhost:5900 > websockify.log 2>&1 &"
-    print(f"Starting websockify on port 6080...")
+    # Try port 80 for better firewall bypass, fallback to 6080
+    port = 80
+    ws_cmd = f"nohup websockify --web {web_path} {port} localhost:5900 > websockify.log 2>&1 &"
+    print(f"Starting websockify on port {port} (for firewall bypass)...")
     run(ws_cmd)
     
     time.sleep(2)
     
     # 5. Verify
-    ports = run("ss -tlnp | grep -E '5900|6080'")
+    ports = run("ss -tlnp | grep -E '5900|80 '")
     print("\nStatus:")
     if "5900" in ports.stdout:
         print("[OK] x11vnc is listening on 5900")
     else:
         print("[FAIL] x11vnc is NOT listening (check x11vnc.log)")
         
-    if "6080" in ports.stdout:
-        print("[OK] websockify is listening on 6080")
+    if f":{port} " in ports.stdout:
+        print(f"[OK] websockify is listening on {port}")
     else:
-        print("[FAIL] websockify is NOT listening (check websockify.log)")
+        print(f"[FAIL] websockify is NOT listening (check websockify.log)")
 
-    print("\nIf both are OK, open: http://<vps-ip>:6080/vnc.html")
+    print(f"\nIf both are OK, open: http://<vps-ip>/vnc.html")
 
 if __name__ == "__main__":
     main()
