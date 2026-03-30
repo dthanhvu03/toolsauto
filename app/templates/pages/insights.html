@@ -1,184 +1,157 @@
-<!DOCTYPE html>
-<html lang="en" class="dark">
+{% extends "layouts/app.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Insights | Premium Analytics</title>
-    <!-- Google Fonts -->
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        dark: {
-                            50: '#f8fafc',
-                            100: '#f1f5f9',
-                            200: '#e2e8f0',
-                            300: '#cbd5e1',
-                            400: '#94a3b8',
-                            500: '#64748b',
-                            600: '#475569',
-                            700: '#334155',
-                            800: '#1e293b',
-                            900: '#0f172a',
-                            950: '#020617',
-                        },
-                        brand: {
-                            primary: '#6366f1',
-                            secondary: '#a855f7',
-                            accent: '#22d3ee',
-                        }
+{% block title %}Page Insights | Premium Analytics{% endblock %}
+
+{% block head_extra %}
+<!-- Google Fonts -->
+<link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                colors: {
+                    dark: {
+                        50: '#f8fafc',
+                        100: '#f1f5f9',
+                        200: '#e2e8f0',
+                        300: '#cbd5e1',
+                        400: '#94a3b8',
+                        500: '#64748b',
+                        600: '#475569',
+                        700: '#334155',
+                        800: '#1e293b',
+                        900: '#0f172a',
+                        950: '#020617',
                     },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        display: ['Outfit', 'sans-serif'],
+                    brand: {
+                        primary: '#6366f1',
+                        secondary: '#a855f7',
+                        accent: '#22d3ee',
+                    }
+                },
+                fontFamily: {
+                    sans: ['Inter', 'sans-serif'],
+                    display: ['Outfit', 'sans-serif'],
+                },
+                animation: {
+                    'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    'float': 'float 6s ease-in-out infinite',
+                    'fade-in': 'fadeIn 0.5s ease-out forwards',
+                    'slide-up': 'slideUp 0.6s ease-out forwards',
+                },
+                keyframes: {
+                    float: {
+                        '0%, 100%': { transform: 'translateY(0)' },
+                        '50%': { transform: 'translateY(-10px)' },
                     },
-                    animation: {
-                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                        'float': 'float 6s ease-in-out infinite',
-                        'fade-in': 'fadeIn 0.5s ease-out forwards',
-                        'slide-up': 'slideUp 0.6s ease-out forwards',
+                    fadeIn: {
+                        '0%': { opacity: '0' },
+                        '100%': { opacity: '1' },
                     },
-                    keyframes: {
-                        float: {
-                            '0%, 100%': { transform: 'translateY(0)' },
-                            '50%': { transform: 'translateY(-10px)' },
-                        },
-                        fadeIn: {
-                            '0%': { opacity: '0' },
-                            '100%': { opacity: '1' },
-                        },
-                        slideUp: {
-                            '0%': { opacity: '0', transform: 'translateY(20px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        }
+                    slideUp: {
+                        '0%': { opacity: '0', transform: 'translateY(20px)' },
+                        '100%': { opacity: '1', transform: 'translateY(0)' },
                     }
                 }
             }
         }
-    </script>
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style type="text/tailwindcss">
-        @layer components {
-            .glass {
-                background: rgba(15, 23, 42, 0.8);
-                backdrop-filter: blur(24px);
-                -webkit-backdrop-filter: blur(24px);
-                border: 1px solid rgba(255, 255, 255, 0.08);
-            }
-            .glass-light {
-                background: rgba(255, 255, 255, 0.03);
-                backdrop-filter: blur(12px);
-                border: 1px solid rgba(255, 255, 255, 0.05);
-            }
-            .text-gradient {
-                @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400;
-            }
-            .card-hover {
-                @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-indigo-500/10;
-            }
-            .btn-primary {
-                @apply bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-semibold py-2.5 px-6 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 hover:scale-[1.05] active:scale-95 transition-all;
-            }
+    }
+</script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style type="text/tailwindcss">
+    @layer components {
+        .glass {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
-        
-        body {
-            background-color: #020617;
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+        .glass-light {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
-        
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #020617; }
-        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #334155; }
-    </style>
-</head>
+        .text-gradient {
+            @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400;
+        }
+        .card-hover {
+            @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-indigo-500/10;
+        }
+        .btn-primary {
+            @apply bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-semibold py-2.5 px-6 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 hover:scale-[1.05] active:scale-95 transition-all;
+        }
+    }
+    
+    .insights-body {
+        background-color: #020617;
+        background-image: 
+            radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+            radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+    }
+    
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #020617; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+</style>
+{% endblock %}
 
-<body class="text-slate-200 antialiased font-sans">
+{% block page_title %}Market Intelligence{% endblock %}
+{% block page_subtitle %}Phân tích hiệu năng nội dung & dự báo tăng trưởng.{% endblock %}
 
-    <!-- Navbar -->
-    <nav class="sticky top-0 z-50 glass border-b border-white/5 px-6 py-4">
-        <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <div class="flex items-center space-x-3 group">
-                <div
-                    class="p-2 bg-gradient-to-br from-brand-primary to-brand-secondary rounded-xl shadow-lg shadow-indigo-500/20 group-hover:rotate-12 transition-transform">
-                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
-                    </svg>
-                </div>
-                <h1 class="text-xl font-display font-bold text-gradient tracking-tight">Antigravity Insights</h1>
-            </div>
-            <a href="/"
-                class="text-sm font-medium text-slate-400 hover:text-white transition-colors flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-white/5">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                </svg>
-                Dashboard
-            </a>
-        </div>
-    </nav>
-    <!-- V4: AI Strategic Reasoning Pulse -->
-    <div id="aiStrategicPulse"
-        class="glass p-6 border-indigo-500/30 ring-1 ring-indigo-500/20 relative overflow-hidden group max-w-7xl mx-auto mt-8 rounded-3xl">
-        <div
-            class="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl group-hover:bg-indigo-500/20 transition-all">
-        </div>
-        <div class="flex items-start gap-4">
+{% block content %}
+<div class="insights-body text-slate-200 antialiased font-sans -m-4 lg:-m-6 p-4 lg:p-6 min-h-screen">
+    <div class="max-w-7xl mx-auto space-y-8 animate-fade-in">
+        <!-- V4: AI Strategic Reasoning Pulse -->
+        <div id="aiStrategicPulse"
+            class="glass p-6 border-indigo-500/30 ring-1 ring-indigo-500/20 relative overflow-hidden group rounded-3xl">
             <div
-                class="flex-shrink-0 w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center border border-indigo-500/30 animate-pulse">
-                <span class="text-2xl">🧠</span>
+                class="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl group-hover:bg-indigo-500/20 transition-all">
             </div>
-            <div class="flex-1 space-y-2">
-                <div class="flex items-center justify-between">
-                    <h2 class="text-lg font-bold text-gray-100 flex items-center gap-2">
-                        Hệ Thống Phản Biện AI (V4)
-                        <span
-                            class="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-[10px] rounded uppercase tracking-wider font-extrabold border border-indigo-500/30">Visible
-                            Intelligence</span>
-                    </h2>
-                    <span class="text-xs text-indigo-400 font-mono">STATUS: Strategic Scanning...</span>
+            <div class="flex items-start gap-4">
+                <div
+                    class="flex-shrink-0 w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center border border-indigo-500/30 animate-pulse">
+                    <span class="text-2xl">🧠</span>
                 </div>
-                <p id="aiCommentaryText" class="text-gray-400 text-sm italic leading-relaxed">
-                    "Đang phân tích vận tốc tăng trưởng của toàn bộ Page... Em nhận thấy niche **Làm Đẹp** đang có xu
-                    hướng bùng nổ visual hook dạng 'transformation'. Em khuyên anh nên tập trung reup các video có
-                    transition nhanh trong 3 giây đầu để tối ưu Retention Rate."
-                </p>
-                <div class="flex gap-4 pt-2">
-                    <div class="flex items-center gap-1.5 text-[11px] text-gray-500">
-                        <span class="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
-                        Niche: Beauty Specialist Active
+                <div class="flex-1 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-lg font-bold text-gray-100 flex items-center gap-2">
+                            Hệ Thống Phản Biện AI (V4)
+                            <span
+                                class="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-[10px] rounded uppercase tracking-wider font-extrabold border border-indigo-500/30">Visible
+                                Intelligence</span>
+                        </h2>
+                        <span class="text-xs text-indigo-400 font-mono">STATUS: Strategic Scanning...</span>
                     </div>
-                    <div class="flex items-center gap-1.5 text-[11px] text-gray-500">
-                        <span class="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
-                        Algorithm: Viral Retention V3
+                    <p id="aiCommentaryText" class="text-gray-400 text-sm italic leading-relaxed">
+                        "Đang phân tích vận tốc tăng trưởng của toàn bộ Page... Em nhận thấy niche **Làm Đẹp** đang có
+                        xu
+                        hướng bùng nổ visual hook dạng 'transformation'. Em khuyên anh nên tập trung reup các video có
+                        transition nhanh trong 3 giây đầu để tối ưu Retention Rate."
+                    </p>
+                    <div class="flex gap-4 pt-2">
+                        <div class="flex items-center gap-1.5 text-[11px] text-gray-500">
+                            <span class="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
+                            Niche: Beauty Specialist Active
+                        </div>
+                        <div class="flex items-center gap-1.5 text-[11px] text-gray-500">
+                            <span class="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
+                            Algorithm: Viral Retention V3
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in">
-
-        <!-- Header & Filters -->
-        <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-            <div class="space-y-2">
-                <h2 class="text-4xl font-display font-extrabold text-white tracking-tight">Market Intelligence</h2>
-                <p class="text-slate-400 text-lg">Phân tích hiệu năng nội dung & dự báo tăng trưởng.</p>
-            </div>
-
+        <!-- Filters -->
+        <div class="flex flex-col lg:flex-row lg:items-end justify-end gap-6">
             <div class="glass p-2 rounded-2xl flex flex-col sm:flex-row items-center gap-2 border border-white/10">
                 <div class="flex items-center space-x-2 px-3">
                     <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Page</span>
@@ -355,246 +328,248 @@
                 </div>
             </div>
         </div>
-    </main>
+    </div>
+</div>
+{% endblock %}
 
-    <!-- JS Logic -->
-    <script>
-        let growthChartInstance = null;
+{% block script_extra %}
+<script>
+    let growthChartInstance = null;
 
-        const formatK = (n) => {
-            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-            if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
-            return n.toLocaleString();
-        };
+    const formatK = (n) => {
+        if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+        if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+        return n.toLocaleString();
+    };
 
-        async function loadData() {
-            const pageUrl = document.getElementById('pageSelect').value;
-            const platform = document.getElementById('platformSelect').value;
+    async function loadData() {
+        const pageUrl = document.getElementById('pageSelect').value;
+        const platform = document.getElementById('platformSelect').value;
 
-            let queryParams = [];
-            if (pageUrl) queryParams.push(`page_url=${encodeURIComponent(pageUrl)}`);
-            if (platform) queryParams.push(`platform=${encodeURIComponent(platform)}`);
-            const urlSuffix = queryParams.length > 0 ? '?' + queryParams.join('&') : '';
+        let queryParams = [];
+        if (pageUrl) queryParams.push(`page_url=${encodeURIComponent(pageUrl)}`);
+        if (platform) queryParams.push(`platform=${encodeURIComponent(platform)}`);
+        const urlSuffix = queryParams.length > 0 ? '?' + queryParams.join('&') : '';
 
-            try {
-                // 1. Growth Data
-                const resGrowth = await fetch('/insights/api/growth' + urlSuffix);
-                const jsonGrowth = await resGrowth.json();
-                if (jsonGrowth.status === 'success') {
-                    updateChart(jsonGrowth.data);
-                    if (jsonGrowth.data.length > 0) {
-                        const latest = jsonGrowth.data[jsonGrowth.data.length - 1];
-                        document.getElementById('totalViews').innerText = formatK(latest.views);
+        try {
+            // 1. Growth Data
+            const resGrowth = await fetch('/insights/api/growth' + urlSuffix);
+            const jsonGrowth = await resGrowth.json();
+            if (jsonGrowth.status === 'success') {
+                updateChart(jsonGrowth.data);
+                if (jsonGrowth.data.length > 0) {
+                    const latest = jsonGrowth.data[jsonGrowth.data.length - 1];
+                    document.getElementById('totalViews').innerText = formatK(latest.views);
 
-                        let totalLikes = 0;
-                        jsonGrowth.data.forEach(d => totalLikes += d.likes);
-                        document.getElementById('totalLikes').innerText = `${formatK(totalLikes)} total interactions recorded.`;
+                    let totalLikes = 0;
+                    jsonGrowth.data.forEach(d => totalLikes += d.likes);
+                    document.getElementById('totalLikes').innerText = `${formatK(totalLikes)} total interactions recorded.`;
 
-                        // Fake aggregate eng rate if needed or use from latest
-                        const rate = latest.views > 0 ? ((latest.likes / latest.views) * 100).toFixed(2) : '0';
-                        document.getElementById('globalEngRate').innerText = rate;
+                    // Fake aggregate eng rate if needed or use from latest
+                    const rate = latest.views > 0 ? ((latest.likes / latest.views) * 100).toFixed(2) : '0';
+                    document.getElementById('globalEngRate').innerText = rate;
+                }
+            }
+
+            // 2. Top Posts
+            const resTop = await fetch('/insights/api/top-posts' + urlSuffix);
+            const jsonTop = await resTop.json();
+            if (jsonTop.status === 'success') {
+                renderLeaderboard(jsonTop.data);
+            }
+        } catch (err) {
+            console.error("Dashboard load error:", err);
+        }
+    }
+
+    function renderLeaderboard(data) {
+        const list = document.getElementById('topPostsList');
+        list.innerHTML = '';
+
+        if (data.length === 0) {
+            list.innerHTML = '<div class="text-center py-10 text-slate-500">No signals found in this range.</div>';
+            return;
+        }
+
+        // Update Best Performer card
+        document.getElementById('topViews').innerText = formatK(data[0].views) + " views";
+        document.getElementById('topCaption').innerText = data[0].caption || "Nội dung đang dẫn đầu thị trường.";
+
+        data.forEach((post, i) => {
+            const el = document.createElement('div');
+            el.className = 'glass-light p-4 rounded-2xl flex items-center gap-4 group cursor-pointer hover:bg-white/10 transition-all animate-slide-up';
+            el.style.animationDelay = `${i * 0.05}s`;
+
+            const growthColor = post.velocity > 0 ? 'text-green-400' : 'text-slate-500';
+            const trendIcon = post.velocity > 1000 ? '🔥' : (post.velocity > 0 ? '↗' : '');
+
+            let iconStr = '';
+            if (post.platform === 'facebook') iconStr = '<svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
+            else if (post.platform === 'tiktok') iconStr = '<svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-4.17.07-8.33.07-12.5z"/></svg>';
+            else if (post.platform === 'instagram') iconStr = '<svg class="w-4 h-4 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
+
+            el.innerHTML = `
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-bold text-white truncate group-hover:text-brand-accent transition-colors">${post.caption || '<No Caption>'}</div>
+                    <div class="flex items-center gap-2 mt-1">
+                        ${iconStr}
+                        <span class="text-[10px] uppercase font-black tracking-widest text-slate-500">${post.page_name}</span>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm font-black text-white">${formatK(post.views)}</div>
+                    <div class="text-[10px] font-bold ${growthColor}">${post.velocity > 0 ? '+' : ''}${formatK(post.velocity)} ${trendIcon}</div>
+                </div>
+            `;
+            el.onclick = () => window.open(post.post_url, '_blank');
+            list.appendChild(el);
+        });
+    }
+
+    function updateChart(data) {
+        const canvas = document.getElementById('growthChart');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        // Smarter labels: show time for intraday, date for historical
+        const labels = data.map(d => {
+            if (d.date.includes(' ')) {
+                const parts = d.date.split(' ');
+                const time = parts[1];
+                const dateParts = parts[0].split('-');
+                return `${dateParts[2]}/${dateParts[1]} ${time}`;
+            }
+            const parts = d.date.split('-');
+            return parts[2] + '/' + parts[1];
+        });
+        const views = data.map(d => d.views);
+
+        if (growthChartInstance) growthChartInstance.destroy();
+
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.4)');
+        gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
+
+        growthChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Gross Reach',
+                    data: views,
+                    borderColor: '#6366f1',
+                    borderWidth: 6,
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.45,
+                    pointRadius: 8,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#6366f1',
+                    pointBorderWidth: 4,
+                    pointHoverRadius: 10,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: '#1e293b',
+                        titleFont: { family: 'Outfit', size: 16, weight: 'bold' },
+                        bodyFont: { family: 'Inter', size: 14 },
+                        padding: 16,
+                        cornerRadius: 12,
+                        displayColors: false,
+                        callbacks: {
+                            label: (tooltipItem) => ` Reach: ${formatK(tooltipItem.raw)}`
+                        }
                     }
-                }
-
-                // 2. Top Posts
-                const resTop = await fetch('/insights/api/top-posts' + urlSuffix);
-                const jsonTop = await resTop.json();
-                if (jsonTop.status === 'success') {
-                    renderLeaderboard(jsonTop.data);
-                }
-            } catch (err) {
-                console.error("Dashboard load error:", err);
-            }
-        }
-
-        function renderLeaderboard(data) {
-            const list = document.getElementById('topPostsList');
-            list.innerHTML = '';
-
-            if (data.length === 0) {
-                list.innerHTML = '<div class="text-center py-10 text-slate-500">No signals found in this range.</div>';
-                return;
-            }
-
-            // Update Best Performer card
-            document.getElementById('topViews').innerText = formatK(data[0].views) + " views";
-            document.getElementById('topCaption').innerText = data[0].caption || "Nội dung đang dẫn đầu thị trường.";
-
-            data.forEach((post, i) => {
-                const el = document.createElement('div');
-                el.className = 'glass-light p-4 rounded-2xl flex items-center gap-4 group cursor-pointer hover:bg-white/10 transition-all animate-slide-up';
-                el.style.animationDelay = `${i * 0.05}s`;
-
-                const growthColor = post.velocity > 0 ? 'text-green-400' : 'text-slate-500';
-                const trendIcon = post.velocity > 1000 ? '🔥' : (post.velocity > 0 ? '↗' : '');
-
-                let iconStr = '';
-                if (post.platform === 'facebook') iconStr = '<svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
-                else if (post.platform === 'tiktok') iconStr = '<svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-4.17.07-8.33.07-12.5z"/></svg>';
-                else if (post.platform === 'instagram') iconStr = '<svg class="w-4 h-4 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
-
-                el.innerHTML = `
-                    <div class="flex-1 min-w-0">
-                        <div class="text-sm font-bold text-white truncate group-hover:text-brand-accent transition-colors">${post.caption || '<No Caption>'}</div>
-                        <div class="flex items-center gap-2 mt-1">
-                            ${iconStr}
-                            <span class="text-[10px] uppercase font-black tracking-widest text-slate-500">${post.page_name}</span>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <div class="text-sm font-black text-white">${formatK(post.views)}</div>
-                        <div class="text-[10px] font-bold ${growthColor}">${post.velocity > 0 ? '+' : ''}${formatK(post.velocity)} ${trendIcon}</div>
-                    </div>
-                `;
-                el.onclick = () => window.open(post.post_url, '_blank');
-                list.appendChild(el);
-            });
-        }
-
-        function updateChart(data) {
-            const ctx = document.getElementById('growthChart').getContext('2d');
-
-            // Smarter labels: show time for intraday, date for historical
-            const labels = data.map(d => {
-                if (d.date.includes(' ')) {
-                    const parts = d.date.split(' ');
-                    const time = parts[1];
-                    const dateParts = parts[0].split('-');
-                    return `${dateParts[2]}/${dateParts[1]} ${time}`;
-                }
-                const parts = d.date.split('-');
-                return parts[2] + '/' + parts[1];
-            });
-            const views = data.map(d => d.views);
-
-            if (growthChartInstance) growthChartInstance.destroy();
-
-            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.4)');
-            gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
-
-            growthChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Gross Reach',
-                        data: views,
-                        borderColor: '#6366f1',
-                        borderWidth: 6,
-                        backgroundColor: gradient,
-                        fill: true,
-                        tension: 0.45,
-                        pointRadius: 8,
-                        pointBackgroundColor: '#fff',
-                        pointBorderColor: '#6366f1',
-                        pointBorderWidth: 4,
-                        pointHoverRadius: 10,
-                    }]
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            backgroundColor: '#1e293b',
-                            titleFont: { family: 'Outfit', size: 16, weight: 'bold' },
-                            bodyFont: { family: 'Inter', size: 14 },
-                            padding: 16,
-                            cornerRadius: 12,
-                            displayColors: false,
-                            callbacks: {
-                                label: (tooltipItem) => ` Reach: ${formatK(tooltipItem.raw)}`
-                            }
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        suggestedMin: 0,
+                        suggestedMax: 1000, // Small baseline, expands automatically
+                        grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+                        ticks: {
+                            color: '#64748b',
+                            font: { size: 10, weight: 'bold' },
+                            callback: (v) => formatK(v)
                         }
                     },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            suggestedMin: 0,
-                            suggestedMax: 1000, // Small baseline, expands automatically
-                            grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
-                            ticks: {
-                                color: '#64748b',
-                                font: { size: 10, weight: 'bold' },
-                                callback: (v) => formatK(v)
-                            }
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: {
-                                color: '#64748b',
-                                font: { size: 9, weight: '500' },
-                                maxRotation: 45,
-                                minRotation: 0
-                            }
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#64748b',
+                            font: { size: 9, weight: '500' },
+                            maxRotation: 45,
+                            minRotation: 0
                         }
                     }
                 }
-            });
-        }
+            }
+        });
+    }
 
-        async function loadPageAnalysis() {
-            try {
-                const platform = document.getElementById('platformSelect').value;
-                const res = await fetch(`/insights/api/page-analysis?platform=${platform}`);
-                const json = await res.json();
-                const section = document.getElementById('strategicSection');
-                const list = document.getElementById('analysisList');
-                section.classList.remove('hidden');
-                list.innerHTML = '';
+    async function loadPageAnalysis() {
+        try {
+            const platform = document.getElementById('platformSelect').value;
+            const res = await fetch(`/insights/api/page-analysis?platform=${platform}`);
+            const json = await res.json();
+            const section = document.getElementById('strategicSection');
+            const list = document.getElementById('analysisList');
+            section.classList.remove('hidden');
+            list.innerHTML = '';
 
-                json.data.forEach((item, i) => {
-                    const card = document.createElement('div');
-                    card.className = `glass p-6 rounded-3xl border-${item.color}-500/20 border-2 relative overflow-hidden group animate-slide-up`;
-                    card.style.animationDelay = `${i * 0.1}s`;
+            json.data.forEach((item, i) => {
+                const card = document.createElement('div');
+                card.className = `glass p-6 rounded-3xl border-${item.color}-500/20 border-2 relative overflow-hidden group animate-slide-up`;
+                card.style.animationDelay = `${i * 0.1}s`;
 
-                    const growthSign = item.growth_pct >= 0 ? '+' : '';
-                    const colorClass = `text-${item.color}-400`;
+                const growthSign = item.growth_pct >= 0 ? '+' : '';
+                const colorClass = `text-${item.color}-400`;
 
-                    card.innerHTML = `
-                            <div class="absolute -right-4 -top-4 w-20 h-20 bg-${item.color}-500/10 rounded-full blur-xl group-hover:bg-${item.color}-500/20 transition-all"></div>
-                            <div class="space-y-4">
-                                <div class="flex justify-between items-start">
-                                    <div class="space-y-1">
-                                        <h4 class="font-display font-bold text-white group-hover:text-brand-accent transition-colors truncate w-32">${item.page_name}</h4>
-                                        <div class="px-2 py-0.5 rounded-full bg-${item.color}-500/10 text-[10px] font-black uppercase tracking-tighter ${colorClass} inline-block">
-                                            ${item.status}
-                                        </div>
-                                    </div>
-                                    <div class="text-right">
-                                        <div class="text-lg font-black text-white">${formatK(item.views)}</div>
-                                        <div class="text-xs font-bold ${colorClass}">${growthSign}${item.growth_pct}%</div>
+                card.innerHTML = `
+                        <div class="absolute -right-4 -top-4 w-20 h-20 bg-${item.color}-500/10 rounded-full blur-xl group-hover:bg-${item.color}-500/20 transition-all"></div>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-start">
+                                <div class="space-y-1">
+                                    <h4 class="font-display font-bold text-white group-hover:text-brand-accent transition-colors truncate w-32">${item.page_name}</h4>
+                                    <div class="px-2 py-0.5 rounded-full bg-${item.color}-500/10 text-[10px] font-black uppercase tracking-tighter ${colorClass} inline-block">
+                                        ${item.status}
                                     </div>
                                 </div>
-                                <div class="p-3 bg-white/5 rounded-xl border border-white/5">
-                                    <p class="text-xs text-slate-300 font-medium leading-relaxed italic">
-                                        "${item.advice}"
-                                    </p>
-                                </div>
-                                <div class="flex items-center gap-2 pt-2">
-                                    <div class="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                                        <div class="h-full bg-${item.color}-500" style="width: ${item.priority === 1 ? '100' : (item.priority === 2 ? '75' : '40')}%"></div>
-                                    </div>
-                                    <span class="text-[10px] font-bold text-slate-500 uppercase">Priority</span>
+                                <div class="text-right">
+                                    <div class="text-lg font-black text-white">${formatK(item.views)}</div>
+                                    <div class="text-xs font-bold ${colorClass}">${growthSign}${item.growth_pct}%</div>
                                 </div>
                             </div>
-                        `;
-                    list.appendChild(card);
-                });
-            } catch (err) {
-                console.error("Strategic Analysis load error:", err);
-            }
+                            <div class="p-3 bg-white/5 rounded-xl border border-white/5">
+                                <p class="text-xs text-slate-300 font-medium leading-relaxed italic">
+                                    "${item.advice}"
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-2 pt-2">
+                                <div class="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                                    <div class="h-full bg-${item.color}-500" style="width: ${item.priority === 1 ? '100' : (item.priority === 2 ? '75' : '40')}%"></div>
+                                </div>
+                                <span class="text-[10px] font-bold text-slate-500 uppercase">Priority</span>
+                            </div>
+                        </div>
+                    `;
+                list.appendChild(card);
+            });
+        } catch (err) {
+            console.error("Strategic Analysis load error:", err);
         }
+    }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            loadData();
-            loadPageAnalysis();
-        });
-    </script>
-</body>
-
-</html>
+    document.addEventListener('DOMContentLoaded', () => {
+        loadData();
+        loadPageAnalysis();
+    });
+</script>
+{% endblock %}
