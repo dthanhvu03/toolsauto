@@ -54,7 +54,7 @@ class Dispatcher:
                 return PublishResult(ok=True, external_post_id=job.external_post_id, details={"msg": "Skipped due to DB idempotency"})
             
             # 2. Open Session (if this fails, it's usually fatal or at least needs backoff)
-            if not adapter.open_session(job.account.profile_path):
+            if not adapter.open_session(job.account.resolved_profile_path):
                 return PublishResult(ok=False, is_fatal=False, error="Failed to open browser session")
                 
             # 3. Remote Truth Verification (Idempotency)
@@ -69,10 +69,10 @@ class Dispatcher:
                     logger.info("[Job %s] Footprint not found externally. Proceeding with publish.", job.id)
 
             # 4. FFmpeg Pre-Processing (if enabled and file is video)
-            if FFMPEG_ENABLED and job.media_path and not job.processed_media_path:
-                if MediaProcessor.is_video(job.media_path):
+            if FFMPEG_ENABLED and job.resolved_media_path and not job.resolved_processed_media_path:
+                if MediaProcessor.is_video(job.resolved_media_path):
                     logger.info("[Job %s] Running FFmpeg pre-processing (profile=%s)", job.id, FFMPEG_PROFILE)
-                    proc_result = MediaProcessor.process(job.media_path, profile=FFMPEG_PROFILE, job=job)
+                    proc_result = MediaProcessor.process(job.resolved_media_path, profile=FFMPEG_PROFILE, job=job)
                     
                     if proc_result.success:
                         job.processed_media_path = proc_result.output_path
@@ -99,9 +99,11 @@ class Dispatcher:
             
             # POST job: standard publish flow
             original_path = job.media_path
-            if job.processed_media_path:
-                job.media_path = job.processed_media_path  # Temporarily swap for adapter
-            
+            if job.resolved_processed_media_path:
+                job.media_path = job.resolved_processed_media_path  # Temporarily swap for adapter
+            else:
+                job.media_path = job.resolved_media_path
+
             result = adapter.publish(job)
             
             job.media_path = original_path  # Restore original path

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import traceback
 from typing import Any
 from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR
-from playwright.sync_api import sync_playwright, Playwright, BrowserContext, Page, Locator, TimeoutError
+from playwright.sync_api import Playwright, BrowserContext, Page, Locator, TimeoutError
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.database.models import Job
 from app.utils.human_behavior import human_type, human_scroll, pre_post_delay
@@ -15,6 +15,8 @@ import json
 import unicodedata
 from collections import deque
 from app.adapters.facebook.selectors import SELECTORS
+from app.adapters.facebook.core.session import FacebookSessionManager
+from app.adapters.facebook.pages.reels import FacebookReelsPage
 
 logger = logging.getLogger(__name__)
 
@@ -31,59 +33,14 @@ class FacebookAdapter(AdapterInterface):
         if self.playwright or self.context or self.page:
             logger.warning("FacebookAdapter: Session already open, closing previous before opening new one.")
             self.close_session()
-            
-        logger.info("FacebookAdapter: Opening persistent context at profile: %s", profile_path)
-        if profile_path:
-            pp = profile_path.strip()
-            if not os.path.isdir(pp):
-                logger.warning(
-                    "FacebookAdapter: profile_path is missing or not a directory — "
-                    "Chromium may create an empty profile (login wall): %s",
-                    pp,
-                )
-            else:
-                default_data = os.path.join(pp, "Default")
-                if not os.path.isdir(default_data):
-                    logger.warning(
-                        "FacebookAdapter: No Chromium 'Default' profile under %s — "
-                        "session may not be logged in (wrong folder or fresh copy).",
-                        pp,
-                    )
 
-        try:
-            self.playwright = sync_playwright().start()
-            self.context = self.playwright.chromium.launch_persistent_context(
-                user_data_dir=profile_path,
-                headless=False,
-                viewport={"width": 1280, "height": 720},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                args=[
-                    '--disable-dev-shm-usage',  # Tránh lỗi thiếu RAM share (/dev/shm) trên Linux/WSL
-                    '--no-sandbox',
-                    '--disable-gpu',            # Tắt Hardware GPU, tiết kiệm RAM
-                    '--js-flags=--lite-mode',   # Ép engine V8 JS chạy chế độ tiết kiệm RAM
-                    '--disable-features=SitePerProcess', # Tắt Isolation mỗi tab 1 process (tiết kiệm cực nhiều RAM)
-                    '--disable-background-networking',
-                    '--disable-default-apps',
-                    '--disable-sync'
-                ]
-            )
-            # persistent context starts with 1 blank page automatically
-            self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
-            
-            # Set a rigorous timeout to prevent silent worker hangs
-            self.page.set_default_timeout(60000)
-            return True
-            
-        except Exception as e:
-            logger.error(f"FacebookAdapter: Failed to bootstrap playwright session: {e}")
+        logger.info("FacebookAdapter: Opening persistent context at profile: %s", profile_path)
+        bundle = FacebookSessionManager.launch_persistent(profile_path)
+        if not bundle:
             self.close_session()
             return False
-
-    PERSONAL_REELS_LABELS = ("Thước phim", "Reels", "Reel", "Video ngắn", "Create reel")
-    PAGE_REELS_LABELS = ("Thước phim", "Reels", "Reel", "Video")
-    NEXT_BUTTON_LABELS = ("Tiếp", "Next")
-    POST_BUTTON_LABELS = ("Đăng", "Post", "Đăng bài", "Publish", "Chia sẻ", "Share", "Đăng Thước phim")
+        self.playwright, self.context, self.page = bundle
+        return True
 
     _REEL_ID_RE = re.compile(r"/reel/([a-zA-Z0-9_-]+)", re.IGNORECASE)
     _SHARE_RE = re.compile(r"/share/[rv]/([a-zA-Z0-9_-]+)", re.IGNORECASE)
@@ -191,115 +148,6 @@ class FacebookAdapter(AdapterInterface):
                 return locator
         return None
 
-    def _find_active_publish_surface(self) -> Page | Locator:
-        if not self.page:
-            raise RuntimeError("Playwright page is not initialized.")
-
-        dialogs = self.page.locator("div[role='dialog']")
-        for idx in range(dialogs.count() - 1, -1, -1):
-            dialog = dialogs.nth(idx)
-            if self._is_visible(dialog):
-                return dialog
-
-        file_inputs = self.page.locator("input[type='file']")
-        for idx in range(file_inputs.count() - 1, -1, -1):
-            dialog = file_inputs.nth(idx).locator("xpath=ancestor::div[@role='dialog'][1]").first
-            if self._is_visible(dialog):
-                return dialog
-
-        return self.page
-
-    def _surface_has_upload_input(self, surface: Page | Locator) -> bool:
-        try:
-            return surface.locator("input[type='file']").count() > 0
-        except Exception:
-            return False
-
-    def _looks_like_publish_surface(self, surface: Page | Locator | None = None) -> bool:
-        if surface is None:
-            surface = self._find_active_publish_surface()
-
-        if self._surface_has_upload_input(surface):
-            return True
-        if self._find_next_button(surface) or self._find_post_button(surface):
-            return True
-
-        try:
-            return surface.locator('div[contenteditable="true"], textarea').count() > 0
-        except Exception:
-            return False
-
-    def _log_surface_inventory(self, surface: Page | Locator, stage: str):
-        visible_buttons: list[str] = []
-        buttons = surface.locator("button, div[role='button'], a[role='button']")
-        for idx in range(min(buttons.count(), 20)):
-            button = buttons.nth(idx)
-            if not self._is_visible(button):
-                continue
-            try:
-                label = (
-                    (button.get_attribute("aria-label") or "")
-                    or (button.inner_text() or "")
-                ).strip()
-            except Exception:
-                continue
-            if label and label not in visible_buttons:
-                visible_buttons.append(label)
-            if len(visible_buttons) >= 8:
-                break
-
-        file_inputs: list[str] = []
-        inputs = surface.locator("input[type='file']")
-        for idx in range(min(inputs.count(), 10)):
-            input_el = inputs.nth(idx)
-            try:
-                accept = (input_el.get_attribute("accept") or "").strip() or "(no accept)"
-            except Exception:
-                accept = "(unreadable)"
-            file_inputs.append(accept)
-
-        textboxes: list[str] = []
-        boxes = surface.locator('div[contenteditable="true"], div[role="textbox"], textarea')
-        for idx in range(min(boxes.count(), 10)):
-            box = boxes.nth(idx)
-            if not self._is_visible(box):
-                continue
-            try:
-                placeholder = (
-                    (box.get_attribute("aria-placeholder") or "")
-                    or (box.get_attribute("placeholder") or "")
-                    or "(no placeholder)"
-                ).strip()
-            except Exception:
-                placeholder = "(unreadable)"
-            textboxes.append(placeholder)
-            if len(textboxes) >= 5:
-                break
-
-        logger.info(
-            "FacebookAdapter: [%s] Surface inventory | buttons=%s | file_inputs=%s | textboxes=%s",
-            stage,
-            visible_buttons or ["(none)"],
-            file_inputs or ["(none)"],
-            textboxes or ["(none)"],
-        )
-
-    def _restore_origin(self, origin_url: str):
-        if not self.page:
-            return
-        try:
-            self.page.keyboard.press("Escape")
-            self.page.wait_for_timeout(800)
-        except Exception:
-            pass
-
-        if self.page.url != origin_url:
-            try:
-                self.page.goto(origin_url, wait_until="domcontentloaded")
-                self.page.wait_for_timeout(3000)
-            except Exception as e:
-                logger.debug("FacebookAdapter: Failed to restore origin URL %s: %s", origin_url, e)
-
     def _click_locator(self, locator: Locator, description: str, timeout: int = 5000) -> bool:
         try:
             locator.scroll_into_view_if_needed()
@@ -328,406 +176,50 @@ class FacebookAdapter(AdapterInterface):
             logger.debug("FacebookAdapter: Force click failed for %s: %s", description, e)
             return False
 
-    def _attempt_entry_click(self, locator: Locator, description: str, origin_url: str) -> bool:
-        if not self._click_locator(locator, description):
-            return False
+    def _normalize_fb_text(self, text: str) -> str:
+        """Standardize Vietnamese and case for reliable matching (NFD, lowercase, d/đ)."""
+        if not text:
+            return ""
+        # Normalize to NFD and strip marks (accents), but keep 'd' vs 'đ' mapping if desirable.
+        # Here we just do a simple NFD + lower to fix combined vs decomposed characters.
+        n = unicodedata.normalize("NFD", text).lower().strip()
+        # Common Vietnamese 'đ' handling if we want to be very broad
+        n = n.replace("đ", "d").replace("Đ", "d")
+        return n
 
-        if self.page:
-            self.page.wait_for_timeout(2500)
-
-        surface = self._find_active_publish_surface()
-        if self._looks_like_publish_surface(surface):
-            return True
-
-        if self.page:
-            self.page.wait_for_timeout(1500)
-        surface = self._find_active_publish_surface()
-        if self._looks_like_publish_surface(surface):
-            return True
-
-        logger.info("FacebookAdapter: %s did not open a publish surface. Restoring origin...", description)
-        self._restore_origin(origin_url)
-        return False
-
-    def _try_entry_labels(self, labels: tuple[str, ...], origin_url: str, flow_name: str) -> bool:
+    def _ensure_authenticated_context(self) -> bool:
+        """Checks for 'Continue as' barriers and bypasses them to return to a standard nav context."""
         if not self.page:
             return False
-
-        for label in labels:
-            candidates = [
-                self.page.get_by_role("button", name=label, exact=False).first,
-                self.page.get_by_role("link", name=label, exact=False).first,
-                self.page.get_by_text(label, exact=False).first,
-            ]
-            for candidate in candidates:
-                if not self._is_visible(candidate):
-                    continue
-                if self._attempt_entry_click(candidate, f"{flow_name} entry '{label}'", origin_url):
-                    return True
-        return False
-
-    def _try_entry_selectors(self, selectors: tuple[str, ...], origin_url: str, flow_name: str) -> bool:
-        if not self.page:
-            return False
-
-        for selector in selectors:
-            candidate = self.page.locator(selector).first
-            if not self._is_visible(candidate):
-                continue
-            if self._attempt_entry_click(candidate, f"{flow_name} selector {selector}", origin_url):
-                return True
-        return False
-
-    def _open_personal_composer_fallback(self) -> bool:
-        if not self.page:
-            return False
-
-        logger.info("FacebookAdapter: [PERSONAL MODE] Falling back to generic composer.")
-        origin_url = self.page.url
-        composer_locators = [
-            self.page.locator("div[data-pagelet='FeedComposer'] div[role='button']").first,
-            self.page.locator("div[aria-describedby][role='button']").first,
-            self.page.get_by_text("on your mind", exact=False).first,
-            self.page.get_by_text("đang nghĩ gì", exact=False).first,
-            self.page.get_by_text("Chia sẻ suy nghĩ", exact=False).first,
-        ]
-
-        for composer in composer_locators:
-            if not self._is_visible(composer):
-                continue
-            if self._click_locator(composer, "personal composer fallback", timeout=10000):
-                self.page.wait_for_timeout(3000)
-                if self._looks_like_publish_surface():
-                    return True
-                self._restore_origin(origin_url)
-        return False
-
-    def _open_personal_reels_entry(self) -> str | None:
-        if not self.page:
-            return None
-
-        origin_url = self.page.url
-        if self._try_entry_labels(self.PERSONAL_REELS_LABELS, origin_url, "personal"):
-            return "direct_reels"
-
-        direct_reels_selectors = (
-            'a[href*="/reels/create"]',
-            'a[href*="/reel/create"]',
-            'a[href*="create"][href*="reel"]',
-            'a[href*="create"][href*="video"]',
-            'div[role="button"][aria-label*="Reel"]',
-            'div[role="button"][aria-label*="reel"]',
-        )
-        if self._try_entry_selectors(direct_reels_selectors, origin_url, "personal"):
-            return "direct_reels"
-
-        self._restore_origin(origin_url)
-        if self._open_personal_composer_fallback():
-            return "composer_fallback"
-        return None
-
-    def _open_page_reels_entry(self) -> str | None:
-        if not self.page:
-            return None
-
-        origin_url = self.page.url
-        logger.info("FacebookAdapter: Navigating to page reels entry from %s", origin_url)
-
-        # 1. Direct URL navigation is most reliable for Fanpages
-        # Since we are already switched to the Fanpage context, we can just go to the global create URL
-        create_url = "https://www.facebook.com/reels/create"
-        logger.info("FacebookAdapter: Trying direct navigation to Fanpage create reel url: %s", create_url)
-        try:
-            self.page.goto(create_url, wait_until="domcontentloaded")
-            self.page.wait_for_timeout(5000)
-            # Check if we landed on a reels creation surface
-            if self._looks_like_publish_surface(self.page):
-                return "direct_reels"
-        except Exception as e:
-            logger.warning("FacebookAdapter: Direct navigation to reels/create failed: %s", e)
-
-        # 2. Fallback to selectors (which are more specific than labels)
-        page_selectors = (
-            'a[href*="/reels/create"]',
-            'a[href*="/reel/create"]',
-            'a[href*="create"][href*="reel"]',
-        )
-        if self._try_entry_selectors(page_selectors, origin_url, "page"):
-            return "direct_reels"
-
-        # 3. Fallback to labels (risky: might open Reel player instead of composer)
-        if self._try_entry_labels(self.PAGE_REELS_LABELS, origin_url, "page"):
-            return "direct_reels"
             
-        return None
-
-    def _select_file_input(self, surface: Page | Locator, media_path: str) -> Locator | None:
-        candidates = surface.locator("input[type='file']")
-        if candidates.count() == 0 and self.page:
-            candidates = self.page.locator("input[type='file']")
-
-        is_video = os.path.splitext(media_path)[1].lower() in (".mp4", ".mov", ".avi", ".mkv", ".webm")
-        chosen: Locator | None = None
-
-        for idx in range(candidates.count()):
-            candidate = candidates.nth(idx)
-            accept_attr = (candidate.get_attribute("accept") or "").lower()
-            if is_video and "video" in accept_attr:
-                logger.info("FacebookAdapter: Selected file input with accept='%s' for video upload.", accept_attr[:80])
-                return candidate
-            if not is_video and ("image" in accept_attr or accept_attr == "") and chosen is None:
-                chosen = candidate
-
-        if chosen:
-            logger.info("FacebookAdapter: Selected file input fallback for non-video upload.")
-            return chosen
-
-        if candidates.count() > 0:
-            logger.info("FacebookAdapter: Using first file input as final fallback.")
-            return candidates.first
-        return None
-
-    def _find_next_button(self, surface: Page | Locator) -> Locator | None:
-        candidates = [
-            surface.get_by_role("button", name="Tiếp", exact=True).first,
-            surface.get_by_role("button", name="Next", exact=True).first,
-            # Removed exact=False for "Tiếp" to avoid clicking unclickable "Thẻ tiếp theo"
-            surface.get_by_role("button", name="Next", exact=False).first,
-            surface.locator('button:has-text("Tiếp")').first,
-            surface.locator('button:has-text("Next")').first,
-            surface.locator('div[role="button"][aria-label="Tiếp"], div[role="button"][aria-label="Next"]').first,
-            surface.locator('span[role="button"][aria-label="Tiếp"], span[role="button"][aria-label="Next"]').first,
-            surface.get_by_text("Tiếp", exact=True).first,
-            surface.get_by_text("Next", exact=True).first,
-        ]
-        return self._find_first_visible(candidates)
-
-    # Schedule-related keywords to EXCLUDE from post button matching
-    SCHEDULE_POISON_WORDS = ("lịch đăng", "schedule", "lên lịch", "lịch", "đăng sau")
-
-    def _is_schedule_button(self, locator: Locator) -> bool:
-        """Check if a button is actually a schedule toggle, not the Post button."""
-        try:
-            btn_text = (locator.inner_text() or "").lower()
-            return any(word in btn_text for word in self.SCHEDULE_POISON_WORDS)
-        except Exception:
-            return False
-
-    def _find_post_button(self, surface: Page | Locator) -> Locator | None:
-        # ── Strategy 1: EXACT text match (highest priority, avoids schedule confusion) ──
-        for label in self.POST_BUTTON_LABELS:
-            exact_candidates = [
-                surface.get_by_role("button", name=label, exact=True).first,
-                surface.locator(f'div[role="button"][aria-label="{label}"]').first,
-                surface.locator(f'button[aria-label="{label}"]').first,
-            ]
-            for candidate in exact_candidates:
-                if self._is_visible(candidate) and not self._is_schedule_button(candidate):
-                    logger.info("FacebookAdapter: Post button matched via exact label '%s'", label)
-                    return candidate
-
-        # ── Strategy 2: Fuzzy match with schedule filter ──
-        fuzzy_candidates: list[Locator] = []
-        for label in self.POST_BUTTON_LABELS:
-            fuzzy_candidates.append(
-                surface.get_by_role("button", name=label, exact=False).first,
-            )
-        fuzzy_candidates.extend(
-            [
-                surface.locator('div[role="button"]:has-text("Đăng")').first,
-                surface.locator('div[role="button"]:has-text("Post")').first,
-                surface.locator('span[role="button"]:has-text("Đăng")').first,
-                surface.locator('span[role="button"]:has-text("Post")').first,
-                surface.locator('button:has-text("Đăng")').first,
-                surface.locator('button:has-text("Post")').first,
-            ]
-        )
-        for candidate in fuzzy_candidates:
-            if self._is_visible(candidate) and not self._is_schedule_button(candidate):
-                logger.info("FacebookAdapter: Post button matched via fuzzy search")
-                return candidate
-
-        logger.warning("FacebookAdapter: No post button found (all candidates were schedule buttons or invisible)")
-        return None
-
-    def _type_caption_in_surface(self, surface: Page | Locator, caption: str) -> bool:
-        if not caption:
+        # 1. If navigation is already present, we are likely fine
+        nav_present = self.page.locator('div[role="navigation"]').count() > 0
+        if nav_present:
             return True
-
+            
+        # 2. Check for 'Continue as' / 'Tiếp tục'
+        logger.info("FacebookAdapter: Navigation missing, checking for session recovery screen...")
+        recovery_btn = None
         candidates = [
-            surface.locator('div[contenteditable="true"][aria-placeholder*="reel"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="Describe"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="thước phim"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="Mô tả"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="nghĩ"]').first,
-            surface.locator('div[role="textbox"][contenteditable="true"]').first,
-            surface.locator('div[role="textbox"]').first,
-            surface.locator('div[contenteditable="true"]').first,
-            surface.locator("textarea").first,
+            self.page.get_by_text("Tiếp tục", exact=True).first,
+            self.page.get_by_text("Continue", exact=True).first,
+            self.page.get_by_role("button", name="Tiếp tục", exact=True).first,
+            self.page.get_by_role("button", name="Continue", exact=True).first,
+            self.page.locator('div[role="button"]:text-is("Tiếp tục")').first,
+            self.page.locator('div[role="button"]:text-is("Continue")').first,
         ]
-
-        signature = caption[:24].strip()
         for candidate in candidates:
-            if not self._is_visible(candidate):
-                continue
-
-            try:
-                current_text = (candidate.inner_text() or "").strip()
-            except Exception:
-                current_text = ""
-
-            if signature and current_text and signature in current_text:
-                logger.info("FacebookAdapter: Caption already present in active surface.")
-                return True
-
-            if current_text and signature and signature not in current_text:
-                logger.debug("FacebookAdapter: Skipping non-empty textbox that does not look like caption.")
-                continue
-
-            try:
-                candidate.click(force=True, timeout=3000)
-                if self.page:
-                    self.page.wait_for_timeout(500)
-                human_type(self.page, caption)
-                if self.page:
-                    self.page.wait_for_timeout(800)
-                    try:
-                        os.makedirs("/home/vu/toolsauto/logs", exist_ok=True)
-                        self.page.screenshot(path="/home/vu/toolsauto/logs/debug_caption_typed.png")
-                        logger.info("FacebookAdapter: Saved debug screenshot of typed caption.")
-                    except:
-                        pass
-                logger.info("FacebookAdapter: Caption typed into active publish surface.")
-                return True
-            except Exception as e:
-                logger.debug("FacebookAdapter: Caption typing candidate failed: %s", e)
-
-        return False
-
-    # Error signals that Facebook shows when a post fails silently
-    FB_ERROR_SIGNALS = (
-        "something went wrong", "đã xảy ra lỗi", "couldn't post",
-        "không thể đăng", "try again", "thử lại", "upload failed",
-        "tải lên thất bại", "couldn't share", "không thể chia sẻ",
-        "an error occurred", "lỗi đã xảy ra",
-    )
-
-    def _check_page_for_errors(self) -> str | None:
-        """Check if Facebook is showing an error message after post attempt."""
-        if not self.page:
-            return None
-        try:
-            body_text = self.page.evaluate("document.body.innerText").lower()
-            for signal in self.FB_ERROR_SIGNALS:
-                if signal in body_text:
-                    return signal
-        except Exception:
-            pass
-        return None
-
-    def _wait_for_post_submission(self) -> str:
-        """
-        Wait for post submission dialog to close.
-        Returns: 'success' | 'error' | 'timeout'
-        """
-        if not self.page:
-            return "error"
-
-        logger.info("FacebookAdapter: Waiting for post submission to complete (dialog to close)...")
-        for tick in range(60):
+            if self._is_visible(candidate):
+                recovery_btn = candidate
+                break
+                
+        if recovery_btn:
+            logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Bypassing...")
+            self._click_locator(recovery_btn, "session recovery button", timeout=5000)
             self.page.wait_for_timeout(5000)
-
-            # --- Handle "Lựa chọn lịch đăng" (Schedule) modal ---
-            # Facebook sometimes shows a scheduling upsell modal after clicking Post.
-            # We detect it and dismiss it so the post submits immediately.
-            try:
-                schedule_signals = ["Lựa chọn lịch đăng", "Choose schedule", "Lên lịch đăng sau", "Schedule for later"]
-                dialogs = self.page.locator('div[role="dialog"]').all()
-                for dlg in dialogs:
-                    if dlg.is_visible():
-                        dlg_text = dlg.inner_text()
-                        if any(sig in dlg_text for sig in schedule_signals):
-                            logger.warning("FacebookAdapter: Detected schedule modal! Dismissing...")
-                            dismissed = False
-                            # Strategy 1: Try clicking the back arrow by aria-label
-                            for aria in ["Quay lại", "Back"]:
-                                back_btn = dlg.locator(f'div[role="button"][aria-label="{aria}"]').first
-                                if self._is_visible(back_btn):
-                                    self._click_locator(back_btn, "schedule modal back button")
-                                    dismissed = True
-                                    break
-                            # Strategy 2: Try the X close button
-                            if not dismissed:
-                                close_btn = dlg.locator('div[aria-label="Đóng"][role="button"], div[aria-label="Close"][role="button"]').first
-                                if self._is_visible(close_btn):
-                                    self._click_locator(close_btn, "schedule modal close button")
-                                    dismissed = True
-                            # Strategy 3: Escape key as last resort
-                            if not dismissed:
-                                logger.info("FacebookAdapter: Using Escape to dismiss schedule modal.")
-                                self.page.keyboard.press("Escape")
-                            self.page.wait_for_timeout(3000)
-                            logger.info("FacebookAdapter: Schedule modal dismissed. Continuing wait...")
-                            break
-            except Exception as e:
-                logger.warning("FacebookAdapter: Error handling schedule modal: %s", e)
-
-            # Check for error signals every few ticks
-            if tick > 0 and tick % 3 == 0:
-                err_signal = self._check_page_for_errors()
-                if err_signal:
-                    logger.error("FacebookAdapter: Detected error signal after post: '%s'", err_signal)
-                    return "error"
-
-            if self.page.locator('div[role="dialog"]').count() == 0:
-                logger.info("FacebookAdapter: Dialog closed and disappeared naturally.")
-                # Double-check for errors on the page after dialog closes
-                self.page.wait_for_timeout(2000)
-                err_signal = self._check_page_for_errors()
-                if err_signal:
-                    logger.error("FacebookAdapter: Error detected after dialog close: '%s'", err_signal)
-                    return "error"
-                return "success"
-
-            dismiss_button = self._find_first_visible(
-                [
-                    self.page.get_by_role("button", name="Đóng", exact=False).first,
-                    self.page.get_by_role("button", name="Xong", exact=False).first,
-                    self.page.get_by_role("button", name="Lúc khác", exact=False).first,
-                    self.page.locator('div[aria-label="Đóng"], div[aria-label="Xong"]').first,
-                ]
-            )
-            if dismiss_button:
-                logger.info("FacebookAdapter: Found Success/Dismiss button, clicking it to unblock...")
-                self._click_locator(dismiss_button, "publish dismiss button")
-                self.page.wait_for_timeout(2000)
-                err_signal = self._check_page_for_errors()
-                if err_signal:
-                    logger.error("FacebookAdapter: Error detected after dismiss: '%s'", err_signal)
-                    return "error"
-                return "success"
-
-        logger.warning("FacebookAdapter: Post submission wait hit timeout window without a strong completion signal.")
-        return "timeout"
-
-    def _neutralize_overlays(self):
-        if not self.page:
-            return
-
-        logger.info("FacebookAdapter: [Phase 2] Neutralizing overlays...")
-        try:
-            modal_close = self.page.locator('div[aria-label="Close"], div[aria-label="Đóng"]').filter(has_text="").first
-            if self._is_visible(modal_close):
-                logger.info("FacebookAdapter: Found intercepting modal close button. Clicking...")
-                self._click_locator(modal_close, "overlay close button")
-                self.page.wait_for_timeout(1000)
-
-            blocking_dialogs = self.page.locator("div[role='dialog']")
-            if blocking_dialogs.count() > 0:
-                logger.info("FacebookAdapter: Waiting for dialog overlays to detach...")
-                blocking_dialogs.first.wait_for(state="hidden", timeout=5000)
-        except Exception as e:
-            logger.debug("FacebookAdapter: Modal neutralization step encountered an issue: %s", e)
+            return self.page.locator('div[role="navigation"]').count() > 0
+            
+        return False
 
     def _switch_to_personal_profile(self, account_name: str) -> bool:
         """
@@ -738,6 +230,9 @@ class FacebookAdapter(AdapterInterface):
             return False
 
         try:
+            # 0. Ensure we are in an authenticated context (bypass Continue as)
+            self._ensure_authenticated_context()
+
             # 1. Open the top right account menu
             account_menu_btn = self.page.locator(SELECTORS["switch_menu"]["account_menu_button"]).last
             if not self._is_visible(account_menu_btn):
@@ -758,7 +253,7 @@ class FacebookAdapter(AdapterInterface):
                 self.page.wait_for_timeout(2000)
             
             # 3. Look for the exact personal profile name (accent-insensitive)
-            target_name = account_name.lower().strip()
+            target_name = self._normalize_fb_text(account_name)
             # Find all possible profile items across the DOM (popups often render outside the main tree)
             profile_items = self.page.locator('div[role="button"], div[role="menuitem"], div[role="radio"], div[role="menuitemradio"]').all()
             
@@ -767,10 +262,7 @@ class FacebookAdapter(AdapterInterface):
                 try:
                     text = el.inner_text().strip()
                     if text and len(text) > 3:
-                        # Normalize accents
-                        normalized = unicodedata.normalize('NFD', text).encode('ascii', 'ignore').decode('utf-8')
-                        normalized = normalized.replace('đ', 'd').replace('Đ', 'D').lower()
-                        if target_name in normalized:
+                        if target_name in self._normalize_fb_text(text):
                             found_el = el
                             break
                 except Exception:
@@ -1001,14 +493,15 @@ class FacebookAdapter(AdapterInterface):
 
             logger.info("FacebookAdapter: Simulating feed browsing before compose...")
             human_scroll(self.page)
-            self._neutralize_overlays()
+            reels = FacebookReelsPage(self.page)
+            reels.neutralize_overlays()
 
             logger.info("FacebookAdapter: [Phase 3] Locating publish entry...")
             if is_page_post:
-                entrypoint_used = self._open_page_reels_entry()
+                entrypoint_used = reels.open_page_reels_entry()
                 if not entrypoint_used:
-                    surface = self._find_active_publish_surface()
-                    self._log_surface_inventory(surface, "page_entrypoint_missing")
+                    surface = reels.find_active_publish_surface()
+                    reels.log_surface_inventory(surface, "page_entrypoint_missing")
                     return self._failure_result(
                         job.id,
                         "page_entrypoint",
@@ -1017,10 +510,10 @@ class FacebookAdapter(AdapterInterface):
                         entrypoint_used,
                     )
             else:
-                entrypoint_used = self._open_personal_reels_entry()
+                entrypoint_used = reels.open_personal_reels_entry()
                 if not entrypoint_used:
-                    surface = self._find_active_publish_surface()
-                    self._log_surface_inventory(surface, "personal_entrypoint_missing")
+                    surface = reels.find_active_publish_surface()
+                    reels.log_surface_inventory(surface, "personal_entrypoint_missing")
                     return self._failure_result(
                         job.id,
                         "personal_entrypoint",
@@ -1029,8 +522,8 @@ class FacebookAdapter(AdapterInterface):
                         entrypoint_used,
                     )
 
-            surface = self._find_active_publish_surface()
-            self._log_surface_inventory(surface, "entry_opened")
+            surface = reels.find_active_publish_surface()
+            reels.log_surface_inventory(surface, "entry_opened")
 
             logger.info("FacebookAdapter: Uploading media from %s", job.media_path)
             if not os.path.exists(job.media_path):
@@ -1042,9 +535,9 @@ class FacebookAdapter(AdapterInterface):
                     entrypoint_used,
                 )
 
-            file_input = self._select_file_input(surface, job.media_path)
+            file_input = reels.select_file_input(surface, job.media_path)
             if not file_input:
-                self._log_surface_inventory(surface, "upload_input_missing")
+                reels.log_surface_inventory(surface, "upload_input_missing")
                 return self._failure_result(
                     job.id,
                     "upload_media",
@@ -1058,7 +551,7 @@ class FacebookAdapter(AdapterInterface):
                 logger.info("FacebookAdapter: Media attached. Waiting for preview...")
                 self.page.wait_for_timeout(8000)
             except Exception as e:
-                self._log_surface_inventory(surface, "upload_media_failed")
+                reels.log_surface_inventory(surface, "upload_media_failed")
                 return self._failure_result(
                     job.id,
                     "upload_media",
@@ -1067,46 +560,46 @@ class FacebookAdapter(AdapterInterface):
                     entrypoint_used,
                 )
 
-            surface = self._find_active_publish_surface()
-            self._log_surface_inventory(surface, "after_upload")
+            surface = reels.find_active_publish_surface()
+            reels.log_surface_inventory(surface, "after_upload")
 
             caption_typed = False
             pre_next_caption = is_page_post or entrypoint_used == "direct_reels"
             if pre_next_caption:
-                caption_typed = self._type_caption_in_surface(surface, publish_caption)
+                caption_typed = reels.fill_caption(surface, publish_caption)
 
             logger.info("FacebookAdapter: Navigating through publish steps...")
             for step in range(6):
-                surface = self._find_active_publish_surface()
-                post_button = self._find_post_button(surface)
+                surface = reels.find_active_publish_surface()
+                post_button = reels.find_post_button(surface)
                 if post_button:
                     logger.info("FacebookAdapter: Post/Đăng button found at step %d.", step)
                     break
 
-                next_button = self._find_next_button(surface)
+                next_button = reels.find_next_button(surface)
                 if not next_button:
                     logger.info("FacebookAdapter: No more Next/Tiếp buttons at step %d.", step)
                     break
 
                 logger.info("FacebookAdapter: Clicking Next/Tiếp at step %d...", step + 1)
                 if not self._click_locator(next_button, f"next button step {step + 1}", timeout=5000):
-                    self._log_surface_inventory(surface, f"next_click_failed_{step + 1}")
+                    reels.log_surface_inventory(surface, f"next_click_failed_{step + 1}")
                     logger.warning("FacebookAdapter: Failed to click Next/Tiếp button but continuing. It might be a false positive (e.g. unclickable carousel arrow).")
                     break
                 self.page.wait_for_timeout(3000)
 
                 if pre_next_caption and not caption_typed:
-                    surface = self._find_active_publish_surface()
-                    caption_typed = self._type_caption_in_surface(surface, publish_caption)
+                    surface = reels.find_active_publish_surface()
+                    caption_typed = reels.fill_caption(surface, publish_caption)
 
-            surface = self._find_active_publish_surface()
+            surface = reels.find_active_publish_surface()
             if not caption_typed:
-                caption_typed = self._type_caption_in_surface(surface, publish_caption)
+                caption_typed = reels.fill_caption(surface, publish_caption)
                 if not caption_typed and publish_caption.strip():
                     logger.warning("FacebookAdapter: Caption area not found in final surface. Proceeding without caption.")
 
-            self._log_surface_inventory(surface, "before_post")
-            post_button = self._find_post_button(surface)
+            reels.log_surface_inventory(surface, "before_post")
+            post_button = reels.find_post_button(surface)
             if not post_button:
                 return self._failure_result(
                     job.id,
@@ -1160,7 +653,7 @@ class FacebookAdapter(AdapterInterface):
             # ── Screenshot immediately after clicking Post ──
             self._capture_failure_artifacts(job.id, "post_clicked")
 
-            submission_status = self._wait_for_post_submission()
+            submission_status = reels.wait_for_post_submission()
             logger.info("FacebookAdapter: Post submission result: %s", submission_status)
 
             # ── Screenshot after submission wait ──
@@ -1709,8 +1202,8 @@ class FacebookAdapter(AdapterInterface):
         """
         if not self.page or not target_page_name:
             return False
-        tn_lower = target_page_name.strip().lower()
-        if not tn_lower:
+        tn_norm = self._normalize_fb_text(target_page_name)
+        if not tn_norm:
             return False
         try:
             candidates = dialog.locator('[role="button"]').all()
@@ -1723,8 +1216,8 @@ class FacebookAdapter(AdapterInterface):
                 al = (el.get_attribute("aria-label") or "").strip()
                 if not al:
                     continue
-                al_lower = al.lower()
-                if tn_lower not in al_lower:
+                al_norm = self._normalize_fb_text(al)
+                if tn_norm not in al_norm:
                     continue
                 if (
                     "chuyển sang" not in al_lower
@@ -1827,6 +1320,9 @@ class FacebookAdapter(AdapterInterface):
         if not self.page:
             return False
             
+        # 0. Ensure we are in an authenticated context (bypass Continue as)
+        self._ensure_authenticated_context()
+
         logger.info("FacebookAdapter: Initiating account switch via avatar menu...")
         try:
             # 1. Click top-right avatar image
@@ -1943,19 +1439,31 @@ class FacebookAdapter(AdapterInterface):
 
             # 3a2b. Text-filtered rows — FB may use menuitemradio, radio, or role=button rows.
             if target_page_name:
-                name_pat = re.compile(re.escape(target_page_name.strip()), re.IGNORECASE)
+                tn_norm = self._normalize_fb_text(target_page_name)
                 for row_sel in (
                     '[role="menuitemradio"]',
                     '[role="radio"]',
                     'div[role="button"]',
                 ):
-                    rows = dialog.locator(row_sel).filter(has_text=name_pat)
-                    cnt = rows.count()
+                    # We can't use Playwright's filter(has_text=...) with normalization easily,
+                    # so we manually filter for precision across NFD/NFC.
+                    all_rows = dialog.locator(row_sel).all()
+                    rows_with_match: list[Locator] = []
+                    for r in all_rows:
+                        try:
+                            t = r.inner_text()
+                            if tn_norm in self._normalize_fb_text(t):
+                                rows_with_match.append(r)
+                        except Exception:
+                            continue
+                    
+                    cnt = len(rows_with_match)
                     if cnt == 0:
                         logger.info(
-                            "FacebookAdapter: 3a2b zero %s rows matching '%s'.",
+                            "FacebookAdapter: 3a2b zero %s rows matching '%s' (norm: %s).",
                             row_sel,
                             target_page_name,
+                            tn_norm,
                         )
                         continue
                     if cnt > 12:
@@ -1966,19 +1474,18 @@ class FacebookAdapter(AdapterInterface):
                         )
                         continue
                     logger.info(
-                        "FacebookAdapter: Switcher %s rows with text match for '%s': count=%s",
+                        "FacebookAdapter: Switcher %s rows with normalized text match for '%s': count=%s",
                         row_sel,
                         target_page_name,
                         cnt,
                     )
                     activated = False
                     if page_id:
-                        for i in range(cnt):
-                            r = rows.nth(i)
+                        for r in rows_with_match:
                             try:
                                 if self._switcher_row_has_page_id(r, page_id):
                                     if self._activate_profile_switcher_row(
-                                        r, f"id-{row_sel}-{i}"
+                                        r, f"id-{row_sel}"
                                     ):
                                         activated = True
                                         break
@@ -1993,7 +1500,7 @@ class FacebookAdapter(AdapterInterface):
                                 cnt,
                             )
                         for i in indices:
-                            r = rows.nth(i)
+                            r = rows_with_match[i]
                             try:
                                 if r.get_attribute("aria-checked") == "true":
                                     logger.info(
