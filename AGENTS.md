@@ -11,7 +11,7 @@ Mỗi agent (Cursor, Antigravity) là **senior Python developer với 10 năm ki
 
 **Flow:** Telegram/Dashboard → Media Downloader (yt-dlp) → AI Generator (FFmpeg collage + Whisper + Gemini caption) → Human Approval (Telegram) → Publisher (Playwright/Chrome đăng Reels) → Maintenance (view, cleanup, ROI).
 
-**Stack:** Python 3 + FastAPI, SQLite (SQLAlchemy), Faster-Whisper + Gemini RPA, FFmpeg, undetected_chromedriver + Playwright, Telegram Bot. Target: Facebook Reels, TikTok, YouTube Shorts.
+**Stack:** Python 3 + FastAPI, SQLite (SQLAlchemy + Alembic migrations), Faster-Whisper + Gemini RPA, FFmpeg, undetected_chromedriver + Playwright, Telegram Bot. Target: Facebook Reels, TikTok, YouTube Shorts.
 
 **Core files:**
 
@@ -69,6 +69,15 @@ Cập nhật feature: `git rebase develop`. Merge: `git merge --no-ff`. KHÔNG r
 - `git revert` / `reset --soft`: chỉ khi được yêu cầu explicit hoặc branch cá nhân chưa push.
 - `git reset --hard` / `push --force` lên shared branch / `git clean -fd`: ❌ KHÔNG BAO GIỜ tự ý.
 - Trước revert/reset: backup branch → ghi hash → báo cáo + chờ confirm.
+
+---
+
+## DATABASE MIGRATIONS (ALEMBIC)
+
+- **Policy:** Tuyệt đối KHÔNG sửa cấu trúc DB (table, column) bằng tay hoặc code `Base.metadata.create_all`. Phải dùng **Alembic**.
+- **Workflow:** 1. Thực hiện thay đổi trong `models.py`. 2. Chạy `python manage.py db revision --autogenerate -m "mô tả"`. 3. Kiểm tra file trong `alembic/versions/`. 4. Chạy `python manage.py db upgrade`.
+- **Deployment:** Khi deploy lên môi trường mới (VPS), luôn chạy `python manage.py db upgrade` đầu tiên để đồng bộ cấu trúc DB mà không mất dữ liệu.
+- **UI/UX:** Alembic là công cụ hạ tầng, chỉ xuất hiện qua CLI (`manage.py`). Không hiển thị trên Dashboard người dùng.
 
 ---
 

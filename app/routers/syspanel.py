@@ -13,12 +13,26 @@ from zoneinfo import ZoneInfo
 from app.main_templates import templates
 from app.database.core import SessionLocal
 from app.database.models import Job, Account
-from app.config import TIMEZONE
+from app.config import (
+    TIMEZONE,
+    DB_PATH,
+    BASE_DIR,
+    CONTENT_DIR,
+    DONE_DIR,
+    FAILED_DIR,
+    REUP_DIR,
+    THUMB_DIR,
+    LOGS_DIR,
+    CONTENT_MEDIA_DIR,
+    CONTENT_VIDEO_DIR,
+    CONTENT_PROCESSED_DIR,
+    iter_pm2_log_directories,
+)
 
 router = APIRouter(prefix="/syspanel", tags=["syspanel"])
 logger = logging.getLogger(__name__)
 
-APP_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+APP_DIR = str(BASE_DIR)
 
 
 def _get_pm2_log_path(worker: str, log_type: str) -> str:
@@ -31,24 +45,14 @@ def _get_pm2_log_path(worker: str, log_type: str) -> str:
         log_name = worker.replace("_", "-")  # FB_Publisher → FB-Publisher
     suffix = f"{log_name}-{log_type}.log"
 
-    candidate_dirs = [
-        "/home/vu/.pm2/logs",
-        os.path.expanduser("~/.pm2/logs"),
-        "/root/.pm2/logs",
-    ]
-    try:
-        for entry in os.scandir("/home"):
-            if entry.is_dir():
-                candidate_dirs.append(f"/home/{entry.name}/.pm2/logs")
-    except Exception:
-        pass
-
-    for d in candidate_dirs:
-        path = os.path.join(d, suffix)
+    for d in iter_pm2_log_directories():
+        path = os.path.join(str(d), suffix)
         if os.path.exists(path):
             return path
 
-    return os.path.join(candidate_dirs[0], suffix)  # fallback — sẽ hiển thị error rõ ràng
+    first = next(iter(iter_pm2_log_directories()), None)
+    base = str(first) if first else os.path.expanduser("~/.pm2/logs")
+    return os.path.join(base, suffix)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -111,10 +115,18 @@ def _get_pm2_processes():
 
 
 def _get_content_stats():
-    base = os.path.join(APP_DIR, "content")
+    mapping = {
+        "media": CONTENT_MEDIA_DIR,
+        "video": CONTENT_VIDEO_DIR,
+        "done": DONE_DIR,
+        "failed": FAILED_DIR,
+        "processed": CONTENT_PROCESSED_DIR,
+        "reup": REUP_DIR,
+        "thumbnails": THUMB_DIR,
+    }
     stats = {}
-    for folder in ["media", "video", "done", "failed", "processed", "reup", "thumbnails"]:
-        path = os.path.join(base, folder)
+    for folder, path in mapping.items():
+        path = str(path)
         if os.path.isdir(path):
             files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
             total_bytes = sum(os.path.getsize(os.path.join(path, f)) for f in files)
@@ -126,8 +138,8 @@ def _get_content_stats():
 
 def _get_screenshots():
     dirs = [
-        os.path.join(APP_DIR, "logs"),
-        os.path.join(APP_DIR, "content"),
+        str(LOGS_DIR),
+        str(CONTENT_DIR),
         APP_DIR,
     ]
     shots = []
@@ -231,7 +243,7 @@ def frag_db_explorer(request: Request, table_name: str = None):
 
     try:
         import sqlite3
-        db_path = os.path.join(APP_DIR, "data/auto_publisher.db")
+        db_path = DB_PATH
         if not os.path.exists(db_path):
             return _html_output('<div class="text-sm text-red-500">Database file not found</div>')
 
@@ -366,7 +378,8 @@ def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "e
     if content is None:
         # Liệt kê tất cả file log tìm được để debug
         all_logs = []
-        for d in ["/home/vu/.pm2/logs", "/root/.pm2/logs"]:
+        for d in iter_pm2_log_directories():
+            d = str(d)
             try:
                 all_logs += [f"{d}/{f}" for f in os.listdir(d) if f.endswith(".log")]
             except Exception:
@@ -471,7 +484,7 @@ def cmd_cleanup_db():
 
 @router.post("/cmd/db-vacuum", response_class=HTMLResponse)
 def cmd_db_vacuum():
-    db_path = os.path.join(APP_DIR, "data/auto_publisher.db")
+    db_path = DB_PATH
     before = os.path.getsize(db_path) / 1024**2 if os.path.exists(db_path) else 0
     out = run_cmd(f"sqlite3 '{db_path}' 'VACUUM;'")
     after = os.path.getsize(db_path) / 1024**2 if os.path.exists(db_path) else 0
@@ -481,8 +494,8 @@ def cmd_db_vacuum():
 
 @router.post("/cmd/db-backup", response_class=HTMLResponse)
 def cmd_db_backup():
-    db_path = os.path.join(APP_DIR, "data/auto_publisher.db")
-    backup_dir = os.path.join(APP_DIR, "data/backups")
+    db_path = DB_PATH
+    backup_dir = os.path.join(os.path.dirname(db_path), "backups")
     os.makedirs(backup_dir, exist_ok=True)
     ts = datetime.now(tz=ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
     backup_path = os.path.join(backup_dir, f"auto_publisher_{ts}.db")

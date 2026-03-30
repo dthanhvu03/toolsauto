@@ -9,7 +9,7 @@ import os
 import sys
 
 # Cho phép chạy từ thư mục gốc project
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text, and_, or_
 from sqlalchemy.orm import Session

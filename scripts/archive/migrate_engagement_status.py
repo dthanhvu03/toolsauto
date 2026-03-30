@@ -6,7 +6,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "auto_publisher.db"
+DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "auto_publisher.db"
 
 if not DB_PATH.exists():
     print(f"[ERROR] Database not found at {DB_PATH}")

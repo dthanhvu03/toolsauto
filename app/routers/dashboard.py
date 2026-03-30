@@ -1,18 +1,14 @@
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, StreamingResponse
-from fastapi import Form
+from fastapi import APIRouter, Depends, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import time
-import os
-from pathlib import Path
-import re
 import datetime
-import asyncio
 from app.database.core import get_db
 from app.database.models import Job, Account, DiscoveredChannel
 from app.services.worker import WorkerService
-from app.services.account import get_discovery_keywords
+from app.services.account import AccountService, get_discovery_keywords
+from app.services.log_service import LogService
 import app.config as config
 from app.services import settings as runtime_settings
 
@@ -23,283 +19,25 @@ from app.main_templates import templates
 router = APIRouter()
 
 
-def _tail_file(path: str, lines: int = 200) -> str:
-    """Efficient tail: read last N lines without loading entire file."""
-    lines = max(50, min(2000, int(lines or 200)))
-    p = Path(path)
-    if not p.exists() or not p.is_file():
-        return f"[missing] {path}\n"
-
-    # Read from end in chunks until we have enough newlines.
-    chunk_size = 8192
-    data = b""
-    try:
-        with p.open("rb") as f:
-            f.seek(0, os.SEEK_END)
-            pos = f.tell()
-            while pos > 0 and data.count(b"\n") <= lines + 2:
-                read_size = chunk_size if pos >= chunk_size else pos
-                pos -= read_size
-                f.seek(pos)
-                data = f.read(read_size) + data
-                if pos == 0:
-                    break
-    except Exception as e:
-        return f"[error reading log] {e}\n"
-
-    text = data.decode("utf-8", errors="replace")
-    parts = text.splitlines()
-    return "\n".join(parts[-lines:]) + ("\n" if not text.endswith("\n") else "")
-
-
-_PM2_LOG_DIR_ROOT = Path("/root/.pm2/logs")
-_PM2_LOG_DIR_USER = Path("/home/vu/.pm2/logs")
-
-_PM2_LOG_MAP: dict[str, dict[str, str]] = {
-    "AI_Generator": {"out": "AI-Generator-out.log", "error": "AI-Generator-error.log"},
-    "FB_Publisher": {"out": "FB-Publisher-out.log", "error": "FB-Publisher-error.log"},
-    "Maintenance": {"out": "Maintenance-out.log", "error": "Maintenance-error.log"},
-    "Web_Dashboard": {"out": "Web-Dashboard-out.log", "error": "Web-Dashboard-error.log"},
-    "ai-worker": {"out": "ai-worker-out.log", "error": "ai-worker-error.log"},
-    "publisher": {"out": "publisher-out.log", "error": "publisher-error.log"},
-    "maintenance": {"out": "maintenance-out.log", "error": "maintenance-error.log"},
-    "web": {"out": "web-out.log", "error": "web-error.log"},
-}
-
-def _get_log_path(fname: str) -> Path:
-    if _PM2_LOG_DIR_ROOT.exists():
-        p = _PM2_LOG_DIR_ROOT / fname
-        if p.exists(): return p
-    return _PM2_LOG_DIR_USER / fname
-
-
-_TS_PREFIX_RE = re.compile(
-    r"^(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})"
-)
-
-
-def _parse_log_ts(line: str) -> float | None:
-    """Parse common timestamp prefixes to epoch seconds for sorting."""
-    m = _TS_PREFIX_RE.match(line or "")
-    if not m:
-        return None
-    s = m.group("ts")
-    try:
-        # Support both "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DDTHH:MM:SS"
-        dt = datetime.datetime.fromisoformat(s.replace(" ", "T"))
-        return dt.timestamp()
-    except Exception:
-        return None
-
-
-def _tail_all(kind: str, lines: int) -> str:
-    """Tail across all whitelisted pm2 logs and return merged last N lines."""
-    lines = max(50, min(2000, int(lines or 200)))
-    kind = (kind or "out").strip()
-    if kind not in ("out", "error"):
-        kind = "out"
-
-    merged: list[tuple[float | None, int, str]] = []
-    for idx, proc in enumerate(_PM2_LOG_MAP.keys()):
-        fname = _PM2_LOG_MAP[proc][kind]
-        path = str(_get_log_path(fname))
-        chunk = _tail_file(path, lines=lines)
-        for raw_line in (chunk.splitlines() if chunk else []):
-            line = f"[{proc}] {raw_line}"
-            merged.append((_parse_log_ts(raw_line), idx, line))
-
-    # Sort primarily by timestamp when present; keep stable per-proc ordering fallback.
-    merged.sort(key=lambda t: (t[0] is None, t[0] or 0.0, t[1]))
-    out_lines = [t[2] for t in merged[-lines:]]
-    return "\n".join(out_lines) + ("\n" if out_lines else "")
-
-def _extract_tiktok_competitors(account: Account) -> list[dict]:
-    """Return list of {url, target_page} filtered to TikTok competitor urls for an account."""
-    import json
-    out: list[dict] = []
-    raw = account.competitor_urls
-    if not raw:
-        return out
-    try:
-        data = json.loads(raw)
-        if not isinstance(data, list):
-            data = [{"url": str(data), "target_page": None}]
-    except Exception:
-        # legacy: comma-separated
-        data = [{"url": u.strip(), "target_page": None} for u in str(raw).split(",") if u.strip()]
-
-    for item in data:
-        if isinstance(item, dict):
-            url = str(item.get("url") or "").strip()
-            tp = item.get("target_page") or None
-        else:
-            url = str(item).strip()
-            tp = None
-        if not url:
-            continue
-        if "tiktok.com/@" not in url.lower():
-            continue
-        out.append({"url": url, "target_page": tp})
-    return out
-
-
-def _normalize_page_url(url: str | None) -> str:
-    if not url:
-        return ""
-    u = str(url).strip()
-    if not u:
-        return ""
-    # strip trailing slash for stable matching
-    return u.rstrip("/")
-
-
-def _build_tiktok_links_context(request: Request, db: Session) -> dict:
-    """Shared data loader for TikTok Links (legacy + SaaS wrapper)."""
-    import math
-    from app.database.models import ViralMaterial
-
-    # Query params
-    tab = (request.query_params.get("tab") or "viral").strip()
-    q = (request.query_params.get("q") or "").strip().lower()
-    status = (request.query_params.get("status") or "").strip().upper()
-    try:
-        min_views = int(request.query_params.get("min_views") or 0)
-    except Exception:
-        min_views = 0
-    try:
-        page = max(1, int(request.query_params.get("page") or 1))
-    except Exception:
-        page = 1
-    try:
-        per_page = int(request.query_params.get("per_page") or 200)
-    except Exception:
-        per_page = 200
-    per_page = max(50, min(500, per_page))
-
-    # Competitors (grouped server-side so UX is clean)
-    accounts = db.query(Account).order_by(Account.name.asc()).all()
-    competitor_groups: dict[str, dict[str, list[str]]] = {}
-    competitor_total = 0
-
-    # Page index: page_url -> {name, niches}
-    page_index: dict[str, dict] = {}
-    for acc in accounts:
-        # managed_pages_list: [{"name","url"}, ...]
-        try:
-            for p in (acc.managed_pages_list or []):
-                p_url = _normalize_page_url(p.get("url"))
-                if not p_url:
-                    continue
-                entry = page_index.setdefault(p_url, {"name": None, "niches": set()})
-                if not entry.get("name") and p.get("name"):
-                    entry["name"] = p.get("name")
-        except Exception:
-            pass
-        # page_niches_map: {page_url: [niche,...]}
-        try:
-            for p_url, niches in (acc.page_niches_map or {}).items():
-                n_url = _normalize_page_url(p_url)
-                if not n_url:
-                    continue
-                entry = page_index.setdefault(n_url, {"name": None, "niches": set()})
-                for n in (niches or []):
-                    if n and str(n).strip():
-                        entry["niches"].add(str(n).strip())
-        except Exception:
-            pass
-
-    for acc in accounts:
-        links = _extract_tiktok_competitors(acc)
-        for link in links:
-            url = link["url"]
-            tp_raw = link["target_page"] or "_unassigned"
-            tp = _normalize_page_url(tp_raw) if tp_raw != "_unassigned" else "_unassigned"
-            # allow search by page name/niches too
-            tp_meta = page_index.get(tp, {}) if tp != "_unassigned" else {}
-            tp_name = (tp_meta.get("name") or "")
-            tp_niches = " ".join(sorted(tp_meta.get("niches") or []))
-            if q and (q not in (acc.name or "").lower()) and (q not in (tp or "").lower()) and (q not in (url or "").lower()) and (q not in tp_name.lower()) and (q not in tp_niches.lower()):
-                continue
-            competitor_groups.setdefault(tp, {}).setdefault(acc.name, []).append(url)
-            competitor_total += 1
-
-    # Viral TikTok
-    viral_query = db.query(ViralMaterial).filter(ViralMaterial.platform == "tiktok")
-    if status:
-        viral_query = viral_query.filter(ViralMaterial.status == status)
-    if min_views > 0:
-        viral_query = viral_query.filter(ViralMaterial.views >= min_views)
-    if q:
-        viral_query = viral_query.filter(ViralMaterial.url.ilike(f"%{q}%"))
-
-    viral_total = viral_query.count()
-    total_pages = max(1, int(math.ceil(viral_total / per_page))) if viral_total else 1
-    if page > total_pages:
-        page = total_pages
-    viral_rows = (
-        viral_query.order_by(ViralMaterial.created_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
-
-    return {
-        "request": request,
-        "tab": tab,
-        "q": q,
-        "status": status,
-        "min_views": min_views,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": total_pages,
-        "competitor_total": competitor_total,
-        "competitor_groups": competitor_groups,
-        "viral_rows": viral_rows,
-        "viral_total": viral_total,
-        "page_index": {
-            k: {"name": v.get("name"), "niches": sorted(list(v.get("niches") or []))}
-            for k, v in page_index.items()
-        },
-    }
-
-
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request, db: Session = Depends(get_db)):
-    """Render the main dashboard."""
-    # Default: show active jobs (PENDING+RUNNING) with pagination
-    query = db.query(Job).filter(Job.status.in_(["PENDING", "RUNNING"]))
-    total = query.count()
-    per_page = 20
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    jobs = query.order_by(Job.schedule_ts.desc()).limit(per_page).all()
-    accounts = db.query(Account).all()
-    state = WorkerService.get_or_create_state(db)
-    viral_min_views = (
-        state.viral_min_views
-        if (state and getattr(state, "viral_min_views", None) is not None)
-        else getattr(config, "VIRAL_MIN_VIEWS", 10000)
-    )
-    viral_max_videos = (
-        state.viral_max_videos_per_channel
-        if (state and getattr(state, "viral_max_videos_per_channel", None) is not None)
-        else getattr(config, "VIRAL_MAX_VIDEOS_PER_CHANNEL", 50)
-    )
-    if viral_max_videos is None or viral_max_videos <= 0:
-        viral_max_videos = 50
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request, "jobs": jobs, "accounts": accounts, "state": state, "now": int(time.time()),
-            "current_status": "active", "current_page": 1, "total_pages": total_pages, "total_jobs": total, "per_page": per_page,
-            "viral_min_views": viral_min_views,
-            "viral_max_videos": viral_max_videos,
-        }
-    )
+    """SaaS Beta (single UI): same as /app — legacy dashboard.html is retired."""
+    return app_overview(request, db)
 
 @router.get("/app", response_class=HTMLResponse)
 def app_overview(request: Request, db: Session = Depends(get_db)):
     """SaaS UI (beta): overview page (no long tables)."""
-    return templates.TemplateResponse("pages/app_overview.html", {"request": request})
+    accounts = db.query(Account).all()
+    state = WorkerService.get_or_create_state(db)
+    return templates.TemplateResponse(
+        "pages/app_overview.html",
+        {
+            "request": request,
+            "accounts": accounts,
+            "state": state,
+            "now": int(time.time()),
+        }
+    )
 
 
 @router.get("/app/overview/page-posting-stats", response_class=HTMLResponse)
@@ -378,7 +116,7 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
         pass
     today_start = int(datetime.datetime.combine(now_dt.date(), datetime.time.min, tzinfo=getattr(now_dt, "tzinfo", None)).timestamp())
 
-    reup_dir = str(getattr(config, "REUP_DIR", "/home/vu/toolsauto/content/reup")).rstrip("/")
+    reup_dir = str(config.REUP_DIR).rstrip("/")
     like_reup = f"{reup_dir}/%"
     active_statuses = ["AWAITING_STYLE", "AI_PROCESSING", "DRAFT", "PENDING", "RUNNING"]
 
@@ -388,7 +126,7 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
         accounts = db.query(Account).all()
         for acc in accounts:
             for p in (acc.managed_pages_list or []):
-                p_url = _normalize_page_url(p.get("url"))
+                p_url = AccountService.normalize_page_url(p.get("url"))
                 if not p_url:
                     continue
                 if p.get("name") and p_url not in page_name_index:
@@ -437,7 +175,7 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
 
     stats = []
     for page_url in pages[:50]:
-        norm = _normalize_page_url(page_url)
+        norm = AccountService.normalize_page_url(page_url)
         used = int(active_map.get(page_url, 0) + done_map.get(page_url, 0))
         remaining = None
         if cap > 0:
@@ -493,66 +231,18 @@ def app_logs(request: Request):
         "pages/app_logs.html",
         {
             "request": request,
-            "default_proc": request.query_params.get("proc") or "ai-worker",
+            "default_proc": request.query_params.get("proc") or "AI_Generator",
             "default_kind": request.query_params.get("kind") or "out",
             "default_lines": int(request.query_params.get("lines") or 200),
-            "procs": ["ALL", *list(_PM2_LOG_MAP.keys())],
+            "procs": ["ALL", *list(LogService.PM2_LOG_MAP.keys())],
         },
     )
 
 
-@router.get("/app/logs/tail", response_class=PlainTextResponse)
+@router.get("/app/logs/tail")
 def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200):
     """Return last N lines for whitelisted pm2 log files."""
-    proc = (proc or "").strip()
-    kind = (kind or "").strip()
-    if proc == "ALL":
-        return PlainTextResponse(_tail_all(kind=kind, lines=lines))
-    if proc not in _PM2_LOG_MAP:
-        return PlainTextResponse(f"[invalid proc] {proc}\n", status_code=400)
-    if kind not in ("out", "error"):
-        return PlainTextResponse(f"[invalid kind] {kind}\n", status_code=400)
-    fname = _PM2_LOG_MAP[proc][kind]
-    path = str(_get_log_path(fname))
-    return PlainTextResponse(_tail_file(path, lines=lines))
-
-
-def _read_new_lines(path: Path, pos: int) -> tuple[int, list[str]]:
-    """Read newly appended lines from `pos` (non-blocking)."""
-    try:
-        with path.open("rb") as f:
-            f.seek(0, os.SEEK_END)
-            end = f.tell()
-            if pos > end:
-                # log rotated/truncated
-                pos = 0
-            if pos == end:
-                return pos, []
-            f.seek(pos)
-            chunk = f.read()
-            pos = f.tell()
-    except FileNotFoundError:
-        return pos, []
-    lines = chunk.splitlines() if chunk else []
-    return pos, [ln.decode("utf-8", errors="replace") for ln in lines]
-
-
-def _match_filters(line: str, level: str | None, q: str | None) -> bool:
-    if not line:
-        return True
-    if level:
-        lvl = level.strip().upper()
-        if lvl in ("INFO", "WARN", "WARNING", "ERROR", "DEBUG"):
-            # very lightweight check
-            if lvl == "WARN":
-                lvl = "WARNING"
-            if lvl not in line.upper():
-                return False
-    if q:
-        qq = q.strip().lower()
-        if qq and (qq not in line.lower()):
-            return False
-    return True
+    return LogService.plain_tail_response(proc, kind, lines)
 
 
 @router.get("/app/logs/stream")
@@ -570,68 +260,7 @@ def app_logs_stream(
       - level: INFO|WARN|ERROR|DEBUG (optional)
       - q: keyword contains filter (optional)
     """
-    proc = (proc or "").strip()
-    kind = (kind or "").strip()
-    level = (level or "").strip()
-    q = (q or "").strip()
-    if kind not in ("out", "error"):
-        kind = "out"
-    if proc != "ALL" and proc not in _PM2_LOG_MAP:
-        return PlainTextResponse(f"[invalid proc] {proc}\n", status_code=400)
-
-    async def gen():
-        # comment to establish stream quickly
-        yield ": stream-start\n\n"
-
-        if proc == "ALL":
-            states: list[tuple[str, Path, int]] = []
-            for p in _PM2_LOG_MAP.keys():
-                fname = _PM2_LOG_MAP[p][kind]
-                path = _get_log_path(fname)
-                try:
-                    start_pos = path.stat().st_size
-                except Exception:
-                    start_pos = 0
-                states.append((p, path, start_pos))
-            while True:
-                sent = 0
-                new_states: list[tuple[str, Path, int]] = []
-                for p, path, pos in states:
-                    pos2, lines = _read_new_lines(path, pos)
-                    new_states.append((p, path, pos2))
-                    for line in lines:
-                        out = f"[{p}] {line}"
-                        if _match_filters(out, level, q):
-                            yield f"data: {out.replace(chr(10),' ')}\n\n"
-                            sent += 1
-                states = new_states
-                if sent == 0:
-                    await asyncio.sleep(0.3)
-        else:
-            fname = _PM2_LOG_MAP[proc][kind]
-            path = _get_log_path(fname)
-            try:
-                pos = path.stat().st_size
-            except Exception:
-                pos = 0
-            while True:
-                pos, lines = _read_new_lines(path, pos)
-                sent = 0
-                for line in lines:
-                    if _match_filters(line, level, q):
-                        yield f"data: {line.replace(chr(10),' ')}\n\n"
-                        sent += 1
-                if sent == 0:
-                    await asyncio.sleep(0.3)
-
-    return StreamingResponse(
-        gen(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return LogService.sse_log_stream(proc=proc, kind=kind, level=level, q=q)
 
 
 @router.get("/app/settings", response_class=HTMLResponse)
@@ -647,12 +276,15 @@ def app_settings(request: Request, db: Session = Depends(get_db)):
             "type": spec.type,
             "title": spec.title,
             "section": spec.section,
+            "description": spec.description,
             "default": default_val,
             "override": ov,
             "has_override": key in overrides,
             "min": spec.min,
             "max": spec.max,
             "choices": spec.choices or [],
+            "enum_labels": spec.enum_labels or {},
+            "unit": spec.unit,
         }
     return templates.TemplateResponse(
         "pages/app_settings.html",
@@ -805,13 +437,15 @@ def queue_panel(request: Request, db: Session = Depends(get_db)):
 @router.get("/tiktok-links", response_class=HTMLResponse)
 def tiktok_links(request: Request, db: Session = Depends(get_db)):
     """UI riêng để theo dõi link TikTok (kênh đối thủ + video viral TikTok)."""
-    return templates.TemplateResponse("pages/tiktok_links.html", _build_tiktok_links_context(request, db))
+    ctx = AccountService.build_tiktok_links_context_data(db, request.query_params)
+    return templates.TemplateResponse("pages/tiktok_links.html", {"request": request, **ctx})
 
 
 @router.get("/app/tiktok-links", response_class=HTMLResponse)
 def app_tiktok_links(request: Request, db: Session = Depends(get_db)):
     """SaaS UI (beta): TikTok Links page (keeps /tiktok-links legacy)."""
-    return templates.TemplateResponse("pages/app_tiktok_links.html", _build_tiktok_links_context(request, db))
+    ctx = AccountService.build_tiktok_links_context_data(db, request.query_params)
+    return templates.TemplateResponse("pages/app_tiktok_links.html", {"request": request, **ctx})
 
 @router.get("/r/{code}")
 def redirect_tracking(code: str, db: Session = Depends(get_db)):
@@ -839,19 +473,11 @@ def approve_discovered_channel(channel_id: int, request: Request, target_page: s
         channel.status = "APPROVED"
         account = channel.account
         if account:
-            import json as _json
-            urls = []
-            if account.competitor_urls:
-                try:
-                    data = _json.loads(account.competitor_urls)
-                    if isinstance(data, list):
-                        urls = data
-                except Exception:
-                    pass
-            exists = any(u.get("url") == channel.channel_url for u in urls if isinstance(u, dict))
-            if not exists:
-                urls.append({"url": channel.channel_url, "target_page": target_page if target_page else None})
-                account.competitor_urls = _json.dumps(urls, ensure_ascii=False)
+            AccountService.append_competitor_url_if_missing(
+                account,
+                channel.channel_url,
+                target_page if target_page else None,
+            )
         db.commit()
     
     channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == "NEW").order_by(DiscoveredChannel.score.desc()).all()

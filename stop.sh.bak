@@ -35,6 +35,5 @@ pkill -f "python workers/ai_generator.py"
 pkill -f "python workers/maintenance.py"
 pkill -f "python worker.py"
 pkill -f "uvicorn app.main:app"
-pkill -f "manage.py"
 
 echo -e "${RED}Tất cả đã dừng hoàn toàn.${NC}"

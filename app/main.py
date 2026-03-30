@@ -2,13 +2,10 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import logging
 
-# Ensure models are loaded to initialize the database
-from app.database import models
-from app.database.core import engine, ensure_runtime_schema
+# Ensure models are loaded (relationships, mappers)
+from app.database import models  # noqa: F401
 
-# Create tables if they don't exist (useful for dev, Alembic handles prod)
-models.Base.metadata.create_all(bind=engine)
-ensure_runtime_schema()
+# Schema: apply migrations with `python manage.py db upgrade` (Alembic), not at startup.
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -21,8 +18,9 @@ import app.config as config
 
 app = FastAPI(title="Auto Publisher Dashboard")
 
-# Register Telegram Notifier for the Web Server process (used by Health checks)
-NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
+# Register Telegram Notifier when configured (no default secrets in config)
+if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+    NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
 
 # Include routers
 app.include_router(dashboard.router)
@@ -40,7 +38,7 @@ app.include_router(manual_job.router)
 app.include_router(affiliates.router)
 
 # Static assets (SaaS UI CSS, etc.)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "app" / "static")), name="static")
 
 # Provide a tiny request-scoped timestamp for templates (used in TikTok Links Age column)
 @app.middleware("http")
