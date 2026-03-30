@@ -92,9 +92,9 @@ if command -v pm2 &>/dev/null; then
     PM2_MEM_MAINT="${PM2_MEM_MAINT:-800M}"
     PM2_MEM_WEB="${PM2_MEM_WEB:-500M}"
 
-    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/publisher.py'" \
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run --server-num=99 --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/publisher.py'" \
         --name "FB_Publisher" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_PUBLISHER"
-    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/ai_generator.py'" \
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run --server-num=100 --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/ai_generator.py'" \
         --name "AI_Generator" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_AI"
     pm2 start "$VENV_PYTHON workers/maintenance.py" \
         --name "Maintenance" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_MAINT"
@@ -122,9 +122,9 @@ fi
 $VENV_PYTHON manage.py serve --no-reload > web.log 2>&1 &
 WEB_PID=$!
 sleep 2
-env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/publisher.py > pub_worker.log 2>&1 &
+env -u DISPLAY xvfb-run --server-num=99 --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" $VENV_PYTHON workers/publisher.py > pub_worker.log 2>&1 &
 PUB_PID=$!
-env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/ai_generator.py > ai_worker.log 2>&1 &
+env -u DISPLAY xvfb-run --server-num=100 --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" $VENV_PYTHON workers/ai_generator.py > ai_worker.log 2>&1 &
 AI_PID=$!
 $VENV_PYTHON workers/maintenance.py > maint_worker.log 2>&1 &
 MAINT_PID=$!
