@@ -1,5 +1,9 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (if exists) at the very start
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -21,7 +25,9 @@ FFMPEG_PROFILE = os.getenv("FFMPEG_PROFILE", "reels")  # reels | feed | compress
 FFMPEG_CRF = int(os.getenv("FFMPEG_CRF", "28"))
 
 # FFmpeg Watermark (auto-enabled when file exists)
-FFMPEG_WATERMARK_PATH = os.getenv("FFMPEG_WATERMARK_PATH", "/home/vu/toolsauto/content/watermark.png")  # Path to PNG logo
+FFMPEG_WATERMARK_PATH = os.getenv(
+    "FFMPEG_WATERMARK_PATH", str(BASE_DIR / "content" / "watermark.png")
+)
 FFMPEG_WATERMARK_POSITION = os.getenv("FFMPEG_WATERMARK_POSITION", "bottom_right")  # top_left|top_right|bottom_left|bottom_right
 FFMPEG_WATERMARK_OPACITY = float(os.getenv("FFMPEG_WATERMARK_OPACITY", "0.4"))  # 0.0 - 1.0
 
@@ -31,16 +37,56 @@ DRM_WATERMARK_TEXT = os.getenv("DRM_WATERMARK_TEXT", "z")
 
 # Directory Settings
 CONTENT_DIR = BASE_DIR / "content"
-# Chromium persistent contexts (FacebookAdapter, login bootstrap). NOT cwd-relative.
-CONTENT_PROFILES_DIR = Path(
-    os.getenv("CONTENT_PROFILES_DIR", str(CONTENT_DIR / "profiles"))
-).expanduser().resolve()
+# Chromium persistent contexts (FacebookAdapter, login bootstrap).
+PROFILES_DIR = CONTENT_DIR / "profiles"
+CONTENT_PROFILES_DIR = PROFILES_DIR # Legacy alias for backward compatibility
+
 DONE_DIR = CONTENT_DIR / "done"
 FAILED_DIR = CONTENT_DIR / "failed"
 REUP_DIR = CONTENT_DIR / "reup"
-THUMB_DIR = Path(os.getenv("THUMB_DIR", str(CONTENT_DIR / "thumbnails")))
-PROFILES_DIR = BASE_DIR / "profiles"
+THUMB_DIR = CONTENT_DIR / "thumbnails"
 LOGS_DIR = BASE_DIR / "logs"
+CONTENT_MEDIA_DIR = CONTENT_DIR / "media"
+CONTENT_VIDEO_DIR = CONTENT_DIR / "video"
+CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
+OUTPUTS_DIR = CONTENT_DIR / "outputs"
+
+
+def iter_pm2_log_directories():
+    """
+    Candidate PM2 log dirs (user ~/.pm2/logs, root, /home/*/.pm2/logs, PM2_LOGS_EXTRA_DIRS).
+    Path order: env extras first, then home, root, then other users under /home.
+    """
+    seen: set[str] = set()
+    extra = os.getenv("PM2_LOGS_EXTRA_DIRS", "")
+    for part in extra.split(os.pathsep):
+        part = part.strip()
+        if not part:
+            continue
+        p = Path(part).expanduser().resolve()
+        s = str(p)
+        if s not in seen:
+            seen.add(s)
+            yield p
+    for p in (
+        Path.home() / ".pm2" / "logs",
+        Path("/root/.pm2/logs"),
+    ):
+        s = str(p)
+        if s not in seen:
+            seen.add(s)
+            yield p
+    try:
+        for entry in os.scandir("/home"):
+            if entry.is_dir():
+                p = Path(entry.path) / ".pm2" / "logs"
+                s = str(p)
+                if s not in seen:
+                    seen.add(s)
+                    yield p
+    except Exception:
+        pass
+
 
 # AI / Whisper Settings
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "medium")  # tiny|base|small|medium
@@ -56,9 +102,9 @@ IDLE_ENGAGEMENT_ENABLED = os.getenv("IDLE_ENGAGEMENT_ENABLED", "true").lower() =
 IDLE_ENGAGEMENT_PROBABILITY = float(os.getenv("IDLE_ENGAGEMENT_PROBABILITY", "0.30"))  # 30% chance when idle
 IDLE_MAX_DURATION_SECONDS = int(os.getenv("IDLE_MAX_DURATION_SECONDS", "90"))  # Hard timeout per session
 
-# Telegram Notifications
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8709664581:AAHElOvpVf7u7xzC-8sSbg7cUUa6_K7VKTk")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "5967314745")
+# Telegram Notifications (set via env — no secrets in repo)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # Redirect Service (Vercel)
 VERCEL_REDIRECT_URL = os.getenv("VERCEL_REDIRECT_URL", "https://vercel-redirect-rho-three.vercel.app")
@@ -84,6 +130,17 @@ ALERT_DRAFT_THRESHOLD = int(os.getenv("ALERT_DRAFT_THRESHOLD", "50"))
 ALERT_VIRAL_NEW_THRESHOLD = int(os.getenv("ALERT_VIRAL_NEW_THRESHOLD", "500"))
 
 # Ensure directories exist
-for d in [CONTENT_DIR, DONE_DIR, FAILED_DIR, REUP_DIR, PROFILES_DIR, LOGS_DIR]:
+for d in [
+    CONTENT_DIR,
+    DONE_DIR,
+    FAILED_DIR,
+    REUP_DIR,
+    PROFILES_DIR,
+    LOGS_DIR,
+    THUMB_DIR,
+    CONTENT_MEDIA_DIR,
+    CONTENT_VIDEO_DIR,
+    CONTENT_PROCESSED_DIR,
+]:
     d.mkdir(parents=True, exist_ok=True)
 
