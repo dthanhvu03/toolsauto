@@ -193,31 +193,52 @@ class FacebookAdapter(AdapterInterface):
             return False
             
         # 1. If navigation is already present, we are likely fine
-        nav_present = self.page.locator('div[role="navigation"]').count() > 0
+        # We check for several common nav markers to be sure
+        nav_present = self.page.locator('div[role="navigation"], div[role="banner"], a[aria-label="Facebook"]').count() > 0
         if nav_present:
             return True
             
         # 2. Check for 'Continue as' / 'Tiếp tục'
+        # We try both exact and non-exact, and different roles.
         logger.info("FacebookAdapter: Navigation missing, checking for session recovery screen...")
         recovery_btn = None
-        candidates = [
-            self.page.get_by_text("Tiếp tục", exact=True).first,
-            self.page.get_by_text("Continue", exact=True).first,
-            self.page.get_by_role("button", name="Tiếp tục", exact=True).first,
-            self.page.get_by_role("button", name="Continue", exact=True).first,
-            self.page.locator('div[role="button"]:text-is("Tiếp tục")').first,
-            self.page.locator('div[role="button"]:text-is("Continue")').first,
-        ]
-        for candidate in candidates:
-            if self._is_visible(candidate):
-                recovery_btn = candidate
+        
+        # Priority: Exact match role=button or text
+        # Fallback: Non-exact match anything clickable
+        search_terms = ["Tiếp tục", "Continue", "Log In", "Đăng nhập"]
+        
+        for term in search_terms:
+            # Try specific roles first
+            for role in ["button", "link"]:
+                loc = self.page.get_by_role(role, name=term, exact=False).first
+                if self._is_visible(loc):
+                    recovery_btn = loc
+                    break
+            if recovery_btn: break
+            
+            # Try generic text
+            loc = self.page.get_by_text(term, exact=False).first
+            if self._is_visible(loc):
+                recovery_btn = loc
                 break
-                
+            if recovery_btn: break
+
+        # Extra fallback: Find the dominant blue button if we see the account name (Hoang Khoa)
+        if not recovery_btn:
+            # Look for elements that LOOK like the blue continue button from the screenshot
+            blue_btn = self.page.locator('div[role="button"]:has-text("Tiếp tục"), div[role="button"][style*="background-color"]')
+            if self._is_visible(blue_btn.first):
+                recovery_btn = blue_btn.first
+
         if recovery_btn:
             logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Bypassing...")
-            self._click_locator(recovery_btn, "session recovery button", timeout=5000)
-            self.page.wait_for_timeout(5000)
-            return self.page.locator('div[role="navigation"]').count() > 0
+            try:
+                self._click_locator(recovery_btn, "session recovery button", timeout=5000)
+                self.page.wait_for_timeout(5000)
+                # Verify navigation again
+                return self.page.locator('div[role="navigation"], a[aria-label="Facebook"]').count() > 0
+            except Exception as e:
+                logger.warning("FacebookAdapter: Failed to click recovery button: %s", e)
             
         return False
 
