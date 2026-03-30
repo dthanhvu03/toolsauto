@@ -1,17 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "layouts/app.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>⚙️ System Panel — Auto Publisher</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
-        rel="stylesheet">
-    <script>
-        tailwind.config = {
+{% block title %}⚙️ System Panel — Auto Publisher{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.tailwindcss.com"></script>
+<link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+    rel="stylesheet">
+<script>
+    tailwind.config = {
+        theme: {
             theme: {
                 extend: {
                     fontFamily: {
@@ -21,403 +19,383 @@
                 }
             }
         }
-    </script>
-    <style>
-        h1,
-        h2,
-        h3,
-        h4,
-        .font-display {
-            font-family: 'Outfit', sans-serif;
-        }
+    }
+</script>
+<style>
+    h1,
+    h2,
+    h3,
+    h4,
+    .font-display {
+        font-family: 'Outfit', sans-serif;
+    }
 
-        .section-card {
-            @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6;
-        }
+    .section-card {
+        @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6;
+    }
 
-        .action-btn {
-            @apply flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-95 select-none cursor-pointer;
-        }
+    .action-btn {
+        @apply flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-95 select-none cursor-pointer;
+    }
 
-        .htmx-request {
-            opacity: 0.6;
-            pointer-events: none;
-        }
-    </style>
-</head>
+    .htmx-request {
+        opacity: 0.6;
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
 
-<body class="bg-gray-50 min-h-screen font-sans antialiased text-gray-900">
-    <div class="max-w-5xl mx-auto px-4 py-8">
+{% block page_title %}⚙️ System Panel{% endblock %}
+{% block page_subtitle %}Monitor & Control — Auto Publisher VPS{% endblock %}
 
-        <!-- Header -->
-        <div class="flex items-center gap-4 mb-8">
-            <a href="/" class="text-gray-400 hover:text-indigo-600 transition-colors">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <!-- ─── 1. Live Metrics ─────────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
+                📊 Live System Metrics
+                <span
+                    class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">auto-refresh
+                    5s</span>
+            </h2>
+        </div>
+        <div id="metrics-container" hx-get="/syspanel/fragments/metrics" hx-trigger="load, every 5s"
+            hx-swap="innerHTML">
+            <div class="flex items-center gap-2 text-sm text-gray-400 animate-pulse">
+                <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                    </circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-            </a>
-            <div>
-                <h1 class="text-2xl font-bold font-display text-gray-900">⚙️ System Panel</h1>
-                <p class="text-sm text-gray-400 mt-0.5">Monitor & Control — Auto Publisher VPS</p>
-            </div>
-            <div
-                class="ml-auto flex items-center gap-2 text-xs text-gray-400 bg-white border border-gray-100 rounded-full px-3 py-1.5 shadow-sm">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                Live Monitoring
+                Loading metrics...
             </div>
         </div>
-
-        <!-- ─── 1. Live Metrics ─────────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
-                    📊 Live System Metrics
-                    <span
-                        class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">auto-refresh
-                        5s</span>
-                </h2>
-            </div>
-            <div id="metrics-container" hx-get="/syspanel/fragments/metrics" hx-trigger="load, every 5s"
-                hx-swap="innerHTML">
-                <div class="flex items-center gap-2 text-sm text-gray-400 animate-pulse">
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                        </circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Loading metrics...
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── 2. PM2 Processes ───────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
-                    🤖 PM2 Processes
-                    <span
-                        class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">auto-refresh
-                        10s</span>
-                </h2>
-                <button hx-get="/syspanel/fragments/pm2" hx-target="#pm2-container" hx-swap="innerHTML"
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                    ↻ Refresh
-                </button>
-            </div>
-            <div id="pm2-container" hx-get="/syspanel/fragments/pm2" hx-trigger="load, every 10s" hx-swap="innerHTML">
-                <div class="text-sm text-gray-400 animate-pulse">Loading processes...</div>
-            </div>
-        </div>
-
-        <!-- ─── 3. Job Stats ───────────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900">📋 Job Statistics</h2>
-                <button hx-get="/syspanel/fragments/job-stats" hx-target="#job-stats-container" hx-swap="innerHTML"
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                    ↻ Refresh
-                </button>
-            </div>
-            <div id="job-stats-container" hx-get="/syspanel/fragments/job-stats" hx-trigger="load" hx-swap="innerHTML">
-                <div class="text-sm text-gray-400 animate-pulse">Loading stats...</div>
-            </div>
-        </div>
-
-        <!-- ─── 4. Content & Storage ───────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900">📁 Content & Storage</h2>
-                <button hx-get="/syspanel/fragments/content-stats" hx-target="#content-stats-container"
-                    hx-swap="innerHTML"
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                    ↻ Refresh
-                </button>
-            </div>
-            <div id="content-stats-container" hx-get="/syspanel/fragments/content-stats" hx-trigger="load"
-                hx-swap="innerHTML">
-                <div class="text-sm text-gray-400 animate-pulse">Loading...</div>
-            </div>
-        </div>
-
-        <!-- ─── 5. Server Actions ──────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <h2 class="text-base font-semibold font-display text-gray-900 mb-5">🛠️ Server Actions</h2>
-
-            <!-- Deploy Controls -->
-            <div class="mb-4">
-                <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Deploy</div>
-                <div class="flex flex-wrap gap-3">
-                    <button hx-post="/syspanel/cmd/git-pull" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Pulling from develop...')"
-                        class="action-btn bg-indigo-600 hover:bg-indigo-700 text-white">
-                        ⬇️ Git Pull (develop)
-                    </button>
-                    <button hx-post="/syspanel/cmd/pm2-restart" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Restarting all PM2 processes...')"
-                        class="action-btn bg-violet-600 hover:bg-violet-700 text-white">
-                        ♻️ Restart All PM2
-                    </button>
-                    <button hx-post="/syspanel/cmd/pm2-start" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Starting system via start.sh...')"
-                        class="action-btn bg-emerald-600 hover:bg-emerald-700 text-white">
-                        ▶️ Start System
-                    </button>
-                    <button hx-post="/syspanel/cmd/pm2-stop" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-confirm="Dừng toàn bộ hệ thống?"
-                        hx-on::before-request="terminalBusy('Stopping all PM2 processes...')"
-                        class="action-btn bg-gray-700 hover:bg-gray-800 text-white">
-                        ⏹️ Stop System
-                    </button>
-                </div>
-            </div>
-
-            <!-- Process Controls -->
-            <div class="mb-4">
-                <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Process Controls</div>
-                <div class="flex flex-wrap gap-3">
-                    <button hx-post="/syspanel/cmd/kill-chrome" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Killing Chrome/Xvfb zombie processes...')"
-                        class="action-btn bg-orange-500 hover:bg-orange-600 text-white">
-                        💀 Kill Chrome/Xvfb
-                    </button>
-                    <button hx-post="/syspanel/cmd/cancel-stuck" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Cancelling stuck RUNNING jobs...')"
-                        class="action-btn bg-amber-500 hover:bg-amber-600 text-white">
-                        🚫 Cancel Stuck Jobs
-                    </button>
-                    <button hx-post="/syspanel/cmd/retry-failed" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Retrying all FAILED jobs...')"
-                        class="action-btn bg-blue-500 hover:bg-blue-600 text-white">
-                        🔁 Retry All Failed
-                    </button>
-                    <button hx-post="/syspanel/cmd/start-vnc" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Starting VNC & WebSockets...')"
-                        class="action-btn bg-pink-500 hover:bg-pink-600 text-white">
-                        📺 Bật Livestream
-                    </button>
-                    <button hx-post="/syspanel/cmd/stop-vnc" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Stopping VNC...')"
-                        class="action-btn bg-rose-600 hover:bg-rose-700 text-white">
-                        ⏹️ Tắt Stream
-                    </button>
-                </div>
-            </div>
-
-            <!-- Maintenance -->
-            <div>
-                <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Database & Files</div>
-                <div class="flex flex-wrap gap-3">
-                    <button hx-post="/syspanel/cmd/db-backup" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Backing up database...')"
-                        class="action-btn bg-teal-600 hover:bg-teal-700 text-white">
-                        💾 Backup DB
-                    </button>
-                    <button hx-post="/syspanel/cmd/db-vacuum" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Running VACUUM on database...')"
-                        class="action-btn bg-cyan-600 hover:bg-cyan-700 text-white">
-                        🗜️ Vacuum DB
-                    </button>
-                    <button hx-post="/syspanel/cmd/cleanup-db" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Running cleanup script...')"
-                        class="action-btn bg-gray-500 hover:bg-gray-600 text-white">
-                        🧹 Dọn Data Rác
-                    </button>
-                    <button hx-post="/syspanel/cmd/cleanup-videos" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-confirm="Xóa video DONE cũ hơn 7 ngày?"
-                        hx-on::before-request="terminalBusy('Deleting old DONE videos...')"
-                        class="action-btn bg-red-500 hover:bg-red-600 text-white">
-                        🗑️ Xóa Video Cũ (>7d)
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── 6. Database Explorer ─────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
-                    🗃️ Database Explorer
-                    <span
-                        class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">Top
-                        50 rows</span>
-                </h2>
-                <div class="flex items-center gap-3">
-                    <select id="db-table-select" name="table_name" hx-get="/syspanel/fragments/db-explorer"
-                        hx-target="#db-explorer-container" hx-trigger="change"
-                        class="text-sm border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 py-1.5 pl-3 pr-8">
-                        <option value="" disabled selected>Chọn Table...</option>
-                        <option value="jobs">jobs</option>
-                        <option value="accounts">accounts</option>
-                        <option value="pages">pages</option>
-                        <option value="viral_materials">viral_materials</option>
-                        <option value="system_state">system_state</option>
-                    </select>
-                    <button hx-get="/syspanel/fragments/db-explorer" hx-target="#db-explorer-container"
-                        hx-include="#db-table-select"
-                        class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                        ↻ Refresh
-                    </button>
-                </div>
-            </div>
-            <div id="db-explorer-container"
-                class="overflow-x-auto border border-gray-100 rounded-lg bg-gray-50 min-h-[200px] flex items-center justify-center">
-                <div class="text-sm text-gray-400">Please select a table to view data</div>
-            </div>
-        </div>
-
-        <!-- ─── 7. Persona Tuner ─────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
-                    🤖 AI Persona Tuner
-                    <span
-                        class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">Giọng
-                        văn Bot</span>
-                </h2>
-            </div>
-            <div hx-get="/syspanel/persona" hx-trigger="load" hx-swap="innerHTML"></div>
-        </div>
-
-        <!-- ─── 8. Log Viewer ──────────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900">📋 Log Viewer</h2>
-                <div class="flex flex-wrap gap-2 sm:ml-auto items-center">
-                    <select id="log-worker"
-                        class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
-                        <optgroup label="── Vu PM2 ──">
-                            <option value="FB_Publisher">FB_Publisher</option>
-                            <option value="AI_Generator">AI_Generator</option>
-                            <option value="Maintenance">Maintenance</option>
-                            <option value="Web_Dashboard" selected>Web_Dashboard</option>
-                        </optgroup>
-                        <optgroup label="── Root PM2 (production) ──">
-                            <option value="ai-worker">ai-worker</option>
-                            <option value="publisher">publisher</option>
-                            <option value="maintenance">maintenance</option>
-                            <option value="web">web</option>
-                        </optgroup>
-                    </select>
-                    <select id="log-type"
-                        class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
-                        <option value="error" selected>Error Log</option>
-                        <option value="out">Output Log</option>
-                    </select>
-                    <button onclick="loadLogs()"
-                        class="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center gap-1.5">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        Load Logs
-                    </button>
-                </div>
-            </div>
-            <div class="bg-[#1a1a2e] rounded-xl overflow-hidden border border-gray-800">
-                <div class="bg-[#16213e] px-4 py-2 flex items-center gap-2 border-b border-gray-700">
-                    <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                    <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                    <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                    <span class="text-xs text-gray-400 font-mono ml-2" id="log-title">Terminal Output</span>
-                </div>
-                <div class="p-4 font-mono text-xs text-green-400 min-h-[180px] max-h-[400px] overflow-y-auto"
-                    id="log-output">
-                    <span class="text-gray-500">Chọn worker và nhấn "Load Logs"...</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── 7. Terminal Output ─────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <h2 class="text-base font-semibold font-display text-gray-900 mb-4">💻 Terminal Output</h2>
-            <div class="bg-[#1a1a2e] rounded-xl overflow-hidden border border-gray-800">
-                <div class="bg-[#16213e] px-4 py-2 flex items-center gap-2 border-b border-gray-700">
-                    <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                    <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                    <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                    <span class="text-xs text-gray-400 font-mono ml-2">Command Output</span>
-                </div>
-                <div class="p-4 font-mono text-xs text-green-400 min-h-[120px] max-h-[350px] overflow-y-auto">
-                    <div id="terminal-output" class="whitespace-pre-wrap break-all">
-                        <span class="text-gray-500">Sẵn sàng nhận lệnh...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ─── 8. Gemini Cookies ───────────────────────────────────────────── -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900">🍪 Gemini Cookie Status</h2>
-                <button hx-get="/syspanel/fragments/gemini-cookies" hx-target="#gemini-cookies-container"
-                    hx-swap="innerHTML"
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                    ↻ Refresh
-                </button>
-            </div>
-            <div id="gemini-cookies-container" hx-get="/syspanel/fragments/gemini-cookies" hx-trigger="load"
-                hx-swap="innerHTML">
-                <div class="text-sm text-gray-400 animate-pulse">Loading cookie info...</div>
-            </div>
-        </div>
-
-        <!-- ─── 9. Screenshots ─────────────────────────────────────────────── -->
-
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-base font-semibold font-display text-gray-900">📷 Bot Screenshots</h2>
-                <button hx-get="/syspanel/fragments/screenshots" hx-target="#screenshots-container" hx-swap="innerHTML"
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                    ↻ Refresh
-                </button>
-            </div>
-            <div id="screenshots-container" hx-get="/syspanel/fragments/screenshots" hx-trigger="load"
-                hx-swap="innerHTML">
-                <div class="text-sm text-gray-400 animate-pulse">Loading screenshots...</div>
-            </div>
-        </div>
-
     </div>
 
-    <script>
-        function terminalBusy(msg) {
-            document.getElementById('terminal-output').innerHTML =
-                `<span class="text-yellow-400 animate-pulse">⏳ ${msg}</span>`;
-            // Auto-scroll terminal
+    <!-- ─── 2. PM2 Processes ───────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
+                🤖 PM2 Processes
+                <span
+                    class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">auto-refresh
+                    10s</span>
+            </h2>
+            <button hx-get="/syspanel/fragments/pm2" hx-target="#pm2-container" hx-swap="innerHTML"
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                ↻ Refresh
+            </button>
+        </div>
+        <div id="pm2-container" hx-get="/syspanel/fragments/pm2" hx-trigger="load, every 10s" hx-swap="innerHTML">
+            <div class="text-sm text-gray-400 animate-pulse">Loading processes...</div>
+        </div>
+    </div>
+
+    <!-- ─── 3. Job Stats ───────────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900">📋 Job Statistics</h2>
+            <button hx-get="/syspanel/fragments/job-stats" hx-target="#job-stats-container" hx-swap="innerHTML"
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                ↻ Refresh
+            </button>
+        </div>
+        <div id="job-stats-container" hx-get="/syspanel/fragments/job-stats" hx-trigger="load" hx-swap="innerHTML">
+            <div class="text-sm text-gray-400 animate-pulse">Loading stats...</div>
+        </div>
+    </div>
+
+    <!-- ─── 4. Content & Storage ───────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900">📁 Content & Storage</h2>
+            <button hx-get="/syspanel/fragments/content-stats" hx-target="#content-stats-container" hx-swap="innerHTML"
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                ↻ Refresh
+            </button>
+        </div>
+        <div id="content-stats-container" hx-get="/syspanel/fragments/content-stats" hx-trigger="load"
+            hx-swap="innerHTML">
+            <div class="text-sm text-gray-400 animate-pulse">Loading...</div>
+        </div>
+    </div>
+
+    <!-- ─── 5. Server Actions ──────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <h2 class="text-base font-semibold font-display text-gray-900 mb-5">🛠️ Server Actions</h2>
+
+        <!-- Deploy Controls -->
+        <div class="mb-4">
+            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Deploy</div>
+            <div class="flex flex-wrap gap-3">
+                <button hx-post="/syspanel/cmd/git-pull" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Pulling from develop...')"
+                    class="action-btn bg-indigo-600 hover:bg-indigo-700 text-white">
+                    ⬇️ Git Pull (develop)
+                </button>
+                <button hx-post="/syspanel/cmd/pm2-restart" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Restarting all PM2 processes...')"
+                    class="action-btn bg-violet-600 hover:bg-violet-700 text-white">
+                    ♻️ Restart All PM2
+                </button>
+                <button hx-post="/syspanel/cmd/pm2-start" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Starting system via start.sh...')"
+                    class="action-btn bg-emerald-600 hover:bg-emerald-700 text-white">
+                    ▶️ Start System
+                </button>
+                <button hx-post="/syspanel/cmd/pm2-stop" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-confirm="Dừng toàn bộ hệ thống?"
+                    hx-on::before-request="terminalBusy('Stopping all PM2 processes...')"
+                    class="action-btn bg-gray-700 hover:bg-gray-800 text-white">
+                    ⏹️ Stop System
+                </button>
+            </div>
+        </div>
+
+        <!-- Process Controls -->
+        <div class="mb-4">
+            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Process Controls</div>
+            <div class="flex flex-wrap gap-3">
+                <button hx-post="/syspanel/cmd/kill-chrome" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Killing Chrome/Xvfb zombie processes...')"
+                    class="action-btn bg-orange-500 hover:bg-orange-600 text-white">
+                    💀 Kill Chrome/Xvfb
+                </button>
+                <button hx-post="/syspanel/cmd/cancel-stuck" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Cancelling stuck RUNNING jobs...')"
+                    class="action-btn bg-amber-500 hover:bg-amber-600 text-white">
+                    🚫 Cancel Stuck Jobs
+                </button>
+                <button hx-post="/syspanel/cmd/retry-failed" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Retrying all FAILED jobs...')"
+                    class="action-btn bg-blue-500 hover:bg-blue-600 text-white">
+                    🔁 Retry All Failed
+                </button>
+                <button hx-post="/syspanel/cmd/start-vnc" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Starting VNC & WebSockets...')"
+                    class="action-btn bg-pink-500 hover:bg-pink-600 text-white">
+                    📺 Bật Livestream
+                </button>
+                <button hx-post="/syspanel/cmd/stop-vnc" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Stopping VNC...')"
+                    class="action-btn bg-rose-600 hover:bg-rose-700 text-white">
+                    ⏹️ Tắt Stream
+                </button>
+            </div>
+        </div>
+
+        <!-- Maintenance -->
+        <div>
+            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Database & Files</div>
+            <div class="flex flex-wrap gap-3">
+                <button hx-post="/syspanel/cmd/db-backup" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Backing up database...')"
+                    class="action-btn bg-teal-600 hover:bg-teal-700 text-white">
+                    💾 Backup DB
+                </button>
+                <button hx-post="/syspanel/cmd/db-vacuum" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Running VACUUM on database...')"
+                    class="action-btn bg-cyan-600 hover:bg-cyan-700 text-white">
+                    🗜️ Vacuum DB
+                </button>
+                <button hx-post="/syspanel/cmd/cleanup-db" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-on::before-request="terminalBusy('Running cleanup script...')"
+                    class="action-btn bg-gray-500 hover:bg-gray-600 text-white">
+                    🧹 Dọn Data Rác
+                </button>
+                <button hx-post="/syspanel/cmd/cleanup-videos" hx-target="#terminal-output" hx-swap="innerHTML"
+                    hx-confirm="Xóa video DONE cũ hơn 7 ngày?"
+                    hx-on::before-request="terminalBusy('Deleting old DONE videos...')"
+                    class="action-btn bg-red-500 hover:bg-red-600 text-white">
+                    🗑️ Xóa Video Cũ (>7d)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── 6. Database Explorer ─────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
+                🗃️ Database Explorer
+                <span
+                    class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">Top
+                    50 rows</span>
+            </h2>
+            <div class="flex items-center gap-3">
+                <select id="db-table-select" name="table_name" hx-get="/syspanel/fragments/db-explorer"
+                    hx-target="#db-explorer-container" hx-trigger="change"
+                    class="text-sm border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 py-1.5 pl-3 pr-8">
+                    <option value="" disabled selected>Chọn Table...</option>
+                    <option value="jobs">jobs</option>
+                    <option value="accounts">accounts</option>
+                    <option value="pages">pages</option>
+                    <option value="viral_materials">viral_materials</option>
+                    <option value="system_state">system_state</option>
+                </select>
+                <button hx-get="/syspanel/fragments/db-explorer" hx-target="#db-explorer-container"
+                    hx-include="#db-table-select"
+                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                    ↻ Refresh
+                </button>
+            </div>
+        </div>
+        <div id="db-explorer-container"
+            class="overflow-x-auto border border-gray-100 rounded-lg bg-gray-50 min-h-[200px] flex items-center justify-center">
+            <div class="text-sm text-gray-400">Please select a table to view data</div>
+        </div>
+    </div>
+
+    <!-- ─── 7. Persona Tuner ─────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
+                🤖 AI Persona Tuner
+                <span
+                    class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">Giọng
+                    văn Bot</span>
+            </h2>
+        </div>
+        <div hx-get="/syspanel/persona" hx-trigger="load" hx-swap="innerHTML"></div>
+    </div>
+
+    <!-- ─── 8. Log Viewer ──────────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900">📋 Log Viewer</h2>
+            <div class="flex flex-wrap gap-2 sm:ml-auto items-center">
+                <select id="log-worker"
+                    class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
+                    <optgroup label="── Vu PM2 ──">
+                        <option value="FB_Publisher">FB_Publisher</option>
+                        <option value="AI_Generator">AI_Generator</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Web_Dashboard" selected>Web_Dashboard</option>
+                    </optgroup>
+                    <optgroup label="── Root PM2 (production) ──">
+                        <option value="ai-worker">ai-worker</option>
+                        <option value="publisher">publisher</option>
+                        <option value="maintenance">maintenance</option>
+                        <option value="web">web</option>
+                    </optgroup>
+                </select>
+                <select id="log-type"
+                    class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
+                    <option value="error" selected>Error Log</option>
+                    <option value="out">Output Log</option>
+                </select>
+                <button onclick="loadLogs()"
+                    class="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center gap-1.5">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Load Logs
+                </button>
+            </div>
+        </div>
+        <div class="bg-[#1a1a2e] rounded-xl overflow-hidden border border-gray-800">
+            <div class="bg-[#16213e] px-4 py-2 flex items-center gap-2 border-b border-gray-700">
+                <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                <span class="text-xs text-gray-400 font-mono ml-2" id="log-title">Terminal Output</span>
+            </div>
+            <div class="p-4 font-mono text-xs text-green-400 min-h-[180px] max-h-[400px] overflow-y-auto"
+                id="log-output">
+                <span class="text-gray-500">Chọn worker và nhấn "Load Logs"...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── 7. Terminal Output ─────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <h2 class="text-base font-semibold font-display text-gray-900 mb-4">💻 Terminal Output</h2>
+        <div class="bg-[#1a1a2e] rounded-xl overflow-hidden border border-gray-800">
+            <div class="bg-[#16213e] px-4 py-2 flex items-center gap-2 border-b border-gray-700">
+                <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                <span class="text-xs text-gray-400 font-mono ml-2">Command Output</span>
+            </div>
+            <div class="p-4 font-mono text-xs text-green-400 min-h-[120px] max-h-[350px] overflow-y-auto">
+                <div id="terminal-output" class="whitespace-pre-wrap break-all">
+                    <span class="text-gray-500">Sẵn sàng nhận lệnh...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── 8. Gemini Cookies ───────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900">🍪 Gemini Cookie Status</h2>
+            <button hx-get="/syspanel/fragments/gemini-cookies" hx-target="#gemini-cookies-container"
+                hx-swap="innerHTML" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                ↻ Refresh
+            </button>
+        </div>
+        <div id="gemini-cookies-container" hx-get="/syspanel/fragments/gemini-cookies" hx-trigger="load"
+            hx-swap="innerHTML">
+            <div class="text-sm text-gray-400 animate-pulse">Loading cookie info...</div>
+        </div>
+    </div>
+
+    <!-- ─── 9. Screenshots ─────────────────────────────────────────────── -->
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900">📷 Bot Screenshots</h2>
+            <button hx-get="/syspanel/fragments/screenshots" hx-target="#screenshots-container" hx-swap="innerHTML"
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                ↻ Refresh
+            </button>
+        </div>
+        <div id="screenshots-container" hx-get="/syspanel/fragments/screenshots" hx-trigger="load" hx-swap="innerHTML">
+            <div class="text-sm text-gray-400 animate-pulse">Loading screenshots...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+    function terminalBusy(msg) {
+        document.getElementById('terminal-output').innerHTML =
+            `<span class="text-yellow-400 animate-pulse">⏳ ${msg}</span>`;
+        // Auto-scroll terminal
+        const el = document.getElementById('terminal-output');
+        if (el) el.closest('.overflow-y-auto').scrollTop = 9999;
+    }
+
+    function loadLogs() {
+        const worker = document.getElementById('log-worker').value;
+        const logType = document.getElementById('log-type').value;
+        document.getElementById('log-title').textContent = `${worker} (${logType})`;
+        document.getElementById('log-output').innerHTML =
+            '<span class="text-yellow-400 animate-pulse">Loading...</span>';
+        htmx.ajax('GET', `/syspanel/logs?worker=${worker}&log_type=${logType}`, {
+            target: '#log-output',
+            swap: 'innerHTML'
+        });
+        setTimeout(() => {
+            const el = document.getElementById('log-output');
+            if (el) el.scrollTop = el.scrollHeight;
+        }, 800);
+    }
+
+    // Auto-scroll terminal after HTMX commands
+    document.addEventListener('htmx:afterSwap', function (evt) {
+        if (evt.detail.target.id === 'terminal-output') {
             const el = document.getElementById('terminal-output');
             if (el) el.closest('.overflow-y-auto').scrollTop = 9999;
-        }
-
-        function loadLogs() {
-            const worker = document.getElementById('log-worker').value;
-            const logType = document.getElementById('log-type').value;
-            document.getElementById('log-title').textContent = `${worker} (${logType})`;
-            document.getElementById('log-output').innerHTML =
-                '<span class="text-yellow-400 animate-pulse">Loading...</span>';
-            htmx.ajax('GET', `/syspanel/logs?worker=${worker}&log_type=${logType}`, {
-                target: '#log-output',
-                swap: 'innerHTML'
-            });
+            // Refresh PM2 and job stats after commands
             setTimeout(() => {
-                const el = document.getElementById('log-output');
-                if (el) el.scrollTop = el.scrollHeight;
-            }, 800);
+                htmx.trigger('#pm2-container', 'refresh');
+                htmx.trigger('#job-stats-container', 'load');
+            }, 1500);
         }
-
-        // Auto-scroll terminal after HTMX commands
-        document.addEventListener('htmx:afterSwap', function (evt) {
-            if (evt.detail.target.id === 'terminal-output') {
-                const el = document.getElementById('terminal-output');
-                if (el) el.closest('.overflow-y-auto').scrollTop = 9999;
-                // Refresh PM2 and job stats after commands
-                setTimeout(() => {
-                    htmx.trigger('#pm2-container', 'refresh');
-                    htmx.trigger('#job-stats-container', 'load');
-                }, 1500);
-            }
-        });
-    </script>
-</body>
-
-</html>
+    });
+</script>
+{% endblock %}
