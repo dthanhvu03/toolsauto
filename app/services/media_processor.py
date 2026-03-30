@@ -14,6 +14,7 @@ import os
 import subprocess
 import logging
 import mimetypes
+import tempfile
 from dataclasses import dataclass
 from typing import Optional
 
@@ -86,6 +87,52 @@ class MediaProcessor:
             return False
         mime, _ = mimetypes.guess_type(file_path)
         return mime in VIDEO_MIMES if mime else False
+
+    @classmethod
+    def extract_thumbnail(cls, video_path: str, job_id: int) -> Optional[str]:
+        """
+        Extract one frame from video via FFmpeg → path to JPEG.
+        Returns None on failure (caller may fall back to text-only).
+        """
+        if not video_path or not os.path.exists(video_path):
+            return None
+
+        thumb_path = os.path.join(tempfile.gettempdir(), f"thumb_{job_id}.jpg")
+        try:
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-ss", "00:00:01",
+                "-frames:v", "1",
+                "-q:v", "5",
+                thumb_path,
+            ]
+            subprocess.run(
+                cmd, capture_output=True, timeout=10,
+                check=True,
+            )
+            if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+                return thumb_path
+        except Exception as e:
+            logger.debug("[MediaProcessor] Thumbnail extraction failed for job %s: %s", job_id, e)
+
+        return None
+
+    @classmethod
+    def cleanup_thumbnail(cls, thumb_path: Optional[str]) -> None:
+        """Remove temporary thumbnail after send."""
+        if thumb_path and os.path.exists(thumb_path):
+            try:
+                os.remove(thumb_path)
+            except OSError:
+                pass
+
+    @classmethod
+    def telegram_video_within_size_limit(cls, video_path: str, max_mb: float = 50.0) -> bool:
+        """True if file exists and is at or below Telegram Bot API video size limit."""
+        if not video_path or not os.path.exists(video_path):
+            return False
+        return os.path.getsize(video_path) / (1024 * 1024) <= max_mb
 
     @classmethod
     def _has_watermark(cls) -> bool:

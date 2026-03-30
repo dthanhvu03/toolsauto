@@ -22,7 +22,7 @@ class JobRow:
 
 
 def _db_path() -> Path:
-    base = Path(__file__).resolve().parent.parent
+    base = Path(__file__).resolve().parent.parent.parent
     env = os.getenv("DB_PATH")
     if env:
         return Path(env)

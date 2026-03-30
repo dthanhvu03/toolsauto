@@ -98,7 +98,7 @@ if command -v pm2 &>/dev/null; then
         --name "AI_Generator" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_AI"
     pm2 start "$VENV_PYTHON workers/maintenance.py" \
         --name "Maintenance" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_MAINT"
-    pm2 start "$VENV_PYTHON manage.py serve --no-reload" \
+    pm2 start "$VENV_PYTHON run_web.py" \
         --name "Web_Dashboard" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_WEB"
     pm2 save
     echo ""
@@ -119,7 +119,7 @@ if ! command -v xvfb-run &>/dev/null; then
     echo "  Cài: sudo apt install xvfb"
 fi
 
-$VENV_PYTHON manage.py serve --no-reload > web.log 2>&1 &
+$VENV_PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > web.log 2>&1 &
 WEB_PID=$!
 sleep 2
 env -u DISPLAY xvfb-run -a $VENV_PYTHON workers/publisher.py > pub_worker.log 2>&1 &

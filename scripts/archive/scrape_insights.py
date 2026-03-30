@@ -3,7 +3,7 @@ import os
 import logging
 from playwright.sync_api import sync_playwright
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -140,11 +140,8 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
         logger.error(f"  ❌ Error scraping {target_url} ({platform}): {e}")
 
 def main():
-    from app.database.core import SessionLocal, ensure_runtime_schema
+    from app.database.core import SessionLocal
     from app.database.models import Account
-    
-    # Ensure platform column is there before running
-    ensure_runtime_schema()
 
     logger.info("Initializing Multi-Platform Insights Scraper...")
     with SessionLocal() as db:

@@ -21,6 +21,10 @@
         </svg>
       </button>
       <div class="text-sm font-semibold">Auto Publisher</div>
+      <div id="gemini-badge" hx-get="/health/gemini/ping" hx-trigger="load">
+        <button
+          class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-gray-50 text-xs text-gray-400 animate-pulse">Checking...</button>
+      </div>
       <a href="/health"
         class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700">Health</a>
     </div>
@@ -38,7 +42,7 @@
       <nav class="p-3 text-sm">
         {% set p = request.url.path %}
         <a href="/app"
-          class="nav-item block px-3 py-2 rounded {% if p == '/app' %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Overview</a>
+          class="nav-item block px-3 py-2 rounded {% if p == '/app' or p == '/' %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Overview</a>
         <a href="/app/jobs"
           class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/jobs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Jobs</a>
         <a href="/app/viral"
@@ -54,17 +58,22 @@
         <a href="/gallery/"
           class="nav-item block px-3 py-2 rounded {% if p.startswith('/gallery') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">🖼️
           Gallery</a>
+        <a href="/insights"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/insights') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">📈
+          Insights</a>
         <a href="/app/logs"
           class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/logs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Logs</a>
         <a href="/affiliates"
           class="nav-item block px-3 py-2 rounded {% if p.startswith('/affiliates') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">🛒
           Affiliates</a>
         <a href="/app/settings"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Settings</a>
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Cài đặt</a>
+        <a href="/syspanel"
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/syspanel') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">⚙️
+          SysPanel</a>
         <div class="mt-3 pt-3 border-t border-[var(--border)]">
           <a href="/tiktok-links" class="nav-item block px-3 py-2 rounded hover:bg-slate-50 text-slate-700">TikTok Links
             (legacy)</a>
-          <a href="/" class="nav-item block px-3 py-2 rounded hover:bg-slate-50 text-slate-700">Old dashboard</a>
         </div>
       </nav>
     </aside>
@@ -78,6 +87,10 @@
             <div class="text-xs text-[var(--muted)]">{% block page_subtitle %}{% endblock %}</div>
           </div>
           <div class="flex items-center gap-2">
+            <div id="gemini-badge-desktop" hx-get="/health/gemini/ping" hx-trigger="load">
+              <button
+                class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-gray-50 text-xs text-gray-400 animate-pulse">Checking...</button>
+            </div>
             <a href="/health"
               class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700 hover:bg-slate-50">
               System Health

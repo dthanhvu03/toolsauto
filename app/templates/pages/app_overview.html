@@ -5,60 +5,82 @@
 {% block page_subtitle %}Nhìn nhanh bottleneck và lối tắt thao tác.{% endblock %}
 
 {% block content %}
-  <div class="grid lg:grid-cols-3 gap-4">
-    <a href="/app/jobs" class="app-card p-5 hover:bg-slate-50 transition">
-      <div class="flex items-center justify-between">
-        <div class="text-sm font-semibold">Jobs</div>
-        <span class="app-badge app-badge-blue">Queue</span>
-      </div>
-      <div class="text-sm text-[var(--muted)] mt-1">Xem PENDING/RUNNING/DRAFT nhanh.</div>
-    </a>
-    <a href="/app/viral" class="app-card p-5 hover:bg-slate-50 transition">
-      <div class="flex items-center justify-between">
-        <div class="text-sm font-semibold">Viral</div>
-        <span class="app-badge app-badge-amber">Scan</span>
-      </div>
-      <div class="text-sm text-[var(--muted)] mt-1">Filter + pagination, giảm lướt.</div>
-    </a>
-    <a href="/app/accounts" class="app-card p-5 hover:bg-slate-50 transition">
-      <div class="flex items-center justify-between">
-        <div class="text-sm font-semibold">Accounts</div>
-        <span class="app-badge">Config</span>
-      </div>
-      <div class="text-sm text-[var(--muted)] mt-1">Quản lý login, limits, competitor.</div>
-    </a>
-  </div>
+<div class="grid lg:grid-cols-3 gap-4">
+  <a href="/app/jobs" class="app-card p-5 hover:bg-slate-50 transition">
+    <div class="flex items-center justify-between">
+      <div class="text-sm font-semibold">Jobs</div>
+      <span class="app-badge app-badge-blue">Queue</span>
+    </div>
+    <div class="text-sm text-[var(--muted)] mt-1">Xem PENDING/RUNNING/DRAFT nhanh.</div>
+  </a>
+  <a href="/app/viral" class="app-card p-5 hover:bg-slate-50 transition">
+    <div class="flex items-center justify-between">
+      <div class="text-sm font-semibold">Viral</div>
+      <span class="app-badge app-badge-amber">Scan</span>
+    </div>
+    <div class="text-sm text-[var(--muted)] mt-1">Filter + pagination, giảm lướt.</div>
+  </a>
+  <a href="/app/accounts" class="app-card p-5 hover:bg-slate-50 transition">
+    <div class="flex items-center justify-between">
+      <div class="text-sm font-semibold">Accounts</div>
+      <span class="app-badge">Config</span>
+    </div>
+    <div class="text-sm text-[var(--muted)] mt-1">Quản lý login, limits, competitor.</div>
+  </a>
+</div>
 
-  <div class="mt-6">
-    <div id="queue-panel" hx-get="/queue/panel" hx-trigger="load, every 30s" hx-swap="outerHTML">
-      {% set lines = 4 %}
-      {% include 'ui/skeleton.html' with context %}
+<div class="mt-6 grid lg:grid-cols-2 gap-4">
+  <!-- Worker Control Panel -->
+  <div class="app-card p-5">
+    {% include 'fragments/worker_status.html' %}
+  </div>
+  <!-- Create Manual Job Panel (Quick) -->
+  <div class="app-card p-5">
+    <div class="text-sm font-semibold mb-4">Quick Manual Job</div>
+    {% include 'fragments/create_job_form.html' %}
+  </div>
+</div>
+<div class="mt-6">
+  {% include 'fragments/accounts_table.html' %}
+</div>
+
+<div class="mt-6">
+  <div id="queue-panel" hx-get="/queue/panel" hx-trigger="load, every 30s" hx-swap="outerHTML">
+    {% set lines = 4 %}
+    {% include 'ui/skeleton.html' with context %}
+  </div>
+</div>
+
+<!-- Automated Competitor Discovery Panel -->
+<div class="mt-6">
+  <div id="discovery-panel" hx-get="/discovery/panel" hx-trigger="load">
+    {% include 'ui/skeleton.html' with context %}
+  </div>
+</div>
+
+<div class="mt-6 grid lg:grid-cols-2 gap-4">
+  <div class="app-card p-5">
+    <div class="text-sm font-semibold">Quick links</div>
+    <div class="mt-3 flex gap-2 flex-wrap">
+      {% set label='TikTok Links' %}{% set href='/app/tiktok-links' %}{% set variant='default' %}{% include
+      'ui/button.html' with context %}
+      {% set label='System Health' %}{% set href='/health' %}{% set variant='default' %}{% include 'ui/button.html' with
+      context %}
     </div>
   </div>
-
-  <div class="mt-6 grid lg:grid-cols-2 gap-4">
-    <div class="app-card p-5">
-      <div class="text-sm font-semibold">Quick links</div>
-      <div class="mt-3 flex gap-2 flex-wrap">
-        {% set label='TikTok Links' %}{% set href='/app/tiktok-links' %}{% set variant='default' %}{% include 'ui/button.html' with context %}
-        {% set label='System Health' %}{% set href='/health' %}{% set variant='default' %}{% include 'ui/button.html' with context %}
-        {% set label='Old dashboard' %}{% set href='/' %}{% set variant='default' %}{% include 'ui/button.html' with context %}
-      </div>
-    </div>
-    <div class="app-card p-5">
-      <div class="text-sm font-semibold">Ops tips (8GB)</div>
-      <div class="mt-2 text-sm text-[var(--muted)] leading-relaxed">
-        Ưu tiên xử lý <b>DRAFT</b>, giảm <b>Viral NEW</b> khi backlog cao, và theo dõi cảnh báo RAM/Chrome trên Telegram.
-      </div>
+  <div class="app-card p-5">
+    <div class="text-sm font-semibold">Ops tips (8GB)</div>
+    <div class="mt-2 text-sm text-[var(--muted)] leading-relaxed">
+      Ưu tiên xử lý <b>DRAFT</b>, giảm <b>Viral NEW</b> khi backlog cao, và theo dõi cảnh báo RAM/Chrome trên Telegram.
     </div>
   </div>
+</div>
 
-  <div class="mt-6">
-    {% include "fragments/page_posting_stats.html" with context %}
-  </div>
+<div class="mt-6">
+  {% include "fragments/page_posting_stats.html" with context %}
+</div>
 
-  <div class="mt-4">
-    {% include "fragments/page_reup_stats.html" with context %}
-  </div>
+<div class="mt-4">
+  {% include "fragments/page_reup_stats.html" with context %}
+</div>
 {% endblock %}
-

@@ -1,19 +1,21 @@
 {% extends "layouts/app.html" %}
 
-{% block title %}Settings • Auto Publisher{% endblock %}
-{% block page_title %}Settings{% endblock %}
-{% block page_subtitle %}Config runtime (đổi là có hiệu lực ngay, không cần restart).{% endblock %}
+{% block title %}Cài đặt • Auto Publisher{% endblock %}
+{% block page_title %}Cài đặt hệ thống{% endblock %}
+{% block page_subtitle %}Thông số runtime — chỉnh là áp dụng ngay cho worker, không cần khởi động lại.{% endblock %}
 
 {% block content %}
   {% if message %}
-    <div class="app-card p-3 mb-4">
+    <div class="app-card p-4 mb-4 border-l-4" style="border-left-color: var(--primary);">
       <div class="text-sm">
         {% if message == 'saved' %}
-          ✅ Đã lưu setting.
+          Đã lưu cài đặt.
         {% elif message == 'reset' %}
-          ♻️ Đã reset setting về default.
+          Đã đặt lại một mục về giá trị mặc định.
         {% elif message.startswith('bulk_saved_') %}
-          ✅ Bulk save xong: {{ message.replace('bulk_saved_', '').replace('_reset_', ' saved, ') }} reset.
+          {% set rest = message[12:] %}
+          {% set pair = rest.split('_reset_') %}
+          Đã lưu <strong>{{ pair[0] }}</strong> thay đổi; đặt lại <strong>{{ pair[1] }}</strong> mục về mặc định.
         {% else %}
           {{ message }}
         {% endif %}
@@ -21,84 +23,170 @@
     </div>
   {% endif %}
 
-  <form method="post" action="/app/settings/bulk-save" class="space-y-4">
-    <div class="app-card p-4 flex items-center justify-between gap-3 flex-wrap">
+  <form id="settings-bulk" method="post" action="/app/settings/bulk-save" class="space-y-6">
+    <div class="app-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border border-[var(--border)] shadow-sm">
       <div>
-        <div class="text-sm font-semibold">Runtime settings</div>
-        <div class="text-xs text-[var(--muted)]">Edit nhiều setting rồi bấm Save All để áp dụng ngay.</div>
+        <div class="text-base font-semibold text-[var(--text)]">Trung tâm điều khiển</div>
+        <div class="text-sm text-[var(--muted)] mt-1 max-w-xl">Chỉnh các thông số bên dưới rồi bấm <strong>Lưu tất cả</strong>. Các mục khác mặc định lấy từ file cấu hình / biến môi trường.</div>
       </div>
-      <button type="submit" class="app-btn app-btn-primary h-10">Save All</button>
+      <button type="submit" class="app-btn app-btn-primary h-11 px-6 whitespace-nowrap">Lưu tất cả</button>
     </div>
 
     {% for section, specs in sections.items() %}
-      <div class="app-card p-4">
-        <div class="flex items-center justify-between gap-3 flex-wrap">
-          <div class="text-base font-semibold">{{ section }}</div>
-          <button type="submit" class="app-btn h-9">Save All</button>
+      <div class="app-card overflow-hidden border border-[var(--border)] shadow-sm">
+        <div class="px-4 sm:px-5 py-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/80">
+          <h2 class="text-lg font-semibold text-[var(--text)]">{{ section }}</h2>
+          <button type="submit" form="settings-bulk" class="app-btn h-10 text-sm">Lưu phần này</button>
         </div>
-
-        <div class="mt-3 overflow-x-auto border border-[var(--border)] rounded-lg">
-          <table class="min-w-full text-sm">
-            <thead class="bg-slate-50 text-slate-700">
-              <tr>
-                <th class="text-left font-semibold px-3 py-2 w-[34%]">Setting</th>
-                <th class="text-left font-semibold px-3 py-2 w-[22%]">Default</th>
-                <th class="text-left font-semibold px-3 py-2 w-[22%]">Effective</th>
-                <th class="text-left font-semibold px-3 py-2 w-[22%]">Override</th>
-                <th class="text-left font-semibold px-3 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-[var(--border)]">
-              {% for spec in specs %}
-                {% set row = effective[spec.key] %}
-                {% set cur = (row.override if row.has_override else row.default) %}
-                <tr class="hover:bg-slate-50/60">
-                  <td class="px-3 py-2 align-top">
-                    <div class="font-medium">{{ row.title }}</div>
-                    <div class="text-xs text-[var(--muted)] font-mono">{{ row.key }} • {{ row.type }}</div>
-                    {% if row.min is not none or row.max is not none %}
-                      <div class="text-[11px] text-[var(--muted)]">
-                        {% if row.min is not none %}min={{ row.min }}{% endif %}
-                        {% if row.max is not none %}max={{ row.max }}{% endif %}
-                      </div>
-                    {% endif %}
-                  </td>
-                  <td class="px-3 py-2 align-top font-mono text-xs break-words">{{ row.default }}</td>
-                  <td class="px-3 py-2 align-top">
+        <div class="px-4 sm:px-5 divide-y divide-[var(--border)]">
+          {% for spec in specs %}
+            {% set row = effective[spec.key] %}
+            {% set cur = (row.override if row.has_override else row.default) %}
+            <div class="py-5 flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-8">
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-[var(--text)] leading-snug">{{ row.title }}</div>
+                {% if row.description %}
+                  <p class="text-sm text-[var(--muted)] mt-1.5 leading-relaxed">{{ row.description }}</p>
+                {% endif %}
+                <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--muted)]">
+                  <span class="font-mono bg-slate-100 px-1.5 py-0.5 rounded">{{ row.key }}</span>
+                  <span>·</span>
+                  <span>{{ row.type }}</span>
+                  {% if row.min is not none or row.max is not none %}
+                    <span>·</span>
+                    <span>
+                      {% if row.min is not none %}tối thiểu {{ row.min }}{% endif %}
+                      {% if row.min is not none and row.max is not none %} — {% endif %}
+                      {% if row.max is not none %}tối đa {{ row.max }}{% endif %}
+                    </span>
+                  {% endif %}
+                </div>
+                <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs">
+                  <div>
+                    <span class="text-[var(--muted)]">Mặc định:</span>
+                    <code class="ml-1 font-mono text-slate-700 bg-slate-50 px-1.5 py-0.5 rounded">{{ row.default }}</code>
+                  </div>
+                  <div>
                     {% if row.has_override %}
-                      <div class="inline-flex items-center px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs mb-1">Override</div>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-100">Đang ghi đè</span>
                     {% endif %}
-                    <div class="font-mono text-xs break-words">{{ cur }}</div>
-                  </td>
-                  <td class="px-3 py-2 align-top">
-                    {% if row.type == 'bool' %}
-                      <select name="{{ row.key }}" class="app-select h-9">
-                        <option value="true" {% if cur %}selected{% endif %}>true</option>
-                        <option value="false" {% if not cur %}selected{% endif %}>false</option>
-                      </select>
-                    {% elif row.type == 'enum' %}
-                      <select name="{{ row.key }}" class="app-select h-9">
-                        {% for c in row.choices %}
-                          <option value="{{ c }}" {% if c == cur %}selected{% endif %}>{{ c }}</option>
-                        {% endfor %}
-                      </select>
-                    {% else %}
-                      <input name="{{ row.key }}" value="{{ cur }}" class="app-input h-9 w-56 font-mono" />
-                    {% endif %}
-                  </td>
-                  <td class="px-3 py-2 align-top whitespace-nowrap">
-                    <form method="post" action="/app/settings/reset" class="inline">
-                      <input type="hidden" name="key" value="{{ row.key }}" />
-                      <button type="submit" class="app-btn h-9" {% if not row.has_override %}disabled{% endif %}>Reset</button>
-                    </form>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+                  </div>
+                  <div>
+                    <span class="text-[var(--muted)]">Giá trị hiện tại:</span>
+                    <code class="ml-1 font-mono text-slate-800">{{ cur }}</code>
+                  </div>
+                </div>
+              </div>
+
+              <div class="shrink-0 flex flex-row lg:flex-col items-stretch sm:items-center lg:items-end justify-between sm:justify-end gap-3 w-full lg:w-auto lg:min-w-[220px]">
+                {% if row.type == 'bool' %}
+                  <input type="hidden" name="{{ row.key }}" id="inp-{{ row.key }}" value="{{ 'true' if cur else 'false' }}" />
+                  <button
+                    type="button"
+                    class="settings-toggle relative inline-flex h-9 w-[52px] shrink-0 cursor-pointer rounded-full border border-[var(--border)] transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 {{ 'settings-toggle-on bg-indigo-500 border-indigo-500' if cur else 'bg-slate-200' }}"
+                    data-inp="inp-{{ row.key }}"
+                    role="switch"
+                    aria-checked="{{ 'true' if cur else 'false' }}"
+                    aria-label="{{ row.title }}"
+                  >
+                    <span class="settings-toggle-knob pointer-events-none inline-block h-7 w-7 rounded-full bg-white shadow mt-0.5"></span>
+                  </button>
+                {% elif row.type == 'enum' %}
+                  <select name="{{ row.key }}" class="app-select h-10 w-full lg:w-56 max-w-full">
+                    {% for c in row.choices %}
+                      <option value="{{ c }}" {% if c == cur %}selected{% endif %}>
+                        {% if row.enum_labels and c in row.enum_labels %}{{ row.enum_labels[c] }}{% else %}{{ c }}{% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                {% elif row.type == 'int' %}
+                  <div class="flex items-center gap-2 w-full justify-end">
+                    <input
+                      type="number"
+                      name="{{ row.key }}"
+                      value="{{ cur }}"
+                      class="app-input h-10 w-28 text-right font-mono"
+                      {% if row.min is not none %}min="{{ row.min | int }}"{% endif %}
+                      {% if row.max is not none %}max="{{ row.max | int }}"{% endif %}
+                      step="1"
+                    />
+                    {% if row.unit %}<span class="text-xs text-[var(--muted)] whitespace-nowrap">{{ row.unit }}</span>{% endif %}
+                  </div>
+                {% elif row.type == 'float' %}
+                  <div class="flex items-center gap-2 w-full justify-end">
+                    <input
+                      type="number"
+                      name="{{ row.key }}"
+                      value="{{ cur }}"
+                      class="app-input h-10 w-28 text-right font-mono"
+                      {% if row.min is not none %}min="{{ row.min }}"{% endif %}
+                      {% if row.max is not none %}max="{{ row.max }}"{% endif %}
+                      step="any"
+                    />
+                    {% if row.unit %}<span class="text-xs text-[var(--muted)] whitespace-nowrap">{{ row.unit }}</span>{% endif %}
+                  </div>
+                {% else %}
+                  <input
+                    name="{{ row.key }}"
+                    value="{{ cur }}"
+                    class="app-input h-10 w-full lg:max-w-md font-mono text-sm"
+                  />
+                {% endif %}
+
+                <button
+                  type="submit"
+                  form="reset-form-{{ row.key }}"
+                  class="app-btn h-9 text-xs whitespace-nowrap"
+                  {% if not row.has_override %}disabled{% endif %}
+                >Đặt lại</button>
+              </div>
+            </div>
+          {% endfor %}
         </div>
       </div>
     {% endfor %}
   </form>
-{% endblock %}
 
+  {% for section, specs in sections.items() %}
+    {% for spec in specs %}
+      <form id="reset-form-{{ spec.key }}" method="post" action="/app/settings/reset" class="hidden">
+        <input type="hidden" name="key" value="{{ spec.key }}" />
+      </form>
+    {% endfor %}
+  {% endfor %}
+
+  <style>
+    .settings-toggle-knob {
+      transition: transform 0.15s ease;
+    }
+    .settings-toggle[aria-checked="true"] .settings-toggle-knob {
+      transform: translateX(22px);
+    }
+    .settings-toggle[aria-checked="false"] .settings-toggle-knob {
+      transform: translateX(4px);
+    }
+  </style>
+  <script>
+    (function () {
+      document.querySelectorAll('.settings-toggle').forEach(function (btn) {
+        var id = btn.getAttribute('data-inp');
+        var inp = document.getElementById(id);
+        if (!inp) return;
+        function sync() {
+          var on = inp.value === 'true';
+          btn.setAttribute('aria-checked', on ? 'true' : 'false');
+          btn.classList.toggle('settings-toggle-on', on);
+          btn.classList.toggle('bg-indigo-500', on);
+          btn.classList.toggle('border-indigo-500', on);
+          btn.classList.toggle('bg-slate-200', !on);
+        }
+        btn.addEventListener('click', function () {
+          var on = inp.value === 'true';
+          inp.value = on ? 'false' : 'true';
+          sync();
+        });
+        sync();
+      });
+    })();
+  </script>
+{% endblock %}

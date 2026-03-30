@@ -5,8 +5,8 @@ Opens each account's browser profile, navigates to the Pages management page,
 and extracts all Page names + URLs. Saves results to the account's managed_pages column.
 
 Usage:
-    python scripts/scrape_pages.py              # Scrape all active accounts
-    python scripts/scrape_pages.py --account 4  # Scrape specific account
+    python manage.py pages scrape
+    python manage.py pages scrape --account 4
 """
 import sys
 import os
@@ -14,7 +14,7 @@ import json
 import logging
 import argparse
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 logging.basicConfig(
     level=logging.INFO,
