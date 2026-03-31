@@ -88,7 +88,7 @@
             <div class="text-xl font-semibold">{% block page_title %}{% endblock %}</div>
             <div class="text-xs text-[var(--muted)]">{% block page_subtitle %}{% endblock %}</div>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="hidden lg:flex flex-wrap items-center gap-2">
             <div id="gemini-badge-desktop" hx-get="/health/gemini/ping" hx-trigger="load">
               <button
                 class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-gray-50 text-xs text-gray-400 animate-pulse">Checking...</button>
