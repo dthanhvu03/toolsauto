@@ -1,26 +1,22 @@
 {# Usage:
-  {% include 'ui/pagination.html' with context %}
-  expects: page, total_pages, on_prev(optional), on_next(optional), href_prev(optional), href_next(optional)
+{% include 'ui/pagination.html' with context %}
+expects: page, total_pages, on_prev(optional), on_next(optional), href_prev(optional), href_next(optional)
 #}
-<div class="flex items-center justify-between gap-3 flex-wrap">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
   <div class="text-xs text-slate-500">Page {{ page }} / {{ total_pages }}</div>
   <div class="flex gap-2">
     {% if page > 1 %}
-      {% if href_prev %}
-        {% set label = '← Prev' %}{% set href = href_prev %}{% set variant='default' %}
-        {% include 'ui/button.html' with context %}
-      {% else %}
-        <button class="app-btn h-9" {% if on_prev %}onclick="{{ on_prev }}"{% endif %}>← Prev</button>
-      {% endif %}
+    {% if href_prev %}
+    {% set label = '← Prev' %}{% set href = href_prev %}{% set variant='default' %}
+    {% include 'ui/button.html' with context %}
+    {% else %}
+    <button class="app-btn h-9" {% if on_prev %}onclick="{{ on_prev }}" {% endif %}>← Prev</button>
     {% endif %}
-    {% if page < total_pages %}
-      {% if href_next %}
-        {% set label = 'Next →' %}{% set href = href_next %}{% set variant='default' %}
-        {% include 'ui/button.html' with context %}
-      {% else %}
-        <button class="app-btn h-9" {% if on_next %}onclick="{{ on_next }}"{% endif %}>Next →</button>
-      {% endif %}
     {% endif %}
+    {% if page < total_pages %} {% if href_next %} {% set label='Next →' %}{% set href=href_next %}{% set
+      variant='default' %} {% include 'ui/button.html' with context %} {% else %} <button class="app-btn h-9" {% if
+      on_next %}onclick="{{ on_next }}" {% endif %}>Next →</button>
+      {% endif %}
+      {% endif %}
   </div>
 </div>
-

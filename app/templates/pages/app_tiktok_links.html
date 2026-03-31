@@ -5,302 +5,305 @@
 {% block page_subtitle %}Theo dõi kênh đối thủ + video viral TikTok trong SaaS UI.{% endblock %}
 
 {% block content %}
-  <div class="app-card p-4">
-    <div class="flex items-center justify-between gap-3 flex-wrap">
-      <div class="flex gap-2">
-        <a href="/app/tiktok-links?tab=viral{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if min_views %}&min_views={{ min_views }}{% endif %}"
-           class="app-chip {% if tab != 'competitors' %}app-chip-active{% endif %}">
-          Viral TikTok
-        </a>
-        <a href="/app/tiktok-links?tab=competitors{% if q %}&q={{ q }}{% endif %}"
-           class="app-chip {% if tab == 'competitors' %}app-chip-active{% endif %}">
-          Kênh đối thủ
-        </a>
-      </div>
-      <div class="text-xs text-[var(--muted)]">
-        Viral: {{ viral_total }} | Competitors: {{ competitor_total }}
-      </div>
+<div class="app-card p-4">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div class="flex gap-2">
+      <a href="/app/tiktok-links?tab=viral{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if min_views %}&min_views={{ min_views }}{% endif %}"
+        class="app-chip {% if tab != 'competitors' %}app-chip-active{% endif %}">
+        Viral TikTok
+      </a>
+      <a href="/app/tiktok-links?tab=competitors{% if q %}&q={{ q }}{% endif %}"
+        class="app-chip {% if tab == 'competitors' %}app-chip-active{% endif %}">
+        Kênh đối thủ
+      </a>
     </div>
-
-    <form method="get" action="/app/tiktok-links" class="mt-4">
-      <input type="hidden" name="tab" value="{{ tab }}">
-      <div class="flex items-end gap-3 flex-wrap">
-        <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Search</label>
-          <input name="q" value="{{ q }}" placeholder="URL / @handle / account / page..."
-                 class="app-input md:w-[520px]" />
-        </div>
-        <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Quick filter (local)</label>
-          <input id="localFilter" placeholder="lọc nhanh ngay trên page…" class="app-input w-72" />
-        </div>
-        {% if tab != 'competitors' %}
-        <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Status</label>
-          <select name="status" class="app-select">
-            <option value="" {% if not status %}selected{% endif %}>All</option>
-            <option value="NEW" {% if status=='NEW' %}selected{% endif %}>NEW</option>
-            <option value="DRAFTED" {% if status=='DRAFTED' %}selected{% endif %}>DRAFTED</option>
-            <option value="FAILED" {% if status=='FAILED' %}selected{% endif %}>FAILED</option>
-            <option value="REUP" {% if status=='REUP' %}selected{% endif %}>REUP</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
-          <input name="min_views" type="number" min="0" step="500" value="{{ min_views }}"
-                 class="app-input w-32" />
-        </div>
-        <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Per page</label>
-          <select name="per_page" class="app-select">
-            <option value="100" {% if per_page==100 %}selected{% endif %}>100</option>
-            <option value="200" {% if per_page==200 %}selected{% endif %}>200</option>
-            <option value="500" {% if per_page==500 %}selected{% endif %}>500</option>
-          </select>
-        </div>
-        {% endif %}
-        <button class="app-btn app-btn-primary">Apply</button>
-        <button type="button" id="copyAll" class="app-btn">Copy all visible</button>
-        {% if tab == 'competitors' %}
-          <button type="button" id="expandAll" class="app-btn">Expand all</button>
-          <button type="button" id="collapseAll" class="app-btn">Collapse all</button>
-        {% endif %}
-        <span id="stat" class="text-xs text-[var(--muted)]"></span>
-      </div>
-    </form>
+    <div class="text-xs text-[var(--muted)]">
+      Viral: {{ viral_total }} | Competitors: {{ competitor_total }}
+    </div>
   </div>
 
-  {% if tab == 'competitors' %}
-  <div class="mt-4 app-card p-4">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-sm font-semibold">Kênh đối thủ (TikTok @) — theo Target Page</h2>
-      <span class="text-xs text-[var(--muted)]">{{ competitor_total }} links</span>
+  <form method="get" action="/app/tiktok-links" class="mt-4">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <div class="flex items-end gap-3 flex-wrap">
+      <div>
+        <label class="block text-xs text-[var(--muted)] mb-1">Search</label>
+        <input name="q" value="{{ q }}" placeholder="URL / @handle / account / page..."
+          class="app-input md:w-[520px]" />
+      </div>
+      <div>
+        <label class="block text-xs text-[var(--muted)] mb-1">Quick filter (local)</label>
+        <input id="localFilter" placeholder="lọc nhanh ngay trên page…" class="app-input w-72" />
+      </div>
+      {% if tab != 'competitors' %}
+      <div>
+        <label class="block text-xs text-[var(--muted)] mb-1">Status</label>
+        <select name="status" class="app-select">
+          <option value="" {% if not status %}selected{% endif %}>All</option>
+          <option value="NEW" {% if status=='NEW' %}selected{% endif %}>NEW</option>
+          <option value="DRAFTED" {% if status=='DRAFTED' %}selected{% endif %}>DRAFTED</option>
+          <option value="FAILED" {% if status=='FAILED' %}selected{% endif %}>FAILED</option>
+          <option value="REUP" {% if status=='REUP' %}selected{% endif %}>REUP</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
+        <input name="min_views" type="number" min="0" step="500" value="{{ min_views }}" class="app-input w-32" />
+      </div>
+      <div>
+        <label class="block text-xs text-[var(--muted)] mb-1">Per page</label>
+        <select name="per_page" class="app-select">
+          <option value="100" {% if per_page==100 %}selected{% endif %}>100</option>
+          <option value="200" {% if per_page==200 %}selected{% endif %}>200</option>
+          <option value="500" {% if per_page==500 %}selected{% endif %}>500</option>
+        </select>
+      </div>
+      {% endif %}
+      <button class="app-btn app-btn-primary">Apply</button>
+      <button type="button" id="copyAll" class="app-btn">Copy all visible</button>
+      {% if tab == 'competitors' %}
+      <button type="button" id="expandAll" class="app-btn">Expand all</button>
+      <button type="button" id="collapseAll" class="app-btn">Collapse all</button>
+      {% endif %}
+      <span id="stat" class="text-xs text-[var(--muted)]"></span>
     </div>
+  </form>
+</div>
 
-    {% for tp, accmap in competitor_groups.items() %}
-    <details class="border border-[var(--border)] rounded-lg mb-4 overflow-hidden" data-collapse="tp" open>
-      <summary class="bg-gray-50 px-4 py-3 flex items-center justify-between cursor-pointer select-none">
-        <div class="text-sm font-semibold text-gray-800 flex items-center gap-2">
-          {% if tp != '_unassigned' %}
-            <span class="text-slate-700">Target</span>
-            <span class="font-mono text-xs text-gray-700">{{ tp }}</span>
-            {% set meta = page_index.get(tp, {}) %}
-            {% if meta.get('name') %}
-              {% set text = meta.get('name') %}{% set tone = 'blue' %}{% include 'ui/badge.html' with context %}
-            {% endif %}
-            {% if meta.get('niches') %}
-              <span class="text-xs text-gray-500">Niches: {{ meta.get('niches')|join(', ') }}</span>
-            {% endif %}
-          {% else %}
-            <span class="text-slate-700">Target</span>
-            {% set text = '_unassigned' %}{% set tone = 'amber' %}{% include 'ui/badge.html' with context %}
-          {% endif %}
-        </div>
-        <button type="button" class="copyGroup app-btn h-9 border-slate-900 bg-slate-900 text-white hover:bg-slate-950"
-                data-copy-group="tp:{{ tp }}">Copy group</button>
-      </summary>
-      <div class="p-4">
-        {% for acc_name, urls in accmap.items() %}
-        <details class="mb-3 border border-slate-100 rounded-lg" data-collapse="acc" open>
-          <summary class="px-3 py-2 flex items-center justify-between cursor-pointer select-none">
-            <div class="text-sm font-medium text-gray-900">{{ acc_name }}</div>
-            <button type="button" class="copyGroup app-btn h-9"
-                    data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Copy account</button>
-          </summary>
-          <div class="p-3 grid md:grid-cols-2 gap-2">
-              {% for u in urls %}
-              <div class="row flex items-center justify-between gap-2 border border-gray-100 rounded px-3 py-2"
-                   data-hay="{{ (tp ~ ' ' ~ acc_name ~ ' ' ~ u) | lower }}">
-                <a class="text-blue-700 hover:underline break-all text-sm" href="{{ u }}" target="_blank" rel="noreferrer">{{ u }}</a>
-                <button type="button" class="copyOne app-btn h-9" data-copy="{{ u }}">Copy</button>
-              </div>
-              {% endfor %}
+{% if tab == 'competitors' %}
+<div class="mt-4 app-card p-4">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold">Kênh đối thủ (TikTok @) — theo Target Page</h2>
+    <span class="text-xs text-[var(--muted)]">{{ competitor_total }} links</span>
+  </div>
+
+  {% for tp, accmap in competitor_groups.items() %}
+  <details class="border border-[var(--border)] rounded-lg mb-4 overflow-hidden" data-collapse="tp" open>
+    <summary class="bg-gray-50 px-4 py-3 flex items-center justify-between cursor-pointer select-none">
+      <div class="text-sm font-semibold text-gray-800 flex items-center gap-2">
+        {% if tp != '_unassigned' %}
+        <span class="text-slate-700">Target</span>
+        <span class="font-mono text-xs text-gray-700">{{ tp }}</span>
+        {% set meta = page_index.get(tp, {}) %}
+        {% if meta.get('name') %}
+        {% set text = meta.get('name') %}{% set tone = 'blue' %}{% include 'ui/badge.html' with context %}
+        {% endif %}
+        {% if meta.get('niches') %}
+        <span class="text-xs text-gray-500">Niches: {{ meta.get('niches')|join(', ') }}</span>
+        {% endif %}
+        {% else %}
+        <span class="text-slate-700">Target</span>
+        {% set text = '_unassigned' %}{% set tone = 'amber' %}{% include 'ui/badge.html' with context %}
+        {% endif %}
+      </div>
+      <button type="button" class="copyGroup app-btn h-9 border-slate-900 bg-slate-900 text-white hover:bg-slate-950"
+        data-copy-group="tp:{{ tp }}">Copy group</button>
+    </summary>
+    <div class="p-4">
+      {% for acc_name, urls in accmap.items() %}
+      <details class="mb-3 border border-slate-100 rounded-lg" data-collapse="acc" open>
+        <summary class="px-3 py-2 flex items-center justify-between cursor-pointer select-none">
+          <div class="text-sm font-medium text-gray-900">{{ acc_name }}</div>
+          <button type="button" class="copyGroup app-btn h-9" data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Copy
+            account</button>
+        </summary>
+        <div class="p-3 grid md:grid-cols-2 gap-2">
+          {% for u in urls %}
+          <div class="row flex items-center justify-between gap-2 border border-gray-100 rounded px-3 py-2"
+            data-hay="{{ (tp ~ ' ' ~ acc_name ~ ' ' ~ u) | lower }}">
+            <a class="text-blue-700 hover:underline break-all text-sm" href="{{ u }}" target="_blank"
+              rel="noreferrer">{{ u }}</a>
+            <button type="button" class="copyOne app-btn h-9" data-copy="{{ u }}">Copy</button>
           </div>
-        </details>
-        {% endfor %}
-      </div>
-    </details>
-    {% endfor %}
-
-    {% if competitor_total == 0 %}
-      <div class="p-6 text-center text-sm text-[var(--muted)]">Chưa có kênh TikTok đối thủ nào.</div>
-    {% endif %}
-  </div>
-  {% else %}
-  <div class="mt-4 app-card p-4">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-sm font-semibold">Video viral TikTok</h2>
-      <span class="text-xs text-[var(--muted)]">Showing {{ viral_rows|length }} / {{ viral_total }}</span>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="min-w-full table-auto border-collapse">
-        <thead>
-          <tr class="bg-gray-50 border-b">
-            <th class="app-table-th">Status</th>
-            <th class="app-table-th">Views</th>
-            <th class="app-table-th">Page</th>
-            <th class="app-table-th">Niches</th>
-            <th class="app-table-th">Age</th>
-            <th class="app-table-th">URL</th>
-            <th class="app-table-th text-right">Copy</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white">
-          {% for v in viral_rows %}
-          <tr class="row border-b text-sm hover:bg-gray-50"
-              data-hay="{{ ((v.status or '') ~ ' ' ~ (v.views or 0) ~ ' ' ~ (v.target_page or '') ~ ' ' ~ (v.url or '') ~ ' ' ~ (v.last_error or '')) | lower }}">
-            <td class="px-3 py-2">
-              {% set text = v.status %}
-              {% if v.status == 'FAILED' %}{% set tone='red' %}
-              {% elif v.status in ['NEW','DRAFTED'] %}{% set tone='amber' %}
-              {% elif v.status == 'REUP' %}{% set tone='green' %}
-              {% else %}{% set tone='default' %}
-              {% endif %}
-              {% set title = v.last_error or '' %}
-              {% include 'ui/badge.html' with context %}
-            </td>
-            <td class="px-3 py-2 text-gray-800">{{ (v.views or 0) | int }}</td>
-            <td class="px-3 py-2">
-              {% if v.target_page %}
-                {% set purl = v.target_page.rstrip('/') %}
-                {% set meta = page_index.get(purl, {}) %}
-                {% if meta.get('name') %}
-                  {% set text = meta.get('name') %}{% set tone='blue' %}{% set title=v.target_page %}{% include 'ui/badge.html' with context %}
-                {% else %}
-                  {% set text = v.target_page %}{% set tone='blue' %}{% set title=v.target_page %}{% include 'ui/badge.html' with context %}
-                {% endif %}
-              {% else %}
-                {% set text = '_unassigned' %}{% set tone='amber' %}{% set title='Chưa gán page' %}{% include 'ui/badge.html' with context %}
-              {% endif %}
-            </td>
-            <td class="px-3 py-2 text-gray-700">
-              {% if v.target_page %}
-                {% set purl = v.target_page.rstrip('/') %}
-                {% set meta = page_index.get(purl, {}) %}
-                {% if meta.get('niches') %}
-                  <span class="text-xs">{{ meta.get('niches')|join(', ') }}</span>
-                {% else %}-{% endif %}
-              {% else %}-{% endif %}
-            </td>
-            <td class="px-3 py-2 text-gray-700">
-              {% if v.created_at %}
-                {% set age_s = (request.state.now_ts or 0) - (v.created_at or 0) %}
-                {% if age_s < 3600 %}{{ (age_s // 60) | int }}m
-                {% elif age_s < 86400 %}{{ (age_s // 3600) | int }}h
-                {% else %}{{ (age_s // 86400) | int }}d
-                {% endif %}
-              {% else %}-{% endif %}
-            </td>
-            <td class="px-3 py-2">
-              <a class="text-blue-600 hover:underline break-all" href="{{ v.url }}" target="_blank" rel="noreferrer">{{ v.url }}</a>
-            </td>
-            <td class="px-3 py-2 text-right">
-              <button type="button" class="copyOne app-btn h-9" data-copy="{{ v.url }}">Copy</button>
-            </td>
-          </tr>
           {% endfor %}
-          {% if viral_rows|length == 0 %}
-            <tr><td colspan="7" class="p-4 text-center text-sm text-[var(--muted)]">Không có video nào theo filter hiện tại.</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
+        </div>
+      </details>
+      {% endfor %}
     </div>
+  </details>
+  {% endfor %}
 
-    <div class="mt-4 flex items-center justify-between gap-3 flex-wrap">
-      <div class="text-xs text-[var(--muted)]">Page {{ page }} / {{ total_pages }}</div>
-      <div class="flex gap-2">
-        {% if page > 1 %}
-        <a class="app-btn h-9"
-           href="/app/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page-1 }}">← Prev</a>
+  {% if competitor_total == 0 %}
+  <div class="p-6 text-center text-sm text-[var(--muted)]">Chưa có kênh TikTok đối thủ nào.</div>
+  {% endif %}
+</div>
+{% else %}
+<div class="mt-4 app-card p-4">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold">Video viral TikTok</h2>
+    <span class="text-xs text-[var(--muted)]">Showing {{ viral_rows|length }} / {{ viral_total }}</span>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full table-auto border-collapse">
+      <thead>
+        <tr class="bg-gray-50 border-b">
+          <th class="app-table-th">Status</th>
+          <th class="app-table-th">Views</th>
+          <th class="app-table-th">Page</th>
+          <th class="app-table-th">Niches</th>
+          <th class="app-table-th">Age</th>
+          <th class="app-table-th">URL</th>
+          <th class="app-table-th text-right">Copy</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white">
+        {% for v in viral_rows %}
+        <tr class="row border-b text-sm hover:bg-gray-50"
+          data-hay="{{ ((v.status or '') ~ ' ' ~ (v.views or 0) ~ ' ' ~ (v.target_page or '') ~ ' ' ~ (v.url or '') ~ ' ' ~ (v.last_error or '')) | lower }}">
+          <td class="px-3 py-2">
+            {% set text = v.status %}
+            {% if v.status == 'FAILED' %}{% set tone='red' %}
+            {% elif v.status in ['NEW','DRAFTED'] %}{% set tone='amber' %}
+            {% elif v.status == 'REUP' %}{% set tone='green' %}
+            {% else %}{% set tone='default' %}
+            {% endif %}
+            {% set title = v.last_error or '' %}
+            {% include 'ui/badge.html' with context %}
+          </td>
+          <td class="px-3 py-2 text-gray-800">{{ (v.views or 0) | int }}</td>
+          <td class="px-3 py-2">
+            {% if v.target_page %}
+            {% set purl = v.target_page.rstrip('/') %}
+            {% set meta = page_index.get(purl, {}) %}
+            {% if meta.get('name') %}
+            {% set text = meta.get('name') %}{% set tone='blue' %}{% set title=v.target_page %}{% include
+            'ui/badge.html' with context %}
+            {% else %}
+            {% set text = v.target_page %}{% set tone='blue' %}{% set title=v.target_page %}{% include 'ui/badge.html'
+            with context %}
+            {% endif %}
+            {% else %}
+            {% set text = '_unassigned' %}{% set tone='amber' %}{% set title='Chưa gán page' %}{% include
+            'ui/badge.html' with context %}
+            {% endif %}
+          </td>
+          <td class="px-3 py-2 text-gray-700">
+            {% if v.target_page %}
+            {% set purl = v.target_page.rstrip('/') %}
+            {% set meta = page_index.get(purl, {}) %}
+            {% if meta.get('niches') %}
+            <span class="text-xs">{{ meta.get('niches')|join(', ') }}</span>
+            {% else %}-{% endif %}
+            {% else %}-{% endif %}
+          </td>
+          <td class="px-3 py-2 text-gray-700">
+            {% if v.created_at %}
+            {% set age_s = (request.state.now_ts or 0) - (v.created_at or 0) %}
+            {% if age_s < 3600 %}{{ (age_s // 60) | int }}m {% elif age_s < 86400 %}{{ (age_s // 3600) | int }}h {% else
+              %}{{ (age_s // 86400) | int }}d {% endif %} {% else %}-{% endif %} </td>
+          <td class="px-3 py-2">
+            <a class="text-blue-600 hover:underline break-all" href="{{ v.url }}" target="_blank" rel="noreferrer">{{
+              v.url }}</a>
+          </td>
+          <td class="px-3 py-2 text-right">
+            <button type="button" class="copyOne app-btn h-9" data-copy="{{ v.url }}">Copy</button>
+          </td>
+        </tr>
+        {% endfor %}
+        {% if viral_rows|length == 0 %}
+        <tr>
+          <td colspan="7" class="p-4 text-center text-sm text-[var(--muted)]">Không có video nào theo filter hiện tại.
+          </td>
+        </tr>
         {% endif %}
-        {% if page < total_pages %}
-        <a class="app-btn h-9"
-           href="/app/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page+1 }}">Next →</a>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="text-xs text-[var(--muted)]">Page {{ page }} / {{ total_pages }}</div>
+    <div class="flex gap-2">
+      {% if page > 1 %}
+      <a class="app-btn h-9"
+        href="/app/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page-1 }}">←
+        Prev</a>
+      {% endif %}
+      {% if page < total_pages %} <a class="app-btn h-9"
+        href="/app/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page+1 }}">
+        Next →</a>
         {% endif %}
-      </div>
     </div>
   </div>
-  {% endif %}
+</div>
+{% endif %}
 
-  <script>
-    const stat = document.getElementById('stat');
-    const copyAll = document.getElementById('copyAll');
-    const localFilter = document.getElementById('localFilter');
-    const expandAll = document.getElementById('expandAll');
-    const collapseAll = document.getElementById('collapseAll');
+<script>
+  const stat = document.getElementById('stat');
+  const copyAll = document.getElementById('copyAll');
+  const localFilter = document.getElementById('localFilter');
+  const expandAll = document.getElementById('expandAll');
+  const collapseAll = document.getElementById('collapseAll');
 
-    function visibleRows() {
-      return Array.from(document.querySelectorAll('.row')).filter(r => !r.classList.contains('hidden'));
-    }
-    function updateStat() {
-      const total = document.querySelectorAll('.row').length;
-      const vis = visibleRows().length;
-      stat.textContent = `Showing ${vis}/${total}`;
-    }
-    function applyLocalFilter() {
-      const q = (localFilter?.value || '').trim().toLowerCase();
-      document.querySelectorAll('.row').forEach(r => {
-        const hay = (r.getAttribute('data-hay') || '').toLowerCase();
-        if (!q || hay.includes(q)) r.classList.remove('hidden');
-        else r.classList.add('hidden');
-      });
-      updateStat();
-    }
-    async function copyText(txt) {
-      try { await navigator.clipboard.writeText(txt); }
-      catch (e) {
-        const ta = document.createElement('textarea');
-        ta.value = txt; document.body.appendChild(ta);
-        ta.select(); document.execCommand('copy'); ta.remove();
-      }
-    }
-    document.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.copyOne');
-      if (btn) {
-        const txt = btn.getAttribute('data-copy') || '';
-        if (!txt) return;
-        await copyText(txt);
-        btn.textContent = 'Copied';
-        setTimeout(() => btn.textContent = 'Copy', 900);
-        return;
-      }
-      const g = e.target.closest('.copyGroup');
-      if (g) {
-        const box = g.closest('.border') || document;
-        const urls = [];
-        box.querySelectorAll('[data-copy]').forEach(b => {
-          const u = b.getAttribute('data-copy');
-          if (u) urls.push(u);
-        });
-        await copyText(urls.join('\\n'));
-        g.textContent = 'Copied';
-        setTimeout(() => g.textContent = g.classList.contains('bg-slate-900') ? 'Copy group' : 'Copy account', 900);
-      }
-    });
-    copyAll.addEventListener('click', async () => {
-      const urls = visibleRows()
-        .map(r => r.querySelector('[data-copy]'))
-        .filter(Boolean)
-        .map(b => b.getAttribute('data-copy'))
-        .filter(Boolean);
-      await copyText(urls.join('\\n'));
-      copyAll.textContent = 'Copied';
-      setTimeout(() => copyAll.textContent = 'Copy all visible', 900);
-    });
-    if (localFilter) {
-      localFilter.addEventListener('input', () => {
-        window.clearTimeout(window.__tiktokLocalDebounce);
-        window.__tiktokLocalDebounce = window.setTimeout(applyLocalFilter, 180);
-      });
-    }
-    if (expandAll) expandAll.addEventListener('click', () => {
-      document.querySelectorAll('details[data-collapse]').forEach(d => d.open = true);
-    });
-    if (collapseAll) collapseAll.addEventListener('click', () => {
-      document.querySelectorAll('details[data-collapse]').forEach(d => d.open = false);
+  function visibleRows() {
+    return Array.from(document.querySelectorAll('.row')).filter(r => !r.classList.contains('hidden'));
+  }
+  function updateStat() {
+    const total = document.querySelectorAll('.row').length;
+    const vis = visibleRows().length;
+    stat.textContent = `Showing ${vis}/${total}`;
+  }
+  function applyLocalFilter() {
+    const q = (localFilter?.value || '').trim().toLowerCase();
+    document.querySelectorAll('.row').forEach(r => {
+      const hay = (r.getAttribute('data-hay') || '').toLowerCase();
+      if (!q || hay.includes(q)) r.classList.remove('hidden');
+      else r.classList.add('hidden');
     });
     updateStat();
-  </script>
+  }
+  async function copyText(txt) {
+    try { await navigator.clipboard.writeText(txt); }
+    catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove();
+    }
+  }
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.copyOne');
+    if (btn) {
+      const txt = btn.getAttribute('data-copy') || '';
+      if (!txt) return;
+      await copyText(txt);
+      btn.textContent = 'Copied';
+      setTimeout(() => btn.textContent = 'Copy', 900);
+      return;
+    }
+    const g = e.target.closest('.copyGroup');
+    if (g) {
+      const box = g.closest('.border') || document;
+      const urls = [];
+      box.querySelectorAll('[data-copy]').forEach(b => {
+        const u = b.getAttribute('data-copy');
+        if (u) urls.push(u);
+      });
+      await copyText(urls.join('\\n'));
+      g.textContent = 'Copied';
+      setTimeout(() => g.textContent = g.classList.contains('bg-slate-900') ? 'Copy group' : 'Copy account', 900);
+    }
+  });
+  copyAll.addEventListener('click', async () => {
+    const urls = visibleRows()
+      .map(r => r.querySelector('[data-copy]'))
+      .filter(Boolean)
+      .map(b => b.getAttribute('data-copy'))
+      .filter(Boolean);
+    await copyText(urls.join('\\n'));
+    copyAll.textContent = 'Copied';
+    setTimeout(() => copyAll.textContent = 'Copy all visible', 900);
+  });
+  if (localFilter) {
+    localFilter.addEventListener('input', () => {
+      window.clearTimeout(window.__tiktokLocalDebounce);
+      window.__tiktokLocalDebounce = window.setTimeout(applyLocalFilter, 180);
+    });
+  }
+  if (expandAll) expandAll.addEventListener('click', () => {
+    document.querySelectorAll('details[data-collapse]').forEach(d => d.open = true);
+  });
+  if (collapseAll) collapseAll.addEventListener('click', () => {
+    document.querySelectorAll('details[data-collapse]').forEach(d => d.open = false);
+  });
+  updateStat();
+</script>
 {% endblock %}
-
