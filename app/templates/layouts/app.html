@@ -68,7 +68,8 @@
           class="nav-item block px-3 py-2 rounded {% if p.startswith('/affiliates') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">🛒
           Affiliates</a>
         <a href="/app/settings"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Cài đặt</a>
+          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Cài
+          đặt</a>
         <a href="/syspanel"
           class="nav-item block px-3 py-2 rounded {% if p.startswith('/syspanel') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">⚙️
           SysPanel</a>
@@ -82,12 +83,12 @@
     <!-- Main -->
     <main class="flex-1">
       <div class="max-w-7xl mx-auto px-4 py-4 lg:px-6 lg:py-6">
-        <div class="hidden lg:flex items-center justify-between mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <div class="text-xl font-semibold">{% block page_title %}{% endblock %}</div>
             <div class="text-xs text-[var(--muted)]">{% block page_subtitle %}{% endblock %}</div>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <div id="gemini-badge-desktop" hx-get="/health/gemini/ping" hx-trigger="load">
               <button
                 class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-gray-50 text-xs text-gray-400 animate-pulse">Checking...</button>
