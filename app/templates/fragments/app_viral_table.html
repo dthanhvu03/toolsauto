@@ -1,17 +1,16 @@
-<div id="viral-table" class="border border-[var(--border)] rounded-lg overflow-hidden">
-  <div class="px-4 py-3 bg-gray-50 border-b border-[var(--border)] flex items-center justify-between">
+<div id="viral-table" class="border border-[var(--border)] rounded-lg overflow-x-auto">
+  <div
+    class="px-4 py-3 bg-gray-50 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div class="text-xs text-[var(--muted)]">
       {{ total|default(0) }} total · Page {{ page }} / {{ total_pages }}
     </div>
     <div class="flex gap-2">
       {% if page > 1 %}
-        <button class="app-btn h-9"
-                onclick="window.refreshViral({{ page - 1 }})">← Prev</button>
+      <button class="app-btn h-9" onclick="window.refreshViral({{ page - 1 }})">← Prev</button>
       {% endif %}
-      {% if page < total_pages %}
-        <button class="app-btn h-9"
-                onclick="window.refreshViral({{ page + 1 }})">Next →</button>
-      {% endif %}
+      {% if page < total_pages %} <button class="app-btn h-9" onclick="window.refreshViral({{ page + 1 }})">Next
+        →</button>
+        {% endif %}
     </div>
   </div>
 
@@ -28,13 +27,14 @@
     </thead>
     <tbody class="bg-white">
       {% for row in items %}
-        {% set item = row.item %}
-        {% set account_name = row.account_name %}
-        {% include 'fragments/viral_row.html' %}
+      {% set item = row.item %}
+      {% set account_name = row.account_name %}
+      {% include 'fragments/viral_row.html' %}
       {% else %}
-        <tr><td colspan="6" class="p-4 text-center text-sm text-[var(--muted)]">No results.</td></tr>
+      <tr>
+        <td colspan="6" class="p-4 text-center text-sm text-[var(--muted)]">No results.</td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
-
