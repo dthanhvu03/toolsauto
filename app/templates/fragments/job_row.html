@@ -69,14 +69,20 @@
         <div class="mt-2 relative inline-block group/brain">
             <div
                 class="flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 border border-indigo-200 rounded text-[9px] text-indigo-600 font-bold cursor-help shadow-sm hover:shadow-indigo-200/50 transition-all animate-pulse">
-                <span>🧠</span>
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                </svg>
                 <span>{{ job.brain_used or 'SmartBrain' }}</span>
             </div>
             <!-- Tooltip Reasoning -->
             <div
                 class="absolute left-0 top-full mt-1 bg-white border border-indigo-100 text-gray-700 text-[11px] rounded-lg shadow-2xl w-64 p-3 z-[110] invisible opacity-0 transition-opacity duration-200 group-hover/brain:visible group-hover/brain:opacity-100 pointer-events-none flex flex-col gap-2 ring-4 ring-indigo-500/10">
                 <div class="font-bold text-indigo-600 flex items-center gap-1 border-b border-indigo-50 pb-1">
-                    <span class="text-sm">🧠</span> Chiến Lược Phản Biện (AI Reasoning)
+                    <svg class="w-3 h-3 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg> Chiến Lược Phản Biện (AI Reasoning)
                 </div>
                 <div class="italic leading-relaxed">
                     "{{ job.ai_reasoning or 'Chuyên gia AI đang phân phối nội dung dựa trên thuật toán viral mới nhất.'
@@ -117,7 +123,11 @@
         {% endif %}
         {% if job.target_page %}
         <div class="mt-1 text-[10px] text-indigo-500 truncate max-w-[120px]" title="{{ job.target_page }}">
-            🚩 {{ job.target_page.split('facebook.com/')[-1] if 'facebook.com/' in job.target_page else job.target_page
+            <svg class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm0 0h5" />
+            </svg>{{ job.target_page.split('facebook.com/')[-1] if 'facebook.com/' in job.target_page else
+            job.target_page
             }}
         </div>
         {% endif %}
@@ -131,21 +141,49 @@
         <div class="flex flex-col gap-1 text-xs">
             {% if job.post_url %}
             <a href="{{ job.post_url }}" target="_blank"
-                class="text-blue-500 hover:text-blue-700 truncate max-w-[120px] block" title="{{ job.post_url }}">🔗
+                class="text-blue-500 hover:text-blue-700 truncate max-w-[120px] block" title="{{ job.post_url }}"><svg
+                    class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
                 Post</a>
             {% endif %}
             {% if job.view_24h is not none %}
-            <span class="text-emerald-600 font-semibold">👁 {{ "{:,}".format(job.view_24h) }} views</span>
+            <span class="text-emerald-600 font-semibold"><svg class="w-3 h-3 inline-block mr-0.5" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>{{ "{:,}".format(job.view_24h) }} views</span>
             {% elif job.metrics_checked %}
-            <span class="text-gray-400">👁 0 views</span>
+            <span class="text-gray-400"><svg class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>0 views</span>
             {% else %}
-            <span class="text-gray-300 italic">⏳ Chờ quét</span>
+            <span class="text-gray-300 italic"><svg class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>Chờ quét</span>
             {% endif %}
             {% if job.click_count and job.click_count > 0 %}
-            <span class="text-amber-600 font-semibold">🖱 {{ job.click_count }} clicks</span>
+            <span class="text-amber-600 font-semibold"><svg class="w-3 h-3 inline-block mr-0.5" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                </svg>{{ job.click_count }} clicks</span>
             {% endif %}
             {% if job.tracking_code %}
-            <span class="text-gray-400 font-mono text-[10px]" title="/r/{{ job.tracking_code }}">📎 {{ job.tracking_code
+            <span class="text-gray-400 font-mono text-[10px]" title="/r/{{ job.tracking_code }}"><svg
+                    class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>{{ job.tracking_code
                 }}</span>
             {% endif %}
         </div>
@@ -165,7 +203,11 @@
             </div>
         </form>
         {% elif job.status == 'AWAITING_STYLE' %}
-        <span class="text-cyan-600 italic truncate block w-full max-w-md">📱 Vui lòng check Telegram để chọn
+        <span class="text-cyan-600 italic truncate block w-full max-w-md"><svg class="w-3 h-3 inline-block mr-0.5"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>Vui lòng check Telegram để chọn
             Style...</span>
         {% else %}
         <span class="text-red-500 truncate block">{{ job.last_error or '-' }}</span>
@@ -248,7 +290,7 @@
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                 </path>
             </svg>
-            🤖 AI Đang Viết...
+            AI Đang Viết...
         </span>
         <button hx-post="/jobs/{{ job.id }}/reset-draft" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             hx-confirm="Reset job #{{ job.id }} về DRAFT?" onclick="this.textContent='...'; this.disabled=true;"
@@ -273,7 +315,10 @@
         {% else %}
         {# DONE — optionally link to external post #}
         {% if job.external_post_id and not job.external_post_id.startswith('safe_mode') %}
-        <span class="text-green-400 text-xs">✓ Posted</span>
+        <span class="text-green-400 text-xs"><svg class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>Posted</span>
         {% else %}
         <span class="text-gray-300 text-xs text-center block w-24">--</span>
         {% endif %}

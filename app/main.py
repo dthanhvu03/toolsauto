@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # Import routers
-from app.routers import dashboard, jobs, accounts, worker, health, telegram, viral, insights, syspanel, pages, gallery, manual_job, affiliates
+from app.routers import dashboard, jobs, accounts, worker, health, telegram, viral, insights, syspanel, pages, gallery, manual_job, affiliates, database
 from app.services.notifier import NotifierService, TelegramNotifier
 import app.config as config
 
@@ -36,6 +36,7 @@ app.include_router(pages.router)
 app.include_router(gallery.router)
 app.include_router(manual_job.router)
 app.include_router(affiliates.router)
+app.include_router(database.router)
 
 # Static assets (SaaS UI CSS, etc.)
 app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "app" / "static")), name="static")

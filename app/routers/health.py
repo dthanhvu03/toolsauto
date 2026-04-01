@@ -66,17 +66,20 @@ def ping_gemini_ui():
     if is_valid:
         return HTMLResponse('''
             <button id="gemini-badge" hx-get="/health/gemini/ping" hx-target="#gemini-badge" hx-swap="outerHTML" 
-                class="inline-flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg shadow-sm text-sm font-medium text-green-700 hover:bg-green-100 transition-all cursor-pointer">
-                🟢 Gemini: Active
+                class="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 h-9 bg-green-50 border border-green-200 rounded-lg shadow-sm text-xs sm:text-sm font-medium text-green-700 hover:bg-green-100 transition-all cursor-pointer whitespace-nowrap shrink-0">
+                <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] animate-pulse"></span>
+                Gemini: Active
             </button>
         ''')
     else:
         return HTMLResponse('''
-            <div id="gemini-badge" class="flex items-center gap-2 bg-red-50 p-1.5 rounded-lg border border-red-200 shadow-sm h-[42px]">
-                <span class="text-red-600 text-sm font-medium px-2">🔴 Gemini: Expired</span>
+            <div id="gemini-badge" class="flex items-center gap-1.5 bg-red-50 p-1 rounded-lg border border-red-200 shadow-sm h-9 whitespace-nowrap shrink-0">
+                <span class="flex items-center gap-1.5 text-red-600 text-xs sm:text-sm font-medium px-1 sm:px-2 shrink-0">
+                    <span class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]"></span> Gemini: Expired
+                </span>
                 <button hx-post="/health/gemini/login" hx-target="#gemini-badge" hx-swap="outerHTML"
-                    class="px-3 h-full bg-red-600 text-white text-xs font-semibold rounded hover:bg-red-700 transition">
-                    Login Now
+                    class="px-2 sm:px-3 h-full bg-red-600 text-white text-[10px] sm:text-xs font-semibold rounded hover:bg-red-700 transition shrink-0 uppercase tracking-wide">
+                    Login
                 </button>
             </div>
         ''')
@@ -96,8 +99,9 @@ def start_gemini_login():
         )
         return HTMLResponse('''
             <button id="gemini-badge" hx-get="/health/gemini/ping" hx-target="#gemini-badge" hx-trigger="every 5s" hx-swap="outerHTML"
-                class="inline-flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm text-sm font-medium text-yellow-700 animate-pulse">
-                ⌛ Mở Chrome... (đang chờ)
+                class="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 h-9 bg-amber-50 border border-amber-200 rounded-lg shadow-sm text-xs sm:text-sm font-medium text-amber-700 animate-pulse whitespace-nowrap shrink-0">
+                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                Chrome...
             </button>
         ''')
     except Exception as e:
