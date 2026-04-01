@@ -4,83 +4,253 @@
 {% block page_title %}Overview{% endblock %}
 {% block page_subtitle %}Nhìn nhanh bottleneck và lối tắt thao tác.{% endblock %}
 
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontFamily: {
+                    sans: ['Inter', 'sans-serif'],
+                    display: ['Outfit', 'sans-serif'],
+                }
+            }
+        }
+    }
+</script>
+<style type="text/tailwindcss">
+    h1, h2, h3, h4, .font-display { font-family: 'Outfit', sans-serif; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="grid lg:grid-cols-3 gap-4">
-  <a href="/app/jobs" class="app-card p-5 hover:bg-slate-50 transition">
-    <div class="flex items-center justify-between">
-      <div class="text-sm font-semibold">Jobs</div>
-      <span class="app-badge app-badge-blue">Queue</span>
+<div class="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 auto-rows-max grid-flow-row-dense">
+
+    <!-- ─── 1. Core Navigation Shortcuts ─────────────────────────────────────────────── -->
+    <div class="md:col-span-2 xl:col-span-3 2xl:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
+        <h2 class="text-base font-semibold font-display text-gray-900 mb-5 flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg> Workspace Quick Access
+        </h2>
+        
+        <div class="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            <a href="/app/jobs" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                Job Tracker
+            </a>
+            <a href="/app/viral" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Viral Content
+            </a>
+            <a href="/app/accounts" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                Profiles Setup
+            </a>
+            <a href="/app/tiktok-links" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                TikTok Source
+            </a>
+        </div>
     </div>
-    <div class="text-sm text-[var(--muted)] mt-1">Xem PENDING/RUNNING/DRAFT nhanh.</div>
-  </a>
-  <a href="/app/viral" class="app-card p-5 hover:bg-slate-50 transition">
-    <div class="flex items-center justify-between">
-      <div class="text-sm font-semibold">Viral</div>
-      <span class="app-badge app-badge-amber">Scan</span>
+
+    <!-- ─── 1.5. System Performance Analytics ────────────────────────────────────────── -->
+    <div class="md:col-span-2 xl:col-span-3 2xl:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
+            <div>
+                <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+                    System Performance
+                </h2>
+                <p class="text-[11px] font-medium text-gray-400 mt-0.5">Viral Discovery vs Video Processing (Last 7 Days)</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="stat-queued" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-wider border border-indigo-100">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Queued: ...
+                </span>
+                <span id="stat-published" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 text-[10px] font-bold uppercase tracking-wider border border-orange-100">
+                    <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> Published: ...
+                </span>
+            </div>
+        </div>
+        
+        <div id="performance-chart" class="w-full h-[280px] -ml-2 -mb-4 mt-2"></div>
     </div>
-    <div class="text-sm text-[var(--muted)] mt-1">Filter + pagination, giảm lướt.</div>
-  </a>
-  <a href="/app/accounts" class="app-card p-5 hover:bg-slate-50 transition">
-    <div class="flex items-center justify-between">
-      <div class="text-sm font-semibold">Accounts</div>
-      <span class="app-badge">Config</span>
+
+    <!-- ─── 3. Active Nodes / Configurations (Compact) ─────────────────────────────── -->
+    <div class="md:col-span-2 xl:col-span-3 2xl:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
+        <div class="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"></path></svg>
+                Active Automation Nodes
+            </h2>
+            <a href="/app/accounts" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider">Configure</a>
+        </div>
+        <div class="bg-slate-50/50">
+            {% include 'fragments/overview_accounts_table.html' %}
+        </div>
     </div>
-    <div class="text-sm text-[var(--muted)] mt-1">Quản lý login, limits, competitor.</div>
-  </a>
-</div>
 
-<div class="mt-6 grid lg:grid-cols-2 gap-4">
-  <!-- Worker Control Panel -->
-  <div class="app-card p-5">
-    {% include 'fragments/worker_status.html' %}
-  </div>
-  <!-- Create Manual Job Panel (Quick) -->
-  <div class="app-card p-5">
-    <div class="text-sm font-semibold mb-4">Quick Manual Job</div>
-    {% include 'fragments/create_job_form.html' %}
-  </div>
-</div>
-<div class="mt-6">
-  {% include 'fragments/accounts_table.html' %}
-</div>
-
-<div class="mt-6">
-  <div id="queue-panel" hx-get="/queue/panel" hx-trigger="load, every 30s" hx-swap="outerHTML">
-    {% set lines = 4 %}
-    {% include 'ui/skeleton.html' with context %}
-  </div>
-</div>
-
-<!-- Automated Competitor Discovery Panel -->
-<div class="mt-6">
-  <div id="discovery-panel" hx-get="/discovery/panel" hx-trigger="load">
-    {% include 'ui/skeleton.html' with context %}
-  </div>
-</div>
-
-<div class="mt-6 grid lg:grid-cols-2 gap-4">
-  <div class="app-card p-5">
-    <div class="text-sm font-semibold">Quick links</div>
-    <div class="mt-3 flex gap-2 flex-wrap">
-      {% set label='TikTok Links' %}{% set href='/app/tiktok-links' %}{% set variant='default' %}{% include
-      'ui/button.html' with context %}
-      {% set label='System Health' %}{% set href='/health' %}{% set variant='default' %}{% include 'ui/button.html' with
-      context %}
+    <!-- ─── 4. System Control & Queue ──────────────────────────────────────────────── -->
+    <div class="md:col-span-2 xl:col-span-2 2xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
+        <h2 class="text-base font-semibold font-display text-gray-900 mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-indigo-500" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> 
+            Worker Control & Backlog
+        </h2>
+        
+        <div class="space-y-6">
+            <div id="queue-panel" hx-get="/queue/panel" hx-trigger="load, every 30s" hx-swap="outerHTML">
+                {% set lines = 2 %}
+                {% include 'ui/skeleton.html' with context %}
+            </div>
+            
+            <div class="border-t border-gray-100 pt-4">
+                {% include 'fragments/worker_status.html' %}
+            </div>
+        </div>
     </div>
-  </div>
-  <div class="app-card p-5">
-    <div class="text-sm font-semibold">Ops tips (8GB)</div>
-    <div class="mt-2 text-sm text-[var(--muted)] leading-relaxed">
-      Ưu tiên xử lý <b>DRAFT</b>, giảm <b>Viral NEW</b> khi backlog cao, và theo dõi cảnh báo RAM/Chrome trên Telegram.
+
+    <!-- ─── 5. Quick Manual Job ────────────────────────────────────────────────────── -->
+    <div class="md:col-span-1 xl:col-span-1 2xl:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
+        <h2 class="text-base font-semibold font-display text-gray-900 mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+            Create Quick Job
+        </h2>
+        <div class="flex-1">
+            {% include 'fragments/create_job_form.html' %}
+        </div>
     </div>
-  </div>
-</div>
 
-<div class="mt-6">
-  {% include "fragments/page_posting_stats.html" with context %}
-</div>
+    <!-- ─── 6. Competitor Discovery Output ─────────────────────────────────────────── -->
+    <div class="md:col-span-1 xl:col-span-1 2xl:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
+        <h2 class="text-base font-semibold font-display text-gray-900 mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
+            Competitor Intelligence
+        </h2>
+        <div id="discovery-panel" hx-get="/discovery/panel" hx-trigger="load">
+            <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-6 text-center animate-pulse">
+                <div class="w-8 h-8 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-2"></div>
+                <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Loading Logs...</p>
+            </div>
+        </div>
+        
+        <!-- Quick Ops Alert -->
+        <div class="mt-4 bg-orange-50/50 border border-orange-100 rounded-xl p-3">
+            <div class="flex items-center gap-2 mb-1.5">
+                <span class="flex h-2 w-2 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                </span>
+                <span class="font-extrabold text-orange-800 text-[10px] tracking-widest uppercase">Memory Alert</span>
+            </div>
+            <p class="text-[11px] text-orange-900/70 font-medium leading-relaxed">
+                Khi backlog đầy, ưu tiên xử lý DRAFT và tạm dừng lấy Viral. Cần chú ý RAM chạy Xvfb.
+            </p>
+        </div>
+    </div>
 
-<div class="mt-4">
-  {% include "fragments/page_reup_stats.html" with context %}
+    <!-- ─── 7. Posting Statistics & Limits ─────────────────────────────────────────── -->
+    <div class="md:col-span-2 xl:col-span-3 2xl:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
+        <h2 class="text-base font-semibold font-display text-gray-900 mb-5 flex items-center gap-2">
+            <svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
+            System Operations Limits
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="space-y-4">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Posting Capacity</div>
+                {% include "fragments/page_posting_stats.html" with context %}
+            </div>
+            <div class="space-y-4">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Reup Pipeline Intake</div>
+                {% include "fragments/page_reup_stats.html" with context %}
+            </div>
+        </div>
+    </div>
+
 </div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    fetch('/app/overview/chart-data')
+        .then(response => response.json())
+        .then(data => {
+            const totalQueued = data.series[0].data.reduce((a, b) => a + b, 0);
+            const totalPublished = data.series[1].data.reduce((a, b) => a + b, 0);
+            
+            document.getElementById('stat-queued').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Queued: ${totalQueued}`;
+            document.getElementById('stat-published').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> Published: ${totalPublished}`;
+
+            var options = {
+                series: data.series,
+                chart: {
+                    height: 280,
+                    type: 'area',
+                    fontFamily: 'Inter, sans-serif',
+                    toolbar: { show: false },
+                    zoom: { enabled: false },
+                    animations: {
+                        enabled: true,
+                        easing: 'easeinout',
+                        speed: 800,
+                        animateGradually: {
+                            enabled: true,
+                            delay: 150
+                        },
+                        dynamicAnimation: {
+                            enabled: true,
+                            speed: 350
+                        }
+                    }
+                },
+                colors: ['#4f46e5', '#f97316'],
+                dataLabels: { enabled: false },
+                stroke: {
+                    curve: 'smooth',
+                    width: 3
+                },
+                fill: {
+                    type: 'gradient',
+                    gradient: {
+                        shadeIntensity: 1,
+                        opacityFrom: 0.45,
+                        opacityTo: 0.05,
+                        stops: [20, 100]
+                    }
+                },
+                xaxis: {
+                    categories: data.categories,
+                    axisBorder: { show: false },
+                    axisTicks: { show: false },
+                    labels: {
+                        style: { colors: '#94a3b8', fontSize: '11px', fontWeight: 600 }
+                    }
+                },
+                yaxis: {
+                    labels: {
+                        style: { colors: '#94a3b8', fontSize: '11px', fontWeight: 500 },
+                        formatter: function (val) { return Math.floor(val) }
+                    }
+                },
+                grid: {
+                    borderColor: '#f1f5f9',
+                    strokeDashArray: 4,
+                    yaxis: { lines: { show: true } }
+                },
+                legend: { show: false },
+                tooltip: {
+                    theme: 'light',
+                    y: { formatter: function (val) { return val + " videos" } }
+                }
+            };
+
+            var chart = new ApexCharts(document.querySelector("#performance-chart"), options);
+            chart.render();
+        })
+        .catch(err => console.error("Could not load chart data: ", err));
+});
+</script>
 {% endblock %}
