@@ -12,22 +12,38 @@
 
 <body class="text-[var(--text)] bg-[var(--bg)]">
   <!-- Mobile topbar -->
-  <div class="lg:hidden sticky top-0 z-40 bg-[var(--surface)] border-b border-[var(--border)]">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+  <div class="lg:hidden sticky top-0 z-40 bg-[var(--surface)] border-b border-[var(--border)] overflow-hidden">
+    <div class="w-full px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-1.5 sm:gap-4">
       <button id="menuBtn" type="button"
-        class="h-11 w-11 inline-flex items-center justify-center rounded border border-[var(--border)] bg-white cursor-pointer touch-manipulation active:bg-gray-100">
+        class="h-9 w-9 sm:h-11 sm:w-11 inline-flex items-center justify-center rounded border border-[var(--border)] bg-white cursor-pointer touch-manipulation active:bg-gray-100 shrink-0">
         <span class="sr-only">Open menu</span>
-        <svg class="h-5 w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="h-4 w-4 sm:h-5 sm:w-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
-      <div class="text-sm font-semibold">Auto Publisher</div>
-      <div id="gemini-badge" hx-get="/health/gemini/ping" hx-trigger="load">
-        <button
-          class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-gray-50 text-xs text-gray-400 animate-pulse">Checking...</button>
+
+      <div class="text-xs sm:text-sm font-bold truncate flex-1 min-w-0 text-center px-1 font-display">
+        {% if self.page_title %}{{ self.page_title() }}{% else %}Auto Publisher{% endif %}
       </div>
-      <a href="/health"
-        class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700">Health</a>
+
+      <div class="flex items-center gap-1 sm:gap-2 shrink-0">
+        <div id="gemini-badge" hx-get="/health/gemini/ping" hx-trigger="load" class="flex items-center">
+          <div
+            class="h-8 px-2 inline-flex items-center gap-1.5 rounded-lg border border-gray-100 bg-gray-50/50 text-[10px] sm:text-xs text-gray-400 animate-pulse whitespace-nowrap transition-all duration-200">
+            <span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+            <span class="hidden xs:inline">Gemini: </span>Checking...
+          </div>
+        </div>
+
+        <a href="/health"
+          class="h-8 w-8 xs:w-auto xs:px-2.5 text-[10px] sm:text-xs inline-flex items-center justify-center xs:justify-start gap-1.5 rounded-lg border border-gray-100 bg-white text-slate-600 shrink-0 font-semibold transition-all duration-200 hover:bg-slate-50 hover:shadow-sm active:scale-95">
+          <svg class="w-3.5 h-3.5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+          <span class="hidden xs:inline">Health</span>
+        </a>
+      </div>
     </div>
   </div>
 
@@ -40,61 +56,190 @@
       <div class="h-16 px-5 flex items-center border-b border-[var(--border)]">
         <div class="font-bold tracking-tight">Auto Publisher</div>
       </div>
-      <nav class="p-3 text-sm">
+      <nav class="p-3 text-sm space-y-1">
         {% set p = request.url.path %}
+
         <a href="/app"
-          class="nav-item block px-3 py-2 rounded {% if p == '/app' or p == '/' %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Overview</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p == '/app' or p == '/' %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p == '/app' or p == '/' %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6">
+            </path>
+          </svg>
+          <span class="truncate">Overview</span>
+        </a>
+
         <a href="/app/jobs"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/jobs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Jobs</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/jobs') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/app/jobs') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2">
+            </path>
+          </svg>
+          <span class="truncate">Jobs Queue</span>
+        </a>
+
         <a href="/app/viral"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/viral') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Viral</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/viral') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/app/viral') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          </svg>
+          <span class="truncate">Viral Content</span>
+        </a>
+
         <a href="/app/tiktok-links"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/tiktok-links') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">TikTok
-          Links</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/tiktok-links') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/app/tiktok-links') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1">
+            </path>
+          </svg>
+          <span class="truncate">TikTok Links</span>
+        </a>
+
         <a href="/app/accounts"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/accounts') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Accounts</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/accounts') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/app/accounts') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z">
+            </path>
+          </svg>
+          <span class="truncate">Accounts</span>
+        </a>
+
         <a href="/app/pages"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/pages') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">📄
-          Pages</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/pages') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/app/pages') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z">
+            </path>
+          </svg>
+          <span class="truncate">Pages</span>
+        </a>
+
         <a href="/gallery/"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/gallery') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">🖼️
-          Gallery</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/gallery') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/gallery') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+            </path>
+          </svg>
+          <span class="truncate">Gallery</span>
+        </a>
+
         <a href="/insights"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/insights') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">📈
-          Insights</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/insights') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/insights') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+            </path>
+          </svg>
+          <span class="truncate">Insights</span>
+        </a>
+
         <a href="/app/logs"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/logs') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Logs</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/logs') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/app/logs') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          <span class="truncate">System Logs</span>
+        </a>
+
         <a href="/affiliates"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/affiliates') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">🛒
-          Affiliates</a>
-        <a href="/app/settings"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">Cài
-          đặt</a>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/affiliates') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/affiliates') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z">
+            </path>
+          </svg>
+          <span class="truncate">Affiliates</span>
+        </a>
+
+        <div class="my-2 border-t border-[var(--border)]"></div>
+
+        <a href="/database"
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/database') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/database') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4">
+            </path>
+          </svg>
+          <span class="truncate">Database</span>
+        </a>
+
         <a href="/syspanel"
-          class="nav-item block px-3 py-2 rounded {% if p.startswith('/syspanel') %}bg-indigo-50 text-indigo-700 border border-indigo-100{% else %}hover:bg-slate-50{% endif %}">⚙️
-          SysPanel</a>
-        <div class="mt-3 pt-3 border-t border-[var(--border)]">
-          <a href="/tiktok-links" class="nav-item block px-3 py-2 rounded hover:bg-slate-50 text-slate-700">TikTok Links
-            (legacy)</a>
-        </div>
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/syspanel') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/syspanel') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01">
+            </path>
+          </svg>
+          <span class="truncate">System Panel</span>
+        </a>
+
+        <a href="/app/settings"
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/settings') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/app/settings') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z">
+            </path>
+          </svg>
+          <span class="truncate">Settings</span>
+        </a>
       </nav>
     </aside>
 
     <!-- Main -->
     <main class="flex-1">
-      <div class="max-w-7xl mx-auto px-4 py-4 lg:px-6 lg:py-6">
+      <div class="w-full px-4 py-4 lg:px-8 lg:py-8">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <div class="text-xl font-semibold">{% block page_title %}{% endblock %}</div>
-            <div class="text-xs text-[var(--muted)]">{% block page_subtitle %}{% endblock %}</div>
+          <div class="flex flex-col gap-1">
+            <div class="text-2xl font-bold tracking-tight text-gray-900">{% block page_title %}{% endblock %}</div>
+            <div class="text-[11px] font-medium text-slate-500 max-w-2xl leading-relaxed">{% block page_subtitle %}{%
+              endblock %}</div>
           </div>
-          <div class="hidden lg:flex flex-wrap items-center gap-2">
-            <div id="gemini-badge-desktop" hx-get="/health/gemini/ping" hx-trigger="load">
-              <button
-                class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-gray-50 text-xs text-gray-400 animate-pulse">Checking...</button>
+          <div class="hidden lg:flex items-center gap-3">
+            {% block page_actions %}{% endblock %}
+            <div id="gemini-badge-desktop" hx-get="/health/gemini/ping" hx-trigger="load" class="min-w-[120px]">
+              <div
+                class="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-gray-100 bg-gray-50/50 text-xs text-gray-400 animate-pulse transition-all duration-200">
+                <span class="w-2 h-2 rounded-full bg-gray-200"></span>
+                Gemini Ping...
+              </div>
             </div>
             <a href="/health"
-              class="h-10 px-3 inline-flex items-center rounded border border-[var(--border)] bg-white text-sm text-slate-700 hover:bg-slate-50">
+              class="h-10 px-4 inline-flex items-center gap-2 rounded-xl border border-indigo-100 bg-white text-sm font-bold text-indigo-600 shadow-sm transition-all duration-200 hover:bg-indigo-50 hover:border-indigo-200 hover:-translate-y-0.5 active:scale-95">
+              <svg class="w-4 h-4 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
               System Health
             </a>
           </div>

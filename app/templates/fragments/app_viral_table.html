@@ -6,9 +6,11 @@
     </div>
     <div class="flex gap-2">
       {% if page > 1 %}
-      <button class="app-btn h-9" onclick="window.refreshViral({{ page - 1 }})">← Prev</button>
+      <button class="app-btn min-h-[44px] min-w-[44px]" aria-label="Previous Page"
+        onclick="window.refreshViral({{ page - 1 }})">← Prev</button>
       {% endif %}
-      {% if page < total_pages %} <button class="app-btn h-9" onclick="window.refreshViral({{ page + 1 }})">Next
+      {% if page < total_pages %} <button class="app-btn min-h-[44px] min-w-[44px]" aria-label="Next Page"
+        onclick="window.refreshViral({{ page + 1 }})">Next
         →</button>
         {% endif %}
     </div>

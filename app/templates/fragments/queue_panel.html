@@ -1,34 +1,34 @@
-<div class="app-card p-5 mb-8">
-  <div class="flex items-center justify-between gap-3 flex-wrap">
+<div id="queue-panel" hx-get="/queue/panel" hx-trigger="every 30s" hx-swap="outerHTML">
+  <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
     <div>
       <div class="text-sm font-semibold text-gray-900">Queue / Backlog</div>
-      <div class="text-xs text-gray-500">Cập nhật mỗi 30s • Telegram: /queue</div>
+      <div class="text-[10px] text-gray-400 mt-0.5">Cập nhật mỗi 30s • Telegram: /queue</div>
     </div>
-    <div class="flex gap-2 flex-wrap">
+    <div class="flex gap-1.5 flex-wrap">
       {% set text = 'PENDING: ' ~ counts.get('PENDING', 0) %}{% set tone='amber' %}{% include 'ui/badge.html' with context %}
       {% set text = 'RUNNING: ' ~ counts.get('RUNNING', 0) %}{% set tone='blue' %}{% include 'ui/badge.html' with context %}
       {% set text = 'DRAFT: ' ~ counts.get('DRAFT', 0) %}{% set tone='amber' %}{% include 'ui/badge.html' with context %}
       {% set text = 'AI: ' ~ counts.get('AI_PROCESSING', 0) %}{% set tone='blue' %}{% include 'ui/badge.html' with context %}
-      {% set text = 'AWAITING_STYLE: ' ~ counts.get('AWAITING_STYLE', 0) %}{% set tone='amber' %}{% include 'ui/badge.html' with context %}
+      {% set text = 'STYLE: ' ~ counts.get('AWAITING_STYLE', 0) %}{% set tone='amber' %}{% include 'ui/badge.html' with context %}
     </div>
   </div>
 
-  <div class="mt-4 grid md:grid-cols-3 gap-3">
-    <div class="border border-gray-100 rounded p-3">
-      <div class="text-xs text-gray-500">Done / Failed</div>
-      <div class="mt-1 text-sm text-gray-800">
-        DONE: <b>{{ counts.get('DONE', 0) }}</b> • FAILED: <b>{{ counts.get('FAILED', 0) }}</b> • CANCELLED: <b>{{ counts.get('CANCELLED', 0) }}</b>
+  <div class="grid md:grid-cols-3 gap-3">
+    <div class="bg-slate-50/70 rounded-xl p-3">
+      <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Done / Failed</div>
+      <div class="text-sm text-gray-800 font-medium">
+        DONE: <b class="text-emerald-600">{{ counts.get('DONE', 0) }}</b> • FAILED: <b class="text-red-500">{{ counts.get('FAILED', 0) }}</b> • CANCELLED: <b class="text-gray-500">{{ counts.get('CANCELLED', 0) }}</b>
       </div>
     </div>
-    <div class="border border-gray-100 rounded p-3">
-      <div class="text-xs text-gray-500">Viral</div>
-      <div class="mt-1 text-sm text-gray-800">
-        NEW: <b>{{ viral_new }}</b> • FAILED: <b>{{ viral_failed }}</b>
+    <div class="bg-slate-50/70 rounded-xl p-3">
+      <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Viral</div>
+      <div class="text-sm text-gray-800 font-medium">
+        NEW: <b class="text-indigo-600">{{ viral_new }}</b> • FAILED: <b class="text-red-500">{{ viral_failed }}</b>
       </div>
     </div>
-    <div class="border border-gray-100 rounded p-3">
-      <div class="text-xs text-gray-500">Bottleneck gợi ý</div>
-      <div class="mt-1 text-sm text-gray-800">
+    <div class="bg-slate-50/70 rounded-xl p-3">
+      <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Bottleneck</div>
+      <div class="text-sm text-gray-800 font-medium">
         {% if counts.get('PENDING', 0) > 0 and counts.get('RUNNING', 0) == 0 %}
           Worker đang idle hoặc bị pause.
         {% elif counts.get('DRAFT', 0) > 0 %}
@@ -36,12 +36,11 @@
         {% elif counts.get('AI_PROCESSING', 0) > 0 %}
           AI đang chạy: xem log AI_Generator.
         {% elif viral_new > 0 %}
-          Viral NEW nhiều: Maintenance sẽ xử lý dần (có thể bị skip khi backlog cao).
+          Viral NEW nhiều: Maintenance sẽ xử lý dần.
         {% else %}
-          Ổn định.
+          <span class="text-emerald-600">Ổn định ✓</span>
         {% endif %}
       </div>
     </div>
   </div>
 </div>
-

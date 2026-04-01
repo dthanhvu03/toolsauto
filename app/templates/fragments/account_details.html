@@ -1,0 +1,260 @@
+<div id="account-{{ account.id }}" class="flex flex-col h-full bg-white animate-in fade-in duration-300">
+    <!-- 1. Header Section -->
+    <div class="p-5 md:p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/30">
+        <div class="flex items-center gap-4">
+            <div class="relative">
+                <div
+                    class="w-14 h-14 rounded-2xl {% if account.platform=='facebook' %}bg-blue-600{% elif account.platform=='instagram' %}bg-gradient-to-tr from-pink-500 to-purple-600{% else %}bg-gray-800{% endif %} flex items-center justify-center shadow-md text-white">
+                    <span class="font-bold text-xl tracking-tight font-display">{{ account.platform[0]|upper }}</span>
+                </div>
+                {% if account.is_active %}
+                <div
+                    class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-sm">
+                </div>
+                {% endif %}
+            </div>
+            <div>
+                <div class="flex items-center gap-2.5">
+                    <h2 class="text-xl font-bold text-gray-900 font-display leading-none">{{ account.name }}</h2>
+                    <span
+                        class="px-1.5 py-0.5 rounded bg-gray-100 text-[9px] font-bold text-gray-500 uppercase tracking-widest border border-gray-200">{{
+                        account.platform }}</span>
+                </div>
+                <div class="flex items-center gap-3 mt-2">
+                    <div class="flex items-center gap-1.5">
+                        <div
+                            class="w-1.5 h-1.5 rounded-full {% if account.login_status == 'ACTIVE' %}bg-emerald-500{% else %}bg-red-500{% endif %}">
+                        </div>
+                        <span
+                            class="text-[10px] font-bold {% if account.login_status == 'ACTIVE' %}text-emerald-600{% else %}text-red-500{% endif %} uppercase tracking-wider">
+                            {{ account.login_status or 'NEW' }} SESSION
+                        </span>
+                    </div>
+                    <span class="text-[10px] text-gray-300 font-mono">Profile ID: #{{ account.id }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button type="button" hx-post="/accounts/{{ account.id }}/toggle" hx-target="#account-{{ account.id }}"
+                hx-swap="outerHTML"
+                class="h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all border shadow-sm flex items-center gap-1.5
+                    {% if account.is_active %}bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100{% else %}bg-gray-50 border-gray-100 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600{% endif %}">
+                {% if account.is_active %}
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg> Stop Node
+                {% else %}
+                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg> Start Node
+                {% endif %}
+            </button>
+            <button type="button" hx-post="/accounts/{{ account.id }}/delete" hx-target="#account-{{ account.id }}"
+                hx-swap="none" hx-confirm="Terminate this account?"
+                class="w-9 h-9 flex items-center justify-center rounded-lg bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. Form Body Section -->
+    <div class="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar bg-white">
+        <form hx-post="/accounts/{{ account.id }}/update-limits" hx-target="#account-{{ account.id }}"
+            hx-swap="innerHTML" class="max-w-4xl mx-auto space-y-8">
+            <input type="hidden" name="competitor_urls" value="">
+            <input type="hidden" name="page_niches" value="">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Group A: Limits -->
+                <div class="space-y-5">
+                    <h3 class="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">Execution Metrics
+                    </h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1.5">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Daily
+                                Limit</label>
+                            <input type="number" name="daily_limit" value="{{ account.daily_limit }}"
+                                class="w-full bg-slate-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Cooldown
+                                (s)</label>
+                            <input type="number" name="cooldown_seconds" value="{{ account.cooldown_seconds }}"
+                                class="w-full bg-slate-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Bot
+                            Sleep</label>
+                        <div class="flex items-center gap-2.5 p-2 bg-slate-50 rounded-xl border border-gray-100">
+                            <input type="time" name="sleep_start_time" value="{{ account.sleep_start_time or '' }}"
+                                class="flex-1 bg-white border border-gray-100 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-100">
+                            <span class="text-gray-300 font-black">~</span>
+                            <input type="time" name="sleep_end_time" value="{{ account.sleep_end_time or '' }}"
+                                class="flex-1 bg-white border border-gray-100 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-100">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group B: Taxonomy -->
+                <div class="space-y-5">
+                    <h3 class="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">Taxonomy &
+                        Operations</h3>
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Global
+                            Categories</label>
+                        <textarea name="niche_topics" placeholder="decor, fashion, pets..."
+                            class="w-full bg-indigo-50/20 border border-indigo-100 rounded-2xl px-4 py-3 text-xs font-semibold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all min-h-[96px]">{{ account.niche_topics_list }}</textarea>
+                    </div>
+
+                    <button type="button" hx-post="/accounts/{{ account.id }}/sync-pages"
+                        hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                        class="w-full h-10 bg-white border border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm"
+                        onclick="this.disabled=true; this.querySelector('span').innerText='SYNCING...';">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Sync Managed Pages</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Distribution Section -->
+            <div class="space-y-5 pt-8 border-t border-gray-50" data-pages-group="acc-{{ account.id }}">
+                <div class="flex items-center justify-between pb-1 px-1">
+                    <h3 class="text-[10px] font-black text-gray-900 uppercase tracking-widest">Active Targets List</h3>
+                    <span
+                        class="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">{{
+                        account.managed_pages_list|length }} Slots</span>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {% if account.managed_pages_list|length > 0 %}
+                    {% set grouped = account.competitor_urls_grouped %}
+                    {% set page_niches = account.page_niches_map %}
+                    {% for page in account.managed_pages_list %}
+                    {% set is_checked = page.url in account.target_pages_list %}
+                    {% set niches_val = ', '.join(page_niches.get(page.url, [])) %}
+
+                    <div class="p-4 rounded-2xl border transition-all duration-300 {% if is_checked %}bg-emerald-50/10 border-emerald-200 shadow-sm shadow-emerald-50{% else %}bg-slate-50/30 border-gray-100{% endif %}"
+                        data-page-block>
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <label class="flex items-center gap-2.5 cursor-pointer min-w-0">
+                                <input type="checkbox" name="target_pages" value="{{ page.url }}" {% if is_checked
+                                    %}checked{% endif %} onchange="toggleCompetitorBox(this)"
+                                    class="rounded-md border-gray-300 text-emerald-500 focus:ring-emerald-400 h-4.5 w-4.5 transition-all">
+                                <div class="truncate">
+                                    <span class="block text-xs font-bold text-gray-800 leading-tight"
+                                        title="{{ page.url }}">{{ page.name }}</span>
+                                    <span class="block text-[9px] text-gray-400 font-mono truncate uppercase mt-0.5">{{
+                                        page.url.split('php?id=')[-1]|truncate(12) }}</span>
+                                </div>
+                            </label>
+                            {% if is_checked %}
+                            <span
+                                class="text-[8px] font-black text-emerald-600 border border-emerald-200 px-1.5 py-0.5 rounded uppercase">On</span>
+                            {% endif %}
+                        </div>
+
+                        <div class="space-y-3">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[9px] font-bold text-gray-300 uppercase shrink-0 w-8">Niche:</span>
+                                <input type="text" data-page-niche="{{ page.url }}" value="{{ niches_val }}"
+                                    placeholder="Page niches..."
+                                    class="flex-1 bg-white border border-gray-100 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-1 focus:ring-indigo-200">
+                            </div>
+                            <div class="space-y-1.5" style="{% if not is_checked %}display:none;{% endif %}"
+                                data-comp-container>
+                                <textarea data-comp-page="{{ page.url }}" rows="3" placeholder="Competitor links..."
+                                    class="w-full bg-white border border-gray-100 rounded-xl px-3 py-2 text-[10px] font-mono text-gray-500 outline-none focus:ring-1 focus:ring-indigo-100 resize-none">{{ grouped.get(page.url, '') }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div
+                        class="col-span-full py-16 border-2 border-dashed border-gray-50 rounded-[32px] flex flex-col items-center justify-center text-gray-300">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.2em]">Sync pages to get started</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Commit Button Container -->
+            <div class="pt-4 pb-12 sticky bottom-0 bg-gradient-to-t from-white to-transparent flex justify-end px-8">
+                <button type="submit"
+                    class="h-9 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-[10px] uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2 shadow-md shadow-indigo-100">
+                    <svg class="w-3.5 h-3.5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Commit Configuration
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        (function () {
+            var row = document.getElementById('account-{{ account.id }}');
+            if (!row) return;
+            var form = row.querySelector('form');
+            if (!form) return;
+            form.addEventListener('htmx:configRequest', function (evt) {
+                var group = row.querySelector('[data-pages-group]');
+                if (!group) return;
+
+                var entries = [];
+                group.querySelectorAll('textarea[data-comp-page]').forEach(function (ta) {
+                    var pageUrl = ta.getAttribute('data-comp-page');
+                    var lines = ta.value.split('\n');
+                    lines.forEach(function (line) {
+                        line = line.trim();
+                        if (!line) return;
+                        entries.push({
+                            url: line,
+                            target_page: (pageUrl === '_unassigned') ? null : pageUrl
+                        });
+                    });
+                });
+                evt.detail.parameters['competitor_urls'] = JSON.stringify(entries);
+
+                var pageNiches = {};
+                group.querySelectorAll('input[data-page-niche]').forEach(function (inp) {
+                    var pageUrl = inp.getAttribute('data-page-niche');
+                    if (!pageUrl) return;
+                    var raw = inp.value || '';
+                    var parts = raw.split(',');
+                    var niches = [];
+                    parts.forEach(function (p) {
+                        var v = p.trim();
+                        if (v) niches.push(v);
+                    });
+                    if (niches.length > 0) {
+                        pageNiches[pageUrl] = niches;
+                    }
+                });
+                evt.detail.parameters['page_niches'] = JSON.stringify(pageNiches);
+            });
+        })();
+
+        function toggleCompetitorBox(cb) {
+            var block = cb.closest('[data-page-block]');
+            var container = block.querySelector('[data-comp-container]');
+            if (container) {
+                container.style.display = cb.checked ? '' : 'none';
+                block.classList.remove('bg-emerald-50/10', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50', 'bg-slate-50/30', 'border-gray-100');
+                if (cb.checked) {
+                    block.classList.add('bg-emerald-50/10', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50');
+                } else {
+                    block.classList.add('bg-slate-50/30', 'border-gray-100');
+                }
+            }
+        }
+    </script>
+</div>

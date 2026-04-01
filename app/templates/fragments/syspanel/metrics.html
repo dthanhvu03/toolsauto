@@ -4,7 +4,9 @@
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-medium text-gray-500">CPU</span>
-            <span class="text-lg">⚡</span>
+            <svg class="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
         </div>
         <div class="text-2xl font-bold text-gray-800">{{ cpu }}%</div>
         <div class="mt-2 w-full bg-gray-100 rounded-full h-1.5">
@@ -15,7 +17,10 @@
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-medium text-gray-500">RAM</span>
-            <span class="text-lg">🧠</span>
+            <svg class="w-5 h-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
         </div>
         <div class="text-2xl font-bold text-gray-800">{{ mem_pct }}%</div>
         <div class="text-xs text-gray-400 mt-0.5">{{ mem_used }} / {{ mem_total }} GB</div>
@@ -27,7 +32,10 @@
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-medium text-gray-500">Disk</span>
-            <span class="text-lg">💾</span>
+            <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
         </div>
         <div class="text-2xl font-bold text-gray-800">{{ disk_pct }}%</div>
         <div class="text-xs text-gray-400 mt-0.5">{{ disk_used }} / {{ disk_total }} GB</div>
@@ -39,7 +47,10 @@
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-medium text-gray-500">Network</span>
-            <span class="text-lg">🌐</span>
+            <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
         </div>
         <div class="text-sm font-bold text-emerald-600">↑ {{ net_sent_mb }} MB</div>
         <div class="text-sm font-bold text-blue-600">↓ {{ net_recv_mb }} MB</div>
@@ -48,7 +59,10 @@
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-medium text-gray-500">Uptime</span>
-            <span class="text-lg">🕐</span>
+            <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
         </div>
         <div class="text-xl font-bold text-indigo-600">{{ uptime }}</div>
         <div class="text-xs text-gray-400 mt-1">Server online</div>
