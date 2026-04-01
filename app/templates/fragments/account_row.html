@@ -1,269 +1,275 @@
-<tr id="account-{{ account.id }}"
-    class="border-b border-gray-100 text-sm hover:bg-gradient-to-r hover:from-indigo-50/30 hover:to-transparent transition-colors duration-200">
-    <!-- ID -->
-    <td class="p-3 text-gray-400 font-mono text-xs align-top">{{ account.id }}</td>
-
-    <!-- Profile -->
-    <td class="p-3 align-top">
-        <div class="flex flex-col gap-1.5">
-            <div id="account-name-disp-{{account.id}}" class="group flex items-center gap-2">
-                <span class="font-semibold text-gray-900">{{ account.name }}</span>
-                <button type="button"
-                    onclick="document.getElementById('account-name-disp-{{account.id}}').classList.add('hidden'); document.getElementById('account-name-edit-{{account.id}}').classList.remove('hidden'); setTimeout(() => document.getElementById('account-name-input-{{account.id}}').focus(), 50);"
-                    class="hidden group-hover:block text-gray-400 hover:text-indigo-600 transition-colors"
-                    title="Rename Profile">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                </button>
-            </div>
-            <div id="account-name-edit-{{account.id}}" class="hidden flex flex-wrap items-center gap-1">
-                <input id="account-name-input-{{account.id}}" type="text" name="name" value="{{ account.name }}"
-                    class="border border-gray-300 rounded px-2 py-0.5 text-xs w-28 focus:ring-1 focus:ring-indigo-500 outline-none">
-                <button type="button" hx-post="/accounts/{{account.id}}/rename" hx-target="#account-{{account.id}}"
-                    hx-swap="outerHTML" hx-include="#account-name-input-{{account.id}}"
-                    class="p-1 text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="Save">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                </button>
-                <button type="button"
-                    onclick="document.getElementById('account-name-edit-{{account.id}}').classList.add('hidden'); document.getElementById('account-name-disp-{{account.id}}').classList.remove('hidden');"
-                    class="p-1 text-gray-400 hover:bg-gray-100 rounded transition-colors" title="Cancel">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="flex flex-wrap gap-1">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold
-                    {% if account.platform == 'facebook' %}bg-blue-100 text-blue-700
-                    {% elif account.platform == 'instagram' %}bg-gradient-to-r from-pink-100 to-purple-100 text-purple-700
-                    {% else %}bg-gray-100 text-gray-600{% endif %}">
-                    {{ account.platform|capitalize }}
-                </span>
-                {% if account.managed_pages_list|length > 0 %}
-                <span
-                    class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-100 text-violet-700">
-                    📄 {{ account.managed_pages_list|length }} Pages
-                </span>
+<div id="account-{{ account.id }}" 
+     class="group flex flex-col bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
+    
+    <!-- 1. Card Header -->
+    <div class="p-4 md:p-5 border-b border-gray-50 flex flex-wrap items-start justify-between gap-3">
+        <div class="flex items-center gap-3 md:gap-4 min-w-0">
+            <div class="relative shrink-0">
+                <div class="w-10 h-10 md:w-12 md:h-12 rounded-xl {% if account.platform=='facebook' %}bg-blue-600{% elif account.platform=='instagram' %}bg-gradient-to-tr from-pink-500 to-purple-600{% else %}bg-gray-800{% endif %} flex items-center justify-center shadow-sm text-white">
+                    <span class="font-bold text-xs md:text-sm tracking-tight font-display">{{ account.platform[0]|upper }}</span>
+                </div>
+                {% if account.is_active %}
+                <div class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow-sm"></div>
                 {% endif %}
             </div>
-            {% if account.error_type == 'FATAL' %}
-            <span class="text-[10px] text-red-500 leading-tight">⚠️ {{ account.last_error }}</span>
+            <div class="min-w-0">
+                <div id="account-name-disp-{{account.id}}" class="flex items-center gap-2 group/name cursor-pointer"
+                     onclick="this.classList.add('hidden'); document.getElementById('account-name-edit-{{account.id}}').classList.remove('hidden'); setTimeout(() => document.getElementById('account-name-input-{{account.id}}').focus(), 50);">
+                    <h3 class="text-sm md:text-base font-bold text-gray-900 truncate font-display">{{ account.name }}</h3>
+                    <svg class="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover/name:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                </div>
+                <!-- Hidden Edit Field -->
+                <div id="account-name-edit-{{account.id}}" class="hidden flex items-center gap-1.5">
+                    <input id="account-name-input-{{account.id}}" type="text" name="name" value="{{ account.name }}"
+                           onkeydown="if(event.key==='Enter'){ this.nextElementSibling.click(); }"
+                           class="bg-white border border-indigo-400 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 outline-none ring-4 ring-indigo-50 w-32">
+                    <button type="button" hx-post="/accounts/{{account.id}}/rename" hx-target="#account-{{account.id}}"
+                            hx-swap="outerHTML" hx-include="#account-name-input-{{account.id}}"
+                            class="w-7 h-7 flex items-center justify-center rounded-md bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-500 hover:text-white transition-all">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="px-1.5 py-0.5 rounded bg-gray-100 text-[9px] font-bold text-gray-500 uppercase tracking-wider">{{ account.platform }}</span>
+                    <span class="text-[10px] text-gray-400 font-mono">ID: {{ account.id }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col items-end gap-1.5">
+            {% if account.login_status == 'ACTIVE' %}
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center gap-1.5">
+                <span class="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
+                SESSION ACTIVE
+            </span>
+            {% elif account.login_status == 'LOGGING_IN' %}
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100 flex items-center gap-1.5 animate-pulse">
+                <span class="w-1 h-1 rounded-full bg-amber-500"></span>
+                LOGGING IN
+            </span>
+            {% else %}
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-50 text-red-600 border border-red-100 flex items-center gap-1.5">
+                <span class="w-1 h-1 rounded-full bg-red-500"></span>
+                INVALID SESSION
+            </span>
+            {% endif %}
+            
+            {% if account.is_active %}
+            <span class="text-[9px] font-bold text-emerald-500/80 uppercase tracking-widest">Automation Running</span>
+            {% else %}
+            <span class="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Automation Paused</span>
             {% endif %}
         </div>
-    </td>
+    </div>
 
-    <!-- Automation -->
-    <td class="p-3 align-top">
-        {% if account.is_active %}
-        <span
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Enabled
-        </span>
-        {% else %}
-        <span
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 ring-1 ring-gray-200">
-            <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Disabled
-        </span>
-        {% endif %}
-    </td>
+    <!-- 2. Card Body -->
+    <form hx-post="/accounts/{{ account.id }}/update-limits" hx-target="#account-{{ account.id }}" hx-swap="outerHTML" 
+          class="p-4 md:p-5 flex flex-col gap-5 relative">
+        <input type="hidden" name="competitor_urls" value="">
+        <input type="hidden" name="page_niches" value="">
 
-    <!-- Session State -->
-    <td class="p-3 align-top">
-        {% if not account.login_status or account.login_status == 'NEW' %}
-        <span
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-100 text-sky-700 ring-1 ring-sky-200">🆕
-            NEW</span>
-        {% elif account.login_status == 'LOGGING_IN' %}
-        <span
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 ring-1 ring-amber-200 animate-pulse">⏳
-            LOGGING IN</span>
-        {% elif account.login_status == 'ACTIVE' %}
-        <span
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">✅
-            ACTIVE</span>
-        {% elif account.login_status == 'INVALID' %}
-        <span
-            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700 ring-1 ring-red-200"
-            title="{{ account.login_error or 'Unknown error' }}">❌ INVALID</span>
-        {% endif %}
-    </td>
-
-    <!-- Limits & Settings -->
-    <td class="p-3 space-y-2 align-top">
-        <form class="flex flex-col gap-2" hx-post="/accounts/{{ account.id }}/update-limits"
-            hx-target="#account-{{ account.id }}" hx-swap="outerHTML">
-
-            <!-- Limit & Cooldown -->
-            <div class="flex items-center gap-2 text-xs text-gray-600">
-                <span class="text-gray-500 font-medium">Limit:</span>
-                <input type="number" name="daily_limit" value="{{ account.daily_limit }}"
-                    class="w-14 border border-gray-200 rounded-md px-1.5 py-1 text-center text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 transition-shadow">
-                <span class="text-gray-500 font-medium">Cooldown(s):</span>
-                <input type="number" name="cooldown_seconds" value="{{ account.cooldown_seconds }}"
-                    class="w-16 border border-gray-200 rounded-md px-1.5 py-1 text-center text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50 transition-shadow">
-                <button type="submit"
-                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3 py-1 rounded-md text-xs shadow-sm transition-all hover:-translate-y-0.5">Save</button>
+        <!-- Limits & Sleep Section -->
+        <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Daily Limit</label>
+                <div class="relative group/input">
+                    <input type="number" name="daily_limit" value="{{ account.daily_limit }}"
+                           class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300 uppercase">Jobs</span>
+                </div>
             </div>
-
-            <!-- Niche Topics -->
-            <div class="flex items-center gap-2 text-xs text-gray-500">
-                <span class="font-medium">Niche:</span>
-                <input type="text" name="niche_topics" value="{{ account.niche_topics_list }}"
-                    placeholder="thời trang, decor, ..."
-                    class="flex-1 border border-gray-200 rounded-md px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white transition-shadow"
-                    style="min-width:140px; max-width:220px;">
+            <div class="space-y-1.5">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Cooldown</label>
+                <div class="relative group/input">
+                    <input type="number" name="cooldown_seconds" value="{{ account.cooldown_seconds }}"
+                           class="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-300 uppercase">Sec</span>
+                </div>
             </div>
+        </div>
 
-            <!-- Sleep Schedule -->
-            <div class="flex items-center gap-2 text-xs text-gray-500">
-                <span title="Bot sẽ không đăng bài và không tương tác dạo trong khung giờ này" class="font-medium">Ngủ
-                    đông:</span>
+        <div class="space-y-2">
+            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1 flex items-center gap-2">
+                Sleep Schedule
+                <span class="text-[9px] font-medium text-gray-300 normal-case">(No interaction during this time)</span>
+            </label>
+            <div class="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-gray-100">
                 <input type="time" name="sleep_start_time" value="{{ account.sleep_start_time or '' }}"
-                    class="border border-gray-200 rounded-md px-1.5 py-1 outline-none focus:ring-2 focus:ring-indigo-500 bg-white transition-shadow">
-                <span class="text-gray-400">~</span>
+                       class="flex-1 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-100">
+                <span class="text-gray-300 font-bold">~</span>
                 <input type="time" name="sleep_end_time" value="{{ account.sleep_end_time or '' }}"
-                    class="border border-gray-200 rounded-md px-1.5 py-1 outline-none focus:ring-2 focus:ring-indigo-500 bg-white transition-shadow">
+                       class="flex-1 bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-100">
+            </div>
+        </div>
+
+        <!-- Taxonomy Section -->
+        <div class="space-y-1.5">
+            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Global Niches</label>
+            <input type="text" name="niche_topics" value="{{ account.niche_topics_list }}" 
+                   placeholder="e.g. decor, fashion, cooking..."
+                   class="w-full bg-indigo-50/50 border border-indigo-100 rounded-xl px-4 py-2.5 text-xs font-semibold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+        </div>
+
+        <!-- Node Configuration Area -->
+        <div class="space-y-3" data-pages-group="acc-{{ account.id }}">
+            <div class="flex items-center justify-between px-1">
+                <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Target Pages & Competitors</label>
+                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{{ account.managed_pages_list|length }} Managed</span>
             </div>
 
-            <!-- Target Pages & Competitor URLs -->
-            <div class="flex flex-col items-start space-y-1 text-xs text-gray-500 w-full"
-                data-pages-group="acc-{{ account.id }}">
-                <div class="flex items-start gap-2 w-full">
-                    <span title="Chọn Page + nhập đối thủ. Round-robin tự phân bổ."
-                        class="w-[55px] pt-0.5 font-medium shrink-0">Pages:</span>
-                    <div class="flex-1 flex flex-col gap-1.5" style="min-width:140px; max-width:300px;">
-                        {% if account.managed_pages_list|length > 0 %}
-                        {% set grouped = account.competitor_urls_grouped %}
-                        {% set page_niches = account.page_niches_map %}
-                        {% for page in account.managed_pages_list %}
-                        {% set is_checked = page.url in account.target_pages_list %}
-                        {% set niches_val = ', '.join(page_niches.get(page.url, [])) %}
-                        <div class="border rounded-lg px-2 py-2 transition-all duration-200 {% if is_checked %}bg-indigo-50/50 border-indigo-200 shadow-sm{% else %}bg-white border-gray-200{% endif %}"
-                            data-page-block>
-                            <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" name="target_pages" value="{{ page.url }}" {% if is_checked
-                                    %}checked{% endif %} onchange="toggleCompetitorBox(this)"
-                                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer">
-                                <span class="truncate font-medium text-gray-700" title="{{ page.url }}">{{ page.name
-                                    }}</span>
-                            </label>
-                            <div class="mt-2 flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span class="shrink-0 font-medium text-gray-400">Niche:</span>
-                                <input type="text" data-page-niche="{{ page.url }}" value="{{ niches_val }}"
-                                    placeholder="gia dụng, đồ bếp..."
-                                    class="flex-1 border border-gray-200 rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white text-[11px] transition-shadow">
-                            </div>
-                            <textarea data-comp-page="{{ page.url }}" rows="2"
-                                placeholder="https://tiktok.com/@doithu (mỗi dòng 1 link)"
-                                class="w-full mt-2 border border-gray-200 rounded-md px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono resize-y bg-white text-gray-600 transition-shadow"
-                                style="{% if not is_checked %}display:none;{% endif %}">{{ grouped.get(page.url, '') }}</textarea>
-                        </div>
-                        {% endfor %}
-                        {% if grouped.get('_unassigned', '') %}
-                        <div class="border rounded-lg px-2 py-2 bg-amber-50 border-amber-200 shadow-sm" data-page-block>
-                            <span class="text-amber-700 font-semibold text-[10px]">⚠️ Chưa gán Page:</span>
-                            <textarea data-comp-page="_unassigned" rows="1"
-                                class="w-full mt-1.5 border border-amber-200 rounded-md px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 font-mono resize-y bg-white transition-shadow">{{ grouped.get('_unassigned', '') }}</textarea>
-                        </div>
-                        {% endif %}
-                        {% else %}
-                        <span class="text-gray-400 italic text-[11px]">Chưa có Page. Bấm Sync Pages ➜</span>
+            <div class="space-y-3 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
+                {% if account.managed_pages_list|length > 0 %}
+                {% set grouped = account.competitor_urls_grouped %}
+                {% set page_niches = account.page_niches_map %}
+                {% for page in account.managed_pages_list %}
+                {% set is_checked = page.url in account.target_pages_list %}
+                {% set niches_val = ', '.join(page_niches.get(page.url, [])) %}
+                
+                <div class="group/node p-3 rounded-2xl border transition-all duration-200 {% if is_checked %}bg-emerald-50/20 border-emerald-200 shadow-sm shadow-emerald-50{% else %}bg-white border-gray-100{% endif %}"
+                     data-page-block>
+                    <div class="flex items-center justify-between gap-3 mb-2.5">
+                        <label class="flex items-center gap-2.5 cursor-pointer min-w-0">
+                            <input type="checkbox" name="target_pages" value="{{ page.url }}" {% if is_checked %}checked{% endif %} 
+                                   onchange="toggleCompetitorBox(this)"
+                                   class="rounded-md border-gray-300 text-emerald-500 focus:ring-emerald-400 h-4 w-4 transition-all">
+                            <span class="truncate text-xs font-bold text-gray-700" title="{{ page.url }}">{{ page.name }}</span>
+                        </label>
+                        {% if is_checked %}
+                        <span class="text-[9px] font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded uppercase">Active</span>
                         {% endif %}
                     </div>
+                    
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider shrink-0 w-8">Niche:</span>
+                            <input type="text" data-page-niche="{{ page.url }}" value="{{ niches_val }}"
+                                   placeholder="niche for this page..."
+                                   class="flex-1 bg-white border border-gray-100 rounded-lg px-2 py-1 text-[11px] font-semibold text-gray-700 outline-none focus:ring-1 focus:ring-indigo-300">
+                        </div>
+                        <div class="space-y-1.5" style="{% if not is_checked %}display:none;{% endif %}" data-comp-container>
+                            <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider block">Source Nodes (Competitors):</span>
+                            <textarea data-comp-page="{{ page.url }}" rows="3"
+                                      placeholder="https://tiktok.com/@competitor (one per line)"
+                                      class="w-full bg-white border border-gray-100 rounded-xl px-3 py-2 text-[11px] font-mono text-gray-500 outline-none focus:ring-1 focus:ring-indigo-300 resize-none">{{ grouped.get(page.url, '') }}</textarea>
+                        </div>
+                    </div>
                 </div>
-                <input type="hidden" name="competitor_urls" value="">
+                {% endfor %}
+
+                {% if grouped.get('_unassigned', '') %}
+                <div class="p-3 rounded-2xl border border-amber-200 bg-amber-50/50 space-y-2" data-page-block>
+                    <div class="flex items-center gap-2 text-amber-700">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        <span class="text-[10px] font-bold uppercase tracking-wider">Unassigned competitors</span>
+                    </div>
+                    <textarea data-comp-page="_unassigned" rows="2"
+                              class="w-full bg-white border border-amber-200 rounded-xl px-3 py-2 text-[11px] font-mono text-gray-600 outline-none focus:ring-1 focus:ring-amber-300 resize-none">{{ grouped.get('_unassigned', '') }}</textarea>
+                </div>
+                {% endif %}
+
+                {% else %}
+                <div class="py-10 border-2 border-dashed border-gray-100 rounded-3xl flex flex-col items-center justify-center text-gray-400 gap-2 bg-slate-50/50">
+                    <svg class="w-8 h-8 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    <span class="text-xs font-medium">No pages found. Click Sync Pages below.</span>
+                </div>
+                {% endif %}
             </div>
-        </form>
+        </div>
 
         {% if account.consecutive_fatal_failures > 0 %}
-        <div class="flex items-center gap-2 text-xs text-red-600 mt-1 bg-red-50 rounded-md px-2 py-1">
-            <span>🚨 Circuit Open ({{ account.consecutive_fatal_failures }} Fails)</span>
-            <button hx-post="/accounts/{{ account.id }}/reset-failures" hx-target="#account-{{ account.id }}"
-                hx-swap="outerHTML" class="underline hover:text-red-800 font-medium">Reset</button>
+        <div class="flex items-center justify-between gap-3 p-3 bg-red-50 rounded-2xl border border-red-100">
+            <div class="flex items-center gap-2.5 text-red-600">
+                <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                <span class="text-[11px] font-bold uppercase tracking-tight">Circuit Broken ({{ account.consecutive_fatal_failures }} Fails)</span>
+            </div>
+            <button type="button" hx-post="/accounts/{{ account.id }}/reset-failures" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                    class="px-4 py-1.5 bg-red-600 text-white text-[10px] font-bold rounded-lg hover:bg-red-700 transition-all uppercase tracking-wider">Reset</button>
         </div>
         {% endif %}
-    </td>
 
-    <!-- Controls -->
-    <td class="p-3 align-top">
-        <div class="flex flex-col gap-2 items-end">
-            {% if not account.login_status or account.login_status in ['NEW', 'INVALID'] %}
-            <button
-                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all hover:-translate-y-0.5 outline-none"
-                onclick="this.innerText='Wait...'; this.classList.add('opacity-50', 'pointer-events-none');"
-                hx-post="/accounts/{{ account.id }}/start-login" hx-target="#account-{{ account.id }}"
-                hx-swap="outerHTML">🔐 Login</button>
-            {% elif account.login_status == 'LOGGING_IN' %}
-            <button
-                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all animate-pulse outline-none"
-                onclick="this.innerText='Checking...'; this.classList.add('opacity-50', 'pointer-events-none');"
-                hx-post="/accounts/{{ account.id }}/confirm-login" hx-target="#account-{{ account.id }}"
-                hx-swap="outerHTML">✅ Confirm</button>
-            {% endif %}
-
-            {% if account.login_status == 'ACTIVE' %}
-            <button
-                class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm transition-all hover:-translate-y-0.5 outline-none"
-                onclick="this.innerText='Syncing...'; this.classList.add('opacity-50', 'pointer-events-none');"
-                hx-post="/accounts/{{ account.id }}/sync-pages" hx-target="#account-{{ account.id }}"
-                hx-swap="outerHTML" title="Tự động quét danh sách Fanpage">🔄 Sync Pages</button>
-            <button
-                class="bg-white hover:bg-gray-50 text-gray-700 font-medium py-1.5 px-4 rounded-lg text-xs shadow-sm border border-gray-200 transition-all hover:-translate-y-0.5 outline-none"
-                onclick="this.innerText='Pinging...'; this.classList.add('opacity-50', 'pointer-events-none');"
-                hx-post="/accounts/{{ account.id }}/validate-session" hx-target="#account-{{ account.id }}"
-                hx-swap="outerHTML">📶 Ping</button>
-            {% endif %}
-
-            {% if sync_started %}
-            <span class="text-xs text-purple-600 animate-pulse font-medium">⏳ Auto Syncing...</span>
-            <script>
-                setTimeout(() => {
-                    htmx.trigger('#accounts-table-body', 'refresh');
-                    window.location.reload();
-                }, 20000);
-            </script>
-            {% endif %}
-
-            <div class="flex gap-1.5 mt-1">
-                <button class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all ring-1
-                        {% if account.is_active %}bg-white text-gray-600 ring-gray-200 hover:bg-gray-50 hover:shadow-sm
-                        {% else %}bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100{% endif %}"
-                    hx-post="/accounts/{{ account.id }}/toggle" hx-target="#account-{{ account.id }}"
-                    hx-swap="outerHTML">
-                    {% if account.is_active %}⏸️ Disable{% else %}▶️ Enable{% endif %}
+        <!-- 3. Action Footer -->
+        <div class="flex flex-col gap-3 pt-6 border-t border-gray-50 mt-auto">
+            <div class="flex items-center gap-2">
+                <!-- Main Login Action -->
+                {% if not account.login_status or account.login_status in ['NEW', 'INVALID'] %}
+                <button type="button" hx-post="/accounts/{{ account.id }}/start-login" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                        class="flex-1 h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm shadow-indigo-100"
+                        onclick="this.innerHTML='<div class=\'w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin\'></div> WAIT...'; this.disabled=true;">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                    Start Login
                 </button>
-                <button class="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition-all"
-                    hx-post="/accounts/{{ account.id }}/delete" hx-target="#account-{{ account.id }}"
-                    hx-swap="outerHTML" title="Delete Account">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                {% elif account.login_status == 'LOGGING_IN' %}
+                <button type="button" hx-post="/accounts/{{ account.id }}/confirm-login" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                        class="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm animate-pulse"
+                        onclick="this.innerHTML='<div class=\'w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin\'></div> CHECKING...'; this.disabled=true;">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                    Confirm Login
+                </button>
+                {% else %}
+                <button type="submit" 
+                        class="flex-1 h-11 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
+                    Save Changes
+                </button>
+                {% endif %}
+                
+                <!-- Toggle Power -->
+                <button type="button" hx-post="/accounts/{{ account.id }}/toggle" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                        class="w-11 h-11 flex items-center justify-center rounded-xl transition-all border {% if account.is_active %}bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100{% else %}bg-gray-50 border-gray-100 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600{% endif %}"
+                        title="{% if account.is_active %}Disable Automation{% else %}Enable Automation{% endif %}">
+                    {% if account.is_active %}
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    {% else %}
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    {% endif %}
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                {% if account.login_status == 'ACTIVE' %}
+                <button type="button" hx-post="/accounts/{{ account.id }}/sync-pages" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                        class="flex-1 h-10 bg-indigo-50 border border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                        onclick="this.disabled=true; this.querySelector('span').innerText='SYNCING...';">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    <span>Sync Pages</span>
+                </button>
+                <button type="button" hx-post="/accounts/{{ account.id }}/validate-session" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                        class="h-10 px-4 bg-white border border-gray-100 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-2"
+                        onclick="this.disabled=true;">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" /></svg>
+                    Ping
+                </button>
+                {% endif %}
+                <button type="button" hx-post="/accounts/{{ account.id }}/delete" hx-target="#account-{{ account.id }}" hx-swap="outerHTML" hx-confirm="Terminate this account from the system?"
+                        class="w-10 h-10 flex items-center justify-center rounded-xl bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </div>
         </div>
-    </td>
 
-    <!-- Inline Scripts -->
+        <!-- Sync Animation Overlay -->
+        {% if sync_started %}
+        <div class="absolute inset-0 bg-white/80 backdrop-blur-sm z-40 flex flex-col items-center justify-center rounded-2xl animate-in fade-in duration-500">
+            <div class="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <span class="text-sm font-bold text-gray-900 font-display">SYNCING PAGES...</span>
+            <span class="text-[10px] text-gray-500 mt-1 uppercase tracking-widest px-8 text-center leading-relaxed">Scanning browser profile for managed fanpages. Please wait...</span>
+            <script>
+                setTimeout(() => { window.location.reload(); }, 25000);
+            </script>
+        </div>
+        {% endif %}
+
+        <!-- HTMX Loader Overlay -->
+        <div class="htmx-indicator absolute inset-0 bg-white/60 backdrop-blur-[2px] z-30 flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300 rounded-2xl">
+            <div class="flex items-center gap-3 px-5 py-3 bg-white rounded-2xl shadow-xl border border-gray-100">
+                <div class="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                <span class="text-xs font-bold text-gray-900 tracking-tight">Syncing...</span>
+            </div>
+        </div>
+    </form>
+
+    <!-- 4. Critical Pre-submission Logic -->
     <script>
-        function toggleCompetitorBox(cb) {
-            var block = cb.closest('[data-page-block]');
-            var ta = block.querySelector('textarea[data-comp-page]');
-            if (ta) {
-                ta.style.display = cb.checked ? '' : 'none';
-                block.className = block.className.replace(/bg-\w+-50\/50/g, '').replace(/bg-\w+-50/g, '').replace(/bg-white/g, '').replace(/border-\w+-200/g, '').replace(/shadow-\w+/g, '');
-                if (cb.checked) {
-                    block.classList.add('bg-indigo-50/50', 'border-indigo-200', 'shadow-sm');
-                } else {
-                    block.classList.add('bg-white', 'border-gray-200');
-                }
-            }
-        }
         (function () {
             var row = document.getElementById('account-{{ account.id }}');
             if (!row) return;
@@ -272,6 +278,8 @@
             form.addEventListener('htmx:configRequest', function (evt) {
                 var group = row.querySelector('[data-pages-group]');
                 if (!group) return;
+                
+                // 1. Serialize competitor URLs
                 var entries = [];
                 group.querySelectorAll('textarea[data-comp-page]').forEach(function (ta) {
                     var pageUrl = ta.getAttribute('data-comp-page');
@@ -287,7 +295,7 @@
                 });
                 evt.detail.parameters['competitor_urls'] = JSON.stringify(entries);
 
-                // Serialize per-page niches
+                // 2. Serialize per-page niches
                 var pageNiches = {};
                 group.querySelectorAll('input[data-page-niche]').forEach(function (inp) {
                     var pageUrl = inp.getAttribute('data-page-niche');
@@ -306,5 +314,20 @@
                 evt.detail.parameters['page_niches'] = JSON.stringify(pageNiches);
             });
         })();
+
+        function toggleCompetitorBox(cb) {
+            var block = cb.closest('[data-page-block]');
+            var container = block.querySelector('[data-comp-container]');
+            if (container) {
+                container.style.display = cb.checked ? '' : 'none';
+                // Update styling
+                block.classList.remove('bg-emerald-50/20', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50', 'bg-white', 'border-gray-100');
+                if (cb.checked) {
+                    block.classList.add('bg-emerald-50/20', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50');
+                } else {
+                    block.classList.add('bg-white', 'border-gray-100');
+                }
+            }
+        }
     </script>
-</tr>
+</div>
