@@ -214,8 +214,13 @@ def app_viral(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/app/accounts", response_class=HTMLResponse)
 def app_accounts(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI (beta): Accounts page wrapper (reuses /accounts/table)."""
-    return templates.TemplateResponse("pages/app_accounts.html", {"request": request})
+    """SaaS UI: Accounts page (Now using Split View by default)."""
+    accounts = AccountService.list_accounts(db)
+    first_account = accounts[0] if accounts else None
+    return templates.TemplateResponse(
+        "pages/app_accounts_split.html", 
+        {"request": request, "accounts": accounts, "first_account": first_account, "now": int(time.time())}
+    )
 
 
 @router.get("/app/pages", response_class=HTMLResponse)
@@ -536,3 +541,48 @@ def force_discovery_scan(request: Request, db: Session = Depends(get_db)):
         {"request": request, "channels": channels, "scan_log": scan_log, "total_found": total_found}
     )
 
+@router.get("/app/overview/chart-data")
+def app_overview_chart_data(db: Session = Depends(get_db)):
+    """JSON endpoint for ApexCharts performance data."""
+    import datetime
+    from app.database.models import Job
+    import app.config as config
+    
+    tz_str = getattr(config, "TIMEZONE", "Asia/Ho_Chi_Minh")
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(tz_str)
+    except Exception:
+        tz = datetime.timezone.utc
+        
+    now = datetime.datetime.now(tz)
+    
+    categories = []
+    queued_data = []
+    published_data = []
+    
+    for i in range(6, -1, -1):
+        target_date = now - datetime.timedelta(days=i)
+        start_dt = datetime.datetime.combine(target_date.date(), datetime.time.min, tzinfo=tz)
+        end_dt = start_dt + datetime.timedelta(days=1)
+        
+        start_ts = int(start_dt.timestamp())
+        end_ts = int(end_dt.timestamp())
+        
+        # Format label 'Mon', 'Tue', etc.
+        label = target_date.strftime("%a")
+        categories.append(label)
+        
+        q_count = db.query(Job).filter(Job.created_at >= start_ts, Job.created_at < end_ts).count()
+        p_count = db.query(Job).filter(Job.status == "DONE", Job.finished_at >= start_ts, Job.finished_at < end_ts).count()
+        
+        queued_data.append(q_count)
+        published_data.append(p_count)
+        
+    return {
+        "categories": categories,
+        "series": [
+            {"name": "Jobs Queued", "data": queued_data},
+            {"name": "Published", "data": published_data}
+        ]
+    }
