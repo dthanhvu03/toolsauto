@@ -132,7 +132,7 @@
                 </div>
                 <div class="bg-gray-50 px-5 py-3 text-xs text-gray-500 flex justify-between border-t border-gray-100">
                     <span>Heartbeat: {{ health.worker.heartbeat_age_seconds }}s ago</span>
-                    <span class="text-indigo-600 font-medium">⏱ Uptime: {{ health.worker.uptime_hours }}h</span>
+                    <span class="text-indigo-600 font-medium"><svg class="w-3.5 h-3.5 inline-block mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>Uptime: {{ health.worker.uptime_hours }}h</span>
                     {% if health.worker.safe_mode %}
                     <span class="text-yellow-600 font-semibold flex items-center gap-1"><svg class="w-3 h-3" fill="none"
                             stroke="currentColor" viewBox="0 0 24 24">
@@ -213,7 +213,7 @@
         <!-- Metrics Overview Card -->
         <div class="mt-8 bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100">
             <div class="px-6 py-5 border-b border-gray-100">
-                <h3 class="text-base leading-6 font-semibold font-display text-gray-900">📊 Metrics Overview</h3>
+                <h3 class="text-base leading-6 font-semibold font-display text-gray-900"><svg class="w-5 h-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>Metrics Overview</h3>
             </div>
             <div class="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-6">
                 <div>
@@ -242,7 +242,7 @@
         <!-- Per-Account 7-Day Rolling Stats -->
         <div class="mt-8 bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100">
             <div class="px-6 py-5 border-b border-gray-100">
-                <h3 class="text-base leading-6 font-semibold font-display text-gray-900">👤 Account Performance (7 ngày)
+                <h3 class="text-base leading-6 font-semibold font-display text-gray-900"><svg class="w-5 h-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>Account Performance (7 ngày)
                 </h3>
             </div>
             <div class="overflow-x-auto">
@@ -303,11 +303,11 @@
                             </td>
                             <td class="px-4 py-2 text-center">
                                 {% if acc.circuit_breaker >= 3 %}
-                                <span class="text-red-500 font-bold text-xs">🔴 {{ acc.circuit_breaker }}</span>
+                                <span class="text-red-500 font-bold text-xs"><span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> {{ acc.circuit_breaker }}</span>
                                 {% elif acc.circuit_breaker >= 1 %}
-                                <span class="text-yellow-500 font-medium text-xs">🟡 {{ acc.circuit_breaker }}</span>
+                                <span class="text-yellow-500 font-medium text-xs"><span class="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span> {{ acc.circuit_breaker }}</span>
                                 {% else %}
-                                <span class="text-green-500 text-xs">🟢 0</span>
+                                <span class="text-green-500 text-xs"><span class="w-2 h-2 rounded-full bg-green-500 inline-block mr-0.5"></span>0</span>
                                 {% endif %}
                             </td>
                         </tr>

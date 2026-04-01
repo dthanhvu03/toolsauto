@@ -11,9 +11,10 @@ from app.main_templates import templates
 router = APIRouter(prefix="/pages", tags=["pages"])
 
 @router.get("/table", response_class=HTMLResponse)
-def get_pages_table(request: Request, q: str = "", db: Session = Depends(get_db)):
+def get_pages_table(request: Request, q: str = "", filter: str = "all", db: Session = Depends(get_db)):
     accounts = AccountService.list_accounts(db)
     q = (q or "").strip().lower()
+    filter = (filter or "all").lower()
     
     pages_list = []
     
@@ -30,6 +31,13 @@ def get_pages_table(request: Request, q: str = "", db: Session = Depends(get_db)
                 continue
             
             is_active = url in target_urls
+            
+            # --- Filter Logic ---
+            if filter == "active" and not is_active:
+                continue
+            if filter == "paused" and is_active:
+                continue
+            
             niches = ", ".join(page_niches.get(url, []))
             comps = competitors.get(url, "")
             
@@ -114,6 +122,40 @@ def update_page(
     
     # We don't render single row replacement. We just trigger a full table reload using HX-Trigger.
     # So we return empty success but with an HX-Trigger header.
+    response = HTMLResponse(content="")
+    response.headers["HX-Trigger"] = "pagesChanged"
+    return response
+
+
+@router.post("/delete", response_class=HTMLResponse)
+def delete_page(
+    request: Request,
+    account_id: int = Form(...),
+    url: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Removes a target page from an account's target_pages_list.
+    Also cleans up associated niches.
+    """
+    acc = db.query(Account).filter(Account.id == account_id).first()
+    if not acc:
+        return HTMLResponse("<tr class='text-red-500'><td>Account not found</td></tr>")
+
+    # 1. Remove from target_pages_list
+    target_urls = set(acc.target_pages_list or [])
+    if url in target_urls:
+        target_urls.remove(url)
+    acc.target_pages_list = list(target_urls)
+
+    # 2. Cleanup niches for this page
+    page_niches = acc.page_niches_map or {}
+    if url in page_niches:
+        del page_niches[url]
+    acc.page_niches_map = page_niches
+
+    db.commit()
+
     response = HTMLResponse(content="")
     response.headers["HX-Trigger"] = "pagesChanged"
     return response
