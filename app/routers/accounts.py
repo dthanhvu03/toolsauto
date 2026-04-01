@@ -167,8 +167,52 @@ def delete_account(account_id: int, request: Request, db: Session = Depends(get_
             {"request": request, "account": account, "now": int(time.time())}
         )
 
+@router.get("/", response_class=HTMLResponse)
+def get_accounts_page(request: Request, db: Session = Depends(get_db)):
+    """Main Accounts Page - Now using Split View by default."""
+    accounts = AccountService.list_accounts(db)
+    first_account = accounts[0] if accounts else None
+    return templates.TemplateResponse(
+        "pages/app_accounts_split.html", 
+        {"request": request, "accounts": accounts, "first_account": first_account, "now": int(time.time())}
+    )
+
+@router.get("/split", response_class=HTMLResponse)
+def get_accounts_split_view_alias(request: Request, db: Session = Depends(get_db)):
+    """Alias for backward compatibility during transition."""
+    return get_accounts_page(request, db)
+
+@router.get("/list", response_class=HTMLResponse)
+def get_accounts_list(request: Request, q: str = "", db: Session = Depends(get_db)):
+    accounts = AccountService.list_accounts(db)
+    q = (q or "").strip().lower()
+    if q:
+        filtered = []
+        for a in accounts:
+            if q in (a.name or "").lower() or q in (a.platform or "").lower():
+                filtered.append(a)
+        accounts = filtered
+    
+    html_content = ""
+    for account in accounts:
+        html_content += templates.get_template("fragments/account_list_item.html").render(
+            {"request": request, "account": account, "now": int(time.time())}
+        )
+    return HTMLResponse(content=html_content)
+
+@router.get("/{account_id}/details", response_class=HTMLResponse)
+def get_account_details_view(account_id: int, request: Request, db: Session = Depends(get_db)):
+    account = AccountService.get_account(db, account_id)
+    if not account:
+        return HTMLResponse(status_code=404)
+    return templates.TemplateResponse(
+        "fragments/account_details.html", 
+        {"request": request, "account": account, "now": int(time.time())}
+    )
+
 @router.get("/{account_id}/pages", response_class=HTMLResponse)
 def get_account_pages(account_id: int, request: Request, db: Session = Depends(get_db)):
+    # ... existing code ...
     """HTMX endpoint to return <option> elements for a specific account's managed pages."""
     account = AccountService.get_account(db, account_id)
     html_content = '<option value="" selected>Cá nhân / Mặc định</option>'
