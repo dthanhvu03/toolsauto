@@ -214,8 +214,13 @@ def app_viral(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/app/accounts", response_class=HTMLResponse)
 def app_accounts(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI (beta): Accounts page wrapper (reuses /accounts/table)."""
-    return templates.TemplateResponse("pages/app_accounts.html", {"request": request})
+    """SaaS UI: Accounts page (Now using Split View by default)."""
+    accounts = AccountService.list_accounts(db)
+    first_account = accounts[0] if accounts else None
+    return templates.TemplateResponse(
+        "pages/app_accounts_split.html", 
+        {"request": request, "accounts": accounts, "first_account": first_account, "now": int(time.time())}
+    )
 
 
 @router.get("/app/pages", response_class=HTMLResponse)
