@@ -10,6 +10,28 @@ from app.main_templates import templates
 router = APIRouter(prefix="/affiliates", tags=["affiliates"])
 logger = logging.getLogger(__name__)
 
+from pydantic import BaseModel
+from typing import List, Optional
+import json
+import re
+from app.services.gemini_rpa import GeminiRPAService
+from app.services.gemini_api import GeminiAPIService
+
+class BatchItem(BaseModel):
+    keyword: str
+    affiliate_url: str
+    comment: str
+    commission_rate: Optional[float] = None
+
+class BatchImportRequest(BaseModel):
+    items: List[BatchItem]
+
+class AIGenerateRequest(BaseModel):
+    product_name: str
+    category: str
+    price: str
+    commission_rate: float
+
 @router.get("/", response_class=HTMLResponse)
 def get_affiliates_page(request: Request):
     """Main page for Affiliate Links management."""
@@ -99,3 +121,76 @@ def delete_affiliate(link_id: int, db: Session = Depends(get_db)):
     response = HTMLResponse(content="")
     response.headers["HX-Trigger"] = "affiliatesChanged"
     return response
+
+@router.post("/import-batch")
+def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
+    """Batch import or update affiliate links from CSV."""
+    success = 0
+    skipped = 0
+    errors = []
+    
+    for i, item in enumerate(req.items, 1):
+        if not item.keyword or not item.affiliate_url or not item.comment:
+            errors.append({"row": i, "reason": "Thiếu thông tin bắt buộc"})
+            skipped += 1
+            continue
+            
+        existing = db.query(AffiliateLink).filter(AffiliateLink.keyword == item.keyword).first()
+        if existing:
+            existing.url = item.affiliate_url
+            existing.comment_template = item.comment
+            success += 1
+        else:
+            link = AffiliateLink(
+                keyword=item.keyword,
+                url=item.affiliate_url,
+                comment_template=item.comment
+            )
+            db.add(link)
+            success += 1
+            
+    db.commit()
+    return {"success": success, "skipped": skipped, "errors": errors}
+
+@router.post("/ai-generate")
+def ai_generate(req: AIGenerateRequest):
+    """Generate keywords and comment templates using Gemini AI."""
+    prompt = (
+        f"Hãy đóng vai chuyên gia Affiliate Marketing. Sản phẩm: {req.product_name}. "
+        f"Danh mục: {req.category}. Giá: {req.price}đ. % Hoa hồng: {req.commission_rate}%. "
+        "Tạo 3-5 keywords NGẮN GỌN để nhận diện khi tìm kiếm nội dung, và 3 mẫu bình luận (1 natural, 1 urgency, 1 review). "
+        "Mỗi bình luận PHẢI có chứa chính xác chuỗi '[LINK]' để hệ thống thay bằng URL sau này. "
+        "Trả kết quả về ĐÚNG json có định dạng sau, KHÔNG BỌC TRONG MARKDOWN, KHÔNG CÓ TEXT THỪA: "
+        '{"keywords": ["kw1", "kw2"], "comments": [{"style": "natural", "text": "..."}, {"style": "urgency", "text": "..."}, {"style": "review", "text": "..."}]}'
+    )
+
+    raw_response = None
+    source = "rpa"
+    
+    try:
+        rpa = GeminiRPAService(max_retries=1)
+        raw_response = rpa.ask(prompt)
+    except Exception as e:
+        logger.error(f"RPA Error in ai-generate: {e}")
+        
+    if not raw_response:
+        source = "api"
+        logger.info("[AI Generate] RPA failed or timed out, trying API fallback.")
+        api = GeminiAPIService()
+        raw_response = api.ask(prompt)
+        
+    if not raw_response:
+        return JSONResponse({"error": "Cả hai engine AI đều thất bại (Quá tải hoặc lỗi). Vui lòng thử lại sau."}, status_code=503)
+        
+    try:
+        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if match:
+            data = json.loads(match.group(0))
+        else:
+            data = json.loads(raw_response)
+        
+        data["source"] = source
+        return {"data": data}
+    except Exception as e:
+        logger.error(f"Cannot parse AI json: {e}\nRaw response: {raw_response}")
+        return JSONResponse({"error": "AI trả kết quả không đúng format hoặc không phải JSON."}, status_code=500)
