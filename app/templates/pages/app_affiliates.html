@@ -4,64 +4,285 @@
 {% block page_title %}Kho Affiliate Links{% endblock %}
 {% block page_subtitle %}Quản lý thư viện Link Mua Hàng để AI làm chim mồi rải comment tự động.{% endblock %}
 
+{% block head_extra %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+/* ─── Tab System ─── */
+.aff-tab-btn { position: relative; padding: .625rem 1rem; font-size: .8125rem; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; transition: all .2s ease; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
+.aff-tab-btn:hover { color: #4f46e5; }
+.aff-tab-btn.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+.aff-tab-btn svg { width: 1rem; height: 1rem; }
+.aff-tab-content { display: none; animation: affFadeIn .25s ease; }
+.aff-tab-content.active { display: block; }
+@keyframes affFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ─── CSV Drop Zone ─── */
+.csv-drop-zone { border: 2px dashed #c7d2fe; border-radius: .75rem; padding: 2rem; text-align: center; cursor: pointer; transition: all .25s ease; background: #fafbff; }
+.csv-drop-zone:hover, .csv-drop-zone.dragover { border-color: #6366f1; background: #eef2ff; box-shadow: 0 0 0 4px rgba(99,102,241,.08); }
+.csv-drop-zone.dragover { transform: scale(1.01); }
+
+/* ─── AI Result Cards ─── */
+.ai-result-card { background: rgba(255,255,255,.85); backdrop-filter: blur(12px); border: 1px solid #e0e7ff; border-radius: .75rem; padding: 1rem; transition: all .2s ease; }
+.ai-result-card:hover { border-color: #818cf8; box-shadow: 0 4px 16px rgba(99,102,241,.1); transform: translateY(-1px); }
+
+/* ─── Style badges ─── */
+.style-natural { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.style-urgency { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.style-review { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+
+/* ─── Preview table ─── */
+.csv-preview-table th { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; padding: .5rem .75rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.csv-preview-table td { font-size: 13px; padding: .5rem .75rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.csv-preview-table tr.invalid td { background: #fef2f2; }
+.csv-preview-table tr.valid td { background: #fff; }
+.csv-preview-table tr:hover td { background: #f8fafc; }
+
+/* ─── Keyword chips ─── */
+.ai-keyword-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .25rem .75rem; border-radius: 9999px; font-size: .75rem; font-weight: 500; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; cursor: pointer; transition: all .15s ease; }
+.ai-keyword-chip:hover { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+
+/* ─── Loading shimmer ─── */
+.ai-shimmer { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: .5rem; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ─── Drawer ─── */
+.aff-drawer-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
+    z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.aff-drawer-overlay.active { opacity: 1; pointer-events: auto; }
+.aff-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 100%; max-width: 480px;
+    background: white; z-index: 50; transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column;
+}
+.aff-drawer.active { transform: translateX(0); }
+
+/* ─── Affiliate List & Pagination ─── */
+.aff-card { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem; padding: .75rem 1rem; transition: all .2s ease; }
+.aff-card:hover { border-color: #cbd5e1; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05); }
+.aff-keyword-badge { display: inline-flex; align-items: center; background: #f8fafc; color: #334155; font-size: .8125rem; font-weight: 600; padding: .25rem .625rem; border-radius: .375rem; border: 1px solid #e2e8f0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aff-action-btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .375rem; transition: all .15s ease; cursor: pointer; }
+.aff-page-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; height: 2rem; padding: 0 .5rem; font-size: .8125rem; font-weight: 500; color: #475569; background: #fff; border: 1px solid #e2e8f0; border-radius: .375rem; transition: all .15s ease; cursor: pointer; }
+.aff-page-btn:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; color: #1e293b; }
+.aff-page-btn.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div>
+    <!-- ═══ Overlays & Drawers ═══ -->
+    <div id="drawerOverlay" class="aff-drawer-overlay" onclick="closeDrawer()"></div>
+    <div id="toolsDrawer" class="aff-drawer">
+        <!-- Header -->
+        <div class="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between bg-white shadow-sm shrink-0 z-10">
+            <h2 class="text-base font-bold text-gray-800">Công cụ Affiliate</h2>
+            <button onclick="closeDrawer()" class="text-gray-500 hover:text-red-500 rounded p-1 hover:bg-red-50 transition-colors">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        
+        <!-- Drawer Body -->
+        <div class="flex-1 overflow-y-auto bg-gray-50/30 pb-10">
+            <!-- Tab Bar -->
+            <div class="flex border-b border-[var(--border)] bg-gray-50/30 sticky top-0 z-10">
+                <button class="aff-tab-btn active flex items-center gap-1.5" onclick="switchTab('manual', this)" id="tabBtnManual">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    Thủ Công
+                </button>
+                {% if csv_import_enabled %}
+                <button class="aff-tab-btn flex items-center gap-1.5" onclick="switchTab('csv', this)" id="tabBtnCsv">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    CSV
+                </button>
+                {% endif %}
+                {% if ai_generate_enabled %}
+                <button class="aff-tab-btn flex items-center gap-1.5" onclick="switchTab('ai', this)" id="tabBtnAi">
+                    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                    AI
+                </button>
+                {% endif %}
+            </div>
 
-    <!-- Form Thêm / Sửa Link -->
-    <div class="lg:col-span-1">
-        <div class="bg-white border border-[var(--border)] rounded-lg p-5 sticky top-20">
-            <h3 class="text-base font-semibold text-gray-800 mb-4" id="formTitle">Tạo Link Affiliate Mới</h3>
+            <!-- ═══ TAB 1: Thêm Thủ Công ═══ -->
+            <div class="aff-tab-content active p-5" id="tabManual">
+                <h3 class="text-base font-semibold text-gray-800 mb-4" id="formTitle">Tạo Link Affiliate Mới</h3>
+                <form hx-post="/affiliates/save" hx-swap="none"
+                    hx-on::after-request="if(event.detail.successful) { this.reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới'; }"
+                    class="space-y-4">
 
-            <form hx-post="/affiliates/save" hx-swap="none"
-                hx-on::after-request="if(event.detail.successful) this.reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới';"
-                class="space-y-4">
+                    <input type="hidden" name="link_id" id="link_id" value="0">
 
-                <input type="hidden" name="link_id" id="link_id" value="0">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Từ Khóa (Keyword)</label>
+                        <input type="text" name="keyword" id="keyword" required
+                            placeholder="Ví dụ: áo thun, giày sneaker..."
+                            class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <p class="text-xs text-gray-500 mt-1">Dùng để AI nhận diện sản phẩm trong Video/Ảnh chụp.</p>
+                    </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Từ Khóa (Keyword)</label>
-                    <input type="text" name="keyword" id="keyword" required
-                        placeholder="Ví dụ: áo thun, giày sneaker..."
-                        class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <p class="text-xs text-gray-500 mt-1">Dùng để AI nhận diện sản phẩm trong Video/Ảnh chụp.</p>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Affiliate URL</label>
+                        <input type="url" name="url" id="url" required placeholder="https://shope.ee/..."
+                            class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Câu Bình Luận Mẫu</label>
+                        <textarea name="comment_template" id="comment_template" required rows="3"
+                            placeholder="Đang flashsale ae mua lẹ không hết: [LINK]"
+                            class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                        <p class="text-xs text-gray-500 mt-1">Ghi rõ từ <b>[LINK]</b>. Hệ thống sẽ thay thế nó bằng URL bên trên.</p>
+                    </div>
+
+                    <div class="pt-2 flex gap-2">
+                        <button type="submit" id="btnSubmit"
+                            class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded text-sm transition-colors">
+                            Thêm Mới
+                        </button>
+                        <button type="button"
+                            onclick="document.forms[0].reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới';"
+                            class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded text-sm transition-colors">
+                            Hủy
+                        </button>
+                    </div>
+                </form>
+                <div id="formError" class="mt-4 text-sm text-red-600"></div>
+            </div>
+
+            <!-- ═══ TAB 2: Import CSV ═══ -->
+            {% if csv_import_enabled %}
+            <div class="aff-tab-content p-5" id="tabCsv">
+                <h3 class="text-base font-semibold text-gray-800 mb-1">Import CSV Hàng Loạt</h3>
+                <p class="text-xs text-gray-500 mb-4">Upload file CSV chứa danh sách affiliate links. Parse 100% phía client.</p>
+
+                <!-- CSV Template Download -->
+                <button onclick="downloadCsvTemplate()" class="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium mb-4 transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Tải file CSV mẫu
+                </button>
+
+                <!-- Drop Zone -->
+                <div class="csv-drop-zone" id="csvDropZone" onclick="document.getElementById('csvFileInput').click()">
+                    <input type="file" accept=".csv" id="csvFileInput" class="hidden" onchange="handleCsvFile(this.files[0])">
+                    <svg class="w-10 h-10 mx-auto mb-2 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <p class="text-sm font-medium text-gray-700">Kéo thả file CSV hoặc <span class="text-indigo-600 underline">chọn file</span></p>
+                    <p class="text-xs text-gray-400 mt-1">Format: keyword, affiliate_url, comment, commission_rate</p>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Affiliate URL</label>
-                    <input type="url" name="url" id="url" required placeholder="https://shope.ee/..."
-                        class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <!-- Preview Area (hidden until file loaded) -->
+                <div id="csvPreviewArea" class="hidden mt-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="text-sm font-semibold text-gray-800">
+                            Preview <span id="csvRowCount" class="text-indigo-600"></span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="csvUntickInvalid()" class="text-xs text-amber-600 hover:text-amber-800 font-medium">Bỏ chọn lỗi</button>
+                            <button onclick="csvTickAll()" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Chọn tất cả</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto max-h-[320px] overflow-y-auto rounded-lg border border-[var(--border)]">
+                        <table class="csv-preview-table w-full text-left">
+                            <thead class="sticky top-0 z-10"><tr>
+                                <th class="w-8"><input type="checkbox" id="csvCheckAll" checked onchange="csvToggleAll(this.checked)"></th>
+                                <th>Keyword</th>
+                                <th>URL</th>
+                                <th>Comment</th>
+                                <th>%</th>
+                                <th class="w-8">✓</th>
+                            </tr></thead>
+                            <tbody id="csvPreviewBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 flex items-center gap-3">
+                        <button onclick="submitCsvImport()" id="csvSubmitBtn"
+                            class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded text-sm transition-colors flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                            Import <span id="csvImportCount">0</span> dòng
+                        </button>
+                        <button onclick="resetCsvImport()" class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded text-sm transition-colors">
+                            Xóa
+                        </button>
+                    </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Câu Bình Luận Mẫu</label>
-                    <textarea name="comment_template" id="comment_template" required rows="3"
-                        placeholder="Đang flashsale ae mua lẹ không hết: [LINK]"
-                        class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-                    <p class="text-xs text-gray-500 mt-1">Ghi rõ từ <b>[LINK]</b>. Hệ thống sẽ thay thế nó bằng URL bên
-                        trên.</p>
-                </div>
+                <!-- Import Result -->
+                <div id="csvResultArea" class="hidden mt-4"></div>
+            </div>
+            {% endif %}
 
-                <div class="pt-2 flex gap-2">
-                    <button type="submit" id="btnSubmit"
-                        class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded text-sm transition-colors">
-                        Thêm Mới
+            <!-- ═══ TAB 3: AI Generate ═══ -->
+            {% if ai_generate_enabled %}
+            <div class="aff-tab-content p-5" id="tabAi">
+                <h3 class="text-base font-semibold text-gray-800 mb-1">AI Generate</h3>
+                <p class="text-xs text-gray-500 mb-4">Nhập tên sản phẩm để AI tự động tạo keywords & comments.</p>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Tên sản phẩm *</label>
+                        <input type="text" id="aiProductName" placeholder="Ví dụ: Sạc dự phòng 20000mAh"
+                            class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Danh mục</label>
+                            <select id="aiCategory" class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                                <option value="Điện tử">Điện tử</option>
+                                <option value="Thời trang">Thời trang</option>
+                                <option value="Mẹ & bé">Mẹ & bé</option>
+                                <option value="Gia dụng">Gia dụng</option>
+                                <option value="Sức khỏe">Sức khỏe</option>
+                                <option value="Thực phẩm">Thực phẩm</option>
+                                <option value="Mỹ phẩm">Mỹ phẩm</option>
+                                <option value="Khác">Khác</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Giá (VNĐ)</label>
+                            <input type="text" id="aiPrice" placeholder="199000"
+                                class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-600 mb-1">Hoa hồng (%)</label>
+                        <input type="number" id="aiCommission" placeholder="15" min="0" max="100"
+                            class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <button onclick="runAiGenerate()" id="aiGenerateBtn"
+                        class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-95">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                        AI Generate
                     </button>
-                    <button type="button"
-                        onclick="document.forms[0].reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới';"
-                        class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded text-sm transition-colors">
-                        Hủy
-                    </button>
                 </div>
-            </form>
 
-            <div id="formError" class="mt-4 text-sm text-red-600"></div>
+                <!-- AI Loading State -->
+                <div id="aiLoading" class="hidden mt-4 space-y-3">
+                    <div class="flex items-center gap-2 text-sm text-indigo-600 font-medium">
+                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>
+                        Đang chờ AI xử lý...
+                    </div>
+                    <div class="space-y-2">
+                        <div class="ai-shimmer h-4 w-3/4"></div>
+                        <div class="ai-shimmer h-4 w-1/2"></div>
+                        <div class="ai-shimmer h-16 w-full"></div>
+                        <div class="ai-shimmer h-16 w-full"></div>
+                    </div>
+                    <p class="text-[11px] text-gray-400">Gemini RPA có thể mất 30-60 giây. Nếu RPA thất bại sẽ tự fallback sang API.</p>
+                </div>
+
+                <!-- AI Result Area -->
+                <div id="aiResultArea" class="hidden mt-4"></div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Danh Sách Links -->
-    <div class="lg:col-span-2">
-        <div class="bg-white border border-[var(--border)] rounded-lg p-5">
-            <div class="flex items-center justify-between gap-3 mb-6">
+    <!-- ═══ MAIN COLUMN — Danh Sách Links ═══ -->
+    <div class="w-full">
+        <div class="bg-white border border-[var(--border)] rounded-lg p-5 sticky top-20 h-[calc(100vh-6rem)] flex flex-col shadow-sm">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 shrink-0">
                 <div class="relative w-full max-w-sm">
                     <input id="searchKeyword" type="text" placeholder="Tìm theo từ khóa..."
                         class="w-full border border-[var(--border)] rounded-full pl-4 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -70,9 +291,28 @@
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </button>
                 </div>
+                
+                <div class="flex items-center gap-2">
+                    <button onclick="openDrawer('manual')" class="bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 text-indigo-700 font-medium py-2 px-3 lg:px-4 rounded-lg text-sm transition-colors flex items-center gap-1.5 shadow-sm">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        <span class="hidden lg:inline">Thêm thủ công</span><span class="lg:hidden">Thêm</span>
+                    </button>
+                    {% if csv_import_enabled %}
+                    <button onclick="openDrawer('csv')" class="bg-white border border-[var(--border)] hover:bg-gray-50 text-gray-700 font-medium py-2 px-3 lg:px-4 rounded-lg text-sm transition-colors flex items-center gap-1.5 shadow-sm">
+                        <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <span class="hidden lg:inline">Import CSV</span>
+                    </button>
+                    {% endif %}
+                    {% if ai_generate_enabled %}
+                    <button onclick="openDrawer('ai')" class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium py-2 px-3 lg:px-4 rounded-lg text-sm transition-all shadow shadow-indigo-200 flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                        <span class="hidden lg:inline">AI Generate</span>
+                    </button>
+                    {% endif %}
+                </div>
             </div>
 
-            <div id="affiliatesTable" hx-get="/affiliates/table" hx-trigger="load, affiliatesChanged from:body"
+            <div id="affiliatesTable" class="flex-1 overflow-y-auto pr-2" hx-get="/affiliates/table" hx-trigger="load, affiliatesChanged from:body"
                 hx-swap="innerHTML">
                 <div class="p-8 text-center text-sm text-gray-400">Đang tải dữ liệu...</div>
             </div>
@@ -81,37 +321,406 @@
 </div>
 
 <script>
-    document.body.addEventListener("htmx:responseError", function (evt) {
-        try {
-            const data = JSON.parse(evt.detail.xhr.response);
-            if (data.error) {
-                alert(data.error);
-            }
-        } catch (e) {
-            alert("Lỗi máy chủ.");
-        }
-    });
+// ════════════════════════════════════════
+// Drawer System
+// ════════════════════════════════════════
+function openDrawer(tabId) {
+    document.getElementById('drawerOverlay').classList.add('active');
+    document.getElementById('toolsDrawer').classList.add('active');
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    if (tabId) {
+        let btnId = 'tabBtnManual';
+        if (tabId === 'csv') btnId = 'tabBtnCsv';
+        if (tabId === 'ai') btnId = 'tabBtnAi';
+        const btn = document.getElementById(btnId);
+        if (btn) switchTab(tabId, btn);
+    }
+}
 
-    function doSearch() {
-        const q = encodeURIComponent(document.getElementById('searchKeyword').value || '');
-        htmx.ajax('GET', `/affiliates/table?q=${q}`, { target: '#affiliatesTable', swap: 'innerHTML' });
+function closeDrawer() {
+    document.getElementById('drawerOverlay').classList.remove('active');
+    document.getElementById('toolsDrawer').classList.remove('active');
+    document.body.style.overflow = '';
+}
+
+// Close drawer on escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === "Escape") closeDrawer();
+});
+
+// ════════════════════════════════════════
+// Tab System
+// ════════════════════════════════════════
+function switchTab(tabId, btn) {
+    document.querySelectorAll('.aff-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.aff-tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    const el = document.getElementById('tab' + tabId.charAt(0).toUpperCase() + tabId.slice(1));
+    if (el) el.classList.add('active');
+}
+
+// ════════════════════════════════════════
+// HTMX Error Handling
+// ════════════════════════════════════════
+document.body.addEventListener("htmx:responseError", function (evt) {
+    try {
+        const data = JSON.parse(evt.detail.xhr.response);
+        if (data.error) alert(data.error);
+    } catch (e) { alert("Lỗi máy chủ."); }
+});
+
+// ════════════════════════════════════════
+// Search
+// ════════════════════════════════════════
+function doSearch() {
+    const q = encodeURIComponent(document.getElementById('searchKeyword').value || '');
+    htmx.ajax('GET', `/affiliates/table?q=${q}`, { target: '#affiliatesTable', swap: 'innerHTML' });
+}
+document.getElementById('btnSearch').addEventListener('click', doSearch);
+document.getElementById('searchKeyword').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+
+// Edit Affiliate (from table fragment)
+window.editAffiliate = function (id, keyword, url, template) {
+    openDrawer('manual');
+    document.getElementById('link_id').value = id;
+    document.getElementById('keyword').value = keyword;
+    document.getElementById('url').value = url;
+    document.getElementById('comment_template').value = template;
+    document.getElementById('formTitle').innerText = 'Chỉnh sửa Link: ' + keyword;
+    document.getElementById('btnSubmit').innerText = 'Lưu Thay Đổi';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+// ════════════════════════════════════════
+// CSV Import — Smart Column Detection
+// ════════════════════════════════════════
+let csvParsedRows = [];
+const SHOPEE_REGEX = /(shope\.pe|shopee\.vn|s\.shopee\.vn)/i;
+
+// Comment templates for auto-generation when comment column is missing
+const AUTO_COMMENTS = [
+    "Mọi người mua cái này xài ngon lắm nè: [LINK]",
+    "Hàng ngon, giá rẻ, mua ở đây nè ae: [LINK]",
+    "Deal xịn đang sale, chốt lẹ: [LINK]",
+    "Mình mới mua xong ưng lắm, chia sẻ cho mn: [LINK]",
+    "Ai cần thì mua ở đây chính hãng nha: [LINK]",
+];
+
+function downloadCsvTemplate() {
+    const header = 'keyword,affiliate_url,comment,commission_rate\n';
+    const sample = '"khăn giấy","https://s.shopee.vn/xxx","Mua lẹ: [LINK]",20\n"sạc dự phòng","https://s.shopee.vn/yyy","Deal hot: [LINK]",18\n';
+    const blob = new Blob(['\uFEFF' + header + sample], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'affiliate_import_template.csv';
+    a.click();
+}
+
+// Drag & Drop
+const dropZone = document.getElementById('csvDropZone');
+if (dropZone) {
+    ['dragenter','dragover'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(e => dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('dragover'); }));
+    dropZone.addEventListener('drop', ev => { if (ev.dataTransfer.files.length) handleCsvFile(ev.dataTransfer.files[0]); });
+}
+
+/**
+ * Smart column mapping — detect Shopee export format & normalize to internal fields.
+ * Shopee CSV: "Tên sản phẩm", "Link ưu đãi", "Tỉ lệ hoa hồng", "Giá", "Link sản phẩm"
+ * Our format: keyword, affiliate_url, comment, commission_rate
+ */
+function mapCsvRow(raw) {
+    const cols = Object.keys(raw);
+    const lower = c => (c || '').toLowerCase().trim();
+    const find = (...patterns) => cols.find(c => patterns.some(p => lower(c).includes(p)));
+
+    // Detect column names (support both our format & Shopee export)
+    const colKeyword   = find('keyword', 'từ khoá', 'từ khóa', 'tên sản phẩm');
+    const colUrl       = find('affiliate_url', 'link ưu đãi', 'link sản phẩm');
+    const colComment   = find('comment', 'câu bình luận', 'bình luận');
+    const colRate      = find('commission_rate', 'tỉ lệ hoa hồng', 'hoa hồng');
+    // Shopee-specific: prefer "Link ưu đãi" over "Link sản phẩm"
+    const colUrlAlt    = find('link ưu đãi');
+    const urlCol       = colUrlAlt || colUrl;
+
+    let keyword = (raw[colKeyword] || '').trim();
+    let url     = (raw[urlCol] || '').trim();
+    let comment = colComment ? (raw[colComment] || '').trim() : '';
+    let rateStr = (raw[colRate] || '').toString().trim();
+
+    // Truncate keyword: use first meaningful segment (before comma or bracket)
+    if (keyword.length > 100) {
+        // Try to cut at a natural boundary
+        const cutAt = keyword.search(/[,\[\(（【]/);
+        keyword = cutAt > 10 ? keyword.substring(0, cutAt).trim() : keyword.substring(0, 95).trim();
     }
 
-    document.getElementById('btnSearch').addEventListener('click', doSearch);
-    document.getElementById('searchKeyword').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') doSearch();
+    // Parse commission rate: "12%" → 12, "20,5%" → 20.5
+    let rate = null;
+    if (rateStr) {
+        rateStr = rateStr.replace('%', '').replace(',', '.').trim();
+        const n = parseFloat(rateStr);
+        if (!isNaN(n) && n >= 0 && n <= 100) rate = n;
+    }
+
+    // Auto-generate comment if missing
+    if (!comment) {
+        const randomComment = AUTO_COMMENTS[Math.floor(Math.random() * AUTO_COMMENTS.length)];
+        comment = randomComment;
+    }
+    // Ensure [LINK] is present
+    if (!comment.includes('[LINK]')) {
+        comment = comment + ' [LINK]';
+    }
+
+    return { keyword, affiliate_url: url, comment, commission_rate: rate };
+}
+
+function validateCsvRow(row) {
+    const errors = [];
+    const kw = (row.keyword || '').trim();
+    const url = (row.affiliate_url || '').trim();
+    const comment = (row.comment || '').trim();
+    const rate = row.commission_rate;
+
+    if (!kw) errors.push('Keyword trống');
+    else if (kw.length > 100) errors.push('Keyword quá 100 ký tự');
+    if (!url) errors.push('URL trống');
+    else if (!SHOPEE_REGEX.test(url)) errors.push('URL không phải Shopee');
+    if (!comment) errors.push('Comment trống');
+    else if (!comment.includes('[LINK]')) errors.push('Thiếu [LINK]');
+    if (rate !== undefined && rate !== '' && rate !== null && rate !== 0) {
+        const n = Number(rate);
+        if (isNaN(n) || n < 0 || n > 100) errors.push('Commission 0-100');
+    }
+    return errors;
+}
+
+function handleCsvFile(file) {
+    if (!file || !file.name.endsWith('.csv')) { alert('Vui lòng chọn file .csv'); return; }
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+            // Detect format & show info
+            const headers = results.meta.fields || [];
+            const isShopee = headers.some(h => h.includes('Tên sản phẩm') || h.includes('Link ưu đãi'));
+            if (isShopee) {
+                console.log('📦 Shopee CSV format detected. Auto-mapping columns...');
+            }
+
+            csvParsedRows = results.data.map((raw, i) => {
+                const mapped = mapCsvRow(raw);
+                return {
+                    ...mapped,
+                    _raw: raw,
+                    _idx: i,
+                    _errors: validateCsvRow(mapped),
+                    _checked: true,
+                    _shopee: isShopee,
+                };
+            });
+            renderCsvPreview(isShopee);
+        },
+        error: function(err) { alert('Lỗi đọc CSV: ' + err.message); }
     });
+}
 
-    // JS to populate the edit form when clicking "Edit" button in the table fragment
-    window.editAffiliate = function (id, keyword, url, template) {
-        document.getElementById('link_id').value = id;
-        document.getElementById('keyword').value = keyword;
-        document.getElementById('url').value = url;
-        document.getElementById('comment_template').value = template;
+function renderCsvPreview(isShopee) {
+    const body = document.getElementById('csvPreviewBody');
+    const area = document.getElementById('csvPreviewArea');
+    const result = document.getElementById('csvResultArea');
+    if (!body || !area) return;
+    result.classList.add('hidden');
+    area.classList.remove('hidden');
 
-        document.getElementById('formTitle').innerText = 'Chỉnh sửa Link: ' + keyword;
-        document.getElementById('btnSubmit').innerText = 'Lưu Thay Đổi';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
+    // Show format detection badge
+    const badge = isShopee
+        ? '<span class="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 font-semibold ml-2">Shopee CSV ✓</span>'
+        : '';
+    document.getElementById('csvRowCount').innerHTML = `(${csvParsedRows.length} dòng, ${csvParsedRows.filter(r => r._errors.length === 0).length} hợp lệ)` + badge;
+    
+    let html = '';
+    csvParsedRows.forEach((row, i) => {
+        const valid = row._errors.length === 0;
+        const cls = valid ? 'valid' : 'invalid';
+        html += `<tr class="${cls}">
+            <td><input type="checkbox" ${row._checked ? 'checked' : ''} onchange="csvToggleRow(${i}, this.checked)"></td>
+            <td class="font-medium max-w-[100px] truncate" title="${esc(row.keyword)}">${esc(row.keyword || '')}</td>
+            <td class="max-w-[120px] truncate text-indigo-600" title="${esc(row.affiliate_url)}">${esc((row.affiliate_url || '').substring(0, 30))}</td>
+            <td class="max-w-[140px] truncate text-gray-500" title="${esc(row.comment)}">${esc((row.comment || '').substring(0, 35))}</td>
+            <td class="text-center">${row.commission_rate || '-'}</td>
+            <td class="text-center">${valid ? '<span class="text-emerald-500">✓</span>' : '<span class="text-red-500 cursor-help" title="' + esc(row._errors.join('; ')) + '">✗</span>'}</td>
+        </tr>`;
+    });
+    body.innerHTML = html;
+    updateCsvCounts();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function csvToggleRow(idx, checked) { csvParsedRows[idx]._checked = checked; updateCsvCounts(); }
+function csvToggleAll(checked) { csvParsedRows.forEach(r => r._checked = checked); renderCsvPreview(csvParsedRows[0]?._shopee); }
+function csvUntickInvalid() { csvParsedRows.forEach(r => { if (r._errors.length > 0) r._checked = false; }); renderCsvPreview(csvParsedRows[0]?._shopee); }
+function csvTickAll() { csvParsedRows.forEach(r => r._checked = true); renderCsvPreview(csvParsedRows[0]?._shopee); }
+
+function updateCsvCounts() {
+    const checked = csvParsedRows.filter(r => r._checked).length;
+    document.getElementById('csvImportCount').textContent = checked;
+}
+
+function resetCsvImport() {
+    csvParsedRows = [];
+    document.getElementById('csvPreviewArea').classList.add('hidden');
+    document.getElementById('csvResultArea').classList.add('hidden');
+    document.getElementById('csvFileInput').value = '';
+}
+
+async function submitCsvImport() {
+    const items = csvParsedRows
+        .filter(r => r._checked)
+        .map(r => ({
+            keyword: (r.keyword || '').trim(),
+            affiliate_url: (r.affiliate_url || '').trim(),
+            comment: (r.comment || '').trim(),
+            commission_rate: r.commission_rate ? Number(r.commission_rate) : null,
+        }));
+    if (items.length === 0) { alert('Không có dòng nào được chọn.'); return; }
+
+    const btn = document.getElementById('csvSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg> Đang import...';
+
+    try {
+        const res = await fetch('/affiliates/import-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items }),
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Lỗi máy chủ'); return; }
+        showCsvResult(data);
+        // Reload table
+        htmx.trigger(document.body, 'affiliatesChanged');
+    } catch (e) {
+        alert('Lỗi kết nối: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Import <span id="csvImportCount">' + items.length + '</span> dòng';
+    }
+}
+
+function showCsvResult(data) {
+    const area = document.getElementById('csvResultArea');
+    let html = `
+        <div class="rounded-lg border overflow-hidden">
+            <div class="bg-emerald-50 border-b border-emerald-200 px-4 py-3 flex items-center gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500 text-white text-sm font-bold">${data.success}</span>
+                    <span class="text-sm font-semibold text-emerald-800">Thành công</span>
+                </div>
+                ${data.skipped > 0 ? `<div class="flex items-center gap-2 ml-4">
+                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-400 text-white text-sm font-bold">${data.skipped}</span>
+                    <span class="text-sm font-semibold text-amber-700">Bỏ qua</span>
+                </div>` : ''}
+            </div>
+            ${data.errors.length > 0 ? `<div class="p-3 space-y-1 max-h-[160px] overflow-y-auto bg-white">
+                ${data.errors.map(e => `<div class="text-xs text-red-600 flex gap-2"><span class="font-mono text-red-400">Dòng ${e.row}</span> ${esc(e.reason)}</div>`).join('')}
+            </div>` : ''}
+        </div>`;
+    area.innerHTML = html;
+    area.classList.remove('hidden');
+}
+
+// ════════════════════════════════════════
+// AI Generate
+// ════════════════════════════════════════
+async function runAiGenerate() {
+    const name = document.getElementById('aiProductName').value.trim();
+    if (!name) { alert('Vui lòng nhập tên sản phẩm.'); return; }
+
+    const btn = document.getElementById('aiGenerateBtn');
+    const loading = document.getElementById('aiLoading');
+    const result = document.getElementById('aiResultArea');
+
+    btn.disabled = true;
+    btn.classList.add('opacity-60');
+    loading.classList.remove('hidden');
+    result.classList.add('hidden');
+
+    try {
+        const res = await fetch('/affiliates/ai-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                product_name: name,
+                category: document.getElementById('aiCategory').value,
+                price: document.getElementById('aiPrice').value || '0',
+                commission_rate: Number(document.getElementById('aiCommission').value) || 0,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Lỗi AI'); return; }
+        renderAiResult(data.data);
+    } catch (e) {
+        alert('Lỗi kết nối: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-60');
+        loading.classList.add('hidden');
+    }
+}
+
+function renderAiResult(data) {
+    const area = document.getElementById('aiResultArea');
+    const sourceLabel = data.source === 'api' ? 'Gemini API' : 'Gemini RPA';
+    
+    let html = `
+        <div class="mb-3 flex items-center justify-between">
+            <span class="text-sm font-semibold text-gray-800">Kết quả AI</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-medium border border-indigo-100">${sourceLabel}</span>
+        </div>
+        
+        <!-- Keywords -->
+        <div class="mb-4">
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Keywords</div>
+            <div class="flex flex-wrap gap-1.5">
+                ${(data.keywords || []).map(k => `<span class="ai-keyword-chip" onclick="useKeyword('${esc(k)}')">${esc(k)}</span>`).join('')}
+            </div>
+        </div>
+
+        <!-- Comments -->
+        <div class="space-y-2">
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Comments</div>
+            ${(data.comments || []).map(c => {
+                const styleClass = c.style === 'natural' ? 'style-natural' : c.style === 'urgency' ? 'style-urgency' : 'style-review';
+                const styleLabel = c.style === 'natural' ? 'Tự Nhiên' : c.style === 'urgency' ? 'Khẩn Cấp' : 'Review';
+                return `<div class="ai-result-card">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                        <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${styleClass}">${styleLabel}</span>
+                        <button onclick="useComment('${esc(c.text)}')" class="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold whitespace-nowrap transition-colors">
+                            Dùng ngay →
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-700 leading-relaxed">${esc(c.text)}</p>
+                </div>`;
+            }).join('')}
+        </div>
+    `;
+    area.innerHTML = html;
+    area.classList.remove('hidden');
+}
+
+function useKeyword(kw) {
+    switchTab('manual', document.getElementById('tabBtnManual'));
+    document.getElementById('keyword').value = kw;
+    document.getElementById('keyword').focus();
+}
+
+function useComment(text) {
+    switchTab('manual', document.getElementById('tabBtnManual'));
+    document.getElementById('comment_template').value = text;
+    document.getElementById('comment_template').focus();
+}
 </script>
 {% endblock %}
