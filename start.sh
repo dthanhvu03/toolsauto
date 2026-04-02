@@ -60,6 +60,10 @@ fi
 source venv/bin/activate
 export PYTHONPATH="$APP_DIR"
 
+# Run database migrations (auto-sync schema)
+echo -e "${YELLOW}Kiểm tra/Cập nhật Database Schema...${NC}"
+python manage.py db upgrade
+
 # Kiểm tra port 8000 (tránh bind failed)
 if command -v ss &>/dev/null; then
     if ss -tlnp 2>/dev/null | grep -q ':8000 '; then
