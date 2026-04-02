@@ -12,6 +12,78 @@ from app.database import models
 router = APIRouter(prefix="/insights", tags=["Insights"])
 templates = Jinja2Templates(directory="app/templates")
 
+@router.get("/api/platform-stats/")
+@router.get("/api/platform-stats")
+def get_platform_stats(page_url: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get view and post distribution per platform."""
+    from sqlalchemy import text
+    sql = """
+        SELECT platform, SUM(views) as total_views, COUNT(DISTINCT post_url) as post_count
+        FROM page_insights
+        WHERE (:page_url IS NULL OR page_url = :page_url)
+        GROUP BY platform
+    """
+    results = db.execute(text(sql), {"page_url": page_url}).fetchall()
+    data = [{"platform": r.platform, "views": r.total_views or 0, "posts": r.post_count} for r in results]
+    return {"status": "success", "data": data}
+
+@router.get("/api/engagement-heatmap/")
+@router.get("/api/engagement-heatmap")
+def get_engagement_heatmap(page_url: Optional[str] = None, platform: Optional[str] = None, db: Session = Depends(get_db)):
+    """Get interaction density (likes + comments + shares) by Day of Week (0-6) and Hour (0-23)."""
+    from sqlalchemy import text
+    sql = """
+        SELECT 
+            CAST(strftime('%w', datetime(recorded_at, 'unixepoch')) AS INTEGER) as dow,
+            CAST(strftime('%H', datetime(recorded_at, 'unixepoch')) AS INTEGER) as hour,
+            SUM(COALESCE(likes, 0) + COALESCE(comments, 0) + COALESCE(shares, 0)) as total_interactions
+        FROM page_insights
+        WHERE (:page_url IS NULL OR page_url = :page_url)
+          AND (:platform IS NULL OR platform = :platform)
+        GROUP BY dow, hour
+    """
+    results = db.execute(text(sql), {"page_url": page_url, "platform": platform}).fetchall()
+    
+    # Initialize 7x24 grid with zeros
+    grid = [[0 for _ in range(24)] for _ in range(7)]
+    for r in results:
+        grid[r.dow][r.hour] = int(r.total_interactions or 0)
+        
+    return {"status": "success", "data": grid}
+
+@router.get("/api/secondary-metrics/")
+@router.get("/api/secondary-metrics")
+def get_secondary_metrics(page_url: Optional[str] = None, platform: Optional[str] = None, db: Session = Depends(get_db)):
+    """Calculate secondary performance indicators."""
+    from sqlalchemy import text
+    # Calculate Avg Views per Post and Total Shares
+    sql = """
+        SELECT 
+            SUM(views) as total_views,
+            COUNT(DISTINCT post_url) as total_posts,
+            SUM(shares) as total_shares,
+            SUM(likes) as total_likes
+        FROM page_insights
+        WHERE (:page_url IS NULL OR page_url = :page_url)
+          AND (:platform IS NULL OR platform = :platform)
+    """
+    r = db.execute(text(sql), {"page_url": page_url, "platform": platform}).fetchone()
+    
+    total_views = r.total_views or 0
+    total_posts = r.total_posts or 1
+    total_shares = r.total_shares or 0
+    total_likes = r.total_likes or 0
+    
+    return {
+        "status": "success", 
+        "data": {
+            "avg_views": round(total_views / total_posts, 1),
+            "total_shares": total_shares,
+            "engagement_rate": round((total_likes + total_shares) / total_views * 100, 2) if total_views > 0 else 0,
+            "posts_count": total_posts
+        }
+    }
+
 @router.get("/", response_class=HTMLResponse)
 def view_insights_dashboard(request: Request, db: Session = Depends(get_db)):
     """Render the main insights dashboard HTML page."""
@@ -157,3 +229,68 @@ def get_page_analysis(platform: str = None, db: Session = Depends(get_db)):
     from app.services.strategic import PageStrategicService
     analysis = PageStrategicService.get_page_analysis(db, platform=platform)
     return {"status": "success", "data": analysis}
+
+@router.get("/api/platform-stats")
+def get_platform_stats(page_url: Optional[str] = None, db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    sql = """
+    SELECT platform, SUM(views) as total_views 
+    FROM page_insights 
+    WHERE (:page_url IS NULL OR page_url = :page_url)
+    GROUP BY platform
+    """
+    params = {"page_url": page_url}
+    results = db.execute(text(sql), params).fetchall()
+    data = [{"platform": r[0] or "unknown", "views": r[1] or 0} for r in results]
+    return {"status": "success", "data": data}
+
+@router.get("/api/engagement-heatmap")
+def get_engagement_heatmap(page_url: Optional[str] = None, platform: Optional[str] = "facebook", db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    # strftime('%w'...) returns 0-6 where 0 is Sunday.
+    sql = """
+    SELECT 
+        CAST(strftime('%w', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as dow,
+        CAST(strftime('%H', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+        SUM(likes + comments) as interactions
+    FROM page_insights
+    WHERE (:platform IS NULL OR platform = :platform)
+      AND (:page_url IS NULL OR page_url = :page_url)
+    GROUP BY dow, hour
+    """
+    params = {"platform": platform, "page_url": page_url}
+    results = db.execute(text(sql), params).fetchall()
+    
+    # Initialize 7x24 grid with zeros (0=Sun, 1=Mon... 6=Sat)
+    # JS expects order: 1, 2, 3, 4, 5, 6, 0
+    heatmap = [[0 for _ in range(24)] for _ in range(7)]
+    for r in results:
+        dow, hour, interactions = r[0], r[1], r[2]
+        if dow is not None and hour is not None:
+            heatmap[dow][hour] = interactions or 0
+            
+    return {"status": "success", "data": heatmap}
+
+@router.get("/api/secondary-metrics")
+def get_secondary_metrics(page_url: Optional[str] = None, platform: Optional[str] = "facebook", db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    sql = """
+    SELECT 
+        AVG(views) as avg_views, 
+        SUM(shares) as total_shares, 
+        CASE WHEN SUM(views) > 0 THEN SUM(likes)*100.0/SUM(views) ELSE 0 END as eng_rate,
+        COUNT(DISTINCT post_url) as active_posts
+    FROM page_insights
+    WHERE (:platform IS NULL OR platform = :platform)
+      AND (:page_url IS NULL OR page_url = :page_url)
+    """
+    params = {"platform": platform, "page_url": page_url}
+    result = db.execute(text(sql), params).fetchone()
+    
+    data = {
+        "avg_views": round(result[0] or 0, 1) if result else 0,
+        "total_shares": result[1] or 0 if result else 0,
+        "engagement_rate": round(result[2] or 0, 2) if result else 0,
+        "posts_count": result[3] or 0 if result else 0
+    }
+    return {"status": "success", "data": data}
