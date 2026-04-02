@@ -154,6 +154,16 @@
                     <option value="instagram">Instagram</option>
                 </select>
             </div>
+            <div class="h-6 w-[1px] bg-gray-200 hidden sm:block"></div>
+            <div class="flex items-center space-x-2 px-3">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Range</span>
+                <select id="daysSelect" onchange="loadData()" aria-label="Select Date Range"
+                    class="bg-transparent border-none text-indigo-600 font-bold text-sm focus:ring-0 cursor-pointer">
+                    <option value="7" selected>7 ngày</option>
+                    <option value="30">30 ngày</option>
+                    <option value="90">90 ngày</option>
+                </select>
+            </div>
             <button onclick="loadData(); loadPageAnalysis();" class="btn-refresh flex items-center gap-2" aria-label="Refresh Data">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -277,9 +287,8 @@
                 </div>
             </div>
 
-            <div class="pt-3 border-t border-gray-100">
-                <p class="text-[10px] text-slate-400 text-center font-medium uppercase tracking-wider">Data refreshed every 12 hours automatically</p>
-            </div>
+            <!-- Pagination Controls -->
+            <div id="topPostsPagination" class="pt-3 border-t border-gray-100 flex items-center justify-center gap-3"></div>
         </div>
     </div> <!-- Closing Charts & Content Grid -->
 
@@ -402,6 +411,8 @@
 <script>
     let growthChartInstance = null;
     let platformChartInstance = null;
+    let currentPage = 1;
+    let totalPages = 1;
 
     const formatK = (n) => {
         if (!n) return "0";
@@ -410,18 +421,26 @@
         return n.toLocaleString();
     };
 
-    async function loadData() {
+    function getDays() {
+        return document.getElementById('daysSelect')?.value || 7;
+    }
+
+    function buildQuery(extra) {
         const pageUrl = document.getElementById('pageSelect').value;
         const platform = document.getElementById('platformSelect').value;
+        const days = getDays();
+        let params = [`days=${days}`];
+        if (pageUrl) params.push(`page_url=${encodeURIComponent(pageUrl)}`);
+        if (platform) params.push(`platform=${encodeURIComponent(platform)}`);
+        if (extra) Object.entries(extra).forEach(([k,v]) => params.push(`${k}=${encodeURIComponent(v)}`));
+        return '?' + params.join('&');
+    }
 
-        let queryParams = [];
-        if (pageUrl) queryParams.push(`page_url=${encodeURIComponent(pageUrl)}`);
-        if (platform) queryParams.push(`platform=${encodeURIComponent(platform)}`);
-        const urlSuffix = queryParams.length > 0 ? '?' + queryParams.join('&') : '';
-
+    async function loadData() {
+        currentPage = 1; // reset pagination on filter change
         try {
             // 1. Growth Data
-            const resGrowth = await fetch('/insights/api/growth' + urlSuffix);
+            const resGrowth = await fetch('/insights/api/growth' + buildQuery());
             const jsonGrowth = await resGrowth.json();
             if (jsonGrowth.status === 'success') {
                 updateChart(jsonGrowth.data);
@@ -438,28 +457,58 @@
                 }
             }
 
-            // 2. Top Posts
-            const resTop = await fetch('/insights/api/top-posts' + urlSuffix);
-            const jsonTop = await resTop.json();
-            if (jsonTop.status === 'success') {
-                renderLeaderboard(jsonTop.data);
-            }
+            // 2. Top Posts (paginated)
+            await loadTopPosts(1);
 
-            // 3. New Advanced Metrics
+            // 3. Advanced metrics
             loadPlatformStats();
             loadSecondaryMetrics();
             loadEngagementHeatmap();
+            loadPageAnalysis();
 
         } catch (err) {
             console.error("Dashboard load error:", err);
         }
     }
 
-    async function loadSecondaryMetrics() {
-        const pageUrl = document.getElementById('pageSelect').value;
-        const platform = document.getElementById('platformSelect').value;
+    async function loadTopPosts(page) {
+        if (page < 1) page = 1;
+        currentPage = page;
         try {
-            const res = await fetch(`/insights/api/secondary-metrics?page_url=${encodeURIComponent(pageUrl)}&platform=${platform}`);
+            const resTop = await fetch('/insights/api/top-posts' + buildQuery({ page: currentPage, limit: 6 }));
+            const jsonTop = await resTop.json();
+            if (jsonTop.status === 'success') {
+                totalPages = jsonTop.total_pages || 1;
+                renderLeaderboard(jsonTop.data);
+                renderPagination();
+            }
+        } catch (e) { console.error("Top posts fail:", e); }
+    }
+
+    function renderPagination() {
+        const container = document.getElementById('topPostsPagination');
+        if (totalPages <= 1) {
+            container.innerHTML = '<p class="text-[10px] text-slate-400 text-center font-medium uppercase tracking-wider">Data refreshed every 12 hours automatically</p>';
+            return;
+        }
+        container.innerHTML = `
+            <button onclick="loadTopPosts(currentPage - 1)" ${currentPage <= 1 ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                ← Prev
+            </button>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                ${currentPage} / ${totalPages}
+            </span>
+            <button onclick="loadTopPosts(currentPage + 1)" ${currentPage >= totalPages ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                Next →
+            </button>
+        `;
+    }
+
+    async function loadSecondaryMetrics() {
+        try {
+            const res = await fetch('/insights/api/secondary-metrics' + buildQuery());
             const json = await res.json();
             if (json.status === 'success') {
                 const d = json.data;
@@ -474,9 +523,8 @@
     }
 
     async function loadPlatformStats() {
-        const pageUrl = document.getElementById('pageSelect').value;
         try {
-            const res = await fetch(`/insights/api/platform-stats?page_url=${encodeURIComponent(pageUrl)}`);
+            const res = await fetch('/insights/api/platform-stats' + buildQuery());
             const json = await res.json();
             if (json.status === 'success') {
                 updatePlatformChart(json.data);
@@ -488,9 +536,9 @@
         const ctx = document.getElementById('platformChart').getContext('2d');
         const container = document.getElementById('platformChart').parentElement;
         const legend = document.getElementById('platformLegend');
-        
+
         if (platformChartInstance) platformChartInstance.destroy();
-        
+
         const views = data.map(d => d.views);
         const totalViews = views.reduce((a, b) => a + b, 0);
 
@@ -501,12 +549,11 @@
         }
 
         const labels = data.map(d => d.platform.toUpperCase());
-        
-        // Ensure canvas exists if overwritten
+
         if (!document.getElementById('platformChart')) {
             container.innerHTML = '<canvas id="platformChart" class="max-h-[250px]"></canvas>';
         }
-        
+
         platformChartInstance = new Chart(ctx, {
             type: 'doughnut',
             data: {
@@ -546,10 +593,8 @@
     }
 
     async function loadEngagementHeatmap() {
-        const pageUrl = document.getElementById('pageSelect').value;
-        const platform = document.getElementById('platformSelect').value;
         try {
-            const res = await fetch(`/insights/api/engagement-heatmap?page_url=${encodeURIComponent(pageUrl)}&platform=${platform}`);
+            const res = await fetch('/insights/api/engagement-heatmap' + buildQuery());
             const json = await res.json();
             if (json.status === 'success') {
                 renderHeatmap(json.data);
@@ -560,13 +605,13 @@
     function renderHeatmap(data) {
         const grid = document.getElementById('heatmapGrid');
         grid.innerHTML = '';
-        
+
         let max = 0;
         data.forEach(row => row.forEach(val => { if (val > max) max = val; }));
         if (max === 0) max = 1;
 
         const order = [1, 2, 3, 4, 5, 6, 0]; // Mon -> Sun
-        
+
         order.forEach(dow => {
             for (let hour = 0; hour < 24; hour++) {
                 const val = data[dow][hour];
@@ -590,10 +635,12 @@
         }
 
         // Update Best Performer card
-        document.getElementById('topViews').innerText = formatK(data[0].views) + " views";
-        document.getElementById('topCaption').innerText = data[0].caption || "Nội dung đang dẫn đầu thị trường.";
+        if (currentPage === 1) {
+            document.getElementById('topViews').innerText = formatK(data[0].views) + " views";
+            document.getElementById('topCaption').innerText = data[0].caption || "Nội dung đang dẫn đầu thị trường.";
+        }
 
-        data.slice(0, 6).forEach((post, i) => {
+        data.forEach((post, i) => {
             const el = document.createElement('div');
             el.className = 'animate-slide-up bg-gray-50 hover:bg-indigo-50/60 p-2.5 px-3 rounded-xl flex items-center gap-3 group cursor-pointer transition-all duration-200 border border-transparent hover:border-indigo-100 active:scale-[0.98]';
             el.style.animationDelay = `${i * 0.05}s`;
@@ -786,11 +833,9 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             loadData();
-            loadPageAnalysis();
         });
     } else {
         loadData();
-        loadPageAnalysis();
     }
 </script>
 {% endblock %}
