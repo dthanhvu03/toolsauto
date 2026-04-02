@@ -1,33 +1,47 @@
 {% extends "layouts/app.html" %}
 
 {% block title %}Database • Auto Publisher{% endblock %}
+
+{% block head_extra %}
+<!-- CodeMirror 5 (Stable for non-build environments) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/sql/sql.min.js"></script>
+<!-- Alpine.js for State Management -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+{% endblock %}
+
 {% block page_title %}
-<div class="flex items-center gap-2">
-    <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
-    </svg>
-    <span>Database Explorer</span>
+<div class="flex items-center justify-between w-full">
+    <div class="flex items-center gap-2">
+        <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+        </svg>
+        <span>Database Explorer</span>
+    </div>
 </div>
 {% endblock %}
-{% block page_subtitle %}Khám phá dữ liệu internal SQLite của hệ thống{% endblock %}
+
+{% block page_subtitle %}Quản trị nền tảng và truy vấn dữ liệu thời gian thực{% endblock %}
 
 {% block content %}
-<div class="flex flex-col md:flex-row gap-6 h-[calc(100vh-10rem)]">
+<div id="explorer-root" class="flex flex-col md:flex-row gap-6 h-[calc(100vh-10rem)]" x-data="dbExplorer()" x-init="console.log('--- Alpine dbExplorer Initialized ---')">
     <!-- ─── Sidebar: Table List ─────────────────────────────────────────── -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 w-full md:w-64 lg:w-72 flex-shrink-0 flex flex-col h-full overflow-hidden">
-        <div class="p-4 border-b border-gray-100 bg-gray-50/50">
+        <div class="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Tables in schema</h3>
+            <button @click="openConsole()" class="p-1 px-2 text-[10px] bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700 transition shadow-sm">
+                SQL Console
+            </button>
         </div>
         <div class="flex-1 overflow-y-auto p-2">
             <ul class="space-y-1">
                 {% for table in tables_info %}
                 <li>
                     <button 
-                        @click="activeTable = '{{ table.name }}'; document.getElementById('q').value=''"
-                        hx-get="/database/fragments/db-explorer" 
-                        hx-vars="table_name:'{{ table.name }}', limit:document.getElementById('limit-select').value"
-                        hx-target="#db-explorer-container"
-                        class="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors duration-150 ease-in-out border border-transparent"
+                        @click="selectTable('{{ table.name }}')"
+                        class="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-all duration-200 border border-transparent"
                         :class="activeTable === '{{ table.name }}' ? 'bg-indigo-50 text-indigo-700 border-indigo-100 shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
                     >
                         <div class="flex items-center gap-2 truncate">
@@ -49,11 +63,11 @@
     </div>
 
     <!-- ─── Main Content: Data Explorer ─────────────────────────────────── -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex-1 flex flex-col min-w-0 h-full relative" x-data="{ activeTable: '' }">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex-1 flex flex-col min-w-0 h-full relative">
         <!-- Explorer Header Controls -->
         <div class="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-t-2xl z-10 shrink-0">
             <div class="flex items-center gap-3">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest hidden sm:inline-block">Data Data</span>
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest hidden sm:inline-block">Explorer</span>
                 <div x-show="activeTable" class="flex items-center gap-2" x-transition>
                     <svg class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -62,92 +76,316 @@
                 </div>
             </div>
             
-            <form 
-                class="flex items-center gap-2"
-                hx-get="/database/fragments/db-explorer"
-                hx-target="#db-explorer-container"
-            >
-                <!-- Hidden inputs to keep state -->
-                <input type="hidden" name="table_name" x-bind:value="activeTable">
-                
-                <!-- Search bar -->
-                <div class="relative max-w-xs w-full sm:w-auto" x-show="activeTable">
-                    <input type="text" name="q" id="q" placeholder="Tìm kiếm..." class="w-full hidden sm:block sm:w-48 text-sm border-gray-200 rounded-lg pl-8 pr-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm placeholder-gray-400 text-gray-600">
-                    <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none hidden sm:flex">
-                        <svg class="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
-                        </svg>
+            <div class="flex items-center gap-2">
+                <div x-show="activeTable" class="flex items-center gap-2">
+                    <div class="relative max-w-xs w-full sm:w-auto">
+                        <input type="text" x-model="q" @keydown.enter.prevent="refreshTable()" placeholder="Tìm kiếm..." class="w-full hidden sm:block sm:w-48 text-sm border-gray-200 rounded-lg pl-8 pr-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm placeholder-gray-400 text-gray-600">
                     </div>
-                </div>
 
-                <!-- Limit Selector -->
-                <div class="flex items-center gap-2" x-show="activeTable">
-                    <span class="text-xs text-gray-500">Limit:</span>
-                    <select id="limit-select" name="limit" 
+                    <select x-model="limit" @change="refreshTable()"
                         class="text-sm border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 py-1.5 pl-3 pr-8 shadow-sm text-gray-600 font-medium">
-                        <option value="10">10</option>
-                        <option value="50" selected>50</option>
+                        <option value="50">50</option>
                         <option value="100">100</option>
                         <option value="500">500</option>
                     </select>
-                </div>
 
-                <button type="submit" x-show="activeTable"
-                    class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent shadow-none hover:shadow-sm" title="Refresh Data">
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                </button>
-            </form>
+                    <button @click="refreshTable()" class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent shadow-none hover:shadow-sm" title="Refresh Data">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                    
+                    <a x-show="activeTable" 
+                       :href="`/database/export-csv?table_name=${activeTable}&q=${q}`"
+                       class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg text-sm font-semibold hover:bg-emerald-100 transition shadow-sm"
+                       title="Xuất CSV">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Export</span>
+                    </a>
+                </div>
+            </div>
         </div>
 
         <!-- Data Area -->
         <div id="db-explorer-container" class="flex-1 overflow-auto bg-gray-50 relative flex items-center justify-center">
-            <!-- Initial state -->
             <div class="flex flex-col items-center justify-center p-12 text-gray-400">
                 <svg class="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <p class="text-sm">Vui lòng chọn Table từ menu bên trái để xem dữ liệu</p>
+                <p class="text-sm">Vui lòng chọn Table hoặc mở Console</p>
             </div>
             
             <div class="htmx-indicator absolute inset-0 bg-white/60 backdrop-blur-sm z-20 flex items-center justify-center pointer-events-none transition-opacity duration-300">
                 <div class="bg-white border text-indigo-600 border-indigo-100 shadow-xl px-4 py-2 rounded-full font-medium text-sm flex items-center gap-2">
-                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                     Loading...
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- ─── SQL Console Modal ─────────────────────────────────────────── -->
+    <div x-show="showConsole" 
+         class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         style="display: none;">
+        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="showConsole = false"></div>
+        
+        <div class="bg-white w-full max-w-5xl h-[85vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden relative border border-gray-100">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-indigo-600 rounded-xl text-white">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-gray-900">SQL Console</h2>
+                        <p class="text-[10px] text-gray-500 font-medium tracking-wider uppercase">Execute Queries</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <template x-if="riskLevel">
+                        <div :class="{
+                            'bg-emerald-50 text-emerald-600 border-emerald-100': riskLevel === 'safe',
+                            'bg-amber-50 text-amber-600 border-amber-100': riskLevel === 'moderate',
+                            'bg-rose-50 text-rose-600 border-rose-100': riskLevel === 'dangerous'
+                        }" class="px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 shadow-sm">
+                            <span class="flex h-1.5 w-1.5 rounded-full" :class="{
+                                'bg-emerald-500': riskLevel === 'safe',
+                                'bg-amber-500': riskLevel === 'moderate',
+                                'bg-rose-500': riskLevel === 'dangerous'
+                            }"></span>
+                            <span x-text="riskLevel.toUpperCase()"></span>
+                        </div>
+                    </template>
+                    <button @click="showConsole = false" class="text-gray-400 hover:text-gray-600 transition p-2 hover:bg-gray-100 rounded-full">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="flex-1 flex flex-col min-h-0 bg-gray-50">
+                <div class="h-1/2 flex flex-col border-b border-gray-200">
+                    <div id="sql-editor" class="flex-1 bg-[#282c34]"></div>
+                    <div class="p-3 bg-white border-t border-gray-100 flex items-center justify-between">
+                        <span class="text-xs text-gray-400 font-mono">Auto-validation enabled</span>
+                        <div class="flex items-center gap-3">
+                            <button @click="clearConsole()" class="text-gray-500 hover:text-gray-700 text-xs font-medium px-3 py-1.5">Clear</button>
+                            <button @click="executeSQL()" 
+                                    :disabled="executing || riskLevel === 'dangerous' || !sqlInput.trim()"
+                                    class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 disabled:opacity-50 transition-all flex items-center gap-2">
+                                <template x-if="executing">
+                                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                </template>
+                                <span>Execute</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1 flex flex-col overflow-hidden bg-white shadow-inner">
+                    <div class="px-4 py-2 bg-gray-50/80 border-b border-gray-100 flex items-center justify-between shrink-0">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Query Results</span>
+                        <span x-show="rowCount" class="text-[10px] font-bold text-indigo-500" x-text="`${rowCount} records fetched`"></span>
+                    </div>
+                    <div class="flex-1 overflow-auto p-4" id="sql-results">
+                        <p class="text-xs text-gray-400 text-center mt-8">Run a query to see results</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── Confirmation Modal ─────────────────────────────────────────── -->
+    <div x-show="showConfirm" class="fixed inset-0 z-[110] flex items-center justify-center p-4" style="display: none;">
+        <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="showConfirm = false"></div>
+        <div class="bg-white max-w-lg w-full rounded-2xl shadow-2xl p-6 relative">
+            <h3 class="text-lg font-bold text-gray-900 mb-2">Confirm Data Modification</h3>
+            <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 font-mono text-xs text-indigo-700 mb-6 overflow-x-auto whitespace-pre">
+                <span x-text="normalizedSQL"></span>
+            </div>
+            <div class="flex items-center justify-end gap-3">
+                <button @click="showConfirm = false" class="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button @click="executeSQL(true)" class="px-6 py-2 text-sm font-bold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-100">Confirm Execute</button>
+            </div>
+        </div>
+    </div>
 </div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+/**
+ * dbExplorer Logic relocated to block script_extra.
+ * Used CodeMirror 5 for maximum stability in Jinja2 templates.
+ */
+function dbExplorer() {
+    console.log('--- DB Explorer Component Discovery ---');
+    return {
+        activeTable: '',
+        q: '',
+        limit: 50,
+        showConsole: false,
+        showConfirm: false,
+        sqlInput: 'SELECT * FROM accounts LIMIT 10',
+        normalizedSQL: '',
+        riskLevel: '',
+        executing: false,
+        rowCount: 0,
+        editor: null,
+
+        selectTable(name) {
+            console.log('--- selectTable:', name);
+            this.activeTable = name;
+            this.q = '';
+            this.refreshTable();
+        },
+
+        refreshTable() {
+            if (!this.activeTable) return;
+            console.log('--- refreshTable:', this.activeTable);
+            
+            if (typeof htmx === 'undefined') {
+                console.error('CRITICAL: HTMX is missing!');
+                return;
+            }
+
+            htmx.ajax('GET', '/database/fragments/db-explorer', {
+                target: '#db-explorer-container',
+                values: {
+                    table_name: this.activeTable,
+                    limit: this.limit,
+                    q: this.q
+                },
+                indicator: '.htmx-indicator'
+            });
+        },
+
+        openConsole() {
+            console.log('--- openConsole ---');
+            this.showConsole = true;
+            this.$nextTick(() => { this.initEditor(); });
+        },
+
+        initEditor() {
+            if (this.editor) return;
+            
+            // Check if CodeMirror 5 is available
+            if (typeof CodeMirror === 'undefined') {
+                console.warn('CodeMirror (v5) not found! Waiting for scripts...');
+                // Retry in 500ms
+                setTimeout(() => this.initEditor(), 500);
+                return;
+            }
+
+            try {
+                const editorEl = document.getElementById('sql-editor');
+                if (!editorEl) return;
+
+                this.editor = CodeMirror(editorEl, {
+                    value: this.sqlInput,
+                    mode: 'text/x-sql',
+                    theme: 'dracula',
+                    lineNumbers: true,
+                    indentWithTabs: true,
+                    smartIndent: true,
+                    matchBrackets : true,
+                    autofocus: true,
+                    lineWrapping: true
+                });
+
+                // Sync CodeMirror to Alpine state
+                this.editor.on('change', (cm) => {
+                    this.sqlInput = cm.getValue();
+                    this.debounceValidate();
+                });
+
+                console.log('--- CodeMirror 5 Init Success ---');
+            } catch (err) {
+                console.error('--- initEditor error:', err);
+            }
+        },
+
+        timer: null,
+        debounceValidate() {
+            clearTimeout(this.timer);
+            this.timer = setTimeout(() => this.validateSQL(), 300);
+        },
+
+        async validateSQL() {
+            if (!this.sqlInput.trim()) { this.riskLevel = ''; return; }
+            try {
+                const res = await fetch(`/database/validate-sql?sql=${encodeURIComponent(this.sqlInput)}`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.riskLevel = data.risk;
+                    this.normalizedSQL = data.normalized;
+                } else { this.riskLevel = 'error'; }
+            } catch (e) { console.error('Validate Error:', e); }
+        },
+
+        async executeSQL(confirmed = false) {
+            this.executing = true;
+            try {
+                const res = await fetch('/database/execute-sql', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ sql: this.sqlInput, confirmed: confirmed })
+                });
+                const data = await res.json();
+                if (data.status === 'require_confirm') {
+                    this.normalizedSQL = data.normalized;
+                    this.showConfirm = true;
+                    this.executing = false;
+                    return;
+                }
+                this.showConfirm = false;
+                const container = document.getElementById('sql-results');
+                if (data.status === 'success' && data.columns) {
+                    this.rowCount = data.rows.length;
+                    let html = `<div class="overflow-auto rounded-lg border border-gray-100 shadow-sm"><table class="w-full text-xs text-left border-collapse">`;
+                    html += `<thead class="bg-gray-50"><tr>${data.columns.map(c => `<th class="px-3 py-2 border-b font-bold text-gray-700">${c}</th>`).join('')}</tr></thead><tbody>`;
+                    data.rows.forEach(r => {
+                        html += `<tr class="hover:bg-gray-50 border-b border-gray-50 text-gray-600 transition">${data.columns.map(c => `<td class="px-3 py-2 truncate max-w-[200px]" title="${r[c]}">${r[c]}</td>`).join('')}</tr>`;
+                    });
+                    html += `</tbody></table></div>`;
+                    container.innerHTML = html;
+                } else if (data.status === 'success') {
+                     container.innerHTML = `<div class="p-4 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 text-sm">Action successful!</div>`;
+                } else {
+                    container.innerHTML = `<div class="p-4 bg-rose-50 text-rose-700 rounded-xl border border-rose-100 font-mono text-sm">Error: ${data.message}</div>`;
+                }
+            } catch(e) { console.error('Execute Error:', e); } finally { this.executing = false; }
+        },
+
+        clearConsole() {
+            if (this.editor) {
+                this.editor.setValue("");
+            }
+            const res = document.getElementById('sql-results');
+            if (res) res.innerHTML = '<p class="text-xs text-center text-gray-400 mt-10">Console Cleared</p>';
+            this.rowCount = 0;
+        }
+    }
+}
+</script>
 
 <style>
-/* Modern Scrollbar for the table and sidebar container */
-#db-explorer-container::-webkit-scrollbar, .overflow-y-auto::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-#db-explorer-container::-webkit-scrollbar-track, .overflow-y-auto::-webkit-scrollbar-track {
-    background: transparent;
-}
-#db-explorer-container::-webkit-scrollbar-thumb, .overflow-y-auto::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
-    border-radius: 20px;
-}
-#db-explorer-container:hover::-webkit-scrollbar-thumb, .overflow-y-auto:hover::-webkit-scrollbar-thumb {
-    background-color: #94a3b8;
-}
-
-/* HTMX Loading Indicator */
-.htmx-indicator{
-    opacity:0;
-    pointer-events:none;
-}
-.htmx-request .htmx-indicator{
-    opacity:1;
-}
-.htmx-request.htmx-indicator{
-    opacity:1;
-}
+/* Modern Scrollbar */
+#db-explorer-container::-webkit-scrollbar, .overflow-y-auto::-webkit-scrollbar { width: 6px; height: 6px; }
+#db-explorer-container::-webkit-scrollbar-thumb, .overflow-y-auto::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 200px; }
+/* HTMX Indicator */
+.htmx-indicator { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { opacity: 1; }
+/* CodeMirror 5 Overrides */
+.CodeMirror { height: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; font-size: 13px; }
 </style>
 {% endblock %}

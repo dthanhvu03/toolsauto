@@ -7,11 +7,12 @@
                     {% for col in columns %}
                     <th class="px-4 py-3 bg-gray-50/95 backdrop-blur-sm">{{ col }}</th>
                     {% endfor %}
+                    <th class="px-4 py-3 bg-gray-50/95 backdrop-blur-sm sticky right-0 z-20 border-l border-gray-100 font-semibold text-gray-700">Thao tác</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 bg-white">
                 {% for row in rows %}
-                <tr class="hover:bg-indigo-50/40 transition-colors group">
+                <tr class="hover:bg-indigo-50/40 transition-colors group htmx-row">
                     <td class="px-4 py-3 text-xs text-gray-400 border-r border-gray-100 bg-white group-hover:bg-indigo-50/40 sticky left-0 z-10 font-mono">{{ loop.index }}</td>
                     {% for col in columns %}
                     {% set val = row[col] %}
@@ -29,10 +30,29 @@
                         {% endif %}
                     </td>
                     {% endfor %}
+                    <td class="px-4 py-3 sticky right-0 z-10 bg-white group-hover:bg-indigo-50/40 border-l border-gray-100">
+                        {% if has_pk %}
+                        <button 
+                            hx-delete="/database/row?table_name={{ table_name }}"
+                            hx-ext="json-enc"
+                            hx-vals='{"pk_values": { {% for pk in pks %}"{{ pk }}": {{ row[pk] | tojson }}{{ "," if not loop.last }}{% endfor %} } }'
+                            hx-confirm="Bạn có chắc chắn muốn xóa bản ghi này khỏi bảng {{ table_name }}?"
+                            hx-target="closest tr"
+                            hx-swap="outerHTML swap:0.5s"
+                            class="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                            title="Xóa dòng">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                        {% else %}
+                        <span class="text-[10px] text-gray-300 italic">No PK</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="{{ columns|length + 1 }}" class="px-4 py-12 text-center text-gray-400 bg-white">
+                    <td colspan="{{ columns|length + 2 }}" class="px-4 py-12 text-center text-gray-400 bg-white">
                         <div class="flex flex-col items-center justify-center gap-3">
                             <svg class="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -62,3 +82,11 @@
         </div>
     </div>
 </div>
+
+<style>
+.htmx-row.htmx-swapping {
+    opacity: 0;
+    transform: translateX(20px);
+    transition: all 0.5s ease;
+}
+</style>
