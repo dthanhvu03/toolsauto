@@ -56,6 +56,21 @@ def db_upgrade(revision: str = typer.Argument("head", help="Target revision (def
 
     If the DB already has all tables from a pre-Alembic install, run `db stamp head` once instead of upgrade.
     """
+    import sqlite3
+    from app.config import DB_PATH
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '_alembic_tmp_%'")
+        for (tmp_table,) in cursor.fetchall():
+            cursor.execute(f"DROP TABLE {tmp_table}")
+            typer.echo(f"🗑️ Dropped orphaned Alembic temp table: {tmp_table}")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        typer.echo(f"⚠️ Warning: Failed to clean tmp tables: {e}")
+
     _alembic(["upgrade", revision])
 
 
@@ -86,6 +101,28 @@ def db_current() -> None:
 def db_stamp(revision: str = typer.Argument("head", help="Revision id to stamp")) -> None:
     """Mark DB at revision without running migration SQL (for existing DBs that already match models)."""
     _alembic(["stamp", revision])
+
+
+@db_app.command("stamp-if-needed")
+def stamp_if_needed() -> None:
+    """Stamp head if DB has tables but no alembic_version."""
+    import sqlite3
+    from app.config import DB_PATH
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = [r[0] for r in cursor.fetchall()]
+    conn.close()
+
+    has_tables = len(tables) > 1  # có tables thực sự
+    has_version = "alembic_version" in tables
+
+    if has_tables and not has_version:
+        print("⚠️  DB exists without alembic_version → stamping head...")
+        _alembic(["stamp", "head"])
+    else:
+        print("✅ alembic_version OK, skipping stamp.")
 
 
 @db_app.command("revision")
