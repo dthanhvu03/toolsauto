@@ -15,7 +15,9 @@ def get_affiliates_page(request: Request):
     """Main page for Affiliate Links management."""
     return templates.TemplateResponse("pages/app_affiliates.html", {
         "request": request,
-        "active_tab": "affiliates"
+        "active_tab": "affiliates",
+        "csv_import_enabled": True,
+        "ai_generate_enabled": True
     })
 
 @router.get("/table", response_class=HTMLResponse)
