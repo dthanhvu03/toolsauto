@@ -1,69 +1,129 @@
 {% if links %}
-<div class="overflow-x-auto">
-    <table class="w-full text-left text-sm whitespace-nowrap">
-        <thead class="text-xs text-[var(--muted)] uppercase bg-gray-50/50">
-            <tr>
-                <th class="px-4 py-3 font-medium">Từ Khóa (Keyword)</th>
-                <th class="px-4 py-3 font-medium">Link Mua Hàng</th>
-                <th class="px-4 py-3 font-medium text-right">Thao tác</th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-            {% for row in links %}
-            <tr class="hover:bg-gray-50/50 transition-colors group">
-                <td class="px-4 py-3 font-medium text-gray-800">
-                    <span class="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md text-xs border border-indigo-100">
-                        {{ row.keyword }}
-                    </span>
-                </td>
-                <td class="px-4 py-3 text-gray-500 max-w-xs truncate" title="{{ row.comment_template }}">
-                    <a href="{{ row.url }}" target="_blank"
-                        class="text-indigo-600 hover:text-indigo-800 hover:underline">
-                        {{ row.url|truncate(40, true, '...') }}
-                    </a>
-                    <div class="text-[11px] text-gray-400 mt-0.5 truncate">{{ row.comment_template }}</div>
-                </td>
-                <td class="px-4 py-3 text-right">
-                    <div
-                        class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                            onclick="editAffiliate(this.dataset.id, this.dataset.kw, this.dataset.url, this.dataset.tpl)"
-                            data-id="{{ row.id }}" data-kw="{{ row.keyword }}" data-url="{{ row.url }}"
-                            data-tpl="{{ row.comment_template }}"
-                            class="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded"
-                            title="Sửa" aria-label="Sửa">
-                            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z">
-                                </path>
-                            </svg>
-                        </button>
-                        <button hx-delete="/affiliates/{{ row.id }}"
-                            hx-confirm="Xóa từ khóa '{{ row.keyword }}' khỏi kho Affilate?" hx-swap="none"
-                            class="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-red-600 hover:bg-red-50 rounded"
-                            title="Xóa" aria-label="Xóa">
-                            <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                                </path>
-                            </svg>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<!-- Stats Bar -->
+<div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-3">
+        <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            {{ total }} links
+        </span>
+        {% if q %}
+        <span class="text-xs text-gray-400">· tìm "{{ q }}"</span>
+        {% endif %}
+    </div>
+    <span class="text-xs text-gray-400">Trang {{ page }}/{{ total_pages }}</span>
 </div>
+
+<!-- Card List -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+    {% for row in links %}
+    <div class="aff-card group relative flex flex-col h-full hover:-translate-y-1 hover:border-indigo-200 duration-200">
+        <!-- Header: Keyword & Actions -->
+        <div class="flex items-start justify-between mb-2">
+            <span class="aff-keyword-badge" title="{{ row.keyword }}">
+                {{ row.keyword|truncate(60, true, '…') }}
+            </span>
+            <div class="flex items-center gap-1 shrink-0 ml-2">
+                <button
+                    onclick="editAffiliate(this.dataset.id, this.dataset.kw, this.dataset.url, this.dataset.tpl)"
+                    data-id="{{ row.id }}" data-kw="{{ row.keyword }}" data-url="{{ row.url }}"
+                    data-tpl="{{ row.comment_template }}"
+                    class="w-7 h-7 inline-flex items-center justify-center rounded text-blue-600 hover:bg-blue-50 transition border border-transparent hover:border-blue-100"
+                    title="Sửa">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                </button>
+                <button hx-delete="/affiliates/{{ row.id }}"
+                    hx-confirm="Xóa từ khóa '{{ row.keyword }}' khỏi kho Affiliate?"
+                    hx-swap="none"
+                    class="w-7 h-7 inline-flex items-center justify-center rounded text-red-500 hover:bg-red-50 transition border border-transparent hover:border-red-100"
+                    title="Xóa">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- URL -->
+        <a href="{{ row.url }}" target="_blank" rel="noopener"
+            class="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 hover:underline mb-3 mt-1 truncate max-w-full bg-indigo-50/50 px-2 py-1 rounded w-max" title="{{ row.url }}">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            {{ row.url|truncate(45, true, '…') }}
+        </a>
+
+        <!-- Comment Template (flex-1 to push everything up, mt-auto inside if needed) -->
+        <div class="flex-1 mt-auto bg-gray-50 rounded p-2.5 border border-gray-100/80 flex flex-col justify-between">
+            <div class="flex items-start gap-2">
+                <svg class="w-3 h-3 text-indigo-300 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/></svg>
+                <div class="flex-1">
+                    <p class="text-[13px] text-gray-600 leading-snug line-clamp-3" title="{{ row.comment_template }}">{{ row.comment_template }}</p>
+                </div>
+            </div>
+            {% if row.commission_rate %}
+            <div class="mt-2 text-right">
+                <span class="inline-flex items-center text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">+{{ row.commission_rate }}%</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+    <div class="text-xs text-gray-400">
+        {{ (page - 1) * 25 + 1 }}–{{ [page * 25, total]|min }} / {{ total }}
+    </div>
+    <div class="flex items-center gap-1">
+        {% if page > 1 %}
+        <button class="aff-page-btn"
+            hx-get="/affiliates/table?page={{ page - 1 }}&q={{ q }}"
+            hx-target="#affiliatesTable" hx-swap="innerHTML">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        {% endif %}
+
+        {% set start_page = [1, page - 2]|max %}
+        {% set end_page = [total_pages, page + 2]|min %}
+
+        {% if start_page > 1 %}
+        <button class="aff-page-btn"
+            hx-get="/affiliates/table?page=1&q={{ q }}"
+            hx-target="#affiliatesTable" hx-swap="innerHTML">1</button>
+        {% if start_page > 2 %}<span class="text-gray-300 text-xs px-1">…</span>{% endif %}
+        {% endif %}
+
+        {% for p in range(start_page, end_page + 1) %}
+        <button class="aff-page-btn {% if p == page %}active{% endif %}"
+            hx-get="/affiliates/table?page={{ p }}&q={{ q }}"
+            hx-target="#affiliatesTable" hx-swap="innerHTML">{{ p }}</button>
+        {% endfor %}
+
+        {% if end_page < total_pages %}
+        {% if end_page < total_pages - 1 %}<span class="text-gray-300 text-xs px-1">…</span>{% endif %}
+        <button class="aff-page-btn"
+            hx-get="/affiliates/table?page={{ total_pages }}&q={{ q }}"
+            hx-target="#affiliatesTable" hx-swap="innerHTML">{{ total_pages }}</button>
+        {% endif %}
+
+        {% if page < total_pages %}
+        <button class="aff-page-btn"
+            hx-get="/affiliates/table?page={{ page + 1 }}&q={{ q }}"
+            hx-target="#affiliatesTable" hx-swap="innerHTML">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 {% else %}
-<div class="py-12 text-center">
-    <div class="text-4xl mb-3"><svg class="w-10 h-10 inline text-indigo-500" fill="none" stroke="currentColor"
-            viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+<div class="py-16 text-center">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-50 mb-4">
+        <svg class="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                 d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
-        </svg></div>
-    <h3 class="text-gray-900 font-medium text-base mb-1">Kho Affiliate Trống</h3>
-    <p class="text-gray-500 text-sm max-w-sm mx-auto">Chưa có link Affiliate nào. Hãy thêm từ khóa và link bên form trái
-        để bot tự động buff sales.</p>
+        </svg>
+    </div>
+    <h3 class="text-gray-900 font-semibold text-base mb-1.5">Kho Affiliate Trống</h3>
+    <p class="text-gray-500 text-sm max-w-sm mx-auto leading-relaxed">Chưa có link Affiliate nào. Hãy thêm từ khóa và link bên form trái để bot tự động buff sales.</p>
 </div>
 {% endif %}
