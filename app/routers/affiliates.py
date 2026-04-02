@@ -139,12 +139,14 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
         if existing:
             existing.url = item.affiliate_url
             existing.comment_template = item.comment
+            existing.commission_rate = item.commission_rate
             success += 1
         else:
             link = AffiliateLink(
                 keyword=item.keyword,
                 url=item.affiliate_url,
-                comment_template=item.comment
+                comment_template=item.comment,
+                commission_rate=item.commission_rate
             )
             db.add(link)
             success += 1
