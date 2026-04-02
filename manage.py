@@ -88,6 +88,28 @@ def db_stamp(revision: str = typer.Argument("head", help="Revision id to stamp")
     _alembic(["stamp", revision])
 
 
+@db_app.command("stamp-if-needed")
+def stamp_if_needed() -> None:
+    """Stamp head if DB has tables but no alembic_version."""
+    import sqlite3
+    from app.config import DB_PATH
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = [r[0] for r in cursor.fetchall()]
+    conn.close()
+
+    has_tables = len(tables) > 1  # có tables thực sự
+    has_version = "alembic_version" in tables
+
+    if has_tables and not has_version:
+        print("⚠️  DB exists without alembic_version → stamping head...")
+        _alembic(["stamp", "head"])
+    else:
+        print("✅ alembic_version OK, skipping stamp.")
+
+
 @db_app.command("revision")
 def db_revision(
     message: str = typer.Option(..., "--message", "-m", help="Migration message"),
