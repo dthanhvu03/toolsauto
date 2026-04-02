@@ -1,46 +1,92 @@
-<div class="overflow-x-auto w-full">
-    <table class="w-full text-left text-sm whitespace-nowrap">
-        <thead class="bg-gray-50 text-gray-500 font-medium tracking-wider text-xs uppercase">
-            <tr>
-                {% for col in columns %}
-                <th class="px-4 py-3">{{ col }}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100 bg-white">
-            {% for row in rows %}
-            <tr class="hover:bg-gray-50/50 transition-colors">
-                {% for col in columns %}
-                {% set val = row[col] %}
-                <td class="px-4 py-3 text-gray-700 max-w-[250px] truncate" title="{{ val | string }}">
-                    {% if val is none %}
-                    <span class="text-gray-300 italic">null</span>
-                    {% elif val is boolean %}
-                    <span
-                        class="px-2 py-0.5 rounded-full text-xs font-medium {{ 'bg-green-100 text-green-700' if val else 'bg-red-100 text-red-700' }}">
+<div class="h-full w-full flex flex-col bg-white">
+    <div class="flex-1 overflow-x-auto overflow-y-auto">
+        <table class="w-full text-left text-sm whitespace-nowrap border-collapse">
+            <thead class="bg-gray-50 text-gray-500 font-medium tracking-wider text-xs uppercase sticky top-0 z-10 shadow-[0_1px_0_0_#f3f4f6]">
+                <tr>
+                    <th class="px-4 py-3 bg-gray-50/95 backdrop-blur-sm sticky left-0 z-20 border-r border-gray-100 font-semibold text-gray-700">#</th>
+                    {% for col in columns %}
+                    <th class="px-4 py-3 bg-gray-50/95 backdrop-blur-sm">{{ col }}</th>
+                    {% endfor %}
+                    <th class="px-4 py-3 bg-gray-50/95 backdrop-blur-sm sticky right-0 z-20 border-l border-gray-100 font-semibold text-gray-700">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+                {% for row in rows %}
+                <tr class="hover:bg-indigo-50/40 transition-colors group htmx-row">
+                    <td class="px-4 py-3 text-xs text-gray-400 border-r border-gray-100 bg-white group-hover:bg-indigo-50/40 sticky left-0 z-10 font-mono">{{ loop.index }}</td>
+                    {% for col in columns %}
+                    {% set val = row[col] %}
+                    <td class="px-4 py-3 text-gray-700 max-w-[250px] lg:max-w-[350px] truncate" title="{{ val | string }}">
+                        {% if val is none %}
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-400 italic border border-gray-200">NULL</span>
+                        {% elif val is boolean or val == 'True' or val == 'False' or val == 1 or val == 0 and col.startswith('is_') %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide {{ 'bg-emerald-100 text-emerald-700 border border-emerald-200' if val and val != 'False' and val != 0 else 'bg-rose-50 text-rose-600 border border-rose-100' }}">
+                            {{ val }}
+                        </span>
+                        {% elif val | string | length > 80 %}
+                        <span class="cursor-help text-gray-600">{{ (val | string)[:80] }}<span class="text-indigo-400">...</span></span>
+                        {% else %}
                         {{ val }}
-                    </span>
-                    {% elif val | string | length > 80 %}
-                    <span class="cursor-help">{{ (val | string)[:80] }}...</span>
-                    {% else %}
-                    {{ val }}
-                    {% endif %}
-                </td>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                    <td class="px-4 py-3 sticky right-0 z-10 bg-white group-hover:bg-indigo-50/40 border-l border-gray-100">
+                        {% if has_pk %}
+                        <button 
+                            hx-delete="/database/row?table_name={{ table_name }}"
+                            hx-ext="json-enc"
+                            hx-vals='{"pk_values": { {% for pk in pks %}"{{ pk }}": {{ row[pk] | tojson }}{{ "," if not loop.last }}{% endfor %} } }'
+                            hx-confirm="Bạn có chắc chắn muốn xóa bản ghi này khỏi bảng {{ table_name }}?"
+                            hx-target="closest tr"
+                            hx-swap="outerHTML swap:0.5s"
+                            class="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                            title="Xóa dòng">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                        {% else %}
+                        <span class="text-[10px] text-gray-300 italic">No PK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ columns|length + 2 }}" class="px-4 py-12 text-center text-gray-400 bg-white">
+                        <div class="flex flex-col items-center justify-center gap-3">
+                            <svg class="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            <span class="text-sm">Không tìm thấy dữ liệu {% if q %}cho từ khóa "{{q}}"{% endif %} trong bảng <strong class="text-gray-600 font-mono">{{ table_name }}</strong></span>
+                        </div>
+                    </td>
+                </tr>
                 {% endfor %}
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="{{ columns|length }}" class="px-4 py-8 text-center text-gray-500 bg-white">
-                    <div class="flex flex-col items-center justify-center gap-2">
-                        <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                        </svg>
-                        <span>No data found in <strong>{{ table_name }}</strong></span>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Footer StatusBar -->
+    <div class="px-4 py-2 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2">
+            <span class="flex h-2 w-2 rounded-full bg-emerald-400"></span>
+            Table <span class="font-mono font-medium text-gray-700">{{ table_name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <span>Showing <span class="font-medium text-gray-700">{{ rows | length }}</span> rows</span>
+            {% if total_rows is defined %}
+            <span class="text-gray-300">|</span>
+            <span>Total: <span class="font-medium text-gray-700">{{ total_rows }}</span></span>
+            {% endif %}
+        </div>
+    </div>
 </div>
+
+<style>
+.htmx-row.htmx-swapping {
+    opacity: 0;
+    transform: translateX(20px);
+    transition: all 0.5s ease;
+}
+</style>
