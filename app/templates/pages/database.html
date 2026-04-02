@@ -1,50 +1,153 @@
 {% extends "layouts/app.html" %}
 
-{% block page_title %}<svg class="w-5 h-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4">
-    </path>
-</svg> Database Explorer{% endblock %}
-{% block page_subtitle %}Khám phá dữ liệu SQLite nội bộ{% endblock %}
+{% block title %}Database • Auto Publisher{% endblock %}
+{% block page_title %}
+<div class="flex items-center gap-2">
+    <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+    </svg>
+    <span>Database Explorer</span>
+</div>
+{% endblock %}
+{% block page_subtitle %}Khám phá dữ liệu internal SQLite của hệ thống{% endblock %}
 
 {% block content %}
-<div class="w-full grid grid-cols-1 gap-6">
-    <!-- ─── Database Explorer ─────────────────────────────────────────── -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col min-h-[500px]">
-        <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-3 mb-4">
-            <h2
-                class="text-base font-semibold font-display text-gray-900 flex items-center gap-2 shrink-0 whitespace-nowrap">
-                <svg class="w-5 h-5 inline-block mr-1 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4">
-                    </path>
-                </svg> Database Explorer
-                <span
-                    class="text-xs font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap shrink-0">Top
-                    50 rows</span>
-            </h2>
-            <div class="flex items-center gap-3">
-                <select id="db-table-select" name="table_name" hx-get="/database/fragments/db-explorer"
-                    hx-target="#db-explorer-container" hx-trigger="change"
-                    class="text-sm border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 py-1.5 pl-3 pr-8">
-                    <option value="" disabled selected>Chọn Table...</option>
-                    <option value="jobs">jobs</option>
-                    <option value="accounts">accounts</option>
-                    <option value="pages">pages</option>
-                    <option value="viral_materials">viral_materials</option>
-                    <option value="system_state">system_state</option>
-                </select>
-                <button hx-get="/database/fragments/db-explorer" hx-target="#db-explorer-container"
-                    hx-include="#db-table-select"
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
-                    ↻ Refresh
-                </button>
-            </div>
+<div class="flex flex-col md:flex-row gap-6 h-[calc(100vh-10rem)]">
+    <!-- ─── Sidebar: Table List ─────────────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 w-full md:w-64 lg:w-72 flex-shrink-0 flex flex-col h-full overflow-hidden">
+        <div class="p-4 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Tables in schema</h3>
         </div>
-        <div id="db-explorer-container"
-            class="overflow-x-auto border border-gray-100 rounded-lg bg-gray-50 flex-1 flex items-center justify-center min-h-[300px]">
-            <div class="text-sm text-gray-400">Please select a table to view data</div>
+        <div class="flex-1 overflow-y-auto p-2">
+            <ul class="space-y-1">
+                {% for table in tables_info %}
+                <li>
+                    <button 
+                        @click="activeTable = '{{ table.name }}'; document.getElementById('q').value=''"
+                        hx-get="/database/fragments/db-explorer" 
+                        hx-vars="table_name:'{{ table.name }}', limit:document.getElementById('limit-select').value"
+                        hx-target="#db-explorer-container"
+                        class="w-full flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors duration-150 ease-in-out border border-transparent"
+                        :class="activeTable === '{{ table.name }}' ? 'bg-indigo-50 text-indigo-700 border-indigo-100 shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                    >
+                        <div class="flex items-center gap-2 truncate">
+                            <svg class="w-4 h-4 shrink-0 transition-colors" :class="activeTable === '{{ table.name }}' ? 'text-indigo-500' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span class="truncate font-medium">{{ table.name }}</span>
+                        </div>
+                        <span class="text-[10px] font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full shrink-0" :class="activeTable === '{{ table.name }}' ? 'bg-indigo-100 text-indigo-600' : ''">
+                            {{ table.count }}
+                        </span>
+                    </button>
+                </li>
+                {% else %}
+                <li class="px-3 py-4 text-xs text-gray-400 text-center">No tables found!</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- ─── Main Content: Data Explorer ─────────────────────────────────── -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex-1 flex flex-col min-w-0 h-full relative" x-data="{ activeTable: '' }">
+        <!-- Explorer Header Controls -->
+        <div class="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-t-2xl z-10 shrink-0">
+            <div class="flex items-center gap-3">
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest hidden sm:inline-block">Data Data</span>
+                <div x-show="activeTable" class="flex items-center gap-2" x-transition>
+                    <svg class="w-4 h-4 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span class="font-mono text-sm font-bold text-gray-800" x-text="activeTable"></span>
+                </div>
+            </div>
+            
+            <form 
+                class="flex items-center gap-2"
+                hx-get="/database/fragments/db-explorer"
+                hx-target="#db-explorer-container"
+            >
+                <!-- Hidden inputs to keep state -->
+                <input type="hidden" name="table_name" x-bind:value="activeTable">
+                
+                <!-- Search bar -->
+                <div class="relative max-w-xs w-full sm:w-auto" x-show="activeTable">
+                    <input type="text" name="q" id="q" placeholder="Tìm kiếm..." class="w-full hidden sm:block sm:w-48 text-sm border-gray-200 rounded-lg pl-8 pr-3 py-1.5 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm placeholder-gray-400 text-gray-600">
+                    <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none hidden sm:flex">
+                        <svg class="h-4 w-4 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Limit Selector -->
+                <div class="flex items-center gap-2" x-show="activeTable">
+                    <span class="text-xs text-gray-500">Limit:</span>
+                    <select id="limit-select" name="limit" 
+                        class="text-sm border-gray-200 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 py-1.5 pl-3 pr-8 shadow-sm text-gray-600 font-medium">
+                        <option value="10">10</option>
+                        <option value="50" selected>50</option>
+                        <option value="100">100</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+
+                <button type="submit" x-show="activeTable"
+                    class="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent shadow-none hover:shadow-sm" title="Refresh Data">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+
+        <!-- Data Area -->
+        <div id="db-explorer-container" class="flex-1 overflow-auto bg-gray-50 relative flex items-center justify-center">
+            <!-- Initial state -->
+            <div class="flex flex-col items-center justify-center p-12 text-gray-400">
+                <svg class="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <p class="text-sm">Vui lòng chọn Table từ menu bên trái để xem dữ liệu</p>
+            </div>
+            
+            <div class="htmx-indicator absolute inset-0 bg-white/60 backdrop-blur-sm z-20 flex items-center justify-center pointer-events-none transition-opacity duration-300">
+                <div class="bg-white border text-indigo-600 border-indigo-100 shadow-xl px-4 py-2 rounded-full font-medium text-sm flex items-center gap-2">
+                    <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Loading...
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<style>
+/* Modern Scrollbar for the table and sidebar container */
+#db-explorer-container::-webkit-scrollbar, .overflow-y-auto::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+#db-explorer-container::-webkit-scrollbar-track, .overflow-y-auto::-webkit-scrollbar-track {
+    background: transparent;
+}
+#db-explorer-container::-webkit-scrollbar-thumb, .overflow-y-auto::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 20px;
+}
+#db-explorer-container:hover::-webkit-scrollbar-thumb, .overflow-y-auto:hover::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+}
+
+/* HTMX Loading Indicator */
+.htmx-indicator{
+    opacity:0;
+    pointer-events:none;
+}
+.htmx-request .htmx-indicator{
+    opacity:1;
+}
+.htmx-request.htmx-indicator{
+    opacity:1;
+}
+</style>
 {% endblock %}
