@@ -30,6 +30,23 @@ class GeminiAPIService:
         except ImportError:
             self.is_configured = False
             logger.warning("Thư viện `google-generativeai` chưa được cài đặt. Tính năng API Fallback bị vô hiệu hoá.")
+
+    def ask(self, prompt: str) -> str | None:
+        """Text-only prompt to Gemini API."""
+        if not self.is_configured:
+            logger.error("GeminiAPIService chưa sẵn sàng.")
+            return None
+        logger.info("🔥 [API Fallback] Đang gửi text prompt lên API chính thức trả phí")
+        t0 = time.time()
+        try:
+            response = self.model.generate_content(prompt)
+            if response and response.text:
+                logger.info("🔥 [API Fallback] Trả kết quả thành công (%.1fs)", time.time() - t0)
+                return response.text
+            return None
+        except Exception as e:
+            logger.error("🔥 [API Fallback] Lỗi khi tạo content từ API: %s", e)
+            return None
             
     def ask_with_file(self, prompt: str, file_path: str) -> str | None:
         """Uploads an image/video to Gemini API and generates content based on the prompt."""
