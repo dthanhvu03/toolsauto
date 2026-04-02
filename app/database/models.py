@@ -531,5 +531,6 @@ class AffiliateLink(Base):
     keyword = Column(String, unique=True, index=True, nullable=False) # e.g. "áo thun", "giày sneaker"
     url = Column(String, nullable=False) # e.g. "https://shope.ee/..."
     comment_template = Column(String, nullable=False) # e.g. "Đang sale mua ở đây nè: [LINK]"
+    commission_rate = Column(Float, nullable=True) # e.g. 15.5 cho 15.5%
     created_at = Column(Integer, default=now_ts)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
