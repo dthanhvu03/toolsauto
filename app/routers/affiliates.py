@@ -45,18 +45,27 @@ def get_affiliates_page(request: Request):
     })
 
 @router.get("/table", response_class=HTMLResponse)
-def get_affiliates_table(request: Request, q: str = "", db: Session = Depends(get_db)):
+def get_affiliates_table(request: Request, q: str = "", page: int = 1, db: Session = Depends(get_db)):
     """HTMX fragment for the table of affiliate links."""
+    limit = 25
+    offset = (page - 1) * limit
+
     query = db.query(AffiliateLink).order_by(AffiliateLink.created_at.desc())
     if q.strip():
         search = f"%{q.strip().lower()}%"
         query = query.filter(AffiliateLink.keyword.ilike(search))
-        
-    links = query.all()
-    
+
+    total = query.count()
+    links = query.offset(offset).limit(limit).all()
+    total_pages = max(1, (total + limit - 1) // limit)
+
     return templates.TemplateResponse("fragments/affiliates_table.html", {
         "request": request,
-        "links": links
+        "links": links,
+        "total": total,
+        "page": page,
+        "total_pages": total_pages,
+        "q": q,
     })
 
 @router.post("/save")
