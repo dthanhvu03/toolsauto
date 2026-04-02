@@ -56,6 +56,21 @@ def db_upgrade(revision: str = typer.Argument("head", help="Target revision (def
 
     If the DB already has all tables from a pre-Alembic install, run `db stamp head` once instead of upgrade.
     """
+    import sqlite3
+    from app.config import DB_PATH
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '_alembic_tmp_%'")
+        for (tmp_table,) in cursor.fetchall():
+            cursor.execute(f"DROP TABLE {tmp_table}")
+            typer.echo(f"🗑️ Dropped orphaned Alembic temp table: {tmp_table}")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        typer.echo(f"⚠️ Warning: Failed to clean tmp tables: {e}")
+
     _alembic(["upgrade", revision])
 
 
