@@ -22,22 +22,22 @@ def upgrade() -> None:
     """Upgrade schema - Minimalist version for SQLite compatibility."""
     # Accounts
     with op.batch_alter_table('accounts', schema=None) as batch_op:
-        batch_op.drop_index('idx_accounts_profile')
+        # batch_op.drop_index('idx_accounts_profile')
         batch_op.create_index(batch_op.f('ix_accounts_is_active'), ['is_active'], unique=False)
         batch_op.create_index(batch_op.f('ix_accounts_login_status'), ['login_status'], unique=False)
         batch_op.create_unique_constraint('uq_accounts_profile_path', ['profile_path'])
 
     # Discovered Channels
     with op.batch_alter_table('discovered_channels', schema=None) as batch_op:
-        batch_op.drop_index('ix_discovered_channels_account_id')
-        batch_op.drop_index('ix_discovered_channels_url_acc')
+        # batch_op.drop_index('ix_discovered_channels_account_id')
+        # batch_op.drop_index('ix_discovered_channels_url_acc')
         batch_op.create_index(batch_op.f('ix_discovered_channels_id'), ['id'], unique=False)
 
     # Jobs
     with op.batch_alter_table('jobs', schema=None) as batch_op:
-        batch_op.drop_index('idx_jobs_last_metrics_check')
-        batch_op.drop_index('idx_jobs_scheduled')
-        batch_op.drop_index('idx_jobs_tracking')
+        # batch_op.drop_index('idx_jobs_last_metrics_check')
+        # batch_op.drop_index('idx_jobs_scheduled')
+        # batch_op.drop_index('idx_jobs_tracking')
         batch_op.create_index(batch_op.f('ix_jobs_batch_id'), ['batch_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_jobs_dedupe_key'), ['dedupe_key'], unique=False)
         batch_op.create_index(batch_op.f('ix_jobs_finished_at'), ['finished_at'], unique=False)
@@ -49,7 +49,7 @@ def upgrade() -> None:
 
     # Page Insights
     with op.batch_alter_table('page_insights', schema=None) as batch_op:
-        batch_op.drop_index('idx_page_insights_platform')
+        # batch_op.drop_index('idx_page_insights_platform')
         batch_op.create_index(batch_op.f('ix_page_insights_platform'), ['platform'], unique=False)
 
     # System State
@@ -58,7 +58,7 @@ def upgrade() -> None:
 
     # Viral Materials
     with op.batch_alter_table('viral_materials', schema=None) as batch_op:
-        batch_op.drop_index('ix_viral_materials_url')
+        # batch_op.drop_index('ix_viral_materials_url')
         batch_op.create_index(batch_op.f('ix_viral_materials_url'), ['url'], unique=True)
         batch_op.create_index(batch_op.f('ix_viral_materials_id'), ['id'], unique=False)
 

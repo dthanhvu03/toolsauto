@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 import logging
+import time
 
 from app.database.core import get_db
 from app.database.models import AffiliateLink
@@ -128,6 +130,7 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
     success = 0
     skipped = 0
     errors = []
+    rows_to_upsert = []
     
     for i, item in enumerate(req.items, 1):
         if not item.keyword or not item.affiliate_url or not item.comment:
@@ -135,23 +138,34 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
             skipped += 1
             continue
             
-        existing = db.query(AffiliateLink).filter(AffiliateLink.keyword == item.keyword).first()
-        if existing:
-            existing.url = item.affiliate_url
-            existing.comment_template = item.comment
-            existing.commission_rate = item.commission_rate
-            success += 1
-        else:
-            link = AffiliateLink(
-                keyword=item.keyword,
-                url=item.affiliate_url,
-                comment_template=item.comment,
-                commission_rate=item.commission_rate
-            )
-            db.add(link)
-            success += 1
+        rows_to_upsert.append({
+            'keyword': item.keyword,
+            'url': item.affiliate_url,
+            'comment_template': item.comment,
+            'commission_rate': float(item.commission_rate) if item.commission_rate else None,
+            'created_at': int(time.time()),
+            'updated_at': int(time.time()),
+        })
+        success += 1
             
-    db.commit()
+    if rows_to_upsert:
+        try:
+            stmt = sqlite_insert(AffiliateLink).values(rows_to_upsert)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=['keyword'],
+                set_={
+                    'url': stmt.excluded.url,
+                    'comment_template': stmt.excluded.comment_template,
+                    'commission_rate': stmt.excluded.commission_rate,
+                    'updated_at': stmt.excluded.updated_at,
+                }
+            )
+            db.execute(stmt)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            return {"success": 0, "skipped": len(req.items), "errors": [{"row": 0, "reason": str(e)}]}
+
     return {"success": success, "skipped": skipped, "errors": errors}
 
 @router.post("/ai-generate")
