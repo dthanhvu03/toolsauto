@@ -131,7 +131,7 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Câu Bình Luận Mẫu</label>
-                        <textarea name="comment_template" id="comment_template" required rows="3"
+                        <textarea name="comment_template" id="comment_template" rows="3"
                             placeholder="Đang flashsale ae mua lẹ không hết: [LINK]"
                             class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
                         <p class="text-xs text-gray-500 mt-1">Ghi rõ từ <b>[LINK]</b>. Hệ thống sẽ thay thế nó bằng URL bên trên.</p>
@@ -397,14 +397,7 @@ window.editAffiliate = function (id, keyword, url, template) {
 let csvParsedRows = [];
 const SHOPEE_REGEX = /(shope\.pe|shopee\.vn|s\.shopee\.vn)/i;
 
-// Comment templates for auto-generation when comment column is missing
-const AUTO_COMMENTS = [
-    "Mọi người mua cái này xài ngon lắm nè: [LINK]",
-    "Hàng ngon, giá rẻ, mua ở đây nè ae: [LINK]",
-    "Deal xịn đang sale, chốt lẹ: [LINK]",
-    "Mình mới mua xong ưng lắm, chia sẻ cho mn: [LINK]",
-    "Ai cần thì mua ở đây chính hãng nha: [LINK]",
-];
+
 
 function downloadCsvTemplate() {
     const header = 'keyword,affiliate_url,comment,commission_rate\n';
@@ -463,13 +456,8 @@ function mapCsvRow(raw) {
         if (!isNaN(n) && n >= 0 && n <= 100) rate = n;
     }
 
-    // Auto-generate comment if missing
-    if (!comment) {
-        const randomComment = AUTO_COMMENTS[Math.floor(Math.random() * AUTO_COMMENTS.length)];
-        comment = randomComment;
-    }
-    // Ensure [LINK] is present
-    if (!comment.includes('[LINK]')) {
+    // Ensure [LINK] is present only if comment is provided
+    if (comment && !comment.includes('[LINK]')) {
         comment = comment + ' [LINK]';
     }
 
@@ -487,8 +475,8 @@ function validateCsvRow(row) {
     else if (kw.length > 100) errors.push('Keyword quá 100 ký tự');
     if (!url) errors.push('URL trống');
     else if (!SHOPEE_REGEX.test(url)) errors.push('URL không phải Shopee');
-    if (!comment) errors.push('Comment trống');
-    else if (!comment.includes('[LINK]')) errors.push('Thiếu [LINK]');
+    // Comment is now optional (AI will generate if missing)
+    if (comment && !comment.includes('[LINK]')) errors.push('Thiếu [LINK] trong comment');
     if (rate !== undefined && rate !== '' && rate !== null && rate !== 0) {
         const n = Number(rate);
         if (isNaN(n) || n < 0 || n > 100) errors.push('Commission 0-100');

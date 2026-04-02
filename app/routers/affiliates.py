@@ -22,7 +22,7 @@ from app.services.gemini_api import GeminiAPIService
 class BatchItem(BaseModel):
     keyword: str
     affiliate_url: str
-    comment: str
+    comment: Optional[str] = None
     commission_rate: Optional[float] = None
 
 class BatchImportRequest(BaseModel):
@@ -142,16 +142,19 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
     rows_to_upsert = []
     
     for i, item in enumerate(req.items, 1):
-        if not item.keyword or not item.affiliate_url or not item.comment:
-            errors.append({"row": i, "reason": "Thiếu thông tin bắt buộc"})
+        if not item.keyword or not item.affiliate_url:
+            errors.append({"row": i, "reason": "Thiếu thông tin bắt buộc (Keyword & URL)"})
             skipped += 1
             continue
+            
+        ai_status = "PENDING" if not item.comment else "DONE"
             
         rows_to_upsert.append({
             'keyword': item.keyword,
             'url': item.affiliate_url,
             'comment_template': item.comment,
             'commission_rate': float(item.commission_rate) if item.commission_rate else None,
+            'ai_status': ai_status,
             'created_at': int(time.time()),
             'updated_at': int(time.time()),
         })
@@ -166,6 +169,7 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
                     'url': stmt.excluded.url,
                     'comment_template': stmt.excluded.comment_template,
                     'commission_rate': stmt.excluded.commission_rate,
+                    'ai_status': stmt.excluded.ai_status,
                     'updated_at': stmt.excluded.updated_at,
                 }
             )
