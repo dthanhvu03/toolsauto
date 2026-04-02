@@ -3,58 +3,39 @@
 {% block title %}Page Insights | Premium Analytics{% endblock %}
 
 {% block head_extra %}
-<!-- Google Fonts -->
-<link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap"
-    rel="stylesheet">
-<!-- Tailwind CSS -->
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    tailwind.config = {
-        darkMode: 'class',
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
         theme: {
             extend: {
                 colors: {
-                    dark: {
-                        50: '#f8fafc',
-                        100: '#f1f5f9',
-                        200: '#e2e8f0',
-                        300: '#cbd5e1',
-                        400: '#94a3b8',
-                        500: '#64748b',
-                        600: '#475569',
-                        700: '#334155',
-                        800: '#1e293b',
-                        900: '#0f172a',
-                        950: '#020617',
-                    },
                     brand: {
                         primary: '#6366f1',
                         secondary: '#a855f7',
-                        accent: '#22d3ee',
+                        accent: '#0891b2',
                     }
                 },
                 fontFamily: {
                     sans: ['Inter', 'sans-serif'],
                     display: ['Outfit', 'sans-serif'],
                 },
+                gridTemplateColumns: {
+                    '24': 'repeat(24, minmax(0, 1fr))',
+                },
                 animation: {
                     'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    'float': 'float 6s ease-in-out infinite',
-                    'fade-in': 'fadeIn 0.5s ease-out forwards',
-                    'slide-up': 'slideUp 0.6s ease-out forwards',
+                    'fade-in': 'fadeIn 0.3s ease-out forwards',
+                    'slide-up': 'slideUp 0.3s ease-out forwards',
                 },
                 keyframes: {
-                    float: {
-                        '0%, 100%': { transform: 'translateY(0)' },
-                        '50%': { transform: 'translateY(-10px)' },
-                    },
                     fadeIn: {
                         '0%': { opacity: '0' },
                         '100%': { opacity: '1' },
                     },
                     slideUp: {
-                        '0%': { opacity: '0', transform: 'translateY(20px)' },
+                        '0%': { opacity: '0', transform: 'translateY(10px)' },
                         '100%': { opacity: '1', transform: 'translateY(0)' },
                     }
                 }
@@ -62,44 +43,48 @@
         }
     }
 </script>
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style type="text/tailwindcss">
+    @layer base {
+        html {
+            scroll-behavior: smooth;
+        }
+    }
+
     @layer components {
-        .glass {
-            background: rgba(15, 23, 42, 0.8);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+        .insight-card {
+            @apply bg-white rounded-2xl shadow-sm border border-gray-100 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/5 hover:-translate-y-0.5;
         }
-        .glass-light {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+        .metric-label {
+            @apply flex items-center gap-2 text-slate-500 text-xs font-bold uppercase tracking-widest mb-3;
         }
-        .text-gradient {
-            @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400;
+        .metric-value {
+            @apply text-4xl font-display font-extrabold text-gray-900 tracking-tight;
         }
-        .card-hover {
-            @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-indigo-500/10;
+        .filter-bar {
+            @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-2 flex flex-col sm:flex-row items-center gap-2;
         }
-        .btn-primary {
-            @apply bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-semibold py-2.5 px-6 rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 hover:scale-[1.05] active:scale-95 transition-all;
+        .btn-refresh {
+            @apply bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold py-2.5 px-6 rounded-xl shadow-md shadow-indigo-500/20 hover:shadow-indigo-500/30 hover:scale-[1.03] active:scale-95 transition-all text-sm;
+        }
+        .heatmap-cell {
+            @apply w-full aspect-square rounded-[2px] transition-all hover:ring-2 hover:ring-indigo-400 hover:z-10 cursor-help;
         }
     }
-    
-    .insights-body {
-        background-color: #020617;
-        background-image: 
-            radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-            radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.1) 0px, transparent 50%);
+
+    @media (prefers-reduced-motion: reduce) {
+        * {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
     }
-    
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #020617; }
-    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    /* Custom Scrollbar - light mode */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #f8fafc; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 </style>
 {% endblock %}
 
@@ -107,225 +92,306 @@
 {% block page_subtitle %}Phân tích hiệu năng nội dung & dự báo tăng trưởng.{% endblock %}
 
 {% block content %}
-<div class="insights-body text-slate-200 antialiased font-sans -m-4 lg:-m-6 p-4 lg:p-6 min-h-screen">
-    <div class="w-full mx-auto space-y-8 animate-fade-in">
-        <!-- V4: AI Strategic Reasoning Pulse -->
-        <div id="aiStrategicPulse"
-            class="glass p-6 border-indigo-500/30 ring-1 ring-indigo-500/20 relative overflow-hidden group rounded-3xl">
-            <div
-                class="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl group-hover:bg-indigo-500/20 transition-all">
+<div class="w-full space-y-6 animate-fade-in">
+
+    <!-- AI Strategic Reasoning Pulse -->
+    <div id="aiStrategicPulse"
+        class="bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700 rounded-2xl shadow-lg shadow-indigo-500/20 text-white transition-transform active:scale-[0.99] p-6 relative overflow-hidden group">
+        <div class="absolute -right-10 -top-10 w-40 h-40 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-all"></div>
+        <div class="absolute right-6 bottom-6 w-24 h-24 bg-purple-400/10 rounded-full blur-2xl"></div>
+        <div class="flex items-start gap-4 relative z-10">
+            <div class="flex-shrink-0 w-11 h-11 bg-white/15 rounded-xl flex items-center justify-center border border-white/20 backdrop-blur-sm">
+                <svg class="w-5 h-5 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
             </div>
-            <div class="flex items-start gap-4">
-                <div
-                    class="flex-shrink-0 w-12 h-12 bg-indigo-600/20 rounded-xl flex items-center justify-center border border-indigo-500/30 animate-pulse">
-                    <svg class="w-6 h-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+            <div class="flex-1 space-y-2">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        Hệ Thống Phản Biện AI (V4)
+                        <span class="px-2 py-0.5 bg-white/15 text-indigo-100 text-[9px] rounded-md uppercase tracking-wider font-extrabold border border-white/20">Visible Intelligence</span>
+                    </h2>
+                    <span class="text-[10px] text-indigo-200/70 font-mono">STATUS: Strategic Scanning...</span>
                 </div>
-                <div class="flex-1 space-y-2">
-                    <div class="flex items-center justify-between">
-                        <h2 class="text-lg font-bold text-gray-100 flex items-center gap-2">
-                            Hệ Thống Phản Biện AI (V4)
-                            <span
-                                class="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-[10px] rounded uppercase tracking-wider font-extrabold border border-indigo-500/30">Visible
-                                Intelligence</span>
-                        </h2>
-                        <span class="text-xs text-indigo-400 font-mono">STATUS: Strategic Scanning...</span>
+                <p id="aiCommentaryText" class="text-indigo-100/80 text-sm italic leading-relaxed">
+                    "Đang phân tích vận tốc tăng trưởng của toàn bộ Page... Em nhận thấy niche **Làm Đẹp** đang có
+                    xu hướng bùng nổ visual hook dạng 'transformation'. Em khuyên anh nên tập trung reup các video có
+                    transition nhanh trong 3 giây đầu để tối ưu Retention Rate."
+                </p>
+                <div class="flex gap-4 pt-1">
+                    <div class="flex items-center gap-1.5 text-[10px] text-indigo-200/60">
+                        <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_6px_rgba(52,211,153,0.5)]"></span>
+                        Niche: Beauty Specialist Active
                     </div>
-                    <p id="aiCommentaryText" class="text-gray-400 text-sm italic leading-relaxed">
-                        "Đang phân tích vận tốc tăng trưởng của toàn bộ Page... Em nhận thấy niche **Làm Đẹp** đang có
-                        xu
-                        hướng bùng nổ visual hook dạng 'transformation'. Em khuyên anh nên tập trung reup các video có
-                        transition nhanh trong 3 giây đầu để tối ưu Retention Rate."
-                    </p>
-                    <div class="flex gap-4 pt-2">
-                        <div class="flex items-center gap-1.5 text-[11px] text-gray-500">
-                            <span class="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.5)]"></span>
-                            Niche: Beauty Specialist Active
-                        </div>
-                        <div class="flex items-center gap-1.5 text-[11px] text-gray-500">
-                            <span class="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
-                            Algorithm: Viral Retention V3
-                        </div>
+                    <div class="flex items-center gap-1.5 text-[10px] text-indigo-200/60">
+                        <span class="w-1.5 h-1.5 bg-sky-400 rounded-full shadow-[0_0_6px_rgba(56,189,248,0.5)]"></span>
+                        Algorithm: Viral Retention V3
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Filters -->
-        <div class="flex flex-col lg:flex-row lg:items-end justify-end gap-6">
-            <div class="glass p-2 rounded-2xl flex flex-col sm:flex-row items-center gap-2 border border-white/10">
-                <div class="flex items-center space-x-2 px-3">
-                    <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Page</span>
-                    <select id="pageSelect" onchange="loadData()"
-                        class="bg-transparent border-none text-brand-accent font-semibold text-sm focus:ring-0 cursor-pointer min-w-[140px]">
-                        <option value="" class="bg-dark-900 text-white">-- All Assets --</option>
-                        {% for p in pages %}
-                        <option value="{{ p.url }}" class="bg-dark-900 text-white">{{ p.name }}</option>
-                        {% endfor %}
-                    </select>
+    <!-- Filters -->
+    <div class="flex flex-col lg:flex-row lg:items-end justify-end gap-4">
+        <div class="filter-bar" role="toolbar" aria-label="Dashboard Filters">
+            <div class="flex items-center space-x-2 px-3">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Page</span>
+                <select id="pageSelect" onchange="loadData()" aria-label="Select Content Page"
+                    class="bg-transparent border-none text-gray-800 font-bold text-sm focus:ring-0 cursor-pointer min-w-[140px]">
+                    <option value="">-- All Assets --</option>
+                    {% for p in pages %}
+                    <option value="{{ p.url }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="h-6 w-[1px] bg-gray-200 hidden sm:block"></div>
+            <div class="flex items-center space-x-2 px-3">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Platform</span>
+                <select id="platformSelect" onchange="loadData()" aria-label="Select Social Platform"
+                    class="bg-transparent border-none text-indigo-600 font-bold text-sm focus:ring-0 cursor-pointer">
+                    <option value="">Universal</option>
+                    <option value="facebook" selected>Facebook</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="instagram">Instagram</option>
+                </select>
+            </div>
+            <button onclick="loadData(); loadPageAnalysis();" class="btn-refresh flex items-center gap-2" aria-label="Refresh Data">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                    </path>
+                </svg>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Strategic Recommendations Section -->
+    <div id="strategicSection" class="space-y-5 hidden">
+        <h3 class="text-lg font-display font-bold text-gray-900 flex items-center gap-3">
+            <span class="flex h-2.5 w-2.5 relative">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-500 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-600"></span>
+            </span>
+            Phân Tích Chiến Lược
+        </h3>
+        <div id="analysisList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <!-- Analysis cards injected here -->
+        </div>
+    </div>
+
+    <!-- Metrics Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- Total Reach -->
+        <div class="insight-card p-6 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 w-24 h-24 bg-indigo-100 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-all"></div>
+            <div class="relative z-10">
+                <div class="metric-label">
+                    <span class="p-1.5 bg-indigo-50 rounded-lg"><svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg></span>
+                    Total Traffic Volume
                 </div>
-                <div class="h-6 w-[1px] bg-white/10 hidden sm:block"></div>
-                <div class="flex items-center space-x-2 px-3">
-                    <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Platform</span>
-                    <select id="platformSelect" onchange="loadData()"
-                        class="bg-transparent border-none text-brand-primary font-semibold text-sm focus:ring-0 cursor-pointer">
-                        <option value="" class="bg-dark-900 text-white">Universal</option>
-                        <option value="facebook" selected class="bg-dark-900 text-white">Facebook</option>
-                        <option value="tiktok" class="bg-dark-900 text-white">TikTok</option>
-                        <option value="instagram" class="bg-dark-900 text-white">Instagram</option>
-                    </select>
+                <div class="flex items-baseline gap-2">
+                    <span id="totalViews" class="metric-value">--</span>
+                    <span class="text-emerald-500 text-xs font-bold flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Live
+                    </span>
                 </div>
-                <button onclick="loadData(); loadPageAnalysis();" class="btn-primary flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                        </path>
-                    </svg>
-                    Refresh
-                </button>
+                <div class="mt-4 h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r from-indigo-500 to-purple-400 rounded-full" style="width: 75%"></div>
+                </div>
             </div>
         </div>
 
-        <!-- Strategic Recommendations Section -->
-        <div id="strategicSection" class="space-y-6 hidden">
-            <h3 class="text-2xl font-display font-bold text-white flex items-center gap-3">
-                <span class="flex h-3 w-3 relative">
-                    <span
-                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-accent opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-3 w-3 bg-brand-accent"></span>
-                </span>
-                Phân Tích Chiến Lược (Strategic Analysis)
+        <!-- Engagement -->
+        <div class="insight-card p-6 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 w-24 h-24 bg-purple-100 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-all"></div>
+            <div class="relative z-10">
+                <div class="metric-label">
+                    <span class="p-1.5 bg-purple-50 rounded-lg"><svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg></span>
+                    Global Interaction Rate
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <span id="globalEngRate" class="metric-value">--</span>
+                    <span class="text-slate-500 text-sm font-medium">avg%</span>
+                </div>
+                <p id="totalLikes" class="mt-3 text-slate-500 text-sm font-medium">Collecting community feedback...</p>
+            </div>
+        </div>
+
+        <!-- Top Performer -->
+        <div class="insight-card p-6 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 w-24 h-24 bg-cyan-100 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-all"></div>
+            <div class="relative z-10">
+                <div class="metric-label">
+                    <span class="p-1.5 bg-cyan-50 rounded-lg"><svg class="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg></span>
+                    Highest Alpha Post
+                </div>
+                <div id="topViews" class="text-2xl font-display font-bold text-indigo-600 tracking-tight">--</div>
+                <div class="mt-3">
+                    <p id="topCaption" class="text-slate-500 text-sm line-clamp-2 italic font-medium">Scanning for viral breakouts...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts & Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Chart Panel -->
+        <div class="lg:col-span-2 insight-card p-6 space-y-4 h-full">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-display font-bold text-gray-900 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                    Velocity Trends
+                </h3>
+                <div class="flex gap-2">
+                    <div class="px-3 py-1 bg-indigo-50 rounded-full text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
+                        Performance Index</div>
+                </div>
+            </div>
+            <div class="relative h-[360px] w-full">
+                <canvas id="growthChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Leaderboard Panel -->
+        <div class="insight-card p-6 space-y-4 flex flex-col h-full">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-display font-bold text-gray-900">Top Signals</h3>
+                <svg class="w-5 h-5 text-slate-300" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.5h-2V13h2v3.5zm0-5.5h-2V7h2v4z" />
+                </svg>
+            </div>
+
+            <div id="topPostsList" class="flex-1 space-y-3 overflow-y-auto pr-1">
+                <!-- Loading state -->
+                <div class="animate-pulse space-y-3">
+                    <div class="h-16 bg-gray-50 rounded-xl"></div>
+                    <div class="h-16 bg-gray-50 rounded-xl"></div>
+                    <div class="h-16 bg-gray-50 rounded-xl"></div>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-gray-100">
+                <p class="text-[10px] text-slate-400 text-center font-medium uppercase tracking-wider">Data refreshed every 12 hours automatically</p>
+            </div>
+        </div>
+    </div> <!-- Closing Charts & Content Grid -->
+
+    <!-- Row 4: Secondary Metrics -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 animate-slide-up" style="animation-delay: 0.3s;">
+        <div class="insight-card p-5">
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Avg Views / Post</div>
+            <div id="avgViews" class="text-2xl font-display font-bold text-gray-900">--</div>
+            <div class="text-[10px] text-emerald-600 font-bold mt-1">High Velocity</div>
+        </div>
+        <div class="insight-card p-5">
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Shares</div>
+            <div id="totalShares" class="text-2xl font-display font-bold text-gray-900">--</div>
+            <div class="text-[10px] text-indigo-600 font-bold mt-1">Viral Potential</div>
+        </div>
+        <div class="insight-card p-5">
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Engagement Rate</div>
+            <div id="avgEngRate" class="text-2xl font-display font-bold text-gray-900">--</div>
+            <div class="text-[10px] text-purple-600 font-bold mt-1">Community Strength</div>
+        </div>
+        <div class="insight-card p-5">
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Active Posts</div>
+            <div id="activePostsCount" class="text-2xl font-display font-bold text-gray-900">--</div>
+            <div class="text-[10px] text-slate-500 font-bold mt-1">System Tracking</div>
+        </div>
+    </div>
+
+    <!-- Row 5: Platform & Heatmap -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-slide-up" style="animation-delay: 0.4s;">
+        <!-- Platform Distribution -->
+        <div class="lg:col-span-1 insight-card p-6 flex flex-col">
+            <h3 class="text-sm font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <span class="w-2 h-2 bg-indigo-500 rounded-full"></span>
+                Platform Distribution
             </h3>
-            <div id="analysisList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Analysis cards injected here -->
+            <div class="flex-1 flex items-center justify-center relative">
+                <canvas id="platformChart" class="max-h-[250px]"></canvas>
+            </div>
+            <div id="platformLegend" class="mt-4 grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-500 uppercase">
+                <!-- Legend items injected by JS -->
             </div>
         </div>
 
-        <!-- Metrics Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Total Reach -->
-            <div class="glass p-8 rounded-3xl card-hover relative overflow-hidden group">
-                <div
-                    class="absolute -right-6 -top-6 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl group-hover:bg-indigo-500/20 transition-all">
-                </div>
-                <div class="flex flex-col h-full justify-between">
-                    <div>
-                        <div
-                            class="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest mb-4">
-                            <span class="p-1.5 bg-indigo-500/20 rounded-lg"><svg class="w-4 h-4 text-indigo-400"
-                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path
-                                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg></span>
-                            Total Traffic Volume
-                        </div>
-                        <div class="flex items-baseline gap-2">
-                            <span id="totalViews" class="text-5xl font-display font-extrabold text-white">--</span>
-                            <span class="text-green-400 text-sm font-bold animate-pulse-slow">Live</span>
-                        </div>
-                    </div>
-                    <div class="mt-6 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
-                        <div class="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 animate-pulse"
-                            style="width: 75%"></div>
-                    </div>
+        <!-- Engagement Heatmap -->
+        <div class="lg:col-span-2 insight-card p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                    Peak Engagement Windows
+                </h3>
+                <div class="flex items-center gap-4 text-[10px] font-bold text-slate-500 uppercase">
+                    <div class="flex items-center gap-1"><div class="w-2 h-2 bg-indigo-50 rounded"></div> Low</div>
+                    <div class="flex items-center gap-1"><div class="w-2 h-2 bg-indigo-600 rounded"></div> High</div>
                 </div>
             </div>
-
-            <!-- Engagement -->
-            <div class="glass p-8 rounded-3xl card-hover relative overflow-hidden group">
-                <div
-                    class="absolute -right-6 -top-6 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all">
-                </div>
-                <div class="flex flex-col h-full justify-between">
-                    <div>
-                        <div
-                            class="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest mb-4">
-                            <span class="p-1.5 bg-purple-500/20 rounded-lg"><svg class="w-4 h-4 text-purple-400"
-                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path
-                                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                </svg></span>
-                            Global Interaction Rate
-                        </div>
-                        <div class="flex items-baseline gap-2">
-                            <span id="globalEngRate" class="text-5xl font-display font-extrabold text-white">--</span>
-                            <span class="text-slate-500 text-sm font-medium">avg%</span>
-                        </div>
+            
+            <div class="relative">
+                <div class="flex">
+                    <div class="w-10 flex flex-col justify-between text-[9px] font-bold text-slate-400 py-4 uppercase">
+                        <span>Mon</span>
+                        <span>Wed</span>
+                        <span>Fri</span>
+                        <span>Sun</span>
                     </div>
-                    <p id="totalLikes" class="mt-4 text-slate-500 font-medium">Collecting community feedback...</p>
-                </div>
-            </div>
-
-            <!-- Top Performer -->
-            <div class="glass p-8 rounded-3xl card-hover relative overflow-hidden group">
-                <div
-                    class="absolute -right-6 -top-6 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/20 transition-all">
-                </div>
-                <div class="flex flex-col h-full justify-between">
-                    <div>
-                        <div
-                            class="flex items-center gap-2 text-slate-400 text-sm font-bold uppercase tracking-widest mb-4">
-                            <span class="p-1.5 bg-cyan-500/20 rounded-lg"><svg class="w-4 h-4 text-cyan-400" fill="none"
-                                    stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                </svg></span>
-                            Highest Alpha Post
+                    <div class="flex-1">
+                        <div id="heatmapGrid" class="grid gap-[2px]" style="grid-template-columns: repeat(24, minmax(0, 1fr));">
+                            <!-- 168 cells injected by JS -->
                         </div>
-                        <div id="topViews" class="text-3xl font-display font-bold text-brand-accent tracking-tighter">--
+                        <div class="flex justify-between mt-3 text-[9px] font-bold text-slate-400 uppercase">
+                            <span>12 AM</span>
+                            <span>6 AM</span>
+                            <span>12 PM</span>
+                            <span>6 PM</span>
+                            <span>11 PM</span>
                         </div>
-                    </div>
-                    <div class="mt-4">
-                        <p id="topCaption" class="text-slate-200 text-sm line-clamp-2 italic font-medium">Scanning for
-                            viral breakouts...</p>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Charts & Content -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Chart Panel -->
-            <div class="lg:col-span-2 glass p-8 rounded-[40px] border border-white/5 space-y-8 h-full">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-2xl font-display font-bold text-white flex items-center gap-3">
-                        <span class="w-2 h-2 rounded-full bg-brand-primary animate-ping"></span>
-                        Velocity Trends
-                    </h3>
-                    <div class="flex gap-2">
-                        <div
-                            class="px-3 py-1 bg-brand-primary/10 rounded-full text-[10px] font-bold text-brand-primary uppercase">
-                            Performance Index</div>
-                    </div>
-                </div>
-                <div class="relative h-[400px] w-full">
-                    <canvas id="growthChart"></canvas>
-                </div>
+    <!-- Row 6: AI Roadmap Bento -->
+    <div class="insight-card p-8 animate-slide-up" style="animation-delay: 0.5s;">
+        <h3 class="text-lg font-display font-black text-gray-900 mb-8 flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                </svg>
             </div>
-
-            <!-- Leaderboard Panel -->
-            <div class="glass p-8 rounded-[40px] border border-white/5 space-y-8 flex flex-col h-full">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-2xl font-display font-bold text-white">Top Signals</h3>
-                    <svg class="w-6 h-6 text-slate-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path
-                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.5h-2V13h2v3.5zm0-5.5h-2V7h2v4z" />
-                    </svg>
-                </div>
-
-                <div id="topPostsList" class="flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar">
-                    <!-- Loading state -->
-                    <div class="animate-pulse space-y-4">
-                        <div class="h-20 bg-white/5 rounded-2xl"></div>
-                        <div class="h-20 bg-white/5 rounded-2xl"></div>
-                        <div class="h-20 bg-white/5 rounded-2xl"></div>
-                    </div>
-                </div>
-
-                <div class="pt-4 border-t border-white/5">
-                    <p class="text-xs text-slate-500 text-center font-medium">Data refreshed every 12 hours
-                        automatically.</p>
-                </div>
+            AI Strategic Growth Roadmap
+        </h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100 group hover:bg-indigo-600 transition-all duration-300">
+                <div class="text-xs font-black text-indigo-600 uppercase mb-3 group-hover:text-indigo-100">Step 01: Retention</div>
+                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">Short-form Transition</div>
+                <p class="text-xs text-slate-600 group-hover:text-indigo-100/80">Optimize first 3 seconds of video for currently exploding pages.</p>
+            </div>
+            <div class="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100 group hover:bg-emerald-600 transition-all duration-300">
+                <div class="text-xs font-black text-emerald-600 uppercase mb-3 group-hover:text-emerald-100">Step 02: Scale</div>
+                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">Niche Decoupling</div>
+                <p class="text-xs text-slate-600 group-hover:text-emerald-100/80">Clone successful patterns from 'KIDS0810' to new satellite pages.</p>
+            </div>
+            <div class="p-5 rounded-2xl bg-purple-50/50 border border-purple-100 group hover:bg-purple-600 transition-all duration-300">
+                <div class="text-xs font-black text-purple-600 uppercase mb-3 group-hover:text-purple-100">Step 03: Monetize</div>
+                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">Affiliate Injection</div>
+                <p class="text-xs text-slate-600 group-hover:text-purple-100/80">Activate auto-comment machine for high-view posts (> 50k).</p>
+            </div>
+            <div class="p-5 rounded-2xl bg-orange-50/50 border border-orange-100 group hover:bg-orange-600 transition-all duration-300">
+                <div class="text-xs font-black text-orange-600 uppercase mb-3 group-hover:text-orange-100">Step 04: Automate</div>
+                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">24/7 Scheduling</div>
+                <p class="text-xs text-slate-600 group-hover:text-orange-100/80">Shift posting schedule to match the Peak Engagement Heatmap.</p>
             </div>
         </div>
     </div>
@@ -335,8 +401,10 @@
 {% block script_extra %}
 <script>
     let growthChartInstance = null;
+    let platformChartInstance = null;
 
     const formatK = (n) => {
+        if (!n) return "0";
         if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
         if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
         return n.toLocaleString();
@@ -365,7 +433,6 @@
                     jsonGrowth.data.forEach(d => totalLikes += d.likes);
                     document.getElementById('totalLikes').innerText = `${formatK(totalLikes)} total interactions recorded.`;
 
-                    // Fake aggregate eng rate if needed or use from latest
                     const rate = latest.views > 0 ? ((latest.likes / latest.views) * 100).toFixed(2) : '0';
                     document.getElementById('globalEngRate').innerText = rate;
                 }
@@ -377,9 +444,140 @@
             if (jsonTop.status === 'success') {
                 renderLeaderboard(jsonTop.data);
             }
+
+            // 3. New Advanced Metrics
+            loadPlatformStats();
+            loadSecondaryMetrics();
+            loadEngagementHeatmap();
+
         } catch (err) {
             console.error("Dashboard load error:", err);
         }
+    }
+
+    async function loadSecondaryMetrics() {
+        const pageUrl = document.getElementById('pageSelect').value;
+        const platform = document.getElementById('platformSelect').value;
+        try {
+            const res = await fetch(`/insights/api/secondary-metrics?page_url=${encodeURIComponent(pageUrl)}&platform=${platform}`);
+            const json = await res.json();
+            if (json.status === 'success') {
+                const d = json.data;
+                document.getElementById('avgViews').textContent = formatK(d.avg_views);
+                document.getElementById('totalShares').textContent = formatK(d.total_shares);
+                document.getElementById('avgEngRate').textContent = d.engagement_rate + '%';
+                document.getElementById('activePostsCount').textContent = d.posts_count;
+            }
+        } catch (e) {
+            console.error("Secondary metrics fail:", e);
+        }
+    }
+
+    async function loadPlatformStats() {
+        const pageUrl = document.getElementById('pageSelect').value;
+        try {
+            const res = await fetch(`/insights/api/platform-stats?page_url=${encodeURIComponent(pageUrl)}`);
+            const json = await res.json();
+            if (json.status === 'success') {
+                updatePlatformChart(json.data);
+            }
+        } catch (e) { console.error("Platform stats fail:", e); }
+    }
+
+    function updatePlatformChart(data) {
+        const ctx = document.getElementById('platformChart').getContext('2d');
+        const container = document.getElementById('platformChart').parentElement;
+        const legend = document.getElementById('platformLegend');
+        
+        if (platformChartInstance) platformChartInstance.destroy();
+        
+        const views = data.map(d => d.views);
+        const totalViews = views.reduce((a, b) => a + b, 0);
+
+        if (!data || data.length === 0 || totalViews === 0) {
+            container.innerHTML = '<div class="text-sm text-slate-400 font-medium h-[250px] flex items-center justify-center">Chưa có dữ liệu phân bổ nền tảng</div>';
+            legend.innerHTML = '';
+            return;
+        }
+
+        const labels = data.map(d => d.platform.toUpperCase());
+        
+        // Ensure canvas exists if overwritten
+        if (!document.getElementById('platformChart')) {
+            container.innerHTML = '<canvas id="platformChart" class="max-h-[250px]"></canvas>';
+        }
+        
+        platformChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: views,
+                    backgroundColor: ['#6366f1', '#10b981', '#ec4899', '#f59e0b'],
+                    borderWidth: 0,
+                    hoverOffset: 15
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1e293b',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: (item) => ` ${item.label}: ${formatK(item.raw)} views`
+                        }
+                    }
+                }
+            }
+        });
+
+        const safeTotalViews = totalViews || 1;
+        legend.innerHTML = data.map((d, i) => `
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full" style="background-color: ${platformChartInstance.data.datasets[0].backgroundColor[i]}"></div>
+                <span>${d.platform}: ${((d.views / safeTotalViews) * 100).toFixed(0)}%</span>
+            </div>
+        `).join('');
+    }
+
+    async function loadEngagementHeatmap() {
+        const pageUrl = document.getElementById('pageSelect').value;
+        const platform = document.getElementById('platformSelect').value;
+        try {
+            const res = await fetch(`/insights/api/engagement-heatmap?page_url=${encodeURIComponent(pageUrl)}&platform=${platform}`);
+            const json = await res.json();
+            if (json.status === 'success') {
+                renderHeatmap(json.data);
+            }
+        } catch (e) { console.error("Heatmap fail:", e); }
+    }
+
+    function renderHeatmap(data) {
+        const grid = document.getElementById('heatmapGrid');
+        grid.innerHTML = '';
+        
+        let max = 0;
+        data.forEach(row => row.forEach(val => { if (val > max) max = val; }));
+        if (max === 0) max = 1;
+
+        const order = [1, 2, 3, 4, 5, 6, 0]; // Mon -> Sun
+        
+        order.forEach(dow => {
+            for (let hour = 0; hour < 24; hour++) {
+                const val = data[dow][hour];
+                const intensity = (val / max).toFixed(2);
+                const cell = document.createElement('div');
+                cell.className = 'heatmap-cell';
+                cell.style.backgroundColor = `rgba(99, 102, 241, ${Math.max(0.05, intensity)})`;
+                cell.title = `Interactions: ${val}`;
+                grid.appendChild(cell);
+            }
+        });
     }
 
     function renderLeaderboard(data) {
@@ -387,7 +585,7 @@
         list.innerHTML = '';
 
         if (data.length === 0) {
-            list.innerHTML = '<div class="text-center py-10 text-slate-500">No signals found in this range.</div>';
+            list.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm">No signals found in this range.</div>';
             return;
         }
 
@@ -395,30 +593,35 @@
         document.getElementById('topViews').innerText = formatK(data[0].views) + " views";
         document.getElementById('topCaption').innerText = data[0].caption || "Nội dung đang dẫn đầu thị trường.";
 
-        data.forEach((post, i) => {
+        data.slice(0, 6).forEach((post, i) => {
             const el = document.createElement('div');
-            el.className = 'glass-light p-4 rounded-2xl flex items-center gap-4 group cursor-pointer hover:bg-white/10 transition-all animate-slide-up';
+            el.className = 'animate-slide-up bg-gray-50 hover:bg-indigo-50/60 p-2.5 px-3 rounded-xl flex items-center gap-3 group cursor-pointer transition-all duration-200 border border-transparent hover:border-indigo-100 active:scale-[0.98]';
             el.style.animationDelay = `${i * 0.05}s`;
 
-            const growthColor = post.velocity > 0 ? 'text-green-400' : 'text-slate-500';
-            const trendIcon = post.velocity > 1000 ? '<svg class='w-3 h-3 inline text-orange-500' fill='none' viewBox='0 0 24 24' stroke='currentColor'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z'/></svg>' : (post.velocity > 0 ? '↗' : '');
+            const growthColor = post.velocity > 0 ? 'text-emerald-600' : 'text-slate-400';
+            const trendIcon = post.velocity > 1000 ? '<svg class="w-3 h-3 inline text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>' : (post.velocity > 0 ? '↗' : '');
 
             let iconStr = '';
-            if (post.platform === 'facebook') iconStr = '<svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
-            else if (post.platform === 'tiktok') iconStr = '<svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-4.17.07-8.33.07-12.5z"/></svg>';
-            else if (post.platform === 'instagram') iconStr = '<svg class="w-4 h-4 text-pink-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
+            if (post.platform === 'facebook') iconStr = '<svg class="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>';
+            else if (post.platform === 'tiktok') iconStr = '<svg class="w-4 h-4 text-gray-800" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-4.17.07-8.33.07-12.5z"/></svg>';
+            else if (post.platform === 'instagram') iconStr = '<svg class="w-4 h-4 text-pink-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
+
+            let captionText = post.caption;
+            if (!captionText || captionText === '<No Caption>' || captionText.startsWith('Views:')) {
+                captionText = post.page_name + ' Trending Post';
+            }
 
             el.innerHTML = `
-                <div class="flex-1 min-w-0">
-                    <div class="text-sm font-bold text-white truncate group-hover:text-brand-accent transition-colors">${post.caption || '<No Caption>'}</div>
-                    <div class="flex items-center gap-2 mt-1">
-                        ${iconStr}
-                        <span class="text-[10px] uppercase font-black tracking-widest text-slate-500">${post.page_name}</span>
-                    </div>
+                <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-white shadow-sm border border-gray-100 flex-shrink-0">
+                    ${iconStr}
                 </div>
-                <div class="text-right">
-                    <div class="text-sm font-black text-white">${formatK(post.views)}</div>
-                    <div class="text-[10px] font-bold ${growthColor}">${post.velocity > 0 ? '+' : ''}${formatK(post.velocity)} ${trendIcon}</div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-[13px] font-bold text-gray-900 truncate group-hover:text-indigo-600 transition-colors leading-tight" title="${captionText}">${captionText}</div>
+                    <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 mt-0.5 max-w-[120px] truncate">${post.page_name}</div>
+                </div>
+                <div class="text-right flex-shrink-0 flex flex-col items-end justify-center">
+                    <div class="text-[13px] font-black text-gray-900 leading-tight">${formatK(post.views)} <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest hidden sm:inline">views</span></div>
+                    <div class="text-[11px] font-bold ${growthColor} mt-0.5 flex items-center gap-0.5" title="Tăng trưởng trong 24h">${post.velocity > 0 ? '+' : ''}${formatK(post.velocity)} ${trendIcon} /24h</div>
                 </div>
             `;
             el.onclick = () => window.open(post.post_url, '_blank');
@@ -431,7 +634,6 @@
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
 
-        // Smarter labels: show time for intraday, date for historical
         const labels = data.map(d => {
             if (d.date.includes(' ')) {
                 const parts = d.date.split(' ');
@@ -446,8 +648,8 @@
 
         if (growthChartInstance) growthChartInstance.destroy();
 
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.4)');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 360);
+        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.15)');
         gradient.addColorStop(1, 'rgba(99, 102, 241, 0)');
 
         growthChartInstance = new Chart(ctx, {
@@ -458,15 +660,18 @@
                     label: 'Gross Reach',
                     data: views,
                     borderColor: '#6366f1',
-                    borderWidth: 6,
+                    borderWidth: 3,
                     backgroundColor: gradient,
                     fill: true,
-                    tension: 0.45,
-                    pointRadius: 8,
+                    tension: 0.4,
+                    pointRadius: 6,
                     pointBackgroundColor: '#fff',
                     pointBorderColor: '#6366f1',
-                    pointBorderWidth: 4,
-                    pointHoverRadius: 10,
+                    pointBorderWidth: 3,
+                    pointHoverRadius: 8,
+                    pointHoverBackgroundColor: '#6366f1',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 3,
                 }]
             },
             options: {
@@ -478,10 +683,10 @@
                         mode: 'index',
                         intersect: false,
                         backgroundColor: '#1e293b',
-                        titleFont: { family: 'Outfit', size: 16, weight: 'bold' },
-                        bodyFont: { family: 'Inter', size: 14 },
-                        padding: 16,
-                        cornerRadius: 12,
+                        titleFont: { family: 'Outfit', size: 14, weight: 'bold' },
+                        bodyFont: { family: 'Inter', size: 13 },
+                        padding: 14,
+                        cornerRadius: 10,
                         displayColors: false,
                         callbacks: {
                             label: (tooltipItem) => ` Reach: ${formatK(tooltipItem.raw)}`
@@ -492,19 +697,19 @@
                     y: {
                         beginAtZero: true,
                         suggestedMin: 0,
-                        suggestedMax: 1000, // Small baseline, expands automatically
-                        grid: { color: 'rgba(255,255,255,0.03)', drawBorder: false },
+                        suggestedMax: 1000,
+                        grid: { color: 'rgba(0,0,0,0.04)', drawBorder: false },
                         ticks: {
-                            color: '#64748b',
-                            font: { size: 10, weight: 'bold' },
+                            color: '#94a3b8',
+                            font: { size: 11, weight: '500' },
                             callback: (v) => formatK(v)
                         }
                     },
                     x: {
                         grid: { display: false },
                         ticks: {
-                            color: '#64748b',
-                            font: { size: 9, weight: '500' },
+                            color: '#94a3b8',
+                            font: { size: 10, weight: '500' },
                             maxRotation: 45,
                             minRotation: 0
                         }
@@ -524,42 +729,52 @@
             section.classList.remove('hidden');
             list.innerHTML = '';
 
+            const colorMap = {
+                'green': { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-500' },
+                'yellow': { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700', bar: 'bg-amber-500' },
+                'orange': { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', badge: 'bg-orange-100 text-orange-700', bar: 'bg-orange-500' },
+                'red': { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-700', bar: 'bg-red-500' },
+                'blue': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' },
+                'indigo': { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', badge: 'bg-indigo-100 text-indigo-700', bar: 'bg-indigo-500' },
+                'purple': { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-700', bar: 'bg-purple-500' },
+            };
+            const defaultColor = { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-700', badge: 'bg-gray-100 text-gray-700', bar: 'bg-gray-500' };
+
             json.data.forEach((item, i) => {
+                const c = colorMap[item.color] || defaultColor;
                 const card = document.createElement('div');
-                card.className = `glass p-6 rounded-3xl border-${item.color}-500/20 border-2 relative overflow-hidden group animate-slide-up`;
-                card.style.animationDelay = `${i * 0.1}s`;
+                card.className = `insight-card p-5 border-l-4 ${c.border} relative overflow-hidden group animate-slide-up`;
+                card.style.animationDelay = `${i * 0.08}s`;
 
                 const growthSign = item.growth_pct >= 0 ? '+' : '';
-                const colorClass = `text-${item.color}-400`;
 
                 card.innerHTML = `
-                        <div class="absolute -right-4 -top-4 w-20 h-20 bg-${item.color}-500/10 rounded-full blur-xl group-hover:bg-${item.color}-500/20 transition-all"></div>
-                        <div class="space-y-4">
-                            <div class="flex justify-between items-start">
-                                <div class="space-y-1">
-                                    <h4 class="font-display font-bold text-white group-hover:text-brand-accent transition-colors truncate w-32">${item.page_name}</h4>
-                                    <div class="px-2 py-0.5 rounded-full bg-${item.color}-500/10 text-[10px] font-black uppercase tracking-tighter ${colorClass} inline-block">
-                                        ${item.status}
-                                    </div>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-lg font-black text-white">${formatK(item.views)}</div>
-                                    <div class="text-xs font-bold ${colorClass}">${growthSign}${item.growth_pct}%</div>
-                                </div>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1.5">
+                                <h4 class="font-display font-bold text-gray-900 group-hover:text-indigo-600 transition-colors text-sm truncate max-w-[160px]">${item.page_name}</h4>
+                                <span class="px-2 py-0.5 rounded-md ${c.badge} text-[10px] font-bold uppercase tracking-wider inline-block">
+                                    ${item.status}
+                                </span>
                             </div>
-                            <div class="p-3 bg-white/5 rounded-xl border border-white/5">
-                                <p class="text-xs text-slate-300 font-medium leading-relaxed italic">
-                                    "${item.advice}"
-                                </p>
-                            </div>
-                            <div class="flex items-center gap-2 pt-2">
-                                <div class="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                                    <div class="h-full bg-${item.color}-500" style="width: ${item.priority === 1 ? '100' : (item.priority === 2 ? '75' : '40')}%"></div>
-                                </div>
-                                <span class="text-[10px] font-bold text-slate-500 uppercase">Priority</span>
+                            <div class="text-right">
+                                <div class="text-lg font-bold text-gray-900">${formatK(item.views)}</div>
+                                <div class="text-xs font-bold ${c.text}">${growthSign}${item.growth_pct}%</div>
                             </div>
                         </div>
-                    `;
+                        <div class="p-3 ${c.bg} rounded-lg">
+                            <p class="text-xs text-gray-600 font-medium leading-relaxed italic">
+                                "${item.advice}"
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full ${c.bar} rounded-full" style="width: ${item.priority === 1 ? '100' : (item.priority === 2 ? '75' : '40')}%"></div>
+                            </div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Priority</span>
+                        </div>
+                    </div>
+                `;
                 list.appendChild(card);
             });
         } catch (err) {
@@ -567,9 +782,15 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
+    // DOM is already ready since this script is at the end of <body>
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            loadPageAnalysis();
+        });
+    } else {
         loadData();
         loadPageAnalysis();
-    });
+    }
 </script>
 {% endblock %}
