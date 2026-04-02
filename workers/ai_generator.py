@@ -10,6 +10,8 @@ from app.services.job import JobService
 from app.config import WORKER_TICK_SECONDS
 from app.services.worker import WorkerService
 from app.services.notifier import NotifierService
+from app.services.affiliate_ai import AffiliateAIService
+from app.database.models import AffiliateLink
 import urllib3
 
 # Setup Logging
@@ -388,6 +390,34 @@ def process_draft_job(db: Session):
         
     return True
 
+def _process_pending_affiliate_links(db: Session):
+    """
+    Finds AffiliateLinks with ai_status='PENDING' and generates comments.
+    Processes one link per tick to minimize rate limiting impact.
+    """
+    link = db.query(AffiliateLink).filter(AffiliateLink.ai_status == "PENDING").first()
+    if not link:
+        return
+
+    link.ai_status = "PROCESSING"
+    db.commit()
+    
+    logger.info(f"[AffiliateBot] Generating comment for keyword: {link.keyword}")
+    try:
+        new_comment = AffiliateAIService.generate_comment(link.keyword, link.url)
+        if new_comment:
+            link.comment_template = new_comment
+            link.ai_status = "DONE"
+            logger.info(f"[AffiliateBot] Successfully generated comment for: {link.keyword}")
+        else:
+            link.ai_status = "FAILED"
+            logger.warning(f"[AffiliateBot] Failed to generate comment for: {link.keyword}")
+    except Exception as e:
+        link.ai_status = "FAILED"
+        logger.error(f"[AffiliateBot] Exception generating comment: {e}")
+    
+    db.commit()
+
 def _check_gemini_circuit(db):
     global GEMINI_CONSECUTIVE_FAILURES, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME
     if GEMINI_CONSECUTIVE_FAILURES >= 3 and not GEMINI_CIRCUIT_OPEN:
@@ -482,6 +512,9 @@ def run_loop():
                 
                 # Check for jobs that need auto-defaulting because user didn't respond to telegram style selection
                 _auto_style_default(db)
+                
+                # Check for affiliate links needing AI comments (Phase 3 SaaS Hardening)
+                _process_pending_affiliate_links(db)
                 
                 found_job = process_draft_job(db)
                 
