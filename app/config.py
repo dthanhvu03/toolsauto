@@ -114,8 +114,13 @@ IDLE_MAX_DURATION_SECONDS = int(os.getenv("IDLE_MAX_DURATION_SECONDS", "90"))  #
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Redirect Service (Vercel)
-VERCEL_REDIRECT_URL = os.getenv("VERCEL_REDIRECT_URL", "https://vercel-redirect-rho-three.vercel.app")
+# Redirect Service (Vercel) — no unsafe default; set VERCEL_REDIRECT_URL in .env when using hosted redirect
+VERCEL_REDIRECT_URL = (os.getenv("VERCEL_REDIRECT_URL") or "").strip().rstrip("/")
+
+# TikWM fallback API (viral_processor when yt-dlp fails on TikTok); defaults preserve prior behavior
+TIKWM_API_BASE = (os.getenv("TIKWM_API_BASE") or "https://www.tikwm.com/api").strip().rstrip("/")
+TIKWM_API_TIMEOUT_SEC = float(os.getenv("TIKWM_API_TIMEOUT_SEC", "15"))
+TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC = float(os.getenv("TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC", "60"))
 
 # Viral scan (TikTok competitor)
 VIRAL_MIN_VIEWS = int(os.getenv("VIRAL_MIN_VIEWS", "10000"))  # Ngưỡng view tối thiểu
