@@ -1052,6 +1052,23 @@ class FacebookAdapter(AdapterInterface):
             # 2. Casual scroll (human behavior)
             human_scroll(self.page)
             self.page.wait_for_timeout(random.randint(1000, 2000))
+
+            # 2b. Reels / watch often hide the composer until "Comment" / "Bình luận" is clicked
+            for _open_name in ("Bình luận", "Comment", "Comments"):
+                try:
+                    _bl = self.page.get_by_role("button", name=_open_name)
+                    if _bl.count() == 0:
+                        continue
+                    _cand = _bl.first
+                    if _cand.is_visible(timeout=1200):
+                        _cand.scroll_into_view_if_needed()
+                        self.page.wait_for_timeout(random.randint(200, 500))
+                        _cand.click(timeout=15000)
+                        self.page.wait_for_timeout(random.randint(1500, 2500))
+                        logger.info("FacebookAdapter: Opened comment section via %r", _open_name)
+                        break
+                except Exception:
+                    continue
             
             # 3. Find comment box (multiple selectors for i18n robustness)
             comment_selectors = [
