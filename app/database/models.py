@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, Index, JSON
+from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, Index, JSON, Text
 from sqlalchemy.orm import relationship
 import time
 from pathlib import Path
@@ -535,6 +535,35 @@ class AffiliateLink(Base):
     ai_status = Column(String, nullable=True, index=True) # None, PENDING, PROCESSING, DONE, FAILED
     created_at = Column(Integer, default=now_ts)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
+
+
+class KeywordBlacklist(Base):
+    """Configurable FB compliance keywords (seeded + maintainable)."""
+    __tablename__ = "keyword_blacklist"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    keyword = Column(String, nullable=False, index=True)
+    category = Column(String, nullable=False, index=True)
+    severity = Column(String, nullable=False)
+    source = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(Integer, default=now_ts)
+
+
+class ViolationLog(Base):
+    """Audit trail for FB compliance checks (publisher + optional UI)."""
+    __tablename__ = "violation_log"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    affiliate_id = Column(Integer, nullable=True, index=True)
+    job_id = Column(Integer, nullable=True, index=True)
+    content_type = Column(String, nullable=True)
+    original_content = Column(Text, nullable=True)
+    rewritten_content = Column(Text, nullable=True)
+    violations_found = Column(Text, nullable=True)
+    action_taken = Column(String, nullable=True, index=True)
+    checked_at = Column(Integer, default=now_ts, index=True)
+
 
 class AuditLog(Base):
     """

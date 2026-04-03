@@ -18,6 +18,7 @@ import json
 import re
 from app.services.gemini_rpa import GeminiRPAService
 from app.services.gemini_api import GeminiAPIService
+from app.services.fb_compliance import compliance_checker, Severity, log_violation
 
 class BatchItem(BaseModel):
     keyword: str
@@ -33,6 +34,10 @@ class AIGenerateRequest(BaseModel):
     category: str
     price: str
     commission_rate: float
+
+
+class ComplianceTextRequest(BaseModel):
+    text: str
 
 @router.get("/", response_class=HTMLResponse)
 def get_affiliates_page(request: Request):
@@ -84,7 +89,25 @@ def save_affiliate(
     
     if not keyword or not url or not comment_template:
         return JSONResponse({"error": "Vui lòng nhập đầy đủ Keyword, URL và Câu bình luận."}, status_code=400)
-        
+
+    save_check = compliance_checker.check(comment_template)
+    if save_check.status == Severity.VIOLATION:
+        log_violation(
+            content=comment_template,
+            violations=save_check.violations,
+            action=Severity.VIOLATION.value,
+            affiliate_id=link_id if link_id > 0 else None,
+            content_type="manual_save",
+        )
+        return JSONResponse(
+            {
+                "error": "Nội dung vi phạm chính sách Facebook, không thể lưu.",
+                "violations": [v.evidence for v in save_check.violations],
+                "status": "VIOLATION",
+            },
+            status_code=422,
+        )
+
     if link_id > 0:
         link = db.query(AffiliateLink).filter(AffiliateLink.id == link_id).first()
         if not link:
@@ -140,26 +163,54 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
     skipped = 0
     errors = []
     rows_to_upsert = []
-    
+
     for i, item in enumerate(req.items, 1):
         if not item.keyword or not item.affiliate_url:
             errors.append({"row": i, "reason": "Thiếu thông tin bắt buộc (Keyword & URL)"})
             skipped += 1
             continue
-            
-        ai_status = "PENDING" if not item.comment else "DONE"
-            
-        rows_to_upsert.append({
-            'keyword': item.keyword,
-            'url': item.affiliate_url,
-            'comment_template': item.comment,
-            'commission_rate': float(item.commission_rate) if item.commission_rate else None,
-            'ai_status': ai_status,
-            'created_at': int(time.time()),
-            'updated_at': int(time.time()),
-        })
+
+        comment = (item.comment or "").strip()
+        ai_status = "PENDING" if not comment else "DONE"
+
+        if comment:
+            comp = compliance_checker.check_and_rewrite(
+                comment, product_category="general"
+            )
+            if comp.status == Severity.VIOLATION:
+                errors.append(
+                    {
+                        "row": i,
+                        "keyword": item.keyword,
+                        "reason": (
+                            "Vi phạm chính sách FB: "
+                            f"{[v.evidence for v in comp.violations]}"
+                        ),
+                    }
+                )
+                skipped += 1
+                continue
+            if comp.status == Severity.WARNING and comp.rewritten:
+                comment = comp.rewritten
+                logger.info(
+                    "[CSV Import] Rewrote comment for keyword=%s", item.keyword
+                )
+
+        rows_to_upsert.append(
+            {
+                "keyword": item.keyword,
+                "url": item.affiliate_url,
+                "comment_template": comment or None,
+                "commission_rate": float(item.commission_rate)
+                if item.commission_rate
+                else None,
+                "ai_status": ai_status,
+                "created_at": int(time.time()),
+                "updated_at": int(time.time()),
+            }
+        )
         success += 1
-            
+
     if rows_to_upsert:
         try:
             stmt = sqlite_insert(AffiliateLink).values(rows_to_upsert)
@@ -219,7 +270,71 @@ def ai_generate(req: AIGenerateRequest):
             data = json.loads(raw_response)
         
         data["source"] = source
-        return {"data": data}
+
+        comments = data.get("comments") or []
+        product_category = req.category or "general"
+        violation_items: list = []
+        audit_snippets: list[str] = []
+        enriched_comments: list[dict] = []
+
+        for c in comments:
+            if not isinstance(c, dict):
+                continue
+            text = (c.get("text") or "").strip()
+            if not text:
+                enriched_comments.append(c)
+                continue
+            comp = compliance_checker.check_and_rewrite(
+                text, product_category=product_category
+            )
+            if comp.status == Severity.VIOLATION:
+                violation_items.extend(comp.violations)
+                audit_snippets.append(text)
+            row = {**c, "compliance_status": comp.status.value}
+            if comp.rewritten:
+                row["rewritten_text"] = comp.rewritten
+            enriched_comments.append(row)
+
+        data["comments"] = enriched_comments
+
+        if violation_items:
+            log_violation(
+                content="\n---\n".join(audit_snippets)[:12000],
+                violations=violation_items,
+                action=Severity.VIOLATION.value,
+                content_type="ai_generate",
+            )
+            return JSONResponse(
+                {
+                    "error": "Nội dung AI tạo ra vi phạm chính sách Facebook.",
+                    "violations": [v.evidence for v in violation_items],
+                    "status": "VIOLATION",
+                },
+                status_code=422,
+            )
+
+        payload: dict = {"data": data}
+        if any(c.get("rewritten_text") for c in enriched_comments):
+            payload["needs_review"] = True
+        return payload
     except Exception as e:
         logger.error(f"Cannot parse AI json: {e}\nRaw response: {raw_response}")
         return JSONResponse({"error": "AI trả kết quả không đúng format hoặc không phải JSON."}, status_code=500)
+
+
+@router.post("/compliance-check")
+def compliance_check_preview(req: ComplianceTextRequest):
+    """P2: lightweight check for manual form (debounced)."""
+    text = (req.text or "").strip()
+    result = compliance_checker.check(text)
+    return {
+        "status": result.status.value,
+        "violations": [
+            {
+                "evidence": v.evidence,
+                "category": v.category,
+                "severity": v.severity.value,
+            }
+            for v in result.violations
+        ],
+    }
