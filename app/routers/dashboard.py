@@ -275,7 +275,8 @@ def app_settings(request: Request, db: Session = Depends(get_db)):
     effective: dict[str, dict] = {}
     for key, spec in runtime_settings.SETTINGS.items():
         default_val = spec.default_getter()
-        ov = overrides.get(key, None)
+        has_override = (key in overrides) and (not spec.env_only)
+        ov = overrides.get(key, None) if not spec.env_only else None
         effective[key] = {
             "key": key,
             "type": spec.type,
@@ -284,19 +285,29 @@ def app_settings(request: Request, db: Session = Depends(get_db)):
             "description": spec.description,
             "default": default_val,
             "override": ov,
-            "has_override": key in overrides,
+            "has_override": has_override,
             "min": spec.min,
             "max": spec.max,
             "choices": spec.choices or [],
             "enum_labels": spec.enum_labels or {},
             "unit": spec.unit,
+            "source": runtime_settings.resolve_setting_source(spec, has_override),
+            "is_secret": spec.is_secret,
+            "restart_required": spec.restart_required,
+            "env_only": spec.env_only,
+            "pair_with": spec.pair_with,
         }
+    section_counts = {
+        sec: runtime_settings.section_visible_count(specs) for sec, specs in grouped.items()
+    }
     return templates.TemplateResponse(
         "pages/app_settings.html",
         {
             "request": request,
             "sections": grouped,
             "effective": effective,
+            "section_counts": section_counts,
+            "pair_skip": runtime_settings.pair_secondary_keys(),
             "message": request.query_params.get("m") or "",
         },
     )
@@ -342,6 +353,9 @@ async def app_settings_bulk_save(request: Request, db: Session = Depends(get_db)
     reset = 0
 
     for key in runtime_settings.SETTINGS.keys():
+        spec = runtime_settings.SETTINGS[key]
+        if spec.env_only:
+            continue
         if key not in form:
             continue
         raw = form.get(key)

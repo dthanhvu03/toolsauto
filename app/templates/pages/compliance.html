@@ -62,10 +62,16 @@
               class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
         Thêm từ khóa
       </button>
-      <label class="cursor-pointer bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
-        Import CSV
-        <input type="file" accept=".csv" class="hidden" onchange="bulkImport(event)">
-      </label>
+      <div class="flex gap-2 items-center flex-wrap">
+        <label class="cursor-pointer bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+          Import CSV
+          <input type="file" accept=".csv" class="hidden" onchange="bulkImport(event)">
+        </label>
+        <a href="/compliance/keywords/sample-csv"
+           class="text-xs text-indigo-600 hover:underline shrink-0">
+          Tải file mẫu
+        </a>
+      </div>
       <a href="/compliance/export-keywords"
          class="inline-flex items-center bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
         Export CSV
@@ -89,12 +95,6 @@
         <select id="filter-category" onchange="filterKeywords()"
                 class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
           <option value="">Tất cả danh mục</option>
-          <option value="health">Sức khỏe</option>
-          <option value="financial">Tài chính</option>
-          <option value="misleading">Gây hiểu nhầm</option>
-          <option value="urgency">Khẩn cấp</option>
-          <option value="engagement_bait">Bait tương tác</option>
-          <option value="custom">Tùy chỉnh</option>
         </select>
         <span class="text-xs text-gray-400 ml-auto" id="keyword-count"></span>
       </div>
@@ -244,11 +244,6 @@
       <div>
         <label class="text-xs text-gray-500">Danh mục</label>
         <select id="modal-category" class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1 bg-white">
-          <option value="health">Sức khỏe</option>
-          <option value="financial">Tài chính</option>
-          <option value="misleading">Gây hiểu nhầm</option>
-          <option value="engagement_bait">Bait tương tác</option>
-          <option value="custom">Tùy chỉnh</option>
         </select>
       </div>
       <div>
@@ -322,10 +317,98 @@
 {% block script_extra %}
 <script>
 let allKeywords = [];
+let allCategories = [];
 let editingId = null;
 let currentViolPage = 1;
 let _severityChart = null;
 let _trendChart = null;
+
+function labelFromSlug(slug) {
+  if (!slug) return '';
+  return String(slug).replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+async function loadCategories() {
+  let data = [];
+  try {
+    const res = await fetch('/compliance/categories');
+    const json = await res.json();
+    data = Array.isArray(json) ? json : [];
+  } catch (e) {
+    data = [];
+  }
+  allCategories = data;
+
+  const filterSelect = document.getElementById('filter-category');
+  if (filterSelect) {
+    const currentFilter = filterSelect.value;
+    filterSelect.innerHTML = '<option value="">Tất cả danh mục</option>';
+    allCategories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat.category;
+      opt.textContent = `${cat.label} (${cat.active})`;
+      filterSelect.appendChild(opt);
+    });
+    if ([...filterSelect.options].some(o => o.value === currentFilter)) {
+      filterSelect.value = currentFilter;
+    }
+  }
+
+  const modalSelect = document.getElementById('modal-category');
+  if (modalSelect) {
+    const currentModal = modalSelect.value;
+    modalSelect.innerHTML = '';
+    if (!allCategories.length) {
+      const z = document.createElement('option');
+      z.value = 'custom';
+      z.textContent = labelFromSlug('custom');
+      modalSelect.appendChild(z);
+    } else {
+      allCategories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.category;
+        opt.textContent = cat.label;
+        modalSelect.appendChild(opt);
+      });
+    }
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = 'Tạo danh mục mới…';
+    modalSelect.appendChild(newOpt);
+    modalSelect.onchange = handleCategoryChange;
+    if (currentModal && currentModal !== '__new__' &&
+        [...modalSelect.options].some(o => o.value === currentModal)) {
+      modalSelect.value = currentModal;
+    }
+  }
+}
+
+function handleCategoryChange(e) {
+  const sel = e.target;
+  if (sel.value !== '__new__') return;
+  const raw = prompt('Nhập mã danh mục (snake_case, ví dụ: my_brand):');
+  const newCat = raw && raw.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (newCat) {
+    const opt = document.createElement('option');
+    opt.value = newCat;
+    opt.textContent = labelFromSlug(newCat);
+    sel.insertBefore(opt, sel.lastElementChild);
+    sel.value = newCat;
+  } else {
+    const first = [...sel.options].find(o => o.value && o.value !== '__new__');
+    sel.value = first ? first.value : 'custom';
+  }
+}
+
+function ensureCategoryOption(sel, cat) {
+  if (!sel || !cat) return;
+  if ([...sel.options].some(o => o.value === cat)) return;
+  const opt = document.createElement('option');
+  opt.value = cat;
+  opt.textContent = categoryLabel(cat);
+  const newOpt = sel.querySelector('option[value="__new__"]');
+  sel.insertBefore(opt, newOpt || null);
+}
 
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -436,6 +519,14 @@ function openAddModal() {
   document.getElementById('modal-keyword').value = '';
   document.getElementById('modal-keyword').disabled = false;
   document.getElementById('modal-severity').value = 'WARNING';
+  const sel = document.getElementById('modal-category');
+  for (let i = 0; i < sel.options.length; i++) {
+    const o = sel.options[i];
+    if (o.value && o.value !== '__new__') {
+      sel.selectedIndex = i;
+      break;
+    }
+  }
   document.getElementById('keyword-modal').classList.remove('hidden');
 }
 
@@ -446,15 +537,21 @@ function editKeyword(id) {
   document.getElementById('modal-title').textContent = 'Chỉnh sửa từ khóa';
   document.getElementById('modal-keyword').value = kw.keyword;
   document.getElementById('modal-keyword').disabled = true;
-  document.getElementById('modal-category').value = kw.category;
   document.getElementById('modal-severity').value = kw.severity;
+  const sel = document.getElementById('modal-category');
+  ensureCategoryOption(sel, kw.category);
+  sel.value = kw.category;
   document.getElementById('keyword-modal').classList.remove('hidden');
 }
 
 async function saveKeyword() {
   const keyword = document.getElementById('modal-keyword').value.trim();
-  const category = document.getElementById('modal-category').value;
+  let category = document.getElementById('modal-category').value;
   const severity = document.getElementById('modal-severity').value;
+  if (category === '__new__') {
+    alert('Chọn hoặc tạo danh mục hợp lệ.');
+    return;
+  }
   try {
     let res;
     if (editingId) {
@@ -473,6 +570,7 @@ async function saveKeyword() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Lỗi');
     closeModal();
+    await loadCategories();
     await loadKeywords();
     await loadAnalytics();
   } catch (err) {
@@ -490,12 +588,14 @@ async function deleteKeyword(id) {
     alert(data.error || 'Không xóa được');
     return;
   }
+  await loadCategories();
   await loadKeywords();
   await loadAnalytics();
 }
 
 async function toggleKeyword(id) {
   await fetch('/compliance/keywords/' + id + '/toggle', { method: 'PATCH' });
+  await loadCategories();
   await loadKeywords();
   await loadAnalytics();
 }
@@ -505,12 +605,9 @@ function closeModal() {
 }
 
 function categoryLabel(cat) {
-  const labels = {
-    health: 'Sức khỏe', financial: 'Tài chính', misleading: 'Gây hiểu nhầm',
-    spam_format: 'Spam', engagement_bait: 'Bait', custom: 'Tùy chỉnh',
-    prohibited: 'Cấm', urgency: 'Khẩn cấp'
-  };
-  return labels[cat] || cat;
+  const found = allCategories.find(c => c.category === cat);
+  if (found) return found.label;
+  return labelFromSlug(cat || '');
 }
 
 function esc(s) {
@@ -761,8 +858,9 @@ async function bulkImport(event) {
   let msg = 'Import xong. Đã thêm: ' + data.imported + ', bỏ qua: ' + data.skipped;
   if (data.errors && data.errors.length) msg += '\nLỗi: ' + data.errors.join(', ');
   alert(msg);
-  loadKeywords();
-  loadAnalytics();
+  await loadCategories();
+  await loadKeywords();
+  await loadAnalytics();
 }
 
 function openAISuggest() {
@@ -835,8 +933,9 @@ async function applyAISuggestions() {
   }
   alert('Đã thêm ' + added + ' từ khóa.');
   closeAISuggest();
-  loadKeywords();
-  loadAnalytics();
+  await loadCategories();
+  await loadKeywords();
+  await loadAnalytics();
 }
 
 async function loadAnalyticsCharts() {
@@ -915,7 +1014,11 @@ async function loadAccountStats() {
   `).join('');
 }
 
-loadKeywords();
-loadAnalytics();
+async function init() {
+  await loadCategories();
+  await loadKeywords();
+  loadAnalytics();
+}
+init();
 </script>
 {% endblock %}

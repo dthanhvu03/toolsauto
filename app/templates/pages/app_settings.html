@@ -2,7 +2,7 @@
 
 {% block title %}Cài đặt • Auto Publisher{% endblock %}
 {% block page_title %}Cài đặt hệ thống{% endblock %}
-{% block page_subtitle %}Thông số runtime — chỉnh là áp dụng ngay cho worker, không cần khởi động lại.{% endblock %}
+{% block page_subtitle %}Thông số runtime — hầu hết áp dụng sau khi lưu; mục có badge &quot;Restart&quot; cần khởi động lại worker để chắc chắn.{% endblock %}
 
 {% block head_extra %}
 <script src="https://cdn.tailwindcss.com"></script>
@@ -28,6 +28,16 @@
 {% endblock %}
 
 {% block content %}
+  {% macro source_pill(src) -%}
+    {% if src == 'database' %}
+      <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-wider" title="Giá trị đang lấy từ runtime_settings (DB)">database</span>
+    {% elif src == 'environment' %}
+      <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-900 border border-amber-100 uppercase tracking-wider" title="Biến môi trường / .env đang được set">environment</span>
+    {% else %}
+      <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200 uppercase tracking-wider" title="Giá trị mặc định trong code (không có env và không có override DB)">default</span>
+    {% endif %}
+  {%- endmacro %}
+
   {% if message %}
     <div class="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-800 font-medium flex items-center gap-2">
       <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
@@ -56,7 +66,7 @@
            data-section="{{ loop.index }}">
           <span class="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0 transition-colors"></span>
           <span class="truncate">{{ section }}</span>
-          <span class="ml-auto text-[10px] font-bold text-gray-300 tabular-nums">{{ specs|length }}</span>
+          <span class="ml-auto text-[10px] font-bold text-gray-300 tabular-nums">{{ section_counts[section] }}</span>
         </a>
         {% endfor %}
         
@@ -90,33 +100,114 @@
               <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
                 {{ section }}
-                <span class="text-xs font-normal text-gray-400 bg-white border border-gray-100 rounded-full px-2 py-0.5">{{ specs|length }} items</span>
+                <span class="text-xs font-normal text-gray-400 bg-white border border-gray-100 rounded-full px-2 py-0.5">{{ section_counts[section] }} items</span>
               </h2>
             </div>
 
             <!-- Settings Grid -->
             <div class="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
               {% for spec in specs %}
-                {% set row = effective[spec.key] %}
-                {% set cur = (row.override if row.has_override else row.default) %}
-                
-                <div class="group relative bg-gray-50/50 hover:bg-white rounded-xl border border-gray-100 hover:border-indigo-200 p-4 transition-all duration-200 hover:shadow-sm flex flex-col">
-                  <!-- Title Row -->
-                  <div class="flex items-start justify-between gap-3 mb-3">
-                    <div class="min-w-0 flex-1">
-                      <div class="text-sm font-semibold text-gray-800 leading-snug">{{ row.title }}</div>
-                      {% if row.description %}
-                        <p class="text-[11px] text-gray-400 mt-1 leading-relaxed line-clamp-2">{{ row.description }}</p>
+                {% if spec.key in pair_skip %}
+                {% elif spec.pair_with %}
+                  {% set row = effective[spec.key] %}
+                  {% set row2 = effective[spec.pair_with] %}
+                  {% set cur = (row.override if row.has_override else row.default) %}
+                  {% set cur2 = (row2.override if row2.has_override else row2.default) %}
+                  <div class="group relative bg-gray-50/50 hover:bg-white rounded-xl border border-gray-100 hover:border-indigo-200 p-4 transition-all duration-200 hover:shadow-sm flex flex-col lg:col-span-2">
+                    <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                      {{ source_pill(row.source) }}
+                      {{ source_pill(row2.source) }}
+                      {% if row.has_override or row2.has_override %}
+                        <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-50 text-violet-700 border border-violet-100 uppercase tracking-wider">Override</span>
                       {% endif %}
                     </div>
-                    {% if row.has_override %}
-                      <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wider">Override</span>
-                    {% endif %}
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div class="min-w-0">
+                        <div class="text-sm font-semibold text-gray-800 leading-snug">{{ row.title }}</div>
+                        <div class="text-[10px] font-mono text-gray-500 mt-0.5 select-all">{{ row.key }}</div>
+                        {% if row.description %}<p class="text-[11px] text-gray-400 mt-1 leading-relaxed">{{ row.description }}</p>{% endif %}
+                        <div class="mt-2 flex items-center gap-1.5 justify-end">
+                          <input type="number" name="{{ row.key }}" value="{{ cur }}"
+                            class="w-full max-w-[10rem] h-9 text-sm text-right font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
+                            {% if row.min is not none %}min="{{ row.min }}"{% endif %}
+                            {% if row.max is not none %}max="{{ row.max }}"{% endif %}
+                            step="{{ '1' if row.type == 'int' else 'any' }}"
+                            title="{% if row.min is not none and row.max is not none %}Hợp lệ {{ row.min }}–{{ row.max }}{% endif %}" />
+                          {% if row.unit %}<span class="text-[10px] text-gray-400 font-medium whitespace-nowrap">{{ row.unit }}</span>{% endif %}
+                        </div>
+                      </div>
+                      <div class="min-w-0">
+                        <div class="text-sm font-semibold text-gray-800 leading-snug">{{ row2.title }}</div>
+                        <div class="text-[10px] font-mono text-gray-500 mt-0.5 select-all">{{ row2.key }}</div>
+                        {% if row2.description %}<p class="text-[11px] text-gray-400 mt-1 leading-relaxed">{{ row2.description }}</p>{% endif %}
+                        <div class="mt-2 flex items-center gap-1.5 justify-end">
+                          <input type="number" name="{{ row2.key }}" value="{{ cur2 }}"
+                            class="w-full max-w-[10rem] h-9 text-sm text-right font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
+                            {% if row2.min is not none %}min="{{ row2.min }}"{% endif %}
+                            {% if row2.max is not none %}max="{{ row2.max }}"{% endif %}
+                            step="{{ '1' if row2.type == 'int' else 'any' }}"
+                            title="{% if row2.min is not none and row2.max is not none %}Hợp lệ {{ row2.min }}–{{ row2.max }}{% endif %}" />
+                          {% if row2.unit %}<span class="text-[10px] text-gray-400 font-medium whitespace-nowrap">{{ row2.unit }}</span>{% endif %}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2.5 border-t border-gray-100/80">
+                      <div class="text-[10px] text-gray-400 space-x-2">
+                        <span>Mặc định: <code class="font-mono text-gray-500 bg-white px-1 py-0.5 rounded border border-gray-50">{{ row.default }}</code> … <code class="font-mono text-gray-500 bg-white px-1 py-0.5 rounded border border-gray-50">{{ row2.default }}</code></span>
+                        {% if row.min is not none or row.max is not none or row2.min is not none or row2.max is not none %}
+                        <span class="text-gray-300 tabular-nums">(
+                          {% if row.min is not none %}{{ row.min }}{% endif %}{% if row.min is not none and row.max is not none %}–{% endif %}{% if row.max is not none %}{{ row.max }}{% endif %}
+                          |
+                          {% if row2.min is not none %}{{ row2.min }}{% endif %}{% if row2.min is not none and row2.max is not none %}–{% endif %}{% if row2.max is not none %}{{ row2.max }}{% endif %}
+                        )</span>
+                        {% endif %}
+                      </div>
+                      <div class="flex gap-2">
+                        <button type="submit" form="reset-form-{{ row.key }}" class="text-[10px] font-bold text-gray-400 hover:text-red-500 uppercase tracking-wider transition-colors disabled:opacity-30 disabled:cursor-not-allowed" {% if not row.has_override %}disabled{% endif %}>Reset min</button>
+                        <button type="submit" form="reset-form-{{ row2.key }}" class="text-[10px] font-bold text-gray-400 hover:text-red-500 uppercase tracking-wider transition-colors disabled:opacity-30 disabled:cursor-not-allowed" {% if not row2.has_override %}disabled{% endif %}>Reset max</button>
+                      </div>
+                    </div>
+                  </div>
+                {% else %}
+                {% set row = effective[spec.key] %}
+                {% set cur = (row.override if row.has_override else row.default) %}
+
+                <div class="group relative bg-gray-50/50 hover:bg-white rounded-xl border border-gray-100 hover:border-indigo-200 p-4 transition-all duration-200 hover:shadow-sm flex flex-col {% if row.env_only %}border-amber-100 bg-amber-50/20{% endif %}">
+                  <!-- Title Row -->
+                  <div class="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                    <div class="min-w-0 flex-1">
+                      <div class="text-sm font-semibold text-gray-800 leading-snug">{{ row.title }}</div>
+                      <div class="text-[10px] font-mono text-gray-500 mt-0.5 select-all">{{ row.key }}</div>
+                      {% if row.description %}
+                        <p class="text-[11px] text-gray-400 mt-1 leading-relaxed line-clamp-3">{{ row.description }}</p>
+                      {% endif %}
+                    </div>
+                    <div class="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
+                      {{ source_pill(row.source) }}
+                      {% if row.restart_required %}
+                        <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-50 text-orange-800 border border-orange-100 uppercase tracking-wider" title="Nên khởi động lại worker sau khi đổi">restart</span>
+                      {% endif %}
+                      {% if row.has_override %}
+                        <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-violet-50 text-violet-700 border border-violet-100 uppercase tracking-wider">Override</span>
+                      {% endif %}
+                      {% if row.env_only %}
+                        <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-900 border border-amber-100 uppercase tracking-wider">env only</span>
+                      {% endif %}
+                    </div>
                   </div>
 
                   <!-- Input Area -->
                   <div class="mt-auto">
-                    {% if row.type == 'bool' %}
+                    {% if row.env_only %}
+                      <div class="rounded-lg border border-amber-100 bg-white/80 px-3 py-2 text-sm text-gray-700">
+                        {% if row.is_secret %}
+                          {% if cur %}<span class="font-mono tracking-widest">••••••••</span> <span class="text-xs text-gray-500">(đã cấu hình)</span>{% else %}<span class="text-gray-500">Chưa đặt trong môi trường</span>{% endif %}
+                        {% else %}
+                          <code class="text-sm font-mono break-all">{{ cur }}</code>
+                        {% endif %}
+                      </div>
+                      <p class="text-[10px] text-amber-900/80 mt-2">Chỉnh qua biến môi trường / file <code class="font-mono">.env</code> rồi khởi động lại tiến trình.</p>
+                    {% elif row.type == 'bool' %}
                       <div class="flex items-center justify-between">
                         <div class="text-[10px] text-gray-400 font-medium">
                           <span class="font-mono bg-white border border-gray-100 px-1.5 py-0.5 rounded">{{ row.key }}</span>
@@ -144,28 +235,35 @@
                         <span class="text-[10px] text-gray-400 font-mono bg-white border border-gray-100 px-1.5 py-0.5 rounded shrink-0">{{ row.key }}</span>
                         <div class="flex items-center gap-1.5 flex-1 justify-end">
                           <input type="number" name="{{ row.key }}" value="{{ cur }}"
-                            class="w-24 h-9 text-sm text-right font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
+                            class="w-28 h-9 text-sm text-right font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none"
                             {% if row.min is not none %}min="{{ row.min }}"{% endif %}
                             {% if row.max is not none %}max="{{ row.max }}"{% endif %}
-                            step="{{ '1' if row.type == 'int' else 'any' }}" />
+                            step="{{ '1' if row.type == 'int' else 'any' }}"
+                            title="{% if row.min is not none and row.max is not none %}Hợp lệ {{ row.min }}–{{ row.max }}{% elif row.min is not none %}≥ {{ row.min }}{% elif row.max is not none %}≤ {{ row.max }}{% endif %}" />
                           {% if row.unit %}<span class="text-[10px] text-gray-400 font-medium whitespace-nowrap">{{ row.unit }}</span>{% endif %}
                         </div>
                       </div>
                     {% else %}
                       <div class="space-y-1.5">
                         <span class="text-[10px] text-gray-400 font-mono bg-white border border-gray-100 px-1.5 py-0.5 rounded">{{ row.key }}</span>
-                        <input name="{{ row.key }}" value="{{ cur }}"
-                          class="w-full h-9 text-sm font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none" />
+                        {% if row.is_secret %}
+                          <input type="password" name="{{ row.key }}" value="{{ cur }}" autocomplete="off"
+                            class="w-full h-9 text-sm font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none" />
+                        {% else %}
+                          <input name="{{ row.key }}" value="{{ cur }}"
+                            class="w-full h-9 text-sm font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none" />
+                        {% endif %}
                       </div>
                     {% endif %}
                   </div>
 
                   <!-- Footer: Default + Reset -->
+                  {% if not row.env_only %}
                   <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100/80">
                     <div class="text-[10px] text-gray-400">
                       Mặc định: <code class="font-mono text-gray-500 bg-white px-1 py-0.5 rounded border border-gray-50">{{ row.default }}</code>
                       {% if row.min is not none or row.max is not none %}
-                        <span class="ml-1 text-gray-300">
+                        <span class="ml-1 text-gray-300 tabular-nums" title="Min / max hợp lệ">
                           ({% if row.min is not none %}{{ row.min }}{% endif %}{% if row.min is not none and row.max is not none %}–{% endif %}{% if row.max is not none %}{{ row.max }}{% endif %})
                         </span>
                       {% endif %}
@@ -176,7 +274,9 @@
                       Reset
                     </button>
                   </div>
+                  {% endif %}
                 </div>
+                {% endif %}
               {% endfor %}
             </div>
           </div>

@@ -29,8 +29,8 @@ _cache_lock = threading.Lock()
 
 def _load_compliance_from_db() -> None:
     """Load keyword_blacklist + compliance_allowlist + compliance_regex_rules into cache."""
-    block_list: list[str] = []
-    warning_list: list[str] = []
+    block_list: list[dict[str, str]] = []
+    warning_list: list[dict[str, str]] = []
     allow_list: list[str] = []
     regex_list: list[tuple[re.Pattern, Severity, str]] = []
     try:
@@ -45,9 +45,11 @@ def _load_compliance_from_db() -> None:
 
         with SessionLocal() as db:
             kw_rows = db.execute(
-                select(KeywordBlacklist.keyword, KeywordBlacklist.severity).where(
-                    KeywordBlacklist.is_active.is_(True)
-                )
+                select(
+                    KeywordBlacklist.keyword,
+                    KeywordBlacklist.severity,
+                    KeywordBlacklist.category,
+                ).where(KeywordBlacklist.is_active.is_(True))
             ).all()
 
             al_rows = db.execute(
@@ -67,15 +69,17 @@ def _load_compliance_from_db() -> None:
             ).all()
 
         for row in kw_rows:
-            kw, sev = row[0], row[1]
+            kw, sev, cat = row[0], row[1], row[2]
             if not kw:
                 continue
             phrase = kw.strip().lower()
+            category = (cat or "custom").strip() or "custom"
             s = (sev or "").strip().upper()
+            item = {"keyword": phrase, "category": category}
             if s == "VIOLATION":
-                block_list.append(phrase)
+                block_list.append(item)
             elif s == "WARNING":
-                warning_list.append(phrase)
+                warning_list.append(item)
 
         for (phrase,) in al_rows:
             if phrase and phrase.strip():
@@ -128,7 +132,8 @@ def _maybe_reload_compliance_cache() -> None:
         _load_compliance_from_db()
 
 
-def _get_keywords() -> tuple[list[str], list[str]]:
+def _get_keywords() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Active keywords from DB: each item is {\"keyword\", \"category\"}."""
     _maybe_reload_compliance_cache()
     with _cache_lock:
         return (
@@ -199,33 +204,40 @@ class FBComplianceChecker:
 
         block_keywords, warning_keywords = _get_keywords()
 
-        for kw in block_keywords:
-            if kw in masked_lower:
-                violations.append(
-                    ViolationItem(
-                        category="prohibited",
-                        severity=Severity.VIOLATION,
-                        evidence=kw,
-                        suggestion=f"Xóa hoặc thay thế '{kw}'",
-                    )
+        for item in block_keywords:
+            kw = item.get("keyword") or ""
+            category = item.get("category") or "custom"
+            if not kw or kw not in masked_lower:
+                continue
+            violations.append(
+                ViolationItem(
+                    category=category,
+                    severity=Severity.VIOLATION,
+                    evidence=kw,
+                    suggestion=f"Xóa hoặc thay thế '{kw}'",
                 )
+            )
 
-        for kw in warning_keywords:
-            if kw in masked_lower:
-                violations.append(
-                    ViolationItem(
-                        category="misleading",
-                        severity=Severity.WARNING,
-                        evidence=kw,
-                        suggestion=f"Làm mềm ngôn ngữ: '{kw}'",
-                    )
+        for item in warning_keywords:
+            kw = item.get("keyword") or ""
+            category = item.get("category") or "custom"
+            if not kw or kw not in masked_lower:
+                continue
+            violations.append(
+                ViolationItem(
+                    category=category,
+                    severity=Severity.WARNING,
+                    evidence=kw,
+                    suggestion=f"Làm mềm ngôn ngữ: '{kw}'",
                 )
+            )
 
+        # Regex rules: synthetic bucket (rules live in DB; no per-rule category column yet)
         for compiled, severity, description in _get_regex_rules():
             if compiled.search(content):
                 violations.append(
                     ViolationItem(
-                        category="spam_format",
+                        category="regex",
                         severity=severity,
                         evidence=description,
                         suggestion=f"Sửa định dạng: {description}",

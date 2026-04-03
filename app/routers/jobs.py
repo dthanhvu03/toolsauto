@@ -399,9 +399,15 @@ def bulk_create_jobs(
                 final_auto_comment = clean_auto_comment
                 if final_auto_comment:
                     from app.config import VERCEL_REDIRECT_URL
-                    vercel_url = VERCEL_REDIRECT_URL
-                    full_tracking_url = f"{vercel_url}/r/{tracking_code}"
-                    final_auto_comment = final_auto_comment.replace("{tracking_url}", full_tracking_url)
+
+                    vercel_url = (VERCEL_REDIRECT_URL or "").strip().rstrip("/")
+                    if vercel_url:
+                        full_tracking_url = f"{vercel_url}/r/{tracking_code}"
+                    else:
+                        full_tracking_url = f"/r/{tracking_code}"
+                    final_auto_comment = final_auto_comment.replace(
+                        "{tracking_url}", full_tracking_url
+                    )
 
                 initial_status = "DRAFT" if captions[i] and "[AI_GENERATE]" in captions[i] else "PENDING"
 

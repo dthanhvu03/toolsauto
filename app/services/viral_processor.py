@@ -218,9 +218,16 @@ def _humanize_yt_dlp_error(platform: str, stderr: str, source_account) -> str:
 def _download_tiktok_fallback(url: str, output_path: str) -> bool:
     """Fallback handler for TikTok using TikWM API when yt-dlp fails due to cookies/JS challenge."""
     import requests
+
+    from app.config import (
+        TIKWM_API_BASE,
+        TIKWM_API_TIMEOUT_SEC,
+        TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC,
+    )
+
     try:
-        api_url = f"https://www.tikwm.com/api/?url={url}"
-        resp = requests.get(api_url, timeout=15)
+        api_url = f"{TIKWM_API_BASE}/?url={url}"
+        resp = requests.get(api_url, timeout=TIKWM_API_TIMEOUT_SEC)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("code") == 0 and "data" in data:
@@ -234,7 +241,9 @@ def _download_tiktok_fallback(url: str, output_path: str) -> bool:
                 play_url = video_data.get("play") or video_data.get("wmplay")
                 if play_url:
                     logger.info("[VIRAL] TikWM returned a valid video URL, downloading...")
-                    video_resp = requests.get(play_url, stream=True, timeout=60)
+                    video_resp = requests.get(
+                        play_url, stream=True, timeout=TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC
+                    )
                     if video_resp.status_code == 200:
                         with open(output_path, 'wb') as f:
                             for chunk in video_resp.iter_content(chunk_size=8192):
