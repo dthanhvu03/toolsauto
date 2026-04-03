@@ -31,6 +31,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
 
+def _category_label(category: str) -> str:
+    """Display label for a category slug; unknown values use title case."""
+    c = (category or "").strip()
+    if not c:
+        return ""
+    return c.replace("_", " ").title()
+
+
 class KeywordCreateBody(BaseModel):
     keyword: str = ""
     category: str = "custom"
@@ -96,24 +104,63 @@ def list_keywords(
     ]
 
 
+@router.get("/categories")
+def get_categories(db: Session = Depends(get_db)):
+    """
+    Unique categories from keyword_blacklist with counts (fully dynamic).
+    """
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                category,
+                COUNT(*) AS total,
+                SUM(CASE WHEN severity = 'VIOLATION' THEN 1 ELSE 0 END) AS violations,
+                SUM(CASE WHEN severity = 'WARNING' THEN 1 ELSE 0 END) AS warnings,
+                SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active
+            FROM keyword_blacklist
+            GROUP BY category
+            ORDER BY total DESC
+            """
+        )
+    ).fetchall()
+    return [
+        {
+            "category": r[0],
+            "total": int(r[1] or 0),
+            "violations": int(r[2] or 0),
+            "warnings": int(r[3] or 0),
+            "active": int(r[4] or 0),
+            "label": _category_label(r[0] or ""),
+        }
+        for r in rows
+    ]
+
+
 @router.get("/keywords/sample-csv")
-def download_sample_csv():
-    """Download sample CSV for bulk keyword import."""
-    sample = (
-        "keyword,category,severity\n"
-        "chữa khỏi bệnh,health,VIOLATION\n"
-        "trị dứt điểm,health,VIOLATION\n"
-        "giảm cân nhanh,health,VIOLATION\n"
-        "không tác dụng phụ,health,VIOLATION\n"
-        "cam kết hoàn tiền 100%,financial,VIOLATION\n"
-        "thu nhập thụ động,financial,VIOLATION\n"
-        "100% hiệu quả,misleading,WARNING\n"
-        "chỉ còn hôm nay,urgency,WARNING\n"
-        "tag bạn bè để nhận,engagement_bait,WARNING\n"
-        "share để nhận quà,engagement_bait,WARNING\n"
-    )
+def download_sample_csv(db: Session = Depends(get_db)):
+    """Sample CSV rows from current DB (no fixed taxonomy in source)."""
+    rows = db.execute(
+        text(
+            """
+            SELECT keyword, category, severity
+            FROM keyword_blacklist
+            WHERE is_active = 1
+            ORDER BY severity DESC, category, keyword
+            LIMIT 15
+            """
+        )
+    ).fetchall()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["keyword", "category", "severity"])
+    for r in rows:
+        writer.writerow([r[0], r[1], r[2]])
+    if not rows:
+        writer.writerow(["vi_du_tu_khoa", "custom", "WARNING"])
+    sample = buf.getvalue()
     return Response(
-        content=sample.encode("utf-8-sig"),
+        content=("\ufeff" + sample).encode("utf-8-sig"),
         media_type="text/csv",
         headers={
             "Content-Disposition": "attachment; filename=keyword_import_sample.csv",
@@ -626,8 +673,7 @@ def ai_suggest_keywords(db: Session = Depends(get_db)):
         "vào blacklist.\n\n"
         "Trả về JSON (KHÔNG markdown, KHÔNG backtick):\n"
         '{"suggestions": ['
-        '{"keyword": "...", "category": "health|financial|'
-        'misleading|engagement_bait|spam_format", '
+        '{"keyword": "...", "category": "snake_case_tu_do", '
         '"severity": "VIOLATION|WARNING", "reason": "..."}'
         ", ...]}"
     )
