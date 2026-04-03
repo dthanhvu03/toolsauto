@@ -3,6 +3,13 @@ import logging
 import signal
 import sys
 import os
+from pathlib import Path
+
+# Repo root on sys.path so `python workers/publisher.py` works without PYTHONPATH=.
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.services.queue import QueueService
