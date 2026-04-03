@@ -270,7 +270,16 @@ class FacebookAdapter(AdapterInterface):
                 self.page.locator('span[dir="auto"]:has-text("Xem tất cả trang cá nhân")')
             ])
             if see_all:
-                self._click_locator(see_all, "see all profiles", timeout=3000)
+                if not self._activate_profile_switcher_row(see_all, "see all profiles"):
+                    self._click_locator(account_menu_btn, "account menu", timeout=5000)
+                    self.page.wait_for_timeout(1500)
+                    see_all = self._find_first_visible([
+                        self.page.locator('text=Xem tất cả trang cá nhân'),
+                        self.page.locator('text=See all profiles'),
+                        self.page.locator('span[dir="auto"]:has-text("Xem tất cả trang cá nhân")'),
+                    ])
+                    if see_all:
+                        self._activate_profile_switcher_row(see_all, "see all profiles (retry)")
                 self.page.wait_for_timeout(2000)
             
             # 3. Look for the exact personal profile name (accent-insensitive)
@@ -1052,6 +1061,23 @@ class FacebookAdapter(AdapterInterface):
             # 2. Casual scroll (human behavior)
             human_scroll(self.page)
             self.page.wait_for_timeout(random.randint(1000, 2000))
+
+            # 2b. Reels / watch often hide the composer until "Comment" / "Bình luận" is clicked
+            for _open_name in ("Bình luận", "Comment", "Comments"):
+                try:
+                    _bl = self.page.get_by_role("button", name=_open_name)
+                    if _bl.count() == 0:
+                        continue
+                    _cand = _bl.first
+                    if _cand.is_visible(timeout=1200):
+                        _cand.scroll_into_view_if_needed()
+                        self.page.wait_for_timeout(random.randint(200, 500))
+                        _cand.click(timeout=15000)
+                        self.page.wait_for_timeout(random.randint(1500, 2500))
+                        logger.info("FacebookAdapter: Opened comment section via %r", _open_name)
+                        break
+                except Exception:
+                    continue
             
             # 3. Find comment box (multiple selectors for i18n robustness)
             comment_selectors = [
@@ -1324,7 +1350,15 @@ class FacebookAdapter(AdapterInterface):
         self.page.wait_for_timeout(2000)
         see_all = self.page.locator(SELECTORS["switch_menu"]["see_all_profiles"]).first
         if see_all.count() > 0 and see_all.is_visible():
-            see_all.click()
+            if not self._activate_profile_switcher_row(see_all, "see all profiles"):
+                logger.warning(
+                    "FacebookAdapter: See-all click failed in reopen dialog; retrying avatar menu once."
+                )
+                self._click_locator(avatar_btn, "avatar menu", timeout=5000)
+                self.page.wait_for_timeout(1500)
+                see_all = self.page.locator(SELECTORS["switch_menu"]["see_all_profiles"]).first
+                if see_all.count() > 0 and see_all.is_visible():
+                    self._activate_profile_switcher_row(see_all, "see all profiles (retry)")
             self.page.wait_for_timeout(2000)
         return self.page.locator('div[role="dialog"]').last
 
@@ -1370,7 +1404,15 @@ class FacebookAdapter(AdapterInterface):
             see_all = self.page.locator(SELECTORS["switch_menu"]["see_all_profiles"]).first
 
             if see_all.count() > 0 and see_all.is_visible():
-                see_all.click()
+                if not self._activate_profile_switcher_row(see_all, "see all profiles"):
+                    logger.warning(
+                        "FacebookAdapter: See-all blocked by overlay; reopening avatar menu and retrying."
+                    )
+                    self._click_locator(avatar_btn, "avatar menu", timeout=5000)
+                    self.page.wait_for_timeout(1500)
+                    see_all = self.page.locator(SELECTORS["switch_menu"]["see_all_profiles"]).first
+                    if see_all.count() > 0 and see_all.is_visible():
+                        self._activate_profile_switcher_row(see_all, "see all profiles (retry)")
                 self.page.wait_for_timeout(2000)
 
             dialog = self.page.locator('div[role="dialog"]').last
