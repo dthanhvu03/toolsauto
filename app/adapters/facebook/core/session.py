@@ -7,7 +7,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from app.config import FACEBOOK_PLAYWRIGHT_HEADLESS, PROFILES_DIR
+from app.config import (
+    FACEBOOK_PLAYWRIGHT_HEADLESS,
+    PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
+    PROFILES_DIR,
+)
 
 from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
@@ -101,7 +105,7 @@ class FacebookSessionManager:
                 ],
             )
             page = context.pages[0] if context.pages else context.new_page()
-            page.set_default_timeout(60000)
+            page.set_default_timeout(PLAYWRIGHT_DEFAULT_TIMEOUT_MS)
             return pw, context, page
         except Exception as e:
             logger.error("FacebookSessionManager: Failed to bootstrap playwright session: %s", e)

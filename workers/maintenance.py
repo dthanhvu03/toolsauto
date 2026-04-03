@@ -30,8 +30,6 @@ _last_summary_ts = 0
 _last_discovery_ts = 0
 _last_boost_ts = 0
 
-STRATEGIC_BOOST_INTERVAL_SEC = 7200 # 2 giờ
-
 
 def _pending_backlog(db: Session) -> int:
     """Count jobs that indicate backlog; used to decide whether to skip heavy maintenance tasks."""
@@ -326,7 +324,7 @@ def _run_strategic_boost(db):
     """
     global _last_boost_ts
     now = time.time()
-    if (now - _last_boost_ts) < STRATEGIC_BOOST_INTERVAL_SEC:
+    if (now - _last_boost_ts) < config.STRATEGIC_BOOST_INTERVAL_SEC:
         return
     _last_boost_ts = now
     logger.info("🕒 Starting Autonomous Strategic Boosting Scan...")
@@ -353,7 +351,11 @@ def run_loop():
         CURRENT_POLLER = TelegramPoller(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)
         CURRENT_POLLER.start()
         
-    logger.info("Entering Maintenance polling loop. Tick=300s (5 minutes)")
+    logger.info(
+        "Entering Maintenance polling loop. Tick=%ss (%.1f minutes)",
+        config.MAINT_LOOP_SLEEP_SEC,
+        config.MAINT_LOOP_SLEEP_SEC / 60.0,
+    )
     
     while RUNNING:
         try:
@@ -372,7 +374,7 @@ def run_loop():
                     break
                     
                 if state.worker_status == "PAUSED":
-                    time.sleep(300)
+                    time.sleep(config.MAINT_LOOP_SLEEP_SEC)
                     continue
                 
                 logger.info("Running routine maintenance tasks...")
@@ -427,12 +429,12 @@ def run_loop():
                 _scrape_page_insights()
                 
             if RUNNING:
-                # Sleep for 5 minutes between maintenance sweeps
-                time.sleep(300)
+                # Sleep between maintenance sweeps
+                time.sleep(config.MAINT_LOOP_SLEEP_SEC)
                 
         except Exception:
             logger.exception("Maintenance Worker encountered a core loop error. Will retry.")
-            time.sleep(300)
+            time.sleep(config.MAINT_LOOP_SLEEP_SEC)
             
     logger.info("Maintenance Worker process completed gracefully.")
 
