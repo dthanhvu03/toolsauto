@@ -40,6 +40,10 @@ CONTENT_DIR = BASE_DIR / "content"
 # Chromium persistent contexts (FacebookAdapter, login bootstrap).
 PROFILES_DIR = CONTENT_DIR / "profiles"
 CONTENT_PROFILES_DIR = PROFILES_DIR # Legacy alias for backward compatibility
+# Facebook publisher Playwright: true = no window (set FACEBOOK_PLAYWRIGHT_HEADLESS=true in .env / PM2).
+FACEBOOK_PLAYWRIGHT_HEADLESS = (
+    os.getenv("FACEBOOK_PLAYWRIGHT_HEADLESS", "false").lower() == "true"
+)
 
 DONE_DIR = CONTENT_DIR / "done"
 FAILED_DIR = CONTENT_DIR / "failed"
