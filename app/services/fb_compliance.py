@@ -1,18 +1,92 @@
 """
 Facebook Content Compliance Checker
-3-layer: Static keywords → Regex patterns → AI rewrite
+3-layer: DB-backed keywords (cached) → Regex patterns → AI rewrite
 """
 from __future__ import annotations
 
 import json
 import logging
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+CACHE_TTL = 300  # seconds
+
+_keyword_cache: dict[str, Any] = {
+    "block": [],
+    "warning": [],
+    "last_loaded": 0,
+}
+_cache_lock = threading.Lock()
+
+
+def _load_keywords_from_db() -> None:
+    """Load active keywords from keyword_blacklist table into cache."""
+    block_list: list[str] = []
+    warning_list: list[str] = []
+    try:
+        from sqlalchemy import select
+
+        from app.database.core import SessionLocal
+        from app.database.models import KeywordBlacklist
+
+        with SessionLocal() as db:
+            rows = db.execute(
+                select(KeywordBlacklist.keyword, KeywordBlacklist.severity).where(
+                    KeywordBlacklist.is_active.is_(True)
+                )
+            ).all()
+
+        for row in rows:
+            kw, sev = row[0], row[1]
+            if not kw:
+                continue
+            phrase = kw.strip().lower()
+            s = (sev or "").strip().upper()
+            if s == "VIOLATION":
+                block_list.append(phrase)
+            elif s == "WARNING":
+                warning_list.append(phrase)
+
+        with _cache_lock:
+            _keyword_cache["block"] = block_list
+            _keyword_cache["warning"] = warning_list
+            _keyword_cache["last_loaded"] = time.time()
+        logger.info(
+            "[Compliance] Loaded %s BLOCK + %s WARNING keywords from DB",
+            len(block_list),
+            len(warning_list),
+        )
+        if not block_list and not warning_list:
+            logger.warning(
+                "[Compliance] No active keywords in DB; only regex rules apply."
+            )
+    except Exception as e:
+        logger.error("[Compliance] Failed to load keywords: %s", e)
+
+
+def _get_keywords() -> tuple[list[str], list[str]]:
+    """Return cached keyword lists; reload if TTL expired."""
+    now = time.time()
+    last = _keyword_cache.get("last_loaded", 0)
+    if now - last > CACHE_TTL:
+        _load_keywords_from_db()
+    with _cache_lock:
+        return (
+            list(_keyword_cache.get("block", [])),
+            list(_keyword_cache.get("warning", [])),
+        )
+
+
+def invalidate_keyword_cache() -> None:
+    """Force reload on next check (call after CRUD)."""
+    with _cache_lock:
+        _keyword_cache["last_loaded"] = 0.0
 
 
 class Severity(str, Enum):
@@ -39,56 +113,6 @@ class ComplianceResult:
 class CompliancePublishError(ValueError):
     """Raised when content must not be published (VIOLATION)."""
 
-
-BLOCK_KEYWORDS = [
-    "chữa khỏi",
-    "chữa bệnh",
-    "trị bệnh",
-    "trị dứt điểm",
-    "hết bệnh",
-    "điều trị",
-    "thay thuốc",
-    "thuốc đặc trị",
-    "kê đơn",
-    "tăng cường sinh lý",
-    "cải thiện chức năng",
-    "giảm cân nhanh",
-    "tăng cân nhanh",
-    "đốt mỡ nhanh",
-    "không tác dụng phụ",
-    "an toàn tuyệt đối",
-    "đã được kiểm chứng lâm sàng",
-    "được bác sĩ khuyên dùng",
-    "cam kết lợi nhuận",
-    "thu nhập thụ động",
-    "kiếm tiền không rủi ro",
-    "không rủi ro",
-    "cam kết hoàn tiền 100%",
-    "đảm bảo lợi nhuận",
-    "lãi suất cao",
-    "kiếm x triệu",
-]
-
-WARNING_KEYWORDS = [
-    "100% hiệu quả",
-    "tuyệt đối hiệu quả",
-    "hoàn hảo nhất",
-    "số 1 thế giới",
-    "tốt nhất thế giới",
-    "chắc chắn hiệu quả",
-    "đảm bảo hiệu quả",
-    "chỉ còn hôm nay",
-    "hết slot",
-    "chỉ còn x suất",
-    "giá chỉ hôm nay",
-    "ưu đãi cuối",
-    "tag 3 người",
-    "tag bạn bè để nhận",
-    "share để nhận quà",
-    "inbox chữ x",
-    "comment số",
-    "bình luận để được",
-]
 
 ALLOWLIST_PHRASES = [
     "trị giá",
@@ -124,7 +148,9 @@ class FBComplianceChecker:
         content_lower = content.lower()
         masked_lower = self._mask_allowlisted_phrases(content_lower)
 
-        for kw in BLOCK_KEYWORDS:
+        block_keywords, warning_keywords = _get_keywords()
+
+        for kw in block_keywords:
             if kw in masked_lower:
                 violations.append(
                     ViolationItem(
@@ -135,7 +161,7 @@ class FBComplianceChecker:
                     )
                 )
 
-        for kw in WARNING_KEYWORDS:
+        for kw in warning_keywords:
             if kw in masked_lower:
                 violations.append(
                     ViolationItem(

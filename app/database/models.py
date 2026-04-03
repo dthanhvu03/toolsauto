@@ -542,12 +542,13 @@ class KeywordBlacklist(Base):
     __tablename__ = "keyword_blacklist"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    keyword = Column(String, nullable=False, index=True)
+    keyword = Column(String, nullable=False, unique=True, index=True)
     category = Column(String, nullable=False, index=True)
     severity = Column(String, nullable=False)
     source = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(Integer, default=now_ts)
+    updated_at = Column(Integer, nullable=True, onupdate=now_ts)
 
 
 class ViolationLog(Base):

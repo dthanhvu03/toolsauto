@@ -1,0 +1,299 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Vi phạm FB • Auto Publisher{% endblock %}
+{% block page_title %}Quản lý vi phạm Facebook{% endblock %}
+{% block page_subtitle %}Danh sách từ khóa (DB) và thống kê violation_log.{% endblock %}
+
+{% block page_actions %}
+<button type="button" onclick="openAddModal()"
+        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">
+  + Thêm từ khóa
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="stats-cards">
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">Từ khóa active</p>
+      <p class="text-2xl font-bold text-gray-800" id="stat-total-keywords">—</p>
+    </div>
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">VIOLATION (30 ngày)</p>
+      <p class="text-2xl font-bold text-red-600" id="stat-total-violations">—</p>
+    </div>
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">Chặn hôm nay (UTC)</p>
+      <p class="text-2xl font-bold text-orange-600" id="stat-blocked-today">—</p>
+    </div>
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">Có bản rewrite (30d)</p>
+      <p class="text-2xl font-bold text-green-600" id="stat-rewritten">—</p>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-[var(--border)] p-4 shadow-sm">
+    <h2 class="font-semibold text-gray-700 mb-4 text-sm">Từ khóa vi phạm nhiều nhất (evidence trong log)</h2>
+    <div id="top-keywords-chart" class="space-y-2"></div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-[var(--border)] flex flex-wrap gap-3 items-center">
+      <input type="text" id="search-input" placeholder="Tìm từ khóa..." oninput="filterKeywords()"
+             class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm w-48">
+      <select id="filter-severity" onchange="filterKeywords()"
+              class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+        <option value="">Tất cả mức độ</option>
+        <option value="VIOLATION">VIOLATION</option>
+        <option value="WARNING">WARNING</option>
+      </select>
+      <select id="filter-category" onchange="filterKeywords()"
+              class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+        <option value="">Tất cả danh mục</option>
+        <option value="health">Sức khỏe</option>
+        <option value="financial">Tài chính</option>
+        <option value="misleading">Gây hiểu nhầm</option>
+        <option value="urgency">Khẩn cấp</option>
+        <option value="engagement_bait">Bait tương tác</option>
+        <option value="custom">Tùy chỉnh</option>
+      </select>
+      <span class="text-xs text-gray-400 ml-auto" id="keyword-count"></span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <th class="px-4 py-3 text-left">Từ khóa</th>
+            <th class="px-4 py-3 text-left">Danh mục</th>
+            <th class="px-4 py-3 text-left">Mức độ</th>
+            <th class="px-4 py-3 text-left">Nguồn</th>
+            <th class="px-4 py-3 text-center">Trạng thái</th>
+            <th class="px-4 py-3 text-center">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody id="keywords-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="keyword-modal"
+     class="hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl border border-[var(--border)]">
+    <h3 class="font-semibold text-gray-800 mb-4 text-sm" id="modal-title">Thêm từ khóa</h3>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-500">Từ khóa *</label>
+        <input type="text" id="modal-keyword" placeholder="Nhập từ khóa..."
+               class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Danh mục</label>
+        <select id="modal-category" class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1 bg-white">
+          <option value="health">Sức khỏe</option>
+          <option value="financial">Tài chính</option>
+          <option value="misleading">Gây hiểu nhầm</option>
+          <option value="engagement_bait">Bait tương tác</option>
+          <option value="custom">Tùy chỉnh</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Mức độ</label>
+        <select id="modal-severity" class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1 bg-white">
+          <option value="WARNING">WARNING — cảnh báo, viết lại</option>
+          <option value="VIOLATION">VIOLATION — chặn</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button type="button" onclick="saveKeyword()"
+              class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Lưu</button>
+      <button type="button" onclick="closeModal()"
+              class="flex-1 border border-[var(--border)] py-2 rounded-lg text-sm hover:bg-gray-50">Hủy</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+let allKeywords = [];
+let editingId = null;
+
+async function loadKeywords() {
+  const res = await fetch('/compliance/keywords');
+  allKeywords = await res.json();
+  renderTable(allKeywords);
+  document.getElementById('keyword-count').textContent = `${allKeywords.length} từ khóa`;
+}
+
+async function loadAnalytics() {
+  const res = await fetch('/compliance/analytics?days=30');
+  const data = await res.json();
+  document.getElementById('stat-total-keywords').textContent = data.total_keywords ?? 0;
+  document.getElementById('stat-total-violations').textContent = data.total_violations ?? 0;
+  document.getElementById('stat-blocked-today').textContent = data.blocked_today ?? 0;
+  document.getElementById('stat-rewritten').textContent = data.rewritten_count ?? 0;
+  renderTopKeywords(data.top_keywords || []);
+}
+
+function renderTable(keywords) {
+  const tbody = document.getElementById('keywords-tbody');
+  if (!keywords.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400 text-sm">Chưa có từ khóa nào</td></tr>';
+    return;
+  }
+  tbody.innerHTML = keywords.map(kw => `
+    <tr class="border-t border-[var(--border)] hover:bg-gray-50 ${!kw.is_active ? 'opacity-40' : ''}">
+      <td class="px-4 py-3 font-mono text-sm font-medium">${esc(kw.keyword)}</td>
+      <td class="px-4 py-3 text-gray-500">
+        <span class="px-2 py-0.5 bg-gray-100 rounded text-xs">${categoryLabel(kw.category)}</span>
+      </td>
+      <td class="px-4 py-3">
+        ${kw.severity === 'VIOLATION'
+          ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">BLOCK</span>'
+          : '<span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">WARN</span>'}
+      </td>
+      <td class="px-4 py-3 text-xs text-gray-400">${esc(kw.source || '—')}</td>
+      <td class="px-4 py-3 text-center">
+        <button type="button" onclick="toggleKeyword(${kw.id})"
+                class="text-xs px-2 py-1 rounded border ${kw.is_active ? 'border-green-300 text-green-600' : 'border-gray-300 text-gray-400'}">
+          ${kw.is_active ? '✓ Active' : '○ Tắt'}
+        </button>
+      </td>
+      <td class="px-4 py-3 text-center">
+        <div class="flex gap-1 justify-center">
+          <button type="button" onclick="editKeyword(${kw.id})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded text-xs">✏️</button>
+          <button type="button" onclick="deleteKeyword(${kw.id})" class="p-1.5 text-red-500 hover:bg-red-50 rounded text-xs">🗑️</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderTopKeywords(keywords) {
+  const container = document.getElementById('top-keywords-chart');
+  if (!keywords.length) {
+    container.innerHTML = '<p class="text-sm text-gray-400">Chưa có dữ liệu</p>';
+    return;
+  }
+  const max = Math.max(1, keywords[0].count);
+  container.innerHTML = keywords.map(kw => `
+    <div class="flex items-center gap-3">
+      <span class="text-sm font-mono w-40 truncate text-gray-700">${esc(kw.keyword || 'N/A')}</span>
+      <div class="flex-1 bg-gray-100 rounded-full h-5 relative overflow-hidden">
+        <div class="bg-red-400 h-5 rounded-full transition-all" style="width:${(kw.count / max * 100).toFixed(0)}%"></div>
+      </div>
+      <span class="text-sm font-bold text-gray-600 w-8 text-right">${kw.count}</span>
+    </div>
+  `).join('');
+}
+
+function filterKeywords() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const severity = document.getElementById('filter-severity').value;
+  const category = document.getElementById('filter-category').value;
+  const filtered = allKeywords.filter(kw => {
+    const matchSearch = !search || (kw.keyword || '').includes(search);
+    const matchSeverity = !severity || kw.severity === severity;
+    const matchCategory = !category || kw.category === category;
+    return matchSearch && matchSeverity && matchCategory;
+  });
+  renderTable(filtered);
+  document.getElementById('keyword-count').textContent = `${filtered.length} / ${allKeywords.length} từ khóa`;
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'Thêm từ khóa mới';
+  document.getElementById('modal-keyword').value = '';
+  document.getElementById('modal-keyword').disabled = false;
+  document.getElementById('modal-severity').value = 'WARNING';
+  document.getElementById('keyword-modal').classList.remove('hidden');
+}
+
+function editKeyword(id) {
+  const kw = allKeywords.find(k => k.id === id);
+  if (!kw) return;
+  editingId = id;
+  document.getElementById('modal-title').textContent = 'Chỉnh sửa từ khóa';
+  document.getElementById('modal-keyword').value = kw.keyword;
+  document.getElementById('modal-keyword').disabled = true;
+  document.getElementById('modal-category').value = kw.category;
+  document.getElementById('modal-severity').value = kw.severity;
+  document.getElementById('keyword-modal').classList.remove('hidden');
+}
+
+async function saveKeyword() {
+  const keyword = document.getElementById('modal-keyword').value.trim();
+  const category = document.getElementById('modal-category').value;
+  const severity = document.getElementById('modal-severity').value;
+  try {
+    let res;
+    if (editingId) {
+      res = await fetch('/compliance/keywords/' + editingId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category, severity })
+      });
+    } else {
+      res = await fetch('/compliance/keywords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword, category, severity })
+      });
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi');
+    closeModal();
+    await loadKeywords();
+    await loadAnalytics();
+  } catch (err) {
+    alert('❌ ' + err.message);
+  }
+}
+
+async function deleteKeyword(id) {
+  const kw = allKeywords.find(k => k.id === id);
+  if (!kw) return;
+  if (!confirm('Xóa từ khóa "' + kw.keyword + '"?')) return;
+  const res = await fetch('/compliance/keywords/' + id, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    alert(data.error || 'Không xóa được');
+    return;
+  }
+  await loadKeywords();
+  await loadAnalytics();
+}
+
+async function toggleKeyword(id) {
+  await fetch('/compliance/keywords/' + id + '/toggle', { method: 'PATCH' });
+  await loadKeywords();
+  await loadAnalytics();
+}
+
+function closeModal() {
+  document.getElementById('keyword-modal').classList.add('hidden');
+}
+
+function categoryLabel(cat) {
+  const labels = {
+    health: 'Sức khỏe', financial: 'Tài chính', misleading: 'Gây hiểu nhầm',
+    spam_format: 'Spam', engagement_bait: 'Bait', custom: 'Tùy chỉnh',
+    prohibited: 'Cấm', urgency: 'Khẩn cấp'
+  };
+  return labels[cat] || cat;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+loadKeywords();
+loadAnalytics();
+</script>
+{% endblock %}
