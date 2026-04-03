@@ -329,8 +329,15 @@ function labelFromSlug(slug) {
 }
 
 async function loadCategories() {
-  const res = await fetch('/compliance/categories');
-  allCategories = await res.json();
+  let data = [];
+  try {
+    const res = await fetch('/compliance/categories');
+    const json = await res.json();
+    data = Array.isArray(json) ? json : [];
+  } catch (e) {
+    data = [];
+  }
+  allCategories = data;
 
   const filterSelect = document.getElementById('filter-category');
   if (filterSelect) {

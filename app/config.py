@@ -40,6 +40,10 @@ CONTENT_DIR = BASE_DIR / "content"
 # Chromium persistent contexts (FacebookAdapter, login bootstrap).
 PROFILES_DIR = CONTENT_DIR / "profiles"
 CONTENT_PROFILES_DIR = PROFILES_DIR # Legacy alias for backward compatibility
+# Facebook publisher Playwright: true = no window (set FACEBOOK_PLAYWRIGHT_HEADLESS=true in .env / PM2).
+FACEBOOK_PLAYWRIGHT_HEADLESS = (
+    os.getenv("FACEBOOK_PLAYWRIGHT_HEADLESS", "false").lower() == "true"
+)
 
 DONE_DIR = CONTENT_DIR / "done"
 FAILED_DIR = CONTENT_DIR / "failed"
@@ -110,8 +114,13 @@ IDLE_MAX_DURATION_SECONDS = int(os.getenv("IDLE_MAX_DURATION_SECONDS", "90"))  #
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# Redirect Service (Vercel)
-VERCEL_REDIRECT_URL = os.getenv("VERCEL_REDIRECT_URL", "https://vercel-redirect-rho-three.vercel.app")
+# Redirect Service (Vercel) — no unsafe default; set VERCEL_REDIRECT_URL in .env when using hosted redirect
+VERCEL_REDIRECT_URL = (os.getenv("VERCEL_REDIRECT_URL") or "").strip().rstrip("/")
+
+# TikWM fallback API (viral_processor when yt-dlp fails on TikTok); defaults preserve prior behavior
+TIKWM_API_BASE = (os.getenv("TIKWM_API_BASE") or "https://www.tikwm.com/api").strip().rstrip("/")
+TIKWM_API_TIMEOUT_SEC = float(os.getenv("TIKWM_API_TIMEOUT_SEC", "15"))
+TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC = float(os.getenv("TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC", "60"))
 
 # Viral scan (TikTok competitor)
 VIRAL_MIN_VIEWS = int(os.getenv("VIRAL_MIN_VIEWS", "10000"))  # Ngưỡng view tối thiểu
@@ -132,6 +141,18 @@ MAINT_VIRAL_LIMIT = int(os.getenv("MAINT_VIRAL_LIMIT", "10"))           # Số v
 ALERT_PENDING_THRESHOLD = int(os.getenv("ALERT_PENDING_THRESHOLD", "30"))
 ALERT_DRAFT_THRESHOLD = int(os.getenv("ALERT_DRAFT_THRESHOLD", "50"))
 ALERT_VIRAL_NEW_THRESHOLD = int(os.getenv("ALERT_VIRAL_NEW_THRESHOLD", "500"))
+
+# Runtime timing (defaults match prior hardcoded literals in workers / Playwright / job service)
+PUBLISHER_PUBLISH_DEADLINE_SEC = int(os.getenv("PUBLISHER_PUBLISH_DEADLINE_SEC", "900"))
+PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC = int(
+    os.getenv("PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC", "1200")
+)
+PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_DEFAULT_TIMEOUT_MS", "60000"))
+MAINT_LOOP_SLEEP_SEC = int(os.getenv("MAINT_LOOP_SLEEP_SEC", "300"))
+STRATEGIC_BOOST_INTERVAL_SEC = int(os.getenv("STRATEGIC_BOOST_INTERVAL_SEC", "7200"))
+COMMENT_JOB_DELAY_MIN_SEC = int(os.getenv("COMMENT_JOB_DELAY_MIN_SEC", "120"))
+COMMENT_JOB_DELAY_MAX_SEC = int(os.getenv("COMMENT_JOB_DELAY_MAX_SEC", "300"))
+IDLE_ENGAGEMENT_COOLDOWN_MINUTES = int(os.getenv("IDLE_ENGAGEMENT_COOLDOWN_MINUTES", "45"))
 
 # Ensure directories exist
 for d in [
