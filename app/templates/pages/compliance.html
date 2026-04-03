@@ -62,10 +62,16 @@
               class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
         Thêm từ khóa
       </button>
-      <label class="cursor-pointer bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
-        Import CSV
-        <input type="file" accept=".csv" class="hidden" onchange="bulkImport(event)">
-      </label>
+      <div class="flex gap-2 items-center flex-wrap">
+        <label class="cursor-pointer bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+          Import CSV
+          <input type="file" accept=".csv" class="hidden" onchange="bulkImport(event)">
+        </label>
+        <a href="/compliance/keywords/sample-csv"
+           class="text-xs text-indigo-600 hover:underline shrink-0">
+          Tải file mẫu
+        </a>
+      </div>
       <a href="/compliance/export-keywords"
          class="inline-flex items-center bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
         Export CSV

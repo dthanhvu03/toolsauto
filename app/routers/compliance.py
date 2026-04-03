@@ -11,7 +11,7 @@ import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -94,6 +94,31 @@ def list_keywords(
         }
         for r in rows
     ]
+
+
+@router.get("/keywords/sample-csv")
+def download_sample_csv():
+    """Download sample CSV for bulk keyword import."""
+    sample = (
+        "keyword,category,severity\n"
+        "chữa khỏi bệnh,health,VIOLATION\n"
+        "trị dứt điểm,health,VIOLATION\n"
+        "giảm cân nhanh,health,VIOLATION\n"
+        "không tác dụng phụ,health,VIOLATION\n"
+        "cam kết hoàn tiền 100%,financial,VIOLATION\n"
+        "thu nhập thụ động,financial,VIOLATION\n"
+        "100% hiệu quả,misleading,WARNING\n"
+        "chỉ còn hôm nay,urgency,WARNING\n"
+        "tag bạn bè để nhận,engagement_bait,WARNING\n"
+        "share để nhận quà,engagement_bait,WARNING\n"
+    )
+    return Response(
+        content=sample.encode("utf-8-sig"),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=keyword_import_sample.csv",
+        },
+    )
 
 
 @router.post("/keywords")
