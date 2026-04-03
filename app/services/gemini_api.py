@@ -12,21 +12,21 @@ import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
-# Tier list — ordered by speed/cost preference
-# gemini-1.0-pro is excluded (deprecated + no multimodal support)
+# Tier list — verified available via genai.list_models()
+# No -preview- (unstable), no gemini-1.0-pro (deprecated), no gemma-*.
 GEMINI_TEXT_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite-preview-02-05",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash-8b-latest",
-    "gemini-1.5-pro-latest",
+    "gemini-2.5-flash",      # Fastest, latest
+    "gemini-2.0-flash",      # Stable, reliable
+    "gemini-2.0-flash-lite",  # Lightweight fallback
+    "gemini-2.5-pro",        # Most capable
+    "gemini-pro-latest",     # Legacy fallback
 ]
 
-# Only multimodal-capable models for ask_with_file
+# Only multimodal-capable models
 GEMINI_MULTIMODAL_MODELS = [
+    "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro-latest",
+    "gemini-2.5-pro",
 ]
 
 COOLDOWN_SECONDS = 60  # Skip rate-limited model for 60s
@@ -110,9 +110,19 @@ class GeminiAPIService:
                 continue
 
             except Exception as e:
+                error_str = str(e)
+                # 404 = model not found or not supported → skip, try next
+                if "404" in error_str or "not found" in error_str.lower():
+                    logger.warning(
+                        f"⚠️ [Gemini] {model_name} not available (404), "
+                        f"skipping to next model."
+                    )
+                    last_error = e
+                    continue  # Try next model instead of stopping
+                # Other unexpected errors → stop rotating
                 logger.error(f"❌ [Gemini] {model_name} unexpected error: {e}")
                 last_error = e
-                break  # Non-quota errors: stop rotating
+                break
 
         raise RuntimeError(f"Tất cả các model Gemini đều thất bại. Lỗi cuối cùng: {last_error}")
 
@@ -177,6 +187,14 @@ class GeminiAPIService:
                     continue
 
                 except Exception as e:
+                    error_str = str(e)
+                    if "404" in error_str or "not found" in error_str.lower():
+                        logger.warning(
+                            f"⚠️ [Gemini] {model_name} not available (404, multimodal), "
+                            f"skipping to next model."
+                        )
+                        last_error = e
+                        continue
                     logger.error(f"❌ [Gemini] {model_name} multimodal error: {e}")
                     last_error = e
                     break
