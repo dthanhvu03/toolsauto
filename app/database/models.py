@@ -551,6 +551,30 @@ class KeywordBlacklist(Base):
     updated_at = Column(Integer, nullable=True, onupdate=now_ts)
 
 
+class ComplianceAllowlist(Base):
+    """Cụm từ được bỏ qua khi quét keyword (vd: trị giá)."""
+    __tablename__ = "compliance_allowlist"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    phrase = Column(String, unique=True, nullable=False, index=True)
+    is_active = Column(Boolean, default=True)
+    source = Column(String, nullable=True)
+    created_at = Column(Integer, default=now_ts)
+
+
+class ComplianceRegexRule(Base):
+    """Quy tắc định dạng spam (regex) — mức độ thường là WARNING."""
+    __tablename__ = "compliance_regex_rules"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    pattern = Column(String, unique=True, nullable=False)
+    description = Column(String, nullable=False)
+    severity = Column(String, nullable=False, default="WARNING")
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(Integer, default=now_ts)
+
+
 class ViolationLog(Base):
     """Audit trail for FB compliance checks (publisher + optional UI)."""
     __tablename__ = "violation_log"

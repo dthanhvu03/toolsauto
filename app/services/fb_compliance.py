@@ -1,6 +1,6 @@
 """
 Facebook Content Compliance Checker
-3-layer: DB-backed keywords (cached) → Regex patterns → AI rewrite
+3-layer: DB-backed keywords + allowlist + regex (cached) → AI rewrite
 """
 from __future__ import annotations
 
@@ -20,29 +20,53 @@ CACHE_TTL = 300  # seconds
 _keyword_cache: dict[str, Any] = {
     "block": [],
     "warning": [],
+    "allowlist": [],
+    "regex": [],  # list[tuple[re.Pattern, Severity, str]]  description = evidence label
     "last_loaded": 0,
 }
 _cache_lock = threading.Lock()
 
 
-def _load_keywords_from_db() -> None:
-    """Load active keywords from keyword_blacklist table into cache."""
+def _load_compliance_from_db() -> None:
+    """Load keyword_blacklist + compliance_allowlist + compliance_regex_rules into cache."""
     block_list: list[str] = []
     warning_list: list[str] = []
+    allow_list: list[str] = []
+    regex_list: list[tuple[re.Pattern, Severity, str]] = []
     try:
         from sqlalchemy import select
 
         from app.database.core import SessionLocal
-        from app.database.models import KeywordBlacklist
+        from app.database.models import (
+            ComplianceAllowlist,
+            ComplianceRegexRule,
+            KeywordBlacklist,
+        )
 
         with SessionLocal() as db:
-            rows = db.execute(
+            kw_rows = db.execute(
                 select(KeywordBlacklist.keyword, KeywordBlacklist.severity).where(
                     KeywordBlacklist.is_active.is_(True)
                 )
             ).all()
 
-        for row in rows:
+            al_rows = db.execute(
+                select(ComplianceAllowlist.phrase).where(
+                    ComplianceAllowlist.is_active.is_(True)
+                )
+            ).all()
+
+            rx_rows = db.execute(
+                select(
+                    ComplianceRegexRule.pattern,
+                    ComplianceRegexRule.description,
+                    ComplianceRegexRule.severity,
+                )
+                .where(ComplianceRegexRule.is_active.is_(True))
+                .order_by(ComplianceRegexRule.sort_order, ComplianceRegexRule.id)
+            ).all()
+
+        for row in kw_rows:
             kw, sev = row[0], row[1]
             if not kw:
                 continue
@@ -53,34 +77,76 @@ def _load_keywords_from_db() -> None:
             elif s == "WARNING":
                 warning_list.append(phrase)
 
+        for (phrase,) in al_rows:
+            if phrase and phrase.strip():
+                allow_list.append(phrase.strip().lower())
+
+        for pat, desc, sev in rx_rows:
+            if not pat or not pat.strip():
+                continue
+            label = (desc or "").strip() or pat[:80]
+            raw_sev = (sev or "WARNING").strip().upper()
+            sev_enum = (
+                Severity.VIOLATION if raw_sev == "VIOLATION" else Severity.WARNING
+            )
+            try:
+                compiled = re.compile(pat)
+            except re.error as err:
+                logger.error(
+                    "[Compliance] Skip invalid regex (id pattern len=%s): %s",
+                    len(pat),
+                    err,
+                )
+                continue
+            regex_list.append((compiled, sev_enum, label))
+
         with _cache_lock:
             _keyword_cache["block"] = block_list
             _keyword_cache["warning"] = warning_list
+            _keyword_cache["allowlist"] = allow_list
+            _keyword_cache["regex"] = regex_list
             _keyword_cache["last_loaded"] = time.time()
+
         logger.info(
-            "[Compliance] Loaded %s BLOCK + %s WARNING keywords from DB",
+            "[Compliance] Loaded DB: %s block, %s warn, %s allowlist, %s regex",
             len(block_list),
             len(warning_list),
+            len(allow_list),
+            len(regex_list),
         )
         if not block_list and not warning_list:
             logger.warning(
-                "[Compliance] No active keywords in DB; only regex rules apply."
+                "[Compliance] No active keywords in keyword_blacklist; only allowlist/regex apply."
             )
     except Exception as e:
-        logger.error("[Compliance] Failed to load keywords: %s", e)
+        logger.error("[Compliance] Failed to load compliance rules: %s", e)
+
+
+def _maybe_reload_compliance_cache() -> None:
+    now = time.time()
+    if now - _keyword_cache.get("last_loaded", 0) > CACHE_TTL:
+        _load_compliance_from_db()
 
 
 def _get_keywords() -> tuple[list[str], list[str]]:
-    """Return cached keyword lists; reload if TTL expired."""
-    now = time.time()
-    last = _keyword_cache.get("last_loaded", 0)
-    if now - last > CACHE_TTL:
-        _load_keywords_from_db()
+    _maybe_reload_compliance_cache()
     with _cache_lock:
         return (
             list(_keyword_cache.get("block", [])),
             list(_keyword_cache.get("warning", [])),
         )
+
+
+def _get_allowlist_phrases() -> list[str]:
+    _maybe_reload_compliance_cache()
+    with _cache_lock:
+        return list(_keyword_cache.get("allowlist", []))
+
+
+def _get_regex_rules() -> list[tuple[re.Pattern, Severity, str]]:
+    _maybe_reload_compliance_cache()
+    with _cache_lock:
+        return list(_keyword_cache.get("regex", []))
 
 
 def invalidate_keyword_cache() -> None:
@@ -114,28 +180,11 @@ class CompliancePublishError(ValueError):
     """Raised when content must not be published (VIOLATION)."""
 
 
-ALLOWLIST_PHRASES = [
-    "trị giá",
-    "miễn phí ship",
-    "freeship",
-    "flash sale",
-    "deal hot",
-]
-
-SPAM_PATTERNS = [
-    (r"[!?]{3,}", "Dấu câu lặp lại (!!!, ???)", Severity.WARNING),
-    (r"[A-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĂĐƠƯ]{5,}", "Chữ IN HOA quá nhiều", Severity.WARNING),
-    (r"[\U0001F300-\U0001FFFF]{6,}", "Quá nhiều emoji liên tiếp", Severity.WARNING),
-    (r"(#\w+\s*){6,}", "Quá nhiều hashtag", Severity.WARNING),
-    (r"(.{15,})\1{2,}", "Lặp lại nội dung", Severity.WARNING),
-]
-
-
 class FBComplianceChecker:
     def _mask_allowlisted_phrases(self, content_lower: str) -> str:
         """Replace allowlisted substrings so keyword scan ignores them."""
         masked = content_lower
-        for i, phrase in enumerate(ALLOWLIST_PHRASES):
+        for i, phrase in enumerate(_get_allowlist_phrases()):
             if phrase in masked:
                 masked = masked.replace(phrase, f" __allow{i}__ ")
         return masked
@@ -172,8 +221,8 @@ class FBComplianceChecker:
                     )
                 )
 
-        for pattern, description, severity in SPAM_PATTERNS:
-            if re.search(pattern, content):
+        for compiled, severity, description in _get_regex_rules():
+            if compiled.search(content):
                 violations.append(
                     ViolationItem(
                         category="spam_format",
