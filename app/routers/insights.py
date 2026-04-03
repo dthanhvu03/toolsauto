@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from typing import Optional
 import datetime
+import time as _time
 
 from app.database.core import get_db
 from app.database import models
@@ -12,85 +13,34 @@ from app.database import models
 router = APIRouter(prefix="/insights", tags=["Insights"])
 templates = Jinja2Templates(directory="app/templates")
 
-@router.get("/api/platform-stats/")
-@router.get("/api/platform-stats")
-def get_platform_stats(page_url: Optional[str] = None, db: Session = Depends(get_db)):
-    """Get view and post distribution per platform."""
-    from sqlalchemy import text
-    sql = """
-        SELECT platform, SUM(views) as total_views, COUNT(DISTINCT post_url) as post_count
-        FROM page_insights
-        WHERE (:page_url IS NULL OR page_url = :page_url)
-        GROUP BY platform
-    """
-    results = db.execute(text(sql), {"page_url": page_url}).fetchall()
-    data = [{"platform": r.platform, "views": r.total_views or 0, "posts": r.post_count} for r in results]
-    return {"status": "success", "data": data}
+# ---------------------------------------------------------------------------
+# Simple TTL cache (Phase P2)
+# ---------------------------------------------------------------------------
+_cache: dict = {}
+CACHE_TTL = 3600  # 1 hour
 
-@router.get("/api/engagement-heatmap/")
-@router.get("/api/engagement-heatmap")
-def get_engagement_heatmap(page_url: Optional[str] = None, platform: Optional[str] = None, db: Session = Depends(get_db)):
-    """Get interaction density (likes + comments + shares) by Day of Week (0-6) and Hour (0-23)."""
-    from sqlalchemy import text
-    sql = """
-        SELECT 
-            CAST(strftime('%w', datetime(recorded_at, 'unixepoch')) AS INTEGER) as dow,
-            CAST(strftime('%H', datetime(recorded_at, 'unixepoch')) AS INTEGER) as hour,
-            SUM(COALESCE(likes, 0) + COALESCE(comments, 0) + COALESCE(shares, 0)) as total_interactions
-        FROM page_insights
-        WHERE (:page_url IS NULL OR page_url = :page_url)
-          AND (:platform IS NULL OR platform = :platform)
-        GROUP BY dow, hour
-    """
-    results = db.execute(text(sql), {"page_url": page_url, "platform": platform}).fetchall()
-    
-    # Initialize 7x24 grid with zeros
-    grid = [[0 for _ in range(24)] for _ in range(7)]
-    for r in results:
-        grid[r.dow][r.hour] = int(r.total_interactions or 0)
-        
-    return {"status": "success", "data": grid}
+def _get_cached(key: str):
+    if key in _cache:
+        data, ts = _cache[key]
+        if _time.time() - ts < CACHE_TTL:
+            return data
+    return None
 
-@router.get("/api/secondary-metrics/")
-@router.get("/api/secondary-metrics")
-def get_secondary_metrics(page_url: Optional[str] = None, platform: Optional[str] = None, db: Session = Depends(get_db)):
-    """Calculate secondary performance indicators."""
-    from sqlalchemy import text
-    # Calculate Avg Views per Post and Total Shares
-    sql = """
-        SELECT 
-            SUM(views) as total_views,
-            COUNT(DISTINCT post_url) as total_posts,
-            SUM(shares) as total_shares,
-            SUM(likes) as total_likes
-        FROM page_insights
-        WHERE (:page_url IS NULL OR page_url = :page_url)
-          AND (:platform IS NULL OR platform = :platform)
-    """
-    r = db.execute(text(sql), {"page_url": page_url, "platform": platform}).fetchone()
-    
-    total_views = r.total_views or 0
-    total_posts = r.total_posts or 1
-    total_shares = r.total_shares or 0
-    total_likes = r.total_likes or 0
-    
-    return {
-        "status": "success", 
-        "data": {
-            "avg_views": round(total_views / total_posts, 1),
-            "total_shares": total_shares,
-            "engagement_rate": round((total_likes + total_shares) / total_views * 100, 2) if total_views > 0 else 0,
-            "posts_count": total_posts
-        }
-    }
+def _set_cached(key: str, data):
+    _cache[key] = (data, _time.time())
 
+def _validate_days(days: int) -> int:
+    """Ensure days is one of the allowed values."""
+    return days if days in (7, 30, 90) else 7
+
+
+# ── Page route (HTML) ─────────────────────────────────────────────────────
 @router.get("/", response_class=HTMLResponse)
 def view_insights_dashboard(request: Request, db: Session = Depends(get_db)):
     """Render the main insights dashboard HTML page."""
-    # Get all unique pages that have insights
     pages = db.query(models.PageInsight.page_url, models.PageInsight.page_name).distinct().all()
     page_options = [{"url": p.page_url, "name": p.page_name or p.page_url} for p in pages]
-    
+
     return templates.TemplateResponse(
         "pages/insights.html",
         {
@@ -100,6 +50,8 @@ def view_insights_dashboard(request: Request, db: Session = Depends(get_db)):
         }
     )
 
+
+# ── /api/growth ───────────────────────────────────────────────────────────
 @router.get("/api/growth")
 def get_growth_metrics(
     page_url: Optional[str] = None,
@@ -112,16 +64,15 @@ def get_growth_metrics(
     Aggregates only the LATEST view count per unique post within each group.
     """
     from sqlalchemy import text
-    
+
+    days = _validate_days(days)
     now = int(datetime.datetime.now().timestamp())
     cutoff = now - (days * 86400)
     time_format = "%Y-%m-%d %H:00" if days <= 2 else "%Y-%m-%d"
-    
-    # We use a subquery to find the latest (max) view count per post_url in each group
-    # This prevents counting the same post multiple times if scraped twice in the same hour.
+
     sql = f"""
     WITH LatestPerGroup AS (
-        SELECT 
+        SELECT
             strftime('{time_format}', datetime(recorded_at, 'unixepoch')) as time_label,
             post_url,
             platform,
@@ -132,60 +83,92 @@ def get_growth_metrics(
         WHERE recorded_at >= :cutoff
         GROUP BY time_label, post_url
     )
-    SELECT 
+    SELECT
         time_label,
         SUM(latest_views) as total_views,
         SUM(latest_likes) as total_likes
     FROM LatestPerGroup
     WHERE 1=1
     """
-    
+
     if page_url:
         sql += " AND page_url = :page_url"
     if platform:
         sql += " AND platform = :platform"
-        
+
     sql += " GROUP BY time_label ORDER BY time_label"
-    
+
     params = {"cutoff": cutoff, "page_url": page_url, "platform": platform}
     results = db.execute(text(sql), params).fetchall()
-    
+
     data = []
     for r in results:
         data.append({
             "date": r.time_label,
             "views": r.total_views or 0,
-            "likes": r.total_likes or 0
+            "likes": r.total_likes or 0,
         })
-        
+
     return {"status": "success", "data": data}
 
+
+# ── /api/top-posts (with pagination) ─────────────────────────────────────
 @router.get("/api/top-posts")
 def get_top_posts(
     page_url: Optional[str] = None,
     platform: Optional[str] = "facebook",
+    days: int = 7,
+    page: int = 1,
     limit: int = 15,
     db: Session = Depends(get_db)
 ):
     """
     Get high-performing posts with advanced decision metrics.
     Calculates Engagement Rate and 24h Velocity using window functions.
+    Supports pagination via page/limit params.
     """
     from sqlalchemy import text
-    
-    # We use a raw SQL query with window functions for efficiency in SQLite 3.25+
-    # 1. Get the latest TWO snapshots for each post_url
-    # 2. Calculate the difference (Velocity) between them
+
+    days = _validate_days(days)
+    if page < 1:
+        page = 1
+    if limit < 1 or limit > 50:
+        limit = 15
+    offset = (page - 1) * limit
+
+    now = int(datetime.datetime.now().timestamp())
+    cutoff = now - (days * 86400)
+
+    # --- count total ---
+    count_sql = """
+    WITH RankedInsights AS (
+        SELECT
+            post_url,
+            ROW_NUMBER() OVER (PARTITION BY post_url ORDER BY recorded_at DESC) as rn
+        FROM page_insights
+        WHERE recorded_at >= :cutoff
+          AND (:platform IS NULL OR platform = :platform)
+          AND (:page_url IS NULL OR page_url = :page_url)
+    )
+    SELECT COUNT(*) as cnt FROM RankedInsights WHERE rn = 1
+    """
+    total = db.execute(
+        text(count_sql),
+        {"cutoff": cutoff, "platform": platform, "page_url": page_url},
+    ).scalar() or 0
+
+    # --- paginated data ---
     sql = """
     WITH RankedInsights AS (
-        SELECT 
+        SELECT
             post_url, page_name, platform, views, likes, comments, caption, recorded_at,
             ROW_NUMBER() OVER (PARTITION BY post_url ORDER BY recorded_at DESC) as rn
         FROM page_insights
-        WHERE (:platform IS NULL OR platform = :platform)
+        WHERE recorded_at >= :cutoff
+          AND (:platform IS NULL OR platform = :platform)
           AND (:page_url IS NULL OR page_url = :page_url)
     )
-    SELECT 
+    SELECT
         l1.post_url, l1.page_name, l1.platform, l1.views, l1.likes, l1.comments, l1.caption,
         (l1.views - COALESCE(l2.views, 0)) as velocity,
         CASE WHEN l1.views > 0 THEN (CAST(l1.likes AS FLOAT) / l1.views) * 100 ELSE 0 END as eng_rate
@@ -193,17 +176,19 @@ def get_top_posts(
     LEFT JOIN RankedInsights l2 ON l1.post_url = l2.post_url AND l2.rn = 2
     WHERE l1.rn = 1
     ORDER BY l1.views DESC
-    LIMIT :limit
+    LIMIT :limit OFFSET :offset
     """
-    
+
     params = {
+        "cutoff": cutoff,
         "platform": platform,
         "page_url": page_url,
-        "limit": limit
+        "limit": limit,
+        "offset": offset,
     }
-    
+
     results = db.execute(text(sql), params).fetchall()
-    
+
     data = []
     for r in results:
         data.append({
@@ -215,11 +200,20 @@ def get_top_posts(
             "comments": r.comments or 0,
             "caption": r.caption or "",
             "velocity": r.velocity or 0,
-            "engagement_rate": round(r.eng_rate or 0, 2)
+            "engagement_rate": round(r.eng_rate or 0, 2),
         })
-        
-    return {"status": "success", "data": data}
 
+    total_pages = max(1, (total + limit - 1) // limit)
+    return {
+        "status": "success",
+        "data": data,
+        "total": total,
+        "page": page,
+        "total_pages": total_pages,
+    }
+
+
+# ── /api/page-analysis ───────────────────────────────────────────────────
 @router.get("/api/page-analysis")
 def get_page_analysis(platform: str = None, db: Session = Depends(get_db)):
     """
@@ -230,67 +224,131 @@ def get_page_analysis(platform: str = None, db: Session = Depends(get_db)):
     analysis = PageStrategicService.get_page_analysis(db, platform=platform)
     return {"status": "success", "data": analysis}
 
-@router.get("/api/platform-stats")
-def get_platform_stats(page_url: Optional[str] = None, db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    sql = """
-    SELECT platform, SUM(views) as total_views 
-    FROM page_insights 
-    WHERE (:page_url IS NULL OR page_url = :page_url)
-    GROUP BY platform
-    """
-    params = {"page_url": page_url}
-    results = db.execute(text(sql), params).fetchall()
-    data = [{"platform": r[0] or "unknown", "views": r[1] or 0} for r in results]
-    return {"status": "success", "data": data}
 
-@router.get("/api/engagement-heatmap")
-def get_engagement_heatmap(page_url: Optional[str] = None, platform: Optional[str] = "facebook", db: Session = Depends(get_db)):
+# ── /api/platform-stats  (merged, cached) ────────────────────────────────
+@router.get("/api/platform-stats")
+def get_platform_stats(
+    page_url: Optional[str] = None,
+    days: int = 7,
+    db: Session = Depends(get_db),
+):
+    """Get view and post distribution per platform (cached 1 h)."""
     from sqlalchemy import text
-    # strftime('%w'...) returns 0-6 where 0 is Sunday.
+
+    days = _validate_days(days)
+    cache_key = f"platform_stats_{days}_{page_url or 'all'}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    now = int(datetime.datetime.now().timestamp())
+    cutoff = now - (days * 86400)
+
     sql = """
-    SELECT 
+        SELECT platform,
+               SUM(views) as total_views,
+               COUNT(DISTINCT post_url) as post_count
+        FROM page_insights
+        WHERE recorded_at >= :cutoff
+          AND (:page_url IS NULL OR page_url = :page_url)
+        GROUP BY platform
+    """
+    results = db.execute(text(sql), {"page_url": page_url, "cutoff": cutoff}).fetchall()
+    data = [
+        {"platform": r.platform or "unknown", "views": r.total_views or 0, "posts": r.post_count}
+        for r in results
+    ]
+    result = {"status": "success", "data": data}
+    _set_cached(cache_key, result)
+    return result
+
+
+# ── /api/engagement-heatmap  (merged, cached) ────────────────────────────
+@router.get("/api/engagement-heatmap")
+def get_engagement_heatmap(
+    page_url: Optional[str] = None,
+    platform: Optional[str] = "facebook",
+    days: int = 7,
+    db: Session = Depends(get_db),
+):
+    """Get interaction density by Day-of-Week × Hour (cached 1 h)."""
+    from sqlalchemy import text
+
+    days = _validate_days(days)
+    cache_key = f"heatmap_{days}_{platform or 'all'}_{page_url or 'all'}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return cached
+
+    now = int(datetime.datetime.now().timestamp())
+    cutoff = now - (days * 86400)
+
+    # Merged: COALESCE from version-A for NULL safety,
+    #         'localtime' from version-B for correct timezone,
+    #         dow/hour NULL guard from version-B.
+    sql = """
+    SELECT
         CAST(strftime('%w', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as dow,
         CAST(strftime('%H', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as hour,
-        SUM(likes + comments) as interactions
+        SUM(COALESCE(likes, 0) + COALESCE(comments, 0) + COALESCE(shares, 0)) as total_interactions
     FROM page_insights
-    WHERE (:platform IS NULL OR platform = :platform)
+    WHERE recorded_at >= :cutoff
+      AND (:platform IS NULL OR platform = :platform)
       AND (:page_url IS NULL OR page_url = :page_url)
     GROUP BY dow, hour
     """
-    params = {"platform": platform, "page_url": page_url}
-    results = db.execute(text(sql), params).fetchall()
-    
-    # Initialize 7x24 grid with zeros (0=Sun, 1=Mon... 6=Sat)
-    # JS expects order: 1, 2, 3, 4, 5, 6, 0
-    heatmap = [[0 for _ in range(24)] for _ in range(7)]
+    results = db.execute(
+        text(sql), {"cutoff": cutoff, "platform": platform, "page_url": page_url}
+    ).fetchall()
+
+    grid = [[0 for _ in range(24)] for _ in range(7)]
     for r in results:
         dow, hour, interactions = r[0], r[1], r[2]
         if dow is not None and hour is not None:
-            heatmap[dow][hour] = interactions or 0
-            
-    return {"status": "success", "data": heatmap}
+            grid[dow][hour] = int(interactions or 0)
 
+    result = {"status": "success", "data": grid}
+    _set_cached(cache_key, result)
+    return result
+
+
+# ── /api/secondary-metrics  (merged) ─────────────────────────────────────
 @router.get("/api/secondary-metrics")
-def get_secondary_metrics(page_url: Optional[str] = None, platform: Optional[str] = "facebook", db: Session = Depends(get_db)):
+def get_secondary_metrics(
+    page_url: Optional[str] = None,
+    platform: Optional[str] = "facebook",
+    days: int = 7,
+    db: Session = Depends(get_db),
+):
+    """Secondary performance KPIs — avg views, shares, engagement rate."""
     from sqlalchemy import text
+
+    days = _validate_days(days)
+    now = int(datetime.datetime.now().timestamp())
+    cutoff = now - (days * 86400)
+
+    # Merged: SQL-side engagement calc from version-B,
+    #         safe AVG + explicit NULL handling from version-A.
     sql = """
-    SELECT 
-        AVG(views) as avg_views, 
-        SUM(shares) as total_shares, 
-        CASE WHEN SUM(views) > 0 THEN SUM(likes)*100.0/SUM(views) ELSE 0 END as eng_rate,
+    SELECT
+        AVG(views)              as avg_views,
+        SUM(shares)             as total_shares,
+        CASE WHEN SUM(views) > 0
+             THEN SUM(COALESCE(likes,0)) * 100.0 / SUM(views)
+             ELSE 0 END         as eng_rate,
         COUNT(DISTINCT post_url) as active_posts
     FROM page_insights
-    WHERE (:platform IS NULL OR platform = :platform)
+    WHERE recorded_at >= :cutoff
+      AND (:platform IS NULL OR platform = :platform)
       AND (:page_url IS NULL OR page_url = :page_url)
     """
-    params = {"platform": platform, "page_url": page_url}
+    params = {"cutoff": cutoff, "platform": platform, "page_url": page_url}
     result = db.execute(text(sql), params).fetchone()
-    
+
     data = {
         "avg_views": round(result[0] or 0, 1) if result else 0,
         "total_shares": result[1] or 0 if result else 0,
         "engagement_rate": round(result[2] or 0, 2) if result else 0,
-        "posts_count": result[3] or 0 if result else 0
+        "posts_count": result[3] or 0 if result else 0,
     }
     return {"status": "success", "data": data}

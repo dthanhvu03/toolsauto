@@ -1,0 +1,921 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Vi phạm FB • Auto Publisher{% endblock %}
+{% block page_title %}Quản lý vi phạm Facebook{% endblock %}
+{% block page_subtitle %}Từ khóa, nhật ký kiểm tra, tester và thống kê.{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block page_actions %}
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-none space-y-6">
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="stats-cards">
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">Từ khóa active</p>
+      <p class="text-2xl font-bold text-gray-800" id="stat-total-keywords">—</p>
+    </div>
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">VIOLATION (30 ngày)</p>
+      <p class="text-2xl font-bold text-red-600" id="stat-total-violations">—</p>
+    </div>
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">Chặn hôm nay (UTC)</p>
+      <p class="text-2xl font-bold text-orange-600" id="stat-blocked-today">—</p>
+    </div>
+    <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
+      <p class="text-xs text-gray-400">Có bản rewrite (30d)</p>
+      <p class="text-2xl font-bold text-green-600" id="stat-rewritten">—</p>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-1 p-1 bg-gray-100 rounded-xl w-fit" role="tablist">
+    <button type="button" onclick="switchTab('keywords')" id="tab-keywords"
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white shadow-sm text-gray-800">
+      Từ khóa
+    </button>
+    <button type="button" onclick="switchTab('violations')" id="tab-violations"
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+      Lịch sử
+    </button>
+    <button type="button" onclick="switchTab('tester')" id="tab-tester"
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+      Kiểm tra
+    </button>
+    <button type="button" onclick="switchTab('allowlist')" id="tab-allowlist"
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+      Cho phép
+    </button>
+    <button type="button" onclick="switchTab('analytics')" id="tab-analytics"
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+      Thống kê
+    </button>
+  </div>
+
+  <div id="tab-content-keywords" class="space-y-6">
+    <div class="flex flex-wrap gap-2 items-center">
+      <button type="button" onclick="openAddModal()"
+              class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+        Thêm từ khóa
+      </button>
+      <label class="cursor-pointer bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+        Import CSV
+        <input type="file" accept=".csv" class="hidden" onchange="bulkImport(event)">
+      </label>
+      <a href="/compliance/export-keywords"
+         class="inline-flex items-center bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
+        Export CSV
+      </a>
+      <button type="button" onclick="openAISuggest()"
+              class="bg-purple-50 border border-purple-200 px-4 py-2 rounded-lg text-sm font-medium text-purple-700 hover:bg-purple-100">
+        AI đề xuất
+      </button>
+    </div>
+
+    <div class="bg-white rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-[var(--border)] flex flex-wrap gap-3 items-center">
+        <input type="text" id="search-input" placeholder="Tìm từ khóa..." oninput="filterKeywords()"
+               class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[12rem] max-w-md">
+        <select id="filter-severity" onchange="filterKeywords()"
+                class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+          <option value="">Tất cả mức độ</option>
+          <option value="VIOLATION">VIOLATION</option>
+          <option value="WARNING">WARNING</option>
+        </select>
+        <select id="filter-category" onchange="filterKeywords()"
+                class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+          <option value="">Tất cả danh mục</option>
+          <option value="health">Sức khỏe</option>
+          <option value="financial">Tài chính</option>
+          <option value="misleading">Gây hiểu nhầm</option>
+          <option value="urgency">Khẩn cấp</option>
+          <option value="engagement_bait">Bait tương tác</option>
+          <option value="custom">Tùy chỉnh</option>
+        </select>
+        <span class="text-xs text-gray-400 ml-auto" id="keyword-count"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+              <th class="px-4 py-3 text-left">Từ khóa</th>
+              <th class="px-4 py-3 text-left">Danh mục</th>
+              <th class="px-4 py-3 text-left">Mức độ</th>
+              <th class="px-4 py-3 text-left">Nguồn</th>
+              <th class="px-4 py-3 text-center">Trạng thái</th>
+              <th class="px-4 py-3 text-center">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="keywords-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-content-violations" class="hidden space-y-4">
+    <div class="flex gap-3 mb-2 flex-wrap items-center">
+      <select id="viol-filter-action" onchange="loadViolations(1)"
+              class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+        <option value="">Tất cả hành động</option>
+        <option value="VIOLATION">Bị chặn</option>
+        <option value="WARNING">Cảnh báo</option>
+        <option value="SAFE">An toàn</option>
+      </select>
+      <select id="viol-filter-days" onchange="loadViolations(1)"
+              class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+        <option value="7">7 ngày</option>
+        <option value="30" selected>30 ngày</option>
+        <option value="90">90 ngày</option>
+      </select>
+      <button type="button" onclick="exportViolations()"
+              class="ml-auto border border-[var(--border)] px-3 py-1.5 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+        Xuất CSV
+      </button>
+    </div>
+    <div class="bg-white rounded-xl border border-[var(--border)] overflow-hidden shadow-sm">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+              <th class="px-4 py-3 text-left">Thời gian</th>
+              <th class="px-4 py-3 text-left">Nội dung</th>
+              <th class="px-4 py-3 text-left">Vi phạm</th>
+              <th class="px-4 py-3 text-center">Hành động</th>
+              <th class="px-4 py-3 text-center">Chi tiết</th>
+            </tr>
+          </thead>
+          <tbody id="violations-tbody"></tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-between px-4 py-3 border-t border-[var(--border)] text-sm text-gray-500">
+        <span id="violations-count"></span>
+        <div class="flex gap-2 items-center" id="violations-pagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-content-tester" class="hidden">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white rounded-xl border border-[var(--border)] p-4 shadow-sm">
+        <h3 class="font-semibold text-gray-700 mb-3 text-sm">Nhập nội dung cần kiểm tra</h3>
+        <textarea id="tester-input" rows="6" placeholder="Dán caption hoặc comment vào đây..."
+                  class="w-full border border-[var(--border)] rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-indigo-300"></textarea>
+        <div class="flex gap-2 mt-3">
+          <button type="button" onclick="runTest()"
+                  class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+            Kiểm tra
+          </button>
+          <button type="button" onclick="clearTest()"
+                  class="border border-[var(--border)] px-4 py-2 rounded-lg text-sm hover:bg-gray-50">
+            Xóa
+          </button>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl border border-[var(--border)] p-4 shadow-sm">
+        <h3 class="font-semibold text-gray-700 mb-3 text-sm">Kết quả</h3>
+        <div id="tester-result" class="text-sm text-gray-400 text-center py-8">
+          Nhập nội dung và nhấn Kiểm tra
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-content-allowlist" class="hidden space-y-4">
+    <div class="flex justify-between items-center flex-wrap gap-2">
+      <p class="text-sm text-gray-500">
+        Các cụm từ này được bỏ qua khi quét keyword (allowlist).
+      </p>
+      <button type="button" onclick="openAllowlistModal()"
+              class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700">
+        Thêm ngoại lệ
+      </button>
+    </div>
+    <div class="bg-white rounded-xl border border-[var(--border)] overflow-hidden shadow-sm">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+            <th class="px-4 py-3 text-left">Cụm từ</th>
+            <th class="px-4 py-3 text-left">Lý do</th>
+            <th class="px-4 py-3 text-center">Active</th>
+            <th class="px-4 py-3 text-center">Xóa</th>
+          </tr>
+        </thead>
+        <tbody id="allowlist-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-content-analytics" class="hidden space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white rounded-xl border border-[var(--border)] p-4 shadow-sm">
+        <h3 class="font-semibold text-gray-700 mb-4 text-sm">Phân bổ hành động (log)</h3>
+        <canvas id="severity-chart" height="200"></canvas>
+      </div>
+      <div class="bg-white rounded-xl border border-[var(--border)] p-4 shadow-sm">
+        <h3 class="font-semibold text-gray-700 mb-4 text-sm">Xu hướng theo ngày</h3>
+        <canvas id="trend-chart" height="200"></canvas>
+      </div>
+      <div class="bg-white rounded-xl border border-[var(--border)] p-4 shadow-sm md:col-span-2">
+        <h3 class="font-semibold text-gray-700 mb-4 text-sm">Từ khóa evidence (top)</h3>
+        <div id="top-keywords-chart" class="space-y-2"></div>
+      </div>
+      <div class="bg-white rounded-xl border border-[var(--border)] p-4 shadow-sm md:col-span-2">
+        <h3 class="font-semibold text-gray-700 mb-4 text-sm">Affiliate có log nhiều nhất</h3>
+        <div id="account-stats-list" class="space-y-2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="keyword-modal"
+     class="hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl border border-[var(--border)]">
+    <h3 class="font-semibold text-gray-800 mb-4 text-sm" id="modal-title">Thêm từ khóa</h3>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-500">Từ khóa *</label>
+        <input type="text" id="modal-keyword" placeholder="Nhập từ khóa..."
+               class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Danh mục</label>
+        <select id="modal-category" class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1 bg-white">
+          <option value="health">Sức khỏe</option>
+          <option value="financial">Tài chính</option>
+          <option value="misleading">Gây hiểu nhầm</option>
+          <option value="engagement_bait">Bait tương tác</option>
+          <option value="custom">Tùy chỉnh</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Mức độ</label>
+        <select id="modal-severity" class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1 bg-white">
+          <option value="WARNING">WARNING — cảnh báo, viết lại</option>
+          <option value="VIOLATION">VIOLATION — chặn</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button type="button" onclick="saveKeyword()"
+              class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">Lưu</button>
+      <button type="button" onclick="closeModal()"
+              class="flex-1 border border-[var(--border)] py-2 rounded-lg text-sm hover:bg-gray-50">Hủy</button>
+    </div>
+  </div>
+</div>
+
+<div id="allowlist-modal"
+     class="hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl border border-[var(--border)]">
+    <h3 class="font-semibold text-gray-800 mb-4 text-sm">Thêm cụm từ cho phép</h3>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-500">Cụm từ *</label>
+        <input type="text" id="allowlist-phrase" class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Lý do (tuỳ chọn)</label>
+        <input type="text" id="allowlist-reason" class="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button type="button" onclick="saveAllowlist()"
+              class="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium">Lưu</button>
+      <button type="button" onclick="closeAllowlistModal()"
+              class="flex-1 border border-[var(--border)] py-2 rounded-lg text-sm">Hủy</button>
+    </div>
+  </div>
+</div>
+
+<div id="violation-detail-modal"
+     class="hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[85vh] overflow-y-auto shadow-xl border border-[var(--border)]">
+    <div class="flex justify-between items-start mb-4">
+      <h3 class="font-semibold text-gray-800 text-sm">Chi tiết log</h3>
+      <button type="button" onclick="closeViolationDetail()" class="text-gray-400 hover:text-gray-600 text-sm px-2">Đóng</button>
+    </div>
+    <pre id="violation-detail-body" class="text-xs bg-gray-50 p-3 rounded-lg overflow-x-auto whitespace-pre-wrap"></pre>
+  </div>
+</div>
+
+<div id="ai-suggest-modal"
+     class="hidden fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto shadow-xl border border-[var(--border)]">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-purple-800 text-sm">AI đề xuất từ khóa</h3>
+      <button type="button" onclick="closeAISuggest()" class="text-gray-400 hover:text-gray-600 text-sm">Đóng</button>
+    </div>
+    <div id="ai-suggest-content">
+      <button type="button" onclick="loadAISuggestions()"
+              class="w-full bg-purple-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-purple-700">
+        Phân tích và đề xuất
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+let allKeywords = [];
+let editingId = null;
+let currentViolPage = 1;
+let _severityChart = null;
+let _trendChart = null;
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
+    btn.classList.add('text-gray-500');
+  });
+  document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
+
+  const btn = document.getElementById('tab-' + tab);
+  if (btn) {
+    btn.classList.add('bg-white', 'shadow-sm', 'text-gray-800');
+    btn.classList.remove('text-gray-500');
+  }
+  const pane = document.getElementById('tab-content-' + tab);
+  if (pane) pane.classList.remove('hidden');
+
+  if (tab === 'violations') loadViolations(1);
+  if (tab === 'allowlist') loadAllowlist();
+  if (tab === 'analytics') loadAnalyticsCharts();
+}
+
+async function loadKeywords() {
+  const res = await fetch('/compliance/keywords');
+  allKeywords = await res.json();
+  renderTable(allKeywords);
+  document.getElementById('keyword-count').textContent = `${allKeywords.length} từ khóa`;
+}
+
+async function loadAnalytics() {
+  const res = await fetch('/compliance/analytics?days=30');
+  const data = await res.json();
+  document.getElementById('stat-total-keywords').textContent = data.total_keywords ?? 0;
+  document.getElementById('stat-total-violations').textContent = data.total_violations ?? 0;
+  document.getElementById('stat-blocked-today').textContent = data.blocked_today ?? 0;
+  document.getElementById('stat-rewritten').textContent = data.rewritten_count ?? 0;
+}
+
+function renderTable(keywords) {
+  const tbody = document.getElementById('keywords-tbody');
+  if (!keywords.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400 text-sm">Chưa có từ khóa nào</td></tr>';
+    return;
+  }
+  tbody.innerHTML = keywords.map(kw => `
+    <tr class="border-t border-[var(--border)] hover:bg-gray-50 ${!kw.is_active ? 'opacity-40' : ''}">
+      <td class="px-4 py-3 font-mono text-sm font-medium">${esc(kw.keyword)}</td>
+      <td class="px-4 py-3 text-gray-500">
+        <span class="px-2 py-0.5 bg-gray-100 rounded text-xs">${categoryLabel(kw.category)}</span>
+      </td>
+      <td class="px-4 py-3">
+        ${kw.severity === 'VIOLATION'
+          ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">BLOCK</span>'
+          : '<span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">WARN</span>'}
+      </td>
+      <td class="px-4 py-3 text-xs text-gray-400">${esc(kw.source || '—')}</td>
+      <td class="px-4 py-3 text-center">
+        <button type="button" onclick="toggleKeyword(${kw.id})"
+                class="text-xs px-2 py-1 rounded border ${kw.is_active ? 'border-green-300 text-green-600' : 'border-gray-300 text-gray-400'}">
+          ${kw.is_active ? 'Active' : 'Tắt'}
+        </button>
+      </td>
+      <td class="px-4 py-3 text-center">
+        <div class="flex gap-2 justify-center">
+          <button type="button" onclick="editKeyword(${kw.id})" class="text-xs text-blue-600 hover:underline">Sửa</button>
+          <button type="button" onclick="deleteKeyword(${kw.id})" class="text-xs text-red-600 hover:underline">Xóa</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderTopKeywords(keywords) {
+  const container = document.getElementById('top-keywords-chart');
+  if (!container) return;
+  if (!keywords.length) {
+    container.innerHTML = '<p class="text-sm text-gray-400">Chưa có dữ liệu</p>';
+    return;
+  }
+  const max = Math.max(1, keywords[0].count);
+  container.innerHTML = keywords.map(kw => `
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="text-sm font-mono shrink-0 min-w-[10rem] max-w-[min(40%,20rem)] truncate text-gray-700" title="${esc(kw.keyword || '')}">${esc(kw.keyword || 'N/A')}</span>
+      <div class="flex-1 min-w-0 bg-gray-100 rounded-full h-5 relative overflow-hidden">
+        <div class="bg-red-400 h-5 rounded-full transition-all" style="width:${(kw.count / max * 100).toFixed(0)}%"></div>
+      </div>
+      <span class="text-sm font-bold text-gray-600 w-10 shrink-0 text-right tabular-nums">${kw.count}</span>
+    </div>
+  `).join('');
+}
+
+function filterKeywords() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const severity = document.getElementById('filter-severity').value;
+  const category = document.getElementById('filter-category').value;
+  const filtered = allKeywords.filter(kw => {
+    const matchSearch = !search || (kw.keyword || '').includes(search);
+    const matchSeverity = !severity || kw.severity === severity;
+    const matchCategory = !category || kw.category === category;
+    return matchSearch && matchSeverity && matchCategory;
+  });
+  renderTable(filtered);
+  document.getElementById('keyword-count').textContent = `${filtered.length} / ${allKeywords.length} từ khóa`;
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'Thêm từ khóa mới';
+  document.getElementById('modal-keyword').value = '';
+  document.getElementById('modal-keyword').disabled = false;
+  document.getElementById('modal-severity').value = 'WARNING';
+  document.getElementById('keyword-modal').classList.remove('hidden');
+}
+
+function editKeyword(id) {
+  const kw = allKeywords.find(k => k.id === id);
+  if (!kw) return;
+  editingId = id;
+  document.getElementById('modal-title').textContent = 'Chỉnh sửa từ khóa';
+  document.getElementById('modal-keyword').value = kw.keyword;
+  document.getElementById('modal-keyword').disabled = true;
+  document.getElementById('modal-category').value = kw.category;
+  document.getElementById('modal-severity').value = kw.severity;
+  document.getElementById('keyword-modal').classList.remove('hidden');
+}
+
+async function saveKeyword() {
+  const keyword = document.getElementById('modal-keyword').value.trim();
+  const category = document.getElementById('modal-category').value;
+  const severity = document.getElementById('modal-severity').value;
+  try {
+    let res;
+    if (editingId) {
+      res = await fetch('/compliance/keywords/' + editingId, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category, severity })
+      });
+    } else {
+      res = await fetch('/compliance/keywords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword, category, severity })
+      });
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi');
+    closeModal();
+    await loadKeywords();
+    await loadAnalytics();
+  } catch (err) {
+    alert('Lỗi: ' + err.message);
+  }
+}
+
+async function deleteKeyword(id) {
+  const kw = allKeywords.find(k => k.id === id);
+  if (!kw) return;
+  if (!confirm('Xóa từ khóa "' + kw.keyword + '"?')) return;
+  const res = await fetch('/compliance/keywords/' + id, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    alert(data.error || 'Không xóa được');
+    return;
+  }
+  await loadKeywords();
+  await loadAnalytics();
+}
+
+async function toggleKeyword(id) {
+  await fetch('/compliance/keywords/' + id + '/toggle', { method: 'PATCH' });
+  await loadKeywords();
+  await loadAnalytics();
+}
+
+function closeModal() {
+  document.getElementById('keyword-modal').classList.add('hidden');
+}
+
+function categoryLabel(cat) {
+  const labels = {
+    health: 'Sức khỏe', financial: 'Tài chính', misleading: 'Gây hiểu nhầm',
+    spam_format: 'Spam', engagement_bait: 'Bait', custom: 'Tùy chỉnh',
+    prohibited: 'Cấm', urgency: 'Khẩn cấp'
+  };
+  return labels[cat] || cat;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+async function loadViolations(page) {
+  currentViolPage = page;
+  const action = document.getElementById('viol-filter-action').value;
+  const days = document.getElementById('viol-filter-days').value;
+  const res = await fetch('/compliance/violations?days=' + days + '&action=' + encodeURIComponent(action)
+    + '&page=' + page + '&limit=20');
+  const data = await res.json();
+
+  const tbody = document.getElementById('violations-tbody');
+  if (!data.violations || !data.violations.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">Không có dữ liệu</td></tr>';
+    document.getElementById('violations-count').textContent = '0 bản ghi';
+    document.getElementById('violations-pagination').innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = data.violations.map(v => {
+    const viols = v.violations_found || [];
+    const evidences = viols.map(x => (x.evidence || '')).filter(Boolean).join(', ');
+    const date = v.checked_at
+      ? new Date(v.checked_at * 1000).toLocaleString('vi-VN')
+      : '—';
+    const oc = v.original_content || '';
+    const preview = oc.length > 80 ? oc.substring(0, 80) + '…' : (oc || '—');
+    let actionBadge = '<span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">' + esc(v.action_taken || '—') + '</span>';
+    if (v.action_taken === 'VIOLATION') {
+      actionBadge = '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs">Chặn</span>';
+    } else if (v.action_taken === 'WARNING') {
+      actionBadge = '<span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">Cảnh báo</span>';
+    } else if (v.action_taken === 'SAFE') {
+      actionBadge = '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">An toàn</span>';
+    }
+    return `
+      <tr class="border-t border-[var(--border)] hover:bg-gray-50">
+        <td class="px-4 py-3 text-xs text-gray-500">${esc(date)}</td>
+        <td class="px-4 py-3 max-w-xs truncate text-gray-700" title="${esc(oc)}">${esc(preview)}</td>
+        <td class="px-4 py-3 text-xs text-red-600">${esc(evidences)}</td>
+        <td class="px-4 py-3 text-center">${actionBadge}</td>
+        <td class="px-4 py-3 text-center">
+          <button type="button" onclick="showViolationDetail(${v.id})" class="text-xs text-blue-600 hover:underline">Xem</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('violations-count').textContent =
+    (data.total || 0) + ' bản ghi';
+  renderPagination(data.page, data.total_pages);
+}
+
+function renderPagination(page, totalPages) {
+  const container = document.getElementById('violations-pagination');
+  if (!totalPages || totalPages <= 1) { container.innerHTML = ''; return; }
+  container.innerHTML = `
+    <button type="button" onclick="loadViolations(${page - 1})"
+            ${page <= 1 ? 'disabled' : ''}
+            class="px-3 py-1 border border-[var(--border)] rounded text-sm disabled:opacity-40">Trước</button>
+    <span class="px-3 py-1 text-sm">${page} / ${totalPages}</span>
+    <button type="button" onclick="loadViolations(${page + 1})"
+            ${page >= totalPages ? 'disabled' : ''}
+            class="px-3 py-1 border border-[var(--border)] rounded text-sm disabled:opacity-40">Sau</button>
+  `;
+}
+
+function exportViolations() {
+  const days = document.getElementById('viol-filter-days').value;
+  window.location.href = '/compliance/export-violations?days=' + days;
+}
+
+async function showViolationDetail(id) {
+  const res = await fetch('/compliance/violations/' + id);
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'Lỗi tải chi tiết');
+    return;
+  }
+  document.getElementById('violation-detail-body').textContent = JSON.stringify(data, null, 2);
+  document.getElementById('violation-detail-modal').classList.remove('hidden');
+}
+
+function closeViolationDetail() {
+  document.getElementById('violation-detail-modal').classList.add('hidden');
+}
+
+function mergeHighlightRanges(content, violations) {
+  const lower = content.toLowerCase();
+  const ranges = [];
+  for (const v of violations) {
+    const needle = (v.evidence || '').trim().toLowerCase();
+    if (!needle) continue;
+    let from = 0;
+    while ((from = lower.indexOf(needle, from)) !== -1) {
+      ranges.push({ start: from, end: from + needle.length, sev: v.severity });
+      from += needle.length;
+    }
+  }
+  if (!ranges.length) return esc(content);
+  ranges.sort((a, b) => a.start - b.start || b.end - a.end);
+  const merged = [];
+  for (const r of ranges) {
+    if (!merged.length || r.start >= merged[merged.length - 1].end) {
+      merged.push({ start: r.start, end: r.end, sev: r.sev });
+    } else {
+      const last = merged[merged.length - 1];
+      last.end = Math.max(last.end, r.end);
+      if (r.sev === 'VIOLATION') last.sev = 'VIOLATION';
+    }
+  }
+  let out = '';
+  let pos = 0;
+  for (const m of merged) {
+    out += esc(content.slice(pos, m.start));
+    const cls = m.sev === 'VIOLATION'
+      ? 'bg-red-100 text-red-800 px-0.5 rounded'
+      : 'bg-amber-100 text-amber-800 px-0.5 rounded';
+    out += '<mark class="' + cls + '">' + esc(content.slice(m.start, m.end)) + '</mark>';
+    pos = m.end;
+  }
+  out += esc(content.slice(pos));
+  return out;
+}
+
+async function runTest() {
+  const content = document.getElementById('tester-input').value;
+  if (!content.trim()) return;
+
+  const resultEl = document.getElementById('tester-result');
+  resultEl.innerHTML = '<div class="text-center text-gray-400 py-4">Đang kiểm tra…</div>';
+
+  const res = await fetch('/compliance/test-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    resultEl.innerHTML = '<p class="text-red-600 text-sm">' + esc(data.error || 'Lỗi') + '</p>';
+    return;
+  }
+
+  const st = data.status;
+  let bannerClass = 'bg-gray-50 border-gray-200 text-gray-800';
+  let label = st;
+  if (st === 'SAFE') { bannerClass = 'bg-green-50 border-green-200 text-green-800'; label = 'An toàn'; }
+  if (st === 'WARNING') { bannerClass = 'bg-amber-50 border-amber-200 text-amber-800'; label = 'Cảnh báo'; }
+  if (st === 'VIOLATION') { bannerClass = 'bg-red-50 border-red-200 text-red-800'; label = 'Vi phạm'; }
+
+  const highlighted = mergeHighlightRanges(content, data.violations || []);
+  const violList = (data.violations || []).map(v => {
+    const rowCls = v.severity === 'VIOLATION' ? 'bg-red-50' : 'bg-amber-50';
+    const evCls = v.severity === 'VIOLATION' ? 'text-red-700' : 'text-amber-700';
+    return '<div class="flex gap-2 text-xs p-2 rounded ' + rowCls + '">'
+      + '<span class="font-mono font-medium ' + evCls + '">' + esc(v.evidence || '') + '</span>'
+      + '<span class="text-gray-600">' + esc(v.suggestion || '') + '</span></div>';
+  }).join('');
+
+  resultEl.innerHTML = `
+    <div class="space-y-4 text-left">
+      <div class="flex flex-wrap items-center gap-3 p-3 rounded-lg border ${bannerClass}">
+        <span class="text-sm font-bold">${esc(label)}</span>
+        <span class="text-xs ml-auto">${data.violation_count} lỗi nặng · ${data.warning_count} cảnh báo</span>
+      </div>
+      <div class="p-3 bg-gray-50 rounded-lg text-sm leading-relaxed">${highlighted}</div>
+      ${violList ? '<div class="space-y-2">' + violList + '</div>' : ''}
+    </div>
+  `;
+}
+
+function clearTest() {
+  document.getElementById('tester-input').value = '';
+  document.getElementById('tester-result').innerHTML =
+    '<div class="text-center text-gray-400 py-8">Nhập nội dung và nhấn Kiểm tra</div>';
+}
+
+async function loadAllowlist() {
+  const res = await fetch('/compliance/allowlist');
+  const items = await res.json();
+  const tbody = document.getElementById('allowlist-tbody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-400">Chưa có mục nào</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(item => `
+    <tr class="border-t border-[var(--border)]">
+      <td class="px-4 py-3 font-mono text-sm">${esc(item.phrase)}</td>
+      <td class="px-4 py-3 text-sm text-gray-500">${esc(item.reason || '—')}</td>
+      <td class="px-4 py-3 text-center text-xs">${item.is_active ? 'Có' : 'Không'}</td>
+      <td class="px-4 py-3 text-center">
+        <button type="button" onclick="deleteAllowlistItem(${item.id})"
+                class="text-red-600 hover:underline text-xs">Xóa</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openAllowlistModal() {
+  document.getElementById('allowlist-phrase').value = '';
+  document.getElementById('allowlist-reason').value = '';
+  document.getElementById('allowlist-modal').classList.remove('hidden');
+}
+
+function closeAllowlistModal() {
+  document.getElementById('allowlist-modal').classList.add('hidden');
+}
+
+async function saveAllowlist() {
+  const phrase = document.getElementById('allowlist-phrase').value.trim();
+  const reason = document.getElementById('allowlist-reason').value.trim();
+  const res = await fetch('/compliance/allowlist', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phrase, reason })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'Lỗi');
+    return;
+  }
+  closeAllowlistModal();
+  loadAllowlist();
+}
+
+async function deleteAllowlistItem(id) {
+  if (!confirm('Xóa mục allowlist này?')) return;
+  await fetch('/compliance/allowlist/' + id, { method: 'DELETE' });
+  loadAllowlist();
+}
+
+async function bulkImport(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/compliance/keywords/bulk-import', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (!res.ok) {
+    alert(data.error || 'Import thất bại');
+    return;
+  }
+  let msg = 'Import xong. Đã thêm: ' + data.imported + ', bỏ qua: ' + data.skipped;
+  if (data.errors && data.errors.length) msg += '\nLỗi: ' + data.errors.join(', ');
+  alert(msg);
+  loadKeywords();
+  loadAnalytics();
+}
+
+function openAISuggest() {
+  document.getElementById('ai-suggest-modal').classList.remove('hidden');
+}
+
+function closeAISuggest() {
+  document.getElementById('ai-suggest-modal').classList.add('hidden');
+}
+
+async function loadAISuggestions() {
+  const content = document.getElementById('ai-suggest-content');
+  content.innerHTML = '<div class="text-center py-8 text-purple-700 text-sm">Đang phân tích…</div>';
+  try {
+    const res = await fetch('/compliance/ai-suggest-keywords', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Lỗi');
+    if (data.message && (!data.suggestions || !data.suggestions.length)) {
+      content.innerHTML = '<p class="text-gray-400 text-center py-4">' + esc(data.message) + '</p>';
+      return;
+    }
+    if (!data.suggestions || !data.suggestions.length) {
+      content.innerHTML = '<p class="text-gray-400 text-center py-4">Không có đề xuất.</p>';
+      return;
+    }
+    window.__aiSuggestList = data.suggestions;
+    content.innerHTML = `
+      <div class="space-y-3">
+        <p class="text-sm text-gray-500 mb-3">Đề xuất ${data.suggestions.length} mục:</p>
+        ${data.suggestions.map((s, i) => `
+          <div class="flex items-start gap-3 p-3 border border-[var(--border)] rounded-lg">
+            <input type="checkbox" id="suggest-${i}" value="${i}" class="mt-1 suggest-check" checked>
+            <div class="flex-1 min-w-0">
+              <p class="font-mono font-medium text-sm">${esc(s.keyword || '')}</p>
+              <p class="text-xs text-gray-500 mt-0.5">${esc(s.category || '')} · <span class="${s.severity === 'VIOLATION' ? 'text-red-600' : 'text-amber-600'}">${esc(s.severity || '')}</span></p>
+              <p class="text-xs text-gray-400 mt-1">${esc(s.reason || '')}</p>
+            </div>
+          </div>
+        `).join('')}
+        <button type="button" onclick="applyAISuggestions()"
+                class="w-full bg-purple-600 text-white py-2 rounded-lg text-sm font-medium mt-2 hover:bg-purple-700">
+          Thêm mục đã chọn
+        </button>
+      </div>
+    `;
+  } catch (err) {
+    content.innerHTML = '<p class="text-red-600 text-center py-4">' + esc(err.message) + '</p>'
+      + '<button type="button" onclick="loadAISuggestions()" class="w-full border border-[var(--border)] py-2 rounded-lg text-sm mt-2">Thử lại</button>';
+  }
+}
+
+async function applyAISuggestions() {
+  const suggestions = window.__aiSuggestList || [];
+  const checked = [...document.querySelectorAll('.suggest-check')]
+    .filter(cb => cb.checked)
+    .map(cb => suggestions[parseInt(cb.value, 10)])
+    .filter(Boolean);
+  let added = 0;
+  for (const s of checked) {
+    const res = await fetch('/compliance/keywords', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keyword: s.keyword,
+        category: s.category || 'custom',
+        severity: s.severity || 'WARNING'
+      })
+    });
+    if (res.ok) added++;
+  }
+  alert('Đã thêm ' + added + ' từ khóa.');
+  closeAISuggest();
+  loadKeywords();
+  loadAnalytics();
+}
+
+async function loadAnalyticsCharts() {
+  if (typeof Chart === 'undefined') {
+    document.getElementById('severity-chart').parentElement.innerHTML +=
+      '<p class="text-red-500 text-sm mt-2">Chart.js chưa tải.</p>';
+    return;
+  }
+  if (_severityChart) { _severityChart.destroy(); _severityChart = null; }
+  if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
+
+  const res = await fetch('/compliance/analytics?days=30');
+  const data = await res.json();
+
+  renderTopKeywords(data.top_keywords || []);
+
+  const sevCtx = document.getElementById('severity-chart');
+  if (sevCtx && data.breakdown) {
+    _severityChart = new Chart(sevCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Vi phạm (chặn)', 'Cảnh báo', 'An toàn'],
+        datasets: [{
+          data: [
+            data.breakdown.VIOLATION || 0,
+            data.breakdown.WARNING || 0,
+            data.breakdown.SAFE || 0
+          ],
+          backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
+        }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  const trendCtx = document.getElementById('trend-chart');
+  if (trendCtx && data.daily_trend && data.daily_trend.length) {
+    const rev = [...data.daily_trend].reverse();
+    const labels = rev.map(d => d.date);
+    const violations = rev.map(d => d.violations || 0);
+    const warnings = rev.map(d => d.warnings || 0);
+    _trendChart = new Chart(trendCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Vi phạm', data: violations, borderColor: '#ef4444', backgroundColor: '#fee2e2', fill: true, tension: 0.3 },
+          { label: 'Cảnh báo', data: warnings, borderColor: '#f59e0b', backgroundColor: '#fef3c7', fill: true, tension: 0.3 }
+        ]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+  }
+
+  await loadAccountStats();
+}
+
+async function loadAccountStats() {
+  const res = await fetch('/compliance/account-stats?days=30');
+  const items = await res.json();
+  const container = document.getElementById('account-stats-list');
+  if (!items.length) {
+    container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Chưa có dữ liệu</p>';
+    return;
+  }
+  const max = items[0].total || 1;
+  container.innerHTML = items.map(item => `
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="text-sm w-48 truncate shrink-0" title="${esc(item.keyword)}">${esc(item.keyword)}</span>
+      <div class="flex-1 min-w-0 bg-gray-100 rounded-full h-4">
+        <div class="bg-red-400 h-4 rounded-full" style="width:${(item.total / max * 100).toFixed(0)}%"></div>
+      </div>
+      <span class="text-sm font-bold w-8 shrink-0 tabular-nums">${item.total}</span>
+      <span class="text-xs text-red-600 w-16 shrink-0">${item.block_rate}% chặn</span>
+    </div>
+  `).join('');
+}
+
+loadKeywords();
+loadAnalytics();
+</script>
+{% endblock %}

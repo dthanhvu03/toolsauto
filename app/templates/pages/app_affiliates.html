@@ -131,9 +131,10 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Câu Bình Luận Mẫu</label>
-                        <textarea name="comment_template" id="comment_template" required rows="3"
+                        <textarea name="comment_template" id="comment_template" rows="3"
                             placeholder="Đang flashsale ae mua lẹ không hết: [LINK]"
                             class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                        <p id="complianceManualHint" class="text-xs mt-1 hidden"></p>
                         <p class="text-xs text-gray-500 mt-1">Ghi rõ từ <b>[LINK]</b>. Hệ thống sẽ thay thế nó bằng URL bên trên.</p>
                     </div>
 
@@ -279,6 +280,38 @@
         </div>
     </div>
 
+    <!-- Compliance Review Modal (AI rewrite confirmation) -->
+    <div id="compliance-review-modal"
+         class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl p-6 max-w-lg w-full shadow-xl">
+            <h3 class="font-semibold text-amber-600 mb-4 text-sm">
+                ⚠️ AI đã viết lại để tuân thủ chính sách Facebook
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p class="text-xs text-gray-400 mb-1">Bản gốc</p>
+                    <p id="original-comment"
+                       class="bg-red-50 p-2 rounded text-gray-600 line-through whitespace-pre-wrap break-words max-h-40 overflow-y-auto"></p>
+                </div>
+                <div>
+                    <p class="text-xs text-gray-400 mb-1">Bản đã chỉnh sửa</p>
+                    <p id="rewritten-comment"
+                       class="bg-green-50 p-2 rounded text-gray-700 whitespace-pre-wrap break-words max-h-40 overflow-y-auto"></p>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-4">
+                <button type="button" onclick="applyRewrite()"
+                        class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-medium">
+                    ✅ Dùng bản đã chỉnh
+                </button>
+                <button type="button" onclick="rejectRewrite()"
+                        class="flex-1 border border-gray-200 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                    ✏️ Tự viết lại
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══ MAIN COLUMN — Danh Sách Links ═══ -->
     <div class="w-full">
         <div class="bg-white border border-[var(--border)] rounded-lg p-5 sticky top-20 h-[calc(100vh-6rem)] flex flex-col shadow-sm">
@@ -397,14 +430,7 @@ window.editAffiliate = function (id, keyword, url, template) {
 let csvParsedRows = [];
 const SHOPEE_REGEX = /(shope\.pe|shopee\.vn|s\.shopee\.vn)/i;
 
-// Comment templates for auto-generation when comment column is missing
-const AUTO_COMMENTS = [
-    "Mọi người mua cái này xài ngon lắm nè: [LINK]",
-    "Hàng ngon, giá rẻ, mua ở đây nè ae: [LINK]",
-    "Deal xịn đang sale, chốt lẹ: [LINK]",
-    "Mình mới mua xong ưng lắm, chia sẻ cho mn: [LINK]",
-    "Ai cần thì mua ở đây chính hãng nha: [LINK]",
-];
+
 
 function downloadCsvTemplate() {
     const header = 'keyword,affiliate_url,comment,commission_rate\n';
@@ -463,13 +489,8 @@ function mapCsvRow(raw) {
         if (!isNaN(n) && n >= 0 && n <= 100) rate = n;
     }
 
-    // Auto-generate comment if missing
-    if (!comment) {
-        const randomComment = AUTO_COMMENTS[Math.floor(Math.random() * AUTO_COMMENTS.length)];
-        comment = randomComment;
-    }
-    // Ensure [LINK] is present
-    if (!comment.includes('[LINK]')) {
+    // Ensure [LINK] is present only if comment is provided
+    if (comment && !comment.includes('[LINK]')) {
         comment = comment + ' [LINK]';
     }
 
@@ -487,8 +508,8 @@ function validateCsvRow(row) {
     else if (kw.length > 100) errors.push('Keyword quá 100 ký tự');
     if (!url) errors.push('URL trống');
     else if (!SHOPEE_REGEX.test(url)) errors.push('URL không phải Shopee');
-    if (!comment) errors.push('Comment trống');
-    else if (!comment.includes('[LINK]')) errors.push('Thiếu [LINK]');
+    // Comment is now optional (AI will generate if missing)
+    if (comment && !comment.includes('[LINK]')) errors.push('Thiếu [LINK] trong comment');
     if (rate !== undefined && rate !== '' && rate !== null && rate !== 0) {
         const n = Number(rate);
         if (isNaN(n) || n < 0 || n > 100) errors.push('Commission 0-100');
@@ -625,7 +646,7 @@ function showCsvResult(data) {
                 </div>` : ''}
             </div>
             ${data.errors.length > 0 ? `<div class="p-3 space-y-1 max-h-[160px] overflow-y-auto bg-white">
-                ${data.errors.map(e => `<div class="text-xs text-red-600 flex gap-2"><span class="font-mono text-red-400">Dòng ${e.row}</span> ${esc(e.reason)}</div>`).join('')}
+                ${data.errors.map(e => `<div class="text-xs text-red-600 flex gap-2 flex-wrap"><span class="font-mono text-red-400 shrink-0">${e.row != null && e.row !== '' ? 'Dòng ' + esc(String(e.row)) : ''}${e.keyword ? (e.row != null ? ' ' : '') + '[' + esc(String(e.keyword)) + ']' : ''}</span><span>${esc(e.reason)}</span></div>`).join('')}
             </div>` : ''}
         </div>`;
     area.innerHTML = html;
@@ -660,7 +681,20 @@ async function runAiGenerate() {
             }),
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || 'Lỗi AI'); return; }
+        if (!res.ok) {
+            if (data.status === 'VIOLATION' && data.violations && data.violations.length) {
+                const msg = data.violations.join('\n• ');
+                alert('❌ Nội dung vi phạm chính sách Facebook:\n• ' + msg + '\n\nVui lòng thử lại với từ khóa khác.');
+            } else {
+                alert(data.error || 'Lỗi AI');
+            }
+            return;
+        }
+        const aiComments = (data.data && data.data.comments) || [];
+        const firstReview = aiComments.find(c => c.rewritten_text);
+        if (data.needs_review && firstReview) {
+            showRewritePreview(firstReview.text, firstReview.rewritten_text);
+        }
         renderAiResult(data.data);
     } catch (e) {
         alert('Lỗi kết nối: ' + e.message);
@@ -695,20 +729,94 @@ function renderAiResult(data) {
             ${(data.comments || []).map(c => {
                 const styleClass = c.style === 'natural' ? 'style-natural' : c.style === 'urgency' ? 'style-urgency' : 'style-review';
                 const styleLabel = c.style === 'natural' ? 'Tự Nhiên' : c.style === 'urgency' ? 'Khẩn Cấp' : 'Review';
+                const rw = c.rewritten_text ? String(c.rewritten_text) : '';
+                const useOrig = `useComment(${JSON.stringify(c.text || '')})`;
+                const useRw = rw ? `useComment(${JSON.stringify(rw)})` : '';
                 return `<div class="ai-result-card">
                     <div class="flex items-start justify-between gap-2 mb-2">
                         <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${styleClass}">${styleLabel}</span>
-                        <button onclick="useComment('${esc(c.text)}')" class="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold whitespace-nowrap transition-colors">
-                            Dùng ngay →
+                        <div class="flex flex-col items-end gap-1">
+                        <button onclick='${useOrig}' class="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold whitespace-nowrap transition-colors">
+                            Dùng bản gốc →
                         </button>
+                        ${rw ? `<button onclick='${useRw}' class="text-[11px] text-green-700 hover:text-green-900 font-semibold whitespace-nowrap transition-colors">
+                            Dùng bản đã chỉnh →
+                        </button>` : ''}
+                        </div>
                     </div>
                     <p class="text-sm text-gray-700 leading-relaxed">${esc(c.text)}</p>
+                    ${rw ? `<p class="text-xs text-amber-700 mt-2 font-medium">Bản đã chỉnh (FB):</p><p class="text-sm text-green-800 leading-relaxed mt-0.5">${esc(rw)}</p>` : ''}
                 </div>`;
             }).join('')}
         </div>
     `;
     area.innerHTML = html;
     area.classList.remove('hidden');
+}
+
+function showRewritePreview(original, rewritten) {
+    const o = document.getElementById('original-comment');
+    const r = document.getElementById('rewritten-comment');
+    const m = document.getElementById('compliance-review-modal');
+    if (o) o.textContent = original || '';
+    if (r) r.textContent = rewritten || '';
+    if (m) m.classList.remove('hidden');
+}
+
+function applyRewrite() {
+    const r = document.getElementById('rewritten-comment');
+    const m = document.getElementById('compliance-review-modal');
+    if (r) document.getElementById('comment_template').value = r.textContent || '';
+    if (m) m.classList.add('hidden');
+    const tabBtn = document.getElementById('tabBtnManual');
+    if (tabBtn) switchTab('manual', tabBtn);
+}
+
+function rejectRewrite() {
+    const m = document.getElementById('compliance-review-modal');
+    if (m) m.classList.add('hidden');
+}
+
+let _complianceDebounce = null;
+(function initManualComplianceDebounce() {
+    const ta = document.getElementById('comment_template');
+    if (!ta) return;
+    ta.addEventListener('input', function () {
+        clearTimeout(_complianceDebounce);
+        _complianceDebounce = setTimeout(runManualComplianceCheck, 450);
+    });
+})();
+
+async function runManualComplianceCheck() {
+    const ta = document.getElementById('comment_template');
+    const hint = document.getElementById('complianceManualHint');
+    if (!ta || !hint) return;
+    const text = ta.value.trim();
+    if (text.length < 3) {
+        hint.classList.add('hidden');
+        return;
+    }
+    try {
+        const res = await fetch('/affiliates/compliance-check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        });
+        const data = await res.json();
+        if (data.status === 'VIOLATION') {
+            hint.textContent = '⛔ FB: ' + (data.violations || []).map(v => v.evidence).join(', ');
+            hint.className = 'text-xs mt-1 text-red-600';
+            hint.classList.remove('hidden');
+        } else if (data.status === 'WARNING') {
+            hint.textContent = '⚠️ Gợi ý: ' + (data.violations || []).map(v => v.evidence).join('; ');
+            hint.className = 'text-xs mt-1 text-amber-600';
+            hint.classList.remove('hidden');
+        } else {
+            hint.classList.add('hidden');
+        }
+    } catch (e) {
+        /* ignore transient network errors */
+    }
 }
 
 function useKeyword(kw) {

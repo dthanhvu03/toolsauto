@@ -211,7 +211,43 @@ def process_single_job(db: Session):
             db.commit()
             CURRENT_JOB_ID = None
             return True
-        
+
+        # Facebook content compliance (hard block VIOLATION before browser)
+        from app.services.fb_compliance import check_before_publish, CompliancePublishError
+        from app.database.models import now_ts
+
+        try:
+            job_type = getattr(job, "job_type", "POST") or "POST"
+            if job_type == "COMMENT":
+                pub_text = (job.auto_comment_text or "").strip()
+                if pub_text:
+                    check_before_publish(
+                        pub_text, job_id=job.id, content_type="comment"
+                    )
+            else:
+                pub_text = (job.caption or "").strip()
+                if pub_text:
+                    check_before_publish(
+                        pub_text, job_id=job.id, content_type="caption"
+                    )
+        except CompliancePublishError as e:
+            logger.error("[Job %s] Compliance blocked publish: %s", job.id, e)
+            job.status = "FAILED"
+            job.last_error = str(e)
+            job.error_type = "COMPLIANCE"
+            job.finished_at = now_ts()
+            JobService._log_event(
+                db,
+                job.id,
+                "ERROR",
+                str(e),
+                "fb_compliance_block",
+            )
+            db.commit()
+            NotifierService.notify_job_failed(job, str(e))
+            CURRENT_JOB_ID = None
+            return True
+
         # START DEADLOCK TIMER (15 mins hard limit for publishing)
         suicide_timer = kill_if_stuck(f"Job {job.id} Publish", timeout=900)
         

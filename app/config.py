@@ -88,6 +88,10 @@ def iter_pm2_log_directories():
         pass
 
 
+# AI / Google AI Studio (Gemini)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
+GOOGLE_API_KEY = GEMINI_API_KEY  # alias
+
 # AI / Whisper Settings
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "medium")  # tiny|base|small|medium
 
