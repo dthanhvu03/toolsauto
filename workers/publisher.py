@@ -3,6 +3,13 @@ import logging
 import signal
 import sys
 import os
+from pathlib import Path
+
+# Repo root on sys.path so `python workers/publisher.py` works without PYTHONPATH=.
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.services.queue import QueueService
@@ -249,7 +256,9 @@ def process_single_job(db: Session):
             return True
 
         # START DEADLOCK TIMER (15 mins hard limit for publishing)
-        suicide_timer = kill_if_stuck(f"Job {job.id} Publish", timeout=900)
+        suicide_timer = kill_if_stuck(
+            f"Job {job.id} Publish", timeout=config.PUBLISHER_PUBLISH_DEADLINE_SEC
+        )
         
         try:
             publish_result = Dispatcher.dispatch(job, db=db)
@@ -400,7 +409,7 @@ def run_loop():
 
 # In-memory cooldown tracker: {account_id: last_engagement_unix_ts}
 _last_engagement_ts: dict[int, float] = {}
-IDLE_COOLDOWN_MINUTES = 45  # Mỗi acc nghỉ tối thiểu 45 phút giữa các phiên dạo
+IDLE_COOLDOWN_MINUTES = config.IDLE_ENGAGEMENT_COOLDOWN_MINUTES
 
 
 def _maybe_idle_engagement(db: Session):
@@ -497,7 +506,10 @@ def _maybe_idle_engagement(db: Session):
         _update_engagement_status(db, "ENGAGING", f"Đang chọn action... ({account.name})")
 
         # START DEADLOCK TIMER for Idle Engagement (20 mins hard limit)
-        idle_suicide_timer = kill_if_stuck(f"Idle Engagement ({account.name})", timeout=1200)
+        idle_suicide_timer = kill_if_stuck(
+            f"Idle Engagement ({account.name})",
+            timeout=config.PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC,
+        )
 
         try:
             result = task.run_random_action(

@@ -1,5 +1,6 @@
+import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from sqlalchemy.orm import Session
@@ -21,6 +22,12 @@ class SettingSpec:
     choices: list[str] | None = None
     enum_labels: dict[str, str] | None = None
     unit: str | None = None
+    # UX / policy (optional)
+    is_secret: bool = False
+    restart_required: bool = False
+    env_only: bool = False  # value from process env only; not persisted to runtime_settings
+    pair_with: str | None = None  # render this row as a paired min/max with the other key
+    env_var_name: str | None = None  # os.environ key for source badge (default: key.upper() + overrides)
 
 
 def _getattr_default(name: str) -> Callable[[], Any]:
@@ -345,6 +352,63 @@ SETTINGS: dict[str, SettingSpec] = {
         section="Hệ thống & liên kết",
         description="Base URL dịch vụ rút gọn/redirect click (affiliate tracking), nếu dùng.",
     ),
+    "PUBLISHER_PUBLISH_DEADLINE_SEC": SettingSpec(
+        key="PUBLISHER_PUBLISH_DEADLINE_SEC",
+        type="int",
+        default_getter=_getattr_default("PUBLISHER_PUBLISH_DEADLINE_SEC"),
+        title="Deadline đăng bài (Publish job)",
+        section="Publisher & Playwright",
+        description="Thời gian tối đa (giây) cho một lần đăng Reels trước khi coi là timeout.",
+        min=60,
+        max=86400,
+        unit="giây",
+    ),
+    "PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC": SettingSpec(
+        key="PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC",
+        type="int",
+        default_getter=_getattr_default("PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC"),
+        title="Deadline phiên idle engagement",
+        section="Publisher & Playwright",
+        description="Giới hạn thời gian một phiên tương tác khi rảnh trong publisher (giây).",
+        min=60,
+        max=86400,
+        unit="giây",
+    ),
+    "PLAYWRIGHT_DEFAULT_TIMEOUT_MS": SettingSpec(
+        key="PLAYWRIGHT_DEFAULT_TIMEOUT_MS",
+        type="int",
+        default_getter=_getattr_default("PLAYWRIGHT_DEFAULT_TIMEOUT_MS"),
+        title="Playwright default timeout",
+        section="Publisher & Playwright",
+        description="Timeout mặc định cho thao tác trình duyệt (ms). Tăng nếu máy chậm hoặc mạng lag.",
+        min=5000,
+        max=600000,
+        unit="ms",
+        restart_required=True,
+    ),
+    "COMMENT_JOB_DELAY_MIN_SEC": SettingSpec(
+        key="COMMENT_JOB_DELAY_MIN_SEC",
+        type="int",
+        default_getter=_getattr_default("COMMENT_JOB_DELAY_MIN_SEC"),
+        title="Delay job comment — tối thiểu",
+        section="Publisher & Playwright",
+        description="Khoảng chờ ngẫu nhiên trước khi chạy job comment (giây).",
+        min=0,
+        max=3600,
+        unit="giây",
+        pair_with="COMMENT_JOB_DELAY_MAX_SEC",
+    ),
+    "COMMENT_JOB_DELAY_MAX_SEC": SettingSpec(
+        key="COMMENT_JOB_DELAY_MAX_SEC",
+        type="int",
+        default_getter=_getattr_default("COMMENT_JOB_DELAY_MAX_SEC"),
+        title="Delay job comment — tối đa",
+        section="Publisher & Playwright",
+        description="Giới hạn trên của delay ngẫu nhiên cho job comment (giây).",
+        min=0,
+        max=7200,
+        unit="giây",
+    ),
     "MAINT_VIRAL_LIMIT": SettingSpec(
         key="MAINT_VIRAL_LIMIT",
         type="int",
@@ -389,7 +453,137 @@ SETTINGS: dict[str, SettingSpec] = {
         max=1000,
         unit="mục",
     ),
+    "MAINT_LOOP_SLEEP_SEC": SettingSpec(
+        key="MAINT_LOOP_SLEEP_SEC",
+        type="int",
+        default_getter=_getattr_default("MAINT_LOOP_SLEEP_SEC"),
+        title="Chu kỳ nghỉ worker bảo trì",
+        section="Bảo trì & cảnh báo",
+        description="Khoảng chờ giữa các vòng lặp maintenance (giây).",
+        min=30,
+        max=86400,
+        unit="giây",
+    ),
+    "STRATEGIC_BOOST_INTERVAL_SEC": SettingSpec(
+        key="STRATEGIC_BOOST_INTERVAL_SEC",
+        type="int",
+        default_getter=_getattr_default("STRATEGIC_BOOST_INTERVAL_SEC"),
+        title="Khoảng cách strategic boost",
+        section="Bảo trì & cảnh báo",
+        description="Tối thiểu thời gian giữa các lần boost chiến lược trong maintenance (giây).",
+        min=60,
+        max=86400 * 7,
+        unit="giây",
+    ),
+    "IDLE_ENGAGEMENT_COOLDOWN_MINUTES": SettingSpec(
+        key="IDLE_ENGAGEMENT_COOLDOWN_MINUTES",
+        type="int",
+        default_getter=_getattr_default("IDLE_ENGAGEMENT_COOLDOWN_MINUTES"),
+        title="Cooldown giữa các phiên idle engagement",
+        section="Tương tác khi rảnh",
+        description="Sau một phiên tương tác khi rảnh, chờ tối thiểu bao nhiêu phút trước khi có thể chạy lại.",
+        min=1,
+        max=1440,
+        unit="phút",
+    ),
+    "TIKWM_API_BASE": SettingSpec(
+        key="TIKWM_API_BASE",
+        type="str",
+        default_getter=_getattr_default("TIKWM_API_BASE"),
+        title="TikWM API base URL",
+        section="Quét TikTok & Viral",
+        description="Endpoint API TikWM khi tải TikTok fallback (không dấu / cuối).",
+    ),
+    "TIKWM_API_TIMEOUT_SEC": SettingSpec(
+        key="TIKWM_API_TIMEOUT_SEC",
+        type="float",
+        default_getter=_getattr_default("TIKWM_API_TIMEOUT_SEC"),
+        title="TikWM API timeout",
+        section="Quét TikTok & Viral",
+        description="Timeout HTTP khi gọi API TikWM (giây).",
+        min=1.0,
+        max=120.0,
+        unit="giây",
+    ),
+    "TELEGRAM_BOT_TOKEN": SettingSpec(
+        key="TELEGRAM_BOT_TOKEN",
+        type="str",
+        default_getter=_getattr_default("TELEGRAM_BOT_TOKEN"),
+        title="Telegram bot token",
+        section="Tích hợp (chỉ .env)",
+        description="Token BotFather — chỉ cấu hình qua biến môi trường TELEGRAM_BOT_TOKEN, không lưu DB.",
+        is_secret=True,
+        env_only=True,
+        env_var_name="TELEGRAM_BOT_TOKEN",
+    ),
+    "GOOGLE_API_KEY": SettingSpec(
+        key="GOOGLE_API_KEY",
+        type="str",
+        default_getter=_getattr_default("GOOGLE_API_KEY"),
+        title="Google / Gemini API key",
+        section="Tích hợp (chỉ .env)",
+        description="Dùng GEMINI_API_KEY hoặc GOOGLE_API_KEY trong .env (config gộp qua GOOGLE_API_KEY), không lưu DB.",
+        is_secret=True,
+        env_only=True,
+        env_var_name="GOOGLE_API_KEY",
+    ),
+    "TELEGRAM_CHAT_ID": SettingSpec(
+        key="TELEGRAM_CHAT_ID",
+        type="str",
+        default_getter=_getattr_default("TELEGRAM_CHAT_ID"),
+        title="Telegram chat ID",
+        section="Tích hợp (chỉ .env)",
+        description="ID chat/channel nhận thông báo — chỉ cấu hình qua TELEGRAM_CHAT_ID trong .env.",
+        env_only=True,
+        env_var_name="TELEGRAM_CHAT_ID",
+    ),
 }
+
+
+_ENV_KEY_OVERRIDES: dict[str, str] = {
+    "viral_min_views": "VIRAL_MIN_VIEWS",
+    "viral_max_videos_per_channel": "VIRAL_MAX_VIDEOS_PER_CHANNEL",
+}
+
+
+def env_var_name_for(spec: SettingSpec) -> str:
+    if spec.env_var_name:
+        return spec.env_var_name
+    return _ENV_KEY_OVERRIDES.get(spec.key, spec.key.upper())
+
+
+def resolve_setting_source(spec: SettingSpec, has_db_override: bool) -> str:
+    """
+    Where the UI should describe the effective value as coming from:
+    database (runtime override), environment (.env / process env), or default (built-in fallback).
+    """
+    if spec.env_only:
+        if spec.key == "GOOGLE_API_KEY":
+            has_env = bool(
+                (os.environ.get("GEMINI_API_KEY") or "").strip()
+                or (os.environ.get("GOOGLE_API_KEY") or "").strip()
+            )
+            return "environment" if has_env else "default"
+        ev = env_var_name_for(spec)
+        val = os.environ.get(ev)
+        return "environment" if val not in (None, "") else "default"
+    if has_db_override:
+        return "database"
+    ev = env_var_name_for(spec)
+    if os.environ.get(ev) is not None and os.environ.get(ev) != "":
+        return "environment"
+    return "default"
+
+
+def pair_secondary_keys() -> frozenset[str]:
+    """Keys that are rendered inside their partner row (pair_with)."""
+    return frozenset(s.pair_with for s in SETTINGS.values() if s.pair_with)
+
+
+def section_visible_count(specs: list[SettingSpec]) -> int:
+    """Card count after collapsing pair_with secondaries."""
+    sec = pair_secondary_keys()
+    return len(specs) - sum(1 for s in specs if s.key in sec)
 
 
 _CACHE_TTL_SEC = 3.0
@@ -454,6 +648,8 @@ def get_effective(db: Session, key: str) -> Any:
     spec = SETTINGS.get(key)
     if not spec:
         raise KeyError(key)
+    if spec.env_only:
+        return spec.default_getter()
     overrides = get_overrides(db, use_cache=True)
     if key in overrides:
         return overrides[key]
@@ -467,6 +663,9 @@ def apply_runtime_overrides_to_config(db: Session) -> dict[str, Any]:
     """
     overrides = get_overrides(db, use_cache=True)
     for key, value in overrides.items():
+        sp = SETTINGS.get(key)
+        if sp and sp.env_only:
+            continue
         if hasattr(config, key):
             setattr(config, key, value)
     return overrides
@@ -476,6 +675,8 @@ def upsert_setting(db: Session, key: str, raw_value: str | None, updated_by: str
     spec = SETTINGS.get(key)
     if not spec:
         raise ValueError("Unsupported key")
+    if spec.env_only:
+        raise ValueError("This setting is environment-only and cannot be changed from the dashboard")
     value = _validate(spec, _cast_value(spec, raw_value))
     stored_value = str(value) if value is not None else None
 
@@ -510,6 +711,8 @@ def reset_setting(db: Session, key: str, updated_by: str | None = None) -> None:
     spec = SETTINGS.get(key)
     if not spec:
         raise ValueError("Unsupported key")
+    if spec.env_only:
+        raise ValueError("This setting is environment-only and cannot be reset from the dashboard")
     row = db.query(RuntimeSetting).filter(RuntimeSetting.key == key).first()
     old_value = row.value if row else None
     if row:

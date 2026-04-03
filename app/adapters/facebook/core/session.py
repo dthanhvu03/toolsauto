@@ -7,7 +7,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from app.config import PROFILES_DIR
+from app.config import (
+    FACEBOOK_PLAYWRIGHT_HEADLESS,
+    PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
+    PROFILES_DIR,
+)
 
 from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
 
@@ -76,9 +80,14 @@ class FacebookSessionManager:
         FacebookSessionManager.log_profile_health(profile_path)
         try:
             pw = sync_playwright().start()
+            headless = FACEBOOK_PLAYWRIGHT_HEADLESS
+            logger.info(
+                "FacebookSessionManager: launch_persistent headless=%s (FACEBOOK_PLAYWRIGHT_HEADLESS)",
+                headless,
+            )
             context = pw.chromium.launch_persistent_context(
                 user_data_dir=profile_path,
-                headless=False,
+                headless=headless,
                 viewport={"width": 1280, "height": 720},
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -96,7 +105,7 @@ class FacebookSessionManager:
                 ],
             )
             page = context.pages[0] if context.pages else context.new_page()
-            page.set_default_timeout(60000)
+            page.set_default_timeout(PLAYWRIGHT_DEFAULT_TIMEOUT_MS)
             return pw, context, page
         except Exception as e:
             logger.error("FacebookSessionManager: Failed to bootstrap playwright session: %s", e)
