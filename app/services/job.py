@@ -10,6 +10,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.database.models import Job, JobEvent, Account
+from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC
 
 def now_ts():
     return int(time.time())
@@ -133,7 +134,7 @@ class JobService:
         # Auto-create COMMENT job if POST has auto_comment_text
         if job.job_type == "POST" and job.auto_comment_text and (post_url or job.post_url):
             import random
-            delay = random.randint(120, 300)  # 2–5 minutes
+            delay = random.randint(COMMENT_JOB_DELAY_MIN_SEC, COMMENT_JOB_DELAY_MAX_SEC)
             comment_job = Job(
                 job_type="COMMENT",
                 platform=job.platform,
