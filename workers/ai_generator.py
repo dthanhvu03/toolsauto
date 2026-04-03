@@ -265,7 +265,7 @@ def process_draft_job(db: Session):
                 "HTTPConnectionPool(host='localhost'",
                 "Read timed out",
                 "cannot connect to chrome",
-                "Service /home/vu/.local/share/undetected_chromedriver/undetected_chromedriver unexpectedly exited",
+                "undetected_chromedriver unexpectedly exited",
             ]
             auth_markers = [
                 "cookies expired",
