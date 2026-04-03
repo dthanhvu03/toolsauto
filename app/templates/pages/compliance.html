@@ -12,7 +12,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto space-y-6">
+<div class="w-full max-w-none space-y-6">
 
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="stats-cards">
     <div class="bg-white rounded-xl p-4 border border-[var(--border)] shadow-sm">
@@ -41,7 +41,7 @@
   <div class="bg-white rounded-xl border border-[var(--border)] shadow-sm overflow-hidden">
     <div class="p-4 border-b border-[var(--border)] flex flex-wrap gap-3 items-center">
       <input type="text" id="search-input" placeholder="Tìm từ khóa..." oninput="filterKeywords()"
-             class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm w-48">
+             class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm flex-1 min-w-[12rem] max-w-md">
       <select id="filter-severity" onchange="filterKeywords()"
               class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
         <option value="">Tất cả mức độ</option>
@@ -180,12 +180,12 @@ function renderTopKeywords(keywords) {
   }
   const max = Math.max(1, keywords[0].count);
   container.innerHTML = keywords.map(kw => `
-    <div class="flex items-center gap-3">
-      <span class="text-sm font-mono w-40 truncate text-gray-700">${esc(kw.keyword || 'N/A')}</span>
-      <div class="flex-1 bg-gray-100 rounded-full h-5 relative overflow-hidden">
+    <div class="flex items-center gap-3 min-w-0">
+      <span class="text-sm font-mono shrink-0 min-w-[10rem] max-w-[min(40%,20rem)] truncate text-gray-700" title="${esc(kw.keyword || '')}">${esc(kw.keyword || 'N/A')}</span>
+      <div class="flex-1 min-w-0 bg-gray-100 rounded-full h-5 relative overflow-hidden">
         <div class="bg-red-400 h-5 rounded-full transition-all" style="width:${(kw.count / max * 100).toFixed(0)}%"></div>
       </div>
-      <span class="text-sm font-bold text-gray-600 w-8 text-right">${kw.count}</span>
+      <span class="text-sm font-bold text-gray-600 w-10 shrink-0 text-right tabular-nums">${kw.count}</span>
     </div>
   `).join('');
 }
