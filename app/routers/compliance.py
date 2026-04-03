@@ -3,21 +3,28 @@ Keyword blacklist management + violation analytics.
 """
 from __future__ import annotations
 
+import csv
+import io
+import json
 import logging
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database.core import get_db
-from app.database.models import KeywordBlacklist
+from app.database.models import ComplianceAllowlist, KeywordBlacklist, ViolationLog
 from app.main_templates import templates
-from app.services.fb_compliance import invalidate_keyword_cache
+from app.services.fb_compliance import (
+    Severity,
+    compliance_checker,
+    invalidate_keyword_cache,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +41,10 @@ class KeywordUpdateBody(BaseModel):
     severity: Optional[str] = None
     category: Optional[str] = None
     is_active: Optional[bool] = None
+
+
+class TestCheckBody(BaseModel):
+    content: str = ""
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -128,6 +139,74 @@ def add_keyword(payload: KeywordCreateBody, db: Session = Depends(get_db)):
         db.rollback()
         logger.exception("add_keyword failed")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.post("/keywords/bulk-import")
+async def bulk_import_keywords(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Import keywords from CSV: keyword,category,severity."""
+    raw = await file.read()
+    try:
+        text_content = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return JSONResponse(
+            {"error": "File phải là UTF-8."},
+            status_code=400,
+        )
+
+    reader = csv.DictReader(io.StringIO(text_content))
+    imported = 0
+    skipped = 0
+    errors: list[str] = []
+    now = int(time.time())
+
+    for i, row in enumerate(reader, 1):
+        keyword = (row.get("keyword") or "").strip().lower()
+        category = (row.get("category") or "custom").strip() or "custom"
+        severity = (row.get("severity") or "WARNING").strip().upper()
+
+        if not keyword:
+            skipped += 1
+            continue
+        if severity not in ("VIOLATION", "WARNING"):
+            errors.append(f"Dòng {i}: severity không hợp lệ")
+            skipped += 1
+            continue
+
+        try:
+            dup = db.execute(
+                text(
+                    "SELECT 1 FROM keyword_blacklist WHERE keyword = :kw LIMIT 1"
+                ),
+                {"kw": keyword},
+            ).fetchone()
+            if dup:
+                skipped += 1
+                continue
+            db.execute(
+                text(
+                    """
+                    INSERT INTO keyword_blacklist
+                    (keyword, category, severity, source, is_active, created_at, updated_at)
+                    VALUES (:kw, :cat, :sev, 'bulk_import', 1, :now, :now)
+                    """
+                ),
+                {"kw": keyword, "cat": category, "sev": severity, "now": now},
+            )
+            imported += 1
+        except Exception as e:
+            errors.append(f"Dòng {i} '{keyword}': {e!s}")
+            skipped += 1
+
+    db.commit()
+    invalidate_keyword_cache()
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors[:10],
+    }
 
 
 @router.put("/keywords/{keyword_id}")
@@ -321,3 +400,456 @@ def get_analytics(days: int = 30, db: Session = Depends(get_db)):
         "blocked_today": blocked_today,
         "rewritten_count": rewritten_count,
     }
+
+
+@router.get("/violations")
+def get_violations(
+    days: int = 30,
+    action: str = "",
+    page: int = 1,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    """Paginated violation log with filters."""
+    days = max(1, min(days, 366))
+    limit = max(1, min(limit, 100))
+    page = max(1, page)
+    cutoff = int(time.time()) - (days * 86400)
+    offset = (page - 1) * limit
+
+    base_where = "checked_at >= :cutoff"
+    params: dict[str, Any] = {"cutoff": cutoff}
+    if action:
+        base_where += " AND action_taken = :action"
+        params["action"] = action
+
+    count_sql = f"SELECT COUNT(*) FROM violation_log WHERE {base_where}"
+    total = db.execute(text(count_sql), params).scalar() or 0
+    total = int(total)
+
+    list_sql = f"""
+        SELECT id, affiliate_id, job_id, content_type,
+               original_content, rewritten_content,
+               violations_found, action_taken, checked_at
+        FROM violation_log
+        WHERE {base_where}
+        ORDER BY checked_at DESC
+        LIMIT :limit OFFSET :offset
+    """
+    list_params = {**params, "limit": limit, "offset": offset}
+    rows = db.execute(text(list_sql), list_params).fetchall()
+
+    def parse_violations(raw: Any) -> list[dict[str, Any]]:
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            return []
+        if isinstance(raw, list):
+            return raw
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    violations = []
+    for r in rows:
+        violations.append(
+            {
+                "id": r[0],
+                "affiliate_id": r[1],
+                "job_id": r[2],
+                "content_type": r[3],
+                "original_content": r[4],
+                "rewritten_content": r[5],
+                "violations_found": parse_violations(r[6]),
+                "action_taken": r[7],
+                "checked_at": r[8],
+            }
+        )
+
+    total_pages = max(1, (total + limit - 1) // limit) if total else 1
+    return {
+        "violations": violations,
+        "total": total,
+        "page": page,
+        "total_pages": total_pages,
+    }
+
+
+@router.get("/violations/{viol_id}")
+def get_violation_detail(viol_id: int, db: Session = Depends(get_db)):
+    row = db.query(ViolationLog).filter(ViolationLog.id == viol_id).first()
+    if not row:
+        return JSONResponse({"error": "Không tìm thấy."}, status_code=404)
+
+    viols: list[dict[str, Any]] = []
+    if row.violations_found:
+        try:
+            parsed = json.loads(row.violations_found)
+            viols = parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            viols = []
+
+    return {
+        "id": row.id,
+        "affiliate_id": row.affiliate_id,
+        "job_id": row.job_id,
+        "content_type": row.content_type,
+        "original_content": row.original_content,
+        "rewritten_content": row.rewritten_content,
+        "violations_found": viols,
+        "action_taken": row.action_taken,
+        "checked_at": row.checked_at,
+    }
+
+
+@router.post("/test-check")
+def test_check(payload: TestCheckBody):
+    """
+    Test compliance on arbitrary text. Returns structured violations only
+    (no server-side HTML — client highlights safely).
+    """
+    content = (payload.content or "").strip()
+    if not content:
+        return JSONResponse(
+            {"error": "Nội dung không được để trống."},
+            status_code=400,
+        )
+
+    result = compliance_checker.check(content)
+
+    def sev_str(s: Any) -> str:
+        if isinstance(s, Severity):
+            return s.value
+        return str(s)
+
+    violations_out = [
+        {
+            "category": v.category,
+            "severity": sev_str(v.severity),
+            "evidence": v.evidence,
+            "suggestion": v.suggestion,
+        }
+        for v in result.violations
+    ]
+
+    return {
+        "status": sev_str(result.status),
+        "violations": violations_out,
+        "violation_count": sum(
+            1 for v in result.violations if sev_str(v.severity) == "VIOLATION"
+        ),
+        "warning_count": sum(
+            1 for v in result.violations if sev_str(v.severity) == "WARNING"
+        ),
+    }
+
+
+@router.post("/ai-suggest-keywords")
+def ai_suggest_keywords(db: Session = Depends(get_db)):
+    """Suggest blacklist keywords from recent violation_log via Gemini API."""
+    cutoff = int(time.time()) - 30 * 86400
+    rows = db.execute(
+        text(
+            """
+            SELECT violations_found, original_content
+            FROM violation_log
+            WHERE checked_at >= :cutoff
+              AND violations_found IS NOT NULL
+              AND TRIM(violations_found) != ''
+            ORDER BY checked_at DESC
+            LIMIT 100
+            """
+        ),
+        {"cutoff": cutoff},
+    ).fetchall()
+
+    if not rows:
+        return {
+            "suggestions": [],
+            "message": "Chưa có đủ dữ liệu vi phạm để phân tích.",
+        }
+
+    violation_samples: list[dict[str, Any]] = []
+    for r in rows[:20]:
+        try:
+            viols = json.loads(r[0]) if r[0] else []
+            evidences = [
+                v.get("evidence")
+                for v in viols
+                if isinstance(v, dict) and v.get("evidence")
+            ]
+            violation_samples.append(
+                {
+                    "content": (r[1] or "")[:200],
+                    "violations": evidences,
+                }
+            )
+        except Exception:
+            continue
+
+    if not violation_samples:
+        return {
+            "suggestions": [],
+            "message": "Chưa có mẫu violations_found hợp lệ.",
+        }
+
+    prompt = (
+        "Phân tích các nội dung vi phạm chính sách Facebook sau "
+        "từ thị trường affiliate Việt Nam:\n\n"
+        f"{json.dumps(violation_samples, ensure_ascii=False, indent=2)}\n\n"
+        "Dựa trên pattern, đề xuất 10 từ khóa/cụm từ mới nên thêm "
+        "vào blacklist.\n\n"
+        "Trả về JSON (KHÔNG markdown, KHÔNG backtick):\n"
+        '{"suggestions": ['
+        '{"keyword": "...", "category": "health|financial|'
+        'misleading|engagement_bait|spam_format", '
+        '"severity": "VIOLATION|WARNING", "reason": "..."}'
+        ", ...]}"
+    )
+
+    try:
+        from app.services.gemini_api import GeminiAPIService
+
+        api = GeminiAPIService()
+        raw = api.ask(prompt)
+        if not raw or not str(raw).strip():
+            return JSONResponse(
+                {"error": "AI không trả về nội dung."},
+                status_code=503,
+            )
+        cleaned = str(raw).strip()
+        if cleaned.startswith("```"):
+            parts = cleaned.split("```")
+            cleaned = parts[1] if len(parts) > 1 else cleaned
+            if cleaned.lstrip().startswith("json"):
+                cleaned = cleaned.lstrip()[4:].lstrip()
+        data = json.loads(cleaned.strip())
+        if not isinstance(data, dict):
+            raise ValueError("Response is not an object")
+        return data
+    except json.JSONDecodeError as e:
+        logger.error("[Compliance] AI suggest JSON parse failed: %s", e)
+        return JSONResponse(
+            {"error": "AI trả về định dạng không hợp lệ."},
+            status_code=503,
+        )
+    except Exception as e:
+        logger.error("[Compliance] AI suggest failed: %s", e, exc_info=True)
+        return JSONResponse(
+            {"error": "AI không thể phân tích lúc này."},
+            status_code=503,
+        )
+
+
+@router.get("/export-keywords")
+def export_keywords(db: Session = Depends(get_db)):
+    """Export active + inactive keywords as CSV."""
+    rows = (
+        db.query(KeywordBlacklist)
+        .order_by(KeywordBlacklist.keyword)
+        .all()
+    )
+
+    def generate():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(
+            ["keyword", "category", "severity", "source", "is_active"]
+        )
+        yield "\ufeff" + buf.getvalue()
+        for r in rows:
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(
+                [
+                    r.keyword,
+                    r.category,
+                    r.severity,
+                    r.source or "",
+                    1 if r.is_active else 0,
+                ]
+            )
+            yield buf.getvalue()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="keywords_export.csv"'
+        },
+    )
+
+
+@router.get("/export-violations")
+def export_violations(days: int = 30, db: Session = Depends(get_db)):
+    """Export violation log as CSV (streaming)."""
+    days = max(1, min(days, 366))
+    cutoff = int(time.time()) - (days * 86400)
+    rows = db.execute(
+        text(
+            """
+            SELECT id, content_type, original_content,
+                   violations_found, action_taken,
+                   datetime(checked_at, 'unixepoch', 'localtime')
+            FROM violation_log
+            WHERE checked_at >= :cutoff
+            ORDER BY checked_at DESC
+            """
+        ),
+        {"cutoff": cutoff},
+    ).fetchall()
+
+    def generate():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(
+            [
+                "ID",
+                "Loại",
+                "Nội dung gốc",
+                "Vi phạm",
+                "Hành động",
+                "Thời gian",
+            ]
+        )
+        yield "\ufeff" + buf.getvalue()
+        for r in rows:
+            violations = ""
+            try:
+                viols = json.loads(r[3]) if r[3] else []
+                if isinstance(viols, list):
+                    violations = "; ".join(
+                        str(v.get("evidence", "")) for v in viols if isinstance(v, dict)
+                    )
+            except (json.JSONDecodeError, TypeError):
+                pass
+            buf = io.StringIO()
+            writer = csv.writer(buf)
+            writer.writerow(
+                [
+                    r[0],
+                    r[1],
+                    (r[2] or "")[:500],
+                    violations,
+                    r[4],
+                    r[5],
+                ]
+            )
+            yield buf.getvalue()
+
+    filename = f"violations_{days}days.csv"
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
+
+@router.get("/allowlist")
+def list_allowlist(db: Session = Depends(get_db)):
+    rows = (
+        db.query(ComplianceAllowlist)
+        .order_by(ComplianceAllowlist.phrase)
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "phrase": r.phrase,
+            "reason": getattr(r, "reason", None),
+            "is_active": bool(r.is_active),
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/allowlist")
+def add_allowlist(payload: dict, db: Session = Depends(get_db)):
+    phrase = (payload.get("phrase") or "").strip().lower()
+    reason = (payload.get("reason") or "").strip() or None
+    if not phrase:
+        return JSONResponse(
+            {"error": "Phrase không được để trống."},
+            status_code=400,
+        )
+    now = int(time.time())
+    row = ComplianceAllowlist(
+        phrase=phrase,
+        reason=reason,
+        is_active=True,
+        source="manual",
+        created_at=now,
+    )
+    db.add(row)
+    try:
+        db.commit()
+        invalidate_keyword_cache()
+        return JSONResponse({"success": True})
+    except IntegrityError:
+        db.rollback()
+        return JSONResponse(
+            {"error": f"Phrase '{phrase}' đã tồn tại."},
+            status_code=409,
+        )
+    except Exception as e:
+        db.rollback()
+        logger.exception("add_allowlist failed")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@router.delete("/allowlist/{item_id}")
+def delete_allowlist(item_id: int, db: Session = Depends(get_db)):
+    row = (
+        db.query(ComplianceAllowlist)
+        .filter(ComplianceAllowlist.id == item_id)
+        .first()
+    )
+    if not row:
+        return JSONResponse({"error": "Không tìm thấy."}, status_code=404)
+    db.delete(row)
+    db.commit()
+    invalidate_keyword_cache()
+    return JSONResponse({"success": True})
+
+
+@router.get("/account-stats")
+def get_account_stats(days: int = 30, db: Session = Depends(get_db)):
+    days = max(1, min(days, 366))
+    cutoff = int(time.time()) - (days * 86400)
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                vl.affiliate_id,
+                MAX(COALESCE(al.keyword, '')) AS kw,
+                COUNT(*) AS total,
+                SUM(CASE WHEN vl.action_taken = 'VIOLATION' THEN 1 ELSE 0 END) AS blocked
+            FROM violation_log vl
+            LEFT JOIN affiliate_links al ON vl.affiliate_id = al.id
+            WHERE vl.checked_at >= :cutoff
+              AND vl.affiliate_id IS NOT NULL
+            GROUP BY vl.affiliate_id
+            ORDER BY total DESC
+            LIMIT 20
+            """
+        ),
+        {"cutoff": cutoff},
+    ).fetchall()
+
+    out = []
+    for r in rows:
+        aff_id, kw, total, blocked = r[0], r[1], int(r[2] or 0), int(r[3] or 0)
+        label = (kw or "").strip() or f"ID #{aff_id}"
+        out.append(
+            {
+                "affiliate_id": aff_id,
+                "keyword": label,
+                "total": total,
+                "blocked": blocked,
+                "block_rate": round(blocked / total * 100) if total > 0 else 0,
+            }
+        )
+    return out
