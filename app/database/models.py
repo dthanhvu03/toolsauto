@@ -557,6 +557,7 @@ class ComplianceAllowlist(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     phrase = Column(String, unique=True, nullable=False, index=True)
+    reason = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     source = Column(String, nullable=True)
     created_at = Column(Integer, default=now_ts)
