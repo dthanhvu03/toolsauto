@@ -1016,19 +1016,19 @@ class FacebookAdapter(AdapterInterface):
     # ─── Auto Comment (Phase 16) ───────────────────────────
     
     CTA_POOL = [
-        "🔗 Link mình để ở đây nè 👇\n{link}",
+        "Link mình để ở đây nè:\n{link}",
         "Ai cần thì vào link này nhé\n{link}",
-        "Xem chi tiết sản phẩm 👉 {link}",
+        "Xem chi tiết sản phẩm tại đây: {link}",
         "Link đây mọi người ơi\n{link}",
         "Mình share link ở đây nha\n{link}",
-        "👇 Link bên dưới nhé\n{link}",
+        "Link bên dưới nhé\n{link}",
     ]
     
     @staticmethod
     def _wrap_with_cta(raw_comment: str) -> str:
         """Wrap the comment text with a random CTA template for anti-detection."""
         
-        # If user already wrote a full comment (has letters/emoji), use as-is
+        # If user already wrote a full comment (has letters), use as-is
         lines = [l.strip() for l in raw_comment.strip().split('\n') if l.strip()]
         
         # Check if it's just raw links
