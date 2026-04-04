@@ -65,11 +65,11 @@ def db_upgrade(revision: str = typer.Argument("head", help="Target revision (def
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '_alembic_tmp_%'")
         for (tmp_table,) in cursor.fetchall():
             cursor.execute(f"DROP TABLE {tmp_table}")
-            typer.echo(f"🗑️ Dropped orphaned Alembic temp table: {tmp_table}")
+            typer.echo(f"[cleanup] Dropped orphaned Alembic temp table: {tmp_table}")
         conn.commit()
         conn.close()
     except Exception as e:
-        typer.echo(f"⚠️ Warning: Failed to clean tmp tables: {e}")
+        typer.echo(f"Warning: Failed to clean tmp tables: {e}")
 
     _alembic(["upgrade", revision])
 
@@ -119,10 +119,10 @@ def stamp_if_needed() -> None:
     has_version = "alembic_version" in tables
 
     if has_tables and not has_version:
-        print("⚠️  DB exists without alembic_version → stamping head...")
+        print("DB exists without alembic_version -> stamping head...")
         _alembic(["stamp", "head"])
     else:
-        print("✅ alembic_version OK, skipping stamp.")
+        print("alembic_version OK, skipping stamp.")
 
 
 @db_app.command("revision")
