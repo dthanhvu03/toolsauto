@@ -1,261 +1,330 @@
 {% extends "layouts/app.html" %}
-
-{% block title %}Platform Config • Auto Publisher{% endblock %}
-{% block page_title %}Platform Config{% endblock %}
-{% block page_subtitle %}Quản lý adapter, workflow, selector và CTA templates (kéo thả + lưu thứ tự).{% endblock %}
-
-{% block head_extra %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js" crossorigin="anonymous"></script>
-{% endblock %}
-
 {% block content %}
-<div class="w-full max-w-none -mx-4 lg:-mx-8 px-4 lg:px-8">
 
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-    <div class="flex flex-wrap gap-2 items-center">
-      <select id="platform-filter" onchange="switchPlatform(this.value)"
-        class="border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white">
+<!-- SortableJS for drag-and-drop -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+
+<div class="w-full max-w-none px-4 py-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-xl font-bold text-gray-800">
+        ⚙️ Platform Config
+      </h1>
+      <p class="text-sm text-gray-500 mt-0.5">
+        Quản lý adapter, workflow, selector và CTA templates
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <select id="platform-filter"
+              onchange="switchPlatform(this.value)"
+              class="border rounded-lg px-3 py-2 text-sm">
         <option value="">Tất cả platform</option>
       </select>
-      <button type="button" onclick="invalidateCache()"
-        class="bg-orange-50 border border-orange-200 text-orange-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-100">
-        Reload cache
+      <button onclick="invalidateCache()"
+              class="bg-orange-50 border border-orange-200
+                     text-orange-600 px-4 py-2 rounded-lg
+                     text-sm font-medium hover:bg-orange-100">
+        🔄 Reload Cache
       </button>
     </div>
   </div>
 
-  <div class="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
-    <button type="button" onclick="switchTab('platform')" id="tab-platform"
-      class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500 bg-white shadow-sm text-gray-800">
-      Platforms
+  <!-- Tab Navigation -->
+  <div class="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+    {% for tab in [
+      ('platform', '🌐 Platforms'),
+      ('workflow', '🔄 Workflows'),
+      ('selectors', '🎯 Selectors'),
+      ('cta', '💬 CTA Templates'),
+    ] %}
+    <button onclick="switchTab('{{ tab[0] }}')"
+            id="tab-{{ tab[0] }}"
+            class="tab-btn px-4 py-2 rounded-lg text-sm
+                   font-medium transition-all text-gray-500
+                   {% if loop.first %}bg-white shadow-sm text-gray-800{% endif %}">
+      {{ tab[1] }}
     </button>
-    <button type="button" onclick="switchTab('workflow')" id="tab-workflow"
-      class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
-      Workflows
-    </button>
-    <button type="button" onclick="switchTab('selectors')" id="tab-selectors"
-      class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
-      Selectors
-    </button>
-    <button type="button" onclick="switchTab('cta')" id="tab-cta"
-      class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
-      CTA templates
-    </button>
+    {% endfor %}
   </div>
 
+  <!-- ── Tab: Platforms ─────────────────────────────────────── -->
   <div id="tab-content-platform">
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="platforms-grid"></div>
-    <button type="button" onclick="openPlatformModal()"
-      class="mt-4 border-2 border-dashed border-gray-300 rounded-xl p-4 w-full text-gray-500 hover:border-indigo-300 hover:text-indigo-600 transition-colors text-sm text-left">
-      + Thêm platform mới
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4"
+         id="platforms-grid">
+      <!-- Rendered by JS -->
+    </div>
+    <button onclick="openPlatformModal()"
+            class="mt-4 border-2 border-dashed border-gray-300
+                   rounded-xl p-4 w-full text-gray-400
+                   hover:border-indigo-300 hover:text-indigo-500
+                   transition-colors text-sm">
+      + Thêm Platform mới
     </button>
   </div>
 
+  <!-- ── Tab: Workflows ─────────────────────────────────────── -->
   <div id="tab-content-workflow" class="hidden">
-    <div id="workflows-container" class="space-y-6"></div>
+    <div id="workflows-container" class="space-y-6">
+      <!-- Rendered by JS -->
+    </div>
   </div>
 
+  <!-- ── Tab: Selectors ─────────────────────────────────────── -->
   <div id="tab-content-selectors" class="hidden">
-    <div class="flex gap-3 mb-4 flex-wrap items-center">
-      <select id="selector-platform-filter" onchange="loadSelectors()"
-        class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+    <div class="flex gap-3 mb-4 flex-wrap">
+      <select id="selector-platform-filter"
+              onchange="loadSelectors()"
+              class="border rounded-lg px-3 py-1.5 text-sm">
         <option value="">Tất cả platform</option>
       </select>
-      <select id="selector-category-filter" onchange="loadSelectors()"
-        class="border border-[var(--border)] rounded-lg px-3 py-1.5 text-sm bg-white">
+      <select id="selector-category-filter"
+              onchange="loadSelectors()"
+              class="border rounded-lg px-3 py-1.5 text-sm">
         <option value="">Tất cả category</option>
-        <option value="post">post</option>
-        <option value="comment">comment</option>
-        <option value="login">login</option>
-        <option value="reels">reels</option>
+        <option value="post">Post</option>
+        <option value="comment">Comment</option>
+        <option value="login">Login</option>
+        <option value="reels">Reels</option>
       </select>
-      <button type="button" onclick="openSelectorModal()"
-        class="ml-auto bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium">
-        + Thêm selector
+      <button onclick="openSelectorModal()"
+              class="ml-auto bg-indigo-600 text-white px-4 py-1.5
+                     rounded-lg text-sm font-medium">
+        + Thêm Selector
       </button>
     </div>
-    <div id="selectors-by-category" class="space-y-6"></div>
+
+    <!-- Drag-and-drop selector list per category -->
+    <div id="selectors-by-category" class="space-y-6">
+      <!-- Rendered by JS — grouped by category -->
+    </div>
   </div>
 
+  <!-- ── Tab: CTA Templates ─────────────────────────────────── -->
   <div id="tab-content-cta" class="hidden">
-    <div class="flex justify-between mb-4 flex-wrap gap-2">
-      <p class="text-sm text-gray-500">Kéo thả để sắp xếp ưu tiên. Thả xong sẽ tự lưu.</p>
-      <button type="button" onclick="openCTAModal()"
-        class="bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium">
+    <div class="flex justify-between mb-4">
+      <p class="text-sm text-gray-500">
+        Kéo thả để sắp xếp thứ tự ưu tiên template
+      </p>
+      <button onclick="openCTAModal()"
+              class="bg-indigo-600 text-white px-4 py-1.5
+                     rounded-lg text-sm font-medium">
         + Thêm CTA
       </button>
     </div>
-    <div id="cta-list" class="space-y-2 bg-white rounded-xl border border-[var(--border)] p-4"></div>
+
+    <div id="cta-list"
+         class="space-y-2 bg-white rounded-xl border p-4">
+      <!-- SortableJS drag-and-drop list -->
+    </div>
   </div>
 
 </div>
 
-<div id="platform-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-    <h3 class="font-semibold text-gray-800 mb-4">Thêm platform</h3>
-    <div class="space-y-3 text-sm">
-      <div>
-        <label class="text-xs text-gray-500">Platform (id)</label>
-        <input id="np-platform" type="text" class="w-full border rounded-lg px-3 py-2 mt-1" placeholder="facebook" />
-      </div>
-      <div>
-        <label class="text-xs text-gray-500">Adapter class</label>
-        <input id="np-adapter" type="text" class="w-full border rounded-lg px-3 py-2 mt-1 font-mono text-xs"
-          placeholder="app.adapters.facebook.adapter.FacebookAdapter" />
-      </div>
-      <div>
-        <label class="text-xs text-gray-500">Display name</label>
-        <input id="np-display" type="text" class="w-full border rounded-lg px-3 py-2 mt-1" />
-      </div>
-    </div>
-    <div class="flex gap-3 mt-5">
-      <button type="button" onclick="saveNewPlatform()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium">Lưu</button>
-      <button type="button" onclick="closePlatformModal()" class="flex-1 border py-2 rounded-lg text-sm">Hủy</button>
-    </div>
-  </div>
-</div>
+<!-- ── Modals ─────────────────────────────────────────────────── -->
 
-<div id="selector-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-    <h3 class="font-semibold text-gray-800 mb-4">Thêm / Sửa selector</h3>
-    <div class="space-y-3 text-sm">
+<!-- Selector Modal -->
+<div id="selector-modal"
+     class="hidden fixed inset-0 bg-black/50 z-50
+            flex items-center justify-center">
+  <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+    <h3 class="font-semibold text-gray-800 mb-4">
+      Thêm / Sửa Selector
+    </h3>
+    <div class="space-y-3">
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-xs text-gray-500">Platform</label>
-          <select id="s-platform" class="w-full border rounded-lg px-3 py-2 mt-1"></select>
+          <select id="s-platform"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+          </select>
         </div>
         <div>
           <label class="text-xs text-gray-500">Category</label>
-          <input id="s-category" type="text" class="w-full border rounded-lg px-3 py-2 mt-1" placeholder="post, comment..." />
+          <input id="s-category" type="text"
+                 placeholder="post, comment, login, reels..."
+                 class="w-full border rounded-lg px-3 py-2
+                        text-sm mt-1">
         </div>
       </div>
       <div>
-        <label class="text-xs text-gray-500">Selector name</label>
-        <input id="s-name" type="text" class="w-full border rounded-lg px-3 py-2 mt-1" />
+        <label class="text-xs text-gray-500">Selector Name</label>
+        <input id="s-name" type="text"
+               placeholder="post_button, comment_box..."
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-xs text-gray-500">Type</label>
-          <select id="s-type" class="w-full border rounded-lg px-3 py-2 mt-1">
-            <option value="css">css</option>
-            <option value="playwright_role">playwright_role</option>
-            <option value="text">text</option>
-            <option value="placeholder">placeholder</option>
-            <option value="xpath">xpath</option>
+          <select id="s-type"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+            <option value="css">CSS</option>
+            <option value="playwright_role">Playwright Role</option>
+            <option value="text">Text</option>
+            <option value="placeholder">Placeholder</option>
+            <option value="xpath">XPath</option>
           </select>
         </div>
         <div>
           <label class="text-xs text-gray-500">Locale</label>
-          <select id="s-locale" class="w-full border rounded-lg px-3 py-2 mt-1">
-            <option value="*">* (all)</option>
-            <option value="vi">vi</option>
-            <option value="en">en</option>
+          <select id="s-locale"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+            <option value="*">* (All)</option>
+            <option value="vi">vi (Vietnamese)</option>
+            <option value="en">en (English)</option>
           </select>
         </div>
       </div>
       <div>
-        <label class="text-xs text-gray-500">Selector value</label>
-        <input id="s-value" type="text" class="w-full border rounded-lg px-3 py-2 mt-1 font-mono text-xs" />
+        <label class="text-xs text-gray-500">
+          Selector Value
+        </label>
+        <input id="s-value" type="text"
+               placeholder='[aria-label="Post"] or .btn-post'
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1 font-mono">
       </div>
       <div>
-        <label class="text-xs text-gray-500">Notes</label>
-        <input id="s-notes" type="text" class="w-full border rounded-lg px-3 py-2 mt-1" />
+        <label class="text-xs text-gray-500">
+          Notes (optional)
+        </label>
+        <input id="s-notes" type="text"
+               placeholder="Mô tả selector này..."
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
       </div>
     </div>
     <div class="flex gap-3 mt-5">
-      <button type="button" onclick="saveSelector()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium">Lưu</button>
-      <button type="button" onclick="closeSelectorModal()" class="flex-1 border py-2 rounded-lg text-sm">Hủy</button>
+      <button onclick="saveSelector()"
+              class="flex-1 bg-indigo-600 text-white py-2
+                     rounded-lg text-sm font-medium">
+        Lưu
+      </button>
+      <button onclick="closeSelectorModal()"
+              class="flex-1 border py-2 rounded-lg text-sm">
+        Hủy
+      </button>
     </div>
   </div>
 </div>
 
-<div id="cta-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-    <h3 class="font-semibold text-gray-800 mb-4">Thêm CTA template</h3>
-    <div class="space-y-3 text-sm">
+<!-- CTA Modal -->
+<div id="cta-modal"
+     class="hidden fixed inset-0 bg-black/50 z-50
+            flex items-center justify-center">
+  <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+    <h3 class="font-semibold text-gray-800 mb-4">
+      Thêm CTA Template
+    </h3>
+    <div class="space-y-3">
       <div>
-        <label class="text-xs text-gray-500">Template (dung {link} lam placeholder)</label>
-        <textarea id="cta-template" rows="3" class="w-full border rounded-lg px-3 py-2 mt-1 resize-none font-mono text-xs"></textarea>
+        <label class="text-xs text-gray-500">
+          Template
+          <span class="text-indigo-500 ml-1">
+            dùng {'{link}'} cho placeholder link
+          </span>
+        </label>
+        <textarea id="cta-template" rows="3"
+                  placeholder="🔗 Link mình để ở đây nè 👇&#10;{link}"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1 resize-none"></textarea>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-xs text-gray-500">Platform</label>
-          <select id="cta-platform" class="w-full border rounded-lg px-3 py-2 mt-1"></select>
+          <select id="cta-platform"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+          </select>
         </div>
         <div>
           <label class="text-xs text-gray-500">Locale</label>
-          <select id="cta-locale" class="w-full border rounded-lg px-3 py-2 mt-1">
-            <option value="vi">vi</option>
-            <option value="en">en</option>
-            <option value="*">*</option>
+          <select id="cta-locale"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+            <option value="vi">vi (Vietnamese)</option>
+            <option value="en">en (English)</option>
+            <option value="*">* (All)</option>
           </select>
         </div>
       </div>
       <div>
-        <label class="text-xs text-gray-500">Page URL (tùy chọn)</label>
-        <input id="cta-page-url" type="text" class="w-full border rounded-lg px-3 py-2 mt-1 text-xs" />
+        <label class="text-xs text-gray-500">
+          Page URL (optional — để trống = áp dụng toàn platform)
+        </label>
+        <input id="cta-page-url" type="text"
+               placeholder="https://facebook.com/yourpage"
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
       </div>
       <div>
-        <label class="text-xs text-gray-500">Niche (tùy chọn)</label>
-        <input id="cta-niche" type="text" class="w-full border rounded-lg px-3 py-2 mt-1" />
+        <label class="text-xs text-gray-500">
+          Niche (optional)
+        </label>
+        <input id="cta-niche" type="text"
+               placeholder="cosmetics, electronics, food..."
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
       </div>
     </div>
     <div class="flex gap-3 mt-5">
-      <button type="button" onclick="saveCTA()" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium">Lưu</button>
-      <button type="button" onclick="closeCTAModal()" class="flex-1 border py-2 rounded-lg text-sm">Hủy</button>
+      <button onclick="saveCTA()"
+              class="flex-1 bg-indigo-600 text-white py-2
+                     rounded-lg text-sm font-medium">
+        Lưu
+      </button>
+      <button onclick="closeCTAModal()"
+              class="flex-1 border py-2 rounded-lg text-sm">
+        Hủy
+      </button>
     </div>
   </div>
 </div>
-{% endblock %}
 
-{% block script_extra %}
 <script>
-const GRIP_SVG = '<svg class="w-4 h-4 text-gray-400 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="1.5"/><circle cx="15" cy="7" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="17" r="1.5"/><circle cx="15" cy="17" r="1.5"/></svg>';
-
+// ─── State ────────────────────────────────────────────────────
 let platforms = [];
 let workflows = [];
 let selectors = [];
 let ctaList = [];
 let editingSelectorId = null;
-let workflowStepSortables = [];
-let selectorGroupSortables = [];
-let ctaSortable = null;
 
-function platformOptionLabel(p) {
-  const name = p.display_name || p.platform;
-  if (p.display_emoji && String(p.display_emoji).trim()) {
-    return p.display_emoji + ' ' + name;
-  }
-  return name;
-}
-
+// ─── Init ─────────────────────────────────────────────────────
 async function init() {
   await loadPlatforms();
   loadWorkflows();
 }
 init();
 
+// ─── Tab switching ────────────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
     btn.classList.add('text-gray-500');
   });
-  document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
-  const tbtn = document.getElementById('tab-' + tab);
-  if (tbtn) {
-    tbtn.classList.add('bg-white', 'shadow-sm', 'text-gray-800');
-    tbtn.classList.remove('text-gray-500');
-  }
-  const content = document.getElementById('tab-content-' + tab);
-  if (content) content.classList.remove('hidden');
+  document.querySelectorAll('[id^="tab-content-"]').forEach(el => {
+    el.classList.add('hidden');
+  });
+  document.getElementById(`tab-${tab}`)
+          .classList.add('bg-white', 'shadow-sm', 'text-gray-800');
+  document.getElementById(`tab-content-${tab}`)
+          .classList.remove('hidden');
+
   if (tab === 'selectors') loadSelectors();
   if (tab === 'cta') loadCTA();
 }
 
+// ─── Platforms ────────────────────────────────────────────────
 async function loadPlatforms() {
   const res = await fetch('/platform-config/platforms');
   platforms = await res.json();
 
+  // Populate filter dropdowns
   const filterSel = document.getElementById('platform-filter');
   const sPlatform = document.getElementById('s-platform');
   const ctaPlatform = document.getElementById('cta-platform');
@@ -263,279 +332,381 @@ async function loadPlatforms() {
   [filterSel, sPlatform, ctaPlatform].forEach(sel => {
     if (!sel) return;
     const current = sel.value;
+    // Keep first option
     while (sel.options.length > 1) sel.remove(1);
     platforms.forEach(p => {
-      sel.appendChild(new Option(platformOptionLabel(p), p.platform));
+      const opt = new Option(
+        `${p.display_emoji} ${p.display_name}`, p.platform
+      );
+      sel.appendChild(opt);
     });
     if (current) sel.value = current;
   });
 
+  // Populate platform-filter for selector tab
   const spf = document.getElementById('selector-platform-filter');
   if (spf) {
     while (spf.options.length > 1) spf.remove(1);
     platforms.forEach(p => {
-      spf.appendChild(new Option(platformOptionLabel(p), p.platform));
+      spf.appendChild(new Option(
+        `${p.display_emoji} ${p.display_name}`, p.platform
+      ));
     });
   }
 
+  // Render platform cards
   const grid = document.getElementById('platforms-grid');
-  if (!grid) return;
   grid.innerHTML = platforms.map(p => `
-    <div class="bg-white rounded-xl border border-[var(--border)] p-4 ${!p.is_active ? 'opacity-50' : ''}">
+    <div class="bg-white rounded-xl border p-4
+                ${!p.is_active ? 'opacity-50' : ''}">
       <div class="flex items-center gap-2 mb-3">
+        <span class="text-2xl">${p.display_emoji}</span>
         <div>
-          <p class="font-semibold text-gray-800">${escapeHtml(p.display_name || p.platform)}</p>
-          <p class="text-xs text-gray-400">${escapeHtml(p.platform)}</p>
+          <p class="font-semibold text-gray-800">
+            ${p.display_name}
+          </p>
+          <p class="text-xs text-gray-400">${p.platform}</p>
         </div>
-        <span class="ml-auto text-xs px-2 py-0.5 rounded-full ${p.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">
+        <span class="ml-auto text-xs px-2 py-0.5 rounded-full
+                     ${p.is_active
+                       ? 'bg-green-100 text-green-700'
+                       : 'bg-gray-100 text-gray-500'}">
           ${p.is_active ? 'Active' : 'Inactive'}
         </span>
       </div>
-      <p class="text-xs text-gray-400 font-mono truncate mb-3">${escapeHtml(p.adapter_class)}</p>
-      <p class="text-xs text-gray-500">${escapeHtml((p.media_extensions || []).join(', '))}</p>
+      <p class="text-xs text-gray-400 font-mono truncate mb-3">
+        ${p.adapter_class}
+      </p>
+      <div class="flex gap-1 text-xs text-gray-500">
+        <span class="bg-gray-50 px-2 py-0.5 rounded">
+          ${(p.media_extensions || []).join(', ')}
+        </span>
+      </div>
     </div>
   `).join('');
 }
 
-function escapeHtml(s) {
-  if (s == null) return '';
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-function escapeAttr(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function destroyWorkflowSortables() {
-  workflowStepSortables.forEach(s => { try { s.destroy(); } catch (e) {} });
-  workflowStepSortables = [];
-}
-
-function destroySelectorSortables() {
-  selectorGroupSortables.forEach(s => { try { s.destroy(); } catch (e) {} });
-  selectorGroupSortables = [];
-}
-
+// ─── Workflows ────────────────────────────────────────────────
 async function loadWorkflows(platform = '') {
-  destroyWorkflowSortables();
-  const q = platform ? ('?platform=' + encodeURIComponent(platform)) : '';
-  const res = await fetch('/platform-config/workflows' + q);
+  const res = await fetch(
+    `/platform-config/workflows${platform ? '?platform=' + platform : ''}`
+  );
   workflows = await res.json();
 
   const container = document.getElementById('workflows-container');
-  if (!container) return;
-
   container.innerHTML = workflows.map(wf => `
-    <div class="bg-white rounded-xl border border-[var(--border)] overflow-hidden">
+    <div class="bg-white rounded-xl border overflow-hidden">
+      <!-- Workflow Header -->
       <div class="flex items-center gap-3 p-4 border-b bg-gray-50">
         <div>
-          <p class="font-semibold text-gray-800">${escapeHtml(wf.name)}</p>
-          <p class="text-xs text-gray-400">${escapeHtml(wf.platform)} · ${escapeHtml(wf.job_type)}</p>
+          <p class="font-semibold text-gray-800">${wf.name}</p>
+          <p class="text-xs text-gray-400">
+            ${wf.platform} · ${wf.job_type}
+          </p>
         </div>
-        <span class="ml-auto text-xs px-2 py-0.5 rounded-full ${wf.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">
+        <span class="ml-auto text-xs px-2 py-0.5 rounded-full
+                     ${wf.is_active
+                       ? 'bg-green-100 text-green-700'
+                       : 'bg-gray-100 text-gray-500'}">
           ${wf.is_active ? 'Active' : 'Inactive'}
         </span>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-0 md:divide-x divide-gray-100">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-0
+                  divide-x divide-gray-100">
+
+        <!-- Steps — Drag-and-drop -->
         <div class="p-4">
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Workflow steps <span class="text-gray-400 font-normal">(kéo để sắp xếp)</span></p>
-          <ul id="steps-${wf.id}" class="space-y-1.5 min-h-[100px]" data-workflow-id="${wf.id}">
+          <p class="text-xs font-semibold text-gray-500 uppercase
+                    tracking-wide mb-3">
+            Workflow Steps
+            <span class="text-gray-300 font-normal ml-1">
+              (kéo để sắp xếp)
+            </span>
+          </p>
+          <ul id="steps-${wf.id}"
+              class="space-y-1.5 min-h-[100px]"
+              data-workflow-id="${wf.id}">
             ${wf.steps.map((step, i) => `
-              <li data-step="${escapeAttr(step)}"
-                class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 cursor-grab text-sm select-none group">
-                <span class="shrink-0 step-drag">${GRIP_SVG}</span>
-                <span class="flex-1 font-mono text-xs text-gray-700">${escapeHtml(step)}</span>
+              <li data-step="${step}"
+                  class="flex items-center gap-2 bg-gray-50
+                         border border-gray-200 rounded-lg
+                         px-3 py-2 cursor-grab text-sm
+                         select-none group">
+                <span class="text-gray-300 group-hover:text-gray-500">
+                  ⠿
+                </span>
+                <span class="flex-1 font-mono text-xs text-gray-700">
+                  ${step}
+                </span>
                 <span class="text-xs text-gray-300">${i + 1}</span>
               </li>
             `).join('')}
           </ul>
-          <button type="button" id="wf-save-steps-${wf.id}" onclick="saveSteps(${wf.id})"
-            class="mt-3 w-full text-xs text-indigo-600 border border-indigo-200 rounded-lg py-1.5 hover:bg-indigo-50">
-            Lưu thứ tự
+          <button onclick="saveSteps(${wf.id})"
+                  class="mt-3 w-full text-xs text-indigo-600
+                         border border-indigo-200 rounded-lg py-1.5
+                         hover:bg-indigo-50">
+            💾 Lưu thứ tự
           </button>
         </div>
+
+        <!-- Timing config -->
         <div class="p-4">
-          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Timing (ms / số)</p>
+          <p class="text-xs font-semibold text-gray-500 uppercase
+                    tracking-wide mb-3">Timing Config (ms)</p>
           <div class="space-y-2" id="timing-${wf.id}">
             ${Object.entries(wf.timing_config || {}).map(([k, v]) => `
               <div class="flex items-center gap-2">
-                <label class="text-xs text-gray-500 flex-1 font-mono truncate">${escapeHtml(k)}</label>
-                <input type="number" step="any" value="${escapeAttr(String(v))}" data-key="${escapeAttr(k)}"
-                  onchange="markTimingDirty(${wf.id})"
-                  class="w-28 border rounded px-2 py-1 text-xs text-right" />
+                <label class="text-xs text-gray-500 flex-1
+                              font-mono">${k}</label>
+                <input type="number" value="${v}"
+                       data-key="${k}"
+                       onchange="markTimingDirty(${wf.id})"
+                       class="w-24 border rounded px-2 py-1
+                              text-xs text-right">
               </div>
             `).join('')}
           </div>
-          <button type="button" onclick="saveTiming(${wf.id})" id="save-timing-${wf.id}"
-            class="mt-3 w-full text-xs text-green-600 border border-green-200 rounded-lg py-1.5 hover:bg-green-50 hidden">
-            Lưu timing
+          <button onclick="saveTiming(${wf.id})"
+                  id="save-timing-${wf.id}"
+                  class="mt-3 w-full text-xs text-green-600
+                         border border-green-200 rounded-lg py-1.5
+                         hover:bg-green-50 hidden">
+            💾 Lưu timing
           </button>
         </div>
       </div>
     </div>
   `).join('');
 
+  // Initialize SortableJS for each workflow's step list
   workflows.forEach(wf => {
-    const el = document.getElementById('steps-' + wf.id);
-    if (el && typeof Sortable !== 'undefined') {
-      const s = Sortable.create(el, {
+    const el = document.getElementById(`steps-${wf.id}`);
+    if (el) {
+      Sortable.create(el, {
         animation: 150,
         ghostClass: 'bg-indigo-50',
-        handle: '.step-drag',
+        handle: 'li',
         onEnd: () => markStepsDirty(wf.id)
       });
-      workflowStepSortables.push(s);
     }
   });
 }
 
 function markStepsDirty(workflowId) {
-  const btn = document.getElementById('wf-save-steps-' + workflowId);
-  if (btn) btn.classList.add('ring-2', 'ring-indigo-300');
+  // Visual indicator that steps changed
+  const btn = document.querySelector(
+    `#steps-${workflowId} ~ button`
+  );
 }
 
 function markTimingDirty(workflowId) {
-  const b = document.getElementById('save-timing-' + workflowId);
-  if (b) b.classList.remove('hidden');
+  document.getElementById(`save-timing-${workflowId}`)
+          ?.classList.remove('hidden');
 }
 
 async function saveSteps(workflowId) {
-  const list = document.getElementById('steps-' + workflowId);
-  if (!list) return;
-  const steps = [...list.querySelectorAll('li')].map(li => li.dataset.step);
-  const res = await fetch('/platform-config/workflows/' + workflowId + '/steps', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ steps })
-  });
-  const data = await res.json();
-  if (data.success) {
-    const btn = document.getElementById('wf-save-steps-' + workflowId);
-    if (btn) btn.classList.remove('ring-2', 'ring-indigo-300');
-    showToast('Đã lưu thứ tự workflow');
-  } else {
-    showToast('Lỗi lưu workflow');
+  const list = document.getElementById(`steps-${workflowId}`);
+  const steps = [...list.querySelectorAll('li')]
+    .map(li => li.dataset.step);
+
+  const res = await fetch(
+    `/platform-config/workflows/${workflowId}/steps`,
+    {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({steps})
+    }
+  );
+  if ((await res.json()).success) {
+    showToast('✅ Đã lưu thứ tự workflow');
   }
 }
 
 async function saveTiming(workflowId) {
-  const container = document.getElementById('timing-' + workflowId);
-  if (!container) return;
+  const container = document.getElementById(`timing-${workflowId}`);
   const timing_config = {};
   container.querySelectorAll('input[data-key]').forEach(input => {
-    const k = input.dataset.key;
-    const v = parseFloat(input.value);
-    timing_config[k] = Number.isNaN(v) ? input.value : v;
+    timing_config[input.dataset.key] = parseFloat(input.value);
   });
-  const res = await fetch('/platform-config/workflows/' + workflowId + '/timing', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ timing_config })
-  });
-  const data = await res.json();
-  if (data.success) {
-    document.getElementById('save-timing-' + workflowId)?.classList.add('hidden');
-    showToast('Đã lưu timing');
+
+  const res = await fetch(
+    `/platform-config/workflows/${workflowId}/timing`,
+    {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({timing_config})
+    }
+  );
+  if ((await res.json()).success) {
+    document.getElementById(`save-timing-${workflowId}`)
+            ?.classList.add('hidden');
+    showToast('✅ Đã lưu timing config');
   }
 }
 
+// ─── Selectors ────────────────────────────────────────────────
 async function loadSelectors() {
-  destroySelectorSortables();
-  const platform = document.getElementById('selector-platform-filter')?.value || '';
-  const category = document.getElementById('selector-category-filter')?.value || '';
+  const platform = document.getElementById(
+    'selector-platform-filter'
+  )?.value || '';
+  const category = document.getElementById(
+    'selector-category-filter'
+  )?.value || '';
+
   const params = new URLSearchParams();
   if (platform) params.set('platform', platform);
   if (category) params.set('category', category);
-  const res = await fetch('/platform-config/selectors?' + params.toString());
+
+  const res = await fetch(
+    `/platform-config/selectors?${params}`
+  );
   selectors = await res.json();
 
+  // Group by category
   const grouped = {};
   selectors.forEach(s => {
-    const key = s.platform + ':' + s.category;
+    const key = `${s.platform}:${s.category}`;
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(s);
   });
 
-  const container = document.getElementById('selectors-by-category');
-  if (!container) return;
+  const container = document.getElementById(
+    'selectors-by-category'
+  );
+  container.innerHTML = Object.entries(grouped).map(
+    ([key, items]) => {
+      const [plt, cat] = key.split(':');
+      return `
+        <div class="bg-white rounded-xl border overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-3
+                      bg-gray-50 border-b">
+            <span class="text-xs font-semibold text-gray-500
+                         uppercase tracking-wide">
+              ${plt} · ${cat}
+            </span>
+            <span class="text-xs text-gray-400">
+              ${items.length} selectors
+            </span>
+            <span class="text-xs text-gray-300 ml-auto">
+              ↕ kéo để ưu tiên
+            </span>
+          </div>
+          <ul id="sel-${key.replace(':', '-')}"
+              data-group="${key}"
+              class="divide-y divide-gray-50 min-h-[50px]">
+            ${items.map(s => `
+              <li data-id="${s.id}"
+                  class="flex items-center gap-3 px-4 py-2.5
+                         cursor-grab hover:bg-gray-50
+                         ${!s.is_active ? 'opacity-40' : ''}
+                         select-none group">
+                <span class="text-gray-300
+                             group-hover:text-gray-500 text-lg">
+                  ⠿
+                </span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs px-1.5 py-0.5 rounded
+                                 bg-blue-50 text-blue-600
+                                 font-mono">
+                      ${s.selector_type}
+                    </span>
+                    <span class="text-xs text-gray-500">
+                      ${s.selector_name}
+                    </span>
+                    ${s.locale !== '*'
+                      ? `<span class="text-xs px-1 py-0.5 rounded
+                                      bg-yellow-50 text-yellow-600">
+                           ${s.locale}
+                         </span>`
+                      : ''}
+                  </div>
+                  <p class="text-sm font-mono text-gray-700
+                            truncate mt-0.5">
+                    ${s.selector_value}
+                  </p>
+                  ${s.notes
+                    ? `<p class="text-xs text-gray-400 mt-0.5">
+                         ${s.notes}
+                       </p>`
+                    : ''}
+                </div>
+                <div class="flex gap-1 opacity-0
+                            group-hover:opacity-100">
+                  <button onclick="editSelector(${s.id})"
+                          class="p-1.5 text-blue-400
+                                 hover:bg-blue-50 rounded text-xs">
+                    ✏️
+                  </button>
+                  <button onclick="toggleSelector(${s.id})"
+                          class="p-1.5 text-gray-400
+                                 hover:bg-gray-100 rounded text-xs">
+                    ${s.is_active ? '👁' : '🚫'}
+                  </button>
+                  <button onclick="deleteSelector(${s.id})"
+                          class="p-1.5 text-red-400
+                                 hover:bg-red-50 rounded text-xs">
+                    🗑️
+                  </button>
+                </div>
+                <span class="text-xs text-gray-300 w-6 text-right">
+                  ${s.priority}
+                </span>
+              </li>
+            `).join('')}
+          </ul>
+          <div class="px-4 py-2 border-t bg-gray-50">
+            <button onclick="saveSelectorsOrder('${key}')"
+                    class="text-xs text-indigo-600
+                           hover:underline">
+              💾 Lưu thứ tự
+            </button>
+          </div>
+        </div>
+      `;
+    }
+  ).join('');
 
-  container.innerHTML = Object.entries(grouped).map(([key, items]) => {
-    const safeId = key.replace(/:/g, '-');
-    return `
-    <div class="bg-white rounded-xl border border-[var(--border)] overflow-hidden">
-      <div class="flex items-center gap-3 px-4 py-3 bg-gray-50 border-b">
-        <span class="text-xs font-semibold text-gray-500 uppercase">${escapeHtml(key)}</span>
-        <span class="text-xs text-gray-400">${items.length} selectors</span>
-        <span class="text-xs text-gray-400 ml-auto">Kéo để ưu tiên</span>
-      </div>
-      <ul id="sel-${safeId}" data-group="${escapeHtml(key)}" class="divide-y divide-gray-50 min-h-[50px]">
-        ${items.map(s => `
-          <li data-id="${s.id}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 ${!s.is_active ? 'opacity-40' : ''} select-none group">
-            <span class="shrink-0 sel-drag cursor-grab">${GRIP_SVG}</span>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-mono">${escapeHtml(s.selector_type)}</span>
-                <span class="text-xs text-gray-500">${escapeHtml(s.selector_name)}</span>
-                ${s.locale !== '*' ? `<span class="text-xs px-1 py-0.5 rounded bg-yellow-50 text-yellow-700">${escapeHtml(s.locale)}</span>` : ''}
-              </div>
-              <p class="text-sm font-mono text-gray-700 truncate mt-0.5">${escapeHtml(s.selector_value)}</p>
-              ${s.notes ? `<p class="text-xs text-gray-400 mt-0.5">${escapeHtml(s.notes)}</p>` : ''}
-            </div>
-            <div class="flex gap-1 opacity-0 group-hover:opacity-100 sm:opacity-100">
-              <button type="button" onclick="editSelector(${s.id})" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded text-xs">Sửa</button>
-              <button type="button" onclick="toggleSelector(${s.id})" class="p-1.5 text-gray-600 hover:bg-gray-100 rounded text-xs">${s.is_active ? 'Off' : 'On'}</button>
-              <button type="button" onclick="deleteSelector(${s.id})" class="p-1.5 text-red-600 hover:bg-red-50 rounded text-xs">Xóa</button>
-            </div>
-            <span class="text-xs text-gray-300 w-8 text-right">${s.priority}</span>
-          </li>
-        `).join('')}
-      </ul>
-      <div class="px-4 py-2 border-t bg-gray-50">
-        <button type="button" data-sel-group="${escapeAttr(key)}" onclick="saveSelectorsOrder(this.getAttribute('data-sel-group'))" class="text-xs text-indigo-600 hover:underline">Lưu thứ tự</button>
-      </div>
-    </div>`;
-  }).join('');
-
+  // Initialize SortableJS for each category group
   Object.keys(grouped).forEach(key => {
-    const el = document.getElementById('sel-' + key.replace(/:/g, '-'));
-    if (el && typeof Sortable !== 'undefined') {
-      const s = Sortable.create(el, {
+    const elId = `sel-${key.replace(':', '-')}`;
+    const el = document.getElementById(elId);
+    if (el) {
+      Sortable.create(el, {
         animation: 150,
         ghostClass: 'bg-indigo-50',
-        handle: '.sel-drag'
+        handle: 'li',
       });
-      selectorGroupSortables.push(s);
     }
   });
 }
 
 async function saveSelectorsOrder(groupKey) {
-  const elId = 'sel-' + groupKey.replace(/:/g, '-');
+  const elId = `sel-${groupKey.replace(':', '-')}`;
   const list = document.getElementById(elId);
-  if (!list) return;
-  const items = [...list.querySelectorAll('li[data-id]')].map((li, i) => ({
-    id: parseInt(li.dataset.id, 10),
-    priority: 100 - (i * 10)
-  }));
+  const items = [...list.querySelectorAll('li')]
+    .map((li, i) => ({
+      id: parseInt(li.dataset.id),
+      priority: 100 - (i * 10)  // descending priority
+    }));
+
   const res = await fetch('/platform-config/selectors/reorder', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items })
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({items})
   });
-  const data = await res.json();
-  if (data.success) showToast('Đã lưu thứ tự selector');
+  if ((await res.json()).success) {
+    showToast('✅ Đã lưu thứ tự selector');
+  }
 }
 
-function editSelector(id) {
+async function editSelector(id) {
   const sel = selectors.find(s => s.id === id);
   if (!sel) return;
   editingSelectorId = id;
+
   document.getElementById('s-platform').value = sel.platform;
   document.getElementById('s-category').value = sel.category;
   document.getElementById('s-name').value = sel.selector_name;
@@ -543,32 +714,37 @@ function editSelector(id) {
   document.getElementById('s-locale').value = sel.locale;
   document.getElementById('s-value').value = sel.selector_value;
   document.getElementById('s-notes').value = sel.notes || '';
+
   openSelectorModal();
 }
 
 async function toggleSelector(id) {
   const sel = selectors.find(s => s.id === id);
   if (!sel) return;
-  await fetch('/platform-config/selectors/' + id, {
+  await fetch(`/platform-config/selectors/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ is_active: !sel.is_active })
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({is_active: !sel.is_active})
   });
   loadSelectors();
 }
 
 async function deleteSelector(id) {
   if (!confirm('Xóa selector này?')) return;
-  await fetch('/platform-config/selectors/' + id, { method: 'DELETE' });
+  await fetch(`/platform-config/selectors/${id}`,
+              {method: 'DELETE'});
   loadSelectors();
 }
 
 function openSelectorModal() {
-  document.getElementById('selector-modal')?.classList.remove('hidden');
+  document.getElementById('selector-modal')
+          .classList.remove('hidden');
 }
+
 function closeSelectorModal() {
   editingSelectorId = null;
-  document.getElementById('selector-modal')?.classList.add('hidden');
+  document.getElementById('selector-modal')
+          .classList.add('hidden');
 }
 
 async function saveSelector() {
@@ -579,91 +755,118 @@ async function saveSelector() {
     selector_type: document.getElementById('s-type').value,
     locale: document.getElementById('s-locale').value,
     selector_value: document.getElementById('s-value').value,
-    notes: document.getElementById('s-notes').value
+    notes: document.getElementById('s-notes').value,
   };
+
   if (editingSelectorId) {
-    await fetch('/platform-config/selectors/' + editingSelectorId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    await fetch(
+      `/platform-config/selectors/${editingSelectorId}`,
+      {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      }
+    );
   } else {
     await fetch('/platform-config/selectors', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload)
     });
   }
+
   closeSelectorModal();
   loadSelectors();
 }
 
-function destroyCtaSortable() {
-  if (ctaSortable) {
-    try { ctaSortable.destroy(); } catch (e) {}
-    ctaSortable = null;
-  }
-}
-
+// ─── CTA Templates ────────────────────────────────────────────
 async function loadCTA() {
-  destroyCtaSortable();
-  const platform = document.getElementById('platform-filter')?.value || '';
-  const params = platform ? ('?platform=' + encodeURIComponent(platform)) : '';
-  const res = await fetch('/platform-config/cta' + params);
+  const platform = document.getElementById(
+    'platform-filter'
+  )?.value || '';
+  const params = platform ? `?platform=${platform}` : '';
+  const res = await fetch(`/platform-config/cta${params}`);
   ctaList = await res.json();
 
   const list = document.getElementById('cta-list');
-  if (!list) return;
-
   list.innerHTML = ctaList.map(cta => `
-    <div data-id="${cta.id}" class="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-white transition-all ${!cta.is_active ? 'opacity-40' : ''} select-none group">
-      <span class="cta-drag-handle shrink-0 mt-0.5 cursor-grab">${GRIP_SVG}</span>
+    <div data-id="${cta.id}"
+         class="flex items-start gap-3 p-3 border rounded-lg
+                bg-gray-50 cursor-grab hover:bg-white
+                hover:border-indigo-200 transition-all
+                ${!cta.is_active ? 'opacity-40' : ''}
+                select-none group">
+      <span class="text-gray-300 group-hover:text-gray-500
+                   text-xl mt-0.5">⠿</span>
       <div class="flex-1 min-w-0">
-        <pre class="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">${escapeHtml(cta.template)}</pre>
-        <div class="flex gap-2 mt-1.5 flex-wrap">
-          <span class="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">${escapeHtml(cta.platform)}</span>
-          <span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">${escapeHtml(cta.locale)}</span>
-          ${cta.page_url ? `<span class="text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 truncate max-w-[200px]" title="${escapeHtml(cta.page_url)}">${escapeHtml(cta.page_url)}</span>` : ''}
-          ${cta.niche ? `<span class="text-xs px-1.5 py-0.5 rounded bg-yellow-50 text-yellow-700">${escapeHtml(cta.niche)}</span>` : ''}
+        <pre class="text-sm text-gray-700 whitespace-pre-wrap
+                    font-sans leading-relaxed">${cta.template}</pre>
+        <div class="flex gap-2 mt-1.5">
+          <span class="text-xs px-1.5 py-0.5 rounded
+                       bg-blue-50 text-blue-600">
+            ${cta.platform}
+          </span>
+          <span class="text-xs px-1.5 py-0.5 rounded
+                       bg-gray-100 text-gray-500">
+            ${cta.locale}
+          </span>
+          ${cta.page_url
+            ? `<span class="text-xs px-1.5 py-0.5 rounded
+                            bg-purple-50 text-purple-600 truncate
+                            max-w-[200px]" title="${cta.page_url}">
+                 📄 ${cta.page_url}
+               </span>`
+            : ''}
+          ${cta.niche
+            ? `<span class="text-xs px-1.5 py-0.5 rounded
+                            bg-yellow-50 text-yellow-600">
+                 🏷 ${cta.niche}
+               </span>`
+            : ''}
         </div>
       </div>
-      <button type="button" onclick="deleteCTA(${cta.id})" class="p-1.5 text-red-600 hover:bg-red-50 rounded text-xs shrink-0">Xóa</button>
-      <span class="text-xs text-gray-300 shrink-0">${cta.priority}</span>
+      <div class="flex gap-1 opacity-0 group-hover:opacity-100">
+        <button onclick="deleteCTA(${cta.id})"
+                class="p-1.5 text-red-400 hover:bg-red-50
+                       rounded text-xs">
+          🗑️
+        </button>
+      </div>
+      <span class="text-xs text-gray-300">${cta.priority}</span>
     </div>
   `).join('');
 
-  if (typeof Sortable !== 'undefined') {
-    ctaSortable = Sortable.create(list, {
-      animation: 150,
-      ghostClass: 'bg-indigo-50',
-      handle: '.cta-drag-handle',
-      draggable: '[data-id]',
-      onEnd: saveCTAOrder
-    });
-  }
+  // SortableJS for CTA list
+  Sortable.create(list, {
+    animation: 150,
+    ghostClass: 'bg-indigo-50 border-indigo-300',
+    handle: 'div[data-id]',
+    onEnd: saveCTAOrder
+  });
 }
 
 async function saveCTAOrder() {
   const list = document.getElementById('cta-list');
-  if (!list) return;
-  const items = [...list.querySelectorAll('[data-id]')].map((el, i) => ({
-    id: parseInt(el.dataset.id, 10),
-    priority: 100 - (i * 10)
-  }));
-  const res = await fetch('/platform-config/cta/reorder', {
+  const items = [...list.querySelectorAll('[data-id]')]
+    .map((el, i) => ({
+      id: parseInt(el.dataset.id),
+      priority: 100 - (i * 10)
+    }));
+
+  await fetch('/platform-config/cta/reorder', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items })
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({items})
   });
-  const data = await res.json();
-  if (data.success) showToast('Đã lưu thứ tự CTA');
+  showToast('✅ Đã lưu thứ tự CTA');
 }
 
 function openCTAModal() {
-  document.getElementById('cta-modal')?.classList.remove('hidden');
+  document.getElementById('cta-modal').classList.remove('hidden');
 }
+
 function closeCTAModal() {
-  document.getElementById('cta-modal')?.classList.add('hidden');
+  document.getElementById('cta-modal').classList.add('hidden');
 }
 
 async function saveCTA() {
@@ -673,69 +876,47 @@ async function saveCTA() {
     locale: document.getElementById('cta-locale').value,
     page_url: document.getElementById('cta-page-url').value || null,
     niche: document.getElementById('cta-niche').value || null,
-    priority: 0
+    priority: 0,
   };
+
   await fetch('/platform-config/cta', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload)
   });
+
   closeCTAModal();
   loadCTA();
 }
 
 async function deleteCTA(id) {
   if (!confirm('Xóa CTA template này?')) return;
-  await fetch('/platform-config/cta/' + id, { method: 'DELETE' });
+  await fetch(`/platform-config/cta/${id}`, {method: 'DELETE'});
   loadCTA();
 }
 
+// ─── Cache control ────────────────────────────────────────────
 async function invalidateCache() {
-  await fetch('/platform-config/cache/invalidate', { method: 'POST' });
-  showToast('Cache đã reload');
+  await fetch('/platform-config/cache/invalidate',
+              {method: 'POST'});
+  showToast('🔄 Cache đã được reload');
 }
 
+// ─── Platform switching ───────────────────────────────────────
 function switchPlatform(platform) {
   loadWorkflows(platform);
-  if (!document.getElementById('tab-content-selectors')?.classList.contains('hidden')) loadSelectors();
-  if (!document.getElementById('tab-content-cta')?.classList.contains('hidden')) loadCTA();
+  loadSelectors();
+  loadCTA();
 }
 
-function openPlatformModal() {
-  document.getElementById('platform-modal')?.classList.remove('hidden');
-}
-function closePlatformModal() {
-  document.getElementById('platform-modal')?.classList.add('hidden');
-}
-
-async function saveNewPlatform() {
-  const payload = {
-    platform: (document.getElementById('np-platform').value || '').trim().toLowerCase(),
-    adapter_class: (document.getElementById('np-adapter').value || '').trim(),
-    display_name: (document.getElementById('np-display').value || '').trim()
-  };
-  if (!payload.platform || !payload.adapter_class) {
-    showToast('Nhập platform và adapter class');
-    return;
-  }
-  const res = await fetch('/platform-config/platforms', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json();
-  if (data.success) {
-    closePlatformModal();
-    await loadPlatforms();
-    showToast('Đã thêm platform');
-  } else {
-    showToast(data.error || 'Lỗi');
-  }
-}
-
+// ─── Toast notification ───────────────────────────────────────
 function showToast(msg) {
   const toast = document.createElement('div');
-  toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg text-sm z-[60] transition-opacity duration-300';
+  toast.className = (
+    'fixed bottom-4 right-4 bg-gray-800 text-white '
+    + 'px-4 py-2 rounded-lg text-sm z-50 '
+    + 'transition-opacity duration-300'
+  );
   toast.textContent = msg;
   document.body.appendChild(toast);
   setTimeout(() => {
@@ -744,4 +925,5 @@ function showToast(msg) {
   }, 2500);
 }
 </script>
+
 {% endblock %}
