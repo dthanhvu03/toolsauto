@@ -1,4 +1,5 @@
 import logging
+import time
 import os
 from pathlib import Path
 import random
@@ -1034,9 +1035,17 @@ class FacebookAdapter(AdapterInterface):
         all_links = all(l.startswith('http') for l in lines)
         
         if all_links and lines:
-            # Wrap with random CTA
             link_text = '\n'.join(lines)
-            template = random.choice(FacebookAdapter.CTA_POOL)
+            try:
+                from app.services.workflow_registry import WorkflowRegistry
+
+                cta_list = WorkflowRegistry.get_cta_templates("facebook", locale="vi")
+            except Exception:
+                cta_list = []
+            if cta_list and cta_list != ["{link}"]:
+                template = random.choice(cta_list)
+            else:
+                template = random.choice(FacebookAdapter.CTA_POOL)
             return template.replace('{link}', link_text)
         else:
             # User wrote custom comment text, use as-is
@@ -1058,12 +1067,48 @@ class FacebookAdapter(AdapterInterface):
             self.page.goto(post_url, wait_until="domcontentloaded")
             self.page.wait_for_timeout(random.randint(3000, 5000))
             
+            # 1b. Debug: screenshot after page load to diagnose login walls
+            try:
+                _debug_path = f"/home/vu/toolsauto/data/debug_comment_{int(time.time())}.png"
+                self.page.screenshot(path=_debug_path)
+                logger.info("FacebookAdapter: Debug screenshot saved: %s", _debug_path)
+            except Exception:
+                pass
+            
+            # 1c. Dismiss login wall if present (common on Reels when session expired)
+            try:
+                _close_btn = self.page.locator("[aria-label='Close'], [aria-label='Đóng']").first
+                if _close_btn.count() > 0 and _close_btn.is_visible(timeout=2000):
+                    _close_btn.click()
+                    self.page.wait_for_timeout(1000)
+                    logger.info("FacebookAdapter: Dismissed login/popup overlay")
+            except Exception:
+                pass
+            
+            # 1d. Check if we're actually logged in
+            _is_logged_in = False
+            try:
+                # If there's a login form visible, session is expired
+                _login_form = self.page.locator("input[name='email'], input[name='pass']").first
+                if _login_form.count() > 0 and _login_form.is_visible(timeout=1500):
+                    logger.warning("FacebookAdapter: Login wall detected — session may be expired for this account")
+                else:
+                    _is_logged_in = True
+            except Exception:
+                _is_logged_in = True  # assume logged in if check fails
+            
             # 2. Casual scroll (human behavior)
             human_scroll(self.page)
             self.page.wait_for_timeout(random.randint(1000, 2000))
 
             # 2b. Reels / watch often hide the composer until "Comment" / "Bình luận" is clicked
+            # On Reels, the comment icon may NOT be a <button> — it can be a div/span/link
+            _opened_comment_section = False
+            
+            # Strategy 1: Try get_by_role("button") for standard posts
             for _open_name in ("Bình luận", "Comment", "Comments"):
+                if _opened_comment_section:
+                    break
                 try:
                     _bl = self.page.get_by_role("button", name=_open_name)
                     if _bl.count() == 0:
@@ -1073,32 +1118,120 @@ class FacebookAdapter(AdapterInterface):
                         _cand.scroll_into_view_if_needed()
                         self.page.wait_for_timeout(random.randint(200, 500))
                         _cand.click(timeout=15000)
-                        self.page.wait_for_timeout(random.randint(1500, 2500))
-                        logger.info("FacebookAdapter: Opened comment section via %r", _open_name)
-                        break
+                        self.page.wait_for_timeout(random.randint(3000, 5000))
+                        logger.info("FacebookAdapter: Opened comment section via button %r", _open_name)
+                        _opened_comment_section = True
                 except Exception:
                     continue
             
-            # 3. Find comment box (multiple selectors for i18n robustness)
+            # Strategy 2: Reels uses aria-label on div/span for the comment icon
+            if not _opened_comment_section:
+                _reel_comment_selectors = [
+                    "[aria-label='Bình luận']",
+                    "[aria-label='Comment']",
+                    "[aria-label='Comments']",
+                    "[aria-label='Để lại bình luận']",
+                    "[aria-label='Leave a comment']",
+                ]
+                for _sel in _reel_comment_selectors:
+                    if _opened_comment_section:
+                        break
+                    try:
+                        _loc = self.page.locator(_sel).first
+                        if _loc.count() > 0 and _loc.is_visible(timeout=1500):
+                            _loc.scroll_into_view_if_needed()
+                            self.page.wait_for_timeout(random.randint(200, 500))
+                            _loc.click(timeout=15000)
+                            self.page.wait_for_timeout(random.randint(3000, 5000))
+                            logger.info("FacebookAdapter: Opened comment section via selector %r", _sel)
+                            _opened_comment_section = True
+                    except Exception:
+                        continue
+            
+            # Strategy 3: Try link role
+            if not _opened_comment_section:
+                for _open_name in ("Bình luận", "Comment"):
+                    if _opened_comment_section:
+                        break
+                    try:
+                        _bl = self.page.get_by_role("link", name=_open_name)
+                        if _bl.count() == 0:
+                            continue
+                        _cand = _bl.first
+                        if _cand.is_visible(timeout=1200):
+                            _cand.click(timeout=15000)
+                            self.page.wait_for_timeout(random.randint(3000, 5000))
+                            logger.info("FacebookAdapter: Opened comment section via link %r", _open_name)
+                            _opened_comment_section = True
+                    except Exception:
+                        continue
+            
+            if not _opened_comment_section:
+                logger.warning("FacebookAdapter: Could not find/open comment section button")
+            
+            # 2c. Debug: screenshot after opening comment section
+            try:
+                _debug_path2 = f"/home/vu/toolsauto/data/debug_comment_after_{int(time.time())}.png"
+                self.page.screenshot(path=_debug_path2)
+                logger.info("FacebookAdapter: Debug screenshot (after comment click) saved: %s", _debug_path2)
+            except Exception:
+                pass
+            
+            # 3. Find comment box (multiple selectors for i18n + Reels robustness)
             comment_selectors = [
+                # Standard post layout (exact match)
                 "div[aria-label='Write a comment']",
                 "div[aria-label='Write a comment…']",
+                "div[aria-label='Write a comment...']",
                 "div[aria-label='Viết bình luận']",
                 "div[aria-label='Viết bình luận…']",
                 "div[aria-label='Viết bình luận...']",
+                # Reels / public comment variants
+                "div[aria-label='Viết bình luận công khai...']",
+                "div[aria-label='Viết bình luận công khai…']",
+                "div[aria-label='Write a public comment...']",
+                "div[aria-label='Write a public comment…']",
+                # Partial match fallbacks (CSS *=)
+                "div[contenteditable='true'][aria-label*='bình luận']",
+                "div[contenteditable='true'][aria-label*='comment']",
+                "div[contenteditable='true'][aria-label*='Comment']",
+                # Generic contenteditable textbox (last resort)
                 "div[contenteditable='true'][role='textbox']",
             ]
             
             comment_box = None
             for sel in comment_selectors:
-                loc = self.page.locator(sel).first
-                if loc.count() > 0:
-                    comment_box = loc
-                    logger.info("FacebookAdapter: Found comment box via: %s", sel)
-                    break
+                try:
+                    loc = self.page.locator(sel).first
+                    if loc.count() > 0 and loc.is_visible(timeout=1500):
+                        comment_box = loc
+                        logger.info("FacebookAdapter: Found comment box via: %s", sel)
+                        break
+                except Exception:
+                    continue
             
+            # Fallback: use Playwright's get_by_placeholder for Lexical editor
             if not comment_box:
-                logger.warning("FacebookAdapter: Comment box not found on post page.")
+                for _ph in ("Viết bình luận", "Write a comment", "Viết bình luận công khai"):
+                    try:
+                        _loc = self.page.get_by_placeholder(_ph).first
+                        if _loc.count() > 0 and _loc.is_visible(timeout=1500):
+                            comment_box = _loc
+                            logger.info("FacebookAdapter: Found comment box via placeholder: %r", _ph)
+                            break
+                    except Exception:
+                        continue
+            
+            # Diagnostic: if still not found, dump all textbox aria-labels for debugging
+            if not comment_box:
+                try:
+                    all_labels = self.page.eval_on_selector_all(
+                        "div[contenteditable='true'], [role='textbox']",
+                        "els => els.map(e => ({tag: e.tagName, role: e.getAttribute('role'), label: e.getAttribute('aria-label'), placeholder: e.getAttribute('aria-placeholder'), editable: e.contentEditable})).slice(0, 10)"
+                    )
+                    logger.warning("FacebookAdapter: Comment box not found. Available textboxes: %s", all_labels)
+                except Exception:
+                    logger.warning("FacebookAdapter: Comment box not found and diagnostic failed.")
                 return PublishResult(ok=False, error="Comment box not found", is_fatal=False)
             
             # 4. Click to focus comment box
