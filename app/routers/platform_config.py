@@ -34,12 +34,15 @@ def start_mcp_inspector(request: Request):
 
     # Step 2: Khởi tạo session tmux mới (Fixed from review: dùng HOST, CLIENT_PORT, SERVER_PORT và --)
     import os
+    import sys
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+    python_exec = sys.executable
+    mcp_script = os.path.join(project_root, "mcp_server.py")
     
     cmd = (
         f"cd {project_root} && "
         "HOST=0.0.0.0 CLIENT_PORT=6274 SERVER_PORT=6277 "
-        "npx -y @modelcontextprotocol/inspector -- venv/bin/python mcp_server.py"
+        f"npx -y @modelcontextprotocol/inspector -- {python_exec} {mcp_script}"
     )
     subprocess.run(["tmux", "new", "-d", "-s", session_name, cmd])
 
