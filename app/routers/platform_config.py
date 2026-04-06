@@ -166,12 +166,27 @@ def update_workflow_timing(
     workflow_id: int, payload: dict,
     db: Session = Depends(get_db)
 ):
+    timing = payload.get("timing_config", {})
+    
+    # ── [n8n-lite Phase 1 Hardening] Timing Validation ──
+    for key, val in timing.items():
+        if not isinstance(val, (int, float)) or val < 0:
+            return JSONResponse({"error": f"Timing '{key}' phải là số dương."}, status_code=400)
+        if val > 300000:
+            return JSONResponse({"error": f"Timing '{key}' vượt quá giới hạn cực đại 300000ms (5 phút)."}, status_code=400)
+            
+    if "upload_settle_wait" in timing and timing["upload_settle_wait"] < 1000:
+        return JSONResponse({"error": "upload_settle_wait tối thiểu là 1000ms để đảm bảo render DOM."}, status_code=400)
+        
+    if "feed_browse_pause" in timing and timing["feed_browse_pause"] < 500:
+        return JSONResponse({"error": "feed_browse_pause tối thiểu là 500ms để tránh bị detect boot."}, status_code=400)
+
     db.execute(text("""
         UPDATE workflow_definitions
         SET timing_config = :timing, updated_at = :now
         WHERE id = :id
     """), {
-        "timing": json.dumps(payload.get("timing_config", {})),
+        "timing": json.dumps(timing),
         "id": workflow_id,
         "now": int(time.time())
     })
@@ -371,3 +386,279 @@ def reorder_cta(payload: dict, db: Session = Depends(get_db)):
     db.commit()
     invalidate()
     return JSONResponse({"success": True})
+
+
+# ─── Phase 3D: Presets API ────────────────────────────────────────
+
+@router.get("/presets")
+def list_presets_api(platform: str = "facebook", job_type: str = "POST"):
+    from app.services.workflow_registry import WorkflowRegistry
+    return WorkflowRegistry.list_presets(platform, job_type)
+
+
+@router.post("/presets/apply")
+def apply_preset_api(payload: dict):
+    from app.services.workflow_registry import WorkflowRegistry
+    name = payload.get("name", "")
+    msg = WorkflowRegistry.apply_preset(name)
+    ok = "activated" in msg
+    return JSONResponse({"success": ok, "message": msg})
+
+
+@router.get("/runtime-config")
+def runtime_config_api(platform: str = "facebook", job_type: str = "POST"):
+    from app.services.workflow_registry import WorkflowRegistry
+    return WorkflowRegistry.get_runtime_snapshot(platform, job_type)
+
+
+@router.get("/selector-health")
+def selector_health_api():
+    from app.services.runtime_events import get_enriched_selector_health
+    return get_enriched_selector_health()
+
+
+@router.get("/presets/preview-switch")
+def preview_switch_api(
+    from_preset: str = "", to_preset: str = "", mode: str = "cache",
+    platform: str = "facebook", job_type: str = "POST"
+):
+    """Compute diff between two presets for impact preview modal."""
+    from app.services.workflow_registry import WorkflowRegistry, PRESET_DESCRIPTIONS
+    from app.database.core import SessionLocal
+    from sqlalchemy import text as sa_text
+
+    db = SessionLocal()
+    try:
+        nodes_to_query = [to_preset]
+        if mode == "db" or not from_preset:
+            nodes_to_query.append(from_preset)
+
+        # Tranh duplicate trong query IN (:a, :b) neu tuong tu nhau:
+        node_a = nodes_to_query[0]
+        node_b = nodes_to_query[1] if len(nodes_to_query) > 1 else node_a
+
+        rows = db.execute(sa_text(
+            "SELECT name, steps, timing_config, retry_config "
+            "FROM workflow_definitions WHERE name IN (:a, :b)"
+        ), {"a": node_a, "b": node_b}).fetchall()
+
+        presets = {}
+        for r in rows:
+            presets[r[0]] = {
+                "name": r[0],
+                "steps": json.loads(r[1] or "[]"),
+                "timing": json.loads(r[2] or "{}"),
+                "retry": json.loads(r[3] or "{}"),
+            }
+
+        # Override from_preset bang cache neu dang chay mode cache
+        if mode == "cache" and from_preset:
+            wf = WorkflowRegistry.get_workflow(platform, job_type)
+            if wf and wf.name == from_preset:
+                presets[from_preset] = {
+                    "name": wf.name,
+                    "steps": wf.steps or [],
+                    "timing": wf.timing or {},
+                    "retry": wf.retry or {}
+                }
+
+        if from_preset not in presets or to_preset not in presets:
+            return JSONResponse(
+                {"error": "Preset not found"}, status_code=404
+            )
+
+        f, t = presets[from_preset], presets[to_preset]
+
+        # Step diff
+        steps_removed = [s for s in f["steps"] if s not in t["steps"]]
+        steps_added = [s for s in t["steps"] if s not in f["steps"]]
+
+        # Timing diff
+        all_keys = set(list(f["timing"].keys()) + list(t["timing"].keys()))
+        timing_changed = []
+        for key in sorted(all_keys):
+            fv = f["timing"].get(key)
+            tv = t["timing"].get(key)
+            if fv != tv:
+                pct = None
+                if fv and tv and fv != 0:
+                    pct = round((tv - fv) / fv * 100)
+                timing_changed.append({
+                    "key": key,
+                    "from": fv,
+                    "to": tv,
+                    "change_pct": pct,
+                })
+
+        # Risk
+        risk_messages = []
+        if steps_removed:
+            risk_messages.append(
+                f"{len(steps_removed)} steps se bi SKIP "
+                f"({', '.join(steps_removed)})"
+            )
+        for tc in timing_changed:
+            if tc["change_pct"] and tc["change_pct"] <= -40:
+                risk_messages.append(
+                    f"{tc['key']} giam {abs(tc['change_pct'])}%"
+                )
+
+        risk_level = "safe"
+        if steps_removed:
+            risk_level = "warning"
+        if len(steps_removed) >= 2 or any(
+            tc["change_pct"] and tc["change_pct"] <= -50
+            for tc in timing_changed
+        ):
+            risk_level = "high"
+
+        return {
+            "from": {
+                **f, "description": PRESET_DESCRIPTIONS.get(f["name"], "")
+            },
+            "to": {
+                **t, "description": PRESET_DESCRIPTIONS.get(t["name"], "")
+            },
+            "diff": {
+                "steps_added": steps_added,
+                "steps_removed": steps_removed,
+                "timing_changed": timing_changed,
+            },
+            "risk_level": risk_level,
+            "risk_messages": risk_messages,
+        }
+    finally:
+        db.close()
+
+
+@router.get("/overview-warnings")
+def overview_warnings_api(
+    platform: str = "facebook", job_type: str = "POST"
+):
+    """Compute aggregated warnings for Overview alert banner."""
+    from app.services.workflow_registry import (
+        WorkflowRegistry, PRESET_DESCRIPTIONS, get_cache_status,
+    )
+    from app.services.runtime_events import get_enriched_selector_health
+
+    warnings = []
+
+    # 1. Selector health warnings
+    health = get_enriched_selector_health()
+    failing = health["summary"]["failing"]
+    low_rate = health["summary"]["warning"]
+    static_heavy = sum(
+        1 for i in health["items"]
+        if i["last_source"] == "static_fallback"
+    )
+
+    if failing >= 3:
+        warnings.append({
+            "severity": "critical",
+            "text": f"{failing} selectors dang fail hoan toan (0% hit rate). "
+                    "Worker co the khong hoan thanh job.",
+            "link": "selector-health",
+        })
+    elif failing > 0:
+        warnings.append({
+            "severity": "warning",
+            "text": f"{failing} selector dang fail. Xem Selector Health de xu ly.",
+            "link": "selector-health",
+        })
+    if low_rate > 0:
+        warnings.append({
+            "severity": "warning",
+            "text": f"{low_rate} selector co hit rate thap (<50%).",
+            "link": "selector-health",
+        })
+    if static_heavy >= 2:
+        warnings.append({
+            "severity": "warning",
+            "text": f"{static_heavy} selector dang dung static fallback.",
+            "link": "selector-health",
+        })
+
+    # 2. Cache warnings
+    cache = get_cache_status()
+    if cache["is_stale"]:
+        age = cache["age_seconds"]
+        if age and age > 300:
+            warnings.append({
+                "severity": "critical",
+                "text": f"Cache da cu ({int(age)}s). Config co the khong phan anh thay doi gan day.",
+                "link": "cache",
+            })
+        else:
+            warnings.append({
+                "severity": "warning",
+                "text": "Cache stale. Bam Reload de dong bo config moi nhat.",
+                "link": "cache",
+            })
+
+    # 3. Preset warnings
+    wf = WorkflowRegistry.get_workflow(platform, job_type)
+    if not wf:
+        warnings.append({
+            "severity": "critical",
+            "text": f"Khong co preset active cho {platform}:{job_type}. "
+                    "Worker se dung config mac dinh.",
+            "link": "preset",
+        })
+    elif wf.name and "fast" in wf.name:
+        skipped = [
+            s for s in WorkflowRegistry.get_step_resolution(platform, job_type)
+            if s["status"] == "SKIP"
+        ]
+        if skipped:
+            warnings.append({
+                "severity": "warning",
+                "text": f"Preset fast dang active - {len(skipped)} steps bi skip.",
+                "link": "preset",
+            })
+    elif wf.name and "stealth" in wf.name:
+        warnings.append({
+            "severity": "info",
+            "text": "Preset stealth active - delay tang, throughput giam.",
+            "link": "preset",
+        })
+
+    # 4. Timing warnings
+    if wf:
+        timing = wf.timing or {}
+        for k, v in timing.items():
+            if "browse" in k and isinstance(v, (int, float)) and v < 1000:
+                warnings.append({
+                    "severity": "warning",
+                    "text": f"Timing {k} = {v}ms - thap hon nguong khuyen nghi.",
+                    "link": "runtime",
+                })
+            if "settle" in k and isinstance(v, (int, float)) and v < 2000:
+                warnings.append({
+                    "severity": "warning",
+                    "text": f"Timing {k} = {v}ms - co the gay loi DOM chua render.",
+                    "link": "runtime",
+                })
+
+    # 5. CTA fallback warning
+    try:
+        cta = WorkflowRegistry.get_cta_templates(platform, locale="vi")
+        if cta == ["{link}"]:
+            warnings.append({
+                "severity": "info",
+                "text": "Khong co CTA template tuy chinh, dang dung fallback.",
+                "link": "cta",
+            })
+    except Exception:
+        pass
+
+    # Sort by severity
+    sev_order = {"critical": 0, "warning": 1, "info": 2}
+    warnings.sort(key=lambda w: sev_order.get(w["severity"], 9))
+
+    return {
+        "has_critical": any(w["severity"] == "critical" for w in warnings),
+        "has_warning": any(w["severity"] == "warning" for w in warnings),
+        "total": len(warnings),
+        "items": warnings,
+    }
+

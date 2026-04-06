@@ -11,6 +11,7 @@
     "build:css": "tailwindcss -i ./app/static/src/app.css -o ./app/static/app.css --minify",
     "watch:css": "tailwindcss -i ./app/static/src/app.css -o ./app/static/app.css --watch",
     "mcp:playwright": "npx -y @playwright/mcp@latest",
+    "mcp:debug": "npx @modelcontextprotocol/inspector venv/bin/python mcp_server.py",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

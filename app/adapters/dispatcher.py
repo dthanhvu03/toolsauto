@@ -2,9 +2,12 @@ import logging
 from app.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
 from app.services.media_processor import MediaProcessor
+from app.services.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
 
 logger = logging.getLogger(__name__)
+from app.services.runtime_events import emit as rt_emit
+from app.services import job_tracer
 
 from app.adapters.facebook.adapter import FacebookAdapter
 
@@ -26,10 +29,31 @@ class DummyAdapter(AdapterInterface):
         logger.info("DummyAdapter: close_session called")
 
 def get_adapter(platform: str) -> AdapterInterface:
-    """Registry pattern to get the appropriate adapter for a platform."""
-    if platform == "facebook":
+    """
+    Prefer DB-driven adapter from WorkflowRegistry (platform_configs.adapter_class).
+    Fall back to legacy routing if Registry fails or returns DummyAdapter for facebook
+    (missing/inactive row or import error — preserves previous publish behavior).
+    """
+    registry_adapter: AdapterInterface | None = None
+    try:
+        registry_adapter = WorkflowRegistry.get_adapter(platform)
+    except Exception as e:
+        logger.warning(
+            "[Dispatcher] WorkflowRegistry.get_adapter(%r) failed: %s",
+            platform,
+            e,
+            exc_info=True,
+        )
+
+    if registry_adapter is None:
+        if platform == "facebook":
+            return FacebookAdapter()
+        return DummyAdapter()
+
+    if platform == "facebook" and isinstance(registry_adapter, DummyAdapter):
         return FacebookAdapter()
-    return DummyAdapter()
+
+    return registry_adapter
 
 class Dispatcher:
     """
@@ -40,6 +64,40 @@ class Dispatcher:
     """
     
     @staticmethod
+    def _inject_cta(platform: str, text: str, locale: str = "vi") -> str:
+        """Inject random CTA into raw link text using Registry phase 2."""
+        if not text: return text
+        lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
+        if all(l.startswith('http') for l in lines) and lines:
+            try:
+                cta_list = WorkflowRegistry.get_cta_templates(platform, locale=locale)
+            except Exception as e:
+                logger.warning(f"[Dispatcher] CTA DB fetch failed: {e}")
+                cta_list = []
+                
+            if cta_list and cta_list != ["{link}"]:
+                import random
+                template = random.choice(cta_list)
+                rt_emit("cta_injected", platform=platform, locale=locale,
+                        source="db", template_preview=template[:50],
+                        pool_size=len(cta_list))
+            else:
+                if platform == "facebook":
+                    from app.adapters.facebook.adapter import FacebookAdapter
+                    import random
+                    template = random.choice(FacebookAdapter.CTA_POOL)
+                    rt_emit("cta_injected", platform=platform, locale=locale,
+                            source="static_fallback", template_preview=template[:50],
+                            reason="no DB templates")
+                else:
+                    template = "{link}"
+                    rt_emit("cta_injected", platform=platform, locale=locale,
+                            source="default", template_preview="{link}",
+                            reason="no templates for platform")
+            return template.replace("{link}", '\n'.join(lines))
+        return text
+    
+    @staticmethod
     def dispatch(job: Job, db=None) -> PublishResult:
         adapter = get_adapter(job.platform)
         if not adapter:
@@ -47,6 +105,26 @@ class Dispatcher:
             
         try:
             logger.info("[Job %s] Dispatching to %s adapter", job.id, job.platform)
+            
+            job_type = getattr(job, 'job_type', 'POST') or 'POST'
+            
+            # --- [n8n-lite Phase 2] Fetch Workflow active steps ---
+            active_steps = None
+            try:
+                workflow = WorkflowRegistry.get_workflow(job.platform, job_type)
+                if workflow and workflow.steps:
+                    active_steps = workflow.steps
+            except Exception as e:
+                logger.warning(f"[Dispatcher] Failed to fetch workflow steps for {job.platform}/{job_type}: {e}")
+            setattr(job, "active_steps", active_steps)
+            setattr(adapter, "active_steps", active_steps)
+            if active_steps is not None:
+                rt_emit("step_config_loaded", platform=job.platform,
+                        job_type=job_type, job_id=job.id,
+                        active_steps=active_steps, source="db")
+            
+            # --- Start Node Tracing ---
+            job_tracer.start_job_trace(job.id, job.platform, job_type, active_steps or [])
             
             # 1. Quick DB Check
             if job.external_post_id:
@@ -85,19 +163,33 @@ class Dispatcher:
                         logger.warning("[Job %s] FFmpeg failed (retryable): %s. Publishing original.", job.id, proc_result.error)
 
             # Lấy job_type để dùng cho execute flow
-            job_type = getattr(job, 'job_type', 'POST') or 'POST'
+            # --- [n8n-lite Phase 2] CTA Injection at Dispatcher level ---
+            # CTA logic pull up for both POST and COMMENT flow
+            final_comment_text = Dispatcher._inject_cta(job.platform, job.auto_comment_text)
             
             # 5. Execute based on job_type
             if job_type == "COMMENT":
                 # COMMENT job: navigate to post and add comment
                 logger.info("[Job %s] Dispatching COMMENT job on post: %s", job.id, job.post_url)
-                result = adapter.post_comment(job.post_url, job.auto_comment_text)
+                
+                # N8n-lite: Inject CTA to comment
+                result = adapter.post_comment(job.post_url, final_comment_text)
                 # COMMENT failures are NEVER fatal
                 if not result.ok:
                     result.is_fatal = False
+                
+                if result.ok:
+                    job_tracer.finish_job_trace(job.id, "completed")
+                else:
+                    job_tracer.finish_job_trace(job.id, "failed", result.error)
                 return result
             
             # POST job: standard publish flow
+            # N8n-lite: Inject CTA to caption if it exists
+            original_caption = getattr(job, "caption", "")
+            if original_caption:
+                job.caption = Dispatcher._inject_cta(job.platform, original_caption)
+                
             original_path = job.media_path
             if job.resolved_processed_media_path:
                 job.media_path = job.resolved_processed_media_path  # Temporarily swap for adapter
@@ -107,9 +199,16 @@ class Dispatcher:
             result = adapter.publish(job)
             
             job.media_path = original_path  # Restore original path
+            
+            if result.ok:
+                job_tracer.finish_job_trace(job.id, "completed")
+            else:
+                job_tracer.finish_job_trace(job.id, "failed", result.error)
+                
             return result
             
         except Exception as e:
+            job_tracer.finish_job_trace(job.id, "failed", str(e))
             # Check for specific class of session invalidation errors
             if "SessionInvalid" in type(e).__name__ or "SessionInvalid" in str(e):
                 logger.error("[Job %s] Adapter hit a fatal SessionInvalid exception. Account must be invalidated.", job.id)
