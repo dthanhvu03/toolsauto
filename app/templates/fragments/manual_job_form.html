@@ -84,7 +84,7 @@
             <button type="button" onclick="document.getElementById('manualJobDialog').close()"
                 class="app-btn text-sm px-4">Hủy</button>
             <button type="submit"
-                onclick="this.textContent='Đang xử lý...'; this.disabled=true; this.classList.add('opacity-60');"
+                onclick="this.innerHTML='<svg class=\'w-4 h-4 inline-block mr-1 animate-spin\' fill=\'none\' viewBox=\'0 0 24 24\'><circle class=\'opacity-25\' cx=\'12\' cy=\'12\' r=\'10\' stroke=\'currentColor\' stroke-width=\'4\'></circle><path class=\'opacity-75\' fill=\'currentColor\' d=\'M4 12a8 8 0 018-8v8H4z\'></path></svg>Đang xử lý...'; this.classList.add('opacity-60', 'pointer-events-none');"
                 class="app-btn app-btn-primary text-sm px-5"><svg class="w-4 h-4 inline-block mr-0.5" fill="none"
                     viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
