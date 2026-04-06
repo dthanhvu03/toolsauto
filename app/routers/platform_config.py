@@ -33,8 +33,11 @@ def start_mcp_inspector(request: Request):
     time.sleep(1)
 
     # Step 2: Khởi tạo session tmux mới (Fixed from review: dùng HOST, CLIENT_PORT, SERVER_PORT và --)
+    import os
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+    
     cmd = (
-        "cd /home/vu/toolsauto && "
+        f"cd {project_root} && "
         "HOST=0.0.0.0 CLIENT_PORT=6274 SERVER_PORT=6277 "
         "npx -y @modelcontextprotocol/inspector -- venv/bin/python mcp_server.py"
     )
