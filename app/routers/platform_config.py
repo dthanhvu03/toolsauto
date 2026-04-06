@@ -29,6 +29,8 @@ def start_mcp_inspector(request: Request):
 
     # Step 1: Dọn dẹp/Restart (Giết tmux session cũ nếu có như recommend)
     subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
+    subprocess.run("fuser -k 6274/tcp 6277/tcp", shell=True, capture_output=True)
+    time.sleep(1)
 
     # Step 2: Khởi tạo session tmux mới (Fixed from review: dùng HOST, CLIENT_PORT, SERVER_PORT và --)
     cmd = (
@@ -40,10 +42,12 @@ def start_mcp_inspector(request: Request):
 
     # Step 3: Poll output để lấy token
     auth_token = None
-    for _ in range(20):
+    last_out = ""
+    for _ in range(60):
         time.sleep(0.5)
         res = subprocess.run(["tmux", "capture-pane", "-p", "-t", session_name], capture_output=True, text=True)
         out = res.stdout
+        last_out = out
 
         # Parse token chuẩn (nghiêm ngặt theo specs)
         m = re.search(r"MCP_PROXY_AUTH_TOKEN=([a-zA-Z0-9]+)", out)
@@ -60,12 +64,15 @@ def start_mcp_inspector(request: Request):
         # Tự động kill nếu lỗi khởi chạy
         subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
         return JSONResponse(
-            {"error": "Không thể bắt được Auth Token. Có thể bị lỗi npm/cài đặt inspector."},
+            {"error": f"Không thể bắt được Auth Token. Dữ liệu log: {last_out[-200:] if last_out else 'Empty log'}"},
             status_code=500
         )
 
     # Step 4: Trả full absolute URL về Frontend (backend tự giải quyết host)
     host = request.url.hostname or "127.0.0.1"
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+        
     url = f"http://{host}:6274/?MCP_PROXY_AUTH_TOKEN={auth_token}"
 
     return JSONResponse({"success": True, "url": url})
