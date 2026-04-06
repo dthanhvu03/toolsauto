@@ -322,7 +322,10 @@ def app_settings_save(
 ):
     # updated_by: best-effort; no auth system yet
     updated_by = request.client.host if request.client else None
-    runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
+    try:
+        runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
+    except ValueError:
+        return RedirectResponse(url="/app/settings?m=save_error", status_code=303)
     return RedirectResponse(url="/app/settings?m=saved", status_code=303)
 
 
@@ -333,7 +336,10 @@ def app_settings_reset(
     key: str = Form(...),
 ):
     updated_by = request.client.host if request.client else None
-    runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
+    try:
+        runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
+    except ValueError:
+        return RedirectResponse(url="/app/settings?m=reset_error", status_code=303)
     return RedirectResponse(url="/app/settings?m=reset", status_code=303)
 
 
