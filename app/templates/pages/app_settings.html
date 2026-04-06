@@ -45,6 +45,10 @@
         Đã lưu cài đặt thành công.
       {% elif message == 'reset' %}
         Đã đặt lại một mục về giá trị mặc định.
+      {% elif message == 'save_error' %}
+        Không thể lưu: key không hợp lệ, mục chỉ cấu hình qua .env, hoặc giá trị không hợp lệ.
+      {% elif message == 'reset_error' %}
+        Không thể đặt lại: key không hợp lệ hoặc mục chỉ cấu hình qua .env.
       {% elif message.startswith('bulk_saved_') %}
         {% set rest = message[12:] %}
         {% set pair = rest.split('_reset_') %}
@@ -285,9 +289,11 @@
 
       {% for section, specs in sections.items() %}
         {% for spec in specs %}
+          {% if not spec.env_only %}
           <form id="reset-form-{{ spec.key }}" method="post" action="/app/settings/reset" class="hidden">
             <input type="hidden" name="key" value="{{ spec.key }}" />
           </form>
+          {% endif %}
         {% endfor %}
       {% endfor %}
     </div>
