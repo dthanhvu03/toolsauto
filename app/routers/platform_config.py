@@ -16,6 +16,68 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/platform-config", tags=["platform-config"])
 
 
+# ─── MCP Inspector API ───────────────────────────────────────────
+
+@router.post("/mcp-inspector/start")
+def start_mcp_inspector(request: Request):
+    """Start MCP Inspector via tmux and return the access URL."""
+    import subprocess
+    import re
+    import time
+
+    session_name = "n8n_mcp_inspector_ux"
+
+    # Step 1: Dọn dẹp/Restart (Giết tmux session cũ nếu có như recommend)
+    subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
+
+    # Step 2: Khởi tạo session tmux mới (Fixed from review: dùng HOST, CLIENT_PORT, SERVER_PORT và --)
+    cmd = (
+        "cd /home/vu/toolsauto && "
+        "HOST=0.0.0.0 CLIENT_PORT=6274 SERVER_PORT=6277 "
+        "npx -y @modelcontextprotocol/inspector -- venv/bin/python mcp_server.py"
+    )
+    subprocess.run(["tmux", "new", "-d", "-s", session_name, cmd])
+
+    # Step 3: Poll output để lấy token
+    auth_token = None
+    for _ in range(20):
+        time.sleep(0.5)
+        res = subprocess.run(["tmux", "capture-pane", "-p", "-t", session_name], capture_output=True, text=True)
+        out = res.stdout
+
+        # Parse token chuẩn (nghiêm ngặt theo specs)
+        m = re.search(r"MCP_PROXY_AUTH_TOKEN=([a-zA-Z0-9]+)", out)
+        if m:
+            auth_token = m.group(1)
+            break
+
+        m2 = re.search(r"Session token:\s*([a-zA-Z0-9]+)", out)
+        if m2:
+            auth_token = m2.group(1)
+            break
+
+    if not auth_token:
+        # Tự động kill nếu lỗi khởi chạy
+        subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
+        return JSONResponse(
+            {"error": "Không thể bắt được Auth Token. Có thể bị lỗi npm/cài đặt inspector."},
+            status_code=500
+        )
+
+    # Step 4: Trả full absolute URL về Frontend (backend tự giải quyết host)
+    host = request.url.hostname or "127.0.0.1"
+    url = f"http://{host}:6274/?MCP_PROXY_AUTH_TOKEN={auth_token}"
+
+    return JSONResponse({"success": True, "url": url})
+
+
+@router.post("/mcp-inspector/stop")
+def stop_mcp_inspector():
+    import subprocess
+    subprocess.run(["tmux", "kill-session", "-t", "n8n_mcp_inspector_ux"], capture_output=True)
+    return JSONResponse({"success": True, "message": "Đã ngừng Inspector"})
+
+
 # ─── Page ────────────────────────────────────────────────────────
 
 @router.get("/")
