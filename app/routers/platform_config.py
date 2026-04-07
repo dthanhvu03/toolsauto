@@ -132,8 +132,91 @@ def list_platforms(db: Session = Depends(get_db)):
 
 @router.post("/platforms")
 def add_platform(payload: dict, db: Session = Depends(get_db)):
+    import os
     now = int(time.time())
     try:
+        adapter_class_str = payload.get("adapter_class", "")
+        platform_id = payload.get("platform", "").lower()
+
+        # [No-Code] Skip file scaffolding for GenericAdapter — it's data-driven
+        is_generic = "generic.adapter.GenericAdapter" in adapter_class_str
+        
+        # [n8n-lite Phase 3] Auto-scaffold only for custom adapter classes
+        if adapter_class_str and platform_id and not is_generic:
+            try:
+                parts = adapter_class_str.split('.')
+                if len(parts) >= 2:
+                    class_name = parts[-1]
+                    module_path = ".".join(parts[:-1])
+                    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+                    file_path = os.path.join(project_root, module_path.replace('.', '/')) + ".py"
+                    dir_path = os.path.dirname(file_path)
+                    
+                    if not os.path.exists(file_path):
+                        os.makedirs(dir_path, exist_ok=True)
+                        init_path = os.path.join(dir_path, "__init__.py")
+                        if not os.path.exists(init_path):
+                            with open(init_path, "w") as f:
+                                pass
+                                
+                        template = f'''import logging
+from typing import Any
+from playwright.sync_api import Playwright, BrowserContext, Page, Locator
+from app.adapters.contracts import AdapterInterface, PublishResult
+from app.database.models import Job
+
+logger = logging.getLogger(__name__)
+
+class {class_name}(AdapterInterface):
+    """
+    Auto-generated Scaffolding for the {platform_id.capitalize()} adapter.
+    """
+    def __init__(self):
+        self.playwright: Playwright | None = None
+        self.context: BrowserContext | None = None
+        self.page: Page | None = None
+        
+    def open_session(self, profile_path: str) -> bool:
+        logger.info("{class_name}: Opening session at %s", profile_path)
+        # TODO: Implement session recovery
+        return False
+
+    def publish(self, job: Job) -> PublishResult:
+        logger.info("{class_name}: Attempting to publish job %s", job.id)
+        # TODO: Implement upload/post automation
+        return PublishResult(ok=False, is_fatal=False, error="Not implemented yet")
+
+    def check_published_state(self, job: Job) -> PublishResult:
+        logger.info("{class_name}: Checking footprint for job %s", job.id)
+        # TODO: Implement idempotency check
+        return PublishResult(ok=False, is_fatal=False, error="Not implemented yet")
+
+    def post_comment(self, post_url: str, comment_text: str) -> PublishResult:
+        logger.info("{class_name}: Posting comment to %s", post_url)
+        # TODO: Implement comment automation
+        return PublishResult(ok=False, is_fatal=False, error="Not implemented yet")
+
+    def close_session(self) -> None:
+        logger.info("{class_name}: Closing session")
+        if self.page:
+            try: self.page.close()
+            except Exception: pass
+        if self.context:
+            try: self.context.close()
+            except Exception: pass
+        if self.playwright:
+            try: self.playwright.stop()
+            except Exception: pass
+        self.page = None
+        self.context = None
+        self.playwright = None
+'''
+                        with open(file_path, "w") as f:
+                            f.write(template)
+                        logger.info(f"Auto-generated adapter scaffolding at {file_path}")
+            except Exception as scaffold_err:
+                logger.warning(f"Failed to auto-scaffold adapter for {platform_id}: {scaffold_err}")
+
         db.execute(text("""
             INSERT INTO platform_configs
             (platform, adapter_class, display_name, display_emoji,
@@ -215,7 +298,187 @@ def list_workflows(
     } for r in rows]
 
 
-@router.put("/workflows/{workflow_id}/steps")
+@router.post("/workflows/{workflow_id}/test")
+def test_workflow(workflow_id: int, payload: dict = {}, db: Session = Depends(get_db)):
+    """
+    Dry-run validation of a workflow.
+    Checks: step schema, selector coverage, value sources.
+    Does NOT launch a browser.
+    """
+    from app.services.workflow_registry import WorkflowRegistry
+
+    # Load workflow
+    row = db.execute(text(
+        "SELECT id, name, platform, job_type, steps, is_active "
+        "FROM workflow_definitions WHERE id = :id"
+    ), {"id": workflow_id}).fetchone()
+
+    if not row:
+        return JSONResponse({"success": False, "error": "Workflow not found"}, 404)
+
+    wf_name = row[1]
+    platform = row[2]
+    job_type = row[3]
+    supplied_steps = payload.get("steps") if payload else None
+    raw_steps = supplied_steps if supplied_steps is not None else json.loads(row[4] or "[]")
+    is_active = row[5]
+
+    results = []
+    overall_ok = True
+    warnings = []
+
+    if not is_active:
+        warnings.append("Workflow is inactive. Activate before use.")
+
+    VALID_ACTIONS = {"navigate", "click", "fill", "upload_file", "wait", "verify", "check_auth", "legacy"}
+    VALID_VALUE_SOURCES = {"job.caption", "job.media_path", "job.post_url", "account.username"}
+
+    for i, raw in enumerate(raw_steps):
+        step_result = {"index": i + 1, "checks": []}
+
+        # Parse step
+        if isinstance(raw, str):
+            step_result["name"] = raw
+            step_result["action"] = "legacy"
+            step_result["status"] = "pass"
+            step_result["checks"].append({
+                "check": "format",
+                "status": "pass",
+                "detail": f"Legacy static step (handled by Custom Adapter)."
+            })
+            results.append(step_result)
+            continue
+
+        name = raw.get("name", "unnamed")
+        action = raw.get("action", "unknown")
+        step_result["name"] = name
+        step_result["action"] = action
+        step_ok = True
+
+        # Check action type
+        if action not in VALID_ACTIONS:
+            step_result["checks"].append({
+                "check": "action",
+                "status": "fail",
+                "detail": f"Unknown action '{action}'. Valid: {', '.join(sorted(VALID_ACTIONS))}"
+            })
+            step_ok = False
+        else:
+            step_result["checks"].append({
+                "check": "action", "status": "pass", "detail": action
+            })
+
+        # Check selector coverage
+        selector_keys = raw.get("selector_keys", [])
+        if action in ("click", "fill", "upload_file") and not selector_keys:
+            step_result["checks"].append({
+                "check": "selectors",
+                "status": "fail",
+                "detail": "No selector_keys provided. Element cannot be found."
+            })
+            step_ok = False
+        elif selector_keys:
+            for key in selector_keys:
+                parts = key.split(":", 1)
+                if len(parts) == 2:
+                    cat, sel_name = parts
+                    db_selectors = WorkflowRegistry.get_selectors(platform, cat)
+                    matching = [s for s in db_selectors if s.selector_name == sel_name]
+                    if matching:
+                        step_result["checks"].append({
+                            "check": f"selector:{key}",
+                            "status": "pass",
+                            "detail": f"Found {len(matching)} selector(s) in DB"
+                        })
+                    else:
+                        step_result["checks"].append({
+                            "check": f"selector:{key}",
+                            "status": "warn",
+                            "detail": f"No DB selectors for '{key}'. Will rely on heuristic fallback."
+                        })
+                else:
+                    step_result["checks"].append({
+                        "check": f"selector:{key}",
+                        "status": "warn",
+                        "detail": f"Raw selector (no category:name format): '{key}'"
+                    })
+
+        # Check value_source
+        vs = raw.get("value_source", "")
+        if action in ("fill", "upload_file") and not vs:
+            step_result["checks"].append({
+                "check": "value_source",
+                "status": "fail",
+                "detail": "No value_source. Field will have nothing to fill/upload."
+            })
+            step_ok = False
+        elif vs:
+            if vs.startswith("literal:") or vs in VALID_VALUE_SOURCES:
+                step_result["checks"].append({
+                    "check": "value_source", "status": "pass", "detail": vs
+                })
+            else:
+                step_result["checks"].append({
+                    "check": "value_source",
+                    "status": "warn",
+                    "detail": f"Unrecognized source '{vs}'. May fail at runtime."
+                })
+
+        # Check URL for navigate
+        if action == "navigate":
+            url = raw.get("url", "")
+            url_key = raw.get("url_key", "")
+            if not url and not url_key and not vs:
+                step_result["checks"].append({
+                    "check": "url",
+                    "status": "fail",
+                    "detail": "Navigate has no url, url_key, or value_source."
+                })
+                step_ok = False
+            elif url_key:
+                base_url = WorkflowRegistry.get_base_url(platform, url_key)
+                if base_url:
+                    step_result["checks"].append({
+                        "check": "url", "status": "pass",
+                        "detail": f"url_key '{url_key}' -> {base_url}"
+                    })
+                else:
+                    step_result["checks"].append({
+                        "check": "url", "status": "warn",
+                        "detail": f"url_key '{url_key}' not found in base_urls."
+                    })
+            else:
+                step_result["checks"].append({
+                    "check": "url", "status": "pass", "detail": url or vs
+                })
+
+        step_result["status"] = "pass" if step_ok else "fail"
+        if not step_ok:
+            overall_ok = False
+        results.append(step_result)
+
+    # Summary
+    pass_count = sum(1 for r in results if r["status"] == "pass")
+    fail_count = sum(1 for r in results if r["status"] == "fail")
+    warn_count = sum(1 for r in results if r["status"] == "warn")
+
+    return JSONResponse({
+        "success": True,
+        "workflow": wf_name,
+        "platform": platform,
+        "job_type": job_type,
+        "overall": "pass" if overall_ok else "fail",
+        "summary": {
+            "total": len(results),
+            "pass": pass_count,
+            "fail": fail_count,
+            "warn": warn_count,
+        },
+        "warnings": warnings,
+        "steps": results,
+    })
+
+
 def update_workflow_steps(
     workflow_id: int, payload: dict,
     db: Session = Depends(get_db)
