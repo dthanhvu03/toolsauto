@@ -31,9 +31,16 @@ class DummyAdapter(AdapterInterface):
 def get_adapter(platform: str) -> AdapterInterface:
     """
     Prefer DB-driven adapter from WorkflowRegistry (platform_configs.adapter_class).
-    Fall back to legacy routing if Registry fails or returns DummyAdapter for facebook
-    (missing/inactive row or import error — preserves previous publish behavior).
+    Fall back to legacy routing if Registry fails or returns DummyAdapter/GenericAdapter
+    for platforms that have dedicated adapters (facebook, tiktok, instagram).
     """
+    from app.adapters.generic.adapter import GenericAdapter
+
+    # Map of platforms that have dedicated (non-Generic) adapters
+    _DEDICATED_ADAPTERS = {
+        "facebook": lambda: FacebookAdapter(),
+    }
+
     registry_adapter: AdapterInterface | None = None
     try:
         registry_adapter = WorkflowRegistry.get_adapter(platform)
@@ -46,12 +53,19 @@ def get_adapter(platform: str) -> AdapterInterface:
         )
 
     if registry_adapter is None:
-        if platform == "facebook":
-            return FacebookAdapter()
+        if platform in _DEDICATED_ADAPTERS:
+            return _DEDICATED_ADAPTERS[platform]()
         return DummyAdapter()
 
-    if platform == "facebook" and isinstance(registry_adapter, DummyAdapter):
-        return FacebookAdapter()
+    # If Registry returned DummyAdapter or GenericAdapter for a platform
+    # that has its own dedicated adapter, prefer the dedicated one.
+    if platform in _DEDICATED_ADAPTERS and isinstance(registry_adapter, (DummyAdapter, GenericAdapter)):
+        logger.info(
+            "[Dispatcher] Platform '%s' has dedicated adapter. "
+            "Overriding %s from Registry.",
+            platform, type(registry_adapter).__name__,
+        )
+        return _DEDICATED_ADAPTERS[platform]()
 
     return registry_adapter
 
