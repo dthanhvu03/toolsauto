@@ -1,0 +1,40 @@
+INFO: [WorkflowRegistry] Cache invalidated
+INFO: FacebookAdapter: Opening persistent context at profile: /tmp/dummy_fb_profile
+INFO: FacebookSessionManager: launch_persistent headless=False (FACEBOOK_PLAYWRIGHT_HEADLESS)
+INFO: FacebookAdapter: Navigation missing, checking for session recovery screen...
+DEBUG: FacebookAdapter: Resolved [recovery:session_recovery_button] -> 0 DB, 2 Static
+DEBUG: FacebookAdapter: Timing [feed_browse_pause] = 4000ms (Default)
+INFO: FacebookAdapter: Closing browser context securely.
+INFO: [WorkflowRegistry] Cache invalidated
+INFO: FacebookAdapter: Opening persistent context at profile: /tmp/dummy_fb_profile
+INFO: FacebookSessionManager: launch_persistent headless=False (FACEBOOK_PLAYWRIGHT_HEADLESS)
+INFO: FacebookAdapter: Navigation missing, checking for session recovery screen...
+DEBUG: FacebookAdapter: Resolved [recovery:session_recovery_button] -> 1 DB, 2 Static
+DEBUG: FacebookAdapter: Timing [feed_browse_pause] = 2000ms (DB)
+INFO: FacebookAdapter: Closing browser context securely.
+INFO: [WorkflowRegistry] Cache invalidated
+ERROR: [WorkflowRegistry] Load failed: (sqlite3.OperationalError) no such table: platform_configs
+[SQL: SELECT platform, adapter_class, display_name, display_emoji, base_urls, viewport, media_extensions FROM platform_configs WHERE is_active=1]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+DEBUG: FacebookAdapter: Resolved [recovery:session_recovery_button] -> 1 DB, 1 Static
+
+
+============================================================
+>> RUNNING SMOKE TEST: TEST A - FALLBACK BASELINE
+============================================================
+>> Opening Headless Playwright Session...
+>> Triggering authentication check (Selector bridge test)...
+>> Triggering browser navigation (Timing bridge test)...
+
+
+============================================================
+>> RUNNING SMOKE TEST: TEST B+C - DB OVERRIDE HIT
+============================================================
+>> Opening Headless Playwright Session...
+>> Triggering authentication check (Selector bridge test)...
+>> Triggering browser navigation (Timing bridge test)...
+
+
+============================================================
+>> RUNNING SMOKE TEST: TEST D - REGISTRY HARDENING
+============================================================

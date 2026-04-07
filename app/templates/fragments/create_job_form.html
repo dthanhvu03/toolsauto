@@ -241,7 +241,7 @@
                 const spaceLeft = MAX_FILES - fileQueue.length;
                 const toAdd = files.slice(0, spaceLeft);
                 if (files.length > spaceLeft) {
-                    alert(`You can only queue a maximum of ${MAX_FILES} files. Remaining files were ignored.`);
+                    showToast(`You can only queue a maximum of ${MAX_FILES} files. Remaining files were ignored.`, 'error');
                 }
 
                 fileQueue = [...fileQueue, ...toAdd];
@@ -359,11 +359,11 @@
             // --- Submission engine ---
             window.submitBulkJobs = async function () {
                 if (!accountSelect.value) {
-                    alert("Please select an Account first.");
+                    showToast("Please select an Account first.", 'error');
                     return;
                 }
                 if (!startTimeInput.value) {
-                    alert("Please select a Base Start Time.");
+                    showToast("Please select a Base Start Time.", 'error');
                     return;
                 }
 
@@ -397,7 +397,7 @@
                     // We physically swap the parent container DOM with the response
                     document.getElementById('create-job-form-container').outerHTML = htmlText;
                 } catch (err) {
-                    alert("Network error occurred during bulk upload.");
+                    showToast("Network error occurred during bulk upload.", 'error');
                     console.error(err);
                     enqueueBtn.disabled = false;
                     enqueueBtn.innerHTML = 'Enqueue Bulk Jobs';

@@ -398,8 +398,8 @@ function switchTab(tabId, btn) {
 document.body.addEventListener("htmx:responseError", function (evt) {
     try {
         const data = JSON.parse(evt.detail.xhr.response);
-        if (data.error) alert(data.error);
-    } catch (e) { alert("Lỗi máy chủ."); }
+        if (data.error) showToast(data.error, 'error');
+    } catch (e) { showToast("Lỗi máy chủ.", 'error'); }
 });
 
 // ════════════════════════════════════════
@@ -518,7 +518,7 @@ function validateCsvRow(row) {
 }
 
 function handleCsvFile(file) {
-    if (!file || !file.name.endsWith('.csv')) { alert('Vui lòng chọn file .csv'); return; }
+    if (!file || !file.name.endsWith('.csv')) { showToast('Vui lòng chọn file .csv', 'error'); return; }
     Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
@@ -543,7 +543,7 @@ function handleCsvFile(file) {
             });
             renderCsvPreview(isShopee);
         },
-        error: function(err) { alert('Lỗi đọc CSV: ' + err.message); }
+        error: function(err) { showToast('Lỗi đọc CSV: ' + err.message, 'error'); }
     });
 }
 
@@ -606,7 +606,7 @@ async function submitCsvImport() {
             comment: (r.comment || '').trim(),
             commission_rate: r.commission_rate ? Number(r.commission_rate) : null,
         }));
-    if (items.length === 0) { alert('Không có dòng nào được chọn.'); return; }
+    if (items.length === 0) { showToast('Không có dòng nào được chọn.', 'error'); return; }
 
     const btn = document.getElementById('csvSubmitBtn');
     btn.disabled = true;
@@ -619,12 +619,12 @@ async function submitCsvImport() {
             body: JSON.stringify({ items }),
         });
         const data = await res.json();
-        if (!res.ok) { alert(data.error || 'Lỗi máy chủ'); return; }
+        if (!res.ok) { showToast(data.error || 'Lỗi máy chủ', 'error'); return; }
         showCsvResult(data);
         // Reload table
         htmx.trigger(document.body, 'affiliatesChanged');
     } catch (e) {
-        alert('Lỗi kết nối: ' + e.message);
+        showToast('Lỗi kết nối: ' + e.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Import <span id="csvImportCount">' + items.length + '</span> dòng';
@@ -658,7 +658,7 @@ function showCsvResult(data) {
 // ════════════════════════════════════════
 async function runAiGenerate() {
     const name = document.getElementById('aiProductName').value.trim();
-    if (!name) { alert('Vui lòng nhập tên sản phẩm.'); return; }
+    if (!name) { showToast('Vui lòng nhập tên sản phẩm.', 'error'); return; }
 
     const btn = document.getElementById('aiGenerateBtn');
     const loading = document.getElementById('aiLoading');
@@ -684,9 +684,9 @@ async function runAiGenerate() {
         if (!res.ok) {
             if (data.status === 'VIOLATION' && data.violations && data.violations.length) {
                 const msg = data.violations.join('\n• ');
-                alert('❌ Nội dung vi phạm chính sách Facebook:\n• ' + msg + '\n\nVui lòng thử lại với từ khóa khác.');
+                showToast('❌ Nội dung vi phạm chính sách FB:\\n• ' + msg, 'error');
             } else {
-                alert(data.error || 'Lỗi AI');
+                showToast(data.error || 'Lỗi AI', 'error');
             }
             return;
         }
@@ -697,7 +697,7 @@ async function runAiGenerate() {
         }
         renderAiResult(data.data);
     } catch (e) {
-        alert('Lỗi kết nối: ' + e.message);
+        showToast('Lỗi kết nối: ' + e.message, 'error');
     } finally {
         btn.disabled = false;
         btn.classList.remove('opacity-60');

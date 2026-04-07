@@ -104,23 +104,31 @@ COOKIE_SYNC_SECRET=vuxuandao2026
 EOF
 ```
 
-### Bước 0.9: Khởi động hệ thống bằng PM2
+### Bước 0.9: Khởi động hệ thống bằng PM2 & Giữ log sạch sẽ
 
 ```bash
 cd /root/toolsauto
+# Cài plugin tự động xoay vòng log để tránh đầy ổ cứng
+pm2 install pm2-logrotate
+
 pm2 start ecosystem.config.js
 pm2 save
 pm2 startup    # Tự khởi động lại khi VPS reboot
 ```
 
-### Bước 0.10: Kiểm tra hệ thống
+### Bước 0.10: Kiểm tra hệ thống & Cấu hình HTTPS (BẮT BUỘC)
 
 ```bash
 pm2 list                    # 4 process phải hiện "online"
 curl http://localhost:8000   # Dashboard phải trả về HTML
 ```
 
-> ✅ **Xong!** Giờ mở trình duyệt vào `http://<IP_VPS>:8000` để dùng Dashboard.
+> ⚠️ **BẢO MẬT TỐI QUAN TRỌNG:**
+> Hệ thống hiện tại đã bật **Basic Authentication** (chặn bằng tài khoản `ADMIN_USERNAME` khai báo trong `.env`).
+> Tuy nhiên, Basic Auth sẽ truyền username/password dạng dễ đọc nếu không đi qua HTTPS.
+> **Anh BẮT BUỘC phải đặt VPS này đằng sau Nginx/Caddy có SSL, hoặc dùng Cloudflare Tunnel (HTTPS) trước khi mở public, nếu không thì pass cực dễ bị lộ.**
+
+> ✅ **Xong bước Deploy cơ bản!** Giờ truy cập thông qua domain HTTPS đã được móc nối vào port 8000.
 
 ---
 
