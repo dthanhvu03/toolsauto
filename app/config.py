@@ -11,6 +11,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "data" / "auto_publisher.db"))
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
+# Authentication & Security
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+
+if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+    import sys
+    print("CRITICAL: ADMIN_USERNAME and ADMIN_PASSWORD must be set in .env for production deployment.", file=sys.stderr)
+    sys.exit(1)
+
 # Worker Settings
 WORKER_TICK_SECONDS = int(os.getenv("WORKER_TICK_SECONDS", "20"))
 WORKER_CRASH_THRESHOLD_SECONDS = int(os.getenv("WORKER_CRASH_THRESHOLD_SECONDS", "300")) # 5 minutes

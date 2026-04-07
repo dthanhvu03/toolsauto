@@ -14,17 +14,23 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # Import routers
-from app.routers import dashboard, jobs, accounts, worker, health, telegram, viral, insights, syspanel, pages, gallery, manual_job, affiliates, database, compliance, platform_config
+from app.routers import auth, dashboard, jobs, accounts, worker, health, telegram, viral, insights, syspanel, pages, gallery, manual_job, affiliates, database, compliance, platform_config
 from app.services.notifier import NotifierService, TelegramNotifier
 import app.config as config
 
-app = FastAPI(title="Auto Publisher Dashboard")
+app = FastAPI(
+    title="Auto Publisher Dashboard",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
+)
 
 # Register Telegram Notifier when configured (no default secrets in config)
 if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
 
 # Include routers
+app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(jobs.router)
 app.include_router(accounts.router)
@@ -45,7 +51,50 @@ app.include_router(platform_config.router)
 # Static assets (SaaS UI CSS, etc.)
 app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "app" / "static")), name="static")
 
-# Provide a tiny request-scoped timestamp for templates (used in TikTok Links Age column)
+import secrets
+import base64
+from fastapi.responses import Response, JSONResponse, RedirectResponse
+from fastapi import Request
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+
+@app.middleware("http")
+async def cookie_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    
+    # Allowed paths without Auth
+    # /favicon.ico and /docs just in case, but we disabled docs above.
+    allowed_prefixes = ("/health", "/static", "/login", "/favicon.ico")
+    if any(path.startswith(p) for p in allowed_prefixes):
+        return await call_next(request)
+        
+    token = request.cookies.get("session_token")
+    is_authenticated = False
+    
+    if token:
+        try:
+            # Re-read secret key from config directly inside middleware 
+            signer = URLSafeTimedSerializer(config.SECRET_KEY)
+            # max_age=604800 (7 days)
+            payload = signer.loads(token, max_age=604800)
+            if payload.get("user") == "admin":
+                is_authenticated = True
+                request.state.user = payload
+        except Exception:
+            # Invalid or expired token
+            pass
+            
+    if is_authenticated:
+        return await call_next(request)
+        
+    # Unauthenticated handling
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept and request.method == "GET":
+        return RedirectResponse(url="/login")
+        
+    return JSONResponse(
+        content={"ok": False, "message": "Unauthorized or Session Expired"},
+        status_code=401
+    )
 @app.middleware("http")
 async def _inject_now_ts(request, call_next):
     import time as _time

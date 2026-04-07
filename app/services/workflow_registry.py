@@ -213,6 +213,9 @@ class WorkflowRegistry:
             mod_path, cls_name = config.adapter_class.rsplit(".", 1)
             module = importlib.import_module(mod_path)
             cls = getattr(module, cls_name)
+            # GenericAdapter needs platform name to load correct workflow
+            if cls_name == "GenericAdapter":
+                return cls(platform=platform)
             return cls()
         except Exception as e:
             logger.error(f"[Registry] Import failed: {e}")
