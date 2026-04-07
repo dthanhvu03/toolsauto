@@ -298,6 +298,36 @@ def list_workflows(
     } for r in rows]
 
 
+@router.post("/workflows")
+def create_workflow(payload: dict, db: Session = Depends(get_db)):
+    name = (payload.get("name") or "").strip()
+    platform = (payload.get("platform") or "").strip()
+    job_type = (payload.get("job_type") or "POST").strip()
+
+    if not name or not platform:
+        return JSONResponse({"error": "Tên workflow và Platform ID là bắt buộc."}, status_code=400)
+
+    # Check duplicate
+    exists = db.execute(
+        text("SELECT id FROM workflow_definitions WHERE name = :name"),
+        {"name": name}
+    ).fetchone()
+    if exists:
+        return JSONResponse({"error": f"Workflow '{name}' đã tồn tại."}, status_code=400)
+
+    now = int(time.time())
+    db.execute(text("""
+        INSERT INTO workflow_definitions
+        (name, platform, job_type, is_active, steps, timing_config, retry_config, created_at, updated_at)
+        VALUES (:name, :platform, :job_type, 0, '[]', '{}', '{}', :now, :now)
+    """), {
+        "name": name, "platform": platform, "job_type": job_type, "now": now
+    })
+    db.commit()
+    invalidate()
+    return JSONResponse({"success": True, "message": f"Đã tạo workflow '{name}'."})
+
+
 @router.post("/workflows/{workflow_id}/test")
 def test_workflow(workflow_id: int, payload: dict = {}, db: Session = Depends(get_db)):
     """
