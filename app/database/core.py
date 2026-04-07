@@ -12,6 +12,15 @@ engine = create_engine(
     }
 )
 
+from sqlalchemy import event
+
+@event.listens_for(engine, "connect")
+def pragma_on_connect(dbapi_con, con_record):
+    cursor = dbapi_con.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    cursor.execute("PRAGMA synchronous=NORMAL;")
+    cursor.close()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

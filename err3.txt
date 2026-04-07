@@ -1,0 +1,53 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /home/vu/toolsauto/venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/vu/toolsauto
+plugins: anyio-4.12.1
+collecting ... collected 1 item
+
+tests/test_n8n_lite_phase2.py::TestN8nLitePhase2::test_adapter_step_toggle_present FAILED
+
+=================================== FAILURES ===================================
+______________ TestN8nLitePhase2.test_adapter_step_toggle_present ______________
+
+self = <test_n8n_lite_phase2.TestN8nLitePhase2 object at 0x76fbb7012570>
+
+    def test_adapter_step_toggle_present(self):
+        # Nếu set active_steps CÓ 'type_comment'
+        adapter = FacebookAdapter()
+        adapter.active_steps = ["type_comment"]
+    
+        adapter.page = MagicMock()
+        adapter.page.locator.return_value.count.return_value = 1
+        adapter.page.locator.return_value.is_visible.return_value = True
+    
+        with patch('app.adapters.facebook.adapter.human_type') as mock_type:
+            adapter._wait_and_locate_array = MagicMock(return_value=MagicMock())
+            adapter.post_comment("https://fake", "Test comment")
+    
+>           mock_type.assert_called_once_with(adapter.page, "Test comment")
+
+tests/test_n8n_lite_phase2.py:73: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='human_type' id='130823477273296'>
+args = (<MagicMock id='130823749452816'>, 'Test comment'), kwargs = {}
+msg = "Expected 'human_type' to be called once. Called 0 times."
+
+    def assert_called_once_with(self, /, *args, **kwargs):
+        """assert that the mock was called exactly once and that that call was
+        with the specified arguments."""
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to be called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+>           raise AssertionError(msg)
+E           AssertionError: Expected 'human_type' to be called once. Called 0 times.
+
+/usr/lib/python3.12/unittest/mock.py:955: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.adapters.facebook.adapter:adapter.py:1272 FacebookAdapter: Comment box not found. Available textboxes: <MagicMock name='mock.eval_on_selector_all()' id='130823480008800'>
+=========================== short test summary info ============================
+FAILED tests/test_n8n_lite_phase2.py::TestN8nLitePhase2::test_adapter_step_toggle_present
+============================== 1 failed in 0.62s ===============================
