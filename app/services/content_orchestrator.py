@@ -16,9 +16,7 @@ import time
 import logging
 import json
 import re
-import math
-
-from app.services.gemini_rpa import GeminiRPAService
+from app.services.ai_runtime import pipeline
 import app.config as config
 
 logger = logging.getLogger(__name__)
@@ -51,7 +49,8 @@ class ContentOrchestrator:
         return cls._whisper_model
 
     def __init__(self):
-        self.gemini = GeminiRPAService()
+        self.sys_pipeline = pipeline
+        self.gemini = None  # Lazy load in fallback
         os.makedirs(THUMB_DIR, exist_ok=True)
 
     # ─── Helpers ───
@@ -497,76 +496,96 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
 
         prompt = mega_prompt + "\n\n" + context_block + "\n\n" + output_rules
 
-        logger.info("Bước 3/3: Bắn Prompt và Ảnh lên Gemini RPA...")
+        logger.info("Bước 3/3: Bắn Prompt và Ảnh lên 9Router Pipeline...")
         t0 = time.time()
-        # Gọi Gemini
+        
+        # Gọi Pipeline thay cho RPA
+        payload, meta = self.sys_pipeline.generate_caption(prompt, target_image)
+        logger.info("9Router Pipeline trả về [%s]: %s (%.1fs)", 
+                    meta.get("status"), meta.get("fail_reason", "none"), time.time() - t0)
+
+        result = {"caption": "", "hashtags": [], "keywords": [], "affiliate_keyword": "", "reasoning": ""}
+        
+        if meta.get("status") == "ok" and payload:
+            result["caption"] = payload.caption
+            result["hashtags"] = payload.hashtags
+            result["keywords"] = payload.keywords
+            result["affiliate_keyword"] = payload.affiliate_keyword
+            result["reasoning"] = payload.reasoning
+            
+            if hasattr(self, 'current_job') and self.current_job:
+                self.current_job.ai_reasoning = payload.reasoning
+            
+            return result
+            
+        # NẾU 9ROUTER LỖI -> FEATURE FLAG FALLBACK
+        use_rpa = getattr(config, "USE_RPA_FALLBACK", True)
+        if use_rpa:
+            logger.warning("⚠️ 9Router thất bại (%s). Kích hoạt RPA Fallback...", meta.get("fail_reason"))
+            return self._fallback_rpa_generation(prompt, target_image, result)
+        else:
+            # Thuần khiết: Fail nhanh, ném lên cho PM2 Worker tự xử lý (short retry / long backoff)
+            raise OutputContractViolation(f"9Router Failed: {meta.get('fail_reason')}")
+
+    def _fallback_rpa_generation(self, prompt: str, target_image: str, default_result: dict) -> dict:
+        """Fallback RPA cũ, sẽ gỡ bỏ ở Phase 4."""
+        if not getattr(self, "gemini", None):
+            from app.services.gemini_rpa import GeminiRPAService
+            self.gemini = GeminiRPAService()
+            
+        result = dict(default_result)
         raw_json = None
         try:
             raw_json = self.gemini.ask_with_file(prompt, target_image)
-            logger.info("Gemini RPA xong (%.1fs)", time.time() - t0)
         except Exception as e:
             logger.error("Lỗi cự tuyệt (Crash) từ Gemini RPA: %s", e)
 
-        # Lốp dự phòng (API Fallback)
+        # Lốp dự phòng API (cũ)
         if not raw_json:
-            logger.warning("⚠️ Gemini RPA thất bại (Cookie hết hạn hoặc timeout). Kích hoạt lốp dự phòng API Fallback...")
             try:
                 from app.services.gemini_api import GeminiAPIService
                 api_fallback = GeminiAPIService()
                 raw_json = api_fallback.ask_with_file(prompt, target_image)
             except Exception as api_err:
-                logger.error("Lỗi kích hoạt API Fallback: %s", api_err)
+                pass
                 
         if not raw_json:
-            logger.error("Cả 2 phương án AI (RPA và API) đều không phản hồi. Kích hoạt 'Poorman's Logic' (Fallback)...")
+            logger.error("RPA/API cũ đều không phản hồi. Kích hoạt 'Poorman's Logic' (Fallback)...")
             return self._poorman_caption_fallback(target_image)
-        
-        # Parse JSON
+            
         import json as _json
         try:
-            # Clean possible markdown wrap
             clean_json = raw_json.strip()
             if clean_json.startswith("```json"):
                 clean_json = clean_json.split("```json")[-1].split("```")[0].strip()
             elif clean_json.startswith("```"):
                 clean_json = clean_json.split("```")[-1].split("```")[0].strip()
-            
+                
             data = _json.loads(clean_json)
             result["caption"] = data.get("caption", "")
             result["hashtags"] = data.get("hashtags", [])
             result["keywords"] = data.get("keywords", [])
             result["affiliate_keyword"] = data.get("affiliate_keyword", "")
-            
-            # ─── New V4 Step: Save AI Strategic Reasoning ───
             if hasattr(self, 'current_job') and self.current_job:
                 self.current_job.ai_reasoning = data.get("reasoning", "")
-                logger.info("AI Reasoning captured: %s", self.current_job.ai_reasoning)
-
         except Exception as e:
-            logger.error("Lỗi parse JSON từ Gemini: %s. Raw: %s", e, raw_json)
-            # Fallback to old parsing if new parsing fails
             result = self._parse_response(raw_json, strict_json=True)
 
-        # Triệt để: nếu Gemini không trả đúng JSON schema → ép 1 vòng "self-repair" (không re-upload file).
-        # Điều kiện: response không hề chứa dấu hiệu JSON keys, hoặc parse ra caption rỗng.
-        if not self._is_valid_caption_schema_json(json.dumps(result, ensure_ascii=False)): # Use json.dumps to ensure it's a string representation of the result dict
+        if not self._is_valid_caption_schema_json(_json.dumps(result, ensure_ascii=False)):
             try:
-                repair_prompt = self._build_repair_prompt(raw_json) # Use raw_json for repair
-                t1 = time.time()
+                repair_prompt = self._build_repair_prompt(raw_json)
                 repaired = self.gemini.ask(repair_prompt)
-                logger.info("Self-repair JSON xong (%.1fs)", time.time() - t1)
                 if repaired:
                     repaired_result = self._parse_response(repaired, strict_json=True)
                     if self._is_valid_caption_schema_json(repaired):
                         result = repaired_result
-            except Exception as e:
-                logger.warning("Self-repair JSON failed: %s", e)
+            except Exception:
+                pass
 
-        # STRICT: fail-closed if still not valid JSON (do not let fallback fill garbage)
-        if not self._is_valid_caption_schema_json(json.dumps(result, ensure_ascii=False)):
-            raise OutputContractViolation("Gemini did not return valid JSON caption schema")
+        if not self._is_valid_caption_schema_json(_json.dumps(result, ensure_ascii=False)):
+            raise OutputContractViolation("Gemini RPA did not return valid JSON caption schema")
 
-        # ─── Anti-Hallucination Guard: detect prompt echo-back ───
+        # Anti-Hallucination Guard: detect prompt echo-back
         caption_lower = (result.get("caption") or "").lower()
         HALLUCINATION_MARKERS = [
             "chuyên gia content facebook ads",
@@ -582,16 +601,11 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
         ]
         hallucination_hits = sum(1 for m in HALLUCINATION_MARKERS if m in caption_lower)
         if hallucination_hits >= 2:
-            logger.error(
-                "HALLUCINATION DETECTED (%d markers matched). Caption is prompt echo-back. Rejecting.",
-                hallucination_hits,
-            )
             raise OutputContractViolation(
                 f"Gemini hallucinated prompt echo-back ({hallucination_hits} markers). "
                 f"Caption preview: {caption_lower[:120]}"
             )
 
-        logger.info("Hoàn tất: %s...", result["caption"][:50] if result["caption"] else "(empty)")
         return result
 
     def _poorman_caption_fallback(self, target_image: str) -> dict:

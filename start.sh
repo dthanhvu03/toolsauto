@@ -35,7 +35,9 @@ fi
 if [ "${1:-}" = "stop" ]; then
     echo -e "${YELLOW}Đang dừng Auto Publisher...${NC}"
     if command -v pm2 &>/dev/null; then
-        pm2 delete FB_Publisher AI_Generator Maintenance Web_Dashboard 2>/dev/null || true
+        pm2 delete FB_Publisher_1 FB_Publisher_2 AI_Generator_1 AI_Generator_2 Maintenance Web_Dashboard 9Router_Gateway 2>/dev/null || true
+        # Dọn legacy names (trước khi có naming convention _1/_2)
+        pm2 delete FB_Publisher AI_Generator 2>/dev/null || true
         pm2 save 2>/dev/null || true
     fi
     [ -f "./stop.sh" ] && bash ./stop.sh || true
@@ -77,13 +79,16 @@ fi
 
 # ─── Dọn tiến trình cũ (chỉ tiến trình của project, không kill Chrome hệ thống) ─
 echo "Dọn tiến trình cũ của project..."
-pm2 delete FB_Publisher AI_Generator Maintenance Web_Dashboard 2>/dev/null || true
+pm2 delete FB_Publisher_1 FB_Publisher_2 AI_Generator_1 AI_Generator_2 Maintenance Web_Dashboard 9Router_Gateway 2>/dev/null || true
+# Dọn legacy names (trước khi có naming convention _1/_2)
+pm2 delete FB_Publisher AI_Generator 2>/dev/null || true
 pkill -f "python workers/publisher.py" 2>/dev/null || true
 pkill -f "python workers/ai_generator.py" 2>/dev/null || true
 pkill -f "python workers/maintenance.py" 2>/dev/null || true
 pkill -f "python worker.py" 2>/dev/null || true
 pkill -f "uvicorn app.main:app" 2>/dev/null || true
 pkill -f "run_web.py" 2>/dev/null || true
+pkill -f "9router" 2>/dev/null || true
 sleep 1
 
 # ─── Khởi động qua PM2 ────────────────────────────────────────────────────
@@ -96,14 +101,30 @@ if command -v pm2 &>/dev/null; then
     PM2_MEM_MAINT="${PM2_MEM_MAINT:-800M}"
     PM2_MEM_WEB="${PM2_MEM_WEB:-500M}"
 
-    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run --server-num=99 --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/publisher.py'" \
-        --name "FB_Publisher" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_PUBLISHER"
-    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run --server-num=100 --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/ai_generator.py'" \
-        --name "AI_Generator" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_AI"
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/publisher.py'" \
+        --name "FB_Publisher_1" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_PUBLISHER"
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/publisher.py'" \
+        --name "FB_Publisher_2" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_PUBLISHER"
+        
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/ai_generator.py'" \
+        --name "AI_Generator_1" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_AI"
+    pm2 start "bash -c 'unset DISPLAY; exec env -u DISPLAY xvfb-run -a --server-args=\"-screen 0 1280x1024x24 -ac +extension GLX +render -noreset\" $VENV_PYTHON workers/ai_generator.py'" \
+        --name "AI_Generator_2" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_AI"
+        
     pm2 start "$VENV_PYTHON workers/maintenance.py" \
         --name "Maintenance" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_MAINT"
     pm2 start "$VENV_PYTHON manage.py serve --no-reload" \
         --name "Web_Dashboard" --cwd "$APP_DIR" --update-env --time --max-memory-restart "$PM2_MEM_WEB"
+        
+    if command -v 9router &>/dev/null; then
+        pm2 start 9router --name "9Router_Gateway" --cwd "$APP_DIR" --time --max-memory-restart "500M"
+    else
+        echo -e "${YELLOW}Cảnh báo: 9router chưa được cài (sudo npm i -g 9router). Bỏ qua khởi động AI Gateway.${NC}"
+    fi
+    
+    # Standby workers by default
+    pm2 stop FB_Publisher_2 AI_Generator_2
+    
     pm2 save
     echo ""
     echo -e "${GREEN}✅ Đã khởi động (PM2).${NC}"
@@ -126,12 +147,20 @@ fi
 $VENV_PYTHON manage.py serve --no-reload > web.log 2>&1 &
 WEB_PID=$!
 sleep 2
-env -u DISPLAY xvfb-run --server-num=99 --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" $VENV_PYTHON workers/publisher.py > pub_worker.log 2>&1 &
+env -u DISPLAY xvfb-run -a --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" $VENV_PYTHON workers/publisher.py > pub_worker.log 2>&1 &
 PUB_PID=$!
-env -u DISPLAY xvfb-run --server-num=100 --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" $VENV_PYTHON workers/ai_generator.py > ai_worker.log 2>&1 &
+env -u DISPLAY xvfb-run -a --server-args="-screen 0 1280x1024x24 -ac +extension GLX +render -noreset" $VENV_PYTHON workers/ai_generator.py > ai_worker.log 2>&1 &
 AI_PID=$!
 $VENV_PYTHON workers/maintenance.py > maint_worker.log 2>&1 &
 MAINT_PID=$!
+
+if command -v 9router &>/dev/null; then
+    9router > 9router.log 2>&1 &
+    NINEROUTER_PID=$!
+    echo $NINEROUTER_PID > .run_9router.pid
+else
+    echo -e "${YELLOW}Cảnh báo: Cần cài 9router (sudo npm i -g 9router). Nhảy qua.${NC}"
+fi
 
 echo $WEB_PID > .run_web.pid
 echo $PUB_PID > .run_pub.pid
