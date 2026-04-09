@@ -24,6 +24,10 @@
     .section-card { @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6; }
     .action-btn { @apply flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap [&>svg]:shrink-0 rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-95 select-none cursor-pointer; }
     .htmx-request { opacity: 0.6; pointer-events: none; }
+    /* PM2 row button spinner: hidden by default, shown when HTMX request is in flight */
+    .htmx-spinner { display: none; }
+    .htmx-request .htmx-spinner { display: inline-block; }
+    .htmx-request .btn-label { display: none; }
 </style>
 {% endblock %}
 
@@ -234,6 +238,22 @@
     <div class="lg:col-span-1 2xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col">
         <div class="flex items-center justify-between gap-3 mb-4">
             <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg> 9Router API Gateway
+                <span class="text-[10px] font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5" title="Chạy trong thread này riêng biệt">Per-Process</span>
+            </h2>
+            <button hx-get="/syspanel/fragments/9router-tuner" hx-target="#9router-container" hx-swap="innerHTML" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">↻ Refresh</button>
+        </div>
+        <div id="9router-container" hx-get="/syspanel/fragments/9router-tuner" hx-trigger="load" hx-swap="innerHTML">
+            <div class="text-sm text-gray-400 animate-pulse">Loading 9Router system...</div>
+        </div>
+    </div>
+
+    <!-- AI Persona Tuner -->
+    <div class="lg:col-span-1 2xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col">
+        <div class="flex items-center justify-between gap-3 mb-4">
+            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -279,11 +299,14 @@
             <div class="flex flex-wrap gap-2 sm:ml-auto items-center">
                 <select id="log-worker"
                     class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
-                    <optgroup label="── Vu PM2 ──">
-                        <option value="FB_Publisher">FB_Publisher</option>
-                        <option value="AI_Generator">AI_Generator</option>
+                    <optgroup label="── Workers (Scaled) ──">
+                        <option value="FB_Publisher_1">FB_Publisher_1</option>
+                        <option value="FB_Publisher_2">FB_Publisher_2</option>
+                        <option value="AI_Generator_1">AI_Generator_1</option>
+                        <option value="AI_Generator_2">AI_Generator_2</option>
                         <option value="Maintenance">Maintenance</option>
                         <option value="Web_Dashboard" selected>Web_Dashboard</option>
+                        <option value="9Router_Gateway">9Router_Gateway</option>
                     </optgroup>
                     <optgroup label="── Root PM2 (production) ──">
                         <option value="ai-worker">ai-worker</option>

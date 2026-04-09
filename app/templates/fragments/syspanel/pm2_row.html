@@ -1,0 +1,75 @@
+<!-- fragments/syspanel/pm2_row.html -->
+<tr id="pm2-row-{{ p.name }}" class="hover:bg-gray-50/50 transition-colors">
+    <td class="py-2.5 pr-4">
+        <span class="font-mono font-semibold text-gray-800">{{ p.name }}</span>
+        <span class="text-xs text-gray-400 ml-1">#{{ p.id }}</span>
+    </td>
+    <td class="py-2.5 pr-4">
+        {% if p.status == 'online' %}
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> online
+        </span>
+        {% elif p.status == 'stopped' %}
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> stopped
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 rounded-full text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> {{ p.status }}
+        </span>
+        {% endif %}
+    </td>
+    <td class="py-2.5 pr-4">
+        <span class="{% if p.cpu > 50 %}text-amber-600 font-semibold{% else %}text-gray-600{% endif %}">
+            {{ p.cpu }}%
+        </span>
+    </td>
+    <td class="py-2.5 pr-4">
+        <span class="{% if p.mem_mb > 500 %}text-red-500 font-semibold{% else %}text-gray-600{% endif %}">
+            {{ p.mem_mb }} MB
+        </span>
+    </td>
+    <td class="py-2.5 pr-4 text-gray-500">{{ p.uptime }}</td>
+    <td class="py-2.5 pr-4">
+        <span class="{% if p.restarts > 5 %}text-red-500 font-bold{% else %}text-gray-500{% endif %}">
+            {{ p.restarts }}
+        </span>
+    </td>
+    <td class="py-2.5">
+        <div class="flex items-center gap-2">
+            {% if p.status == 'online' %}
+            <form hx-post="/syspanel/cmd/pm2-action" hx-target="#pm2-row-{{ p.name }}" hx-swap="outerHTML"
+                  hx-disabled-elt="find button" hx-indicator="find .htmx-spinner" class="m-0 w-min">
+                <input type="hidden" name="action" value="stop">
+                <input type="hidden" name="name" value="{{ p.name }}">
+                <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-red-50 text-red-600 hover:bg-red-100 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
+                    <span class="btn-label">Stop</span>
+                    <svg class="htmx-spinner hidden w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" stroke-linecap="round"></circle></svg>
+                </button>
+            </form>
+            <form hx-post="/syspanel/cmd/pm2-action" hx-target="#pm2-row-{{ p.name }}" hx-swap="outerHTML"
+                  hx-disabled-elt="find button" hx-indicator="find .htmx-spinner" class="m-0 w-min">
+                <input type="hidden" name="action" value="restart">
+                <input type="hidden" name="name" value="{{ p.name }}">
+                <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    <span class="btn-label">Restart</span>
+                    <svg class="htmx-spinner hidden w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" stroke-linecap="round"></circle></svg>
+                </button>
+            </form>
+            {% else %}
+            <form hx-post="/syspanel/cmd/pm2-action" hx-target="#pm2-row-{{ p.name }}" hx-swap="outerHTML"
+                  hx-disabled-elt="find button" hx-indicator="find .htmx-spinner" class="m-0 w-min">
+                <input type="hidden" name="action" value="start">
+                <input type="hidden" name="name" value="{{ p.name }}">
+                <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+                    <span class="btn-label">Start</span>
+                    <svg class="htmx-spinner hidden w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="31.4 31.4" stroke-linecap="round"></circle></svg>
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </td>
+</tr>
