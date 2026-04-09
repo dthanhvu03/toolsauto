@@ -204,20 +204,8 @@ class AICaptionPipeline:
             return None
 
     def _check_vision_compatibility(self, model: str, has_image: bool) -> bool:
-        if not has_image:
-            return True
-            
-        VISION_SUPPORTED_PREFIXES = ["gemini-1.5", "gemini-2.0", "gemini-2.5", "claude-3", "gpt-4o", "gpt-4-turbo"]
-        model_lower = model.lower()
-        if any(prefix in model_lower for prefix in VISION_SUPPORTED_PREFIXES):
-            return True
-            
-        # Fail fast for pure text models if we know they definitely lack vision
-        if "kimi-k2" in model_lower:
-            return False
-            
-        # If unknown, assume NOT supported to fail fast and prevent wasted requests.
-        return False
+        # Cho phép mọi model thoải mái xử lý ảnh (bỏ cơ chế lọc theo yêu cầu của user)
+        return True
 
     def _extract_and_parse_json(self, raw_text: str) -> Optional[CaptionPayload]:
         if not raw_text:
