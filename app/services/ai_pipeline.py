@@ -207,7 +207,7 @@ class AICaptionPipeline:
         if not has_image:
             return True
             
-        VISION_SUPPORTED_PREFIXES = ["gemini-1.5", "claude-3", "gpt-4o", "gpt-4-turbo"]
+        VISION_SUPPORTED_PREFIXES = ["gemini-1.5", "gemini-2.0", "gemini-2.5", "claude-3", "gpt-4o", "gpt-4-turbo"]
         model_lower = model.lower()
         if any(prefix in model_lower for prefix in VISION_SUPPORTED_PREFIXES):
             return True
