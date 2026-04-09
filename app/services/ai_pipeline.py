@@ -101,8 +101,9 @@ class AICaptionPipeline:
         self.circuit_breaker = CircuitBreaker(failure_ttl=1800, success_ttl=60, max_failures=3)
         
         # Load initial config
+        default_router_url = os.environ.get("ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
         self.enabled = True
-        self.base_url = "http://localhost:20128/v1"
+        self.base_url = default_router_url
         self.api_key = ""
         self.default_model = "if/gemini-1.5-flash"
         
@@ -131,7 +132,8 @@ class AICaptionPipeline:
                 data = json.load(f)
                 
             enabled = bool(data.get("enabled", True))
-            base_url = str(data.get("base_url", "http://localhost:20128/v1"))
+            default_router_url = os.environ.get("ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+            base_url = str(data.get("base_url", default_router_url))
             api_key = str(data.get("api_key", ""))
             default_model = str(data.get("default_model", "if/gemini-1.5-flash"))
             
@@ -205,7 +207,7 @@ class AICaptionPipeline:
         if not has_image:
             return True
             
-        VISION_SUPPORTED_PREFIXES = ["gemini-1.5", "claude-3", "gpt-4o", "gpt-4-turbo"]
+        VISION_SUPPORTED_PREFIXES = ["gemini-1.5", "gemini-2.0", "gemini-2.5", "claude-3", "gpt-4o", "gpt-4-turbo"]
         model_lower = model.lower()
         if any(prefix in model_lower for prefix in VISION_SUPPORTED_PREFIXES):
             return True
