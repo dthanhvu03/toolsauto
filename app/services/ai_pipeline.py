@@ -9,7 +9,7 @@ import io
 import logging
 from enum import Enum
 from typing import Optional, List, Dict, Any, Tuple
-from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
+from pydantic import BaseModel, Field, ValidationError, validator
 
 try:
     from PIL import Image
@@ -80,9 +80,10 @@ class CaptionPayload(BaseModel):
     affiliate_keyword: str = ""
     reasoning: str = ""
 
-    model_config = ConfigDict(populate_by_name=True)
+    class Config:
+        allow_population_by_field_name = True
 
-    @field_validator('caption')
+    @validator('caption')
     @classmethod
     def check_generic_caption(cls, v: str) -> str:
         lower_v = v.strip().lower()
