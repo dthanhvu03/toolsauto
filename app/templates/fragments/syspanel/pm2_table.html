@@ -15,56 +15,7 @@
         </thead>
         <tbody class="divide-y divide-gray-50">
             {% for p in procs %}
-            <tr class="hover:bg-gray-50/50 transition-colors">
-                <td class="py-2.5 pr-4">
-                    <span class="font-mono font-semibold text-gray-800">{{ p.name }}</span>
-                    <span class="text-xs text-gray-400 ml-1">#{{ p.id }}</span>
-                </td>
-                <td class="py-2.5 pr-4">
-                    {% if p.status == 'online' %}
-                    <span
-                        class="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> online
-                    </span>
-                    {% elif p.status == 'stopped' %}
-                    <span
-                        class="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs font-medium">
-                        <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> stopped
-                    </span>
-                    {% else %}
-                    <span
-                        class="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-600 rounded-full text-xs font-medium">
-                        <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> {{ p.status }}
-                    </span>
-                    {% endif %}
-                </td>
-                <td class="py-2.5 pr-4">
-                    <span class="{% if p.cpu > 50 %}text-amber-600 font-semibold{% else %}text-gray-600{% endif %}">
-                        {{ p.cpu }}%
-                    </span>
-                </td>
-                <td class="py-2.5 pr-4">
-                    <span class="{% if p.mem_mb > 500 %}text-red-500 font-semibold{% else %}text-gray-600{% endif %}">
-                        {{ p.mem_mb }} MB
-                    </span>
-                </td>
-                <td class="py-2.5 pr-4 text-gray-500">{{ p.uptime }}</td>
-                <td class="py-2.5 pr-4">
-                    <span class="{% if p.restarts > 5 %}text-red-500 font-bold{% else %}text-gray-500{% endif %}">
-                        {{ p.restarts }}
-                    </span>
-                </td>
-                <td class="py-2.5">
-                    <form hx-post="/syspanel/cmd/pm2-restart-one" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="document.getElementById('terminal-output').innerHTML='<span class=\'animate-pulse text-yellow-400\'>Restarting {{ p.name }}...</span>'">
-                        <input type="hidden" name="name" value="{{ p.name }}">
-                        <button type="submit"
-                            class="px-2.5 py-1 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium transition-colors">
-                            ↺ Restart
-                        </button>
-                    </form>
-                </td>
-            </tr>
+                {% include 'fragments/syspanel/pm2_row.html' %}
             {% endfor %}
         </tbody>
     </table>

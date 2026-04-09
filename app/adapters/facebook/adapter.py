@@ -1253,6 +1253,12 @@ class FacebookAdapter(AdapterInterface):
             
             # 3. Find comment box (multiple selectors for i18n + Reels robustness)
             comment_selectors = [
+                # New variants (Comment as...)
+                "div[aria-label^='Bình luận dưới tên']",
+                "div[aria-label^='Comment as']",
+                "div[aria-label*='bình luận dưới tên' i]",
+                "div[role='textbox'][aria-label*='bình luận' i]",
+                "div[role='textbox'][aria-label*='comment' i]",
                 # Standard post layout (exact match)
                 "div[aria-label='Write a comment']",
                 "div[aria-label='Write a comment…']",
@@ -1266,23 +1272,41 @@ class FacebookAdapter(AdapterInterface):
                 "div[aria-label='Write a public comment...']",
                 "div[aria-label='Write a public comment…']",
                 # Partial match fallbacks (CSS *=)
-                "div[contenteditable='true'][aria-label*='bình luận']",
-                "div[contenteditable='true'][aria-label*='comment']",
+                "div[contenteditable='true'][aria-label*='bình luận' i]",
+                "div[contenteditable='true'][aria-label*='comment' i]",
                 "div[contenteditable='true'][aria-label*='Comment']",
-                # Generic contenteditable textbox (last resort)
-                "div[contenteditable='true'][role='textbox']",
             ]
             
             comment_box = None
+            
+            # Allow DOM to settle before checking for textboxes
+            self.page.wait_for_timeout(1500)
+            
             for sel in comment_selectors:
+                if comment_box: break
                 try:
-                    loc = self.page.locator(sel).first
-                    if loc.count() > 0 and loc.is_visible(timeout=1500):
-                        comment_box = loc
-                        logger.info("FacebookAdapter: Found comment box via: %s", sel)
-                        break
+                    loc = self.page.locator(sel)
+                    for i in range(loc.count()):
+                        nth_loc = loc.nth(i)
+                        if nth_loc.is_visible():
+                            comment_box = nth_loc
+                            logger.info("FacebookAdapter: Found comment box via: %s (idx %d)", sel, i)
+                            break
                 except Exception:
                     continue
+            
+            # Secondary generic fallback (last visible textbox avoids chat tabs)
+            if not comment_box:
+                try:
+                    loc = self.page.locator("div[contenteditable='true'][role='textbox']")
+                    for i in reversed(range(loc.count())):
+                        nth_loc = loc.nth(i)
+                        if nth_loc.is_visible():
+                            comment_box = nth_loc
+                            logger.info("FacebookAdapter: Found comment box via generic fallback (idx %d)", i)
+                            break
+                except Exception:
+                    pass
             
             # Fallback: use Playwright's get_by_placeholder for Lexical editor
             if not comment_box:
