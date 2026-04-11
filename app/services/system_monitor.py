@@ -13,7 +13,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 import app.config as config
-from app.services.notifier import NotifierService
+from app.services.notifier_service import NotifierService
+from app.constants import JobStatus, ViralStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -123,11 +125,11 @@ class SystemMonitorService:
         try:
             from app.database.models import Job, ViralMaterial
 
-            pending = db.query(Job).filter(Job.status == "PENDING").count()
-            drafts = db.query(Job).filter(Job.status == "DRAFT").count()
-            ai = db.query(Job).filter(Job.status == "AI_PROCESSING").count()
-            running = db.query(Job).filter(Job.status == "RUNNING").count()
-            viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == "NEW").count()
+            pending = db.query(Job).filter(Job.status == JobStatus.PENDING).count()
+            drafts = db.query(Job).filter(Job.status == JobStatus.DRAFT).count()
+            ai = db.query(Job).filter(Job.status == JobStatus.AI_PROCESSING).count()
+            running = db.query(Job).filter(Job.status == JobStatus.RUNNING).count()
+            viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.NEW).count()
 
             th_pending = _get_runtime_int(db, "ALERT_PENDING_THRESHOLD", config.ALERT_PENDING_THRESHOLD)
             th_drafts = _get_runtime_int(db, "ALERT_DRAFT_THRESHOLD", config.ALERT_DRAFT_THRESHOLD)

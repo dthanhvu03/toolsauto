@@ -17,6 +17,8 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 import app.config as config
+from app.constants import AccountStatus, JobStatus, ViralStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -130,14 +132,14 @@ def _apply_material_metadata(mat, info_data: dict) -> None:
 
 
 def _mark_material_failed(db, mat, reason: str) -> None:
-    is_manual_reup = (mat.status == "REUP")
-    mat.status = "FAILED"
+    is_manual_reup = (mat.status == ViralStatus.REUP)
+    mat.status = JobStatus.FAILED
     mat.last_error = (reason or "Unknown error")[:255]
     db.commit()
 
     # Nhắn Telegram ngay nếu đây là job manual reup do user gửi
     if is_manual_reup:
-        from app.services.notifier import NotifierService
+        from app.services.notifier_service import NotifierService
         error_vi = reason
         if "no downloadable video stream" in reason.lower() or "slideshow" in reason.lower():
             error_vi = "Link này là dạng Ảnh trượt (Slideshow) hoặc Audio-only, bot chỉ hỗ trợ tải Video Mp4 tiêu chuẩn."
@@ -172,7 +174,7 @@ def _get_download_source_account(db, mat):
         preferred = db.query(Account).filter(
             Account.id == mat.scraped_by_account_id,
             Account.is_active == True,
-            Account.login_status == "ACTIVE",
+            Account.login_status == AccountStatus.ACTIVE,
             Account.platform == mat.platform,
         ).first()
     if preferred:
@@ -180,7 +182,7 @@ def _get_download_source_account(db, mat):
 
     return db.query(Account).filter(
         Account.is_active == True,
-        Account.login_status == "ACTIVE",
+        Account.login_status == AccountStatus.ACTIVE,
         Account.platform == mat.platform,
     ).first()
 
@@ -258,8 +260,8 @@ def _download_tiktok_fallback(url: str, output_path: str) -> bool:
 def _process_viral_materials(db: Session, only_material_id: int | None = None) -> None:
     """
     Downstream consumer cho bảng viral_materials.
-    - status='NEW' (từ scraper): đã qua filter views >= ngưỡng (cài đặt Viral), tải + tạo DRAFT.
-    - status='REUP' (từ lệnh /reup): manual input, luôn xử lý bất kể views.
+    - status=ViralStatus.NEW (từ scraper): đã qua filter views >= ngưỡng (cài đặt Viral), tải + tạo DRAFT.
+    - status=ViralStatus.REUP (từ lệnh /reup): manual input, luôn xử lý bất kể views.
     Tải video vào content/reup/<platform>/ để phân loại rõ ràng.
     If only_material_id is set, skip fair-queue gathering and process that row only.
     """
@@ -270,7 +272,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
         if not mat:
             logger.warning("[VIRAL] No viral_material id=%s", only_material_id)
             return
-        if mat.status not in ("NEW", "REUP"):
+        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP):
             logger.info("[VIRAL] Skip material id=%s status=%s", only_material_id, mat.status)
             return
         materials = [mat]
@@ -287,7 +289,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
 
         materials = []
         # First, always grab REUP materials (manual/boosted) since they are high priority
-        reups = db.query(ViralMaterial).filter(ViralMaterial.status == "REUP").all()
+        reups = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.REUP).all()
         materials.extend(reups)
     
         # Then, fairly grab NEW materials per account and per target_page to prevent starvation
@@ -306,7 +308,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             if not pages:
                 # Fallback for accounts without explicit target pages
                 acc_materials = db.query(ViralMaterial).filter(
-                    ViralMaterial.status == "NEW",
+                    ViralMaterial.status == ViralStatus.NEW,
                     ViralMaterial.scraped_by_account_id == acc_id
                 ).order_by(ViralMaterial.views.desc()).limit(limit_per_acc).all()
                 materials.extend(acc_materials)
@@ -315,7 +317,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 for page_url in pages:
                     # Fetch top materials specifically for this page
                     page_materials = db.query(ViralMaterial).filter(
-                        ViralMaterial.status == "NEW",
+                        ViralMaterial.status == ViralStatus.NEW,
                         ViralMaterial.scraped_by_account_id == acc_id,
                         ViralMaterial.target_page == page_url
                     ).order_by(ViralMaterial.views.desc()).limit(limit_per_page).all()
@@ -323,14 +325,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 
                 # Allow fallback for videos scraped without a specific target_page
                 general_materials = db.query(ViralMaterial).filter(
-                    ViralMaterial.status == "NEW",
+                    ViralMaterial.status == ViralStatus.NEW,
                     ViralMaterial.scraped_by_account_id == acc_id,
                     ViralMaterial.target_page.is_(None)
                 ).order_by(ViralMaterial.views.desc()).limit(limit_per_acc).all()
                 materials.extend(general_materials)
 
         # Sort the final combined list by views so the highest views across the picked batch get processed first
-        materials.sort(key=lambda m: (m.status != "REUP", -m.views))
+        materials.sort(key=lambda m: (m.status != ViralStatus.REUP, -m.views))
 
     if not materials:
         return
@@ -340,9 +342,13 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
     # Lấy account mặc định (fallback nếu material không chỉ định acc)
     default_account = db.query(Account).filter(
         Account.is_active == True,
-        Account.login_status == "ACTIVE",
+        Account.login_status == AccountStatus.ACTIVE,
         Account.platform == "facebook",
     ).first()
+
+
+    # Bug #6 Fix: Batch pre-fetch active accounts to avoid N+1 queries in loop
+    active_accounts_by_id = {acc.id: acc for acc in db.query(Account).filter(Account.is_active == True).all()}
 
     if not default_account:
         logger.warning("[VIRAL] No active Facebook account found. Skipping viral ingestion.")
@@ -361,7 +367,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             # If this sweep is processing REUP materials, optionally cap intake per target_page/day.
             # This prevents lag spikes by limiting how many REUP-derived jobs can enter the pipeline.
             if (
-                mat.status == "REUP"
+                mat.status == ViralStatus.REUP
                 and int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0) > 0
             ):
                 from datetime import datetime, time as time_obj
@@ -371,10 +377,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 # Resolve target account/page *without* downloading media
                 target_account = default_account
                 if mat.scraped_by_account_id:
-                    specified_acc = db.query(Account).filter(
-                        Account.id == mat.scraped_by_account_id,
-                        Account.is_active == True,
-                    ).first()
+                    specified_acc = active_accounts_by_id.get(mat.scraped_by_account_id)
                     if specified_acc:
                         target_account = specified_acc
 
@@ -391,7 +394,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     )
 
                     cap = int(config.REUP_VIDEOS_PER_PAGE_PER_DAY)
-                    active_statuses = ["AWAITING_STYLE", "AI_PROCESSING", "DRAFT", "PENDING", "RUNNING"]
+                    active_statuses = [JobStatus.AWAITING_STYLE, JobStatus.AI_PROCESSING, JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING]
 
                     active_today = db.query(Job).filter(
                         Job.target_page == resolved_target,
@@ -401,7 +404,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
 
                     posted_today = db.query(Job).filter(
                         Job.target_page == resolved_target,
-                        Job.status == "DONE",
+                        Job.status == JobStatus.DONE,
                         Job.finished_at >= today_start,
                     ).count()
 
@@ -578,10 +581,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             # Chọn account: ưu tiên acc do user chỉ định, fallback acc mặc định
             target_account = default_account
             if mat.scraped_by_account_id:
-                specified_acc = db.query(Account).filter(
-                    Account.id == mat.scraped_by_account_id,
-                    Account.is_active == True,
-                ).first()
+                specified_acc = active_accounts_by_id.get(mat.scraped_by_account_id)
                 if specified_acc:
                     target_account = specified_acc
 
@@ -676,19 +676,19 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 account_id=target_account.id,
                 media_path=media_path,
                 caption=caption_metadata,
-                status="AWAITING_STYLE",
+                status=JobStatus.AWAITING_STYLE,
                 schedule_ts=calc_schedule,
                 target_page=resolved_target
             )
             db.add(new_job)
-            mat.status = "DRAFTED"
+            mat.status = ViralStatus.DRAFTED
             _clear_material_error(mat)
             db.commit()
 
             logger.info("[VIRAL] Created AWAITING_STYLE Job #%s from %s material #%s → acc '%s'",
                         new_job.id, mat.platform, mat.id, target_account.name)
             
-            from app.services.notifier import NotifierService
+            from app.services.notifier_service import NotifierService
             NotifierService.notify_style_selection(new_job)
 
         except subprocess.TimeoutExpired:
@@ -714,7 +714,7 @@ class ViralProcessorService:
         if not mat:
             logger.warning("[VIRAL] download_and_queue: unknown material id=%s", material_id)
             return False
-        if mat.status not in ("NEW", "REUP"):
+        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP):
             logger.info("[VIRAL] download_and_queue: skip id=%s status=%s", material_id, mat.status)
             return False
         _process_viral_materials(db, only_material_id=material_id)
