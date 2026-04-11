@@ -3,12 +3,15 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 import time
 import json
+import logging
 from app.database.core import get_db
 from app.database.models import Account
 from app.services.account import AccountService
 from app.main_templates import templates
+from app.services.fb_compliance import compliance_checker, Severity
 
 router = APIRouter(prefix="/pages", tags=["pages"])
+logger = logging.getLogger(__name__)
 
 @router.get("/table", response_class=HTMLResponse)
 def get_pages_table(request: Request, q: str = "", filter: str = "all", db: Session = Depends(get_db)):
@@ -81,7 +84,22 @@ def update_page(
     acc = db.query(Account).filter(Account.id == account_id).first()
     if not acc:
         return HTMLResponse("<tr class='text-red-500'><td>Account not found</td></tr>")
-        
+    
+    # [Compliance Gate] Check niches (comma-separated list of keywords)
+    # User Note: Check each keyword individually. Report field type.
+    raw_niches = (niches or "").strip()
+    if raw_niches:
+        logger.info(f"[Compliance Check] Target field: niches (type: CommaSeparatedKeywords)")
+        n_list_to_check = [n.strip() for n in raw_niches.split(",") if n.strip()]
+        for kw in n_list_to_check:
+            comp = compliance_checker.check(kw)
+            if comp.status == Severity.VIOLATION:
+                msg = f"❌ Vi phạm chính sách tại từ khóa: '{kw}'"
+                # Return an HX-Trigger to show original data or a toast error
+                response = HTMLResponse(content="")
+                response.headers["HX-Trigger"] = json.dumps({"showMessage": {"text": msg, "type": "error"}})
+                return response
+
     # 1. Update target_pages_list
     target_urls = set(acc.target_pages_list or [])
     active = is_active == "on"
@@ -93,7 +111,7 @@ def update_page(
     
     # 2. Update page_niches_map
     current_niches = acc.page_niches_map or {}
-    n_list = [n.strip() for n in niches.split(",") if n.strip()]
+    n_list = [n.strip() for n in raw_niches.split(",") if n.strip()]
     if n_list:
         current_niches[url] = n_list
     elif url in current_niches:

@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from app.database.models import SystemState, now_ts
 from typing import Optional
+from app.constants import JobStatus
+
 
 
 class WorkerService:
@@ -11,7 +13,7 @@ class WorkerService:
         if not state:
             state = SystemState(
                 id=1,
-                worker_status="RUNNING",
+                worker_status=JobStatus.RUNNING,
                 safe_mode=False
             )
             db.add(state)

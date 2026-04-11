@@ -3,7 +3,9 @@ import time
 from sqlalchemy import text, or_
 from sqlalchemy.orm import Session
 from app.database.models import PageInsight, ViralMaterial, Account, Job
-from app.services.notifier import NotifierService
+from app.services.notifier_service import NotifierService
+from app.constants import ViralStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +118,7 @@ class PageStrategicService:
         filters = [ViralMaterial.title.ilike(f"%{kw}%") for kw in niches]
         return db.query(ViralMaterial).filter(
             ViralMaterial.platform == platform,
-            ViralMaterial.status == "NEW",
+            ViralMaterial.status == ViralStatus.NEW,
             ViralMaterial.title.isnot(None),
             or_(*filters)
         ).order_by(ViralMaterial.views.desc()).first()
@@ -159,7 +161,7 @@ class PageStrategicService:
             # 1. Check cooldown (Session Binge Window: giảm xuống 1h để mớm liên tục video cùng niche)
             last_boost = db.query(ViralMaterial).filter(
                 ViralMaterial.target_page == p["page_url"],
-                ViralMaterial.status == "REUP",
+                ViralMaterial.status == ViralStatus.REUP,
                 ViralMaterial.created_at >= int(time.time()) - 3600  # 1h (Session Binge Window)
             ).first()
             if last_boost:
@@ -186,7 +188,7 @@ class PageStrategicService:
             if not material:
                 material = db.query(ViralMaterial).filter(
                     ViralMaterial.platform == p["platform"],
-                    ViralMaterial.status == "NEW"
+                    ViralMaterial.status == ViralStatus.NEW
                 ).order_by(ViralMaterial.views.desc()).first()
 
             if not material:
@@ -208,7 +210,7 @@ class PageStrategicService:
                 boost_context += f", top_posts=[{top_posts_summary}]"
 
             # 5. Inject into reup pipeline with BOOST_CONTEXT
-            material.status = "REUP"
+            material.status = ViralStatus.REUP
             material.target_page = p["page_url"]
             material.scraped_by_account_id = p["account_id"]
             

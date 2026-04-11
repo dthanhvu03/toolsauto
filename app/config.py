@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
 
 # Database
-DB_PATH = os.getenv("DB_PATH", str(BASE_DIR / "data" / "auto_publisher.db"))
+DB_PATH = os.getenv("DB_PATH", str(DATA_DIR / "auto_publisher.db"))
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # Authentication & Security
@@ -47,41 +48,19 @@ DRM_WATERMARK_TEXT = os.getenv("DRM_WATERMARK_TEXT", "z")
 
 # Directory Settings
 CONTENT_DIR = BASE_DIR / "content"
-# Chromium persistent contexts (FacebookAdapter, login bootstrap).
-PROFILES_DIR = CONTENT_DIR / "profiles"
-CONTENT_PROFILES_DIR = PROFILES_DIR # Legacy alias for backward compatibility
-# Facebook publisher Playwright: true = no window (set FACEBOOK_PLAYWRIGHT_HEADLESS=true in .env / PM2).
-FACEBOOK_PLAYWRIGHT_HEADLESS = (
-    os.getenv("FACEBOOK_PLAYWRIGHT_HEADLESS", "false").lower() == "true"
-)
-
 DONE_DIR = CONTENT_DIR / "done"
 FAILED_DIR = CONTENT_DIR / "failed"
-REUP_DIR = CONTENT_DIR / "reup"
-THUMB_DIR = CONTENT_DIR / "thumbnails"
+REUP_DIR = BASE_DIR / "reup_videos"
+PROFILES_DIR = BASE_DIR / "profiles"
+CONTENT_PROFILES_DIR = PROFILES_DIR
 LOGS_DIR = BASE_DIR / "logs"
+THUMB_DIR = BASE_DIR / "thumbnails"
 CONTENT_MEDIA_DIR = CONTENT_DIR / "media"
-CONTENT_VIDEO_DIR = CONTENT_DIR / "video"
+CONTENT_VIDEO_DIR = CONTENT_DIR / "videos"
 CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
-OUTPUTS_DIR = CONTENT_DIR / "outputs"
-
 
 def iter_pm2_log_directories():
-    """
-    Candidate PM2 log dirs (user ~/.pm2/logs, root, /home/*/.pm2/logs, PM2_LOGS_EXTRA_DIRS).
-    Path order: env extras first, then home, root, then other users under /home.
-    """
-    seen: set[str] = set()
-    extra = os.getenv("PM2_LOGS_EXTRA_DIRS", "")
-    for part in extra.split(os.pathsep):
-        part = part.strip()
-        if not part:
-            continue
-        p = Path(part).expanduser().resolve()
-        s = str(p)
-        if s not in seen:
-            seen.add(s)
-            yield p
+    seen = set()
     for p in (
         Path.home() / ".pm2" / "logs",
         Path("/root/.pm2/logs"),
@@ -102,9 +81,54 @@ def iter_pm2_log_directories():
         pass
 
 
+# Facebook / Playwright Settings
+FACEBOOK_PLAYWRIGHT_HEADLESS = os.getenv('FACEBOOK_PLAYWRIGHT_HEADLESS', 'true').lower() == 'true'
+PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv('PLAYWRIGHT_DEFAULT_TIMEOUT_MS', '60000'))
+
 # AI / Google AI Studio (Gemini)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_API_KEY = GEMINI_API_KEY  # alias
+
+# AI / Fallback (Poorman)
+FALLBACK_CAPTION_POOL = os.getenv("FALLBACK_CAPTION_POOL", "Góc nhìn thú vị cho mọi người tham khảo nhé! Đừng bỏ lỡ 🔥 | Video này đảm bảo sẽ không làm cả nhà thất vọng đâu! Xem ngay 🎬 | Chút năng lượng cho một ngày làm việc đây, thư giãn nhé 👇 | Cùng tham khảo video tuyệt vời này nha! Nhớ follow kênh nhé 💯")
+FALLBACK_HASHTAG_POOL = os.getenv("FALLBACK_HASHTAG_POOL", "#viral, #trending, #xuhuong | #video, #daily, #relax, #giaitri | #thugiangi, #khampha, #haynhat")
+
+# AI / Prompts (BrainFactory)
+PERSONA_PROMPT_BEAUTY = os.getenv("PERSONA_PROMPT_BEAUTY", """Bạn là Chuyên gia Tư vấn Chăm sóc Da & Làm đẹp (Beauty Expert). 
+Giọng văn: Tận tâm, am hiểu kiến thức chuyên môn nhưng dễ hiểu, tập trung vào sự tự tin và vẻ đẹp tự nhiên.
+Ưu tiên: Phân tích thành phần, công dụng và cảm giác khi sử dụng trên da.""")
+
+PERSONA_PROMPT_FASHION = os.getenv("PERSONA_PROMPT_FASHION", """Bạn là Stylist/Fashion Blogger nổi tiếng. 
+Giọng văn: Gu thẩm mỹ cao, cập nhật xu hướng, năng động, gợi cảm hứng về phong cách cá nhân.
+Ưu tiên: Cách phối đồ, chất liệu, tính ứng dụng và sự tự tin khi diện trang phục.""")
+
+PERSONA_PROMPT_TECH = os.getenv("PERSONA_PROMPT_TECH", """Bạn là Reviewer Công nghệ (Tech Geek). 
+Giọng văn: Khách quan, tập trung vào tính năng thực tế, thông số nổi bật và trải nghiệm người dùng.
+Ưu tiên: Giải quyết vấn đề (pain-point), sự tiện lợi và tính đột phá của sản phẩm.""")
+
+PERSONA_PROMPT_HOME = os.getenv("PERSONA_PROMPT_HOME", """Bạn là Chuyên gia Chăm sóc Nhà cửa & Đời sống (Home Expert). 
+Giọng văn: Ấm áp, ngăn nắp, tập trung vào sự tiện nghi và niềm vui khi chăm sóc tổ ấm.
+Ưu tiên: Tính năng tiết kiệm thời gian, sự bền bỉ và vẻ đẹp của không gian sống.""")
+
+PERSONA_PROMPT_FUNNY = os.getenv("PERSONA_PROMPT_FUNNY", """Bạn là Content Creator mảng Giải trí (Gen-Z Creative). 
+Giọng văn: Lầy lội, hài hước, dùng nhiều tiếng lóng trending, bắt trend cực nhanh.
+Ưu tiên: Sự bất ngờ (punchline), khả năng gây tranh luận hoặc chia sẻ mạnh (viral factor).""")
+
+PERSONA_PROMPT_GENERAL = os.getenv("PERSONA_PROMPT_GENERAL", """Bạn là Chuyên gia Marketing & Copywriter thực chiến with 10 years experience.
+Giọng văn: Chuyên nghiệp, thu hút, tối ưu tỷ lệ chuyển đổi.
+Ưu tiên: Sự rõ ràng, hook mạnh và thông điệp súc tích.
+Yêu cầu bổ sung: Luôn giải thích ngắn gọn lý do tại sao chọn hướng tiếp cận này (reasoning).""")
+
+VISUAL_HOOK_INSTRUCTION = os.getenv("VISUAL_HOOK_INSTRUCTION", """[VISUAL HOOK ANALYSIS]
+Hãy soi kỹ 2 khung hình đầu tiên trong ảnh Collage (tương ứng với 3 giây đầu của video). 
+1. Visual Hook là gì? (Ví dụ: Một hành động bất ngờ, một gương mặt đẹp, một hiệu ứng lạ).
+2. Hãy viết 1 câu HOOK (Tiêu đề) cực mạnh để CỘNG HƯỞNG với visual hook đó. Mục tiêu: Người dùng không thể lướt qua.
+3. Giải thích tại sao visual hook này lại hiệu quả (reasoning).""")
+
+ENGAGEMENT_SECRETS = os.getenv("ENGAGEMENT_SECRETS", """[ALGORITHM SECRETS - TĂNG TƯƠNG TÁC]
+- Không bao giờ bắt đầu bằng lời chào. Vào thẳng vấn đề (The Hook).
+- Sử dụng các kỹ thuật Curiosity Gap (Khoảng trống tò mò). Thách thức người xem bằng một câu hỏi hoặc khẳng định gây sốc.
+- Hashtag tối ưu: Sử dụng công thức [Niche] + [Keyword] + [Trending] để lọt vào đúng tệp khách hàng.""")
 
 # AI / Whisper Settings
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "medium")  # tiny|base|small|medium
@@ -176,6 +200,6 @@ for d in [
     CONTENT_MEDIA_DIR,
     CONTENT_VIDEO_DIR,
     CONTENT_PROCESSED_DIR,
+    DATA_DIR,
 ]:
     d.mkdir(parents=True, exist_ok=True)
-

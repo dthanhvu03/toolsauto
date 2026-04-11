@@ -7,6 +7,8 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from playwright.sync_api import sync_playwright
+from app.constants import AccountStatus
+
 
 def update_account_status(account_id: int, status: str, error: str = None):
     try:
@@ -58,7 +60,7 @@ def main():
             )
         except Exception as e:
             print(f"LOGIN_ERROR: Failed to launch browser context. Is it already open? {e}")
-            update_account_status(args.account_id, "INVALID", f"Failed to launch browser: {e}")
+            update_account_status(args.account_id, AccountStatus.INVALID, f"Failed to launch browser: {e}")
             sys.exit(1)
 
         page = browser.pages[0] if browser.pages else browser.new_page()
@@ -68,7 +70,7 @@ def main():
         except Exception as e:
             print(f"LOGIN_ERROR: Failed to load {args.platform}: {e}")
             browser.close()
-            update_account_status(args.account_id, "INVALID", f"Failed to load {args.platform}: {e}")
+            update_account_status(args.account_id, AccountStatus.INVALID, f"Failed to load {args.platform}: {e}")
             sys.exit(1)
 
         print("Browser loaded. Please log in. Waiting for authentication...")
@@ -92,7 +94,7 @@ def main():
 
                 if login_ok:
                     print("LOGIN_OK")
-                    update_account_status(args.account_id, "ACTIVE", None)
+                    update_account_status(args.account_id, AccountStatus.ACTIVE, None)
                     time.sleep(2)
                     browser.close()
                     sys.exit(0)
@@ -101,7 +103,7 @@ def main():
                 # Catching generic closed page exceptions if user closes it manually
                 if "Target page, context or browser has been closed" in str(e):
                     print("LOGIN_CLOSED_BY_USER")
-                    update_account_status(args.account_id, "INVALID", "Browser closed by user before login completion.")
+                    update_account_status(args.account_id, AccountStatus.INVALID, "Browser closed by user before login completion.")
                     sys.exit(0)
             
             time.sleep(poll_interval_seconds)
@@ -109,7 +111,7 @@ def main():
 
         print("LOGIN_TIMEOUT")
         browser.close()
-        update_account_status(args.account_id, "INVALID", "Authentication timed out after 15 minutes.")
+        update_account_status(args.account_id, AccountStatus.INVALID, "Authentication timed out after 15 minutes.")
         sys.exit(1)
 
 if __name__ == "__main__":
