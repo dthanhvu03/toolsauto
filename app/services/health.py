@@ -3,6 +3,8 @@ import psutil
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_
 from app.database.models import SystemState, Job, Account
+from app.constants import AccountStatus, JobStatus
+
 
 class HealthService:
     @staticmethod
@@ -28,20 +30,20 @@ class HealthService:
         uptime_seconds = (now - worker_started) if worker_started else 0
         
         # 2. Job Counters (Indexed)
-        running_jobs_count = db.query(Job).filter(Job.status == "RUNNING").count()
+        running_jobs_count = db.query(Job).filter(Job.status == JobStatus.RUNNING).count()
         orphan_jobs_count = db.query(Job).filter(
-            Job.status == "RUNNING",
+            Job.status == JobStatus.RUNNING,
             Job.last_heartbeat_at < (now - orphan_threshold_seconds)
         ).count()
         
         failed_last_24h = db.query(Job).filter(
-            Job.status == "FAILED",
+            Job.status == JobStatus.FAILED,
             Job.finished_at >= (now - 86400)
         ).count()
         
         # 3. Account Breaker Counters (Indexed)
         disabled_accounts_count = db.query(Account).filter(
-            (Account.is_active == False) | (Account.login_status != "ACTIVE")
+            (Account.is_active == False) | (Account.login_status != AccountStatus.ACTIVE)
         ).count()
         
         # 4. Psutil Metrics
@@ -87,8 +89,8 @@ class HealthService:
                 Account.is_active,
                 Account.login_status,
                 Account.consecutive_fatal_failures,
-                func.count(case((and_(Job.status == "DONE", Job.finished_at >= seven_days_ago), 1))).label("done_7d"),
-                func.count(case((and_(Job.status == "FAILED", Job.finished_at >= seven_days_ago), 1))).label("failed_7d"),
+                func.count(case((and_(Job.status == JobStatus.DONE, Job.finished_at >= seven_days_ago), 1))).label("done_7d"),
+                func.count(case((and_(Job.status == JobStatus.FAILED, Job.finished_at >= seven_days_ago), 1))).label("failed_7d"),
             )
             .outerjoin(Job, and_(Job.account_id == Account.id, Job.finished_at >= seven_days_ago))
             .group_by(Account.id)
@@ -122,11 +124,11 @@ class HealthService:
         status = "ok"
         degradation_reasons = []
 
-        if worker_status != "RUNNING":
+        if worker_status != JobStatus.RUNNING:
             status = "degraded"
             degradation_reasons.append(f"Worker is {worker_status}")
             
-        if worker_hb_age > 120 and worker_status == "RUNNING": # 2 minutes dead
+        if worker_hb_age > 120 and worker_status == JobStatus.RUNNING: # 2 minutes dead
             status = "degraded"
             degradation_reasons.append(f"Worker heartbeat stale ({worker_hb_age}s)")
 

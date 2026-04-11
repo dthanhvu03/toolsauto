@@ -19,6 +19,9 @@ import re
 from app.services.gemini_rpa import GeminiRPAService
 from app.services.gemini_api import GeminiAPIService
 from app.services.fb_compliance import compliance_checker, Severity, log_violation
+from app.services.affiliate_ai import AffiliateAIService
+from app.constants import JobStatus
+
 
 class BatchItem(BaseModel):
     keyword: str
@@ -171,7 +174,40 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
             continue
 
         comment = (item.comment or "").strip()
-        ai_status = "PENDING" if not comment else "DONE"
+
+        if not comment:
+            # Auto-generate comment via AffiliateAIService (RPA -> API fallback)
+            try:
+                generated = AffiliateAIService.generate_comment(
+                    keyword=item.keyword,
+                    url=item.affiliate_url
+                )
+                if generated:
+                    # Run compliance check on AI-generated comment
+                    comp = compliance_checker.check_and_rewrite(
+                        generated, product_category="general"
+                    )
+                    if comp.status == Severity.VIOLATION:
+                        logger.warning(
+                            "[BatchImport] AI comment violated compliance for keyword=%s, skipping AI.",
+                            item.keyword
+                        )
+                        comment = ""
+                        ai_status = JobStatus.PENDING
+                    else:
+                        comment = comp.rewritten if comp.rewritten else generated
+                        ai_status = JobStatus.DONE
+                        logger.info(
+                            "[BatchImport] AI auto-generated comment for keyword=%s (source: ai)",
+                            item.keyword
+                        )
+                else:
+                    ai_status = JobStatus.PENDING
+            except Exception as e:
+                logger.error("[BatchImport] AffiliateAI failed for keyword=%s: %s", item.keyword, e)
+                ai_status = JobStatus.PENDING
+        else:
+            ai_status = JobStatus.DONE
 
         if comment:
             comp = compliance_checker.check_and_rewrite(

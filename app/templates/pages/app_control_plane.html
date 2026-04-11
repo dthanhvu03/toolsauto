@@ -1,0 +1,71 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Control Plane • Auto Publisher{% endblock %}
+{% block page_title %}Admin Control Plane{% endblock %}
+{% block page_subtitle %}Hệ thống cấu hình trung tâm (Config-driven Architecture){% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl">
+
+  <!-- Thẻ 1: System Settings -->
+  <a href="/app/settings" class="group block relative bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all hover:border-indigo-200">
+    <div class="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"></div>
+    <div class="relative">
+      <div class="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+      </div>
+      <h3 class="text-lg font-bold text-gray-900 mb-1">System & Worker Settings</h3>
+      <p class="text-sm text-gray-500 line-clamp-2">Cấu hình thời gian chạy (timeout, retry, circuit breaker, thresholds).</p>
+      <div class="mt-4 flex items-center justify-between text-indigo-600 text-sm font-medium">
+        <span>Quản lý cấu hình</span>
+        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+      </div>
+    </div>
+  </a>
+
+  <!-- Thẻ 2: AI Studio -->
+  <a href="/app/ai-studio" class="group block relative bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all hover:border-violet-200">
+    <div class="absolute inset-0 bg-gradient-to-br from-violet-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl"></div>
+    <div class="relative">
+      <div class="w-12 h-12 bg-violet-100 text-violet-600 rounded-xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+      </div>
+      <h3 class="text-lg font-bold text-gray-900 mb-1">AI Prompt Studio</h3>
+      <p class="text-sm text-gray-500 line-clamp-2">Editor toàn màn hình cho prompts, persona, fallback policies, và test runs.</p>
+      <div class="mt-4 flex items-center justify-between text-violet-600 text-sm font-medium">
+        <span>Vào AI Studio</span>
+        <svg class="w-4 h-4 transform group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+      </div>
+    </div>
+  </a>
+  
+  <!-- Thẻ 3: Policy Studio -->
+  <div class="group block relative bg-gray-50 rounded-2xl border border-gray-100 p-6 shadow-sm opacity-60 cursor-not-allowed">
+    <div class="relative">
+      <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+      </div>
+      <h3 class="text-lg font-bold text-gray-900 mb-1">Policy & Rules</h3>
+      <p class="text-sm text-gray-500 line-clamp-2">Cấu hình publish guard, auto-approve, và Facebook compliance thresholds.</p>
+      <div class="mt-4 flex items-center gap-2">
+        <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-500 rounded">Sắp ra mắt (Sprint 5)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Thẻ 4: Template Manager -->
+  <div class="group block relative bg-gray-50 rounded-2xl border border-gray-100 p-6 shadow-sm opacity-60 cursor-not-allowed">
+    <div class="relative">
+      <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center mb-4">
+        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+      </div>
+      <h3 class="text-lg font-bold text-gray-900 mb-1">Template Manager</h3>
+      <p class="text-sm text-gray-500 line-clamp-2">Quản lý nội dung tĩnh, CTA, notification text, và action labels mà không cần sửa code.</p>
+      <div class="mt-4 flex items-center gap-2">
+        <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-500 rounded">Sắp ra mắt (Sprint 4)</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

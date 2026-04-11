@@ -27,7 +27,7 @@ def health_check_json(db: Session = Depends(get_db)):
         worker_hb_age = health.get("worker", {}).get("heartbeat_age_seconds", 0)
         now_ts = int(time.time())
         if worker_hb_age > 300 and (now_ts - _last_worker_down_alert) > 1800:
-            from app.services.notifier import NotifierService
+            from app.services.notifier_service import NotifierService
             NotifierService.notify_worker_down()
             _last_worker_down_alert = now_ts
             

@@ -13,6 +13,8 @@ import logging
 from sqlalchemy.orm import Session
 from app.database.models import Job
 from app.config import CONTENT_DIR
+from app.constants import JobStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ class CleanupService:
         from sqlalchemy import or_
         jobs = (
             db.query(Job)
-            .filter(Job.status == "DONE", Job.finished_at <= cutoff)
+            .filter(Job.status == JobStatus.DONE, Job.finished_at <= cutoff)
             .filter(or_(Job.media_path.isnot(None), Job.processed_media_path.isnot(None)))
             .all()
         )
@@ -109,7 +111,7 @@ class CleanupService:
         from sqlalchemy import or_
         jobs = (
             db.query(Job)
-            .filter(Job.status == "FAILED", Job.finished_at <= cutoff)
+            .filter(Job.status == JobStatus.FAILED, Job.finished_at <= cutoff)
             .filter(or_(Job.media_path.isnot(None), Job.processed_media_path.isnot(None)))
             .all()
         )
@@ -147,7 +149,7 @@ class CleanupService:
         from sqlalchemy import or_
         jobs = (
             db.query(Job)
-            .filter(Job.status == "CANCELLED")
+            .filter(Job.status == JobStatus.CANCELLED)
             .filter(or_(Job.media_path.isnot(None), Job.processed_media_path.isnot(None)))
             .all()
         )

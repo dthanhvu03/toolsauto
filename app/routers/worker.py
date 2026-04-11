@@ -7,6 +7,8 @@ from app.database.core import get_db
 from app.services.worker import WorkerService
 
 from app.main_templates import templates
+from app.constants import JobStatus
+
 
 router = APIRouter(prefix="/worker", tags=["worker"])
 
@@ -46,7 +48,7 @@ def pause_worker(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/resume", response_class=HTMLResponse)
 def resume_worker(request: Request, db: Session = Depends(get_db)):
-    state = WorkerService.set_status(db, "RUNNING")
+    state = WorkerService.set_status(db, JobStatus.RUNNING)
     return get_worker_status(request, db)
 
 @router.post("/restart", response_class=HTMLResponse)

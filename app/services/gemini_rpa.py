@@ -205,7 +205,7 @@ class GeminiRPAService:
         opts.add_argument("--disable-gpu")
         
         pm2_name = os.environ.get("name", "gemini_rpa_default").replace(" ", "_")
-        profile_path = f"/tmp/toolsauto_chrome_{pm2_name}"
+        profile_path = f"/tmp/{os.getenv('APP_NAME', 'app')}_chrome_{pm2_name}"
         logger.info("Using isolated Chromium profile: %s", profile_path)
         
         try:

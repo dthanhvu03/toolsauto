@@ -13,8 +13,8 @@ from zoneinfo import ZoneInfo
 from app.main_templates import templates
 from app.database.core import SessionLocal
 from app.database.models import Job, Account
-from app.config import (
-    TIMEZONE,
+from app.constants import JobStatus
+from app.config import (    TIMEZONE,
     DB_PATH,
     BASE_DIR,
     CONTENT_DIR,
@@ -525,7 +525,7 @@ def cmd_cleanup_videos():
     cutoff = int(time.time()) - 7 * 86400
     try:
         done_jobs = db.query(Job).filter(
-            Job.status == "DONE",
+            Job.status == JobStatus.DONE,
             Job.finished_at != None,
             Job.finished_at < cutoff
         ).all()
@@ -557,10 +557,10 @@ def cmd_retry_failed():
     """Bulk retry all FAILED jobs."""
     db = SessionLocal()
     try:
-        failed = db.query(Job).filter(Job.status == "FAILED").all()
+        failed = db.query(Job).filter(Job.status == JobStatus.FAILED).all()
         count = len(failed)
         for job in failed:
-            job.status = "PENDING"
+            job.status = JobStatus.PENDING
             job.tries = 0
             job.locked_at = None
         db.commit()
@@ -579,12 +579,12 @@ def cmd_cancel_stuck():
     cutoff = int(time.time()) - 600
     try:
         stuck = db.query(Job).filter(
-            Job.status == "RUNNING",
+            Job.status == JobStatus.RUNNING,
             Job.last_heartbeat_at < cutoff
         ).all()
         count = len(stuck)
         for job in stuck:
-            job.status = "FAILED"
+            job.status = JobStatus.FAILED
             job.last_error = "Cancelled: no heartbeat for 10+ min (manual syspanel)"
         db.commit()
         return _html_output(f"✅ Cancelled {count} stuck RUNNING jobs → FAILED")

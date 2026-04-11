@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.database.models import Job, JobEvent, Account
 from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC
+from app.constants import JobStatus
+
 
 def now_ts():
     return int(time.time())
@@ -44,7 +46,7 @@ class JobService:
         tracking_code = str(uuid.uuid4())[:8]
         tracking_url = f"/r/{tracking_code}"
         
-        initial_status = "DRAFT" if caption and "[AI_GENERATE]" in caption else "PENDING"
+        initial_status = JobStatus.DRAFT if caption and "[AI_GENERATE]" in caption else JobStatus.PENDING
         
         new_job = Job(
             platform=account.platform,
@@ -117,7 +119,7 @@ class JobService:
     @staticmethod
     def mark_done(db: Session, job: Job, details: str = None, external_post_id: str = None, post_url: str = None):
         """Transitions RUNNING -> DONE."""
-        job.status = "DONE"
+        job.status = JobStatus.DONE
         job.finished_at = now_ts()
         job.last_error = None
         if external_post_id:
@@ -142,7 +144,7 @@ class JobService:
                 parent_job_id=job.id,
                 post_url=post_url or job.post_url,
                 auto_comment_text=job.auto_comment_text,
-                status="PENDING",
+                status=JobStatus.PENDING,
                 scheduled_at=now_ts() + delay,
                 schedule_ts=now_ts() + delay,  # Also set for compatibility
                 media_path=job.media_path,
@@ -173,10 +175,10 @@ class JobService:
                 JobService._log_event(db, job.id, "WARN", f"Circuit breaker activated for account {job.account.name}")
         
         if is_fatal or job.tries >= job.max_tries:
-            job.status = "FAILED"
+            job.status = JobStatus.FAILED
             job.finished_at = now_ts()
         else:
-            job.status = "PENDING"
+            job.status = JobStatus.PENDING
             # Exponential backoff
             backoff_mins = 5 if job.tries == 1 else 15
             job.schedule_ts = now_ts() + (backoff_mins * 60)
@@ -186,7 +188,7 @@ class JobService:
     @staticmethod
     def update_heartbeat(db: Session, job_id: int):
         """Updates the heartbeat of a RUNNING job."""
-        db.query(Job).filter(Job.id == job_id, Job.status == "RUNNING").update(
+        db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.RUNNING).update(
             {"last_heartbeat_at": now_ts()}
         )
         db.commit()
@@ -194,7 +196,7 @@ class JobService:
     @staticmethod
     def rollback_to_pending(db: Session, job: Job, reason: str):
         """Rolls back a locked job to PENDING if pre-dispatch validation fails."""
-        job.status = "PENDING"
+        job.status = JobStatus.PENDING
         # Delay it briefly to avoid immediate re-lock looping
         job.schedule_ts = now_ts() + 60
         JobService._log_event(db, job.id, "WARN", f"Rolled back to PENDING: {reason}")
@@ -204,8 +206,8 @@ class JobService:
     def retry_job(db: Session, job_id: int):
         """Transitions FAILED -> PENDING. Does not reset tries."""
         now = now_ts()
-        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == "FAILED").update({
-            "status": "PENDING",
+        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.FAILED).update({
+            "status": JobStatus.PENDING,
             "schedule_ts": now
         })
         if rows_affected == 0:
@@ -218,9 +220,9 @@ class JobService:
         """Transitions AI_PROCESSING/FAILED/PENDING -> DRAFT for re-processing."""
         rows_affected = db.query(Job).filter(
             Job.id == job_id,
-            Job.status.in_(["AI_PROCESSING", "FAILED", "PENDING", "RUNNING"])
+            Job.status.in_([JobStatus.AI_PROCESSING, JobStatus.FAILED, JobStatus.PENDING, JobStatus.RUNNING])
         ).update({
-            "status": "DRAFT",
+            "status": JobStatus.DRAFT,
             "last_error": None,
             "tries": 0,
         }, synchronize_session="fetch")
@@ -232,8 +234,8 @@ class JobService:
     @staticmethod
     def cancel_job(db: Session, job_id: int):
         """Transitions PENDING, DRAFT, or AI_PROCESSING -> CANCELLED."""
-        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status.in_(["PENDING", "DRAFT", "AI_PROCESSING"])).update({
-            "status": "CANCELLED"
+        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status.in_([JobStatus.PENDING, JobStatus.DRAFT, JobStatus.AI_PROCESSING])).update({
+            "status": JobStatus.CANCELLED
         }, synchronize_session="fetch")
         if rows_affected == 0:
             raise ValueError("Job is not in PENDING/DRAFT/AI_PROCESSING state or does not exist.")
@@ -245,7 +247,7 @@ class JobService:
         """Updates schedule_ts for a PENDING job."""
         if new_ts < now_ts():
             raise ValueError("Schedule time cannot be in the past.")
-        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == "PENDING").update({
+        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.PENDING).update({
             "schedule_ts": new_ts
         })
         if rows_affected == 0:
@@ -257,7 +259,7 @@ class JobService:
     def force_run_job(db: Session, job_id: int):
         """Sets schedule_ts to now for a PENDING job."""
         now = now_ts()
-        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == "PENDING").update({
+        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.PENDING).update({
             "schedule_ts": now
         })
         if rows_affected == 0:
