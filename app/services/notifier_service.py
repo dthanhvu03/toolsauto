@@ -18,7 +18,7 @@ from typing import Optional
 
 from app.services.media_processor import MediaProcessor
 from app.services.notifiers import BaseNotifier, TelegramNotifier
-from app.services import notifier_service as nf
+from app.services import notifier_formatting as nf
 from app.constants import JobStatus
 
 
