@@ -3,13 +3,19 @@ import logging
 import signal
 import sys
 import os
+from pathlib import Path
+
+# Repo root on sys.path so `python workers/ai_generator.py` works without PYTHONPATH=.
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.services.queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_TICK_SECONDS
 from app.services.worker import WorkerService
-from app.services.notifier import NotifierService
+from app.services.notifier_service import NotifierService
 from app.services.affiliate_ai import AffiliateAIService
 from app.database.models import AffiliateLink
 import urllib3
@@ -19,6 +25,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - [AI_WORKER] - %(le
 logger = logging.getLogger(__name__)
 
 import app.config as config
+from app.services import settings as runtime_settings
+from app.constants import JobStatus
+
 
 RUNNING = True
 CURRENT_JOB_ID = None
@@ -145,8 +154,9 @@ def process_draft_job(db: Session):
             except Exception:
                 job.tries = 1
 
-            if int(job.tries) <= 3:
-                job.status = "DRAFT"
+            max_retries = runtime_settings.get_int("ai.max_retries", 3, db=db)
+            if int(job.tries) <= max_retries:
+                job.status = JobStatus.DRAFT
                 job.last_error = f"Gemini output contract violation (try {job.tries}/3). Backoff {backoff_sec}s."
                 db.commit()
                 logger.warning("[Job %s] Output contract violation. Keep DRAFT + backoff %ss (try=%s/3).", job.id, backoff_sec, job.tries)
@@ -161,7 +171,7 @@ def process_draft_job(db: Session):
                     pass
                 return True
             else:
-                job.status = "FAILED"
+                job.status = JobStatus.FAILED
                 job.last_error = "Gemini output contract violated repeatedly (>3)."
                 db.commit()
                 logger.error("[Job %s] Output contract violated repeatedly. Mark FAILED.", job.id)
@@ -184,7 +194,7 @@ def process_draft_job(db: Session):
                 final_text += f"\n\n{existing_salt}"
                 
             job.caption = final_text
-            job.status = "DRAFT"
+            job.status = JobStatus.DRAFT
             
             # Pass AI generated keywords to notifier temporarily
             job._ai_keywords = ai_result.get("keywords", [])
@@ -228,8 +238,9 @@ def process_draft_job(db: Session):
             except Exception:
                 job.tries = 1
 
-            if int(job.tries) <= 3:
-                job.status = "DRAFT"
+            max_retries = runtime_settings.get_int("ai.max_retries", 3, db=db)
+            if int(job.tries) <= max_retries:
+                job.status = JobStatus.DRAFT
                 job.last_error = f"AI Generation returned empty result (try {job.tries}/3)"
                 db.commit()
                 # Thêm backoff để không lặp vô cực
@@ -240,7 +251,7 @@ def process_draft_job(db: Session):
                 
                 logger.warning("[Job %s] AI Generation returned empty. Kept as DRAFT. Backoff %ss. Failures: %d/3", job.id, backoff_sec, job.tries)
             else:
-                job.status = "FAILED"
+                job.status = JobStatus.FAILED
                 job.last_error = "AI Generation returned empty repeatedly (>3). Mark FAILED."
                 db.commit()
                 logger.error("[Job %s] AI Generation empty exceeded retries. Mark FAILED.", job.id)
@@ -261,18 +272,9 @@ def process_draft_job(db: Session):
             # Policy per PLAN-20260317-01 (Review):
             # - Auth/Cookie/Captcha => FAILED + circuit breaker
             # - Infra timeout/driver crash => DO NOT FAILED; backoff and retry later
-            infra_markers = [
-                "HTTPConnectionPool(host='localhost'",
-                "Read timed out",
-                "cannot connect to chrome",
-                "undetected_chromedriver unexpectedly exited",
-            ]
-            auth_markers = [
-                "cookies expired",
-                "signin",
-                "ServiceLogin",
-                "Captcha",
-            ]
+            from app.constants import GEMINI_INFRA_MARKERS, GEMINI_AUTH_MARKERS
+            infra_markers = GEMINI_INFRA_MARKERS
+            auth_markers = GEMINI_AUTH_MARKERS
 
             is_infra = any(m in msg for m in infra_markers)
             is_auth = any(m.lower() in msg.lower() for m in auth_markers)
@@ -289,13 +291,14 @@ def process_draft_job(db: Session):
                     job.tries = int(job.tries or 0) + 1
                 except Exception:
                     job.tries = 1
-                if int(job.tries) <= 3:
-                    job.status = "DRAFT"
+                max_retries = runtime_settings.get_int("ai.max_retries", 3, db=db)
+                if int(job.tries) <= max_retries:
+                    job.status = JobStatus.DRAFT
                     job.last_error = f"Gemini infra timeout (try {job.tries}/3). Backoff {backoff_sec}s. Last: {msg}"
                     db.commit()
                     logger.error("[Job %s] GEMINI INFRA TIMEOUT. Keep DRAFT + backoff %ss (try=%s/3).", job.id, backoff_sec, job.tries)
                 else:
-                    job.status = "FAILED"
+                    job.status = JobStatus.FAILED
                     job.last_error = f"Gemini infra timeout exceeded (>{3} retries). Last: {msg}"
                     db.commit()
                     logger.error("[Job %s] GEMINI INFRA TIMEOUT exceeded retries. Mark FAILED.", job.id)
@@ -311,7 +314,7 @@ def process_draft_job(db: Session):
                 # DO NOT increment circuit-breaker failures for infra
             elif is_auth:
                 # Cookie/auth issues: FAILED + open circuit breaker immediately
-                job.status = "FAILED"
+                job.status = JobStatus.FAILED
                 job.last_error = f"Gemini auth/cookie failed: {msg}"
                 db.commit()
                 GEMINI_CONSECUTIVE_FAILURES = 999
@@ -329,7 +332,7 @@ def process_draft_job(db: Session):
                     pass
             elif is_policy:
                 # Content policy refusal: FAILED (user needs to adjust content/prompt)
-                job.status = "FAILED"
+                job.status = JobStatus.FAILED
                 job.last_error = f"Gemini content policy refused: {msg}"
                 db.commit()
                 try:
@@ -342,7 +345,7 @@ def process_draft_job(db: Session):
                     pass
             else:
                 logger.error("[Job %s] GEMINI AUTH/LOGIC FAIL after 3 retries. Mark FAILED.", job.id)
-                job.status = "FAILED"
+                job.status = JobStatus.FAILED
                 job.last_error = f"Gemini RPA Failed: {e}"
                 db.commit()
                 GEMINI_CONSECUTIVE_FAILURES += 1
@@ -360,8 +363,9 @@ def process_draft_job(db: Session):
             except Exception:
                 job.tries = 1
 
-            if int(job.tries) <= 3:
-                job.status = "DRAFT"
+            max_retries = runtime_settings.get_int("ai.max_retries", 3, db=db)
+            if int(job.tries) <= max_retries:
+                job.status = JobStatus.DRAFT
                 job.last_error = f"AI Generation Error (try {job.tries}/3): {e}"
                 db.commit()
                 
@@ -372,7 +376,7 @@ def process_draft_job(db: Session):
                 
                 logger.warning("[Job %s] Unhandled exception during AI Generation: %s. Kept as DRAFT. Backoff %ss. Failures: %d/3", job.id, e, backoff_sec, job.tries)
             else:
-                job.status = "FAILED"
+                job.status = JobStatus.FAILED
                 job.last_error = f"AI Generation Error repeatedly (>3): {e}. Mark FAILED."
                 db.commit()
                 logger.error("[Job %s] AI Generation Error exceeded retries. Mark FAILED.", job.id)
@@ -392,10 +396,10 @@ def process_draft_job(db: Session):
 
 def _process_pending_affiliate_links(db: Session):
     """
-    Finds AffiliateLinks with ai_status='PENDING' and generates comments.
+    Finds AffiliateLinks with ai_status=JobStatus.PENDING and generates comments.
     Processes one link per tick to minimize rate limiting impact.
     """
-    link = db.query(AffiliateLink).filter(AffiliateLink.ai_status == "PENDING").first()
+    link = db.query(AffiliateLink).filter(AffiliateLink.ai_status == JobStatus.PENDING).first()
     if not link:
         return
 
@@ -407,13 +411,13 @@ def _process_pending_affiliate_links(db: Session):
         new_comment = AffiliateAIService.generate_comment(link.keyword, link.url)
         if new_comment:
             link.comment_template = new_comment
-            link.ai_status = "DONE"
+            link.ai_status = JobStatus.DONE
             logger.info(f"[AffiliateBot] Successfully generated comment for: {link.keyword}")
         else:
-            link.ai_status = "FAILED"
+            link.ai_status = JobStatus.FAILED
             logger.warning(f"[AffiliateBot] Failed to generate comment for: {link.keyword}")
     except Exception as e:
-        link.ai_status = "FAILED"
+        link.ai_status = JobStatus.FAILED
         logger.error(f"[AffiliateBot] Exception generating comment: {e}")
     
     db.commit()
@@ -442,7 +446,7 @@ def _auto_style_default(db):
     threshold_ts = int(time.time()) - 1800 # 30 mins
     
     jobs_to_update = db.query(Job).filter(
-        Job.status == "AWAITING_STYLE",
+        Job.status == JobStatus.AWAITING_STYLE,
         Job.created_at < threshold_ts
     ).all()
     
@@ -450,10 +454,10 @@ def _auto_style_default(db):
         logger.info("Auto-defaulting %d AWAITING_STYLE jobs to 'short' (30m timeout passed)", len(jobs_to_update))
         for j in jobs_to_update:
             j.ai_style = "short"
-            j.status = "DRAFT"
+            j.status = JobStatus.DRAFT
             
             # Optionally notify that it was auto-selected
-            from app.services.notifier import NotifierService
+            from app.services.notifier_service import NotifierService
             account_name = j.account.name if j.account else "Unknown"
             try:
                 NotifierService._broadcast(f"⏳ <b>Hết thời gian chờ (30 phút)</b>\nJob #{j.id} ({account_name}) đã tự động được chọn phong cách: NGẮN GỌN (SHORT).\nAI đang tiến hành viết nội dung...")
@@ -464,8 +468,9 @@ def _auto_style_default(db):
 def run_loop():
     """Main AI Generator loop."""
     global RUNNING, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME
-    from app.services.notifier import TelegramNotifier
+    from app.services.notifier_service import TelegramNotifier
     import app.config as config
+    from app.services import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
 
     logger.info("AI Worker started. Press Ctrl+C to stop.")
@@ -474,7 +479,7 @@ def run_loop():
     try:
         from app.database.models import Job
         with SessionLocal() as db:
-            stuck_jobs = db.query(Job).filter(Job.status == "AI_PROCESSING").update({"status": "DRAFT"})
+            stuck_jobs = db.query(Job).filter(Job.status == JobStatus.AI_PROCESSING).update({"status": JobStatus.DRAFT})
             if stuck_jobs > 0:
                 logger.info("Reset %d stuck jobs from AI_PROCESSING to DRAFT on startup.", stuck_jobs)
             db.commit()

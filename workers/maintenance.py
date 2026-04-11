@@ -4,15 +4,24 @@ import logging
 import signal
 import subprocess
 import sys
+from pathlib import Path
+
+# Repo root on sys.path so `python workers/maintenance.py` works without PYTHONPATH=.
+_root = Path(__file__).resolve().parent.parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.services.worker import WorkerService
 from app.services.cleanup import CleanupService
 from app.services.metrics_checker import MetricsChecker
-from app.services.notifier import NotifierService, TelegramNotifier
+from app.services.notifier_service import NotifierService, TelegramNotifier
 from app.services.system_monitor import SystemMonitorService
 from app.services.viral_processor import ViralProcessorService
 import app.config as config
+from app.services import settings as runtime_settings
+from app.constants import JobStatus, ViralStatus
+
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - [MAINTENANCE] - %(levelname)s - %(message)s")
@@ -35,7 +44,7 @@ def _pending_backlog(db: Session) -> int:
     """Count jobs that indicate backlog; used to decide whether to skip heavy maintenance tasks."""
     from app.database.models import Job
     return db.query(Job).filter(
-        Job.status.in_(["PENDING", "RUNNING", "DRAFT", "AI_PROCESSING", "AWAITING_STYLE"])
+        Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
     ).count()
 
 
@@ -86,7 +95,7 @@ def _cleanup_orphaned_virals(db: Session):
             return  # Safety fallback: don't cleanup if no active pages at all
             
         virals = db.query(ViralMaterial).filter(
-            ViralMaterial.status.in_(["NEW", "REUP"]),
+            ViralMaterial.status.in_([ViralStatus.NEW, ViralStatus.REUP]),
             ViralMaterial.target_page.isnot(None),
             ViralMaterial.target_page != ""
         ).all()
@@ -100,11 +109,11 @@ def _cleanup_orphaned_virals(db: Session):
         if orphans_fixed > 0:
             logger.info("🧹 Auto-Cleaned %d orphaned viral materials (target page deleted).", orphans_fixed)
 
-        # 2. Smart Cleanup: Tự động đào thải video ế (NEW > 48h)
+        # 2. Smart Cleanup: Tự động đào thải video ế
         import os
-        stale_threshold = int(time.time()) - (48 * 3600)
+        stale_threshold = int(time.time()) - (runtime_settings.get_int('worker.maintenance.stale_threshold_hours', 48, db=db) * 3600)
         stale_virals = db.query(ViralMaterial).filter(
-            ViralMaterial.status == "NEW",
+            ViralMaterial.status == ViralStatus.NEW,
             ViralMaterial.created_at < stale_threshold
         ).all()
         
@@ -127,7 +136,7 @@ def _cleanup_orphaned_virals(db: Session):
             stale_count += 1
             
         if stale_count > 0:
-            logger.info("🗑️ Smart Cleanup: Đã xóa %d video ế (nằm kho quá 48h) để dọn dung lượng.", stale_count)
+            logger.info("🗑️ Smart Cleanup: Đã xóa %d video ế quá hạn để dọn dung lượng.", stale_count)
 
         if orphans_fixed > 0 or stale_count > 0:
             db.commit()
@@ -156,7 +165,7 @@ def _check_daily_summary(db):
 
 # Hourly tracker cho TikTok scraping (chạy mỗi 1 giờ, không mỗi 5 phút)
 _last_tiktok_scrape_ts: float = 0
-TIKTOK_SCRAPE_INTERVAL_SEC = 3600  # 1 giờ
+TIKTOK_SCRAPE_INTERVAL_SEC = runtime_settings.get_int('worker.maintenance.tiktok_scrape_sec', 3600)  # 1 giờ
 
 
 def _scrape_tiktok_competitors(db):
@@ -197,7 +206,7 @@ def _scrape_tiktok_competitors(db):
 
 # Hourly Zombie Purge
 _last_purge_ts: float = 0
-PURGE_INTERVAL_SEC = 3600  # 1 giờ
+PURGE_INTERVAL_SEC = runtime_settings.get_int('worker.maintenance.purge_interval_sec', 3600)  # 1 giờ
 
 def _purge_zombies():
     global _last_purge_ts
@@ -216,7 +225,7 @@ def _purge_zombies():
 
 # ── Competitor Discovery (chạy 24h/lần, ban đêm) ──────────────────────
 _last_discovery_ts: float = 0
-DISCOVERY_INTERVAL_SEC = 86400  # 24 giờ
+DISCOVERY_INTERVAL_SEC = runtime_settings.get_int('worker.maintenance.discovery_interval_sec', 86400)  # 24 giờ
 DISCOVERY_NIGHT_START = 2   # 2 AM
 DISCOVERY_NIGHT_END = 5     # 5 AM
 DISCOVERY_MAX_KEYWORDS = 3

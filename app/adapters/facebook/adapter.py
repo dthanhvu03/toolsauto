@@ -7,7 +7,7 @@ import re
 from urllib.parse import urlparse
 import traceback
 from typing import Any
-from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR
+from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR, DATA_DIR
 from playwright.sync_api import Playwright, BrowserContext, Page, Locator, TimeoutError
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.database.models import Job
@@ -216,8 +216,8 @@ class FacebookAdapter(AdapterInterface):
     def _click_locator(self, locator: Locator, description: str, timeout: int = 5000) -> bool:
         try:
             locator.scroll_into_view_if_needed()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("FacebookAdapter: Swallowed exception at line 219: %s", e)
 
         try:
             locator.click(timeout=timeout)
@@ -366,8 +366,8 @@ class FacebookAdapter(AdapterInterface):
                         if target_name in self._normalize_fb_text(text):
                             found_el = el
                             break
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Swallowed exception at line 369: %s", e)
 
             if found_el:
                 logger.info("FacebookAdapter: Found personal profile '%s' in switcher. Clicking...", account_name)
@@ -385,7 +385,8 @@ class FacebookAdapter(AdapterInterface):
                 # Close the menu if we opened it by clicking off banner
                 try:
                     self.page.keyboard.press("Escape")
-                except: pass
+                except:
+                    logger.warning("FacebookAdapter: Swallowed unknown exception at line 388")
                 
         except Exception as e:
             logger.warning("FacebookAdapter: Failed during profile switch attempt: %s", e)
@@ -470,17 +471,32 @@ class FacebookAdapter(AdapterInterface):
                     self._verify_posting_context_matches_target(target_page_url or "")
                 )
 
-                if norm_target and norm_active and not verified_ok:
-                    error_msg = f"Security abort: Active context ({norm_active}) does not match target page ({norm_target}). Preventing wrong-page post."
-                    logger.error("FacebookAdapter: %s", error_msg)
-                    return self._failure_result(
-                        job.id,
-                        "context_verification",
-                        error_msg,
-                        flow_mode,
-                        entrypoint_used,
-                        is_fatal=False
-                    )
+                if not verified_ok:
+                    if not norm_active:
+                        # /me check threw an exception (browser closed, timeout, etc.)
+                        # Cannot verify context → MUST abort to prevent wrong-page post
+                        error_msg = "/me check failed — cannot verify context safety. Aborting to prevent wrong-page post."
+                        logger.error("FacebookAdapter: %s", error_msg)
+                        return self._failure_result(
+                            job.id,
+                            "context_verification_exception",
+                            error_msg,
+                            flow_mode,
+                            entrypoint_used,
+                            is_fatal=False
+                        )
+                    else:
+                        # /me resolved but doesn't match target page
+                        error_msg = f"Security abort: Active context ({norm_active}) does not match target page ({norm_target}). Preventing wrong-page post."
+                        logger.error("FacebookAdapter: %s", error_msg)
+                        return self._failure_result(
+                            job.id,
+                            "context_verification",
+                            error_msg,
+                            flow_mode,
+                            entrypoint_used,
+                            is_fatal=False
+                        )
                 else:
                     logger.info("FacebookAdapter: Context verified successfully. Safe to proceed.")
             else:
@@ -607,8 +623,8 @@ class FacebookAdapter(AdapterInterface):
                                 full = clean if clean.startswith("http") else "https://www.facebook.com" + clean
                                 if full not in pre_existing_reels:
                                     pre_existing_reels.append(full)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("FacebookAdapter: Swallowed exception at line 610: %s", e)
                     logger.info("FacebookAdapter: Pre-scanned %d existing reels before posting.", len(pre_existing_reels))
                 except Exception as e:
                     logger.warning("FacebookAdapter: Pre-scan reels failed: %s. Proceeding without.", e)
@@ -813,8 +829,8 @@ class FacebookAdapter(AdapterInterface):
                     if normalized:
                         post_url = normalized
                         logger.info("FacebookAdapter: post_url captured from current URL after post: %s", post_url)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Swallowed exception at line 816: %s", e)
 
                 if not post_url:
                     if target_page_url:
@@ -839,8 +855,8 @@ class FacebookAdapter(AdapterInterface):
                     try:
                         self.page.goto(profile_url, wait_until="commit", timeout=15000)
                         self.page.wait_for_timeout(5000)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("FacebookAdapter: Swallowed exception at line 842: %s", e)
 
                     try:
                         see_more_buttons = self.page.locator(
@@ -851,12 +867,12 @@ class FacebookAdapter(AdapterInterface):
                             try:
                                 btn.click(timeout=2000)
                                 self.page.wait_for_timeout(500)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 854: %s", e)
                         if see_more_buttons:
                             logger.info("FacebookAdapter: Expanded %d 'See more' buttons.", min(len(see_more_buttons), 5))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("FacebookAdapter: Swallowed exception at line 858: %s", e)
 
                     if salt:
                         try:
@@ -904,8 +920,8 @@ class FacebookAdapter(AdapterInterface):
                                             logger.info("FacebookAdapter: post_url captured via main feed (JS fallback): %s", post_url)
                             if post_url:
                                 break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("FacebookAdapter: Swallowed exception at line 907: %s", e)
 
                     unique_reels = []
                     for reels_tab_url in reels_tab_urls:
@@ -926,8 +942,8 @@ class FacebookAdapter(AdapterInterface):
                                     normalized = self._normalize_post_url(full)
                                     if normalized and normalized not in unique_reels:
                                         unique_reels.append(normalized)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 929: %s", e)
                         if unique_reels:
                             logger.info("FacebookAdapter: Found %d reel/video links on %s", len(unique_reels), reels_tab_url)
                             break
@@ -1143,11 +1159,11 @@ class FacebookAdapter(AdapterInterface):
             
             # 1b. Debug: screenshot after page load to diagnose login walls
             try:
-                _debug_path = f"/home/vu/toolsauto/data/debug_comment_{int(time.time())}.png"
+                _debug_path = DATA_DIR / f"debug_comment_{int(time.time())}.png"
                 self.page.screenshot(path=_debug_path)
                 logger.info("FacebookAdapter: Debug screenshot saved: %s", _debug_path)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("FacebookAdapter: Swallowed exception at line 1149: %s", e)
             
             # 1c. Dismiss login wall if present (common on Reels when session expired)
             try:
@@ -1156,8 +1172,8 @@ class FacebookAdapter(AdapterInterface):
                     _close_btn.click()
                     self.page.wait_for_timeout(1000)
                     logger.info("FacebookAdapter: Dismissed login/popup overlay")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("FacebookAdapter: Swallowed exception at line 1159: %s", e)
             
             # 1d. Check if we're actually logged in
             _is_logged_in = False
@@ -1245,11 +1261,11 @@ class FacebookAdapter(AdapterInterface):
             
             # 2c. Debug: screenshot after opening comment section
             try:
-                _debug_path2 = f"/home/vu/toolsauto/data/debug_comment_after_{int(time.time())}.png"
+                _debug_path2 = DATA_DIR / f"debug_comment_after_{int(time.time())}.png"
                 self.page.screenshot(path=_debug_path2)
                 logger.info("FacebookAdapter: Debug screenshot (after comment click) saved: %s", _debug_path2)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("FacebookAdapter: Swallowed exception at line 1251: %s", e)
             
             # 3. Find comment box (multiple selectors for i18n + Reels robustness)
             comment_selectors = [
@@ -1305,8 +1321,8 @@ class FacebookAdapter(AdapterInterface):
                             comment_box = nth_loc
                             logger.info("FacebookAdapter: Found comment box via generic fallback (idx %d)", i)
                             break
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Swallowed exception at line 1308: %s", e)
             
             # Fallback: use Playwright's get_by_placeholder for Lexical editor
             if not comment_box:
@@ -1543,8 +1559,8 @@ class FacebookAdapter(AdapterInterface):
             return False
         try:
             row.scroll_into_view_if_needed(timeout=5000)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("FacebookAdapter: Swallowed exception at line 1546: %s", e)
         try:
             if not row.is_visible(timeout=3000):
                 logger.info("FacebookAdapter: Switcher row not visible (%s)", label)
@@ -1788,8 +1804,8 @@ class FacebookAdapter(AdapterInterface):
                                     ):
                                         activated = True
                                         break
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 1791: %s", e)
                     if not activated:
                         indices = list(range(cnt))
                         if row_sel == "div[role=\"button\"]" and cnt >= 2:
@@ -1807,8 +1823,8 @@ class FacebookAdapter(AdapterInterface):
                                         i,
                                     )
                                     continue
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 1810: %s", e)
                             if self._activate_profile_switcher_row(r, f"{row_sel}-{i}"):
                                 activated = True
                                 break
@@ -1911,8 +1927,8 @@ class FacebookAdapter(AdapterInterface):
                             
                             if target_norm in normalized:
                                 name_candidates.append(el)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("FacebookAdapter: Swallowed exception at line 1914: %s", e)
 
                 found_el = None
                 if page_id and name_candidates:
@@ -1925,8 +1941,8 @@ class FacebookAdapter(AdapterInterface):
                                     page_id,
                                 )
                                 break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("FacebookAdapter: Swallowed exception at line 1928: %s", e)
                     if not found_el:
                         logger.warning(
                             "FacebookAdapter: %s name matches, page id %s not in href/markup; "
