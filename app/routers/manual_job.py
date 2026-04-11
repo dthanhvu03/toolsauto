@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.database.core import get_db
 from app.database.models import Account, Job
 from app.main_templates import templates
+from app.constants import AccountStatus, JobStatus
+from app.services.fb_compliance import compliance_checker, Severity
 
 router = APIRouter(prefix="/jobs/manual", tags=["manual-jobs"])
 logger = logging.getLogger(__name__)
@@ -20,7 +22,7 @@ MANUAL_DIR = os.path.join(BASE_DIR, "content", "manual")
 @router.get("/form", response_class=HTMLResponse)
 def manual_job_form(request: Request, db: Session = Depends(get_db)):
     """Return the manual-job creation form (called via HTMX into a modal)."""
-    accounts = db.query(Account).filter(Account.is_active == True, Account.login_status == "ACTIVE").all()
+    accounts = db.query(Account).filter(Account.is_active == True, Account.login_status == AccountStatus.ACTIVE).all()
     pages_by_acc = []
     for acc in accounts:
         for pg in (acc.managed_pages_list or []):
@@ -46,6 +48,18 @@ async def manual_job_create(
     db: Session = Depends(get_db)
 ):
     """Create a high-priority manual job, bypassing AI and crawl stages."""
+    
+    # [Compliance Gate] Check user-provided caption
+    caption_text = (caption or "").strip()
+    if caption_text:
+        comp = compliance_checker.check(caption_text)
+        if comp.status == Severity.VIOLATION:
+            violations = ", ".join([v.evidence for v in comp.violations])
+            msg = f"❌ Không thể tạo Job: Nội dung vi phạm chính sách Facebook ({violations})"
+            return HTMLResponse(
+                f'<div class="p-3 text-sm rounded bg-rose-50 text-rose-800 border border-rose-200 font-medium">{msg}</div>'
+            )
+
     os.makedirs(MANUAL_DIR, exist_ok=True)
     
     media_path = None
@@ -62,9 +76,9 @@ async def manual_job_create(
             platform="facebook",
             account_id=account_id,
             target_page=target_page,
-            caption=caption.strip() or None,
+            caption=caption_text or None,
             media_path=media_path,
-            status="PENDING",
+            status=JobStatus.PENDING,
             schedule_ts=int(time.time()),
             tries=0,
             max_tries=3,
@@ -79,4 +93,7 @@ async def manual_job_create(
         logger.error(f"Manual job create error: {e}")
         msg = f"❌ Lỗi tạo Job: {e}"
 
-    return HTMLResponse(f'<div class="p-3 text-sm rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">{msg}</div>')
+    return HTMLResponse(
+        f'<div class="p-3 text-sm rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">{msg}</div>'
+        f'<script>if(window.refreshJobs) window.refreshJobs(1); setTimeout(() => document.getElementById("manualJobDialog").close(), 2000);</script>'
+    )

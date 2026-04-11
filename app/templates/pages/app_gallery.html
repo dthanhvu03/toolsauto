@@ -38,7 +38,7 @@
                     const card = el.closest('[data-media-card]');
                     if (card) card.remove();
                 } else {
-                    alert('Lỗi: ' + (data.error || 'Unknown'));
+                    showToast('Lỗi: ' + (data.error || 'Unknown'), 'error');
                 }
             });
     }

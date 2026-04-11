@@ -16,6 +16,8 @@ from sqlalchemy import and_, select
 
 from app.database.models import Job, Account
 from app.config import TIMEZONE, CONTENT_PROFILES_DIR
+from app.constants import JobStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +69,7 @@ class MetricsChecker:
             db.query(Job)
             .join(Account, Job.account_id == Account.id)
             .filter(
-                Job.status == "DONE",
+                Job.status == JobStatus.DONE,
                 Job.post_url != None,
                 Job.finished_at != None,
                 # Either it was never checked, OR it was checked but is older than threshold

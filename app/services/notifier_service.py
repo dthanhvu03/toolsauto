@@ -3,12 +3,12 @@ Notifier Service — Gửi thông báo qua các kênh khác nhau (Telegram, Emai
 
 Kiến trúc:
     TelegramClient     → Low-level API wrapper (telegram_client.py)
-    TelegramNotifier   → app/services/notifiers/telegram.py (kế thừa BaseNotifier)
+    TelegramNotifier   → app.services.notifier_services/telegram.py (kế thừa BaseNotifier)
     NotifierService    → Facade (gọi tất cả channels)
     MediaProcessor     → extract/cleanup thumbnail cho notify_job_done
 
 Dùng:
-    from app.services.notifier import NotifierService, TelegramNotifier
+    from app.services.notifier_service import NotifierService, TelegramNotifier
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
     NotifierService.notify_job_done(job)
 """
@@ -19,6 +19,8 @@ from typing import Optional
 from app.services.media_processor import MediaProcessor
 from app.services.notifiers import BaseNotifier, TelegramNotifier
 from app.services import notifier_formatting as nf
+from app.constants import JobStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -160,15 +162,15 @@ class NotifierService:
 
         recent = db.query(Job).filter(Job.created_at >= since).all()
 
-        done = sum(1 for j in recent if j.status == "DONE")
-        failed = sum(1 for j in recent if j.status == "FAILED")
-        pending = sum(1 for j in recent if j.status == "PENDING")
-        draft = sum(1 for j in recent if j.status == "DRAFT")
-        running = sum(1 for j in recent if j.status == "RUNNING")
+        done = sum(1 for j in recent if j.status == JobStatus.DONE)
+        failed = sum(1 for j in recent if j.status == JobStatus.FAILED)
+        pending = sum(1 for j in recent if j.status == JobStatus.PENDING)
+        draft = sum(1 for j in recent if j.status == JobStatus.DRAFT)
+        running = sum(1 for j in recent if j.status == JobStatus.RUNNING)
         total = len(recent)
 
-        total_views = sum(j.view_24h or 0 for j in recent if j.status == "DONE")
-        total_clicks = sum(j.click_count or 0 for j in recent if j.status == "DONE")
+        total_views = sum(j.view_24h or 0 for j in recent if j.status == JobStatus.DONE)
+        total_clicks = sum(j.click_count or 0 for j in recent if j.status == JobStatus.DONE)
 
         cls._broadcast(nf.daily_summary_message(
             done, failed, pending, draft, running, total, total_views, total_clicks,

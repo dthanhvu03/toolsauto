@@ -204,6 +204,10 @@ class GeminiRPAService:
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
         
+        pm2_name = os.environ.get("name", "gemini_rpa_default").replace(" ", "_")
+        profile_path = f"/tmp/{os.getenv('APP_NAME', 'app')}_chrome_{pm2_name}"
+        logger.info("Using isolated Chromium profile: %s", profile_path)
+        
         try:
             major = _detect_chrome_major_version()
             if major:
@@ -216,6 +220,7 @@ class GeminiRPAService:
                 options=opts,
                 keep_alive=True,
                 use_subprocess=True,
+                user_data_dir=profile_path,
                 # Pin driver major to the installed browser to prevent SessionNotCreated
                 **({"version_main": major} if major else {}),
             )

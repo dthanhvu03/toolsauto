@@ -39,10 +39,36 @@ venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 ---
 
+### 6) n8n-lite Debug MCP Server (business logic)
+
+Server Python riêng expose workflow/CTA/step toggle tools qua stdio transport.
+
+```bash
+# Chạy trực tiếp
+PYTHONPATH=. venv/bin/python mcp_server.py
+
+# Mở bằng MCP Inspector
+npx -y @modelcontextprotocol/inspector -- venv/bin/python mcp_server.py
+```
+
+**Tools có sẵn:**
+
+| Tool | Mô tả |
+|------|--------|
+| `get_workflow_steps` | Xem steps hiện tại từ workflow_definitions |
+| `get_cta_templates` | Xem CTA templates từ DB |
+| `inject_cta` | Preview CTA injection (read-only) |
+| `preview_step_toggles` | Xem step nào active/skipped |
+| `invalidate_workflow_cache` | Xoá cache để reload từ DB |
+
+---
+
 ## English
 
 1. Merge [`cursor-mcp.json`](./cursor-mcp.json) into your Cursor MCP configuration (or add the `playwright` server manually with `npx -y @playwright/mcp@latest`).
 2. Start the FastAPI app on port **8000**, then use the agent to drive the browser via MCP tools (`navigate`, `snapshot`, `click`, etc.).
 3. Use **`./scripts/run-mcp-playwright.sh`** only for debugging the MCP process outside Cursor.
+4. Use **`PYTHONPATH=. venv/bin/python mcp_server.py`** for the n8n-lite debug tools (workflow, CTA, step toggles).
 
 **Related:** Official package [@playwright/mcp](https://www.npmjs.com/package/@playwright/mcp).
+

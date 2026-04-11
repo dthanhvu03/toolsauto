@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.database.models import Account, Job
 from app.config import CONTENT_PROFILES_DIR
 import logging
+from app.constants import AccountStatus, JobStatus, ViralStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +103,7 @@ class AccountService:
             name=name,
             platform=platform,
             is_active=True,
-            login_status="NEW",
+            login_status=ViralStatus.NEW,
             daily_limit=daily_limit,
             cooldown_seconds=cooldown_seconds
         )
@@ -258,7 +260,7 @@ class AccountService:
             raise ValueError(f"Account {account_id} not found.")
             
         account.consecutive_fatal_failures = 0
-        account.login_status = "ACTIVE"
+        account.login_status = AccountStatus.ACTIVE
         account.login_error = None
         account.is_active = True
         
@@ -275,7 +277,7 @@ class AccountService:
             
         pending_running = db.query(Job).filter(
             Job.account_id == account_id,
-            Job.status.in_(["PENDING", "RUNNING"])
+            Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING])
         ).count()
         
         if pending_running > 0:
@@ -378,10 +380,10 @@ class AccountService:
                 browser.close()
                 
             if is_logged_in:
-                account.login_status = "ACTIVE"
+                account.login_status = AccountStatus.ACTIVE
                 account.login_error = None
             else:
-                account.login_status = "INVALID"
+                account.login_status = AccountStatus.INVALID
                 account.login_error = f"Session expired or account requires re-login on {account.platform}."
                 
             db.commit()
@@ -403,7 +405,7 @@ class AccountService:
         """Transitions an account state directly to INVALID."""
         account = cls.get_account(db, account_id)
         if account:
-            account.login_status = "INVALID"
+            account.login_status = AccountStatus.INVALID
             account.login_error = reason
             db.commit()
         return account

@@ -38,22 +38,7 @@
     {% endif %}
   {%- endmacro %}
 
-  {% if message %}
-    <div class="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-800 font-medium flex items-center gap-2">
-      <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-      {% if message == 'saved' %}
-        Đã lưu cài đặt thành công.
-      {% elif message == 'reset' %}
-        Đã đặt lại một mục về giá trị mặc định.
-      {% elif message.startswith('bulk_saved_') %}
-        {% set rest = message[12:] %}
-        {% set pair = rest.split('_reset_') %}
-        Đã lưu <strong>{{ pair[0] }}</strong> thay đổi; đặt lại <strong>{{ pair[1] }}</strong> mục về mặc định.
-      {% else %}
-        {{ message }}
-      {% endif %}
-    </div>
-  {% endif %}
+  <!-- Legacy message block removed in favor of global HTMX toast notifications -->
 
   <div class="flex items-start gap-8">
     <!-- ─── Sticky Sidebar Navigation ─────────────────────────────────── -->
@@ -61,6 +46,7 @@
       <div class="space-y-1">
         <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-3">Sections</div>
         {% for section, specs in sections.items() %}
+        {% if section not in ['AI Prompt Configs', 'AI Prompt Personas'] %}
         <a href="#section-{{ loop.index }}"
            class="settings-nav-link flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-indigo-700 hover:bg-indigo-50/50 transition-all duration-150"
            data-section="{{ loop.index }}">
@@ -68,6 +54,7 @@
           <span class="truncate">{{ section }}</span>
           <span class="ml-auto text-[10px] font-bold text-gray-300 tabular-nums">{{ section_counts[section] }}</span>
         </a>
+        {% endif %}
         {% endfor %}
         
         <div class="border-t border-gray-100 mt-4 pt-4">
@@ -82,7 +69,7 @@
 
     <!-- ─── Main Content ──────────────────────────────────────────────── -->
     <div class="flex-1 min-w-0">
-      <form id="settings-bulk" method="post" action="/app/settings/bulk-save" class="space-y-6">
+      <form id="settings-bulk" hx-post="/app/settings/bulk-save" hx-trigger="submit" class="space-y-6">
         
         <!-- Mobile Save Button -->
         <div class="xl:hidden bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex items-center justify-between gap-4">
@@ -94,6 +81,7 @@
         </div>
 
         {% for section, specs in sections.items() %}
+          {% if section not in ['AI Prompt Configs', 'AI Prompt Personas'] %}
           <div id="section-{{ loop.index }}" class="scroll-mt-24 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <!-- Section Header -->
             <div class="px-5 py-4 border-b border-gray-100 bg-slate-50/60 flex items-center justify-between">
@@ -280,16 +268,20 @@
               {% endfor %}
             </div>
           </div>
+          {% endif %}
         {% endfor %}
       </form>
 
       {% for section, specs in sections.items() %}
         {% for spec in specs %}
-          <form id="reset-form-{{ spec.key }}" method="post" action="/app/settings/reset" class="hidden">
+          {% if not spec.env_only %}
+          <form id="reset-form-{{ spec.key }}" hx-post="/app/settings/reset" hx-trigger="submit" class="hidden">
             <input type="hidden" name="key" value="{{ spec.key }}" />
           </form>
+          {% endif %}
         {% endfor %}
       {% endfor %}
+
     </div>
   </div>
 {% endblock %}

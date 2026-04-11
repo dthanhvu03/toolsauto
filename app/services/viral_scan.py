@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 from app.database.models import Account, ViralMaterial, SystemState
 from app.services.tiktok_scraper import TikTokScraper
 import app.config as config
+from app.constants import ViralStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +130,7 @@ def run_tiktok_competitor_scan(db: Session) -> tuple[int, int]:
                 views=vid.get("view_count", 0),
                 scraped_by_account_id=account_id,
                 target_page=channel_target_page,
-                status="NEW",
+                status=ViralStatus.NEW,
             )
             db.add(mat)
             total_found += 1
