@@ -1,0 +1,170 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}AI Studio • Auto Publisher{% endblock %}
+{% block page_title %}AI Prompt Studio{% endblock %}
+{% block page_subtitle %}Quản lý Persona, cấu hình thuật toán và test nội dung trực tiếp với Google Gemini.{% endblock %}
+
+{% block head_extra %}
+<script>
+  function selectPrompt(key, title, content) {
+    document.getElementById('current-prompt-key').value = key;
+    document.getElementById('prompt-title').innerText = title;
+    document.getElementById('prompt-editor').value = decodeURIComponent(content);
+    
+    // update active states
+    document.querySelectorAll('.prompt-nav-item').forEach(el => {
+      if(el.dataset.key === key) {
+        el.classList.add('bg-indigo-50', 'border-indigo-100', 'text-indigo-700');
+        el.classList.remove('border-transparent', 'text-gray-500', 'hover:bg-gray-50');
+      } else {
+        el.classList.remove('bg-indigo-50', 'border-indigo-100', 'text-indigo-700');
+        el.classList.add('border-transparent', 'text-gray-500', 'hover:bg-gray-50');
+      }
+    });
+  }
+</script>
+<style>
+  .ai-editor {
+    resize: vertical; min-height: 480px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 14px; line-height: 1.6;
+  }
+  
+  /* HTMX Loading States */
+  .htmx-loading-show { display: none; }
+  .htmx-request .htmx-loading-show { display: block; }
+  .htmx-request .htmx-loading-hide { display: none; }
+  .htmx-request button[type="submit"] { opacity: 0.7; pointer-events: none; }
+  .htmx-request button[type="submit"] { cursor: not-allowed; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-[1400px]">
+  
+  <div class="flex flex-col lg:flex-row gap-6 items-start">
+    
+    <!-- Left Sidebar (Navigation) -->
+    <div class="w-full lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm sticky top-24">
+      <div class="p-4 border-b border-gray-50 bg-gray-50/50">
+        <div class="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-1">Library</div>
+        <div class="font-bold text-sm text-gray-900">AI Templates</div>
+      </div>
+      
+      <div class="p-2 flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
+        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mt-2 mb-1">Personas (Ngách)</div>
+        {% for id, info in personas.items() %}
+        <button type="button" 
+          onclick="selectPrompt('{{ info.key }}', 'Persona: {{ info.label }}', encodeURIComponent(`{{ info.value | replace('`', '\\`') }}`))"
+          class="prompt-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors {% if loop.first %}bg-indigo-50 border-indigo-100 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50{% endif %}"
+          data-key="{{ info.key }}">
+          <span class="text-gray-400 w-5 h-5 flex items-center justify-center">{{ info.icon|safe }}</span>
+          <span class="truncate">{{ info.label }}</span>
+        </button>
+        {% endfor %}
+        
+        <div class="my-2 border-t border-gray-100 mx-2"></div>
+        
+        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-1">Configs (Lõi lõi)</div>
+        {% for id, info in configs.items() %}
+        <button type="button" 
+          onclick="selectPrompt('{{ info.key }}', 'Config: {{ info.label }}', encodeURIComponent(`{{ info.value | replace('`', '\\`') }}`))"
+          class="prompt-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors border-transparent text-gray-500 hover:bg-gray-50"
+          data-key="{{ info.key }}">
+          <span class="text-gray-400 w-5 h-5 flex items-center justify-center">{{ info.icon|safe }}</span>
+          <span class="truncate">{{ info.label }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Center Panel (Editor) -->
+    <div class="flex-1 min-w-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <!-- Header -->
+      <div class="px-6 py-5 border-b border-gray-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 id="prompt-title" class="text-lg font-display font-bold text-gray-900">Persona: {{ personas['general'].label }}</h2>
+          <p class="text-xs text-gray-500 mt-1 flex items-center gap-2">Chỉnh sửa nội dung prompt & Lưu trực tiếp vào Database.</p>
+        </div>
+      </div>
+      
+      <!-- Body -->
+      <form id="promptForm" hx-post="/app/ai-studio/save" hx-trigger="submit" hx-swap="beforeend" hx-target="body" class="p-6">
+        <input type="hidden" name="key" id="current-prompt-key" value="{{ personas['general'].key }}">
+        
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold text-gray-500 mr-2">Cú pháp chèn nhanh:</span>
+          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[POST_TITLE]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-gray-100 text-gray-600 hover:text-indigo-600 border border-gray-200 transition-colors">[[POST_TITLE]]</button>
+          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[GROUP_NAME]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-gray-100 text-gray-600 hover:text-indigo-600 border border-gray-200 transition-colors">[[GROUP_NAME]]</button>
+          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[LINK]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-gray-100 text-gray-600 hover:text-indigo-600 border border-gray-200 transition-colors">[[LINK]]</button>
+        </div>
+
+        <textarea name="value" id="prompt-editor"
+          class="ai-editor w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-gray-700 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-colors shadow-inner" 
+          spellcheck="false">{{ personas['general'].value }}</textarea>
+
+        <div class="mt-6 flex justify-end">
+          <button type="submit" class="h-10 px-6 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95">
+            <svg class="w-4 h-4 htmx-loading-hide" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+            <svg class="w-4 h-4 htmx-loading-show animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span class="htmx-loading-hide">Lưu xuống hệ thống</span>
+            <span class="htmx-loading-show">Đang lưu...</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Right Panel (Sandbox) -->
+    <div class="w-full lg:w-[380px] xl:w-[420px] shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden sticky top-24">
+      <div class="px-5 py-4 border-b border-gray-100 bg-emerald-50/40">
+        <h2 class="text-sm font-display font-bold text-gray-900 flex items-center gap-2">
+          <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+          Gemini Live Sandbox
+        </h2>
+      </div>
+      
+      <div class="p-5">
+        <form id="sandboxForm" hx-post="/app/ai-studio/test-run" hx-target="#generation-result" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">🔗 Đầu vào Test (Tiêu đề Video/Link)</label>
+            <input type="text" name="prompt_content" placeholder="Vd: 3 cách chăm sóc da mặt..." required
+              class="block w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-gray-700 text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">🎭 Áp dụng Persona (Theo ngách)</label>
+            <div class="relative">
+              <select name="niche" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-gray-700 text-sm focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-all appearance-none cursor-pointer">
+                {% for id, info in personas.items() %}
+                <option value="{{ id }}">{{ info.label }}</option>
+                {% endfor %}
+              </select>
+              <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1.5">Kết quả test sẽ ráp chung với cấu hình Visual Hook và Engagement.</p>
+          </div>
+          
+          <button type="submit"
+            class="w-full mt-2 h-11 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center gap-2 transition-colors">
+            <svg class="w-4 h-4 htmx-loading-hide" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <svg class="w-4 h-4 htmx-loading-show animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <span class="htmx-loading-hide">Giả Lập Gọi Gemini AI</span>
+            <span class="htmx-loading-show">Đang mô phỏng...</span>
+          </button>
+        </form>
+        
+        <div class="mt-6 border-t border-gray-100 pt-6">
+          <div id="generation-result" class="min-h-[160px] flex items-center justify-center">
+            <div class="text-center text-gray-400 py-8 flex flex-col items-center">
+              <svg class="w-10 h-10 mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+              <p class="text-sm font-medium">Bản Mockup bài đăng sẽ hiển thị ở đây</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

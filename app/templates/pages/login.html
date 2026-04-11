@@ -179,26 +179,6 @@
             }
         }
 
-        function showToast(message, type = 'error') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            
-            const isError = type === 'error';
-            const bgClass = isError ? 'bg-red-500/10 border-red-500/20' : 'bg-emerald-500/10 border-emerald-500/20';
-            const iconColor = isError ? 'text-red-400' : 'text-emerald-400';
-            const iconPath = isError 
-                ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />'
-                : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />';
-                
-            toast.className = `pointer-events-auto toast-enter overflow-hidden rounded-xl border ${bgClass} p-4 shadow-lg backdrop-blur-md`;
-            toast.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <div class="flex-shrink-0">
-                        <svg class="h-6 w-6 ${iconColor}" fill="none" viewBox="0 0 24 24" stroke="currentColor">${iconPath}</svg>
-                    </div>
-                    <div class="flex-1">
-                        <p class="text-sm font-semibold text-white">${message}</p>
-                    </div>
                     <button onclick="this.closest('.toast-enter').remove()" class="text-slate-400 hover:text-white transition-colors">
                         <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                     </button>

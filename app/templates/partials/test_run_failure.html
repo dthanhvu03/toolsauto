@@ -1,0 +1,11 @@
+
+<div class="p-4 bg-orange-50 rounded-xl border border-orange-200">
+    <div class="text-xs font-bold text-orange-800 uppercase mb-2 flex items-center gap-1.5"><svg class="w-4 h-4 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> Kiểm định thất bại</div>
+    <ul class="list-disc list-inside text-sm text-orange-700">
+        {% for err in errors %}
+        <li>{{ err }}</li>
+        {% endfor %}
+    </ul>
+    <hr class="my-2 border-orange-200">
+    <div class="text-gray-800 whitespace-pre-wrap text-sm">{{ cleaned }}</div>
+</div>

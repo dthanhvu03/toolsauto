@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from app.database.models import Job
+from app.constants import AccountStatus, JobStatus
+
 
 class QueueService:
     
@@ -209,7 +211,7 @@ class QueueService:
         # Telegram alert (best-effort, avoid spam by only sending when something recovered)
         if recovered_total > 0:
             try:
-                from app.services.notifier import NotifierService
+                from app.services.notifier_service import NotifierService
                 ids_preview = []
                 if stale_running_ids:
                     ids_preview.extend(stale_running_ids[:5])

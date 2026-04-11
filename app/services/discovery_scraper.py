@@ -17,6 +17,8 @@ import time
 from urllib.parse import quote
 
 from app.services.yt_dlp_path import yt_dlp_binary
+from app.constants import ViralStatus
+
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +177,7 @@ class DiscoveryScraper:
                 video_count=stats["video_count"],
                 post_frequency=stats["post_frequency"],
                 score=stats["score"],
-                status="NEW",
+                status=ViralStatus.NEW,
             )
             db.add(record)
             saved += 1

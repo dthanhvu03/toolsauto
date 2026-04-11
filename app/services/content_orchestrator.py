@@ -547,7 +547,7 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
                 api_fallback = GeminiAPIService()
                 raw_json = api_fallback.ask_with_file(prompt, target_image)
             except Exception as api_err:
-                pass
+                logger.error("[Orchestrator] GeminiAPIService Fallback Error: %s", api_err)
                 
         if not raw_json:
             logger.error("RPA/API cũ đều không phản hồi. Kích hoạt 'Poorman's Logic' (Fallback)...")
@@ -587,18 +587,7 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
 
         # Anti-Hallucination Guard: detect prompt echo-back
         caption_lower = (result.get("caption") or "").lower()
-        HALLUCINATION_MARKERS = [
-            "chuyên gia content facebook ads",
-            "chuyên gia digital marketing",
-            "accesstrade đã sẵn sàng",
-            "hỗ trợ bạn tối ưu ngân sách",
-            "cho tôi thông tin",
-            "lên ngay dàn bài",
-            "bạn muốn vít ads",
-            "chiến dịch affiliate",
-            "tư duy a/b testing",
-            "chào vũ",
-        ]
+        from app.constants import HALLUCINATION_MARKERS
         hallucination_hits = sum(1 for m in HALLUCINATION_MARKERS if m in caption_lower)
         if hallucination_hits >= 2:
             raise OutputContractViolation(
@@ -610,33 +599,72 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
 
     def _poorman_caption_fallback(self, target_image: str) -> dict:
         """
-        Lớp dự phòng cuối cùng: dùng caption từ ViralMaterial (nếu có) 
-        hoặc sinh caption cực kỳ đơn giản dựa trên metadata.
+        Lớp dự phòng cuối cùng: dùng caption từ Job Text (nếu có) 
+        hoặc sinh caption cực kỳ đơn giản xoay vòng dựa trên metadata.
         """
-        logger.info("🎬 [Poorman's Logic] Đang chuẩn bị caption dự phòng từ metadata...")
+        import random
+        import re
+        job_id = getattr(getattr(self, 'current_job', None), 'id', 'Unknown')
+        logger.warning(f"🎬 [Poorman Logic] event=poorman_fallback job_id={job_id} target_image={target_image} reason_code=all_providers_exhausted")
+        
+        fallback_title = ""
+        try:
+            if hasattr(self, 'current_job') and getattr(self, 'current_job', None):
+                raw_ctx = getattr(self.current_job, 'caption', "") or ""
+                salt_match = re.search(r'\[ref:[a-zA-Z0-9]+\]|#v\d{4}', raw_ctx)
+                if salt_match:
+                    raw_ctx = raw_ctx.replace(salt_match.group(0), "")
+                
+                title_match = re.search(r'### ORIGINAL_VIRAL_TITLE:\s*(.*?)\s*###', raw_ctx)
+                if title_match and title_match.group(1):
+                    fallback_title = title_match.group(1).strip()
+                elif "Context:" in raw_ctx:
+                    fallback_title = raw_ctx.replace("Context:", "").strip()
+        except Exception as e:
+            logger.error("[Poorman Logic] Không thể trích xuất context: %s. Degrade về random array.", e)
+            
+        if fallback_title and len(fallback_title) > 5:
+            final_caption = f"{fallback_title}\n\n👉 Bạn thấy sao về video này? Để lại cho tụi mình 1 bình luận nhé!"
+            keywords = ["xuhuong", "video"]
+            reasoning = "smart_context_fallback"
+            f_lvl = 2
+        else:
+            try:
+                import app.config as config
+                raw_cap = getattr(config, "FALLBACK_CAPTION_POOL", "").strip()
+                pool_captions = [c.strip() for c in raw_cap.split("|") if c.strip()]
+                if not pool_captions:
+                    pool_captions = ["Video thú vị quá cả nhà ơi!"]
+            except Exception:
+                pool_captions = ["Video thú vị quá cả nhà ơi!"]
+                
+            final_caption = random.choice(pool_captions)
+            keywords = ["giaitri", "trending"]
+            reasoning = "generic_random_fallback"
+            f_lvl = 1
+
+        try:
+            import app.config as config
+            raw_hash = getattr(config, "FALLBACK_HASHTAG_POOL", "").strip()
+            hashtag_pools = []
+            for combo in raw_hash.split("|"):
+                tags = [t.strip() for t in combo.split(",") if t.strip()]
+                if tags:
+                    hashtag_pools.append(tags)
+            if not hashtag_pools:
+                hashtag_pools = [["#viral", "#xuhuong"]]
+        except Exception:
+            hashtag_pools = [["#viral", "#xuhuong"]]
+
         fallback_res = {
-            "caption": "Video hay quá cả nhà ơi! 😍 #viral #reels #trending",
-            "hashtags": ["#viral", "#reels", "#trending", "#xuhuong"],
-            "keywords": ["video hay", "trending"],
-            "affiliate_keyword": ""
+            "caption": final_caption,
+            "hashtags": random.choice(hashtag_pools),
+            "keywords": keywords,
+            "affiliate_keyword": "",
+            "reasoning": reasoning,
+            "fallback_level": f_lvl
         }
         
-        # Thử lấy title gốc từ ViralMaterial gắn kèm Job
-        if hasattr(self, 'current_job') and self.current_job:
-            from sqlalchemy.orm import Session
-            from app.database.db import SessionLocal
-            from app.database.models import ViralMaterial
-            
-            db = SessionLocal()
-            try:
-                # Tìm ViralMaterial tương ứng qua media_path (mapping logic phụ thuộc vào cách tạọ media_path)
-                # Đơn giản nhất là nếu có title trong chính ViralMaterial thì dùng.
-                # Tuy nhiên, Orchestrator thường chỉ nhận path. 
-                # Ta có thể tra cứu Job -> ViralMaterial link nếu có.
-                pass
-            finally:
-                db.close()
-                
         return fallback_res
 
     def generate_comments(self, keywords: list, count: int = 5) -> list:
@@ -769,7 +797,7 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
         """Try to extract JSON text from a response (codefence or outermost braces)."""
         if not text:
             return None
-        m = re.search(r"```json\\s*\\n(.*?)\\n\\s*```", text, re.DOTALL | re.IGNORECASE)
+        m = re.search(r"```json\s*\n(.*?)\n\s*```", text, re.DOTALL | re.IGNORECASE)
         if m:
             return m.group(1).strip()
         start = text.find("{")
