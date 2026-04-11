@@ -28,6 +28,8 @@ google-api-python-client==2.191.0
 google-auth==2.48.0
 google-auth-httplib2==0.3.0
 google-generativeai==0.8.6
+google-genai
+
 googleapis-common-protos==1.72.0
 greenlet==3.3.1
 grpcio==1.78.0
@@ -71,7 +73,8 @@ pyasn1==0.6.2
 pyasn1_modules==0.4.2
 PyAutoGUI==0.9.54
 pycparser==3.0
-pydantic==1.10.26
+pydantic>=2.0
+
 pydantic_core==2.41.5
 pyee==13.0.1
 PyGetWindow==0.0.9
