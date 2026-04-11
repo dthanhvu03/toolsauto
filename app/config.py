@@ -58,6 +58,7 @@ THUMB_DIR = BASE_DIR / "thumbnails"
 CONTENT_MEDIA_DIR = CONTENT_DIR / "media"
 CONTENT_VIDEO_DIR = CONTENT_DIR / "videos"
 CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
+OUTPUTS_DIR = BASE_DIR / "outputs"
 
 def iter_pm2_log_directories():
     seen = set()
@@ -200,6 +201,7 @@ for d in [
     CONTENT_MEDIA_DIR,
     CONTENT_VIDEO_DIR,
     CONTENT_PROCESSED_DIR,
+    OUTPUTS_DIR,
     DATA_DIR,
 ]:
     d.mkdir(parents=True, exist_ok=True)
