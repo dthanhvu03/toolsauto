@@ -549,7 +549,7 @@ async function saveKeyword() {
   let category = document.getElementById('modal-category').value;
   const severity = document.getElementById('modal-severity').value;
   if (category === '__new__') {
-    alert('Chọn hoặc tạo danh mục hợp lệ.');
+    showToast('Chọn hoặc tạo danh mục hợp lệ.', 'error');
     return;
   }
   try {
@@ -574,7 +574,7 @@ async function saveKeyword() {
     await loadKeywords();
     await loadAnalytics();
   } catch (err) {
-    alert('Lỗi: ' + err.message);
+    showToast('Lỗi: ' + err.message, 'error');
   }
 }
 
@@ -585,7 +585,7 @@ async function deleteKeyword(id) {
   const res = await fetch('/compliance/keywords/' + id, { method: 'DELETE' });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    alert(data.error || 'Không xóa được');
+    showToast(data.error || 'Không xóa được', 'error');
     return;
   }
   await loadCategories();
@@ -688,7 +688,7 @@ async function showViolationDetail(id) {
   const res = await fetch('/compliance/violations/' + id);
   const data = await res.json();
   if (!res.ok) {
-    alert(data.error || 'Lỗi tải chi tiết');
+    showToast(data.error || 'Lỗi tải chi tiết', 'error');
     return;
   }
   document.getElementById('violation-detail-body').textContent = JSON.stringify(data, null, 2);
@@ -830,7 +830,7 @@ async function saveAllowlist() {
   });
   const data = await res.json();
   if (!res.ok) {
-    alert(data.error || 'Lỗi');
+    showToast(data.error || 'Lỗi', 'error');
     return;
   }
   closeAllowlistModal();
@@ -852,12 +852,12 @@ async function bulkImport(event) {
   const res = await fetch('/compliance/keywords/bulk-import', { method: 'POST', body: formData });
   const data = await res.json();
   if (!res.ok) {
-    alert(data.error || 'Import thất bại');
+    showToast(data.error || 'Import thất bại', 'error');
     return;
   }
   let msg = 'Import xong. Đã thêm: ' + data.imported + ', bỏ qua: ' + data.skipped;
   if (data.errors && data.errors.length) msg += '\nLỗi: ' + data.errors.join(', ');
-  alert(msg);
+  showToast(msg, 'success');
   await loadCategories();
   await loadKeywords();
   await loadAnalytics();
@@ -931,7 +931,7 @@ async function applyAISuggestions() {
     });
     if (res.ok) added++;
   }
-  alert('Đã thêm ' + added + ' từ khóa.');
+  showToast('Đã thêm ' + added + ' từ khóa.', 'success');
   closeAISuggest();
   await loadCategories();
   await loadKeywords();

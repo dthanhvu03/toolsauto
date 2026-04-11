@@ -1,4 +1,5 @@
 import logging
+import time
 import os
 from pathlib import Path
 import random
@@ -6,7 +7,7 @@ import re
 from urllib.parse import urlparse
 import traceback
 from typing import Any
-from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR
+from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR, DATA_DIR
 from playwright.sync_api import Playwright, BrowserContext, Page, Locator, TimeoutError
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.database.models import Job
@@ -19,6 +20,8 @@ from app.adapters.facebook.core.session import FacebookSessionManager
 from app.adapters.facebook.pages.reels import FacebookReelsPage
 
 logger = logging.getLogger(__name__)
+from app.services.runtime_events import emit as rt_emit
+from app.services.job_tracer import update_active_node
 
 class FacebookAdapter(AdapterInterface):
     """
@@ -148,11 +151,73 @@ class FacebookAdapter(AdapterInterface):
                 return locator
         return None
 
+    def _get_dynamic_selectors(self, category: str, key: str, fallback_static: str) -> list[str]:
+        """Fetch DB selectors first, mix with static fallback."""
+        from app.services.workflow_registry import WorkflowRegistry
+        db_selectors = []
+        try:
+            db_selectors = WorkflowRegistry.get_selector_values("facebook", f"{category}:{key}")
+        except Exception as e:
+            logger.warning("FacebookAdapter: [n8n-lite] Error fetching DB selectors for %s:%s - %s", category, key, e)
+            
+        fallback_list = [s.strip() for s in fallback_static.split(",") if s.strip()]
+        
+        combined = []
+        for sel in db_selectors:
+            if sel not in combined: combined.append(sel)
+        for sel in fallback_list:
+            if sel not in combined: combined.append(sel)
+            
+        source = "db" if db_selectors else "static_fallback"
+        self._last_selector_meta = (category, key, source)
+        rt_emit("selector_resolved", platform="facebook",
+                category=category, selector_key=key,
+                source=source, db_count=len(db_selectors),
+                static_count=len(fallback_list), total=len(combined))
+        return combined
+
+    def _wait_and_locate_array(self, selectors: list[str]) -> Locator | None:
+        """Evaluate array of selectors and return first visible locator"""
+        if not self.page: return None
+        for idx, sel in enumerate(selectors):
+            loc = self.page.locator(sel)
+            if self._is_visible(loc.first):
+                self._report_selector_outcome(True, idx, len(selectors))
+                return loc.first
+            if self._is_visible(loc.last):
+                self._report_selector_outcome(True, idx, len(selectors))
+                return loc.last
+        self._report_selector_outcome(False, None, len(selectors))
+        return None
+
+    def _report_selector_outcome(self, matched: bool, idx: int | None, total: int) -> None:
+        """Report selector match outcome using stashed metadata from _get_dynamic_selectors."""
+        meta = getattr(self, "_last_selector_meta", None)
+        if not meta:
+            return
+        from app.services.runtime_events import record_selector_outcome
+        record_selector_outcome(meta[0], meta[1], meta[2],
+                                matched=matched, matched_index=idx,
+                                total_tried=total)
+
+    def _get_dynamic_timing(self, key: str, default: int) -> int:
+        from app.services.workflow_registry import WorkflowRegistry
+        val = default
+        try:
+            val = WorkflowRegistry.get_timing("facebook", "POST", key, default)
+            source = "db" if val != default else "default"
+            rt_emit("timing_resolved", platform="facebook",
+                    timing_key=key, value_ms=int(val), source=source,
+                    default_ms=default)
+        except Exception as e:
+            logger.warning("FacebookAdapter: [n8n-lite] Error fetching DB timing for %s - %s", key, e)
+        return int(val)
+
     def _click_locator(self, locator: Locator, description: str, timeout: int = 5000) -> bool:
         try:
             locator.scroll_into_view_if_needed()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("FacebookAdapter: Swallowed exception at line 219: %s", e)
 
         try:
             locator.click(timeout=timeout)
@@ -203,9 +268,14 @@ class FacebookAdapter(AdapterInterface):
         logger.info("FacebookAdapter: Navigation missing, checking for session recovery screen...")
         recovery_btn = None
         
-        # Priority: Exact match role=button or text
-        # Fallback: Non-exact match anything clickable
-        search_terms = ["Tiếp tục", "Continue", "Log In", "Đăng nhập"]
+        # [n8n-lite Phase 1]: Dynamic Session Recovery Button
+        dyn_selectors = self._get_dynamic_selectors("recovery", "session_recovery_button", 'div[role="button"]:has-text("Tiếp tục"), div[role="button"]:has-text("Continue")')
+        recovery_btn = self._wait_and_locate_array(dyn_selectors)
+        
+        if not recovery_btn:
+            # Priority: Exact match role=button or text
+            # Fallback: Non-exact match anything clickable
+            search_terms = ["Tiếp tục", "Continue", "Log In", "Đăng nhập"]
         
         for term in search_terms:
             # Try specific roles first
@@ -255,8 +325,9 @@ class FacebookAdapter(AdapterInterface):
             self._ensure_authenticated_context()
 
             # 1. Open the top right account menu
-            account_menu_btn = self.page.locator(SELECTORS["switch_menu"]["account_menu_button"]).last
-            if not self._is_visible(account_menu_btn):
+            account_dyn = self._get_dynamic_selectors("switch_menu", "account_menu_button", SELECTORS["switch_menu"]["account_menu_button"])
+            account_menu_btn = self._wait_and_locate_array(account_dyn)
+            if not account_menu_btn:
                 logger.warning("FacebookAdapter: Account menu button not visible.")
                 return False
 
@@ -295,8 +366,8 @@ class FacebookAdapter(AdapterInterface):
                         if target_name in self._normalize_fb_text(text):
                             found_el = el
                             break
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Swallowed exception at line 369: %s", e)
 
             if found_el:
                 logger.info("FacebookAdapter: Found personal profile '%s' in switcher. Clicking...", account_name)
@@ -314,7 +385,8 @@ class FacebookAdapter(AdapterInterface):
                 # Close the menu if we opened it by clicking off banner
                 try:
                     self.page.keyboard.press("Escape")
-                except: pass
+                except:
+                    logger.warning("FacebookAdapter: Swallowed unknown exception at line 388")
                 
         except Exception as e:
             logger.warning("FacebookAdapter: Failed during profile switch attempt: %s", e)
@@ -344,6 +416,7 @@ class FacebookAdapter(AdapterInterface):
 
         try:
             # 1. Navigation & Page Context Switch
+            update_active_node(job.id, "switch_profile")
             if target_page_url:
                 target_page_name = None
                 if job.account and getattr(job.account, 'managed_pages_list', None):
@@ -361,10 +434,17 @@ class FacebookAdapter(AdapterInterface):
                 if not target_page_url.startswith("http"):
                     target_page_url = "https://" + target_page_url
                 self.page.goto(target_page_url, wait_until="domcontentloaded")
-                self.page.wait_for_timeout(4000)
+                
+                active_steps = getattr(job, "active_steps", None)
+                if active_steps is not None and "feed_browse" not in active_steps:
+                    rt_emit("step_skipped", platform="facebook", step_name="feed_browse",
+                            job_id=job.id, reason="not in active_steps")
+                else:
+                    self.page.wait_for_timeout(self._get_dynamic_timing("feed_browse_pause", 4000))
 
-                switch_btn = self.page.locator(SELECTORS["switch_menu"]["switch_now_button"]).first
-                if self._is_visible(switch_btn):
+                switch_dyn = self._get_dynamic_selectors("switch_menu", "switch_now_button", SELECTORS["switch_menu"]["switch_now_button"])
+                switch_btn = self._wait_and_locate_array(switch_dyn)
+                if switch_btn:
                     logger.info("FacebookAdapter: Found 'Switch now' button for the Page. Clicking...")
                     self._click_locator(switch_btn, "page switch button", timeout=10000)
                     self.page.wait_for_timeout(5000)
@@ -391,23 +471,44 @@ class FacebookAdapter(AdapterInterface):
                     self._verify_posting_context_matches_target(target_page_url or "")
                 )
 
-                if norm_target and norm_active and not verified_ok:
-                    error_msg = f"Security abort: Active context ({norm_active}) does not match target page ({norm_target}). Preventing wrong-page post."
-                    logger.error("FacebookAdapter: %s", error_msg)
-                    return self._failure_result(
-                        job.id,
-                        "context_verification",
-                        error_msg,
-                        flow_mode,
-                        entrypoint_used,
-                        is_fatal=False
-                    )
+                if not verified_ok:
+                    if not norm_active:
+                        # /me check threw an exception (browser closed, timeout, etc.)
+                        # Cannot verify context → MUST abort to prevent wrong-page post
+                        error_msg = "/me check failed — cannot verify context safety. Aborting to prevent wrong-page post."
+                        logger.error("FacebookAdapter: %s", error_msg)
+                        return self._failure_result(
+                            job.id,
+                            "context_verification_exception",
+                            error_msg,
+                            flow_mode,
+                            entrypoint_used,
+                            is_fatal=False
+                        )
+                    else:
+                        # /me resolved but doesn't match target page
+                        error_msg = f"Security abort: Active context ({norm_active}) does not match target page ({norm_target}). Preventing wrong-page post."
+                        logger.error("FacebookAdapter: %s", error_msg)
+                        return self._failure_result(
+                            job.id,
+                            "context_verification",
+                            error_msg,
+                            flow_mode,
+                            entrypoint_used,
+                            is_fatal=False
+                        )
                 else:
                     logger.info("FacebookAdapter: Context verified successfully. Safe to proceed.")
             else:
                 logger.info("FacebookAdapter: Navigating to www.facebook.com (Personal Profile)")
                 self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
-                self.page.wait_for_timeout(4000) # Give React time to render DOM
+                
+                active_steps = getattr(job, "active_steps", None)
+                if active_steps is not None and "feed_browse" not in active_steps:
+                    rt_emit("step_skipped", platform="facebook", step_name="feed_browse",
+                            job_id=job.id, reason="not in active_steps")
+                else:
+                    self.page.wait_for_timeout(self._get_dynamic_timing("feed_browse_pause", 4000)) # Give React time to render DOM
 
                 # Explicitly switch back to Personal Profile if stuck on a Fanpage
                 account_name = job.account.name if job.account else None
@@ -423,48 +524,55 @@ class FacebookAdapter(AdapterInterface):
             email_in = self.page.locator('input[name="email"]').count() > 0
             nav_present = self.page.locator('div[role="navigation"]').count() > 0
 
+            recovery_btn = None
             # Session Recovery: "Continue as XYZ" screen
             if not nav_present and not (login_btn and email_in):
                 logger.info("FacebookAdapter: Navigation missing, checking for 'Continue as' session recovery screen...")
-                # Use exact text matching to avoid clicking invisible parent divs
-                recovery_btn = None
+                
+                # [n8n-lite Phase 1]: Dynamic Session Recovery
+                dyn_selectors = self._get_dynamic_selectors("recovery", "session_recovery_button", "")
+                recovery_btn = self._wait_and_locate_array(dyn_selectors)
+
+                if not recovery_btn:
+                    # Use exact text matching to avoid clicking invisible parent divs
+                    try:
+                        candidates = [
+                            self.page.get_by_text("Tiếp tục", exact=True).first,
+                            self.page.get_by_text("Continue", exact=True).first,
+                            self.page.get_by_role("button", name="Tiếp tục", exact=True).first,
+                            self.page.get_by_role("button", name="Continue", exact=True).first,
+                            self.page.locator('div[role="button"]:text-is("Tiếp tục")').first,
+                            self.page.locator('div[role="button"]:text-is("Continue")').first,
+                        ]
+                        for candidate in candidates:
+                            if self._is_visible(candidate):
+                                recovery_btn = candidate
+                                break
+                                
+                    except Exception as e:
+                        logger.warning("FacebookAdapter: Error during manual session recovery candidate checks: %s", e)
+
+            if recovery_btn:
+                logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Clicking...")
+                # Force click on the exact text node
                 try:
-                    candidates = [
-                        self.page.get_by_text("Tiếp tục", exact=True).first,
-                        self.page.get_by_text("Continue", exact=True).first,
-                        self.page.get_by_role("button", name="Tiếp tục", exact=True).first,
-                        self.page.get_by_role("button", name="Continue", exact=True).first,
-                        self.page.locator('div[role="button"]:text-is("Tiếp tục")').first,
-                        self.page.locator('div[role="button"]:text-is("Continue")').first,
-                    ]
-                    for candidate in candidates:
-                        if self._is_visible(candidate):
-                            recovery_btn = candidate
-                            break
-                            
-                    if recovery_btn:
-                        logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Clicking...")
-                        # Force click on the exact text node
-                        try:
-                            recovery_btn.click(force=True, timeout=5000)
-                        except Exception:
-                            self._click_locator(recovery_btn, "session recovery button", timeout=5000)
-                            
-                        self.page.wait_for_timeout(8000)
-                        
-                        # Sometimes we need to explicitly reload or wait for redirect
-                        if "login" in self.page.url or "checkpoint" in self.page.url:
-                            self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
-                            self.page.wait_for_timeout(5000)
-                            
-                        # Re-check navigation after clicking
-                        nav_present = self.page.locator('div[role="navigation"]').count() > 0
-                        if nav_present:
-                            logger.info("FacebookAdapter: Session successfully recovered!")
-                        else:
-                            logger.warning("FacebookAdapter: Clicked recovery but navigation still missing.")
-                except Exception as e:
-                    logger.warning("FacebookAdapter: Error during session recovery click: %s", e)
+                    recovery_btn.click(force=True, timeout=5000)
+                except Exception:
+                    self._click_locator(recovery_btn, "session recovery button", timeout=5000)
+                    
+                self.page.wait_for_timeout(8000)
+                
+                # Sometimes we need to explicitly reload or wait for redirect
+                if "login" in self.page.url or "checkpoint" in self.page.url:
+                    self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+                    self.page.wait_for_timeout(5000)
+                    
+                # Re-check navigation after clicking
+                nav_present = self.page.locator('div[role="navigation"]').count() > 0
+                if nav_present:
+                    logger.info("FacebookAdapter: Session successfully recovered!")
+                else:
+                    logger.warning("FacebookAdapter: Clicked recovery but navigation still missing.")
 
             if (login_btn and email_in) or not nav_present:
                 logger.error("FacebookAdapter: Account is logged out or requires verification.")
@@ -492,27 +600,34 @@ class FacebookAdapter(AdapterInterface):
                 logger.info("FacebookAdapter: Auto-injected verification salt: %s", publish_salt)
 
             # ── Pre-scan existing reels to detect NEW ones after posting ──
+            update_active_node(job.id, "pre_scan")
             pre_existing_reels: list[str] = []
-            try:
-                if target_page_url:
-                    pre_reels_url = target_page_url.rstrip('/') + '/reels_tab' if '?' not in target_page_url else target_page_url + '&sk=reels_tab'
-                else:
-                    pre_reels_url = "https://www.facebook.com/me/reels_tab"
-                self.page.goto(pre_reels_url, wait_until="domcontentloaded", timeout=15000)
-                self.page.wait_for_timeout(6000)
-                for link in self.page.locator('a').all():
-                    try:
-                        href = link.get_attribute("href")
-                        if href and "/reel/" in href and len(href) > 20:
-                            clean = href.split("?")[0]
-                            full = clean if clean.startswith("http") else "https://www.facebook.com" + clean
-                            if full not in pre_existing_reels:
-                                pre_existing_reels.append(full)
-                    except Exception:
-                        pass
-                logger.info("FacebookAdapter: Pre-scanned %d existing reels before posting.", len(pre_existing_reels))
-            except Exception as e:
-                logger.warning("FacebookAdapter: Pre-scan reels failed: %s. Proceeding without.", e)
+            active_steps = getattr(job, "active_steps", None)
+            
+            if active_steps is not None and "pre_scan" not in active_steps:
+                rt_emit("step_skipped", platform="facebook", step_name="pre_scan",
+                        job_id=job.id, reason="not in active_steps")
+            else:
+                try:
+                    if target_page_url:
+                        pre_reels_url = target_page_url.rstrip('/') + '/reels_tab' if '?' not in target_page_url else target_page_url + '&sk=reels_tab'
+                    else:
+                        pre_reels_url = "https://www.facebook.com/me/reels_tab"
+                    self.page.goto(pre_reels_url, wait_until="domcontentloaded", timeout=15000)
+                    self.page.wait_for_timeout(6000)
+                    for link in self.page.locator('a').all():
+                        try:
+                            href = link.get_attribute("href")
+                            if href and "/reel/" in href and len(href) > 20:
+                                clean = href.split("?")[0]
+                                full = clean if clean.startswith("http") else "https://www.facebook.com" + clean
+                                if full not in pre_existing_reels:
+                                    pre_existing_reels.append(full)
+                        except Exception as e:
+                            logger.warning("FacebookAdapter: Swallowed exception at line 610: %s", e)
+                    logger.info("FacebookAdapter: Pre-scanned %d existing reels before posting.", len(pre_existing_reels))
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Pre-scan reels failed: %s. Proceeding without.", e)
 
             # Navigate back to profile/home for composer entry
             if target_page_url:
@@ -521,6 +636,7 @@ class FacebookAdapter(AdapterInterface):
                 self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
             self.page.wait_for_timeout(3000)
 
+            update_active_node(job.id, "feed_browse")
             logger.info("FacebookAdapter: Simulating feed browsing before compose...")
             human_scroll(self.page)
             reels = FacebookReelsPage(self.page)
@@ -579,7 +695,7 @@ class FacebookAdapter(AdapterInterface):
             try:
                 file_input.set_input_files(job.media_path)
                 logger.info("FacebookAdapter: Media attached. Waiting for preview...")
-                self.page.wait_for_timeout(8000)
+                self.page.wait_for_timeout(self._get_dynamic_timing("upload_settle_wait", 8000))
             except Exception as e:
                 reels.log_surface_inventory(surface, "upload_media_failed")
                 return self._failure_result(
@@ -653,6 +769,7 @@ class FacebookAdapter(AdapterInterface):
                 )
 
 
+            update_active_node(job.id, "post_content")
             logger.info("FacebookAdapter: Clicking POST button...")
             logger.info("FacebookAdapter: Waiting for Post button to become enabled...")
             try:
@@ -701,6 +818,7 @@ class FacebookAdapter(AdapterInterface):
             self.page.wait_for_timeout(10000)
 
             # ── Post-publish verification: scan for new reel ──
+            update_active_node(job.id, "post_verify")
             profile_url = target_page_url if target_page_url else "https://www.facebook.com/me"
             post_url = None
             try:
@@ -711,8 +829,8 @@ class FacebookAdapter(AdapterInterface):
                     if normalized:
                         post_url = normalized
                         logger.info("FacebookAdapter: post_url captured from current URL after post: %s", post_url)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Swallowed exception at line 816: %s", e)
 
                 if not post_url:
                     if target_page_url:
@@ -737,8 +855,8 @@ class FacebookAdapter(AdapterInterface):
                     try:
                         self.page.goto(profile_url, wait_until="commit", timeout=15000)
                         self.page.wait_for_timeout(5000)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("FacebookAdapter: Swallowed exception at line 842: %s", e)
 
                     try:
                         see_more_buttons = self.page.locator(
@@ -749,12 +867,12 @@ class FacebookAdapter(AdapterInterface):
                             try:
                                 btn.click(timeout=2000)
                                 self.page.wait_for_timeout(500)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 854: %s", e)
                         if see_more_buttons:
                             logger.info("FacebookAdapter: Expanded %d 'See more' buttons.", min(len(see_more_buttons), 5))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("FacebookAdapter: Swallowed exception at line 858: %s", e)
 
                     if salt:
                         try:
@@ -802,8 +920,8 @@ class FacebookAdapter(AdapterInterface):
                                             logger.info("FacebookAdapter: post_url captured via main feed (JS fallback): %s", post_url)
                             if post_url:
                                 break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("FacebookAdapter: Swallowed exception at line 907: %s", e)
 
                     unique_reels = []
                     for reels_tab_url in reels_tab_urls:
@@ -824,8 +942,8 @@ class FacebookAdapter(AdapterInterface):
                                     normalized = self._normalize_post_url(full)
                                     if normalized and normalized not in unique_reels:
                                         unique_reels.append(normalized)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 929: %s", e)
                         if unique_reels:
                             logger.info("FacebookAdapter: Found %d reel/video links on %s", len(unique_reels), reels_tab_url)
                             break
@@ -1015,32 +1133,13 @@ class FacebookAdapter(AdapterInterface):
     # ─── Auto Comment (Phase 16) ───────────────────────────
     
     CTA_POOL = [
-        "🔗 Link mình để ở đây nè 👇\n{link}",
+        "Link mình để ở đây nè:\n{link}",
         "Ai cần thì vào link này nhé\n{link}",
-        "Xem chi tiết sản phẩm 👉 {link}",
+        "Xem chi tiết sản phẩm tại đây: {link}",
         "Link đây mọi người ơi\n{link}",
         "Mình share link ở đây nha\n{link}",
-        "👇 Link bên dưới nhé\n{link}",
+        "Link bên dưới nhé\n{link}",
     ]
-    
-    @staticmethod
-    def _wrap_with_cta(raw_comment: str) -> str:
-        """Wrap the comment text with a random CTA template for anti-detection."""
-        
-        # If user already wrote a full comment (has letters/emoji), use as-is
-        lines = [l.strip() for l in raw_comment.strip().split('\n') if l.strip()]
-        
-        # Check if it's just raw links
-        all_links = all(l.startswith('http') for l in lines)
-        
-        if all_links and lines:
-            # Wrap with random CTA
-            link_text = '\n'.join(lines)
-            template = random.choice(FacebookAdapter.CTA_POOL)
-            return template.replace('{link}', link_text)
-        else:
-            # User wrote custom comment text, use as-is
-            return raw_comment.strip()
     
     def post_comment(self, post_url: str, comment_text: str) -> PublishResult:
         """
@@ -1058,12 +1157,48 @@ class FacebookAdapter(AdapterInterface):
             self.page.goto(post_url, wait_until="domcontentloaded")
             self.page.wait_for_timeout(random.randint(3000, 5000))
             
+            # 1b. Debug: screenshot after page load to diagnose login walls
+            try:
+                _debug_path = DATA_DIR / f"debug_comment_{int(time.time())}.png"
+                self.page.screenshot(path=_debug_path)
+                logger.info("FacebookAdapter: Debug screenshot saved: %s", _debug_path)
+            except Exception as e:
+                logger.warning("FacebookAdapter: Swallowed exception at line 1149: %s", e)
+            
+            # 1c. Dismiss login wall if present (common on Reels when session expired)
+            try:
+                _close_btn = self.page.locator("[aria-label='Close'], [aria-label='Đóng']").first
+                if _close_btn.count() > 0 and _close_btn.is_visible(timeout=2000):
+                    _close_btn.click()
+                    self.page.wait_for_timeout(1000)
+                    logger.info("FacebookAdapter: Dismissed login/popup overlay")
+            except Exception as e:
+                logger.warning("FacebookAdapter: Swallowed exception at line 1159: %s", e)
+            
+            # 1d. Check if we're actually logged in
+            _is_logged_in = False
+            try:
+                # If there's a login form visible, session is expired
+                _login_form = self.page.locator("input[name='email'], input[name='pass']").first
+                if _login_form.count() > 0 and _login_form.is_visible(timeout=1500):
+                    logger.warning("FacebookAdapter: Login wall detected — session may be expired for this account")
+                else:
+                    _is_logged_in = True
+            except Exception:
+                _is_logged_in = True  # assume logged in if check fails
+            
             # 2. Casual scroll (human behavior)
             human_scroll(self.page)
             self.page.wait_for_timeout(random.randint(1000, 2000))
 
             # 2b. Reels / watch often hide the composer until "Comment" / "Bình luận" is clicked
+            # On Reels, the comment icon may NOT be a <button> — it can be a div/span/link
+            _opened_comment_section = False
+            
+            # Strategy 1: Try get_by_role("button") for standard posts
             for _open_name in ("Bình luận", "Comment", "Comments"):
+                if _opened_comment_section:
+                    break
                 try:
                     _bl = self.page.get_by_role("button", name=_open_name)
                     if _bl.count() == 0:
@@ -1073,32 +1208,144 @@ class FacebookAdapter(AdapterInterface):
                         _cand.scroll_into_view_if_needed()
                         self.page.wait_for_timeout(random.randint(200, 500))
                         _cand.click(timeout=15000)
-                        self.page.wait_for_timeout(random.randint(1500, 2500))
-                        logger.info("FacebookAdapter: Opened comment section via %r", _open_name)
-                        break
+                        self.page.wait_for_timeout(random.randint(3000, 5000))
+                        logger.info("FacebookAdapter: Opened comment section via button %r", _open_name)
+                        _opened_comment_section = True
                 except Exception:
                     continue
             
-            # 3. Find comment box (multiple selectors for i18n robustness)
+            # Strategy 2: Reels uses aria-label on div/span for the comment icon
+            if not _opened_comment_section:
+                _reel_comment_selectors = [
+                    "[aria-label='Bình luận']",
+                    "[aria-label='Comment']",
+                    "[aria-label='Comments']",
+                    "[aria-label='Để lại bình luận']",
+                    "[aria-label='Leave a comment']",
+                ]
+                for _sel in _reel_comment_selectors:
+                    if _opened_comment_section:
+                        break
+                    try:
+                        _loc = self.page.locator(_sel).first
+                        if _loc.count() > 0 and _loc.is_visible(timeout=1500):
+                            _loc.scroll_into_view_if_needed()
+                            self.page.wait_for_timeout(random.randint(200, 500))
+                            _loc.click(timeout=15000)
+                            self.page.wait_for_timeout(random.randint(3000, 5000))
+                            logger.info("FacebookAdapter: Opened comment section via selector %r", _sel)
+                            _opened_comment_section = True
+                    except Exception:
+                        continue
+            
+            # Strategy 3: Try link role
+            if not _opened_comment_section:
+                for _open_name in ("Bình luận", "Comment"):
+                    if _opened_comment_section:
+                        break
+                    try:
+                        _bl = self.page.get_by_role("link", name=_open_name)
+                        if _bl.count() == 0:
+                            continue
+                        _cand = _bl.first
+                        if _cand.is_visible(timeout=1200):
+                            _cand.click(timeout=15000)
+                            self.page.wait_for_timeout(random.randint(3000, 5000))
+                            logger.info("FacebookAdapter: Opened comment section via link %r", _open_name)
+                            _opened_comment_section = True
+                    except Exception:
+                        continue
+            
+            if not _opened_comment_section:
+                logger.warning("FacebookAdapter: Could not find/open comment section button")
+            
+            # 2c. Debug: screenshot after opening comment section
+            try:
+                _debug_path2 = DATA_DIR / f"debug_comment_after_{int(time.time())}.png"
+                self.page.screenshot(path=_debug_path2)
+                logger.info("FacebookAdapter: Debug screenshot (after comment click) saved: %s", _debug_path2)
+            except Exception as e:
+                logger.warning("FacebookAdapter: Swallowed exception at line 1251: %s", e)
+            
+            # 3. Find comment box (multiple selectors for i18n + Reels robustness)
             comment_selectors = [
+                # New variants (Comment as...)
+                "div[aria-label^='Bình luận dưới tên']",
+                "div[aria-label^='Comment as']",
+                "div[aria-label*='bình luận dưới tên' i]",
+                "div[role='textbox'][aria-label*='bình luận' i]",
+                "div[role='textbox'][aria-label*='comment' i]",
+                # Standard post layout (exact match)
                 "div[aria-label='Write a comment']",
                 "div[aria-label='Write a comment…']",
+                "div[aria-label='Write a comment...']",
                 "div[aria-label='Viết bình luận']",
                 "div[aria-label='Viết bình luận…']",
                 "div[aria-label='Viết bình luận...']",
-                "div[contenteditable='true'][role='textbox']",
+                # Reels / public comment variants
+                "div[aria-label='Viết bình luận công khai...']",
+                "div[aria-label='Viết bình luận công khai…']",
+                "div[aria-label='Write a public comment...']",
+                "div[aria-label='Write a public comment…']",
+                # Partial match fallbacks (CSS *=)
+                "div[contenteditable='true'][aria-label*='bình luận' i]",
+                "div[contenteditable='true'][aria-label*='comment' i]",
+                "div[contenteditable='true'][aria-label*='Comment']",
             ]
             
             comment_box = None
-            for sel in comment_selectors:
-                loc = self.page.locator(sel).first
-                if loc.count() > 0:
-                    comment_box = loc
-                    logger.info("FacebookAdapter: Found comment box via: %s", sel)
-                    break
             
+            # Allow DOM to settle before checking for textboxes
+            self.page.wait_for_timeout(1500)
+            
+            for sel in comment_selectors:
+                if comment_box: break
+                try:
+                    loc = self.page.locator(sel)
+                    for i in range(loc.count()):
+                        nth_loc = loc.nth(i)
+                        if nth_loc.is_visible():
+                            comment_box = nth_loc
+                            logger.info("FacebookAdapter: Found comment box via: %s (idx %d)", sel, i)
+                            break
+                except Exception:
+                    continue
+            
+            # Secondary generic fallback (last visible textbox avoids chat tabs)
             if not comment_box:
-                logger.warning("FacebookAdapter: Comment box not found on post page.")
+                try:
+                    loc = self.page.locator("div[contenteditable='true'][role='textbox']")
+                    for i in reversed(range(loc.count())):
+                        nth_loc = loc.nth(i)
+                        if nth_loc.is_visible():
+                            comment_box = nth_loc
+                            logger.info("FacebookAdapter: Found comment box via generic fallback (idx %d)", i)
+                            break
+                except Exception as e:
+                    logger.warning("FacebookAdapter: Swallowed exception at line 1308: %s", e)
+            
+            # Fallback: use Playwright's get_by_placeholder for Lexical editor
+            if not comment_box:
+                for _ph in ("Viết bình luận", "Write a comment", "Viết bình luận công khai"):
+                    try:
+                        _loc = self.page.get_by_placeholder(_ph).first
+                        if _loc.count() > 0 and _loc.is_visible(timeout=1500):
+                            comment_box = _loc
+                            logger.info("FacebookAdapter: Found comment box via placeholder: %r", _ph)
+                            break
+                    except Exception:
+                        continue
+            
+            # Diagnostic: if still not found, dump all textbox aria-labels for debugging
+            if not comment_box:
+                try:
+                    all_labels = self.page.eval_on_selector_all(
+                        "div[contenteditable='true'], [role='textbox']",
+                        "els => els.map(e => ({tag: e.tagName, role: e.getAttribute('role'), label: e.getAttribute('aria-label'), placeholder: e.getAttribute('aria-placeholder'), editable: e.contentEditable})).slice(0, 10)"
+                    )
+                    logger.warning("FacebookAdapter: Comment box not found. Available textboxes: %s", all_labels)
+                except Exception:
+                    logger.warning("FacebookAdapter: Comment box not found and diagnostic failed.")
                 return PublishResult(ok=False, error="Comment box not found", is_fatal=False)
             
             # 4. Click to focus comment box
@@ -1107,9 +1354,14 @@ class FacebookAdapter(AdapterInterface):
             comment_box.click()
             self.page.wait_for_timeout(random.randint(500, 1000))
             
-            # 5. Wrap with random CTA and type
-            final_comment = self._wrap_with_cta(comment_text)
-            human_type(self.page, final_comment)
+            # 5. Type comment (Check workflow config if available, otherwise default to typing)
+            final_comment = comment_text
+            adapter_steps = getattr(self, 'active_steps', None)
+            if adapter_steps is None or "type_comment" in adapter_steps:
+                human_type(self.page, final_comment)
+            else:
+                rt_emit("step_skipped", platform="facebook", step_name="type_comment",
+                        reason="not in active_steps")
             
             # 6. Random pause before submit (1–3 seconds)
             self.page.wait_for_timeout(random.randint(1000, 3000))
@@ -1307,8 +1559,8 @@ class FacebookAdapter(AdapterInterface):
             return False
         try:
             row.scroll_into_view_if_needed(timeout=5000)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("FacebookAdapter: Swallowed exception at line 1546: %s", e)
         try:
             if not row.is_visible(timeout=3000):
                 logger.info("FacebookAdapter: Switcher row not visible (%s)", label)
@@ -1552,8 +1804,8 @@ class FacebookAdapter(AdapterInterface):
                                     ):
                                         activated = True
                                         break
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 1791: %s", e)
                     if not activated:
                         indices = list(range(cnt))
                         if row_sel == "div[role=\"button\"]" and cnt >= 2:
@@ -1571,8 +1823,8 @@ class FacebookAdapter(AdapterInterface):
                                         i,
                                     )
                                     continue
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.warning("FacebookAdapter: Swallowed exception at line 1810: %s", e)
                             if self._activate_profile_switcher_row(r, f"{row_sel}-{i}"):
                                 activated = True
                                 break
@@ -1675,8 +1927,8 @@ class FacebookAdapter(AdapterInterface):
                             
                             if target_norm in normalized:
                                 name_candidates.append(el)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("FacebookAdapter: Swallowed exception at line 1914: %s", e)
 
                 found_el = None
                 if page_id and name_candidates:
@@ -1689,8 +1941,8 @@ class FacebookAdapter(AdapterInterface):
                                     page_id,
                                 )
                                 break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning("FacebookAdapter: Swallowed exception at line 1928: %s", e)
                     if not found_el:
                         logger.warning(
                             "FacebookAdapter: %s name matches, page id %s not in href/markup; "

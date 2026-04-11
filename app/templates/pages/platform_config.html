@@ -1,0 +1,1766 @@
+{% extends "layouts/app.html" %}
+{% block content %}
+
+<!-- SortableJS for drag-and-drop -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+
+<!-- Extracted JS modules (P0 Refactoring) -->
+<script src="/static/js/platform_config_simulation.js"></script>
+<script src="/static/js/platform_config_warnings.js"></script>
+<script src="/static/js/platform_config_api.js"></script>
+
+<div class="w-full max-w-none px-4 py-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-xl font-bold text-gray-800">
+        Platform Config
+      </h1>
+      <p class="text-sm text-gray-500 mt-0.5">
+        Quản lý adapter, workflow, selector và CTA templates
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <select id="platform-filter"
+              onchange="switchPlatform(this.value)"
+              class="border rounded-lg px-3 py-2 text-sm">
+        <option value="">Tất cả platform</option>
+      </select>
+      <button id="btn-mcp-inspector" onclick="startMCPInspector()"
+              class="bg-indigo-600 text-white px-4 py-2 rounded-lg
+                     text-sm font-medium hover:bg-indigo-700
+                     flex items-center gap-1.5 transition">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+        <span>MCP Debug</span>
+      </button>
+      <button onclick="invalidateCache()"
+              class="bg-orange-50 border border-orange-200
+                     text-orange-600 px-4 py-2 rounded-lg
+                     text-sm font-medium hover:bg-orange-100">
+        Reload cache
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab Navigation -->
+  <div class="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+    {% for tab in [
+      ('overview', '⚡ Overview'),
+      ('platform', 'Platforms'),
+      ('workflow', 'Workflows'),
+      ('selectors', 'Selectors'),
+      ('cta', 'CTA templates'),
+    ] %}
+    <button onclick="switchTab('{{ tab[0] }}')"
+            id="tab-{{ tab[0] }}"
+            class="tab-btn px-4 py-2 rounded-lg text-sm
+                   font-medium transition-all text-gray-500
+                   {% if loop.first %}bg-white shadow-sm text-gray-800{% endif %}">
+      {{ tab[1] }}
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- ── Tab: Overview ──────────────────────────────────────── -->
+  <div id="tab-content-overview">
+
+    <!-- ① Alert Banner (conditional — hidden when healthy) -->
+    <div id="overview-alert-banner" class="hidden mb-4"></div>
+
+    <!-- Row 1: Runtime Snapshot + Cache & Sync -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+
+      <!-- ② Runtime Snapshot -->
+      <div class="lg:col-span-2 bg-white rounded-xl border">
+        <div class="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Runtime Snapshot
+            <span class="text-xs text-gray-400 font-normal" id="rc-platform-label">facebook:POST</span>
+          </h3>
+          <div class="flex items-center gap-2">
+            <span id="rc-cache-badge" class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"></span>
+            <button onclick="refreshRuntimeSnapshot()" title="Refresh" class="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="runtime-snapshot-body" class="px-5 py-4 space-y-4">
+          <div class="animate-pulse space-y-3">
+            <div class="h-4 bg-gray-100 rounded w-3/4"></div>
+            <div class="h-4 bg-gray-100 rounded w-1/2"></div>
+            <div class="h-4 bg-gray-100 rounded w-2/3"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ③ Cache & Sync -->
+      <div class="bg-white rounded-xl border">
+        <div class="px-5 pt-4 pb-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+            Cache &amp; Sync
+          </h3>
+        </div>
+        <div id="cache-sync-body" class="px-5 py-4 space-y-3">
+          <div class="animate-pulse space-y-3">
+            <div class="h-4 bg-gray-100 rounded w-full"></div>
+            <div class="h-4 bg-gray-100 rounded w-2/3"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Row 1.5: Simulation & Debug Assistant -->
+    <div class="bg-white rounded-xl border mb-4 shadow-sm border-indigo-100 overflow-hidden">
+      <div class="px-5 py-3 border-b border-indigo-50 bg-indigo-50/50 flex items-center justify-between">
+        <h3 class="text-sm font-bold text-indigo-800 flex items-center gap-2">
+           <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+           Debug Assistant
+        </h3>
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-3 text-[11px] text-indigo-700 font-semibold bg-white/50 px-3 py-1 rounded-full border border-indigo-100">
+            <span class="text-indigo-400">Mode:</span>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="simulation-mode" value="realistic" checked class="w-3 h-3 text-indigo-600 focus:ring-indigo-500">
+              <span>Realistic</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" name="simulation-mode" value="full" class="w-3 h-3 text-indigo-600 focus:ring-indigo-500">
+              <span>Full analysis</span>
+            </label>
+          </div>
+          <button id="btn-simulate-job" onclick="handleSimulateJob()" class="text-xs px-3 py-1.5 bg-indigo-600 text-white font-bold rounded shadow-sm hover:bg-indigo-700 transition flex items-center gap-1.5 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+             Simulate Next Job
+          </button>
+        </div>
+      </div>
+      <div id="simulation-panel" class="hidden border-t-2 border-indigo-400">
+         <!-- Content generated by JS -->
+      </div>
+    </div>
+
+    <!-- Row 2: Preset Control + Step Resolution -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+
+      <!-- ④ Preset Control -->
+      <div class="bg-white rounded-xl border">
+        <div class="px-5 pt-4 pb-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            Active Preset
+          </h3>
+        </div>
+        <div id="preset-control-body" class="px-5 py-4">
+          <p class="text-gray-400 text-xs">Loading...</p>
+        </div>
+      </div>
+
+      <!-- ⑤ Step Resolution -->
+      <div class="bg-white rounded-xl border">
+        <div class="px-5 pt-4 pb-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+            Step Resolution
+          </h3>
+        </div>
+        <div id="step-resolution-body" class="px-5 py-4">
+          <p class="text-gray-400 text-xs">Loading...</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Row 3: Selector Health + Operational Warnings -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+      <!-- ⑥ Selector Health -->
+      <div class="bg-white rounded-xl border">
+        <div class="px-5 pt-4 pb-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Selector Health
+            <span class="text-xs text-gray-400 font-normal">(in-memory, resets on restart)</span>
+          </h3>
+        </div>
+        <div id="selector-health-body" class="px-5 py-4">
+          <p class="text-gray-400 text-xs">Loading...</p>
+        </div>
+      </div>
+
+      <!-- ⑦ Operational Warnings -->
+      <div class="bg-white rounded-xl border">
+        <div class="px-5 pt-4 pb-3 border-b border-gray-100">
+          <h3 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+            <svg class="w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            Operational Warnings
+          </h3>
+        </div>
+        <div id="warnings-body" class="px-5 py-4">
+          <p class="text-gray-400 text-xs">Checking...</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Tab: Platforms ─────────────────────────────────────── -->
+  <div id="tab-content-platform" class="hidden">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4"
+         id="platforms-grid">
+      <!-- Rendered by JS -->
+    </div>
+    <button onclick="openPlatformModal()"
+            class="mt-4 border-2 border-dashed border-gray-300
+                   rounded-xl p-4 w-full text-gray-400
+                   hover:border-indigo-300 hover:text-indigo-500
+                   transition-colors text-sm">
+      + Thêm Platform mới
+    </button>
+  </div>
+
+  <!-- ── Tab: Workflows ─────────────────────────────────────── -->
+  <div id="tab-content-workflow" class="hidden">
+    <!-- Create Workflow Form -->
+    <div class="bg-white rounded-xl border p-5 mb-6">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+        <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Tạo Workflow Mới
+      </h3>
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="flex-1 min-w-[160px]">
+          <label class="block text-xs text-gray-500 mb-1">Tên Workflow</label>
+          <input id="new-wf-name" type="text" placeholder="VD: post_facebook_reels"
+                 class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none">
+        </div>
+        <div class="min-w-[130px]">
+          <label class="block text-xs text-gray-500 mb-1">Platform ID</label>
+          <input id="new-wf-platform" type="text" placeholder="facebook"
+                 class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none">
+        </div>
+        <div class="min-w-[110px]">
+          <label class="block text-xs text-gray-500 mb-1">Job Type</label>
+          <select id="new-wf-jobtype" class="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-indigo-400 focus:outline-none">
+            <option value="POST">POST</option>
+            <option value="REELS">REELS</option>
+            <option value="STORY">STORY</option>
+            <option value="COMMENT">COMMENT</option>
+            <option value="ENGAGE">ENGAGE</option>
+          </select>
+        </div>
+        <button onclick="createWorkflow()"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Thêm
+        </button>
+      </div>
+    </div>
+
+    <div id="workflows-container" class="space-y-6">
+      <!-- Rendered by JS -->
+    </div>
+  </div>
+
+  <!-- ── Tab: Selectors ─────────────────────────────────────── -->
+  <div id="tab-content-selectors" class="hidden">
+    <div class="flex gap-3 mb-4 flex-wrap">
+      <select id="selector-platform-filter"
+              onchange="loadSelectors()"
+              class="border rounded-lg px-3 py-1.5 text-sm">
+        <option value="">Tất cả platform</option>
+      </select>
+      <select id="selector-category-filter"
+              onchange="loadSelectors()"
+              class="border rounded-lg px-3 py-1.5 text-sm">
+        <option value="">Tất cả category</option>
+        <option value="post">Post</option>
+        <option value="comment">Comment</option>
+        <option value="login">Login</option>
+        <option value="reels">Reels</option>
+      </select>
+      <button onclick="openSelectorModal()"
+              class="ml-auto bg-indigo-600 text-white px-4 py-1.5
+                     rounded-lg text-sm font-medium">
+        + Thêm Selector
+      </button>
+    </div>
+
+    <!-- Drag-and-drop selector list per category -->
+    <div id="selectors-by-category" class="space-y-6">
+      <!-- Rendered by JS — grouped by category -->
+    </div>
+  </div>
+
+  <!-- ── Tab: CTA Templates ─────────────────────────────────── -->
+  <div id="tab-content-cta" class="hidden">
+    <div class="flex justify-between mb-4">
+      <p class="text-sm text-gray-500">
+        Kéo thả để sắp xếp thứ tự ưu tiên template
+      </p>
+      <button onclick="openCTAModal()"
+              class="bg-indigo-600 text-white px-4 py-1.5
+                     rounded-lg text-sm font-medium">
+        + Thêm CTA
+      </button>
+    </div>
+
+    <div id="cta-list"
+         class="space-y-2 bg-white rounded-xl border p-4">
+      <!-- SortableJS drag-and-drop list -->
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Modals ─────────────────────────────────────────────────── -->
+
+<!-- Platform Modal -->
+<div id="platform-modal"
+     class="hidden fixed inset-0 bg-black/50 z-50
+            flex items-center justify-center">
+  <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+    <h3 class="font-semibold text-gray-800 mb-4">
+      Thêm Platform Mới
+    </h3>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-500">Platform ID (lowercase)</label>
+        <input id="p-platform" type="text"
+               placeholder="ví dụ: tiktok, instagram..."
+               oninput="autoGenPlatformData()"
+               class="w-full border rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-500">Tên hiển thị</label>
+          <input id="p-display-name" type="text"
+                 placeholder="TikTok"
+                 oninput="this.dataset.autoGenerated='false'"
+                 class="w-full border rounded-lg px-3 py-2 text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">Emoji (nếu có)</label>
+          <input id="p-emoji" type="text"
+                 placeholder="🎵"
+                 class="w-full border rounded-lg px-3 py-2 text-sm mt-1">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Adapter Class</label>
+        <input id="p-adapter-class" type="text"
+               placeholder="app.adapters.tiktok.adapter.TiktokAdapter"
+               oninput="this.dataset.autoGenerated='false'"
+               class="w-full border rounded-lg px-3 py-2 text-sm mt-1 font-mono">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Trang chủ (Base URL - Tùy chọn)</label>
+        <input id="p-base-url" type="text"
+               placeholder="https://tiktok.com"
+               class="w-full border rounded-lg px-3 py-2 text-sm mt-1 font-mono">
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button onclick="savePlatform()"
+              class="flex-1 bg-indigo-600 text-white py-2
+                     rounded-lg text-sm font-medium">
+        Lưu
+      </button>
+      <button onclick="closePlatformModal()"
+              class="flex-1 border py-2 rounded-lg text-sm">
+        Hủy
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Selector Modal -->
+<div id="selector-modal"
+     class="hidden fixed inset-0 bg-black/50 z-50
+            flex items-center justify-center">
+  <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+    <h3 class="font-semibold text-gray-800 mb-4">
+      Thêm / Sửa Selector
+    </h3>
+    <div class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-500">Platform</label>
+          <select id="s-platform"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">Category</label>
+          <input id="s-category" type="text"
+                 placeholder="post, comment, login, reels..."
+                 class="w-full border rounded-lg px-3 py-2
+                        text-sm mt-1">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">Selector Name</label>
+        <input id="s-name" type="text"
+               placeholder="post_button, comment_box..."
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-500">Type</label>
+          <select id="s-type"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+            <option value="css">CSS</option>
+            <option value="playwright_role">Playwright Role</option>
+            <option value="text">Text</option>
+            <option value="placeholder">Placeholder</option>
+            <option value="xpath">XPath</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">Locale</label>
+          <select id="s-locale"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+            <option value="*">* (All)</option>
+            <option value="vi">vi (Vietnamese)</option>
+            <option value="en">en (English)</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">
+          Selector Value
+        </label>
+        <input id="s-value" type="text"
+               placeholder='[aria-label="Post"] or .btn-post'
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1 font-mono">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">
+          Notes (optional)
+        </label>
+        <input id="s-notes" type="text"
+               placeholder="Mô tả selector này..."
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button onclick="saveSelector()"
+              class="flex-1 bg-indigo-600 text-white py-2
+                     rounded-lg text-sm font-medium">
+        Lưu
+      </button>
+      <button onclick="closeSelectorModal()"
+              class="flex-1 border py-2 rounded-lg text-sm">
+        Hủy
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- CTA Modal -->
+<div id="cta-modal"
+     class="hidden fixed inset-0 bg-black/50 z-50
+            flex items-center justify-center">
+  <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+    <h3 class="font-semibold text-gray-800 mb-4">
+      Thêm CTA Template
+    </h3>
+    <div class="space-y-3">
+      <div>
+        <label class="text-xs text-gray-500">
+          Template
+          <span class="text-indigo-500 ml-1">
+            dùng {'{link}'} cho placeholder link
+          </span>
+        </label>
+        <textarea id="cta-template" rows="3"
+                  placeholder="Link mình để ở đây:&#10;{link}"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1 resize-none"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-500">Platform</label>
+          <select id="cta-platform"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500">Locale</label>
+          <select id="cta-locale"
+                  class="w-full border rounded-lg px-3 py-2
+                         text-sm mt-1">
+            <option value="vi">vi (Vietnamese)</option>
+            <option value="en">en (English)</option>
+            <option value="*">* (All)</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">
+          Page URL (optional — để trống = áp dụng toàn platform)
+        </label>
+        <input id="cta-page-url" type="text"
+               placeholder="https://facebook.com/yourpage"
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
+      </div>
+      <div>
+        <label class="text-xs text-gray-500">
+          Niche (optional)
+        </label>
+        <input id="cta-niche" type="text"
+               placeholder="cosmetics, electronics, food..."
+               class="w-full border rounded-lg px-3 py-2
+                      text-sm mt-1">
+      </div>
+    </div>
+    <div class="flex gap-3 mt-5">
+      <button onclick="saveCTA()"
+              class="flex-1 bg-indigo-600 text-white py-2
+                     rounded-lg text-sm font-medium">
+        Lưu
+      </button>
+      <button onclick="closeCTAModal()"
+              class="flex-1 border py-2 rounded-lg text-sm">
+        Hủy
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── MCP API ───────────────────────────────────────────────────
+async function startMCPInspector() {
+  const btn = document.getElementById('btn-mcp-inspector');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Khởi tạo...`;
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/platform-config/mcp-inspector/start', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      window.open(data.url, '_blank');
+    } else {
+      showToast("Lỗi khởi chạy MCP: " + data.error, 'error');
+    }
+  } catch (err) {
+    showToast("Network error: " + err.message, 'error');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
+
+// ─── State ────────────────────────────────────────────────────
+let platforms = [];
+let workflows = [];
+let selectors = [];
+let ctaList = [];
+let editingSelectorId = null;
+let editingPlatformId = null;
+
+// ─── Init ─────────────────────────────────────────────────────
+async function init() {
+  await loadPlatforms();
+  loadWorkflows();
+  loadOverview();
+}
+init();
+
+// ─── Tab switching ────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
+    btn.classList.add('text-gray-500');
+  });
+  document.querySelectorAll('[id^="tab-content-"]').forEach(el => {
+    el.classList.add('hidden');
+  });
+  document.getElementById(`tab-${tab}`)
+          .classList.add('bg-white', 'shadow-sm', 'text-gray-800');
+  document.getElementById(`tab-content-${tab}`)
+          .classList.remove('hidden');
+
+  if (tab === 'selectors') loadSelectors();
+  if (tab === 'cta') loadCTA();
+  if (tab === 'overview') loadOverview();
+}
+
+// ─── Platforms ────────────────────────────────────────────────
+async function loadPlatforms() {
+  const res = await fetch('/platform-config/platforms');
+  platforms = await res.json();
+
+  // Populate filter dropdowns
+  const filterSel = document.getElementById('platform-filter');
+  const sPlatform = document.getElementById('s-platform');
+  const ctaPlatform = document.getElementById('cta-platform');
+
+  [filterSel, sPlatform, ctaPlatform].forEach(sel => {
+    if (!sel) return;
+    const current = sel.value;
+    // Keep first option
+    while (sel.options.length > 1) sel.remove(1);
+    platforms.forEach(p => {
+      const label = (p.display_name || p.platform || '').trim();
+      sel.appendChild(new Option(label, p.platform));
+    });
+    if (current) sel.value = current;
+  });
+
+  // Populate platform-filter for selector tab
+  const spf = document.getElementById('selector-platform-filter');
+  if (spf) {
+    while (spf.options.length > 1) spf.remove(1);
+    platforms.forEach(p => {
+      const label = (p.display_name || p.platform || '').trim();
+      spf.appendChild(new Option(label, p.platform));
+    });
+  }
+
+  // Render platform cards
+  const grid = document.getElementById('platforms-grid');
+  grid.innerHTML = platforms.map(p => `
+    <div class="bg-white rounded-xl border p-4
+                ${!p.is_active ? 'opacity-50' : ''}">
+      <div class="flex items-center gap-2 mb-3">
+        <div>
+          <p class="font-semibold text-gray-800">
+            ${p.display_name}
+          </p>
+          <p class="text-xs text-gray-400">${p.platform}</p>
+        </div>
+        <span class="ml-auto text-xs px-2 py-0.5 rounded-full
+                     ${p.is_active
+                       ? 'bg-green-100 text-green-700'
+                       : 'bg-gray-100 text-gray-500'}">
+          ${p.is_active ? 'Active' : 'Inactive'}
+        </span>
+      </div>
+      <p class="text-xs text-gray-400 font-mono truncate mb-3">
+        ${p.adapter_class}
+      </p>
+      <div class="flex gap-1 text-xs text-gray-500 items-center justify-between">
+        <span class="bg-gray-50 px-2 py-0.5 rounded">
+          ${(p.media_extensions || []).join(', ')}
+        </span>
+        <button onclick="editPlatform(${p.id})"
+                class="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">
+          Sửa
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openPlatformModal() {
+  editingPlatformId = null;
+  document.getElementById('platform-modal').classList.remove('hidden');
+}
+
+function editPlatform(id) {
+  const p = platforms.find(x => x.id === id);
+  if (!p) return;
+  editingPlatformId = id;
+  document.getElementById('p-platform').value = p.platform || '';
+  document.getElementById('p-display-name').value = p.display_name || '';
+  document.getElementById('p-display-name').dataset.autoGenerated = 'false';
+  document.getElementById('p-emoji').value = p.display_emoji || '';
+  document.getElementById('p-adapter-class').value = p.adapter_class || '';
+  document.getElementById('p-adapter-class').dataset.autoGenerated = 'false';
+  document.getElementById('p-base-url').value = p.base_urls?.home || '';
+  document.getElementById('platform-modal').classList.remove('hidden');
+}
+
+function closePlatformModal() {
+  editingPlatformId = null;
+  document.getElementById('platform-modal').classList.add('hidden');
+  const ids = ['p-platform', 'p-display-name', 'p-emoji', 'p-adapter-class', 'p-base-url'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) {
+      el.value = '';
+      el.dataset.autoGenerated = 'true';
+    }
+  });
+}
+
+function autoGenPlatformData() {
+  const plat = document.getElementById('p-platform').value.trim().toLowerCase();
+  
+  const dispNode = document.getElementById('p-display-name');
+  const adaptNode = document.getElementById('p-adapter-class');
+
+  if (!plat) {
+    if (dispNode.dataset.autoGenerated !== "false") dispNode.value = '';
+    if (adaptNode.dataset.autoGenerated !== "false") adaptNode.value = '';
+    return;
+  }
+  
+  // Auto-capitalize first letter for Display Name
+  if (!dispNode.value || dispNode.dataset.autoGenerated !== "false") {
+    dispNode.value = plat.charAt(0).toUpperCase() + plat.slice(1);
+    dispNode.dataset.autoGenerated = "true";
+  }
+  
+  // Auto-generate Adapter Class — detect known dedicated adapters first
+  const KNOWN_ADAPTERS = {
+    'facebook':  'app.adapters.facebook.adapter.FacebookAdapter',
+    'tiktok':    'app.adapters.tiktok.adapter.TiktokAdapter',
+    'instagram': 'app.adapters.instagram.adapter.InstagramAdapter',
+  };
+  if (!adaptNode.value || adaptNode.dataset.autoGenerated !== "false") {
+    adaptNode.value = KNOWN_ADAPTERS[plat] || 'app.adapters.generic.adapter.GenericAdapter';
+    adaptNode.dataset.autoGenerated = "true";
+  }
+}
+
+async function savePlatform() {
+  const baseUrlVal = document.getElementById('p-base-url') ? document.getElementById('p-base-url').value.trim() : "";
+  const payload = {
+    platform: document.getElementById('p-platform').value.toLowerCase().trim(),
+    display_name: document.getElementById('p-display-name').value.trim(),
+    display_emoji: document.getElementById('p-emoji').value.trim(),
+    adapter_class: document.getElementById('p-adapter-class').value.trim(),
+    base_urls: baseUrlVal ? { home: baseUrlVal } : {},
+    viewport: {width: 1280, height: 720},
+    media_extensions: []
+  };
+
+  if (!payload.platform || !payload.adapter_class) {
+    showToast("Vui lòng nhập Platform ID và Adapter Class.", 'error');
+    return;
+  }
+
+  const method = editingPlatformId ? 'PUT' : 'POST';
+  const url = editingPlatformId 
+    ? `/platform-config/platforms/${editingPlatformId}` 
+    : '/platform-config/platforms';
+
+  const res = await fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  
+  if (res.ok) {
+    const data = await res.json();
+    if (data.success) {
+      closePlatformModal();
+      showToast('Đã thêm Platform thành công!');
+      loadPlatforms();
+    } else {
+      showToast("Lỗi: " + data.error, 'error');
+    }
+  } else {
+    showToast("Lỗi kết nối hoặc server", 'error');
+  }
+}
+
+// ─── Create Workflow ──────────────────────────────────────────
+async function createWorkflow() {
+  const name = document.getElementById('new-wf-name').value.trim();
+  const platform = document.getElementById('new-wf-platform').value.trim();
+  const job_type = document.getElementById('new-wf-jobtype').value;
+
+  if (!name || !platform) {
+    showToast('Vui lòng nhập Tên Workflow và Platform ID.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/platform-config/workflows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, platform, job_type }),
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(data.message || 'Đã tạo workflow thành công!');
+      document.getElementById('new-wf-name').value = '';
+      document.getElementById('new-wf-platform').value = '';
+      loadWorkflows();
+    } else {
+      showToast(data.error || 'Lỗi tạo workflow.', 'error');
+    }
+  } catch (e) {
+    showToast('Lỗi kết nối: ' + e.message, 'error');
+  }
+}
+
+// ─── Workflows ────────────────────────────────────────────────
+async function loadWorkflows(platform = '') {
+  const res = await fetch(
+    `/platform-config/workflows${platform ? '?platform=' + platform : ''}`
+  );
+  workflows = await res.json();
+
+  const container = document.getElementById('workflows-container');
+  container.innerHTML = workflows.map(wf => `
+    <div class="bg-white rounded-xl border overflow-hidden">
+      <!-- Workflow Header -->
+      <div class="flex items-center gap-3 p-4 border-b bg-gray-50">
+        <div>
+          <p class="font-semibold text-gray-800">${wf.name}</p>
+          <p class="text-xs text-gray-400">
+            ${wf.platform} · ${wf.job_type}
+          </p>
+        </div>
+        <span class="ml-auto text-xs px-2 py-0.5 rounded-full
+                     ${wf.is_active
+                       ? 'bg-green-100 text-green-700'
+                       : 'bg-gray-100 text-gray-500'}">
+          ${wf.is_active ? 'Active' : 'Inactive'}
+        </span>
+        <button onclick="testWorkflow(${wf.id})"
+                class="text-xs px-2.5 py-1 rounded-lg
+                       bg-amber-50 text-amber-700 border
+                       border-amber-200 hover:bg-amber-100
+                       font-medium ml-2 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Test
+        </button>
+        ${!wf.is_active
+          ? `<button onclick="applyPreset('${wf.name}')"
+                    class="text-xs px-2.5 py-1 rounded-lg
+                           bg-indigo-50 text-indigo-600 border
+                           border-indigo-200 hover:bg-indigo-100
+                           font-medium ml-1">
+               Activate
+             </button>`
+          : ''}
+      </div>
+
+      <!-- Test Results Container -->
+      <div id="test-results-${wf.id}" class="hidden border-b"></div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-0
+                  divide-x divide-gray-100">
+
+        <!-- Steps — Step Builder -->
+        <div class="p-4">
+          <p class="text-xs font-semibold text-gray-500 uppercase
+                    tracking-wide mb-2">
+            Workflow Steps
+            <span class="text-gray-300 font-normal ml-1">
+              (${wf.steps.length} steps)
+            </span>
+          </p>
+          <div id="steps-${wf.id}"
+               class="space-y-2 min-h-[60px] max-h-[400px] overflow-y-auto"
+               data-workflow-id="${wf.id}">
+            ${wf.steps.map((step, i) => renderStepRow(step, i, wf.id)).join('')}
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button onclick="addStep(${wf.id})"
+                    class="flex-1 text-xs text-indigo-600
+                           border border-indigo-200 rounded-lg py-1.5
+                           hover:bg-indigo-50 font-medium">
+              + Thêm step
+            </button>
+            <button onclick="saveSteps(${wf.id})"
+                    id="save-steps-${wf.id}"
+                    class="flex-1 text-xs text-white bg-indigo-600
+                           rounded-lg py-1.5 hover:bg-indigo-700
+                           font-medium flex items-center justify-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+              Lưu Steps
+            </button>
+          </div>
+        </div>
+
+        <!-- Timing config -->
+        <div class="p-4">
+          <p class="text-xs font-semibold text-gray-500 uppercase
+                    tracking-wide mb-3">Timing Config (ms)</p>
+          <div class="space-y-2" id="timing-${wf.id}">
+            ${Object.entries(wf.timing_config || {}).map(([k, v]) => `
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-500 flex-1
+                              font-mono">${k}</label>
+                <input type="number" value="${v}"
+                       data-key="${k}"
+                       onchange="markTimingDirty(${wf.id})"
+                       class="w-24 border rounded px-2 py-1
+                              text-xs text-right">
+              </div>
+            `).join('')}
+          </div>
+          <button onclick="saveTiming(${wf.id})"
+                  id="save-timing-${wf.id}"
+                  class="mt-3 w-full text-xs text-green-600
+                         border border-green-200 rounded-lg py-1.5
+                         hover:bg-green-50 hidden">
+            Lưu timing
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // No SortableJS needed — using ▲▼ buttons instead
+}
+
+// ─── Step Builder ─────────────────────────────────────────────
+const STEP_ACTIONS = [
+  { value: 'navigate', label: 'Navigate' },
+  { value: 'click', label: 'Click' },
+  { value: 'fill', label: 'Fill' },
+  { value: 'upload_file', label: 'Upload File' },
+  { value: 'wait', label: 'Wait' },
+  { value: 'verify', label: 'Verify' },
+  { value: 'check_auth', label: 'Check Auth' },
+  { value: 'legacy', label: 'Legacy (Hardcoded)' },
+];
+
+const VALUE_SOURCES = [
+  { value: '', label: '(không dùng)' },
+  { value: 'job.media_path', label: 'job.media_path' },
+  { value: 'job.caption', label: 'job.caption' },
+  { value: 'job.post_url', label: 'job.post_url' },
+  { value: 'account.username', label: 'account.username' },
+];
+
+function parseStep(step) {
+  // Backward compat: string → object
+  if (typeof step === 'string') {
+    return { name: step, action: 'legacy', selector_keys: [], value_source: '',
+             required: false, timeout_ms: 10000, wait_after_ms: 1000,
+             retry_count: 1, continue_on_error: true };
+  }
+  return {
+    name: step.name || 'unnamed',
+    action: step.action || 'wait',
+    selector_keys: step.selector_keys || [],
+    value_source: step.value_source || '',
+    url_key: step.url_key || '',
+    url: step.url || '',
+    required: step.required !== false,
+    timeout_ms: step.timeout_ms || 10000,
+    wait_after_ms: step.wait_after_ms || 1000,
+    retry_count: step.retry_count || 1,
+    continue_on_error: step.continue_on_error || false,
+    success_selector_keys: step.success_selector_keys || [],
+    error_selector_keys: step.error_selector_keys || [],
+    login_selector_keys: step.login_selector_keys || [],
+    auth_selector_keys: step.auth_selector_keys || [],
+  };
+}
+
+function renderStepRow(rawStep, index, wfId) {
+  const s = parseStep(rawStep);
+  const isLegacy = (typeof rawStep === 'string');
+  const actionOpts = STEP_ACTIONS.map(a =>
+    `<option value="${a.value}" ${a.value === s.action ? 'selected' : ''}>${a.label}</option>`
+  ).join('');
+
+  const selectorKeysStr = (s.selector_keys || []).join(', ');
+  const showUrl = ['navigate'].includes(s.action);
+  const showSelector = ['click','fill','upload_file','verify','check_auth'].includes(s.action);
+  const showValue = ['fill','upload_file','navigate'].includes(s.action);
+
+  return `
+    <div class="bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs"
+         data-step-index="${index}">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-gray-400 font-bold w-5 text-center">${index + 1}</span>
+        <input type="text" value="${s.name}" placeholder="step_name"
+               data-field="name"
+               class="flex-1 border rounded px-2 py-1 font-mono text-xs">
+        <select data-field="action"
+                onchange="onStepActionChange(${wfId}, ${index}, this.value)"
+                class="border rounded px-1.5 py-1 text-xs w-[130px]">
+          ${actionOpts}
+        </select>
+        <div class="flex gap-0.5">
+          <button onclick="moveStep(${wfId}, ${index}, -1)" title="Lên"
+                  class="px-1 py-0.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded ${index === 0 ? 'opacity-30 pointer-events-none' : ''}"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg></button>
+          <button onclick="moveStep(${wfId}, ${index}, 1)" title="Xuống"
+                  class="px-1 py-0.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg></button>
+          <button onclick="duplicateStep(${wfId}, ${index})" title="Nhân bản"
+                  class="px-1 py-0.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></button>
+          <button onclick="deleteStep(${wfId}, ${index})" title="Xóa"
+                  class="px-1 py-0.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        ${showUrl ? `
+        <div>
+          <label class="text-[10px] text-gray-400">URL / URL Key</label>
+          <input type="text" value="${s.url || s.url_key || ''}" placeholder="upload hoặc https://..."
+                 data-field="url_or_key"
+                 class="w-full border rounded px-2 py-1 font-mono text-[11px]">
+        </div>` : ''}
+        ${showSelector ? `
+        <div class="${showUrl ? '' : 'col-span-2'}">
+          <label class="text-[10px] text-gray-400">Selector Keys (phẩy phân cách)</label>
+          <input type="text" value="${selectorKeysStr}" placeholder="upload:file_input, caption:text_area"
+                 data-field="selector_keys"
+                 class="w-full border rounded px-2 py-1 font-mono text-[11px]">
+        </div>` : ''}
+        ${showValue ? `
+        <div>
+          <label class="text-[10px] text-gray-400">Value Source</label>
+          <input type="text" value="${s.value_source}" placeholder="job.caption, literal:Hello"
+                 data-field="value_source"
+                 class="w-full border rounded px-2 py-1 font-mono text-[11px]" list="value-sources-list">
+        </div>` : ''}
+        <div class="flex items-end gap-3">
+          <label class="flex items-center gap-1 text-[10px] text-gray-500">
+            <input type="checkbox" data-field="required" ${s.required ? 'checked' : ''} class="rounded">
+            Bắt buộc
+          </label>
+          <label class="flex items-center gap-1 text-[10px] text-gray-500">
+            <input type="number" value="${s.timeout_ms}" data-field="timeout_ms"
+                   class="w-14 border rounded px-1 py-0.5 text-[10px] text-right"> ms
+          </label>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getWorkflowStepsData(wfId) {
+  // Read all step rows from DOM and build array of step objects
+  const container = document.getElementById(`steps-${wfId}`);
+  if (!container) return [];
+  const rows = container.querySelectorAll('[data-step-index]');
+  return [...rows].map(row => {
+    const get = (f) => row.querySelector(`[data-field="${f}"]`);
+    const action = get('action')?.value || 'wait';
+    const urlOrKey = get('url_or_key')?.value?.trim() || '';
+    const selectorKeysRaw = get('selector_keys')?.value?.trim() || '';
+    const selectorKeys = selectorKeysRaw ? selectorKeysRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+    const step = {
+      name: get('name')?.value?.trim() || 'unnamed',
+      action: action,
+      required: get('required')?.checked ?? true,
+      timeout_ms: parseInt(get('timeout_ms')?.value) || 10000,
+      wait_after_ms: 1000,
+      retry_count: 1,
+      continue_on_error: false,
+    };
+
+    if (selectorKeys.length) step.selector_keys = selectorKeys;
+    if (get('value_source')?.value?.trim()) step.value_source = get('value_source').value.trim();
+    if (urlOrKey) {
+      if (urlOrKey.startsWith('http')) step.url = urlOrKey;
+      else step.url_key = urlOrKey;
+    }
+    return step;
+  });
+}
+
+function reRenderSteps(wfId) {
+  const wf = workflows.find(w => w.id === wfId);
+  if (!wf) return;
+  const container = document.getElementById(`steps-${wfId}`);
+  if (!container) return;
+  container.innerHTML = wf.steps.map((step, i) => renderStepRow(step, i, wfId)).join('');
+}
+
+function addStep(wfId) {
+  const wf = workflows.find(w => w.id === wfId);
+  if (!wf) return;
+  // Save current DOM state first
+  wf.steps = getWorkflowStepsData(wfId);
+  wf.steps.push({
+    name: `step_${wf.steps.length + 1}`,
+    action: 'click',
+    selector_keys: [],
+    value_source: '',
+    required: true,
+    timeout_ms: 10000,
+    wait_after_ms: 1000,
+    retry_count: 1,
+    continue_on_error: false,
+  });
+  reRenderSteps(wfId);
+}
+
+function moveStep(wfId, index, direction) {
+  const wf = workflows.find(w => w.id === wfId);
+  if (!wf) return;
+  wf.steps = getWorkflowStepsData(wfId);
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= wf.steps.length) return;
+  const temp = wf.steps[index];
+  wf.steps[index] = wf.steps[newIndex];
+  wf.steps[newIndex] = temp;
+  reRenderSteps(wfId);
+}
+
+function deleteStep(wfId, index) {
+  const wf = workflows.find(w => w.id === wfId);
+  if (!wf) return;
+  wf.steps = getWorkflowStepsData(wfId);
+  if (wf.steps.length <= 1) { showToast('Cần ít nhất 1 step.', 'error'); return; }
+  wf.steps.splice(index, 1);
+  reRenderSteps(wfId);
+}
+
+function duplicateStep(wfId, index) {
+  const wf = workflows.find(w => w.id === wfId);
+  if (!wf) return;
+  wf.steps = getWorkflowStepsData(wfId);
+  const clone = JSON.parse(JSON.stringify(wf.steps[index]));
+  clone.name = clone.name + '_copy';
+  wf.steps.splice(index + 1, 0, clone);
+  reRenderSteps(wfId);
+}
+
+function onStepActionChange(wfId, index, newAction) {
+  const wf = workflows.find(w => w.id === wfId);
+  if (!wf) return;
+  wf.steps = getWorkflowStepsData(wfId);
+  wf.steps[index].action = newAction;
+  reRenderSteps(wfId);
+}
+
+function markStepsDirty(workflowId) {
+  // No-op (replaced by direct button)
+}
+
+function markTimingDirty(workflowId) {
+  document.getElementById(`save-timing-${workflowId}`)
+          ?.classList.remove('hidden');
+}
+
+async function saveSteps(workflowId) {
+  const steps = getWorkflowStepsData(workflowId);
+
+  const res = await fetch(
+    `/platform-config/workflows/${workflowId}/steps`,
+    {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({steps})
+    }
+  );
+  if ((await res.json()).success) {
+    showToast('Đã lưu workflow steps thành công!');
+    // Update local state
+    const wf = workflows.find(w => w.id === workflowId);
+    if (wf) wf.steps = steps;
+  }
+}
+
+async function saveTiming(workflowId) {
+  const container = document.getElementById(`timing-${workflowId}`);
+  const timing_config = {};
+  container.querySelectorAll('input[data-key]').forEach(input => {
+    timing_config[input.dataset.key] = parseFloat(input.value);
+  });
+
+  const res = await fetch(
+    `/platform-config/workflows/${workflowId}/timing`,
+    {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({timing_config})
+    }
+  );
+  if ((await res.json()).success) {
+    document.getElementById(`save-timing-${workflowId}`)
+            ?.classList.add('hidden');
+    showToast('Đã lưu timing config');
+  }
+}
+
+// ─── Test Workflow ────────────────────────────────────────────
+async function testWorkflow(wfId) {
+  const container = document.getElementById(`test-results-${wfId}`);
+  if (!container) return;
+
+   // Show loading
+  container.classList.remove('hidden');
+  container.innerHTML = `
+    <div class="p-4 text-center text-sm text-gray-500">
+      <svg class="w-4 h-4 inline animate-spin mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      Testing workflow...
+    </div>`;
+
+  const steps = getWorkflowStepsData(wfId);
+
+  // Run test — send current DOM steps in body (does NOT save to DB)
+  const res = await fetch(`/platform-config/workflows/${wfId}/test`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ steps })
+  });
+  const data = await res.json();
+
+  if (!data.success) {
+    container.innerHTML = `<div class="p-4 text-sm text-red-600">${data.error || 'Test failed'}</div>`;
+    return;
+  }
+
+  const statusColors = {
+    pass: 'bg-green-100 text-green-700 border-green-200',
+    fail: 'bg-red-100 text-red-700 border-red-200',
+    warn: 'bg-amber-100 text-amber-700 border-amber-200',
+  };
+  const statusIcons = {
+    pass: '<svg class="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>',
+    fail: '<svg class="w-3.5 h-3.5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
+    warn: '<svg class="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>',
+  };
+
+  const overallColor = data.overall === 'pass'
+    ? 'bg-green-50 border-green-200'
+    : 'bg-red-50 border-red-200';
+
+  const warningsHtml = data.warnings?.length
+    ? data.warnings.map(w => `<div class="text-xs text-amber-600 mb-1">${w}</div>`).join('')
+    : '';
+
+  container.innerHTML = `
+    <div class="p-4 border ${overallColor} rounded-lg m-3">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          ${statusIcons[data.overall]}
+          <span class="font-semibold text-sm">${data.workflow}</span>
+          <span class="text-xs text-gray-400">${data.platform} · ${data.job_type}</span>
+        </div>
+        <div class="flex gap-2 text-xs">
+          <span class="px-2 py-0.5 rounded ${statusColors.pass}">${data.summary.pass} pass</span>
+          ${data.summary.fail ? `<span class="px-2 py-0.5 rounded ${statusColors.fail}">${data.summary.fail} fail</span>` : ''}
+          ${data.summary.warn ? `<span class="px-2 py-0.5 rounded ${statusColors.warn}">${data.summary.warn} warn</span>` : ''}
+        </div>
+      </div>
+      ${warningsHtml}
+      <div class="space-y-1.5">
+        ${data.steps.map(step => `
+          <div class="flex items-start gap-2 text-xs">
+            <span class="w-5 text-center font-mono text-gray-400">${step.index}</span>
+            ${statusIcons[step.status]}
+            <div class="flex-1">
+              <span class="font-mono font-medium">${step.name}</span>
+              <span class="text-gray-400 ml-1">(${step.action})</span>
+              ${step.checks.map(c => `
+                <div class="ml-2 text-[11px] ${c.status === 'pass' ? 'text-green-600' : c.status === 'fail' ? 'text-red-600' : 'text-amber-600'}">
+                  ${c.status === 'pass' ? '✓' : c.status === 'fail' ? '✗' : '⚠'} ${c.detail}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <button onclick="document.getElementById('test-results-${wfId}').classList.add('hidden')"
+              class="mt-3 text-xs text-gray-400 hover:text-gray-600">
+        Đóng
+      </button>
+    </div>
+  `;
+}
+
+// ─── Selectors ────────────────────────────────────────────────
+async function loadSelectors() {
+  const platform = document.getElementById(
+    'selector-platform-filter'
+  )?.value || '';
+  const category = document.getElementById(
+    'selector-category-filter'
+  )?.value || '';
+
+  const params = new URLSearchParams();
+  if (platform) params.set('platform', platform);
+  if (category) params.set('category', category);
+
+  const res = await fetch(
+    `/platform-config/selectors?${params}`
+  );
+  selectors = await res.json();
+
+  // Group by category
+  const grouped = {};
+  selectors.forEach(s => {
+    const key = `${s.platform}:${s.category}`;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(s);
+  });
+
+  const container = document.getElementById(
+    'selectors-by-category'
+  );
+  container.innerHTML = Object.entries(grouped).map(
+    ([key, items]) => {
+      const [plt, cat] = key.split(':');
+      return `
+        <div class="bg-white rounded-xl border overflow-hidden">
+          <div class="flex items-center gap-3 px-4 py-3
+                      bg-gray-50 border-b">
+            <span class="text-xs font-semibold text-gray-500
+                         uppercase tracking-wide">
+              ${plt} · ${cat}
+            </span>
+            <span class="text-xs text-gray-400">
+              ${items.length} selectors
+            </span>
+            <span class="text-xs text-gray-300 ml-auto">
+              Kéo để ưu tiên
+            </span>
+          </div>
+          <ul id="sel-${key.replace(':', '-')}"
+              data-group="${key}"
+              class="divide-y divide-gray-50 min-h-[50px]">
+            ${items.map(s => `
+              <li data-id="${s.id}"
+                  class="flex items-center gap-3 px-4 py-2.5
+                         cursor-grab hover:bg-gray-50
+                         ${!s.is_active ? 'opacity-40' : ''}
+                         select-none group">
+                <span class="text-gray-400 font-mono text-xs select-none" title="Kéo">::</span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs px-1.5 py-0.5 rounded
+                                 bg-blue-50 text-blue-600
+                                 font-mono">
+                      ${s.selector_type}
+                    </span>
+                    <span class="text-xs text-gray-500">
+                      ${s.selector_name}
+                    </span>
+                    ${s.locale !== '*'
+                      ? `<span class="text-xs px-1 py-0.5 rounded
+                                      bg-yellow-50 text-yellow-600">
+                           ${s.locale}
+                         </span>`
+                      : ''}
+                  </div>
+                  <p class="text-sm font-mono text-gray-700
+                            truncate mt-0.5">
+                    ${s.selector_value}
+                  </p>
+                  ${s.notes
+                    ? `<p class="text-xs text-gray-400 mt-0.5">
+                         ${s.notes}
+                       </p>`
+                    : ''}
+                </div>
+                <div class="flex gap-1 opacity-0
+                            group-hover:opacity-100">
+                  <button onclick="editSelector(${s.id})"
+                          class="p-1.5 text-blue-600
+                                 hover:bg-blue-50 rounded text-xs">
+                    Sửa
+                  </button>
+                  <button onclick="toggleSelector(${s.id})"
+                          class="p-1.5 text-gray-600
+                                 hover:bg-gray-100 rounded text-xs">
+                    ${s.is_active ? 'Tắt' : 'Bật'}
+                  </button>
+                  <button onclick="deleteSelector(${s.id})"
+                          class="p-1.5 text-red-600
+                                 hover:bg-red-50 rounded text-xs">
+                    Xóa
+                  </button>
+                </div>
+                <span class="text-xs text-gray-300 w-6 text-right">
+                  ${s.priority}
+                </span>
+              </li>
+            `).join('')}
+          </ul>
+          <div class="px-4 py-2 border-t bg-gray-50">
+            <button onclick="saveSelectorsOrder('${key}')"
+                    class="text-xs text-indigo-600
+                           hover:underline">
+              Lưu thứ tự
+            </button>
+          </div>
+        </div>
+      `;
+    }
+  ).join('');
+
+  // Initialize SortableJS for each category group
+  Object.keys(grouped).forEach(key => {
+    const elId = `sel-${key.replace(':', '-')}`;
+    const el = document.getElementById(elId);
+    if (el) {
+      Sortable.create(el, {
+        animation: 150,
+        ghostClass: 'bg-indigo-50',
+        handle: 'li',
+      });
+    }
+  });
+}
+
+async function saveSelectorsOrder(groupKey) {
+  const elId = `sel-${groupKey.replace(':', '-')}`;
+  const list = document.getElementById(elId);
+  const items = [...list.querySelectorAll('li')]
+    .map((li, i) => ({
+      id: parseInt(li.dataset.id),
+      priority: 100 - (i * 10)  // descending priority
+    }));
+
+  const res = await fetch('/platform-config/selectors/reorder', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({items})
+  });
+  if ((await res.json()).success) {
+    showToast('Đã lưu thứ tự selector');
+  }
+}
+
+async function editSelector(id) {
+  const sel = selectors.find(s => s.id === id);
+  if (!sel) return;
+  editingSelectorId = id;
+
+  document.getElementById('s-platform').value = sel.platform;
+  document.getElementById('s-category').value = sel.category;
+  document.getElementById('s-name').value = sel.selector_name;
+  document.getElementById('s-type').value = sel.selector_type;
+  document.getElementById('s-locale').value = sel.locale;
+  document.getElementById('s-value').value = sel.selector_value;
+  document.getElementById('s-notes').value = sel.notes || '';
+
+  openSelectorModal();
+}
+
+async function toggleSelector(id) {
+  const sel = selectors.find(s => s.id === id);
+  if (!sel) return;
+  await fetch(`/platform-config/selectors/${id}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({is_active: !sel.is_active})
+  });
+  loadSelectors();
+}
+
+async function deleteSelector(id) {
+  if (!confirm('Xóa selector này?')) return;
+  await fetch(`/platform-config/selectors/${id}`,
+              {method: 'DELETE'});
+  loadSelectors();
+}
+
+function openSelectorModal() {
+  document.getElementById('selector-modal')
+          .classList.remove('hidden');
+}
+
+function closeSelectorModal() {
+  editingSelectorId = null;
+  document.getElementById('selector-modal')
+          .classList.add('hidden');
+}
+
+async function saveSelector() {
+  const payload = {
+    platform: document.getElementById('s-platform').value,
+    category: document.getElementById('s-category').value,
+    selector_name: document.getElementById('s-name').value,
+    selector_type: document.getElementById('s-type').value,
+    locale: document.getElementById('s-locale').value,
+    selector_value: document.getElementById('s-value').value,
+    notes: document.getElementById('s-notes').value,
+  };
+
+  if (editingSelectorId) {
+    await fetch(
+      `/platform-config/selectors/${editingSelectorId}`,
+      {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      }
+    );
+  } else {
+    await fetch('/platform-config/selectors', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+  }
+
+  closeSelectorModal();
+  loadSelectors();
+}
+
+// ─── CTA Templates ────────────────────────────────────────────
+async function loadCTA() {
+  const platform = document.getElementById(
+    'platform-filter'
+  )?.value || '';
+  const params = platform ? `?platform=${platform}` : '';
+  const res = await fetch(`/platform-config/cta${params}`);
+  ctaList = await res.json();
+
+  const list = document.getElementById('cta-list');
+  list.innerHTML = ctaList.map(cta => `
+    <div data-id="${cta.id}"
+         class="flex items-start gap-3 p-3 border rounded-lg
+                bg-gray-50 cursor-grab hover:bg-white
+                hover:border-indigo-200 transition-all
+                ${!cta.is_active ? 'opacity-40' : ''}
+                select-none group">
+      <span class="text-gray-400 font-mono text-xs mt-0.5 select-none" title="Kéo">::</span>
+      <div class="flex-1 min-w-0">
+        <pre class="text-sm text-gray-700 whitespace-pre-wrap
+                    font-sans leading-relaxed">${cta.template}</pre>
+        <div class="flex gap-2 mt-1.5">
+          <span class="text-xs px-1.5 py-0.5 rounded
+                       bg-blue-50 text-blue-600">
+            ${cta.platform}
+          </span>
+          <span class="text-xs px-1.5 py-0.5 rounded
+                       bg-gray-100 text-gray-500">
+            ${cta.locale}
+          </span>
+          ${cta.page_url
+            ? `<span class="text-xs px-1.5 py-0.5 rounded
+                            bg-purple-50 text-purple-600 truncate
+                            max-w-[200px]" title="${cta.page_url}">
+                 URL: ${cta.page_url}
+               </span>`
+            : ''}
+          ${cta.niche
+            ? `<span class="text-xs px-1.5 py-0.5 rounded
+                            bg-yellow-50 text-yellow-600">
+                 Niche: ${cta.niche}
+               </span>`
+            : ''}
+        </div>
+      </div>
+      <div class="flex gap-1 opacity-0 group-hover:opacity-100">
+        <button onclick="deleteCTA(${cta.id})"
+                class="p-1.5 text-red-600 hover:bg-red-50
+                       rounded text-xs">
+          Xóa
+        </button>
+      </div>
+      <span class="text-xs text-gray-300">${cta.priority}</span>
+    </div>
+  `).join('');
+
+  // SortableJS for CTA list
+  Sortable.create(list, {
+    animation: 150,
+    ghostClass: 'bg-indigo-50 border-indigo-300',
+    handle: 'div[data-id]',
+    onEnd: saveCTAOrder
+  });
+}
+
+async function saveCTAOrder() {
+  const list = document.getElementById('cta-list');
+  const items = [...list.querySelectorAll('[data-id]')]
+    .map((el, i) => ({
+      id: parseInt(el.dataset.id),
+      priority: 100 - (i * 10)
+    }));
+
+  await fetch('/platform-config/cta/reorder', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({items})
+  });
+  showToast('Đã lưu thứ tự CTA');
+}
+
+function openCTAModal() {
+  document.getElementById('cta-modal').classList.remove('hidden');
+}
+
+function closeCTAModal() {
+  document.getElementById('cta-modal').classList.add('hidden');
+}
+
+async function saveCTA() {
+  const payload = {
+    platform: document.getElementById('cta-platform').value,
+    template: document.getElementById('cta-template').value,
+    locale: document.getElementById('cta-locale').value,
+    page_url: document.getElementById('cta-page-url').value || null,
+    niche: document.getElementById('cta-niche').value || null,
+    priority: 0,
+  };
+
+  await fetch('/platform-config/cta', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+
+  closeCTAModal();
+  loadCTA();
+}
+
+async function deleteCTA(id) {
+  if (!confirm('Xóa CTA template này?')) return;
+  await fetch(`/platform-config/cta/${id}`, {method: 'DELETE'});
+  loadCTA();
+}
+
+// ─── Cache control ────────────────────────────────────────────
+async function invalidateCache() {
+  await fetch('/platform-config/cache/invalidate',
+              {method: 'POST'});
+  showToast('Cache đã được reload');
+}
+
+// ─── Platform switching ───────────────────────────────────────
+function switchPlatform(platform) {
+  loadWorkflows(platform);
+  loadSelectors();
+  loadCTA();
+}
+
+// ─── Toast notification ───────────────────────────────────────
+function showToast(msg) {
+  const toast = document.createElement('div');
+  toast.className = (
+    'fixed bottom-4 right-4 bg-gray-800 text-white '
+    + 'px-4 py-2 rounded-lg text-sm z-50 '
+    + 'transition-opacity duration-300'
+  );
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+// ─── Overview Panel (Redesigned) ──────────────────────────────
+
+// SVG icon helpers (no emoji)
+const SVG = {
+  checkCircle: '<svg class="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+  xCircle: '<svg class="w-4 h-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+  skipForward: '<svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>',
+  alertTriangle: '<svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+  alertCritical: '<svg class="w-4 h-4 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+  infoCircle: '<svg class="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+  lightbulb: '<svg class="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>',
+};
+
+function sourceTag(src) {
+  const map = {
+    preset:   'bg-indigo-50 text-indigo-600 border-indigo-200',
+    database: 'bg-blue-50 text-blue-600 border-blue-200',
+    default:  'bg-gray-100 text-gray-500 border-gray-200',
+    fallback: 'bg-orange-50 text-orange-600 border-orange-200',
+    none:     'bg-red-50 text-red-500 border-red-200',
+  };
+  const cls = map[src] || map.default;
+  return `<span class="text-[10px] px-1.5 py-0.5 rounded border ${cls}">${src}</span>`;
+}
+
+// ─── API, Warnings, and Simulation logic extracted to: ───
+// /static/js/platform_config_api.js       (state, fetch, overview rendering)
+// /static/js/platform_config_warnings.js  (buildWarningsFromData, renderWarnings)
+// /static/js/platform_config_simulation.js (simulateJob, classifiers, risk analysis)
+
+function renderSimulationResult(res) {
+  const panel = document.getElementById('simulation-panel');
+  panel.classList.remove('hidden');
+  const ovColorMap = { 'FAIL': 'bg-red-50 text-red-700 border-b border-red-100', 'RISK': 'bg-amber-50 text-amber-700 border-b border-amber-100', 'SUCCESS': 'bg-emerald-50 text-emerald-700 border-b border-emerald-100', 'UNKNOWN': 'bg-gray-50 text-gray-700 border-b border-gray-100' };
+  const ovIconMap = { 'FAIL': SVG.xCircle.replace('text-red-500', 'text-red-600'), 'RISK': SVG.alertTriangle.replace('text-amber-500', 'text-amber-600'), 'SUCCESS': SVG.checkCircle.replace('text-green-500', 'text-emerald-600'), 'UNKNOWN': SVG.infoCircle.replace('text-blue-500', 'text-gray-500') };
+  let html = `
+    <div class="${ovColorMap[res.overall]} px-5 py-3.5 flex items-center justify-between">
+       <div class="flex items-center gap-3">
+         ${ovIconMap[res.overall].replace('w-4 h-4', 'w-6 h-6')}
+         <div class="flex flex-col">
+            <span class="text-sm font-bold uppercase tracking-wider">Job Prediction: ${res.overall}</span>
+            <span class="text-[10px] font-semibold opacity-80 mt-0.5">${res.summary}</span>
+         </div>
+       </div>
+       <div class="flex flex-col items-end">
+          <span class="text-[10px] uppercase font-bold tracking-widest opacity-70">Conf: ${res.confidence}</span>
+          <span class="text-xs font-bold capitalize mt-0.5">Risk: ${res.risk_level}</span>
+       </div>
+    </div>
+    <div class="p-5 bg-white space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-gray-100">
+         <span class="text-[10px] uppercase font-bold text-gray-500">Mô phỏng trình tự thực thi (${res.mode})</span>
+         ${res.stopped_early ? `<span class="text-red-600 font-bold text-[10px] italic flex items-center gap-1">${SVG.xCircle.replace('w-4 h-4', 'w-3 h-3')} STOPPED EARLY</span>` : ''}
+      </div>
+      ${(res.mode === 'realistic' && res.stopped_early) ? `<div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600">${SVG.infoCircle.replace('w-4 h-4 text-blue-500', 'w-3.5 h-3.5 text-slate-400 shrink-0')} <span>Simulation stopped early in <strong>Realistic</strong> mode — các bước sau failure đầu tiên không được thực thi, giống hành vi worker thật.</span></div>` : ''}`;
+  if (res.first_failure) {
+    html += `
+      <div class="rounded-lg border border-red-200 bg-red-50 p-3 shadow-sm border-l-4">
+        <div class="text-[10px] font-bold text-red-500 uppercase tracking-widest mb-1">First Failure Trigger</div>
+        <div class="text-sm text-red-900 font-bold mb-1">${res.first_failure.step}</div>
+        <div class="text-[10px] text-red-700 leading-relaxed">${res.first_failure.reason}</div>
+        <div class="mt-2 text-[10px] font-bold text-red-600 bg-white/60 w-fit px-2 py-0.5 rounded">&rarr; Action: ${res.first_failure.action}</div>
+      </div>`;
+  }
+  if (res.shared_risks.length > 0) {
+    html += `
+      <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-sm border-l-4">
+        <div class="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-2">Shared Selector Risk Analysis</div>
+        <div class="space-y-2">
+          ${res.shared_risks.map(r => `
+            <div class="flex items-start gap-2">
+              <div class="mt-1 w-1.5 h-1.5 rounded-full ${r.severity==='critical'?'bg-red-500':'bg-amber-500'} shrink-0"></div>
+              <div class="flex flex-col">
+                <span class="text-[10px] text-gray-800 font-bold">Selector "[${r.selector_key}]" </span>
+                <span class="text-[10px] text-gray-500">Ảnh hưởng ${r.steps.length} bước: ${r.steps.join(', ')}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+  html += `<div class="space-y-2.5">`;
+  const stBadge = { 'OK': 'bg-emerald-50 text-emerald-700 border-emerald-100', 'FAIL': 'bg-red-50 text-red-700 border-red-100', 'RISK': 'bg-amber-50 text-amber-700 border-amber-100', 'SKIPPED': 'bg-gray-50 text-gray-400 border-gray-100', 'UNKNOWN': 'bg-purple-50 text-purple-700 border-purple-100', 'NOT_EXECUTED': 'bg-gray-100 text-gray-400 border-gray-200 opacity-60' };
+  res.steps.forEach(s => {
+    html += `
+       <div class="flex items-start gap-3">
+         <div class="px-2 py-0.5 rounded shadow-sm text-[10px] font-bold w-16 text-center shrink-0 border ${stBadge[s.execution_status]}">${s.execution_status}</div>
+         <div class="flex flex-col flex-1">
+           <div class="flex items-center gap-2">
+             <span class="text-xs font-bold font-mono text-gray-700">${s.step}</span>
+             ${s.execution_status === 'OK' ? SVG.checkCircle.replace('w-4 h-4', 'w-3 h-3 text-emerald-500') : ''}
+           </div>
+           ${s.reason ? `<span class="text-[10px] text-gray-500 leading-relaxed">${s.reason}</span>` : ''}
+           ${s.action ? `<span class="text-[10px] text-indigo-600 font-bold mt-0.5">&rarr; Suggested Action: ${s.action}</span>` : ''}
+         </div>
+       </div>`;
+  });
+  html += `</div>`;
+  if (res.cta_status) {
+    const cColor = res.cta_status.status === 'RISK' ? 'bg-amber-50 text-amber-700 border-amber-100' : (res.cta_status.status === 'INFO' ? 'bg-blue-50 text-blue-700 border-blue-100' : 'bg-emerald-50 text-emerald-700 border-emerald-100');
+    html += `
+      <div class="mt-4 pt-4 border-t border-dashed border-gray-200 flex items-start gap-3">
+        <div class="px-2 py-0.5 rounded shadow-sm text-[10px] font-bold w-16 text-center shrink-0 border ${cColor}">CTA: ${res.cta_status.status}</div>
+        <div class="flex-1">
+          <span class="text-[10px] font-semibold text-gray-700">${res.cta_status.message}</span>
+          ${res.cta_status.action ? `<div class="text-[10px] text-indigo-600 font-bold mt-1">&rarr; ${res.cta_status.action}</div>` : ''}
+        </div>
+      </div>`;
+  }
+  html += `</div></div>`;
+  panel.innerHTML = html;
+}
+
+// ─── Patch loadOverview to chain cache state ───
+const _origLoadOverview = loadOverview;
+loadOverview = async function() {
+  await _origLoadOverview();
+  // Cache state depends on _runtimeData being populated
+  setTimeout(loadCacheState, 300);
+};
+</script>
+
+{% endblock %}

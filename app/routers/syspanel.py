@@ -13,8 +13,8 @@ from zoneinfo import ZoneInfo
 from app.main_templates import templates
 from app.database.core import SessionLocal
 from app.database.models import Job, Account
-from app.config import (
-    TIMEZONE,
+from app.constants import JobStatus
+from app.config import (    TIMEZONE,
     DB_PATH,
     BASE_DIR,
     CONTENT_DIR,
@@ -76,42 +76,66 @@ def _html_output(text: str) -> HTMLResponse:
     return HTMLResponse(f"<pre class='text-sm text-green-400 font-mono whitespace-pre-wrap leading-relaxed'>{escaped}</pre>")
 
 
+# Whitelist PM2 process names (including _1/_2 scaling convention)
+PM2_SAFE_NAMES = {
+    "FB_Publisher_1", "FB_Publisher_2",
+    "AI_Generator_1", "AI_Generator_2",
+    "Maintenance", "Web_Dashboard", "9Router_Gateway",
+    # Legacy (single-instance)
+    "FB_Publisher", "AI_Generator",
+}
+
+
+def _parse_pm2_proc(p: dict) -> dict:
+    """Parse a single PM2 jlist entry into a clean dict."""
+    mem = p.get("monit", {}).get("memory", 0)
+    cpu = p.get("monit", {}).get("cpu", 0)
+    status = p.get("pm2_env", {}).get("status", "unknown")
+    restarts = p.get("pm2_env", {}).get("restart_time", 0)
+    uptime_ms = p.get("pm2_env", {}).get("pm_uptime", None)
+    pid = p.get("pid", "-")
+    if uptime_ms:
+        secs = int((time.time() * 1000 - uptime_ms) / 1000)
+    else:
+        secs = 0
+    if secs < 60:
+        uptime_str = f"{secs}s"
+    elif secs < 3600:
+        uptime_str = f"{secs // 60}m {secs % 60}s"
+    else:
+        uptime_str = f"{secs // 3600}h {(secs % 3600) // 60}m"
+    return {
+        "id": p.get("pm_id"),
+        "name": p.get("name"),
+        "status": status,
+        "cpu": cpu,
+        "mem_mb": round(mem / (1024 * 1024), 1),
+        "restarts": restarts,
+        "uptime": uptime_str,
+        "pid": pid,
+    }
+
+
 def _get_pm2_processes():
     try:
         result = subprocess.run("pm2 jlist", shell=True, capture_output=True, text=True, timeout=10)
         data = json.loads(result.stdout)
-        procs = []
-        for p in data:
-            mem = p.get("monit", {}).get("memory", 0)
-            cpu = p.get("monit", {}).get("cpu", 0)
-            status = p.get("pm2_env", {}).get("status", "unknown")
-            restarts = p.get("pm2_env", {}).get("restart_time", 0)
-            uptime_ms = p.get("pm2_env", {}).get("pm_uptime", None)
-            created_at = p.get("pm2_env", {}).get("created_at", None)
-            pid = p.get("pid", "-")
-            if uptime_ms:
-                secs = int((time.time() * 1000 - uptime_ms) / 1000)
-            else:
-                secs = 0
-            if secs < 60:
-                uptime_str = f"{secs}s"
-            elif secs < 3600:
-                uptime_str = f"{secs // 60}m {secs % 60}s"
-            else:
-                uptime_str = f"{secs // 3600}h {(secs % 3600) // 60}m"
-            procs.append({
-                "id": p.get("pm_id"),
-                "name": p.get("name"),
-                "status": status,
-                "cpu": cpu,
-                "mem_mb": round(mem / (1024 * 1024), 1),
-                "restarts": restarts,
-                "uptime": uptime_str,
-                "pid": pid,
-            })
-        return procs
+        return [_parse_pm2_proc(p) for p in data]
     except Exception:
         return []
+
+
+def _get_pm2_process_by_name(name: str) -> dict | None:
+    """Fetch a single PM2 process by name, for HTMX partial row swap."""
+    try:
+        result = subprocess.run("pm2 jlist", shell=True, capture_output=True, text=True, timeout=10)
+        data = json.loads(result.stdout)
+        for p in data:
+            if p.get("name") == name:
+                return _parse_pm2_proc(p)
+    except Exception:
+        pass
+    return None
 
 
 def _get_content_stats():
@@ -310,8 +334,10 @@ def frag_screenshots(request: Request):
 def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "error", lines: int = 100):
     # Bao gồm cả process names của root PM2 (production) và vu PM2 (dev)
     safe_workers = [
-        "FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard",       # vu PM2
-        "ai-worker", "publisher", "maintenance", "web", "ai", "worker",        # root PM2
+        "FB_Publisher_1", "FB_Publisher_2", "AI_Generator_1", "AI_Generator_2",  # scaled
+        "FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard",          # legacy
+        "9Router_Gateway",
+        "ai-worker", "publisher", "maintenance", "web", "ai", "worker",           # root PM2
     ]
     if worker not in safe_workers:
         worker = "Web_Dashboard"
@@ -378,11 +404,39 @@ def cmd_pm2_restart():
 
 @router.post("/cmd/pm2-restart-one", response_class=HTMLResponse)
 def cmd_pm2_restart_one(name: str = Form(...)):
-    safe = ["FB_Publisher", "AI_Generator", "Maintenance", "Web_Dashboard"]
-    if name not in safe:
-        return _html_output(f"❌ Unknown process: {name}")
+    if name not in PM2_SAFE_NAMES:
+        return _html_output(f"Unknown process: {name}")
     out = run_cmd(f"pm2 restart {name}")
     return _html_output(f"$ pm2 restart {name}\n\n{out}")
+
+
+@router.post("/cmd/pm2-action", response_class=HTMLResponse)
+def cmd_pm2_action(request: Request, action: str = Form(...), name: str = Form(...)):
+    """Unified PM2 action endpoint — returns HTMX row fragment for OOB swap."""
+    if name not in PM2_SAFE_NAMES:
+        return HTMLResponse(
+            f"<tr><td colspan='7' class='py-2 text-red-500 text-sm'>Unknown process: {name}</td></tr>",
+            status_code=400,
+        )
+    if action not in ("start", "stop", "restart"):
+        return HTMLResponse(
+            f"<tr><td colspan='7' class='py-2 text-red-500 text-sm'>Invalid action: {action}</td></tr>",
+            status_code=400,
+        )
+
+    run_cmd(f"pm2 {action} {name}")
+    # Brief pause for PM2 to update status
+    time.sleep(0.5)
+
+    proc = _get_pm2_process_by_name(name)
+    if proc:
+        return templates.TemplateResponse("fragments/syspanel/pm2_row.html", {
+            "request": request, "p": proc,
+        })
+    # Fallback: process disappeared (deleted) — return empty row with message
+    return HTMLResponse(
+        f"<tr><td colspan='7' class='py-2 text-gray-400 text-sm italic'>{name} — removed</td></tr>"
+    )
 
 
 @router.post("/cmd/pm2-start", response_class=HTMLResponse)
@@ -471,7 +525,7 @@ def cmd_cleanup_videos():
     cutoff = int(time.time()) - 7 * 86400
     try:
         done_jobs = db.query(Job).filter(
-            Job.status == "DONE",
+            Job.status == JobStatus.DONE,
             Job.finished_at != None,
             Job.finished_at < cutoff
         ).all()
@@ -503,10 +557,10 @@ def cmd_retry_failed():
     """Bulk retry all FAILED jobs."""
     db = SessionLocal()
     try:
-        failed = db.query(Job).filter(Job.status == "FAILED").all()
+        failed = db.query(Job).filter(Job.status == JobStatus.FAILED).all()
         count = len(failed)
         for job in failed:
-            job.status = "PENDING"
+            job.status = JobStatus.PENDING
             job.tries = 0
             job.locked_at = None
         db.commit()
@@ -525,12 +579,12 @@ def cmd_cancel_stuck():
     cutoff = int(time.time()) - 600
     try:
         stuck = db.query(Job).filter(
-            Job.status == "RUNNING",
+            Job.status == JobStatus.RUNNING,
             Job.last_heartbeat_at < cutoff
         ).all()
         count = len(stuck)
         for job in stuck:
-            job.status = "FAILED"
+            job.status = JobStatus.FAILED
             job.last_error = "Cancelled: no heartbeat for 10+ min (manual syspanel)"
         db.commit()
         return _html_output(f"✅ Cancelled {count} stuck RUNNING jobs → FAILED")
@@ -597,3 +651,103 @@ def save_persona(system_prompt: str = Form("")):
         return _html_output(f"❌ Lỗi: {e}")
 
 
+# ─── 9Router UI ───────────────────────────────────────────────────────────────
+
+@router.get("/fragments/9router-tuner", response_class=HTMLResponse)
+def frag_9router_tuner(request: Request):
+    from app.services.ai_runtime import pipeline
+    from app.services.ai_pipeline import AICaptionPipeline
+
+    # Config fields: read from this process's pipeline singleton (always up-to-date via reload_config)
+    with pipeline._config_lock:
+        is_enabled = pipeline.enabled
+        base_url = pipeline.base_url
+        default_model = pipeline.default_model
+
+    api_key_masked = pipeline._get_masked_key()
+
+    # Runtime stats: read from shared file written by AI_Generator process (cross-PM2 IPC)
+    shared = AICaptionPipeline.load_shared_runtime_state()
+    provider = shared.get("provider", "N/A")
+    model = shared.get("model", "N/A")
+    latency = shared.get("latency_ms", 0)
+    msg = shared.get("fail_reason", "none")
+    circuit_state = shared.get("circuit_state", pipeline.circuit_breaker.state.name)
+
+    ctx = {
+        "request": request,
+        "is_enabled": is_enabled,
+        "base_url": base_url,
+        "api_key_masked": api_key_masked,
+        "default_model": default_model,
+        "circuit_state": circuit_state,
+        "last_latency_ms": latency,
+        "last_provider": provider,
+        "last_model": model,
+        "last_fail_reason": msg,
+    }
+    return templates.TemplateResponse("fragments/syspanel/9router_tuner.html", ctx)
+
+
+@router.post("/cmd/9router/config", response_class=HTMLResponse)
+def cmd_save_9router_config(
+    enabled: str = Form("false"),
+    base_url: str = Form(""),
+    api_key: str = Form(""),
+    default_model: str = Form("")
+):
+    from app.services.ai_runtime import pipeline
+    
+    config_path = pipeline.CONFIG_PATH
+    is_enabled = enabled.lower() == "true"
+    
+    data = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except: pass
+        
+    data["enabled"] = is_enabled
+    data["base_url"] = base_url.strip()
+    if api_key and "••••••" not in api_key:
+        data["api_key"] = api_key.strip()
+    data["default_model"] = default_model.strip()
+    
+    try:
+        # Đảm bảo thư mục (data/config) tồn tại trước khi ghi file
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            
+        success = pipeline.reload_config()
+        if not success:
+            return _html_output("❌ Lỗi: reload_config thất bại. Giữ nguyên cấu hình cũ.")
+            
+        return _html_output("✅ Cập nhật Config thành công & Đã reload nóng AI Pipeline!")
+    except Exception as e:
+        return _html_output(f"❌ Lỗi ghi file config: {e}")
+
+
+@router.post("/cmd/9router/test", response_class=HTMLResponse)
+def cmd_test_9router_connection(
+    base_url: str = Form(""),
+    api_key: str = Form(""),
+    default_model: str = Form("")
+):
+    from app.services.ai_runtime import pipeline
+    
+    temp_key = api_key.strip()
+    if temp_key and "••••••" in temp_key:
+        with pipeline._config_lock:
+            temp_key = pipeline.api_key
+            
+    res = pipeline.test_connection(base_url.strip(), temp_key, default_model.strip())
+    
+    if res["ok"]:
+        html = f"✅ Kết nối thành công! ({res['latency_ms']}ms)\nModel: {res['model']}"
+    else:
+        html = f"❌ Kết nối thất bại: {res.get('message')}\nLý do: {res.get('fail_reason')}"
+        
+    return _html_output(html)

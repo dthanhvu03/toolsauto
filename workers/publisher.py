@@ -20,10 +20,13 @@ from app.services.worker import WorkerService
 from app.services.account import AccountService
 from app.services.system_monitor import SystemMonitorService
 import app.config as config
-from app.services.notifier import NotifierService
+from app.services import settings as runtime_settings
+from app.services.notifier_service import NotifierService
 
 # Suicide Timer for Deadlock Prevention
 import threading
+from app.constants import AccountStatus, JobStatus
+
 
 def kill_if_stuck(label: str, timeout: int):
     """
@@ -73,11 +76,11 @@ def check_crash_recovery(db: Session):
     # Reset accounts stuck in ENGAGING (stale lock from crashed engagement)
     from app.database.models import Account
     stale_engaging = db.query(Account).filter(
-        Account.login_status == "ENGAGING"
+        Account.login_status == AccountStatus.ENGAGING
     ).all()
     if stale_engaging:
         for acc in stale_engaging:
-            acc.login_status = "ACTIVE"
+            acc.login_status = AccountStatus.ACTIVE
             logger.warning("Reset stale ENGAGING lock for account '%s' → ACTIVE", acc.name)
         db.commit()
         logger.warning("Recovered %d accounts from stale ENGAGING state.", len(stale_engaging))
@@ -94,11 +97,11 @@ def process_single_job(db: Session):
 
     # Apply runtime overrides (DB) to this process config
     apply_runtime_overrides_to_config(db)
-    from app.config import MAX_CONCURRENT_ACCOUNTS
+    MAX_CONCURRENT_ACCOUNTS = runtime_settings.get_int('publish.max_concurrent_accounts', 2, db=db)
     
     # Pre-check: Limit concurrent Facebook accounts
     running_fb_count = db.query(Job).filter(
-        Job.status == "RUNNING", 
+        Job.status == JobStatus.RUNNING, 
         Job.platform == "facebook"
     ).count()
     if running_fb_count >= MAX_CONCURRENT_ACCOUNTS:
@@ -107,10 +110,12 @@ def process_single_job(db: Session):
 
     # Adaptive Throttling: Pause if system resources are under pressure
     health = SystemMonitorService().check_health()
-    if health.get("ram_percent") and health["ram_percent"] > 90:
+    ram_threshold = runtime_settings.get_int("worker.publisher.ram_threshold", 95, db=db)
+    if health.get("ram_percent") and health["ram_percent"] > ram_threshold:
         logger.warning(f"🛑 Hệ thống quá tải RAM ({health['ram_percent']}%). Tạm dừng claim job trong 60s...")
         return False
-    if health.get("chrome_playwright_count") and health["chrome_playwright_count"] >= 15:
+    max_browsers = runtime_settings.get_int("worker.publisher.max_browser_instances", 15, db=db)
+    if health.get("chrome_playwright_count") and health["chrome_playwright_count"] >= max_browsers:
         logger.warning(f"🛑 Quá nhiều trình duyệt đang mở ({health['chrome_playwright_count']}). Tạm dừng claim job...")
         return False
 
@@ -122,7 +127,7 @@ def process_single_job(db: Session):
     effective_daily_limit = 0
     try:
         # Runtime cap overrides account setting (if set)
-        effective_daily_limit = int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0)
+        effective_daily_limit = runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db)
     except Exception:
         effective_daily_limit = 0
     if (not effective_daily_limit) and job.account:
@@ -138,10 +143,10 @@ def process_single_job(db: Session):
         # If POSTS_PER_PAGE_PER_DAY cap is enabled, enforce per-page across all accounts.
         q = db.query(Job).filter(
             Job.target_page == job.target_page,
-            Job.status == "DONE",
+            Job.status == JobStatus.DONE,
             Job.finished_at >= today_start
         )
-        if not int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0):
+        if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
             q = q.filter(Job.account_id == job.account_id)
         posted_today = q.count()
         
@@ -153,16 +158,16 @@ def process_single_job(db: Session):
                 for alt_page in alt_pages:
                     alt_count = db.query(Job).filter(
                         Job.target_page == alt_page,
-                        Job.status == "DONE",
+                        Job.status == JobStatus.DONE,
                         Job.finished_at >= today_start
                     )
-                    if not int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0):
+                    if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
                         alt_count = alt_count.filter(Job.account_id == job.account_id)
                     if alt_count.count() < effective_daily_limit:
                         logger.info("[Job %s] Page '%s' maxed out. Redirecting → '%s'",
                                     job.id, job.target_page, alt_page)
                         job.target_page = alt_page
-                        job.status = "PENDING"
+                        job.status = JobStatus.PENDING
                         db.commit()
                         reassigned = True
                         break
@@ -170,7 +175,7 @@ def process_single_job(db: Session):
             if not reassigned:
                 logger.info("[Job %s] Daily limit (%s) reached for ALL pages. Requeuing for tomorrow.",
                             job.id, effective_daily_limit)
-                job.status = "PENDING"
+                job.status = JobStatus.PENDING
                 job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
                 db.commit()
             return True
@@ -179,7 +184,7 @@ def process_single_job(db: Session):
     if job.account and getattr(job.account, 'is_sleeping', False):
         logger.info("[Job %s] Account '%s' is SLEEPING (%s - %s). Postponing job for 10 minutes.", 
                     job.id, job.account.name, job.account.sleep_start_time, job.account.sleep_end_time)
-        job.status = "PENDING"
+        job.status = JobStatus.PENDING
         job.schedule_ts = int(time.time()) + 600
         db.commit()
         return True
@@ -212,9 +217,10 @@ def process_single_job(db: Session):
         heartbeat_thread.start()
 
         # SAFETY GUARD: Never publish a job with un-processed AI placeholder
-        if job.caption and "[AI_GENERATE]" in job.caption:
-            logger.warning("[Job %s] BLOCKED: Caption still contains [AI_GENERATE]. Resetting to DRAFT.", job.id)
-            job.status = "DRAFT"
+        from app.constants import AI_GENERATE_MARKER
+        if job.caption and AI_GENERATE_MARKER in job.caption:
+            logger.warning("[Job %s] BLOCKED: Caption still contains %s. Resetting to DRAFT.", job.id, AI_GENERATE_MARKER)
+            job.status = JobStatus.DRAFT
             db.commit()
             CURRENT_JOB_ID = None
             return True
@@ -239,7 +245,7 @@ def process_single_job(db: Session):
                     )
         except CompliancePublishError as e:
             logger.error("[Job %s] Compliance blocked publish: %s", job.id, e)
-            job.status = "FAILED"
+            job.status = JobStatus.FAILED
             job.last_error = str(e)
             job.error_type = "COMPLIANCE"
             job.finished_at = now_ts()
@@ -323,7 +329,7 @@ def process_single_job(db: Session):
     finally:
         try:
             db.refresh(job)
-            if job.status in ["DONE", "FAILED"]:
+            if job.status in [JobStatus.DONE, JobStatus.FAILED]:
                 # 1. Dọn file render qua xử lý
                 p_path = job.resolved_processed_media_path
                 if p_path and os.path.exists(p_path):
@@ -346,8 +352,9 @@ def process_single_job(db: Session):
 def run_loop():
     """Main Publisher loop."""
     global RUNNING
-    from app.services.notifier import TelegramNotifier
+    from app.services.notifier_service import TelegramNotifier
     import app.config as config
+    from app.services import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
     
     logger.info("Publisher Worker started. Press Ctrl+C to stop.")
@@ -419,7 +426,7 @@ def _maybe_idle_engagement(db: Session):
     never blocked for long.
 
     Safety mechanisms:
-      - Account is locked via login_status="ENGAGING" to prevent concurrent
+      - Account is locked via login_status=AccountStatus.ENGAGING to prevent concurrent
         browser sessions from the Publisher claiming the same account.
       - Per-account cooldown (IDLE_COOLDOWN_MINUTES) prevents unnaturally
         frequent engagement that triggers Meta anti-bot detection.
@@ -435,7 +442,7 @@ def _maybe_idle_engagement(db: Session):
         from app.database.models import Job
         threshold = int(os.getenv("IDLE_ENGAGEMENT_DISABLE_WHEN_PENDING", "10"))
         backlog = db.query(Job).filter(
-            Job.status.in_(["PENDING", "RUNNING", "DRAFT", "AI_PROCESSING", "AWAITING_STYLE"])
+            Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
         ).count()
         if backlog >= threshold:
             logger.info("[IDLE] Backlog=%d >= %d. Skipping idle engagement.", backlog, threshold)
@@ -451,7 +458,7 @@ def _maybe_idle_engagement(db: Session):
 
     accounts = db.query(Account).filter(
         Account.is_active == True,
-        Account.login_status == "ACTIVE",
+        Account.login_status == AccountStatus.ACTIVE,
         Account.platform == "facebook",
     ).all()
     
@@ -476,7 +483,7 @@ def _maybe_idle_engagement(db: Session):
                 account.name, niche_keywords or "general", len(competitor_urls))
 
     # ── LOCK: Đánh dấu acc đang ENGAGING để Publisher không claim job cho acc này ──
-    account.login_status = "ENGAGING"
+    account.login_status = AccountStatus.ENGAGING
     db.commit()
     logger.info("[IDLE] Account '%s' locked → ENGAGING", account.name)
 
@@ -502,8 +509,8 @@ def _maybe_idle_engagement(db: Session):
 
         task = FacebookEngagementTask(adapter.page)
 
-        # Write "ENGAGING" status to DB for Dashboard display
-        _update_engagement_status(db, "ENGAGING", f"Đang chọn action... ({account.name})")
+        # Write AccountStatus.ENGAGING status to DB for Dashboard display
+        _update_engagement_status(db, AccountStatus.ENGAGING, f"Đang chọn action... ({account.name})")
 
         # START DEADLOCK TIMER for Idle Engagement (20 mins hard limit)
         idle_suicide_timer = kill_if_stuck(
@@ -529,11 +536,11 @@ def _maybe_idle_engagement(db: Session):
             "spy_competitor": "🕵️ Dạo kênh Đối thủ",
         }
         action_label = action_labels.get(result.get("action"), result.get("action", ""))
-        _update_engagement_status(db, "ENGAGING", f"{action_label} — {account.name}")
+        _update_engagement_status(db, AccountStatus.ENGAGING, f"{action_label} — {account.name}")
 
         if result.get("checkpointed"):
             logger.error("[IDLE] Account '%s' CHECKPOINTED during engagement! Quarantining.", account.name)
-            account.login_status = "INVALID"
+            account.login_status = AccountStatus.INVALID
             account.login_error = "Checkpoint detected during idle engagement"
             account.is_active = False
             db.commit()
@@ -595,8 +602,8 @@ def _maybe_idle_engagement(db: Session):
         # ── UNLOCK: Trả acc về ACTIVE (trừ khi đã bị checkpoint → INVALID) ──
         try:
             db.refresh(account)
-            if account.login_status == "ENGAGING":
-                account.login_status = "ACTIVE"
+            if account.login_status == AccountStatus.ENGAGING:
+                account.login_status = AccountStatus.ACTIVE
                 db.commit()
                 logger.info("[IDLE] Account '%s' unlocked → ACTIVE", account.name)
         except Exception:

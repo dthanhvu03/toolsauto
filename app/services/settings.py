@@ -35,8 +35,9 @@ def _getattr_default(name: str) -> Callable[[], Any]:
 
 
 SETTINGS: dict[str, SettingSpec] = {
-    "WORKER_TICK_SECONDS": SettingSpec(
-        key="WORKER_TICK_SECONDS",
+    "worker.tick_seconds": SettingSpec(
+        key="worker.tick_seconds",
+        env_var_name="WORKER_TICK_SECONDS",
         type="int",
         default_getter=_getattr_default("WORKER_TICK_SECONDS"),
         title="Tần suất quét Job (Worker)",
@@ -46,8 +47,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=300,
         unit="giây",
     ),
-    "WORKER_CRASH_THRESHOLD_SECONDS": SettingSpec(
-        key="WORKER_CRASH_THRESHOLD_SECONDS",
+    "worker.crash_threshold_seconds": SettingSpec(
+        key="worker.crash_threshold_seconds",
+        env_var_name="WORKER_CRASH_THRESHOLD_SECONDS",
         type="int",
         default_getter=_getattr_default("WORKER_CRASH_THRESHOLD_SECONDS"),
         title="Ngưỡng coi Worker 'chết'",
@@ -57,8 +59,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=3600,
         unit="giây",
     ),
-    "WORKER_MAX_BATCH_SIZE": SettingSpec(
-        key="WORKER_MAX_BATCH_SIZE",
+    "worker.max_batch_size": SettingSpec(
+        key="worker.max_batch_size",
+        env_var_name="WORKER_MAX_BATCH_SIZE",
         type="int",
         default_getter=_getattr_default("WORKER_MAX_BATCH_SIZE"),
         title="Số job xử lý tối đa mỗi vòng",
@@ -68,8 +71,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=50,
         unit="job",
     ),
-    "MAX_FILES_PER_BATCH": SettingSpec(
-        key="MAX_FILES_PER_BATCH",
+    "worker.max_files_per_batch": SettingSpec(
+        key="worker.max_files_per_batch",
+        env_var_name="MAX_FILES_PER_BATCH",
         type="int",
         default_getter=_getattr_default("MAX_FILES_PER_BATCH"),
         title="Số file tối đa mỗi đợt upload",
@@ -79,16 +83,18 @@ SETTINGS: dict[str, SettingSpec] = {
         max=500,
         unit="file",
     ),
-    "TIMEZONE": SettingSpec(
-        key="TIMEZONE",
+    "system.timezone": SettingSpec(
+        key="system.timezone",
+        env_var_name="TIMEZONE",
         type="str",
         default_getter=_getattr_default("TIMEZONE"),
         title="Múi giờ hệ thống",
         section="Hệ thống Worker",
         description="Múi giờ dùng cho lịch đăng, báo cáo ngày và khung giờ ngủ đông tài khoản (vd: Asia/Ho_Chi_Minh).",
     ),
-    "viral_min_views": SettingSpec(
-        key="viral_min_views",
+    "viral.min_views": SettingSpec(
+        key="viral.min_views",
+        env_var_name="VIRAL_MIN_VIEWS",
         type="int",
         default_getter=_getattr_default("VIRAL_MIN_VIEWS"),
         title="Lượt xem tối thiểu (quét TikTok)",
@@ -98,8 +104,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=10_000_000,
         unit="view",
     ),
-    "viral_max_videos_per_channel": SettingSpec(
-        key="viral_max_videos_per_channel",
+    "viral.max_videos_per_channel": SettingSpec(
+        key="viral.max_videos_per_channel",
+        env_var_name="VIRAL_MAX_VIDEOS_PER_CHANNEL",
         type="int",
         default_getter=_getattr_default("VIRAL_MAX_VIDEOS_PER_CHANNEL"),
         title="Tối đa video mỗi kênh mỗi lần quét",
@@ -109,8 +116,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=500,
         unit="video",
     ),
-    "POST_DELAY_MIN_SEC": SettingSpec(
-        key="POST_DELAY_MIN_SEC",
+    "publish.delay_min_sec": SettingSpec(
+        key="publish.delay_min_sec",
+        env_var_name="POST_DELAY_MIN_SEC",
         type="int",
         default_getter=_getattr_default("POST_DELAY_MIN_SEC"),
         title="Delay đăng bài — tối thiểu",
@@ -120,8 +128,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=3600,
         unit="giây",
     ),
-    "POST_DELAY_MAX_SEC": SettingSpec(
-        key="POST_DELAY_MAX_SEC",
+    "publish.delay_max_sec": SettingSpec(
+        key="publish.delay_max_sec",
+        env_var_name="POST_DELAY_MAX_SEC",
         type="int",
         default_getter=_getattr_default("POST_DELAY_MAX_SEC"),
         title="Delay đăng bài — tối đa",
@@ -131,8 +140,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=3600,
         unit="giây",
     ),
-    "POSTS_PER_PAGE_PER_DAY": SettingSpec(
-        key="POSTS_PER_PAGE_PER_DAY",
+    "publish.posts_per_page_per_day": SettingSpec(
+        key="publish.posts_per_page_per_day",
+        env_var_name="POSTS_PER_PAGE_PER_DAY",
         type="int",
         default_getter=_getattr_default("POSTS_PER_PAGE_PER_DAY"),
         title="Giới hạn bài đăng / Page / ngày",
@@ -142,8 +152,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=200,
         unit="bài",
     ),
-    "REUP_VIDEOS_PER_PAGE_PER_DAY": SettingSpec(
-        key="REUP_VIDEOS_PER_PAGE_PER_DAY",
+    "publish.reup_videos_per_page_per_day": SettingSpec(
+        key="publish.reup_videos_per_page_per_day",
+        env_var_name="REUP_VIDEOS_PER_PAGE_PER_DAY",
         type="int",
         default_getter=_getattr_default("REUP_VIDEOS_PER_PAGE_PER_DAY"),
         title="Giới hạn Reup / Page / ngày",
@@ -153,8 +164,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=200,
         unit="video",
     ),
-    "MAX_CONCURRENT_ACCOUNTS": SettingSpec(
-        key="MAX_CONCURRENT_ACCOUNTS",
+    "publish.max_concurrent_accounts": SettingSpec(
+        key="publish.max_concurrent_accounts",
+        env_var_name="MAX_CONCURRENT_ACCOUNTS",
         type="int",
         default_getter=_getattr_default("MAX_CONCURRENT_ACCOUNTS"),
         title="Số tài khoản chạy song song",
@@ -164,8 +176,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=10,
         unit="account",
     ),
-    "WHISPER_MODEL_SIZE": SettingSpec(
-        key="WHISPER_MODEL_SIZE",
+    "ai.whisper_model_size": SettingSpec(
+        key="ai.whisper_model_size",
+        env_var_name="WHISPER_MODEL_SIZE",
         type="enum",
         default_getter=_getattr_default("WHISPER_MODEL_SIZE"),
         title="Cỡ model Whisper",
@@ -179,8 +192,69 @@ SETTINGS: dict[str, SettingSpec] = {
             "medium": "Medium — chi tiết cao nhất",
         },
     ),
-    "MAX_CAPTION_LENGTH": SettingSpec(
-        key="MAX_CAPTION_LENGTH",
+    "ai.fallback_caption_pool": SettingSpec(
+        key="ai.fallback_caption_pool",
+        env_var_name="FALLBACK_CAPTION_POOL",
+        type="str",
+        default_getter=_getattr_default("FALLBACK_CAPTION_POOL"),
+        title="Template Fallback Caption",
+        section="AI & Whisper",
+        description="Mẫu caption dự phòng. Các mẫu cách nhau bởi dấu |",
+    ),
+    "ai.fallback_hashtag_pool": SettingSpec(
+        key="ai.fallback_hashtag_pool",
+        env_var_name="FALLBACK_HASHTAG_POOL",
+        type="str",
+        default_getter=_getattr_default("FALLBACK_HASHTAG_POOL"),
+        title="Template Fallback Hashtag",
+        section="AI & Whisper",
+        description="Mẫu bộ tag dự phòng. Cụm bộ tag cách nhau bởi dấu |, trong mỗi bộ các tag cách nhau bởi dấu phẩy",
+    ),
+    "ai.prompt.beauty": SettingSpec(
+        key="ai.prompt.beauty",
+        env_var_name="PERSONA_PROMPT_BEAUTY", type="text", default_getter=_getattr_default("PERSONA_PROMPT_BEAUTY"),
+        title="Prompt: Hệ Beauty/Skincare", section="AI Prompt Personas",
+    ),
+    "ai.prompt.fashion": SettingSpec(
+        key="ai.prompt.fashion",
+        env_var_name="PERSONA_PROMPT_FASHION", type="text", default_getter=_getattr_default("PERSONA_PROMPT_FASHION"),
+        title="Prompt: Hệ Fashion/Outfit", section="AI Prompt Personas",
+    ),
+    "ai.prompt.tech": SettingSpec(
+        key="ai.prompt.tech",
+        env_var_name="PERSONA_PROMPT_TECH", type="text", default_getter=_getattr_default("PERSONA_PROMPT_TECH"),
+        title="Prompt: Hệ Tech/Công nghệ", section="AI Prompt Personas",
+    ),
+    "ai.prompt.home": SettingSpec(
+        key="ai.prompt.home",
+        env_var_name="PERSONA_PROMPT_HOME", type="text", default_getter=_getattr_default("PERSONA_PROMPT_HOME"),
+        title="Prompt: Hệ Gia dụng/Nhà cửa", section="AI Prompt Personas",
+    ),
+    "ai.prompt.funny": SettingSpec(
+        key="ai.prompt.funny",
+        env_var_name="PERSONA_PROMPT_FUNNY", type="text", default_getter=_getattr_default("PERSONA_PROMPT_FUNNY"),
+        title="Prompt: Hệ Hài hước/Meme", section="AI Prompt Personas",
+    ),
+    "ai.prompt.general": SettingSpec(
+        key="ai.prompt.general",
+        env_var_name="PERSONA_PROMPT_GENERAL", type="text", default_getter=_getattr_default("PERSONA_PROMPT_GENERAL"),
+        title="Prompt: Khung chuẩn (General)", section="AI Prompt Personas",
+    ),
+    "ai.prompt.visual_hook": SettingSpec(
+        key="ai.prompt.visual_hook",
+        env_var_name="VISUAL_HOOK_INSTRUCTION", type="text", default_getter=_getattr_default("VISUAL_HOOK_INSTRUCTION"),
+        title="Prompt: Luật phân tích Visual Hook", section="AI Prompt Configs",
+        description="Quy tắc phân tích hook hình ảnh 3s đầu.",
+    ),
+    "ai.prompt.engagement_secrets": SettingSpec(
+        key="ai.prompt.engagement_secrets",
+        env_var_name="ENGAGEMENT_SECRETS", type="text", default_getter=_getattr_default("ENGAGEMENT_SECRETS"),
+        title="Prompt: Bí mật thuật toán (Engagement)", section="AI Prompt Configs",
+        description="Luật viết để tăng tương tác (tò mò, hashtag...).",
+    ),
+    "ai.max_caption_length": SettingSpec(
+        key="ai.max_caption_length",
+        env_var_name="MAX_CAPTION_LENGTH",
         type="int",
         default_getter=_getattr_default("MAX_CAPTION_LENGTH"),
         title="Độ dài caption tối đa",
@@ -190,8 +264,9 @@ SETTINGS: dict[str, SettingSpec] = {
         max=5000,
         unit="ký tự",
     ),
-    "MAX_TRANSCRIPT_LENGTH": SettingSpec(
-        key="MAX_TRANSCRIPT_LENGTH",
+    "ai.max_transcript_length": SettingSpec(
+        key="ai.max_transcript_length",
+        env_var_name="MAX_TRANSCRIPT_LENGTH",
         type="int",
         default_getter=_getattr_default("MAX_TRANSCRIPT_LENGTH"),
         title="Độ dài transcript tối đa",
@@ -655,6 +730,56 @@ def get_effective(db: Session, key: str) -> Any:
         return overrides[key]
     return spec.default_getter()
 
+
+def get(key: str, db: Session = None, default: Any = None) -> Any:
+    """Safe getter that can instantiate its own DB session if needed, avoiding boilerplate in workers."""
+    spec = SETTINGS.get(key)
+    if not spec:
+        return default
+        
+    def _fetch(session: Session):
+        if spec.env_only:
+            return spec.default_getter()
+        overrides = get_overrides(session, use_cache=True)
+        return overrides.get(key, spec.default_getter())
+
+    from app.database.core import SessionLocal
+    if db is not None:
+        return _fetch(db)
+    else:
+        with SessionLocal() as new_db:
+            return _fetch(new_db)
+
+def get_int(key: str, default: int = 0, db: Session = None) -> int:
+    try:
+        val = get(key, db=db, default=default)
+        return int(val) if val is not None else default
+    except (ValueError, TypeError):
+        return default
+
+def get_bool(key: str, default: bool = False, db: Session = None) -> bool:
+    val = get(key, db=db, default=default)
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        return val.lower() in ('true', '1', 't', 'y', 'yes')
+    return default
+
+def get_str(key: str, default: str = "", db: Session = None) -> str:
+    val = get(key, db=db, default=default)
+    return str(val) if val is not None else default
+    
+def get_json(key: str, default: Any = None, db: Session = None) -> Any:
+    import json
+    val = get(key, db=db, default=None)
+    if not val:
+        return default
+    try:
+        if isinstance(val, str):
+            return json.loads(val)
+        return val
+    except Exception:
+        return default
 
 def apply_runtime_overrides_to_config(db: Session) -> dict[str, Any]:
     """

@@ -1,0 +1,80 @@
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+INFO    app.services.workflow_registry: [WorkflowRegistry] Cache invalidated
+
+======================================================================
+  N8N-LITE PHASE 2 — RUNTIME SMOKE TEST
+======================================================================
+
+======================================================================
+>> SMOKE TEST A — Baseline Fallback
+======================================================================
+  [[92mPASS[0m] A — Baseline Fallback
+       Comment CTA wrapped: 'Bạn nào cần link thì đây nha: https://shopee.vn/product/123'
+       Caption unchanged (non-link text) ✓
+       Workflow steps from DB: []
+       Steps empty → runtime will use defaults (all blocks enabled) ✓
+
+======================================================================
+>> SMOKE TEST B — CTA Injection for COMMENT
+======================================================================
+  [[92mPASS[0m] B — CTA Injection for COMMENT
+       Comment CTA injected: '🔥 Xem deal HOT tại đây: https://shopee.vn/deal/456'
+       DB template confirmed (🔥 marker found) ✓
+
+======================================================================
+>> SMOKE TEST C — CTA Injection for POST Caption
+======================================================================
+  [[92mPASS[0m] C — CTA Injection for POST Caption
+       Link-only caption CTA injected: 'Bạn nào cần link thì đây nha: https://tiki.vn/product/789'
+       Mixed-text caption unchanged ✓
+
+======================================================================
+>> SMOKE TEST D — Step Toggle: skip feed_browse
+======================================================================
+  [[92mPASS[0m] D — Step Toggle: skip feed_browse
+       Workflow steps: ['pre_scan', 'type_comment']
+       'feed_browse' NOT in steps → runtime will skip feed_browse_pause ✓
+       Runtime decision: feed_browse skip path triggered ✓
+       Log would emit: "FacebookAdapter: [n8n-lite] feed_browse skipped via Workflow config."
+
+======================================================================
+>> SMOKE TEST E — Step Toggle: skip type_comment
+======================================================================
+  [[92mPASS[0m] E — Step Toggle: skip type_comment
+       Workflow steps: ['feed_browse', 'pre_scan']
+       'type_comment' NOT in steps → physical typing skipped ✓
+       Log would emit: "FacebookAdapter: [n8n-lite] 'type_comment' physical step skipped via workflow steps config."
+
+======================================================================
+>> SMOKE TEST F — Missing/Broken Config Fallback
+======================================================================
+  [[92mPASS[0m] F — Missing/Broken Config Fallback
+       F.1: Non-facebook platform, no CTA pool → link returned as-is ✓
+       F.2: Steps after NULL override: []
+       F.2: Steps empty/None → adapter defaults will apply ✓
+       F.3: Empty text → returned unchanged ✓
+       F.4: None text → returned None ✓
+
+======================================================================
+  SMOKE TEST SUMMARY
+======================================================================
+  [[92mPASS[0m] A — Baseline Fallback
+  [[92mPASS[0m] B — CTA Injection for COMMENT
+  [[92mPASS[0m] C — CTA Injection for POST Caption
+  [[92mPASS[0m] D — Step Toggle: skip feed_browse
+  [[92mPASS[0m] E — Step Toggle: skip type_comment
+  [[92mPASS[0m] F — Missing/Broken Config Fallback
+
+  6/6 tests passed.
+  ✅ Phase 2 is RUNTIME-SAFE.
+======================================================================
+

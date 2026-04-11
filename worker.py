@@ -127,7 +127,7 @@ def process_single_job(db: Session):
         # Cleanup temporary processed media if job reached terminal state
         try:
             db.refresh(job) # Ensure we have latest status
-            if job.status in ["DONE", "FAILED"]:
+            if job.status == "DONE" or (job.status == "FAILED" and job.tries >= job.max_tries):
                 if job.processed_media_path and os.path.exists(job.processed_media_path):
                     logger.info("[Job %s] Terminal state reached. Cleaning up temporary media: %s", job.id, job.processed_media_path)
                     os.remove(job.processed_media_path)
@@ -160,7 +160,7 @@ def process_draft_job(db: Session):
         
         existing_salt_match = re.search(r'\[ref:[a-zA-Z0-9]+\]|#v\d{4}', job.caption or "")
         existing_salt = existing_salt_match.group(0) if existing_salt_match else ""
-        user_context = (job.caption or "").replace(r"[AI_GENERATE]", "").replace(existing_salt, "").strip()
+        user_context = (job.caption or "").replace("[AI_GENERATE]", "").replace(existing_salt, "").strip()
         
         if user_context.startswith("Context:"):
             user_context = user_context.replace("Context:", "", 1).strip()

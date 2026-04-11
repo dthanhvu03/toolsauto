@@ -17,6 +17,8 @@ from app.database.models import Job, Account
 from app.services.job import JobService
 
 from app.main_templates import templates
+from app.constants import JobStatus
+
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 logger = logging.getLogger(__name__)
@@ -35,8 +37,8 @@ def get_jobs_table(
     
     # Status filter
     if status == "active":
-        query = query.filter(Job.status.in_(["AWAITING_STYLE", "DRAFT", "PENDING", "RUNNING", "AI_PROCESSING"]))
-    elif status in ("DRAFT", "PENDING", "RUNNING", "DONE", "FAILED", "CANCELLED"):
+        query = query.filter(Job.status.in_([JobStatus.AWAITING_STYLE, JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING, JobStatus.AI_PROCESSING]))
+    elif status in (JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELLED):
         query = query.filter(Job.status == status)
     # else "all" → no filter
 
@@ -175,9 +177,9 @@ def force_run_job(job_id: int, request: Request, db: Session = Depends(get_db)):
 @router.post("/{job_id}/approve", response_class=HTMLResponse)
 def approve_job(job_id: int, request: Request, db: Session = Depends(get_db)):
     """HTMX action: Moves DRAFT to PENDING."""
-    job = db.query(Job).filter(Job.id == job_id, Job.status == "DRAFT").first()
+    job = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.DRAFT).first()
     if job:
-        job.status = "PENDING"
+        job.status = JobStatus.PENDING
         job.is_approved = True
         db.commit()
         JobService._log_event(db, job_id, "INFO", "User approved AI Draft")
@@ -194,7 +196,7 @@ def update_job_caption(
     db: Session = Depends(get_db)
 ):
     """HTMX action: Updates caption for DRAFT jobs."""
-    job = db.query(Job).filter(Job.id == job_id, Job.status == "DRAFT").first()
+    job = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.DRAFT).first()
     if job:
         job.caption = caption
         db.commit()
@@ -409,7 +411,7 @@ def bulk_create_jobs(
                         "{tracking_url}", full_tracking_url
                     )
 
-                initial_status = "DRAFT" if captions[i] and "[AI_GENERATE]" in captions[i] else "PENDING"
+                initial_status = JobStatus.DRAFT if captions[i] and "[AI_GENERATE]" in captions[i] else JobStatus.PENDING
 
                 job = Job(
                     platform=account.platform,

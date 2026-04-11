@@ -9,12 +9,15 @@ from app.database.models import Job, Account, DiscoveredChannel
 from app.services.worker import WorkerService
 from app.services.account import AccountService, get_discovery_keywords
 from app.services.log_service import LogService
+from app.utils.htmx import htmx_toast_response
 import app.config as config
 from app.services import settings as runtime_settings
 
 # Gắn FastAPI app state or custom dependencies later if needed.
 # Note: we need access to templates in routers. We'll import them from a shared location.
 from app.main_templates import templates
+from app.constants import JobStatus, ViralStatus
+
 
 router = APIRouter()
 
@@ -62,7 +65,7 @@ def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_
 
     rows = (
         db.query(Job.target_page, func.count(Job.id))
-        .filter(Job.target_page.isnot(None), Job.status == "DONE", Job.finished_at >= today_start)
+        .filter(Job.target_page.isnot(None), Job.status == JobStatus.DONE, Job.finished_at >= today_start)
         .group_by(Job.target_page)
         .order_by(func.count(Job.id).desc())
         .limit(50)
@@ -99,7 +102,7 @@ def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_
 def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)):
     """
     HTMX fragment: show today's per-page REUP intake usage + remaining vs cap.
-    We treat a job as "REUP" if its media_path/processed_media_path is under config.REUP_DIR.
+    We treat a job as ViralStatus.REUP if its media_path/processed_media_path is under config.REUP_DIR.
     Cap is runtime setting REUP_VIDEOS_PER_PAGE_PER_DAY (0 = disabled).
     """
     try:
@@ -118,7 +121,7 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
 
     reup_dir = str(config.REUP_DIR).rstrip("/")
     like_reup = f"{reup_dir}/%"
-    active_statuses = ["AWAITING_STYLE", "AI_PROCESSING", "DRAFT", "PENDING", "RUNNING"]
+    active_statuses = [JobStatus.AWAITING_STYLE, JobStatus.AI_PROCESSING, JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING]
 
     # Build page url -> name index from accounts.managed_pages_list
     page_name_index: dict[str, str] = {}
@@ -156,7 +159,7 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
         db.query(Job.target_page, func.count(Job.id))
         .filter(
             Job.target_page.isnot(None),
-            Job.status == "DONE",
+            Job.status == JobStatus.DONE,
             Job.finished_at >= today_start,
             (
                 Job.media_path.ilike(like_reup)
@@ -268,6 +271,17 @@ def app_logs_stream(
     return LogService.sse_log_stream(proc=proc, kind=kind, level=level, q=q)
 
 
+@router.get("/app/control-plane", response_class=HTMLResponse)
+def app_control_plane(request: Request, db: Session = Depends(get_db)):
+    """SaaS UI: Admin Control Plane Hub."""
+    return templates.TemplateResponse(
+        "pages/app_control_plane.html",
+        {
+            "request": request,
+        }
+    )
+
+
 @router.get("/app/settings", response_class=HTMLResponse)
 def app_settings(request: Request, db: Session = Depends(get_db)):
     grouped = runtime_settings.list_specs_by_section()
@@ -313,7 +327,7 @@ def app_settings(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/app/settings/save", response_class=RedirectResponse)
+@router.post("/app/settings/save", response_class=HTMLResponse)
 def app_settings_save(
     request: Request,
     db: Session = Depends(get_db),
@@ -322,22 +336,28 @@ def app_settings_save(
 ):
     # updated_by: best-effort; no auth system yet
     updated_by = request.client.host if request.client else None
-    runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
-    return RedirectResponse(url="/app/settings?m=saved", status_code=303)
+    try:
+        runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
+    except ValueError:
+        return htmx_toast_response("Không thể lưu: key hoặc giá trị không hợp lệ.", "error", refresh_page=False)
+    return htmx_toast_response("Đã lưu cài đặt thành công.", "success", refresh_page=True)
 
 
-@router.post("/app/settings/reset", response_class=RedirectResponse)
+@router.post("/app/settings/reset", response_class=HTMLResponse)
 def app_settings_reset(
     request: Request,
     db: Session = Depends(get_db),
     key: str = Form(...),
 ):
     updated_by = request.client.host if request.client else None
-    runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
-    return RedirectResponse(url="/app/settings?m=reset", status_code=303)
+    try:
+        runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
+    except ValueError:
+        return htmx_toast_response("Không thể đặt lại.", "error", refresh_page=False)
+    return htmx_toast_response("Đã đặt lại về mặc định.", "success", refresh_page=True)
 
 
-@router.post("/app/settings/bulk-save", response_class=RedirectResponse)
+@router.post("/app/settings/bulk-save", response_class=HTMLResponse)
 async def app_settings_bulk_save(request: Request, db: Session = Depends(get_db)):
     """
     Bulk save settings from a single form submission.
@@ -374,7 +394,7 @@ async def app_settings_bulk_save(request: Request, db: Session = Depends(get_db)
         runtime_settings.upsert_setting(db, key=key, raw_value=str(raw), updated_by=updated_by)
         changed += 1
 
-    return RedirectResponse(url=f"/app/settings?m=bulk_saved_{changed}_reset_{reset}", status_code=303)
+    return htmx_toast_response(f"Đã lưu {changed} thay đổi; đặt lại {reset} mục về mặc định.", "success", refresh_page=True)
 
 @router.get("/app/viral/table", response_class=HTMLResponse)
 def app_viral_table(
@@ -440,8 +460,8 @@ def queue_panel(request: Request, db: Session = Depends(get_db)):
 
     rows = db.execute(text("SELECT status, COUNT(*) FROM jobs GROUP BY status")).fetchall()
     counts = {str(s): int(c) for s, c in rows}
-    viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == "NEW").count()
-    viral_failed = db.query(ViralMaterial).filter(ViralMaterial.status == "FAILED").count()
+    viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.NEW).count()
+    viral_failed = db.query(ViralMaterial).filter(ViralMaterial.status == JobStatus.FAILED).count()
 
     return templates.TemplateResponse(
         "fragments/queue_panel.html",
@@ -479,7 +499,7 @@ def redirect_tracking(code: str, db: Session = Depends(get_db)):
 
 @router.get("/discovery/panel", response_class=HTMLResponse)
 def get_discovery_panel(request: Request, db: Session = Depends(get_db)):
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == "NEW").order_by(DiscoveredChannel.score.desc()).all()
+    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels}
@@ -488,7 +508,7 @@ def get_discovery_panel(request: Request, db: Session = Depends(get_db)):
 @router.post("/discovery/{channel_id}/approve", response_class=HTMLResponse)
 def approve_discovered_channel(channel_id: int, request: Request, target_page: str = Form(""), db: Session = Depends(get_db)):
     channel = db.query(DiscoveredChannel).filter(DiscoveredChannel.id == channel_id).first()
-    if channel and channel.status == "NEW":
+    if channel and channel.status == ViralStatus.NEW:
         channel.status = "APPROVED"
         account = channel.account
         if account:
@@ -499,7 +519,7 @@ def approve_discovered_channel(channel_id: int, request: Request, target_page: s
             )
         db.commit()
     
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == "NEW").order_by(DiscoveredChannel.score.desc()).all()
+    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels}
@@ -508,10 +528,10 @@ def approve_discovered_channel(channel_id: int, request: Request, target_page: s
 @router.post("/discovery/{channel_id}/reject", response_class=HTMLResponse)
 def reject_discovered_channel(channel_id: int, request: Request, db: Session = Depends(get_db)):
     channel = db.query(DiscoveredChannel).filter(DiscoveredChannel.id == channel_id).first()
-    if channel and channel.status == "NEW":
+    if channel and channel.status == ViralStatus.NEW:
         channel.status = "REJECTED"
         db.commit()
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == "NEW").order_by(DiscoveredChannel.score.desc()).all()
+    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels}
@@ -549,7 +569,7 @@ def force_discovery_scan(request: Request, db: Session = Depends(get_db)):
 
     logger.info("[DISCOVERY] Force scan complete. %d new channels found.", total_found)
 
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == "NEW").order_by(DiscoveredChannel.score.desc()).all()
+    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels, "scan_log": scan_log, "total_found": total_found}
@@ -588,7 +608,7 @@ def app_overview_chart_data(db: Session = Depends(get_db)):
         categories.append(label)
         
         q_count = db.query(Job).filter(Job.created_at >= start_ts, Job.created_at < end_ts).count()
-        p_count = db.query(Job).filter(Job.status == "DONE", Job.finished_at >= start_ts, Job.finished_at < end_ts).count()
+        p_count = db.query(Job).filter(Job.status == JobStatus.DONE, Job.finished_at >= start_ts, Job.finished_at < end_ts).count()
         
         queued_data.append(q_count)
         published_data.append(p_count)

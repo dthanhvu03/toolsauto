@@ -4,6 +4,8 @@ from app.database.core import get_db
 from app.database.models import Job
 from app.services.job import JobService
 from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from app.constants import JobStatus
+
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
@@ -49,10 +51,10 @@ async def telegram_callback(request: Request, db: Session = Depends(get_db)):
         return {"ok": True}
 
     if action == "approve":
-        if job.status != "DRAFT":
+        if job.status != JobStatus.DRAFT:
             client.answer_callback_query(callback_id, f"⚠️ Job #{job_id} đã ở trạng thái {job.status}")
         else:
-            job.status = "PENDING"
+            job.status = JobStatus.PENDING
             job.is_approved = True
             db.commit()
             JobService._log_event(db, job_id, "INFO", f"Approved via Telegram by {user_name}")
@@ -61,10 +63,10 @@ async def telegram_callback(request: Request, db: Session = Depends(get_db)):
             client.edit_message_reply_markup(message_id, reply_markup=None)
 
     elif action == "cancel":
-        if job.status not in ("DRAFT", "PENDING"):
+        if job.status not in (JobStatus.DRAFT, JobStatus.PENDING):
             client.answer_callback_query(callback_id, f"⚠️ Job #{job_id} đã ở trạng thái {job.status}")
         else:
-            job.status = "CANCELLED"
+            job.status = JobStatus.CANCELLED
             db.commit()
             JobService._log_event(db, job_id, "INFO", f"Cancelled via Telegram by {user_name}")
             client.answer_callback_query(callback_id, f"❌ Job #{job_id} đã bị hủy!")

@@ -26,6 +26,18 @@
   </script>
   <style type="text/tailwindcss">
     h1, h2, h3, h4, .font-display { font-family: 'Outfit', sans-serif; }
+    
+    /* Toast animations */
+    @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+    .toast-enter { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .toast-exit { animation: slideOutRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
   </style>
 </head>
 
@@ -207,6 +219,17 @@
           <span class="truncate">Vi phạm FB</span>
         </a>
 
+        <a href="/platform-config/"
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/platform-config') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0 {% if p.startswith('/platform-config') %}text-indigo-600{% else %}text-slate-400{% endif %}"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="truncate">Platform Config</span>
+        </a>
+
         <div class="my-2 border-t border-[var(--border)]"></div>
 
         <a href="/database"
@@ -244,6 +267,24 @@
           </svg>
           <span class="truncate">Settings</span>
         </a>
+        
+        <a href="/app/ai-studio"
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/ai-studio') %}bg-indigo-50 text-indigo-700 font-medium{% else %}hover:bg-slate-50 text-slate-700{% endif %} transition-colors">
+          <svg class="w-5 h-5 shrink-0 {% if p.startswith('/app/ai-studio') %}text-indigo-600{% else %}text-slate-400{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          <span class="truncate font-semibold text-indigo-600">AI Studio</span>
+        </a>
+        
+        <div class="my-2 border-t border-[var(--border)]"></div>
+        
+        <button type="button" onclick="handleLogout()"
+          class="nav-item w-full flex items-center gap-3 px-3 py-2 rounded hover:bg-rose-50 text-rose-600 transition-colors">
+          <svg class="w-5 h-5 shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span class="truncate font-medium">Log out</span>
+        </button>
       </nav>
     </aside>
 
@@ -280,6 +321,9 @@
       </div>
     </main>
   </div>
+  
+  <!-- Global Toast Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-[100] flex flex-col gap-2 w-full max-w-sm pointer-events-none"></div>
 
   <script>
     const sidebar = document.getElementById('sidebar');
@@ -311,6 +355,65 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') window.closeSidebar();
     });
+    
+    // Global Toast System
+    window.showToast = function(message, type = 'success') {
+        const container = document.getElementById('toastContainer');
+        if (!container) return; // Fallback
+        
+        const toast = document.createElement('div');
+        const isError = type === 'error';
+        const bgClass = isError ? 'bg-white border-rose-200 shadow-rose-100' : 'bg-white border-emerald-200 shadow-emerald-100';
+        const iconColor = isError ? 'text-rose-500' : 'text-emerald-500';
+        const iconPath = isError 
+            ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />'
+            : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />';
+            
+        toast.className = `pointer-events-auto toast-enter overflow-hidden rounded-xl border ${bgClass} p-4 shadow-xl`;
+        toast.innerHTML = `
+            <div class="flex items-center gap-3">
+                <div class="flex-shrink-0">
+                    <svg class="h-6 w-6 ${iconColor}" fill="none" viewBox="0 0 24 24" stroke="currentColor">${iconPath}</svg>
+                </div>
+                <div class="flex-1">
+                    <p class="text-sm font-semibold text-slate-800">${message}</p>
+                </div>
+                <button onclick="this.closest('.toast-enter').remove()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(toast);
+        
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.classList.remove('toast-enter');
+                toast.classList.add('toast-exit');
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, 3000);
+    };
+
+    // HTMX Toast trigger listener
+    document.body.addEventListener('showMessage', function(evt) {
+        if (evt.detail) {
+            window.showToast(evt.detail.msg || evt.detail.message, evt.detail.type || 'success');
+        }
+    });
+
+    // Logout Function logic
+    window.handleLogout = async function() {
+        try {
+            const resp = await fetch('/logout', { method: 'POST', headers: { 'Accept': 'application/json' } });
+            const data = await resp.json();
+            if (data.ok) {
+                window.location.href = data.redirect || '/login';
+            }
+        } catch (e) {
+            window.showToast("Failed to logout safely", "error");
+        }
+    };
   </script>
   {% block script_extra %}{% endblock %}
 </body>
