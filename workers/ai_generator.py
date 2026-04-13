@@ -21,8 +21,8 @@ from app.database.models import AffiliateLink
 import urllib3
 
 # Setup Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - [AI_WORKER] - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+from app.utils.logger import setup_shared_logger
+logger = setup_shared_logger(__name__ if __name__ != "__main__" else "ai_generator")
 
 import app.config as config
 from app.services import settings as runtime_settings

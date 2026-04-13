@@ -10,8 +10,8 @@ from app.database import models  # noqa: F401
 # Schema: apply migrations with `python manage.py db upgrade` (Alembic), not at startup.
 
 # Setup Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+from app.utils.logger import setup_shared_logger
+logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fastapi")
 
 # Import routers
 from app.routers import auth, dashboard, jobs, accounts, worker, health, telegram, viral, insights, syspanel, pages, gallery, manual_job, affiliates, database, compliance, platform_config, ai, ai_studio
