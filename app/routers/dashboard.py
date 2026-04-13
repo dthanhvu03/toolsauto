@@ -8,7 +8,7 @@ from app.database.core import get_db
 from app.database.models import Job, Account, DiscoveredChannel
 from app.services.worker import WorkerService
 from app.services.account import AccountService, get_discovery_keywords
-from app.services.log_service import LogService
+from app.services.log_query_facade import LogQueryFacade
 from app.utils.htmx import htmx_toast_response
 import app.config as config
 from app.services import settings as runtime_settings
@@ -226,10 +226,10 @@ def app_accounts(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/app/pages", response_class=HTMLResponse)
+@router.get("/app/pages")
 def app_pages(request: Request):
-    """SaaS UI: Target Pages CRUD editor."""
-    return templates.TemplateResponse("pages/app_pages.html", {"request": request})
+    """Legacy UI redirect: Target Pages CRUD moved to /app/accounts split view."""
+    return RedirectResponse(url="/app/accounts")
 
 
 @router.get("/app/logs", response_class=HTMLResponse)
@@ -242,7 +242,7 @@ def app_logs(request: Request):
             "default_proc": request.query_params.get("proc") or "AI_Generator",
             "default_kind": request.query_params.get("kind") or "out",
             "default_lines": int(request.query_params.get("lines") or 200),
-            "procs": ["ALL", *list(LogService.PM2_LOG_MAP.keys())],
+            "procs": LogQueryFacade.list_system_sources(),
         },
     )
 
@@ -250,7 +250,7 @@ def app_logs(request: Request):
 @router.get("/app/logs/tail")
 def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200):
     """Return last N lines for whitelisted pm2 log files."""
-    return LogService.plain_tail_response(proc, kind, lines)
+    return LogQueryFacade.get_system_tail(proc, kind, lines)
 
 
 @router.get("/app/logs/stream")
@@ -268,7 +268,51 @@ def app_logs_stream(
       - level: INFO|WARN|ERROR|DEBUG (optional)
       - q: keyword contains filter (optional)
     """
-    return LogService.sse_log_stream(proc=proc, kind=kind, level=level, q=q)
+    return LogQueryFacade.stream_system_logs(proc=proc, kind=kind, level=level, q=q)
+
+@router.get("/app/logs/domain-events")
+def app_logs_domain_events(
+    request: Request,
+    source: str = "",
+    level: str = "",
+    job_id: str = "",
+    q: str = "",
+    page: int = 1,
+    db: Session = Depends(get_db)
+):
+    """HTMX fragment returning normalized domain events from the database."""
+    job_id_int = None
+    if job_id and job_id.isdigit():
+        job_id_int = int(job_id)
+        
+    results, total, total_pages = LogQueryFacade.query_domain_events(
+        db=db,
+        source=source if source else None,
+        level=level if level else None,
+        job_id=job_id_int,
+        q=q if q else None,
+        page=page,
+        per_page=50
+    )
+    
+    return templates.TemplateResponse(
+        "fragments/domain_events_table.html",
+        {
+            "request": request,
+            "events": results,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+            "filters": {
+                "source": source,
+                "level": level,
+                "job_id": job_id,
+                "q": q
+            }
+        }
+    )
+
+
 
 
 @router.get("/app/control-plane", response_class=HTMLResponse)

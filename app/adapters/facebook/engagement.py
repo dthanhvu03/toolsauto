@@ -486,7 +486,7 @@ class FacebookEngagementTask:
             pattern = r'([\d\.,]+)\s*(K|M|B|Tr|N|k|m|b|tr|n)\b'
             
             # Use javascript evaluation to find text from both innerText AND aria-label
-            texts = self.page.evaluate('''() => {
+            texts = self.page.evaluate(r'''() => {
                 const elements = document.querySelectorAll('span, div');
                 const results = new Set();
                 for(let el of elements) {

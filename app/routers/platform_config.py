@@ -509,11 +509,12 @@ def test_workflow(workflow_id: int, payload: dict = {}, db: Session = Depends(ge
     })
 
 
+@router.put("/workflows/{workflow_id}/steps")
 def update_workflow_steps(
     workflow_id: int, payload: dict,
     db: Session = Depends(get_db)
 ):
-    """Update step order after drag-and-drop."""
+    """Update step list (content + order) after drag-and-drop or inline edit."""
     steps = payload.get("steps", [])
     db.execute(text("""
         UPDATE workflow_definitions
@@ -524,6 +525,30 @@ def update_workflow_steps(
         "id": workflow_id,
         "now": int(time.time())
     })
+    db.commit()
+    invalidate()
+    return JSONResponse({"success": True})
+
+
+@router.delete("/workflows/{workflow_id}")
+def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
+    """Delete a workflow definition."""
+    db.execute(
+        text("DELETE FROM workflow_definitions WHERE id = :id"),
+        {"id": workflow_id}
+    )
+    db.commit()
+    invalidate()
+    return JSONResponse({"success": True})
+
+
+@router.delete("/platforms/{platform_id}")
+def delete_platform(platform_id: int, db: Session = Depends(get_db)):
+    """Delete a platform config."""
+    db.execute(
+        text("DELETE FROM platform_configs WHERE id = :id"),
+        {"id": platform_id}
+    )
     db.commit()
     invalidate()
     return JSONResponse({"success": True})

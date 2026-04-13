@@ -1399,6 +1399,47 @@ class FacebookAdapter(AdapterInterface):
                 base += "?id=" + pieces[1].split("&")[0]
         return base
 
+    @staticmethod
+    def _is_fb_homepage_url(url: str) -> bool:
+        """Return True if URL is bare facebook.com root with no meaningful path or query.
+        This happens when /me is resolved while in Facebook Page context."""
+        try:
+            parsed = urlparse(url)
+            path = parsed.path or "/"
+            return (
+                parsed.netloc in ("www.facebook.com", "facebook.com")
+                and path in ("", "/")
+                and not parsed.query
+            )
+        except Exception:
+            return False
+
+    def _verify_page_context_via_switch_banner(self, target_page_url: str) -> bool:
+        """Fallback check when /me resolves to root (Facebook Page context).
+        Navigate to target page and verify the 'Switch now' banner is absent.
+        Banner appears only when visiting a managed page while NOT in that page's identity.
+        Its absence confirms we are already operating as the target page.
+        """
+        if not self.page or not target_page_url:
+            return False
+        try:
+            self.page.goto(target_page_url, wait_until="domcontentloaded")
+            self.page.wait_for_timeout(4000)
+            switch_sel = SELECTORS["switch_menu"]["switch_now_button"]
+            switch_visible = self.page.locator(switch_sel).count() > 0
+            if switch_visible:
+                logger.info(
+                    "FacebookAdapter: Fallback check — 'Switch now' banner visible on target page → NOT in page context."
+                )
+                return False
+            logger.info(
+                "FacebookAdapter: Fallback check — 'Switch now' banner absent → confirmed Page context."
+            )
+            return True
+        except Exception as e:
+            logger.warning("FacebookAdapter: Fallback page-context banner check failed: %s", e)
+            return False
+
     def _urls_indicate_same_fb_page_context(self, target_page_url: str, active_url: str) -> bool:
         norm_target = self._normalize_fb_profile_url_for_compare(target_page_url or "")
         norm_active = self._normalize_fb_profile_url_for_compare(active_url or "")
@@ -1447,6 +1488,19 @@ class FacebookAdapter(AdapterInterface):
         nt = self._normalize_fb_profile_url_for_compare(target_page_url or "")
         na = self._normalize_fb_profile_url_for_compare(active_url)
         ok = self._urls_indicate_same_fb_page_context(target_page_url or "", active_url)
+
+        # Fallback: /me resolves to facebook.com root when browser is in Page context.
+        # Pages have no personal /me redirect; FB returns the homepage instead.
+        # In that case use the Switch-now banner absence as a reliable secondary check.
+        if not ok and self._is_fb_homepage_url(active_url):
+            logger.info(
+                "FacebookAdapter: /me resolved to FB homepage — likely Page context. "
+                "Running Switch-now banner fallback check..."
+            )
+            ok = self._verify_page_context_via_switch_banner(target_page_url or "")
+            if ok:
+                na = self._normalize_fb_profile_url_for_compare(self.page.url)
+
         return (ok, na, nt)
 
     def _switcher_row_has_page_id(self, row: Locator, page_id: str) -> bool:

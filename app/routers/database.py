@@ -165,6 +165,8 @@ async def execute_sql(request: Request, db: Session = Depends(get_db)):
         risk, normalized_sql = analyze_sql(raw_sql)
         
         if risk == SQLRiskLevel.DANGEROUS:
+            ip = request.client.host if request.client else "unknown"
+            logger.warning("Blocked DANGEROUS SQL from %s: %.200s", ip, normalized_sql)
             return {"status": "error", "message": "Câu lệnh này bị chặn hoàn toàn vì lý do an toàn (DANGEROUS)."}
             
         if risk == SQLRiskLevel.MODERATE and not confirmed:
@@ -254,9 +256,15 @@ async def delete_row(request: Request, table_name: str, db: Session = Depends(ge
 def export_csv(table_name: str, q: str = "", db: Session = Depends(get_db)):
     """Streaming CSV export for large tables."""
     try:
-        # Whitelist check
-        # (Exporting is usually safe but we can restrict if needed)
-        
+        # Validate table name exists before any query — prevents injection via table_name param
+        conn_check = sqlite3.connect(DB_PATH)
+        cur_check = conn_check.cursor()
+        cur_check.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", (table_name,))
+        if not cur_check.fetchone():
+            conn_check.close()
+            raise HTTPException(400, f"Bảng '{table_name}' không tồn tại.")
+        conn_check.close()
+
         def generate():
             # Get columns
             conn = sqlite3.connect(DB_PATH)

@@ -1,17 +1,21 @@
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
 from typing import Optional
 import datetime
 import time as _time
+import subprocess
+import sys
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.database.core import get_db
 from app.database import models
+from app.main_templates import templates
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
-templates = Jinja2Templates(directory="app/templates")
 
 # ---------------------------------------------------------------------------
 # Simple TTL cache (Phase P2)
@@ -68,7 +72,7 @@ def get_growth_metrics(
     days = _validate_days(days)
     now = int(datetime.datetime.now().timestamp())
     cutoff = now - (days * 86400)
-    time_format = "%Y-%m-%d %H:00" if days <= 2 else "%Y-%m-%d"
+    time_format = "%Y-%m-%d %H:00" if days == 7 else "%Y-%m-%d"
 
     sql = f"""
     WITH LatestPerGroup AS (
@@ -120,6 +124,7 @@ def get_top_posts(
     days: int = 7,
     page: int = 1,
     limit: int = 15,
+    sort_by: Optional[str] = "views",
     db: Session = Depends(get_db)
 ):
     """
@@ -132,9 +137,14 @@ def get_top_posts(
     days = _validate_days(days)
     if page < 1:
         page = 1
-    if limit < 1 or limit > 50:
+    if limit < 1 or limit > 100:
         limit = 15
     offset = (page - 1) * limit
+
+    # Whitelist sort columns to prevent SQL injection
+    _sort_map = {"views": "l1.views", "likes": "l1.likes", "comments": "l1.comments",
+                 "shares": "l1.shares", "date": "l1.published_date", "eng_rate": "eng_rate"}
+    order_col = _sort_map.get(sort_by or "views", "l1.views")
 
     now = int(datetime.datetime.now().timestamp())
     cutoff = now - (days * 86400)
@@ -158,10 +168,11 @@ def get_top_posts(
     ).scalar() or 0
 
     # --- paginated data ---
-    sql = """
+    sql = f"""
     WITH RankedInsights AS (
         SELECT
-            post_url, page_name, platform, views, likes, comments, caption, recorded_at,
+            post_url, page_name, platform, views, likes, comments, shares, caption,
+            published_date, recorded_at,
             ROW_NUMBER() OVER (PARTITION BY post_url ORDER BY recorded_at DESC) as rn
         FROM page_insights
         WHERE recorded_at >= :cutoff
@@ -169,13 +180,14 @@ def get_top_posts(
           AND (:page_url IS NULL OR page_url = :page_url)
     )
     SELECT
-        l1.post_url, l1.page_name, l1.platform, l1.views, l1.likes, l1.comments, l1.caption,
+        l1.post_url, l1.page_name, l1.platform, l1.views, l1.likes, l1.comments, l1.shares,
+        l1.caption, l1.published_date,
         (l1.views - COALESCE(l2.views, 0)) as velocity,
         CASE WHEN l1.views > 0 THEN (CAST(l1.likes AS FLOAT) / l1.views) * 100 ELSE 0 END as eng_rate
     FROM RankedInsights l1
     LEFT JOIN RankedInsights l2 ON l1.post_url = l2.post_url AND l2.rn = 2
     WHERE l1.rn = 1
-    ORDER BY l1.views DESC
+    ORDER BY {order_col} DESC NULLS LAST
     LIMIT :limit OFFSET :offset
     """
 
@@ -198,7 +210,9 @@ def get_top_posts(
             "views": r.views or 0,
             "likes": r.likes or 0,
             "comments": r.comments or 0,
+            "shares": r.shares or 0,
             "caption": r.caption or "",
+            "published_date": r.published_date or "",
             "velocity": r.velocity or 0,
             "engagement_rate": round(r.eng_rate or 0, 2),
         })
@@ -352,3 +366,318 @@ def get_secondary_metrics(
         "posts_count": result[3] or 0 if result else 0,
     }
     return {"status": "success", "data": data}
+
+
+# ── /api/ai-commentary  (9router powered strategic analysis) ─────────────
+COMMENTARY_CACHE_TTL = 1800  # 30 min — AI calls are slow & expensive
+
+@router.get("/api/ai-commentary")
+def get_ai_commentary(
+    page_url: Optional[str] = None,
+    platform: Optional[str] = None,
+    days: int = 7,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate real-time AI strategic commentary using 9router.
+    Feeds actual DB metrics into the LLM and returns plain-text analysis.
+    Cached 30 min per (page_url, platform, days) combination.
+    """
+    from sqlalchemy import text as _text
+    from app.services.ai_runtime import pipeline
+
+    days = _validate_days(days)
+    cache_key = f"ai_commentary_{days}_{platform or 'all'}_{page_url or 'all'}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return {**cached, "cached": True}
+
+    now = int(_time.time())
+    cutoff = now - (days * 86400)
+    params_base = {"cutoff": cutoff, "platform": platform, "page_url": page_url}
+
+    # Top pages by total views
+    top_pages = db.execute(_text("""
+        WITH ranked AS (
+            SELECT page_name, page_url, post_url, platform,
+                   MAX(views) as views, MAX(likes) as likes
+            FROM page_insights
+            WHERE recorded_at >= :cutoff
+              AND (:platform IS NULL OR platform = :platform)
+              AND (:page_url IS NULL OR page_url = :page_url)
+            GROUP BY page_url, post_url
+        )
+        SELECT page_name, page_url, SUM(views) as total_views,
+               SUM(likes) as total_likes, COUNT(DISTINCT post_url) as post_count
+        FROM ranked
+        GROUP BY page_url
+        ORDER BY total_views DESC LIMIT 5
+    """), params_base).fetchall()
+
+    # Best performing single post
+    top_post = db.execute(_text("""
+        SELECT page_name, caption, MAX(views) as views
+        FROM page_insights
+        WHERE recorded_at >= :cutoff
+          AND (:platform IS NULL OR platform = :platform)
+          AND (:page_url IS NULL OR page_url = :page_url)
+        GROUP BY post_url ORDER BY views DESC LIMIT 1
+    """), params_base).fetchone()
+
+    # Aggregate metrics
+    agg = db.execute(_text("""
+        SELECT AVG(views) as avg_views,
+               CASE WHEN SUM(views) > 0
+                    THEN SUM(COALESCE(likes,0)) * 100.0 / SUM(views) ELSE 0 END as eng_rate,
+               COUNT(DISTINCT post_url) as active_posts,
+               COUNT(DISTINCT platform) as platform_count
+        FROM page_insights
+        WHERE recorded_at >= :cutoff
+          AND (:platform IS NULL OR platform = :platform)
+          AND (:page_url IS NULL OR page_url = :page_url)
+    """), params_base).fetchone()
+
+    # Build data context
+    avg_views = round(agg[0] or 0) if agg else 0
+    eng_rate = round(agg[1] or 0, 2) if agg else 0
+    active_posts = agg[2] or 0 if agg else 0
+
+    pages_lines = "\n".join(
+        f"  • {r[0] or r[1]}: {r[2]:,} views, {r[3]:,} likes, {r[4]} bài"
+        for r in top_pages
+    ) if top_pages else "  Chưa có dữ liệu."
+
+    top_post_line = ""
+    if top_post:
+        cap = (top_post[1] or "")[:80] or "(không có caption)"
+        top_post_line = f"{top_post[0]} — {top_post[2]:,} views — \"{cap}\""
+
+    platform_ctx = platform.upper() if platform else "tất cả nền tảng"
+
+    prompt = f"""Bạn là chuyên gia phân tích social media. Viết 1 đoạn nhận xét chiến lược (2-3 câu, tiếng Việt, tự nhiên, không dùng bullet point, không JSON):
+
+Dữ liệu thực tế {days} ngày — {platform_ctx}:
+{pages_lines}
+Bài tốt nhất: {top_post_line or 'Chưa có'}
+Avg views/bài: {avg_views:,} | Engagement rate: {eng_rate}% | Tổng bài tracking: {active_posts}
+
+Nhận xét chiến lược ngắn gọn (plain text):"""
+
+    text, meta = pipeline.generate_text(prompt)
+
+    if not text:
+        fallback = (
+            f"Đang theo dõi {active_posts} bài trên {platform_ctx}. "
+            f"Avg {avg_views:,} views/bài, engagement rate {eng_rate}%. "
+            f"9router chưa phản hồi — vui lòng kiểm tra kết nối."
+        )
+        return {
+            "status": "fallback",
+            "commentary": fallback,
+            "model": meta.get("fail_reason", "N/A"),
+            "cached": False,
+        }
+
+    result = {
+        "status": "success",
+        "commentary": text.strip(),
+        "model": meta.get("model", "N/A"),
+        "latency_ms": meta.get("latency_ms", 0),
+        "cached": False,
+    }
+    _set_cached(cache_key, result)
+    return result
+
+
+# ── /api/ai-roadmap  (9router powered strategic roadmap) ─────────────────
+@router.get("/api/ai-roadmap")
+def get_ai_roadmap(
+    page_url: Optional[str] = None,
+    platform: Optional[str] = None,
+    days: int = 7,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate a 4-step strategic growth roadmap using 9router.
+    Builds context from real DB metrics, asks the LLM to return structured JSON.
+    Cached 30 min per (page_url, platform, days) combination.
+    """
+    import json
+    import re as _re
+    from sqlalchemy import text as _text
+    from app.services.ai_runtime import pipeline
+
+    days = _validate_days(days)
+    cache_key = f"ai_roadmap_{days}_{platform or 'all'}_{page_url or 'all'}"
+    cached = _get_cached(cache_key)
+    if cached:
+        return {**cached, "cached": True}
+
+    now = int(_time.time())
+    cutoff = now - (days * 86400)
+    params_base = {"cutoff": cutoff, "platform": platform, "page_url": page_url}
+
+    # Top pages by views
+    top_pages = db.execute(_text("""
+        WITH ranked AS (
+            SELECT page_name, post_url,
+                   MAX(views) as views, MAX(likes) as likes
+            FROM page_insights
+            WHERE recorded_at >= :cutoff
+              AND (:platform IS NULL OR platform = :platform)
+              AND (:page_url IS NULL OR page_url = :page_url)
+            GROUP BY page_url, post_url
+        )
+        SELECT page_name, SUM(views) as total_views,
+               SUM(likes) as total_likes, COUNT(DISTINCT post_url) as post_count
+        FROM ranked GROUP BY page_name ORDER BY total_views DESC LIMIT 5
+    """), params_base).fetchall()
+
+    # Aggregate metrics
+    agg = db.execute(_text("""
+        SELECT AVG(views) as avg_views,
+               CASE WHEN SUM(views) > 0
+                    THEN SUM(COALESCE(likes,0)) * 100.0 / SUM(views) ELSE 0 END as eng_rate,
+               COUNT(DISTINCT post_url) as active_posts
+        FROM page_insights
+        WHERE recorded_at >= :cutoff
+          AND (:platform IS NULL OR platform = :platform)
+          AND (:page_url IS NULL OR page_url = :page_url)
+    """), params_base).fetchone()
+
+    avg_views = round(agg[0] or 0) if agg else 0
+    eng_rate = round(agg[1] or 0, 2) if agg else 0
+    active_posts = agg[2] or 0 if agg else 0
+    platform_ctx = platform.upper() if platform else "tất cả nền tảng"
+
+    pages_lines = "\n".join(
+        f"  • {r[0]}: {r[1]:,} views, {r[2]:,} likes, {r[3]} bài"
+        for r in top_pages
+    ) if top_pages else "  Chưa có dữ liệu."
+
+    prompt = f"""Bạn là chiến lược gia social media. Dựa vào dữ liệu thực tế dưới đây, tạo ra 4 bước roadmap chiến lược CỤ THỂ cho các trang này.
+
+Dữ liệu {days} ngày — {platform_ctx}:
+{pages_lines}
+Avg views/bài: {avg_views:,} | Engagement rate: {eng_rate}% | Tổng bài tracking: {active_posts}
+
+Trả về JSON array (chỉ JSON thuần, không có markdown, không có text khác):
+[
+  {{"step": "01", "category": "Retention", "title": "...", "description": "...(1 câu cụ thể dựa vào data)", "theme": "indigo"}},
+  {{"step": "02", "category": "Scale", "title": "...", "description": "...", "theme": "emerald"}},
+  {{"step": "03", "category": "Monetize", "title": "...", "description": "...", "theme": "purple"}},
+  {{"step": "04", "category": "Automate", "title": "...", "description": "...", "theme": "orange"}}
+]"""
+
+    text, meta = pipeline.generate_text(prompt)
+
+    steps = None
+    if text:
+        try:
+            json_match = _re.search(r'\[.*?\]', text, _re.DOTALL)
+            if json_match:
+                steps = json.loads(json_match.group(0))
+        except Exception:
+            pass
+
+    if not steps:
+        # Fallback: generic steps built from real metrics
+        steps = [
+            {"step": "01", "category": "Retention", "title": "Tối ưu 3 giây đầu",
+             "description": f"Cải thiện hook cho {active_posts} bài đang tracking để tăng retention rate.", "theme": "indigo"},
+            {"step": "02", "category": "Scale", "title": "Nhân bản nội dung thành công",
+             "description": f"Clone các mẫu nội dung đạt engagement rate cao nhất trên {platform_ctx}.", "theme": "emerald"},
+            {"step": "03", "category": "Monetize", "title": "Kích hoạt affiliate",
+             "description": f"Tích hợp affiliate cho bài có views > avg {avg_views:,} trên {platform_ctx}.", "theme": "purple"},
+            {"step": "04", "category": "Automate", "title": "Lên lịch theo heatmap",
+             "description": "Đặt lịch đăng theo Peak Engagement Windows để tối ưu organic reach.", "theme": "orange"},
+        ]
+        meta["fail_reason"] = meta.get("fail_reason", "parse_failed")
+
+    result = {
+        "status": "success",
+        "steps": steps,
+        "model": meta.get("model", "N/A"),
+        "latency_ms": meta.get("latency_ms", 0),
+        "is_fallback": not bool(text),
+        "cached": False,
+    }
+    _set_cached(cache_key, result)
+    return result
+
+
+# ── /api/status  (data freshness) ────────────────────────────────────────
+@router.get("/api/status")
+def get_data_status(db: Session = Depends(get_db)):
+    """Return data freshness info: last scraped timestamp + total record count."""
+    from sqlalchemy import text as _text
+
+    row = db.execute(_text(
+        "SELECT MAX(recorded_at) as last_ts, COUNT(*) as total FROM page_insights"
+    )).fetchone()
+
+    last_ts = row[0] if row else None
+    total = row[1] if row else 0
+    now = int(_time.time())
+
+    if last_ts:
+        age_sec = now - last_ts
+        age_h = age_sec // 3600
+        age_m = (age_sec % 3600) // 60
+        if age_h >= 1:
+            age_label = f"{age_h}h {age_m}m ago"
+        else:
+            age_label = f"{age_m}m ago"
+        last_updated_iso = datetime.datetime.fromtimestamp(last_ts).strftime("%Y-%m-%d %H:%M")
+    else:
+        age_label = "never"
+        last_updated_iso = None
+
+    return {
+        "status": "success",
+        "last_updated": last_updated_iso,
+        "age_label": age_label,
+        "total_records": total,
+        "stale": (last_ts is None) or ((now - last_ts) > 43200),  # >12h = stale
+    }
+
+
+# ── /api/trigger-refresh  (manual scrape trigger) ────────────────────────
+_refresh_running: bool = False
+
+@router.post("/api/trigger-refresh")
+def trigger_refresh():
+    """Kick off the insights scraper immediately (non-blocking subprocess)."""
+    global _refresh_running
+    if _refresh_running:
+        return JSONResponse({"status": "already_running", "message": "Scraper đang chạy, vui lòng đợi."}, status_code=429)
+
+    scraper_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "scripts", "archive", "scrape_insights.py"
+    )
+    scraper_path = os.path.abspath(scraper_path)
+
+    if not os.path.exists(scraper_path):
+        return JSONResponse({"status": "error", "message": f"Scraper không tìm thấy: {scraper_path}"}, status_code=500)
+
+    try:
+        _refresh_running = True
+        proc = subprocess.Popen(
+            [sys.executable, scraper_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logger.info("Insights scraper triggered manually (pid=%s)", proc.pid)
+        # Reset flag after 30 min max (safety valve)
+        def _reset():
+            import time as _t
+            _t.sleep(1800)
+            global _refresh_running
+            _refresh_running = False
+        import threading
+        threading.Thread(target=_reset, daemon=True).start()
+        return {"status": "success", "message": "Scraper đã được kích hoạt, dữ liệu sẽ cập nhật sau vài phút.", "pid": proc.pid}
+    except Exception as e:
+        _refresh_running = False
+        logger.error("Failed to trigger scraper: %s", e)
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
