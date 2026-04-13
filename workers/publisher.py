@@ -44,8 +44,8 @@ def kill_if_stuck(label: str, timeout: int):
     return timer
 
 # Setup Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - [PUBLISHER] - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+from app.utils.logger import setup_shared_logger
+logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publisher")
 
 RUNNING = True
 CURRENT_JOB_ID = None
