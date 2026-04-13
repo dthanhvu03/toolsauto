@@ -29,8 +29,9 @@ def setup_shared_logger(name: str) -> logging.Logger:
 
     # 2. TimedRotatingFileHandler for local backup
     # Dynamically find the repo root (assuming this file is app/utils/logger.py)
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    logs_dir = os.path.join(root_dir, "logs")
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # Allow override via environment variable for production flexibility
+    logs_dir = os.environ.get("LOG_DIR", os.path.join(BASE_DIR, "logs"))
     os.makedirs(logs_dir, exist_ok=True)
 
     log_file = os.path.join(logs_dir, "app.log")
