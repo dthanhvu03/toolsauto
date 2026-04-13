@@ -61,9 +61,18 @@
         </div>
     </div>
 
-    <!-- 2. Form Body Section -->
-    <div class="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar bg-white">
-        <form hx-post="/accounts/{{ account.id }}/update-limits" hx-target="#account-{{ account.id }}"
+    <!-- 1.5 Tab Navigation -->
+    <div class="flex items-center gap-6 px-6 border-b border-gray-100 bg-white shrink-0 mt-2">
+        <button type="button" onclick="switchAccountTab('config', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-indigo-600 text-indigo-600 transition-colors">Configuration</button>
+        <button type="button" onclick="switchAccountTab('pages', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-transparent text-gray-400 hover:text-gray-600 transition-colors">Target Pages</button>
+    </div>
+
+    <!-- 2. Body Section -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar bg-white relative">
+        
+        <!-- Tab 1: Config -->
+        <div id="tab-config" class="account-tab-content p-5 md:p-8">
+            <form hx-post="/accounts/{{ account.id }}/update-limits" hx-target="#account-{{ account.id }}"
             hx-swap="innerHTML" class="max-w-4xl mx-auto space-y-8">
             <input type="hidden" name="competitor_urls" value="">
             <input type="hidden" name="page_niches" value="">
@@ -196,6 +205,17 @@
                 </button>
             </div>
         </form>
+        </div>
+
+        <!-- Tab 2: Target Pages -->
+        <div id="tab-pages" class="account-tab-content p-5 md:p-8" style="display:none;" 
+             hx-get="/accounts/{{ account.id }}/pages-tab" 
+             hx-trigger="load, pagesChanged from:body">
+             <div class="py-16 flex justify-center text-gray-300">
+                 <div class="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+             </div>
+        </div>
+
     </div>
 
     <!-- Scripts -->
@@ -255,6 +275,25 @@
                     block.classList.add('bg-slate-50/30', 'border-gray-100');
                 }
             }
+        }
+
+        function switchAccountTab(tabId, btnEl) {
+            // Hide all contents
+            document.querySelectorAll('.account-tab-content').forEach(function(el) {
+                el.style.display = 'none';
+            });
+            // Show target content
+            var target = document.getElementById('tab-' + tabId);
+            if(target) target.style.display = 'block';
+
+            // Reset all buttons
+            document.querySelectorAll('.account-tab-btn').forEach(function(btn) {
+                btn.classList.remove('border-indigo-600', 'text-indigo-600');
+                btn.classList.add('border-transparent', 'text-gray-400');
+            });
+            // Highlight active button
+            btnEl.classList.remove('border-transparent', 'text-gray-400');
+            btnEl.classList.add('border-indigo-600', 'text-indigo-600');
         }
     </script>
 </div>
