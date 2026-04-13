@@ -260,13 +260,13 @@ class AICaptionPipeline:
         payload = {
             "model": temp_model,
             "messages": messages,
-            "max_tokens": 1500,
+            "max_tokens": 4096,  # Reasoning models need extra budget for thinking tokens
             "temperature": 0.5,
             "stream": False,
         }
 
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=60.0)
+            resp = requests.post(url, headers=headers, json=payload, timeout=120.0)
             
             if resp.status_code == 200:
                 data = resp.json()

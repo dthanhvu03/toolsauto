@@ -430,7 +430,146 @@
         <div id="roadmapGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 hidden"></div>
     </div>
 
-    <!-- Row 7: Reel Content Library -->
+    <!-- Row 7: Competitive Intelligence Engine -->
+    <div class="space-y-5 animate-slide-up" style="animation-delay: 0.65s;">
+
+        <!-- Section header -->
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-200 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-lg font-display font-black text-gray-900">Competitive Intelligence</h2>
+                <p class="text-xs text-slate-400 font-medium">Dữ liệu đối thủ tự động từ FB suggested-reels stream — cập nhật mỗi lần scrape</p>
+            </div>
+        </div>
+
+        <!-- Benchmark Row -->
+        <div id="benchmarkSection" class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+            <!-- Gap Ratio Card -->
+            <div class="insight-card p-6 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100 relative overflow-hidden">
+                <div class="absolute -right-6 -top-6 w-24 h-24 bg-amber-200/30 rounded-full blur-2xl"></div>
+                <div class="relative z-10">
+                    <div class="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-2">Market Gap</div>
+                    <div id="benchGap" class="text-5xl font-display font-black text-amber-600 tracking-tight">--<span class="text-2xl">×</span></div>
+                    <p id="benchGapLabel" class="mt-2 text-xs text-slate-500 font-medium">Loading benchmark...</p>
+                    <div id="benchNoData" class="hidden mt-3 text-xs text-amber-600 font-bold bg-amber-100 px-3 py-2 rounded-lg">
+                        Chưa có data competitor — chạy scrape để thu thập
+                    </div>
+                </div>
+            </div>
+
+            <!-- Our stats vs Market stats -->
+            <div class="lg:col-span-2 insight-card p-6">
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span> Trang của bạn
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Views</span>
+                                <span id="ourAvgViews" class="text-sm font-black text-gray-900">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Likes</span>
+                                <span id="ourAvgLikes" class="text-sm font-bold text-rose-500">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Top reel</span>
+                                <span id="ourMaxViews" class="text-sm font-bold text-indigo-600">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Posts tracked</span>
+                                <span id="ourPostCount" class="text-sm font-bold text-gray-600">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-bold text-orange-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-orange-500"></span> Thị trường (FB suggested)
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Views</span>
+                                <span id="mktAvgViews" class="text-sm font-black text-gray-900">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Likes</span>
+                                <span id="mktAvgLikes" class="text-sm font-bold text-rose-500">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Top reel</span>
+                                <span id="mktMaxViews" class="text-sm font-bold text-orange-600">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Reels tracked</span>
+                                <span id="mktReelCount" class="text-sm font-bold text-gray-600">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trending Topics + Competitor Top Reels -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+            <!-- Trending Topics -->
+            <div class="insight-card p-6 flex flex-col">
+                <h3 class="text-sm font-display font-black text-gray-900 mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></span>
+                    Trending Topics
+                    <span class="ml-auto text-[10px] text-slate-400 font-normal" id="topicsAnalyzedLabel"></span>
+                </h3>
+                <div id="trendingTopicsList" class="flex-1 flex flex-wrap gap-2 content-start">
+                    <div class="animate-pulse w-full space-y-2">
+                        <div class="h-6 bg-gray-100 rounded-full w-20"></div>
+                        <div class="h-6 bg-gray-100 rounded-full w-28"></div>
+                        <div class="h-6 bg-gray-100 rounded-full w-16"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Competitor Top Reels -->
+            <div class="lg:col-span-2 insight-card p-6 flex flex-col">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <h3 class="text-sm font-display font-black text-gray-900 flex items-center gap-2">
+                        <span class="w-2 h-2 bg-amber-500 rounded-full"></span>
+                        Top Competitor Reels
+                    </h3>
+                    <div id="compSortBtns" class="flex gap-1">
+                        <button data-sort="views"    onclick="setCompSort(this)" class="comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600">Views</button>
+                        <button data-sort="likes"    onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Likes</button>
+                        <button data-sort="date"     onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Date</button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-100">
+                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Caption</th>
+                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3 hidden md:table-cell">Page</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Views</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 hidden sm:table-cell">Likes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="compTableBody">
+                            <tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="compPagination" class="mt-3 pt-3 border-t border-gray-100 flex items-center justify-center gap-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 8: Reel Content Library -->
     <div class="insight-card p-6 animate-slide-up" style="animation-delay: 0.6s;">
         <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
             <h3 class="text-lg font-display font-black text-gray-900 flex items-center gap-3">
@@ -542,6 +681,10 @@
             loadAiRoadmap();
             _libPage = 1;
             loadLibrary();
+            loadBenchmark();
+            loadTrendingTopics();
+            _compPage = 1;
+            loadCompetitorTop();
 
         } catch (err) {
             console.error("Dashboard load error:", err);
@@ -1172,17 +1315,200 @@
         `;
     }
 
+    // ── Competitive Intelligence ─────────────────────────────────────────────
+    let _compPage = 1;
+    let _compTotalPages = 1;
+    let _compSort = 'views';
+
+    function setCompSort(btn) {
+        document.querySelectorAll('#compSortBtns .comp-sort').forEach(b => {
+            b.className = 'comp-sort px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50';
+        });
+        btn.className = 'comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600';
+        _compSort = btn.dataset.sort;
+        _compPage = 1;
+        loadCompetitorTop();
+    }
+
+    async function loadBenchmark() {
+        try {
+            const platform = document.getElementById('platformSelect').value;
+            const pageUrl  = document.getElementById('pageSelect').value;
+            const days     = getDays();
+            const params   = [`days=${days}`, `platform=${encodeURIComponent(platform)}`];
+            if (pageUrl) params.push(`page_url=${encodeURIComponent(pageUrl)}`);
+
+            const res  = await fetch('/insights/api/market-benchmark?' + params.join('&'));
+            const json = await res.json();
+            if (json.status !== 'success') return;
+
+            // API shape: json.our.{avg_views,avg_likes,max_views,post_count}
+            //            json.market.{avg_views,avg_likes,max_views,reel_count}
+            //            json.gap_ratio, json.has_competitor_data
+            const our = json.our   || {};
+            const mkt = json.market || {};
+            const gapEl = document.getElementById('benchGap');
+
+            if (!json.has_competitor_data) {
+                gapEl.innerHTML = '--<span class="text-2xl">×</span>';
+                document.getElementById('benchGapLabel').textContent = 'Chưa có dữ liệu thị trường';
+                document.getElementById('benchNoData').classList.remove('hidden');
+                document.getElementById('ourAvgViews').textContent  = our.avg_views  ? formatK(our.avg_views)  : '--';
+                document.getElementById('ourAvgLikes').textContent  = our.avg_likes  ? formatK(our.avg_likes)  : '--';
+                document.getElementById('ourMaxViews').textContent  = our.max_views  ? formatK(our.max_views)  : '--';
+                document.getElementById('ourPostCount').textContent = our.post_count || '--';
+                ['mktAvgViews','mktAvgLikes','mktMaxViews'].forEach(id => document.getElementById(id).textContent = '--');
+                document.getElementById('mktReelCount').textContent = '0';
+                return;
+            }
+
+            document.getElementById('benchNoData').classList.add('hidden');
+
+            const gap = json.gap_ratio;
+            gapEl.innerHTML = `${gap.toFixed(1)}<span class="text-2xl">×</span>`;
+            ['text-amber-600','text-emerald-600','text-red-600'].forEach(c => gapEl.classList.remove(c));
+            if (gap >= 2) {
+                gapEl.classList.add('text-red-600');
+                document.getElementById('benchGapLabel').textContent = `Thị trường mạnh hơn ${gap.toFixed(1)}× — cơ hội tăng trưởng lớn`;
+            } else if (gap >= 1.2) {
+                gapEl.classList.add('text-amber-600');
+                document.getElementById('benchGapLabel').textContent = `Bạn đang theo sau ${gap.toFixed(1)}× — cần đẩy mạnh content`;
+            } else if (gap > 0.8) {
+                gapEl.classList.add('text-emerald-600');
+                document.getElementById('benchGapLabel').textContent = `Bạn ngang thị trường — duy trì đà`;
+            } else {
+                gapEl.classList.add('text-emerald-600');
+                document.getElementById('benchGapLabel').textContent = `Bạn đang DẪN ĐẦU thị trường ${(1 / gap).toFixed(1)}×`;
+            }
+
+            document.getElementById('ourAvgViews').textContent  = formatK(our.avg_views);
+            document.getElementById('ourAvgLikes').textContent  = formatK(our.avg_likes);
+            document.getElementById('ourMaxViews').textContent  = formatK(our.max_views);
+            document.getElementById('ourPostCount').textContent = our.post_count;
+            document.getElementById('mktAvgViews').textContent  = formatK(mkt.avg_views);
+            document.getElementById('mktAvgLikes').textContent  = formatK(mkt.avg_likes);
+            document.getElementById('mktMaxViews').textContent  = formatK(mkt.max_views);
+            document.getElementById('mktReelCount').textContent = mkt.reel_count;
+        } catch (e) {
+            console.error('Benchmark load error:', e);
+        }
+    }
+
+    async function loadTrendingTopics() {
+        const container = document.getElementById('trendingTopicsList');
+        const label     = document.getElementById('topicsAnalyzedLabel');
+        try {
+            const platform = document.getElementById('platformSelect').value;
+            const days     = getDays();
+            const res  = await fetch(`/insights/api/trending-topics?days=${days}&platform=${encodeURIComponent(platform)}&limit=25`);
+            const json = await res.json();
+
+            if (json.status !== 'success' || !json.data || json.data.length === 0) {
+                container.innerHTML = '<span class="text-xs text-slate-400 italic">Chưa có dữ liệu — chạy scrape để thu thập.</span>';
+                return;
+            }
+            if (json.reels_analyzed) label.textContent = `${json.reels_analyzed} reels`;
+
+            const maxCount = json.data[0].count || 1;
+            container.innerHTML = json.data.map(t => {
+                const size    = Math.round(10 + (t.count / maxCount) * 8);
+                const opacity = (0.5 + (t.count / maxCount) * 0.5).toFixed(2);
+                return `<button
+                    onclick="void(0)"
+                    class="px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-700 font-semibold hover:bg-amber-100 hover:border-amber-300 transition-all"
+                    style="font-size:${size}px;opacity:${opacity}"
+                    title="${t.count} lần xuất hiện">${t.word}</button>`;
+            }).join('');
+        } catch (e) {
+            console.error('Trending topics error:', e);
+            container.innerHTML = '<span class="text-xs text-red-400">Lỗi tải dữ liệu</span>';
+        }
+    }
+
+    async function loadCompetitorTop(page) {
+        if (page !== undefined) _compPage = page;
+        const tbody = document.getElementById('compTableBody');
+        tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Loading...</td></tr>';
+
+        try {
+            const platform = document.getElementById('platformSelect').value;
+            const days     = getDays();
+            const params   = [`days=${days}`, `sort_by=${_compSort}`, `page=${_compPage}`, `limit=10`];
+            if (platform) params.push(`platform=${encodeURIComponent(platform)}`);
+
+            const res  = await fetch('/insights/api/competitor-top?' + params.join('&'));
+            const json = await res.json();
+
+            if (json.status !== 'success') {
+                tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs">Không có dữ liệu</td></tr>';
+                return;
+            }
+            _compTotalPages = json.total_pages || 1;
+            renderCompetitorTable(json.data);
+            renderCompPagination();
+        } catch (e) {
+            console.error('Competitor top error:', e);
+            tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-red-400 text-xs">Lỗi tải dữ liệu</td></tr>';
+        }
+    }
+
+    function renderCompetitorTable(data) {
+        const tbody = document.getElementById('compTableBody');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="py-10 text-center text-slate-400 text-xs">Chưa có dữ liệu đối thủ — chạy scrape để thu thập.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(r => {
+            const cap      = r.caption || (r.page_name || 'Competitor') + ' Reel';
+            const capShort = cap.length > 55 ? cap.slice(0, 55) + '…' : cap;
+            const viewsCls = r.views >= 100000
+                ? 'text-orange-600 font-black'
+                : r.views >= 10000
+                    ? 'text-amber-600 font-bold'
+                    : 'text-gray-700 font-semibold';
+            return `<tr class="border-b border-gray-50 hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                        onclick="window.open('${r.reel_url}', '_blank')">
+                <td class="py-2.5 pr-3 max-w-[220px]">
+                    <div class="text-[12px] font-semibold text-gray-800 group-hover:text-amber-700 transition-colors truncate" title="${cap.replace(/"/g,'&quot;')}">${capShort}</div>
+                </td>
+                <td class="py-2.5 pr-3 hidden md:table-cell">
+                    <span class="text-[11px] text-slate-500 truncate max-w-[90px] block">${r.page_name || '—'}</span>
+                </td>
+                <td class="py-2.5 pr-3 text-right text-[13px] ${viewsCls}">${r.views > 0 ? formatK(r.views) : '<span class="text-slate-300">—</span>'}</td>
+                <td class="py-2.5 text-right text-[12px] text-rose-500 font-semibold hidden sm:table-cell">${r.likes > 0 ? formatK(r.likes) : '<span class="text-slate-300">—</span>'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderCompPagination() {
+        const el = document.getElementById('compPagination');
+        if (_compTotalPages <= 1) { el.innerHTML = ''; return; }
+        el.innerHTML = `
+            <button onclick="loadCompetitorTop(_compPage - 1)" ${_compPage <= 1 ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed">← Prev</button>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">${_compPage} / ${_compTotalPages}</span>
+            <button onclick="loadCompetitorTop(_compPage + 1)" ${_compPage >= _compTotalPages ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+        `;
+    }
+
     // DOM is already ready since this script is at the end of <body>
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             loadDataStatus();
             loadData();
             loadLibrary();
+            loadBenchmark();
+            loadTrendingTopics();
+            loadCompetitorTop();
         });
     } else {
         loadDataStatus();
         loadData();
         loadLibrary();
+        loadBenchmark();
+        loadTrendingTopics();
+        loadCompetitorTop();
     }
 </script>
 {% endblock %}
