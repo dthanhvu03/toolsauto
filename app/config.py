@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
 # Database
-DB_PATH = os.getenv("DB_PATH", str(DATA_DIR / "auto_publisher.db"))
+DB_PATH = os.environ.get("DB_PATH") or str(DATA_DIR / "auto_publisher.db")
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # Authentication & Security
