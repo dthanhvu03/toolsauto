@@ -681,3 +681,195 @@ def trigger_refresh():
         _refresh_running = False
         logger.error("Failed to trigger scraper: %s", e)
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+# ── /api/market-benchmark  (our pages vs competitor reels) ───────────────
+@router.get("/api/market-benchmark")
+def get_market_benchmark(
+    platform: Optional[str] = "facebook",
+    days: int = 7,
+    db: Session = Depends(get_db),
+):
+    """
+    Compare our tracked pages' avg metrics vs the FB-suggested competitor reels
+    harvested automatically by the scraper (GQL[5] stream).
+    """
+    from sqlalchemy import text
+
+    days = _validate_days(days)
+    now = int(_time.time())
+    cutoff = now - (days * 86400)
+
+    our = db.execute(text("""
+        SELECT AVG(views), AVG(likes), AVG(comments), AVG(shares),
+               COUNT(DISTINCT post_url), MAX(views)
+        FROM page_insights
+        WHERE recorded_at >= :cutoff
+          AND (:platform IS NULL OR platform = :platform)
+    """), {"cutoff": cutoff, "platform": platform}).fetchone()
+
+    mkt = db.execute(text("""
+        SELECT AVG(views), AVG(likes), AVG(comments), AVG(shares),
+               COUNT(DISTINCT reel_url), MAX(views)
+        FROM competitor_reels
+        WHERE scraped_at >= :cutoff
+    """), {"cutoff": cutoff}).fetchone()
+
+    def _s(row, idx, default=0):
+        v = row[idx] if row else None
+        return round(v or default, 1)
+
+    our_avg   = _s(our, 0)
+    mkt_avg   = _s(mkt, 0)
+    gap_ratio = round(mkt_avg / max(our_avg, 1), 1)
+
+    return {
+        "status": "success",
+        "days": days,
+        "our": {
+            "avg_views":    our_avg,
+            "avg_likes":    _s(our, 1),
+            "avg_comments": _s(our, 2),
+            "avg_shares":   _s(our, 3),
+            "post_count":   int(our[4] or 0) if our else 0,
+            "max_views":    int(our[5] or 0) if our else 0,
+        },
+        "market": {
+            "avg_views":    mkt_avg,
+            "avg_likes":    _s(mkt, 1),
+            "avg_comments": _s(mkt, 2),
+            "avg_shares":   _s(mkt, 3),
+            "reel_count":   int(mkt[4] or 0) if mkt else 0,
+            "max_views":    int(mkt[5] or 0) if mkt else 0,
+        },
+        "gap_ratio":          gap_ratio,
+        "has_competitor_data": (int(mkt[4] or 0) if mkt else 0) > 0,
+    }
+
+
+# ── /api/competitor-top  (top competitor reels by metric) ────────────────
+@router.get("/api/competitor-top")
+def get_competitor_top(
+    days: int = 7,
+    page: int = 1,
+    limit: int = 20,
+    sort_by: Optional[str] = "views",
+    db: Session = Depends(get_db),
+):
+    """Top competitor reels sorted by views/likes/date — paginated."""
+    from sqlalchemy import text
+
+    days = _validate_days(days)
+    _sort_map = {"views": "max_views", "likes": "max_likes",
+                 "comments": "max_comments", "date": "published_date"}
+    order_col = _sort_map.get(sort_by or "views", "max_views")
+
+    if page < 1: page = 1
+    if limit < 1 or limit > 100: limit = 20
+    offset = (page - 1) * limit
+
+    now = int(_time.time())
+    cutoff = now - (days * 86400)
+
+    total = db.execute(text(
+        "SELECT COUNT(DISTINCT reel_url) FROM competitor_reels WHERE scraped_at >= :cutoff"
+    ), {"cutoff": cutoff}).scalar() or 0
+
+    rows = db.execute(text(f"""
+        SELECT reel_url, page_name, page_url, platform,
+               MAX(views)    as max_views,
+               MAX(likes)    as max_likes,
+               MAX(comments) as max_comments,
+               MAX(shares)   as max_shares,
+               caption, published_date
+        FROM competitor_reels
+        WHERE scraped_at >= :cutoff
+        GROUP BY reel_url
+        ORDER BY {order_col} DESC NULLS LAST
+        LIMIT :limit OFFSET :offset
+    """), {"cutoff": cutoff, "limit": limit, "offset": offset}).fetchall()
+
+    data = [{
+        "reel_url":       r[0],
+        "page_name":      r[1] or "",
+        "page_url":       r[2] or "",
+        "platform":       r[3] or "facebook",
+        "views":          int(r[4] or 0),
+        "likes":          int(r[5] or 0),
+        "comments":       int(r[6] or 0),
+        "shares":         int(r[7] or 0),
+        "caption":        r[8] or "",
+        "published_date": r[9] or "",
+    } for r in rows]
+
+    return {
+        "status":      "success",
+        "data":        data,
+        "total":       total,
+        "page":        page,
+        "total_pages": max(1, (total + limit - 1) // limit),
+        "has_data":    total > 0,
+    }
+
+
+# ── /api/trending-topics  (keyword frequency from competitor captions) ────
+@router.get("/api/trending-topics")
+def get_trending_topics(
+    days: int = 7,
+    limit: int = 25,
+    db: Session = Depends(get_db),
+):
+    """
+    Word frequency across competitor reel captions — reveals trending themes
+    FB's algorithm is pushing in our niche.
+    """
+    import re as _re
+    from sqlalchemy import text
+
+    days = _validate_days(days)
+    now = int(_time.time())
+    cutoff = now - (days * 86400)
+
+    rows = db.execute(text("""
+        SELECT caption, views FROM competitor_reels
+        WHERE scraped_at >= :cutoff
+          AND caption IS NOT NULL AND caption != ''
+        ORDER BY views DESC
+        LIMIT 500
+    """), {"cutoff": cutoff}).fetchall()
+
+    STOPWORDS = {
+        # Vietnamese
+        'là','và','của','trong','cho','với','có','được','này','những','các','như',
+        'đã','hay','thì','mà','khi','từ','về','ra','vào','lên','lại','cũng','đến',
+        'để','theo','bởi','qua','vì','vậy','nếu','đây','thế','một','không','rất',
+        'còn','mình','bạn','tôi','anh','chị','em','ở','nè','nha','ơi','nhé','luôn',
+        'quá','nào','cái','ai','gì','sao','rồi','thôi','hơn','nhất','bao','vẫn',
+        'tới','sau','trước','đó','kia','đây','đâu','đều','lắm','được','bị','hết',
+        # English
+        'the','a','an','is','are','was','be','to','of','in','on','at','for','with',
+        'this','that','it','i','you','we','they','my','your','our','their','and',
+        'or','but','so','if','as','by','from','up','out','how','what','when',
+        'where','who','all','just','do','dont','can','get','has','have',
+    }
+
+    freq: dict = {}
+    for (cap, views) in rows:
+        if not cap:
+            continue
+        weight = max(1, min(int(views or 1) // 1000, 10))  # views boost, capped at 10×
+        words = _re.findall(r'[a-zA-ZÀ-ỹ\u00C0-\u024F\u1E00-\u1EFF]{3,}', cap.lower())
+        for w in words:
+            if w not in STOPWORDS:
+                freq[w] = freq.get(w, 0) + weight
+
+    if limit < 1 or limit > 100:
+        limit = 25
+    topics = sorted(freq.items(), key=lambda x: -x[1])[:limit]
+
+    return {
+        "status":                  "success",
+        "topics":                  [{"word": w, "count": c} for w, c in topics],
+        "total_captions_analyzed": len(rows),
+        "days":                    days,
+    }

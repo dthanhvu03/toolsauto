@@ -158,25 +158,177 @@ def extract_reel_metrics_from_relay(body_html: str, video_id: str) -> dict:
     return result
 
 
+def extract_suggested_reels_from_gql(gql_bodies: list) -> list:
+    """
+    Parse captured GQL NDJSON responses and extract suggested/competitor reel data.
+    FB returns ~17 blobs in one large GQL response (~700KB NDJSON).
+
+    Each blob has a "path" field like ["viewer","video_feed_unit_feed","edges",N,...].
+    We group blobs by edge index N to correctly assign metrics to each video.
+    Video IDs are in "video_id":"<16-digit>" fields (not as URLs in these blobs).
+
+    Returns list of dicts: {reel_url, page_name, page_url, views, likes, comments,
+                             shares, caption, published_date}
+    """
+    import json as _json
+    import datetime as _dt
+
+    # edge_idx → accumulated entry for that video
+    by_edge = {}
+
+    for body in gql_bodies:
+        blobs = [ln for ln in body.splitlines() if ln.strip()]
+
+        # Only process large responses — suggested reel streams have 10+ blobs
+        if len(blobs) < 10:
+            continue
+
+        for blob_text in blobs:
+            # Determine which edge (video position) this blob belongs to
+            edge_m = re.search(r'"path"\s*:\s*\[.*?"edges"\s*,\s*(\d+)', blob_text)
+            if not edge_m:
+                continue
+            edge_idx = int(edge_m.group(1))
+
+            entry = by_edge.setdefault(edge_idx, {
+                'views': 0, 'likes': 0, 'comments': 0, 'shares': 0
+            })
+
+            # ── Video ID — use LAST occurrence in blob.
+            # FB blobs carry all previous video_ids as cross-refs; the newest
+            # video for this edge is always appended last.
+            vid_all = re.findall(r'"video_id"\s*:\s*"?(\d{10,})"?', blob_text)
+            if vid_all:
+                entry['video_id'] = vid_all[-1]
+
+            # ── Views (often absent; keep for future-proofing) ───────────────
+            for key in ('video_view_count', 'play_count', 'view_count', 'watch_count'):
+                for m in re.finditer(rf'"{key}"\s*:\s*(\d+)', blob_text):
+                    entry['views'] = max(entry['views'], int(m.group(1)))
+
+            # ── Likes ────────────────────────────────────────────────────────
+            lk = re.search(r'"likers"\s*:\s*\{"count"\s*:\s*(\d+)', blob_text)
+            if lk:
+                entry['likes'] = max(entry['likes'], int(lk.group(1)))
+
+            # ── Comments ─────────────────────────────────────────────────────
+            cm = re.search(r'"total_comment_count"\s*:\s*(\d+)', blob_text)
+            if cm:
+                entry['comments'] = max(entry['comments'], int(cm.group(1)))
+
+            # ── Shares ───────────────────────────────────────────────────────
+            sh = re.search(r'"share_count_reduced"\s*:\s*"([^"]+)"', blob_text)
+            if sh:
+                entry['shares'] = max(entry['shares'], parse_count(sh.group(1)))
+
+            # ── Caption ──────────────────────────────────────────────────────
+            if not entry.get('caption'):
+                for pat in (
+                    r'"message"\s*:\s*\{"text"\s*:\s*"((?:[^"\\]|\\.){15,1000})"',
+                    r'"description"\s*:\s*\{"text"\s*:\s*"((?:[^"\\]|\\.){15,1000})"',
+                ):
+                    cap_m = re.search(pat, blob_text)
+                    if cap_m:
+                        entry['caption'] = decode_relay_str(cap_m.group(1))
+                        break
+
+            # ── Page name ────────────────────────────────────────────────────
+            if not entry.get('page_name'):
+                # Look for name near "owner" or "actors" section
+                for nm_pat in (
+                    r'"owner"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]{2,80})"',
+                    r'"actors"\s*:\s*\[\s*\{[^}]*"name"\s*:\s*"([^"]{2,80})"',
+                    r'"name"\s*:\s*"([^"]{2,80})"',
+                ):
+                    nm = re.search(nm_pat, blob_text)
+                    if nm:
+                        try:
+                            candidate = _json.loads('"' + nm.group(1) + '"')
+                        except Exception:
+                            candidate = nm.group(1)
+                        # Skip hashtags and obviously wrong names
+                        if not candidate.startswith('#') and len(candidate) > 2:
+                            entry['page_name'] = candidate
+                            break
+
+            # ── Published date ────────────────────────────────────────────────
+            if not entry.get('published_date'):
+                dm = re.search(r'"creation_time"\s*:\s*(\d{10})', blob_text)
+                if dm:
+                    ts = int(dm.group(1))
+                    entry['published_date'] = (
+                        _dt.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+                    )
+
+    # Build final list: only entries that have a video_id
+    final = []
+    for edge_idx in sorted(by_edge.keys()):
+        entry = by_edge[edge_idx]
+        vid = entry.get('video_id')
+        if not vid:
+            continue
+        final.append({
+            'reel_url':       f"https://www.facebook.com/reel/{vid}",
+            'page_name':      entry.get('page_name', ''),
+            'page_url':       entry.get('page_url', ''),
+            'views':          entry.get('views', 0),
+            'likes':          entry.get('likes', 0),
+            'comments':       entry.get('comments', 0),
+            'shares':         entry.get('shares', 0),
+            'caption':        entry.get('caption', ''),
+            'published_date': entry.get('published_date', ''),
+        })
+
+    # Return entries with at least one engagement signal
+    return [r for r in final
+            if r.get('likes', 0) > 0 or r.get('comments', 0) > 0 or r.get('caption')]
+
+
 def scrape_reel_detail(page, reel_url: str) -> dict:
     """
-    Visit an individual reel page and extract comments, shares, likes, caption, date.
-    Returns dict matching extract_reel_metrics_from_relay output.
+    Visit an individual reel page and extract:
+      - Primary reel: comments, shares, likes, caption, published_date  (from Relay HTML)
+      - Competitor reels: up to 17 suggested reels from FB GQL stream    (from network)
+
+    Returns dict with primary metrics + '_competitor_reels' key.
     """
     video_id_m = re.search(r'/reel/(\d+)', reel_url)
     if not video_id_m:
         return {}
     video_id = video_id_m.group(1)
 
+    gql_bodies = []
+
+    def _on_response(resp):
+        if 'graphql' not in resp.url.lower():
+            return
+        try:
+            body = resp.body().decode('utf-8', errors='replace')
+            gql_bodies.append(body)
+        except Exception:
+            pass
+
     try:
+        page.on('response', _on_response)
         page.goto(reel_url, wait_until='domcontentloaded', timeout=30000)
         page.wait_for_timeout(4000)
         body_html = page.inner_html('body')
+    except Exception as e:
+        logger.warning(f"  reel detail scrape failed for {reel_url}: {e}")
+        page.remove_listener('response', _on_response)
+        return {}
+    finally:
+        try:
+            page.remove_listener('response', _on_response)
+        except Exception:
+            pass
 
-        metrics = extract_reel_metrics_from_relay(body_html, video_id)
+    # ── Primary reel metrics (Relay HTML — proven, scoped) ────────────────────
+    metrics = extract_reel_metrics_from_relay(body_html, video_id)
 
-        # DOM fallback for caption if relay didn't find it
-        if not metrics.get('caption'):
+    # DOM caption fallback
+    if not metrics.get('caption'):
+        try:
             dom_caption = page.evaluate("""() => {
                 let best = '', bestLen = 0;
                 document.querySelectorAll('[dir="auto"]').forEach(el => {
@@ -189,16 +341,82 @@ def scrape_reel_detail(page, reel_url: str) -> dict:
             }""")
             if dom_caption:
                 metrics['caption'] = dom_caption
+        except Exception:
+            pass
 
-        return metrics
-    except Exception as e:
-        logger.warning(f"  reel detail scrape failed for {reel_url}: {e}")
-        return {}
+    # ── Competitor reels (GQL suggested stream) ───────────────────────────────
+    metrics['_competitor_reels'] = extract_suggested_reels_from_gql(gql_bodies)
+    logger.info(f"    GQL bodies={len(gql_bodies)}, competitor_reels={len(metrics['_competitor_reels'])}")
+
+    return metrics
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main scraper
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _save_competitor_reels(db_session, competitor_reels: list, account_id: int):
+    """
+    Upsert competitor reels harvested from GQL[5] suggested stream.
+    Dedup: one row per (reel_url, scrape_date).  If seen again same day → update metrics.
+    """
+    from app.database.models import CompetitorReel
+    from sqlalchemy import text as _sql_text
+
+    today = datetime.date.today().isoformat()
+
+    # Fetch existing reel_urls for today in one query (avoid N+1)
+    reel_urls = [cr['reel_url'] for cr in competitor_reels]
+    if not reel_urls:
+        return
+
+    placeholders = ','.join([f':u{i}' for i in range(len(reel_urls))])
+    params = {f'u{i}': u for i, u in enumerate(reel_urls)}
+    params['sd'] = today
+    existing_rows = db_session.execute(
+        _sql_text(f"SELECT reel_url, id FROM competitor_reels "
+                  f"WHERE scrape_date=:sd AND reel_url IN ({placeholders})"),
+        params
+    ).fetchall()
+    existing_map = {row[0]: row[1] for row in existing_rows}
+
+    saved = updated = 0
+    for cr in competitor_reels:
+        reel_url = cr['reel_url']
+        if reel_url in existing_map:
+            # Update with highest observed values
+            db_session.execute(
+                _sql_text("""UPDATE competitor_reels
+                             SET views=MAX(views,:v), likes=MAX(likes,:lk),
+                                 comments=MAX(comments,:cm), shares=MAX(shares,:sh)
+                             WHERE id=:rid"""),
+                {'v': cr.get('views', 0), 'lk': cr.get('likes', 0),
+                 'cm': cr.get('comments', 0), 'sh': cr.get('shares', 0),
+                 'rid': existing_map[reel_url]}
+            )
+            updated += 1
+        else:
+            obj = CompetitorReel(
+                reel_url=reel_url,
+                page_url=cr.get('page_url'),
+                page_name=cr.get('page_name'),
+                platform='facebook',
+                views=cr.get('views', 0),
+                likes=cr.get('likes', 0),
+                comments=cr.get('comments', 0),
+                shares=cr.get('shares', 0),
+                caption=cr.get('caption', ''),
+                published_date=cr.get('published_date'),
+                source_account_id=account_id,
+                scrape_date=today,
+            )
+            db_session.add(obj)
+            existing_map[reel_url] = True  # mark as seen within this batch
+            saved += 1
+
+    if saved or updated:
+        logger.debug(f"    competitor_reels: +{saved} new, {updated} updated")
+
 
 def scrape_insights_for_page(page, db_session, account_id, target_url, platform="facebook"):
     from app.database.models import PageInsight, now_ts
@@ -304,10 +522,25 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
 
         saved_count = 0
         skipped_dup = 0
+        # Visit up to 3 dup reels anyway to capture competitor GQL stream.
+        # After competitor data is harvested once we stop (saves time).
+        _comp_visits_remaining = 3
 
         for r in valid_items:
-            if r['url'] in existing_urls_normalized:
+            is_dup = r['url'] in existing_urls_normalized
+            if is_dup:
                 skipped_dup += 1
+                # Still visit this reel for competitor data if not yet collected
+                if platform != "facebook" or _comp_visits_remaining <= 0:
+                    continue
+                logger.info(f"    dup reel — visiting for competitor data ({_comp_visits_remaining} left): {r['url']}")
+                detail = scrape_reel_detail(page, r['url'])
+                competitor_reels = detail.pop('_competitor_reels', [])
+                if competitor_reels:
+                    _save_competitor_reels(db_session, competitor_reels, account_id)
+                    _comp_visits_remaining = 0  # Got data — no need to visit more
+                else:
+                    _comp_visits_remaining -= 1
                 continue
 
             # ── Grid-level likes (from aria-label) — fallback only ───────────
@@ -325,6 +558,12 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
             if platform == "facebook" and r['url']:
                 logger.info(f"    enriching reel: {r['url']}")
                 detail = scrape_reel_detail(page, r['url'])
+
+            # ── Save competitor reels harvested during this reel visit ─────────
+            competitor_reels = detail.pop('_competitor_reels', [])
+            if competitor_reels:
+                _save_competitor_reels(db_session, competitor_reels, account_id)
+                _comp_visits_remaining = 0  # Already got data this page
 
             # Merge: grid views + detail metrics
             likes = detail.get('likes') or likes_grid
