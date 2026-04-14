@@ -123,58 +123,59 @@ def process_single_job(db: Session):
     if not job:
         return False
         
-    # Enforce Daily Limit (per-page logic)
-    effective_daily_limit = 0
-    try:
-        # Runtime cap overrides account setting (if set)
-        effective_daily_limit = runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db)
-    except Exception:
-        effective_daily_limit = 0
-    if (not effective_daily_limit) and job.account:
-        effective_daily_limit = int(getattr(job.account, "daily_limit", 0) or 0)
-
-    if job.account and effective_daily_limit > 0:
-        from datetime import datetime, time as time_obj
-        from zoneinfo import ZoneInfo
-        import app.config as app_config
-        today_start = int(datetime.combine(datetime.now(ZoneInfo(app_config.TIMEZONE)).date(), time_obj.min).timestamp())
-        
-        # Count DONE jobs today for this SPECIFIC target_page.
-        # If POSTS_PER_PAGE_PER_DAY cap is enabled, enforce per-page across all accounts.
-        q = db.query(Job).filter(
-            Job.target_page == job.target_page,
-            Job.status == JobStatus.DONE,
-            Job.finished_at >= today_start
-        )
-        if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
-            q = q.filter(Job.account_id == job.account_id)
-        posted_today = q.count()
-        
-        if posted_today >= effective_daily_limit:
-            logger.info("[Job %s] Page '%s' at daily limit (%s). Postponed to tomorrow.",
-                        job.id, job.target_page, effective_daily_limit)
-            job.status = JobStatus.PENDING
-            job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
-            db.commit()
-            return True
-
-    # Xin ý kiến giấc ngủ (Human Rest Cycle)
-    if job.account and getattr(job.account, 'is_sleeping', False):
-        logger.info("[Job %s] Account '%s' is SLEEPING (%s - %s). Postponing job for 10 minutes.", 
-                    job.id, job.account.name, job.account.sleep_start_time, job.account.sleep_end_time)
-        job.status = JobStatus.PENDING
-        job.schedule_ts = int(time.time()) + 600
-        db.commit()
-        return True
-        
-    CURRENT_JOB_ID = job.id
-    logger.info("[Job %s] Claimed for account '%s' on %s", job.id, job.account.name, job.platform)
+    import threading
+    heartbeat_stop = threading.Event()
     
     try:
+        # Enforce Daily Limit (per-page logic)
+        effective_daily_limit = 0
+        try:
+            # Runtime cap overrides account setting (if set)
+            effective_daily_limit = runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db)
+        except Exception:
+            effective_daily_limit = 0
+        if (not effective_daily_limit) and job.account:
+            effective_daily_limit = int(getattr(job.account, "daily_limit", 0) or 0)
+
+        if job.account and effective_daily_limit > 0:
+            from datetime import datetime, time as time_obj
+            from zoneinfo import ZoneInfo
+            import app.config as app_config
+            today_start = int(datetime.combine(datetime.now(ZoneInfo(app_config.TIMEZONE)).date(), time_obj.min).timestamp())
+            
+            # Count DONE jobs today for this SPECIFIC target_page.
+            q = db.query(Job).filter(
+                Job.target_page == job.target_page,
+                Job.status == JobStatus.DONE,
+                Job.finished_at >= today_start
+            )
+            if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
+                q = q.filter(Job.account_id == job.account_id)
+            
+            posted_today = q.with_for_update().count()
+            
+            if posted_today >= effective_daily_limit:
+                logger.info("[Job %s] Page '%s' at daily limit (%s). Postponed to tomorrow.",
+                            job.id, job.target_page, effective_daily_limit)
+                job.status = JobStatus.PENDING
+                job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
+                db.commit()
+                return True
+
+        # Xin ý kiến giấc ngủ (Human Rest Cycle)
+        if job.account and getattr(job.account, 'is_sleeping', False):
+            logger.info("[Job %s] Account '%s' is SLEEPING (%s - %s). Postponing job for 10 minutes.", 
+                        job.id, job.account.name, job.account.sleep_start_time, job.account.sleep_end_time)
+            job.status = JobStatus.PENDING
+            job.schedule_ts = int(time.time()) + 600
+            db.commit()
+            return True
+            
+        CURRENT_JOB_ID = job.id
+        logger.info("[Job %s] Claimed for account '%s' on %s", job.id, job.account.name, job.platform)
+        
         # Keep Job.last_heartbeat_at fresh while dispatch/publish is running.
         # Otherwise QueueService.recover_crashed_jobs() may treat it as stale and reset RUNNING -> PENDING.
-        import threading
-        heartbeat_stop = threading.Event()
         heartbeat_interval = max(20, min(60, int(WORKER_CRASH_THRESHOLD_SECONDS // 3)))
 
         def _heartbeat_loop(job_id: int):
