@@ -1056,11 +1056,13 @@ class FacebookAdapter(AdapterInterface):
 
             # ── Post-publish verification ──
             # Skip strict identity check here because FB often redirects to /reel/ URL which skips the page slug.
-            # Only verify that the captured post_url looks like a valid Reel/Watch link.
-            if post_url:
-                is_valid_format = ("facebook.com/reel/" in post_url or "facebook.com/watch" in post_url)
-                if not is_valid_format:
-                    logger.warning("[Job %s] Unexpected post_url format: %s", job.id, post_url)
+            # Pre-post check remains the real guard.
+            if post_url and "facebook.com/reel/" in post_url:
+                logger.info("[Job %s] Post verified: %s", job.id, post_url)
+            elif post_url and "facebook.com/watch" in post_url:
+                logger.info("[Job %s] Post verified (watch): %s", job.id, post_url)
+            else:
+                logger.warning("[Job %s] Unexpected post_url: %s", job.id, post_url)
 
             return PublishResult(
                 ok=True,
