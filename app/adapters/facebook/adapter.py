@@ -22,6 +22,13 @@ from app.adapters.facebook.pages.reels import FacebookReelsPage
 logger = logging.getLogger(__name__)
 from app.services.runtime_events import emit as rt_emit
 from app.services.job_tracer import update_active_node
+from app.services.notifier_service import NotifierService
+
+class PageMismatchError(Exception):
+    def __init__(self, expected: str, actual: str):
+        self.expected = expected
+        self.actual = actual
+        super().__init__(f"Page mismatch: expected={expected}, actual={actual}")
 
 class FacebookAdapter(AdapterInterface):
     """
@@ -298,6 +305,51 @@ class FacebookAdapter(AdapterInterface):
             # Look for elements that LOOK like the blue continue button from the screenshot
             blue_btn = self.page.locator('div[role="button"]:has-text("Tiếp tục"), div[role="button"][style*="background-color"]')
             if self._is_visible(blue_btn.first):
+                return self._click_locator(blue_btn.first, "blue continue button")
+        
+        return False
+
+    def _verify_page_identity(self, expected_target: str, context: str = "pre-post") -> None:
+        """
+        Verify the current browser state matches the intended target page.
+        Raises PageMismatchError if identity cannot be confirmed.
+        """
+        if not self.page or not expected_target:
+            return
+
+        actual_url = self.page.url
+        
+        # 1. URL Substring check (Slug or ID)
+        identifier = ""
+        if "id=" in expected_target:
+            # Handle profile.php?id=123
+            match = re.search(r"id=(\d+)", expected_target)
+            if match:
+                identifier = match.group(1)
+        else:
+            # Handle facebook.com/SlugName
+            parts = expected_target.rstrip("/").split("/")
+            if parts:
+                identifier = parts[-1].split("?")[0]
+
+        if identifier and identifier in actual_url:
+            logger.info("FacebookAdapter: [Identity] URL verification passed for '%s' (%s)", identifier, context)
+            return
+
+        # 2. Page Title / Header check (Fallback)
+        try:
+            page_title = self.page.title()
+            # If slug is in title (common for pages)
+            if identifier.lower() in page_title.lower():
+                 logger.info("FacebookAdapter: [Identity] Title verification passed for '%s' (%s)", identifier, context)
+                 return
+        except Exception:
+            pass
+
+        # If we reach here, identity is suspicious
+        logger.error("FacebookAdapter: [Identity] Verification FAILED for '%s'. Actual URL: %s", expected_target, actual_url)
+        raise PageMismatchError(expected_target, actual_url)
+
                 recovery_btn = blue_btn.first
 
         if recovery_btn:
@@ -499,6 +551,8 @@ class FacebookAdapter(AdapterInterface):
                         )
                 else:
                     logger.info("FacebookAdapter: Context verified successfully. Safe to proceed.")
+                    # Explicit identity verification (Slug/ID check)
+                    self._verify_page_identity(target_page_url, context="pre-post")
             else:
                 logger.info("FacebookAdapter: Navigating to www.facebook.com (Personal Profile)")
                 self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
@@ -1013,6 +1067,15 @@ class FacebookAdapter(AdapterInterface):
             if not post_url:
                 logger.warning("FacebookAdapter: Post URL not found but submission appeared successful. May be processing delay.")
 
+            # ── Post-publish identity verification ──
+            if target_page_url:
+                try:
+                    self._verify_page_identity(target_page_url, context="post-post")
+                except PageMismatchError as e:
+                    # Enrich exception with context for logging/alerting
+                    e.context = "post-post"
+                    raise e
+
             return PublishResult(
                 ok=True,
                 external_post_id=f"fb_post_{job.id}",
@@ -1024,6 +1087,23 @@ class FacebookAdapter(AdapterInterface):
                     verified=bool(post_url),
                 ),
             )
+
+        except PageMismatchError as e:
+            if getattr(e, "context", "pre-post") == "post-post":
+                # Critical alert for post-post mismatch
+                alert_msg = (
+                    "⛔ WRONG PAGE DETECTED\n"
+                    f"Job ID: {job.id}\n"
+                    f"Expected: {e.expected}\n"
+                    f"Actual URL: {e.actual}\n"
+                    "Action: Job marked FAILED, media file preserved\n"
+                    "Manual review required."
+                )
+                try:
+                    NotifierService._broadcast(alert_msg)
+                except Exception as notify_err:
+                    logger.error("FacebookAdapter: Failed to send mismatch alert: %s", notify_err)
+            raise e
 
         except Exception as e:
             logger.error("FacebookAdapter: Playwright encounter an error during publish: %s", e)
