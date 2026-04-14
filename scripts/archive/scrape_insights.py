@@ -8,7 +8,9 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+import app.config as config
 from app.utils.url_utils import canonical_fb_url
+from zoneinfo import ZoneInfo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -526,7 +528,6 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
             raw_name = target_url
 
         # Timezone-aware day_cutoff (Asia/Ho_Chi_Minh = UTC+7)
-        from zoneinfo import ZoneInfo
         timezone_vn = ZoneInfo(config.TIMEZONE)
         now_vn = datetime.datetime.now(timezone_vn)
         day_cutoff_vn = now_vn.replace(hour=0, minute=0, second=0, microsecond=0)
