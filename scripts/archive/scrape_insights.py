@@ -417,17 +417,13 @@ def _save_competitor_reels(db_session, competitor_reels: list, account_id: int):
         else:
             obj = CompetitorReel(
                 reel_url=reel_url,
+                scrape_date=today,
                 page_url=cr.get('page_url'),
-                page_name=cr.get('page_name'),
-                platform='facebook',
                 views=cr.get('views', 0),
                 likes=cr.get('likes', 0),
                 comments=cr.get('comments', 0),
                 shares=cr.get('shares', 0),
-                caption=cr.get('caption', '') if not re.match(r'^Views?:\s*[\d\.]+[KkMm]?$', cr.get('caption', '')) else '',
-                published_date=cr.get('published_date'),
-                source_account_id=account_id,
-                scrape_date=today,
+                caption=cr.get('caption', ''),
             )
             db_session.add(obj)
             existing_map[reel_url] = True  # mark as seen within this batch
