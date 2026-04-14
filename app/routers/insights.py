@@ -154,7 +154,11 @@ def get_top_posts(
     WITH RankedInsights AS (
         SELECT
             post_url,
-            ROW_NUMBER() OVER (PARTITION BY post_url ORDER BY recorded_at DESC) as rn
+            REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/') as canonical_url,
+            ROW_NUMBER() OVER (PARTITION BY 
+                REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
+                ORDER BY recorded_at DESC
+            ) as rn
         FROM page_insights
         WHERE recorded_at >= :cutoff
           AND (:platform IS NULL OR platform = :platform)
@@ -173,7 +177,10 @@ def get_top_posts(
         SELECT
             post_url, page_name, platform, views, likes, comments, shares, caption,
             published_date, recorded_at,
-            ROW_NUMBER() OVER (PARTITION BY post_url ORDER BY recorded_at DESC) as rn
+            ROW_NUMBER() OVER (PARTITION BY 
+                REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
+                ORDER BY recorded_at DESC
+            ) as rn
         FROM page_insights
         WHERE recorded_at >= :cutoff
           AND (:platform IS NULL OR platform = :platform)
@@ -185,7 +192,10 @@ def get_top_posts(
         (l1.views - COALESCE(l2.views, 0)) as velocity,
         CASE WHEN l1.views > 0 THEN (CAST(l1.likes AS FLOAT) / l1.views) * 100 ELSE 0 END as eng_rate
     FROM RankedInsights l1
-    LEFT JOIN RankedInsights l2 ON l1.post_url = l2.post_url AND l2.rn = 2
+    LEFT JOIN RankedInsights l2 ON 
+        REPLACE(REPLACE(RTRIM(LOWER(l1.post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/') = 
+        REPLACE(REPLACE(RTRIM(LOWER(l2.post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
+        AND l2.rn = 2
     WHERE l1.rn = 1
     ORDER BY {order_col} DESC NULLS LAST
     LIMIT :limit OFFSET :offset
