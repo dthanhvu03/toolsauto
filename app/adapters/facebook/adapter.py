@@ -350,19 +350,6 @@ class FacebookAdapter(AdapterInterface):
         logger.error("FacebookAdapter: [Identity] Verification FAILED for '%s'. Actual URL: %s", expected_target, actual_url)
         raise PageMismatchError(expected_target, actual_url)
 
-                recovery_btn = blue_btn.first
-
-        if recovery_btn:
-            logger.info("FacebookAdapter: Found 'Continue/Tiếp tục' recovery button. Bypassing...")
-            try:
-                self._click_locator(recovery_btn, "session recovery button", timeout=5000)
-                self.page.wait_for_timeout(5000)
-                # Verify navigation again
-                return self.page.locator('div[role="navigation"], a[aria-label="Facebook"]').count() > 0
-            except Exception as e:
-                logger.warning("FacebookAdapter: Failed to click recovery button: %s", e)
-            
-        return False
 
     def _switch_to_personal_profile(self, account_name: str) -> bool:
         """

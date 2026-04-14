@@ -8,17 +8,18 @@ engine = create_engine(
     poolclass=NullPool,
     connect_args={
         "check_same_thread": False,
-        "timeout": 30.0  # Increased timeout for multiprocess concurrency
+        "timeout": 30.0
     }
 )
 
 from sqlalchemy import event
 
 @event.listens_for(engine, "connect")
-def pragma_on_connect(dbapi_con, con_record):
-    cursor = dbapi_con.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL;")
-    cursor.execute("PRAGMA synchronous=NORMAL;")
+def set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
