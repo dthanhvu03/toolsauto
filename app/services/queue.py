@@ -143,25 +143,25 @@ class QueueService:
             stale_ai_ids = []
 
         # Recover stale RUNNING jobs -> PENDING
-        sql_running = """
-            UPDATE jobs
-            SET 
-                status = 'PENDING',
-                tries = tries + 1
-            WHERE status = 'RUNNING'
-              AND last_heartbeat_at < (strftime('%s', 'now') - :threshold)
-        """
-        result1 = db.execute(text(sql_running), {"threshold": threshold_seconds})
+        if stale_running_ids:
+            sql_running = """
+                UPDATE jobs
+                SET 
+                    status = 'PENDING',
+                    tries = tries + 1
+                WHERE id IN :ids
+            """
+            db.execute(text(sql_running), {"ids": tuple(stale_running_ids)})
         
         # Recover stale AI_PROCESSING jobs -> DRAFT (not PENDING!)
-        sql_ai = """
-            UPDATE jobs
-            SET 
-                status = 'DRAFT'
-            WHERE status = 'AI_PROCESSING'
-              AND last_heartbeat_at < (strftime('%s', 'now') - :threshold)
-        """
-        result2 = db.execute(text(sql_ai), {"threshold": threshold_seconds})
+        if stale_ai_ids:
+            sql_ai = """
+                UPDATE jobs
+                SET 
+                    status = 'DRAFT'
+                WHERE id IN :ids
+            """
+            db.execute(text(sql_ai), {"ids": tuple(stale_ai_ids)})
 
         # Write JobEvent records for recovered jobs (best-effort)
         try:
@@ -206,7 +206,7 @@ class QueueService:
         except Exception:
             pass
 
-        recovered_total = result1.rowcount + result2.rowcount
+        recovered_total = len(stale_running_ids) + len(stale_ai_ids)
 
         # Telegram alert (best-effort, avoid spam by only sending when something recovered)
         if recovered_total > 0:

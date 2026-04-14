@@ -247,57 +247,58 @@ def process_single_job(db: Session):
         )
         
         try:
-            publish_result = Dispatcher.dispatch(job, db=db)
-        finally:
-            heartbeat_stop.set()
             try:
-                heartbeat_thread.join(timeout=5)
-            except Exception:
-                pass
-            suicide_timer.cancel() # Cancel if finished normally
-        
-        
-        if publish_result.ok:
-            logger.info("[Job %s] Successfully published!", job.id)
+                publish_result = Dispatcher.dispatch(job, db=db)
+            finally:
+                heartbeat_stop.set()
+                try:
+                    heartbeat_thread.join(timeout=5)
+                except Exception:
+                    pass
+                suicide_timer.cancel() # Cancel if finished normally
             
-            import random
-            # Re-apply overrides in case settings changed while publishing
-            apply_runtime_overrides_to_config(db)
-            from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
-            delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
-            logger.info(f"[Job {job.id}] Nghỉ ngơi {delay_sec}s để giả lập người thật trước khi chốt Job...")
-            time.sleep(delay_sec)
             
-            post_url = publish_result.details.get("post_url") if publish_result.details else None
-            JobService.mark_done(
-                db=db, 
-                job=job, 
-                details="Success", 
-                external_post_id=publish_result.external_post_id,
-                post_url=post_url
-            )
-            NotifierService.notify_job_done(job, post_url=post_url)
-        else:
-            logger.error("[Job %s] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
-            JobService.mark_failed_or_retry(
-                db=db, 
-                job=job, 
-                error_msg=publish_result.error or "Unknown failure",
-                is_fatal=publish_result.is_fatal,
-                error_type="FATAL" if publish_result.is_fatal else "RETRYABLE"
-            )
-            if publish_result.is_fatal or job.tries >= job.max_tries:
-                NotifierService.notify_job_failed(job, publish_result.error)
-            
-            if publish_result.details and publish_result.details.get("invalidate_account"):
-                logger.error("[Job %s] Adapter triggered account invalidation. Disabling account '%s'.", job.id, job.account.name)
-                AccountService.invalidate_account(
-                    db=db, 
-                    account_id=job.account.id, 
-                    reason=publish_result.error
-                )
-                NotifierService.notify_account_invalid(job.account.name, publish_result.error)
+            if publish_result.ok:
+                logger.info("[Job %s] Successfully published!", job.id)
                 
+                import random
+                # Re-apply overrides in case settings changed while publishing
+                apply_runtime_overrides_to_config(db)
+                from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
+                delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
+                logger.info(f"[Job {job.id}] Nghỉ ngơi {delay_sec}s để giả lập người thật trước khi chốt Job...")
+                time.sleep(delay_sec)
+                
+                post_url = publish_result.details.get("post_url") if publish_result.details else None
+                JobService.mark_done(
+                    db=db, 
+                    job=job, 
+                    details="Success", 
+                    external_post_id=publish_result.external_post_id,
+                    post_url=post_url
+                )
+                NotifierService.notify_job_done(job, post_url=post_url)
+            else:
+                logger.error("[Job %s] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
+                JobService.mark_failed_or_retry(
+                    db=db, 
+                    job=job, 
+                    error_msg=publish_result.error or "Unknown failure",
+                    is_fatal=publish_result.is_fatal,
+                    error_type="FATAL" if publish_result.is_fatal else "RETRYABLE"
+                )
+                if publish_result.is_fatal or job.tries >= job.max_tries:
+                    NotifierService.notify_job_failed(job, publish_result.error)
+                
+                if publish_result.details and publish_result.details.get("invalidate_account"):
+                    logger.error("[Job %s] Adapter triggered account invalidation. Disabling account '%s'.", job.id, job.account.name)
+                    AccountService.invalidate_account(
+                        db=db, 
+                        account_id=job.account.id, 
+                        reason=publish_result.error
+                    )
+                    NotifierService.notify_account_invalid(job.account.name, publish_result.error)
+                    
         except PageMismatchError as e:
             logger.error("[Job %s] Page identity mismatch: %s", job.id, e)
             job.status = JobStatus.FAILED
@@ -306,13 +307,13 @@ def process_single_job(db: Session):
             job.tries = job.max_tries # Block auto-retry, require human review
             db.commit()
 
-    except Exception as e:
-        try:
-            heartbeat_stop.set()
-        except Exception:
-            pass
-        logger.exception("[Job %s] Unhandled worker exception processing job: %s", job.id, e)
-        JobService.mark_failed_or_retry(db, job, str(e), is_fatal=False)
+        except Exception as e:
+            try:
+                heartbeat_stop.set()
+            except Exception:
+                pass
+            logger.exception("[Job %s] Unhandled worker exception processing job: %s", job.id, e)
+            JobService.mark_failed_or_retry(db, job, str(e), is_fatal=False)
         
     finally:
         try:
@@ -354,10 +355,21 @@ def run_loop():
     
     logger.info("Publisher Worker started. Press Ctrl+C to stop.")
     
+    # [Priority 2] Staggered startup to prevent DB lock contention
+    import random
+    stagger_sec = random.uniform(1, 5)
+    logger.info(f"Staggering startup: sleeping for {stagger_sec:.2f}s...")
+    time.sleep(stagger_sec)
+    
     register_signals()
     
     with SessionLocal() as db:
-        check_crash_recovery(db)
+        try:
+            check_crash_recovery(db)
+        except Exception as e:
+            # If database is locked, another worker is likely already doing recovery
+            logger.warning("Crash recovery check failed (likely DB lock contention): %s", e)
+            
         state = WorkerService.get_or_create_state(db)
         state.worker_started_at = int(time.time())
         db.commit()
