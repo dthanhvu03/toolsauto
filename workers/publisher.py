@@ -308,7 +308,14 @@ def process_single_job(db: Session):
     finally:
         try:
             db.refresh(job)
-            if job.status in [JobStatus.DONE, JobStatus.FAILED]:
+            should_cleanup = False
+            if job.status == JobStatus.DONE:
+                should_cleanup = True
+            elif job.status == JobStatus.FAILED:
+                if job.tries >= job.max_tries and getattr(job, "error_type", "") != "PAGE_MISMATCH":
+                    should_cleanup = True
+
+            if should_cleanup:
                 # 1. Dọn file render qua xử lý
                 p_path = job.resolved_processed_media_path
                 if p_path and os.path.exists(p_path):

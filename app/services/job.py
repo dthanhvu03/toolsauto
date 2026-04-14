@@ -205,13 +205,18 @@ class JobService:
     @staticmethod
     def retry_job(db: Session, job_id: int):
         """Transitions FAILED -> PENDING. Does not reset tries."""
-        now = now_ts()
-        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.FAILED).update({
-            "status": JobStatus.PENDING,
-            "schedule_ts": now
-        })
-        if rows_affected == 0:
+        job = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.FAILED).first()
+        if not job:
             raise ValueError("Job is not in FAILED state or does not exist.")
+            
+        # Verify media file exists before allowing retry
+        if not job.resolved_media_path:
+            raise ValueError("Cannot retry: media file has been deleted")
+
+        now = now_ts()
+        job.status = JobStatus.PENDING
+        job.schedule_ts = now
+        
         db.commit()
         JobService._log_event(db, job_id, "INFO", "MANUAL_RETRY")
 
