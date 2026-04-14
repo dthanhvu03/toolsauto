@@ -331,13 +331,28 @@ def scrape_reel_detail(page, reel_url: str) -> dict:
     # DOM caption fallback
     if not metrics.get('caption'):
         try:
+            # More specific selector for FB Reels caption
             dom_caption = page.evaluate("""() => {
                 let best = '', bestLen = 0;
-                document.querySelectorAll('[dir="auto"]').forEach(el => {
+                // Target elements that are likely captions: .x11i5rnm[dir="auto"] or siblings of "See more"
+                const candidates = document.querySelectorAll('.x11i5rnm[dir="auto"], .x193iq5w[dir="auto"], [dir="auto"]');
+                candidates.forEach(el => {
                     const t = (el.innerText || '').trim();
-                    if (t.length > 30 && t.length < 2000 && t.includes(' ') &&
-                        !t.startsWith('http') && (t.match(/\\n/g)||[]).length < 8 &&
-                        t.length > bestLen) { bestLen = t.length; best = t.slice(0, 600); }
+                    // Basic sanity checks: must have spaces, not be a URL, not be too long/short
+                    if (t.length > 5 && t.length < 2500 && t.includes(' ') &&
+                        !t.startsWith('http') && (t.match(/\\n/g)||[]).length < 15 &&
+                        t.length > bestLen) {
+                        
+                        // Exclusion list for notification/UI text
+                        const low = t.toLowerCase();
+                        if (low.includes('chưa đọc') || low.includes('chia sẻ') || 
+                            low.includes('theo dõi') || /^views?:/i.test(low)) {
+                            return;
+                        }
+                        
+                        bestLen = t.length; 
+                        best = t.slice(0, 800); 
+                    }
                 });
                 return best;
             }""")
@@ -510,14 +525,20 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
         if raw_name.startswith('profile.php') or not raw_name:
             raw_name = target_url
 
+        # Timezone-aware day_cutoff (Asia/Ho_Chi_Minh = UTC+7)
+        from zoneinfo import ZoneInfo
+        timezone_vn = ZoneInfo(config.TIMEZONE)
+        now_vn = datetime.datetime.now(timezone_vn)
+        day_cutoff_vn = now_vn.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_cutoff = int(day_cutoff_vn.timestamp())
+
         from sqlalchemy import text as _sql_text
-        day_cutoff = int(datetime.datetime.now().replace(
-            hour=0, minute=0, second=0, microsecond=0).timestamp())
+        # GLOBAL dedupe check: check all page_insights from today across ANY page_url
         existing_urls = set(
             row[0]
             for row in db_session.execute(
-                _sql_text("SELECT post_url FROM page_insights WHERE page_url=:pu AND recorded_at>=:cutoff"),
-                {"pu": target_url, "cutoff": day_cutoff}
+                _sql_text("SELECT post_url FROM page_insights WHERE recorded_at>=:cutoff"),
+                {"cutoff": day_cutoff}
             ).fetchall()
         )
         existing_urls_normalized = {canonical_fb_url(u) for u in existing_urls}
@@ -579,8 +600,12 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
                 if creation_time else None
             )
 
-            if (caption and re.match(r'^Views?:\s*[\d\.]+[KkMm]?$', caption)):
-                caption = ""
+            if caption:
+                low_cap = caption.lower().strip()
+                if re.match(r'^views?:\s*[\d\.]+[kkm]?$', low_cap) or \
+                   'chưa đọc' in low_cap or \
+                   len(caption) < 5:
+                    caption = ""
 
             insight = PageInsight(
                 account_id=account_id,
