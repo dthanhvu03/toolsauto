@@ -18,6 +18,7 @@ from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
 from app.services.worker import WorkerService
 from app.services.account import AccountService
+from app.adapters.facebook.adapter import PageMismatchError
 from app.services.system_monitor import SystemMonitorService
 import app.config as config
 from app.services import settings as runtime_settings
@@ -297,6 +298,14 @@ def process_single_job(db: Session):
                 )
                 NotifierService.notify_account_invalid(job.account.name, publish_result.error)
                 
+        except PageMismatchError as e:
+            logger.error("[Job %s] Page identity mismatch: %s", job.id, e)
+            job.status = JobStatus.FAILED
+            job.last_error = str(e)
+            job.error_type = "PAGE_MISMATCH"
+            job.tries = job.max_tries # Block auto-retry, require human review
+            db.commit()
+
     except Exception as e:
         try:
             heartbeat_stop.set()
