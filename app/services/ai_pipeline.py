@@ -260,13 +260,13 @@ class AICaptionPipeline:
         payload = {
             "model": temp_model,
             "messages": messages,
-            "max_tokens": 1500,
+            "max_tokens": 4096,  # Reasoning models need extra budget for thinking tokens
             "temperature": 0.5,
             "stream": False,
         }
 
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=60.0)
+            resp = requests.post(url, headers=headers, json=payload, timeout=120.0)
             
             if resp.status_code == 200:
                 data = resp.json()
@@ -373,6 +373,34 @@ class AICaptionPipeline:
             os.replace(tmp_path, self.RUNTIME_STATE_PATH)
         except Exception:
             pass  # Best-effort, don't crash the pipeline
+
+    def generate_text(self, prompt: str) -> Tuple[Optional[str], dict]:
+        """Call 9router and return raw plain text (no JSON parsing).
+        Use this for analysis, commentary, and strategic reasoning tasks."""
+        with self._config_lock:
+            is_enabled = self.enabled
+
+        meta: dict = {"provider": "9router", "model": "N/A", "latency_ms": 0, "ok": True}
+
+        if not is_enabled:
+            return None, {**meta, "ok": False, "fail_reason": "router_disabled"}
+
+        if not self.circuit_breaker.allow_request():
+            return None, {**meta, "ok": False, "fail_reason": "circuit_open"}
+
+        start_time = time.perf_counter()
+        raw_text, actual_model, fail_reason = self._call_9router(prompt)
+        meta["model"] = actual_model
+        meta["latency_ms"] = int((time.perf_counter() - start_time) * 1000)
+
+        if fail_reason != FailReason.NONE:
+            self.circuit_breaker.record_failure()
+            self._update_runtime_state("poorman", actual_model, meta["latency_ms"], fail_reason.value)
+            return None, {**meta, "ok": False, "fail_reason": fail_reason.value}
+
+        self.circuit_breaker.record_success()
+        self._update_runtime_state("9router", actual_model, meta["latency_ms"], "none")
+        return raw_text, meta
 
     @classmethod
     def load_shared_runtime_state(cls) -> dict:

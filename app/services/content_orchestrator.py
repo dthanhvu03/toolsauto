@@ -12,6 +12,7 @@ Dùng:
 import subprocess
 import os
 import hashlib
+import math
 import time
 import logging
 import json
@@ -477,19 +478,19 @@ BẠN THỰC THI NHIỆM VỤ NÀY NHƯ MỘT API TRẢ VỀ DỮ LIỆU THUẦN
 Tuyệt đối KHÔNG ĐƯA RA CÁC LỰA CHỌN (Option 1, Option 2...). CHỈ VIẾT DUY NHẤT 1 BÀI HOÀN CHỈNH TỐT NHẤT. Bắt đầu viết ngay lập tức bằng JSON.
 
 [GIỚI HẠN ĐỘ DÀI]
-- Caption CỰC KỲ NGẮN, lý tưởng từ 150 đến 250 ký tự. KHÔNG ĐƯỢC vượt quá {{config.MAX_CAPTION_LENGTH}} ký tự. Càng ngắn gọn, súc tích càng tốt.
+- Caption CỰC KỲ NGẮN, lý tưởng từ 150 đến 250 ký tự. KHÔNG ĐƯỢC vượt quá {config.MAX_CAPTION_LENGTH} ký tự. Càng ngắn gọn, súc tích càng tốt.
 - Hashtags: 3 đến {config.MAX_HASHTAGS} hashtags.
 - Keywords: 3 đến {config.MAX_KEYWORDS} keywords.
 
 YÊU CẦU ĐẦU RA (BẮT BUỘC TRẢ VỀ CHÍNH XÁC ĐỊNH DẠNG JSON SAU, KHÔNG THÊM BẤT KỲ CHỮ NÀO BÊN NGOÀI KHỐI JSON):
 ```json
-{{{{
+{{
   "caption": "điền nội dung caption phù hợp với quy tắc ở trên vào đây",
   "hashtags": ["#Tag1", "#Tag2", "#Tag3", "#Tag4", "#Tag5"],
   "keywords": ["keyword 1", "keyword 2", "keyword 3"],
   "affiliate_keyword": "từ khóa từ danh sách kho, hoặc chuỗi rỗng nếu không khớp",
   "reasoning": "giải thích ngắn gọn về chiến lược visual hook và persona đã chọn"
-}}}}
+}}
 ```
 
 Hãy bắt đầu viết JSON ngay bây giờ:"""
@@ -669,6 +670,10 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
 
     def generate_comments(self, keywords: list, count: int = 5) -> list:
         """Sinh comment affiliate dựa trên keywords."""
+        if not self.gemini:
+            from app.services.gemini_rpa import GeminiRPAService
+            self.gemini = GeminiRPAService()
+
         kw_str = ", ".join(keywords[:5])
         prompt = f"""Viết {count} comment ngắn (tiếng Việt) cho video Facebook Reels về: {kw_str}.
 

@@ -20,7 +20,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # Project path: root home is /root, not /home/root
+            # Dynamic project path detection
             if [ -n "${{ secrets.VPS_PROJECT_PATH }}" ]; then
               DEPLOY_PATH="${{ secrets.VPS_PROJECT_PATH }}"
             elif [ "${{ secrets.VPS_USER }}" = "root" ]; then
@@ -30,25 +30,27 @@ jobs:
             fi
             cd "$DEPLOY_PATH" || exit 1
 
+            echo "=== Deploying branch: ${{ github.ref_name }} ==="
+
             # Backup database before deploying
             mkdir -p data/backups
-            cp data/auto_publisher.db data/backups/auto_publisher_$(date +%Y%m%d_%H%M%S).db || true
+            cp data/auto_publisher.db "data/backups/auto_publisher_$(date +%Y%m%d_%H%M%S).db" || true
 
             # Fetch latest changes and reset
             git fetch origin
-            git reset --hard origin/${{ github.ref_name }}
+            git reset --hard "origin/${{ github.ref_name }}"
 
             # Update Python dependencies
             source venv/bin/activate
-            pip install -r requirements.txt
+            pip install -r requirements.txt --quiet
 
             # Run database migrations
-            python manage.py db stamp-if-needed
-            python manage.py db upgrade head
+            python manage.py db stamp-if-needed || true
+            python manage.py db upgrade head || true
 
-            # Update Node dependencies (if package.json changed)
-            npm install || true
-
-            # Restart all PM2 workers
-            pm2 restart all
+            # Graceful reload PM2 (current jobs finish before restart)
+            pm2 reload ecosystem.config.js
             pm2 save
+
+            echo "=== Deploy complete ==="
+            pm2 list

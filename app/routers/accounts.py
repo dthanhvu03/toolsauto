@@ -1,3 +1,4 @@
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse
@@ -5,8 +6,11 @@ from sqlalchemy.orm import Session
 import time
 from app.database.core import get_db
 from app.services.account import AccountService
+from app.services.page_utils import PageUtils
 
 from app.main_templates import templates
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -49,7 +53,7 @@ def create_account(
     try:
         AccountService.create_account(db, platform=platform, name=name, daily_limit=daily_limit, cooldown_seconds=cooldown_seconds)
     except Exception as e:
-        pass 
+        logger.error("Failed to create account name=%s platform=%s: %s", name, platform, e)
     accounts = AccountService.list_accounts(db)
     
     return templates.TemplateResponse(
@@ -85,7 +89,8 @@ def validate_account_session(account_id: int, request: Request, db: Session = De
 def toggle_account(account_id: int, request: Request, db: Session = Depends(get_db)):
     try:
         account = AccountService.toggle_account(db, account_id)
-    except ValueError:
+    except ValueError as e:
+        logger.warning("toggle_account account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
     return templates.TemplateResponse(
@@ -109,7 +114,7 @@ def update_account_limits(
 ):
     try:
         account = AccountService.update_limits(
-            db, account_id, daily_limit, cooldown_seconds, 
+            db, account_id, daily_limit, cooldown_seconds,
             niche_topics=niche_topics,
             sleep_start_time=sleep_start_time,
             sleep_end_time=sleep_end_time,
@@ -117,7 +122,8 @@ def update_account_limits(
             target_pages=target_pages or [],
             page_niches=page_niches or "",
         )
-    except ValueError:
+    except ValueError as e:
+        logger.warning("update_limits account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
     return templates.TemplateResponse(
@@ -129,7 +135,8 @@ def update_account_limits(
 def reset_account_failures(account_id: int, request: Request, db: Session = Depends(get_db)):
     try:
         account = AccountService.reset_failures(db, account_id)
-    except ValueError:
+    except ValueError as e:
+        logger.warning("reset_failures account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
     return templates.TemplateResponse(
@@ -208,6 +215,26 @@ def get_account_details_view(account_id: int, request: Request, db: Session = De
     return templates.TemplateResponse(
         "fragments/account_details.html", 
         {"request": request, "account": account, "now": int(time.time())}
+    )
+
+@router.get("/{account_id}/pages-tab", response_class=HTMLResponse)
+def get_account_pages_tab(
+    account_id: int, 
+    request: Request, 
+    q: str = "", 
+    filter: str = "all", 
+    db: Session = Depends(get_db)
+):
+    """HTMX endpoint to return the Pages Management tab content for a specific account."""
+    account = AccountService.get_account(db, account_id)
+    if not account:
+        return HTMLResponse(status_code=404)
+        
+    pages_list = PageUtils.build_page_view_models(account, q=q, filter_str=filter)
+    
+    return templates.TemplateResponse(
+        "fragments/pages_table.html", 
+        {"request": request, "pages": pages_list, "now": int(time.time()), "is_account_scoped": True}
     )
 
 @router.get("/{account_id}/pages", response_class=HTMLResponse)

@@ -7,6 +7,7 @@ import logging
 from app.database.core import get_db
 from app.database.models import Account
 from app.services.account import AccountService
+from app.services.page_utils import PageUtils
 from app.main_templates import templates
 from app.services.fb_compliance import compliance_checker, Severity
 
@@ -16,49 +17,11 @@ logger = logging.getLogger(__name__)
 @router.get("/table", response_class=HTMLResponse)
 def get_pages_table(request: Request, q: str = "", filter: str = "all", db: Session = Depends(get_db)):
     accounts = AccountService.list_accounts(db)
-    q = (q or "").strip().lower()
-    filter = (filter or "all").lower()
-    
     pages_list = []
     
     for acc in accounts:
-        managed = acc.managed_pages_list or []
-        target_urls = set(acc.target_pages_list or [])
-        page_niches = acc.page_niches_map or {}
-        competitors = acc.competitor_urls_grouped or {}
-        
-        for p in managed:
-            url = p.get('url', '')
-            name = p.get('name', 'Unknown')
-            if not url:
-                continue
-            
-            is_active = url in target_urls
-            
-            # --- Filter Logic ---
-            if filter == "active" and not is_active:
-                continue
-            if filter == "paused" and is_active:
-                continue
-            
-            niches = ", ".join(page_niches.get(url, []))
-            comps = competitors.get(url, "")
-            
-            # Allow searching by page name, url, or niche
-            haystack = f"{name} {url} {niches} {acc.name}".lower()
-            if q and q not in haystack:
-                continue
-                
-            pages_list.append({
-                "account_id": acc.id,
-                "account_name": acc.name,
-                "platform": acc.platform,
-                "url": url,
-                "name": name,
-                "is_active": is_active,
-                "niches": niches,
-                "competitors": comps
-            })
+        acc_pages = PageUtils.build_page_view_models(acc, q=q, filter_str=filter)
+        pages_list.extend(acc_pages)
             
     return templates.TemplateResponse("fragments/pages_table.html", {
         "request": request, 

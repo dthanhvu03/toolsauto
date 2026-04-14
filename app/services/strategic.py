@@ -1,5 +1,6 @@
 import logging
 import time
+import json
 from sqlalchemy import text, or_
 from sqlalchemy.orm import Session
 from app.database.models import PageInsight, ViralMaterial, Account, Job
@@ -9,19 +10,33 @@ from app.constants import ViralStatus
 
 logger = logging.getLogger(__name__)
 
+
 class PageStrategicService:
     """
     Strategic Analysis & Autonomous Boosting Service.
     Identifies high-growth 'exploding' FB pages and automatically pushes
     niche-matched content with context-aware AI captions.
     """
+    _cache = {}
+    _cache_ts = {}  # timestamp per platform key
+    CACHE_TTL = 900  # 15 minutes
 
     @staticmethod
     def get_page_analysis(db: Session, platform: str = None):
         """
         Categorize pages based on growth momentum and engagement.
-        Filters by platform if provided.
+        Now includes AI-powered advice via 9Router with batching and caching.
         """
+        cache_key = platform or "all"
+        now_ts = int(time.time())
+        
+        # 1. Check Service Layer Cache
+        if cache_key in PageStrategicService._cache:
+            if now_ts - PageStrategicService._cache_ts.get(cache_key, 0) < PageStrategicService.CACHE_TTL:
+                logger.debug(f"[STRATEGIC] Cache hit for {cache_key}")
+                return PageStrategicService._cache[cache_key]
+
+        # 2. Calculate Base Metrics from DB
         platform_filter = f"WHERE platform = '{platform}'" if platform else ""
         
         sql = f"""
@@ -58,30 +73,33 @@ class PageStrategicService:
         results = db.execute(text(sql)).fetchall()
         
         analysis = []
+        batch_data = []
+
         for r in results:
+            # Default hardcoded categorization (Fallback / Context)
             status = "STEADY"
-            advice = "Duy trì tần suất đăng bài hiện tại."
+            hardcoded_advice = "Duy trì tần suất đăng bài hiện tại."
             priority = 3
             color = "amber"
             
             # EXPLODING: Growth > 10% OR Abs Growth > 500 views in ~2h
             if r.growth_pct > 10 or r.growth_abs > 500:
                 status = "EXPLODING 🔥"
-                advice = "Tiềm năng viral cao! Hãy reup thêm 3-5 video cùng chủ đề ngay."
+                hardcoded_advice = "Tiềm năng viral cao! Hãy reup thêm 3-5 video cùng chủ đề ngay."
                 priority = 1
                 color = "green"
             elif r.growth_pct < 1 and r.growth_abs < 50:
                 status = "STAGNANT ⚠️"
-                advice = "Nội dung đang bão hòa. Hãy thử đổi Niche hoặc test chủ đề mới."
+                hardcoded_advice = "Nội dung đang bão hòa. Hãy đổi Niche hoặc test chủ đề mới."
                 priority = 4
                 color = "rose"
             elif r.avg_eng_rate > 5:
                 status = "HIGH ENGAGEMENT 💎"
-                advice = "Khán giả cực kỳ thích content này. Tập trung vào chất lượng hơn số lượng."
+                hardcoded_advice = "Khán giả cực kỳ thích content này. Tập trung vào chất lượng hơn số lượng."
                 priority = 2
                 color = "cyan"
 
-            analysis.append({
+            item = {
                 "page_name": r.page_name,
                 "page_url": r.page_url,
                 "platform": r.platform,
@@ -91,12 +109,87 @@ class PageStrategicService:
                 "growth_pct": round(r.growth_pct, 1),
                 "eng_rate": round(r.avg_eng_rate, 2),
                 "status": status,
-                "advice": advice,
+                "advice": hardcoded_advice,  # Initial advice is hardcoded fallback
                 "priority": priority,
                 "color": color
-            })
+            }
+            analysis.append(item)
             
-        return analysis
+            batch_data.append({
+                "name": r.page_name,
+                "views": f"{r.current_views:,}",
+                "growth": f"+{round(r.growth_pct, 1)}%",
+                "engagement": f"{round(r.avg_eng_rate, 2)}%",
+                "status": status
+            })
+
+        # 3. AI Batch AI Analysis (9Router)
+        if analysis:
+            try:
+                from app.services.ai_runtime import pipeline
+                if pipeline.enabled:
+                    data_str = "\n".join([f"- {d['name']}: {d['views']} views, {d['growth']} growth, {d['engagement']} eng, status: {d['status']}" for d in batch_data])
+                    
+                    prompt = f"""Bạn là chuyên gia phân tích chiến lược Social Media. 
+Dựa vào dữ liệu metrics bên dưới của các trang, hãy đưa ra đúng 1 câu nhận xét/khuyên ngắn gọn (actionable advice) cho TỪNG trang.
+
+Yêu cầu:
+- Trả về kết quả theo định dạng: [Tên trang]: [Lời khuyên]
+- Mỗi trang 1 dòng.
+- Lời khuyên cực ngắn gọn (dưới 20 từ), tập trung vào hành động cụ thể để tăng trưởng.
+
+Dữ liệu:
+{data_str}
+
+Kết quả:"""
+                    
+                    ai_text, meta = pipeline.generate_text(prompt)
+                    
+                    if ai_text and meta.get("ok"):
+                        print(f"[STRATEGIC] Raw AI Response for {len(batch_data)} pages:\n{ai_text}")
+                        ai_map = {}
+                        for line in ai_text.strip().split("\n"):
+                            line = line.strip()
+                            if ":" in line:
+                                parts = line.split(":", 1)
+                                name_part = parts[0].strip().lstrip("0123456789. -*#").lower()
+                                msg = parts[1].strip()
+                                if name_part:
+                                    ai_map[name_part] = msg
+                        
+                        print(f"[STRATEGIC] Parsed AI Map keys: {list(ai_map.keys())}")
+                        
+                        if ai_map:
+                            match_count = 0
+                            for item in analysis:
+                                p_name = item["page_name"].lower().strip()
+                                for ai_name, ai_msg in ai_map.items():
+                                    if ai_name in p_name or p_name in ai_name:
+                                        item["advice"] = ai_msg
+                                        item["is_ai"] = True
+                                        match_count += 1
+                                        break
+                            print(f"[STRATEGIC] Successfully matched AI advice for {match_count}/{len(analysis)} pages.")
+                            
+                            # Update Cache only on SUCCESS - to persist AI advice
+                            PageStrategicService._cache[cache_key] = analysis
+                            PageStrategicService._cache_ts[cache_key] = now_ts
+                        else:
+                            print("[STRATEGIC] AI response parsing failed to find any valid matches.")
+                    else:
+                        print(f"[STRATEGIC] AI call unsuccessful: {meta.get('fail_reason', 'no text')}")
+                        # If AI fails, we DON'T update the cache if there is already a valid AI cache
+                        if cache_key not in PageStrategicService._cache:
+                             PageStrategicService._cache[cache_key] = analysis
+                             PageStrategicService._cache_ts[cache_key] = now_ts
+            except Exception as e:
+                print(f"[STRATEGIC] AI Batch Error: {e}")
+                logger.error("Strategic AI Error", exc_info=True)
+                if cache_key not in PageStrategicService._cache:
+                    PageStrategicService._cache[cache_key] = analysis
+                    PageStrategicService._cache_ts[cache_key] = now_ts
+
+        return PageStrategicService._cache.get(cache_key, analysis)
 
     @staticmethod
     def _lookup_page_niches(db: Session, account_id: int, page_url: str) -> list[str]:

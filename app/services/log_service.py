@@ -23,8 +23,8 @@ class LogService:
     """Read and tail whitelisted PM2 log files under candidate directories."""
 
     PM2_LOG_MAP: ClassVar[dict[str, dict[str, str]]] = {
-        "AI_Generator": {"out": "AI-Generator-out.log", "error": "AI-Generator-error.log"},
-        "FB_Publisher": {"out": "FB-Publisher-out.log", "error": "FB-Publisher-error.log"},
+        "AI_Generator": {"out": "AI-Generator-1-out.log", "error": "AI-Generator-1-error.log"},
+        "FB_Publisher": {"out": "FB-Publisher-1-out.log", "error": "FB-Publisher-1-error.log"},
         "Maintenance": {"out": "Maintenance-out.log", "error": "Maintenance-error.log"},
         "Web_Dashboard": {"out": "Web-Dashboard-out.log", "error": "Web-Dashboard-error.log"},
     }
