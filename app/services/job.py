@@ -187,11 +187,24 @@ class JobService:
         
     @staticmethod
     def update_heartbeat(db: Session, job_id: int):
-        """Updates the heartbeat of a RUNNING job."""
-        db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.RUNNING).update(
-            {"last_heartbeat_at": now_ts()}
-        )
-        db.commit()
+        """Updates the heartbeat of a RUNNING job with silent retries for locking."""
+        import sqlalchemy.exc
+        import time as _time
+        for attempt in range(3):
+            try:
+                db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.RUNNING).update(
+                    {"last_heartbeat_at": int(_time.time())}
+                )
+                db.commit()
+                break
+            except sqlalchemy.exc.OperationalError:
+                db.rollback()
+                if attempt < 2:
+                    _time.sleep(0.5 * (attempt + 1))
+                continue
+            except Exception:
+                db.rollback()
+                break
         
     @staticmethod
     def rollback_to_pending(db: Session, job: Job, reason: str):

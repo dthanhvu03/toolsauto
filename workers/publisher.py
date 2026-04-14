@@ -177,7 +177,8 @@ def process_single_job(db: Session):
         
         # Keep Job.last_heartbeat_at fresh while dispatch/publish is running.
         # Otherwise QueueService.recover_crashed_jobs() may treat it as stale and reset RUNNING -> PENDING.
-        heartbeat_interval = max(20, min(60, int(WORKER_CRASH_THRESHOLD_SECONDS // 3)))
+        # [HB-Fix] Force interval to 60s to reduce DB load per Priority 2.
+        heartbeat_interval = 60
 
         def _heartbeat_loop(job_id: int):
             while not heartbeat_stop.is_set():
@@ -185,7 +186,8 @@ def process_single_job(db: Session):
                     with SessionLocal() as hb_db:
                         JobService.update_heartbeat(hb_db, job_id)
                 except Exception as hb_err:
-                    logger.warning("[Job %s] Heartbeat refresh failed: %s", job_id, hb_err)
+                    # [HB-Fix] Log at DEBUG level to reduce main log noise per Priority 1.
+                    logger.debug("[Job %s] Heartbeat refresh failed: %s", job_id, hb_err)
                 # Wait with stop support
                 heartbeat_stop.wait(heartbeat_interval)
 

@@ -3,6 +3,7 @@ import logging
 import signal
 import sys
 import os
+import threading
 from pathlib import Path
 
 # Repo root on sys.path so `python workers/ai_generator.py` works without PYTHONPATH=.
@@ -97,6 +98,26 @@ def process_draft_job(db: Session):
         )
     except Exception:
         pass
+    
+    heartbeat_stop = threading.Event()
+    heartbeat_interval = 60
+
+    def _heartbeat_loop(job_id: int):
+        while not heartbeat_stop.is_set():
+            try:
+                with SessionLocal() as hb_db:
+                    JobService.update_heartbeat(hb_db, job_id)
+            except Exception as hb_err:
+                # [HB-Fix] Log at DEBUG level to reduce main log noise
+                logger.debug("[Job %s] AI Heartbeat refresh failed: %s", job_id, hb_err)
+            heartbeat_stop.wait(heartbeat_interval)
+
+    heartbeat_thread = threading.Thread(
+        target=_heartbeat_loop,
+        args=(job.id,),
+        daemon=True,
+    )
+    heartbeat_thread.start()
     
     try:
         from app.services.content_orchestrator import ContentOrchestrator
@@ -390,6 +411,11 @@ def process_draft_job(db: Session):
                 except Exception:
                     pass
     finally:
+        heartbeat_stop.set()
+        try:
+            heartbeat_thread.join(timeout=5)
+        except Exception:
+            pass
         CURRENT_JOB_ID = None
         
     return True
