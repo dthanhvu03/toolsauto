@@ -1054,14 +1054,13 @@ class FacebookAdapter(AdapterInterface):
             if not post_url:
                 logger.warning("FacebookAdapter: Post URL not found but submission appeared successful. May be processing delay.")
 
-            # ── Post-publish identity verification ──
-            if target_page_url:
-                try:
-                    self._verify_page_identity(target_page_url, context="post-post")
-                except PageMismatchError as e:
-                    # Enrich exception with context for logging/alerting
-                    e.context = "post-post"
-                    raise e
+            # ── Post-publish verification ──
+            # Skip strict identity check here because FB often redirects to /reel/ URL which skips the page slug.
+            # Only verify that the captured post_url looks like a valid Reel/Watch link.
+            if post_url:
+                is_valid_format = ("facebook.com/reel/" in post_url or "facebook.com/watch" in post_url)
+                if not is_valid_format:
+                    logger.warning("[Job %s] Unexpected post_url format: %s", job.id, post_url)
 
             return PublishResult(
                 ok=True,
