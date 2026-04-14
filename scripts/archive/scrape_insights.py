@@ -8,6 +8,8 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+from app.utils.url_utils import canonical_fb_url
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - [INSIGHTS] - %(levelname)s - %(message)s"
@@ -405,7 +407,7 @@ def _save_competitor_reels(db_session, competitor_reels: list, account_id: int):
                 likes=cr.get('likes', 0),
                 comments=cr.get('comments', 0),
                 shares=cr.get('shares', 0),
-                caption=cr.get('caption', ''),
+                caption=cr.get('caption', '') if not re.match(r'^Views?:\s*[\d\.]+[KkMm]?$', cr.get('caption', '')) else '',
                 published_date=cr.get('published_date'),
                 source_account_id=account_id,
                 scrape_date=today,
@@ -518,7 +520,7 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
                 {"pu": target_url, "cutoff": day_cutoff}
             ).fetchall()
         )
-        existing_urls_normalized = {u.rstrip('/') for u in existing_urls}
+        existing_urls_normalized = {canonical_fb_url(u) for u in existing_urls}
 
         saved_count = 0
         skipped_dup = 0
@@ -527,14 +529,15 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
         _comp_visits_remaining = 3
 
         for r in valid_items:
-            is_dup = r['url'] in existing_urls_normalized
+            norm_url = canonical_fb_url(r['url'])
+            is_dup = norm_url in existing_urls_normalized
             if is_dup:
                 skipped_dup += 1
                 # Still visit this reel for competitor data if not yet collected
                 if platform != "facebook" or _comp_visits_remaining <= 0:
                     continue
-                logger.info(f"    dup reel — visiting for competitor data ({_comp_visits_remaining} left): {r['url']}")
-                detail = scrape_reel_detail(page, r['url'])
+                logger.info(f"    dup reel — visiting for competitor data ({_comp_visits_remaining} left): {norm_url}")
+                detail = scrape_reel_detail(page, norm_url)
                 competitor_reels = detail.pop('_competitor_reels', [])
                 if competitor_reels:
                     _save_competitor_reels(db_session, competitor_reels, account_id)
@@ -576,12 +579,15 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
                 if creation_time else None
             )
 
+            if (caption and re.match(r'^Views?:\s*[\d\.]+[KkMm]?$', caption)):
+                caption = ""
+
             insight = PageInsight(
                 account_id=account_id,
                 platform=platform,
                 page_url=target_url,
                 page_name=raw_name,
-                post_url=r['url'],
+                post_url=norm_url,
                 views=r['views'],
                 likes=likes,
                 comments=comments,
