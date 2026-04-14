@@ -44,8 +44,8 @@ def kill_if_stuck(label: str, timeout: int):
     return timer
 
 # Setup Logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - [PUBLISHER] - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+from app.utils.logger import setup_shared_logger
+logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publisher")
 
 RUNNING = True
 CURRENT_JOB_ID = None
@@ -151,33 +151,11 @@ def process_single_job(db: Session):
         posted_today = q.count()
         
         if posted_today >= effective_daily_limit:
-            # Try to reassign to another page that still has quota
-            reassigned = False
-            if job.account and hasattr(job.account, 'target_pages_list'):
-                alt_pages = [p for p in (job.account.target_pages_list or []) if p != job.target_page]
-                for alt_page in alt_pages:
-                    alt_count = db.query(Job).filter(
-                        Job.target_page == alt_page,
-                        Job.status == JobStatus.DONE,
-                        Job.finished_at >= today_start
-                    )
-                    if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
-                        alt_count = alt_count.filter(Job.account_id == job.account_id)
-                    if alt_count.count() < effective_daily_limit:
-                        logger.info("[Job %s] Page '%s' maxed out. Redirecting → '%s'",
-                                    job.id, job.target_page, alt_page)
-                        job.target_page = alt_page
-                        job.status = JobStatus.PENDING
-                        db.commit()
-                        reassigned = True
-                        break
-
-            if not reassigned:
-                logger.info("[Job %s] Daily limit (%s) reached for ALL pages. Requeuing for tomorrow.",
-                            job.id, effective_daily_limit)
-                job.status = JobStatus.PENDING
-                job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
-                db.commit()
+            logger.info("[Job %s] Page '%s' at daily limit (%s). Postponed to tomorrow.",
+                        job.id, job.target_page, effective_daily_limit)
+            job.status = JobStatus.PENDING
+            job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
+            db.commit()
             return True
 
     # Xin ý kiến giấc ngủ (Human Rest Cycle)

@@ -69,3 +69,6 @@ content/thumbnails/*.mp3
 
 content/reup/
 *.db
+
+# Unified logs
+logs/

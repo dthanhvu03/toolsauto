@@ -1,8 +1,18 @@
 // ecosystem.config.js — PM2 process definitions
 // All paths are dynamic via __dirname (no hardcoded absolute paths)
 const path = require("path");
-const PROJECT_ROOT = __dirname;
+const childProcess = require("child_process");
+
+const PROJECT_ROOT = path.resolve(__dirname);
 const VENV_PYTHON = path.join(PROJECT_ROOT, "venv/bin/python");
+
+let routerPath = "";
+try {
+  routerPath = childProcess.execSync("which 9router").toString().trim();
+} catch (err) {
+  // If which fails (e.g., local environment without 9router yet), use a fallback or keep it empty
+  routerPath = "9router"; 
+}
 
 module.exports = {
   apps: [
@@ -44,6 +54,16 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       env: { PYTHONUNBUFFERED: "1" },
+    },
+    {
+      name: "9Router_Gateway",
+      script: routerPath,
+      interpreter: "node",
+      cwd: PROJECT_ROOT,
+      max_restarts: 10,
+      min_uptime: 5000,
+      restart_delay: 3000,
+      autorestart: true,
     },
     {
       name: "Web_Dashboard",

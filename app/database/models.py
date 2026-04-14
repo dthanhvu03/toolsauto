@@ -519,6 +519,37 @@ class PageInsight(Base):
     
     recorded_at = Column(Integer, default=now_ts, index=True) # Thời điểm cào data
 
+class CompetitorReel(Base):
+    """
+    Reel đối thủ được thu thập tự động từ GQL suggested-reels stream
+    (GQL[5] — 17 blobs FB trả về mỗi lần load 1 reel page).
+    Dedup theo (reel_url, scrape_date) — mỗi ngày chỉ lưu 1 lần.
+    """
+    __tablename__ = "competitor_reels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    reel_url  = Column(String, nullable=False, index=True)
+    page_url  = Column(String, nullable=True,  index=True)
+    page_name = Column(String, nullable=True)
+    platform  = Column(String, default="facebook", index=True)
+
+    views    = Column(Integer, default=0, index=True)
+    likes    = Column(Integer, default=0)
+    comments = Column(Integer, default=0)
+    shares   = Column(Integer, default=0)
+    caption  = Column(String, nullable=True)
+    published_date = Column(String, nullable=True)
+
+    source_account_id = Column(Integer, nullable=True, index=True)
+    scrape_date = Column(String, nullable=False)   # YYYY-MM-DD  ← dedup key
+    scraped_at  = Column(Integer, default=now_ts, index=True)
+
+    __table_args__ = (
+        Index('idx_competitor_dedup', 'reel_url', 'scrape_date', unique=True),
+        Index('idx_competitor_views', 'scraped_at', 'views'),
+    )
+
+
 class AffiliateLink(Base):
     """
     Kho Link Affiliate cho tính năng "Máy Bơm Affiliate" (Auto-Injector).

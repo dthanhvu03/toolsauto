@@ -1,0 +1,134 @@
+<div id="domain-events-container">
+    {% if total == 0 %}
+    <div class="h-48 flex flex-col items-center justify-center text-center border border-gray-200 rounded-xl bg-gray-50">
+        <svg class="w-10 h-10 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+        <div class="text-gray-600 font-medium">Không tìm thấy sự kiện nào</div>
+        <div class="text-[11px] text-gray-400 mt-1">Điều chỉnh bộ lọc để xem các log khác.</div>
+    </div>
+    {% else %}
+    <div class="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm">
+        <table class="w-full text-xs text-left whitespace-nowrap">
+            <thead class="text-gray-500 uppercase bg-gray-50 border-b border-gray-200 sticky top-0 text-[10px] tracking-wider">
+                <tr>
+                    <th class="px-5 py-4 font-bold">Thời gian</th>
+                    <th class="px-5 py-4 font-bold">Trạng thái</th>
+                    <th class="px-5 py-4 font-bold">Nguồn phát</th>
+                    <th class="px-5 py-4 font-bold">Job ID</th>
+                    <th class="px-5 py-4 font-bold max-w-xl">Chi tiết sự kiện</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for ev in events %}
+                <tr class="hover:bg-gray-50 group transition-colors">
+                    <td class="px-5 py-3 align-top font-mono text-[11px] text-gray-500">
+                        <span class="unix-ts" data-ts="{{ ev.timestamp }}">{{ ev.timestamp }}</span>
+                    </td>
+                    <td class="px-5 py-3 align-top">
+                        {% if ev.level == 'ERROR' or ev.level == 'FATAL' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                            <svg class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ERROR
+                        </span>
+                        {% elif ev.level == 'WARNING' or ev.level == 'WARN' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                            <svg class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg> WARN
+                        </span>
+                        {% elif ev.level == 'INFO' %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                            <svg class="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> INFO
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                            {{ ev.level or 'N/A' }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-3 align-top">
+                        <div class="font-semibold text-gray-900">{{ ev.source }}</div>
+                        <div class="text-[10px] text-indigo-600 mt-0.5 font-medium">{{ ev.event_type }}</div>
+                    </td>
+                    <td class="px-5 py-3 align-top">
+                        {% if ev.job_id %}
+                        <a href="/app/jobs?q={{ ev.job_id }}" class="inline-flex items-center text-blue-600 hover:text-blue-800 font-mono transition-colors">
+                            #{{ ev.job_id }}
+                            <svg class="w-3 h-3 ml-1 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                        </a>
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-5 py-3 align-top w-full max-w-xl">
+                        <div class="text-gray-800 whitespace-normal break-words leading-relaxed">{{ ev.message }}</div>
+                        {% if ev.actor %}
+                        <div class="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                            {{ ev.actor }}
+                        </div>
+                        {% endif %}
+                        {% if ev.metadata %}
+                        <details class="mt-2 text-[10px] text-gray-500 group-hover:text-gray-700 transition-colors">
+                            <summary class="cursor-pointer hover:text-gray-900 select-none inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                                Metadata
+                            </summary>
+                            <div class="mt-1.5 p-3 bg-gray-50 border border-gray-200 rounded-lg font-mono break-all whitespace-pre-wrap text-emerald-700 overflow-x-auto shadow-inner">
+                                {{ ev.metadata }}
+                            </div>
+                        </details>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- HTMX Pagination -->
+    <div class="flex items-center justify-between mt-6 px-2">
+        <div class="text-xs text-gray-500">
+            Trang <span class="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{{ page }}</span> / {{ total_pages }} <span class="mx-2 text-gray-300">|</span> Tổng số <span class="font-bold text-gray-900">{{ total }}</span> sự kiện
+        </div>
+        
+        <div class="flex gap-2"
+             hx-target="#domain-events-container" 
+             hx-swap="outerHTML" 
+             hx-include="#domainFilterForm">
+            {% if page > 1 %}
+            <button type="button" hx-get="/app/logs/domain-events?page={{ page - 1 }}" class="h-8 px-4 text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 rounded border border-gray-300 transition-colors flex items-center gap-1 shadow-sm">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                Trước
+            </button>
+            {% else %}
+            <button type="button" disabled class="h-8 px-4 text-xs font-semibold bg-gray-50 text-gray-400 rounded border border-gray-200 cursor-not-allowed flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                Trước
+            </button>
+            {% endif %}
+            
+            {% if page < total_pages %}
+            <button type="button" hx-get="/app/logs/domain-events?page={{ page + 1 }}" class="h-8 px-4 text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 rounded border border-gray-300 transition-colors flex items-center gap-1 shadow-sm">
+                Sau
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+            {% else %}
+            <button type="button" disabled class="h-8 px-4 text-xs font-semibold bg-gray-50 text-gray-400 rounded border border-gray-200 cursor-not-allowed flex items-center gap-1">
+                Sau
+                <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <script>
+    // Convert timestamps automatically if any script handles unix-ts. 
+    // We can run a small local converter here just in case.
+    document.querySelectorAll('#domain-events-container .unix-ts').forEach(el => {
+        const ts = parseInt(el.getAttribute('data-ts'), 10);
+        if (ts) {
+            const date = new Date(ts * 1000);
+            const pad = n => n.toString().padStart(2, '0');
+            el.textContent = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        }
+    });
+    </script>
+</div>

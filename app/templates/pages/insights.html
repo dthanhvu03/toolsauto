@@ -94,7 +94,7 @@
 {% block content %}
 <div class="w-full space-y-6 animate-fade-in">
 
-    <!-- AI Strategic Reasoning Pulse -->
+    <!-- AI Strategic Reasoning Pulse — powered by 9router -->
     <div id="aiStrategicPulse"
         class="bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700 rounded-2xl shadow-lg shadow-indigo-500/20 text-white transition-transform active:scale-[0.99] p-6 relative overflow-hidden group">
         <div class="absolute -right-10 -top-10 w-40 h-40 bg-white/5 rounded-full blur-3xl group-hover:bg-white/10 transition-all"></div>
@@ -106,32 +106,44 @@
             <div class="flex-1 space-y-2">
                 <div class="flex items-center justify-between flex-wrap gap-2">
                     <h2 class="text-base font-bold text-white flex items-center gap-2">
-                        Hệ Thống Phản Biện AI (V4)
-                        <span class="px-2 py-0.5 bg-white/15 text-indigo-100 text-[9px] rounded-md uppercase tracking-wider font-extrabold border border-white/20">Visible Intelligence</span>
+                        AI Strategic Analyst
+                        <span class="px-2 py-0.5 bg-white/15 text-indigo-100 text-[9px] rounded-md uppercase tracking-wider font-extrabold border border-white/20">9router Live</span>
                     </h2>
-                    <span class="text-[10px] text-indigo-200/70 font-mono">STATUS: Strategic Scanning...</span>
+                    <span id="aiModelLabel" class="text-[10px] text-indigo-200/70 font-mono">STATUS: Đang tải...</span>
                 </div>
-                <p id="aiCommentaryText" class="text-indigo-100/80 text-sm italic leading-relaxed">
-                    "Đang phân tích vận tốc tăng trưởng của toàn bộ Page... Em nhận thấy niche **Làm Đẹp** đang có
-                    xu hướng bùng nổ visual hook dạng 'transformation'. Em khuyên anh nên tập trung reup các video có
-                    transition nhanh trong 3 giây đầu để tối ưu Retention Rate."
-                </p>
-                <div class="flex gap-4 pt-1">
+                <!-- Loading skeleton -->
+                <div id="aiCommentaryLoading" class="animate-pulse space-y-2 py-1">
+                    <div class="h-3 bg-white/20 rounded-full w-full"></div>
+                    <div class="h-3 bg-white/20 rounded-full w-5/6"></div>
+                    <div class="h-3 bg-white/10 rounded-full w-3/4"></div>
+                </div>
+                <p id="aiCommentaryText" class="text-indigo-100/90 text-sm leading-relaxed hidden"></p>
+                <div id="aiCommentaryMeta" class="flex gap-4 pt-1 hidden">
                     <div class="flex items-center gap-1.5 text-[10px] text-indigo-200/60">
-                        <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_6px_rgba(52,211,153,0.5)]"></span>
-                        Niche: Beauty Specialist Active
+                        <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_6px_rgba(52,211,153,0.5)]" id="aiStatusDot"></span>
+                        <span id="aiStatusLabel">9router Active</span>
                     </div>
                     <div class="flex items-center gap-1.5 text-[10px] text-indigo-200/60">
                         <span class="w-1.5 h-1.5 bg-sky-400 rounded-full shadow-[0_0_6px_rgba(56,189,248,0.5)]"></span>
-                        Algorithm: Viral Retention V3
+                        <span id="aiLatencyLabel">--ms</span>
                     </div>
+                    <button onclick="loadAiCommentary(true)" class="ml-auto text-[10px] text-indigo-200/50 hover:text-white transition-colors">↻ regenerate</button>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Filters -->
-    <div class="flex flex-col lg:flex-row lg:items-end justify-end gap-4">
+    <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+        <!-- Data freshness badge -->
+        <div id="dataStatusBadge" class="flex items-center gap-2 text-xs font-semibold text-slate-500 bg-white border border-gray-100 rounded-xl px-4 py-2.5 shadow-sm self-start lg:self-auto">
+            <span id="dataStatusDot" class="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0"></span>
+            <span id="dataStatusText">Đang kiểm tra dữ liệu...</span>
+            <button id="triggerRefreshBtn" onclick="triggerDataRefresh()"
+                class="ml-2 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-[10px] font-bold rounded-lg uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                ↻ Refresh Now
+            </button>
+        </div>
         <div class="filter-bar" role="toolbar" aria-label="Dashboard Filters">
             <div class="flex items-center space-x-2 px-3">
                 <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Page</span>
@@ -177,12 +189,27 @@
 
     <!-- Strategic Recommendations Section -->
     <div id="strategicSection" class="space-y-5 hidden">
-        <h3 class="text-lg font-display font-bold text-gray-900 flex items-center gap-3">
-            <span class="flex h-2.5 w-2.5 relative">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-500 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-600"></span>
-            </span>
-            Phân Tích Chiến Lược
+        <h3 class="text-lg font-display font-bold text-gray-900 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="flex h-2.5 w-2.5 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-500 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-600"></span>
+                </span>
+                Phân Tích Chiến Lược
+            </div>
+            <!-- AI Badge -->
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-full border border-indigo-100/50">
+                <div class="flex -space-x-1">
+                    <span class="text-[10px] font-black text-indigo-600 tracking-tighter uppercase italic">9Router</span>
+                </div>
+                <div class="w-[1px] h-3 bg-indigo-200"></div>
+                <span class="text-[10px] font-bold text-indigo-600/80 uppercase tracking-widest flex items-center gap-1">
+                    <svg class="w-3 h-3 text-indigo-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+                    </svg>
+                    AI Powered
+                </span>
+            </div>
         </h3>
         <div id="analysisList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <!-- Analysis cards injected here -->
@@ -324,7 +351,7 @@
                 <span class="w-2 h-2 bg-indigo-500 rounded-full"></span>
                 Platform Distribution
             </h3>
-            <div class="flex-1 flex items-center justify-center relative">
+            <div id="platformChartContainer" class="flex-1 flex items-center justify-center relative">
                 <canvas id="platformChart" class="max-h-[250px]"></canvas>
             </div>
             <div id="platformLegend" class="mt-4 grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-500 uppercase">
@@ -370,39 +397,226 @@
         </div>
     </div>
 
-    <!-- Row 6: AI Roadmap Bento -->
+    <!-- Row 6: AI Roadmap Bento — powered by 9router -->
     <div class="insight-card p-8 animate-slide-up" style="animation-delay: 0.5s;">
-        <h3 class="text-lg font-display font-black text-gray-900 mb-8 flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
-                </svg>
-            </div>
-            AI Strategic Growth Roadmap
-        </h3>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div class="p-5 rounded-2xl bg-indigo-50/50 border border-indigo-100 group hover:bg-indigo-600 transition-all duration-300">
-                <div class="text-xs font-black text-indigo-600 uppercase mb-3 group-hover:text-indigo-100">Step 01: Retention</div>
-                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">Short-form Transition</div>
-                <p class="text-xs text-slate-600 group-hover:text-indigo-100/80">Optimize first 3 seconds of video for currently exploding pages.</p>
-            </div>
-            <div class="p-5 rounded-2xl bg-emerald-50/50 border border-emerald-100 group hover:bg-emerald-600 transition-all duration-300">
-                <div class="text-xs font-black text-emerald-600 uppercase mb-3 group-hover:text-emerald-100">Step 02: Scale</div>
-                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">Niche Decoupling</div>
-                <p class="text-xs text-slate-600 group-hover:text-emerald-100/80">Clone successful patterns from 'KIDS0810' to new satellite pages.</p>
-            </div>
-            <div class="p-5 rounded-2xl bg-purple-50/50 border border-purple-100 group hover:bg-purple-600 transition-all duration-300">
-                <div class="text-xs font-black text-purple-600 uppercase mb-3 group-hover:text-purple-100">Step 03: Monetize</div>
-                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">Affiliate Injection</div>
-                <p class="text-xs text-slate-600 group-hover:text-purple-100/80">Activate auto-comment machine for high-view posts (> 50k).</p>
-            </div>
-            <div class="p-5 rounded-2xl bg-orange-50/50 border border-orange-100 group hover:bg-orange-600 transition-all duration-300">
-                <div class="text-xs font-black text-orange-600 uppercase mb-3 group-hover:text-orange-100">Step 04: Automate</div>
-                <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white">24/7 Scheduling</div>
-                <p class="text-xs text-slate-600 group-hover:text-orange-100/80">Shift posting schedule to match the Peak Engagement Heatmap.</p>
+        <div class="flex items-center justify-between mb-8 flex-wrap gap-3">
+            <h3 class="text-lg font-display font-black text-gray-900 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                    </svg>
+                </div>
+                AI Strategic Growth Roadmap
+            </h3>
+            <div class="flex items-center gap-3">
+                <span id="roadmapModelLabel" class="text-[10px] text-slate-400 font-mono hidden"></span>
+                <button onclick="loadAiRoadmap(true)"
+                    class="text-[11px] font-bold text-indigo-500 hover:text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-all flex items-center gap-1.5">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    Regenerate
+                </button>
             </div>
         </div>
+
+        <!-- Loading skeleton -->
+        <div id="roadmapLoading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-pulse">
+            <div class="h-32 bg-gray-100 rounded-2xl"></div>
+            <div class="h-32 bg-gray-100 rounded-2xl"></div>
+            <div class="h-32 bg-gray-100 rounded-2xl"></div>
+            <div class="h-32 bg-gray-100 rounded-2xl"></div>
+        </div>
+
+        <!-- AI-generated steps injected here -->
+        <div id="roadmapGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 hidden"></div>
+    </div>
+
+    <!-- Row 7: Competitive Intelligence Engine -->
+    <div class="space-y-5 animate-slide-up" style="animation-delay: 0.65s;">
+
+        <!-- Section header -->
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-200 flex-shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+            </div>
+            <div>
+                <h2 class="text-lg font-display font-black text-gray-900">Competitive Intelligence</h2>
+                <p class="text-xs text-slate-400 font-medium">Dữ liệu đối thủ tự động từ FB suggested-reels stream — cập nhật mỗi lần scrape</p>
+            </div>
+        </div>
+
+        <!-- Benchmark Row -->
+        <div id="benchmarkSection" class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+            <!-- Gap Ratio Card -->
+            <div class="insight-card p-6 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100 relative overflow-hidden">
+                <div class="absolute -right-6 -top-6 w-24 h-24 bg-amber-200/30 rounded-full blur-2xl"></div>
+                <div class="relative z-10">
+                    <div class="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-2">Market Gap</div>
+                    <div id="benchGap" class="text-5xl font-display font-black text-amber-600 tracking-tight">--<span class="text-2xl">×</span></div>
+                    <p id="benchGapLabel" class="mt-2 text-xs text-slate-500 font-medium">Loading benchmark...</p>
+                    <div id="benchNoData" class="hidden mt-3 text-xs text-amber-600 font-bold bg-amber-100 px-3 py-2 rounded-lg">
+                        Chưa có data competitor — chạy scrape để thu thập
+                    </div>
+                </div>
+            </div>
+
+            <!-- Our stats vs Market stats -->
+            <div class="lg:col-span-2 insight-card p-6">
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span> Trang của bạn
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Views</span>
+                                <span id="ourAvgViews" class="text-sm font-black text-gray-900">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Likes</span>
+                                <span id="ourAvgLikes" class="text-sm font-bold text-rose-500">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Top reel</span>
+                                <span id="ourMaxViews" class="text-sm font-bold text-indigo-600">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Posts tracked</span>
+                                <span id="ourPostCount" class="text-sm font-bold text-gray-600">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-bold text-orange-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-orange-500"></span> Thị trường (FB suggested)
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Views</span>
+                                <span id="mktAvgViews" class="text-sm font-black text-gray-900">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Avg Likes</span>
+                                <span id="mktAvgLikes" class="text-sm font-bold text-rose-500">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Top reel</span>
+                                <span id="mktMaxViews" class="text-sm font-bold text-orange-600">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-500">Reels tracked</span>
+                                <span id="mktReelCount" class="text-sm font-bold text-gray-600">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trending Topics + Competitor Top Reels -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+            <!-- Trending Topics -->
+            <div class="insight-card p-6 flex flex-col">
+                <h3 class="text-sm font-display font-black text-gray-900 mb-4 flex items-center gap-2">
+                    <span class="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></span>
+                    Trending Topics
+                    <span class="ml-auto text-[10px] text-slate-400 font-normal" id="topicsAnalyzedLabel"></span>
+                </h3>
+                <div id="trendingTopicsList" class="flex-1 flex flex-wrap gap-2 content-start">
+                    <div class="animate-pulse w-full space-y-2">
+                        <div class="h-6 bg-gray-100 rounded-full w-20"></div>
+                        <div class="h-6 bg-gray-100 rounded-full w-28"></div>
+                        <div class="h-6 bg-gray-100 rounded-full w-16"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Competitor Top Reels -->
+            <div class="lg:col-span-2 insight-card p-6 flex flex-col">
+                <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <h3 class="text-sm font-display font-black text-gray-900 flex items-center gap-2">
+                        <span class="w-2 h-2 bg-amber-500 rounded-full"></span>
+                        Top Competitor Reels
+                    </h3>
+                    <div id="compSortBtns" class="flex gap-1">
+                        <button data-sort="views"    onclick="setCompSort(this)" class="comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600">Views</button>
+                        <button data-sort="likes"    onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Likes</button>
+                        <button data-sort="date"     onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Date</button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-100">
+                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Caption</th>
+                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3 hidden md:table-cell">Page</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Views</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 hidden sm:table-cell">Likes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="compTableBody">
+                            <tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="compPagination" class="mt-3 pt-3 border-t border-gray-100 flex items-center justify-center gap-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 8: Reel Content Library -->
+    <div class="insight-card p-6 animate-slide-up" style="animation-delay: 0.6s;">
+        <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+            <h3 class="text-lg font-display font-black text-gray-900 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center text-white shadow-lg shadow-pink-200">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                Reel Content Library
+            </h3>
+            <!-- Sort controls -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sort by:</span>
+                <div id="librarySortBtns" class="flex gap-1">
+                    <button data-sort="views"     onclick="setLibrarySort(this)" class="sort-btn active px-3 py-1 rounded-lg text-xs font-bold border border-indigo-200 bg-indigo-50 text-indigo-600">Views</button>
+                    <button data-sort="likes"     onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Likes</button>
+                    <button data-sort="comments"  onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Comments</button>
+                    <button data-sort="date"      onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Date</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-100">
+                        <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 w-8">#</th>
+                        <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4">Caption</th>
+                        <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden md:table-cell">Page</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4">Views</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden sm:table-cell">Likes</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden sm:table-cell">Cmt</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden lg:table-cell">Shares</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden lg:table-cell">Eng%</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 hidden xl:table-cell">Published</th>
+                    </tr>
+                </thead>
+                <tbody id="libraryTableBody">
+                    <tr><td colspan="9" class="py-10 text-center text-slate-400 text-sm animate-pulse">Loading reel data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div id="libraryPagination" class="mt-4 pt-4 border-t border-gray-100 flex items-center justify-center gap-3"></div>
     </div>
 </div>
 {% endblock %}
@@ -413,6 +627,7 @@
     let platformChartInstance = null;
     let currentPage = 1;
     let totalPages = 1;
+    let _roadmapCacheKey = null;
 
     const formatK = (n) => {
         if (!n) return "0";
@@ -445,26 +660,31 @@
             if (jsonGrowth.status === 'success') {
                 updateChart(jsonGrowth.data);
                 if (jsonGrowth.data.length > 0) {
-                    const latest = jsonGrowth.data[jsonGrowth.data.length - 1];
-                    document.getElementById('totalViews').innerText = formatK(latest.views);
+                    const totalViewsSum = jsonGrowth.data.reduce((sum, d) => sum + d.views, 0);
+                    document.getElementById('totalViews').innerText = formatK(totalViewsSum);
 
-                    let totalLikes = 0;
-                    jsonGrowth.data.forEach(d => totalLikes += d.likes);
+                    const totalLikes = jsonGrowth.data.reduce((sum, d) => sum + d.likes, 0);
                     document.getElementById('totalLikes').innerText = `${formatK(totalLikes)} total interactions recorded.`;
-
-                    const rate = latest.views > 0 ? ((latest.likes / latest.views) * 100).toFixed(2) : '0';
-                    document.getElementById('globalEngRate').innerText = rate;
+                    // globalEngRate is set accurately by loadSecondaryMetrics()
                 }
             }
 
             // 2. Top Posts (paginated)
             await loadTopPosts(1);
 
-            // 3. Advanced metrics
+            // 3. Advanced metrics + AI commentary + roadmap + library (all fire in parallel, non-blocking)
             loadPlatformStats();
             loadSecondaryMetrics();
             loadEngagementHeatmap();
             loadPageAnalysis();
+            loadAiCommentary();
+            loadAiRoadmap();
+            _libPage = 1;
+            loadLibrary();
+            loadBenchmark();
+            loadTrendingTopics();
+            _compPage = 1;
+            loadCompetitorTop();
 
         } catch (err) {
             console.error("Dashboard load error:", err);
@@ -516,6 +736,7 @@
                 document.getElementById('totalShares').textContent = formatK(d.total_shares);
                 document.getElementById('avgEngRate').textContent = d.engagement_rate + '%';
                 document.getElementById('activePostsCount').textContent = d.posts_count;
+                document.getElementById('globalEngRate').textContent = d.engagement_rate + '%';
             }
         } catch (e) {
             console.error("Secondary metrics fail:", e);
@@ -533,14 +754,15 @@
     }
 
     function updatePlatformChart(data) {
-        const ctx = document.getElementById('platformChart').getContext('2d');
-        const container = document.getElementById('platformChart').parentElement;
+        const container = document.getElementById('platformChartContainer');
         const legend = document.getElementById('platformLegend');
 
-        if (platformChartInstance) platformChartInstance.destroy();
+        if (platformChartInstance) {
+            platformChartInstance.destroy();
+            platformChartInstance = null;
+        }
 
-        const views = data.map(d => d.views);
-        const totalViews = views.reduce((a, b) => a + b, 0);
+        const totalViews = (data || []).reduce((sum, d) => sum + d.views, 0);
 
         if (!data || data.length === 0 || totalViews === 0) {
             container.innerHTML = '<div class="text-sm text-slate-400 font-medium h-[250px] flex items-center justify-center">Chưa có dữ liệu phân bổ nền tảng</div>';
@@ -548,11 +770,14 @@
             return;
         }
 
-        const labels = data.map(d => d.platform.toUpperCase());
-
+        // Ensure canvas exists — may have been replaced by the empty-state div on a prior call
         if (!document.getElementById('platformChart')) {
             container.innerHTML = '<canvas id="platformChart" class="max-h-[250px]"></canvas>';
         }
+
+        const ctx = document.getElementById('platformChart').getContext('2d');
+        const labels = data.map(d => d.platform.toUpperCase());
+        const views = data.map(d => d.views);
 
         platformChartInstance = new Chart(ctx, {
             type: 'doughnut',
@@ -654,7 +879,9 @@
             else if (post.platform === 'instagram') iconStr = '<svg class="w-4 h-4 text-pink-500" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
 
             let captionText = post.caption;
-            if (!captionText || captionText === '<No Caption>' || captionText.startsWith('Views:')) {
+            // Treat as no-caption if: empty, placeholder, old "Views: X" prefix, or raw view count only (e.g. "77K")
+            const isViewCountOnly = /^[\d\.,]+\s*[KMBkmb]?$/.test((captionText || '').trim());
+            if (!captionText || captionText === '<No Caption>' || captionText.startsWith('Views:') || isViewCountOnly) {
                 captionText = post.page_name + ' Trending Post';
             }
 
@@ -795,21 +1022,31 @@
 
                 const growthSign = item.growth_pct >= 0 ? '+' : '';
 
+                const isAi = item.is_ai === true;
+
                 card.innerHTML = `
                     <div class="space-y-3">
                         <div class="flex justify-between items-start">
                             <div class="space-y-1.5">
                                 <h4 class="font-display font-bold text-gray-900 group-hover:text-indigo-600 transition-colors text-sm truncate max-w-[160px]">${item.page_name}</h4>
-                                <span class="px-2 py-0.5 rounded-md ${c.badge} text-[10px] font-bold uppercase tracking-wider inline-block">
-                                    ${item.status}
-                                </span>
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-0.5 rounded-md ${c.badge} text-[10px] font-bold uppercase tracking-wider inline-block">
+                                        ${item.status}
+                                    </span>
+                                    ${isAi ? `
+                                        <span class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-600 text-[9px] font-black uppercase tracking-tighter border border-indigo-100">
+                                            <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                                            AI
+                                        </span>
+                                    ` : ''}
+                                </div>
                             </div>
                             <div class="text-right">
                                 <div class="text-lg font-bold text-gray-900">${formatK(item.views)}</div>
                                 <div class="text-xs font-bold ${c.text}">${growthSign}${item.growth_pct}%</div>
                             </div>
                         </div>
-                        <div class="p-3 ${c.bg} rounded-lg">
+                        <div class="p-3 ${c.bg} rounded-lg border border-white/50 shadow-inner group-hover:shadow-md transition-shadow">
                             <p class="text-xs text-gray-600 font-medium leading-relaxed italic">
                                 "${item.advice}"
                             </p>
@@ -829,13 +1066,449 @@
         }
     }
 
+    let _commentaryAbort = null;
+
+    async function loadAiCommentary(forceReload = false) {
+        // Show loading state
+        document.getElementById('aiCommentaryLoading').classList.remove('hidden');
+        document.getElementById('aiCommentaryText').classList.add('hidden');
+        document.getElementById('aiCommentaryMeta').classList.add('hidden');
+        document.getElementById('aiModelLabel').textContent = 'STATUS: Đang phân tích...';
+
+        // Abort previous in-flight request if any
+        if (_commentaryAbort) _commentaryAbort.abort();
+        _commentaryAbort = new AbortController();
+
+        const url = '/insights/api/ai-commentary' + buildQuery() + (forceReload ? '&_bust=' + Date.now() : '');
+        try {
+            const res = await fetch(url, { signal: _commentaryAbort.signal });
+            const json = await res.json();
+
+            const textEl = document.getElementById('aiCommentaryText');
+            const metaEl = document.getElementById('aiCommentaryMeta');
+            const loadingEl = document.getElementById('aiCommentaryLoading');
+            const modelLabel = document.getElementById('aiModelLabel');
+            const statusDot = document.getElementById('aiStatusDot');
+            const statusLabel = document.getElementById('aiStatusLabel');
+            const latencyLabel = document.getElementById('aiLatencyLabel');
+
+            loadingEl.classList.add('hidden');
+            textEl.classList.remove('hidden');
+            metaEl.classList.remove('hidden');
+
+            textEl.textContent = '"' + (json.commentary || 'Không có nhận xét.') + '"';
+
+            const isSuccess = json.status === 'success';
+            const isCached = json.cached === true;
+
+            modelLabel.textContent = `MODEL: ${json.model || 'N/A'}` + (isCached ? ' · cached' : '');
+            statusDot.className = `w-1.5 h-1.5 rounded-full shadow-[0_0_6px_rgba(52,211,153,0.5)] ${isSuccess ? 'bg-emerald-400' : 'bg-amber-400'}`;
+            statusLabel.textContent = isSuccess ? '9router Live' : 'Fallback Mode';
+            latencyLabel.textContent = json.latency_ms ? `${json.latency_ms}ms` : '';
+
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            document.getElementById('aiCommentaryLoading').classList.add('hidden');
+            document.getElementById('aiCommentaryText').classList.remove('hidden');
+            document.getElementById('aiCommentaryText').textContent = '⚠️ Không thể kết nối 9router.';
+            document.getElementById('aiModelLabel').textContent = 'STATUS: Error';
+        }
+    }
+
+    const ROADMAP_THEME = {
+        indigo:  { bg: 'bg-indigo-50/50',  border: 'border-indigo-100',  label: 'text-indigo-600',  hover: 'hover:bg-indigo-600',  hoverLabel: 'group-hover:text-indigo-100', hoverDesc: 'group-hover:text-indigo-100/80' },
+        emerald: { bg: 'bg-emerald-50/50', border: 'border-emerald-100', label: 'text-emerald-600', hover: 'hover:bg-emerald-600', hoverLabel: 'group-hover:text-emerald-100', hoverDesc: 'group-hover:text-emerald-100/80' },
+        purple:  { bg: 'bg-purple-50/50',  border: 'border-purple-100',  label: 'text-purple-600',  hover: 'hover:bg-purple-600',  hoverLabel: 'group-hover:text-purple-100', hoverDesc: 'group-hover:text-purple-100/80' },
+        orange:  { bg: 'bg-orange-50/50',  border: 'border-orange-100',  label: 'text-orange-600',  hover: 'hover:bg-orange-600',  hoverLabel: 'group-hover:text-orange-100', hoverDesc: 'group-hover:text-orange-100/80' },
+    };
+    const ROADMAP_THEME_DEFAULT = { bg: 'bg-gray-50/50', border: 'border-gray-100', label: 'text-gray-600', hover: 'hover:bg-gray-600', hoverLabel: 'group-hover:text-gray-100', hoverDesc: 'group-hover:text-gray-100/80' };
+
+    async function loadAiRoadmap(forceReload = false) {
+        const loadingEl = document.getElementById('roadmapLoading');
+        const gridEl = document.getElementById('roadmapGrid');
+        const modelLabel = document.getElementById('roadmapModelLabel');
+
+        loadingEl.classList.remove('hidden');
+        gridEl.classList.add('hidden');
+        modelLabel.classList.add('hidden');
+
+        const url = '/insights/api/ai-roadmap' + buildQuery() + (forceReload ? '&_bust=' + Date.now() : '');
+        try {
+            const res = await fetch(url);
+            const json = await res.json();
+            if (json.status !== 'success' || !Array.isArray(json.steps)) return;
+
+            gridEl.innerHTML = '';
+            json.steps.forEach((s, i) => {
+                const t = ROADMAP_THEME[s.theme] || ROADMAP_THEME_DEFAULT;
+                const card = document.createElement('div');
+                card.className = `p-5 rounded-2xl ${t.bg} border ${t.border} group ${t.hover} transition-all duration-300 animate-slide-up`;
+                card.style.animationDelay = `${i * 0.07}s`;
+                card.innerHTML = `
+                    <div class="text-xs font-black ${t.label} uppercase mb-3 ${t.hoverLabel} transition-colors">Step ${s.step || String(i+1).padStart(2,'0')}: ${s.category || ''}</div>
+                    <div class="text-sm font-bold text-gray-900 mb-2 group-hover:text-white transition-colors">${s.title || ''}</div>
+                    <p class="text-xs text-slate-600 ${t.hoverDesc} transition-colors">${s.description || ''}</p>
+                `;
+                gridEl.appendChild(card);
+            });
+
+            loadingEl.classList.add('hidden');
+            gridEl.classList.remove('hidden');
+
+            if (json.model && json.model !== 'N/A') {
+                modelLabel.textContent = `${json.model}${json.cached ? ' · cached' : ''}${json.latency_ms ? ' · ' + json.latency_ms + 'ms' : ''}`;
+                modelLabel.classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error('Roadmap load error:', e);
+            loadingEl.classList.add('hidden');
+            gridEl.innerHTML = '<div class="col-span-4 text-center py-6 text-slate-400 text-sm">Không thể tải roadmap từ 9router.</div>';
+            gridEl.classList.remove('hidden');
+        }
+    }
+
+    async function loadDataStatus() {
+        try {
+            const res = await fetch('/insights/api/status');
+            const json = await res.json();
+            if (json.status !== 'success') return;
+
+            const dot = document.getElementById('dataStatusDot');
+            const text = document.getElementById('dataStatusText');
+            const { age_label, last_updated, total_records, stale } = json;
+
+            if (stale) {
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 animate-pulse';
+                text.innerHTML = `<span class="text-amber-600">Data cũ</span> &bull; cập nhật ${age_label} &bull; ${total_records.toLocaleString()} records`;
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0';
+                text.innerHTML = `Cập nhật lúc <strong>${last_updated}</strong> (${age_label}) &bull; ${total_records.toLocaleString()} records`;
+            }
+        } catch (e) {
+            document.getElementById('dataStatusText').textContent = 'Không thể kiểm tra trạng thái dữ liệu.';
+        }
+    }
+
+    async function triggerDataRefresh() {
+        const btn = document.getElementById('triggerRefreshBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Đang chạy...';
+        document.getElementById('dataStatusDot').className = 'w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0 animate-pulse';
+        document.getElementById('dataStatusText').textContent = 'Đang khởi động scraper...';
+
+        try {
+            const res = await fetch('/insights/api/trigger-refresh', { method: 'POST' });
+            const json = await res.json();
+            if (json.status === 'success') {
+                document.getElementById('dataStatusText').innerHTML =
+                    `<span class="text-emerald-600">✅ Scraper đang chạy</span> — dữ liệu sẽ cập nhật sau vài phút.`;
+                btn.textContent = '✓ Triggered';
+                // Re-enable after 3 min
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = '↻ Refresh Now';
+                    loadDataStatus();
+                    loadData();
+                }, 180000);
+            } else if (json.status === 'already_running') {
+                document.getElementById('dataStatusText').textContent = '⏳ Scraper đang chạy, vui lòng đợi.';
+                btn.disabled = false;
+                btn.textContent = '↻ Refresh Now';
+            } else {
+                document.getElementById('dataStatusText').textContent = `❌ Lỗi: ${json.message}`;
+                btn.disabled = false;
+                btn.textContent = '↻ Retry';
+            }
+        } catch (e) {
+            document.getElementById('dataStatusText').textContent = '❌ Không thể kết nối server.';
+            btn.disabled = false;
+            btn.textContent = '↻ Retry';
+        }
+    }
+
+    // ── Reel Content Library ──────────────────────────────────────────────
+    let _libPage = 1;
+    let _libTotalPages = 1;
+    let _libSort = 'views';
+
+    function setLibrarySort(btn) {
+        document.querySelectorAll('#librarySortBtns .sort-btn').forEach(b => {
+            b.className = 'sort-btn px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50';
+        });
+        btn.className = 'sort-btn active px-3 py-1 rounded-lg text-xs font-bold border border-indigo-200 bg-indigo-50 text-indigo-600';
+        _libSort = btn.dataset.sort;
+        _libPage = 1;
+        loadLibrary();
+    }
+
+    async function loadLibrary(page) {
+        if (page) _libPage = page;
+        const pageUrl = document.getElementById('pageSelect').value;
+        const platform = document.getElementById('platformSelect').value;
+        const days = getDays();
+        let params = [`days=${days}`, `limit=20`, `page=${_libPage}`, `sort_by=${_libSort}`];
+        if (pageUrl) params.push(`page_url=${encodeURIComponent(pageUrl)}`);
+        if (platform) params.push(`platform=${encodeURIComponent(platform)}`);
+
+        const tbody = document.getElementById('libraryTableBody');
+        tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400 text-sm animate-pulse">Loading...</td></tr>';
+
+        try {
+            const res = await fetch('/insights/api/top-posts?' + params.join('&'));
+            const json = await res.json();
+            if (json.status !== 'success') return;
+
+            _libTotalPages = json.total_pages || 1;
+            renderLibraryTable(json.data);
+            renderLibraryPagination();
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-red-400 text-sm">Lỗi tải dữ liệu</td></tr>';
+        }
+    }
+
+    function renderLibraryTable(data) {
+        const tbody = document.getElementById('libraryTableBody');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="py-10 text-center text-slate-400 text-sm">Không có dữ liệu trong khoảng thời gian này.</td></tr>';
+            return;
+        }
+
+        const offset = (_libPage - 1) * 20;
+        tbody.innerHTML = data.map((r, i) => {
+            const cap = r.caption || (r.page_name + ' Post');
+            const capShort = cap.length > 60 ? cap.slice(0, 60) + '…' : cap;
+            const date = r.published_date ? r.published_date.slice(0, 10) : '—';
+            const eng = r.engagement_rate > 0 ? `<span class="text-purple-600">${r.engagement_rate}%</span>` : '<span class="text-slate-300">—</span>';
+            const viewsColor = r.views >= 10000 ? 'text-indigo-600 font-black' : r.views >= 1000 ? 'text-gray-900 font-bold' : 'text-slate-500';
+            let platIcon = '';
+            if (r.platform === 'facebook') platIcon = '<span class="text-blue-500 text-[10px] font-black">FB</span>';
+            else if (r.platform === 'tiktok') platIcon = '<span class="text-gray-800 text-[10px] font-black">TT</span>';
+            else if (r.platform === 'instagram') platIcon = '<span class="text-pink-500 text-[10px] font-black">IG</span>';
+
+            return `<tr class="border-b border-gray-50 hover:bg-indigo-50/40 transition-colors cursor-pointer group" onclick="window.open('${r.post_url}', '_blank')">
+                <td class="py-2.5 pr-4 text-[11px] text-slate-400 font-bold">${offset + i + 1}</td>
+                <td class="py-2.5 pr-4 max-w-[220px]">
+                    <div class="text-[13px] font-semibold text-gray-800 group-hover:text-indigo-600 transition-colors truncate" title="${cap}">${capShort}</div>
+                </td>
+                <td class="py-2.5 pr-4 hidden md:table-cell">
+                    <div class="flex items-center gap-1.5">${platIcon}<span class="text-[11px] text-slate-500 truncate max-w-[90px]">${r.page_name || '—'}</span></div>
+                </td>
+                <td class="py-2.5 pr-4 text-right text-[13px] ${viewsColor}">${formatK(r.views)}</td>
+                <td class="py-2.5 pr-4 text-right text-[12px] text-rose-500 font-semibold hidden sm:table-cell">${r.likes > 0 ? formatK(r.likes) : '<span class="text-slate-300">—</span>'}</td>
+                <td class="py-2.5 pr-4 text-right text-[12px] text-amber-600 font-semibold hidden sm:table-cell">${r.comments > 0 ? r.comments : '<span class="text-slate-300">—</span>'}</td>
+                <td class="py-2.5 pr-4 text-right text-[12px] text-emerald-600 font-semibold hidden lg:table-cell">${r.shares > 0 ? r.shares : '<span class="text-slate-300">—</span>'}</td>
+                <td class="py-2.5 pr-4 text-right hidden lg:table-cell">${eng}</td>
+                <td class="py-2.5 text-right text-[11px] text-slate-400 hidden xl:table-cell">${date}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderLibraryPagination() {
+        const el = document.getElementById('libraryPagination');
+        if (_libTotalPages <= 1) { el.innerHTML = ''; return; }
+        el.innerHTML = `
+            <button onclick="loadLibrary(_libPage - 1)" ${_libPage <= 1 ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed">← Prev</button>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">${_libPage} / ${_libTotalPages}</span>
+            <button onclick="loadLibrary(_libPage + 1)" ${_libPage >= _libTotalPages ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-600 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+        `;
+    }
+
+    // ── Competitive Intelligence ─────────────────────────────────────────────
+    let _compPage = 1;
+    let _compTotalPages = 1;
+    let _compSort = 'views';
+
+    function setCompSort(btn) {
+        document.querySelectorAll('#compSortBtns .comp-sort').forEach(b => {
+            b.className = 'comp-sort px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50';
+        });
+        btn.className = 'comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600';
+        _compSort = btn.dataset.sort;
+        _compPage = 1;
+        loadCompetitorTop();
+    }
+
+    async function loadBenchmark() {
+        try {
+            const platform = document.getElementById('platformSelect').value;
+            const pageUrl  = document.getElementById('pageSelect').value;
+            const days     = getDays();
+            const params   = [`days=${days}`, `platform=${encodeURIComponent(platform)}`];
+            if (pageUrl) params.push(`page_url=${encodeURIComponent(pageUrl)}`);
+
+            const res  = await fetch('/insights/api/market-benchmark?' + params.join('&'));
+            const json = await res.json();
+            if (json.status !== 'success') return;
+
+            // API shape: json.our.{avg_views,avg_likes,max_views,post_count}
+            //            json.market.{avg_views,avg_likes,max_views,reel_count}
+            //            json.gap_ratio, json.has_competitor_data
+            const our = json.our   || {};
+            const mkt = json.market || {};
+            const gapEl = document.getElementById('benchGap');
+
+            if (!json.has_competitor_data) {
+                gapEl.innerHTML = '--<span class="text-2xl">×</span>';
+                document.getElementById('benchGapLabel').textContent = 'Chưa có dữ liệu thị trường';
+                document.getElementById('benchNoData').classList.remove('hidden');
+                document.getElementById('ourAvgViews').textContent  = our.avg_views  ? formatK(our.avg_views)  : '--';
+                document.getElementById('ourAvgLikes').textContent  = our.avg_likes  ? formatK(our.avg_likes)  : '--';
+                document.getElementById('ourMaxViews').textContent  = our.max_views  ? formatK(our.max_views)  : '--';
+                document.getElementById('ourPostCount').textContent = our.post_count || '--';
+                ['mktAvgViews','mktAvgLikes','mktMaxViews'].forEach(id => document.getElementById(id).textContent = '--');
+                document.getElementById('mktReelCount').textContent = '0';
+                return;
+            }
+
+            document.getElementById('benchNoData').classList.add('hidden');
+
+            const gap = json.gap_ratio;
+            gapEl.innerHTML = `${gap.toFixed(1)}<span class="text-2xl">×</span>`;
+            ['text-amber-600','text-emerald-600','text-red-600'].forEach(c => gapEl.classList.remove(c));
+            if (gap >= 2) {
+                gapEl.classList.add('text-red-600');
+                document.getElementById('benchGapLabel').textContent = `Thị trường mạnh hơn ${gap.toFixed(1)}× — cơ hội tăng trưởng lớn`;
+            } else if (gap >= 1.2) {
+                gapEl.classList.add('text-amber-600');
+                document.getElementById('benchGapLabel').textContent = `Bạn đang theo sau ${gap.toFixed(1)}× — cần đẩy mạnh content`;
+            } else if (gap > 0.8) {
+                gapEl.classList.add('text-emerald-600');
+                document.getElementById('benchGapLabel').textContent = `Bạn ngang thị trường — duy trì đà`;
+            } else {
+                gapEl.classList.add('text-emerald-600');
+                document.getElementById('benchGapLabel').textContent = `Bạn đang DẪN ĐẦU thị trường ${(1 / gap).toFixed(1)}×`;
+            }
+
+            document.getElementById('ourAvgViews').textContent  = formatK(our.avg_views);
+            document.getElementById('ourAvgLikes').textContent  = formatK(our.avg_likes);
+            document.getElementById('ourMaxViews').textContent  = formatK(our.max_views);
+            document.getElementById('ourPostCount').textContent = our.post_count;
+            document.getElementById('mktAvgViews').textContent  = formatK(mkt.avg_views);
+            document.getElementById('mktAvgLikes').textContent  = formatK(mkt.avg_likes);
+            document.getElementById('mktMaxViews').textContent  = formatK(mkt.max_views);
+            document.getElementById('mktReelCount').textContent = mkt.reel_count;
+        } catch (e) {
+            console.error('Benchmark load error:', e);
+        }
+    }
+
+    async function loadTrendingTopics() {
+        const container = document.getElementById('trendingTopicsList');
+        const label     = document.getElementById('topicsAnalyzedLabel');
+        try {
+            const platform = document.getElementById('platformSelect').value;
+            const days     = getDays();
+            const res  = await fetch(`/insights/api/trending-topics?days=${days}&platform=${encodeURIComponent(platform)}&limit=25`);
+            const json = await res.json();
+
+            if (json.status !== 'success' || !json.data || json.data.length === 0) {
+                container.innerHTML = '<span class="text-xs text-slate-400 italic">Chưa có dữ liệu — chạy scrape để thu thập.</span>';
+                return;
+            }
+            if (json.reels_analyzed) label.textContent = `${json.reels_analyzed} reels`;
+
+            const maxCount = json.data[0].count || 1;
+            container.innerHTML = json.data.map(t => {
+                const size    = Math.round(10 + (t.count / maxCount) * 8);
+                const opacity = (0.5 + (t.count / maxCount) * 0.5).toFixed(2);
+                return `<button
+                    onclick="void(0)"
+                    class="px-3 py-1 rounded-full bg-amber-50 border border-amber-100 text-amber-700 font-semibold hover:bg-amber-100 hover:border-amber-300 transition-all"
+                    style="font-size:${size}px;opacity:${opacity}"
+                    title="${t.count} lần xuất hiện">${t.word}</button>`;
+            }).join('');
+        } catch (e) {
+            console.error('Trending topics error:', e);
+            container.innerHTML = '<span class="text-xs text-red-400">Lỗi tải dữ liệu</span>';
+        }
+    }
+
+    async function loadCompetitorTop(page) {
+        if (page !== undefined) _compPage = page;
+        const tbody = document.getElementById('compTableBody');
+        tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Loading...</td></tr>';
+
+        try {
+            const platform = document.getElementById('platformSelect').value;
+            const days     = getDays();
+            const params   = [`days=${days}`, `sort_by=${_compSort}`, `page=${_compPage}`, `limit=10`];
+            if (platform) params.push(`platform=${encodeURIComponent(platform)}`);
+
+            const res  = await fetch('/insights/api/competitor-top?' + params.join('&'));
+            const json = await res.json();
+
+            if (json.status !== 'success') {
+                tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs">Không có dữ liệu</td></tr>';
+                return;
+            }
+            _compTotalPages = json.total_pages || 1;
+            renderCompetitorTable(json.data);
+            renderCompPagination();
+        } catch (e) {
+            console.error('Competitor top error:', e);
+            tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-red-400 text-xs">Lỗi tải dữ liệu</td></tr>';
+        }
+    }
+
+    function renderCompetitorTable(data) {
+        const tbody = document.getElementById('compTableBody');
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="py-10 text-center text-slate-400 text-xs">Chưa có dữ liệu đối thủ — chạy scrape để thu thập.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(r => {
+            const cap      = r.caption || (r.page_name || 'Competitor') + ' Reel';
+            const capShort = cap.length > 55 ? cap.slice(0, 55) + '…' : cap;
+            const viewsCls = r.views >= 100000
+                ? 'text-orange-600 font-black'
+                : r.views >= 10000
+                    ? 'text-amber-600 font-bold'
+                    : 'text-gray-700 font-semibold';
+            return `<tr class="border-b border-gray-50 hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                        onclick="window.open('${r.reel_url}', '_blank')">
+                <td class="py-2.5 pr-3 max-w-[220px]">
+                    <div class="text-[12px] font-semibold text-gray-800 group-hover:text-amber-700 transition-colors truncate" title="${cap.replace(/"/g,'&quot;')}">${capShort}</div>
+                </td>
+                <td class="py-2.5 pr-3 hidden md:table-cell">
+                    <span class="text-[11px] text-slate-500 truncate max-w-[90px] block">${r.page_name || '—'}</span>
+                </td>
+                <td class="py-2.5 pr-3 text-right text-[13px] ${viewsCls}">${r.views > 0 ? formatK(r.views) : '<span class="text-slate-300">—</span>'}</td>
+                <td class="py-2.5 text-right text-[12px] text-rose-500 font-semibold hidden sm:table-cell">${r.likes > 0 ? formatK(r.likes) : '<span class="text-slate-300">—</span>'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderCompPagination() {
+        const el = document.getElementById('compPagination');
+        if (_compTotalPages <= 1) { el.innerHTML = ''; return; }
+        el.innerHTML = `
+            <button onclick="loadCompetitorTop(_compPage - 1)" ${_compPage <= 1 ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed">← Prev</button>
+            <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">${_compPage} / ${_compTotalPages}</span>
+            <button onclick="loadCompetitorTop(_compPage + 1)" ${_compPage >= _compTotalPages ? 'disabled' : ''}
+                class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold text-slate-600 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+        `;
+    }
+
     // DOM is already ready since this script is at the end of <body>
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
+            loadDataStatus();
             loadData();
+            loadLibrary();
+            loadBenchmark();
+            loadTrendingTopics();
+            loadCompetitorTop();
         });
     } else {
+        loadDataStatus();
         loadData();
+        loadLibrary();
+        loadBenchmark();
+        loadTrendingTopics();
+        loadCompetitorTop();
     }
 </script>
 {% endblock %}
