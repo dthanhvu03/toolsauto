@@ -6,8 +6,6 @@ from app.config import DATABASE_URL
 engine = create_engine(
     DATABASE_URL,
     poolclass=NullPool,
-    pool_timeout=30,
-    pool_pre_ping=True,
     connect_args={
         "check_same_thread": False,
         "timeout": 30
