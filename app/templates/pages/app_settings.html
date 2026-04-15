@@ -58,10 +58,11 @@
         {% endfor %}
         
         <div class="border-t border-gray-100 mt-4 pt-4">
-          <button type="submit" form="settings-bulk"
-                  class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all duration-150 shadow-sm hover:shadow-md active:scale-95">
-            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            Lưu tất cả
+          <button type="submit" form="settings-bulk" id="btn-save-all-desktop"
+                  class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all duration-150 shadow-sm hover:shadow-md active:scale-95 disabled:opacity-60 disabled:cursor-wait">
+            <svg class="w-4 h-4 save-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <svg class="w-4 h-4 save-spinner hidden animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <span class="save-label">Lưu tất cả</span>
           </button>
         </div>
       </div>
@@ -77,7 +78,10 @@
             <div class="text-sm font-semibold text-gray-900">Trung tâm điều khiển</div>
             <div class="text-xs text-gray-400 mt-0.5">Chỉnh rồi bấm Lưu</div>
           </div>
-          <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all whitespace-nowrap shadow-sm">Lưu tất cả</button>
+          <button type="submit" id="btn-save-all-mobile" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all whitespace-nowrap shadow-sm disabled:opacity-60 disabled:cursor-wait">
+            <svg class="w-4 h-4 save-spinner hidden animate-spin inline-block mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            <span class="save-label">Lưu tất cả</span>
+          </button>
         </div>
 
         {% for section, specs in sections.items() %}
@@ -347,5 +351,56 @@
       });
     });
   })();
+  // ─── Save Button Loading State ───────────────────────────────────
+  (function () {
+    var form = document.getElementById('settings-bulk');
+    if (!form) return;
+
+    // Before HTMX sends the request: show spinner, disable buttons
+    form.addEventListener('htmx:beforeRequest', function () {
+      document.querySelectorAll('.save-label').forEach(function (el) {
+        el.textContent = 'Đang lưu...';
+      });
+      document.querySelectorAll('.save-icon').forEach(function (el) {
+        el.classList.add('hidden');
+      });
+      document.querySelectorAll('.save-spinner').forEach(function (el) {
+        el.classList.remove('hidden');
+      });
+      document.querySelectorAll('[type="submit"]').forEach(function (btn) {
+        if (btn.form === form || btn.getAttribute('form') === 'settings-bulk') {
+          btn.disabled = true;
+        }
+      });
+    });
+
+    // After HTMX completes: restore buttons
+    form.addEventListener('htmx:afterRequest', function (evt) {
+      document.querySelectorAll('.save-label').forEach(function (el) {
+        el.textContent = 'Lưu tất cả';
+      });
+      document.querySelectorAll('.save-icon').forEach(function (el) {
+        el.classList.remove('hidden');
+      });
+      document.querySelectorAll('.save-spinner').forEach(function (el) {
+        el.classList.add('hidden');
+      });
+      document.querySelectorAll('[type="submit"]').forEach(function (btn) {
+        if (btn.form === form || btn.getAttribute('form') === 'settings-bulk') {
+          btn.disabled = false;
+        }
+      });
+    });
+  })();
+
+  // ─── Reset Button Feedback ─────────────────────────────────────────
+  document.querySelectorAll('form[id^="reset-form-"]').forEach(function (resetForm) {
+    resetForm.addEventListener('htmx:afterRequest', function (evt) {
+      // After a successful reset, reload the page to show updated values
+      if (evt.detail.successful) {
+        setTimeout(function () { window.location.reload(); }, 800);
+      }
+    });
+  });
 </script>
 {% endblock %}
