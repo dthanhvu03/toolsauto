@@ -50,7 +50,7 @@ def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_
     Cap is runtime setting POSTS_PER_PAGE_PER_DAY (0 = disabled).
     """
     try:
-        cap = int(runtime_settings.get_effective(db, "publish.posts_per_page_per_day") or 0)
+        cap = int(runtime_settings.get_effective(db, "POSTS_PER_PAGE_PER_DAY") or 0)
     except Exception:
         cap = int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0)
 
@@ -106,7 +106,7 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
     Cap is runtime setting REUP_VIDEOS_PER_PAGE_PER_DAY (0 = disabled).
     """
     try:
-        cap = int(runtime_settings.get_effective(db, "publish.reup_videos_per_page_per_day") or 0)
+        cap = int(runtime_settings.get_effective(db, "REUP_VIDEOS_PER_PAGE_PER_DAY") or 0)
     except Exception:
         cap = int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0)
 
@@ -383,11 +383,8 @@ def app_settings_save(
     try:
         runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
     except ValueError:
-        return JSONResponse({"success": False, "error": "Không thể lưu: key hoặc giá trị không hợp lệ."}, status_code=400)
-    
-    import json as _json
-    headers = {"HX-Trigger": _json.dumps({"showMessage": {"msg": "Đã lưu cài đặt thành công.", "type": "success"}})}
-    return JSONResponse({"success": True}, headers=headers)
+        return htmx_toast_response("Không thể lưu: key hoặc giá trị không hợp lệ.", "error", refresh_page=False)
+    return htmx_toast_response("Đã lưu cài đặt thành công.", "success", refresh_page=True)
 
 
 @router.post("/app/settings/reset", response_class=HTMLResponse)
@@ -401,7 +398,7 @@ def app_settings_reset(
         runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
     except ValueError:
         return htmx_toast_response("Không thể đặt lại.", "error", refresh_page=False)
-    return htmx_toast_response("Đã đặt lại về mặc định.", "success", refresh_page=False)
+    return htmx_toast_response("Đã đặt lại về mặc định.", "success", refresh_page=True)
 
 
 @router.post("/app/settings/bulk-save", response_class=HTMLResponse)
@@ -441,7 +438,7 @@ async def app_settings_bulk_save(request: Request, db: Session = Depends(get_db)
         runtime_settings.upsert_setting(db, key=key, raw_value=str(raw), updated_by=updated_by)
         changed += 1
 
-    return htmx_toast_response(f"Đã lưu {changed} thay đổi; đặt lại {reset} mục về mặc định.", "success", refresh_page=False)
+    return htmx_toast_response(f"Đã lưu {changed} thay đổi; đặt lại {reset} mục về mặc định.", "success", refresh_page=True)
 
 @router.get("/app/viral/table", response_class=HTMLResponse)
 def app_viral_table(
