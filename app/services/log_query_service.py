@@ -1,6 +1,6 @@
 import math
 import logging
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, List, Tuple, Dict, Literal
 from app.schemas.log import CanonicalLogEvent
 from app.services.log_normalizer import LogNormalizer
 from sqlalchemy.orm import Session
@@ -23,9 +23,9 @@ _SOURCE_REGISTRY: Dict[str, str] = {
             level         AS level,
             'job_event'   AS event_type,
             job_id        AS job_id,
-            NULL          AS actor,
+            CAST(NULL AS TEXT) AS actor,
             message       AS message,
-            meta_json     AS metadata,
+            CAST(meta_json AS TEXT) AS metadata,
             id            AS _id
         FROM job_events
     """,
@@ -36,9 +36,9 @@ _SOURCE_REGISTRY: Dict[str, str] = {
             action_taken                                                  AS level,
             'compliance_violation'                                        AS event_type,
             job_id                                                        AS job_id,
-            NULL                                                          AS actor,
+            CAST(NULL AS TEXT)                                            AS actor,
             'Compliance violation: ' || COALESCE(content_type, 'unknown') AS message,
-            violations_found                                              AS metadata,
+            CAST(violations_found AS TEXT)                              AS metadata,
             id                                                            AS _id
         FROM violation_log
     """,
@@ -49,9 +49,9 @@ _SOURCE_REGISTRY: Dict[str, str] = {
             'INFO'                     AS level,
             action                     AS event_type,
             NULL                       AS job_id,
-            user_id                    AS actor,
+            CAST(user_id AS TEXT)      AS actor,
             'Audit action: ' || action AS message,
-            details                    AS metadata,
+            CAST(details AS TEXT)       AS metadata,
             id                         AS _id
         FROM audit_logs
     """,
@@ -62,15 +62,49 @@ _SOURCE_REGISTRY: Dict[str, str] = {
             'INFO'                                                     AS level,
             action                                                     AS event_type,
             NULL                                                       AS job_id,
-            updated_by                                                 AS actor,
+            CAST(updated_by AS TEXT)                                  AS actor,
             action || ' on key ' || key                                AS message,
-            json_object('old_value', COALESCE(old_value, ''),
-                        'new_value', COALESCE(new_value, ''))          AS metadata,
+            ('old_value=' || COALESCE(old_value, '') || '; new_value=' || COALESCE(new_value, '')) AS metadata,
             id                                                         AS _id
         FROM runtime_settings_audit
     """,
 }
 
+
+def _normalize_category(value: Optional[str]) -> Literal["user", "tech", "all"]:
+    if not value:
+        return "all"
+    normalized = value.strip().lower()
+    if normalized in {"user", "tech", "all"}:
+        return normalized
+    return "all"
+
+
+def _tech_heuristic_sql() -> str:
+    return (
+        "("
+        "LOWER(COALESCE(message, '')) LIKE '%python traceback%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%psycopg2%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%sqlalchemy%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%playwright%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%pydantic%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%typeerror%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%valueerror%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%attributeerror%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%connection refused%' OR "
+        "LOWER(COALESCE(message, '')) LIKE '%timeout%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%python traceback%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%psycopg2%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%sqlalchemy%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%playwright%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%pydantic%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%typeerror%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%valueerror%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%attributeerror%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%connection refused%' OR "
+        "LOWER(COALESCE(metadata, '')) LIKE '%timeout%'"
+        ")"
+    )
 
 class LogQueryService:
     @staticmethod
@@ -108,10 +142,12 @@ class LogQueryService:
         job_id: Optional[int] = None,
         q: Optional[str] = None,
         page: int = 1,
-        per_page: int = 50
+        per_page: int = 50,
+        category: str = "all",
     ) -> Tuple[List[CanonicalLogEvent], int, int]:
         per_page = max(10, min(200, int(per_page)))
         page = max(1, int(page))
+        category = _normalize_category(category)
 
         # Validate source against registry — prevents unexpected/injected values
         if source and source not in _SOURCE_REGISTRY:
@@ -132,6 +168,20 @@ class LogQueryService:
         # Outer query to apply filters globally over the UNION
         params: Dict[str, object] = {}
         outer_where = []
+
+        tech_heuristic = _tech_heuristic_sql()
+        if category == "user":
+            outer_where.append(
+                "((UPPER(COALESCE(level, '')) = 'INFO' "
+                "OR source IN ('audit_logs', 'violation_log', 'runtime_settings_audit')) "
+                f"AND NOT {tech_heuristic})"
+            )
+        elif category == "tech":
+            outer_where.append(
+                "(UPPER(COALESCE(level, '')) IN ('ERROR', 'WARNING', 'WARN', 'FATAL', 'CRITICAL') "
+                f"OR {tech_heuristic})"
+            )
+
         if level:
             outer_where.append("level LIKE :level")
             params["level"] = f"%{level}%"
@@ -179,6 +229,6 @@ class LogQueryService:
                 "message": r[6],
                 "metadata": r[7],
             }
-            results.append(LogNormalizer.normalize_domain_row(raw_dict))
+            results.append(LogNormalizer.normalize_domain_row(raw_dict, category=category))
             
         return results, total_rows, total_pages

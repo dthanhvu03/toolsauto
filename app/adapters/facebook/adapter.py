@@ -52,6 +52,23 @@ class FacebookAdapter(AdapterInterface):
         self.playwright, self.context, self.page = bundle
         return True
 
+    def _is_session_alive(self) -> bool:
+        """Check if the Playwright page/context is still alive before using it."""
+        if not self.page or not self.context:
+            return False
+        try:
+            # Accessing page.url will throw if the page/context/browser is closed
+            _ = self.page.url
+            return True
+        except Exception:
+            return False
+
+    def _try_recover_session(self, profile_path: str) -> bool:
+        """Attempt to close dead session and relaunch a fresh one."""
+        logger.warning("FacebookAdapter: Session is dead. Attempting recovery...")
+        self.close_session()
+        return self.open_session(profile_path)
+
     _REEL_ID_RE = re.compile(r"/reel/([a-zA-Z0-9_-]+)", re.IGNORECASE)
     _SHARE_RE = re.compile(r"/share/[rv]/([a-zA-Z0-9_-]+)", re.IGNORECASE)
 
@@ -333,7 +350,7 @@ class FacebookAdapter(AdapterInterface):
                 identifier = parts[-1].split("?")[0]
 
         if identifier and identifier in actual_url:
-            logger.info("FacebookAdapter: [Identity] URL verification passed for '%s' (%s)", identifier, context)
+            logger.debug("FacebookAdapter: [Identity] URL verification passed for '%s' (%s)", identifier, context)
             return
 
         # 2. Page Title / Header check (Fallback)
@@ -341,7 +358,7 @@ class FacebookAdapter(AdapterInterface):
             page_title = self.page.title()
             # If slug is in title (common for pages)
             if identifier.lower() in page_title.lower():
-                 logger.info("FacebookAdapter: [Identity] Title verification passed for '%s' (%s)", identifier, context)
+                 logger.debug("FacebookAdapter: [Identity] Title verification passed for '%s' (%s)", identifier, context)
                  return
         except Exception:
             pass
@@ -409,7 +426,7 @@ class FacebookAdapter(AdapterInterface):
                     logger.warning("FacebookAdapter: Swallowed exception at line 369: %s", e)
 
             if found_el:
-                logger.info("FacebookAdapter: Found personal profile '%s' in switcher. Clicking...", account_name)
+                logger.debug("FacebookAdapter: Found personal profile '%s' in switcher. Clicking...", account_name)
                 # Find the closest clickable container
                 clickable = found_el.locator("xpath=ancestor::div[@role='button' or @role='menuitemradio' or @role='radio' or @role='menuitem']").first
                 if self._is_visible(clickable):
@@ -420,7 +437,7 @@ class FacebookAdapter(AdapterInterface):
                 self.page.wait_for_timeout(5000) # Wait for page reload context switch
                 return True
             else:
-                logger.info("FacebookAdapter: Personal profile '%s' not explicitly found in switcher. Might already be active.", account_name)
+                logger.debug("FacebookAdapter: Personal profile '%s' not explicitly found in switcher. Might already be active.", account_name)
                 # Close the menu if we opened it by clicking off banner
                 try:
                     self.page.keyboard.press("Escape")
@@ -437,6 +454,15 @@ class FacebookAdapter(AdapterInterface):
 
         if not self.page:
             return PublishResult(ok=False, error="Playwright page is not initialized.", is_fatal=True)
+
+        # Bug #2 fix: Detect dead browser session early before attempting navigation
+        if not self._is_session_alive():
+            logger.error("FacebookAdapter: Browser session is dead (page/context closed). Cannot publish.")
+            return PublishResult(
+                ok=False,
+                error="Browser session is dead (page/context closed). Will retry with fresh session.",
+                is_fatal=False,
+            )
 
         target_page_url = (getattr(job, "target_page", None) or "").strip() or None
         is_page_post = bool(target_page_url)
@@ -633,12 +659,12 @@ class FacebookAdapter(AdapterInterface):
             publish_salt_match = re.search(r'\[ref:[a-zA-Z0-9]+\]|#v\d{4}', publish_caption)
             if publish_salt_match:
                 publish_salt = publish_salt_match.group(0)
-                logger.info("FacebookAdapter: Existing salt found in caption: %s", publish_salt)
+                logger.debug("FacebookAdapter: Existing salt found in caption: %s", publish_salt)
             else:
                 raw = f"{job.id}-{job.account_id}-{getattr(job, 'created_at', job.id)}"
                 publish_salt = f"[ref:{_hashlib.sha256(raw.encode()).hexdigest()[:8]}]"
                 publish_caption = f"{publish_caption}\n\n{publish_salt}" if publish_caption else publish_salt
-                logger.info("FacebookAdapter: Auto-injected verification salt: %s", publish_salt)
+                logger.debug("FacebookAdapter: Auto-injected verification salt: %s", publish_salt)
 
             # ── Pre-scan existing reels to detect NEW ones after posting ──
             update_active_node(job.id, "pre_scan")
@@ -683,7 +709,7 @@ class FacebookAdapter(AdapterInterface):
             reels = FacebookReelsPage(self.page)
             reels.neutralize_overlays()
 
-            logger.info("FacebookAdapter: [Phase 3] Locating publish entry...")
+            logger.info("FacebookAdapter: [Phase 1] Bước 1/5: Tìm nơi đăng bài...")
             if is_page_post:
                 entrypoint_used = reels.open_page_reels_entry()
                 if not entrypoint_used:
@@ -712,7 +738,7 @@ class FacebookAdapter(AdapterInterface):
             surface = reels.find_active_publish_surface()
             reels.log_surface_inventory(surface, "entry_opened")
 
-            logger.info("FacebookAdapter: Uploading media from %s", job.media_path)
+            logger.info("FacebookAdapter: [Phase 2] Bước 2/5: Tải video lên từ %s", job.media_path)
             if not os.path.exists(job.media_path):
                 return self._failure_result(
                     job.id,
@@ -755,23 +781,52 @@ class FacebookAdapter(AdapterInterface):
             if pre_next_caption:
                 caption_typed = reels.fill_caption(surface, publish_caption)
 
+            logger.info("FacebookAdapter: [Phase 3] Bước 3/5: Nhập nội dung bài viết và chuẩn bị các bước tiếp theo...")
+            for _overlay_try in range(5):
+                try:
+                    blocking = self.page.locator('div[role="dialog"]:visible').count()
+                    if blocking == 0:
+                        break
+                    self.page.keyboard.press("Escape")
+                    self.page.wait_for_timeout(2000)
+                except Exception:
+                    break
+
             logger.info("FacebookAdapter: Navigating through publish steps...")
             for step in range(6):
                 surface = reels.find_active_publish_surface()
                 post_button = reels.find_post_button(surface)
                 if post_button:
-                    logger.info("FacebookAdapter: Post/Đăng button found at step %d.", step)
+                    logger.info("FacebookAdapter: Post/Dang button found at step %d.", step)
                     break
 
                 next_button = reels.find_next_button(surface)
                 if not next_button:
-                    logger.info("FacebookAdapter: No more Next/Tiếp buttons at step %d.", step)
+                    logger.info("FacebookAdapter: No more Next/Tiep buttons at step %d.", step)
                     break
 
-                logger.info("FacebookAdapter: Clicking Next/Tiếp at step %d...", step + 1)
+                logger.info("FacebookAdapter: Clicking Next/Tiep at step %d...", step + 1)
                 if not self._click_locator(next_button, f"next button step {step + 1}", timeout=5000):
+                    # Fallback: force click via JS when overlay blocks normal click
+                    try:
+                        next_button.evaluate("el => el.click()")
+                        logger.info("FacebookAdapter: JS-force-clicked Next button at step %d.", step + 1)
+                        self.page.wait_for_timeout(3000)
+                        continue
+                    except Exception:
+                        pass
                     reels.log_surface_inventory(surface, f"next_click_failed_{step + 1}")
-                    logger.warning("FacebookAdapter: Failed to click Next/Tiếp button but continuing. It might be a false positive (e.g. unclickable carousel arrow).")
+                    logger.warning("FacebookAdapter: Failed to click Next/Tiep button at step %d. Trying to dismiss overlays...", step + 1)
+                    # Try dismissing overlay and retry
+                    try:
+                        self.page.keyboard.press("Escape")
+                        self.page.wait_for_timeout(2000)
+                        retry_next = reels.find_next_button(reels.find_active_publish_surface())
+                        if retry_next and self._click_locator(retry_next, f"next button step {step + 1} retry", timeout=5000):
+                            self.page.wait_for_timeout(3000)
+                            continue
+                    except Exception:
+                        pass
                     break
                 self.page.wait_for_timeout(3000)
 
@@ -811,7 +866,7 @@ class FacebookAdapter(AdapterInterface):
 
 
             update_active_node(job.id, "post_content")
-            logger.info("FacebookAdapter: Clicking POST button...")
+            logger.info("FacebookAdapter: [Phase 4] Bước 4/5: Đang thực hiện đăng bài lên Facebook...")
             logger.info("FacebookAdapter: Waiting for Post button to become enabled...")
             try:
                 post_handle = post_button.element_handle()
@@ -856,213 +911,146 @@ class FacebookAdapter(AdapterInterface):
                     entrypoint_used,
                 )
 
-            self.page.wait_for_timeout(10000)
-
-            # ── Post-publish verification: scan for new reel ──
+            # ── Post-publish verification: FAST TRACK ──
+            logger.info("FacebookAdapter: [Phase 5] Bước 5/5: Kiểm tra và lấy link bài viết vừa đăng...")
             update_active_node(job.id, "post_verify")
-            profile_url = target_page_url if target_page_url else "https://www.facebook.com/me"
             post_url = None
-            try:
-                # Nhanh: nếu FB redirect sang trang reel mới thì dùng luôn URL hiện tại
+            
+            # 1. Immediate catch: Success Toast
+            logger.info("FacebookAdapter: [Fast-Track] Checking for success toast link...")
+            toast_link = reels.find_success_toast_link()
+            if toast_link:
+                post_url = self._normalize_post_url(toast_link)
+                if post_url:
+                    logger.info("FacebookAdapter: Post URL captured INSTANTLY via toast: %s", post_url)
+
+            # 2. Immediate catch: Redirect URL
+            if not post_url:
                 try:
                     current_url = self.page.url or ""
                     normalized = self._normalize_post_url(current_url)
                     if normalized:
                         post_url = normalized
-                        logger.info("FacebookAdapter: post_url captured from current URL after post: %s", post_url)
-                except Exception as e:
-                    logger.warning("FacebookAdapter: Swallowed exception at line 816: %s", e)
+                        logger.info("FacebookAdapter: Post URL captured via current URL redirect: %s", post_url)
+                except Exception:
+                    pass
 
-                if not post_url:
-                    if target_page_url:
-                        base_page = target_page_url.split("?")[0].rstrip("/")
-                        reels_tab_urls = [
-                            base_page + "/reels_tab",
-                            base_page + "/reels",
-                            base_page + "/videos",
-                        ]
-                    else:
-                        reels_tab_urls = [
-                            "https://www.facebook.com/me/reels_tab",
-                            "https://www.facebook.com/me/reels",
-                            "https://www.facebook.com/reel",
-                        ]
-                    salt = publish_salt
-                    logger.info("FacebookAdapter: Scanning profile for salt '%s' to extract post_url...", salt)
-
-                for attempt in range(4):
-                    if post_url:
-                        break
-                    try:
-                        self.page.goto(profile_url, wait_until="commit", timeout=15000)
-                        self.page.wait_for_timeout(5000)
-                    except Exception as e:
-                        logger.warning("FacebookAdapter: Swallowed exception at line 842: %s", e)
-
-                    try:
-                        see_more_buttons = self.page.locator(
-                            'div[role="button"]:has-text("See more"), '
-                            'div[role="button"]:has-text("Xem thêm")'
-                        ).all()
-                        for btn in see_more_buttons[:5]:
-                            try:
-                                btn.click(timeout=2000)
-                                self.page.wait_for_timeout(500)
-                            except Exception as e:
-                                logger.warning("FacebookAdapter: Swallowed exception at line 854: %s", e)
-                        if see_more_buttons:
-                            logger.info("FacebookAdapter: Expanded %d 'See more' buttons.", min(len(see_more_buttons), 5))
-                    except Exception as e:
-                        logger.warning("FacebookAdapter: Swallowed exception at line 858: %s", e)
-
-                    if salt:
-                        try:
-                            full_text = self.page.evaluate("document.body.innerText")
-                            if salt in full_text:
-                                all_links = self.page.locator(
-                                    'a[href*="/posts/"], a[href*="/reel/"], a[href*="/videos/"], a[href*="/share/r/"], a[href*="/share/v/"]'
-                                ).all()
-                                for link in all_links:
-                                    try:
-                                        parent = link.locator("xpath=ancestor::div[@data-pagelet or contains(@class,'x1yztbdb') or @role='article']").first
-                                        if parent.count() > 0:
-                                            parent_text = parent.inner_text()
-                                            if salt in parent_text:
-                                                href = link.get_attribute("href")
-                                                normalized = self._normalize_post_url(href)
-                                                if normalized:
-                                                    post_url = normalized
-                                                    logger.info("FacebookAdapter: post_url captured via main feed: %s", post_url)
-                                                    break
-                                    except Exception:
-                                        continue
-                                # Fallback: dùng JS tìm link /reel/ hoặc /share/ mà có ancestor chứa salt
-                                if not post_url and full_text and salt in full_text:
-                                    found_href = self.page.evaluate("""
-                                        (salt) => {
-                                            const links = document.querySelectorAll('a[href*="/reel/"], a[href*="/share/r/"], a[href*="/share/v/"]');
-                                            for (const a of links) {
-                                                let el = a;
-                                                for (let i = 0; i < 20 && el; i++) {
-                                                    if (el.textContent && el.textContent.indexOf(salt) >= 0) {
-                                                        let h = a.getAttribute('href');
-                                                        return h ? (h.startsWith('http') ? h : 'https://www.facebook.com' + h) : null;
-                                                    }
-                                                    el = el.parentElement;
-                                                }
-                                            }
-                                            return null;
-                                        }
-                                    """, salt)
-                                    if found_href:
-                                        normalized = self._normalize_post_url(found_href)
-                                        if normalized:
-                                            post_url = normalized
-                                            logger.info("FacebookAdapter: post_url captured via main feed (JS fallback): %s", post_url)
-                            if post_url:
-                                break
-                        except Exception as e:
-                            logger.warning("FacebookAdapter: Swallowed exception at line 907: %s", e)
-
-                    unique_reels = []
-                    for reels_tab_url in reels_tab_urls:
-                        try:
-                            self.page.goto(reels_tab_url, wait_until="domcontentloaded", timeout=15000)
-                            self.page.wait_for_timeout(8000)
-                        except Exception:
-                            continue
-                        reel_links = self.page.locator('a').all()
-                        for link in reel_links:
-                            try:
-                                href = link.get_attribute("href")
-                                if not href or len(href) < 20:
-                                    continue
-                                clean_url = href.split("?")[0]
-                                if "/reel/" in clean_url or "/videos/" in clean_url:
-                                    full = (clean_url if clean_url.startswith("http") else "https://www.facebook.com" + clean_url).rstrip("/")
-                                    normalized = self._normalize_post_url(full)
-                                    if normalized and normalized not in unique_reels:
-                                        unique_reels.append(normalized)
-                            except Exception as e:
-                                logger.warning("FacebookAdapter: Swallowed exception at line 929: %s", e)
-                        if unique_reels:
-                            logger.info("FacebookAdapter: Found %d reel/video links on %s", len(unique_reels), reels_tab_url)
-                            break
-
-                    if salt:
-                        recent_reels = unique_reels[:10]
-                        for href in recent_reels:
-                            full_url = href if href.startswith("http") else "https://www.facebook.com" + href
-                            try:
-                                self.page.goto(full_url, wait_until="commit", timeout=15000)
-                                self.page.wait_for_timeout(5000)
-                                html_content = self.page.evaluate("document.body.innerHTML")
-                                text_content = self.page.evaluate("document.body.innerText")
-                                if salt in html_content or salt in (text_content or ""):
-                                    normalized = self._normalize_post_url(full_url)
-                                    if normalized:
-                                        post_url = normalized
-                                        logger.info("FacebookAdapter: post_url captured via Reels tab deep dive: %s", post_url)
-                                    break
-                            except Exception:
-                                continue
-
-                        if post_url:
-                            break
-                    else:
-                        # No salt — check if a NEW reel appeared (not in pre_existing_reels)
-                        for reel_url in unique_reels:
-                            normalized = self._normalize_post_url(reel_url)
-                            if not normalized:
-                                continue
-                            if normalized not in pre_existing_reels:
-                                post_url = normalized
-                                logger.info("FacebookAdapter: NEW reel detected (not in pre-existing set): %s", post_url)
-                                break
-                        if post_url:
-                            break
-                        # If no new reel yet, wait and retry
-                        if attempt < 3:
-                            logger.info("FacebookAdapter: No new reel found on attempt %d/4. Waiting 10s before retry...", attempt + 1)
-                            self.page.wait_for_timeout(10000)
-                            continue
-                        break
-
-                    logger.info("FacebookAdapter: Salt not found on attempt %d/4. Waiting 10s before retry...", attempt + 1)
-                    self.page.wait_for_timeout(10000)
-
-                if not post_url:
-                    logger.warning("FacebookAdapter: Could not verify post_url — post may not have been published.")
-
-            except Exception as e:
-                logger.warning("FacebookAdapter: Failed to capture post_url: %s", e)
-
-            # ── Final screenshot for evidence ──
-            self._capture_failure_artifacts(job.id, "post_verification_final")
-
-            # If we couldn't find the new reel AND submission was ambiguous (timeout), treat as failure
-            if not post_url and submission_status == "timeout":
-                return self._failure_result(
-                    job.id,
-                    "post_verification_failed",
-                    "Post submission timed out AND post could not be verified on profile. Likely NOT published.",
-                    flow_mode,
-                    entrypoint_used,
-                )
-
-            # If we found nothing but submission seemed ok, log warning but allow (FB processing delay)
             if not post_url:
-                logger.warning("FacebookAdapter: Post URL not found but submission appeared successful. May be processing delay.")
+                logger.info("FacebookAdapter: Fast-track immediate capture missed. Starting profiling scan...")
+                # Reduce post-click cooldown if we already waited in reels.wait_for_post_submission
+                self.page.wait_for_timeout(4000) 
 
-            # ── Post-publish verification ──
-            # Skip strict identity check here because FB often redirects to /reel/ URL which skips the page slug.
-            # Pre-post check remains the real guard.
-            if post_url and "facebook.com/reel/" in post_url:
-                logger.info("[Job %s] Post verified: %s", job.id, post_url)
-            elif post_url and "facebook.com/watch" in post_url:
-                logger.info("[Job %s] Post verified (watch): %s", job.id, post_url)
+                salt = publish_salt
+                
+                # Try up to 3 attempts with increasing depth
+                for attempt in range(3):
+                    if post_url: break
+                    
+                    logger.info("FacebookAdapter: Verification attempt %d/3...", attempt + 1)
+                    
+                    # A. Direct Reels Tab (Fastest for Reels)
+                    if reels.navigate_to_reels_tab(target_page_url):
+                        # High-speed JS scan for new items or salt
+                        found_href = self.page.evaluate("""
+                            ([salt, pre_reels]) => {
+                                const links = document.querySelectorAll('a[href*="/reel/"], a[href*="/share/r/"], a[href*="/share/v/"]');
+                                // Priority 1: Salt in ancestor
+                                for (const a of links) {
+                                    let el = a;
+                                    for (let i = 0; i < 15 && el; i++) {
+                                        if (el.textContent && el.textContent.indexOf(salt) >= 0) {
+                                            return a.getAttribute('href');
+                                        }
+                                        el = el.parentElement;
+                                    }
+                                }
+                                // Priority 2: Newest item not in pre_reels
+                                if (!salt && links.length > 0) {
+                                    const firstHref = links[0].getAttribute('href');
+                                    if (firstHref && !pre_reels.includes(firstHref)) return firstHref;
+                                }
+                                return null;
+                            }
+                        """, [salt, pre_existing_reels])
+                        
+                        if found_href:
+                            post_url = self._normalize_post_url(found_href)
+                            if post_url:
+                                logger.info("FacebookAdapter: Post URL captured via Reels tab scan: %s", post_url)
+                                break
+
+                    # B. Deep Dive (Only on attempt 2+)
+                    if not post_url and attempt >= 1 and salt:
+                        logger.info("FacebookAdapter: Deep-diving into latest reels to find salt...")
+                        # Grab top 5 reel links and visit them
+                        latest_links = self.page.evaluate("""
+                            () => Array.from(document.querySelectorAll('a[href*="/reel/"]'))
+                                .map(a => a.getAttribute('href'))
+                                .slice(0, 5)
+                        """)
+                        for href in latest_links:
+                            try:
+                                full_u = href if href.startswith("http") else "https://www.facebook.com" + href
+                                self.page.goto(full_u, wait_until="commit", timeout=10000)
+                                self.page.wait_for_timeout(3000)
+                                if salt in (self.page.evaluate("document.body.innerText") or ""):
+                                    post_url = self._normalize_post_url(full_u)
+                                    break
+                            except Exception: continue
+                        if post_url: break
+
+                    # C. Profile Refresh (Final fallback)
+                    if not post_url and attempt == 2:
+                        profile_url = target_page_url if target_page_url else "https://www.facebook.com/me"
+                        logger.info("FacebookAdapter: Final fallback: refreshing main profile %s", profile_url)
+                        try:
+                            self.page.goto(profile_url, wait_until="domcontentloaded", timeout=15000)
+                            self.page.wait_for_timeout(5000)
+                            # Expand just a bit
+                            more = self.page.locator('div[role="button"]:has-text("See more"), div[role="button"]:has-text("Xem thêm")').first
+                            if self._is_visible(more): more.click(timeout=2000)
+                            
+                            # Final JS sweep
+                            found_href = self.page.evaluate("""
+                                (salt) => {
+                                    const links = document.querySelectorAll('a[href*="/posts/"], a[href*="/reel/"], a[href*="/videos/"]');
+                                    for (const a of links) {
+                                        let el = a;
+                                        for (let i = 0; i < 20 && el; i++) {
+                                            if (el.textContent && el.textContent.indexOf(salt) >= 0) {
+                                                return a.getAttribute('href');
+                                            }
+                                            el = el.parentElement;
+                                        }
+                                    }
+                                    return null;
+                                }
+                            """, salt)
+                            if found_href:
+                                post_url = self._normalize_post_url(found_href)
+                                if post_url:
+                                    logger.info("FacebookAdapter: Post URL captured via final profile refresh sweep: %s", post_url)
+                        except Exception: pass
+
+                    if not post_url and attempt < 2:
+                        wait_sec = 8 if attempt == 0 else 15
+                        logger.info("FacebookAdapter: No new reel found yet. Waiting %ds before retry...", wait_sec)
+                        self.page.wait_for_timeout(wait_sec * 1000)
+
+            # ── Final report ──
+            if not post_url:
+                if submission_status == "success":
+                    logger.warning("[Job %s] Post URL not found. Submission seemed OK but post is UNVERIFIED.", job.id)
+                elif submission_status == "timeout":
+                    return self._failure_result(
+                        job.id, "post_verification_failed",
+                        "Post submission timed out AND post could not be verified. Likely NOT published.",
+                        flow_mode, entrypoint_used
+                    )
             else:
-                logger.warning("[Job %s] Unexpected post_url: %s", job.id, post_url)
+                logger.info("[Job %s] Post verified: %s", job.id, post_url)
+
+            self._capture_failure_artifacts(job.id, "post_verification_final")
 
             return PublishResult(
                 ok=True,
@@ -1071,7 +1059,7 @@ class FacebookAdapter(AdapterInterface):
                     flow_mode,
                     entrypoint_used,
                     post_url=post_url,
-                    msg="Post submitted." if post_url else "Post submitted but URL not yet verified.",
+                    msg="Post submitted." if post_url else "Post submitted but URL unverified.",
                     verified=bool(post_url),
                 ),
             )
@@ -1536,7 +1524,7 @@ class FacebookAdapter(AdapterInterface):
         Open /me and compare resolved profile URL to target page.
         Returns (ok, norm_active, norm_target) for logging / error messages.
         """
-        if not self.page:
+        if not self.page or not self._is_session_alive():
             return (
                 False,
                 "",
@@ -1685,37 +1673,37 @@ class FacebookAdapter(AdapterInterface):
             logger.warning("FacebookAdapter: Swallowed exception at line 1546: %s", e)
         try:
             if not row.is_visible(timeout=3000):
-                logger.info("FacebookAdapter: Switcher row not visible (%s)", label)
+                logger.debug("FacebookAdapter: Switcher row not visible (%s)", label)
                 return False
         except Exception:
             return False
         # Cover images often intercept normal click — force first to avoid 8s timeout.
         try:
             row.click(force=True, timeout=5000)
-            logger.info("FacebookAdapter: Switcher row force click OK (%s)", label)
+            logger.debug("FacebookAdapter: Switcher row force click OK (%s)", label)
             return True
         except Exception as e:
-            logger.info("FacebookAdapter: Switcher row force click failed (%s): %s", label, e)
+            logger.debug("FacebookAdapter: Switcher row force click failed (%s): %s", label, e)
         try:
             row.click(timeout=8000)
-            logger.info("FacebookAdapter: Switcher row normal click OK (%s)", label)
+            logger.debug("FacebookAdapter: Switcher row normal click OK (%s)", label)
             return True
         except Exception as e:
-            logger.info("FacebookAdapter: Switcher row normal click failed (%s): %s", label, e)
+            logger.debug("FacebookAdapter: Switcher row normal click failed (%s): %s", label, e)
         try:
             row.evaluate("el => el.click()")
-            logger.info("FacebookAdapter: Switcher row evaluate click OK (%s)", label)
+            logger.debug("FacebookAdapter: Switcher row evaluate click OK (%s)", label)
             return True
         except Exception as e:
-            logger.info("FacebookAdapter: Switcher row evaluate click failed (%s): %s", label, e)
+            logger.debug("FacebookAdapter: Switcher row evaluate click failed (%s): %s", label, e)
         try:
             row.focus(timeout=5000)
             self.page.wait_for_timeout(200)
             self.page.keyboard.press("Enter")
-            logger.info("FacebookAdapter: Switcher row Enter OK (%s)", label)
+            logger.debug("FacebookAdapter: Switcher row Enter OK (%s)", label)
             return True
         except Exception as e:
-            logger.info("FacebookAdapter: Switcher row Enter failed (%s): %s", label, e)
+            logger.debug("FacebookAdapter: Switcher row Enter failed (%s): %s", label, e)
         return False
 
     def _reopen_profile_switch_dialog(self, avatar_btn: Locator) -> Locator:
@@ -1842,7 +1830,7 @@ class FacebookAdapter(AdapterInterface):
                     except Exception:
                         continue
                 if not id_had_visible_link:
-                    logger.info(
+                    logger.debug(
                         "FacebookAdapter: No visible href control for page id %s inside switcher dialog.",
                         page_id,
                     )
@@ -1896,7 +1884,7 @@ class FacebookAdapter(AdapterInterface):
                     
                     cnt = len(rows_with_match)
                     if cnt == 0:
-                        logger.info(
+                        logger.debug(
                             "FacebookAdapter: 3a2b zero %s rows matching '%s' (norm: %s).",
                             row_sel,
                             target_page_name,
@@ -1904,13 +1892,13 @@ class FacebookAdapter(AdapterInterface):
                         )
                         continue
                     if cnt > 12:
-                        logger.info(
+                        logger.debug(
                             "FacebookAdapter: 3a2b skip %s (count=%s too many, likely false positives).",
                             row_sel,
                             cnt,
                         )
                         continue
-                    logger.info(
+                    logger.debug(
                         "FacebookAdapter: Switcher %s rows with normalized text match for '%s': count=%s",
                         row_sel,
                         target_page_name,
@@ -1932,7 +1920,7 @@ class FacebookAdapter(AdapterInterface):
                         indices = list(range(cnt))
                         if row_sel == "div[role=\"button\"]" and cnt >= 2:
                             indices = list(range(cnt - 1, -1, -1))
-                            logger.info(
+                            logger.debug(
                                 "FacebookAdapter: 3a2b trying button row indices reversed (count=%s).",
                                 cnt,
                             )
@@ -1940,7 +1928,7 @@ class FacebookAdapter(AdapterInterface):
                             r = rows_with_match[i]
                             try:
                                 if r.get_attribute("aria-checked") == "true":
-                                    logger.info(
+                                    logger.debug(
                                         "FacebookAdapter: Skip switcher row %s (already selected).",
                                         i,
                                     )

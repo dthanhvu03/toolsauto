@@ -248,9 +248,9 @@ def app_logs(request: Request):
 
 
 @router.get("/app/logs/tail")
-def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200):
+def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200, category: str = "user"):
     """Return last N lines for whitelisted pm2 log files."""
-    return LogQueryFacade.get_system_tail(proc, kind, lines)
+    return LogQueryFacade.get_system_tail(proc, kind, lines, category=category)
 
 
 @router.get("/app/logs/stream")
@@ -259,6 +259,7 @@ def app_logs_stream(
     kind: str = "out",
     level: str = "",
     q: str = "",
+    category: str = "user",
 ):
     """
     Server-Sent Events stream for realtime logs.
@@ -268,7 +269,7 @@ def app_logs_stream(
       - level: INFO|WARN|ERROR|DEBUG (optional)
       - q: keyword contains filter (optional)
     """
-    return LogQueryFacade.stream_system_logs(proc=proc, kind=kind, level=level, q=q)
+    return LogQueryFacade.stream_system_logs(proc=proc, kind=kind, level=level, q=q, category=category)
 
 @router.get("/app/logs/domain-events")
 def app_logs_domain_events(
@@ -277,6 +278,7 @@ def app_logs_domain_events(
     level: str = "",
     job_id: str = "",
     q: str = "",
+    category: str = "user",
     page: int = 1,
     db: Session = Depends(get_db)
 ):
@@ -284,7 +286,11 @@ def app_logs_domain_events(
     job_id_int = None
     if job_id and job_id.isdigit():
         job_id_int = int(job_id)
-        
+
+    category_norm = (category or "user").strip().lower()
+    if category_norm not in {"user", "tech", "all"}:
+        category_norm = "user"
+
     results, total, total_pages = LogQueryFacade.query_domain_events(
         db=db,
         source=source if source else None,
@@ -292,9 +298,10 @@ def app_logs_domain_events(
         job_id=job_id_int,
         q=q if q else None,
         page=page,
-        per_page=50
+        per_page=50,
+        category=category_norm,
     )
-    
+
     return templates.TemplateResponse(
         "fragments/domain_events_table.html",
         {
@@ -307,7 +314,8 @@ def app_logs_domain_events(
                 "source": source,
                 "level": level,
                 "job_id": job_id,
-                "q": q
+                "q": q,
+                "category": category_norm,
             }
         }
     )

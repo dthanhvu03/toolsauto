@@ -52,6 +52,9 @@
                 <span class="w-1 h-1 rounded-full bg-red-500"></span>
                 INVALID SESSION
             </span>
+            {% if account.login_error %}
+            <span class="text-[9px] font-bold text-red-400 mt-1 max-w-[150px] text-right leading-tight">{{ account.login_error }}</span>
+            {% endif %}
             {% endif %}
             
             {% if account.is_active %}
@@ -191,27 +194,32 @@
         <div class="flex flex-col gap-3 pt-6 border-t border-gray-50 mt-auto">
             <div class="flex items-center gap-2">
                 <!-- Main Login Action -->
-                {% if not account.login_status or account.login_status in ['NEW', 'INVALID'] %}
-                <button type="button" hx-post="/accounts/{{ account.id }}/start-login" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
-                        class="flex-1 h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm shadow-indigo-100"
-                        onclick="this.innerHTML='<div class=\'w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin\'></div> WAIT...'; this.disabled=true;">
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-                    Start Login
-                </button>
-                {% elif account.login_status == 'LOGGING_IN' %}
+                {% if account.login_status == 'LOGGING_IN' %}
                 <button type="button" hx-post="/accounts/{{ account.id }}/confirm-login" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
                         class="flex-1 h-11 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm animate-pulse"
                         onclick="this.innerHTML='<div class=\'w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin\'></div> CHECKING...'; this.disabled=true;">
                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-                    Confirm Login
+                    Xác nhận Login
+                </button>
+                {% elif not account.login_status or account.login_status in ['NEW', 'INVALID'] %}
+                <button type="button" hx-post="/accounts/{{ account.id }}/start-login" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+                        class="flex-1 {% if start_login_error %}min-h-[44px] h-auto py-1.5 bg-red-500 hover:bg-red-600{% else %}h-11 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100{% endif %} text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm"
+                        onclick="this.innerHTML='<div class=\'w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin flex-shrink-0\'></div> WAIT...'; this.disabled=true;">
+                    {% if start_login_error %}
+                    <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <span class="text-[9px] md:text-[10px] normal-case tracking-normal leading-tight text-left max-w-[200px] sm:max-w-none">{{ start_login_error }}</span>
+                    {% else %}
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
+                    Đăng nhập
+                    {% endif %}
                 </button>
                 {% else %}
-                <button type="submit" 
-                        class="flex-1 h-11 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm">
-                    <svg class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
-                    Save Changes
+                <button type="submit"
+                        class="flex-1 h-11 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm">
+                    Lưu thay đổi
                 </button>
                 {% endif %}
+                
                 
                 <!-- Toggle Power -->
                 <button type="button" hx-post="/accounts/{{ account.id }}/toggle" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"

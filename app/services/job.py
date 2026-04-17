@@ -9,9 +9,13 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.database.core import SessionLocal
 from app.database.models import Job, JobEvent, Account
 from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC
 from app.constants import JobStatus
+from app.utils.logger import setup_shared_logger
+
+logger = setup_shared_logger(__name__)
 
 
 def now_ts():
@@ -154,7 +158,11 @@ class JobService:
             JobService._log_event(db, job.id, "INFO", 
                 f"Auto COMMENT job created (delay={delay}s)")
         
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     @staticmethod
     def mark_failed_or_retry(db: Session, job: Job, error_msg: str, is_fatal: bool, error_type: Optional[str] = None):
@@ -183,7 +191,11 @@ class JobService:
             backoff_mins = 5 if job.tries == 1 else 15
             job.schedule_ts = now_ts() + (backoff_mins * 60)
             
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         
     @staticmethod
     def update_heartbeat(db: Session, job_id: int):
@@ -287,10 +299,33 @@ class JobService:
 
     @staticmethod
     def _log_event(db: Session, job_id: int, level: str, message: str, meta: str = None):
-        event = JobEvent(
-            job_id=job_id,
-            level=level,
-            message=message,
-            meta_json=meta
-        )
-        db.add(event)
+        """Best-effort event logging that must never break business state transitions."""
+        payload = {
+            "job_id": job_id,
+            "level": level,
+            "message": message,
+            "meta_json": meta,
+        }
+
+        last_err = None
+        for attempt in range(2):
+            event_db = SessionLocal()
+            try:
+                event_db.add(JobEvent(**payload))
+                event_db.commit()
+                return
+            except Exception as exc:
+                last_err = exc
+                event_db.rollback()
+                if attempt == 0:
+                    logger.warning(
+                        "[Job %s] _log_event failed on attempt %s, retrying once: %s",
+                        job_id,
+                        attempt + 1,
+                        exc,
+                    )
+                    continue
+            finally:
+                event_db.close()
+
+        logger.error("[Job %s] _log_event failed after retry: %s", job_id, last_err)

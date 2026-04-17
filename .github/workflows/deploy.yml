@@ -44,9 +44,28 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt --quiet
 
-            # Run database migrations
+            # Run database schema migrations (Alembic)
             python manage.py db stamp-if-needed || true
             python manage.py db upgrade head || true
+
+            # One-time SQLite → PostgreSQL data migration
+            # Chỉ chạy nếu: file SQLite tồn tại VÀ chưa có marker .migrated_to_pg
+            SQLITE_FILE="data/auto_publisher.db"
+            MARKER_FILE="data/.migrated_to_pg"
+            if [ -f "$SQLITE_FILE" ] && [ ! -f "$MARKER_FILE" ]; then
+              echo "=== Phát hiện SQLite, bắt đầu migrate data sang PostgreSQL... ==="
+              python scripts/migrate_sqlite_to_postgres.py \
+                --sqlite "$SQLITE_FILE" \
+                --postgres "${DATABASE_URL:-postgresql+psycopg2://admin:admin@localhost/toolsauto_db}"
+              if [ $? -eq 0 ]; then
+                touch "$MARKER_FILE"
+                echo "=== Migration hoàn tất. Marker tạo tại $MARKER_FILE ==="
+              else
+                echo "=== [WARNING] Migration thất bại, kiểm tra log ==="
+              fi
+            else
+              echo "=== PostgreSQL migration: đã chạy trước đó hoặc không có SQLite, bỏ qua ==="
+            fi
 
             # Graceful reload PM2 (current jobs finish before restart)
             pm2 reload ecosystem.config.js

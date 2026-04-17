@@ -10,7 +10,8 @@ DATA_DIR = BASE_DIR / "data"
 
 # Database
 DB_PATH = os.environ.get("DB_PATH") or str(DATA_DIR / "auto_publisher.db")
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# Change default to PostgreSQL, but allow env override
+DATABASE_URL = os.environ.get("DATABASE_URL") or "postgresql+psycopg2://admin:admin@localhost/toolsauto_db"
 
 # Authentication & Security
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
@@ -24,7 +25,7 @@ if not ADMIN_USERNAME or not ADMIN_PASSWORD:
 
 # Worker Settings
 WORKER_TICK_SECONDS = int(os.getenv("WORKER_TICK_SECONDS", "20"))
-WORKER_CRASH_THRESHOLD_SECONDS = int(os.getenv("WORKER_CRASH_THRESHOLD_SECONDS", "300")) # 5 minutes
+WORKER_CRASH_THRESHOLD_SECONDS = int(os.getenv("WORKER_CRASH_THRESHOLD_SECONDS", "120")) # 2 minutes
 WORKER_MAX_BATCH_SIZE = int(os.getenv("WORKER_MAX_BATCH_SIZE", "3"))
 MAX_FILES_PER_BATCH = int(os.getenv("MAX_FILES_PER_BATCH", "50"))
 SAFE_MODE = os.getenv("SAFE_MODE", "false").lower() == "true"

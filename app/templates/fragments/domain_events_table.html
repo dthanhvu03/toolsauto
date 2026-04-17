@@ -1,3 +1,4 @@
+{% set current_category = filters.get('category', 'user') if filters else 'user' %}
 <div id="domain-events-container">
     {% if total == 0 %}
     <div class="h-48 flex flex-col items-center justify-center text-center border border-gray-200 rounded-xl bg-gray-50">
@@ -43,8 +44,25 @@
                         {% endif %}
                     </td>
                     <td class="px-5 py-3 align-top">
+                        {% if current_category == 'user' %}
+                        <div class="font-semibold text-gray-900">
+                            {% if ev.source == 'job_events' %}
+                            Ho&#7841;t &#273;&#7897;ng Job
+                            {% elif ev.source == 'violation_log' %}
+                            Ki&#7875;m duy&#7879;t n&#7897;i dung
+                            {% elif ev.source == 'audit_logs' %}
+                            Nh&#7853;t k&#253; thao t&#225;c
+                            {% elif ev.source == 'runtime_settings_audit' %}
+                            L&#7883;ch s&#7917; c&#7845;u h&#236;nh
+                            {% else %}
+                            {{ ev.source }}
+                            {% endif %}
+                        </div>
+                        <div class="text-[10px] text-gray-500 mt-0.5 font-medium">{{ ev.event_type }}</div>
+                        {% else %}
                         <div class="font-semibold text-gray-900">{{ ev.source }}</div>
                         <div class="text-[10px] text-indigo-600 mt-0.5 font-medium">{{ ev.event_type }}</div>
+                        {% endif %}
                     </td>
                     <td class="px-5 py-3 align-top">
                         {% if ev.job_id %}
@@ -70,7 +88,7 @@
                                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
                                 Metadata
                             </summary>
-                            <div class="mt-1.5 p-3 bg-gray-50 border border-gray-200 rounded-lg font-mono break-all whitespace-pre-wrap text-emerald-700 overflow-x-auto shadow-inner">
+                            <div class="mt-1.5 p-3 bg-gray-50 border border-gray-200 rounded-lg font-mono break-all whitespace-pre-wrap text-emerald-700 overflow-x-auto shadow-inner metadata-json">
                                 {{ ev.metadata }}
                             </div>
                         </details>
@@ -120,14 +138,25 @@
     {% endif %}
     
     <script>
-    // Convert timestamps automatically if any script handles unix-ts. 
-    // We can run a small local converter here just in case.
     document.querySelectorAll('#domain-events-container .unix-ts').forEach(el => {
         const ts = parseInt(el.getAttribute('data-ts'), 10);
         if (ts) {
             const date = new Date(ts * 1000);
             const pad = n => n.toString().padStart(2, '0');
             el.textContent = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        }
+    });
+
+    // Pretty-print JSON for Tech view metadata
+    document.querySelectorAll('#domain-events-container .metadata-json').forEach(el => {
+        try {
+            const raw = el.textContent.trim();
+            if (raw && (raw.startsWith('{') || raw.startsWith('['))) {
+                const jsonObj = JSON.parse(raw);
+                el.textContent = JSON.stringify(jsonObj, null, 2);
+            }
+        } catch(e) {
+            // Not valid JSON, keep raw
         }
     });
     </script>

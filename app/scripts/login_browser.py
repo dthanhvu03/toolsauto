@@ -56,7 +56,12 @@ def main():
             browser = p.chromium.launch_persistent_context(
                 user_data_dir=args.profile_dir,
                 headless=False,
-                args=["--window-size=1200,800"]
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--window-size=1200,800",
+                ]
             )
         except Exception as e:
             print(f"LOGIN_ERROR: Failed to launch browser context. Is it already open? {e}")

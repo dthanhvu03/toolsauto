@@ -123,6 +123,7 @@ def _load_compliance_from_db() -> None:
                 "[Compliance] No active keywords in keyword_blacklist; only allowlist/regex apply."
             )
     except Exception as e:
+        db.rollback()
         logger.error("[Compliance] Failed to load compliance rules: %s", e)
 
 
@@ -378,6 +379,7 @@ def log_violation(
             )
             db.commit()
     except Exception as e:
+        db.rollback()
         logger.error("[Compliance] Failed to log violation: %s", e)
 
 
