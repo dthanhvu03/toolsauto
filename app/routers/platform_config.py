@@ -223,7 +223,7 @@ class {class_name}(AdapterInterface):
              is_active, base_urls, viewport, media_extensions,
              created_at, updated_at)
             VALUES (:platform, :adapter_class, :display_name,
-                    :display_emoji, 1, :base_urls, :viewport,
+                    :display_emoji, true, :base_urls, :viewport,
                     :media_extensions, :now, :now)
         """), {
             "platform": payload.get("platform", "").lower(),
@@ -319,7 +319,7 @@ def create_workflow(payload: dict, db: Session = Depends(get_db)):
     db.execute(text("""
         INSERT INTO workflow_definitions
         (name, platform, job_type, is_active, steps, timing_config, retry_config, created_at, updated_at)
-        VALUES (:name, :platform, :job_type, 0, '[]', '{}', '{}', :now, :now)
+        VALUES (:name, :platform, :job_type, false, '[]', '{}', '{}', :now, :now)
     """), {
         "name": name, "platform": platform, "job_type": job_type, "now": now
     })
@@ -631,7 +631,7 @@ def add_selector(payload: dict, db: Session = Depends(get_db)):
              valid_from, is_active, notes, created_at, updated_at)
             VALUES (:platform, :category, :name, :stype,
                     :value, :locale, :priority, 1,
-                    :now, 1, :notes, :now, :now)
+                    :now, true, :notes, :now, :now)
         """), {
             "platform": payload.get("platform"),
             "category": payload.get("category"),
@@ -739,7 +739,7 @@ def add_cta(payload: dict, db: Session = Depends(get_db)):
         (platform, template, locale, page_url, niche,
          priority, is_active, created_at)
         VALUES (:platform, :template, :locale, :page_url,
-                :niche, :priority, 1, :now)
+                :niche, :priority, true, :now)
     """), {
         "platform": payload.get("platform"),
         "template": payload.get("template"),

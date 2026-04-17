@@ -11,11 +11,12 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app.main_templates import templates
-from app.database.core import SessionLocal
+from app.database.core import SessionLocal, engine
 from app.database.models import Job, Account
 from app.constants import JobStatus
-from app.config import (    TIMEZONE,
-    DB_PATH,
+from app.config import (
+    TIMEZONE,
+    DATABASE_URL,
     BASE_DIR,
     CONTENT_DIR,
     DONE_DIR,
@@ -460,22 +461,22 @@ def cmd_kill_chrome():
 
 @router.post("/cmd/start-vnc", response_class=HTMLResponse)
 def cmd_start_vnc(request: Request):
-    # Kill existing to avoid port conflicts
-    run_cmd("pkill -f x11vnc; pkill -f websockify")
-    # Start x11vnc mapped to :99
-    cmd_vnc = "nohup x11vnc -display :99 -nopw -listen localhost -xkb -ncache 10 -shared -forever -bg > vnc.log 2>&1 &"
-    # Start websockify proxy
-    cmd_web = "nohup websockify --web /usr/share/novnc/ 6080 localhost:5900 > web.log 2>&1 &"
+    """Delegate VNC startup to the specialized script for better stability."""
+    # Correct paths: script and venv are inside BASE_DIR (which APP_DIR points to)
+    script_path = os.path.join(APP_DIR, "scripts", "start_vps_vnc.py")
+    python_path = os.path.join(APP_DIR, "venv", "bin", "python")
     
-    out1 = run_cmd(cmd_vnc)
-    out2 = run_cmd(cmd_web)
+    cmd = f"{python_path} {script_path}"
+    out = run_cmd(cmd)
     
-    # Get dynamic host (e.g. 14.225.218.116 or localhost)
+    # Get dynamic host for the link
     host = request.client.host
     if request.headers.get("host"):
         host = request.headers["host"].split(":")[0]
     
-    msg = f"✅ VNC Live Stream Started!\n\nLink: http://{host}:6080/vnc.html\n\n[x11vnc]\n{out1}\n\n[websockify]\n{out2}"
+    # Check if failed or success based on output
+    status_icon = "✅" if "[OK]" in out else "⚠️"
+    msg = f"{status_icon} VNC Startup Result:\n\n{out}\n\nLink: http://{host}:6080/vnc.html"
     return _html_output(msg)
 
 
@@ -495,27 +496,101 @@ def cmd_cleanup_db():
 
 @router.post("/cmd/db-vacuum", response_class=HTMLResponse)
 def cmd_db_vacuum():
-    db_path = DB_PATH
-    before = os.path.getsize(db_path) / 1024**2 if os.path.exists(db_path) else 0
-    out = run_cmd(f"sqlite3 '{db_path}' 'VACUUM;'")
-    after = os.path.getsize(db_path) / 1024**2 if os.path.exists(db_path) else 0
-    saved = before - after
-    return _html_output(f"$ sqlite3 VACUUM\n\nBefore: {before:.2f} MB\nAfter:  {after:.2f} MB\nSaved:  {saved:.2f} MB\n\n{out}")
+    """Run PostgreSQL VACUUM ANALYZE on all tables."""
+    try:
+        from sqlalchemy import text as sa_text
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(sa_text("VACUUM ANALYZE"))
+        return _html_output("VACUUM ANALYZE completed successfully.")
+    except Exception as e:
+        return _html_output(f"VACUUM error: {e}")
 
 
 @router.post("/cmd/db-backup", response_class=HTMLResponse)
 def cmd_db_backup():
-    db_path = DB_PATH
-    backup_dir = os.path.join(os.path.dirname(db_path), "backups")
-    os.makedirs(backup_dir, exist_ok=True)
-    ts = datetime.now(tz=ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
-    backup_path = os.path.join(backup_dir, f"auto_publisher_{ts}.db")
+    """Backup PostgreSQL database using pg_dump."""
     try:
-        shutil.copy2(db_path, backup_path)
-        size = os.path.getsize(backup_path) / 1024**2
-        return _html_output(f"✅ Backup created:\n{backup_path}\nSize: {size:.2f} MB")
+        from urllib.parse import urlparse
+        parsed = urlparse(DATABASE_URL.replace("postgresql+psycopg2://", "postgresql://"))
+        db_host = parsed.hostname or "localhost"
+        db_port = str(parsed.port or 5432)
+        db_name = (parsed.path or "/toolsauto_db").lstrip("/")
+        db_user = parsed.username or "admin"
+        db_pass = parsed.password or ""
+
+        backup_dir = os.path.join(str(BASE_DIR), "data", "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        ts = datetime.now(tz=ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(backup_dir, f"{db_name}_{ts}.sql.gz")
+
+        env = os.environ.copy()
+        if db_pass:
+            env["PGPASSWORD"] = db_pass
+
+        cmd = f"pg_dump -h {db_host} -p {db_port} -U {db_user} {db_name} | gzip > '{backup_path}'"
+        result = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True,
+            timeout=300, env=env
+        )
+        if result.returncode != 0:
+            err = (result.stderr or "").strip()
+            return _html_output(f"Backup failed (exit {result.returncode}):\n{err}")
+
+        size_mb = os.path.getsize(backup_path) / 1024**2
+        return _html_output(
+            f"Backup created successfully:\n"
+            f"File: {backup_path}\n"
+            f"Size: {size_mb:.2f} MB"
+        )
+    except subprocess.TimeoutExpired:
+        return _html_output("Backup failed: pg_dump timed out (>5 min).")
     except Exception as e:
-        return _html_output(f"❌ Backup failed: {e}")
+        return _html_output(f"Backup failed: {e}")
+
+
+@router.post("/cmd/db-info", response_class=HTMLResponse)
+def cmd_db_info():
+    """Show PostgreSQL database info: version, size, connections, top tables."""
+    try:
+        from sqlalchemy import text as sa_text
+        lines = []
+        with engine.connect() as conn:
+            # PG version
+            ver = conn.execute(sa_text("SELECT version()")).scalar()
+            lines.append(f"PostgreSQL Version:\n  {ver}")
+
+            # DB size
+            db_size = conn.execute(sa_text(
+                "SELECT pg_size_pretty(pg_database_size(current_database()))"
+            )).scalar()
+            lines.append(f"\nDatabase Size: {db_size}")
+
+            # Active connections
+            conns = conn.execute(sa_text(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+            )).scalar()
+            lines.append(f"Active Connections: {conns}")
+
+            # Top 10 tables by size
+            rows = conn.execute(sa_text(
+                "SELECT relname AS table, "
+                "pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size, "
+                "n_live_tup AS row_count "
+                "FROM pg_class c "
+                "JOIN pg_stat_user_tables s ON c.relname = s.relname "
+                "WHERE c.relkind = 'r' "
+                "ORDER BY pg_total_relation_size(c.oid) DESC "
+                "LIMIT 10"
+            )).fetchall()
+            lines.append("\nTop 10 Tables (by size):")
+            lines.append(f"  {'Table':<30} {'Size':<12} {'Rows':>10}")
+            lines.append(f"  {'-'*30} {'-'*12} {'-'*10}")
+            for r in rows:
+                lines.append(f"  {r[0]:<30} {r[1]:<12} {r[2]:>10}")
+
+        return _html_output("\n".join(lines))
+    except Exception as e:
+        return _html_output(f"DB Info error: {e}")
 
 
 @router.post("/cmd/cleanup-videos", response_class=HTMLResponse)

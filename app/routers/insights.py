@@ -72,12 +72,12 @@ def get_growth_metrics(
     days = _validate_days(days)
     now = int(datetime.datetime.now().timestamp())
     cutoff = now - (days * 86400)
-    time_format = "%Y-%m-%d %H:00" if days == 7 else "%Y-%m-%d"
+    time_format = "YYYY-MM-DD HH24:00" if days == 7 else "YYYY-MM-DD"
 
     sql = f"""
     WITH LatestPerGroup AS (
         SELECT
-            strftime('{time_format}', datetime(recorded_at, 'unixepoch')) as time_label,
+            TO_CHAR(TO_TIMESTAMP(recorded_at), '{time_format}') as time_label,
             post_url,
             platform,
             page_url,
@@ -312,8 +312,8 @@ def get_engagement_heatmap(
     #         dow/hour NULL guard from version-B.
     sql = """
     SELECT
-        CAST(strftime('%w', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as dow,
-        CAST(strftime('%H', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+        CAST(EXTRACT(DOW FROM TO_TIMESTAMP(recorded_at)) AS INTEGER) as dow,
+        CAST(EXTRACT(HOUR FROM TO_TIMESTAMP(recorded_at)) AS INTEGER) as hour,
         SUM(COALESCE(likes, 0) + COALESCE(comments, 0) + COALESCE(shares, 0)) as total_interactions
     FROM page_insights
     WHERE recorded_at >= :cutoff

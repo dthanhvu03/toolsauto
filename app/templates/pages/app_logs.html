@@ -22,6 +22,18 @@
 
 <div id="system-logs-view" class="hidden">
 <div class="app-card p-4">
+  {% set current_sys_category = request.query_params.get('sys_category', 'user') %}
+  <div class="mb-4 flex items-center justify-between gap-3 flex-wrap border-b border-[var(--border)] pb-4">
+    <div class="flex items-center gap-4">
+      <div class="text-xs text-[var(--muted)]">Ch&#7871; &#273;&#7897; hi&#7875;n th&#7883; System Logs</div>
+      <div class="inline-flex rounded-lg border border-gray-300 bg-white p-1">
+        <button type="button" id="sys-cat-user" onclick="setSystemCategory('user')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">Ho&#7841;t &#273;&#7897;ng</button>
+        <button type="button" id="sys-cat-tech" onclick="setSystemCategory('tech')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">K&#7929; thu&#7853;t</button>
+        <button type="button" id="sys-cat-all" onclick="setSystemCategory('all')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">T&#7845;t c&#7843;</button>
+      </div>
+    </div>
+  </div>
+
   <div class="flex items-center justify-between gap-3 flex-wrap">
     <div class="flex items-center gap-2 flex-wrap">
       <div class="text-xs text-[var(--muted)]">Process</div>
@@ -89,12 +101,23 @@
 </div>
 
 <div id="domain-events-view" class="hidden">
+  {% set current_category = request.query_params.get('category', 'user') %}
   <div class="app-card p-4">
+    <div class="mb-4 flex items-center justify-between gap-3 flex-wrap">
+      <div class="text-xs text-[var(--muted)]">Ch&#7871; &#273;&#7897; hi&#7875;n th&#7883; Domain Events</div>
+      <div class="inline-flex rounded-lg border border-gray-300 bg-white p-1">
+        <button type="button" id="domain-cat-user" onclick="setDomainCategory('user')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">Ho&#7841;t &#273;&#7897;ng</button>
+        <button type="button" id="domain-cat-tech" onclick="setDomainCategory('tech')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">K&#7929; thu&#7853;t</button>
+        <button type="button" id="domain-cat-all" onclick="setDomainCategory('all')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">T&#7845;t c&#7843;</button>
+      </div>
+    </div>
+
     <form id="domainFilterForm" 
           hx-get="/app/logs/domain-events" 
           hx-target="#domain-events-container" 
           hx-swap="outerHTML" 
           class="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-4 flex-wrap mb-6 shadow-sm">
+      <input type="hidden" id="domainCategoryInput" name="category" value="{{ current_category }}" />
       
       <div class="flex-1 min-w-[160px]">
         <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5 flex items-center gap-1">
@@ -143,8 +166,9 @@
     </form>
 
     <div id="domain-events-container" class="mt-4" 
-         hx-get="/app/logs/domain-events?{{ request.url.query }}" 
-         hx-trigger="loadDomainEvents from:body">
+         hx-get="/app/logs/domain-events"
+         hx-trigger="loadDomainEvents from:body"
+         hx-include="#domainFilterForm">
       <div class="p-8 text-center text-[var(--muted)] text-sm border border-[var(--border)] rounded-lg bg-black/50">
         Loading...
       </div>
@@ -167,6 +191,7 @@
   const statusDot = document.getElementById('statusDot');
   const statusText = document.getElementById('statusText');
 
+  let systemCategory = 'user';
   let kind = {{ ("'" ~default_kind ~ "'") | safe }};
   let paused = false;
   let timer = null;
@@ -193,6 +218,7 @@
     url.searchParams.set('proc', proc);
     url.searchParams.set('kind', kind);
     url.searchParams.set('lines', lines);
+    url.searchParams.set('category', systemCategory);
     return url.toString();
   }
 
@@ -201,6 +227,7 @@
     const url = new URL(window.location.origin + '/app/logs/stream');
     url.searchParams.set('proc', proc);
     url.searchParams.set('kind', kind);
+    url.searchParams.set('category', systemCategory);
     const lvl = (levelSel && levelSel.value) ? levelSel.value : '';
     const q = (search.value || '').trim();
     if (lvl) url.searchParams.set('level', lvl);
@@ -296,16 +323,60 @@
     m.textContent = `Realtime: ${rt} • Mode: ${mode} • Lines: ${currentMaxLines()} • Window: ${win ? (win / 60 + 'm') : 'ALL'} • Showing: ${buf.length} • From: ${firstTs} • To: ${lastTs}`;
   }
 
+  function translateLogLine(text) {
+    if (systemCategory !== 'user') return text;
+    let out = text;
+    out = out.replace(/Entering AI polling loop\./ig, "Đang chờ lệnh từ hệ thống...");
+    out = out.replace(/Tick=\d+s/ig, ""); // Remove tick verbosity
+    out = out.replace(/No active job, exiting safely\./ig, "Chưa có tiến trình mới, đang tạm nghỉ.");
+    out = out.replace(/Starting DB sync\.\.\./ig, "Đang đồng bộ dữ liệu...");
+    out = out.replace(/Running routine maintenance tasks\.\.\./ig, "Đang dọn dẹp bộ nhớ định kỳ...");
+    out = out.replace(/Checking for crashed\/stale jobs/ig, "Đang kiểm tra và khôi phục tác vụ lỗi");
+    out = out.replace(/Received termination signal/ig, "Nhận lệnh chờ tắt từ máy chủ");
+    out = out.replace(/Preparing to shut down\.\.\./ig, "Đang chuẩn bị tắt hệ thống...");
+    out = out.replace(/Processing job/ig, "Đang xử lý tác vụ");
+    out = out.replace(/completed successfully/ig, "đã thực hiện thành công");
+    out = out.replace(/failed with error/ig, "đã gặp từ chối/lỗi");
+    return out;
+  }
+
   function renderBuffer(mode = 'render') {
-    const text = buf.join('\n');
-    const marked = applySearch(text);
-    const html = marked
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/&lt;&lt;/g, '<mark class=\"bg-yellow-500/30 text-yellow-100\">')
-      .replace(/&gt;&gt;/g, '</mark>');
-    logBox.innerHTML = html;
+    let htmlLines = [];
+    for (let ln of buf) {
+      if (ln === undefined) continue;
+      
+      // 1. Translate
+      ln = translateLogLine(String(ln));
+      
+      // 2. Escape HTML securely
+      ln = ln.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      
+      // 3. Highlight Search
+      const q = (search.value || '').trim();
+      if (q) {
+        const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(esc, 'ig');
+        ln = ln.replace(re, (m) => `<mark class="bg-yellow-500/30 text-yellow-100">${m}</mark>`);
+      }
+      
+      // 4. Colorize Level
+      if (ln.includes('[ERROR]') || ln.includes('FATAL')) {
+        ln = `<span class="text-red-400 font-semibold">${ln}</span>`;
+      } else if (ln.includes('[WARN]') || ln.includes('[WARNING]')) {
+        ln = `<span class="text-yellow-400 font-semibold">${ln}</span>`;
+      } else if (ln.includes('[INFO]')) {
+        ln = `<span class="text-blue-300/80">${ln}</span>`;
+      } else if (ln.includes('[DEBUG]')) {
+        ln = `<span class="text-gray-500">${ln}</span>`;
+      }
+
+      // 5. Dim timestamps (ISO formats)
+      ln = ln.replace(/(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[\.,]?\d*)/g, '<span class="text-gray-500/80">$1</span>');
+
+      htmlLines.push(ln);
+    }
+    
+    logBox.innerHTML = htmlLines.join('\n');
     scrollToBottom();
     updateMeta(mode);
   }
@@ -454,16 +525,83 @@
     } else {
        document.getElementById('system-logs-view').classList.remove('hidden');
        const url = new URL(window.location);
-       if (url.searchParams.has('tab')) {
-           url.searchParams.delete('tab');
-           window.history.replaceState({}, '', url);
-       }
+       url.searchParams.delete('tab');
+       window.history.replaceState({}, '', url);
        restart();
     }
   }
 
+  function refreshDomainCategoryButtons() {
+    const input = document.getElementById('domainCategoryInput');
+    const value = (input && input.value ? input.value : 'user').toLowerCase();
+    const buttons = {
+      user: document.getElementById('domain-cat-user'),
+      tech: document.getElementById('domain-cat-tech'),
+      all: document.getElementById('domain-cat-all'),
+    };
+
+    Object.entries(buttons).forEach(([key, btn]) => {
+      if (!btn) return;
+      if (key === value) {
+        btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+        btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+      } else {
+        btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+        btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+      }
+    });
+  }
+
+  function refreshSystemCategoryButtons() {
+    const value = systemCategory.toLowerCase();
+    const buttons = {
+      user: document.getElementById('sys-cat-user'),
+      tech: document.getElementById('sys-cat-tech'),
+      all: document.getElementById('sys-cat-all'),
+    };
+
+    Object.entries(buttons).forEach(([key, btn]) => {
+      if (!btn) return;
+      if (key === value) {
+        btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+        btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
+      } else {
+        btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
+        btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
+      }
+    });
+  }
+
+  function setDomainCategory(category) {
+    const input = document.getElementById('domainCategoryInput');
+    if (!input) return;
+    input.value = category;
+    refreshDomainCategoryButtons();
+
+    const form = document.getElementById('domainFilterForm');
+    if (form) {
+      form.requestSubmit();
+    }
+  }
+
+  function setSystemCategory(category) {
+    systemCategory = category;
+    refreshSystemCategoryButtons();
+    restart();
+  }
+
+  document.body.addEventListener('htmx:afterSwap', (event) => {
+    if (event && event.target && event.target.id === 'domain-events-container') {
+      refreshDomainCategoryButtons();
+    }
+  });
+
   const tabParams = new URLSearchParams(window.location.search);
   const initialTab = tabParams.get('tab') || 'system';
+  systemCategory = tabParams.get('sys_category') || 'user';
+  
   switchTab(initialTab);
+  refreshDomainCategoryButtons();
+  refreshSystemCategoryButtons();
 </script>
 {% endblock %}

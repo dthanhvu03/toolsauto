@@ -559,6 +559,11 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
                 competitor_reels = detail.pop('_competitor_reels', [])
                 if competitor_reels:
                     _save_competitor_reels(db_session, competitor_reels, account_id)
+                    # [DB-LOCK-FIX] Commit dup competitor data immediately
+                    try:
+                        db_session.commit()
+                    except Exception:
+                        db_session.rollback()
                     _comp_visits_remaining = 0  # Got data — no need to visit more
                 else:
                     _comp_visits_remaining -= 1
@@ -585,6 +590,12 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
             if competitor_reels:
                 _save_competitor_reels(db_session, competitor_reels, account_id)
                 _comp_visits_remaining = 0  # Already got data this page
+
+            # [DB-LOCK-FIX] Flush competitor data immediately to release write lock
+            try:
+                db_session.commit()
+            except Exception:
+                db_session.rollback()
 
             # Merge: grid views + detail metrics
             likes = detail.get('likes') or likes_grid
@@ -680,12 +691,16 @@ def main():
                     )
                     page = context.pages[0] if context.pages else context.new_page()
 
-                    for url in fb_targets:
-                        scrape_insights_for_page(page, db, account.id, url, platform="facebook")
-                    for url in tk_targets:
-                        scrape_insights_for_page(page, db, account.id, url, platform="tiktok")
-                    for url in ig_targets:
-                        scrape_insights_for_page(page, db, account.id, url, platform="instagram")
+                    # [DB-LOCK-FIX] Use a fresh short-lived session per page
+                    # to avoid holding DB write locks for the entire scraping run
+                    all_targets = (
+                        [(url, "facebook") for url in fb_targets] +
+                        [(url, "tiktok") for url in tk_targets] +
+                        [(url, "instagram") for url in ig_targets]
+                    )
+                    for target_url, platform in all_targets:
+                        with SessionLocal() as page_db:
+                            scrape_insights_for_page(page, page_db, account.id, target_url, platform=platform)
 
                     context.close()
             except Exception as e:

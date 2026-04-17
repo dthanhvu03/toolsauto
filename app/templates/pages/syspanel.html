@@ -202,19 +202,25 @@
 
             <!-- Database & Files -->
             <div class="bg-slate-50/50 rounded-xl p-4 border border-slate-100/50">
-                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Database & Files</div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Database (PostgreSQL)</div>
                 <div class="flex flex-col gap-2">
+                    <button hx-post="/syspanel/cmd/db-info" hx-target="#terminal-output" hx-swap="innerHTML"
+                        hx-on::before-request="terminalBusy('Querying DB info...')"
+                        class="action-btn bg-indigo-500 hover:bg-indigo-600 text-white text-xs">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        DB Info
+                    </button>
                     <button hx-post="/syspanel/cmd/db-backup" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Backing up...')"
+                        hx-on::before-request="terminalBusy('Running pg_dump...')"
                         class="action-btn bg-teal-600 hover:bg-teal-700 text-white text-xs">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
-                        Backup DB
+                        Backup (pg_dump)
                     </button>
                     <button hx-post="/syspanel/cmd/db-vacuum" hx-target="#terminal-output" hx-swap="innerHTML"
-                        hx-on::before-request="terminalBusy('Running VACUUM...')"
+                        hx-on::before-request="terminalBusy('Running VACUUM ANALYZE...')"
                         class="action-btn bg-cyan-600 hover:bg-cyan-700 text-white text-xs">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-                        Vacuum DB
+                        Vacuum & Analyze
                     </button>
                     <button hx-post="/syspanel/cmd/cleanup-db" hx-target="#terminal-output" hx-swap="innerHTML"
                         hx-on::before-request="terminalBusy('Running cleanup...')"

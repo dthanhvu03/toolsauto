@@ -79,7 +79,7 @@ def _load_all() -> dict:
         rows = db.execute(text(
             "SELECT platform, adapter_class, display_name, "
             "display_emoji, base_urls, viewport, media_extensions "
-            "FROM platform_configs WHERE is_active=1"
+            "FROM platform_configs WHERE is_active=true"
         )).fetchall()
         for r in rows:
             data["platforms"][r[0]] = PlatformConfig(
@@ -97,7 +97,7 @@ def _load_all() -> dict:
         rows = db.execute(text(
             "SELECT name, platform, job_type, steps, "
             "timing_config, retry_config "
-            "FROM workflow_definitions WHERE is_active=1 "
+            "FROM workflow_definitions WHERE is_active=true "
             "ORDER BY platform, job_type, name"
         )).fetchall()
         for r in rows:
@@ -121,7 +121,7 @@ def _load_all() -> dict:
                    selector_type, selector_value, locale,
                    priority, notes
             FROM platform_selectors
-            WHERE is_active=1
+            WHERE is_active=true
               AND (valid_until IS NULL OR valid_until > :now)
             ORDER BY platform, category, priority DESC
         """), {"now": int(time.time())}).fetchall()
@@ -140,7 +140,7 @@ def _load_all() -> dict:
             SELECT platform, template, locale,
                    page_url, niche, priority
             FROM cta_templates
-            WHERE is_active=1
+            WHERE is_active=true
             ORDER BY platform, priority DESC
         """)).fetchall()
         for r in rows:
@@ -350,12 +350,12 @@ class WorkflowRegistry:
 
             # Deactivate all siblings, activate target
             db.execute(sa_text(
-                "UPDATE workflow_definitions SET is_active = 0, updated_at = :now "
+                "UPDATE workflow_definitions SET is_active = false, updated_at = :now "
                 "WHERE platform = :platform AND job_type = :job_type"
             ), {"platform": platform, "job_type": job_type, "now": now})
 
             db.execute(sa_text(
-                "UPDATE workflow_definitions SET is_active = 1, updated_at = :now "
+                "UPDATE workflow_definitions SET is_active = true, updated_at = :now "
                 "WHERE name = :name"
             ), {"name": preset_name, "now": now})
 

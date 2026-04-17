@@ -291,49 +291,68 @@ class AccountService:
     @classmethod
     def start_login(cls, db: Session, account_id: int):
         """Spawns the headed browser process to allow user authentication."""
-        # 1. Atomic Check
-        updated_rows = db.query(Account).filter(
-            Account.id == account_id,
-            Account.login_status != "LOGGING_IN"
-        ).update({"login_status": "LOGGING_IN", "login_started_at": now_ts()})
-        db.commit()
-        
-        if updated_rows == 0:
-            raise ValueError(f"Account {account_id} is already logging in or locking failed.")
-            
-        account = cls.get_account(db, account_id)
-        
-        # 2. Spawn Subprocess
-        # We assume main.py is in root, so `app/scripts/login_browser.py` is relative
-        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "login_browser.py"))
-        
-        env = os.environ.copy()
-        env["PYTHONPATH"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        env["DISPLAY"] = ":99"
+        try:
+            # 0. Prevent login if jobs are running to avoid Profile in use conflict
+            running_jobs = db.query(Job).filter(
+                Job.account_id == account_id,
+                Job.status == JobStatus.RUNNING
+            ).count()
+            if running_jobs > 0:
+                raise ValueError("Tài khoản đang thực hiện đăng bài, vui lòng không đăng nhập lúc này!")
 
-        # Non-blocking spawn using the exact same python executable (venv) as the running FastAPI app
-        import sys
-        process = subprocess.Popen(
-            [
-                sys.executable,
-                script_path,
-                "--profile-dir",
-                account.resolved_profile_path,
-                "--account-id",
-                str(account.id),
-                "--platform",
-                account.platform,
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=env
-        )
-        
-        # 3. Store PID
-        account.login_process_pid = process.pid
-        db.commit()
-        
-        return account
+            # 1. Atomic Check
+            updated_rows = db.query(Account).filter(
+                Account.id == account_id,
+                Account.login_status != "LOGGING_IN"
+            ).update({"login_status": "LOGGING_IN", "login_started_at": now_ts()})
+            db.commit()
+            
+            if updated_rows == 0:
+                raise ValueError(f"Account {account_id} is already logging in or locking failed.")
+                
+            account = cls.get_account(db, account_id)
+            
+            # 2. Spawn Subprocess
+            # The script is in app/scripts/login_browser.py
+            # __file__ is app/services/account.py
+            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "login_browser.py"))
+            
+            from app.config import BASE_DIR, LOGS_DIR
+            env = os.environ.copy()
+            env["PYTHONPATH"] = str(BASE_DIR)
+            # Force :99 to match the VNC bridge, even on local with WSLg
+            env["DISPLAY"] = ":99"
+
+            # 3. Log errors to file instead of DEVNULL for debugging
+            log_file = os.path.join(LOGS_DIR, f"login_account_{account.id}.log")
+            log_handle = open(log_file, "a")
+            log_handle.write(f"\n--- Login Started at {now_ts()} ---\n")
+            log_handle.flush()
+
+            # Non-blocking spawn using the exact same python executable (venv) as the running FastAPI app
+            import sys
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    script_path,
+                    "--profile-dir",
+                    account.resolved_profile_path or "",
+                    "--account-id",
+                    str(account.id),
+                    "--platform",
+                    account.platform,
+                ],
+                stdout=log_handle,
+                stderr=log_handle,
+                env=env
+            )
+            account.login_process_pid = process.pid
+            db.commit()
+            return account
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error starting login process: {e}")
+            raise e
 
     @classmethod
     def kill_login_process(cls, db: Session, account: Account):

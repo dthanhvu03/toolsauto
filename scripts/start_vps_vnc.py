@@ -18,11 +18,11 @@ def main():
         return
 
     # Try to find display and auth
-    # Example: Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp -auth /tmp/xvfb-run.nVnBQ0/Xauthority
-    match = re.search(r"(:\d+).*?-auth\s+(\S+)", ps.stdout)
+    # Improved regex to specifically look for Xvfb followed by display
+    match = re.search(r"Xvfb\s+(:\d+).*?-auth\s+(\S+)", ps.stdout)
     if not match:
-        # Fallback: just try to find display
-        match_display = re.search(r"(:\d+)", ps.stdout)
+        # Fallback: just try to find display after Xvfb
+        match_display = re.search(r"Xvfb\s+(:\d+)", ps.stdout)
         if not match_display:
             print("Error: Could not determine Xvfb display.")
             return
@@ -44,25 +44,50 @@ def main():
 
     # 3. Start x11vnc
     print(f"Starting x11vnc on {display}...")
+    # STRATEGY: COMPLETELY UNSET WAYLAND TO AVOID CONFLICTS
+    vnc_env = os.environ.copy()
+    if "WAYLAND_DISPLAY" in vnc_env:
+        del vnc_env["WAYLAND_DISPLAY"]
+    vnc_env["XDG_SESSION_TYPE"] = "x11"
+    
     vnc_cmd = f"nohup x11vnc -display {display} "
     if auth:
         vnc_cmd += f"-auth {auth} "
-        os.environ["XAUTHORITY"] = auth
+        vnc_env["XAUTHORITY"] = auth
     
-    os.environ["DISPLAY"] = display
+    vnc_env["DISPLAY"] = display
     vnc_cmd += "-forever -shared -bg -rfbport 5900 -nopw -noxrecord -noxfixes -noxdamage > x11vnc.log 2>&1"
     
-    run(vnc_cmd)
-    
+    print(f"Executing: {vnc_cmd}")
+    subprocess.Popen(vnc_cmd, shell=True, env=vnc_env)
+    time.sleep(1)
+
+    # 3b. Start openbox window manager so windows appear properly
+    wm_running = run("pgrep -x openbox")
+    if not wm_running.stdout.strip():
+        print(f"Starting openbox window manager on {display}...")
+        wm_env = vnc_env.copy()
+        wm_env["DISPLAY"] = display
+        if auth:
+            wm_env["XAUTHORITY"] = auth
+        subprocess.Popen(
+            "nohup openbox --replace > /tmp/openbox.log 2>&1",
+            shell=True, env=wm_env
+        )
+        time.sleep(1)
+    else:
+        print(f"openbox already running (pid {wm_running.stdout.strip()})")
+
     # 4. Start websockify
     # Use common paths for novnc
     novnc_paths = ["/usr/share/novnc/", "/usr/local/share/novnc/"]
     web_path = next((p for p in novnc_paths if os.path.exists(p)), "/usr/share/novnc/")
     
-    # Try port 80 for better firewall bypass, fallback to 6080
-    port = 80
-    ws_cmd = f"nohup websockify --web {web_path} {port} localhost:5900 > websockify.log 2>&1 &"
-    print(f"Starting websockify on port {port} (for firewall bypass)...")
+    # Use 6080 (standard for noVNC) or 8080. Using 6080 to avoid sudo requirements.
+    port = 6080
+    # Use 127.0.0.1 instead of localhost for stability
+    ws_cmd = f"nohup websockify --web {web_path} {port} 127.0.0.1:5900 > websockify.log 2>&1 &"
+    print(f"Starting websockify on port {port} targeting 127.0.0.1:5900...")
     run(ws_cmd)
     
     time.sleep(2)

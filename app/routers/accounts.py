@@ -36,6 +36,9 @@ def get_accounts_table(request: Request, q: str = "", db: Session = Depends(get_
     now = int(time.time())
     html_content = ""
     for account in accounts:
+        if account.login_error:
+            from app.services.log_normalizer import LogNormalizer
+            account.login_error = LogNormalizer._translate_message(account.login_error)
         html_content += templates.get_template("fragments/account_row.html").render(
             {"request": request, "account": account, "now": now}
         )
@@ -63,15 +66,34 @@ def create_account(
 
 @router.post("/{account_id}/start-login", response_class=HTMLResponse)
 def start_account_login(account_id: int, request: Request, db: Session = Depends(get_db)):
-    account = AccountService.start_login(db, account_id)
+    error_msg = None
+    try:
+        account = AccountService.start_login(db, account_id)
+    except ValueError as e:
+        db.rollback()
+        logger.warning(f"start_account_login blocked: {e}")
+        account = AccountService.get_account(db, account_id)
+        error_msg = str(e)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"start_account_login error: {e}")
+        account = AccountService.get_account(db, account_id)
+        error_msg = "Có lỗi hệ thống xảy ra"
+        
     return templates.TemplateResponse(
         "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time())}
+        {"request": request, "account": account, "now": int(time.time()), "start_login_error": error_msg}
     )
 
 @router.post("/{account_id}/confirm-login", response_class=HTMLResponse)
 def confirm_account_login(account_id: int, request: Request, db: Session = Depends(get_db)):
-    account = AccountService.confirm_login(db, account_id)
+    try:
+        account = AccountService.confirm_login(db, account_id)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"confirm_account_login error: {e}")
+        account = AccountService.get_account(db, account_id)
+        
     return templates.TemplateResponse(
         "fragments/account_row.html", 
         {"request": request, "account": account, "now": int(time.time())}
@@ -79,7 +101,13 @@ def confirm_account_login(account_id: int, request: Request, db: Session = Depen
 
 @router.post("/{account_id}/validate-session", response_class=HTMLResponse)
 def validate_account_session(account_id: int, request: Request, db: Session = Depends(get_db)):
-    account = AccountService.validate_session(db, account_id)
+    try:
+        account = AccountService.validate_session(db, account_id)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"validate_account_session error: {e}")
+        account = AccountService.get_account(db, account_id)
+        
     return templates.TemplateResponse(
         "fragments/account_row.html", 
         {"request": request, "account": account, "now": int(time.time())}
@@ -122,7 +150,8 @@ def update_account_limits(
             target_pages=target_pages or [],
             page_niches=page_niches or "",
         )
-    except ValueError as e:
+    except Exception as e:
+        db.rollback()
         logger.warning("update_limits account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
@@ -135,7 +164,8 @@ def update_account_limits(
 def reset_account_failures(account_id: int, request: Request, db: Session = Depends(get_db)):
     try:
         account = AccountService.reset_failures(db, account_id)
-    except ValueError as e:
+    except Exception as e:
+        db.rollback()
         logger.warning("reset_failures account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
@@ -212,6 +242,9 @@ def get_account_details_view(account_id: int, request: Request, db: Session = De
     account = AccountService.get_account(db, account_id)
     if not account:
         return HTMLResponse(status_code=404)
+    if account.login_error:
+        from app.services.log_normalizer import LogNormalizer
+        account.login_error = LogNormalizer._translate_message(account.login_error)
     return templates.TemplateResponse(
         "fragments/account_details.html", 
         {"request": request, "account": account, "now": int(time.time())}
