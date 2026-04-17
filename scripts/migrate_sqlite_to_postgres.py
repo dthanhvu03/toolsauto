@@ -128,7 +128,7 @@ def migrate_table(
         return 0, 0
 
     table = meta.tables[table_name]
-    col_names = [c.name for c in table.columns]
+    model_cols = {c.name for c in table.columns}
 
     with src_engine.connect() as src_conn:
         total = src_conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
@@ -156,17 +156,23 @@ def migrate_table(
 
     rows_copied = 0
     with src_engine.connect() as src_conn, dst_engine.connect() as dst_conn:
+        # Get actual column names from SQLite in their real order
+        probe = src_conn.execute(text(f"SELECT * FROM {table_name} LIMIT 1"))
+        src_col_names = list(probe.keys())
+        # Only migrate columns that exist in the model
+        col_names = [c for c in src_col_names if c in model_cols]
+        cols_sql = ", ".join(col_names)
+
         offset = 0
         while True:
             result = src_conn.execute(
-                text(f"SELECT * FROM {table_name} LIMIT {batch_size} OFFSET {offset}")
+                text(f"SELECT {cols_sql} FROM {table_name} LIMIT {batch_size} OFFSET {offset}")
             )
             rows = result.fetchall()
             if not rows:
                 break
 
             batch = [dict(zip(col_names, row)) for row in rows]
-            # Sanitize: replace empty string with None for non-text columns
             dst_conn.execute(table.insert(), batch)
             dst_conn.commit()
 
