@@ -68,7 +68,11 @@ class MediaProcessor:
     PROFILES = {
         "reels": {
             "vf": "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
-            "crf": FFMPEG_CRF,
+            "crf": 18,
+            "pix_fmt": "yuv420p",
+            "profile": "high",
+            "level": "4.1",
+            "preset": "medium",
         },
         "feed": {
             "vf": "scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:black",
@@ -200,7 +204,10 @@ class MediaProcessor:
         cmd += [
             "-c:v", "libx264",
             "-crf", str(profile_cfg["crf"]),
-            "-preset", "fast",
+            "-preset", profile_cfg.get("preset", "fast"),
+            "-profile:v", profile_cfg.get("profile", "high"),
+            "-level", profile_cfg.get("level", "4.1"),
+            "-pix_fmt", profile_cfg.get("pix_fmt", "yuv420p"),
             "-threads", "2",
             "-c:a", "aac",
             "-b:a", "128k",
