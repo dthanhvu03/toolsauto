@@ -950,8 +950,7 @@ class FacebookAdapter(AdapterInterface):
             # ── Screenshot immediately after clicking Post ──
             self._capture_failure_artifacts(job.id, "post_clicked")
 
-            logger.info("FacebookAdapter: Chờ GraphQL trả về kết quả (tối đa 120s)...")
-            import time
+            logger.info("FacebookAdapter: [Phase 4] Đang đợi tín hiệu GraphQL từ Facebook (tối đa 120s)...")
             deadline = time.time() + 120
             post_id_from_graphql = None
             while time.time() < deadline:
@@ -966,7 +965,7 @@ class FacebookAdapter(AdapterInterface):
                 pass
                 
             submission_status = "success" if post_id_from_graphql else reels.wait_for_post_submission()
-            logger.info("FacebookAdapter: Post submission result (DOM status): %s", submission_status)
+            logger.info("FacebookAdapter: Trạng thái submission (DOM): %s", submission_status)
 
             # ── Screenshot after submission wait ──
             self._capture_failure_artifacts(job.id, "after_submission_wait")
@@ -989,16 +988,16 @@ class FacebookAdapter(AdapterInterface):
             # 0. The Ultimate Fast-Track: GraphQL ID
             if post_id_from_graphql:
                 post_url = f"https://www.facebook.com/{post_id_from_graphql}"
-                logger.info("FacebookAdapter: 🎯 TẠO URL THÀNH CÔNG TỪ GRAPHQL POST ID: %s", post_url)
+                logger.info("FacebookAdapter: 🎯 [Thành công] Xác minh bài viết qua GraphQL ID: %s", post_url)
             
             # 1. Immediate catch: Success Toast
             if not post_url:
-                logger.info("FacebookAdapter: [Fast-Track] Checking for success toast link...")
+                logger.info("FacebookAdapter: [Fast-Track] Kiểm tra thông báo Success Toast...")
                 toast_link = reels.find_success_toast_link()
                 if toast_link:
                     post_url = self._normalize_post_url(toast_link)
                     if post_url:
-                        logger.info("FacebookAdapter: Post URL captured INSTANTLY via toast: %s", post_url)
+                        logger.info("FacebookAdapter: 🎯 [Thành công] Lấy URL qua Toast: %s", post_url)
 
             # 2. Immediate catch: Redirect URL
             if not post_url:
