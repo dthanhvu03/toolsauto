@@ -852,16 +852,18 @@ class FacebookAdapter(AdapterInterface):
                 next_btn_1_loc.wait_for(state="visible", timeout=60000)
                 next_btn_1_loc.click(timeout=5000, force=True)
                 logger.info("FacebookAdapter: Đã click nút Tiếp ở Bước 1")
+                self.page.wait_for_timeout(2000) # Chờ animation chuyển bước
             except Exception as e:
                 logger.warning("FacebookAdapter: Lỗi click nút Tiếp ở Bước 1: %s", e)
 
             logger.info("FacebookAdapter: [Reels Dialog - Step 2] Giao diện Chỉnh sửa, click Tiếp...")
-            self.page.wait_for_timeout(2000)
+            self.page.wait_for_timeout(1000)
             try:
                 next_btn_2_loc = self.page.locator('div[aria-label="Tiếp"], div[aria-label="Next"]').first
                 next_btn_2_loc.wait_for(state="visible", timeout=30000)
                 next_btn_2_loc.click(timeout=5000, force=True)
                 logger.info("FacebookAdapter: Đã click nút Tiếp ở Bước 2")
+                self.page.wait_for_timeout(2000) # Chờ animation chuyển bước
             except Exception as e:
                 logger.warning("FacebookAdapter: Lỗi click nút Tiếp ở Bước 2: %s", e)
 
@@ -878,6 +880,10 @@ class FacebookAdapter(AdapterInterface):
             caption_typed = reels.fill_caption(surface, publish_caption)
             if not caption_typed and publish_caption.strip():
                 logger.warning("FacebookAdapter: Caption area not found in final surface. Proceeding without caption.")
+            
+            # Đợi thêm một chút để Facebook cập nhật trạng thái nút Đăng sau khi nhập liệu
+            logger.info("FacebookAdapter: Đã nhập xong Caption, đợi 3s để giao diện ổn định...")
+            self.page.wait_for_timeout(3000)
 
             reels.log_surface_inventory(surface, "before_post")
             post_button = reels.find_post_button(surface)
