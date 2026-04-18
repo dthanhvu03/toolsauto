@@ -21,7 +21,7 @@ from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.adapters.common.locator import LocatorStrategy, LocatorCandidate
 from app.adapters.tiktok.selectors import HEURISTIC_SELECTORS
 from app.database.models import Job
-from app.config import SAFE_MODE, LOGS_DIR
+from app.config import SAFE_MODE, LOGS_DIR, TIKTOK_HOST, TIKTOK_UPLOAD_URL
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class TiktokAdapter(AdapterInterface):
     """
 
     PLATFORM = "tiktok"
-    UPLOAD_URL = "https://www.tiktok.com/upload"
+    UPLOAD_URL = TIKTOK_UPLOAD_URL
 
     def __init__(self):
         self.playwright: Playwright | None = None
@@ -90,7 +90,7 @@ class TiktokAdapter(AdapterInterface):
 
         # Navigate to TikTok to check session validity
         try:
-            self.page.goto("https://www.tiktok.com/", wait_until="domcontentloaded")
+            self.page.goto(f"{TIKTOK_HOST}/", wait_until="domcontentloaded")
             self.page.wait_for_timeout(3000)
         except Exception as e:
             logger.error("TiktokAdapter: Failed to navigate to TikTok: %s", e)

@@ -7,7 +7,7 @@ from typing import Any, List, Optional
 
 from sqlalchemy.orm import Session
 from app.database.models import Account, Job
-from app.config import CONTENT_PROFILES_DIR
+from app.config import CONTENT_PROFILES_DIR, FACEBOOK_HOST, INSTAGRAM_HOST
 import logging
 from app.constants import AccountStatus, JobStatus, ViralStatus
 
@@ -51,12 +51,12 @@ class AccountService:
     @staticmethod
     def get_login_url(platform: str) -> str:
         if platform == "instagram":
-            return "https://www.instagram.com/"
-        return "https://www.facebook.com/"
+            return f"{INSTAGRAM_HOST}/"
+        return f"{FACEBOOK_HOST}/"
 
     @staticmethod
     def _has_instagram_session(page) -> bool:
-        cookies = page.context.cookies(["https://www.instagram.com/"])
+        cookies = page.context.cookies([f"{INSTAGRAM_HOST}/"])
         cookie_names = {cookie.get("name") for cookie in cookies}
         return "sessionid" in cookie_names and "ds_user_id" in cookie_names
 

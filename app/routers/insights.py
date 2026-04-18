@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 from app.database.core import get_db
 from app.database import models
 from app.main_templates import templates
+from app import config
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
 
@@ -662,10 +663,7 @@ def trigger_refresh():
     if _refresh_running:
         return JSONResponse({"status": "already_running", "message": "Scraper đang chạy, vui lòng đợi."}, status_code=429)
 
-    scraper_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "scripts", "archive", "scrape_insights.py"
-    )
-    scraper_path = os.path.abspath(scraper_path)
+    scraper_path = str(config.BASE_DIR / "scripts" / "archive" / "scrape_insights.py")
 
     if not os.path.exists(scraper_path):
         return JSONResponse({"status": "error", "message": f"Scraper không tìm thấy: {scraper_path}"}, status_code=500)

@@ -32,13 +32,39 @@ jobs:
 
             echo "=== Deploying branch: ${{ github.ref_name }} ==="
 
+            # Xác định vị trí Data DB chuẩn tùy theo trạng thái Migration
+            DB_SOURCE="data/auto_publisher.db"
+            BACKUP_DIR="data/backups"
+            MARKER_FILE="data/.migrated_to_pg"
+            if [ -f "storage/db/auto_publisher.db" ]; then
+              DB_SOURCE="storage/db/auto_publisher.db"
+              BACKUP_DIR="storage/db/backups"
+              MARKER_FILE="storage/db/.migrated_to_pg"
+            fi
+
             # Backup database before deploying
-            mkdir -p data/backups
-            cp data/auto_publisher.db "data/backups/auto_publisher_$(date +%Y%m%d_%H%M%S).db" || true
+            mkdir -p "$BACKUP_DIR"
+            cp "$DB_SOURCE" "$BACKUP_DIR/auto_publisher_$(date +%Y%m%d_%H%M%S).db" || true
 
             # Fetch latest changes and reset
             git fetch origin
             git reset --hard "origin/${{ github.ref_name }}"
+            
+            # --- MIGRATION: KHỚP HẠ TẦNG LƯU TRỮ (Task-003) ---
+            echo "=== Tự động chuyển dời & dọn dẹp cấu trúc Storage ==="
+            mkdir -p storage/profiles storage/media/thumbs storage/media/reup storage/db storage/archive_legacy
+            [ -d "profiles" ] && cp -rn profiles/* storage/profiles/ 2>/dev/null || true
+            [ -d "thumbnails" ] && cp -rn thumbnails/* storage/media/thumbs/ 2>/dev/null || true
+            [ -d "reup_videos" ] && cp -rn reup_videos/* storage/media/reup/ 2>/dev/null || true
+            [ -d "data" ] && cp -rn data/* storage/db/ 2>/dev/null || true
+            
+            # Chèn biến config trỏ sang layout mới trong .env nếu chưa có
+            if ! grep -q "^STORAGE_LAYOUT_MODE=" .env 2>/dev/null; then
+              echo -e "\nSTORAGE_LAYOUT_MODE=storage" >> .env
+            else
+              sed -i 's/^STORAGE_LAYOUT_MODE=.*/STORAGE_LAYOUT_MODE=storage/g' .env
+            fi
+            # --------------------------------------------------
 
             # Update Python dependencies
             source venv/bin/activate
@@ -49,13 +75,10 @@ jobs:
             python manage.py db upgrade head || true
 
             # One-time SQLite → PostgreSQL data migration
-            # Chỉ chạy nếu: file SQLite tồn tại VÀ chưa có marker .migrated_to_pg
-            SQLITE_FILE="data/auto_publisher.db"
-            MARKER_FILE="data/.migrated_to_pg"
-            if [ -f "$SQLITE_FILE" ] && [ ! -f "$MARKER_FILE" ]; then
+            if [ -f "$DB_SOURCE" ] && [ ! -f "$MARKER_FILE" ]; then
               echo "=== Phát hiện SQLite, bắt đầu migrate data sang PostgreSQL... ==="
               python scripts/migrate_sqlite_to_postgres.py \
-                --sqlite "$SQLITE_FILE" \
+                --sqlite "$DB_SOURCE" \
                 --postgres "${DATABASE_URL:-postgresql+psycopg2://admin:admin@localhost/toolsauto_db}"
               if [ $? -eq 0 ]; then
                 touch "$MARKER_FILE"
@@ -64,12 +87,12 @@ jobs:
                 echo "=== [WARNING] Migration thất bại, kiểm tra log ==="
               fi
             else
-              echo "=== PostgreSQL migration: đã chạy trước đó hoặc không có SQLite, bỏ qua ==="
+              echo "=== PostgreSQL migration: Bỏ qua (Đã chạy hoặc DB chính không phải SQLite) ==="
             fi
 
-            # Graceful reload PM2 (current jobs finish before restart)
-            pm2 reload ecosystem.config.js
-            pm2 save
+            # Khởi động lại Server sử dụng chuẩn start.sh (Wrap an toàn Xvfb)
+            chmod +x start.sh
+            bash ./start.sh
 
             echo "=== Deploy complete ==="
             pm2 list

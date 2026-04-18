@@ -320,7 +320,8 @@ def _scrape_page_insights():
     _last_insights_ts = now
     logger.info("Starting Page Insights Scraper (managed subprocess)...")
     try:
-        proc = subprocess.Popen([sys.executable, "scripts/archive/scrape_insights.py"])
+        scraper_path = str(config.BASE_DIR / "scripts" / "archive" / "scrape_insights.py")
+        proc = subprocess.Popen([sys.executable, scraper_path])
         proc._start_time = now  # Track start time for timeout
         _insights_process = proc
         logger.info("[INSIGHTS] Started subprocess PID=%d", proc.pid)

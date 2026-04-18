@@ -14,6 +14,7 @@ import logging
 import subprocess
 import time
 
+from app.config import TIKTOK_HOST
 from app.services.yt_dlp_path import yt_dlp_binary
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ class TikTokScraper:
         Quét kênh TikTok, trả về danh sách video viral.
 
         Args:
-            channel_url: URL kênh TikTok (e.g. https://tiktok.com/@username)
+            channel_url: URL kênh TikTok (e.g. {TIKTOK_HOST}/@username)
             max_videos: Số video tối đa quét metadata (giới hạn request)
             min_views: Ngưỡng view tối thiểu để coi là "viral"
 
@@ -129,7 +130,7 @@ class TikTokScraper:
 
                 # Đảm bảo URL đầy đủ
                 if not url.startswith("http"):
-                    url = f"https://www.tiktok.com/@{data.get('uploader_id', 'unknown')}/video/{data.get('id', '')}"
+                    url = f"{TIKTOK_HOST}/@{data.get('uploader_id', 'unknown')}/video/{data.get('id', '')}"
 
                 entry = {
                     "url": url,

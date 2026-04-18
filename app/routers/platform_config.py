@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.database.core import get_db
 from app.main_templates import templates
 from app.services.workflow_registry import invalidate
+from app.config import MCP_PROXY_PORT
 import json, time, logging
 
 logger = logging.getLogger(__name__)
@@ -26,10 +27,15 @@ def start_mcp_inspector(request: Request):
     import time
 
     session_name = "n8n_mcp_inspector_ux"
+    mcp_server_port = 6277
 
     # Step 1: Dọn dẹp/Restart (Giết tmux session cũ nếu có như recommend)
     subprocess.run(["tmux", "kill-session", "-t", session_name], capture_output=True)
-    subprocess.run("fuser -k 6274/tcp 6277/tcp", shell=True, capture_output=True)
+    subprocess.run(
+        f"fuser -k {MCP_PROXY_PORT}/tcp {mcp_server_port}/tcp",
+        shell=True,
+        capture_output=True,
+    )
     time.sleep(1)
 
     # Step 2: Khởi tạo session tmux mới (Fixed from review: dùng HOST, CLIENT_PORT, SERVER_PORT và --)
@@ -41,7 +47,7 @@ def start_mcp_inspector(request: Request):
     
     cmd = (
         f"cd {project_root} && "
-        "HOST=0.0.0.0 CLIENT_PORT=6274 SERVER_PORT=6277 "
+        f"HOST=0.0.0.0 CLIENT_PORT={MCP_PROXY_PORT} SERVER_PORT={mcp_server_port} "
         f"npx -y @modelcontextprotocol/inspector -- {python_exec} {mcp_script}"
     )
     subprocess.run(["tmux", "new", "-d", "-s", session_name, cmd])
@@ -79,7 +85,7 @@ def start_mcp_inspector(request: Request):
     if host == "0.0.0.0":
         host = "127.0.0.1"
         
-    url = f"http://{host}:6274/?MCP_PROXY_AUTH_TOKEN={auth_token}"
+    url = f"http://{host}:{MCP_PROXY_PORT}/?MCP_PROXY_AUTH_TOKEN={auth_token}"
 
     return JSONResponse({"success": True, "url": url})
 
@@ -1054,4 +1060,3 @@ def overview_warnings_api(
         "total": len(warnings),
         "items": warnings,
     }
-

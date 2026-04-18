@@ -10,6 +10,7 @@ import logging
 from enum import Enum
 from typing import Optional, List, Dict, Any, Tuple
 from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
+from app import config
 
 try:
     from PIL import Image
@@ -92,8 +93,8 @@ class CaptionPayload(BaseModel):
 
 
 class AICaptionPipeline:
-    CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/config/9router_config.json"))
-    RUNTIME_STATE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/config/9router_runtime.json"))
+    CONFIG_PATH = str(config.DATA_DIR / "config" / "9router_config.json")
+    RUNTIME_STATE_PATH = str(config.DATA_DIR / "config" / "9router_runtime.json")
 
     def __init__(self):
         self._config_lock = threading.Lock()

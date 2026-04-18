@@ -11,12 +11,12 @@ from app.database.models import Account, Job
 from app.main_templates import templates
 from app.constants import AccountStatus, JobStatus
 from app.services.fb_compliance import compliance_checker, Severity
+from app.config import CONTENT_DIR
 
 router = APIRouter(prefix="/jobs/manual", tags=["manual-jobs"])
 logger = logging.getLogger(__name__)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-MANUAL_DIR = os.path.join(BASE_DIR, "content", "manual")
+MANUAL_DIR = str(CONTENT_DIR / "manual")
 
 
 @router.get("/form", response_class=HTMLResponse)

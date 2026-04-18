@@ -10,7 +10,7 @@ from pathlib import Path
 
 from playwright.sync_api import Locator, Page
 
-from app.config import LOGS_DIR
+from app.config import LOGS_DIR, FACEBOOK_HOST, FB_REELS_CREATE_URL
 from app.utils.human_behavior import human_type
 
 logger = logging.getLogger(__name__)
@@ -47,8 +47,9 @@ class FacebookReelsPage:
         "lỗi đã xảy ra",
     )
 
-    def __init__(self, page: Page):
+    def __init__(self, page: Page, job_logger: logging.Logger | None = None):
         self.page = page
+        self.logger = job_logger if job_logger is not None else logger
 
     # ── Visibility / clicks (local copies; adapter keeps its own for non-Reels flows) ─────────
 
@@ -73,22 +74,22 @@ class FacebookReelsPage:
             pass
         try:
             locator.click(timeout=timeout)
-            logger.info("FacebookAdapter: Clicked %s", description)
+            self.logger.info("FacebookAdapter: Clicked %s", description)
             return True
         except Exception as e:
-            logger.debug("FacebookAdapter: Standard click failed for %s: %s", description, e)
+            self.logger.debug("FacebookAdapter: Standard click failed for %s: %s", description, e)
         try:
             locator.evaluate("el => el.click()")
-            logger.info("FacebookAdapter: JS-clicked %s", description)
+            self.logger.info("FacebookAdapter: JS-clicked %s", description)
             return True
         except Exception as e:
-            logger.debug("FacebookAdapter: JS click failed for %s: %s", description, e)
+            self.logger.debug("FacebookAdapter: JS click failed for %s: %s", description, e)
         try:
             locator.click(force=True, timeout=timeout)
-            logger.info("FacebookAdapter: Force-clicked %s", description)
+            self.logger.info("FacebookAdapter: Force-clicked %s", description)
             return True
         except Exception as e:
-            logger.debug("FacebookAdapter: Force click failed for %s: %s", description, e)
+            self.logger.debug("FacebookAdapter: Force click failed for %s: %s", description, e)
             return False
 
     def find_active_publish_surface(self) -> Page | Locator:
@@ -137,7 +138,7 @@ class FacebookReelsPage:
             try:
                 loc = surface.locator(f'div[role="button"][aria-label="{label}"]')
                 if loc.count() > 0:
-                    logger.info("FacebookAdapter: Next button '%s' found via aria-label fallback (may be overlapped)", label)
+                    self.logger.info("FacebookAdapter: Next button '%s' found via aria-label fallback (may be overlapped)", label)
                     return loc.first
             except Exception:
                 pass
@@ -162,13 +163,13 @@ class FacebookReelsPage:
 
             # Check aria-label for definitive schedule indicators
             if any(s.lower() in aria_lower for s in self.SCHEDULE_ARIA_LABELS):
-                logger.debug("is_schedule_button=True (aria match): aria='%s', text='%s'", aria, btn_text[:40])
+                self.logger.debug("is_schedule_button=True (aria match): aria='%s', text='%s'", aria, btn_text[:40])
                 return True
 
             # Check text content for schedule poison words
             is_poison = any(word in btn_text for word in self.SCHEDULE_POISON_WORDS)
             if is_poison:
-                logger.debug("is_schedule_button=True (poison): text='%s', aria='%s'", btn_text[:60], aria)
+                self.logger.debug("is_schedule_button=True (poison): text='%s', aria='%s'", btn_text[:60], aria)
             return is_poison
         except Exception:
             return False
@@ -183,7 +184,7 @@ class FacebookReelsPage:
             ]
             for candidate in exact_candidates:
                 if self._is_visible(candidate) and not self.is_schedule_button(candidate):
-                    logger.debug("FacebookAdapter: Post button matched via exact label '%s'", label)
+                    self.logger.debug("FacebookAdapter: Post button matched via exact label '%s'", label)
                     return candidate
         fuzzy_candidates: list[Locator] = []
         for label in self.POST_BUTTON_LABELS:
@@ -200,14 +201,14 @@ class FacebookReelsPage:
         )
         for candidate in fuzzy_candidates:
             if self._is_visible(candidate) and not self.is_schedule_button(candidate):
-                logger.debug("FacebookAdapter: Post button matched via fuzzy search")
+                self.logger.debug("FacebookAdapter: Post button matched via fuzzy search")
                 return candidate
         # Fallback: aria-label exact match even if not visible (overlapped dialog)
         for label in self.POST_BUTTON_LABELS:
             try:
                 loc = surface.locator(f'div[role="button"][aria-label="{label}"]')
                 if loc.count() > 0 and not self.is_schedule_button(loc.first):
-                    logger.debug("FacebookAdapter: Post button '%s' found via aria-label fallback", label)
+                    self.logger.debug("FacebookAdapter: Post button '%s' found via aria-label fallback", label)
                     return loc.first
             except Exception:
                 pass
@@ -225,7 +226,7 @@ class FacebookReelsPage:
             except Exception:
                 pass
         if _debug_parts:
-            logger.warning("FacebookAdapter: Post button candidates: %s", " | ".join(_debug_parts[:5]))
+            self.logger.warning("FacebookAdapter: Post button candidates: %s", " | ".join(_debug_parts[:5]))
         else:
             # No matching buttons found at all — log all visible buttons on the surface
             try:
@@ -240,11 +241,11 @@ class FacebookReelsPage:
                                 vis_btns.append(f"'{t}'(aria='{a}')")
                     except Exception:
                         pass
-                logger.warning("FacebookAdapter: NO post-label candidates found. Visible buttons on surface: %s",
+                self.logger.warning("FacebookAdapter: NO post-label candidates found. Visible buttons on surface: %s",
                               ", ".join(vis_btns[:10]) if vis_btns else "(none)")
             except Exception as _e:
-                logger.warning("FacebookAdapter: NO post-label candidates + surface scan failed: %s", _e)
-        logger.warning(
+                self.logger.warning("FacebookAdapter: NO post-label candidates + surface scan failed: %s", _e)
+        self.logger.warning(
             "FacebookAdapter: No post button found (all candidates were schedule buttons or invisible)"
         )
         return None
@@ -304,7 +305,7 @@ class FacebookReelsPage:
             textboxes.append(placeholder)
             if len(textboxes) >= 5:
                 break
-        logger.debug(
+        self.logger.debug(
             "FacebookAdapter: [%s] Surface inventory | buttons=%s | file_inputs=%s | textboxes=%s",
             stage,
             visible_buttons or ["(none)"],
@@ -325,7 +326,7 @@ class FacebookReelsPage:
                 self.page.goto(origin_url, wait_until="domcontentloaded")
                 self.page.wait_for_timeout(3000)
             except Exception as e:
-                logger.debug("FacebookAdapter: Failed to restore origin URL %s: %s", origin_url, e)
+                self.logger.debug("FacebookAdapter: Failed to restore origin URL %s: %s", origin_url, e)
 
     def attempt_entry_click(self, locator: Locator, description: str, origin_url: str) -> bool:
         if not self.click_locator(locator, description):
@@ -338,7 +339,7 @@ class FacebookReelsPage:
         surface = self.find_active_publish_surface()
         if self.looks_like_publish_surface(surface):
             return True
-        logger.info(
+        self.logger.info(
             "FacebookAdapter: %s did not open a publish surface. Restoring origin...", description
         )
         self.restore_origin(origin_url)
@@ -374,7 +375,7 @@ class FacebookReelsPage:
     def open_personal_composer_fallback(self) -> bool:
         if not self.page:
             return False
-        logger.info("FacebookAdapter: [PERSONAL MODE] Falling back to generic composer.")
+        self.logger.info("FacebookAdapter: [PERSONAL MODE] Falling back to generic composer.")
         origin_url = self.page.url
         composer_locators = [
             self.page.locator("div[data-pagelet='FeedComposer'] div[role='button']").first,
@@ -418,16 +419,16 @@ class FacebookReelsPage:
         if not self.page:
             return None
         origin_url = self.page.url
-        logger.debug("FacebookAdapter: Navigating to page reels entry from %s", origin_url)
-        create_url = "https://www.facebook.com/reels/create"
-        logger.debug("FacebookAdapter: Trying direct navigation to Fanpage create reel url: %s", create_url)
+        self.logger.debug("FacebookAdapter: Navigating to page reels entry from %s", origin_url)
+        create_url = FB_REELS_CREATE_URL
+        self.logger.debug("FacebookAdapter: Trying direct navigation to Fanpage create reel url: %s", create_url)
         try:
             self.page.goto(create_url, wait_until="domcontentloaded")
             self.page.wait_for_timeout(5000)
             if self.looks_like_publish_surface(self.page):
                 return "direct_reels"
         except Exception as e:
-            logger.warning("FacebookAdapter: Direct navigation to reels/create failed: %s", e)
+            self.logger.warning("FacebookAdapter: Direct navigation to reels/create failed: %s", e)
         page_selectors = (
             'a[href*="/reels/create"]',
             'a[href*="/reel/create"]',
@@ -455,7 +456,7 @@ class FacebookReelsPage:
             candidate = candidates.nth(idx)
             accept_attr = (candidate.get_attribute("accept") or "").lower()
             if is_video and "video" in accept_attr:
-                logger.debug(
+                self.logger.debug(
                     "FacebookAdapter: Selected file input with accept='%s' for video upload.",
                     accept_attr[:80],
                 )
@@ -463,10 +464,10 @@ class FacebookReelsPage:
             if not is_video and ("image" in accept_attr or accept_attr == "") and chosen is None:
                 chosen = candidate
         if chosen:
-            logger.debug("FacebookAdapter: Selected file input fallback for non-video upload.")
+            self.logger.debug("FacebookAdapter: Selected file input fallback for non-video upload.")
             return chosen
         if candidates.count() > 0:
-            logger.debug("FacebookAdapter: Using first file input as final fallback.")
+            self.logger.debug("FacebookAdapter: Using first file input as final fallback.")
             return candidates.first
         return None
 
@@ -477,11 +478,11 @@ class FacebookReelsPage:
             return False
         try:
             inp.set_input_files(media_path)
-            logger.info("FacebookAdapter: Media attached. Waiting for preview...")
+            self.logger.info("FacebookAdapter: Media attached. Waiting for preview...")
             self.page.wait_for_timeout(8000)
             return True
         except Exception as e:
-            logger.warning("FacebookAdapter: upload_video failed: %s", e)
+            self.logger.warning("FacebookAdapter: upload_video failed: %s", e)
             return False
 
     def click_next(self, surface: Page | Locator, step_label: str = "next") -> bool:
@@ -520,10 +521,10 @@ class FacebookReelsPage:
             except Exception:
                 current_text = ""
             if signature and current_text and signature in current_text:
-                logger.info("FacebookAdapter: Caption already present in active surface.")
+                self.logger.info("FacebookAdapter: Caption already present in active surface.")
                 return True
             if current_text and signature and signature not in current_text:
-                logger.debug(
+                self.logger.debug(
                     "FacebookAdapter: Skipping non-empty textbox that does not look like caption."
                 )
                 continue
@@ -535,13 +536,13 @@ class FacebookReelsPage:
                 try:
                     Path(LOGS_DIR).mkdir(parents=True, exist_ok=True)
                     self.page.screenshot(path=str(Path(LOGS_DIR) / "debug_caption_typed.png"))
-                    logger.info("FacebookAdapter: Saved debug screenshot of typed caption.")
+                    self.logger.info("FacebookAdapter: Saved debug screenshot of typed caption.")
                 except Exception:
                     pass
-                logger.info("FacebookAdapter: Caption typed into active publish surface.")
+                self.logger.info("FacebookAdapter: Caption typed into active publish surface.")
                 return True
             except Exception as e:
-                logger.debug("FacebookAdapter: Caption typing candidate failed: %s", e)
+                self.logger.debug("FacebookAdapter: Caption typing candidate failed: %s", e)
         return False
 
     def check_page_for_errors(self) -> str | None:
@@ -559,7 +560,7 @@ class FacebookReelsPage:
     def wait_for_post_submission(self) -> str:
         if not self.page:
             return "error"
-        logger.info("FacebookAdapter: Waiting for post submission to complete (dialog to close)...")
+        self.logger.info("FacebookAdapter: Waiting for post submission to complete (dialog to close)...")
         for tick in range(24):  # 24 ticks × 5s = 120s max (was 60 × 5s = 300s)
             self.page.wait_for_timeout(5000)
             try:
@@ -574,7 +575,7 @@ class FacebookReelsPage:
                     if dlg.is_visible():
                         dlg_text = dlg.inner_text()
                         if any(sig in dlg_text for sig in schedule_signals):
-                            logger.warning("FacebookAdapter: Detected schedule modal! Dismissing...")
+                            self.logger.warning("FacebookAdapter: Detected schedule modal! Dismissing...")
                             dismissed = False
                             for aria in ["Quay lại", "Back"]:
                                 back_btn = dlg.locator(f'div[role="button"][aria-label="{aria}"]').first
@@ -590,31 +591,31 @@ class FacebookReelsPage:
                                     self.click_locator(close_btn, "schedule modal close button")
                                     dismissed = True
                             if not dismissed:
-                                logger.info("FacebookAdapter: Using Escape to dismiss schedule modal.")
+                                self.logger.info("FacebookAdapter: Using Escape to dismiss schedule modal.")
                                 self.page.keyboard.press("Escape")
                             self.page.wait_for_timeout(3000)
-                            logger.info("FacebookAdapter: Schedule modal dismissed. Re-scanning for Post button...")
+                            self.logger.info("FacebookAdapter: Schedule modal dismissed. Re-scanning for Post button...")
                             # After dismissing schedule modal, try to find and click the real Post button
                             surface = self.find_active_publish_surface()
                             retry_post_btn = self.find_post_button(surface)
                             if retry_post_btn:
-                                logger.info("FacebookAdapter: Found Post button after schedule dismiss. Clicking...")
+                                self.logger.info("FacebookAdapter: Found Post button after schedule dismiss. Clicking...")
                                 self.click_locator(retry_post_btn, "post button (after schedule dismiss)")
                                 self.page.wait_for_timeout(3000)
                             break
             except Exception as e:
-                logger.warning("FacebookAdapter: Error handling schedule modal: %s", e)
+                self.logger.warning("FacebookAdapter: Error handling schedule modal: %s", e)
             if tick > 0 and tick % 3 == 0:
                 err_signal = self.check_page_for_errors()
                 if err_signal:
-                    logger.error("FacebookAdapter: Detected error signal after post: '%s'", err_signal)
+                    self.logger.error("FacebookAdapter: Detected error signal after post: '%s'", err_signal)
                     return "error"
             if self.page.locator('div[role="dialog"]').count() == 0:
-                logger.info("FacebookAdapter: Dialog closed and disappeared naturally.")
+                self.logger.info("FacebookAdapter: Dialog closed and disappeared naturally.")
                 self.page.wait_for_timeout(2000)
                 err_signal = self.check_page_for_errors()
                 if err_signal:
-                    logger.error("FacebookAdapter: Error detected after dialog close: '%s'", err_signal)
+                    self.logger.error("FacebookAdapter: Error detected after dialog close: '%s'", err_signal)
                     return "error"
                 return "success"
             dismiss_button = self._find_first_visible(
@@ -626,15 +627,15 @@ class FacebookReelsPage:
                 ]
             )
             if dismiss_button:
-                logger.info("FacebookAdapter: Found Success/Dismiss button, clicking it to unblock...")
+                self.logger.info("FacebookAdapter: Found Success/Dismiss button, clicking it to unblock...")
                 self.click_locator(dismiss_button, "publish dismiss button")
                 self.page.wait_for_timeout(2000)
                 err_signal = self.check_page_for_errors()
                 if err_signal:
-                    logger.error("FacebookAdapter: Error detected after dismiss: '%s'", err_signal)
+                    self.logger.error("FacebookAdapter: Error detected after dismiss: '%s'", err_signal)
                     return "error"
                 return "success"
-        logger.warning(
+        self.logger.warning(
             "FacebookAdapter: Post submission wait hit timeout window without a strong completion signal."
         )
         return "timeout"
@@ -642,7 +643,7 @@ class FacebookReelsPage:
     def neutralize_overlays(self):
         if not self.page:
             return
-        logger.info("FacebookAdapter: [Phase 2] Neutralizing overlays...")
+        self.logger.info("FacebookAdapter: [Phase 2] Neutralizing overlays...")
         try:
             modal_close = (
                 self.page.locator('div[aria-label="Close"], div[aria-label="Đóng"]')
@@ -650,15 +651,15 @@ class FacebookReelsPage:
                 .first
             )
             if self._is_visible(modal_close):
-                logger.info("FacebookAdapter: Found intercepting modal close button. Clicking...")
+                self.logger.info("FacebookAdapter: Found intercepting modal close button. Clicking...")
                 self.click_locator(modal_close, "overlay close button")
                 self.page.wait_for_timeout(1000)
             blocking_dialogs = self.page.locator("div[role='dialog']")
             if blocking_dialogs.count() > 0:
-                logger.info("FacebookAdapter: Waiting for dialog overlays to detach...")
+                self.logger.info("FacebookAdapter: Waiting for dialog overlays to detach...")
                 blocking_dialogs.first.wait_for(state="hidden", timeout=5000)
         except Exception as e:
-            logger.debug("FacebookAdapter: Modal neutralization step encountered an issue: %s", e)
+            self.logger.debug("FacebookAdapter: Modal neutralization step encountered an issue: %s", e)
 
     # ── Fast-Track Verification Helpers ───────────────────────────────────────────
 
@@ -683,8 +684,8 @@ class FacebookReelsPage:
                     if self._is_visible(link):
                         href = link.get_attribute("href")
                         if href and ("/reel/" in href or "/v/" in href or "/watch/" in href):
-                            full_url = href if href.startswith("http") else "https://www.facebook.com" + href
-                            logger.info("FacebookAdapter: Success toast link captured: %s", full_url)
+                            full_url = href if href.startswith("http") else f"{FACEBOOK_HOST}{href}"
+                            self.logger.info("FacebookAdapter: Success toast link captured: %s", full_url)
                             return full_url
             
             # Direct text search fallback
@@ -693,12 +694,12 @@ class FacebookReelsPage:
                 if self._is_visible(link):
                     href = link.get_attribute("href")
                     if href and ("/reel/" in href or "/v/" in href):
-                         full_url = href if href.startswith("http") else "https://www.facebook.com" + href
-                         logger.info("FacebookAdapter: Success toast link captured via label '%s': %s", label, full_url)
+                         full_url = href if href.startswith("http") else f"{FACEBOOK_HOST}{href}"
+                         self.logger.info("FacebookAdapter: Success toast link captured via label '%s': %s", label, full_url)
                          return full_url
                          
         except Exception as e:
-            logger.debug("FacebookAdapter: Error scanning toast: %s", e)
+            self.logger.debug("FacebookAdapter: Error scanning toast: %s", e)
         return None
 
     def navigate_to_reels_tab(self, target_page_url: str | None = None) -> bool:
@@ -711,12 +712,12 @@ class FacebookReelsPage:
                 reels_url = f"{base}/reels/"
             else:
                 # Personal: facebook.com/me/reels
-                reels_url = "https://www.facebook.com/me/reels/"
+                reels_url = f"{FACEBOOK_HOST}/me/reels/"
             
-            logger.info("FacebookAdapter: Navigating to Reels tab for fast verification: %s", reels_url)
+            self.logger.info("FacebookAdapter: Navigating to Reels tab for fast verification: %s", reels_url)
             self.page.goto(reels_url, wait_until="domcontentloaded", timeout=15000)
             self.page.wait_for_timeout(3000) # Wait for React content
             return True
         except Exception as e:
-            logger.warning("FacebookAdapter: Navigation to Reels tab failed: %s", e)
+            self.logger.warning("FacebookAdapter: Navigation to Reels tab failed: %s", e)
             return False

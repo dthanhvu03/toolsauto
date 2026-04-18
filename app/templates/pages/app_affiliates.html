@@ -5,7 +5,8 @@
 {% block page_subtitle %}Quản lý thư viện Link Mua Hàng để AI làm chim mồi rải comment tự động.{% endblock %}
 
 {% block head_extra %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<!-- PapaParse for CSV handling -->
+<script src="{{ config.CDN_PAPAPARSE }}"></script>
 <style>
 /* ─── Tab System ─── */
 .aff-tab-btn { position: relative; padding: .625rem 1rem; font-size: .8125rem; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; transition: all .2s ease; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
