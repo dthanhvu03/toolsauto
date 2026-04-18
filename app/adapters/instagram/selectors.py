@@ -1,6 +1,7 @@
 # Instagram Selectors — Heuristic fallback locators
 # Priority: role/label → text → placeholder → stable attr → CSS last resort
 # See app/adapters/common/locator.py
+from app.config import INSTAGRAM_HOST
 
 HEURISTIC_SELECTORS = {
     "login": {
@@ -17,7 +18,7 @@ HEURISTIC_SELECTORS = {
         ],
     },
     "upload": {
-        "upload_page_url": "https://www.instagram.com/",
+        "upload_page_url": f"{INSTAGRAM_HOST}/",
         "new_post_button": [
             ("css", 'svg[aria-label="New post"], a[href="#"]'),
             ("role", "link:New post"),

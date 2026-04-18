@@ -1,6 +1,7 @@
 from fastapi.templating import Jinja2Templates
 from zoneinfo import ZoneInfo
 from app.config import TIMEZONE, BASE_DIR
+import app.config as config
 import time
 import os
 
@@ -35,6 +36,7 @@ templates.env.filters["format_time"] = format_time
 templates.env.filters["date_only"] = date_only
 templates.env.filters["time_only"] = time_only
 templates.env.globals["now"] = time.time  
+templates.env.globals["config"] = config
 
 _evidence_cache = {"mtime": 0, "data": {}}
 

@@ -6,11 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Health</title>
     <!-- Tailwind for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="{{ config.CDN_TAILWIND }}"></script>
+    <script src="{{ config.CDN_HTMX }}"></script>
     <!-- Google Fonts -->
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap"
+        href="{{ config.CDN_GOOGLE_FONTS }}"
         rel="stylesheet">
     <script>
         tailwind.config = {

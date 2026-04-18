@@ -18,12 +18,14 @@ from app.config import (
     TIMEZONE,
     DATABASE_URL,
     BASE_DIR,
+    DATA_DIR,
     CONTENT_DIR,
     DONE_DIR,
     FAILED_DIR,
     REUP_DIR,
     THUMB_DIR,
     LOGS_DIR,
+    VNC_PORT,
     CONTENT_MEDIA_DIR,
     CONTENT_VIDEO_DIR,
     CONTENT_PROCESSED_DIR,
@@ -476,7 +478,7 @@ def cmd_start_vnc(request: Request):
     
     # Check if failed or success based on output
     status_icon = "✅" if "[OK]" in out else "⚠️"
-    msg = f"{status_icon} VNC Startup Result:\n\n{out}\n\nLink: http://{host}:6080/vnc.html"
+    msg = f"{status_icon} VNC Startup Result:\n\n{out}\n\nLink: http://{host}:{VNC_PORT}/vnc.html"
     return _html_output(msg)
 
 
@@ -518,16 +520,17 @@ def cmd_db_backup():
         db_user = parsed.username or "admin"
         db_pass = parsed.password or ""
 
-        backup_dir = os.path.join(str(BASE_DIR), "data", "backups")
-        os.makedirs(backup_dir, exist_ok=True)
+        backup_dir = DATA_DIR / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(tz=ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
-        backup_path = os.path.join(backup_dir, f"{db_name}_{ts}.sql.gz")
+        backup_path = backup_dir / f"{db_name}_{ts}.sql.gz"
 
         env = os.environ.copy()
         if db_pass:
             env["PGPASSWORD"] = db_pass
 
-        cmd = f"pg_dump -h {db_host} -p {db_port} -U {db_user} {db_name} | gzip > '{backup_path}'"
+        backup_path_str = str(backup_path)
+        cmd = f"pg_dump -h {db_host} -p {db_port} -U {db_user} {db_name} | gzip > '{backup_path_str}'"
         result = subprocess.run(
             cmd, shell=True, capture_output=True, text=True,
             timeout=300, env=env
@@ -536,10 +539,10 @@ def cmd_db_backup():
             err = (result.stderr or "").strip()
             return _html_output(f"Backup failed (exit {result.returncode}):\n{err}")
 
-        size_mb = os.path.getsize(backup_path) / 1024**2
+        size_mb = os.path.getsize(backup_path_str) / 1024**2
         return _html_output(
             f"Backup created successfully:\n"
-            f"File: {backup_path}\n"
+            f"File: {backup_path_str}\n"
             f"Size: {size_mb:.2f} MB"
         )
     except subprocess.TimeoutExpired:

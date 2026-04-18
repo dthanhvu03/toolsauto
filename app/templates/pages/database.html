@@ -3,13 +3,14 @@
 {% block title %}Database • Auto Publisher{% endblock %}
 
 {% block head_extra %}
-<!-- CodeMirror 5 (Stable for non-build environments) -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/sql/sql.min.js"></script>
-<!-- Alpine.js for State Management -->
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<!-- CodeMirror for SQL Editing -->
+<link rel="stylesheet" href="{{ config.CDN_CODEMIRROR_CSS }}">
+<link rel="stylesheet" href="{{ config.CDN_CODEMIRROR_THEME }}">
+<script src="{{ config.CDN_CODEMIRROR_JS }}"></script>
+<script src="{{ config.CDN_CODEMIRROR_SQL }}"></script>
+
+<!-- Alpine.js for interactive UI -->
+<script defer src="{{ config.CDN_ALPINEJS }}"></script>
 {% endblock %}
 
 {% block page_title %}

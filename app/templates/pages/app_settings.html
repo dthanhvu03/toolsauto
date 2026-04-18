@@ -5,8 +5,8 @@
 {% block page_subtitle %}Thông số runtime — hầu hết áp dụng sau khi lưu; mục có badge &quot;Restart&quot; cần khởi động lại worker để chắc chắn.{% endblock %}
 
 {% block head_extra %}
-<script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="{{ config.CDN_TAILWIND }}"></script>
+<link href="{{ config.CDN_GOOGLE_FONTS }}" rel="stylesheet">
 <script>
     tailwind.config = {
         theme: {

@@ -5,11 +5,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Auto Publisher{% endblock %}</title>
-  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-  <link rel="stylesheet" href="/static/app.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <script src="{{ config.CDN_HTMX }}"></script>
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <link href="{{ config.CDN_GOOGLE_FONTS }}" rel="stylesheet">
   {% block head_extra %}{% endblock %}
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="{{ config.CDN_TAILWIND }}"></script>
   <script>
     if (!window.tailwind || !tailwind.config) {
       tailwind.config = {

@@ -4,6 +4,7 @@
 #
 # Format follows LocatorCandidate(strategy, locator_type, value, source)
 # See app/adapters/common/locator.py
+from app.config import TIKTOK_UPLOAD_URL
 
 HEURISTIC_SELECTORS = {
     "login": {
@@ -22,7 +23,7 @@ HEURISTIC_SELECTORS = {
         ],
     },
     "upload": {
-        "upload_page_url": "https://www.tiktok.com/upload",
+        "upload_page_url": TIKTOK_UPLOAD_URL,
         "file_input": [
             ("css", 'input[type="file"][accept*="video"]'),
             ("css", 'input[type="file"]'),

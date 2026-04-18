@@ -1,0 +1,126 @@
+# PHÂN TÍCH KẾT QUẢ GRAPHQL META — ĐĂNG REEL
+# Tổng hợp từ nhiều lần chạy E2E inspector
+
+## === MUTATION CHÍNH: ComposerStoryCreateMutation ===
+
+Operation: ComposerStoryCreateMutation
+doc_id: 35222657370682144
+
+Response shape:
+{
+  "data": {
+    "story_create": {
+      "story_id": "UzpfSTEwNTIxNDE2NjQ2NDQ1OTg6MTIyMTA4NjUwNDM2OTcxNzIy",  # base64
+      "post_id": "122108650436971722",      # <--- ID dùng được!
+      "story": null,
+      "feed_story_edge": null
+    }
+  }
+}
+
+KEY FINDING: Facebook KHÔNG trả post URL trong mutation response.
+Chỉ có post_id + story_id (base64). 
+URL reel xuất hiện SAU qua query FBUnifiedVideoRootWithEntrypointQuery.
+
+
+## === FLOW GraphQL KHI ĐĂNG REEL ===
+
+[Khi upload file]
+t+0s   → useComposerVideoUploaderConfigQuery    (doc_id=9734072893355148)
+t+0s   → useCometVideoEditorCopyrightCheckMutation (doc_id=25171698979168867)
+          - video.id: 997083159478070  ← VIDEO ID trong hệ thống Meta
+          - Kiểm tra copyright
+t+0~8s → CometVideoEditorCopyrightCheckDetailsLiveQueryUpdaterQuery (doc_id=25488331727450621)
+          - Polling copyright status (nhiều lần liên tiếp mỗi 1-2s)
+          - video.id: same
+
+[Sau khi click Next x2 → vào "Cài đặt thước phim"]
+t+N    → ReelsCreationWYSIWYGOverlayQuery    (doc_id=26663595376611061)
+          - viewer.actor.url: facebook.com/profile.php?id=61579151682343
+          - enable_reels_tab_deeplink: True
+t+N    → ReelsComposerPrivacySelectorQuery   (doc_id=26471663529158011)
+          - post_param: 300645083384735       ← PARAM QUAN TRỌNG
+          - privacy_write_id: [base64]
+t+N    → ReelsComposerBoostQuery             (doc_id=9380291732068456)
+t+N    → useFeedComposerCometMentionsBootloadDataSourceQuery (doc_id=24037885915835927)
+
+[Sau khi click Đăng]
+t+60~90s → ComposerStoryCreateMutation      (doc_id=35222657370682144)
+           RESPONSE:
+             story_create.story_id = "UzpfS..." (base64-encoded global ID)
+             story_create.post_id  = "122108650436971722"
+             story_create.story    = null
+             story_create.feed_story_edge = null
+           NOTE: URL KHÔNG có trong response này!
+
+t+60~90s → FBUnifiedVideoRootWithEntrypointQuery (doc_id=26089637660739122)
+           RESPONSE chứa:
+             facebook.com/reel/REEL_ID   ← URL reel thực tế
+           Đây là query BAN ĐẦU sau khi server xác nhận video xử lý xong
+
+
+## === CÁCH EXTRACT post_id TỪ GRAPHQL ===
+
+Field path để lấy post_id:
+  data["data"]["story_create"]["post_id"]
+
+Field path để lấy story_id:
+  data["data"]["story_create"]["story_id"]
+  (Decode từ base64: UzpfS... → pfbid...)
+
+Để lấy post URL:
+  Không có trực tiếp trong mutation response.
+  Cần chờ FBUnifiedVideoRootWithEntrypointQuery (đến cùng lúc hoặc ngay sau).
+  
+  Hoặc: construct URL từ post_id:
+    personal: https://www.facebook.com/[username]/posts/[post_id]
+  
+  Hoặc: dùng story_id (sau khi decode base64):
+    pfbid... → https://www.facebook.com/reel/[extracted_id]
+
+
+## === OPERATIONS TIMELINE ĐẦY ĐỦ ===
+
+PHASE 1 — Page Load:
+  FBYRPTimeLimitsEnforcementQuery     (26231556423171691) — video time limit
+  fetchMWChatVideoAutoplaySettingQuery (9713919638685405) — chat video setting
+
+PHASE 2 — Upload:
+  useComposerVideoUploaderConfigQuery  (9734072893355148)  — upload config
+  useCometVideoEditorCopyrightCheckMutation (25171698979168867) — copyright check
+  CometVideoEditorCopyrightCheckDetailsLiveQueryUpdaterQuery (25488331727450621) × N
+
+PHASE 3 — Composer Config:
+  ReelsCreationWYSIWYGOverlayQuery    (26663595376611061)  — overlay/WYSIWYG
+  ReelsComposerPrivacySelectorQuery   (26471663529158011)  — privacy
+  ReelsComposerBoostQuery             (9380291732068456)   — boost/promote
+  useFeedComposerCometMentionsBootload* × 3               — mentions typeahead
+
+PHASE 4 — SUBMIT (after click Đăng):
+  ComposerStoryCreateMutation         (35222657370682144)  ← KEY MUTATION
+  FBUnifiedVideoRootWithEntrypointQuery (26089637660739122) ← URL query
+
+POST-SUBMIT:
+  FBUnifiedVideoContainerQuery        (26848802571380777)  — video data
+  FBScreenTimeLogger_syncMutation     (25996223396680352)  — logging
+
+
+## === ĐỀ XUẤT TÍCH HỢP VÀO FacebookAdapter ===
+
+1. Đăng ký listener TRƯỚC khi click Post:
+   page.on("response", _on_graphql_response)
+
+2. Trong handler, tìm ComposerStoryCreateMutation:
+   if "story_create" in data.get("data", {}):
+       post_id = data["data"]["story_create"]["post_id"]
+       → Notify main thread via threading.Event
+
+3. post_id dùng để:
+   - Lưu vào DB ngay lập tức (record đã publish)
+   - Construct URL nếu cần: dùng post_id để query Graph API
+
+4. Thời gian kỳ vọng: mutation đến sau 60-90s từ khi click Post
+   (Facebook cần xử lý video async trước khi trả response)
+
+5. KHÔNG nên dùng mutation để lấy URL trực tiếp.
+   Nên tiếp tục dùng DOM scan hoặc chờ FBUnifiedVideoRootWithEntrypointQuery.

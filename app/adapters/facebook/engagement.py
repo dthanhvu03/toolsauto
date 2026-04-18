@@ -18,6 +18,7 @@ import time
 import traceback
 
 from playwright.sync_api import Page
+from app.config import FACEBOOK_HOST
 
 from app.utils.human_behavior import (
     casual_scroll_feed,
@@ -167,7 +168,7 @@ class FacebookEngagementTask:
         """Navigate to News Feed and scroll casually."""
         logger.info("[ENGAGEMENT] Scrolling News Feed...")
 
-        self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+        self.page.goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
         self.page.wait_for_timeout(random.randint(2000, 4000))
 
         self._checkpoint_guard()
@@ -201,7 +202,7 @@ class FacebookEngagementTask:
             import urllib.parse
             q = urllib.parse.quote(enhanced_keyword)
             # Try to search for niche videos
-            search_url = f"https://www.facebook.com/search/videos/?q={q}"
+            search_url = f"{FACEBOOK_HOST}/search/videos/?q={q}"
             try:
                 self.page.goto(search_url, wait_until="domcontentloaded")
                 self.page.wait_for_timeout(random.randint(3000, 5000))
@@ -214,7 +215,7 @@ class FacebookEngagementTask:
                         href = vid.get_attribute("href", timeout=1000)
                         if href and (re.search(r'/reel/(\d+)', href) or re.search(r'v=(\d+)', href)):
                             if href.startswith("/"):
-                                href = "https://www.facebook.com" + href
+                                href = f"{FACEBOOK_HOST}{href}"
                             self.interacted_urls.add(href.split("&")[0])
                             stealth_click(self.page, vid)
                             self.page.wait_for_timeout(random.randint(3000, 5000))
@@ -230,7 +231,7 @@ class FacebookEngagementTask:
         else:
             logger.info("[ENGAGEMENT] Watching random Reels...")
             # Try Reels first, fall back to Watch
-            for url in ["https://www.facebook.com/reel", "https://www.facebook.com/watch"]:
+            for url in [f"{FACEBOOK_HOST}/reel", f"{FACEBOOK_HOST}/watch"]:
                 try:
                     self.page.goto(url, wait_until="domcontentloaded")
                     self.page.wait_for_timeout(random.randint(3000, 5000))
@@ -297,7 +298,7 @@ class FacebookEngagementTask:
         logger.info("[ENGAGEMENT] Searching topic: '%s'", enhanced_keyword)
 
         # Navigate to Facebook home first
-        self.page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+        self.page.goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
         self.page.wait_for_timeout(random.randint(2000, 3000))
 
         self._checkpoint_guard()
@@ -452,7 +453,8 @@ class FacebookEngagementTask:
                         if post_link.count() > 0:
                             href = post_link.get_attribute("href")
                             if href:
-                                if href.startswith("/"): href = "https://www.facebook.com" + href
+                                if href.startswith("/"):
+                                    href = f"{FACEBOOK_HOST}{href}"
                                 self.interacted_urls.add(href.split("?")[0])
                 except Exception:
                     pass
@@ -504,7 +506,7 @@ class FacebookEngagementTask:
                 return Array.from(results);
             }''')
             
-            # Extract video URL since facebook.com/reel doesn't have ID in address bar
+            # Extract video URL since the generic reel route doesn't always expose ID in address bar
             html = self.page.content()
             url_pattern = r'(https:[\\/]+www\.facebook\.com[\\/]+reel[\\/]+\d+)'
             url_matches = re.findall(url_pattern, html)
