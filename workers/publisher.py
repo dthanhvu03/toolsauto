@@ -269,15 +269,7 @@ def process_single_job(db: Session):
             
             if publish_result.ok:
                 logger.info("[Job %s] Successfully published!", job.id)
-                
-                import random
-                # Re-apply overrides in case settings changed while publishing
-                apply_runtime_overrides_to_config(db)
-                from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
-                delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
-                logger.info(f"[Job {job.id}] Nghỉ ngơi {delay_sec}s để giả lập người thật trước khi chốt Job...")
-                time.sleep(delay_sec)
-                
+
                 post_url = publish_result.details.get("post_url") if publish_result.details else None
                 logger.debug("[DB][status_transition] Marking job_id=%s as DONE", job.id)
                 JobService.mark_done(
@@ -288,6 +280,14 @@ def process_single_job(db: Session):
                     post_url=post_url
                 )
                 NotifierService.notify_job_done(job, post_url=post_url)
+
+                import random
+                # Re-apply overrides in case settings changed while publishing
+                apply_runtime_overrides_to_config(db)
+                from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
+                delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
+                logger.info(f"[Job {job.id}] Nghỉ ngơi {delay_sec}s trước job tiếp theo...")
+                time.sleep(delay_sec)
             else:
                 logger.error("[Job %s] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
                 logger.debug("[DB][status_transition] Marking job_id=%s failed/retry", job.id)
