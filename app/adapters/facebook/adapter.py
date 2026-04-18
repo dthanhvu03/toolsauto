@@ -866,9 +866,15 @@ class FacebookAdapter(AdapterInterface):
                 logger.warning("FacebookAdapter: Lỗi click nút Tiếp ở Bước 2: %s", e)
 
             logger.info("FacebookAdapter: [Reels Dialog - Step 3] Giao diện Cài đặt, chuẩn bị điền caption và Đăng...")
-            self.page.wait_for_timeout(3000)
+            try:
+                # Wait for any contenteditable area to appear in Step 3
+                caption_loc = self.page.locator('div[contenteditable="true"]').first
+                caption_loc.wait_for(state="visible", timeout=15000)
+                logger.info("FacebookAdapter: Đã thấy khu vực nhập caption.")
+            except Exception:
+                logger.warning("FacebookAdapter: Chờ khu vực caption quá lâu hoặc không thấy.")
+
             surface = reels.find_active_publish_surface()
-            
             caption_typed = reels.fill_caption(surface, publish_caption)
             if not caption_typed and publish_caption.strip():
                 logger.warning("FacebookAdapter: Caption area not found in final surface. Proceeding without caption.")
