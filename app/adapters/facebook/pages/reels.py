@@ -114,6 +114,7 @@ class FacebookReelsPage:
 
     def find_next_button(self, surface: Page | Locator) -> Locator | None:
         candidates = [
+            surface.locator('div[aria-label="Tiếp"], div[aria-label="Next"]').first,
             surface.get_by_role("button", name="Tiếp", exact=True).first,
             surface.get_by_role("button", name="Next", exact=True).first,
             surface.get_by_role("button", name="Next", exact=False).first,
@@ -175,6 +176,7 @@ class FacebookReelsPage:
     def find_post_button(self, surface: Page | Locator) -> Locator | None:
         for label in self.POST_BUTTON_LABELS:
             exact_candidates = [
+                surface.locator(f'div[aria-label="{label}"]').first,
                 surface.get_by_role("button", name=label, exact=True).first,
                 surface.locator(f'div[role="button"][aria-label="{label}"]').first,
                 surface.locator(f'button[aria-label="{label}"]').first,
