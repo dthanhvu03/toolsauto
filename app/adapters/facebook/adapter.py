@@ -846,62 +846,32 @@ class FacebookAdapter(AdapterInterface):
             caption_typed = False
 
             logger.info("FacebookAdapter: [Phase 3] Bước 3/5: Nhập nội dung bài viết và chuẩn bị các bước tiếp theo...")
-            for _overlay_try in range(5):
-                try:
-                    blocking = self.page.locator('div[role="dialog"]:visible').count()
-                    if blocking == 0:
-                        break
-                    self.page.keyboard.press("Escape")
-                    self.page.wait_for_timeout(2000)
-                except Exception:
-                    break
+            logger.info("FacebookAdapter: [Reels Dialog - Step 1] Chờ nút Tiếp hiện ra rồi click (max 60s chờ video upload)...")
+            try:
+                next_btn_1_loc = self.page.locator('div[aria-label="Tiếp"], div[aria-label="Next"]').first
+                next_btn_1_loc.wait_for(state="visible", timeout=60000)
+                next_btn_1_loc.click(timeout=5000, force=True)
+                logger.info("FacebookAdapter: Đã click nút Tiếp ở Bước 1")
+            except Exception as e:
+                logger.warning("FacebookAdapter: Lỗi click nút Tiếp ở Bước 1: %s", e)
 
-            logger.info("FacebookAdapter: Navigating through publish steps...")
-            for step in range(6):
-                surface = reels.find_active_publish_surface()
-                if not caption_typed:
-                    caption_typed = reels.fill_caption(surface, publish_caption)
+            logger.info("FacebookAdapter: [Reels Dialog - Step 2] Giao diện Chỉnh sửa, click Tiếp...")
+            self.page.wait_for_timeout(2000)
+            try:
+                next_btn_2_loc = self.page.locator('div[aria-label="Tiếp"], div[aria-label="Next"]').first
+                next_btn_2_loc.wait_for(state="visible", timeout=30000)
+                next_btn_2_loc.click(timeout=5000, force=True)
+                logger.info("FacebookAdapter: Đã click nút Tiếp ở Bước 2")
+            except Exception as e:
+                logger.warning("FacebookAdapter: Lỗi click nút Tiếp ở Bước 2: %s", e)
 
-                post_button = reels.find_post_button(surface)
-                if post_button:
-                    logger.info("FacebookAdapter: Post/Dang button found at step %d.", step)
-                    break
-
-                next_button = reels.find_next_button(surface)
-                if not next_button:
-                    logger.info("FacebookAdapter: No more Next/Tiep buttons at step %d.", step)
-                    break
-
-                logger.info("FacebookAdapter: Clicking Next/Tiep at step %d...", step + 1)
-                if not self._click_locator(next_button, f"next button step {step + 1}", timeout=5000):
-                    # Fallback: force click via JS when overlay blocks normal click
-                    try:
-                        next_button.evaluate("el => el.click()")
-                        logger.info("FacebookAdapter: JS-force-clicked Next button at step %d.", step + 1)
-                        self.page.wait_for_timeout(3000)
-                        continue
-                    except Exception:
-                        pass
-                    reels.log_surface_inventory(surface, f"next_click_failed_{step + 1}")
-                    logger.warning("FacebookAdapter: Failed to click Next/Tiep button at step %d. Trying to dismiss overlays...", step + 1)
-                    # Try dismissing overlay and retry
-                    try:
-                        self.page.keyboard.press("Escape")
-                        self.page.wait_for_timeout(2000)
-                        retry_next = reels.find_next_button(reels.find_active_publish_surface())
-                        if retry_next and self._click_locator(retry_next, f"next button step {step + 1} retry", timeout=5000):
-                            self.page.wait_for_timeout(3000)
-                            continue
-                    except Exception:
-                        pass
-                    break
-                self.page.wait_for_timeout(3000)
-
+            logger.info("FacebookAdapter: [Reels Dialog - Step 3] Giao diện Cài đặt, chuẩn bị điền caption và Đăng...")
+            self.page.wait_for_timeout(3000)
             surface = reels.find_active_publish_surface()
-            if not caption_typed:
-                caption_typed = reels.fill_caption(surface, publish_caption)
-                if not caption_typed and publish_caption.strip():
-                    logger.warning("FacebookAdapter: Caption area not found in final surface. Proceeding without caption.")
+            
+            caption_typed = reels.fill_caption(surface, publish_caption)
+            if not caption_typed and publish_caption.strip():
+                logger.warning("FacebookAdapter: Caption area not found in final surface. Proceeding without caption.")
 
             reels.log_surface_inventory(surface, "before_post")
             post_button = reels.find_post_button(surface)
@@ -942,6 +912,27 @@ class FacebookAdapter(AdapterInterface):
             except Exception as e:
                 logger.warning("FacebookAdapter: Wait for button enabled timed out or failed: %s", e)
 
+            # ── ATTACH GRAPHQL LISTENER ──
+            captured_post_ids = []
+            
+            def intercept_graphql(response):
+                if "/api/graphql/" in response.url:
+                    try:
+                        req_post = response.request.post_data or ""
+                        if "ComposerStoryCreateMutation" in req_post or "VideoPublishMutation" in req_post or "doc_id=35222657370682144" in req_post:
+                            body = response.json()
+                            data = body.get("data", {})
+                            story_create = data.get("story_create", {}) or data.get("video_publish", {})
+                            if story_create:
+                                p_id = story_create.get("post_id") or story_create.get("video_id")
+                                if p_id:
+                                    logger.info(f"FacebookAdapter: Bắt được post_id từ GraphQL: {p_id}")
+                                    captured_post_ids.append(str(p_id))
+                    except Exception:
+                        pass
+
+            self.page.on("response", intercept_graphql)
+
             logger.info("FacebookAdapter: Simulating pre-post hesitation...")
             pre_post_delay(self.page)
 
@@ -959,8 +950,23 @@ class FacebookAdapter(AdapterInterface):
             # ── Screenshot immediately after clicking Post ──
             self._capture_failure_artifacts(job.id, "post_clicked")
 
-            submission_status = reels.wait_for_post_submission()
-            logger.info("FacebookAdapter: Post submission result: %s", submission_status)
+            logger.info("FacebookAdapter: Chờ GraphQL trả về kết quả (tối đa 120s)...")
+            import time
+            deadline = time.time() + 120
+            post_id_from_graphql = None
+            while time.time() < deadline:
+                if captured_post_ids:
+                    post_id_from_graphql = captured_post_ids[0]
+                    break
+                self.page.wait_for_timeout(1000)
+                
+            try:
+                self.page.remove_listener("response", intercept_graphql)
+            except Exception:
+                pass
+                
+            submission_status = "success" if post_id_from_graphql else reels.wait_for_post_submission()
+            logger.info("FacebookAdapter: Post submission result (DOM status): %s", submission_status)
 
             # ── Screenshot after submission wait ──
             self._capture_failure_artifacts(job.id, "after_submission_wait")
@@ -980,13 +986,19 @@ class FacebookAdapter(AdapterInterface):
             post_url = None
             salt = publish_salt
             
+            # 0. The Ultimate Fast-Track: GraphQL ID
+            if post_id_from_graphql:
+                post_url = f"https://www.facebook.com/{post_id_from_graphql}"
+                logger.info("FacebookAdapter: 🎯 TẠO URL THÀNH CÔNG TỪ GRAPHQL POST ID: %s", post_url)
+            
             # 1. Immediate catch: Success Toast
-            logger.info("FacebookAdapter: [Fast-Track] Checking for success toast link...")
-            toast_link = reels.find_success_toast_link()
-            if toast_link:
-                post_url = self._normalize_post_url(toast_link)
-                if post_url:
-                    logger.info("FacebookAdapter: Post URL captured INSTANTLY via toast: %s", post_url)
+            if not post_url:
+                logger.info("FacebookAdapter: [Fast-Track] Checking for success toast link...")
+                toast_link = reels.find_success_toast_link()
+                if toast_link:
+                    post_url = self._normalize_post_url(toast_link)
+                    if post_url:
+                        logger.info("FacebookAdapter: Post URL captured INSTANTLY via toast: %s", post_url)
 
             # 2. Immediate catch: Redirect URL
             if not post_url:
