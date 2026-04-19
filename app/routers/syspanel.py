@@ -31,6 +31,7 @@ from app.config import (
     CONTENT_PROCESSED_DIR,
     iter_pm2_log_directories,
 )
+import app.config as config
 
 router = APIRouter(prefix="/syspanel", tags=["syspanel"])
 logger = logging.getLogger(__name__)
@@ -708,7 +709,7 @@ def cmd_clear_gemini_cookies():
 
 # ─── Persona Tuner ────────────────────────────────────────────────────────────
 
-PERSONA_FILE = os.path.join(APP_DIR, "ai_persona.json")
+PERSONA_FILE = str(config.STORAGE_DB_DIR / "config" / "ai_persona.json")
 DEFAULT_PERSONA = (
     "Bạn là chuyên gia content sáng tạo, viết tiếng Việt tự nhiên, gần gũi với người dùng Facebook Việt Nam. "
     "Hãy viết caption hấp dẫn, giàu cảm xúc, phù hợp với chủ đề video, có thể dùng emoji vừa phải."
@@ -738,6 +739,7 @@ def get_persona(request: Request):
 @router.post("/persona", response_class=HTMLResponse)
 def save_persona(system_prompt: str = Form("")):
     try:
+        os.makedirs(os.path.dirname(PERSONA_FILE), exist_ok=True)
         with open(PERSONA_FILE, "w", encoding="utf-8") as f:
             json.dump({"system_prompt": system_prompt.strip()}, f, ensure_ascii=False, indent=2)
         return _html_output("✅ Đã lưu Persona AI mới! Bot sẽ dùng giọng văn này từ job tiếp theo.")

@@ -67,6 +67,10 @@ Full workflow 7 phase: `agents/WORKFLOW.md`
 - **Resources**: Xóa file video/ảnh tạm ngay sau khi job xong
 - **Import**: Đặt `import` ở đầu file, không khai báo trong function
 
+## Runtime Config Rule
+Mọi file config runtime (JSON, state files) PHẢI nằm trong `storage/db/config/`.
+KHÔNG BAO GIỜ tạo file config runtime ở thư mục gốc project vì deploy `git reset --hard` sẽ xóa file untracked ở root.
+
 ---
 
 ## File Conventions
