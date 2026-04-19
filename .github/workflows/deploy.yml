@@ -5,6 +5,15 @@ on:
     branches:
       - main
       - develop
+    paths:
+      - 'app/**'
+      - 'workers/**'
+      - 'scripts/**'
+      - 'templates/**'
+      - 'requirements.txt'
+      - 'start.sh'
+      - 'manage.py'
+      - '.github/workflows/**'
 
 jobs:
   deploy:

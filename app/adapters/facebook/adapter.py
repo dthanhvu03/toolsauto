@@ -551,6 +551,49 @@ class FacebookAdapter(AdapterInterface):
         is_page_post = bool(target_page_url)
         flow_mode = "page" if is_page_post else "personal"
         entrypoint_used: str | None = None
+        
+        # ── INITIALIZE GRAPHQL CAPTURE (Phase C) ──
+        captured_post_ids = []
+        captured_graphql_events = []
+
+        def intercept_graphql(response):
+            if "/api/graphql/" in response.url:
+                try:
+                    req_post = response.request.post_data or ""
+                    # Mutations we care about for publishing
+                    mutations = [
+                        "ComposerStoryCreateMutation",
+                        "VideoPublishMutation",
+                        "ReelCreateMutation",
+                        "useReelCreationMutation",
+                        "CometVideoUploadMutation",
+                    ]
+                    if any(m in req_post for m in mutations):
+                        body = response.json()
+                        captured_graphql_events.append({
+                            "ts": time.time(),
+                            "status": response.status,
+                            "mutation": next((m for m in mutations if m in req_post), "unknown"),
+                        })
+                        
+                        data = body.get("data", {})
+                        # Try to extract IDs from all common response structures
+                        for key in ("story_create", "video_publish", "reel_create", "video_upload", "composer_story_create"):
+                            res = data.get(key, {})
+                            if isinstance(res, dict):
+                                p_id = res.get("post_id") or res.get("video_id") or res.get("id")
+                                if p_id:
+                                    self.logger.info("FacebookAdapter: [GRAPHQL] Bắt được ID từ %s: %s", key, p_id)
+                                    captured_post_ids.append(str(p_id))
+                                    break
+                        
+                        # Errors
+                        if body.get("errors"):
+                            self.logger.warning("FacebookAdapter: [GRAPHQL] Server-side error payload: %s", body.get("errors")[:1])
+                except Exception:
+                    pass
+
+        self.page.on("response", intercept_graphql)
 
         try:
             # Check for account access
@@ -885,12 +928,32 @@ class FacebookAdapter(AdapterInterface):
 
             self.logger.info("FacebookAdapter: [Reels Dialog - Step 3] Giao diện Cài đặt, chuẩn bị điền caption và Đăng...")
             try:
-                # Wait for any contenteditable area to appear in Step 3
-                caption_loc = self.page.locator('div[contenteditable="true"]').first
-                caption_loc.wait_for(state="visible", timeout=15000)
-                self.logger.info("FacebookAdapter: Đã thấy khu vực nhập caption.")
-            except Exception:
-                self.logger.warning("FacebookAdapter: Chờ khu vực caption quá lâu hoặc không thấy.")
+                # Wait for any contenteditable area with fallback selectors (Phase B)
+                caption_selectors = [
+                    'div[role="textbox"][contenteditable="true"]',
+                    'div[contenteditable="true"][data-lexical-editor="true"]',
+                    'div[contenteditable="true"][aria-label*="reel" i]',
+                    'div[contenteditable="true"][aria-label*="Mô tả" i]',
+                    'div[contenteditable="true"][aria-label*="Describe" i]',
+                    'div[contenteditable="true"][aria-placeholder]',
+                    'div[contenteditable="true"]',
+                ]
+                found_caption = False
+                for sel in caption_selectors:
+                    try:
+                        self.page.locator(sel).first.wait_for(state="visible", timeout=3000)
+                        self.logger.debug("FacebookAdapter: Caption area found via selector: %s", sel)
+                        found_caption = True
+                        break
+                    except:
+                        continue
+                        
+                if not found_caption:
+                    self.logger.warning("FacebookAdapter: Chờ khu vực caption quá lâu hoặc không thấy qua list selectors.")
+                else:
+                    self.logger.info("FacebookAdapter: Đã thấy khu vực nhập caption.")
+            except Exception as e:
+                self.logger.warning("FacebookAdapter: Exception searching for caption: %s", e)
 
             surface = reels.find_active_publish_surface()
             caption_typed = reels.fill_caption(surface, publish_caption)
@@ -940,26 +1003,7 @@ class FacebookAdapter(AdapterInterface):
             except Exception as e:
                 self.logger.warning("FacebookAdapter: Wait for button enabled timed out or failed: %s", e)
 
-            # ── ATTACH GRAPHQL LISTENER ──
-            captured_post_ids = []
-            
-            def intercept_graphql(response):
-                if "/api/graphql/" in response.url:
-                    try:
-                        req_post = response.request.post_data or ""
-                        if "ComposerStoryCreateMutation" in req_post or "VideoPublishMutation" in req_post or "doc_id=35222657370682144" in req_post:
-                            body = response.json()
-                            data = body.get("data", {})
-                            story_create = data.get("story_create", {}) or data.get("video_publish", {})
-                            if story_create:
-                                p_id = story_create.get("post_id") or story_create.get("video_id")
-                                if p_id:
-                                    self.logger.info(f"FacebookAdapter: Bắt được post_id từ GraphQL: {p_id}")
-                                    captured_post_ids.append(str(p_id))
-                    except Exception:
-                        pass
-
-            self.page.on("response", intercept_graphql)
+            # ── REMOVED: GraphQL listener moved to start of publish() ──
 
             self.logger.info("FacebookAdapter: Simulating pre-post hesitation...")
             pre_post_delay(self.page)
@@ -981,11 +1025,17 @@ class FacebookAdapter(AdapterInterface):
             self.logger.info("FacebookAdapter: [Phase 4] Đang đợi tín hiệu GraphQL từ Facebook (tối đa 120s)...")
             deadline = time.time() + 120
             post_id_from_graphql = None
-            while time.time() < deadline:
-                if captured_post_ids:
-                    post_id_from_graphql = captured_post_ids[0]
-                    break
-                self.page.wait_for_timeout(1000)
+            
+            # Fast-track: if we already have it, don't wait
+            if captured_post_ids:
+                post_id_from_graphql = captured_post_ids[0]
+                self.logger.info("FacebookAdapter: GraphQL ID already captured, skipping busy-wait.")
+            else:
+                while time.time() < deadline:
+                    if captured_post_ids:
+                        post_id_from_graphql = captured_post_ids[0]
+                        break
+                    self.page.wait_for_timeout(2000)
                 
             try:
                 self.page.remove_listener("response", intercept_graphql)
