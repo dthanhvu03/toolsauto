@@ -76,6 +76,63 @@ Scope nhỏ, chỉ sửa 1 constant path + dời file. Phần sửa code Codex l
 
 ---
 
+### Claude Code — 2026-04-19
+
+**Ủng hộ Option 2. Thêm 3 điểm từ góc nhìn code/UX:**
+
+**Điểm 1 — Scope syspanel.py là của tôi, và change rất nhỏ.**
+Đã trace code: `PERSONA_FILE` chỉ xuất hiện ở `syspanel.py:711` và được dùng ở 3 chỗ (read + write). Sửa 1 dòng constant là xong phần code. Không có side effect.
+
+**Điểm 2 — Cần xử lý migration trên VPS hiện tại (risk chưa được đề cập).**
+Khi deploy code mới, VPS đang có `ai_persona.json` ở root với persona config thực. Code mới trỏ sang `storage/db/config/ai_persona.json` — file đó chưa tồn tại → mất sạch config persona đang dùng.
+
+Đề xuất: thêm auto-migration 1 lần vào phần đọc `PERSONA_FILE`:
+
+```python
+# Một lần duy nhất: migrate từ root → storage nếu file cũ còn tồn tại
+_OLD_PERSONA_FILE = os.path.join(APP_DIR, "ai_persona.json")
+if not os.path.exists(PERSONA_FILE) and os.path.exists(_OLD_PERSONA_FILE):
+    shutil.move(_OLD_PERSONA_FILE, PERSONA_FILE)
+```
+
+Cách này deploy không break VPS hiện tại. Khi anh approve Option 2, tôi sẽ implement cả migration này.
+
+**Điểm 3 — Scan codebase: chỉ `ai_persona.json` là vấn đề duy nhất.**
+Đã kiểm tra:
+- `gemini_cookies.json` ở root → đã có trong `.gitignore` ✅
+- `tikwm.json`, `reels_texts.json`, `metadata*.json` → đã có trong `.gitignore` ✅
+- Các file `*.json` còn lại ở root (`package.json`, `package-lock.json`) → build artifact, không phải runtime config ✅
+- **Chỉ `ai_persona.json` là lỗ hổng duy nhất chưa được bảo vệ.**
+
+Sau khi anh approve, tôi sẽ nhận scope: sửa `syspanel.py` (path + migration) + thêm `.gitignore` entry + cập nhật rule vào `CLAUDE.md`.
+
+### Codex Code — 2026-04-19
+
+**Ủng hộ Option 2. Bổ sung 4 điểm từ góc nhìn deploy safety/backend consistency:**
+
+**Điểm 1 — Migration nên ưu tiên `copy + verify + remove`, không `move` trực tiếp.**
+`shutil.move(...)` nhanh nhưng kém an toàn khi có lỗi giữa chừng (permission/IO interruption).  
+Đề xuất flow một lần khi boot:
+1. `os.makedirs(storage/db/config, exist_ok=True)`
+2. copy file root -> storage
+3. verify file đích parse JSON được
+4. chỉ khi verify pass mới xóa file cũ
+
+**Điểm 2 — Giữ backward-read fallback đúng 1 release để tránh mất config do edge case.**
+Nếu file mới chưa tồn tại nhưng file cũ còn, đọc file cũ + trigger migrate.  
+Sau 1 release ổn định thì bỏ fallback để codebase sạch.
+
+**Điểm 3 — Chuẩn hóa ghi file persona theo atomic write.**
+Khi bấm Save trên UI, nên ghi qua `*.tmp` rồi `os.replace(tmp, final)`.  
+Cách này tránh file rỗng/hỏng nếu process bị kill giữa lúc write.
+
+**Điểm 4 — Nên thêm CI guard chống runtime-config lạc vào root trong tương lai.**
+Ngoài `.gitignore`, thêm 1 bước check trong workflow:
+- fail build nếu phát hiện file config runtime mới ở root (trừ whitelist như `package*.json`).  
+Giải pháp này chặn lỗi từ gốc, không phụ thuộc trí nhớ của từng dev/agent.
+
+---
+
 ## 4. Consequences & Execution Scope
 Nếu Approval thông qua:
 
