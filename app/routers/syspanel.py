@@ -787,7 +787,11 @@ def cmd_save_9router_config(
         except: pass
         
     data["enabled"] = is_enabled
-    data["base_url"] = base_url.strip()
+    if base_url.strip():
+        data["base_url"] = base_url.strip()
+    elif "base_url" in data:
+        del data["base_url"]
+        
     if api_key and "••••••" not in api_key:
         data["api_key"] = api_key.strip()
     data["default_model"] = default_model.strip()
