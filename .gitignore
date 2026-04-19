@@ -71,4 +71,6 @@ content/reup/
 *.db
 
 # Unified logs
+# log files
 logs/
+storage/
