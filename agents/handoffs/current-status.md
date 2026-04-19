@@ -1,52 +1,59 @@
-# Agent Status — 2026-04-18 — FINAL GO-LIVE
+# ToolsAuto — Current Project Status
 
-## ✅ Plan 001 — Contextual Logging (Job ID) — HOÀN THÀNH (Verified)
-
-### Tóm tắt triển khai & Xác minh
-- **Code**: Đã refactor toàn bộ `FacebookAdapter` và `FacebookReelsPage` để sử dụng `JobLoggerAdapter`.
-- **Verify (Runtime)**: Đã chạy thành công Job 725 qua `test_publish_job.py`.
-- **Kết quả**: Log đã xuất hiện tiền tố `[Job 725]` chính xác (Xác nhận qua stdout).
-- **Hành động**: Đã terminate phiên test an toàn sau khi xác nhận log format.
+*Last updated by: Claude Code — 2026-04-19*
 
 ---
 
-## 🔲 Tiến độ tiếp theo
-- **Trạng thái**: Sẵn sàng vận hành 100%.
-- **Action**: Anh có thể bật PM2 cho các worker chạy thực tế.
-- **Theo dõi**: Sử dụng `grep "\[Job "` để lọc log theo Job mong muốn.
+## System State
+| Item | State |
+|---|---|
+| **Environment** | WSL Ubuntu / Python 3.10 / Direct Server |
+| **Backend** | Running (manage.py serve) |
+| **Git Branch** | develop |
+| **Git Status** | Modified files — xem `git status` để biết chi tiết |
+| **Last Major Work** | TASK-006 UI/UX Recovery — **DONE and Verified** |
 
 ---
 
-## 🔎 Checkpoint (Antigravity) — Lễ Khánh Thành Hoàn Tất
-- Thư mục `agents/` đã đầy đủ: README, WORKFLOW, PROMPT_SYSTEM, TEMPLATES.
-- Task 001 đã được ký duyệt hoàn thành (Verified).
-- Toàn bộ hệ thống "Operating System cho Agent" chính thức đi vào hoạt động.
+## Active Tasks
+
+| Task | Executor | Phase | Blocker |
+|---|---|---|---|
+| None | All Agents | **Standby** | Chờ User giao việc mới / Chọn từ backlog |
 
 ---
 
-## ⚠️ Lưu ý vận hành (Handoff)
-- Khi có một Task mới, hãy tạo file trong `agents/tasks/` dùng đúng template.
-- Luôn kiểm tra `current-status.md` trước khi bắt đầu phiên mới.
-- Trong trường hợp Agent bị crash, hãy thực hiện đúng `Failure Recovery Workflow` trong file WORKFLOW.md.
+## Done This Session (Verified)
+
+- ✅ Chạy lại `browser_subagent` verify thành công trang Viral Dashboard và Jobs Queue (KHÔNG còn dính lỗi 404).
+- ✅ Update `backend/models.py` Job mapping để map chuẩn xác route cũ `reup_videos/` và sinh property `thumbnail_url` hash tự động.
+- ✅ Archive TASK-006 thành công vào thư mục `tasks/archive/`.
+- ✅ Backend đã được restart thông qua `manage.py serve`.
 
 ---
 
-## ✅ Cập nhật trạng thái mới nhất — 2026-04-18
+## Unfinished
 
-### TASK-003 (Asset Consolidation)
-- **Trạng thái**: DONE & ARCHIVED.
-- **Hoạt động**: Dữ liệu đã migrate thành công vào `storage/` và layout cũ đã đưa vào `archive_legacy/`.
-
-### TASK-004 (Path Hardcoded Refactor)
-- **Trạng thái**: DONE & ARCHIVED.
-- **Hoạt động**: Toàn bộ đường dẫn cứng tại 7 file mục tiêu đã chuyển về sử dụng `app/config.py`. Code được xác minh chạy ổn định qua static check và review.
-
-### TASK-005 (Config Centralization)
-- **Trạng thái**: DONE & ARCHIVED.
-- **Hoạt động**: Toàn bộ host (Facebook, Tiktok, Instgram), Ports và CDNs đã dùng biến config tập trung. Task và Plan đã được archive.
+- ⏳ None
 
 ---
 
-## 🔲 Tiến độ tiếp theo
-- Hệ thống đã sẵn sàng cho bất kỳ feature hoặc bugfix nào khác sau chuỗi Refactor này. Môi trường PM2 / local server có thể khởi chạy và trỏ config theo ý ý định một cách an toàn.
-- **Hành động đề xuất cho Agent tiếp theo**: Hãy pick các yêu cầu tính năng từ người dùng hoặc theo dõi log `app.log` khi hệ thống hoạt động.
+## Blockers / Risks
+
+- ⚠️ Không có blocker. Hệ thống hoàn toàn thông suốt tại route `/app`.
+
+---
+
+## Next Action
+
+1. **Anti**: Pick task tiếp theo từ backlog hoặc chờ User giao việc.
+
+---
+
+## Workflow Reference
+
+Hệ thống 3-agent vừa được setup (2026-04-19):
+- Quy trình: `agents/WORKFLOW.md`
+- Prompt chuẩn: `agents/PROMPT_SYSTEM.md`
+- Lệnh nhanh: `agents/QUICK_START.md`
+- Claude Code tự động đọc: `CLAUDE.md` (root)

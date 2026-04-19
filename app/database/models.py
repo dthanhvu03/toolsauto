@@ -297,13 +297,18 @@ class Job(Base):
     def resolved_media_path(self) -> str:
         if not self.media_path:
             return ""
+        from app.config import REUP_DIR, CONTENT_DIR
         p = Path(self.media_path)
         if p.exists():
             return str(p.absolute())
-        # Rebase relative to CONTENT_DIR if missing
+        # Rebase relative to CONTENT_DIR or REUP_DIR if missing
         try:
-            # If path contains 'content/', try to rebase from there
-            if "content/" in self.media_path:
+            if "reup_videos/" in self.media_path:
+                suffix = self.media_path.split("reup_videos/", 1)[1]
+                rebased = REUP_DIR / suffix
+                if rebased.exists():
+                    return str(rebased.absolute())
+            elif "content/" in self.media_path:
                 suffix = self.media_path.split("content/", 1)[1]
                 rebased = CONTENT_DIR / suffix
                 if rebased.exists():
@@ -311,6 +316,7 @@ class Job(Base):
         except Exception:
             pass
         return self.media_path
+
 
     caption = Column(String)
     schedule_ts = Column(Integer, index=True)
@@ -339,12 +345,18 @@ class Job(Base):
     def resolved_processed_media_path(self) -> str:
         if not self.processed_media_path:
             return ""
+        from app.config import REUP_DIR, CONTENT_DIR
         p = Path(self.processed_media_path)
         if p.exists():
             return str(p.absolute())
-        # Rebase relative to CONTENT_DIR if missing
+        # Rebase relative to CONTENT_DIR or REUP_DIR if missing
         try:
-            if "content/" in self.processed_media_path:
+            if "reup_videos/" in self.processed_media_path:
+                suffix = self.processed_media_path.split("reup_videos/", 1)[1]
+                rebased = REUP_DIR / suffix
+                if rebased.exists():
+                    return str(rebased.absolute())
+            elif "content/" in self.processed_media_path:
                 suffix = self.processed_media_path.split("content/", 1)[1]
                 rebased = CONTENT_DIR / suffix
                 if rebased.exists():
@@ -437,6 +449,15 @@ class ViralMaterial(Base):
     status = Column(String, default="NEW", index=True) # NEW, DOWNLOADED, DRAFTED, FAILED
     last_error = Column(String, nullable=True)
     
+    @property
+    def thumbnail_url(self) -> str:
+        """Returns the relative path to the generated thumbnail collage, or empty string if not downloaded."""
+        if self.status in ("NEW", "FAILED") or not self.url:
+            return ""
+        import hashlib
+        fhash = hashlib.md5(self.url.encode()).hexdigest()
+        return f"/thumbnails/{fhash}_collage.jpg"
+
     created_at = Column(Integer, default=now_ts)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
 
