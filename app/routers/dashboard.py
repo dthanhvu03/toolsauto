@@ -43,6 +43,12 @@ def app_overview(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/app/dashboard", response_class=HTMLResponse)
+def app_overview_legacy(request: Request, db: Session = Depends(get_db)):
+    """Backward-compatible alias for legacy dashboard path."""
+    return app_overview(request, db)
+
+
 @router.get("/app/overview/page-posting-stats", response_class=HTMLResponse)
 def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_db)):
     """

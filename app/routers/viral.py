@@ -30,13 +30,13 @@ def _render_viral_tbody(request: Request, db: Session, scan_message: str | None 
     if scan_message:
         parts.append(
             f'<tr class="bg-green-50 border-b">'
-            f'<td colspan="6" class="p-3 text-sm text-green-800">{scan_message}</td></tr>'
+            f'<td colspan="7" class="p-3 text-sm text-green-800">{scan_message}</td></tr>'
         )
     # Dòng thông tin: đang hiển thị X / tổng Y
     if total_count > 0:
         showing = min(len(materials), VIRAL_TABLE_LIMIT)
         parts.append(
-            f'<tr class="bg-gray-50 border-b"><td colspan="6" class="p-2 text-xs text-gray-500">'
+            f'<tr class="bg-gray-50 border-b"><td colspan="7" class="p-2 text-xs text-gray-500">'
             f'Hiển thị {showing} / {total_count} video (sắp theo views giảm dần, tối đa {VIRAL_TABLE_LIMIT})'
             f'</td></tr>'
         )
@@ -49,7 +49,7 @@ def _render_viral_tbody(request: Request, db: Session, scan_message: str | None 
         )
     if not parts:
         parts.append(
-            '<tr><td colspan="6" class="p-4 text-center text-sm text-gray-500">Chưa có video viral nào.</td></tr>'
+            '<tr><td colspan="7" class="p-4 text-center text-sm text-gray-500">Chưa có video viral nào.</td></tr>'
         )
     return "".join(parts)
 

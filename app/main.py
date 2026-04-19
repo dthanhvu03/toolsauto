@@ -51,6 +51,8 @@ app.include_router(ai_studio.router)
 
 # Static assets (SaaS UI CSS, etc.)
 app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "app" / "static")), name="static")
+config.THUMB_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/thumbnails", StaticFiles(directory=str(config.THUMB_DIR)), name="thumbnails")
 
 import secrets
 import base64
