@@ -42,6 +42,7 @@ reels_body.html
 reels_texts.json
 metadata*.json
 gemini_cookies.json
+ai_persona.json
 
 # Inter-agent communication (internal only)
 .comms/
