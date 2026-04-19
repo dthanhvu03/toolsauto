@@ -9436,5 +9436,47 @@
       "channels": 2,
       "fpcalc_version": "unknown"
     }
+  },
+  {
+    "video_asset_id": "job_731",
+    "account": "Hoang Khoa",
+    "source_path": "/home/vu/toolsauto/storage/media/content/processed/viral_823_tikwm_reup_processed.mp4",
+    "filename": "viral_823_tikwm_reup_processed.mp4",
+    "created_at": 1776571173,
+    "phash_signatures": {
+      "1.11s": "916b852569e9cfc2",
+      "3.34s": "d5318d6d6ee8c192",
+      "5.57s": "d13d85676968c593",
+      "7.79s": "d55a936261989eb5",
+      "10.02s": "d1239c4a62b19f9e"
+    },
+    "audio": {
+      "fingerprint": "AQAAREqy7ImSFGZgh6lQLyqeocmVHJ1qEX_wIPou9DSSKJSnBGW3wz36PMGXov9xEX0SBWdzPE5HZI-QXB6e47fQ4zUcKrmGKvjxHw_C0xK0VHiyHd-WHOlX4jue4yKaxDz6Hz1DCi5FwV9yoXp0JE2NPC_-4uh3PJEOJxUqHu_xHKcJPxmu4VUQJ1n6QWeyCbl0odaDJpbwhDmeU3goCcCAA5IJKAwUxAlAEAACMECQApohSAhxhAAGnFDEOAAIMAIAIIQgxgShCLSCOAIQIAAJAgABFA",
+      "duration": 11.12,
+      "sample_rate": 44100,
+      "channels": 2,
+      "fpcalc_version": "unknown"
+    }
+  },
+  {
+    "video_asset_id": "job_736",
+    "account": "Nguyen Ngoc Vi",
+    "source_path": "/home/vu/toolsauto/storage/media/content/processed/viral_828_7629579541509328136_reup_processed.mp4",
+    "filename": "viral_828_7629579541509328136_reup_processed.mp4",
+    "created_at": 1776572852,
+    "phash_signatures": {
+      "4.73s": "940d6763396969b5",
+      "14.20s": "9ce10d35f1c69cca",
+      "23.67s": "9e60033f8dc7969c",
+      "33.13s": "d3687f3dec723020",
+      "42.60s": "cc59346793d29e38"
+    },
+    "audio": {
+      "fingerprint": "AQAA3dyWJBOVCNOVHM110GNyRHTmBMk3o2Kao8FrPB-uPRSOH1scOsKXfMiqI0lfOMeuB2eUdMIzdfiF5iF6g_3xH04ecMzBbxGoZ4_x42WD56ilo3lSNKVGlIpePAnOaEKiiMocIUsaHH2OJtK24bmCL4cnZakocJcj_MiSZYNGZimeZ3CdC3HCGM-WG1eO5qmMXvhjRM7xQ8-JCN_xJY3AmVSCqzua6Ef_YSeH5Iwe5D98LRKeBz-maTyaSMryDL-Q_T2S5Vkoo-yMOftxwU0S_EimZwijMHnw41uWD7V4mH_g7kbYI5lkWFMe2FmFbkpQZkfyE2meCrVSPMcdjP6RNEmLMOPBPMSJB_fQJALzUGxwisePf8YTJeHx7EL-BMkeHVMiBVeO-xLx8EezHPXw4kfPR4iUHzqTFJnjJhifCT_-HFOUo_KDJ9nwGydy3pAeHeEbmA-qhNfwHw8f9FIcMNkUGW8e4WrwHekuXMZ7hPpBJU-ENslxZUfzHO2RH8myRRJcRbFQ5Q9-gT0aTmRQ9si1IGmNXw8aX0IXPTiYY1sj6QhzJNWn4ElEB6dTWH4kCQ_-48uJj8EjpviWHCF56OGDSXqIUOnBZEmSV_jxD78STE-PMCU0hkYzToNy8XgL5wt-KngE5h00Kw-iZvjyoZmeGvUurAzhB__xHMniJAFDnkJ-KnBj46pH_OgBQoABRDmEiDFMAOSwNIQgZIFwgBDmCADCQIKQNAQwtwBgBgpBEUJEQIEAEYwpJIgzgggHgAJAAQUYAQ4BhYAAACBEjRHMACQIIMIQIAxy1gAlEHgAKCSABIgIJwwSDhAGAFKACUEMMMQDw5xBCGJDjANOAASIEEpAZISEBCiCEEGAGg0MQJwYAQRSEAkkCBBaGIIEMYAYBJAxCDiAFABGMCeQGsIAABCAwAFBCBDMAA",
+      "duration": 30.0,
+      "sample_rate": 44100,
+      "channels": 2,
+      "fpcalc_version": "unknown"
+    }
   }
 ]

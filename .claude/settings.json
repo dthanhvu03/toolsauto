@@ -72,7 +72,15 @@
       "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/tasks/**)",
       "Read(//home/vu/toolsauto/app/**)",
       "Read(//home/vu/toolsauto/app/utils/**)",
-      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/app/utils/**)"
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/app/utils/**)",
+      "Read(//home/vu/toolsauto/agents/**)",
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/**)",
+      "Read(//home/vu/toolsauto/agents/templates/**)",
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/templates/**)",
+      "Read(//home/vu/toolsauto/agents/plans/archive/**)",
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/plans/archive/**)",
+      "Read(//home/vu/toolsauto/agents/tasks/archive/**)",
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/tasks/archive/**)"
     ],
     "additionalDirectories": [
       "\\home\\vu\\toolsauto\\app\\services",
