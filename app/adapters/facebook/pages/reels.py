@@ -502,12 +502,14 @@ class FacebookReelsPage:
         if not caption:
             return True
         candidates = [
-            surface.locator('div[contenteditable="true"][aria-placeholder*="reel"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="Describe"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="thước phim"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="Mô tả"]').first,
-            surface.locator('div[contenteditable="true"][aria-placeholder*="nghĩ"]').first,
+            surface.locator('div[contenteditable="true"][data-lexical-editor="true"]').first,
+            surface.locator('div[role="textbox"][contenteditable="true"][aria-label*="reel" i]').first,
             surface.locator('div[role="textbox"][contenteditable="true"]').first,
+            surface.locator('div[contenteditable="true"][aria-placeholder*="reel" i]').first,
+            surface.locator('div[contenteditable="true"][aria-placeholder*="Describe" i]').first,
+            surface.locator('div[contenteditable="true"][aria-placeholder*="thước phim" i]').first,
+            surface.locator('div[contenteditable="true"][aria-placeholder*="Mô tả" i]').first,
+            surface.locator('div[contenteditable="true"][aria-placeholder*="nghĩ" i]').first,
             surface.locator('div[role="textbox"]').first,
             surface.locator('div[contenteditable="true"]').first,
             surface.locator("textarea").first,

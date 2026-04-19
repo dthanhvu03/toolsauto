@@ -18,11 +18,9 @@
 
 ## Active Tasks
 
-- ⚡ **TASK-010**: GraphQL Sync + Caption Fix + Deploy Path Filter (P0 Critical)
-  - **PLAN**: PLAN-010
-  - **ADR**: DECISION-003
-  - **Executor**: Antigravity (trực tiếp)
-  - **Scope**: 3 phases — A: deploy filter, B: caption selectors, C: GraphQL enhancement
+- ✅ **TASK-010 DONE**: GraphQL Sync + Caption Fix + Deploy Path Filter
+  - **Status**: Archived
+  - **PLAN**: PLAN-010 (Archived)
 
 ---
 
