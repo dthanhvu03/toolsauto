@@ -123,6 +123,9 @@ PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv('PLAYWRIGHT_DEFAULT_TIMEOUT_MS', '
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_API_KEY = GEMINI_API_KEY  # alias
 
+# 9Router Gateway (centralized; avoid hardcoded fallbacks in services)
+ROUTER_BASE_URL = (os.getenv("ROUTER_BASE_URL") or "http://localhost:20128/v1").strip()
+
 # AI / Fallback (Poorman)
 FALLBACK_CAPTION_POOL = os.getenv("FALLBACK_CAPTION_POOL", "Góc nhìn thú vị cho mọi người tham khảo nhé! Đừng bỏ lỡ 🔥 | Video này đảm bảo sẽ không làm cả nhà thất vọng đâu! Xem ngay 🎬 | Chút năng lượng cho một ngày làm việc đây, thư giãn nhé 👇 | Cùng tham khảo video tuyệt vời này nha! Nhớ follow kênh nhé 💯")
 FALLBACK_HASHTAG_POOL = os.getenv("FALLBACK_HASHTAG_POOL", "#viral, #trending, #xuhuong | #video, #daily, #relax, #giaitri | #thugiangi, #khampha, #haynhat")

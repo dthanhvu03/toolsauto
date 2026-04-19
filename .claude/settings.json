@@ -80,7 +80,9 @@
       "Read(//home/vu/toolsauto/agents/plans/archive/**)",
       "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/plans/archive/**)",
       "Read(//home/vu/toolsauto/agents/tasks/archive/**)",
-      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/tasks/archive/**)"
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/tasks/archive/**)",
+      "Read(//home/vu/toolsauto/agents/handoffs/**)",
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/handoffs/**)"
     ],
     "additionalDirectories": [
       "\\home\\vu\\toolsauto\\app\\services",
