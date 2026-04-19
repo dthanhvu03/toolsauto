@@ -162,7 +162,7 @@ def process_single_job(db: Session):
             logger.debug("[DB][daily_limit_count] posted_today=%s, effective_daily_limit=%s", posted_today, effective_daily_limit)
 
             if posted_today >= effective_daily_limit:
-                logger.info("[Job %s] Page '%s' at daily limit (%s). Postponed to tomorrow.",
+                logger.info("[PUBLISHER] [Job-%s] [DAILY_LIMIT] Page '%s' reached limit (%s). Postponed to tomorrow.",
                             job.id, job.target_page, effective_daily_limit)
                 job.status = JobStatus.PENDING
                 job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
@@ -171,7 +171,7 @@ def process_single_job(db: Session):
 
         # Xin ý kiến giấc ngủ (Human Rest Cycle)
         if job.account and getattr(job.account, 'is_sleeping', False):
-            logger.info("[Job %s] Account '%s' is SLEEPING (%s - %s). Postponing job for 10 minutes.", 
+            logger.info("[PUBLISHER] [Job-%s] [SLEEP_WINDOW] Account '%s' is sleeping (%s - %s). Postponing 10 minutes.", 
                         job.id, job.account.name, job.account.sleep_start_time, job.account.sleep_end_time)
             job.status = JobStatus.PENDING
             job.schedule_ts = int(time.time()) + 600
@@ -179,7 +179,7 @@ def process_single_job(db: Session):
             return True
             
         CURRENT_JOB_ID = job.id
-        logger.info("[Job %s] Claimed for account '%s' on %s", job.id, job.account.name, job.platform)
+        logger.info("[PUBLISHER] [Job-%s] [CLAIM] Account='%s' Platform=%s", job.id, job.account.name, job.platform)
         
         # Keep Job.last_heartbeat_at fresh while dispatch/publish is running.
         # Otherwise QueueService.recover_crashed_jobs() may treat it as stale and reset RUNNING -> PENDING.
@@ -193,7 +193,7 @@ def process_single_job(db: Session):
                         JobService.update_heartbeat(hb_db, job_id)
                 except Exception as hb_err:
                     # [HB-Fix] Log at DEBUG level to reduce main log noise per Priority 1.
-                    logger.debug("[Job %s] Heartbeat refresh failed: %s", job_id, hb_err)
+                    logger.debug("[PUBLISHER] [Job-%s] [HEARTBEAT] Refresh failed: %s", job_id, hb_err)
                 # Wait with stop support
                 heartbeat_stop.wait(heartbeat_interval)
 
@@ -207,7 +207,7 @@ def process_single_job(db: Session):
         # SAFETY GUARD: Never publish a job with un-processed AI placeholder
         from app.constants import AI_GENERATE_MARKER
         if job.caption and AI_GENERATE_MARKER in job.caption:
-            logger.warning("[Job %s] BLOCKED: Caption still contains %s. Resetting to DRAFT.", job.id, AI_GENERATE_MARKER)
+            logger.warning("[PUBLISHER] [Job-%s] [VALIDATION] Caption still contains %s. Resetting to DRAFT.", job.id, AI_GENERATE_MARKER)
             job.status = JobStatus.DRAFT
             db.commit()
             CURRENT_JOB_ID = None
@@ -232,7 +232,7 @@ def process_single_job(db: Session):
                         pub_text, job_id=job.id, content_type="caption"
                     )
         except CompliancePublishError as e:
-            logger.error("[Job %s] Compliance blocked publish: %s", job.id, e)
+            logger.error("[PUBLISHER] [Job-%s] [COMPLIANCE] Blocked publish: %s", job.id, e)
             job.status = JobStatus.FAILED
             job.last_error = str(e)
             job.error_type = "COMPLIANCE"
@@ -255,7 +255,7 @@ def process_single_job(db: Session):
         )
         
         try:
-            logger.info("[Job %s] Bat dau dang Reel len Facebook...", job.id)
+            logger.info("[PUBLISHER] [Job-%s] [PUBLISH] Bắt đầu đăng Reel lên Facebook...", job.id)
             try:
                 publish_result = Dispatcher.dispatch(job, db=db)
             finally:
@@ -268,7 +268,7 @@ def process_single_job(db: Session):
             
             
             if publish_result.ok:
-                logger.info("[Job %s] Successfully published!", job.id)
+                logger.info("[PUBLISHER] [Job-%s] [DONE] Successfully published.", job.id)
 
                 post_url = publish_result.details.get("post_url") if publish_result.details else None
                 logger.debug("[DB][status_transition] Marking job_id=%s as DONE", job.id)
@@ -286,10 +286,10 @@ def process_single_job(db: Session):
                 apply_runtime_overrides_to_config(db)
                 from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
                 delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
-                logger.info(f"[Job {job.id}] Nghỉ ngơi {delay_sec}s trước job tiếp theo...")
+                logger.info("[PUBLISHER] [Job-%s] [COOLDOWN] Nghỉ %ss trước job tiếp theo.", job.id, delay_sec)
                 time.sleep(delay_sec)
             else:
-                logger.error("[Job %s] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
+                logger.error("[PUBLISHER] [Job-%s] [FAILED] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
                 logger.debug("[DB][status_transition] Marking job_id=%s failed/retry", job.id)
                 JobService.mark_failed_or_retry(
                     db=db, 
@@ -302,7 +302,7 @@ def process_single_job(db: Session):
                     NotifierService.notify_job_failed(job, publish_result.error)
                 
                 if publish_result.details and publish_result.details.get("invalidate_account"):
-                    logger.error("[Job %s] Adapter triggered account invalidation. Disabling account '%s'.", job.id, job.account.name)
+                    logger.error("[PUBLISHER] [Job-%s] [ACCOUNT_INVALID] Disabling account '%s'.", job.id, job.account.name)
                     AccountService.invalidate_account(
                         db=db, 
                         account_id=job.account.id, 
@@ -312,7 +312,7 @@ def process_single_job(db: Session):
                     
         except PageMismatchError as e:
             db.rollback()
-            logger.error("[Job %s] Page identity mismatch: %s", job.id, e)
+            logger.error("[PUBLISHER] [Job-%s] [PAGE_MISMATCH] %s", job.id, e)
             job.status = JobStatus.FAILED
             job.last_error = str(e)
             job.error_type = "PAGE_MISMATCH"
@@ -326,7 +326,7 @@ def process_single_job(db: Session):
             except Exception:
                 pass
             db.rollback()
-            logger.exception("[Job %s] Unhandled worker exception processing job: %s", job.id, e)
+            logger.exception("[PUBLISHER] [Job-%s] [EXCEPTION] Unhandled exception while processing job: %s", job.id, e)
             logger.debug("[DB][status_transition] Marking job_id=%s failed/retry after exception", job.id)
             JobService.mark_failed_or_retry(db, job, str(e), is_fatal=False)
         
@@ -346,17 +346,17 @@ def process_single_job(db: Session):
                 # 1. Dọn file render qua xử lý
                 p_path = job.resolved_processed_media_path
                 if p_path and os.path.exists(p_path):
-                    logger.info("[Job %s] Terminal state reached. Cleaning up processed media: %s", job.id, p_path)
+                    logger.info("[PUBLISHER] [Job-%s] [CLEANUP] Removing processed media: %s", job.id, p_path)
                     os.remove(p_path)
                 
                 # 2. Dọn luôn file gốc mồ côi
                 m_path = job.resolved_media_path
                 if m_path and os.path.exists(m_path):
-                    logger.info("[Job %s] Terminal state reached. Cleaning up original media: %s", job.id, m_path)
+                    logger.info("[PUBLISHER] [Job-%s] [CLEANUP] Removing original media: %s", job.id, m_path)
                     os.remove(m_path)
                     
         except Exception as cleanup_err:
-            logger.warning("[Job %s] Failed to run cleanup flow safely: %s", job.id, cleanup_err)
+            logger.warning("[PUBLISHER] [Job-%s] [CLEANUP_WARN] Failed to run cleanup safely: %s", job.id, cleanup_err)
             
         CURRENT_JOB_ID = None
         
@@ -483,7 +483,7 @@ def _maybe_idle_engagement(db: Session):
             Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
         ).count()
         if backlog >= threshold:
-            logger.info("[IDLE] Backlog=%d >= %d. Skipping idle engagement.", backlog, threshold)
+            logger.debug("[IDLE] Backlog=%d >= %d. Skipping idle engagement.", backlog, threshold)
             return
     except Exception:
         # Never block publishing due to idle warmup checks
@@ -517,13 +517,13 @@ def _maybe_idle_engagement(db: Session):
     niche_keywords = parse_niche_topics(getattr(account, "niche_topics", None))
     competitor_urls = parse_niche_topics(getattr(account, "competitor_urls", None))
 
-    logger.info("[IDLE] Starting engagement session for account '%s' (niche: %s, competitors: %d)",
+    logger.debug("[IDLE] Starting engagement session for account '%s' (niche: %s, competitors: %d)",
                 account.name, niche_keywords or "general", len(competitor_urls))
 
     # ── LOCK: Đánh dấu acc đang ENGAGING để Publisher không claim job cho acc này ──
     account.login_status = AccountStatus.ENGAGING
     db.commit()
-    logger.info("[IDLE] Account '%s' locked → ENGAGING", account.name)
+    logger.debug("[IDLE] Account '%s' locked -> ENGAGING", account.name)
 
     # Notify Telegram — session started
     try:
@@ -599,7 +599,7 @@ def _maybe_idle_engagement(db: Session):
                 pass
 
         elif result.get("ok"):
-            logger.info("[IDLE] Engagement completed: action=%s", result.get("action"))
+            logger.debug("[IDLE] Engagement completed: action=%s", result.get("action"))
             # Notify Telegram — success
             try:
                 urls_list = result.get("urls", [])
@@ -643,7 +643,7 @@ def _maybe_idle_engagement(db: Session):
             if account.login_status == AccountStatus.ENGAGING:
                 account.login_status = AccountStatus.ACTIVE
                 db.commit()
-                logger.info("[IDLE] Account '%s' unlocked → ACTIVE", account.name)
+                logger.debug("[IDLE] Account '%s' unlocked -> ACTIVE", account.name)
         except Exception:
             pass
         # Ghi nhận thời gian dạo cuối cùng cho cooldown
