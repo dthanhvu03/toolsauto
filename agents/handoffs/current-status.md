@@ -18,7 +18,9 @@
 
 ## Active Tasks
 
-*Không có task active. Hệ thống đang ổn định.*
+- ⚡ **TASK-008**: System Logs Optimization (In Progress)
+  - **PLAN**: PLAN-008
+  - **Ownership**: Codex Code (Backend Logic) & Claude Code (UI CSS)
 
 ---
 
@@ -48,8 +50,8 @@
 
 ## Next Action
 
-1. **Antigravity**: Review diff 3 file modified, approve commit lên develop.
-2. **Antigravity**: Confirm AI Content Generator hoạt động end-to-end sau khi Gateway phục hồi.
+1. **Codex Code**: Nhận lệnh từ Antigravity, tiến hành đọc `PLAN-008` (Phase A & B) và sửa code `app/utils/logger.py`, giảm IDLE spam tại các `workers/*.py`. Ghi chú vào `TASK-008` khi hoàn tất.
+2. **Claude Code**: Sau khi Codex xong phần Backend, vào handle file `syspanel.py` CSS highlight.
 
 ---
 
