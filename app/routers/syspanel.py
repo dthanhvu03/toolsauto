@@ -79,6 +79,21 @@ def _html_output(text: str) -> HTMLResponse:
     return HTMLResponse(f"<pre class='text-sm text-green-400 font-mono whitespace-pre-wrap leading-relaxed'>{escaped}</pre>")
 
 
+def _colorize_log_lines(escaped: str) -> str:
+    lines = escaped.split("\n")
+    result = []
+    for line in lines:
+        if "[ERROR]" in line or "[EXCEPTION]" in line:
+            result.append(f"<span class='text-red-400 font-semibold'>{line}</span>")
+        elif "[WARNING]" in line or "[WARN]" in line:
+            result.append(f"<span class='text-yellow-400'>{line}</span>")
+        elif "[DEBUG]" in line:
+            result.append(f"<span class='text-gray-500'>{line}</span>")
+        else:
+            result.append(line)
+    return "\n".join(result)
+
+
 # Whitelist PM2 process names (including _1/_2 scaling convention)
 PM2_SAFE_NAMES = {
     "FB_Publisher_1", "FB_Publisher_2",
@@ -375,7 +390,8 @@ def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "e
             f"Available log files:\n" + "\n".join(f"  {x}" for x in all_logs)
         )
     escaped = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return HTMLResponse(f"<pre class='text-xs text-green-400 font-mono whitespace-pre-wrap leading-relaxed'>{escaped}</pre>")
+    colorized = _colorize_log_lines(escaped)
+    return HTMLResponse(f"<pre class='text-xs text-green-400 font-mono whitespace-pre-wrap leading-relaxed'>{colorized}</pre>")
 
 
 # ─── Screenshot Serve ─────────────────────────────────────────────────────────
