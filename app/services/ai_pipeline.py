@@ -101,7 +101,7 @@ class AICaptionPipeline:
         self.circuit_breaker = CircuitBreaker(failure_ttl=1800, success_ttl=60, max_failures=3)
         
         # Load initial config
-        default_router_url = os.environ.get("ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+        default_router_url = config.ROUTER_BASE_URL
         self.enabled = True
         self.base_url = default_router_url
         self.api_key = ""
@@ -132,7 +132,7 @@ class AICaptionPipeline:
                 data = json.load(f)
                 
             enabled = bool(data.get("enabled", True))
-            default_router_url = os.environ.get("ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+            default_router_url = config.ROUTER_BASE_URL
             base_url = str(data.get("base_url", default_router_url))
             api_key = str(data.get("api_key", ""))
             default_model = str(data.get("default_model", "if/gemini-1.5-flash"))
