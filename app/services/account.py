@@ -424,8 +424,10 @@ class AccountService:
         """Transitions an account state directly to INVALID."""
         account = cls.get_account(db, account_id)
         if account:
+            account.is_active = False
             account.login_status = AccountStatus.INVALID
             account.login_error = reason
+            account.login_process_pid = None
             db.commit()
         return account
 

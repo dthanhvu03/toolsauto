@@ -179,7 +179,7 @@ class JobService:
         if is_fatal and job.account:
             job.account.consecutive_fatal_failures += 1
             if job.account.consecutive_fatal_failures >= 3:
-                job.account.status = False
+                job.account.is_active = False
                 JobService._log_event(db, job.id, "WARN", f"Circuit breaker activated for account {job.account.name}")
         
         if is_fatal or job.tries >= job.max_tries:
