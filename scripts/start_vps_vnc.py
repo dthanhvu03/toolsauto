@@ -110,18 +110,40 @@ def main():
     start_detached(vnc_args, vnc_env, "x11vnc.log")
     time.sleep(1)
 
-    # 3b. Start openbox window manager so windows appear properly
-    wm_running = run("pgrep -x openbox")
-    if not wm_running.stdout.strip():
-        print(f"Starting openbox window manager on {display}...")
-        wm_env = vnc_env.copy()
-        wm_env["DISPLAY"] = display
-        if auth:
-            wm_env["XAUTHORITY"] = auth
-        start_detached(["openbox", "--replace"], wm_env, "/tmp/openbox.log")
-        time.sleep(1)
-    else:
-        print(f"openbox already running (pid {wm_running.stdout.strip()})")
+    # 3b. Start a window manager so browser windows appear properly
+    import shutil
+    wm_candidates = [
+        ("openbox", ["openbox", "--replace"]),
+        ("fluxbox", ["fluxbox"]),
+        ("xfwm4", ["xfwm4"]),
+    ]
+    wm_env = vnc_env.copy()
+    wm_env["DISPLAY"] = display
+    if auth:
+        wm_env["XAUTHORITY"] = auth
+
+    # Check if any WM is already running
+    any_wm_running = False
+    for wm_name, _ in wm_candidates:
+        check = run(f"pgrep -x {wm_name}")
+        if check.stdout.strip():
+            print(f"{wm_name} already running (pid {check.stdout.strip()})")
+            any_wm_running = True
+            break
+
+    if not any_wm_running:
+        wm_started = False
+        for wm_name, wm_cmd in wm_candidates:
+            if shutil.which(wm_name):
+                print(f"Starting {wm_name} window manager on {display}...")
+                start_detached(wm_cmd, wm_env, f"/tmp/{wm_name}.log")
+                time.sleep(1)
+                wm_started = True
+                break
+        if not wm_started:
+            print("WARNING: No window manager found (tried: openbox, fluxbox, xfwm4).")
+            print("  Browser windows may not render properly. Install one with:")
+            print("  apt-get install -y openbox")
 
     # 4. Start websockify
     # Use common paths for novnc
