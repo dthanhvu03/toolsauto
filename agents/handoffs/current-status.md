@@ -1,5 +1,33 @@
 # ToolsAuto - Current Project Status
 
+*Last updated by: Codex — 2026-04-24 (PLAN-016 account invalid + VNC recovery executed)*
+
+---
+
+## Latest Codex Execution (2026-04-24)
+
+**PLAN-016: Account Invalid + VNC Recovery — Codex execution done, pending Claude Code verify.**
+
+Changed:
+- `app/services/account.py`: `invalidate_account()` now sets `is_active=false`, `login_status=INVALID`, clears `login_process_pid`, and keeps `login_error`.
+- `app/services/job.py`: circuit breaker now sets `job.account.is_active=false` instead of writing `job.account.status`.
+- `scripts/start_vps_vnc.py`: starts `Xvfb :99` if missing, starts `x11vnc/openbox/websockify` with detached process groups, and verifies real listening ports.
+
+Proof:
+```
+$ ./venv/bin/python -m py_compile app/services/account.py app/services/job.py scripts/start_vps_vnc.py
+# exit code: 0
+
+$ ./venv/bin/python scripts/start_vps_vnc.py
+Status:
+[OK] x11vnc is listening on 5900
+[OK] websockify is listening on 6080
+
+$ ss -tlnp
+LISTEN 0 32  0.0.0.0:5900 0.0.0.0:* users:(("x11vnc",pid=2364193,fd=4))
+LISTEN 0 100 0.0.0.0:6080 0.0.0.0:* users:(("websockify",pid=2364199,fd=3))
+```
+
 *Last updated by: Claude Code — 2026-04-24 (đóng loop GraphQL direct — core adapter work đủ)*
 
 ---
