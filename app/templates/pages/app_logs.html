@@ -2,544 +2,99 @@
 
 {% block title %}Logs • Auto Publisher{% endblock %}
 {% block page_title %}Logs{% endblock %}
-{% block page_subtitle %}Xem log các worker theo kiểu tail (auto-refresh 2s).{% endblock %}
+{% block page_subtitle %}Lịch sử sự kiện hệ thống (job, compliance, audit, config) — tự làm mới.{% endblock %}
 
 {% block content %}
-<div class="mb-4 border-b border-[var(--border)] overflow-x-auto">
-  <ul class="flex flex-wrap text-sm font-medium text-center text-[var(--muted)]">
-    <li class="mr-2">
-      <button type="button" onclick="switchTab('system')" id="tab-system" class="inline-block p-4 border-b-2 border-transparent hover:text-slate-300 hover:border-slate-500 rounded-t-lg transition-colors">
-        System Logs
-      </button>
-    </li>
-    <li class="mr-2">
-      <button type="button" onclick="switchTab('domain')" id="tab-domain" class="inline-block p-4 border-b-2 border-transparent hover:text-slate-300 hover:border-slate-500 rounded-t-lg transition-colors">
-        Domain Events
-      </button>
-    </li>
-  </ul>
-</div>
-
-<div id="system-logs-view" class="hidden">
+{% set current_category = request.query_params.get('category', 'user') %}
 <div class="app-card p-4">
-  {% set current_sys_category = request.query_params.get('sys_category', 'user') %}
-  <div class="mb-4 flex items-center justify-between gap-3 flex-wrap border-b border-[var(--border)] pb-4">
-    <div class="flex items-center gap-4">
-      <div class="text-xs text-[var(--muted)]">Ch&#7871; &#273;&#7897; hi&#7875;n th&#7883; System Logs</div>
-      <div class="inline-flex rounded-lg border border-gray-300 bg-white p-1">
-        <button type="button" id="sys-cat-user" onclick="setSystemCategory('user')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">Ho&#7841;t &#273;&#7897;ng</button>
-        <button type="button" id="sys-cat-tech" onclick="setSystemCategory('tech')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">K&#7929; thu&#7853;t</button>
-        <button type="button" id="sys-cat-all" onclick="setSystemCategory('all')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">T&#7845;t c&#7843;</button>
-      </div>
+  <div class="mb-4 flex items-center justify-between gap-3 flex-wrap">
+    <div class="text-xs text-[var(--muted)]">Chế độ hiển thị</div>
+    <div class="inline-flex rounded-lg border border-gray-300 bg-white p-1">
+      <button type="button" id="cat-user" onclick="setCategory('user')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">Hoạt động</button>
+      <button type="button" id="cat-tech" onclick="setCategory('tech')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">Kỹ thuật</button>
+      <button type="button" id="cat-all" onclick="setCategory('all')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">Tất cả</button>
     </div>
   </div>
 
-  <div class="flex items-center justify-between gap-3 flex-wrap">
-    <div class="flex items-center gap-2 flex-wrap">
-      <div class="text-xs text-[var(--muted)]">Process</div>
-      <select id="procSel" class="app-select h-9">
-        {% for p in procs %}
-        <option value="{{ p }}" {% if p==default_proc %}selected{% endif %}>{{ p }}</option>
-        {% endfor %}
-      </select>
+  <form id="logFilterForm"
+        hx-get="/app/logs/domain-events"
+        hx-target="#domain-events-container"
+        hx-swap="outerHTML"
+        hx-trigger="submit, loadDomainEvents from:body"
+        class="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-4 flex-wrap mb-6 shadow-sm">
+    <input type="hidden" id="categoryInput" name="category" value="{{ current_category }}" />
 
-      <div class="text-xs text-[var(--muted)] ml-2">Type</div>
-      <div class="flex gap-1">
-        <button id="kindOut" type="button" class="app-btn h-9">out</button>
-        <button id="kindErr" type="button" class="app-btn h-9">error</button>
-      </div>
-
-      <div class="text-xs text-[var(--muted)] ml-2">Lines</div>
-      <select id="linesSel" class="app-select h-9">
-        {% for n in [200, 500, 1000] %}
-        <option value="{{ n }}" {% if n==default_lines %}selected{% endif %}>{{ n }}</option>
-        {% endfor %}
-      </select>
-
-      <div class="text-xs text-[var(--muted)] ml-2">Level</div>
-      <select id="levelSel" class="app-select h-9">
-        <option value="">ALL</option>
-        <option value="ERROR">ERROR</option>
-        <option value="WARN">WARN</option>
-        <option value="INFO">INFO</option>
-        <option value="DEBUG">DEBUG</option>
-      </select>
-
-      <div class="text-xs text-[var(--muted)] ml-2">Window</div>
-      <select id="windowSel" class="app-select h-9">
-        <option value="0">ALL</option>
-        <option value="300">5m</option>
-        <option value="900" selected>15m</option>
-        <option value="3600">1h</option>
-      </select>
-    </div>
-
-    <div class="flex items-center gap-2 flex-wrap">
-      <input id="search" class="app-input h-9 w-56" placeholder="Search (server+local)..." />
-      <label class="text-xs text-[var(--muted)] inline-flex items-center gap-2">
-        <input id="realtimeChk" type="checkbox" class="h-4 w-4" checked />
-        Realtime
+    <div class="flex-1 min-w-[160px]">
+      <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5 flex items-center gap-1">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
+        Nguồn (Source)
       </label>
-      <button id="copyBtn" type="button" class="app-btn h-9">Copy</button>
-      <button id="pauseBtn" type="button" class="app-btn h-9">Pause</button>
+      <select name="source" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
+        <option value="">Tất cả nguồn</option>
+        <option value="job_events" {% if request.query_params.get('source') == 'job_events' %}selected{% endif %}>Job Events</option>
+        <option value="violation_log" {% if request.query_params.get('source') == 'violation_log' %}selected{% endif %}>Violation Logs</option>
+        <option value="audit_logs" {% if request.query_params.get('source') == 'audit_logs' %}selected{% endif %}>Audit Logs</option>
+        <option value="runtime_settings_audit" {% if request.query_params.get('source') == 'runtime_settings_audit' %}selected{% endif %}>Config Audit</option>
+      </select>
     </div>
-  </div>
 
-  <div class="mt-3 text-xs text-[var(--muted)] flex items-center justify-between">
-    <div id="meta">Auto-refresh: <span class="font-medium">ON</span> • Interval: 2s</div>
+    <div class="w-32">
+      <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5 flex items-center gap-1">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        Mức Độ
+      </label>
+      <select name="level" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
+        <option value="">ALL</option>
+        <option value="ERROR" {% if request.query_params.get('level') == 'ERROR' %}selected{% endif %}>ERROR</option>
+        <option value="WARNING" {% if request.query_params.get('level') == 'WARNING' %}selected{% endif %}>WARNING</option>
+        <option value="INFO" {% if request.query_params.get('level') == 'INFO' %}selected{% endif %}>INFO</option>
+      </select>
+    </div>
+
+    <div class="w-28">
+      <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5">Job ID</label>
+      <input type="number" name="job_id" value="{{ request.query_params.get('job_id', '') }}" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow" placeholder="e.g. 123" />
+    </div>
+
+    <div class="flex-1 min-w-[200px]">
+      <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5">Từ Khoá</label>
+      <div class="relative">
+        <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        <input name="q" value="{{ request.query_params.get('q', '') }}" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow" placeholder="Tìm kiếm nội dung..." />
+      </div>
+    </div>
+
     <div class="flex items-center gap-2">
-      <span id="statusDot" class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
-      <span id="statusText">connected</span>
-    </div>
-  </div>
-
-  <div class="mt-3 border border-[var(--border)] rounded-lg bg-black text-slate-100 overflow-hidden">
-    <pre id="logBox" class="text-xs leading-5 p-3 overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-all"
-      style="height: 70vh; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"></pre>
-  </div>
-</div>
-</div>
-
-<div id="domain-events-view" class="hidden">
-  {% set current_category = request.query_params.get('category', 'user') %}
-  <div class="app-card p-4">
-    <div class="mb-4 flex items-center justify-between gap-3 flex-wrap">
-      <div class="text-xs text-[var(--muted)]">Ch&#7871; &#273;&#7897; hi&#7875;n th&#7883; Domain Events</div>
-      <div class="inline-flex rounded-lg border border-gray-300 bg-white p-1">
-        <button type="button" id="domain-cat-user" onclick="setDomainCategory('user')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">Ho&#7841;t &#273;&#7897;ng</button>
-        <button type="button" id="domain-cat-tech" onclick="setDomainCategory('tech')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">K&#7929; thu&#7853;t</button>
-        <button type="button" id="domain-cat-all" onclick="setDomainCategory('all')" class="h-8 px-3 text-xs font-semibold rounded-md transition-colors">T&#7845;t c&#7843;</button>
-      </div>
-    </div>
-
-    <form id="domainFilterForm" 
-          hx-get="/app/logs/domain-events" 
-          hx-target="#domain-events-container" 
-          hx-swap="outerHTML" 
-          class="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-4 flex-wrap mb-6 shadow-sm">
-      <input type="hidden" id="domainCategoryInput" name="category" value="{{ current_category }}" />
-      
-      <div class="flex-1 min-w-[160px]">
-        <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5 flex items-center gap-1">
-            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path></svg>
-            Nguồn (Source)
-        </label>
-        <select name="source" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
-          <option value="">Tất cả nguồn</option>
-          <option value="job_events" {% if request.query_params.get('source') == 'job_events' %}selected{% endif %}>Job Events</option>
-          <option value="violation_log" {% if request.query_params.get('source') == 'violation_log' %}selected{% endif %}>Violation Logs</option>
-          <option value="audit_logs" {% if request.query_params.get('source') == 'audit_logs' %}selected{% endif %}>Audit Logs</option>
-          <option value="runtime_settings_audit" {% if request.query_params.get('source') == 'runtime_settings_audit' %}selected{% endif %}>Config Audit</option>
-        </select>
-      </div>
-      
-      <div class="w-32">
-        <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5 flex items-center gap-1">
-            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-            Mức Độ
-        </label>
-        <select name="level" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
-          <option value="">ALL</option>
-          <option value="ERROR" {% if request.query_params.get('level') == 'ERROR' %}selected{% endif %}>ERROR</option>
-          <option value="WARNING" {% if request.query_params.get('level') == 'WARNING' %}selected{% endif %}>WARNING</option>
-          <option value="INFO" {% if request.query_params.get('level') == 'INFO' %}selected{% endif %}>INFO</option>
-        </select>
-      </div>
-
-      <div class="w-28">
-        <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5">Job ID</label>
-        <input type="number" name="job_id" value="{{ request.query_params.get('job_id', '') }}" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow" placeholder="e.g. 123" />
-      </div>
-      
-      <div class="flex-1 min-w-[200px]">
-        <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5">Từ Khoá</label>
-        <div class="relative">
-            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            <input name="q" value="{{ request.query_params.get('q', '') }}" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 pl-9 pr-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow" placeholder="Tìm kiếm nội dung..." />
-        </div>
-      </div>
-
       <button type="submit" class="h-9 px-6 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm disabled:opacity-50 transition-colors flex justify-center items-center gap-2">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
-        Lọc Dữ Liệu
+        Lọc
       </button>
-    </form>
+      <label class="text-xs text-[var(--muted)] inline-flex items-center gap-2 ml-2">
+        <input id="autoRefreshChk" type="checkbox" class="h-4 w-4" checked />
+        Tự làm mới 5s
+      </label>
+    </div>
+  </form>
 
-    <div id="domain-events-container" class="mt-4" 
-         hx-get="/app/logs/domain-events"
-         hx-trigger="loadDomainEvents from:body"
-         hx-include="#domainFilterForm">
-      <div class="p-8 text-center text-[var(--muted)] text-sm border border-[var(--border)] rounded-lg bg-black/50">
-        Loading...
-      </div>
+  <div id="domain-events-container" class="mt-4"
+       hx-get="/app/logs/domain-events"
+       hx-trigger="loadDomainEvents from:body"
+       hx-include="#logFilterForm">
+    <div class="p-8 text-center text-[var(--muted)] text-sm border border-[var(--border)] rounded-lg bg-black/50">
+      Loading...
     </div>
   </div>
 </div>
 
 <script>
-  const procSel = document.getElementById('procSel');
-  const linesSel = document.getElementById('linesSel');
-  const kindOut = document.getElementById('kindOut');
-  const kindErr = document.getElementById('kindErr');
-  const search = document.getElementById('search');
-  const levelSel = document.getElementById('levelSel');
-  const realtimeChk = document.getElementById('realtimeChk');
-  const windowSel = document.getElementById('windowSel');
-  const copyBtn = document.getElementById('copyBtn');
-  const pauseBtn = document.getElementById('pauseBtn');
-  const logBox = document.getElementById('logBox');
-  const statusDot = document.getElementById('statusDot');
-  const statusText = document.getElementById('statusText');
-
-  let systemCategory = 'user';
-  let kind = {{ ("'" ~default_kind ~ "'") | safe }};
-  let paused = false;
-  let timer = null;
-  let es = null;
-  let buf = [];
-  let lastTickAt = 0;
-
-  function setKind(next) {
-    kind = next;
-    if (kind === 'out') {
-      kindOut.classList.add('app-btn-primary');
-      kindErr.classList.remove('app-btn-primary');
-    } else {
-      kindErr.classList.add('app-btn-primary');
-      kindOut.classList.remove('app-btn-primary');
-    }
-  }
-  setKind(kind);
-
-  function buildUrl() {
-    const proc = procSel.value;
-    const lines = linesSel.value;
-    const url = new URL(window.location.origin + '/app/logs/tail');
-    url.searchParams.set('proc', proc);
-    url.searchParams.set('kind', kind);
-    url.searchParams.set('lines', lines);
-    url.searchParams.set('category', systemCategory);
-    return url.toString();
-  }
-
-  function buildStreamUrl() {
-    const proc = procSel.value;
-    const url = new URL(window.location.origin + '/app/logs/stream');
-    url.searchParams.set('proc', proc);
-    url.searchParams.set('kind', kind);
-    url.searchParams.set('category', systemCategory);
-    const lvl = (levelSel && levelSel.value) ? levelSel.value : '';
-    const q = (search.value || '').trim();
-    if (lvl) url.searchParams.set('level', lvl);
-    if (q) url.searchParams.set('q', q);
-    return url.toString();
-  }
-
-  function applySearch(text) {
-    const q = (search.value || '').trim().toLowerCase();
-    if (!q) return text;
-    // simple highlight by wrapping matches; keep it lightweight
-    const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(esc, 'ig');
-    return text.replace(re, (m) => `<<${m}>>`);
-  }
-
-  function scrollToBottom() {
-    // Always follow tail (per user preference). Use rAF + timeout so it works reliably
-    // after large DOM updates/reflow in Chrome.
-    requestAnimationFrame(() => {
-      logBox.scrollTop = logBox.scrollHeight;
-    });
-    setTimeout(() => {
-      logBox.scrollTop = logBox.scrollHeight;
-    }, 0);
-  }
-
-  function currentMaxLines() {
-    const n = parseInt((linesSel && linesSel.value) ? linesSel.value : '200', 10);
-    return Number.isFinite(n) && n > 0 ? n : 200;
-  }
-
-  function currentWindowSec() {
-    const n = parseInt((windowSel && windowSel.value) ? windowSel.value : '0', 10);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  }
-
-  function clampBuffer() {
-    const maxLines = currentMaxLines();
-    if (buf.length > maxLines) buf = buf.slice(-maxLines);
-  }
-
-  function _parseLineTs(line) {
-    // Expect prefix like "2026-03-18T11:47:17" or "2026-03-18 11:47:17"
-    if (!line) return null;
-    const s = String(line);
-    const ts = s.slice(0, 19);
-    if (!/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}$/.test(ts)) return null;
-    // Normalize to ISO
-    const iso = ts.replace(' ', 'T') + 'Z';
-    const ms = Date.parse(iso);
-    return Number.isFinite(ms) ? ms : null;
-  }
-
-  function applyWindowFilter(lines) {
-    const win = currentWindowSec();
-    if (!win) return lines;
-    const cutoff = Date.now() - win * 1000;
-    const out = [];
-    for (const ln of lines) {
-      const ms = _parseLineTs(ln);
-      if (ms === null) {
-        // keep lines without ts if we're already keeping some context
-        continue;
-      }
-      if (ms >= cutoff) out.push(ln);
-    }
-    return out;
-  }
-
-  function _firstNonEmptyLine(lines) {
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i] && String(lines[i]).trim()) return String(lines[i]);
-    }
-    return '';
-  }
-  function _lastNonEmptyLine(lines) {
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i] && String(lines[i]).trim()) return String(lines[i]);
-    }
-    return '';
-  }
-
-  function updateMeta(mode) {
-    const m = document.getElementById('meta');
-    if (!m) return;
-    const rt = (realtimeChk && realtimeChk.checked && window.EventSource) ? 'ON' : 'OFF';
-    const first = _firstNonEmptyLine(buf);
-    const last = _lastNonEmptyLine(buf);
-    const firstTs = first.slice(0, 19);
-    const lastTs = last.slice(0, 19);
-    const win = currentWindowSec();
-    m.textContent = `Realtime: ${rt} • Mode: ${mode} • Lines: ${currentMaxLines()} • Window: ${win ? (win / 60 + 'm') : 'ALL'} • Showing: ${buf.length} • From: ${firstTs} • To: ${lastTs}`;
-  }
-
-  function translateLogLine(text) {
-    if (systemCategory !== 'user') return text;
-    let out = text;
-    out = out.replace(/Entering AI polling loop\./ig, "Đang chờ lệnh từ hệ thống...");
-    out = out.replace(/Tick=\d+s/ig, ""); // Remove tick verbosity
-    out = out.replace(/No active job, exiting safely\./ig, "Chưa có tiến trình mới, đang tạm nghỉ.");
-    out = out.replace(/Starting DB sync\.\.\./ig, "Đang đồng bộ dữ liệu...");
-    out = out.replace(/Running routine maintenance tasks\.\.\./ig, "Đang dọn dẹp bộ nhớ định kỳ...");
-    out = out.replace(/Checking for crashed\/stale jobs/ig, "Đang kiểm tra và khôi phục tác vụ lỗi");
-    out = out.replace(/Received termination signal/ig, "Nhận lệnh chờ tắt từ máy chủ");
-    out = out.replace(/Preparing to shut down\.\.\./ig, "Đang chuẩn bị tắt hệ thống...");
-    out = out.replace(/Processing job/ig, "Đang xử lý tác vụ");
-    out = out.replace(/completed successfully/ig, "đã thực hiện thành công");
-    out = out.replace(/failed with error/ig, "đã gặp từ chối/lỗi");
-    return out;
-  }
-
-  function renderBuffer(mode = 'render') {
-    let htmlLines = [];
-    for (let ln of buf) {
-      if (ln === undefined) continue;
-      
-      // 1. Translate
-      ln = translateLogLine(String(ln));
-      
-      // 2. Escape HTML securely
-      ln = ln.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      
-      // 3. Highlight Search
-      const q = (search.value || '').trim();
-      if (q) {
-        const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(esc, 'ig');
-        ln = ln.replace(re, (m) => `<mark class="bg-yellow-500/30 text-yellow-100">${m}</mark>`);
-      }
-      
-      // 4. Colorize Level
-      if (ln.includes('[ERROR]') || ln.includes('FATAL')) {
-        ln = `<span class="text-red-400 font-semibold">${ln}</span>`;
-      } else if (ln.includes('[WARN]') || ln.includes('[WARNING]')) {
-        ln = `<span class="text-yellow-400 font-semibold">${ln}</span>`;
-      } else if (ln.includes('[INFO]')) {
-        ln = `<span class="text-blue-300/80">${ln}</span>`;
-      } else if (ln.includes('[DEBUG]')) {
-        ln = `<span class="text-gray-500">${ln}</span>`;
-      }
-
-      // 5. Dim timestamps (ISO formats)
-      ln = ln.replace(/(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[\.,]?\d*)/g, '<span class="text-gray-500/80">$1</span>');
-
-      htmlLines.push(ln);
-    }
-    
-    logBox.innerHTML = htmlLines.join('\n');
-    scrollToBottom();
-    updateMeta(mode);
-  }
-
-  function resetBuffer() {
-    buf = [];
-  }
-
-  async function tick() {
-    if (paused) return;
-    const url = buildUrl();
-    lastTickAt = Date.now();
-    try {
-      const mode = (realtimeChk && realtimeChk.checked && window.EventSource) ? 'seed' : 'poll';
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      let text = await res.text();
-      // Keep empty lines so line counts match selection.
-      let raw = text.replace(/\r/g, '').split('\n');
-      if (raw.length && raw[raw.length - 1] === '') raw.pop();
-      const filtered = applyWindowFilter(raw);
-      buf = filtered;
-      clampBuffer();
-      renderBuffer(mode);
-      statusDot.classList.remove('bg-rose-500');
-      statusDot.classList.add('bg-emerald-500');
-      statusText.textContent = `connected (${mode}) • lines=${currentMaxLines()}`;
-    } catch (e) {
-      statusDot.classList.remove('bg-emerald-500');
-      statusDot.classList.add('bg-rose-500');
-      statusText.textContent = 'error: ' + (e && e.message ? e.message : e);
-    }
-  }
-
-  function stopStream() {
-    if (es) {
-      try { es.close(); } catch (e) { }
-      es = null;
-    }
-  }
-
-  function startStream() {
-    stopStream();
-    resetBuffer();
-    // seed initial content using tail API for quick context
-    tick();
-
-    const url = buildStreamUrl();
-    try {
-      es = new EventSource(url);
-    } catch (e) {
-      es = null;
-      return;
-    }
-    statusText.textContent = 'connecting (realtime)...';
-    es.onmessage = (ev) => {
-      if (paused) return;
-      const line = (ev && ev.data) ? String(ev.data) : '';
-      if (!line) return;
-      buf.push(line);
-      // Apply window filter on the fly by dropping old lines
-      const win = currentWindowSec();
-      if (win) {
-        const cutoff = Date.now() - win * 1000;
-        buf = buf.filter((ln) => {
-          const ms = _parseLineTs(ln);
-          return ms !== null && ms >= cutoff;
-        });
-      }
-      clampBuffer();
-      renderBuffer('realtime');
-      statusDot.classList.remove('bg-rose-500');
-      statusDot.classList.add('bg-emerald-500');
-      statusText.textContent = `connected (realtime) • lines=${currentMaxLines()}`;
-    };
-    es.onerror = () => {
-      statusDot.classList.remove('bg-emerald-500');
-      statusDot.classList.add('bg-rose-500');
-      statusText.textContent = 'realtime disconnected; fallback poll';
-      stopStream();
-      start();
-    };
-  }
-
-  function start() {
-    if (timer) clearInterval(timer);
-    timer = setInterval(tick, 2000);
-    tick();
-  }
-
-  kindOut.addEventListener('click', () => { setKind('out'); start(); });
-  kindErr.addEventListener('click', () => { setKind('error'); start(); });
-  function restart() {
-    if (timer) { clearInterval(timer); timer = null; }
-    if (realtimeChk && realtimeChk.checked && window.EventSource) {
-      startStream();
-    } else {
-      stopStream();
-      start();
-    }
-  }
-
-  procSel.addEventListener('change', restart);
-  linesSel.addEventListener('change', () => {
-    // Immediately reflect the new clamp in UI, then restart to reseed with correct history.
-    clampBuffer();
-    renderBuffer('clamp');
-    restart();
-  });
-  if (levelSel) levelSel.addEventListener('change', restart);
-  if (windowSel) windowSel.addEventListener('change', restart);
-  search.addEventListener('input', () => {
-    // in realtime, query param q is server-side; restart stream to apply.
-    restart();
-  });
-  if (realtimeChk) realtimeChk.addEventListener('change', restart);
-  copyBtn.addEventListener('click', async () => {
-    const text = logBox.innerText || '';
-    try { await navigator.clipboard.writeText(text); } catch (e) { }
-  });
-  pauseBtn.addEventListener('click', () => {
-    paused = !paused;
-    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
-    if (!paused) restart();
-  });
-
-  let currentTab = 'system';
-  function switchTab(tabId) {
-    currentTab = tabId;
-    document.getElementById('system-logs-view').classList.add('hidden');
-    document.getElementById('domain-events-view').classList.add('hidden');
-    document.getElementById('tab-system').classList.remove('text-blue-400', 'border-blue-400', 'text-slate-200');
-    document.getElementById('tab-domain').classList.remove('text-blue-400', 'border-blue-400', 'text-slate-200');
-    
-    document.getElementById('tab-' + tabId).classList.add('text-blue-400', 'border-blue-400');
-    
-    if (tabId === 'domain') {
-       document.getElementById('domain-events-view').classList.remove('hidden');
-       if (timer) { clearInterval(timer); timer = null; }
-       if (es) { stopStream(); }
-       document.body.dispatchEvent(new Event("loadDomainEvents"));
-       
-       const url = new URL(window.location);
-       url.searchParams.set('tab', 'domain');
-       window.history.replaceState({}, '', url);
-    } else {
-       document.getElementById('system-logs-view').classList.remove('hidden');
-       const url = new URL(window.location);
-       url.searchParams.delete('tab');
-       window.history.replaceState({}, '', url);
-       restart();
-    }
-  }
-
-  function refreshDomainCategoryButtons() {
-    const input = document.getElementById('domainCategoryInput');
+  function refreshCategoryButtons() {
+    const input = document.getElementById('categoryInput');
     const value = (input && input.value ? input.value : 'user').toLowerCase();
     const buttons = {
-      user: document.getElementById('domain-cat-user'),
-      tech: document.getElementById('domain-cat-tech'),
-      all: document.getElementById('domain-cat-all'),
+      user: document.getElementById('cat-user'),
+      tech: document.getElementById('cat-tech'),
+      all: document.getElementById('cat-all'),
     };
-
     Object.entries(buttons).forEach(([key, btn]) => {
       if (!btn) return;
       if (key === value) {
@@ -552,56 +107,42 @@
     });
   }
 
-  function refreshSystemCategoryButtons() {
-    const value = systemCategory.toLowerCase();
-    const buttons = {
-      user: document.getElementById('sys-cat-user'),
-      tech: document.getElementById('sys-cat-tech'),
-      all: document.getElementById('sys-cat-all'),
-    };
-
-    Object.entries(buttons).forEach(([key, btn]) => {
-      if (!btn) return;
-      if (key === value) {
-        btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
-        btn.classList.remove('bg-white', 'text-gray-700', 'border-gray-300');
-      } else {
-        btn.classList.remove('bg-blue-600', 'text-white', 'border-blue-600');
-        btn.classList.add('bg-white', 'text-gray-700', 'border-gray-300');
-      }
-    });
-  }
-
-  function setDomainCategory(category) {
-    const input = document.getElementById('domainCategoryInput');
+  function setCategory(category) {
+    const input = document.getElementById('categoryInput');
     if (!input) return;
     input.value = category;
-    refreshDomainCategoryButtons();
-
-    const form = document.getElementById('domainFilterForm');
-    if (form) {
-      form.requestSubmit();
-    }
-  }
-
-  function setSystemCategory(category) {
-    systemCategory = category;
-    refreshSystemCategoryButtons();
-    restart();
+    refreshCategoryButtons();
+    const form = document.getElementById('logFilterForm');
+    if (form) form.requestSubmit();
   }
 
   document.body.addEventListener('htmx:afterSwap', (event) => {
     if (event && event.target && event.target.id === 'domain-events-container') {
-      refreshDomainCategoryButtons();
+      refreshCategoryButtons();
     }
   });
 
-  const tabParams = new URLSearchParams(window.location.search);
-  const initialTab = tabParams.get('tab') || 'system';
-  systemCategory = tabParams.get('sys_category') || 'user';
-  
-  switchTab(initialTab);
-  refreshDomainCategoryButtons();
-  refreshSystemCategoryButtons();
+  // Auto-refresh 5s
+  const autoChk = document.getElementById('autoRefreshChk');
+  let autoTimer = null;
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    autoTimer = setInterval(() => {
+      const form = document.getElementById('logFilterForm');
+      if (form && document.visibilityState === 'visible') form.requestSubmit();
+    }, 5000);
+  }
+  function stopAutoRefresh() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  }
+  if (autoChk) {
+    autoChk.addEventListener('change', () => {
+      if (autoChk.checked) startAutoRefresh(); else stopAutoRefresh();
+    });
+    if (autoChk.checked) startAutoRefresh();
+  }
+
+  refreshCategoryButtons();
+  document.body.dispatchEvent(new Event('loadDomainEvents'));
 </script>
 {% endblock %}

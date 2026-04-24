@@ -240,16 +240,10 @@ def app_pages(request: Request):
 
 @router.get("/app/logs", response_class=HTMLResponse)
 def app_logs(request: Request):
-    """SaaS UI: log viewer (PM2 logs)."""
+    """SaaS UI: unified domain events log viewer."""
     return templates.TemplateResponse(
         "pages/app_logs.html",
-        {
-            "request": request,
-            "default_proc": request.query_params.get("proc") or "AI_Generator",
-            "default_kind": request.query_params.get("kind") or "out",
-            "default_lines": int(request.query_params.get("lines") or 200),
-            "procs": LogQueryFacade.list_system_sources(),
-        },
+        {"request": request},
     )
 
 
