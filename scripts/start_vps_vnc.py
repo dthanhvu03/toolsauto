@@ -104,7 +104,12 @@ def main():
         "-nopw",
         "-noxrecord",
         "-noxfixes",
-        "-noxdamage",
+        # NOTE: -noxdamage removed intentionally.
+        # It was causing black screen issues because x11vnc
+        # could not detect framebuffer changes without DAMAGE extension.
+        "-ncache", "10",            # Client-side pixel caching for faster redraws
+        "-fixscreen", "V=6",        # Force full repaint every 6 seconds to fix black screen
+        "-xd_area", "50000",        # DAMAGE event area threshold for better tracking
     ])
     
     start_detached(vnc_args, vnc_env, "x11vnc.log")
