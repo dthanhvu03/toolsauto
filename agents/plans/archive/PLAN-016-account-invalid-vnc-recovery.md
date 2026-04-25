@@ -4,12 +4,12 @@
 | Field | Value |
 |---|---|
 | **ID** | PLAN-016 |
-| **Status** | Codex Execution Done |
+| **Status** | Done |
 | **Executor** | Codex |
 | **Created by** | User-directed hotfix |
 | **Related Task** | TASK-016 |
 | **Created** | 2026-04-24 |
-| **Updated** | 2026-04-24 |
+| **Updated** | 2026-04-25 |
 
 ---
 
@@ -66,7 +66,36 @@ Execution Done. Cần Claude Code verify + handoff.
 ---
 
 ## Anti Sign-off Gate
-**Reviewed by**: Pending
+**Reviewed by**: Claude Code — 2026-04-25
+
+### Acceptance Criteria Check
+| # | Criterion | Proof | Pass? |
+|---|---|---|---|
+| 1 | `invalidate_account()` sets `is_active=false`, `login_status=INVALID`, clears pid, preserves error | `git show 6b34fbe -- app/services/account.py` | ✅ |
+| 2 | Circuit breaker writes `is_active`, not `status` | `git show 6b34fbe -- app/services/job.py` (line 182) | ✅ |
+| 3 | `start_vps_vnc.py` recovers display + starts services | Run output below | ✅ |
+
+### Verification Re-run (2026-04-25)
+```
+$ ./venv/bin/python -m py_compile app/services/account.py app/services/job.py scripts/start_vps_vnc.py
+exit=0
+
+$ ./venv/bin/python scripts/start_vps_vnc.py
+=== VNC Auto-Starter for VPS ===
+Detected Display: :100
+Detected Auth: /tmp/xvfb-run.QkTT7f/Xauthority
+Starting x11vnc on :100...
+openbox already running (pid 36951)
+Starting websockify on port 6080 targeting 127.0.0.1:5900...
+Status:
+[OK] x11vnc is listening on 5900
+[OK] websockify is listening on 6080
+```
+
+### Scope & Proof Check
+- [x] Executor làm đúng Scope (3 files: account.py, job.py, start_vps_vnc.py + agents docs).
+- [x] Proof là output thực tế (not mocked).
+- [x] Proof cover hết Validation Plan.
 
 ### Verdict
-> CODEX EXECUTION DONE - PENDING CLAUDE CODE VERIFY
+> **APPROVED** — PLAN-016 done. Ready to archive.
