@@ -6,6 +6,17 @@
 
 ## Latest Execution (2026-04-25)
 
+**Threads Account Dropdown Hotfix (Codex, user-directed):**
+- Fixed `/threads` account linking backend to only show active Facebook-capable accounts in the Threads dropdown.
+- Normalized comma-separated `Account.platform` tokens before checking `facebook` / `threads`.
+- Guarded `/threads/link-account` so non-Facebook accounts cannot be linked to Threads accidentally.
+- Verification proof:
+  - `wsl -d Ubuntu --cd /home/vu/toolsauto -- ./venv/bin/python -m py_compile app/routers/threads.py` -> exit code 0.
+  - Render/data check -> `linked=[(3, 'Hoang Khoa', 'facebook,threads')]`, `available=[(4, 'Nguyen Ngoc Vi', 'facebook')]`.
+  - Template render check -> `has_select=True`, `has_fb_available=True`, `has_ig_available=False`, `option_count=1`.
+  - Authenticated TestClient GET `/threads/` -> `status=200`, `has_select=True`, `option_count=1`.
+  - `pm2 restart Web_Dashboard --update-env` -> restarted process ids `3` and `9`; both returned `online`.
+
 **Threads Dashboard & System Optimization:**
 - **UI/UX**: Implemented a Premium "Threads Master" Dashboard (`/threads`) with dark glassmorphism design, live HTMX feeds for News, and a visual Job Pipeline.
 - **Cleanup**: Purged massive storage bloat in `logs/` (176MB of screenshots/HTML dumps reduced to ~700KB). Removed obsolete `scratch/` files and deprecated `database.db` (SQLite). Cleared Chromium Caches via `CleanupService`.
