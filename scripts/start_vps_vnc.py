@@ -176,7 +176,7 @@ def main():
     else:
         print(f"[FAIL] websockify is NOT listening (check websockify.log)")
 
-    print(f"\nIf both are OK, open: http://<vps-ip>/vnc.html")
+    print(f"\nIf both are OK, open: http://<vps-ip>:{port}/vnc.html")
 
 if __name__ == "__main__":
     main()
