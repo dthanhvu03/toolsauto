@@ -33,6 +33,7 @@ Fix the operational path where a Facebook account detected as logged out/checkpo
 - `AccountService.invalidate_account()` disables automation by setting `is_active=false` and `login_status=INVALID`.
 - `JobService.mark_failed_or_retry()` circuit breaker now writes `Account.is_active`.
 - `scripts/start_vps_vnc.py` starts or reuses `Xvfb :99`, then starts persistent `x11vnc` and `websockify`.
+- **Fixed VNC crash:** Added graceful window manager fallback (`openbox`, `fluxbox`, `xfwm4`) in `start_vps_vnc.py` so it doesn't crash if `openbox` is not installed.
 
 ## Verification Proof
 ```

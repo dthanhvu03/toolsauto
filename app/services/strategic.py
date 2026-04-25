@@ -45,15 +45,20 @@ class PageStrategicService:
                 page_url, page_name, platform, account_id,
                 SUM(views) as total_views,
                 AVG(CASE WHEN views > 0 THEN (CAST(likes AS FLOAT) / views) * 100 ELSE 0 END) as avg_eng_rate,
-                recorded_at,
-                ROW_NUMBER() OVER(PARTITION BY page_url ORDER BY recorded_at DESC) as rn
+                MAX(recorded_at) as recorded_at,
+                ROW_NUMBER() OVER(PARTITION BY page_url ORDER BY time_bucket DESC) as rn
             FROM (
-                SELECT page_url, page_name, platform, account_id, post_url, MAX(views) as views, MAX(likes) as likes, recorded_at
+                SELECT 
+                    page_url, page_name, platform, account_id, post_url, 
+                    MAX(views) as views, 
+                    MAX(likes) as likes, 
+                    MAX(recorded_at) as recorded_at,
+                    (recorded_at / 3600) as time_bucket
                 FROM page_insights
                 {platform_filter}
-                GROUP BY page_url, post_url, (recorded_at / 3600)
-            )
-            GROUP BY page_url, recorded_at
+                GROUP BY page_url, page_name, platform, account_id, post_url, (recorded_at / 3600)
+            ) subq
+            GROUP BY page_url, page_name, platform, account_id, time_bucket
         )
         SELECT 
             curr.page_url, curr.page_name, curr.platform, curr.account_id,

@@ -487,7 +487,7 @@ def run_loop():
 
                     # 3. Recover crashed/stale jobs (Self-healing)
                     logger.info("Checking for crashed/stale jobs to recover...")
-                    from app.services.queue import QueueService
+                    from app.services.job_queue import QueueService
                     recovered = QueueService.recover_crashed_jobs(db, config.WORKER_CRASH_THRESHOLD_SECONDS)
                     if recovered > 0:
                         logger.warning(f"Self-healing: Recovered {recovered} stale jobs.")

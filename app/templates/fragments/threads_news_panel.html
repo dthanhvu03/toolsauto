@@ -1,0 +1,78 @@
+<div class="space-y-4">
+    <!-- Status & Toggle -->
+    <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+        <div>
+            <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Automation Mode</div>
+            <div class="flex items-center gap-2">
+                {% if auto_mode %}
+                <span class="flex h-2 w-2 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span class="text-xs font-bold text-emerald-700">TỰ ĐỘNG (Auto)</span>
+                {% else %}
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span class="text-xs font-bold text-amber-700">DUYỆT TAY (Manual)</span>
+                {% endif %}
+            </div>
+        </div>
+        
+        <button hx-post="/threads/toggle-auto" 
+                hx-target="#threads-news-control"
+                class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none {% if auto_mode %}bg-indigo-600{% else %}bg-gray-200{% endif %}">
+            <span class="sr-only">Toggle auto mode</span>
+            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {% if auto_mode %}translate-x-5{% else %}translate-x-0{% endif %}"></span>
+        </button>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-2 gap-3">
+        <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+            <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Articles</div>
+            <div class="text-xl font-bold text-gray-900">{{ total_articles }}</div>
+        </div>
+        <div class="p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
+            <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">New Queued</div>
+            <div class="text-xl font-bold text-indigo-600">{{ new_articles }}</div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex gap-2">
+        <button hx-post="/threads/trigger-scrape"
+                hx-target="#threads-news-control"
+                hx-indicator="#scrape-loader"
+                class="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-xs font-bold transition-all active:scale-95">
+            <svg id="scrape-loader" class="htmx-indicator animate-spin h-3 w-3 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Sync & Post Now
+        </button>
+    </div>
+
+    <!-- Latest Jobs List -->
+    <div class="space-y-2">
+        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Recent Posts</div>
+        {% if latest_jobs %}
+            {% for job in latest_jobs %}
+            <div class="p-2.5 bg-slate-50/50 rounded-lg border border-slate-100 flex items-start gap-3">
+                <div class="w-8 h-8 rounded bg-white border border-gray-100 flex items-center justify-center shrink-0">
+                    <span class="text-xs font-black text-gray-400">#{{ job.id }}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-[10px] font-bold text-gray-900 truncate">{{ job.caption[:60] }}...</div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-md {% if job.status == 'DONE' %}bg-emerald-100 text-emerald-700{% elif job.status == 'FAILED' %}bg-rose-100 text-rose-700{% else %}bg-blue-100 text-blue-700{% endif %} uppercase tracking-tighter">
+                            {{ job.status }}
+                        </span>
+                        <span class="text-[9px] text-gray-400 font-medium">{{ job.created_at | datetime }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="text-center py-4 text-[11px] text-gray-400 italic">No threads jobs yet.</div>
+        {% endif %}
+    </div>
+</div>
