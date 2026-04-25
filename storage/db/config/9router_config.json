@@ -1,6 +1,0 @@
-{
-  "enabled": true,
-  "base_url": "http://localhost:20128/v1",
-  "api_key": "sk-b4d54c0e2d2a57f1-gs5puv-914d1c46",
-  "default_model": "ollama/kimi-k2.5"
-}

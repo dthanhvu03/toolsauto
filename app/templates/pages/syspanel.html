@@ -292,63 +292,7 @@
         </div>
     </div>
 
-    <!-- ─── ROW 5: Log Viewer (Full Width) ─────────────────────────────── -->
-    <div class="lg:col-span-2 2xl:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col">
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                    </path>
-                </svg> Log Viewer
-            </h2>
-            <div class="flex flex-wrap gap-2 sm:ml-auto items-center">
-                <select id="log-worker"
-                    class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
-                    <optgroup label="── Workers (Scaled) ──">
-                        <option value="FB_Publisher_1">FB_Publisher_1</option>
-                        <option value="FB_Publisher_2">FB_Publisher_2</option>
-                        <option value="AI_Generator_1">AI_Generator_1</option>
-                        <option value="AI_Generator_2">AI_Generator_2</option>
-                        <option value="Maintenance">Maintenance</option>
-                        <option value="Web_Dashboard" selected>Web_Dashboard</option>
-                        <option value="9Router_Gateway">9Router_Gateway</option>
-                    </optgroup>
-                    <optgroup label="── Root PM2 (production) ──">
-                        <option value="ai-worker">ai-worker</option>
-                        <option value="publisher">publisher</option>
-                        <option value="maintenance">maintenance</option>
-                        <option value="web">web</option>
-                    </optgroup>
-                </select>
-                <select id="log-type"
-                    class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-gray-50 text-gray-700 focus:ring-1 focus:ring-indigo-400 outline-none">
-                    <option value="error" selected>Error Log</option>
-                    <option value="out">Output Log</option>
-                </select>
-                <button onclick="loadLogs()"
-                    class="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors flex items-center gap-1.5">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Load Logs
-                </button>
-            </div>
-        </div>
-        <div class="bg-[#1a1a2e] rounded-xl overflow-hidden border border-gray-800">
-            <div class="bg-[#16213e] px-4 py-2 flex items-center gap-2 border-b border-gray-700">
-                <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                <span class="text-xs text-gray-400 font-mono ml-2" id="log-title">Terminal Output</span>
-            </div>
-            <div class="p-4 font-mono text-xs text-green-400 min-h-[180px] max-h-[400px] overflow-auto whitespace-pre rounded-b-xl"
-                id="log-output">
-                <span class="text-gray-500">Chọn worker và nhấn "Load Logs"...</span>
-            </div>
-        </div>
-    </div>
+
 
     <!-- ─── ROW 6: Gemini Cookies + Bot Screenshots ────────────────────── -->
     <div class="lg:col-span-1 2xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col">
