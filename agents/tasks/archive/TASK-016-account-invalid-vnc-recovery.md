@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | TASK-016 |
-| **Status** | Codex Execution Done |
+| **Status** | Done (Claude Code verified 2026-04-25) |
 | **Owner** | Codex |
 | **Created** | 2026-04-24 |
 | **Related Plan** | PLAN-016 |

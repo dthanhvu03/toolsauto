@@ -1,10 +1,28 @@
 # ToolsAuto - Current Project Status
 
-*Last updated by: Antigravity — 2026-04-25 (Threads Master Dashboard, Massive Cleanup, & FB Smoothness Fixes)*
+*Last updated by: Claude Code — 2026-04-25 (PLAN-016 verify + sign-off + archive)*
 
 ---
 
-## Latest Execution (2026-04-25)
+## Latest Execution (2026-04-25 — Claude Code)
+
+**Threads Dashboard UX touch-up (template-only, no behavior change):**
+- Fix bug `{{ job.caption[:80] }}...` luôn nối "..." → dùng `truncate(80, true, '…')` + default '(no caption)'.
+- Thêm empty state cho News Intelligence Feed và Job Pipeline khi list rỗng.
+- Defensive `(acc.name or '?')[0]` cho avatar initial khi name rỗng.
+- Validate: Jinja parse OK (`env.get_template('pages/app_threads.html')`).
+- File: `app/templates/pages/app_threads.html` (chỉ template).
+
+**PLAN-016 Verification & Sign-off:**
+- Verified diff scope: Codex chỉ chạm 3 files đúng scope (`app/services/account.py`, `app/services/job.py`, `scripts/start_vps_vnc.py`) trong commit `6b34fbe`, plus follow-up VNC fixes ở `f0995c1` + `b871c55`.
+- Compile proof: `py_compile` 3 file → exit 0.
+- Runtime proof: `scripts/start_vps_vnc.py` chạy clean, `x11vnc:5900` + `websockify:6080` đều listening (Xvfb đã sẵn ở `:100`, fallback start `:99` không cần kích hoạt lần này).
+- Code claim đúng: `invalidate_account()` set `is_active=False` + `login_status=INVALID` + clear `login_process_pid`; circuit breaker dùng `is_active` thay cho `status` non-contract.
+- Sign-off **APPROVED** trong PLAN-016. Đã archive PLAN-016 + TASK-016.
+
+---
+
+## Previous Execution (2026-04-25 — Antigravity)
 
 **Threads Account Dropdown Hotfix (Codex, user-directed):**
 - Fixed `/threads` account linking backend to only show active Facebook-capable accounts in the Threads dropdown.
@@ -65,5 +83,11 @@
 
 ## Next Action
 
-1. **Monitor Production**: Observe the `pm2 logs FB_Publisher_1` to ensure the new `FacebookAdapter` logic successfully switches profiles for jobs that previously failed.
-2. **Workers**: Ensure `Threads_NewsWorker` and `Threads_AutoReply` are running smoothly and populating the new Dashboard.
+1. **TASK-017 (Threads News Automation) — còn dở**:
+   - Tích hợp `news_scraper` vào Maintenance worker (scrape RSS định kỳ).
+   - Hoàn thiện `app/services/content_orchestrator.py` (method chính thức cho Threads news).
+   - Cập nhật `workers/ai_generator.py` để xử lý nguồn tin tức.
+   - Cập nhật `app/services/strategic.py` để trigger định kỳ.
+   - Test đăng bài thật trên Threads sau khi anh duyệt.
+2. **PLAN-015 (Business Suite GraphQL reverse-engineering)**: Vẫn ở Bước 1, chờ Codex.
+3. **Monitor Production**: Tiếp tục theo dõi `pm2 logs FB_Publisher_1` cho FB smoothness fixes.
