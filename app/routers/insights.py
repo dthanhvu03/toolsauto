@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 from app.database.core import get_db
 from app.database import models
 from app.main_templates import templates
+from app import config
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
 
@@ -72,12 +73,12 @@ def get_growth_metrics(
     days = _validate_days(days)
     now = int(datetime.datetime.now().timestamp())
     cutoff = now - (days * 86400)
-    time_format = "%Y-%m-%d %H:00" if days == 7 else "%Y-%m-%d"
+    time_format = "YYYY-MM-DD HH24:00" if days == 7 else "YYYY-MM-DD"
 
     sql = f"""
     WITH LatestPerGroup AS (
         SELECT
-            strftime('{time_format}', datetime(recorded_at, 'unixepoch')) as time_label,
+            TO_CHAR(TO_TIMESTAMP(recorded_at), '{time_format}') as time_label,
             post_url,
             platform,
             page_url,
@@ -154,7 +155,11 @@ def get_top_posts(
     WITH RankedInsights AS (
         SELECT
             post_url,
-            ROW_NUMBER() OVER (PARTITION BY post_url ORDER BY recorded_at DESC) as rn
+            REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/') as canonical_url,
+            ROW_NUMBER() OVER (PARTITION BY 
+                REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
+                ORDER BY recorded_at DESC
+            ) as rn
         FROM page_insights
         WHERE recorded_at >= :cutoff
           AND (:platform IS NULL OR platform = :platform)
@@ -173,7 +178,10 @@ def get_top_posts(
         SELECT
             post_url, page_name, platform, views, likes, comments, shares, caption,
             published_date, recorded_at,
-            ROW_NUMBER() OVER (PARTITION BY post_url ORDER BY recorded_at DESC) as rn
+            ROW_NUMBER() OVER (PARTITION BY 
+                REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
+                ORDER BY recorded_at DESC
+            ) as rn
         FROM page_insights
         WHERE recorded_at >= :cutoff
           AND (:platform IS NULL OR platform = :platform)
@@ -185,7 +193,10 @@ def get_top_posts(
         (l1.views - COALESCE(l2.views, 0)) as velocity,
         CASE WHEN l1.views > 0 THEN (CAST(l1.likes AS FLOAT) / l1.views) * 100 ELSE 0 END as eng_rate
     FROM RankedInsights l1
-    LEFT JOIN RankedInsights l2 ON l1.post_url = l2.post_url AND l2.rn = 2
+    LEFT JOIN RankedInsights l2 ON 
+        REPLACE(REPLACE(RTRIM(LOWER(l1.post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/') = 
+        REPLACE(REPLACE(RTRIM(LOWER(l2.post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
+        AND l2.rn = 2
     WHERE l1.rn = 1
     ORDER BY {order_col} DESC NULLS LAST
     LIMIT :limit OFFSET :offset
@@ -302,8 +313,8 @@ def get_engagement_heatmap(
     #         dow/hour NULL guard from version-B.
     sql = """
     SELECT
-        CAST(strftime('%w', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as dow,
-        CAST(strftime('%H', datetime(recorded_at, 'unixepoch', 'localtime')) AS INTEGER) as hour,
+        CAST(EXTRACT(DOW FROM TO_TIMESTAMP(recorded_at)) AS INTEGER) as dow,
+        CAST(EXTRACT(HOUR FROM TO_TIMESTAMP(recorded_at)) AS INTEGER) as hour,
         SUM(COALESCE(likes, 0) + COALESCE(comments, 0) + COALESCE(shares, 0)) as total_interactions
     FROM page_insights
     WHERE recorded_at >= :cutoff
@@ -652,10 +663,7 @@ def trigger_refresh():
     if _refresh_running:
         return JSONResponse({"status": "already_running", "message": "Scraper đang chạy, vui lòng đợi."}, status_code=429)
 
-    scraper_path = os.path.join(
-        os.path.dirname(__file__), "..", "..", "scripts", "archive", "scrape_insights.py"
-    )
-    scraper_path = os.path.abspath(scraper_path)
+    scraper_path = str(config.BASE_DIR / "scripts" / "archive" / "scrape_insights.py")
 
     if not os.path.exists(scraper_path):
         return JSONResponse({"status": "error", "message": f"Scraper không tìm thấy: {scraper_path}"}, status_code=500)

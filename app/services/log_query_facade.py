@@ -15,18 +15,18 @@ class LogQueryFacade:
     """
 
     @staticmethod
-    def get_system_tail(proc: str, kind: str, lines: int) -> PlainTextResponse:
+    def get_system_tail(proc: str, kind: str, lines: int, category: str = "all") -> PlainTextResponse:
         """
         Retrieves the tail of PM2/system logs.
         """
-        return LogService.plain_tail_response(proc=proc, kind=kind, lines=lines)
+        return LogService.plain_tail_response(proc=proc, kind=kind, lines=lines, category=category)
 
     @staticmethod
-    def stream_system_logs(proc: str, kind: str, level: str, q: str) -> StreamingResponse:
+    def stream_system_logs(proc: str, kind: str, level: str, q: str, category: str = "all") -> StreamingResponse:
         """
         Establishes an SSE stream for real-time PM2 logs.
         """
-        return LogService.sse_log_stream(proc=proc, kind=kind, level=level, q=q)
+        return LogService.sse_log_stream(proc=proc, kind=kind, level=level, q=q, category=category)
 
     @staticmethod
     def query_domain_events(
@@ -36,7 +36,8 @@ class LogQueryFacade:
         job_id: Optional[int] = None,
         q: Optional[str] = None,
         page: int = 1,
-        per_page: int = 50
+        per_page: int = 50,
+        category: str = "all",
     ) -> Tuple[List[CanonicalLogEvent], int, int]:
         """
         Queries structured domain events from the database.
@@ -49,7 +50,8 @@ class LogQueryFacade:
             job_id=job_id,
             q=q,
             page=page,
-            per_page=per_page
+            per_page=per_page,
+            category=category,
         )
 
     @staticmethod

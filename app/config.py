@@ -6,11 +6,58 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
+
+# Storage Layout (PLAN-003)
+STORAGE_DIR = Path(os.getenv("STORAGE_DIR", str(BASE_DIR / "storage")))
+STORAGE_DB_DIR = STORAGE_DIR / "db"
+STORAGE_PROFILES_DIR = STORAGE_DIR / "profiles"
+STORAGE_MEDIA_DIR = STORAGE_DIR / "media"
+STORAGE_REUP_DIR = STORAGE_MEDIA_DIR / "reup"
+STORAGE_THUMBS_DIR = STORAGE_MEDIA_DIR / "thumbs"
+STORAGE_CONTENT_DIR = STORAGE_MEDIA_DIR / "content"
+
+LEGACY_DATA_DIR = BASE_DIR / "data"
+LEGACY_CONTENT_DIR = BASE_DIR / "content"
+LEGACY_REUP_DIR = BASE_DIR / "reup_videos"
+LEGACY_PROFILES_DIR = BASE_DIR / "profiles"
+LEGACY_THUMB_DIR = BASE_DIR / "thumbnails"
+LEGACY_OUTPUTS_DIR = BASE_DIR / "outputs"
+
+# Storage cutover mode:
+# - legacy (default): keeps current runtime paths stable.
+# - storage: routes runtime to storage/ layout.
+STORAGE_LAYOUT_MODE = (os.getenv("STORAGE_LAYOUT_MODE", "legacy") or "legacy").strip().lower()
+if STORAGE_LAYOUT_MODE not in {"legacy", "storage"}:
+    STORAGE_LAYOUT_MODE = "legacy"
+
+if STORAGE_LAYOUT_MODE == "storage":
+    DATA_DIR = STORAGE_DB_DIR
+    CONTENT_DIR = STORAGE_CONTENT_DIR
+    REUP_DIR = STORAGE_REUP_DIR
+    PROFILES_DIR = STORAGE_PROFILES_DIR
+    THUMB_DIR = STORAGE_THUMBS_DIR
+    OUTPUTS_DIR = CONTENT_DIR / "outputs"
+else:
+    DATA_DIR = LEGACY_DATA_DIR
+    CONTENT_DIR = LEGACY_CONTENT_DIR
+    REUP_DIR = LEGACY_REUP_DIR
+    PROFILES_DIR = LEGACY_PROFILES_DIR
+    THUMB_DIR = LEGACY_THUMB_DIR
+    OUTPUTS_DIR = LEGACY_OUTPUTS_DIR
+
+# Backward-compatible aliases used across the codebase.
+DONE_DIR = CONTENT_DIR / "done"
+FAILED_DIR = CONTENT_DIR / "failed"
+CONTENT_PROFILES_DIR = PROFILES_DIR
+LOGS_DIR = BASE_DIR / "logs"
+CONTENT_MEDIA_DIR = CONTENT_DIR / "media"
+CONTENT_VIDEO_DIR = CONTENT_DIR / "videos"
+CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
 
 # Database
 DB_PATH = os.environ.get("DB_PATH") or str(DATA_DIR / "auto_publisher.db")
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# Change default to PostgreSQL, but allow env override
+DATABASE_URL = os.environ.get("DATABASE_URL") or "postgresql+psycopg2://admin:admin@localhost/toolsauto_db"
 
 # Authentication & Security
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
@@ -24,7 +71,7 @@ if not ADMIN_USERNAME or not ADMIN_PASSWORD:
 
 # Worker Settings
 WORKER_TICK_SECONDS = int(os.getenv("WORKER_TICK_SECONDS", "20"))
-WORKER_CRASH_THRESHOLD_SECONDS = int(os.getenv("WORKER_CRASH_THRESHOLD_SECONDS", "300")) # 5 minutes
+WORKER_CRASH_THRESHOLD_SECONDS = int(os.getenv("WORKER_CRASH_THRESHOLD_SECONDS", "120")) # 2 minutes
 WORKER_MAX_BATCH_SIZE = int(os.getenv("WORKER_MAX_BATCH_SIZE", "3"))
 MAX_FILES_PER_BATCH = int(os.getenv("MAX_FILES_PER_BATCH", "50"))
 SAFE_MODE = os.getenv("SAFE_MODE", "false").lower() == "true"
@@ -37,7 +84,7 @@ FFMPEG_CRF = int(os.getenv("FFMPEG_CRF", "28"))
 
 # FFmpeg Watermark (auto-enabled when file exists)
 FFMPEG_WATERMARK_PATH = os.getenv(
-    "FFMPEG_WATERMARK_PATH", str(BASE_DIR / "content" / "watermark.png")
+    "FFMPEG_WATERMARK_PATH", str(CONTENT_DIR / "watermark.png")
 )
 FFMPEG_WATERMARK_POSITION = os.getenv("FFMPEG_WATERMARK_POSITION", "bottom_right")  # top_left|top_right|bottom_left|bottom_right
 FFMPEG_WATERMARK_OPACITY = float(os.getenv("FFMPEG_WATERMARK_OPACITY", "0.4"))  # 0.0 - 1.0
@@ -45,20 +92,6 @@ FFMPEG_WATERMARK_OPACITY = float(os.getenv("FFMPEG_WATERMARK_OPACITY", "0.4"))  
 # VideoProtector (DRM)
 DRM_ENABLED = os.getenv("DRM_ENABLED", "true").lower() == "true"
 DRM_WATERMARK_TEXT = os.getenv("DRM_WATERMARK_TEXT", "z")
-
-# Directory Settings
-CONTENT_DIR = BASE_DIR / "content"
-DONE_DIR = CONTENT_DIR / "done"
-FAILED_DIR = CONTENT_DIR / "failed"
-REUP_DIR = BASE_DIR / "reup_videos"
-PROFILES_DIR = BASE_DIR / "profiles"
-CONTENT_PROFILES_DIR = PROFILES_DIR
-LOGS_DIR = BASE_DIR / "logs"
-THUMB_DIR = BASE_DIR / "thumbnails"
-CONTENT_MEDIA_DIR = CONTENT_DIR / "media"
-CONTENT_VIDEO_DIR = CONTENT_DIR / "videos"
-CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
-OUTPUTS_DIR = BASE_DIR / "outputs"
 
 def iter_pm2_log_directories():
     seen = set()
@@ -89,6 +122,9 @@ PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv('PLAYWRIGHT_DEFAULT_TIMEOUT_MS', '
 # AI / Google AI Studio (Gemini)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_API_KEY = GEMINI_API_KEY  # alias
+
+# 9Router Gateway (centralized; avoid hardcoded fallbacks in services)
+ROUTER_BASE_URL = (os.getenv("ROUTER_BASE_URL") or "http://localhost:20128/v1").strip()
 
 # AI / Fallback (Poorman)
 FALLBACK_CAPTION_POOL = os.getenv("FALLBACK_CAPTION_POOL", "Góc nhìn thú vị cho mọi người tham khảo nhé! Đừng bỏ lỡ 🔥 | Video này đảm bảo sẽ không làm cả nhà thất vọng đâu! Xem ngay 🎬 | Chút năng lượng cho một ngày làm việc đây, thư giãn nhé 👇 | Cùng tham khảo video tuyệt vời này nha! Nhớ follow kênh nhé 💯")
@@ -177,6 +213,34 @@ ALERT_PENDING_THRESHOLD = int(os.getenv("ALERT_PENDING_THRESHOLD", "30"))
 ALERT_DRAFT_THRESHOLD = int(os.getenv("ALERT_DRAFT_THRESHOLD", "50"))
 ALERT_VIRAL_NEW_THRESHOLD = int(os.getenv("ALERT_VIRAL_NEW_THRESHOLD", "500"))
 
+# External Platform Hosts
+FACEBOOK_HOST = (os.getenv("FACEBOOK_HOST") or "https://www.facebook.com").strip().rstrip("/")
+INSTAGRAM_HOST = (os.getenv("INSTAGRAM_HOST") or "https://www.instagram.com").strip().rstrip("/")
+TIKTOK_HOST = (os.getenv("TIKTOK_HOST") or "https://www.tiktok.com").strip().rstrip("/")
+
+# Common Platform Endpoints
+FB_REELS_CREATE_URL = f"{FACEBOOK_HOST}/reels/create"
+TIKTOK_UPLOAD_URL = f"{TIKTOK_HOST}/upload"
+
+# Local Infrastructure & Service Hosts
+VNC_HOST = (os.getenv("VNC_HOST") or "localhost").strip()
+VNC_PORT = int(os.getenv("VNC_PORT", "6080"))
+MCP_PROXY_PORT = int(os.getenv("MCP_PROXY_PORT", "6274"))
+
+# Frontend Assets (CDN Hub)
+CDN_HTMX = (os.getenv("CDN_HTMX") or "https://unpkg.com/htmx.org@1.9.10").strip()
+CDN_TAILWIND = (os.getenv("CDN_TAILWIND") or "https://cdn.tailwindcss.com").strip()
+CDN_CHARTJS = (os.getenv("CDN_CHARTJS") or "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js").strip()
+CDN_APEXCHARTS = (os.getenv("CDN_APEXCHARTS") or "https://cdn.jsdelivr.net/npm/apexcharts").strip()
+CDN_GOOGLE_FONTS = (os.getenv("CDN_GOOGLE_FONTS") or "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap").strip()
+CDN_CODEMIRROR_CSS = (os.getenv("CDN_CODEMIRROR_CSS") or "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css").strip()
+CDN_CODEMIRROR_THEME = (os.getenv("CDN_CODEMIRROR_THEME") or "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css").strip()
+CDN_CODEMIRROR_JS = (os.getenv("CDN_CODEMIRROR_JS") or "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js").strip()
+CDN_CODEMIRROR_SQL = (os.getenv("CDN_CODEMIRROR_SQL") or "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/sql/sql.min.js").strip()
+CDN_ALPINEJS = (os.getenv("CDN_ALPINEJS") or "https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js").strip()
+CDN_PAPAPARSE = (os.getenv("CDN_PAPAPARSE") or "https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js").strip()
+CDN_SORTABLE = (os.getenv("CDN_SORTABLE") or "https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js").strip()
+
 # Runtime timing (defaults match prior hardcoded literals in workers / Playwright / job service)
 PUBLISHER_PUBLISH_DEADLINE_SEC = int(os.getenv("PUBLISHER_PUBLISH_DEADLINE_SEC", "900"))
 PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC = int(
@@ -191,6 +255,13 @@ IDLE_ENGAGEMENT_COOLDOWN_MINUTES = int(os.getenv("IDLE_ENGAGEMENT_COOLDOWN_MINUT
 
 # Ensure directories exist
 for d in [
+    STORAGE_DIR,
+    STORAGE_DB_DIR,
+    STORAGE_PROFILES_DIR,
+    STORAGE_MEDIA_DIR,
+    STORAGE_REUP_DIR,
+    STORAGE_THUMBS_DIR,
+    STORAGE_CONTENT_DIR,
     CONTENT_DIR,
     DONE_DIR,
     FAILED_DIR,
@@ -202,6 +273,5 @@ for d in [
     CONTENT_VIDEO_DIR,
     CONTENT_PROCESSED_DIR,
     OUTPUTS_DIR,
-    DATA_DIR,
 ]:
     d.mkdir(parents=True, exist_ok=True)

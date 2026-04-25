@@ -11,6 +11,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from playwright.sync_api import Playwright, BrowserContext, Page
 
@@ -19,7 +20,7 @@ from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.adapters.common.locator import LocatorStrategy, LocatorCandidate
 from app.adapters.instagram.selectors import HEURISTIC_SELECTORS
 from app.database.models import Job
-from app.config import SAFE_MODE, LOGS_DIR
+from app.config import SAFE_MODE, LOGS_DIR, INSTAGRAM_HOST
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,8 @@ class InstagramAdapter(AdapterInterface):
     """
 
     PLATFORM = "instagram"
-    HOME_URL = "https://www.instagram.com/"
+    HOME_URL = f"{INSTAGRAM_HOST}/"
+    HOST_NETLOC = urlparse(INSTAGRAM_HOST).netloc.lower()
 
     def __init__(self):
         self.playwright: Playwright | None = None
@@ -140,7 +142,7 @@ class InstagramAdapter(AdapterInterface):
         try:
             # ── Step 1: Ensure on Instagram home ──
             update_active_node(job.id, "navigate_home")
-            if "instagram.com" not in self.page.url:
+            if self.HOST_NETLOC not in urlparse(self.page.url).netloc.lower():
                 self.page.goto(self.HOME_URL, wait_until="domcontentloaded")
                 self.page.wait_for_timeout(3000)
 

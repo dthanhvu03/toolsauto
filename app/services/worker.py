@@ -27,16 +27,28 @@ class WorkerService:
 
     @staticmethod
     def update_heartbeat(db: Session, current_job_id: Optional[int]):
-        """Cheap update for worker heartbeat."""
-        # We try to avoid fetching the whole object and just do a mass update on the single row.
-        db.query(SystemState).filter(SystemState.id == 1).update(
-            {
-                "heartbeat_at": now_ts(),
-                "current_job_id": current_job_id,
-                "updated_at": now_ts()
-            }
-        )
-        db.commit()
+        """Cheap update for worker heartbeat with silent retries for locking."""
+        import sqlalchemy.exc
+        import time as _time
+        for attempt in range(3):
+            try:
+                db.query(SystemState).filter(SystemState.id == 1).update(
+                    {
+                        "heartbeat_at": int(_time.time()),
+                        "current_job_id": current_job_id,
+                        "updated_at": int(_time.time())
+                    }
+                )
+                db.commit()
+                break
+            except sqlalchemy.exc.OperationalError:
+                db.rollback()
+                if attempt < 2:
+                    _time.sleep(0.5 * (attempt + 1))
+                continue
+            except Exception:
+                db.rollback()
+                break
 
     @staticmethod
     def set_status(db: Session, status: str) -> SystemState:

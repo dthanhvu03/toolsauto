@@ -16,12 +16,12 @@ from pathlib import Path
 from PIL import Image
 import imagehash
 
-from app.config import BASE_DIR
+from app.config import CONTENT_DIR, DATA_DIR
 
 logger = logging.getLogger(__name__)
 
 # Where to store the pHash evidence log
-EVIDENCE_FILE = BASE_DIR / "data" / "drm_evidence.json"
+EVIDENCE_FILE = DATA_DIR / "drm_evidence.json"
 
 class VideoProtector:
     
@@ -79,15 +79,17 @@ class VideoProtector:
         timestamps = [duration * f for f in fractions]
         
         hashes = {}
-        temp_dir = Path("/tmp/videoprotector")
+        temp_dir = CONTENT_DIR / "temp" / "videoprotector"
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         for i, ts in enumerate(timestamps):
             tmp_img = temp_dir / f"frame_{int(time.time())}_{i}.jpg"
-            
-            # Extract exactly 1 frame at the target timestamp
+
+            # Extract exactly 1 frame at the target timestamp. 
+            # Moving -ss after -i for better stability on some FFmpeg builds.
             cmd = [
-                "ffmpeg", "-y", "-ss", str(ts), "-i", video_path,
+                "ffmpeg", "-y", "-i", video_path,
+                "-ss", f"{ts:.3f}",
                 "-frames:v", "1", "-q:v", "2", str(tmp_img)
             ]
             
@@ -130,7 +132,7 @@ class VideoProtector:
         start_time = 10 if duration_sec > 15 else 0
         window_duration = 30
         
-        temp_dir = Path("/tmp/videoprotector")
+        temp_dir = CONTENT_DIR / "temp"
         temp_dir.mkdir(parents=True, exist_ok=True)
         tmp_wav = temp_dir / f"audio_{int(time.time())}.wav"
         

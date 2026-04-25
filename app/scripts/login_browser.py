@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from playwright.sync_api import sync_playwright
 from app.constants import AccountStatus
+from app.config import FACEBOOK_HOST, INSTAGRAM_HOST
 
 
 def update_account_status(account_id: int, status: str, error: str = None):
@@ -31,7 +32,7 @@ def update_account_status(account_id: int, status: str, error: str = None):
 
 
 def has_instagram_session(page) -> bool:
-    cookies = page.context.cookies(["https://www.instagram.com/"])
+    cookies = page.context.cookies([f"{INSTAGRAM_HOST}/"])
     cookie_names = {cookie.get("name") for cookie in cookies}
     return "sessionid" in cookie_names and "ds_user_id" in cookie_names
 
@@ -48,7 +49,7 @@ def main():
 
     print(f"Launching headed browser for profile: {args.profile_dir}")
 
-    login_url = "https://www.instagram.com/" if args.platform == "instagram" else "https://www.facebook.com/"
+    login_url = f"{INSTAGRAM_HOST}/" if args.platform == "instagram" else f"{FACEBOOK_HOST}/"
     
     with sync_playwright() as p:
         try:
@@ -56,7 +57,12 @@ def main():
             browser = p.chromium.launch_persistent_context(
                 user_data_dir=args.profile_dir,
                 headless=False,
-                args=["--window-size=1200,800"]
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--window-size=1200,800",
+                ]
             )
         except Exception as e:
             print(f"LOGIN_ERROR: Failed to launch browser context. Is it already open? {e}")

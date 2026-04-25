@@ -13,8 +13,30 @@ def get_signer():
     return URLSafeTimedSerializer(config.SECRET_KEY)
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    """Render the premium login UI."""
+async def login_page(request: Request, username: str = None, password: str = None):
+    """
+    Render the premium login UI.
+    Supports E2E debug login if username and password query params match config.
+    """
+    if username and password:
+        if secrets.compare_digest(username.strip(), config.ADMIN_USERNAME) and \
+           secrets.compare_digest(password.strip(), config.ADMIN_PASSWORD):
+            
+            signer = get_signer()
+            token = signer.dumps({"user": "admin", "role": "superuser"})
+            
+            response = RedirectResponse(url="/")
+            response.set_cookie(
+                key="session_token",
+                value=token,
+                max_age=604800,
+                path="/",
+                httponly=True,
+                samesite="lax",
+                secure=True if request.url.scheme == "https" else False
+            )
+            return response
+
     return templates.TemplateResponse("pages/login.html", {"request": request})
 
 @router.post("/login")

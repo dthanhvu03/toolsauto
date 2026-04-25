@@ -9,9 +9,13 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.database.core import SessionLocal
 from app.database.models import Job, JobEvent, Account
 from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC
 from app.constants import JobStatus
+from app.utils.logger import setup_shared_logger
+
+logger = setup_shared_logger(__name__)
 
 
 def now_ts():
@@ -154,7 +158,11 @@ class JobService:
             JobService._log_event(db, job.id, "INFO", 
                 f"Auto COMMENT job created (delay={delay}s)")
         
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     @staticmethod
     def mark_failed_or_retry(db: Session, job: Job, error_msg: str, is_fatal: bool, error_type: Optional[str] = None):
@@ -171,7 +179,7 @@ class JobService:
         if is_fatal and job.account:
             job.account.consecutive_fatal_failures += 1
             if job.account.consecutive_fatal_failures >= 3:
-                job.account.status = False
+                job.account.is_active = False
                 JobService._log_event(db, job.id, "WARN", f"Circuit breaker activated for account {job.account.name}")
         
         if is_fatal or job.tries >= job.max_tries:
@@ -183,15 +191,32 @@ class JobService:
             backoff_mins = 5 if job.tries == 1 else 15
             job.schedule_ts = now_ts() + (backoff_mins * 60)
             
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         
     @staticmethod
     def update_heartbeat(db: Session, job_id: int):
-        """Updates the heartbeat of a RUNNING job."""
-        db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.RUNNING).update(
-            {"last_heartbeat_at": now_ts()}
-        )
-        db.commit()
+        """Updates the heartbeat of a RUNNING job with silent retries for locking."""
+        import sqlalchemy.exc
+        import time as _time
+        for attempt in range(3):
+            try:
+                db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.RUNNING).update(
+                    {"last_heartbeat_at": int(_time.time())}
+                )
+                db.commit()
+                break
+            except sqlalchemy.exc.OperationalError:
+                db.rollback()
+                if attempt < 2:
+                    _time.sleep(0.5 * (attempt + 1))
+                continue
+            except Exception:
+                db.rollback()
+                break
         
     @staticmethod
     def rollback_to_pending(db: Session, job: Job, reason: str):
@@ -205,13 +230,18 @@ class JobService:
     @staticmethod
     def retry_job(db: Session, job_id: int):
         """Transitions FAILED -> PENDING. Does not reset tries."""
-        now = now_ts()
-        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.FAILED).update({
-            "status": JobStatus.PENDING,
-            "schedule_ts": now
-        })
-        if rows_affected == 0:
+        job = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.FAILED).first()
+        if not job:
             raise ValueError("Job is not in FAILED state or does not exist.")
+            
+        # Verify media file exists before allowing retry
+        if not job.resolved_media_path:
+            raise ValueError("Cannot retry: media file has been deleted")
+
+        now = now_ts()
+        job.status = JobStatus.PENDING
+        job.schedule_ts = now
+        
         db.commit()
         JobService._log_event(db, job_id, "INFO", "MANUAL_RETRY")
 
@@ -269,10 +299,33 @@ class JobService:
 
     @staticmethod
     def _log_event(db: Session, job_id: int, level: str, message: str, meta: str = None):
-        event = JobEvent(
-            job_id=job_id,
-            level=level,
-            message=message,
-            meta_json=meta
-        )
-        db.add(event)
+        """Best-effort event logging that must never break business state transitions."""
+        payload = {
+            "job_id": job_id,
+            "level": level,
+            "message": message,
+            "meta_json": meta,
+        }
+
+        last_err = None
+        for attempt in range(2):
+            event_db = SessionLocal()
+            try:
+                event_db.add(JobEvent(**payload))
+                event_db.commit()
+                return
+            except Exception as exc:
+                last_err = exc
+                event_db.rollback()
+                if attempt == 0:
+                    logger.warning(
+                        "[Job %s] _log_event failed on attempt %s, retrying once: %s",
+                        job_id,
+                        attempt + 1,
+                        exc,
+                    )
+                    continue
+            finally:
+                event_db.close()
+
+        logger.error("[Job %s] _log_event failed after retry: %s", job_id, last_err)

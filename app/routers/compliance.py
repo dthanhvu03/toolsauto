@@ -117,7 +117,7 @@ def get_categories(db: Session = Depends(get_db)):
                 COUNT(*) AS total,
                 SUM(CASE WHEN severity = 'VIOLATION' THEN 1 ELSE 0 END) AS violations,
                 SUM(CASE WHEN severity = 'WARNING' THEN 1 ELSE 0 END) AS warnings,
-                SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) AS active
+                SUM(CASE WHEN is_active = true THEN 1 ELSE 0 END) AS active
             FROM keyword_blacklist
             GROUP BY category
             ORDER BY total DESC
@@ -145,7 +145,7 @@ def download_sample_csv(db: Session = Depends(get_db)):
             """
             SELECT keyword, category, severity
             FROM keyword_blacklist
-            WHERE is_active = 1
+            WHERE is_active = true
             ORDER BY severity DESC, category, keyword
             LIMIT 15
             """
@@ -363,17 +363,18 @@ def get_analytics(days: int = 30, db: Session = Depends(get_db)):
             text(
                 """
                 SELECT
-                  json_extract(j.value, '$.evidence') AS kw,
+                  j.value->>'evidence' AS kw,
                   COUNT(*) AS cnt,
                   SUM(CASE WHEN action_taken = 'VIOLATION' THEN 1 ELSE 0 END) AS blocked,
                   SUM(CASE WHEN action_taken = 'WARNING' THEN 1 ELSE 0 END) AS warned
-                FROM violation_log, json_each(violation_log.violations_found) AS j
+                FROM violation_log,
+                     json_array_elements(CAST(violation_log.violations_found AS json)) AS j
                 WHERE checked_at >= :cutoff
                   AND violations_found IS NOT NULL
                   AND TRIM(violations_found) != ''
                   AND violations_found LIKE '[%'
                 GROUP BY kw
-                HAVING kw IS NOT NULL AND kw != ''
+                HAVING (j.value->>'evidence') IS NOT NULL AND (j.value->>'evidence') != ''
                 ORDER BY cnt DESC
                 LIMIT 20
                 """
@@ -381,6 +382,7 @@ def get_analytics(days: int = 30, db: Session = Depends(get_db)):
             {"cutoff": cutoff},
         ).fetchall()
     except Exception:
+        db.rollback()
         logger.warning("analytics top_keywords query failed", exc_info=True)
         top_rows = []
 
@@ -388,7 +390,7 @@ def get_analytics(days: int = 30, db: Session = Depends(get_db)):
         text(
             """
             SELECT
-              date(checked_at, 'unixepoch') AS d,
+              TO_CHAR(TO_TIMESTAMP(checked_at), 'YYYY-MM-DD') AS d,
               COUNT(*) AS total,
               SUM(CASE WHEN action_taken = 'VIOLATION' THEN 1 ELSE 0 END) AS violations,
               SUM(CASE WHEN action_taken = 'WARNING' THEN 1 ELSE 0 END) AS warnings
@@ -419,7 +421,7 @@ def get_analytics(days: int = 30, db: Session = Depends(get_db)):
             """
             SELECT category, COUNT(*) AS c
             FROM keyword_blacklist
-            WHERE is_active = 1
+            WHERE is_active = true
             GROUP BY category
             ORDER BY c DESC
             """
@@ -427,7 +429,7 @@ def get_analytics(days: int = 30, db: Session = Depends(get_db)):
     ).fetchall()
 
     total_keywords = scalar_one(
-        "SELECT COUNT(*) FROM keyword_blacklist WHERE is_active = 1",
+        "SELECT COUNT(*) FROM keyword_blacklist WHERE is_active = true",
         {},
     )
     total_violations = scalar_one(
@@ -761,7 +763,7 @@ def export_violations(days: int = 30, db: Session = Depends(get_db)):
             """
             SELECT id, content_type, original_content,
                    violations_found, action_taken,
-                   datetime(checked_at, 'unixepoch', 'localtime')
+                   TO_CHAR(TO_TIMESTAMP(checked_at), 'YYYY-MM-DD HH24:MI:SS')
             FROM violation_log
             WHERE checked_at >= :cutoff
             ORDER BY checked_at DESC

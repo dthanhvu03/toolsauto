@@ -10,6 +10,12 @@ from pathlib import Path
 _root = Path(__file__).resolve().parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
+
+# Setup Logging before importing app.* modules
+from app.utils.logger import setup_shared_logger
+setup_shared_logger("app")
+logger = setup_shared_logger(__name__ if __name__ != "__main__" else "maintenance")
+
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.services.worker import WorkerService
@@ -21,11 +27,6 @@ from app.services.viral_processor import ViralProcessorService
 import app.config as config
 from app.services import settings as runtime_settings
 from app.constants import JobStatus, ViralStatus
-
-
-# Setup Logging
-from app.utils.logger import setup_shared_logger
-logger = setup_shared_logger(__name__ if __name__ != "__main__" else "maintenance")
 
 RUNNING = True
 CURRENT_POLLER = None
@@ -142,6 +143,7 @@ def _cleanup_orphaned_virals(db: Session):
             db.commit()
 
     except Exception as e:
+        db.rollback()
         logger.error("Error cleaning orphaned/stale virals: %s", e)
 
 def _check_daily_summary(db):
@@ -160,6 +162,7 @@ def _check_daily_summary(db):
             _last_summary_date = today
             logger.info("Daily summary sent successfully.")
         except Exception as e:
+            db.rollback()
             logger.error("Daily summary failed: %s", e)
 
 
@@ -231,22 +234,99 @@ DISCOVERY_NIGHT_END = 5     # 5 AM
 DISCOVERY_MAX_KEYWORDS = 3
 DISCOVERY_DELAY_BETWEEN_SEC = 600  # 10 phút giữa mỗi keyword
 
-# ── Page Insights Scraper (chạy 12h/lần) ──────────────────────────────
+# ── DRAFT Sweeper: chuyển DRAFT (caption done) → PENDING ──────────────
+def _sweep_orphaned_drafts(db):
+    """Move DRAFT jobs without [AI_GENERATE] marker to PENDING.
+    These are jobs where AI already finished caption but status wasn't transitioned."""
+    from sqlalchemy import text as _sql_text
+    try:
+        result = db.execute(_sql_text("""
+            UPDATE jobs
+            SET status = 'PENDING'
+            WHERE status = 'DRAFT'
+              AND (caption IS NULL OR caption NOT LIKE '%[AI_GENERATE]%')
+              AND tries < max_tries
+              AND (last_error IS NULL OR last_error = '')
+        """))
+        db.commit()
+        count = result.rowcount
+        if count > 0:
+            logger.info("[MAINT] Swept %d orphaned DRAFT jobs -> PENDING", count)
+        return count
+    except Exception as e:
+        db.rollback()
+        logger.error("[MAINT] DRAFT sweep failed: %s", e)
+        return 0
+
+
+# ── Zombie Cleanup: DRAFT/PENDING exhausted tries → FAILED ────────────
+def _sweep_zombie_jobs(db):
+    """Move exhausted-tries DRAFT/PENDING jobs to FAILED."""
+    from sqlalchemy import text as _sql_text
+    try:
+        result = db.execute(_sql_text("""
+            UPDATE jobs
+            SET status = 'FAILED',
+                last_error = COALESCE(NULLIF(last_error, ''), 'Exhausted max tries without success')
+            WHERE status IN ('DRAFT', 'PENDING')
+              AND tries >= max_tries
+              AND max_tries > 0
+        """))
+        db.commit()
+        count = result.rowcount
+        if count > 0:
+            logger.info("[MAINT] Moved %d zombie jobs (exhausted tries) -> FAILED", count)
+        return count
+    except Exception as e:
+        db.rollback()
+        logger.error("[MAINT] Zombie sweep failed: %s", e)
+        return 0
+
+
+# ── Page Insights Scraper (chạy 12h/lần, managed subprocess) ──────────
 _last_insights_ts: float = 0
 INSIGHTS_INTERVAL_SEC = 43200  # 12 giờ
+_insights_process = None  # Track subprocess PID
+INSIGHTS_TIMEOUT_SEC = 1800  # 30 phút max
 
 def _scrape_page_insights():
-    global _last_insights_ts
+    global _last_insights_ts, _insights_process
     now = time.time()
+
+    # Check if previous process is still running
+    if _insights_process is not None:
+        poll = _insights_process.poll()
+        if poll is None:
+            # Still running — check timeout
+            start_time = getattr(_insights_process, '_start_time', now)
+            if (now - start_time) > INSIGHTS_TIMEOUT_SEC:
+                logger.warning("[INSIGHTS] Subprocess timed out after %ds. Killing.", INSIGHTS_TIMEOUT_SEC)
+                try:
+                    _insights_process.kill()
+                except Exception:
+                    pass
+                _insights_process = None
+            else:
+                return  # Still running within timeout
+        else:
+            if poll != 0:
+                logger.warning("[INSIGHTS] Subprocess exited with code %d", poll)
+            else:
+                logger.info("[INSIGHTS] Subprocess completed successfully")
+            _insights_process = None
+
     if (now - _last_insights_ts) < INSIGHTS_INTERVAL_SEC:
         return
     _last_insights_ts = now
-    logger.info("🕒 Starting Page Insights Scraper...")
+    logger.info("Starting Page Insights Scraper (managed subprocess)...")
     try:
-        # Script moved to archive during consolidation
-        subprocess.Popen([sys.executable, "scripts/archive/scrape_insights.py"])
+        scraper_path = str(config.BASE_DIR / "scripts" / "archive" / "scrape_insights.py")
+        proc = subprocess.Popen([sys.executable, scraper_path])
+        proc._start_time = now  # Track start time for timeout
+        _insights_process = proc
+        logger.info("[INSIGHTS] Started subprocess PID=%d", proc.pid)
     except Exception as e:
-        logger.error(f"Failed to start scrape_insights.py: {e}")
+        logger.error("Failed to start scrape_insights.py: %s", e)
 
 
 def _run_competitor_discovery(db):
@@ -371,71 +451,83 @@ def run_loop():
             with SessionLocal() as db:
                 state = WorkerService.get_or_create_state(db)
 
-                # Apply runtime overrides from DB (app/settings) so cap values take effect immediately.
                 try:
-                    from app.services.settings import apply_runtime_overrides_to_config
-                    apply_runtime_overrides_to_config(db)
+                    # Apply runtime overrides from DB (app/settings) so cap values take effect immediately.
+                    try:
+                        from app.services.settings import apply_runtime_overrides_to_config
+                        apply_runtime_overrides_to_config(db)
+                    except Exception:
+                        db.rollback()
+
+                    if state.pending_command in ("REQUEST_EXIT", "RESTART_REQUESTED"):
+                        logger.warning(f"Received pending command: {state.pending_command}. Graceful exit requested.")
+                        break
+
+                    if state.worker_status == "PAUSED":
+                        time.sleep(config.MAINT_LOOP_SLEEP_SEC)
+                        continue
+
+                    logger.info("Running routine maintenance tasks...")
+
+                    # 1. Cleanup old media files and temp files
+                    CleanupService.run(db)
+                    SystemMonitorService().cleanup_temp_files()
+
+                    # 2. Check 24h Metrics for published posts
+                    MetricsChecker.check_pending(db)
+
+                    # 2b. Cleanup orphaned virals (hourly)
+                    _cleanup_orphaned_virals(db)
+
+                    # 2c. Sweep orphaned DRAFTs → PENDING (every tick)
+                    _sweep_orphaned_drafts(db)
+
+                    # 2d. Sweep zombie jobs (exhausted tries) → FAILED
+                    _sweep_zombie_jobs(db)
+
+                    # 3. Recover crashed/stale jobs (Self-healing)
+                    logger.info("Checking for crashed/stale jobs to recover...")
+                    from app.services.job_queue import QueueService
+                    recovered = QueueService.recover_crashed_jobs(db, config.WORKER_CRASH_THRESHOLD_SECONDS)
+                    if recovered > 0:
+                        logger.warning(f"Self-healing: Recovered {recovered} stale jobs.")
+
+                    # 4. Daily Summary Report
+                    _check_daily_summary(db)
+
+                    # 5. Autonomous Strategic Boosting (Auto-Push)
+                    _run_strategic_boost(db)
+
+                    # Alerts (queue pressure + resources) with cooldown
+                    SystemMonitorService().maybe_alert_queue_and_resources(db)
+
+                    backlog = _pending_backlog(db)
+                    if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:
+                        logger.info(
+                            "[MAINT] Backlog=%d >= %d. Skipping heavy tasks (viral ingest/tiktok scan/discovery) this sweep.",
+                            backlog,
+                            MAINT_SKIP_HEAVY_WHEN_PENDING,
+                        )
+                    else:
+                        # 4. Process viral materials → AWAITING_STYLE jobs (yt-dlp heavy)
+                        ViralProcessorService().process_all(db)
+
+                        # 5. Auto-discover TikTok competitor videos (hourly)
+                        _scrape_tiktok_competitors(db)
+
+                        # 7. Competitor Discovery (nightly, 24h interval)
+                        _run_competitor_discovery(db)
+
+                    # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap
+                    _purge_zombies()
+
+                    # 8. Run Page Insights Scraper (12h interval)
+                    _scrape_page_insights()
+
+                    logger.info("Hoan tat mot vong maintenance dinh ky.")
                 except Exception:
-                    pass
-                
-                if state.pending_command in ("REQUEST_EXIT", "RESTART_REQUESTED"):
-                    logger.warning(f"Received pending command: {state.pending_command}. Graceful exit requested.")
-                    break
-                    
-                if state.worker_status == "PAUSED":
-                    time.sleep(config.MAINT_LOOP_SLEEP_SEC)
-                    continue
-                
-                logger.info("Running routine maintenance tasks...")
-                
-                # 1. Cleanup old media files and temp files
-                CleanupService.run(db)
-                SystemMonitorService().cleanup_temp_files()
-
-                # 2. Check 24h Metrics for published posts
-                MetricsChecker.check_pending(db)
-                
-                # 2b. Cleanup orphaned virals (hourly)
-                _cleanup_orphaned_virals(db)
-                
-                # 3. Recover crashed/stale jobs (Self-healing)
-                logger.info("Checking for crashed/stale jobs to recover...")
-                from app.services.queue import QueueService
-                recovered = QueueService.recover_crashed_jobs(db, config.WORKER_CRASH_THRESHOLD_SECONDS)
-                if recovered > 0:
-                    logger.warning(f"Self-healing: Recovered {recovered} stale jobs.")
-                
-                # 4. Daily Summary Report
-                _check_daily_summary(db)
-                
-                # 5. Autonomous Strategic Boosting (Auto-Push)
-                _run_strategic_boost(db)
-
-                # Alerts (queue pressure + resources) with cooldown
-                SystemMonitorService().maybe_alert_queue_and_resources(db)
-
-                backlog = _pending_backlog(db)
-                if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:
-                    logger.info(
-                        "[MAINT] Backlog=%d >= %d. Skipping heavy tasks (viral ingest/tiktok scan/discovery) this sweep.",
-                        backlog,
-                        MAINT_SKIP_HEAVY_WHEN_PENDING,
-                    )
-                else:
-                    # 4. Process viral materials → AWAITING_STYLE jobs (yt-dlp heavy)
-                    ViralProcessorService().process_all(db)
-                    
-                    # 5. Auto-discover TikTok competitor videos (hourly)
-                    _scrape_tiktok_competitors(db)
-                    
-                    # 7. Competitor Discovery (nightly, 24h interval)
-                    _run_competitor_discovery(db)
-
-                # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap
-                _purge_zombies()
-                
-                # 8. Run Page Insights Scraper (12h interval)
-                _scrape_page_insights()
+                    db.rollback()
+                    raise
                 
             if RUNNING:
                 # Sleep between maintenance sweeps

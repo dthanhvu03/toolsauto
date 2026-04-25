@@ -10,6 +10,7 @@ import logging
 from enum import Enum
 from typing import Optional, List, Dict, Any, Tuple
 from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
+from app import config
 
 try:
     from PIL import Image
@@ -92,15 +93,15 @@ class CaptionPayload(BaseModel):
 
 
 class AICaptionPipeline:
-    CONFIG_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/config/9router_config.json"))
-    RUNTIME_STATE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../data/config/9router_runtime.json"))
+    CONFIG_PATH = str(config.DATA_DIR / "config" / "9router_config.json")
+    RUNTIME_STATE_PATH = str(config.DATA_DIR / "config" / "9router_runtime.json")
 
     def __init__(self):
         self._config_lock = threading.Lock()
         self.circuit_breaker = CircuitBreaker(failure_ttl=1800, success_ttl=60, max_failures=3)
         
         # Load initial config
-        default_router_url = os.environ.get("ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+        default_router_url = config.ROUTER_BASE_URL
         self.enabled = True
         self.base_url = default_router_url
         self.api_key = ""
@@ -131,7 +132,7 @@ class AICaptionPipeline:
                 data = json.load(f)
                 
             enabled = bool(data.get("enabled", True))
-            default_router_url = os.environ.get("ROUTER_BASE_URL", "http://127.0.0.1:20128/v1")
+            default_router_url = config.ROUTER_BASE_URL
             base_url = str(data.get("base_url", default_router_url))
             api_key = str(data.get("api_key", ""))
             default_model = str(data.get("default_model", "if/gemini-1.5-flash"))
