@@ -8,6 +8,11 @@ import time
 
 router = APIRouter(prefix="/threads", tags=["Threads"])
 
+
+def _platform_tokens(platform: str | None) -> set[str]:
+    return {token.strip().lower() for token in (platform or "").split(",") if token.strip()}
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -28,11 +33,14 @@ async def threads_master_dashboard(request: Request, db: Session = Depends(get_d
     threads_jobs = db.query(Job).filter(Job.platform == "threads").order_by(Job.id.desc()).limit(10).all()
     
     # Get all FB accounts and mark which ones are linked to Threads
-    all_accounts = db.query(Account).filter(Account.is_active == True).all()
+    all_accounts = db.query(Account).filter(Account.is_active == True).order_by(Account.id.asc()).all()
     linked_accounts = []
     available_accounts = []
     for acc in all_accounts:
-        if acc.platform and "threads" in acc.platform:
+        platforms = _platform_tokens(acc.platform)
+        if "facebook" not in platforms:
+            continue
+        if "threads" in platforms:
             linked_accounts.append(acc)
         else:
             available_accounts.append(acc)
@@ -91,14 +99,14 @@ async def trigger_news_scrape(request: Request, db: Session = Depends(get_db)):
 @router.post("/link-account", response_class=HTMLResponse)
 async def link_account_to_threads(request: Request, account_id: int = Form(...), db: Session = Depends(get_db)):
     """Link an existing Facebook account profile to Threads."""
-    account = db.query(Account).filter(Account.id == account_id).first()
+    account = db.query(Account).filter(Account.id == account_id, Account.is_active == True).first()
     if account:
         # Append 'threads' to the platform field (e.g. "facebook" -> "facebook,threads")
-        platforms = set((account.platform or "").split(","))
-        platforms.discard("")
-        platforms.add("threads")
-        account.platform = ",".join(sorted(platforms))
-        db.commit()
+        platforms = _platform_tokens(account.platform)
+        if "facebook" in platforms:
+            platforms.add("threads")
+            account.platform = ",".join(sorted(platforms))
+            db.commit()
     
     # Return full page redirect via HTMX
     return HTMLResponse(
@@ -112,9 +120,8 @@ async def unlink_account_from_threads(request: Request, account_id: int = Form(.
     """Remove Threads capability from an account."""
     account = db.query(Account).filter(Account.id == account_id).first()
     if account:
-        platforms = set((account.platform or "").split(","))
+        platforms = _platform_tokens(account.platform)
         platforms.discard("threads")
-        platforms.discard("")
         account.platform = ",".join(sorted(platforms)) or "facebook"
         db.commit()
     
