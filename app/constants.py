@@ -21,6 +21,11 @@ class ViralStatus(StrEnum):
     DRAFTED = "DRAFTED"
     FAILED = "FAILED"
 
+class JobType(StrEnum):
+    POST = "POST"
+    COMMENT = "COMMENT"
+    VERIFY_THREADS = "VERIFY_THREADS"
+
 # Sentinel marker for content orchestrator & queue
 AI_GENERATE_MARKER = "[AI_GENERATE]"
 
