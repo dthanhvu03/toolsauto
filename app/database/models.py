@@ -297,13 +297,18 @@ class Job(Base):
     def resolved_media_path(self) -> str:
         if not self.media_path:
             return ""
+        from app.config import REUP_DIR, CONTENT_DIR
         p = Path(self.media_path)
         if p.exists():
             return str(p.absolute())
-        # Rebase relative to CONTENT_DIR if missing
+        # Rebase relative to CONTENT_DIR or REUP_DIR if missing
         try:
-            # If path contains 'content/', try to rebase from there
-            if "content/" in self.media_path:
+            if "reup_videos/" in self.media_path:
+                suffix = self.media_path.split("reup_videos/", 1)[1]
+                rebased = REUP_DIR / suffix
+                if rebased.exists():
+                    return str(rebased.absolute())
+            elif "content/" in self.media_path:
                 suffix = self.media_path.split("content/", 1)[1]
                 rebased = CONTENT_DIR / suffix
                 if rebased.exists():
@@ -311,6 +316,7 @@ class Job(Base):
         except Exception:
             pass
         return self.media_path
+
 
     caption = Column(String)
     schedule_ts = Column(Integer, index=True)
@@ -339,12 +345,18 @@ class Job(Base):
     def resolved_processed_media_path(self) -> str:
         if not self.processed_media_path:
             return ""
+        from app.config import REUP_DIR, CONTENT_DIR
         p = Path(self.processed_media_path)
         if p.exists():
             return str(p.absolute())
-        # Rebase relative to CONTENT_DIR if missing
+        # Rebase relative to CONTENT_DIR or REUP_DIR if missing
         try:
-            if "content/" in self.processed_media_path:
+            if "reup_videos/" in self.processed_media_path:
+                suffix = self.processed_media_path.split("reup_videos/", 1)[1]
+                rebased = REUP_DIR / suffix
+                if rebased.exists():
+                    return str(rebased.absolute())
+            elif "content/" in self.processed_media_path:
                 suffix = self.processed_media_path.split("content/", 1)[1]
                 rebased = CONTENT_DIR / suffix
                 if rebased.exists():
@@ -437,6 +449,15 @@ class ViralMaterial(Base):
     status = Column(String, default="NEW", index=True) # NEW, DOWNLOADED, DRAFTED, FAILED
     last_error = Column(String, nullable=True)
     
+    @property
+    def thumbnail_url(self) -> str:
+        """Returns the relative path to the generated thumbnail collage, or empty string if not downloaded."""
+        if self.status in ("NEW", "FAILED") or not self.url:
+            return ""
+        import hashlib
+        fhash = hashlib.md5(self.url.encode()).hexdigest()
+        return f"/thumbnails/{fhash}_collage.jpg"
+
     created_at = Column(Integer, default=now_ts)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
 
@@ -521,32 +542,26 @@ class PageInsight(Base):
 
 class CompetitorReel(Base):
     """
-    Reel đối thủ được thu thập tự động từ GQL suggested-reels stream
-    (GQL[5] — 17 blobs FB trả về mỗi lần load 1 reel page).
-    Dedup theo (reel_url, scrape_date) — mỗi ngày chỉ lưu 1 lần.
+    Reel đối thủ được thu thập tự động từ GQL suggested-reels stream.
+    Dedup theo (reel_url, scrape_date).
     """
     __tablename__ = "competitor_reels"
 
     id = Column(Integer, primary_key=True, index=True)
-    reel_url  = Column(String, nullable=False, index=True)
-    page_url  = Column(String, nullable=True,  index=True)
-    page_name = Column(String, nullable=True)
-    platform  = Column(String, default="facebook", index=True)
-
-    views    = Column(Integer, default=0, index=True)
-    likes    = Column(Integer, default=0)
+    reel_url = Column(String, nullable=False, index=True)
+    scrape_date = Column(String, nullable=False, index=True) # YYYY-MM-DD
+    page_url = Column(String, nullable=True, index=True)
+    
+    views = Column(Integer, default=0, index=True)
+    likes = Column(Integer, default=0)
     comments = Column(Integer, default=0)
-    shares   = Column(Integer, default=0)
-    caption  = Column(String, nullable=True)
-    published_date = Column(String, nullable=True)
-
-    source_account_id = Column(Integer, nullable=True, index=True)
-    scrape_date = Column(String, nullable=False)   # YYYY-MM-DD  ← dedup key
-    scraped_at  = Column(Integer, default=now_ts, index=True)
+    shares = Column(Integer, default=0)
+    caption = Column(String, nullable=True)
+    
+    recorded_at = Column(Integer, default=now_ts, index=True)
 
     __table_args__ = (
         Index('idx_competitor_dedup', 'reel_url', 'scrape_date', unique=True),
-        Index('idx_competitor_views', 'scraped_at', 'views'),
     )
 
 
@@ -634,3 +649,103 @@ class AuditLog(Base):
     details = Column(JSON, nullable=True)
     ip_address = Column(String(45), nullable=True)
     created_at = Column(Integer, default=now_ts, index=True)
+
+class PlatformConfig(Base):
+    __tablename__ = "platform_configs"
+    id = Column(Integer, primary_key=True)
+    platform = Column(String, nullable=False, unique=True)
+    adapter_class = Column(String, nullable=False)
+    display_name = Column(String, nullable=True)
+    display_emoji = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    base_urls = Column(Text, nullable=True)
+    viewport = Column(Text, nullable=True)
+    user_agents = Column(Text, nullable=True)
+    browser_args = Column(Text, nullable=True)
+    media_extensions = Column(Text, nullable=True)
+    created_at = Column(Integer, nullable=True)
+    updated_at = Column(Integer, nullable=True)
+
+class WorkflowDefinition(Base):
+    __tablename__ = "workflow_definitions"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    platform = Column(String, nullable=False)
+    job_type = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    steps = Column(Text, nullable=True)
+    timing_config = Column(Text, nullable=True)
+    retry_config = Column(Text, nullable=True)
+    created_at = Column(Integer, nullable=True)
+    updated_at = Column(Integer, nullable=True)
+
+class PlatformSelector(Base):
+    __tablename__ = "platform_selectors"
+    id = Column(Integer, primary_key=True)
+    platform = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    selector_name = Column(String, nullable=False)
+    selector_type = Column(String, default="css")
+    selector_value = Column(Text, nullable=False)
+    locale = Column(String, default="*")
+    priority = Column(Integer, default=0)
+    version = Column(Integer, default=1)
+    valid_from = Column(Integer, nullable=True)
+    valid_until = Column(Integer, nullable=True)
+    is_active = Column(Boolean, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(Integer, nullable=True)
+    updated_at = Column(Integer, nullable=True)
+
+class CtaTemplate(Base):
+    __tablename__ = "cta_templates"
+    id = Column(Integer, primary_key=True)
+    platform = Column(String, nullable=False)
+    template = Column(Text, nullable=False)
+    locale = Column(String, default="vi")
+    page_url = Column(String, nullable=True)
+    niche = Column(String, nullable=True)
+    priority = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(Integer, nullable=True)
+
+class NewsArticle(Base):
+    """
+    Lưu trữ tin tức cào được từ RSS/Web để AI xử lý đăng Threads/Facebook.
+    """
+    __tablename__ = "news_articles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_url = Column(String, unique=True, index=True, nullable=False)
+    source_name = Column(String, nullable=True) # e.g. "VnExpress"
+    title = Column(String, nullable=False)
+    summary = Column(Text, nullable=True)
+    content = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
+    category = Column(String, nullable=True, index=True)
+    published_at = Column(Integer, nullable=True, index=True) # Unix TS từ RSS
+    
+    # Processing status
+    status = Column(String, default="NEW", index=True) # NEW, DRAFTED, POSTED, SKIPPED
+    created_at = Column(Integer, default=now_ts)
+    updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
+
+
+class ThreadsInteraction(Base):
+    """
+    Theo dõi các lượt tương tác (reply) trên Threads để tránh trả lời lặp lại.
+    """
+    __tablename__ = "threads_interactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), index=True)
+    thread_id = Column(String, index=True) # ID của bài viết/bình luận gốc
+    username = Column(String) # Người mình tương tác cùng
+    content = Column(Text) # Nội dung mình đã reply
+    status = Column(String, default="DONE") # DONE, FAILED
+    
+    created_at = Column(Integer, default=now_ts)
+
+    __table_args__ = (
+        Index('idx_threads_interaction_dedup', 'account_id', 'thread_id', unique=True),
+    )

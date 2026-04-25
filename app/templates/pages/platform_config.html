@@ -1,8 +1,8 @@
 {% extends "layouts/app.html" %}
 {% block content %}
 
-<!-- SortableJS for drag-and-drop -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<!-- Sortable JS for drag-and-drop -->
+<script src="{{ config.CDN_SORTABLE }}"></script>
 
 <!-- Extracted JS modules (P0 Refactoring) -->
 <script src="/static/js/platform_config_simulation.js"></script>
@@ -358,7 +358,7 @@
       <div>
         <label class="text-xs text-gray-500">Trang chủ (Base URL - Tùy chọn)</label>
         <input id="p-base-url" type="text"
-               placeholder="https://tiktok.com"
+               placeholder="https://tiktok.com/..."
                class="w-full border rounded-lg px-3 py-2 text-sm mt-1 font-mono">
       </div>
     </div>
@@ -510,7 +510,7 @@
           Page URL (optional — để trống = áp dụng toàn platform)
         </label>
         <input id="cta-page-url" type="text"
-               placeholder="https://facebook.com/yourpage"
+               placeholder="https://facebook.com/..."
                class="w-full border rounded-lg px-3 py-2
                       text-sm mt-1">
       </div>

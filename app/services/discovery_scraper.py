@@ -16,6 +16,7 @@ import subprocess
 import time
 from urllib.parse import quote
 
+from app.config import TIKTOK_HOST
 from app.services.yt_dlp_path import yt_dlp_binary
 from app.constants import ViralStatus
 
@@ -34,7 +35,7 @@ class DiscoveryScraper:
         Uses yt-dlp --flat-playlist on /tag/{keyword} endpoint.
         """
         tag = keyword.strip().replace(" ", "").lower()
-        url = f"https://www.tiktok.com/tag/{quote(tag)}"
+        url = f"{TIKTOK_HOST}/tag/{quote(tag)}"
 
         cmd = [
             yt_dlp_binary(),
@@ -74,7 +75,7 @@ class DiscoveryScraper:
                 if not uploader_id:
                     continue
 
-                channel_url = f"https://www.tiktok.com/@{uploader_id}"
+                channel_url = f"{TIKTOK_HOST}/@{uploader_id}"
                 videos.append({
                     "channel_url": channel_url,
                     "channel_name": uploader,

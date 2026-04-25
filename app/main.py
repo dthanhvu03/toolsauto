@@ -14,7 +14,7 @@ from app.utils.logger import setup_shared_logger
 logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fastapi")
 
 # Import routers
-from app.routers import auth, dashboard, jobs, accounts, worker, health, telegram, viral, insights, syspanel, pages, gallery, manual_job, affiliates, database, compliance, platform_config, ai, ai_studio
+from app.routers import auth, dashboard, jobs, accounts, worker, health, telegram, viral, insights, syspanel, pages, manual_job, affiliates, database, compliance, platform_config, ai, ai_studio, threads
 from app.services.notifier_service import NotifierService, TelegramNotifier
 import app.config as config
 
@@ -41,7 +41,6 @@ app.include_router(viral.router)
 app.include_router(insights.router)
 app.include_router(syspanel.router)
 app.include_router(pages.router)
-app.include_router(gallery.router)
 app.include_router(manual_job.router)
 app.include_router(affiliates.router)
 app.include_router(compliance.router)
@@ -49,9 +48,12 @@ app.include_router(database.router)
 app.include_router(platform_config.router)
 app.include_router(ai.router)
 app.include_router(ai_studio.router)
+app.include_router(threads.router)
 
 # Static assets (SaaS UI CSS, etc.)
 app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "app" / "static")), name="static")
+config.THUMB_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/thumbnails", StaticFiles(directory=str(config.THUMB_DIR)), name="thumbnails")
 
 import secrets
 import base64

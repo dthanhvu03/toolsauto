@@ -42,6 +42,8 @@ reels_body.html
 reels_texts.json
 metadata*.json
 gemini_cookies.json
+gemini_cookies_invalid
+ai_persona.json
 
 # Inter-agent communication (internal only)
 .comms/
@@ -71,4 +73,6 @@ content/reup/
 *.db
 
 # Unified logs
+# log files
 logs/
+storage/

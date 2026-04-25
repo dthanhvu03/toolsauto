@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, select
 
 from app.database.models import Job, Account
-from app.config import TIMEZONE, CONTENT_PROFILES_DIR
+from app.config import TIMEZONE, CONTENT_PROFILES_DIR, FACEBOOK_HOST
 from app.constants import JobStatus
 
 
@@ -154,7 +154,7 @@ class MetricsChecker:
                 try:
                     # STRATEGY 3: To bypass geoblocking/soft-blocking generic reel urls on headless
                     # navigate directly to the user's reels tab and find the specific thumbnail
-                    page.goto("https://www.facebook.com/me/reels_tab", wait_until="domcontentloaded")
+                    page.goto(f"{FACEBOOK_HOST}/me/reels_tab", wait_until="domcontentloaded")
                     page.wait_for_timeout(5000)
                     
                     # Extract pairs of (URL, count) from all reel thumbnails in the grid

@@ -20,6 +20,7 @@
     <thead class="bg-white">
       <tr class="border-b border-[var(--border)] text-xs text-gray-500">
         <th class="w-16 px-4 py-2 text-left uppercase">ID</th>
+        <th class="w-24 px-4 py-2 text-center uppercase">Thumbnail</th>
         <th class="w-[38%] px-4 py-2 text-left uppercase">Title / URL</th>
         <th class="w-36 px-4 py-2 text-left uppercase">Views</th>
         <th class="w-52 px-4 py-2 text-center uppercase">Account</th>
@@ -34,7 +35,7 @@
       {% include 'fragments/viral_row.html' %}
       {% else %}
       <tr>
-        <td colspan="6" class="p-4 text-center text-sm text-[var(--muted)]">No results.</td>
+        <td colspan="7" class="p-4 text-center text-sm text-[var(--muted)]">No results.</td>
       </tr>
       {% endfor %}
     </tbody>

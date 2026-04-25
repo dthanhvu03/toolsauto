@@ -10,14 +10,20 @@ _root = Path(__file__).resolve().parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
+# Setup Logging before importing app.* modules
+from app.utils.logger import setup_shared_logger
+setup_shared_logger("app")  # capture all app.adapters.* logs into the same file
+logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publisher")
+
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
-from app.services.queue import QueueService
+from app.services.job_queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
 from app.services.worker import WorkerService
 from app.services.account import AccountService
+from app.adapters.facebook.adapter import PageMismatchError
 from app.services.system_monitor import SystemMonitorService
 import app.config as config
 from app.services import settings as runtime_settings
@@ -42,10 +48,6 @@ def kill_if_stuck(label: str, timeout: int):
     timer.daemon = True
     timer.start()
     return timer
-
-# Setup Logging
-from app.utils.logger import setup_shared_logger
-logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publisher")
 
 RUNNING = True
 CURRENT_JOB_ID = None
@@ -119,63 +121,70 @@ def process_single_job(db: Session):
         logger.warning(f"🛑 Quá nhiều trình duyệt đang mở ({health['chrome_playwright_count']}). Tạm dừng claim job...")
         return False
 
+    logger.debug("[DB][claim_next_job] Attempting to claim next job")
     job = QueueService.claim_next_job(db)
     if not job:
+        logger.debug("[DB][claim_next_job] No eligible job claimed")
         return False
-        
-    # Enforce Daily Limit (per-page logic)
-    effective_daily_limit = 0
-    try:
-        # Runtime cap overrides account setting (if set)
-        effective_daily_limit = runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db)
-    except Exception:
-        effective_daily_limit = 0
-    if (not effective_daily_limit) and job.account:
-        effective_daily_limit = int(getattr(job.account, "daily_limit", 0) or 0)
+    logger.debug("[DB][claim_next_job] Claimed job_id=%s", job.id)
 
-    if job.account and effective_daily_limit > 0:
-        from datetime import datetime, time as time_obj
-        from zoneinfo import ZoneInfo
-        import app.config as app_config
-        today_start = int(datetime.combine(datetime.now(ZoneInfo(app_config.TIMEZONE)).date(), time_obj.min).timestamp())
-        
-        # Count DONE jobs today for this SPECIFIC target_page.
-        # If POSTS_PER_PAGE_PER_DAY cap is enabled, enforce per-page across all accounts.
-        q = db.query(Job).filter(
-            Job.target_page == job.target_page,
-            Job.status == JobStatus.DONE,
-            Job.finished_at >= today_start
-        )
-        if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
-            q = q.filter(Job.account_id == job.account_id)
-        posted_today = q.count()
-        
-        if posted_today >= effective_daily_limit:
-            logger.info("[Job %s] Page '%s' at daily limit (%s). Postponed to tomorrow.",
-                        job.id, job.target_page, effective_daily_limit)
-            job.status = JobStatus.PENDING
-            job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
-            db.commit()
-            return True
-
-    # Xin ý kiến giấc ngủ (Human Rest Cycle)
-    if job.account and getattr(job.account, 'is_sleeping', False):
-        logger.info("[Job %s] Account '%s' is SLEEPING (%s - %s). Postponing job for 10 minutes.", 
-                    job.id, job.account.name, job.account.sleep_start_time, job.account.sleep_end_time)
-        job.status = JobStatus.PENDING
-        job.schedule_ts = int(time.time()) + 600
-        db.commit()
-        return True
-        
-    CURRENT_JOB_ID = job.id
-    logger.info("[Job %s] Claimed for account '%s' on %s", job.id, job.account.name, job.platform)
+    import threading
+    heartbeat_stop = threading.Event()
     
     try:
+        # Enforce Daily Limit (per-page logic)
+        effective_daily_limit = 0
+        try:
+            # Runtime cap overrides account setting (if set)
+            effective_daily_limit = runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db)
+        except Exception:
+            effective_daily_limit = 0
+        if (not effective_daily_limit) and job.account:
+            effective_daily_limit = int(getattr(job.account, "daily_limit", 0) or 0)
+
+        if job.account and effective_daily_limit > 0:
+            from datetime import datetime, time as time_obj
+            from zoneinfo import ZoneInfo
+            import app.config as app_config
+            today_start = int(datetime.combine(datetime.now(ZoneInfo(app_config.TIMEZONE)).date(), time_obj.min).timestamp())
+            
+            # Count DONE jobs today for this SPECIFIC target_page.
+            q = db.query(Job).filter(
+                Job.target_page == job.target_page,
+                Job.status == JobStatus.DONE,
+                Job.finished_at >= today_start
+            )
+            if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
+                q = q.filter(Job.account_id == job.account_id)
+            
+            logger.debug("[DB][daily_limit_count] Counting DONE jobs for target_page=%s", job.target_page)
+            posted_today = q.count()
+            logger.debug("[DB][daily_limit_count] posted_today=%s, effective_daily_limit=%s", posted_today, effective_daily_limit)
+
+            if posted_today >= effective_daily_limit:
+                logger.info("[PUBLISHER] [Job-%s] [DAILY_LIMIT] Page '%s' reached limit (%s). Postponed to tomorrow.",
+                            job.id, job.target_page, effective_daily_limit)
+                job.status = JobStatus.PENDING
+                job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
+                db.commit()
+                return True
+
+        # Xin ý kiến giấc ngủ (Human Rest Cycle)
+        if job.account and getattr(job.account, 'is_sleeping', False):
+            logger.info("[PUBLISHER] [Job-%s] [SLEEP_WINDOW] Account '%s' is sleeping (%s - %s). Postponing 10 minutes.", 
+                        job.id, job.account.name, job.account.sleep_start_time, job.account.sleep_end_time)
+            job.status = JobStatus.PENDING
+            job.schedule_ts = int(time.time()) + 600
+            db.commit()
+            return True
+            
+        CURRENT_JOB_ID = job.id
+        logger.info("[PUBLISHER] [Job-%s] [CLAIM] Account='%s' Platform=%s", job.id, job.account.name, job.platform)
+        
         # Keep Job.last_heartbeat_at fresh while dispatch/publish is running.
         # Otherwise QueueService.recover_crashed_jobs() may treat it as stale and reset RUNNING -> PENDING.
-        import threading
-        heartbeat_stop = threading.Event()
-        heartbeat_interval = max(20, min(60, int(WORKER_CRASH_THRESHOLD_SECONDS // 3)))
+        # [HB-Fix] Force interval to 60s to reduce DB load per Priority 2.
+        heartbeat_interval = 60
 
         def _heartbeat_loop(job_id: int):
             while not heartbeat_stop.is_set():
@@ -183,7 +192,8 @@ def process_single_job(db: Session):
                     with SessionLocal() as hb_db:
                         JobService.update_heartbeat(hb_db, job_id)
                 except Exception as hb_err:
-                    logger.warning("[Job %s] Heartbeat refresh failed: %s", job_id, hb_err)
+                    # [HB-Fix] Log at DEBUG level to reduce main log noise per Priority 1.
+                    logger.debug("[PUBLISHER] [Job-%s] [HEARTBEAT] Refresh failed: %s", job_id, hb_err)
                 # Wait with stop support
                 heartbeat_stop.wait(heartbeat_interval)
 
@@ -197,7 +207,7 @@ def process_single_job(db: Session):
         # SAFETY GUARD: Never publish a job with un-processed AI placeholder
         from app.constants import AI_GENERATE_MARKER
         if job.caption and AI_GENERATE_MARKER in job.caption:
-            logger.warning("[Job %s] BLOCKED: Caption still contains %s. Resetting to DRAFT.", job.id, AI_GENERATE_MARKER)
+            logger.warning("[PUBLISHER] [Job-%s] [VALIDATION] Caption still contains %s. Resetting to DRAFT.", job.id, AI_GENERATE_MARKER)
             job.status = JobStatus.DRAFT
             db.commit()
             CURRENT_JOB_ID = None
@@ -222,7 +232,7 @@ def process_single_job(db: Session):
                         pub_text, job_id=job.id, content_type="caption"
                     )
         except CompliancePublishError as e:
-            logger.error("[Job %s] Compliance blocked publish: %s", job.id, e)
+            logger.error("[PUBLISHER] [Job-%s] [COMPLIANCE] Blocked publish: %s", job.id, e)
             job.status = JobStatus.FAILED
             job.last_error = str(e)
             job.error_type = "COMPLIANCE"
@@ -245,83 +255,108 @@ def process_single_job(db: Session):
         )
         
         try:
-            publish_result = Dispatcher.dispatch(job, db=db)
-        finally:
-            heartbeat_stop.set()
+            logger.info("[PUBLISHER] [Job-%s] [PUBLISH] Bắt đầu đăng Reel lên Facebook...", job.id)
             try:
-                heartbeat_thread.join(timeout=5)
+                publish_result = Dispatcher.dispatch(job, db=db)
+            finally:
+                heartbeat_stop.set()
+                try:
+                    heartbeat_thread.join(timeout=5)
+                except Exception:
+                    pass
+                suicide_timer.cancel() # Cancel if finished normally
+            
+            
+            if publish_result.ok:
+                logger.info("[PUBLISHER] [Job-%s] [DONE] Successfully published.", job.id)
+
+                post_url = publish_result.details.get("post_url") if publish_result.details else None
+                logger.debug("[DB][status_transition] Marking job_id=%s as DONE", job.id)
+                JobService.mark_done(
+                    db=db, 
+                    job=job, 
+                    details="Success", 
+                    external_post_id=publish_result.external_post_id,
+                    post_url=post_url
+                )
+                NotifierService.notify_job_done(job, post_url=post_url)
+
+                import random
+                # Re-apply overrides in case settings changed while publishing
+                apply_runtime_overrides_to_config(db)
+                from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
+                delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
+                logger.info("[PUBLISHER] [Job-%s] [COOLDOWN] Nghỉ %ss trước job tiếp theo.", job.id, delay_sec)
+                time.sleep(delay_sec)
+            else:
+                logger.error("[PUBLISHER] [Job-%s] [FAILED] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
+                logger.debug("[DB][status_transition] Marking job_id=%s failed/retry", job.id)
+                JobService.mark_failed_or_retry(
+                    db=db, 
+                    job=job, 
+                    error_msg=publish_result.error or "Unknown failure",
+                    is_fatal=publish_result.is_fatal,
+                    error_type="FATAL" if publish_result.is_fatal else "RETRYABLE"
+                )
+                if publish_result.is_fatal or job.tries >= job.max_tries:
+                    NotifierService.notify_job_failed(job, publish_result.error)
+                
+                if publish_result.details and publish_result.details.get("invalidate_account"):
+                    logger.error("[PUBLISHER] [Job-%s] [ACCOUNT_INVALID] Disabling account '%s'.", job.id, job.account.name)
+                    AccountService.invalidate_account(
+                        db=db, 
+                        account_id=job.account.id, 
+                        reason=publish_result.error
+                    )
+                    NotifierService.notify_account_invalid(job.account.name, publish_result.error)
+                    
+        except PageMismatchError as e:
+            db.rollback()
+            logger.error("[PUBLISHER] [Job-%s] [PAGE_MISMATCH] %s", job.id, e)
+            job.status = JobStatus.FAILED
+            job.last_error = str(e)
+            job.error_type = "PAGE_MISMATCH"
+            job.tries = job.max_tries # Block auto-retry, require human review
+            logger.debug("[DB][status_transition] Marking job_id=%s PAGE_MISMATCH FAILED", job.id)
+            db.commit()
+
+        except Exception as e:
+            try:
+                heartbeat_stop.set()
             except Exception:
                 pass
-            suicide_timer.cancel() # Cancel if finished normally
-        
-        
-        if publish_result.ok:
-            logger.info("[Job %s] Successfully published!", job.id)
-            
-            import random
-            # Re-apply overrides in case settings changed while publishing
-            apply_runtime_overrides_to_config(db)
-            from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
-            delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
-            logger.info(f"[Job {job.id}] Nghỉ ngơi {delay_sec}s để giả lập người thật trước khi chốt Job...")
-            time.sleep(delay_sec)
-            
-            post_url = publish_result.details.get("post_url") if publish_result.details else None
-            JobService.mark_done(
-                db=db, 
-                job=job, 
-                details="Success", 
-                external_post_id=publish_result.external_post_id,
-                post_url=post_url
-            )
-            NotifierService.notify_job_done(job, post_url=post_url)
-        else:
-            logger.error("[Job %s] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
-            JobService.mark_failed_or_retry(
-                db=db, 
-                job=job, 
-                error_msg=publish_result.error or "Unknown failure",
-                is_fatal=publish_result.is_fatal,
-                error_type="FATAL" if publish_result.is_fatal else "RETRYABLE"
-            )
-            if publish_result.is_fatal or job.tries >= job.max_tries:
-                NotifierService.notify_job_failed(job, publish_result.error)
-            
-            if publish_result.details and publish_result.details.get("invalidate_account"):
-                logger.error("[Job %s] Adapter triggered account invalidation. Disabling account '%s'.", job.id, job.account.name)
-                AccountService.invalidate_account(
-                    db=db, 
-                    account_id=job.account.id, 
-                    reason=publish_result.error
-                )
-                NotifierService.notify_account_invalid(job.account.name, publish_result.error)
-                
-    except Exception as e:
-        try:
-            heartbeat_stop.set()
-        except Exception:
-            pass
-        logger.exception("[Job %s] Unhandled worker exception processing job: %s", job.id, e)
-        JobService.mark_failed_or_retry(db, job, str(e), is_fatal=False)
+            db.rollback()
+            logger.exception("[PUBLISHER] [Job-%s] [EXCEPTION] Unhandled exception while processing job: %s", job.id, e)
+            logger.debug("[DB][status_transition] Marking job_id=%s failed/retry after exception", job.id)
+            JobService.mark_failed_or_retry(db, job, str(e), is_fatal=False)
         
     finally:
         try:
+            # Always reset failed transaction state before cleanup-path queries.
+            db.rollback()
             db.refresh(job)
-            if job.status in [JobStatus.DONE, JobStatus.FAILED]:
+            should_cleanup = False
+            if job.status == JobStatus.DONE:
+                should_cleanup = True
+            elif job.status == JobStatus.FAILED:
+                if job.tries >= job.max_tries and getattr(job, "error_type", "") != "PAGE_MISMATCH":
+                    should_cleanup = True
+
+            if should_cleanup:
                 # 1. Dọn file render qua xử lý
                 p_path = job.resolved_processed_media_path
                 if p_path and os.path.exists(p_path):
-                    logger.info("[Job %s] Terminal state reached. Cleaning up processed media: %s", job.id, p_path)
+                    logger.info("[PUBLISHER] [Job-%s] [CLEANUP] Removing processed media: %s", job.id, p_path)
                     os.remove(p_path)
                 
                 # 2. Dọn luôn file gốc mồ côi
                 m_path = job.resolved_media_path
                 if m_path and os.path.exists(m_path):
-                    logger.info("[Job %s] Terminal state reached. Cleaning up original media: %s", job.id, m_path)
+                    logger.info("[PUBLISHER] [Job-%s] [CLEANUP] Removing original media: %s", job.id, m_path)
                     os.remove(m_path)
                     
         except Exception as cleanup_err:
-            logger.warning("[Job %s] Failed to clean up media file: %s", job.id, cleanup_err)
+            logger.warning("[PUBLISHER] [Job-%s] [CLEANUP_WARN] Failed to run cleanup safely: %s", job.id, cleanup_err)
             
         CURRENT_JOB_ID = None
         
@@ -337,13 +372,29 @@ def run_loop():
     
     logger.info("Publisher Worker started. Press Ctrl+C to stop.")
     
+    # [Priority 2] Staggered startup to prevent DB lock contention
+    import random
+    stagger_sec = random.uniform(1, 5)
+    logger.info(f"Staggering startup: sleeping for {stagger_sec:.2f}s...")
+    time.sleep(stagger_sec)
+    
     register_signals()
     
     with SessionLocal() as db:
-        check_crash_recovery(db)
-        state = WorkerService.get_or_create_state(db)
-        state.worker_started_at = int(time.time())
-        db.commit()
+        try:
+            check_crash_recovery(db)
+        except Exception as e:
+            db.rollback()
+            # If database is locked, another worker is likely already doing recovery
+            logger.warning("Crash recovery check failed (likely DB lock contention): %s", e)
+
+        try:
+            state = WorkerService.get_or_create_state(db)
+            state.worker_started_at = int(time.time())
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
         
     logger.info("Entering polling loop. Tick=%ss", config.WORKER_TICK_SECONDS)
     # Adaptive idle backoff to reduce DB polling + CPU wakeups when queue is empty
@@ -351,36 +402,45 @@ def run_loop():
     idle_sleep_cap = int(os.getenv("PUBLISHER_IDLE_SLEEP_CAP_SEC", "60"))
     
     while RUNNING:
+        found_job = False
         try:
             with SessionLocal() as db:
-                state = WorkerService.get_or_create_state(db)
-                
-                # Separate Heartbeat for Publisher could be tracked separately in DB later, 
-                # for now MVP uses the existing global one
-                WorkerService.update_heartbeat(db, CURRENT_JOB_ID)
-                
-                if state.pending_command in ("REQUEST_EXIT", "RESTART_REQUESTED"):
-                    logger.warning(f"Received pending command: {state.pending_command}. Graceful exit requested.")
-                    # Only one worker should clear the command, but for now we'll just exit.
-                    break
-                    
-                if state.worker_status == "PAUSED":
-                    time.sleep(config.WORKER_TICK_SECONDS)
-                    continue
-                    
-                config.SAFE_MODE = state.safe_mode
-                
-                found_job = process_single_job(db)
-                
+                try:
+                    state = WorkerService.get_or_create_state(db)
+
+                    # Separate Heartbeat for Publisher could be tracked separately in DB later,
+                    # for now MVP uses the existing global one
+                    WorkerService.update_heartbeat(db, CURRENT_JOB_ID)
+
+                    if state.pending_command in ("REQUEST_EXIT", "RESTART_REQUESTED"):
+                        logger.warning(f"Received pending command: {state.pending_command}. Graceful exit requested.")
+                        # Only one worker should clear the command, but for now we'll just exit.
+                        break
+
+                    if state.worker_status == "PAUSED":
+                        time.sleep(config.WORKER_TICK_SECONDS)
+                        continue
+
+                    config.SAFE_MODE = state.safe_mode
+
+                    found_job = process_single_job(db)
+                except Exception:
+                    db.rollback()
+                    raise
+
             if not found_job and RUNNING:
                 with SessionLocal() as db_idle:
-                    _maybe_idle_engagement(db_idle)
+                    try:
+                        _maybe_idle_engagement(db_idle)
+                    except Exception:
+                        db_idle.rollback()
+                        raise
                 time.sleep(idle_sleep)
                 idle_sleep = min(idle_sleep * 2, idle_sleep_cap)
             else:
                 # Reset backoff once we actually do work
                 idle_sleep = config.WORKER_TICK_SECONDS
-                
+
         except Exception:
             logger.exception("Publisher encountered a core loop error. Will retry.")
             time.sleep(config.WORKER_TICK_SECONDS)
@@ -423,7 +483,7 @@ def _maybe_idle_engagement(db: Session):
             Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
         ).count()
         if backlog >= threshold:
-            logger.info("[IDLE] Backlog=%d >= %d. Skipping idle engagement.", backlog, threshold)
+            logger.debug("[IDLE] Backlog=%d >= %d. Skipping idle engagement.", backlog, threshold)
             return
     except Exception:
         # Never block publishing due to idle warmup checks
@@ -457,13 +517,13 @@ def _maybe_idle_engagement(db: Session):
     niche_keywords = parse_niche_topics(getattr(account, "niche_topics", None))
     competitor_urls = parse_niche_topics(getattr(account, "competitor_urls", None))
 
-    logger.info("[IDLE] Starting engagement session for account '%s' (niche: %s, competitors: %d)",
+    logger.debug("[IDLE] Starting engagement session for account '%s' (niche: %s, competitors: %d)",
                 account.name, niche_keywords or "general", len(competitor_urls))
 
     # ── LOCK: Đánh dấu acc đang ENGAGING để Publisher không claim job cho acc này ──
     account.login_status = AccountStatus.ENGAGING
     db.commit()
-    logger.info("[IDLE] Account '%s' locked → ENGAGING", account.name)
+    logger.debug("[IDLE] Account '%s' locked -> ENGAGING", account.name)
 
     # Notify Telegram — session started
     try:
@@ -539,7 +599,7 @@ def _maybe_idle_engagement(db: Session):
                 pass
 
         elif result.get("ok"):
-            logger.info("[IDLE] Engagement completed: action=%s", result.get("action"))
+            logger.debug("[IDLE] Engagement completed: action=%s", result.get("action"))
             # Notify Telegram — success
             try:
                 urls_list = result.get("urls", [])
@@ -583,7 +643,7 @@ def _maybe_idle_engagement(db: Session):
             if account.login_status == AccountStatus.ENGAGING:
                 account.login_status = AccountStatus.ACTIVE
                 db.commit()
-                logger.info("[IDLE] Account '%s' unlocked → ACTIVE", account.name)
+                logger.debug("[IDLE] Account '%s' unlocked -> ACTIVE", account.name)
         except Exception:
             pass
         # Ghi nhận thời gian dạo cuối cùng cho cooldown

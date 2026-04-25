@@ -482,3 +482,20 @@ def bulk_create_jobs(
                 "error": str(e)
             }
         )
+
+@router.get("/{job_id}/details", response_class=HTMLResponse)
+def get_job_details(job_id: int, request: Request, db: Session = Depends(get_db)):
+    """HTMX fragment: Returns full job details for modal."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404)
+        
+    # Get latest events
+    from app.database.models import JobEvent
+    events = db.query(JobEvent).filter(JobEvent.job_id == job_id).order_by(JobEvent.ts.desc()).limit(20).all()
+    
+    return templates.TemplateResponse(
+        "fragments/job_details.html", 
+        {"request": request, "job": job, "events": events, "now": int(time.time())}
+    )
+

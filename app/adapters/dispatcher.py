@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 from app.services.runtime_events import emit as rt_emit
 from app.services import job_tracer
 
-from app.adapters.facebook.adapter import FacebookAdapter
+from app.adapters.facebook.adapter import FacebookAdapter, PageMismatchError
 
 class DummyAdapter(AdapterInterface):
     """A dummy adapter for scaffolding and testing."""
@@ -221,6 +221,10 @@ class Dispatcher:
                 
             return result
             
+        except PageMismatchError as e:
+            job_tracer.finish_job_trace(job.id, "failed", str(e))
+            raise e
+
         except Exception as e:
             job_tracer.finish_job_trace(job.id, "failed", str(e))
             # Check for specific class of session invalidation errors

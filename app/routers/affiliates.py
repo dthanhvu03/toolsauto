@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 import logging
 import time
 
@@ -249,7 +249,7 @@ def import_batch(req: BatchImportRequest, db: Session = Depends(get_db)):
 
     if rows_to_upsert:
         try:
-            stmt = sqlite_insert(AffiliateLink).values(rows_to_upsert)
+            stmt = pg_insert(AffiliateLink).values(rows_to_upsert)
             stmt = stmt.on_conflict_do_update(
                 index_elements=['keyword'],
                 set_={

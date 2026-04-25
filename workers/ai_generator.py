@@ -3,6 +3,7 @@ import logging
 import signal
 import sys
 import os
+import threading
 from pathlib import Path
 
 # Repo root on sys.path so `python workers/ai_generator.py` works without PYTHONPATH=.
@@ -11,7 +12,7 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
-from app.services.queue import QueueService
+from app.services.job_queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_TICK_SECONDS
 from app.services.worker import WorkerService
@@ -88,7 +89,7 @@ def process_draft_job(db: Session):
         return False
         
     CURRENT_JOB_ID = job.id
-    logger.info("[Job %s] Claimed DRAFT for AI Generation", job.id)
+    logger.info("[AI_GEN] [Job-%s] [CLAIM] Claimed DRAFT for AI generation", job.id)
     try:
         NotifierService._broadcast(
             f"🤖 <b>AI đang xử lý</b>\n"
@@ -97,6 +98,26 @@ def process_draft_job(db: Session):
         )
     except Exception:
         pass
+    
+    heartbeat_stop = threading.Event()
+    heartbeat_interval = 60
+
+    def _heartbeat_loop(job_id: int):
+        while not heartbeat_stop.is_set():
+            try:
+                with SessionLocal() as hb_db:
+                    JobService.update_heartbeat(hb_db, job_id)
+            except Exception as hb_err:
+                # [HB-Fix] Log at DEBUG level to reduce main log noise
+                logger.debug("[AI_GEN] [Job-%s] [HEARTBEAT] Refresh failed: %s", job_id, hb_err)
+            heartbeat_stop.wait(heartbeat_interval)
+
+    heartbeat_thread = threading.Thread(
+        target=_heartbeat_loop,
+        args=(job.id,),
+        daemon=True,
+    )
+    heartbeat_thread.start()
     
     try:
         from app.services.content_orchestrator import ContentOrchestrator
@@ -159,7 +180,7 @@ def process_draft_job(db: Session):
                 job.status = JobStatus.DRAFT
                 job.last_error = f"Gemini output contract violation (try {job.tries}/3). Backoff {backoff_sec}s."
                 db.commit()
-                logger.warning("[Job %s] Output contract violation. Keep DRAFT + backoff %ss (try=%s/3).", job.id, backoff_sec, job.tries)
+                logger.warning("[AI_GEN] [Job-%s] [CONTRACT_RETRY] Output contract violation. Keep DRAFT + backoff %ss (try=%s/3).", job.id, backoff_sec, job.tries)
                 try:
                     NotifierService._broadcast(
                         f"⚠️ <b>Gemini trả sai format (không phải JSON)</b>\n"
@@ -174,7 +195,7 @@ def process_draft_job(db: Session):
                 job.status = JobStatus.FAILED
                 job.last_error = "Gemini output contract violated repeatedly (>3)."
                 db.commit()
-                logger.error("[Job %s] Output contract violated repeatedly. Mark FAILED.", job.id)
+                logger.error("[AI_GEN] [Job-%s] [CONTRACT_FAILED] Output contract violated repeatedly. Mark FAILED.", job.id)
                 try:
                     NotifierService._broadcast(
                         f"🚨 <b>Gemini sai format liên tục</b>\n"
@@ -211,13 +232,13 @@ def process_draft_job(db: Session):
                         comment_text = aff_link.comment_template.replace("[LINK]", aff_link.url)
                         # Gán thẳng vào auto_comment_text của Job
                         job.auto_comment_text = comment_text
-                        logger.info(f"[{job.id}] Auto-injected Affiliate Link for keyword: {matched_aff_kw}")
+                        logger.info("[AI_GEN] [Job-%s] [AFFILIATE] Auto-injected keyword: %s", job.id, matched_aff_kw)
                 except Exception as e:
-                    logger.error(f"[{job.id}] Error attaching Affiliate Link: {e}")
+                    logger.error("[AI_GEN] [Job-%s] [AFFILIATE_ERR] Error attaching Affiliate Link: %s", job.id, e)
 
             
             db.commit()
-            logger.info("[Job %s] AI Generation complete. Awaiting user approval.", job.id)
+            logger.info("[AI_GEN] [Job-%s] [DRAFT_READY] AI generation complete. Awaiting user approval.", job.id)
             NotifierService.notify_draft_ready(job)
             try:
                 NotifierService._broadcast(
@@ -249,12 +270,12 @@ def process_draft_job(db: Session):
                 GEMINI_INFRA_BACKOFF_LEVEL = min(GEMINI_INFRA_BACKOFF_LEVEL + 1, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
                 GEMINI_NEXT_ALLOWED_TS = time.time() + backoff_sec
                 
-                logger.warning("[Job %s] AI Generation returned empty. Kept as DRAFT. Backoff %ss. Failures: %d/3", job.id, backoff_sec, job.tries)
+                logger.warning("[AI_GEN] [Job-%s] [EMPTY_RETRY] AI returned empty. Keep DRAFT + backoff %ss (try=%d/3).", job.id, backoff_sec, job.tries)
             else:
                 job.status = JobStatus.FAILED
                 job.last_error = "AI Generation returned empty repeatedly (>3). Mark FAILED."
                 db.commit()
-                logger.error("[Job %s] AI Generation empty exceeded retries. Mark FAILED.", job.id)
+                logger.error("[AI_GEN] [Job-%s] [EMPTY_FAILED] AI returned empty repeatedly. Mark FAILED.", job.id)
                 try:
                     NotifierService._broadcast(
                         f"🚨 <b>Lỗi AI Trả về Rỗng Liên Tục</b>\n"
@@ -265,7 +286,7 @@ def process_draft_job(db: Session):
                     pass
         
     except Exception as e:
-        logger.exception("[Job %s] Unhandled exception during AI Generation: %s", job.id, e)
+        logger.exception("[AI_GEN] [Job-%s] [EXCEPTION] Unhandled exception during AI generation: %s", job.id, e)
         if type(e).__name__ == "GeminiMaxRetriesExceeded":
             msg = str(e)
 
@@ -296,12 +317,12 @@ def process_draft_job(db: Session):
                     job.status = JobStatus.DRAFT
                     job.last_error = f"Gemini infra timeout (try {job.tries}/3). Backoff {backoff_sec}s. Last: {msg}"
                     db.commit()
-                    logger.error("[Job %s] GEMINI INFRA TIMEOUT. Keep DRAFT + backoff %ss (try=%s/3).", job.id, backoff_sec, job.tries)
+                    logger.error("[AI_GEN] [Job-%s] [INFRA_TIMEOUT] Keep DRAFT + backoff %ss (try=%s/3).", job.id, backoff_sec, job.tries)
                 else:
                     job.status = JobStatus.FAILED
                     job.last_error = f"Gemini infra timeout exceeded (>{3} retries). Last: {msg}"
                     db.commit()
-                    logger.error("[Job %s] GEMINI INFRA TIMEOUT exceeded retries. Mark FAILED.", job.id)
+                    logger.error("[AI_GEN] [Job-%s] [INFRA_FAILED] Infra timeout exceeded retries. Mark FAILED.", job.id)
                 try:
                     NotifierService._broadcast(
                         f"⚠️ <b>Gemini RPA bị timeout/hạ tầng</b>\n"
@@ -344,7 +365,7 @@ def process_draft_job(db: Session):
                 except Exception:
                     pass
             else:
-                logger.error("[Job %s] GEMINI AUTH/LOGIC FAIL after 3 retries. Mark FAILED.", job.id)
+                logger.error("[AI_GEN] [Job-%s] [AUTH_FAILED] Gemini auth/logic failed after retries. Mark FAILED.", job.id)
                 job.status = JobStatus.FAILED
                 job.last_error = f"Gemini RPA Failed: {e}"
                 db.commit()
@@ -374,12 +395,12 @@ def process_draft_job(db: Session):
                 GEMINI_INFRA_BACKOFF_LEVEL = min(GEMINI_INFRA_BACKOFF_LEVEL + 1, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
                 GEMINI_NEXT_ALLOWED_TS = time.time() + backoff_sec
                 
-                logger.warning("[Job %s] Unhandled exception during AI Generation: %s. Kept as DRAFT. Backoff %ss. Failures: %d/3", job.id, e, backoff_sec, job.tries)
+                logger.warning("[AI_GEN] [Job-%s] [EXCEPTION_RETRY] Unhandled exception: %s. Keep DRAFT + backoff %ss (try=%d/3).", job.id, e, backoff_sec, job.tries)
             else:
                 job.status = JobStatus.FAILED
                 job.last_error = f"AI Generation Error repeatedly (>3): {e}. Mark FAILED."
                 db.commit()
-                logger.error("[Job %s] AI Generation Error exceeded retries. Mark FAILED.", job.id)
+                logger.error("[AI_GEN] [Job-%s] [EXCEPTION_FAILED] AI generation error exceeded retries. Mark FAILED.", job.id)
                 try:
                     NotifierService._broadcast(
                         f"🚨 <b>Lỗi AI Generation Liên Tục</b>\n"
@@ -390,6 +411,11 @@ def process_draft_job(db: Session):
                 except Exception:
                     pass
     finally:
+        heartbeat_stop.set()
+        try:
+            heartbeat_thread.join(timeout=5)
+        except Exception:
+            pass
         CURRENT_JOB_ID = None
         
     return True

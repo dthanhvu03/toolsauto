@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import time
@@ -43,6 +43,12 @@ def app_overview(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/app/dashboard", response_class=HTMLResponse)
+def app_overview_legacy(request: Request, db: Session = Depends(get_db)):
+    """Backward-compatible alias for legacy dashboard path."""
+    return app_overview(request, db)
+
+
 @router.get("/app/overview/page-posting-stats", response_class=HTMLResponse)
 def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_db)):
     """
@@ -50,7 +56,7 @@ def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_
     Cap is runtime setting POSTS_PER_PAGE_PER_DAY (0 = disabled).
     """
     try:
-        cap = int(runtime_settings.get_effective(db, "POSTS_PER_PAGE_PER_DAY") or 0)
+        cap = int(runtime_settings.get_effective(db, "publish.posts_per_page_per_day") or 0)
     except Exception:
         cap = int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0)
 
@@ -106,7 +112,7 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
     Cap is runtime setting REUP_VIDEOS_PER_PAGE_PER_DAY (0 = disabled).
     """
     try:
-        cap = int(runtime_settings.get_effective(db, "REUP_VIDEOS_PER_PAGE_PER_DAY") or 0)
+        cap = int(runtime_settings.get_effective(db, "publish.reup_videos_per_page_per_day") or 0)
     except Exception:
         cap = int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0)
 
@@ -234,23 +240,17 @@ def app_pages(request: Request):
 
 @router.get("/app/logs", response_class=HTMLResponse)
 def app_logs(request: Request):
-    """SaaS UI: log viewer (PM2 logs)."""
+    """SaaS UI: unified domain events log viewer."""
     return templates.TemplateResponse(
         "pages/app_logs.html",
-        {
-            "request": request,
-            "default_proc": request.query_params.get("proc") or "AI_Generator",
-            "default_kind": request.query_params.get("kind") or "out",
-            "default_lines": int(request.query_params.get("lines") or 200),
-            "procs": LogQueryFacade.list_system_sources(),
-        },
+        {"request": request},
     )
 
 
 @router.get("/app/logs/tail")
-def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200):
+def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200, category: str = "user"):
     """Return last N lines for whitelisted pm2 log files."""
-    return LogQueryFacade.get_system_tail(proc, kind, lines)
+    return LogQueryFacade.get_system_tail(proc, kind, lines, category=category)
 
 
 @router.get("/app/logs/stream")
@@ -259,6 +259,7 @@ def app_logs_stream(
     kind: str = "out",
     level: str = "",
     q: str = "",
+    category: str = "user",
 ):
     """
     Server-Sent Events stream for realtime logs.
@@ -268,7 +269,7 @@ def app_logs_stream(
       - level: INFO|WARN|ERROR|DEBUG (optional)
       - q: keyword contains filter (optional)
     """
-    return LogQueryFacade.stream_system_logs(proc=proc, kind=kind, level=level, q=q)
+    return LogQueryFacade.stream_system_logs(proc=proc, kind=kind, level=level, q=q, category=category)
 
 @router.get("/app/logs/domain-events")
 def app_logs_domain_events(
@@ -277,6 +278,7 @@ def app_logs_domain_events(
     level: str = "",
     job_id: str = "",
     q: str = "",
+    category: str = "user",
     page: int = 1,
     db: Session = Depends(get_db)
 ):
@@ -284,7 +286,11 @@ def app_logs_domain_events(
     job_id_int = None
     if job_id and job_id.isdigit():
         job_id_int = int(job_id)
-        
+
+    category_norm = (category or "user").strip().lower()
+    if category_norm not in {"user", "tech", "all"}:
+        category_norm = "user"
+
     results, total, total_pages = LogQueryFacade.query_domain_events(
         db=db,
         source=source if source else None,
@@ -292,9 +298,10 @@ def app_logs_domain_events(
         job_id=job_id_int,
         q=q if q else None,
         page=page,
-        per_page=50
+        per_page=50,
+        category=category_norm,
     )
-    
+
     return templates.TemplateResponse(
         "fragments/domain_events_table.html",
         {
@@ -307,7 +314,8 @@ def app_logs_domain_events(
                 "source": source,
                 "level": level,
                 "job_id": job_id,
-                "q": q
+                "q": q,
+                "category": category_norm,
             }
         }
     )
@@ -383,8 +391,11 @@ def app_settings_save(
     try:
         runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
     except ValueError:
-        return htmx_toast_response("Không thể lưu: key hoặc giá trị không hợp lệ.", "error", refresh_page=False)
-    return htmx_toast_response("Đã lưu cài đặt thành công.", "success", refresh_page=True)
+        return JSONResponse({"success": False, "error": "Không thể lưu: key hoặc giá trị không hợp lệ."}, status_code=400)
+    
+    import json as _json
+    headers = {"HX-Trigger": _json.dumps({"showMessage": {"msg": "Đã lưu cài đặt thành công.", "type": "success"}})}
+    return JSONResponse({"success": True}, headers=headers)
 
 
 @router.post("/app/settings/reset", response_class=HTMLResponse)
@@ -398,7 +409,7 @@ def app_settings_reset(
         runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
     except ValueError:
         return htmx_toast_response("Không thể đặt lại.", "error", refresh_page=False)
-    return htmx_toast_response("Đã đặt lại về mặc định.", "success", refresh_page=True)
+    return htmx_toast_response("Đã đặt lại về mặc định.", "success", refresh_page=False)
 
 
 @router.post("/app/settings/bulk-save", response_class=HTMLResponse)
@@ -438,7 +449,7 @@ async def app_settings_bulk_save(request: Request, db: Session = Depends(get_db)
         runtime_settings.upsert_setting(db, key=key, raw_value=str(raw), updated_by=updated_by)
         changed += 1
 
-    return htmx_toast_response(f"Đã lưu {changed} thay đổi; đặt lại {reset} mục về mặc định.", "success", refresh_page=True)
+    return htmx_toast_response(f"Đã lưu {changed} thay đổi; đặt lại {reset} mục về mặc định.", "success", refresh_page=False)
 
 @router.get("/app/viral/table", response_class=HTMLResponse)
 def app_viral_table(

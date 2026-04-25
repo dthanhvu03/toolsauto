@@ -1,0 +1,149 @@
+<div class="flex flex-col h-full max-h-[90vh]">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-gray-900">Chi tiết Job #{{ job.id }}</h3>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{{ job.platform }}</span>
+                    <span class="w-1 h-1 rounded-full bg-gray-300"></span>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{{ job.account.name if job.account else 'Deleted' }}</span>
+                </div>
+            </div>
+        </div>
+        <button onclick="document.getElementById('jobDetailsDialog').close()" class="p-2 hover:bg-gray-200 rounded-full transition-colors">
+            <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- Scrollable Content -->
+    <div class="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+        
+        <!-- Status & Schedule Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Trạng thái</div>
+                <div class="flex items-center gap-2">
+                    {% set text = job.status %}
+                    {% if job.status == 'DONE' %}{% set tone = 'green' %}
+                    {% elif job.status in ['PENDING','DRAFT'] %}{% set tone = 'amber' %}
+                    {% elif job.status == 'FAILED' %}{% set tone = 'red' %}
+                    {% else %}{% set tone = 'blue' %}{% endif %}
+                    {% include 'ui/badge.html' with context %}
+                </div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Lịch đăng</div>
+                <div class="text-sm font-semibold text-gray-700">{{ job.schedule_ts | format_time }}</div>
+            </div>
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Số lần thử</div>
+                <div class="text-sm font-semibold text-gray-700">{{ job.tries }} / {{ job.max_tries }}</div>
+            </div>
+        </div>
+
+        <!-- Caption Section -->
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest">Nội dung bài viết (Caption)</h4>
+                    <span class="text-[10px] font-bold {% if (job.caption|length) > 500 %}text-rose-500{% else %}text-emerald-500{% endif %} bg-gray-100 px-1.5 py-0.5 rounded">
+                        {{ job.caption|length }} / 500 ký tự
+                    </span>
+                </div>
+                <button onclick="navigator.clipboard.writeText(this.nextElementSibling.textContent); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy', 2000)" 
+                        class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100 transition-colors">Copy</button>
+                <div class="hidden">{{ job.caption }}</div>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-gray-50 border border-gray-100 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed font-medium shadow-inner">
+                {{ job.caption or '(Không có caption)' }}
+            </div>
+        </div>
+
+        {% if job.ai_reasoning %}
+        <!-- AI Reasoning -->
+        <div class="p-4 rounded-2xl bg-indigo-50 border border-indigo-100 border-l-4 border-l-indigo-500 shadow-sm">
+            <h4 class="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg> AI Reasoning (Phân tích chiến lược)
+            </h4>
+            <p class="text-sm text-indigo-900/80 leading-relaxed italic">
+                "{{ job.ai_reasoning }}"
+            </p>
+        </div>
+        {% endif %}
+
+        {% if job.last_error %}
+        <!-- Error Message -->
+        <div class="p-4 rounded-2xl bg-rose-50 border border-rose-100 border-l-4 border-l-rose-500 shadow-sm">
+            <h4 class="text-xs font-bold text-rose-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg> Lỗi gần nhất
+            </h4>
+            <div class="text-xs font-mono text-rose-700 break-words bg-white/50 p-2 rounded-lg border border-rose-100">
+                {{ job.last_error }}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Timeline / Events -->
+        <div>
+            <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Nhật ký Job (Timeline)</h4>
+            <div class="space-y-3 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
+                {% for event in events %}
+                <div class="flex gap-4 relative">
+                    <div class="w-6 h-6 rounded-full bg-white border-2 border-gray-100 flex items-center justify-center shrink-0 z-10">
+                        <div class="w-2 h-2 rounded-full {% if event.level == 'ERROR' %}bg-rose-500{% elif event.level == 'WARN' %}bg-amber-500{% else %}bg-indigo-500{% endif %}"></div>
+                    </div>
+                    <div class="flex-1 pb-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-xs font-bold text-gray-800">{{ event.message }}</p>
+                            <span class="text-[10px] font-medium text-gray-400 shrink-0">{{ event.ts | format_time }}</span>
+                        </div>
+                        {% if event.meta_json and event.meta_json != '{}' %}
+                        <div class="mt-1 text-[10px] text-gray-500 font-mono bg-gray-50 p-1.5 rounded border border-gray-100 truncate max-w-full" title="{{ event.meta_json }}">
+                            {{ event.meta_json }}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not events %}
+                <div class="text-center py-4 text-xs text-gray-400 italic">Chưa có bản ghi nhật ký nào.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Technical Metadata -->
+        <div class="pt-4 border-t border-gray-100 grid grid-cols-2 gap-y-4 gap-x-8">
+            <div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Dedupe Key</div>
+                <div class="text-[10px] font-mono text-gray-600 truncate" title="{{ job.dedupe_key }}">{{ job.dedupe_key or '-' }}</div>
+            </div>
+            <div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Tracking Code</div>
+                <div class="text-[10px] font-mono text-gray-600">{{ job.tracking_code or '-' }}</div>
+            </div>
+            <div class="col-span-2">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Media Path</div>
+                <div class="text-[10px] font-mono text-gray-600 break-all bg-gray-50 p-2 rounded-lg border border-gray-100">{{ job.media_path or '-' }}</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-4 border-t border-gray-100 flex justify-end bg-gray-50/50">
+        <button onclick="document.getElementById('jobDetailsDialog').close()" class="app-btn bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Đóng</button>
+    </div>
+</div>
