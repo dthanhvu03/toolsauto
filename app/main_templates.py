@@ -33,6 +33,7 @@ def time_only(ts):
     return dt_utc.astimezone(ZoneInfo(TIMEZONE)).strftime('%H:%M')
 
 templates.env.filters["format_time"] = format_time
+templates.env.filters["datetime"] = format_time
 templates.env.filters["date_only"] = date_only
 templates.env.filters["time_only"] = time_only
 templates.env.globals["now"] = time.time  

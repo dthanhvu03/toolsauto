@@ -282,17 +282,22 @@ class FacebookAdapter(AdapterInterface):
                 static_count=len(fallback_list), total=len(combined))
         return combined
 
-    def _wait_and_locate_array(self, selectors: list[str]) -> Locator | None:
-        """Evaluate array of selectors and return first visible locator"""
+    def _wait_and_locate_array(self, selectors: list[str], timeout_ms: int = 5000) -> Locator | None:
+        """Evaluate array of selectors and return first visible locator, waiting up to timeout_ms."""
         if not self.page: return None
-        for idx, sel in enumerate(selectors):
-            loc = self.page.locator(sel)
-            if self._is_visible(loc.first):
-                self._report_selector_outcome(True, idx, len(selectors))
-                return loc.first
-            if self._is_visible(loc.last):
-                self._report_selector_outcome(True, idx, len(selectors))
-                return loc.last
+        
+        start_time = time.time()
+        while (time.time() - start_time) * 1000 < timeout_ms:
+            for idx, sel in enumerate(selectors):
+                try:
+                    loc = self.page.locator(sel).first
+                    if loc.count() > 0 and loc.is_visible():
+                        self._report_selector_outcome(True, idx, len(selectors))
+                        return loc
+                except Exception:
+                    continue
+            self.page.wait_for_timeout(500) # Poll every 500ms
+            
         self._report_selector_outcome(False, None, len(selectors))
         return None
 
@@ -626,6 +631,18 @@ class FacebookAdapter(AdapterInterface):
                     target_page_url = "https://" + target_page_url
                 self.page.goto(target_page_url, wait_until="domcontentloaded")
                 
+                # [n8n-lite Phase 2] Resolve real numeric ID if current URL is a slug
+                if not self._facebook_numeric_id_from_url(target_page_url):
+                    self.logger.info("FacebookAdapter: Slug detected. Extracting real Page ID from metadata...")
+                    resolved_id = self._extract_page_id_from_current_page()
+                    if resolved_id:
+                        self.logger.info("FacebookAdapter: Resolved Page ID: %s", resolved_id)
+                        # Construct a virtual URL with ID for the switcher to use
+                        if "?" in target_page_url:
+                            target_page_url += f"&id={resolved_id}"
+                        else:
+                            target_page_url += f"?id={resolved_id}"
+                
                 active_steps = getattr(job, "active_steps", None)
                 if active_steps is not None and "feed_browse" not in active_steps:
                     rt_emit("step_skipped", platform="facebook", step_name="feed_browse",
@@ -904,61 +921,63 @@ class FacebookAdapter(AdapterInterface):
 
             caption_typed = False
 
-            self.logger.info("FacebookAdapter: [Phase 3] Bước 3/5: Nhập nội dung bài viết và chuẩn bị các bước tiếp theo...")
-            self.logger.info("FacebookAdapter: [Reels Dialog - Step 1] Chờ nút Tiếp hiện ra rồi click (max 60s chờ video upload)...")
-            try:
-                next_btn_1_loc = self.page.locator('div[aria-label="Tiếp"], div[aria-label="Next"]').first
-                next_btn_1_loc.wait_for(state="visible", timeout=60000)
-                next_btn_1_loc.click(timeout=5000, force=True)
-                self.logger.info("FacebookAdapter: Đã click nút Tiếp ở Bước 1")
-                self.page.wait_for_timeout(2000) # Chờ animation chuyển bước
-            except Exception as e:
-                self.logger.warning("FacebookAdapter: Lỗi click nút Tiếp ở Bước 1: %s", e)
-
-            self.logger.info("FacebookAdapter: [Reels Dialog - Step 2] Giao diện Chỉnh sửa, click Tiếp...")
-            self.page.wait_for_timeout(1000)
-            try:
-                next_btn_2_loc = self.page.locator('div[aria-label="Tiếp"], div[aria-label="Next"]').first
-                next_btn_2_loc.wait_for(state="visible", timeout=30000)
-                next_btn_2_loc.click(timeout=5000, force=True)
-                self.logger.info("FacebookAdapter: Đã click nút Tiếp ở Bước 2")
-                self.page.wait_for_timeout(2000) # Chờ animation chuyển bước
-            except Exception as e:
-                self.logger.warning("FacebookAdapter: Lỗi click nút Tiếp ở Bước 2: %s", e)
-
-            self.logger.info("FacebookAdapter: [Reels Dialog - Step 3] Giao diện Cài đặt, chuẩn bị điền caption và Đăng...")
-            try:
-                # Wait for any contenteditable area with fallback selectors (Phase B)
-                caption_selectors = [
-                    'div[role="textbox"][contenteditable="true"]',
-                    'div[contenteditable="true"][data-lexical-editor="true"]',
-                    'div[contenteditable="true"][aria-label*="reel" i]',
-                    'div[contenteditable="true"][aria-label*="Mô tả" i]',
-                    'div[contenteditable="true"][aria-label*="Describe" i]',
-                    'div[contenteditable="true"][aria-placeholder]',
-                    'div[contenteditable="true"]',
-                ]
-                found_caption = False
-                for sel in caption_selectors:
-                    try:
-                        self.page.locator(sel).first.wait_for(state="visible", timeout=3000)
-                        self.logger.debug("FacebookAdapter: Caption area found via selector: %s", sel)
-                        found_caption = True
-                        break
-                    except:
-                        continue
-                        
-                if not found_caption:
-                    self.logger.warning("FacebookAdapter: Chờ khu vực caption quá lâu hoặc không thấy qua list selectors.")
+            self.logger.info("FacebookAdapter: [Phase 3] Bước 3/5: Tiến tới giao diện nhập Caption...")
+            
+            caption_selectors = [
+                'div[role="textbox"][contenteditable="true"]',
+                'div[contenteditable="true"][data-lexical-editor="true"]',
+                'div[contenteditable="true"][aria-label*="reel" i]',
+                'div[contenteditable="true"][aria-label*="Mô tả" i]',
+                'div[contenteditable="true"][aria-label*="Describe" i]',
+                'div[contenteditable="true"][aria-placeholder]',
+                'div[contenteditable="true"]',
+            ]
+            
+            found_caption = False
+            for loop_idx in range(15): # Max 15 attempts (roughly 30-40 seconds)
+                # 1. Check if we are already at the caption screen
+                caption_loc = self._wait_and_locate_array(caption_selectors, timeout_ms=1000)
+                if caption_loc:
+                    self.logger.info("FacebookAdapter: Đã thấy khu vực nhập caption (Step 3).")
+                    found_caption = True
+                    break
+                    
+                # 2. If not, look for a "Next" button and click it
+                surface = reels.find_active_publish_surface()
+                next_btn = reels.find_next_button(surface)
+                if next_btn and self._is_visible(next_btn):
+                    is_disabled = next_btn.get_attribute("aria-disabled") == "true"
+                    if not is_disabled:
+                        self.logger.info("FacebookAdapter: Found 'Next' button, clicking to advance...")
+                        try:
+                            next_btn.click(timeout=3000, force=True)
+                            self.page.wait_for_timeout(2000) # Wait for animation
+                        except Exception as e:
+                            self.logger.warning("FacebookAdapter: Click Next error: %s", e)
+                    else:
+                        self.logger.debug("FacebookAdapter: 'Next' button is disabled (video processing?), waiting...")
                 else:
-                    self.logger.info("FacebookAdapter: Đã thấy khu vực nhập caption.")
-            except Exception as e:
-                self.logger.warning("FacebookAdapter: Exception searching for caption: %s", e)
+                    self.logger.debug("FacebookAdapter: No 'Next' button and no 'Caption' box yet. Waiting...")
+                
+                self.page.wait_for_timeout(1000)
+
+            if not found_caption:
+                self.logger.warning("FacebookAdapter: Chờ khu vực caption quá lâu hoặc không thấy qua list selectors.")
 
             surface = reels.find_active_publish_surface()
             caption_typed = reels.fill_caption(surface, publish_caption)
+            
+            # ABORT if we couldn't type the caption (prevents fake "done" without text)
             if not caption_typed and publish_caption.strip():
-                self.logger.warning("FacebookAdapter: Caption area not found in final surface. Proceeding without caption.")
+                self.logger.error("FacebookAdapter: Caption area not found in final surface. ABORTING publish to prevent empty caption.")
+                return self._failure_result(
+                    job.id,
+                    "caption_failed",
+                    "Cannot find caption input box on final publish surface.",
+                    flow_mode,
+                    entrypoint_used,
+                    is_fatal=False
+                )
             
             # Đợi thêm một chút để Facebook cập nhật trạng thái nút Đăng sau khi nhập liệu
             self.logger.info("FacebookAdapter: Đã nhập xong Caption, đợi 3s để giao diện ổn định...")
@@ -1563,13 +1582,45 @@ class FacebookAdapter(AdapterInterface):
             self.logger.warning("FacebookAdapter: Failed to post comment: %s", e)
             return PublishResult(ok=False, error=f"Comment failed: {e}", is_fatal=False)
 
-    @staticmethod
-    def _facebook_numeric_id_from_url(url: str) -> str | None:
+    def _facebook_numeric_id_from_url(self, url: str) -> str | None:
         """Extract profile/page numeric id from facebook URLs (profile.php?id=…)."""
         if not url:
             return None
         m = re.search(r"[?&]id=(\d{5,})", url)
         return m.group(1) if m else None
+
+    def _extract_page_id_from_current_page(self) -> str | None:
+        """Attempt to extract the actual Facebook Page ID from the current page's metadata or script blobs."""
+        if not self.page: return None
+        try:
+            return self.page.evaluate("""
+                () => {
+                    // 1. Check App Links (Meta tags)
+                    const appLink = document.querySelector('meta[property="al:android:url"], meta[property="al:ios:url"]');
+                    if (appLink && appLink.content.includes('id=')) {
+                        return appLink.content.split('id=')[1].split(/[&?]/)[0];
+                    }
+                    if (appLink && appLink.content.includes('page/')) {
+                         return appLink.content.split('page/')[1].split(/[&?]/)[0];
+                    }
+                    
+                    // 2. Check for PageID in JS config strings
+                    const html = document.documentElement.innerHTML;
+                    let match = html.match(/\"pageID\":\"(\d+)\"/);
+                    if (match) return match[1];
+                    
+                    match = html.match(/\"delegate_page_id\":\"(\d+)\"/);
+                    if (match) return match[1];
+                    
+                    // 3. Check for userID (if we are on /me and it resolved to the page)
+                    match = html.match(/\"userID\":\"(\d+)\"/);
+                    if (match) return match[1];
+
+                    return null;
+                }
+            """)
+        except Exception:
+            return None
 
     @staticmethod
     def _normalize_fb_profile_url_for_compare(u: str) -> str:
@@ -1902,9 +1953,19 @@ class FacebookAdapter(AdapterInterface):
                     see_all = self.page.locator(SELECTORS["switch_menu"]["see_all_profiles"]).first
                     if see_all.count() > 0 and see_all.is_visible():
                         self._activate_profile_switcher_row(see_all, "see all profiles (retry)")
-                self.page.wait_for_timeout(2000)
+                self.page.wait_for_timeout(3000)
 
             dialog = self.page.locator('div[role="dialog"]').last
+
+            # [Optimization] Scroll the dialog to load all pages (Facebook lazy loads profiles)
+            if dialog.count() > 0:
+                self.logger.info("FacebookAdapter: Scrolling switcher dialog to load all profiles...")
+                for _ in range(5):
+                    try:
+                        dialog.evaluate("el => el.scrollTop = el.scrollHeight")
+                        self.page.wait_for_timeout(1000)
+                    except Exception:
+                        break
 
             # 3a. Prefer href match (numeric id) — FB often uses role=link or bare href, not only <a>.
             page_id = self._facebook_numeric_id_from_url(target_page_url or "")

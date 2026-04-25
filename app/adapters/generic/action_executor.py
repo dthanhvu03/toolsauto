@@ -92,7 +92,7 @@ class StepConfig:
             value_source=d.get("value_source", ""),
             url_key=d.get("url_key", ""),
             url=d.get("url", ""),
-            required=d.get("required", True),
+            required=d.get("required", not d.get("optional", False)),
             timeout_ms=d.get("timeout_ms", 10000),
             wait_after_ms=d.get("wait_after_ms", 1000),
             retry_count=d.get("retry_count", 1),
@@ -310,6 +310,7 @@ class ActionExecutor:
             "fill": self._action_fill,
             "upload_file": self._action_upload_file,
             "wait": self._action_wait,
+            "wait_visible": self._action_wait_visible,
             "verify": self._action_verify,
             "check_auth": self._action_check_auth,
         }
@@ -387,7 +388,16 @@ class ActionExecutor:
                 details={"locator_log": result.log_entries},
             )
 
-        result.locator.click(timeout=step.timeout_ms)
+        try:
+            result.locator.click(force=True, timeout=step.timeout_ms)
+        except Exception as e:
+            return StepResult(
+                step_name=step.name, action="click",
+                success=False,
+                error=f"Click failed: {str(e)}",
+                artifacts=self._capture_artifacts(job_id, step.name),
+            )
+
         return StepResult(
             step_name=step.name, action="click",
             success=True,
@@ -453,6 +463,11 @@ class ActionExecutor:
         import os
         file_path = ValueResolver.resolve(step.value_source, context)
         if not file_path:
+            if not step.required:
+                return StepResult(
+                    step_name=step.name, action="upload_file",
+                    success=True, details={"msg": "Skipped (not required, no value)"},
+                )
             return StepResult(
                 step_name=step.name, action="upload_file",
                 success=False,
@@ -474,6 +489,11 @@ class ActionExecutor:
         )
 
         if not result.found or not result.locator:
+            if not step.required:
+                return StepResult(
+                    step_name=step.name, action="upload_file",
+                    success=True, details={"msg": "Skipped (not required, element not found)"},
+                )
             return StepResult(
                 step_name=step.name, action="upload_file",
                 success=False,
@@ -482,7 +502,25 @@ class ActionExecutor:
                 details={"locator_log": result.log_entries},
             )
 
-        result.locator.set_input_files(str(file_path))
+        # Determine if we should use direct set_input_files or file_chooser listener
+        try:
+            tag_name = result.locator.evaluate("el => el.tagName.toLowerCase()")
+            if tag_name == "input" and result.locator.get_attribute("type") == "file":
+                result.locator.set_input_files(str(file_path))
+            else:
+                # Use file_chooser listener pattern
+                with self.page.expect_file_chooser() as fc_info:
+                    result.locator.click()
+                file_chooser = fc_info.value
+                file_chooser.set_files(str(file_path))
+        except Exception as e:
+            return StepResult(
+                step_name=step.name, action="upload_file",
+                success=False,
+                error=f"Upload failed: {str(e)}",
+                artifacts=self._capture_artifacts(job_id, step.name),
+            )
+
         return StepResult(
             step_name=step.name, action="upload_file",
             success=True,
@@ -501,6 +539,39 @@ class ActionExecutor:
         return StepResult(
             step_name=step.name, action="wait",
             success=True, details={"waited_ms": wait_ms},
+        )
+
+    # ── Action: Wait Visible ─────────────────────────────────────
+
+    def _action_wait_visible(
+        self, step: StepConfig, context: dict, job_id: int,
+    ) -> StepResult:
+        """Wait for an element to become visible."""
+        candidates = self._build_candidates(step.selector_keys)
+        if not candidates:
+            return StepResult(
+                step_name=step.name, action="wait_visible",
+                success=False, error="No selector candidates provided.",
+            )
+
+        result = self.locator_engine.resolve(
+            step.name, candidates,
+            must_be_visible=True,
+            timeout_ms=step.timeout_ms,
+        )
+
+        if not result.found:
+            return StepResult(
+                step_name=step.name, action="wait_visible",
+                success=False,
+                error=f"Element not visible within {step.timeout_ms}ms",
+                artifacts=self._capture_artifacts(job_id, step.name),
+            )
+
+        return StepResult(
+            step_name=step.name, action="wait_visible",
+            success=True,
+            locator_strategy_used=result.strategy_used,
         )
 
     # ── Action: Verify ───────────────────────────────────────────

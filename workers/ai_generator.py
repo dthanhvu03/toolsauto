@@ -12,7 +12,7 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
-from app.services.queue import QueueService
+from app.services.job_queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_TICK_SECONDS
 from app.services.worker import WorkerService

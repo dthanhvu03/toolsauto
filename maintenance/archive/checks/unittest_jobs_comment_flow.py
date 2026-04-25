@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database.models import Base, Account, Job, now_ts
 from app.services.job import JobService
-from app.services.queue import QueueService
+from app.services.job_queue import QueueService
 
 
 def _make_session():

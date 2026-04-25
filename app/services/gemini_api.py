@@ -99,7 +99,8 @@ class GeminiAPIService:
 
             except genai_errors.ClientError as e:
                 # 429 = Resource Exhausted
-                if e.status_code == 429:
+                code = getattr(e, "code", None) or getattr(e, "status_code", None)
+                if code == 429:
                     logger.warning(
                         f"🔥 [Gemini Rotation] {model_name} quota exceeded. "
                         f"Switching to next model."
@@ -108,7 +109,7 @@ class GeminiAPIService:
                     last_error = e
                     continue
                 # 404 = Not Found
-                elif e.status_code == 404:
+                elif code == 404:
                     logger.warning(
                         f"⚠️ [Gemini] {model_name} not available (404), "
                         f"skipping to next model."

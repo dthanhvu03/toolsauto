@@ -17,7 +17,7 @@ logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publish
 
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
-from app.services.queue import QueueService
+from app.services.job_queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
