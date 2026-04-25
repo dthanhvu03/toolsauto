@@ -514,7 +514,40 @@ class FacebookReelsPage:
             surface.locator('div[contenteditable="true"]').first,
             surface.locator("textarea").first,
         ]
+        
+        # Extended javascript fallback to find any element that looks like a caption box
+        js_find_caption = """
+        () => {
+            const editables = Array.from(document.querySelectorAll('[contenteditable="true"], textarea, [role="textbox"]'));
+            for (let el of editables) {
+                const label = (el.getAttribute('aria-label') || '').toLowerCase();
+                const placeholder = (el.getAttribute('aria-placeholder') || '').toLowerCase();
+                if (label.includes('mô tả') || label.includes('describe') || label.includes('reel') || 
+                    placeholder.includes('mô tả') || placeholder.includes('describe') || placeholder.includes('reel') || 
+                    placeholder.includes('thước phim')) {
+                    return el;
+                }
+            }
+            return null;
+        }
+        """
+
         signature = caption[:24].strip()
+        
+        # Try JS fallback first if it matches exactly
+        try:
+            js_el = self.page.evaluate_handle(js_find_caption)
+            if js_el:
+                self.logger.debug("FacebookAdapter: JS Fallback found caption element.")
+                js_el.click(force=True, timeout=3000)
+                self.page.wait_for_timeout(500)
+                human_type(self.page, caption)
+                self.page.wait_for_timeout(800)
+                self.logger.info("FacebookAdapter: Caption typed via JS fallback.")
+                return True
+        except Exception as e:
+            self.logger.debug("FacebookAdapter: JS Fallback failed: %s", e)
+
         for candidate in candidates:
             if not self._is_visible(candidate):
                 continue
@@ -545,6 +578,18 @@ class FacebookReelsPage:
                 return True
             except Exception as e:
                 self.logger.debug("FacebookAdapter: Caption typing candidate failed: %s", e)
+                
+        # Last resort: Try keyboard typing if we can just click the dialog
+        try:
+            self.logger.warning("FacebookAdapter: All caption candidates failed. Trying blind keyboard typing...")
+            surface.click(force=True, timeout=2000)
+            self.page.keyboard.press("Tab")
+            self.page.wait_for_timeout(300)
+            human_type(self.page, caption)
+            return True
+        except Exception:
+            pass
+
         return False
 
     def check_page_for_errors(self) -> str | None:
