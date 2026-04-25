@@ -196,6 +196,30 @@ async def link_account_to_threads(request: Request, account_id: int = Form(...),
         headers={"HX-Redirect": "/threads"}
     )
 
+@router.post("/cancel-verify", response_class=HTMLResponse)
+async def cancel_threads_verification(request: Request, account_id: int = Form(...), db: Session = Depends(get_db)):
+    """Cancel any pending/running VERIFY_THREADS jobs for an account."""
+    active_jobs = db.query(Job).filter(
+        Job.account_id == account_id,
+        Job.job_type == JobType.VERIFY_THREADS,
+        Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING])
+    ).all()
+
+    for j in active_jobs:
+        j.status = JobStatus.CANCELLED
+        j.last_error = "Cancelled by user"
+        j.finished_at = int(time.time())
+
+    if active_jobs:
+        db.commit()
+        logger.info("Cancelled %d VERIFY_THREADS job(s) for account_id %s", len(active_jobs), account_id)
+
+    return HTMLResponse(
+        content="",
+        status_code=200,
+        headers={"HX-Redirect": "/threads"}
+    )
+
 @router.post("/retry-verify", response_class=HTMLResponse)
 async def retry_threads_verification(request: Request, account_id: int = Form(...), db: Session = Depends(get_db)):
     """Retry a failed Threads verification by creating a new VERIFY_THREADS job."""
