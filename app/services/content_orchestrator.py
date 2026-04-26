@@ -822,11 +822,12 @@ Trả lời mỗi comment trên 1 dòng, đánh số 1. 2. 3. ..."""
         keywords = data.get("keywords")
         if not isinstance(caption, str) or not caption.strip():
             return False
-        if not isinstance(hashtags, list) or not all(isinstance(x, (str, int, float, bool)) for x in hashtags):
+        if hashtags is not None and (not isinstance(hashtags, list) or not all(isinstance(x, (str, int, float, bool)) for x in hashtags)):
             return False
-        if not isinstance(keywords, list) or not all(isinstance(x, (str, int, float, bool)) for x in keywords):
+        if keywords is not None and (not isinstance(keywords, list) or not all(isinstance(x, (str, int, float, bool)) for x in keywords)):
             return False
-        if not isinstance(data.get("affiliate_keyword", ""), str):
+        affiliate_kw = data.get("affiliate_keyword")
+        if affiliate_kw is not None and not isinstance(affiliate_kw, str):
             return False
         return True
 
