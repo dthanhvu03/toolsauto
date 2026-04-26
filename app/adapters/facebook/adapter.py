@@ -986,6 +986,20 @@ class FacebookAdapter(AdapterInterface):
             reels.log_surface_inventory(surface, "before_post")
             post_button = reels.find_post_button(surface)
             if not post_button:
+                # Handle new Facebook UI flow: Click 'Next' (Tiếp) one more time if Post is missing
+                next_btn_extra = reels.find_next_button(surface)
+                if next_btn_extra and self._is_visible(next_btn_extra):
+                    self.logger.info("FacebookAdapter: Post button not found, but 'Next' button is visible. Clicking to advance to final post screen...")
+                    try:
+                        next_btn_extra.click(timeout=3000, force=True)
+                        self.page.wait_for_timeout(3000)
+                        surface = reels.find_active_publish_surface()
+                        reels.log_surface_inventory(surface, "before_post_retry")
+                        post_button = reels.find_post_button(surface)
+                    except Exception as e:
+                        self.logger.warning("FacebookAdapter: Failed to click extra 'Next' button: %s", e)
+
+            if not post_button:
                 return self._failure_result(
                     job.id,
                     "post_button",
