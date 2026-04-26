@@ -5,7 +5,7 @@ from sqlalchemy import func
 import time
 import datetime
 from app.database.core import get_db
-from app.database.models import Job, Account, DiscoveredChannel
+from app.database.models import Job, Account, DiscoveredChannel, IncidentGroup
 from app.services.worker import WorkerService
 from app.services.account import AccountService, get_discovery_keywords
 from app.services.log_query_facade import LogQueryFacade
@@ -321,6 +321,120 @@ def app_logs_domain_events(
     )
 
 
+
+
+@router.get("/app/logs/ai-analytics", response_class=HTMLResponse)
+def app_logs_ai_analytics(request: Request, db: Session = Depends(get_db)):
+    """HTMX fragment: AI Analytics tab (Health Report card + Top Incidents table)."""
+    groups = (
+        db.query(IncidentGroup)
+        .order_by(
+            IncidentGroup.occurrence_count.desc(),
+            IncidentGroup.last_seen_at.desc(),
+        )
+        .limit(50)
+        .all()
+    )
+    return templates.TemplateResponse(
+        "fragments/ai_analytics_tab.html",
+        {"request": request, "groups": groups},
+    )
+
+
+@router.get("/app/logs/ai-report/live", response_class=HTMLResponse)
+def app_logs_ai_report_live(request: Request, db: Session = Depends(get_db)):
+    """HTMX fragment: generate a live AI health report from the last 24h of incidents."""
+    import html as _html
+    from datetime import datetime, timedelta, timezone
+
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    groups = (
+        db.query(IncidentGroup)
+        .filter(
+            IncidentGroup.last_seen_at >= since,
+            IncidentGroup.status.in_(["open", "acknowledged"]),
+        )
+        .order_by(IncidentGroup.occurrence_count.desc())
+        .limit(20)
+        .all()
+    )
+
+    if not groups:
+        return HTMLResponse(
+            '<div class="text-sm text-gray-500 italic p-3">'
+            'Không có incident nào trong 24h qua. Hệ thống đang ổn định.'
+            '</div>'
+        )
+
+    # Reuse the prompt builder from the ai_reporter worker so UI and Telegram report stay in sync.
+    from workers.ai_reporter import _build_prompt
+    from app.services.ai_runtime import pipeline
+
+    prompt = _build_prompt(groups)
+    try:
+        text, meta = pipeline.generate_text(prompt)
+    except Exception as exc:
+        return HTMLResponse(
+            f'<div class="text-sm text-red-600 p-3">AI pipeline error: {_html.escape(str(exc))}</div>'
+        )
+
+    if not (meta.get("ok") and text):
+        reason = meta.get("fail_reason", "empty response")
+        return HTMLResponse(
+            f'<div class="text-sm text-red-600 p-3">'
+            f'AI generation failed: {_html.escape(str(reason))}'
+            f'</div>'
+        )
+
+    try:
+        import markdown2
+        body_html = markdown2.markdown(
+            text, extras=["tables", "fenced-code-blocks", "break-on-newline"]
+        )
+    except Exception:
+        body_html = "<pre class='whitespace-pre-wrap text-sm'>" + _html.escape(text) + "</pre>"
+
+    meta_line = (
+        f'<div class="text-[10px] text-gray-400 mt-2">'
+        f'groups_in_report={len(groups)} • model_ok={bool(meta.get("ok"))} '
+        f'• generated_at={datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+        f'</div>'
+    )
+    return HTMLResponse(
+        f'<div class="prose prose-sm max-w-none ai-report-body">{body_html}</div>{meta_line}'
+    )
+
+
+@router.post("/app/logs/incident/{signature}/ack", response_class=HTMLResponse)
+def app_logs_incident_ack(
+    signature: str, request: Request, db: Session = Depends(get_db)
+):
+    """Mark an incident group as acknowledged. Returns the updated row HTML for HTMX swap."""
+    from datetime import datetime, timezone
+
+    group = (
+        db.query(IncidentGroup)
+        .filter(IncidentGroup.error_signature == signature)
+        .first()
+    )
+    if not group:
+        return HTMLResponse(
+            '<tr><td colspan="7" class="px-3 py-2 text-xs text-red-600">'
+            'Incident group not found (đã bị xoá?)'
+            '</td></tr>',
+            status_code=404,
+        )
+
+    group.status = "acknowledged"
+    group.acknowledged_by = "dashboard"
+    group.acknowledged_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(group)
+
+    return templates.TemplateResponse(
+        "fragments/incident_group_row.html",
+        {"request": request, "g": group},
+    )
 
 
 @router.get("/app/control-plane", response_class=HTMLResponse)
