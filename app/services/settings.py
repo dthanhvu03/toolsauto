@@ -612,6 +612,89 @@ SETTINGS: dict[str, SettingSpec] = {
         env_only=True,
         env_var_name="TELEGRAM_CHAT_ID",
     ),
+    "THREADS_AUTO_MODE": SettingSpec(
+        key="THREADS_AUTO_MODE",
+        type="bool",
+        default_getter=lambda: False,
+        title="Bật Auto Threads News",
+        section="Threads Auto",
+        description="Tự động thu thập và đăng báo mới lên Threads.",
+    ),
+    "THREADS_POST_INTERVAL_MIN": SettingSpec(
+        key="THREADS_POST_INTERVAL_MIN",
+        type="int",
+        default_getter=lambda: 180,
+        title="Giới hạn thời gian (Cooldown)",
+        section="Threads Auto",
+        description="Khoảng thời gian tối thiểu (phút) giữa 2 bài đăng tự động trên Threads để tránh spam.",
+        min=10,
+        max=1440,
+        unit="phút",
+    ),
+    "THREADS_SCRAPE_CYCLE_MIN": SettingSpec(
+        key="THREADS_SCRAPE_CYCLE_MIN",
+        type="int",
+        default_getter=lambda: 30,
+        title="Chu kỳ quét tin mới",
+        section="Threads Auto",
+        description="Worker quét nguồn tin tức mỗi bao nhiêu phút. Giảm = cập nhật nhanh hơn, tăng tải hệ thống.",
+        min=5,
+        max=360,
+        unit="phút",
+    ),
+    "THREADS_MAX_CHARS_PER_SEGMENT": SettingSpec(
+        key="THREADS_MAX_CHARS_PER_SEGMENT",
+        type="int",
+        default_getter=lambda: 450,
+        title="Ký tự tối đa mỗi bài trong thread",
+        section="Threads Auto",
+        description="Giới hạn ký tự cho mỗi bài đăng trong chuỗi thread (Threads giới hạn ~500 ký tự).",
+        min=100,
+        max=500,
+        unit="ký tự",
+    ),
+    "THREADS_MAX_CAPTION_LENGTH": SettingSpec(
+        key="THREADS_MAX_CAPTION_LENGTH",
+        type="int",
+        default_getter=lambda: 500,
+        title="Ký tự tối đa caption (cắt cuối)",
+        section="Threads Auto",
+        description="Giới hạn cuối cùng cho caption sau khi thêm nguồn. Bài vượt quá sẽ bị cắt bớt.",
+        min=200,
+        max=600,
+        unit="ký tự",
+    ),
+    "THREADS_AI_PROMPT": SettingSpec(
+        key="THREADS_AI_PROMPT",
+        type="text",
+        default_getter=lambda: """Hãy đóng vai chuyên gia sáng tạo nội dung cho Threads.
+Viết lại tin tức này thành bài đăng Threads cực thu hút.
+
+YÊU CẦU ĐẶC BIỆT (Threading):
+- Nếu tin tức dài hoặc có nhiều ý hay, hãy chia thành một chuỗi (thread) gồm 2-4 bài đăng.
+- Bài đầu tiên (Head) phải cực kỳ "giật gân" (Hook).
+- Các bài sau bổ sung chi tiết.
+- Mỗi bài dưới {max_chars} ký tự.
+
+QUY TẮC STYLE:
+1. TIÊU ĐỀ VIẾT HOA (Hook), dùng emoji biểu cảm ‼️🔥.
+2. Cấu trúc: 2-5 dòng, không hashtag.
+3. Cung cấp nội dung cô đọng nhất.
+
+TIN GỐC:
+Tiêu đề: {title}
+Tóm tắt: {summary}
+Nguồn: {source_name}
+
+TRẢ VỀ JSON LIST (Mảng các object):
+[
+  {{"caption": "Nội dung bài 1...", "reasoning": "..."}},
+  {{"caption": "Nội dung bài 2...", "reasoning": "..."}}
+]""",
+        title="AI Prompt viết bài Threads",
+        section="Threads Auto",
+        description="Template prompt gửi cho Gemini. Dùng {title}, {summary}, {source_name}, {max_chars} làm biến thay thế.",
+    ),
 }
 
 
