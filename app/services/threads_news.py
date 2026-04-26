@@ -72,6 +72,7 @@ class ThreadsNewsService:
             # 2. Check cooldown
             last_job = db.query(Job).filter(
                 Job.platform == "threads",
+                Job.job_type == "post",
                 Job.created_at >= int(time.time()) - (interval_min * 60)
             ).first()
             if last_job:
@@ -87,10 +88,10 @@ class ThreadsNewsService:
                 logger.info("No new articles to post to Threads.")
                 return
 
-            # 4. Find Threads account (Hoang Khoa)
-            account = db.query(Account).filter(Account.profile_path.like("%facebook_3")).first()
+            # 4. Find connected Threads account
+            account = db.query(Account).filter(Account.platform.like("%threads%"), Account.is_active == True).first()
             if not account:
-                logger.error("Threads account (Hoang Khoa / facebook_3) not found in DB.")
+                logger.error("No active Threads account found in DB.")
                 return
 
             logger.info(f"Processing article '{article.title}' for Threads...")
