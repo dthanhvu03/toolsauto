@@ -177,7 +177,7 @@ class FacebookAdapter(AdapterInterface):
                     continue
                 try:
                     full_u = href if href.startswith("http") else f"{FACEBOOK_HOST}{href}"
-                    self.page.goto(full_u, wait_until="commit", timeout=10000)
+                    self._safe_goto(full_u, wait_until="commit", timeout=10000)
                     self.page.wait_for_timeout(3000)
                     if salt in (self.page.evaluate("document.body.innerText") or ""):
                         post_url = self._normalize_post_url(full_u)
@@ -362,6 +362,26 @@ class FacebookAdapter(AdapterInterface):
         # Common Vietnamese 'đ' handling if we want to be very broad
         n = n.replace("đ", "d").replace("Đ", "d")
         return n
+
+
+    def _safe_goto(self, url: str, wait_until: str = "domcontentloaded", timeout: int = 60000, retries: int = 3) -> bool:
+        if not self.page: return False
+        for attempt in range(retries):
+            try:
+                self.logger.info("FacebookAdapter: Navigating to %s (Attempt %d/%d)...", url, attempt + 1, retries)
+                self.page.goto(url, wait_until=wait_until, timeout=timeout)
+                return True
+            except Exception as e:
+                self.logger.warning("FacebookAdapter: Navigation to %s failed on attempt %d: %s", url, attempt + 1, e)
+                if attempt < retries - 1:
+                    self.logger.info("FacebookAdapter: Waiting 5s before retry...")
+                    try:
+                        self.page.wait_for_timeout(5000)
+                    except Exception:
+                        pass
+                else:
+                    raise e
+        return False
 
     def _ensure_authenticated_context(self) -> bool:
         """Checks for 'Continue as' barriers and bypasses them to return to a standard nav context."""
@@ -629,7 +649,7 @@ class FacebookAdapter(AdapterInterface):
                 self.logger.info("FacebookAdapter: Target Page specified. Navigating to %s (Name: %s)", target_page_url, target_page_name)
                 if not target_page_url.startswith("http"):
                     target_page_url = "https://" + target_page_url
-                self.page.goto(target_page_url, wait_until="domcontentloaded")
+                self._safe_goto(target_page_url, wait_until="domcontentloaded")
                 
                 # [n8n-lite Phase 2] Resolve real numeric ID if current URL is a slug
                 if not self._facebook_numeric_id_from_url(target_page_url):
@@ -667,7 +687,7 @@ class FacebookAdapter(AdapterInterface):
 
                 # Reload target page after switch so Facebook applies identity (slow VPS / delayed UI).
                 try:
-                    self.page.goto(target_page_url, wait_until="domcontentloaded")
+                    self._safe_goto(target_page_url, wait_until="domcontentloaded")
                     self.page.wait_for_timeout(5000)
                 except Exception as e:
                     self.logger.warning("FacebookAdapter: Post-switch reload of target page failed: %s", e)
@@ -711,7 +731,7 @@ class FacebookAdapter(AdapterInterface):
                     self._verify_page_identity(target_page_url, context="pre-post")
             else:
                 self.logger.info("FacebookAdapter: Navigating to %s (Personal Profile)", FACEBOOK_HOST)
-                self.page.goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
+                self._safe_goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
                 
                 active_steps = getattr(job, "active_steps", None)
                 if active_steps is not None and "feed_browse" not in active_steps:
@@ -774,7 +794,7 @@ class FacebookAdapter(AdapterInterface):
                 
                 # Sometimes we need to explicitly reload or wait for redirect
                 if "login" in self.page.url or "checkpoint" in self.page.url:
-                    self.page.goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
+                    self._safe_goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
                     self.page.wait_for_timeout(5000)
                     
                 # Re-check navigation after clicking
@@ -823,7 +843,7 @@ class FacebookAdapter(AdapterInterface):
                         pre_reels_url = target_page_url.rstrip('/') + '/reels_tab' if '?' not in target_page_url else target_page_url + '&sk=reels_tab'
                     else:
                         pre_reels_url = f"{FACEBOOK_HOST}/me/reels_tab"
-                    self.page.goto(pre_reels_url, wait_until="domcontentloaded", timeout=15000)
+                    self._safe_goto(pre_reels_url, wait_until="domcontentloaded", timeout=15000)
                     self.page.wait_for_timeout(6000)
                     for link in self.page.locator('a').all():
                         try:
@@ -841,9 +861,9 @@ class FacebookAdapter(AdapterInterface):
 
             # Navigate back to profile/home for composer entry
             if target_page_url:
-                self.page.goto(target_page_url, wait_until="domcontentloaded")
+                self._safe_goto(target_page_url, wait_until="domcontentloaded")
             else:
-                self.page.goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
+                self._safe_goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
             self.page.wait_for_timeout(3000)
 
             update_active_node(job.id, "feed_browse")
@@ -1146,7 +1166,7 @@ class FacebookAdapter(AdapterInterface):
                         profile_url = target_page_url if target_page_url else f"{FACEBOOK_HOST}/me"
                         self.logger.info("FacebookAdapter: Final fallback: refreshing main profile %s", profile_url)
                         try:
-                            self.page.goto(profile_url, wait_until="domcontentloaded", timeout=15000)
+                            self._safe_goto(profile_url, wait_until="domcontentloaded", timeout=15000)
                             self.page.wait_for_timeout(5000)
                             # Expand just a bit
                             more = self.page.locator('div[role="button"]:has-text("See more"), div[role="button"]:has-text("Xem thêm")').first
@@ -1278,7 +1298,7 @@ class FacebookAdapter(AdapterInterface):
         
         try:
             # Navigate to the user's own profile page
-            self.page.goto(f"{FACEBOOK_HOST}/me", wait_until="domcontentloaded")
+            self._safe_goto(f"{FACEBOOK_HOST}/me", wait_until="domcontentloaded")
             
             # Wait a few seconds for viewport content or lazy loaders
             self.page.wait_for_timeout(5000)
@@ -1370,7 +1390,7 @@ class FacebookAdapter(AdapterInterface):
         
         try:
             # 1. Navigate to the post
-            self.page.goto(post_url, wait_until="domcontentloaded")
+            self._safe_goto(post_url, wait_until="domcontentloaded")
             self.page.wait_for_timeout(random.randint(3000, 5000))
             
             # 1b. Debug: screenshot after page load to diagnose login walls
@@ -1671,7 +1691,7 @@ class FacebookAdapter(AdapterInterface):
         if not self.page or not target_page_url:
             return False
         try:
-            self.page.goto(target_page_url, wait_until="domcontentloaded")
+            self._safe_goto(target_page_url, wait_until="domcontentloaded")
             self.page.wait_for_timeout(4000)
             switch_sel = SELECTORS["switch_menu"]["switch_now_button"]
             switch_visible = self.page.locator(switch_sel).count() > 0
@@ -1723,7 +1743,7 @@ class FacebookAdapter(AdapterInterface):
                 self._normalize_fb_profile_url_for_compare(target_page_url or ""),
             )
         try:
-            self.page.goto(f"{FACEBOOK_HOST}/me", wait_until="domcontentloaded")
+            self._safe_goto(f"{FACEBOOK_HOST}/me", wait_until="domcontentloaded")
             self.page.wait_for_timeout(3000)
             active_url = self.page.url
         except Exception as e:
