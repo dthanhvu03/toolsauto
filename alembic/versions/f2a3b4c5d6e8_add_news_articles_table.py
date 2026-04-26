@@ -20,26 +20,29 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.create_table('news_articles',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('source_url', sa.String(), nullable=False),
-        sa.Column('source_name', sa.String(), nullable=True),
-        sa.Column('title', sa.String(), nullable=False),
-        sa.Column('summary', sa.Text(), nullable=True),
-        sa.Column('content', sa.Text(), nullable=True),
-        sa.Column('image_url', sa.String(), nullable=True),
-        sa.Column('category', sa.String(), nullable=True),
-        sa.Column('published_at', sa.Integer(), nullable=True),
-        sa.Column('status', sa.String(), nullable=True),
-        sa.Column('created_at', sa.Integer(), nullable=True),
-        sa.Column('updated_at', sa.Integer(), nullable=True),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_news_articles_id'), 'news_articles', ['id'], unique=False)
-    op.create_index(op.f('ix_news_articles_source_url'), 'news_articles', ['source_url'], unique=True)
-    op.create_index(op.f('ix_news_articles_category'), 'news_articles', ['category'], unique=False)
-    op.create_index(op.f('ix_news_articles_published_at'), 'news_articles', ['published_at'], unique=False)
-    op.create_index(op.f('ix_news_articles_status'), 'news_articles', ['status'], unique=False)
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    if not inspector.has_table('news_articles'):
+        op.create_table('news_articles',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('source_url', sa.String(), nullable=False),
+            sa.Column('source_name', sa.String(), nullable=True),
+            sa.Column('title', sa.String(), nullable=False),
+            sa.Column('summary', sa.Text(), nullable=True),
+            sa.Column('content', sa.Text(), nullable=True),
+            sa.Column('image_url', sa.String(), nullable=True),
+            sa.Column('category', sa.String(), nullable=True),
+            sa.Column('published_at', sa.Integer(), nullable=True),
+            sa.Column('status', sa.String(), nullable=True),
+            sa.Column('created_at', sa.Integer(), nullable=True),
+            sa.Column('updated_at', sa.Integer(), nullable=True),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_news_articles_id'), 'news_articles', ['id'], unique=False)
+        op.create_index(op.f('ix_news_articles_source_url'), 'news_articles', ['source_url'], unique=True)
+        op.create_index(op.f('ix_news_articles_category'), 'news_articles', ['category'], unique=False)
+        op.create_index(op.f('ix_news_articles_published_at'), 'news_articles', ['published_at'], unique=False)
+        op.create_index(op.f('ix_news_articles_status'), 'news_articles', ['status'], unique=False)
 
 
 def downgrade() -> None:

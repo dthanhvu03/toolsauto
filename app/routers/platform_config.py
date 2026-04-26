@@ -50,12 +50,12 @@ def start_mcp_inspector(request: Request):
         f"HOST=0.0.0.0 CLIENT_PORT={MCP_PROXY_PORT} SERVER_PORT={mcp_server_port} "
         f"npx -y @modelcontextprotocol/inspector -- {python_exec} {mcp_script}"
     )
-    subprocess.run(["tmux", "new", "-d", "-s", session_name, cmd])
+    subprocess.run(["tmux", "new", "-d", "-x", "200", "-s", session_name, cmd])
 
     # Step 3: Poll output để lấy token
     auth_token = None
     last_out = ""
-    for _ in range(60):
+    for _ in range(120):  # Wait up to 60s for npx to install
         time.sleep(0.5)
         res = subprocess.run(["tmux", "capture-pane", "-p", "-t", session_name], capture_output=True, text=True)
         out = res.stdout
