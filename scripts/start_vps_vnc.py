@@ -58,20 +58,24 @@ def main():
     if not xvfb_processes.strip():
         return
 
-    # Try to find display and auth
-    # Improved regex to specifically look for Xvfb followed by display
-    match = re.search(r"Xvfb\s+(:\d+).*?-auth\s+(\S+)", xvfb_processes)
-    if not match:
-        # Fallback: just try to find display after Xvfb
-        match_display = re.search(r"Xvfb\s+(:\d+)", xvfb_processes)
-        if not match_display:
-            print("Error: Could not determine Xvfb display.")
-            return
-        display = match_display.group(1)
-        auth = None
+    # Find all Xvfb displays and prefer DEFAULT_DISPLAY (:99) over
+    # temporary displays created by xvfb-run (Playwright, etc.)
+    all_displays = re.findall(r"Xvfb\s+(:\d+)", xvfb_processes)
+    if not all_displays:
+        print("Error: Could not determine Xvfb display.")
+        return
+
+    # Prefer DEFAULT_DISPLAY if it exists, otherwise use first found
+    if DEFAULT_DISPLAY in all_displays:
+        display = DEFAULT_DISPLAY
+        print(f"Using preferred display {display} (found {len(all_displays)} total: {all_displays})")
     else:
-        display = match.group(1)
-        auth = match.group(2)
+        display = all_displays[0]
+        print(f"DEFAULT_DISPLAY {DEFAULT_DISPLAY} not found, using {display} (from {all_displays})")
+
+    # Try to find auth for the chosen display
+    auth_match = re.search(r"Xvfb\s+" + re.escape(display) + r".*?-auth\s+(\S+)", xvfb_processes)
+    auth = auth_match.group(1) if auth_match else None
 
     print(f"Detected Display: {display}")
     if auth:
