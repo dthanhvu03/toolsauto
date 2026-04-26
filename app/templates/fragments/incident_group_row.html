@@ -1,0 +1,54 @@
+{# Single row in the Top Incidents table. Used both in the initial render and as the response of POST /app/logs/incident/{sig}/ack so HTMX can swap it inline. #}
+{%- set status = (g.status or 'open')|lower -%}
+{%- set sev = (g.severity_max or 'error')|lower -%}
+<tr id="incident-row-{{ g.error_signature }}" class="border-b border-gray-200 hover:bg-gray-50">
+  <td class="px-3 py-2 text-xs font-mono text-gray-700 break-all" title="{{ g.error_signature }}">
+    {{ g.error_signature[:16] }}{% if g.error_signature|length > 16 %}…{% endif %}
+  </td>
+  <td class="px-3 py-2 text-xs">
+    <span class="inline-flex items-center gap-1">
+      <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold uppercase text-[10px]">{{ g.last_platform or '-' }}</span>
+      {% if sev == 'critical' %}
+        <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold uppercase text-[10px]">CRIT</span>
+      {% elif sev == 'error' %}
+        <span class="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold uppercase text-[10px]">ERR</span>
+      {% else %}
+        <span class="px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 font-semibold uppercase text-[10px]">WARN</span>
+      {% endif %}
+    </span>
+  </td>
+  <td class="px-3 py-2 text-xs text-right font-semibold text-gray-900">{{ g.occurrence_count }}</td>
+  <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
+    {{ g.last_seen_at.strftime('%Y-%m-%d %H:%M') if g.last_seen_at else '-' }}
+  </td>
+  <td class="px-3 py-2 text-xs text-gray-700 max-w-[420px] truncate" title="{{ g.last_sample_message or '' }}">
+    {{ (g.last_sample_message or '-')|truncate(120, true, '…') }}
+  </td>
+  <td class="px-3 py-2 text-xs">
+    {% if status == 'acknowledged' %}
+      <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold text-[10px] uppercase">Acknowledged</span>
+    {% elif status == 'resolved' %}
+      <span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold text-[10px] uppercase">Resolved</span>
+    {% elif status == 'ignored' %}
+      <span class="px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 font-semibold text-[10px] uppercase">Ignored</span>
+    {% else %}
+      <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold text-[10px] uppercase">Open</span>
+    {% endif %}
+  </td>
+  <td class="px-3 py-2 text-xs text-right">
+    {% if status == 'open' %}
+      <button type="button"
+              class="h-7 px-2.5 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              hx-post="/app/logs/incident/{{ g.error_signature }}/ack"
+              hx-target="#incident-row-{{ g.error_signature }}"
+              hx-swap="outerHTML"
+              hx-confirm="Đánh dấu nhóm lỗi này là đã xem?">
+        Acknowledge
+      </button>
+    {% else %}
+      <span class="text-[11px] text-gray-400">
+        {% if g.acknowledged_at %}@ {{ g.acknowledged_at.strftime('%m-%d %H:%M') }}{% else %}—{% endif %}
+      </span>
+    {% endif %}
+  </td>
+</tr>

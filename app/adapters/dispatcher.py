@@ -78,6 +78,32 @@ class Dispatcher:
     """
     
     @staticmethod
+    def _log_dispatch_incident(job: Job, exc: BaseException, feature: str | None = None, severity: str = "error"):
+        """Best-effort structured incident logging at the dispatcher boundary."""
+        try:
+            from app.services.incident_logger import IncidentLogger
+
+            account = getattr(job, "account", None)
+            IncidentLogger.log_incident(
+                exception=exc,
+                platform=getattr(job, "platform", "unknown"),
+                job_id=getattr(job, "id", None),
+                account_id=getattr(job, "account_id", None) or getattr(account, "id", None),
+                feature=feature or getattr(job, "job_type", None),
+                worker_name="dispatcher",
+                severity=severity,
+                context={
+                    "job_status": getattr(job, "status", None),
+                    "job_type": getattr(job, "job_type", None),
+                    "target_page": getattr(job, "target_page", None),
+                    "account_name": getattr(account, "name", None),
+                },
+                source_log_ref="logs/app.log",
+            )
+        except Exception:
+            logger.debug("[Job %s] Incident logging failed", getattr(job, "id", None), exc_info=True)
+
+    @staticmethod
     def _inject_cta(platform: str, text: str, locale: str = "vi") -> str:
         """Inject random CTA into raw link text using Registry phase 2."""
         if not text: return text
@@ -223,10 +249,12 @@ class Dispatcher:
             
         except PageMismatchError as e:
             job_tracer.finish_job_trace(job.id, "failed", str(e))
+            Dispatcher._log_dispatch_incident(job, e, feature=getattr(job, "job_type", None), severity="error")
             raise e
 
         except Exception as e:
             job_tracer.finish_job_trace(job.id, "failed", str(e))
+            Dispatcher._log_dispatch_incident(job, e, feature=getattr(job, "job_type", None), severity="error")
             # Check for specific class of session invalidation errors
             if "SessionInvalid" in type(e).__name__ or "SessionInvalid" in str(e):
                 logger.error("[Job %s] Adapter hit a fatal SessionInvalid exception. Account must be invalidated.", job.id)
