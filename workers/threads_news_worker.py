@@ -15,6 +15,20 @@ logger = setup_shared_logger("threads_news_worker")
 
 from app.services.news_scraper import NewsScraper
 from app.services.threads_news import ThreadsNewsService
+from app.database.core import SessionLocal
+from app.database.models import RuntimeSetting
+
+def _get_scrape_cycle_seconds():
+    """Read THREADS_SCRAPE_CYCLE_MIN from DB, default 30 min."""
+    try:
+        db = SessionLocal()
+        s = db.query(RuntimeSetting).filter(RuntimeSetting.key == "THREADS_SCRAPE_CYCLE_MIN").first()
+        db.close()
+        if s:
+            return int(s.value) * 60
+    except Exception:
+        pass
+    return 1800  # 30 min default
 
 def run_loop():
     logger.info("Threads News Worker started.")
@@ -33,8 +47,9 @@ def run_loop():
             logger.info("Processing news to Threads...")
             service.process_news_to_threads()
             
-            logger.info("Cycle complete. Sleeping for 30 minutes...")
-            time.sleep(1800)
+            sleep_sec = _get_scrape_cycle_seconds()
+            logger.info(f"Cycle complete. Sleeping for {sleep_sec // 60} minutes...")
+            time.sleep(sleep_sec)
             
         except KeyboardInterrupt:
             logger.info("Worker stopped by user.")
