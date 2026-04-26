@@ -209,8 +209,9 @@ def process_draft_job(db: Session):
         
         if ai_result and ai_result.get("caption"):
             final_text = ai_result["caption"].strip()
-            if ai_result.get("hashtags"):
-                final_text += "\n\n" + " ".join(ai_result["hashtags"])
+            hashtags = ai_result.get("hashtags")
+            if hashtags:
+                final_text += "\n\n" + " ".join(hashtags)
             if existing_salt:
                 final_text += f"\n\n{existing_salt}"
                 
@@ -218,7 +219,7 @@ def process_draft_job(db: Session):
             job.status = JobStatus.DRAFT
             
             # Pass AI generated keywords to notifier temporarily
-            job._ai_keywords = ai_result.get("keywords", [])
+            job._ai_keywords = ai_result.get("keywords") or []
             
             # Xử lý Affiliate Link Injector
             matched_aff_kw = ai_result.get("affiliate_keyword")

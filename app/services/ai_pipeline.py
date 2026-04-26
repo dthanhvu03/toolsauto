@@ -76,10 +76,10 @@ class CircuitBreaker:
 
 class CaptionPayload(BaseModel):
     caption: str
-    hashtags: List[str] = Field(default_factory=list)
-    keywords: List[str] = Field(default_factory=list)
-    affiliate_keyword: str = ""
-    reasoning: str = ""
+    hashtags: Optional[List[str]] = Field(default_factory=list)
+    keywords: Optional[List[str]] = Field(default_factory=list)
+    affiliate_keyword: Optional[str] = ""
+    reasoning: Optional[str] = ""
 
     model_config = ConfigDict(populate_by_name=True)
 
