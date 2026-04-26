@@ -1,10 +1,16 @@
 """
-Threads Verification Worker
-============================
+Threads Verification Worker (Headed / VNC-visible)
+====================================================
 Background worker that processes VERIFY_THREADS jobs.
-Uses Playwright to launch the account's browser profile,
-navigates to threads.net, and checks if the session is logged in
-by inspecting BarcelonaSessionInfo in the page source.
+Uses Playwright to launch the account's browser profile WITH GUI
+on the VNC display (:99), so the user can see and interact with
+the browser via VNC.
+
+Flow:
+1. Opens browser on VNC display :99 → navigates to threads.net
+2. Waits up to USER_INTERACTION_TIMEOUT seconds for user to log in
+3. Periodically checks login state every CHECK_INTERVAL seconds
+4. If logged in → marks as Connected. If timeout → marks as Failed.
 
 Run with: python workers/threads_verifier.py
 Manage with PM2: pm2 start workers/threads_verifier.py --name threads-verifier --interpreter python3
@@ -30,16 +36,55 @@ from app.database.models import Account, Job
 from app.constants import JobType, JobStatus
 
 # ---------- Configuration ----------
-POLL_INTERVAL = 15          # seconds between poll cycles
-VERIFY_TIMEOUT = 60000      # Playwright navigation timeout (ms)
-PAGE_SETTLE_WAIT = 6        # seconds to wait for page JS to settle
-MAX_RETRIES_PER_JOB = 2     # retry count before marking FAILED
+POLL_INTERVAL = 15                # seconds between poll cycles
+VERIFY_TIMEOUT = 60000            # Playwright navigation timeout (ms)
+USER_INTERACTION_TIMEOUT = 120    # seconds to wait for user to log in via VNC
+CHECK_INTERVAL = 10               # seconds between login state checks
+VNC_DISPLAY = ":99"               # X11 display for VNC (must match start_vps_vnc.py)
+MAX_RETRIES_PER_JOB = 2           # retry count before marking FAILED
+
+
+async def check_login_state(page) -> tuple[bool, str]:
+    """
+    Check if the current page shows a logged-in Threads session.
+    Returns (is_logged_in, detail_message).
+    """
+    try:
+        content = await page.content()
+
+        # Strategy 1: BarcelonaSessionInfo (most reliable)
+        if '"is_logged_out":false' in content or '"is_logged_out": false' in content:
+            return True, "BarcelonaSessionInfo confirms logged in"
+
+        if '"is_logged_out":true' in content or '"is_logged_out": true' in content:
+            return False, "BarcelonaSessionInfo confirms logged out"
+
+        # Strategy 2: Login button detection
+        login_btn = page.locator('a[href*="/login"], button:has-text("Log in"), button:has-text("Dang nhap")')
+        login_count = await login_btn.count()
+        if login_count > 0:
+            return False, f"Login button detected ({login_count} found)"
+
+        # Strategy 3: Barcelona page layout
+        nav_bar = page.locator('div[id="barcelona-page-layout"]')
+        if await nav_bar.count() > 0:
+            return True, "Barcelona layout detected"
+
+        # Strategy 4: URL redirect
+        final_url = page.url
+        if "/login" in final_url.lower():
+            return False, f"Redirected to login: {final_url}"
+
+        return False, f"Indeterminate state at {page.url}"
+
+    except Exception as e:
+        return False, f"Check error: {str(e)[:200]}"
 
 
 async def verify_threads_login(account: Account) -> tuple[bool, str]:
     """
-    Launch Playwright with the account's persistent browser profile,
-    navigate to https://www.threads.net/, and determine login state.
+    Launch a VISIBLE browser on VNC display, navigate to threads.net,
+    and wait for user to log in. Periodically checks login state.
 
     Returns:
         (is_logged_in: bool, detail: str)
@@ -50,82 +95,88 @@ async def verify_threads_login(account: Account) -> tuple[bool, str]:
     if not profile_path or not Path(profile_path).exists():
         return False, f"Profile path not found: {profile_path}"
 
-    logger.info("[%s] Launching browser with profile: %s", account.name, profile_path)
+    logger.info("[%s] Launching VISIBLE browser on display %s with profile: %s",
+                account.name, VNC_DISPLAY, profile_path)
+
+    # Set DISPLAY so browser appears on VNC
+    os.environ["DISPLAY"] = VNC_DISPLAY
 
     async with async_playwright() as p:
         context = None
         try:
             context = await p.chromium.launch_persistent_context(
                 user_data_dir=profile_path,
-                headless=True,
+                headless=False,         # HEADED - visible on VNC!
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage",
                     "--disable-gpu",
+                    f"--display={VNC_DISPLAY}",
+                    "--start-maximized",
                 ],
+                no_viewport=True,       # Use full window size
                 timeout=30000,
             )
 
             page = await context.new_page()
-            logger.info("[%s] Navigating to threads.net...", account.name)
+            logger.info("[%s] Navigating to threads.net (visible on VNC)...", account.name)
 
-            response = await page.goto(
+            await page.goto(
                 "https://www.threads.net/",
                 wait_until="domcontentloaded",
                 timeout=VERIFY_TIMEOUT,
             )
 
-            # Wait for React/SPA to hydrate
-            await asyncio.sleep(PAGE_SETTLE_WAIT)
+            # Wait for page to settle
+            await asyncio.sleep(5)
 
-            # Strategy 1: Parse BarcelonaSessionInfo from page source
-            # Threads embeds session info as JSON in a <script> tag:
-            #   "BarcelonaSessionInfo",[],{"is_th_session":true,"is_logged_out":false}
-            content = await page.content()
+            # First quick check - maybe already logged in
+            is_logged_in, detail = await check_login_state(page)
+            if is_logged_in:
+                logger.info("[%s] Already logged in! Detail: %s", account.name, detail)
+                # Keep browser open for 3 seconds so user can see on VNC
+                await asyncio.sleep(3)
+                return True, detail
 
-            if '"is_logged_out":false' in content or '"is_logged_out": false' in content:
-                logger.info("[%s] BarcelonaSessionInfo: logged IN", account.name)
-                return True, "BarcelonaSessionInfo confirms logged in"
+            # Not logged in yet - wait for user to log in via VNC
+            logger.info("[%s] NOT logged in. Waiting %d seconds for user to log in via VNC...",
+                        account.name, USER_INTERACTION_TIMEOUT)
 
-            if '"is_logged_out":true' in content or '"is_logged_out": true' in content:
-                logger.warning("[%s] BarcelonaSessionInfo: logged OUT", account.name)
-                return False, "BarcelonaSessionInfo confirms logged out"
+            elapsed = 0
+            while elapsed < USER_INTERACTION_TIMEOUT:
+                await asyncio.sleep(CHECK_INTERVAL)
+                elapsed += CHECK_INTERVAL
 
-            # Strategy 2: Check for login-related DOM elements
-            # If logged out, Threads shows a "Log in" button prominently
-            login_btn = page.locator('a[href*="/login"], button:has-text("Log in"), button:has-text("Dang nhap")')
-            login_count = await login_btn.count()
-            if login_count > 0:
-                logger.warning("[%s] Found %d login button(s) - NOT logged in", account.name, login_count)
-                return False, f"Login button detected ({login_count} found)"
+                # Re-check login state (page may have changed after user interaction)
+                try:
+                    # Refresh page content after potential navigation
+                    current_url = page.url
+                    is_logged_in, detail = await check_login_state(page)
 
-            # Strategy 3: Check for logged-in indicators
-            # When logged in, Threads shows navigation with home/search/profile icons
-            nav_bar = page.locator('div[id="barcelona-page-layout"]')
-            if await nav_bar.count() > 0:
-                # Check if it's a 404/error page vs actual feed
-                error_indicators = page.locator('text="Not all who wander are lost"')
-                if await error_indicators.count() > 0:
-                    # This is a 404 page - still logged in though
-                    logger.info("[%s] Got 404 page but user IS authenticated", account.name)
-                    return True, "Authenticated (404 page but session valid)"
+                    remaining = USER_INTERACTION_TIMEOUT - elapsed
+                    logger.info("[%s] Check %d/%ds: logged_in=%s (URL: %s, remaining: %ds)",
+                                account.name, elapsed, USER_INTERACTION_TIMEOUT,
+                                is_logged_in, current_url[:60], remaining)
 
-                logger.info("[%s] Barcelona page layout found - likely logged in", account.name)
-                return True, "Barcelona layout detected"
+                    if is_logged_in:
+                        logger.info("[%s] User logged in successfully! Detail: %s",
+                                    account.name, detail)
+                        # Keep browser visible briefly so user sees success
+                        await asyncio.sleep(3)
+                        return True, detail
 
-            # Fallback: Check HTTP response status
-            final_url = page.url
-            if "/login" in final_url.lower():
-                logger.warning("[%s] Redirected to login page: %s", account.name, final_url)
-                return False, f"Redirected to login: {final_url}"
+                except Exception as e:
+                    logger.warning("[%s] Check error at %ds: %s", account.name, elapsed, e)
 
-            # Unable to determine - log warning and assume not verified
-            logger.warning("[%s] Could not determine login state. URL: %s", account.name, final_url)
-            return False, f"Indeterminate state at {final_url}"
+            # Timeout - user didn't log in within the window
+            logger.warning("[%s] Timeout after %ds. User did not complete login.",
+                            account.name, USER_INTERACTION_TIMEOUT)
+            return False, f"Timeout: user did not log in within {USER_INTERACTION_TIMEOUT}s"
 
         except Exception as e:
-            logger.error("[%s] Browser error during verification: %s", account.name, e, exc_info=True)
+            logger.error("[%s] Browser error during verification: %s",
+                         account.name, e, exc_info=True)
             return False, f"Browser error: {str(e)[:200]}"
 
         finally:
@@ -146,7 +197,8 @@ def process_verify_job(db: Session, job: Job):
         logger.error("Job #%s: Account ID %s not found", job.id, job.account_id)
         return
 
-    logger.info("Processing VERIFY_THREADS Job #%s for account '%s' (ID: %s)", job.id, account.name, account.id)
+    logger.info("Processing VERIFY_THREADS Job #%s for account '%s' (ID: %s)",
+                job.id, account.name, account.id)
 
     # Mark as running
     job.status = JobStatus.RUNNING
@@ -171,7 +223,8 @@ def process_verify_job(db: Session, job: Job):
         job.last_error = None
         job.finished_at = int(time.time())
         db.commit()
-        logger.info("Job #%s SUCCESS: Account '%s' verified for Threads. Detail: %s", job.id, account.name, detail)
+        logger.info("Job #%s SUCCESS: Account '%s' verified for Threads. Detail: %s",
+                     job.id, account.name, detail)
     else:
         # Failure
         tries = (job.tries or 0) + 1
@@ -205,8 +258,9 @@ def claim_next_verify_job(db: Session):
 def run():
     """Main polling loop."""
     logger.info("=" * 60)
-    logger.info("Threads Verifier Worker started")
-    logger.info("Poll interval: %ds | Verify timeout: %dms", POLL_INTERVAL, VERIFY_TIMEOUT)
+    logger.info("Threads Verifier Worker started (HEADED mode)")
+    logger.info("VNC Display: %s | Poll: %ds | User timeout: %ds",
+                VNC_DISPLAY, POLL_INTERVAL, USER_INTERACTION_TIMEOUT)
     logger.info("=" * 60)
 
     while True:
