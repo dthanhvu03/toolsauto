@@ -612,6 +612,25 @@ SETTINGS: dict[str, SettingSpec] = {
         env_only=True,
         env_var_name="TELEGRAM_CHAT_ID",
     ),
+    "THREADS_AUTO_MODE": SettingSpec(
+        key="THREADS_AUTO_MODE",
+        type="bool",
+        default_getter=lambda: False,
+        title="Bật Auto Threads News",
+        section="Threads Auto",
+        description="Tự động thu thập và đăng báo mới lên Threads.",
+    ),
+    "THREADS_POST_INTERVAL_MIN": SettingSpec(
+        key="THREADS_POST_INTERVAL_MIN",
+        type="int",
+        default_getter=lambda: 180,
+        title="Giới hạn thời gian (Cooldown)",
+        section="Threads Auto",
+        description="Khoảng thời gian tối thiểu (phút) giữa 2 bài đăng tự động trên Threads để tránh spam.",
+        min=10,
+        max=1440,
+        unit="phút",
+    ),
 }
 
 
