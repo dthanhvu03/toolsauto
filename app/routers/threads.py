@@ -128,7 +128,7 @@ async def toggle_threads_auto(request: Request, db: Session = Depends(get_db)):
         new_val = not current_val
         setting.value = "true" if new_val else "false"
     else:
-        setting = RuntimeSetting(key="THREADS_AUTO_MODE", value="true")
+        setting = RuntimeSetting(key="THREADS_AUTO_MODE", value="true", type="bool")
         db.add(setting)
     db.commit()
     
