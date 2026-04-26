@@ -1,0 +1,96 @@
+{# AI Analytics tab content. Loaded via HTMX from GET /app/logs/ai-analytics. #}
+<div class="space-y-4">
+
+  <!-- Card 1: AI Health Report -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+        </svg>
+        <div>
+          <div class="text-sm font-semibold text-gray-900">AI Health Report</div>
+          <div class="text-[11px] text-gray-500">Tổng hợp incident 24h gần nhất, sinh bằng 9Router pipeline.</div>
+        </div>
+      </div>
+      <button type="button"
+              class="h-8 px-3 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors inline-flex items-center gap-1.5 disabled:opacity-60"
+              hx-get="/app/logs/ai-report/live"
+              hx-target="#ai-report-body"
+              hx-swap="innerHTML"
+              hx-indicator="#ai-report-spinner">
+        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+        </svg>
+        Generate Live Report
+        <span id="ai-report-spinner" class="htmx-indicator inline-block w-3.5 h-3.5 ml-1">
+          <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+        </span>
+      </button>
+    </div>
+    <div id="ai-report-body" class="px-4 py-4 text-sm text-gray-800 min-h-[80px]">
+      <div class="text-xs text-gray-500 italic">
+        Chưa có báo cáo. Bấm <b>Generate Live Report</b> để gọi AI tổng hợp 20 incident groups gần nhất trong 24h.
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 2: Top Incidents Table -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+        <div>
+          <div class="text-sm font-semibold text-gray-900">Top Incidents</div>
+          <div class="text-[11px] text-gray-500">Sắp xếp theo tần suất cao nhất. Dữ liệu live từ <code>incident_groups</code>.</div>
+        </div>
+      </div>
+      <button type="button"
+              class="h-7 px-2.5 text-[11px] font-semibold rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              hx-get="/app/logs/ai-analytics"
+              hx-target="#ai-analytics-pane"
+              hx-swap="innerHTML">
+        Refresh
+      </button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left">
+        <thead>
+          <tr class="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-wider text-gray-500">
+            <th class="px-3 py-2 font-bold">Signature</th>
+            <th class="px-3 py-2 font-bold">Platform / Sev</th>
+            <th class="px-3 py-2 font-bold text-right">Count</th>
+            <th class="px-3 py-2 font-bold">Last Seen</th>
+            <th class="px-3 py-2 font-bold">Sample</th>
+            <th class="px-3 py-2 font-bold">Status</th>
+            <th class="px-3 py-2 font-bold text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if not groups %}
+            <tr>
+              <td colspan="7" class="px-3 py-8 text-center text-xs text-gray-500 italic">
+                Chưa có incident nào được ghi nhận. Hệ thống đang sạch ✨
+              </td>
+            </tr>
+          {% else %}
+            {% for g in groups %}
+              {% include "fragments/incident_group_row.html" %}
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    {% if groups %}
+      <div class="px-3 py-2 border-t border-gray-100 text-[10px] text-gray-400">
+        Hiển thị {{ groups|length }} group (tối đa 50). Truy vấn từ <code>incident_groups</code>.
+      </div>
+    {% endif %}
+  </div>
+
+</div>

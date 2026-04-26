@@ -1,0 +1,1 @@
+from app.database.core import SessionLocal; from app.database.models import Account; db=SessionLocal(); print([(a.id, a.name, a.platform, a.profile_path, a.threads_status) for a in db.query(Account).all()])
