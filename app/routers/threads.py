@@ -121,12 +121,16 @@ async def get_threads_news_panel(request: Request, db: Session = Depends(get_db)
 
 @router.post("/toggle-auto", response_class=HTMLResponse)
 async def toggle_threads_auto(request: Request, db: Session = Depends(get_db)):
+    from app.database.models import RuntimeSetting
     setting = db.query(RuntimeSetting).filter(RuntimeSetting.key == "THREADS_AUTO_MODE").first()
     if setting:
         current_val = setting.value.lower() == "true"
         new_val = not current_val
         setting.value = "true" if new_val else "false"
-        db.commit()
+    else:
+        setting = RuntimeSetting(key="THREADS_AUTO_MODE", value="true")
+        db.add(setting)
+    db.commit()
     
     return await get_threads_news_panel(request, db)
 
