@@ -320,9 +320,24 @@ class GeminiRPAService:
                 EC.visibility_of_element_located(
                     (By.CSS_SELECTOR, '[role="textbox"], div[contenteditable="true"]')))
             box.click()
-            time.sleep(0.3)
-            box.send_keys(safe_prompt)
-            time.sleep(1)
+            time.sleep(0.5)
+            
+            # Xoá nội dung cũ nếu có (dùng JS để an toàn với contenteditable)
+            driver.execute_script("arguments[0].textContent = '';", box)
+            time.sleep(0.2)
+            
+            # Dùng JS insertText để dán văn bản thần tốc, không kích hoạt Enter (submit) khi gặp ký tự \n
+            try:
+                js_insert = "arguments[0].focus(); document.execCommand('insertText', false, arguments[1]);"
+                driver.execute_script(js_insert, box, safe_prompt)
+            except Exception as e:
+                logger.warning("JS insertText lỗi: %s. Dùng fallback Shift+Enter", e)
+                for line in safe_prompt.split('\n'):
+                    if line:
+                        box.send_keys(line)
+                    box.send_keys(Keys.SHIFT, Keys.ENTER)
+            
+            time.sleep(1.5)
             
             try:
                 proof = os.path.join(DEBUG_DIR, "video_upload_proof.png")
