@@ -70,7 +70,16 @@ async def check_login_state(page) -> tuple[bool, str]:
         if await nav_bar.count() > 0:
             return True, "Barcelona layout detected"
 
-        # Strategy 4: URL redirect
+        # Strategy 4: Common logged-in UI elements (Icons, Profile links)
+        profile_icons = page.locator('svg[aria-label="Profile"], svg[aria-label="Trang cá nhân"]')
+        if await profile_icons.count() > 0:
+            return True, "Profile icon detected"
+            
+        home_icons = page.locator('svg[aria-label="Home"], svg[aria-label="Trang chủ"]')
+        if await home_icons.count() > 0:
+            return True, "Home icon detected"
+
+        # Strategy 5: URL redirect
         final_url = page.url
         if "/login" in final_url.lower():
             return False, f"Redirected to login: {final_url}"
