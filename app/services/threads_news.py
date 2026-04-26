@@ -68,6 +68,8 @@ class ThreadsNewsService:
             # 1. Check settings
             auto_mode = self.get_setting(db, "THREADS_AUTO_MODE", False)
             interval_min = self.get_setting(db, "THREADS_POST_INTERVAL_MIN", 180)
+            max_chars_per_segment = self.get_setting(db, "THREADS_MAX_CHARS_PER_SEGMENT", 450)
+            max_caption_length = self.get_setting(db, "THREADS_MAX_CAPTION_LENGTH", 500)
             
             # 2. Check cooldown
             last_job = db.query(Job).filter(
@@ -101,32 +103,24 @@ class ThreadsNewsService:
                 from app.services.gemini_api import GeminiAPIService
                 gemini = GeminiAPIService()
                 
-                prompt = f"""
-Hãy đóng vai chuyên gia sáng tạo nội dung cho Threads (Account us28qt - "News in daily life").
-Viết lại tin tức này thành bài đăng Threads cực thu hút, style us28qt.
-
-YÊU CẦU ĐẶC BIỆT (Threading):
-- Nếu tin tức dài hoặc có nhiều ý hay, hãy chia thành một chuỗi (thread) gồm 2-4 bài đăng.
-- Bài đầu tiên (Head) phải cực kỳ "giật gân" (Hook).
-- Các bài sau bổ sung chi tiết.
-- Mỗi bài dưới 450 ký tự.
-
-QUY TẮC STYLE:
-1. TIÊU ĐỀ VIẾT HOA (Hook), dùng emoji cờ 🇺🇸🇮🇷🇻🇳, emoji biểu cảm ‼️🔥🥴.
-2. Cấu trúc: 2-5 dòng, không hashtag.
-3. Cung cấp nội dung cô đọng nhất.
-
-TIN GỐC:
-Tiêu đề: {article.title}
-Tóm tắt: {article.summary}
-Nguồn: {article.source_name}
-
-TRẢ VỀ JSON LIST (Mảng các object):
-[
-  {{"caption": "Nội dung bài 1...", "reasoning": "..."}},
-  {{"caption": "Nội dung bài 2...", "reasoning": "..."}}
-]
-"""
+                # Load prompt template from settings
+                prompt_template = self.get_setting(db, "THREADS_AI_PROMPT", None)
+                if not prompt_template:
+                    # Fallback default prompt
+                    prompt_template = (
+                        "Viết lại tin tức này thành bài đăng Threads thu hút.\n"
+                        "Chia thành 2-4 bài, mỗi bài dưới {max_chars} ký tự.\n"
+                        "Tiêu đề: {title}\nTóm tắt: {summary}\nNguồn: {source_name}\n"
+                        'TRẢ VỀ JSON LIST: [{{"caption": "...", "reasoning": "..."}}]'
+                    )
+                
+                prompt = prompt_template.format(
+                    title=article.title,
+                    summary=article.summary or "",
+                    source_name=article.source_name or "",
+                    max_chars=max_chars_per_segment,
+                )
+                
                 ai_result = gemini.ask(prompt)
                 segments = []
                 if ai_result:
@@ -175,8 +169,8 @@ TRẢ VỀ JSON LIST (Mảng các object):
                 if i == len(segments) - 1:
                     caption += f"\n\n(Nguồn: {article.source_name})\n{article.source_url}"
                 
-                if len(caption) > 500:
-                    caption = caption[:497] + "..."
+                if len(caption) > max_caption_length:
+                    caption = caption[:max_caption_length - 3] + "..."
 
                 new_job = Job(
                     account_id=account.id,
