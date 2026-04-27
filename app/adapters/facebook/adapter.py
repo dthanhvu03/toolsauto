@@ -10,6 +10,7 @@ from typing import Any
 from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR, DATA_DIR, FACEBOOK_HOST
 from playwright.sync_api import Playwright, BrowserContext, Page, Locator, TimeoutError
 from app.adapters.contracts import AdapterInterface, PublishResult
+from app.adapters.common.decorators import playwright_safe_action
 from app.database.models import Job
 from app.utils.human_behavior import human_type, human_scroll, pre_post_delay
 import json
@@ -282,6 +283,7 @@ class FacebookAdapter(AdapterInterface):
                 static_count=len(fallback_list), total=len(combined))
         return combined
 
+    @playwright_safe_action(default=None, logger_name=__name__)
     def _wait_and_locate_array(self, selectors: list[str], timeout_ms: int = 5000) -> Locator | None:
         """Evaluate array of selectors and return first visible locator, waiting up to timeout_ms."""
         if not self.page: return None
@@ -324,6 +326,7 @@ class FacebookAdapter(AdapterInterface):
             self.logger.warning("FacebookAdapter: [n8n-lite] Error fetching DB timing for %s - %s", key, e)
         return int(val)
 
+    @playwright_safe_action(default=False, logger_name=__name__)
     def _click_locator(self, locator: Locator, description: str, timeout: int = 5000) -> bool:
         try:
             locator.scroll_into_view_if_needed()
@@ -364,6 +367,7 @@ class FacebookAdapter(AdapterInterface):
         return n
 
 
+    @playwright_safe_action(default=False, logger_name=__name__)
     def _safe_goto(self, url: str, wait_until: str = "domcontentloaded", timeout: int = 60000, retries: int = 3) -> bool:
         if not self.page: return False
         for attempt in range(retries):
