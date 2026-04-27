@@ -3,7 +3,9 @@ import json
 import time
 import re
 import threading
+import asyncio
 import requests
+import httpx
 import base64
 import io
 import logging
@@ -287,7 +289,60 @@ class AICaptionPipeline:
             logger.error("Request generation error: %s", e)
             return None, temp_model, FailReason.TEMPORARY_NETWORK
 
+    async def _call_9router_async(self, prompt: str) -> Tuple[Optional[str], Optional[str], FailReason]:
+        with self._config_lock:
+            temp_model = self.default_model
+            temp_api_key = self.api_key
+            temp_base_url = self.base_url
+
+        url = temp_base_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {temp_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": temp_model,
+            "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+            "max_tokens": 4096,
+            "temperature": 0.5,
+            "stream": False,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                raw_out = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                actual_model = data.get("model", temp_model)
+                return raw_out, actual_model, FailReason.NONE
+            if resp.status_code == 429:
+                return None, temp_model, FailReason.RATE_LIMITED
+            if resp.status_code in [401, 403]:
+                return None, temp_model, FailReason.AUTH_ERROR
+
+            logger.error("Server API returned %s: %s", resp.status_code, resp.text[:200])
+            return None, temp_model, FailReason.TEMPORARY_NETWORK
+        except httpx.TimeoutException:
+            return None, temp_model, FailReason.TIMEOUT
+        except Exception as e:
+            logger.error("Async request generation error: %s", e)
+            return None, temp_model, FailReason.TEMPORARY_NETWORK
+
     def generate_caption(self, prompt: str, image_path: Optional[str] = None) -> Tuple[Optional[CaptionPayload], dict]:
+        """Generate caption JSON with 9Router → Native Gemini Vision fallback (PLAN-025).
+
+        Tier 1: 9Router (canonical, multimodal).
+        Tier 2: Native Gemini vision via `app.services.ai_native_fallback.call_native_gemini_vision`.
+                Only fires when an image is provided AND Tier 1 fails (router disabled,
+                circuit open, HTTP error, or output validation failure).
+        Tier 3 does not exist — caller (orchestrator) decides what to do (RPA, poorman).
+
+        meta always contains:
+            status, provider, model, latency_ms, fail_reason,
+            fallback_used, primary_fail_reason
+        """
         with self._config_lock:
             is_enabled = self.enabled
 
@@ -296,59 +351,106 @@ class AICaptionPipeline:
             "provider": "9router",
             "model": "N/A",
             "latency_ms": 0,
-            "fail_reason": FailReason.NONE.value
+            "fail_reason": FailReason.NONE.value,
+            "fallback_used": False,
+            "primary_fail_reason": None,
         }
 
+        # Try Tier 1 — 9Router. We track its outcome in `primary_fail_reason`
+        # so we can switch to Tier 2 with full provenance.
+        primary_fail: Optional[str] = None
+        actual_model = "N/A"
+        latency_ms = 0
+        raw_text: Optional[str] = None
+
         if not is_enabled:
-            meta.update({
-                "status": "error",
-                "provider": "native",
-                "fail_reason": "router_disabled"
-            })
-            self._update_runtime_state("native", "N/A", 0, "disabled")
-            return None, meta
+            primary_fail = "router_disabled"
+        elif not self.circuit_breaker.allow_request():
+            primary_fail = FailReason.CIRCUIT_OPEN.value
+        else:
+            start_time = time.perf_counter()
+            raw_text, actual_model, fail_reason = self._call_9router(prompt, image_path)
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            meta["model"] = actual_model
+            meta["latency_ms"] = latency_ms
 
-        if not self.circuit_breaker.allow_request():
+            if fail_reason != FailReason.NONE:
+                self.circuit_breaker.record_failure()
+                primary_fail = fail_reason.value
+            else:
+                self.circuit_breaker.record_success()
+                parsed_payload = self._extract_and_parse_json(raw_text)
+                if parsed_payload:
+                    self._update_runtime_state("9router", actual_model, latency_ms, "none")
+                    return parsed_payload, meta
+                # 9Router responded but JSON parse failed — treat as primary fail
+                # and let native vision try (it may produce a parseable response).
+                primary_fail = FailReason.INVALID_OUTPUT.value
+
+        # Tier 1 failed. Try native vision fallback only when an image is present —
+        # text-only callers should use generate_text() which has its own fallback.
+        if not image_path:
+            self._update_runtime_state("poorman", actual_model, latency_ms, primary_fail or "no_image")
             meta.update({
                 "status": "error",
                 "provider": "poorman",
-                "fail_reason": FailReason.CIRCUIT_OPEN.value
+                "fail_reason": primary_fail or "no_image_for_vision_fallback",
+                "primary_fail_reason": primary_fail,
             })
-            self._update_runtime_state("poorman", "N/A", 0, "circuit_open")
-            return None, meta
-            
-        start_time = time.perf_counter()
-        
-        raw_text, actual_model, fail_reason = self._call_9router(prompt, image_path)
-        latency = time.perf_counter() - start_time
-        meta["model"] = actual_model
-        meta["latency_ms"] = int(latency * 1000)
-        
-        if fail_reason != FailReason.NONE:
-            self.circuit_breaker.record_failure()
-            meta.update({
-                "status": "error",
-                "provider": "poorman",
-                "fail_reason": fail_reason.value
-            })
-            self._update_runtime_state("poorman", actual_model, meta["latency_ms"], fail_reason.value)
-            return None, meta
-            
-        self.circuit_breaker.record_success()
-
-        parsed_payload = self._extract_and_parse_json(raw_text)
-        
-        if not parsed_payload:
-            meta.update({
-                "status": "error",
-                "provider": "poorman",
-                "fail_reason": FailReason.INVALID_OUTPUT.value
-            })
-            self._update_runtime_state("poorman", actual_model, meta["latency_ms"], "validation_failed")
             return None, meta
 
-        self._update_runtime_state("9router", actual_model, meta["latency_ms"], "none")
-        return parsed_payload, meta
+        logger.warning(
+            "[AI FALLBACK] generate_caption Tier 1 failed (reason=%s); switching to native vision",
+            primary_fail,
+        )
+        # Lazy import — pipeline must NOT import google.genai directly (ADR-006).
+        from app.services.ai_native_fallback import call_native_gemini_vision
+
+        native_start = time.perf_counter()
+        native_text, native_meta = call_native_gemini_vision(prompt, image_path)
+        native_latency = native_meta.get("latency_ms") or int((time.perf_counter() - native_start) * 1000)
+
+        if native_meta.get("ok") and native_text:
+            parsed_payload = self._extract_and_parse_json(native_text)
+            if parsed_payload:
+                meta.update({
+                    "status": "ok",
+                    "provider": native_meta.get("provider", "native_gemini_vision"),
+                    "model": native_meta.get("model", "N/A"),
+                    "latency_ms": native_latency,
+                    "fail_reason": FailReason.NONE.value,
+                    "fallback_used": True,
+                    "primary_fail_reason": primary_fail,
+                })
+                self._update_runtime_state(
+                    "native_gemini_vision", meta["model"], native_latency, "fallback_ok"
+                )
+                return parsed_payload, meta
+            # Native returned text but JSON invalid — treat as native failure.
+            native_fail_reason = FailReason.INVALID_OUTPUT.value
+        else:
+            native_fail_reason = native_meta.get("fail_reason") or "native_vision_failed"
+
+        # Both tiers failed.
+        meta.update({
+            "status": "error",
+            "provider": "poorman",
+            "model": native_meta.get("model", actual_model),
+            "latency_ms": native_latency,
+            "fail_reason": native_fail_reason,
+            "fallback_used": True,
+            "fallback_failed": True,
+            "primary_fail_reason": primary_fail,
+        })
+        self._update_runtime_state(
+            "poorman", meta["model"], native_latency, f"both_tiers_failed:{native_fail_reason}"
+        )
+        logger.error(
+            "[AI FALLBACK] generate_caption both tiers failed (primary=%s, native=%s)",
+            primary_fail,
+            native_fail_reason,
+        )
+        return None, meta
 
     def _update_runtime_state(self, provider: str, model: str, latency: int, fail_reason: str):
         with self._config_lock:
@@ -376,32 +478,177 @@ class AICaptionPipeline:
             pass  # Best-effort, don't crash the pipeline
 
     def generate_text(self, prompt: str) -> Tuple[Optional[str], dict]:
-        """Call 9router and return raw plain text (no JSON parsing).
-        Use this for analysis, commentary, and strategic reasoning tasks."""
+        """Call 9Router with native-Gemini fallback (per ADR-006).
+
+        Tier 1: 9Router (canonical).
+        Tier 2: Native Gemini via `app.services.ai_native_fallback` — only if
+                Tier 1 fails AND fallback is permitted (router disabled,
+                circuit open, or 9Router HTTP error all qualify).
+        Tier 3 does not exist: if both fail, return error meta and let the
+                caller decide what to do (worker may use RPA or poorman).
+
+        meta always contains:
+            ok, provider, model, latency_ms, fallback_used, primary_fail_reason
+        And on failure:
+            fail_reason, fallback_failed
+        """
         with self._config_lock:
             is_enabled = self.enabled
 
-        meta: dict = {"provider": "9router", "model": "N/A", "latency_ms": 0, "ok": True}
+        # Try Tier 1 — 9Router
+        primary_fail_reason: Optional[str] = None
+        primary_meta: dict = {
+            "provider": "9router",
+            "model": "N/A",
+            "latency_ms": 0,
+            "ok": True,
+            "fallback_used": False,
+            "primary_fail_reason": None,
+        }
 
         if not is_enabled:
-            return None, {**meta, "ok": False, "fail_reason": "router_disabled"}
+            primary_fail_reason = "router_disabled"
+        elif not self.circuit_breaker.allow_request():
+            primary_fail_reason = "circuit_open"
+        else:
+            start_time = time.perf_counter()
+            raw_text, actual_model, fail_reason = self._call_9router(prompt)
+            primary_meta["model"] = actual_model
+            primary_meta["latency_ms"] = int((time.perf_counter() - start_time) * 1000)
 
-        if not self.circuit_breaker.allow_request():
-            return None, {**meta, "ok": False, "fail_reason": "circuit_open"}
+            if fail_reason == FailReason.NONE:
+                self.circuit_breaker.record_success()
+                self._update_runtime_state("9router", actual_model, primary_meta["latency_ms"], "none")
+                return raw_text, primary_meta
 
-        start_time = time.perf_counter()
-        raw_text, actual_model, fail_reason = self._call_9router(prompt)
-        meta["model"] = actual_model
-        meta["latency_ms"] = int((time.perf_counter() - start_time) * 1000)
-
-        if fail_reason != FailReason.NONE:
             self.circuit_breaker.record_failure()
-            self._update_runtime_state("poorman", actual_model, meta["latency_ms"], fail_reason.value)
-            return None, {**meta, "ok": False, "fail_reason": fail_reason.value}
+            self._update_runtime_state("poorman", actual_model, primary_meta["latency_ms"], fail_reason.value)
+            primary_fail_reason = fail_reason.value
 
-        self.circuit_breaker.record_success()
-        self._update_runtime_state("9router", actual_model, meta["latency_ms"], "none")
-        return raw_text, meta
+        # Tier 1 failed. Log explicitly and try Tier 2.
+        logger.warning(
+            "[AI FALLBACK] 9Router failed (reason=%s); switching to native Gemini",
+            primary_fail_reason,
+        )
+        # Lazy import to keep ai_pipeline.py free of google.genai (per ADR-006 isolation).
+        from app.services.ai_native_fallback import call_native_gemini
+
+        native_start = time.perf_counter()
+        native_text, native_meta = call_native_gemini(prompt)
+        # Compose unified meta — preserve primary failure reason for observability.
+        merged: dict = {
+            "provider": native_meta.get("provider", "native_gemini"),
+            "model": native_meta.get("model", "N/A"),
+            "latency_ms": native_meta.get("latency_ms", int((time.perf_counter() - native_start) * 1000)),
+            "fallback_used": True,
+            "primary_fail_reason": primary_fail_reason,
+        }
+
+        if native_meta.get("ok") and native_text:
+            merged["ok"] = True
+            self._update_runtime_state(
+                "native_gemini", merged["model"], merged["latency_ms"], "fallback_ok"
+            )
+            return native_text, merged
+
+        # Both tiers failed — final fail.
+        merged["ok"] = False
+        merged["fail_reason"] = native_meta.get("fail_reason") or "native_fallback_failed"
+        merged["fallback_failed"] = True
+        logger.error(
+            "[AI FALLBACK] Both tiers failed (primary=%s, native=%s)",
+            primary_fail_reason,
+            merged["fail_reason"],
+        )
+        return None, merged
+
+    async def generate_text_async(self, prompt: str) -> Tuple[Optional[str], dict]:
+        """Async version of generate_text for background workers.
+
+        Keeps the same 2-tier contract as generate_text:
+        9Router -> native Gemini -> fail. No google.genai import lives in this
+        module; native SDK calls stay isolated in ai_native_fallback.py.
+        """
+        with self._config_lock:
+            is_enabled = self.enabled
+
+        primary_fail_reason: Optional[str] = None
+        primary_meta: dict = {
+            "provider": "9router",
+            "model": "N/A",
+            "latency_ms": 0,
+            "ok": True,
+            "fallback_used": False,
+            "primary_fail_reason": None,
+        }
+
+        if not is_enabled:
+            primary_fail_reason = "router_disabled"
+        elif not self.circuit_breaker.allow_request():
+            primary_fail_reason = "circuit_open"
+        else:
+            start_time = time.perf_counter()
+            raw_text, actual_model, fail_reason = await self._call_9router_async(prompt)
+            primary_meta["model"] = actual_model
+            primary_meta["latency_ms"] = int((time.perf_counter() - start_time) * 1000)
+
+            if fail_reason == FailReason.NONE:
+                self.circuit_breaker.record_success()
+                await asyncio.to_thread(
+                    self._update_runtime_state,
+                    "9router",
+                    actual_model,
+                    primary_meta["latency_ms"],
+                    "none",
+                )
+                return raw_text, primary_meta
+
+            self.circuit_breaker.record_failure()
+            await asyncio.to_thread(
+                self._update_runtime_state,
+                "poorman",
+                actual_model,
+                primary_meta["latency_ms"],
+                fail_reason.value,
+            )
+            primary_fail_reason = fail_reason.value
+
+        logger.warning(
+            "[AI FALLBACK ASYNC] 9Router failed (reason=%s); switching to native Gemini",
+            primary_fail_reason,
+        )
+        from app.services.ai_native_fallback import call_native_gemini_async
+
+        native_start = time.perf_counter()
+        native_text, native_meta = await call_native_gemini_async(prompt)
+        merged: dict = {
+            "provider": native_meta.get("provider", "native_gemini"),
+            "model": native_meta.get("model", "N/A"),
+            "latency_ms": native_meta.get("latency_ms", int((time.perf_counter() - native_start) * 1000)),
+            "fallback_used": True,
+            "primary_fail_reason": primary_fail_reason,
+        }
+
+        if native_meta.get("ok") and native_text:
+            merged["ok"] = True
+            await asyncio.to_thread(
+                self._update_runtime_state,
+                "native_gemini",
+                merged["model"],
+                merged["latency_ms"],
+                "fallback_ok",
+            )
+            return native_text, merged
+
+        merged["ok"] = False
+        merged["fail_reason"] = native_meta.get("fail_reason") or "native_fallback_failed"
+        merged["fallback_failed"] = True
+        logger.error(
+            "[AI FALLBACK ASYNC] Both tiers failed (primary=%s, native=%s)",
+            primary_fail_reason,
+            merged["fail_reason"],
+        )
+        return None, merged
 
     @classmethod
     def load_shared_runtime_state(cls) -> dict:

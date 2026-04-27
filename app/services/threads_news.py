@@ -98,20 +98,22 @@ class ThreadsNewsService:
 
             logger.info(f"Processing article '{article.title}' for Threads...")
 
-            # 5. Generate AI Content (Threading support)
+            # 5. Generate AI Content
+            segments = []
+            job_status = "PENDING" if auto_mode else "DRAFT"
             try:
-                from app.services.gemini_api import GeminiAPIService
-                gemini = GeminiAPIService()
+                from app.services.ai_runtime import pipeline
                 
                 # Load prompt template from settings
                 prompt_template = self.get_setting(db, "THREADS_AI_PROMPT", None)
                 if not prompt_template:
-                    # Fallback default prompt
+                    # Fallback default prompt - Single Post Version
                     prompt_template = (
-                        "Viết lại tin tức này thành bài đăng Threads thu hút.\n"
-                        "Chia thành 2-4 bài, mỗi bài dưới {max_chars} ký tự.\n"
+                        "Viết lại tin tức này thành 01 bài đăng Threads duy nhất, thu hút.\n"
+                        "Cấu trúc: [Tiêu đề hấp dẫn] + [Tóm tắt nội dung chính].\n"
+                        "Tổng độ dài PHẢI dưới 450 ký tự (để dành chỗ cho link nguồn).\n"
                         "Tiêu đề: {title}\nTóm tắt: {summary}\nNguồn: {source_name}\n"
-                        'TRẢ VỀ JSON LIST: [{{"caption": "...", "reasoning": "..."}}]'
+                        'TRẢ VỀ JSON: {{"caption": "...", "reasoning": "..."}}'
                     )
                 
                 prompt = prompt_template.format(
@@ -121,26 +123,30 @@ class ThreadsNewsService:
                     max_chars=max_chars_per_segment,
                 )
                 
-                ai_result = gemini.ask(prompt)
-                segments = []
+                ai_result, meta = pipeline.generate_text(prompt)
                 if ai_result:
-                    # Parse JSON list
+                    # Parse JSON (support both single object or list)
                     try:
                         import json
-                        # Find [ and ] to extract JSON if there's markdown fluff
-                        start = ai_result.find("[")
-                        end = ai_result.rfind("]") + 1
-                        if start != -1 and end != -1:
-                            segments = json.loads(ai_result[start:end])
+                        # Try finding a single object first
+                        start_obj = ai_result.find("{")
+                        end_obj = ai_result.rfind("}") + 1
+                        
+                        # Try finding a list if no object or if list comes first
+                        start_list = ai_result.find("[")
+                        end_list = ai_result.rfind("]") + 1
+                        
+                        if start_obj != -1 and (start_list == -1 or start_obj < start_list):
+                            obj = json.loads(ai_result[start_obj:end_obj])
+                            segments = [obj]
+                        elif start_list != -1:
+                            list_obj = json.loads(ai_result[start_list:end_list])
+                            if list_obj:
+                                segments = [list_obj[0]]
                         else:
-                            # Fallback: maybe it returned a single object?
-                            start_obj = ai_result.find("{")
-                            end_obj = ai_result.rfind("}") + 1
-                            if start_obj != -1 and end_obj != -1:
-                                obj = json.loads(ai_result[start_obj:end_obj])
-                                segments = [obj]
+                            logger.warning(f"No JSON markers found in AI result. Raw: {ai_result[:100]}")
                     except Exception as je:
-                        logger.warning(f"JSON parse failed for threading: {je}. Using raw fallback.")
+                        logger.warning(f"JSON parse failed for threads: {je}")
                 
                 if not segments:
                     # Fallback to simple single post
@@ -150,53 +156,54 @@ class ThreadsNewsService:
                 logger.error(f"AI Generation failed: {e}")
                 segments = [{"caption": f"NÓNG: {article.title}\n\n{article.summary[:300]}...", "reasoning": "error_fallback"}]
 
-            # 5b. Download Image (Chỉ cho bài đầu tiên)
+            # 5b. Download Image
             media_path = None
             if article.image_url:
                 media_path = self._download_image(article.image_url)
 
-            # 6. Create Jobs (Threading)
-            last_job_id = None
-            job_status = "PENDING" if auto_mode else "DRAFT"
-            
-            for i, seg in enumerate(segments):
+            # 6. Create Job (Single Post Only)
+            if segments:
+                seg = segments[0]
                 caption = seg.get("caption", "")
-                # Final cleanup
+                
+                # Clean HTML tags
                 import re
                 caption = re.sub(r'<[^>]*>', '', caption)
                 
-                # Append source link to the LAST segment or first if single
-                if i == len(segments) - 1:
-                    caption += f"\n\n(Nguồn: {article.source_name})\n{article.source_url}"
+                # Prepare source footer
+                source_footer = f"\n\n(Nguồn: {article.source_name})\n{article.source_url}"
                 
-                if len(caption) > max_caption_length:
-                    caption = caption[:max_caption_length - 3] + "..."
+                # Strict length check (500 chars limit)
+                if len(caption) + len(source_footer) > max_caption_length:
+                    allowed_caption_len = max_caption_length - len(source_footer) - 5
+                    if allowed_caption_len > 0:
+                        caption = caption[:allowed_caption_len].strip() + "..."
+                
+                final_caption = f"{caption}{source_footer}"
 
                 new_job = Job(
                     account_id=account.id,
                     platform="threads",
                     job_type="post",
                     status=job_status,
-                    caption=caption,
-                    media_path=media_path if i == 0 else None, # Chỉ ảnh cho bài đầu
-                    parent_job_id=last_job_id,
-                    ai_reasoning=seg.get("reasoning", ""),
+                    caption=final_caption,
+                    media_path=media_path,
+                    parent_job_id=None,
+                    ai_reasoning=seg.get("reasoning", "single_post_v3"),
                     created_at=int(time.time()),
-                    dedupe_key=f"threads_news_{article.id}_{i}"
+                    dedupe_key=f"threads_news_v2_{article.id}"
                 )
                 db.add(new_job)
-                db.flush() # Lấy ID cho bài sau
-                last_job_id = new_job.id
-                
-                logger.info(f"Created Threads job {new_job.id} (Part {i+1}, Status: {job_status})")
+                logger.info(f"Created single Threads job {new_job.id} (Status: {job_status})")
+            else:
+                logger.warning(f"No content generated for article {article.id}. Skipping.")
             
             # 7. Update article status
             article.status = "DRAFTED" if job_status == "DRAFT" else "POSTED"
             
             db.commit()
-            logger.info(f"Finished processing article {article.id} into {len(segments)} segments.")
+            logger.info(f"Finished processing article {article.id}.")
 
-            
         except Exception as e:
             logger.error(f"Error in process_news_to_threads: {e}")
             db.rollback()
