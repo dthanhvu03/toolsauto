@@ -18,6 +18,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from app.constants import JobType
+
 from playwright.sync_api import Playwright, BrowserContext, Page
 
 from app.adapters.contracts import AdapterInterface, PublishResult
@@ -245,7 +247,7 @@ class GenericAdapter(AdapterInterface):
         try:
             from app.services.workflow_registry import WorkflowRegistry
 
-            job_type = getattr(job, "job_type", "POST") or "POST"
+            job_type = getattr(job, "job_type", JobType.POST) or JobType.POST
             workflow = WorkflowRegistry.get_workflow(self.platform, job_type)
 
             if not workflow or not workflow.steps:
