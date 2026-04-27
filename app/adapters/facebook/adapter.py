@@ -68,16 +68,14 @@ class FacebookAdapter(AdapterInterface):
         self.playwright, self.context, self.page = bundle
         return True
 
+    @playwright_safe_action(default=False, catch=(Exception,), logger_name=__name__)
     def _is_session_alive(self) -> bool:
         """Check if the Playwright page/context is still alive before using it."""
         if not self.page or not self.context:
             return False
-        try:
-            # Accessing page.url will throw if the page/context/browser is closed
-            _ = self.page.url
-            return True
-        except Exception:
-            return False
+        # Accessing page.url will throw if the page/context/browser is closed.
+        _ = self.page.url
+        return True
 
     def _try_recover_session(self, profile_path: str) -> bool:
         """Attempt to close dead session and relaunch a fresh one."""
@@ -244,13 +242,11 @@ class FacebookAdapter(AdapterInterface):
             artifacts=artifacts,
         )
 
+    @playwright_safe_action(default=False, catch=(Exception,), logger_name=__name__)
     def _is_visible(self, locator: Locator | None) -> bool:
         if locator is None:
             return False
-        try:
-            return locator.count() > 0 and locator.is_visible()
-        except Exception:
-            return False
+        return locator.count() > 0 and locator.is_visible()
 
     def _find_first_visible(self, locators: list[Locator]) -> Locator | None:
         for locator in locators:
@@ -1627,38 +1623,36 @@ class FacebookAdapter(AdapterInterface):
         m = re.search(r"[?&]id=(\d{5,})", url)
         return m.group(1) if m else None
 
+    @playwright_safe_action(default=None, catch=(Exception,), logger_name=__name__)
     def _extract_page_id_from_current_page(self) -> str | None:
         """Attempt to extract the actual Facebook Page ID from the current page's metadata or script blobs."""
         if not self.page: return None
-        try:
-            return self.page.evaluate("""
-                () => {
-                    // 1. Check App Links (Meta tags)
-                    const appLink = document.querySelector('meta[property="al:android:url"], meta[property="al:ios:url"]');
-                    if (appLink && appLink.content.includes('id=')) {
-                        return appLink.content.split('id=')[1].split(/[&?]/)[0];
-                    }
-                    if (appLink && appLink.content.includes('page/')) {
-                         return appLink.content.split('page/')[1].split(/[&?]/)[0];
-                    }
-                    
-                    // 2. Check for PageID in JS config strings
-                    const html = document.documentElement.innerHTML;
-                    let match = html.match(/\"pageID\":\"(\d+)\"/);
-                    if (match) return match[1];
-                    
-                    match = html.match(/\"delegate_page_id\":\"(\d+)\"/);
-                    if (match) return match[1];
-                    
-                    // 3. Check for userID (if we are on /me and it resolved to the page)
-                    match = html.match(/\"userID\":\"(\d+)\"/);
-                    if (match) return match[1];
-
-                    return null;
+        return self.page.evaluate("""
+            () => {
+                // 1. Check App Links (Meta tags)
+                const appLink = document.querySelector('meta[property="al:android:url"], meta[property="al:ios:url"]');
+                if (appLink && appLink.content.includes('id=')) {
+                    return appLink.content.split('id=')[1].split(/[&?]/)[0];
                 }
-            """)
-        except Exception:
-            return None
+                if (appLink && appLink.content.includes('page/')) {
+                     return appLink.content.split('page/')[1].split(/[&?]/)[0];
+                }
+                
+                // 2. Check for PageID in JS config strings
+                const html = document.documentElement.innerHTML;
+                let match = html.match(/\"pageID\":\"(\d+)\"/);
+                if (match) return match[1];
+                
+                match = html.match(/\"delegate_page_id\":\"(\d+)\"/);
+                if (match) return match[1];
+                
+                // 3. Check for userID (if we are on /me and it resolved to the page)
+                match = html.match(/\"userID\":\"(\d+)\"/);
+                if (match) return match[1];
+
+                return null;
+            }
+        """)
 
     @staticmethod
     def _normalize_fb_profile_url_for_compare(u: str) -> str:
@@ -1672,19 +1666,17 @@ class FacebookAdapter(AdapterInterface):
         return base
 
     @staticmethod
+    @playwright_safe_action(default=False, catch=(Exception,), logger_name=__name__)
     def _is_fb_homepage_url(url: str) -> bool:
         """Return True if URL is bare FB host root with no meaningful path or query.
         This happens when /me is resolved while in Facebook Page context."""
-        try:
-            parsed = urlparse(url)
-            path = parsed.path or "/"
-            return (
-                parsed.netloc.lower() in _FB_HOST_NETLOCS
-                and path in ("", "/")
-                and not parsed.query
-            )
-        except Exception:
-            return False
+        parsed = urlparse(url)
+        path = parsed.path or "/"
+        return (
+            parsed.netloc.lower() in _FB_HOST_NETLOCS
+            and path in ("", "/")
+            and not parsed.query
+        )
 
     def _verify_page_context_via_switch_banner(self, target_page_url: str) -> bool:
         """Fallback check when /me resolves to root (Facebook Page context).
@@ -1775,17 +1767,15 @@ class FacebookAdapter(AdapterInterface):
 
         return (ok, na, nt)
 
+    @playwright_safe_action(default=False, catch=(Exception,), logger_name=__name__)
     def _switcher_row_has_page_id(self, row: Locator, page_id: str) -> bool:
         """True if row subtree has href with id or FB inlined the numeric id in markup."""
         if not page_id:
             return False
-        try:
-            if row.locator(f'[href*="{page_id}"]').count() > 0:
-                return True
-            outer = row.evaluate("e => (e && e.outerHTML) ? e.outerHTML : ''")
-            return page_id in (outer or "")
-        except Exception:
-            return False
+        if row.locator(f'[href*="{page_id}"]').count() > 0:
+            return True
+        outer = row.evaluate("e => (e && e.outerHTML) ? e.outerHTML : ''")
+        return page_id in (outer or "")
 
     def _resolve_switcher_clickable(self, el: Locator) -> Locator:
         clickable = el.locator(
