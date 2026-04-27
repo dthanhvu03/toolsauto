@@ -182,7 +182,22 @@ Mỗi Phase = 1 commit riêng. Nếu fail: `git revert <commit-hash> && pm2 rest
   - Verify: `venv/bin/python -c "from app.main import app; print('OK')"` → `OK` ✅
   - Verify: `venv/bin/python -m py_compile app/adapters/common/decorators.py app/adapters/facebook/adapter.py app/adapters/generic/adapter.py` → exit 0; note: existing `SyntaxWarning: invalid escape sequence '\d'` at `facebook/adapter.py:1634` remains unrelated.
   - Execution Done. Cần Claude Code verify + handoff.
-- ⏳ Phase 4: Enum & Constants — Chưa bắt đầu
+- ✅ Phase 4: Enum & Constants — DONE (Claude Code, commits `c47d810`, `b5af72e`, `9f8abf6`)
+  - **Commit 1 `c47d810` (Platform domain)**: Thêm `Platform(StrEnum)` (FACEBOOK/THREADS/TIKTOK/INSTAGRAM) + `STORY` vào JobType + skeleton `WorkflowAction` vào `app/constants.py`. Replace 2 magic string trong `app/adapters/dispatcher.py` (dict key `_DEDICATED_ADAPTERS` + `if platform == Platform.FACEBOOK`).
+  - **Commit 2 `b5af72e` (JobType domain)**: Replace tại 5 site comparison/constructor:
+    - `app/adapters/dispatcher.py:211` → `if job_type == JobType.COMMENT`
+    - `app/adapters/generic/adapter.py:248` → `getattr(job, "job_type", JobType.POST) or JobType.POST`
+    - `app/services/job.py:141` → `if job.job_type == JobType.POST`; `:145` → `Job(job_type=JobType.COMMENT, ...)`
+    - `app/services/job_tracer.py:32` → `if job_type.upper() == JobType.POST`
+    - `workers/publisher.py:221-222` → `getattr(default JobType.POST)` + `if job_type == JobType.COMMENT`
+  - **Commit 3 `9f8abf6` (WorkflowAction domain)**: Vocabulary ALIGN với `ActionExecutor.handlers` thực tế (NAVIGATE/CLICK/FILL/UPLOAD_FILE/WAIT/WAIT_VISIBLE/VERIFY/CHECK_AUTH). **Lệch scope ghi rõ**: PLAN gốc liệt kê `type/upload/scroll/select` — các giá trị này KHÔNG tồn tại trong codebase, đã thay bằng giá trị thực tế. Replace tại `action_executor.py:307-316` (handlers dict keys) + `platform_config_service.py:454`. `db_acl.py:31 action == "select"` thuộc domain SQL DML, không phải WorkflowAction → giữ nguyên (escalation: confirmed not a magic-string violation).
+  - **Verify proof (executed sau commit 3)**:
+    - `grep -rn '"facebook"' app/adapters/dispatcher.py` → **0 matches** ✅
+    - `python -c "from app.constants import Platform, JobType, WorkflowAction; assert Platform.FACEBOOK == 'facebook'; assert JobType.POST == 'POST'; assert WorkflowAction.NAVIGATE == 'navigate'; print('enum_ok')"` → `enum_ok` ✅
+    - `python -c "from app.main import app; print('OK')"` → `app_import_ok` ✅
+    - Pytest baseline (TRƯỚC commit 1): **58 passed, 18 failed** trong 247.93s.
+    - Pytest sau commit 3: **58 passed, 18 failed** trong 257.58s — **0 regression**, cùng danh sách 18 fail pre-existing (test_platform_workflow_runtime, test_post_page, test_switch*, test_ai_pipeline_async, test_composer_strict, test_daily_limit_postpone, test_integration). Skipped 5 collection errors pre-existing (test_insert/maintenance_media_filter/scrape/video_notify/ytdlp).
+  - **Tương thích ngược 100%**: `StrEnum` ⇒ `Platform.FACEBOOK == "facebook"`, hash giống string, JSON serialize giống string, SQLAlchemy persist giống string, FastAPI Form() giống string. Default values trong `Column(default="facebook")` và FastAPI param defaults (~30 site) giữ nguyên — out of scope (không phải comparison; type chú thích là `str`; thay đổi sẽ làm dirty diff và risk routing). Các site đó đã được dọn nếu cần ở phase tiếp theo.
 
 ---
 

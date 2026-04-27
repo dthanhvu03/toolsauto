@@ -1,10 +1,15 @@
 - **[2026-04-27]** NEW TASK-027: Codebase Refactoring Sprint ⏳
   - Architecture Review hoàn tất → phát hiện 5 vi phạm nguyên tắc quốc tế (SOLID/DRY/Clean Architecture).
   - Tạo `agents/ARCHITECTURE_REVIEW.md`, `agents/CODING_STANDARDS.md`, cập nhật `RULES.md` + `WORKFLOW.md`.
-  - PLAN-027 tạo (Active) — Phase 1: **DONE** (Schema Centralization).
-  - Next: Phase 2 (Thin Controller) — Tách logic từ routers sang services.
+  - PLAN-027 tạo (Active) — Phase 1 **DONE** (Schema Centralization, Claude Code), Phase 2 **DONE** (Thin Controller, Codex), Phase 3 **DONE** (DRY Error Handling, Codex), Phase 4 **DONE** (Enum & Constants, Claude Code).
+  - **Phase 4 (Enum & Constants)** — Claude Code, commits `c47d810`, `b5af72e`, `9f8abf6`:
+    - Thêm `Platform(StrEnum)`, `WorkflowAction(StrEnum)`, mở rộng `JobType` với `STORY` trong `app/constants.py`.
+    - Replace magic strings ở các site comparison/constructor: `dispatcher.py` (Platform.FACEBOOK + JobType.COMMENT), `generic/adapter.py`, `services/job.py`, `services/job_tracer.py`, `workers/publisher.py`, `generic/action_executor.py` (handlers dict), `services/platform_config_service.py`.
+    - **Lệch scope ghi rõ**: WorkflowAction enum dùng vocabulary thực tế (FILL/UPLOAD_FILE/VERIFY/CHECK_AUTH) thay vì giá trị PLAN liệt kê (TYPE/UPLOAD/SCROLL/SELECT) vì các giá trị PLAN không tồn tại trong handlers thực tế. `db_acl.py:31 "select"` là SQL DML, không phải WorkflowAction → giữ nguyên.
+    - Verify: `grep '"facebook"' app/adapters/dispatcher.py` = 0 ✅; `Platform.FACEBOOK == "facebook"` ✅; `from app.main import app` OK ✅; pytest 58/76 (18 fail = pre-existing baseline, 0 regression).
+  - Next: Anti Sign-off Gate cho cả 4 Phase. Sau approve → archive PLAN-027 + TASK-027.
   - Đã loại scope trùng lặp: AI Pathway (TASK-023/024), models split (TASK-022), test baseline (TASK-021), cron (TASK-020).
-  - **Status: Assigned (Phase 2-4 pending)**
+  - **Status: All 4 Phases Done — chờ Anti Sign-off**
 
 - **[2026-04-27]** Done TASK-026: Async Pipeline & Threads Caller Migration ✅
   - Triển khai `generate_text_async` và `call_native_gemini_async` (Async SDK).
