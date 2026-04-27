@@ -172,7 +172,16 @@ Mỗi Phase = 1 commit riêng. Nếu fail: `git revert <commit-hash> && pm2 rest
     - Verify thêm: `grep -c 'subprocess' app/routers/syspanel.py` → `0` ✅
     - Verify: `venv/bin/python -c "from app.main import app; print('OK')"` → `OK` ✅
   - Execution Done. Cần Claude Code verify + handoff.
-- ⏳ Phase 3: DRY Error Handling — Chưa bắt đầu
+- ✅ Phase 3: DRY Error Handling — DONE (Codex)
+  - Tạo `app/adapters/common/decorators.py` với `@playwright_safe_action` (commit `896efef`).
+  - Apply Facebook helper-only: `_wait_and_locate_array`, `_click_locator`, `_safe_goto` trong `app/adapters/facebook/adapter.py` (commit `26404b3`). Không đụng public `publish/open_session`, không đụng checkpoint/switcher handling đặc thù.
+  - Apply Generic trong `app/adapters/generic/adapter.py` cho pattern cleanup Playwright resource lặp lại (`close/stop` try-except-pass) (commit Phase 3 cuối). Không apply vào `publish`; step execution thực tế nằm ở `app/adapters/generic/action_executor.py` và đang có `StepResult`/artifact handling riêng, nên không đổi.
+  - Baseline thực tế: `grep -c 'except.*Timeout' app/adapters/facebook/adapter.py` trước apply → `0`; `app/adapters/generic/adapter.py` → `0`. Snapshot hiện tại không có `except TimeoutError` pattern để giảm >50%; code dùng `except Exception` quanh Playwright calls.
+  - Verify: `grep -c 'except.*Timeout' app/adapters/facebook/adapter.py` → `0` ✅
+  - Verify: `venv/bin/python -c "from app.adapters.facebook.adapter import FacebookAdapter; print('OK')"` → `OK` ✅
+  - Verify: `venv/bin/python -c "from app.main import app; print('OK')"` → `OK` ✅
+  - Verify: `venv/bin/python -m py_compile app/adapters/common/decorators.py app/adapters/facebook/adapter.py app/adapters/generic/adapter.py` → exit 0; note: existing `SyntaxWarning: invalid escape sequence '\d'` at `facebook/adapter.py:1634` remains unrelated.
+  - Execution Done. Cần Claude Code verify + handoff.
 - ⏳ Phase 4: Enum & Constants — Chưa bắt đầu
 
 ---
