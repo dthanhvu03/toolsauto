@@ -100,7 +100,25 @@ def build_report(groups: list[IncidentGroup]) -> str:
     try:
         response, meta = pipeline.generate_text(prompt)
         if meta.get("ok") and response:
-            return "<b>Daily Health Report</b>\n<pre>" + html.escape(response[:3500]) + "</pre>"
+            header = "<b>Daily Health Report</b>"
+            # Per ADR-006: surface fallback usage so reader knows output came from
+            # native Gemini, not the canonical 9Router gateway.
+            if meta.get("fallback_used"):
+                primary = html.escape(str(meta.get("primary_fail_reason") or "unknown"))
+                model = html.escape(str(meta.get("model") or "native"))
+                header += (
+                    "\n<i>⚠️ Dự phòng: Gemini Native (model="
+                    + model
+                    + ", 9Router fail_reason="
+                    + primary
+                    + ")</i>"
+                )
+                logger.warning(
+                    "[AI Reporter] Report generated via native fallback (primary=%s, model=%s)",
+                    meta.get("primary_fail_reason"),
+                    meta.get("model"),
+                )
+            return header + "\n<pre>" + html.escape(response[:3500]) + "</pre>"
         return _fallback_report(groups, meta.get("fail_reason", "empty response"))
     except Exception as exc:
         logger.warning("[AI Reporter] Report generation failed: %s", exc)

@@ -1,6 +1,26 @@
+"""DEPRECATED — Legacy direct-Gemini service. Use AICaptionPipeline (ADR-006).
+
+Per ADR-006 (Phương án A + Guardrails) and PLAN-022, the canonical text path is:
+
+    from app.services.ai_runtime import pipeline
+    text, meta = pipeline.generate_text(prompt)   # 9Router → native auto-fallback
+
+Native text fallback now lives in `app/services/ai_native_fallback.py`.
+
+Why this file is NOT deleted yet:
+- Vision path (`ask_with_file`) is still used by `content_orchestrator` for
+  image+prompt JSON generation. AICaptionPipeline.generate_caption() exists
+  for that flow but does NOT yet have native vision fallback. Migration of
+  the vision path is out of scope for ADR-006 and will be a follow-up.
+- Async path (`ask_async`) used by `workers/threads_auto_reply.py`. Migration
+  to pipeline async equivalent is also out of scope.
+
+Do NOT add new callers to GeminiAPIService for text. Use `pipeline.generate_text`.
+"""
 import time
 import logging
 import os
+import warnings
 import app.config as config
 from PIL import Image
 from google import genai
@@ -9,6 +29,14 @@ from app.constants import JobStatus
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+warnings.warn(
+    "app.services.gemini_api is DEPRECATED for the text path. "
+    "Use app.services.ai_runtime.pipeline.generate_text() (ADR-006). "
+    "Vision/async paths are still allowed temporarily.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 # Tier list — verified available via genai.list_models()
 GEMINI_TEXT_MODELS = [
