@@ -1625,6 +1625,27 @@ function switchPlatform(platform) {
   loadCTA();
 }
 
+async function applyPreset(name) {
+  if (!confirm(`Kích hoạt workflow "${name}"?`)) return;
+  try {
+    const res = await fetch('/platform-config/presets/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message || `Đã kích hoạt ${name}`);
+      loadWorkflows();
+      if (typeof loadOverview === 'function') loadOverview();
+    } else {
+      showToast(data.message || data.error || 'Lỗi khi kích hoạt');
+    }
+  } catch (e) {
+    showToast('Lỗi kết nối: ' + e.message);
+  }
+}
+
 // ─── Toast notification ───────────────────────────────────────
 function showToast(msg) {
   const toast = document.createElement('div');
