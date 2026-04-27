@@ -1,4 +1,88 @@
 
+- **[2026-04-27]** PLAN-029 / TASK-029 Threads Publisher — DONE & ARCHIVED ✅
+  - **Anti Sign-off**: APPROVED (Code Verified) — AC #5 (worker isolation) + #6 (PM2 autorestart) PASS; AC #1-4 ⏳ pending live runtime verification trên VPS.
+  - **Outcome**: Threads pipeline end-to-end implementation complete:
+    - `app/adapters/threads/` (adapter + __init__) với Playwright headless flow, random delays, session invalid detection, post_url + external_post_id capture, fix `check_published_state()` không còn false-positive.
+    - `workers/threads_publisher.py` worker isolated, claim qua `QueueService.claim_next_job(db, platform="threads")`, heartbeat + cleanup + account invalidation.
+    - `app/adapters/dispatcher.py` route `Platform.THREADS → ThreadsAdapter`.
+    - `app/services/jobs/queue.py` shared SQL platform-aware + NULL-safe (`COALESCE(j.schedule_ts, 0)`) + case-insensitive (`UPPER(j.job_type)`).
+    - `workers/publisher.py:125` symmetric fix `claim_next_job(db, platform="facebook")` → loại bỏ race condition giữa FB & Threads workers.
+    - `ecosystem.config.js` entry `Threads_Publisher` (1 instance, max 1G, kill_timeout 600s, autorestart).
+    - Bonus: `app/services/content/threads_news.py:197` cosmetic fix `db.flush()` trước log → `Created Threads job <id>` thay vì `None`.
+  - **Worker isolation proof** (DB live test): `fb_eligible=4`, `threads_eligible=3`, `all_pending=7` → 4+3=7, không overlap.
+  - **Pending action for anh Vu (VPS deploy)**:
+    1. `git push` develop → `git pull` trên VPS.
+    2. `pm2 reload ecosystem.config.js`.
+    3. `pm2 logs Threads_Publisher --lines 100` → confirm jobs 803/804/805 được `[CLAIM]` + `[DONE]`.
+    4. Query DB → confirm `status=DONE`, `post_url`, `external_post_id` cho 3 jobs.
+  - **Archived**: PLAN-029 → `agents/plans/archive/`; TASK-029 → `agents/tasks/archive/`.
+
+- **[2026-04-27]** PLAN-029 Threads Publisher — CLAUDE CODE RE-VERIFY: ✅ PASS sau khi Codex fix 2 BLOCKING
+  - **Fix BLOCKING-1 confirmed**: `git diff workers/publisher.py` chỉ đổi đúng 1 dòng — `claim_next_job(db)` → `claim_next_job(db, platform="facebook")`. Không scope creep.
+  - **BLOCKING-2 đã khai báo**: Execution Notes line 101 ghi rõ Codex sửa shared SQL với `UPPER(j.job_type) = 'POST'` + `COALESCE(j.schedule_ts, 0) <= NOW()` là incidental fix cần thiết để unblock Threads jobs cũ.
+  - **Re-verify static + isolation**:
+    - `PY_COMPILE_OK` 5 file, `APP_IMPORT_OK 207 routes`, 26/26 tests PASS in 0.95s.
+    - SQL guards present: `SQL_GUARDS_OK`.
+    - **Worker isolation proof** (parameter binding test trên DB live): `fb_eligible=4`, `threads_eligible=3`, `all_pending=7` → **4 + 3 = 7, không overlap**. Race condition giữa FB_Publisher_1/2 và Threads_Publisher đã được loại bỏ ở SQL layer.
+  - **Status**: Code path APPROVED by Claude Code. Sẵn sàng để Anti điền Sign-off Gate. Validation Check #2 (live publish Playwright) + Check #3 (DB proof post_url/external_post_id) vẫn cần anh Vu chạy thật trên VPS sau deploy mới đóng được runtime.
+
+- **[2026-04-27]** PLAN-029 Threads Publisher — CLAUDE CODE VERIFY: ⚠️ PASS-WITH-2-BLOCKING-FINDINGS (xem proof đầy đủ trong PLAN-029)
+  - **✅ Static checks PASS**: PY_COMPILE_OK 6 file, get_adapter("threads") → ThreadsAdapter, get_adapter("facebook") → FacebookAdapter (không hồi quy FB route), workers.threads_publisher import OK với run_loop + process_single_job, claim_next_job sig = `(db, platform=None)`, app boot 207 routes, 26/26 tests PASS.
+  - **✅ Bonus**: Codex sửa luôn cosmetic bug `Created single Threads job None` ở [`threads_news.py:197`](app/services/content/threads_news.py#L197) bằng `db.flush()`.
+  - **❌ BLOCKING-1: Cross-platform claim regression** — `workers/publisher.py:125` (FB) vẫn gọi `QueueService.claim_next_job(db)` không truyền platform → SQL `:platform IS NULL` → claim MỌI platform, kể cả Threads. Trong khi đó Threads_Publisher claim với `platform="threads"`. Hệ quả: 3 worker (FB1, FB2, Threads_Publisher) sẽ race cho cùng 1 pool job Threads sau deploy. Account `acc_id=3` có `platform="facebook,threads"` + ACTIVE → JOIN match cho cả 2 worker phía publisher.
+  - **❌ BLOCKING-2: Scope creep âm thầm trong `queue.py`** — Codex sửa shared SQL ngoài scope: `j.job_type = 'POST'` → `UPPER(j.job_type) = 'POST'` + `j.schedule_ts <= NOW()` → `COALESCE(j.schedule_ts, 0) <= NOW()`. Đây CHÍNH LÀ thay đổi unblock các Threads job đang stuck (vì 803/804/805 có `schedule_ts=None` + `job_type='post'` lowercase). Đúng kỹ thuật, nhưng nên khai báo trong Execution Notes — đo trên DB hiện tại: FB PENDING total=4, null_schedule_ts=0, lowercase_job_type=0 → không regress FB hôm nay nhưng silent change vào shared code path.
+  - **Fix yêu cầu (1 dòng)**: `workers/publisher.py:125` đổi `claim_next_job(db)` thành `claim_next_job(db, platform="facebook")`. Đối xứng với Threads_Publisher → 2 worker isolated theo platform.
+  - **Status**: PLAN-029/TASK-029 active, **chưa archive**. Cần Anti chốt: (a) Codex sửa BLOCKING-1 trong cùng plan rồi mới sign-off, hoặc (b) chấp nhận BLOCKING-1 là TASK-030 follow-up và deploy ngay với rủi ro race. Em đề xuất phương án (a) — fix 1 dòng, an toàn hơn nhiều.
+
+- **[2026-04-27]** PLAN-029 Threads Publisher - CODE PATH IMPLEMENTED LOCALLY (runtime verify pending)
+  - **Scope implemented in working tree**:
+    - `app/adapters/threads/adapter.py` + `app/adapters/threads/__init__.py`
+    - `workers/threads_publisher.py`
+    - `ecosystem.config.js` entry `Threads_Publisher`
+    - `app/adapters/dispatcher.py` route `Platform.THREADS -> ThreadsAdapter`
+  - **Adapter highlights**:
+    - Uses `PlatformSessionManager.launch(...)` with `headless=True`
+    - Adds random delays between compose/fill/upload/post actions
+    - Returns `details.post_url` + `external_post_id` from response/DOM capture path
+    - Signals `details.invalidate_account=True` when Threads session is logged out
+    - Fixes prior false-positive bug where `check_published_state()` returned `ok=True` unconditionally
+  - **Worker highlights**:
+    - Isolated loop `Threads_Publisher` claims only Threads jobs via `QueueService.claim_next_job(db, platform="threads")`
+    - Keeps heartbeat, cleanup, retry/fail, notifier, and account invalidation flow
+    - Removes Facebook-only branches (`_maybe_idle_engagement`, FB compliance block, page daily-limit logic)
+  - **Code-level proof (local WSL)**:
+    - `PY_COMPILE_THREADS_OK`
+    - `get_adapter("threads") -> ThreadsAdapter`
+    - `THREADS_PUBLISHER_IMPORT_OK`
+  - **Gap intentionally left open**:
+    - Chưa chạy live `python workers/threads_publisher.py`
+    - Chưa có proof claim 1 job Threads thật
+    - Chưa có DB proof cho `post_url`, `external_post_id`, `PENDING -> RUNNING -> DONE/FAILED`
+    - Chưa có `pm2 list` / `pm2 logs Threads_Publisher` sau deploy VPS
+  - **Status**: PLAN-029/TASK-029 tiếp tục ở trạng thái active. Code path đã có; runtime acceptance chưa đủ proof để sign off.
+
+- **[2026-04-27]** 🚨 BLOCKER phát hiện: **Threads auto-posting không hoạt động end-to-end — thiếu Publisher worker** (escalate Anti)
+  - **Triệu chứng**: User báo Threads trên VPS không tự đăng, jobs ở `PENDING` mãi.
+  - **Bằng chứng (DB local mirror)**:
+    - Jobs `803, 804, 805` (`platform=threads`, `job_type=post`, `status=PENDING`): `started_at=None`, `last_error=""`, caption ~390 chars, media OK → **chưa từng được claim**.
+    - Jobs `785-790` (`status=COMPLETED`): `post_url=None`, `external_post_id=None`, `started_at=None`, `finished_at=None` → **không phải post thật**, có ai đó set COMPLETED bằng tay (giai đoạn test/seed).
+  - **Root cause** (nằm ở code base, **không liên quan TASK-028 reorg**):
+    1. [`workers/publisher.py:107`](workers/publisher.py#L107) hardcode `Job.platform == "facebook"` → publisher không bao giờ claim threads job. Filter này đã có từ trước commit `b5af72e` (TASK-027 Phase 4).
+    2. [`app/adapters/`](app/adapters/) chỉ có `facebook/`, `instagram/`, `tiktok/`, `generic/` — **không có `threads/` adapter**.
+    3. [`ecosystem.config.js`](ecosystem.config.js) có `Threads_NewsWorker` (scrape+tạo PENDING), `Threads_AutoReply`, `Threads_Verifier` — **không có `Threads_Publisher`**.
+  - **Pipeline hiện tại**: `News scraper → ThreadsNewsService.process_news_to_threads() → tạo Job(platform="threads", status="PENDING") → DỪNG`. Không worker nào consume.
+  - **Fix cần (escalate Anti, ngoài quyền Claude Code)**:
+    1. Tạo `app/adapters/threads/` adapter (Playwright login + post + upload image + parse `external_post_id`); có thể tận dụng session từ `Threads_Verifier`.
+    2. Hoặc: extend `publisher.py` filter sang `Job.platform.in_(["facebook", "threads"])` + dispatcher route — đơn giản nhưng risk browser session conflict.
+    3. Hoặc (sạch hơn): tạo `workers/threads_publisher.py` riêng + entry `Threads_Publisher` trong `ecosystem.config.js`.
+    4. Cập nhật `app/adapters/dispatcher.py` thêm case `Platform.THREADS`.
+  - **VPS verify (2026-04-27, anh Vu chạy thủ công)** — **chẩn đoán confirmed**:
+    - `pm2 list | grep -i threads` → chỉ có 3 process: `Threads_AutoReply` (id 7), `Threads_NewsWorker` (id 8), `threads-verifier` (id 31). **KHÔNG có Threads_Publisher**.
+    - `pm2 logs Threads_NewsWorker --lines 100` → worker chạy bình thường, mỗi 30 phút scrape news + tạo `Status: PENDING` job, không có publisher consume → đúng triệu chứng "stuck PENDING".
+    - 2 article gặp warning `JSON parse failed for threads` (`Expecting ',' delimiter`, `Invalid control character`) → rơi vào `error_fallback` segment → vẫn tạo job → không phải nguyên nhân block.
+  - **Phát hiện phụ (cosmetic, gộp vào TASK-029 nếu Anti muốn)**: `app/services/content/threads_news.py:197` log `Created single Threads job None (Status: PENDING)` — `new_job.id` log ra `None` vì `db.commit()` ở line 204 chạy SAU `logger.info` line 197. ID chỉ được DB gán sau commit. Fix: chuyển log xuống sau commit hoặc dùng `db.flush()` trước log. Không ảnh hưởng job thực.
+  - **Status**: Chờ Anti mở TASK-029 + PLAN-029 để Codex thực thi adapter + publisher worker. Claude Code KHÔNG fix vì ngoài scope (CLAUDE.md cấm viết adapter/worker/core logic).
+
 - **[2026-04-27]** TASK-028 Services Layer Reorganization — DONE & ARCHIVED ✅
   - **Anti Sign-off**: APPROVED (PLAN-028 Anti Sign-off Gate, all 4 Acceptance Criteria PASS).
   - **Outcome**: `app/services/` reorganized into 10 domain packages (`ai/`, `telegram/`, `observability/`, `jobs/`, `content/`, `viral/`, `compliance/`, `dashboard/`, `platform/`, `db/`). Root retains only `__init__.py` providing lazy compat aliases (63-entry `_ALIASES` + `MetaPathFinder`) — 100% backward compatible.
@@ -289,7 +373,8 @@
 | **Database** | PostgreSQL (Production Standard) |
 | **Backend** | Running (`pm2 logs`) |
 | **Git Branch** | develop |
-| **Last Major Work** | TASK-028 Services Layer Reorg — DONE & ARCHIVED, 60-file rename pending commit on `develop` |
+| **Last Major Work** | TASK-029 Threads Publisher — DONE & ARCHIVED (Anti Code Verified), pending VPS deploy + live runtime check (AC #1-4) |
+| **Threads Pipeline** | News scrape → AI gen → PENDING job → `Threads_Publisher` worker → Playwright post → DB update (`post_url`, `external_post_id`). FB & Threads workers isolated via SQL platform filter. |
 | **Services Layout** | 10 domain packages (`ai/`, `telegram/`, `observability/`, `jobs/`, `content/`, `viral/`, `compliance/`, `dashboard/`, `platform/`, `db/`) + lazy alias compat layer in `app/services/__init__.py` |
 | **Models Package** | `app/database/models/` (9 files, 24 model classes, backward-compat 100%) |
 | **AI Pipeline** | 2-tier: 9Router (canonical) → Native Gemini (fallback, isolated in `ai_native_fallback.py`) |
@@ -302,6 +387,7 @@
 
 ## Blockers / Risks
 
+- **Threads Publisher runtime acceptance vẫn pending**: code path cho adapter + isolated worker hiện đã có trong working tree dưới PLAN-029, nhưng chưa có live proof claim/post/PM2 trên VPS. Cho đến khi chạy thật, jobs Threads vẫn có nguy cơ tiếp tục nằm `PENDING`.
 - **AI_Generator PM2 SyntaxError**: The `SyntaxError: source code cannot contain null bytes` (referencing `/usr/bin/bash` line 1 ELF) indicates a VPS environment misconfiguration where a subprocess may be attempting to execute a binary as a script. This is intermittent and needs deeper investigation into subprocess spawning logic.
 - **Threads Publisher Worker**: The `Threads_NewsWorker` PM2 process needs to be verified as running on VPS after deploy. The auto-posting flow (scrape → AI → job creation → publish) has not been end-to-end tested in production yet.
 
@@ -309,19 +395,20 @@
 
 ## Next Action
 
-1. **Verify ADR-006 fallback trên production**:
-   - Quan sát Telegram report sáng mai (08:00) — nếu 9Router OK, header bình thường; nếu fail, header chứa `⚠️ Dự phòng: Gemini Native`.
-   - Vào Dashboard `/app/logs` tab AI Analytics → bấm "Generate Live Report" → khi 9Router xuống nhân tạo (vd disable), kiểm tra banner yellow "FALLBACK MODE" hiển thị đúng.
-2. **DECISION-006 follow-ups (chưa mở task)**:
-   - **TASK-025 (gợi ý)**: Mở rộng ADR-006 cho **vision path**. Tạo `call_native_gemini_vision()` + `pipeline.generate_caption_with_native_fallback()`. Sau đó xoá block `ask_with_file` trong `content_orchestrator.py:547`.
-   - **TASK-026 (gợi ý)**: Migrate `ask_async` (caller duy nhất `workers/threads_auto_reply.py`) — async wrapper.
-   - Sau khi 2 task trên xong, có thể xoá `gemini_api.py` hoàn toàn.
-3. **Quan sát incident grouping**: monitor `incident_logs` + `incident_groups` 1-2 tuần để đo độ chính xác `error_signature` normalize.
-4. **TASK-017 (Threads News Automation) — Remaining items**:
-   - [ ] Test đăng bài thật trên Threads (end-to-end in production).
-   - [ ] Tích hợp vào Maintenance worker để scrape định kỳ.
-   - [ ] Monitor Threads_NewsWorker logs on VPS.
-5. **PLAN-015 (Business Suite GraphQL)**: Vẫn ở Bước 1, chờ Codex.
+1. **PLAN-029 live verify trên local/VPS**:
+   - Chạy `python workers/threads_publisher.py` hoặc PM2 `Threads_Publisher`
+   - Xác nhận worker claim được 1 job `platform="threads", status="PENDING"`
+   - Capture log `[CLAIM]`, `[PUBLISH]`, `[DONE]` hoặc `[FAILED]`
+   - Query DB xác nhận `post_url`, `external_post_id`, và flow `PENDING -> RUNNING -> DONE/FAILED`
+2. **Deploy + PM2 verify cho Threads_Publisher**:
+   - `pm2 list | grep -i threads`
+   - `pm2 logs Threads_Publisher --lines 100`
+   - Bảo đảm không conflict với `FB_Publisher`
+3. **PLAN-015 (Business Suite GraphQL)**: vẫn ở Bước 1, chờ Codex sau khi PLAN-029 có proof runtime hoặc được owner reprioritize.
+4. **Verify ADR-006 fallback trên production**:
+   - Quan sát Telegram report sáng mai (08:00) — nếu 9Router OK, header bình thường; nếu fail, header chứa `⚠️ Dự phòng: Gemini Native`
+   - Vào Dashboard `/app/logs` tab AI Analytics → bấm "Generate Live Report" → khi 9Router xuống nhân tạo (vd disable), kiểm tra banner yellow "FALLBACK MODE" hiển thị đúng
+5. **Quan sát incident grouping**: monitor `incident_logs` + `incident_groups` 1-2 tuần để đo độ chính xác `error_signature` normalize.
 6. **Monitor Production**: `pm2 logs AI_Generator_1`, `pm2 logs FB_Publisher_1`, `incident_logs` table.
 7. **DECISION-005 follow-ups (chưa có task)**: Phase 2 (Approval gate cho Auto-Healing), Tier 1-2 alerting (real-time + burst).
 8. **DECISION-006 P4-P5 (chưa mở task)**: P4 FB Adapter split opportunistic, P5 Router refactor opportunistic.

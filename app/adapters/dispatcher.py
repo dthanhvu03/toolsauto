@@ -37,9 +37,13 @@ def get_adapter(platform: str) -> AdapterInterface:
     """
     from app.adapters.generic.adapter import GenericAdapter
 
+    from app.adapters.facebook.adapter import FacebookAdapter
+    from app.adapters.threads.adapter import ThreadsAdapter
+
     # Map of platforms that have dedicated (non-Generic) adapters
     _DEDICATED_ADAPTERS = {
         Platform.FACEBOOK: lambda: FacebookAdapter(),
+        Platform.THREADS: lambda: ThreadsAdapter(),
     }
 
     registry_adapter: AdapterInterface | None = None

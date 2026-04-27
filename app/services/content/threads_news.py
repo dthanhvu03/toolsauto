@@ -194,6 +194,7 @@ class ThreadsNewsService:
                     dedupe_key=f"threads_news_v2_{article.id}"
                 )
                 db.add(new_job)
+                db.flush()
                 logger.info(f"Created single Threads job {new_job.id} (Status: {job_status})")
             else:
                 logger.warning(f"No content generated for article {article.id}. Skipping.")
