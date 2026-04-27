@@ -77,9 +77,12 @@ Dự án hiện tại tổ chức theo mô hình Kiến trúc Đa tầng (Layere
 
 ### 1. Thư mục `app/routers/` (Tầng Controller)
 - **Nguyên tắc bị vi phạm:** Fat Controller (Controller béo phì).
-- **Thực trạng:** Tầng Router ĐÁNG LẼ chỉ được phép làm 3 việc: Nhận Request $\rightarrow$ Validate $\rightarrow$ Trả Response. Nhưng hiện tại:
-  - `routers/platform_config.py` (38KB): Gọi trực tiếp Terminal Server qua Bash subprocess (`subprocess.run(["tmux", ...])`).
-  - `routers/compliance.py` (28KB): Chứa hàng tá câu truy vấn SQL thô `db.execute(text("SELECT..."))` trực tiếp bên trong các route (như `/categories`, `/ai-suggest-keywords`).
+- **Thực trạng:** Tầng Router ĐÁNG LẼ chỉ được phép làm 3 việc: Nhận Request $\rightarrow$ Validate $\rightarrow$ Trả Response. Tuy nhiên, sau Phase 2 của TASK-027, vẫn còn nhiều router vi phạm nặng:
+  - `routers/dashboard.py` (~30KB): Chứa hơn **45 câu query ORM** và các câu SQL thô (`db.execute(text(...))`). Đây là "God Router" ôm đồm toàn bộ logic thống kê, hiển thị log, và analytics.
+  - `routers/threads.py`: Chứa logic phân loại account (`_classify_accounts`) và hàng chục query quản lý job Threads.
+  - `routers/jobs.py`: Chứa logic upload file, xử lý path, và query trạng thái job phức tạp.
+  - `routers/viral.py`, `routers/affiliates.py`, `routers/pages.py`: Đều chứa logic truy vấn trực tiếp thay vì delegate qua Service.
+  - `routers/database.py`: (Chấp nhận được vì đây là DB Explorer, nhưng cần guardrails tốt hơn).
 - **Hậu quả:** Khó viết Unit Test cho logic mà không giả lập được HTTP Request.
 
 ### 2. Thư mục `app/schemas/` (Tầng Validation / DTO)

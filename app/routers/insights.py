@@ -1,19 +1,12 @@
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from typing import Optional
-import datetime
-import time as _time
-import sys
-import os
 import logging
 
 logger = logging.getLogger(__name__)
 
 from app.database.core import get_db
-from app.database import models
-from app.main_templates import templates
-from app import config
 
 from app.services import insights_service
 

@@ -1,35 +1,7 @@
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import HTMLResponse, FileResponse
-import os
-import json
-import glob
-import time
-import psutil
-import shutil
+from fastapi.responses import HTMLResponse
 import logging
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from app.main_templates import templates
-from app.database.core import SessionLocal, engine
-from app.database.models import Job, Account
-from app.constants import JobStatus
-from app.config import (
-    TIMEZONE,
-    DATABASE_URL,
-    BASE_DIR,
-    DATA_DIR,
-    CONTENT_DIR,
-    DONE_DIR,
-    FAILED_DIR,
-    REUP_DIR,
-    THUMB_DIR,
-    LOGS_DIR,
-    VNC_PORT,
-    CONTENT_MEDIA_DIR,
-    CONTENT_VIDEO_DIR,
-    CONTENT_PROCESSED_DIR,
-    iter_pm2_log_directories,
-)
+from app.config import BASE_DIR
 import app.config as config
 
 from app.services import syspanel_service

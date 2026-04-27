@@ -26,6 +26,30 @@ class WorkerService:
         return state
 
     @staticmethod
+    def get_state_with_trace(db: Session) -> tuple[SystemState, Optional[dict]]:
+        import json
+        import time
+        state = WorkerService.get_or_create_state(db)
+        trace_data = None
+        if state.engagement_status == 'JOB_EXECUTION' and state.engagement_detail:
+            try:
+                trace_data = json.loads(state.engagement_detail)
+                if trace_data.get("status") in ("completed", "failed") and trace_data.get("updated_at"):
+                    from datetime import datetime
+                    try:
+                        updated_ts = datetime.fromisoformat(trace_data["updated_at"]).timestamp()
+                        if time.time() - updated_ts > 45:
+                            trace_data = None
+                            state.engagement_status = None
+                            state.engagement_detail = None
+                            db.commit()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        return state, trace_data
+
+    @staticmethod
     def update_heartbeat(db: Session, current_job_id: Optional[int]):
         """Cheap update for worker heartbeat with silent retries for locking."""
         import sqlalchemy.exc

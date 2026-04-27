@@ -94,6 +94,14 @@ class AccountService:
     def list_accounts(db: Session, skip: int = 0, limit: int = 100) -> List[Account]:
         return db.query(Account).order_by(Account.id.asc()).offset(skip).limit(limit).all()
 
+    @staticmethod
+    def get_active_accounts(db: Session) -> List[Account]:
+        return db.query(Account).filter(Account.is_active == True).all()
+
+    @staticmethod
+    def get_account_by_id(db: Session, account_id: int) -> Optional[Account]:
+        return AccountService.get_account(db, account_id)
+
     @classmethod
     def create_account(cls, db: Session, platform: str, name: str, daily_limit: int = 3, cooldown_seconds: int = 1800) -> Account:
         """Creates a new account in state NEW."""
@@ -107,34 +115,76 @@ class AccountService:
             daily_limit=daily_limit,
             cooldown_seconds=cooldown_seconds
         )
-        db.add(new_acc)
-        db.commit()
-        db.refresh(new_acc)
+        try:
+            db.add(new_acc)
+            db.commit()
+            db.refresh(new_acc)
+            
+            # Now set exact profile path
+            profile_path = os.path.join(cls.BASE_PROFILE_DIR, f"{platform}_{new_acc.id}")
+            profile_path = os.path.abspath(os.path.normpath(profile_path))
+            os.makedirs(profile_path, exist_ok=True) # CRITICAL FIX: Physically provision directory
+            
+            new_acc.profile_path = profile_path
+            db.commit()
+            db.refresh(new_acc)
+            return new_acc
+        except Exception as e:
+            db.rollback()
+            raise e
         
-        # Now set exact profile path
-        profile_path = os.path.join(cls.BASE_PROFILE_DIR, f"{platform}_{new_acc.id}")
-        profile_path = os.path.abspath(os.path.normpath(profile_path))
-        os.makedirs(profile_path, exist_ok=True) # CRITICAL FIX: Physically provision directory
+    @staticmethod
+    def rename_account(db: Session, account_id: int, name: str) -> Optional[Account]:
+        try:
+            account = AccountService.get_account(db, account_id)
+            if account and name and name.strip():
+                account.name = name.strip()
+                db.commit()
+                db.refresh(account)
+            return account
+        except Exception as e:
+            db.rollback()
+            raise e
+
+    @staticmethod
+    def trigger_page_sync(db: Session, account_id: int) -> bool:
+        import threading
+        import sys
         
-        new_acc.profile_path = profile_path
-        db.commit()
-        db.refresh(new_acc)
-        
-        return new_acc
-        
+        account = AccountService.get_account(db, account_id)
+        if not account:
+            return False
+            
+        def _run_scraper(acc_id):
+            from app.config import BASE_DIR
+            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "scrape_pages.py"))
+            env = os.environ.copy()
+            env["DISPLAY"] = ":99"
+            python_bin = str(BASE_DIR / "venv" / "bin" / "python")
+            subprocess.run([python_bin, script_path, "--account", str(acc_id)], env=env, cwd=str(BASE_DIR))
+            
+        thread = threading.Thread(target=_run_scraper, args=(account_id,))
+        thread.daemon = True
+        thread.start()
+        return True
+
     @staticmethod
     def toggle_account(db: Session, account_id: int) -> Optional[Account]:
         """Atomically flips the is_active state of an account."""
-        account = AccountService.get_account(db, account_id)
-        if not account:
-            raise ValueError(f"Account {account_id} not found.")
-        
-        new_status = not account.is_active
-        db.query(Account).filter(Account.id == account_id).update({"is_active": new_status})
-        db.commit()
-        db.refresh(account)
-        logger.info(f"Toggled account {account_id} is_active to {new_status}")
-        return account
+        try:
+            account = AccountService.get_account(db, account_id)
+            if not account:
+                raise ValueError(f"Account {account_id} not found.")
+            
+            new_status = not account.is_active
+            db.query(Account).filter(Account.id == account_id).update({"is_active": new_status})
+            db.commit()
+            db.refresh(account)
+            logger.info(f"Toggled account {account_id} is_active to {new_status}")
+            return account
+        except Exception as e:
+            db.rollback()
+            raise e
 
     @staticmethod
     def update_limits(
@@ -155,138 +205,217 @@ class AccountService:
         if not (0 <= cooldown_seconds <= 86400):
             raise ValueError("cooldown_seconds must be between 0 and 86400.")
             
-        account = AccountService.get_account(db, account_id)
-        if not account:
-            raise ValueError(f"Account {account_id} not found.")
-            
-        account.daily_limit = daily_limit
-        account.cooldown_seconds = cooldown_seconds
+        try:
+            account = AccountService.get_account(db, account_id)
+            if not account:
+                raise ValueError(f"Account {account_id} not found.")
+                
+            account.daily_limit = daily_limit
+            account.cooldown_seconds = cooldown_seconds
 
-        # Multi-target pages
-        pages = [p.strip() for p in (target_pages or []) if p and p.strip()]
-        account.target_pages_list = pages
-        
-        account.sleep_start_time = sleep_start_time.strip() if sleep_start_time else None
-        account.sleep_end_time = sleep_end_time.strip() if sleep_end_time else None
-        
-        # Process niche_topics: convert comma-separated to JSON array
-        raw_niche = (niche_topics or "").strip()
-        if raw_niche:
-            if not raw_niche.startswith("["):
-                keywords = [k.strip() for k in raw_niche.split(",") if k.strip()]
-                raw_niche = _json.dumps(keywords, ensure_ascii=False)
-            account.niche_topics = raw_niche
-        else:
-            account.niche_topics = None
+            # Multi-target pages
+            pages = [p.strip() for p in (target_pages or []) if p and p.strip()]
+            account.target_pages_list = pages
             
-        # Process competitor_urls: parse "url → target_page" lines into JSON objects
-        raw_urls = (competitor_urls or "").strip()
-        if raw_urls:
-            if raw_urls.startswith("["):
-                account.competitor_urls = raw_urls
+            account.sleep_start_time = sleep_start_time.strip() if sleep_start_time else None
+            account.sleep_end_time = sleep_end_time.strip() if sleep_end_time else None
+            
+            # Process niche_topics: convert comma-separated to JSON array
+            raw_niche = (niche_topics or "").strip()
+            if raw_niche:
+                if not raw_niche.startswith("["):
+                    keywords = [k.strip() for k in raw_niche.split(",") if k.strip()]
+                    raw_niche = _json.dumps(keywords, ensure_ascii=False)
+                account.niche_topics = raw_niche
             else:
-                entries = []
-                for line in raw_urls.replace('\r', '').split('\n'):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if ' → ' in line:
-                        url_part, tp_part = line.split(' → ', 1)
-                        url_part = url_part.strip()
-                        tp_part = tp_part.strip() or None
-                        if tp_part == "None":
-                            tp_part = None
-                        entries.append({"url": url_part, "target_page": tp_part})
-                    else:
-                        entries.append({"url": line, "target_page": None})
-                account.competitor_urls = _json.dumps(entries, ensure_ascii=False) if entries else None
-        else:
-            account.competitor_urls = None
+                account.niche_topics = None
+                
+            # Process competitor_urls: parse "url → target_page" lines into JSON objects
+            raw_urls = (competitor_urls or "").strip()
+            if raw_urls:
+                if raw_urls.startswith("["):
+                    account.competitor_urls = raw_urls
+                else:
+                    entries = []
+                    for line in raw_urls.replace('\r', '').split('\n'):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        if ' → ' in line:
+                            url_part, tp_part = line.split(' → ', 1)
+                            url_part = url_part.strip()
+                            tp_part = tp_part.strip() or None
+                            if tp_part == "None":
+                                tp_part = None
+                            entries.append({"url": url_part, "target_page": tp_part})
+                        else:
+                            entries.append({"url": line, "target_page": None})
+                    account.competitor_urls = _json.dumps(entries, ensure_ascii=False) if entries else None
+            else:
+                account.competitor_urls = None
 
-        # Process page_niches: JSON mapping page_url -> [niches]
-        raw_page_niches = (page_niches or "").strip()
-        if raw_page_niches:
+            # Process page_niches: JSON mapping page_url -> [niches]
+            raw_page_niches = (page_niches or "").strip()
+            if raw_page_niches:
+                try:
+                    data = _json.loads(raw_page_niches)
+                except Exception:
+                    data = {}
+                # Normalize to dict[str, list[str]] before assigning
+                mapping: dict[str, list[str]] = {}
+                if isinstance(data, dict):
+                    for url, niches in data.items():
+                        if not url:
+                            continue
+                        if not isinstance(niches, list):
+                            niches = [niches]
+                        cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                        if cleaned:
+                            mapping[str(url).strip()] = cleaned
+                elif isinstance(data, list):
+                    for item in data:
+                        if not isinstance(item, dict):
+                            continue
+                        url = str(item.get("page_url") or "").strip()
+                        if not url:
+                            continue
+                        niches = item.get("niches") or []
+                        if not isinstance(niches, list):
+                            niches = [niches]
+                        cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                        if cleaned:
+                            mapping[url] = cleaned
+                account.page_niches_map = mapping
+            else:
+                account.page_niches = None
+
+            db.commit()
+            db.refresh(account)
+            logger.info(
+                "Updated limits for account %s: daily_limit=%s, cooldown=%s, niche=%s, sleep=%s-%s, competitors=%s, page_niches=%s",
+                account_id,
+                daily_limit,
+                cooldown_seconds,
+                account.niche_topics,
+                account.sleep_start_time,
+                account.sleep_end_time,
+                account.competitor_urls,
+                account.page_niches,
+            )
+            return account
+        except Exception as e:
+            db.rollback()
+            raise e
+
+    @staticmethod
+    def update_page_config(db: Session, account_id: int, url: str, is_active: bool, niches: str, competitors: str) -> bool:
+        try:
+            acc = db.query(Account).filter(Account.id == account_id).first()
+            if not acc:
+                return False
+            
+            # 1. Update target_pages_list
+            target_urls = set(acc.target_pages_list or [])
+            if is_active:
+                target_urls.add(url)
+            elif url in target_urls:
+                target_urls.remove(url)
+            acc.target_pages_list = list(target_urls)
+            
+            # 2. Update page_niches_map
+            current_niches = acc.page_niches_map or {}
+            n_list = [n.strip() for n in niches.split(",") if n.strip()]
+            if n_list:
+                current_niches[url] = n_list
+            elif url in current_niches:
+                del current_niches[url]
+            acc.page_niches_map = current_niches
+            
+            # 3. Update competitor_urls
+            comp_urls = [c.strip() for c in competitors.replace("\r\n", "\n").split("\n") if c.strip()]
             try:
-                data = _json.loads(raw_page_niches)
+                raw_comps = json.loads(acc.competitor_urls or "[]") if acc.competitor_urls else []
+                if not isinstance(raw_comps, list):
+                    raw_comps = []
             except Exception:
-                data = {}
-            # Normalize to dict[str, list[str]] before assigning
-            mapping: dict[str, list[str]] = {}
-            if isinstance(data, dict):
-                for url, niches in data.items():
-                    if not url:
-                        continue
-                    if not isinstance(niches, list):
-                        niches = [niches]
-                    cleaned = [str(n).strip() for n in niches if str(n).strip()]
-                    if cleaned:
-                        mapping[str(url).strip()] = cleaned
-            elif isinstance(data, list):
-                for item in data:
-                    if not isinstance(item, dict):
-                        continue
-                    url = str(item.get("page_url") or "").strip()
-                    if not url:
-                        continue
-                    niches = item.get("niches") or []
-                    if not isinstance(niches, list):
-                        niches = [niches]
-                    cleaned = [str(n).strip() for n in niches if str(n).strip()]
-                    if cleaned:
-                        mapping[url] = cleaned
-            account.page_niches_map = mapping
-        else:
-            account.page_niches = None
+                raw_comps = []
+                
+            new_comps = [c for c in raw_comps if not (isinstance(c, dict) and c.get('target_page') == url)]
+            for c_url in comp_urls:
+                new_comps.append({"target_page": url, "url": c_url})
+                
+            acc.competitor_urls = json.dumps(new_comps, ensure_ascii=False) if new_comps else None
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
 
-        db.commit()
-        db.refresh(account)
-        logger.info(
-            "Updated limits for account %s: daily_limit=%s, cooldown=%s, niche=%s, sleep=%s-%s, competitors=%s, page_niches=%s",
-            account_id,
-            daily_limit,
-            cooldown_seconds,
-            account.niche_topics,
-            account.sleep_start_time,
-            account.sleep_end_time,
-            account.competitor_urls,
-            account.page_niches,
-        )
-        return account
+    @staticmethod
+    def delete_page_config(db: Session, account_id: int, url: str) -> bool:
+        try:
+            acc = db.query(Account).filter(Account.id == account_id).first()
+            if not acc:
+                return False
+
+            target_urls = set(acc.target_pages_list or [])
+            if url in target_urls:
+                target_urls.remove(url)
+            acc.target_pages_list = list(target_urls)
+
+            page_niches = acc.page_niches_map or {}
+            if url in page_niches:
+                del page_niches[url]
+            acc.page_niches_map = page_niches
+
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
 
     @staticmethod
     def reset_failures(db: Session, account_id: int) -> Account:
-        account = AccountService.get_account(db, account_id)
-        if not account:
-            raise ValueError(f"Account {account_id} not found.")
+        try:
+            account = AccountService.get_account(db, account_id)
+            if not account:
+                raise ValueError(f"Account {account_id} not found.")
+                
+            account.consecutive_fatal_failures = 0
+            account.login_status = AccountStatus.ACTIVE
+            account.login_error = None
+            account.is_active = True
             
-        account.consecutive_fatal_failures = 0
-        account.login_status = AccountStatus.ACTIVE
-        account.login_error = None
-        account.is_active = True
-        
-        db.commit()
-        db.refresh(account)
-        logger.info(f"Full Rescue Reset performed for account {account_id}")
-        return account
+            db.commit()
+            db.refresh(account)
+            logger.info(f"Full Rescue Reset performed for account {account_id}")
+            return account
+        except Exception as e:
+            db.rollback()
+            raise e
 
     @staticmethod
     def delete_account(db: Session, account_id: int):
-        account = AccountService.get_account(db, account_id)
-        if not account:
-            raise ValueError(f"Account {account_id} not found.")
+        try:
+            account = AccountService.get_account(db, account_id)
+            if not account:
+                raise ValueError(f"Account {account_id} not found.")
+                
+            pending_running = db.query(Job).filter(
+                Job.account_id == account_id,
+                Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING])
+            ).count()
             
-        pending_running = db.query(Job).filter(
-            Job.account_id == account_id,
-            Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING])
-        ).count()
-        
-        if pending_running > 0:
-            raise ValueError(f"Cannot delete account {account_id} because it has {pending_running} active jobs.")
-            
-        db.delete(account)
-        db.commit()
-        logger.info(f"Deleted account {account_id} from database. Profile path '{account.profile_path}' retained safely.")
-        return True
+            if pending_running > 0:
+                raise ValueError(f"Cannot delete account {account_id} because it has {pending_running} active jobs.")
+                
+            db.delete(account)
+            db.commit()
+            logger.info(f"Deleted account {account_id} from database. Profile path '{account.profile_path}' retained safely.")
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
 
     @classmethod
     def start_login(cls, db: Session, account_id: int):
