@@ -541,17 +541,12 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
         except Exception as e:
             logger.error("Lỗi cự tuyệt (Crash) từ Gemini RPA: %s", e)
 
-        # Lốp dự phòng API (cũ)
+        # PLAN-025: native vision fallback đã được tích hợp vào pipeline.generate_caption.
+        # Khi orchestrator vào _fallback_rpa_generation nghĩa là pipeline (gồm cả tier
+        # native vision) đã thất bại + RPA cũng vừa fail. Không gọi tier API legacy
+        # nữa — pipeline đã cover. Chỉ còn poorman làm cấp cuối.
         if not raw_json:
-            try:
-                from app.services.gemini_api import GeminiAPIService
-                api_fallback = GeminiAPIService()
-                raw_json = api_fallback.ask_with_file(prompt, target_image)
-            except Exception as api_err:
-                logger.error("[Orchestrator] GeminiAPIService Fallback Error: %s", api_err)
-                
-        if not raw_json:
-            logger.error("RPA/API cũ đều không phản hồi. Kích hoạt 'Poorman's Logic' (Fallback)...")
+            logger.error("Pipeline (9Router+native) và RPA đều không phản hồi. Kích hoạt 'Poorman's Logic'...")
             return self._poorman_caption_fallback(target_image)
             
         import json as _json

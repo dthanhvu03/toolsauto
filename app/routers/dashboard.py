@@ -394,14 +394,30 @@ def app_logs_ai_report_live(request: Request, db: Session = Depends(get_db)):
     except Exception:
         body_html = "<pre class='whitespace-pre-wrap text-sm'>" + _html.escape(text) + "</pre>"
 
+    # ADR-006: surface fallback mode prominently — reader must know if output
+    # came from native Gemini path instead of the canonical 9Router.
+    fallback_banner = ""
+    if meta.get("fallback_used"):
+        primary = _html.escape(str(meta.get("primary_fail_reason") or "unknown"))
+        fallback_banner = (
+            '<div class="mb-3 px-3 py-2 rounded-md border border-yellow-300 bg-yellow-50 '
+            'flex items-center gap-2 text-xs text-yellow-800">'
+            '<span class="px-1.5 py-0.5 rounded bg-yellow-400 text-white font-bold uppercase '
+            'tracking-wider text-[10px]">FALLBACK MODE</span>'
+            f'<span>Báo cáo sinh từ <b>Native Gemini</b>; 9Router lỗi: <code>{primary}</code></span>'
+            '</div>'
+        )
+
     meta_line = (
         f'<div class="text-[10px] text-gray-400 mt-2">'
-        f'groups_in_report={len(groups)} • model_ok={bool(meta.get("ok"))} '
-        f'• generated_at={datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+        f'groups_in_report={len(groups)} • provider={_html.escape(str(meta.get("provider") or "?"))}'
+        f' • model={_html.escape(str(meta.get("model") or "?"))}'
+        f' • fallback_used={bool(meta.get("fallback_used"))}'
+        f' • generated_at={datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
         f'</div>'
     )
     return HTMLResponse(
-        f'<div class="prose prose-sm max-w-none ai-report-body">{body_html}</div>{meta_line}'
+        f'{fallback_banner}<div class="prose prose-sm max-w-none ai-report-body">{body_html}</div>{meta_line}'
     )
 
 

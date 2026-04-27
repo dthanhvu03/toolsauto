@@ -108,6 +108,15 @@ Lỗi điển hình: dùng sai tên file → lệnh move thất bại âm thầm
 
 ---
 
+## Path & Filesystem Conventions (WSL Hybrid)
+
+Để đảm bảo các Agent (Anti, Claude Code) luôn nhìn thấy file của nhau:
+- **Write/Edit (Windows Tools):** Luôn dùng path `\\wsl.localhost\Ubuntu\home\vu\toolsauto\...`
+- **Read/Verify (WSL Terminal):** Luôn dùng path `/home/vu/toolsauto/...`
+- **CWD:** Giữ ở `/home/vu/toolsauto/` (trong WSL) hoặc root tương ứng.
+
+---
+
 ## File Conventions
 
 | Loại | Pattern | Lưu ở |
