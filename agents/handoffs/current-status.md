@@ -1,4 +1,22 @@
 
+- **[2026-04-27]** TASK-027 Phase 3 + Phase 5 - CODEX EXECUTION DONE (committed)
+  - **Phase 3 commit**: `90a0a27` - `refactor(P027-Phase3): Apply @playwright_safe_action across FB adapter`
+  - **Phase 5 commit**: `44353cc` - `feat(P027-Phase5): Auto-cleanup job_events + incident_logs after 30d`
+  - **Phase 3 scope**: Applied existing `@playwright_safe_action` to small Facebook adapter helper methods and removed helper-local manual `try/except` where there was no retry/fallback behavior. Kept manual handling in retry/fallback selector, multi-click strategy, switcher recovery, artifact, and publish flow blocks.
+  - **Phase 3 proof**:
+    - Before: `try=87 except=88 PlaywrightError=0`
+    - After: `try=82 except=83 PlaywrightError=0`
+    - `python3 -m py_compile app/adapters/facebook/adapter.py` -> PASS with pre-existing-style `SyntaxWarning: invalid escape sequence '\d'`
+    - `source venv/bin/activate && python -c 'from app.main import app; print(len(app.routes))'` -> `207`
+    - Adapter/Facebook pytest scan -> no matching test file found.
+  - **Phase 3 caveat**: The exact requested `except PlaywrightError` pattern was already absent (`0`) in current `adapter.py`; legacy blocks mostly catch generic `Exception`, so the >=50% PlaywrightError reduction target is not applicable to repo reality.
+  - **Phase 5 scope**: Added `cleanup.log_retention_days` runtime setting (default 30), `_cleanup_old_logs(db, days=30)`, and once-daily integration in `CleanupService.run()`.
+  - **Phase 5 proof**:
+    - `python3 -m py_compile app/services/cleanup.py app/services/settings.py` -> PASS
+    - Manual call `_cleanup_old_logs(db, days=99999)` -> `{'job_events_deleted': 0, 'incident_logs_deleted': 0}`
+  - **Data retention note**: Uses actual schema column `incident_logs.occurred_at`; does not delete `incident_groups`.
+  - **Status**: PLAN-027 archived; TASK-027 archived. Execution Done. Can Claude Code verify + handoff.
+
 - **[2026-04-27]** TASK-027 Phase 1 — SIGNED OFF & COMMITTED ✅ (Claude Code verify pass)
   - **Commit**: `07fa5c3` — `refactor(P027-Phase1): God Router eradication — thin controllers across 19 routers`
   - **Diff**: 41 files changed, +5,627 / -5,678 (net -51 LOC). 8 service classes mới được track (`affiliate_service`, `ai_service`, `ai_studio_service`, `dashboard_service`, `database_service`, `telegram_service`, `threads_service`, `viral_service`).

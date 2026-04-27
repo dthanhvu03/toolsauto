@@ -121,9 +121,53 @@
   - ~80 dead imports cleaned (router + 9 service files).
   - TestClient smoke 12 endpoints PASS (401/307, no 500). pyflakes clean trên file đã touch.
 - [x] Phase 2: Global Enum Migration — DONE (commits `c47d810`, `b5af72e`, `9f8abf6`)
-- [ ] Phase 3: DRY Adapter Refactor (Pending — Codex)
+- [x] Phase 3: DRY Adapter Refactor - DONE (commit `90a0a27`)
+  - Scope applied: decorated small UI/helper methods with existing `@playwright_safe_action`; removed manual helper-local `try/except` where no retry/fallback behavior existed.
+  - Preserved behavior: kept manual `try/except` blocks in methods with retry, fallback selectors, multi-strategy click, switcher recovery, artifact capture, and publish flow logic.
+  - Reality note: exact `PlaywrightError` try/except count was already `0` before this pass; adapter currently catches generic `Exception` in legacy blocks.
+  - Proof:
+```text
+PS> Select-String count before edit
+try=87 except=88 PlaywrightError=0
+
+PS> Select-String count after edit
+try=82 except=83 PlaywrightError=0
+
+WSL> python3 -m py_compile app/adapters/facebook/adapter.py
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+  return self.page.evaluate("""
+
+WSL> source venv/bin/activate && python -c 'from app.main import app; print(len(app.routes))'
+207
+
+WSL> find tests app/tests -maxdepth 2 -type f | grep -Ei 'adapter|facebook' || true
+<no output>
+```
 - [x] Phase 4: AI Pipeline Unification — DONE (commit `5257096` + ADR-006 work)
-- [ ] Phase 5: Data Retention (Pending — Codex)
+- [x] Phase 5: Data Retention - DONE (commit `44353cc`)
+  - Added `cleanup.log_retention_days` runtime setting with default 30 days.
+  - Added `_cleanup_old_logs(db, days=30)` to delete old `job_events` and `incident_logs` only; `incident_groups` is intentionally untouched.
+  - Integrated log cleanup into `CleanupService.run()` with a once-per-day in-process throttle and rollback-safe exception handling.
+  - Schema note: repo model uses `IncidentLog.occurred_at`, not `created_at`, so implementation targets the actual column.
+  - Proof:
+```text
+WSL> python3 -m py_compile app/services/cleanup.py app/services/settings.py
+<no output>
+
+WSL> source venv/bin/activate && python - <<'PY'
+from app.database.core import SessionLocal
+from app.services.cleanup import _cleanup_old_logs
+
+db = SessionLocal()
+try:
+    print(_cleanup_old_logs(db, days=99999))
+finally:
+    db.close()
+PY
+{'job_events_deleted': 0, 'incident_logs_deleted': 0}
+```
+
+Execution Done. Can Claude Code verify + handoff.
 
 ---
 
