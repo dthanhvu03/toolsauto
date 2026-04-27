@@ -36,29 +36,38 @@
 Dưới góc nhìn của **SOLID Principles**, **Clean Architecture**, và **DRY**, dưới đây là 5 "Món nợ kỹ thuật" cần lên kế hoạch cấu trúc lại (Refactor) ở các Phase tiếp theo để hệ thống đạt chuẩn Enterprise:
 
 ### 1. Vi phạm nguyên tắc OCP (Open-Closed Principle)
-- **Vị trí:** `app/adapters/dispatcher.py` (hàm `_inject_cta`)
-- **Vấn đề:** Đang tồn tại mã cứng `if platform == "facebook": ...`. Theo chuẩn thiết kế, khi thêm nền tảng mới (Tiktok, Threads), không được phép chui vào file dispatcher để viết thêm lệnh `if... else`.
-- **Khắc phục:** Dùng đa hình (Polymorphism) hoặc đẩy toàn bộ Logic Fallback CTA xuống Database.
+- **Vị trí cụ thể:** 
+  - `app/adapters/dispatcher.py` -> Hàm `_inject_cta()` (Line 125-131): Hardcode logic `if platform == "facebook":`.
+  - `app/adapters/dispatcher.py` -> Hàm `get_adapter()` (Line 40-42): Hardcode Dictionary `_DEDICATED_ADAPTERS = {"facebook": lambda: FacebookAdapter()}`.
+- **Vấn đề:** Đang tồn tại mã cứng để rẽ nhánh logic cho Facebook. Theo chuẩn thiết kế, khi thêm nền tảng mới (Tiktok, Threads), không được phép chui vào file dispatcher để viết thêm lệnh `if... else` hay sửa Dictionary mặc định.
+- **Khắc phục:** Dùng đa hình (Polymorphism) bằng Registry Pattern cho Adapter, và đẩy toàn bộ Logic Fallback CTA xuống Database.
 
 ### 2. Mô hình God Object (Anti-pattern phân quyền)
-- **Vị trí:** `app/adapters/facebook/adapter.py`
-- **Vấn đề:** Class `FacebookAdapter` cũ (trước Generic Adapter) đang ôm đồm quá nhiều việc (Đăng Reel, đăng Page, xử lý Business Suite, xử lý Checkpoint...). Vi phạm nguyên tắc **Single Responsibility**.
-- **Khắc phục:** Tách nhỏ thành các Strategy chuyên biệt hoặc chuyển hoàn toàn 100% về `GenericAdapter` (No-code).
+- **Vị trí cụ thể:** `app/adapters/facebook/adapter.py` -> Class `FacebookAdapter`.
+- **Vấn đề:** Class này dài tới **2,373 dòng code** và chứa 44 phương thức khác nhau. Nó đang ôm đồm quá nhiều việc: Quản lý session (`open_session`), Đăng bài (`publish`), Lấy mã định danh (`_extract_page_id_from_current_page`), Chuyển đổi Profile (`_switch_to_personal_profile`), Bắt lỗi UI... Vi phạm nguyên tắc **Single Responsibility**.
+- **Khắc phục:** Tách nhỏ thành các Strategy chuyên biệt theo miền (AuthStrategy, PublishStrategy, VerifyStrategy) hoặc chuyển hoàn toàn 100% về `GenericAdapter` (No-code).
 
 ### 3. Database Polling (Anti-pattern giao tiếp)
-- **Vị trí:** `app/workers/publisher.py`
-- **Vấn đề:** Các bot dùng vòng lặp `while True: sleep(10)` để liên tục query Database tìm việc mới. Khi Scale lên hàng chục bot, DB sẽ quá tải (CPU Spikes).
-- **Khắc phục:** Cần chuyển sang kiến trúc **Event-Driven / Message Queue** (Redis, RabbitMQ) để chủ động Push Job cho worker thay vì để worker Pull liên tục.
+- **Vị trí cụ thể:** 
+  - `workers/publisher.py` -> Vòng lặp `while RUNNING:` (Line 404). Gọi liên tục `QueueService.fetch_pending_jobs()` rồi `time.sleep()`.
+  - `workers/threads_news_worker.py` -> Vòng lặp `while True:` (Line 38).
+  - `workers/threads_auto_reply.py` -> Vòng lặp `while True:` (Line 139).
+- **Vấn đề:** Các bot dùng vòng lặp vô tận với lệnh ngủ (Sleep) để liên tục query Database tìm việc mới. Khi Scale lên hàng chục bot, DB sẽ liên tục bị khóa (Lock) và quá tải (CPU Spikes).
+- **Khắc phục:** Cần chuyển sang kiến trúc **Event-Driven / Message Queue** (Redis, RabbitMQ) để chủ động Push Job cho worker (theo mô hình Pub/Sub) thay vì để worker Pull liên tục.
 
 ### 4. Magic Strings rải rác
-- **Vị trí:** Xuyên suốt dự án.
-- **Vấn đề:** Chuỗi ký tự như `"facebook"`, `"POST"`, `"DONE"` được gõ thẳng vào code. Nguy cơ lỗi chính tả làm gãy logic ngầm mà IDE không cảnh báo được.
-- **Khắc phục:** Định nghĩa tất cả thành `Enum` (ví dụ: `Platform.FACEBOOK`, `JobStatus.DONE`).
+- **Vị trí cụ thể:** 
+  - Khắp `app/routers/platform_config.py` (Ví dụ Line 380: Set tĩnh các action `"navigate", "click", "wait_visible"...`).
+  - Khắp `workers/publisher.py` (Ví dụ Line 221: Ép kiểu `job_type = getattr(job, "job_type", "POST") or "POST"`).
+- **Vấn đề:** Chuỗi ký tự như `"facebook"`, `"POST"`, `"DONE"` được gõ thẳng vào code. Nguy cơ gõ sai 1 chữ 's' làm gãy logic ngầm mà IDE không cảnh báo được.
+- **Khắc phục:** Định nghĩa tất cả thành biến cục bộ hoặc các class `Enum` (ví dụ: `Platform.FACEBOOK`, `JobStatus.DONE`).
 
 ### 5. Vi phạm DRY (Don't Repeat Yourself) ở luồng Bắt Lỗi
-- **Vị trí:** Các file Playwright Adapters.
-- **Vấn đề:** Luồng Try/Catch bắt lỗi Playwright Timeout, chụp màn hình, log lỗi... bị lặp lại ở quá nhiều hàm.
-- **Khắc phục:** Tạo các **Python Decorators** (VD: `@playwright_safe_action`) bọc quanh các hàm thao tác UI để tái sử dụng logic bắt lỗi 1 lần duy nhất.
+- **Vị trí cụ thể:** 
+  - `app/adapters/facebook/adapter.py`: Khối lệnh `try: ... except PlaywrightTimeoutError: ... except Exception:` bị sao chép lặp lại hơn **15 lần** giữa các hàm `publish`, `check_published_state`, `_click_locator`.
+  - `app/adapters/generic/adapter.py`: Khối `try-except` bắt lỗi chung chung lặp lại 6 lần.
+- **Vấn đề:** Luồng bắt lỗi Playwright Timeout, chụp màn hình, log lỗi... bị lặp lại ở quá nhiều hàm. Sửa 1 luồng bắt lỗi phải đi tìm 15 chỗ để sửa.
+- **Khắc phục:** Tạo các **Python Decorators** (VD: `@playwright_safe_action(timeout=5000, take_screenshot=True)`) bọc quanh các hàm thao tác UI để tái sử dụng logic bắt lỗi 1 lần duy nhất ở file Helper.
 
 ---
 
