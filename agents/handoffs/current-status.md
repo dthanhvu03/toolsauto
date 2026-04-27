@@ -1,16 +1,20 @@
+- **[2026-04-27]** ✅ PLAN-030 / TASK-030 Fix Threads Upload — DONE & ARCHIVED
+  - **Outcome**: Threads media upload fixed by adding `ATTACH_SELECTORS` and `_find_first_present` helper.
+  - **Status**: Committed (`91a6778`) and pushed to `develop`.
+  - **Archived**: PLAN-030 -> `agents/plans/archive/`; TASK-030 -> `agents/tasks/archive/`.
 
-- **[2026-04-27]** ðŸ› PLAN-029 live runtime feedback tá»« VPS â€” kiáº¿n trÃºc OK, **1 bug á»Ÿ adapter cháº·n 100% job fail**
+- **[2026-04-27]** ðŸ › PLAN-029 live runtime feedback tá»« VPS â€” kiáº¿n trÃºc OK, **1 bug á»Ÿ adapter cháº·n 100% job fail**
   - **âœ… Hoáº¡t Ä‘á»™ng Ä‘Ãºng**: Threads_Publisher claim job liÃªn tá»¥c (537/538/539/540/543/551/552/557...), Dispatcher â†’ ThreadsAdapter âœ“, session login OK (`Authenticated indicator found: a[href^="/@"]`), idempotency footprint check âœ“, compose + caption fill âœ“.
-  - **âŒ Failure point**: Táº¤T Cáº¢ jobs fail táº¡i step upload media vá»›i error `Could not find Threads media file input.` (Fatal: False, retry-able). Jobs Ä‘ang á»Ÿ `2/3` tries â†’ 1 fail ná»¯a thÃ nh FATAL.
+  - **â Œ Failure point**: Táº¤T Cáº¢ jobs fail táº¡i step upload media vá»›i error `Could not find Threads media file input.` (Fatal: False, retry-able). Jobs Ä‘ang á»Ÿ `2/3` tries â†’ 1 fail ná»¯a thÃ nh FATAL.
   - **Root cause** (file: [`app/adapters/threads/adapter.py:374-383`](app/adapters/threads/adapter.py#L374-L383)):
     1. `_find_first_visible(FILE_INPUT_SELECTORS)` gate on `is_visible()`. NhÆ°ng `<input type="file">` trÃªn Threads UI luÃ´n render vá»›i `display:none`/visually-hidden (pattern Meta phá»• biáº¿n) â†’ `is_visible()` luÃ´n False â†’ tÃ¬m khÃ´ng ra.
     2. Adapter khÃ´ng click nÃºt "Ä‘Ã­nh kÃ¨m"/paperclip/"Add to thread" TRÆ¯á»šC khi tÃ¬m file input. TrÃªn Threads, pháº£i click button Ä‘Ã³ Ä‘á»ƒ spawn `<input type="file">` vÃ o DOM.
-  - **ÄÃ¢y lÃ  bug NGOÃ€I scope Claude Code** (CLAUDE.md cáº¥m sá»­a adapter logic). Cáº§n **Anti má»Ÿ TASK-030 (PLAN-029 follow-up)** cho Codex sá»­a 2 Ä‘iá»ƒm trÃªn.
+  - **Ä Ã¢y lÃ  bug NGOÃ€I scope Claude Code** (CLAUDE.md cáº¥m sá»­a adapter logic). Cáº§n **Anti má»Ÿ TASK-030 (PLAN-029 follow-up)** cho Codex sá»­a 2 Ä‘iá»ƒm trÃªn.
   - **Recovery sau khi fix merge**: anh Vu reset `tries=0, status=PENDING` cho jobs threads 536-557 (hoáº·c dÃ¹ng nÃºt "Force Run" trÃªn dashboard).
-  - **Status**: PLAN-029 ÄÃƒ ARCHIVE â€” Ä‘Ãºng quy trÃ¬nh. Follow-up pháº£i lÃ  TASK má»›i, khÃ´ng re-open archive.
+  - **Status**: PLAN-029 Ä Ãƒ ARCHIVE â€” Ä‘Ãºng quy trÃ¬nh. Follow-up pháº£i lÃ  TASK má»›i, khÃ´ng re-open archive.
 
 - **[2026-04-27]** PLAN-029 / TASK-029 Threads Publisher â€” DONE & ARCHIVED âœ…
-  - **Anti Sign-off**: APPROVED (Code Verified) â€” AC #5 (worker isolation) + #6 (PM2 autorestart) PASS; AC #1-4 â³ pending live runtime verification trÃªn VPS.
+  - **Anti Sign-off**: APPROVED (Code Verified) â€” AC #5 (worker isolation) + #6 (PM2 autorestart) PASS; AC #1-4 â ³ pending live runtime verification trÃªn VPS.
   - **Outcome**: Threads pipeline end-to-end implementation complete:
     - `app/adapters/threads/` (adapter + __init__) vá»›i Playwright headless flow, random delays, session invalid detection, post_url + external_post_id capture, fix `check_published_state()` khÃ´ng cÃ²n false-positive.
     - `workers/threads_publisher.py` worker isolated, claim qua `QueueService.claim_next_job(db, platform="threads")`, heartbeat + cleanup + account invalidation.
