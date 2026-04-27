@@ -968,7 +968,7 @@ function renderStepRow(rawStep, index, wfId) {
 
   const selectorKeysStr = (s.selector_keys || []).join(', ');
   const showUrl = ['navigate'].includes(s.action);
-  const showSelector = ['click','fill','upload_file','verify','check_auth'].includes(s.action);
+  const showSelector = ['click','fill','upload_file','wait_visible','verify','check_auth'].includes(s.action);
   const showValue = ['fill','upload_file','navigate'].includes(s.action);
 
   return `
