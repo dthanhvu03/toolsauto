@@ -26,6 +26,7 @@ from playwright.sync_api import Page
 from app.adapters.common.locator import LocatorStrategy, LocatorCandidate
 from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.config import LOGS_DIR
+from app.constants import WorkflowAction
 
 logger = logging.getLogger(__name__)
 
@@ -305,14 +306,14 @@ class ActionExecutor:
         """Route to the correct action handler."""
         action = step.action.lower()
         handlers = {
-            "navigate": self._action_navigate,
-            "click": self._action_click,
-            "fill": self._action_fill,
-            "upload_file": self._action_upload_file,
-            "wait": self._action_wait,
-            "wait_visible": self._action_wait_visible,
-            "verify": self._action_verify,
-            "check_auth": self._action_check_auth,
+            WorkflowAction.NAVIGATE: self._action_navigate,
+            WorkflowAction.CLICK: self._action_click,
+            WorkflowAction.FILL: self._action_fill,
+            WorkflowAction.UPLOAD_FILE: self._action_upload_file,
+            WorkflowAction.WAIT: self._action_wait,
+            WorkflowAction.WAIT_VISIBLE: self._action_wait_visible,
+            WorkflowAction.VERIFY: self._action_verify,
+            WorkflowAction.CHECK_AUTH: self._action_check_auth,
         }
 
         handler = handlers.get(action)

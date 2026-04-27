@@ -276,6 +276,11 @@ Output: ADR hoặc PLAN mới cho sprint tiếp theo
 5. **Checkpoint Rule**: Cập nhật `current-status.md` khi bắt đầu task mới, đổi phase, trước sửa logic lớn, sau verify milestone
 6. **Handoff is Mandatory**: Không phiên nào kết thúc mà không update current-status.md
 7. **Atomic Commits**: Mỗi commit = 1 logical change. Không gom nhiều thứ vào 1 commit
+8. **Thin Controller**: Router chỉ nhận request, validate, gọi service, trả response. Cấm viết SQL thô hoặc gọi subprocess trong router.
+9. **Schema Centralization**: Mọi Pydantic BaseModel phải nằm trong `app/schemas/`. Cấm định nghĩa schema chui trong router.
+10. **No God Service**: Không để 1 file service vượt quá 1000 LOC. Nếu phát hiện — tách nhỏ theo domain.
+11. **Adapter Must Be Blind**: Dispatcher cấm hardcode rẽ nhánh theo tên platform. Dùng Registry Pattern.
+12. **DRY Error Handling**: Luồng try/catch Playwright phải dùng Decorator hoặc Helper chung. Cấm copy-paste.
 
 ---
 

@@ -10,10 +10,12 @@ Policy:
 import os
 import time
 import logging
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from app.database.models import Job
+from app.database.models import IncidentLog, Job, JobEvent
 from app.config import CONTENT_DIR
 from app.constants import JobStatus
+from app.services import settings as runtime_settings
 
 
 logger = logging.getLogger(__name__)
@@ -24,9 +26,46 @@ CLEANUP_FAILED_AFTER_DAYS = int(os.getenv("CLEANUP_FAILED_AFTER_DAYS", "1"))  # 
 CLEANUP_TMP_AFTER_HOURS   = 1                                                   # Remove stale .tmp files after 1h
 
 MEDIA_DIR = CONTENT_DIR / "media"
+LOG_CLEANUP_INTERVAL_SEC = 86400
+_last_log_cleanup_ts = 0.0
 
 def now_ts():
     return int(time.time())
+
+
+def _cleanup_old_logs(db: Session, days: int = 30) -> dict:
+    """Delete raw log rows older than retention; keep aggregate incident_groups intact."""
+    result = {"job_events_deleted": 0, "incident_logs_deleted": 0}
+    if days <= 0:
+        logger.warning("[Cleanup] Invalid log retention days=%s; skipping log cleanup.", days)
+        return result
+
+    cutoff_ts = now_ts() - days * 86400
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(days=days)
+
+    try:
+        result["job_events_deleted"] = (
+            db.query(JobEvent)
+            .filter(JobEvent.ts < cutoff_ts)
+            .delete(synchronize_session=False)
+        )
+        result["incident_logs_deleted"] = (
+            db.query(IncidentLog)
+            .filter(IncidentLog.occurred_at < cutoff_dt)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        logger.info(
+            "[Cleanup] Log retention days=%d deleted job_events=%d incident_logs=%d",
+            days,
+            result["job_events_deleted"],
+            result["incident_logs_deleted"],
+        )
+        return result
+    except Exception as e:
+        db.rollback()
+        logger.warning("[Cleanup] old_logs failed: %s", e)
+        return result
 
 
 class CleanupService:
@@ -61,6 +100,23 @@ class CleanupService:
             cls._clear_browser_caches()
         except Exception as e:
             logger.warning("[Cleanup] clear_browser_caches failed: %s", e)
+
+        cls._run_daily_log_cleanup(db)
+
+    @classmethod
+    def _run_daily_log_cleanup(cls, db: Session):
+        global _last_log_cleanup_ts
+        current_ts = time.time()
+        if (current_ts - _last_log_cleanup_ts) < LOG_CLEANUP_INTERVAL_SEC:
+            return
+
+        try:
+            days = runtime_settings.get_int("cleanup.log_retention_days", 30, db=db)
+            _cleanup_old_logs(db, days=days)
+            _last_log_cleanup_ts = current_ts
+        except Exception as e:
+            db.rollback()
+            logger.warning("[Cleanup] daily old_logs failed: %s", e)
 
     @classmethod
     def _archive_done_files(cls, db: Session):
@@ -229,4 +285,3 @@ class CleanupService:
 
         if freed_mb > 0:
             logger.info("[Cleanup] Cleared %.1f MB of browser cache.", freed_mb)
-
