@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.database.models import Job, JobEvent, Account
 from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC
-from app.constants import JobStatus
+from app.constants import JobStatus, JobType
 from app.utils.logger import setup_shared_logger
 
 logger = setup_shared_logger(__name__)
@@ -138,11 +138,11 @@ class JobService:
         JobService._log_event(db, job.id, "INFO", "Job marked DONE", details)
         
         # Auto-create COMMENT job if POST has auto_comment_text
-        if job.job_type == "POST" and job.auto_comment_text and (post_url or job.post_url):
+        if job.job_type == JobType.POST and job.auto_comment_text and (post_url or job.post_url):
             import random
             delay = random.randint(COMMENT_JOB_DELAY_MIN_SEC, COMMENT_JOB_DELAY_MAX_SEC)
             comment_job = Job(
-                job_type="COMMENT",
+                job_type=JobType.COMMENT,
                 platform=job.platform,
                 account_id=job.account_id,
                 parent_job_id=job.id,

@@ -209,7 +209,7 @@ class Dispatcher:
             final_comment_text = Dispatcher._inject_cta(job.platform, job.auto_comment_text)
             
             # 5. Execute based on job_type
-            if job_type == "COMMENT":
+            if job_type == JobType.COMMENT:
                 # COMMENT job: navigate to post and add comment
                 logger.info("[Job %s] Dispatching COMMENT job on post: %s", job.id, job.post_url)
                 

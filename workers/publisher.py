@@ -31,7 +31,7 @@ from app.services.notifier_service import NotifierService
 
 # Suicide Timer for Deadlock Prevention
 import threading
-from app.constants import AccountStatus, JobStatus
+from app.constants import AccountStatus, JobStatus, JobType
 
 
 def kill_if_stuck(label: str, timeout: int):
@@ -218,8 +218,8 @@ def process_single_job(db: Session):
         from app.database.models import now_ts
 
         try:
-            job_type = getattr(job, "job_type", "POST") or "POST"
-            if job_type == "COMMENT":
+            job_type = getattr(job, "job_type", JobType.POST) or JobType.POST
+            if job_type == JobType.COMMENT:
                 pub_text = (job.auto_comment_text or "").strip()
                 if pub_text:
                     check_before_publish(
