@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | TASK-027 |
-| **Status** | New |
+| **Status** | Assigned |
 | **Priority** | P1 |
 | **Owner** | Antigravity |
 | **Executor** | Codex / Claude Code (theo từng Phase) |
@@ -100,3 +100,5 @@ Cấu trúc lại (Refactor) codebase ToolsAuto để tuân thủ các nguyên t
 | Date | Status | Note |
 |---|---|---|
 | 2026-04-27 | New | Task được tạo bởi Anti sau Architecture Review. Đã research current-status.md, loại bỏ scope trùng lặp. |
+| 2026-04-27 | Planned | PLAN-027 được tạo (4 Phase), anh Vu đã approve |
+| 2026-04-27 | Assigned | Phase 1 assign cho Antigravity (self-execute), Phase 2-3 cho Codex, Phase 4 cho Claude Code |

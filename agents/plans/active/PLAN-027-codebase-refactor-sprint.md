@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | PLAN-027 |
-| **Status** | Draft |
+| **Status** | Active |
 | **Executor** | Claude Code (Phase 1, 4) / Codex (Phase 2, 3) |
 | **Created by** | Antigravity |
 | **Related Task** | TASK-027 |
@@ -143,7 +143,12 @@ Mỗi Phase = 1 commit riêng. Nếu fail: `git revert <commit-hash> && pm2 rest
 ## Execution Notes
 *(Executor điền vào — KHÔNG để trống khi Done)*
 
-- ⏳ Phase 1: Schema Centralization — Chưa bắt đầu
+- ✅ Phase 1: Schema Centralization — DONE (commit `8313d61`)
+  - Dời 7 class BaseModel: 3 từ `compliance.py`, 4 từ `affiliates.py`
+  - Tạo: `app/schemas/compliance.py`, `app/schemas/affiliates.py`, `app/schemas/__init__.py`
+  - Verify: `grep -rn "class.*BaseModel" app/routers/` = 0 kết quả ✅
+  - Verify: `python scratch/verify_phase1.py` = ALL CHECKS PASSED ✅
+  - Verify: pytest baseline 26/26 PASS (5 async pre-existing fails, unrelated) ✅
 - ⏳ Phase 2: Thin Controller — Chưa bắt đầu
 - ⏳ Phase 3: DRY Error Handling — Chưa bắt đầu
 - ⏳ Phase 4: Enum & Constants — Chưa bắt đầu
