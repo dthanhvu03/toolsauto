@@ -1,0 +1,1 @@
+"""Viral service domain."""

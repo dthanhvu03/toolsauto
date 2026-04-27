@@ -1,7 +1,7 @@
 """Telegram channel adapter (Telegram Bot API via TelegramClient)."""
 from typing import Optional
 
-from app.services.notifiers.base import BaseNotifier
+from .base import BaseNotifier
 
 
 class TelegramNotifier(BaseNotifier):
