@@ -1647,19 +1647,20 @@ async function applyPreset(name) {
 }
 
 // ─── Toast notification ───────────────────────────────────────
-function showToast(msg) {
+function showToast(msg, type = 'success') {
   const toast = document.createElement('div');
+  const bg = type === 'error' ? 'bg-red-600' : 'bg-gray-800';
   toast.className = (
-    'fixed bottom-4 right-4 bg-gray-800 text-white '
+    `fixed bottom-4 right-4 ${bg} text-white `
     + 'px-4 py-2 rounded-lg text-sm z-50 '
-    + 'transition-opacity duration-300'
+    + 'transition-opacity duration-300 shadow-lg'
   );
   toast.textContent = msg;
   document.body.appendChild(toast);
   setTimeout(() => {
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
-  }, 2500);
+  }, 3500);
 }
 
 // ─── Overview Panel (Redesigned) ──────────────────────────────
