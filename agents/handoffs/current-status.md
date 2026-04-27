@@ -1,4 +1,20 @@
 
+- **[2026-04-27]** TASK-027 Phase 1 — SIGNED OFF & COMMITTED ✅ (Claude Code verify pass)
+  - **Commit**: `07fa5c3` — `refactor(P027-Phase1): God Router eradication — thin controllers across 19 routers`
+  - **Diff**: 41 files changed, +5,627 / -5,678 (net -51 LOC). 8 service classes mới được track (`affiliate_service`, `ai_service`, `ai_studio_service`, `dashboard_service`, `database_service`, `telegram_service`, `threads_service`, `viral_service`).
+  - **Verify pass:**
+    - `grep db.query|db.commit|db.execute|db.add|db.delete|subprocess|runtime_settings.upsert app/routers/` → **0 hit**
+    - `python -c 'from app.main import app'` → **APP_IMPORT_OK 207 routes**
+    - TestClient smoke 12 endpoints (`/app`, `/app/jobs`, `/app/viral`, `/app/accounts`, `/app/logs`, `/app/settings`, `/queue/panel`, `/discovery/panel`, `/compliance/`, `/compliance/keywords`, `/health/`, `/insights/`) → all 401/307 (handler reached, không 500)
+    - `pyflakes` trên file đã touch → clean (chỉ còn f-string warnings không thuộc scope)
+  - **3 critical bug Anti để lại đã fix tại review pass:**
+    1. `app/services/viral_service.py:3` — thiếu `Any` trong typing import (NameError tại class body)
+    2. `app/services/threads_service.py:3` — thiếu `Any` (cùng lỗi)
+    3. `app/routers/compliance.py` — Anti xóa `BaseModel` import nhưng quên import `KeywordCreateBody, KeywordUpdateBody, TestCheckBody` từ `app/schemas/compliance.py`. App boot OK nhờ `from __future__ import annotations`, nhưng request đầu tiên vào `POST /compliance/keywords` sẽ 500. Đã re-import từ schemas package.
+  - **Cleanup polish:** dọn ~80 unused imports rò rỉ sau refactor (manual_job, health, compliance, syspanel, database, affiliates, jobs, auth, platform_config, insights, dashboard + 9 service files).
+  - **Out-of-scope (chưa commit):** `scratch/check_jobs.py`, `dump_threads_*.py`, `verify_phase1.py` — file verify tạm của Anti, để user tự quyết.
+  - **Status**: Phase 1 DONE & COMMITTED. Phase 2-4 (Anti đã làm trước đó) cũng DONE. **PLAN-027 còn Phase 3 (DRY adapter) + Phase 5 (Data retention) — Codex executor.**
+
 - **[2026-04-27]** TASK-027 Correction: Phase 1-B verified with exceptions, not clean 100% completion.
   - Proof now recorded in `agents/plans/active/PLAN-027-codebase-refactor-sprint.md`.
   - PASS: `app/routers/` has zero `db.query`, `db.commit`, `db.add`, `db.delete`; app startup import loads 207 routes.
@@ -225,7 +241,7 @@
 | **Database** | PostgreSQL (Production Standard) |
 | **Backend** | Running (`pm2 logs`) |
 | **Git Branch** | develop |
-| **Last Major Work** | TASK-023/024: ADR-006 AI Fallback (9Router → Native Gemini, isolated, surfaced UX) |
+| **Last Major Work** | TASK-027 Phase 1 (God Router Eradication) — COMMITTED `07fa5c3`, 19 routers thin, 8 services new |
 | **Models Package** | `app/database/models/` (9 files, 24 model classes, backward-compat 100%) |
 | **AI Pipeline** | 2-tier: 9Router (canonical) → Native Gemini (fallback, isolated in `ai_native_fallback.py`) |
 | **Test Baseline** | `tests/test_{incident_logger,ai_reporter,ai_pipeline,ai_native_fallback}.py` — **18/18 PASS** |
