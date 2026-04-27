@@ -89,6 +89,7 @@ New → Planned → Assigned → In Progress → Verified → Handed Off → Don
 ### Phase 3 — Planning (Owner: Anti)
 - Tạo `agents/plans/active/PLAN-NNN.md` từ template
 - Ghi rõ: Goal, Scope, Out of Scope, Approach từng bước, Risks, Validation Plan, Rollback Plan
+- **Micro-tasking Rule**: Ưu tiên chia nhỏ PLAN thành các giai đoạn (Phases) có thể thực thi độc lập để tránh cạn kiệt token.
 - **Assign rõ ràng** trong PLAN: `Executor: Codex` hoặc `Executor: Claude Code`
 - Cập nhật TASK status → `Planned`
 - Thông báo cho Codex hoặc Claude Code bắt đầu

@@ -19,7 +19,7 @@ logger = setup_shared_logger("threads_auto_reply")
 from sqlalchemy.orm import Session
 from app.database.core import SessionLocal
 from app.database.models import Account, ThreadsInteraction
-from app.services.gemini_api import GeminiAPIService
+from app.services.ai_runtime import pipeline
 
 async def process_account(account: Account, db: Session):
     logger.info(f"Processing Threads auto-reply for account: {account.name}")
@@ -73,7 +73,14 @@ async def process_account(account: Account, db: Session):
                     
                     # Generate AI response
                     prompt = f"Bạn là một người dùng Threads thân thiện, hài hước và tinh tế. Hãy viết một câu trả lời ngắn gọn (dưới 20 từ) cho bình luận sau: '{content_snippet}'. Hãy dùng ngôn ngữ tự nhiên, trẻ trung."
-                    ai_reply = GeminiAPIService().ask(prompt)
+                    ai_reply, ai_meta = await pipeline.generate_text_async(prompt)
+                    logger.info(
+                        "Threads auto-reply AI result: ok=%s provider=%s model=%s fallback_used=%s",
+                        ai_meta.get("ok"),
+                        ai_meta.get("provider"),
+                        ai_meta.get("model"),
+                        ai_meta.get("fallback_used"),
+                    )
                     
                     if not ai_reply:
                         ai_reply = "Cảm ơn bạn đã chia sẻ nhé! 😊"
