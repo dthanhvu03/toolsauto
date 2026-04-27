@@ -83,9 +83,9 @@ Dự án hiện tại tổ chức theo mô hình Kiến trúc Đa tầng (Layere
 - **Hậu quả:** Khó viết Unit Test cho logic mà không giả lập được HTTP Request.
 
 ### 2. Thư mục `app/schemas/` (Tầng Validation / DTO)
-- **Nguyên tắc bị vi phạm:** Separation of Concerns (Thiếu quy hoạch tập trung).
-- **Thực trạng:** Thư mục này gần như bị bỏ hoang (chỉ có 1 file `log.py` 629 bytes). Toàn bộ các class Pydantic Models kiểm tra dữ liệu đầu vào (như `KeywordCreateBody`, `KeywordUpdateBody`) đang bị viết "chui" rải rác ngay bên trong các file Router (Ví dụ `routers/compliance.py` dòng 42).
-- **Hậu quả:** Bất kỳ Service nào cần xài lại Schema này đều phải đi `import` ngược từ Router, gây ra lỗi Import Vòng Tròn (Circular Import).
+- **Trạng thái:** ✅ **ĐÃ KHẮC PHỤC (TASK-027 Phase 1)**
+- **Nguyên tắc:** Separation of Concerns (Quy hoạch tập trung).
+- **Kết quả:** Đã dời 7 Pydantic schemas rải rác từ `routers/` sang `app/schemas/affiliates.py` và `app/schemas/compliance.py`. Sử dụng `__init__.py` để re-export tập trung. Giảm thiểu nguy cơ Circular Import và tăng khả năng tái sử dụng.
 
 ### 3. Thư mục `app/services/` (Tầng Business Logic)
 - **Nguyên tắc bị vi phạm:** Single Source of Truth và God Service.
