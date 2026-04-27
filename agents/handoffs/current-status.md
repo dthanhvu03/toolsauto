@@ -1,4 +1,34 @@
 
+- **[2026-04-27]** TASK-028 Services Layer Reorganization — DONE & ARCHIVED ✅
+  - **Anti Sign-off**: APPROVED (PLAN-028 Anti Sign-off Gate, all 4 Acceptance Criteria PASS).
+  - **Outcome**: `app/services/` reorganized into 10 domain packages (`ai/`, `telegram/`, `observability/`, `jobs/`, `content/`, `viral/`, `compliance/`, `dashboard/`, `platform/`, `db/`). Root retains only `__init__.py` providing lazy compat aliases (63-entry `_ALIASES` + `MetaPathFinder`) — 100% backward compatible.
+  - **Pending action for user**: Commit the 60-file rename + `app/services/__init__.py` modification on branch `develop`. Suggested message: `refactor(P028): reorganize app/services into domain packages with lazy aliases`.
+  - **Archived**: PLAN-028 → `agents/plans/archive/`; TASK-028 → `agents/tasks/archive/`.
+
+- **[2026-04-27]** TASK-028 Services Layer Reorganization — CLAUDE CODE VERIFY PASS ✅ (pending Anti sign-off before archive)
+  - **Claude Code verify (independent re-run on local WSL)**:
+    - `APP_IMPORT_OK 207` routes
+    - `LEGACY_IMPORT_MATRIX_OK 12` (covers `ai_pipeline`, `ai_native_fallback`, `ai_runtime`, `notifier_service`, `notifiers`, `job_queue`, `content_orchestrator`, `platform_config_service`, `compliance_service`, `account`, `settings`, `health`)
+    - `ALIAS_IDENTITY_OK True` (`app.services.ai_native_fallback is app.services.ai.native_fallback`)
+    - `FROM_IMPORT_OK True` (`from app.services import settings` → `app.services.platform.settings`)
+    - Targeted pytest: **26/26 PASS** in 1.06s
+    - Root `app/services/*.py` scan: only `__init__.py`
+    - Caller scope diff (excluding `app/services/`, `agents/`, `.claude/`) = **empty** → no router/worker/caller file edited
+  - **Status**: Verify pass; PLAN-028 + TASK-028 NOT archived yet (Anti Sign-off Gate is BLOCKING per template).
+
+- **[2026-04-27]** TASK-028 Services Layer Reorganization - CODEX EXECUTION DONE (pending Claude verify)
+  - **Scope**: Moved tracked service implementation files from flat `app/services/` into domain packages: `ai/`, `telegram/`, `observability/`, `jobs/`, `content/`, `viral/`, `compliance/`, `dashboard/`, `platform/`, and `db/`.
+  - **Compatibility**: `app/services/__init__.py` now provides lazy module aliases so legacy imports like `app.services.ai_pipeline`, `app.services.job_queue`, `app.services.notifiers`, and `from app.services import settings` still resolve without editing callers.
+  - **Caller scope proof**: `git diff --name-only -- . ':(exclude)app/services/**'` produced no output before status artifact updates, confirming no routers/workers/callers were edited.
+  - **Move proof**: `MOVE_COUNT=62`, `SOURCE_LEFT=0`, `DEST_MISSING=0`; root `app/services` file scan shows only `__init__.py`.
+  - **Verification proof**:
+    - Alias identity smoke -> `ALIAS_IDENTITY_OK True`
+    - Legacy import matrix -> `LEGACY_IMPORT_MATRIX_OK 9`
+    - Services compile -> `PY_COMPILE_SERVICES_OK`
+    - App boot -> `APP_IMPORT_OK 207 routes`
+    - Targeted service baseline -> `26 passed in 1.23s`
+  - **Status**: PLAN-028 and TASK-028 proof updated. Execution Done. Can Claude Code verify + handoff.
+
 - **[2026-04-27]** TASK-027 Phase 3 + Phase 5 - CODEX EXECUTION DONE (committed)
   - **Phase 3 commit**: `90a0a27` - `refactor(P027-Phase3): Apply @playwright_safe_action across FB adapter`
   - **Phase 5 commit**: `44353cc` - `feat(P027-Phase5): Auto-cleanup job_events + incident_logs after 30d`
@@ -259,7 +289,8 @@
 | **Database** | PostgreSQL (Production Standard) |
 | **Backend** | Running (`pm2 logs`) |
 | **Git Branch** | develop |
-| **Last Major Work** | TASK-027 Phase 1 (God Router Eradication) — COMMITTED `07fa5c3`, 19 routers thin, 8 services new |
+| **Last Major Work** | TASK-028 Services Layer Reorg — DONE & ARCHIVED, 60-file rename pending commit on `develop` |
+| **Services Layout** | 10 domain packages (`ai/`, `telegram/`, `observability/`, `jobs/`, `content/`, `viral/`, `compliance/`, `dashboard/`, `platform/`, `db/`) + lazy alias compat layer in `app/services/__init__.py` |
 | **Models Package** | `app/database/models/` (9 files, 24 model classes, backward-compat 100%) |
 | **AI Pipeline** | 2-tier: 9Router (canonical) → Native Gemini (fallback, isolated in `ai_native_fallback.py`) |
 | **Test Baseline** | `tests/test_{incident_logger,ai_reporter,ai_pipeline,ai_native_fallback}.py` — **18/18 PASS** |
