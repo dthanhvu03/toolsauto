@@ -39,20 +39,7 @@ def _category_label(category: str) -> str:
     return c.replace("_", " ").title()
 
 
-class KeywordCreateBody(BaseModel):
-    keyword: str = ""
-    category: str = "custom"
-    severity: str = "WARNING"
-
-
-class KeywordUpdateBody(BaseModel):
-    severity: Optional[str] = None
-    category: Optional[str] = None
-    is_active: Optional[bool] = None
-
-
-class TestCheckBody(BaseModel):
-    content: str = ""
+from app.schemas.compliance import KeywordCreateBody, KeywordUpdateBody, TestCheckBody
 
 
 @router.get("/", response_class=HTMLResponse)

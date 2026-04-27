@@ -21,26 +21,12 @@ from app.services.gemini_api import GeminiAPIService
 from app.services.fb_compliance import compliance_checker, Severity, log_violation
 from app.services.affiliate_ai import AffiliateAIService
 from app.constants import JobStatus
-
-
-class BatchItem(BaseModel):
-    keyword: str
-    affiliate_url: str
-    comment: Optional[str] = None
-    commission_rate: Optional[float] = None
-
-class BatchImportRequest(BaseModel):
-    items: List[BatchItem]
-
-class AIGenerateRequest(BaseModel):
-    product_name: str
-    category: str
-    price: str
-    commission_rate: float
-
-
-class ComplianceTextRequest(BaseModel):
-    text: str
+from app.schemas.affiliates import (
+    BatchItem,
+    BatchImportRequest,
+    AIGenerateRequest,
+    ComplianceTextRequest,
+)
 
 @router.get("/", response_class=HTMLResponse)
 def get_affiliates_page(request: Request):
