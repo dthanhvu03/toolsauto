@@ -149,7 +149,7 @@ Mỗi Phase = 1 commit riêng. Nếu fail: `git revert <commit-hash> && pm2 rest
   - Verify: `grep -rn "class.*BaseModel" app/routers/` = 0 kết quả ✅
   - Verify: `python scratch/verify_phase1.py` = ALL CHECKS PASSED ✅
   - Verify: pytest baseline 26/26 PASS (5 async pre-existing fails, unrelated) ✅
-- ⏳ Phase 2: Thin Controller — Đang thực hiện
+- ✅ Phase 2: Thin Controller — DONE (Codex)
   - `platform_config.py` → `app/services/platform_config_service.py`
     - Tách logic SQL/subprocess/tính toán sang service; router chỉ còn route decorator + signature + gọi service.
     - Verify: `wc -l app/routers/platform_config.py` → `163 app/routers/platform_config.py` ✅
@@ -165,6 +165,13 @@ Mỗi Phase = 1 commit riêng. Nếu fail: `git revert <commit-hash> && pm2 rest
     - Verify: `wc -l app/routers/insights.py` → `131 app/routers/insights.py` ✅
     - Verify: `grep -c 'db.execute\|text(' app/routers/insights.py` → `0` ✅
     - Verify: `venv/bin/python -c "from app.main import app; print('OK')"` → `OK` ✅
+  - `syspanel.py` → `app/services/syspanel_service.py`
+    - Tách logic subprocess/PM2/log/db maintenance/persona/9Router config sang service; router chỉ còn route decorator + signature + gọi service.
+    - Verify: `wc -l app/routers/syspanel.py` → `187 app/routers/syspanel.py` ✅
+    - Verify: `grep -c 'db.execute\|text(' app/routers/syspanel.py` → `0` ✅
+    - Verify thêm: `grep -c 'subprocess' app/routers/syspanel.py` → `0` ✅
+    - Verify: `venv/bin/python -c "from app.main import app; print('OK')"` → `OK` ✅
+  - Execution Done. Cần Claude Code verify + handoff.
 - ⏳ Phase 3: DRY Error Handling — Chưa bắt đầu
 - ⏳ Phase 4: Enum & Constants — Chưa bắt đầu
 
