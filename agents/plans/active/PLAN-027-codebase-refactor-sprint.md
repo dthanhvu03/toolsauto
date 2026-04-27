@@ -155,6 +155,11 @@ Mỗi Phase = 1 commit riêng. Nếu fail: `git revert <commit-hash> && pm2 rest
     - Verify: `wc -l app/routers/platform_config.py` → `163 app/routers/platform_config.py` ✅
     - Verify: `grep -c 'db.execute\|text(' app/routers/platform_config.py` → `0` ✅
     - Verify: `venv/bin/python -c "from app.main import app; print('OK')"` → `OK` ✅
+  - `compliance.py` → `app/services/compliance_service.py`
+    - Tách logic SQL/tính toán/export/AI suggest sang service; router chỉ còn route decorator + signature + gọi service.
+    - Verify: `wc -l app/routers/compliance.py` → `130 app/routers/compliance.py` ✅
+    - Verify: `grep -c 'db.execute\|text(' app/routers/compliance.py` → `0` ✅
+    - Verify: `venv/bin/python -c "from app.main import app; print('OK')"` → `OK` ✅
 - ⏳ Phase 3: DRY Error Handling — Chưa bắt đầu
 - ⏳ Phase 4: Enum & Constants — Chưa bắt đầu
 
