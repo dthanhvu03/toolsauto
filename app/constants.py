@@ -24,7 +24,24 @@ class ViralStatus(StrEnum):
 class JobType(StrEnum):
     POST = "POST"
     COMMENT = "COMMENT"
+    STORY = "STORY"
     VERIFY_THREADS = "VERIFY_THREADS"
+
+class Platform(StrEnum):
+    FACEBOOK = "facebook"
+    THREADS = "threads"
+    TIKTOK = "tiktok"
+    INSTAGRAM = "instagram"
+
+class WorkflowAction(StrEnum):
+    NAVIGATE = "navigate"
+    CLICK = "click"
+    TYPE = "type"
+    WAIT = "wait"
+    WAIT_VISIBLE = "wait_visible"
+    UPLOAD = "upload"
+    SCROLL = "scroll"
+    SELECT = "select"
 
 # Sentinel marker for content orchestrator & queue
 AI_GENERATE_MARKER = "[AI_GENERATE]"

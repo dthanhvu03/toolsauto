@@ -1,6 +1,7 @@
 import logging
 from app.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
+from app.constants import Platform, JobType
 from app.services.media_processor import MediaProcessor
 from app.services.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
@@ -38,7 +39,7 @@ def get_adapter(platform: str) -> AdapterInterface:
 
     # Map of platforms that have dedicated (non-Generic) adapters
     _DEDICATED_ADAPTERS = {
-        "facebook": lambda: FacebookAdapter(),
+        Platform.FACEBOOK: lambda: FacebookAdapter(),
     }
 
     registry_adapter: AdapterInterface | None = None
@@ -122,7 +123,7 @@ class Dispatcher:
                         source="db", template_preview=template[:50],
                         pool_size=len(cta_list))
             else:
-                if platform == "facebook":
+                if platform == Platform.FACEBOOK:
                     from app.adapters.facebook.adapter import FacebookAdapter
                     import random
                     template = random.choice(FacebookAdapter.CTA_POOL)
