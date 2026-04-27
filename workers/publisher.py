@@ -122,7 +122,7 @@ def process_single_job(db: Session):
         return False
 
     logger.debug("[DB][claim_next_job] Attempting to claim next job")
-    job = QueueService.claim_next_job(db)
+    job = QueueService.claim_next_job(db, platform="facebook")
     if not job:
         logger.debug("[DB][claim_next_job] No eligible job claimed")
         return False
