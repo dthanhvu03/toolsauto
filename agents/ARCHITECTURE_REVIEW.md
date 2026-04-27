@@ -71,6 +71,35 @@ Dưới góc nhìn của **SOLID Principles**, **Clean Architecture**, và **DRY
 
 ---
 
+## Phần 3: Phân Tích Chuyên Sâu Từng Tầng (Layers)
+
+Dự án hiện tại tổ chức theo mô hình Kiến trúc Đa tầng (Layered Architecture). Tuy nhiên, ranh giới giữa các tầng đang bị mờ nhạt và vi phạm một số nguyên tắc cơ bản:
+
+### 1. Thư mục `app/routers/` (Tầng Controller)
+- **Nguyên tắc bị vi phạm:** Fat Controller (Controller béo phì).
+- **Thực trạng:** Tầng Router ĐÁNG LẼ chỉ được phép làm 3 việc: Nhận Request $\rightarrow$ Validate $\rightarrow$ Trả Response. Nhưng hiện tại:
+  - `routers/platform_config.py` (38KB): Gọi trực tiếp Terminal Server qua Bash subprocess (`subprocess.run(["tmux", ...])`).
+  - `routers/compliance.py` (28KB): Chứa hàng tá câu truy vấn SQL thô `db.execute(text("SELECT..."))` trực tiếp bên trong các route (như `/categories`, `/ai-suggest-keywords`).
+- **Hậu quả:** Khó viết Unit Test cho logic mà không giả lập được HTTP Request.
+
+### 2. Thư mục `app/schemas/` (Tầng Validation / DTO)
+- **Nguyên tắc bị vi phạm:** Separation of Concerns (Thiếu quy hoạch tập trung).
+- **Thực trạng:** Thư mục này gần như bị bỏ hoang (chỉ có 1 file `log.py` 629 bytes). Toàn bộ các class Pydantic Models kiểm tra dữ liệu đầu vào (như `KeywordCreateBody`, `KeywordUpdateBody`) đang bị viết "chui" rải rác ngay bên trong các file Router (Ví dụ `routers/compliance.py` dòng 42).
+- **Hậu quả:** Bất kỳ Service nào cần xài lại Schema này đều phải đi `import` ngược từ Router, gây ra lỗi Import Vòng Tròn (Circular Import).
+
+### 3. Thư mục `app/services/` (Tầng Business Logic)
+- **Nguyên tắc bị vi phạm:** Single Source of Truth và God Service.
+- **Thực trạng:** 
+  - Tồn tại song song 2 đường gọi AI: `ai_pipeline.py` (hệ thống 9Router mới) và `gemini_api.py` (gọi trực tiếp kiểu cũ).
+  - File `content_orchestrator.py` (nặng 45KB) đóng vai trò God Service, ôm đồm từ tạo caption, dịch thuật, chèn hashtag, đến kiểm tra từ khóa... Thậm chí nó phải import chéo cả `gemini_api.py` làm phương án dự phòng (fallback) rất lồng cồng.
+- **Hậu quả:** Sửa 1 luồng AI sẽ phải đi rà soát và sửa song song cả 2 đường ống.
+
+### 4. Thư mục `app/adapters/` (Tầng Giao Tiếp External)
+- **Nguyên tắc bị vi phạm:** Tight Coupling (Phụ thuộc cứng).
+- **Thực trạng:** File `dispatcher.py` chịu trách nhiệm điều phối Adapter nhưng lại tự ý rẽ nhánh bằng mã cứng `if platform == "facebook":`. Theo chuẩn thiết kế, Dispatcher phải "mù", chỉ cần gọi `WorkflowRegistry` để lấy interface ra chạy mà không cần quan tâm tên nền tảng.
+
+---
+
 ## 🎯 Kết luận
 Đây không phải là "Code rác mỳ ý". Dự án hiện tại là một nền móng (Foundation) rất thực dụng và mạnh mẽ. Những điểm vi phạm trên là **Sự đánh đổi (Trade-off) có chủ ý** ở Phase 1 để ra mắt sản phẩm nhanh. 
 Mục tiêu tiếp theo là mở một **"Refactoring Sprint"** để giải quyết triệt để 5 vấn đề này, biến dự án thành một hệ thống SaaS Automation hoàn hảo không tì vết.
