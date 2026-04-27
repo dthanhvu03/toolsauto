@@ -366,7 +366,7 @@ def test_workflow(workflow_id: int, payload: dict = {}, db: Session = Depends(ge
     if not is_active:
         warnings.append("Workflow is inactive. Activate before use.")
 
-    VALID_ACTIONS = {"navigate", "click", "fill", "upload_file", "wait", "verify", "check_auth", "legacy"}
+    VALID_ACTIONS = {"navigate", "click", "fill", "upload_file", "wait", "wait_visible", "verify", "check_auth", "legacy"}
     VALID_VALUE_SOURCES = {"job.caption", "job.media_path", "job.post_url", "account.username"}
 
     for i, raw in enumerate(raw_steps):
