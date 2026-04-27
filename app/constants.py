@@ -34,14 +34,15 @@ class Platform(StrEnum):
     INSTAGRAM = "instagram"
 
 class WorkflowAction(StrEnum):
+    """Action types supported by GenericAdapter.ActionExecutor."""
     NAVIGATE = "navigate"
     CLICK = "click"
-    TYPE = "type"
+    FILL = "fill"
+    UPLOAD_FILE = "upload_file"
     WAIT = "wait"
     WAIT_VISIBLE = "wait_visible"
-    UPLOAD = "upload"
-    SCROLL = "scroll"
-    SELECT = "select"
+    VERIFY = "verify"
+    CHECK_AUTH = "check_auth"
 
 # Sentinel marker for content orchestrator & queue
 AI_GENERATE_MARKER = "[AI_GENERATE]"

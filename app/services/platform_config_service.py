@@ -11,6 +11,7 @@ from app.database.core import get_db
 from app.main_templates import templates
 from app.services.workflow_registry import invalidate
 from app.config import MCP_PROXY_PORT
+from app.constants import WorkflowAction
 import json, time, logging
 
 logger = logging.getLogger(__name__)
@@ -451,7 +452,7 @@ def test_workflow(workflow_id: int, payload: dict = {}, db: Session = Depends(ge
                 })
 
         # Check URL for navigate
-        if action == "navigate":
+        if action == WorkflowAction.NAVIGATE:
             url = raw.get("url", "")
             url_key = raw.get("url_key", "")
             if not url and not url_key and not vs:
