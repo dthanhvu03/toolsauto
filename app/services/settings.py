@@ -495,6 +495,17 @@ SETTINGS: dict[str, SettingSpec] = {
         max=50,
         unit="video",
     ),
+    "cleanup.log_retention_days": SettingSpec(
+        key="cleanup.log_retention_days",
+        type="int",
+        default_getter=lambda: 30,
+        title="Số ngày giữ log thô",
+        section="Bảo trì & cảnh báo",
+        description="Tự động xóa job_events và incident_logs cũ hơn số ngày này. Không xóa incident_groups.",
+        min=1,
+        max=365,
+        unit="ngày",
+    ),
     "ALERT_PENDING_THRESHOLD": SettingSpec(
         key="ALERT_PENDING_THRESHOLD",
         type="int",
