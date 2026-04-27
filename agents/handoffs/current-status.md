@@ -1,3 +1,10 @@
+- **[2026-04-27]** NEW TASK-027: Codebase Refactoring Sprint ⏳
+  - Architecture Review hoàn tất → phát hiện 5 vi phạm nguyên tắc quốc tế (SOLID/DRY/Clean Architecture).
+  - Tạo `agents/ARCHITECTURE_REVIEW.md`, `agents/CODING_STANDARDS.md`, cập nhật `RULES.md` + `WORKFLOW.md`.
+  - PLAN-027 tạo (Draft) — 4 Phase: Schema Centralization → Thin Controller → DRY Error Handling → Enum & Constants.
+  - Đã loại scope trùng lặp: AI Pathway (TASK-023/024), models split (TASK-022), test baseline (TASK-021), cron (TASK-020).
+  - **Status: New → chờ anh Vu approve PLAN-027 trước khi Assign cho Agent thực thi.**
+
 - **[2026-04-27]** Done TASK-026: Async Pipeline & Threads Caller Migration ✅
   - Triển khai `generate_text_async` và `call_native_gemini_async` (Async SDK).
   - Hoàn tất migrate Threads worker sang kiến trúc AI Pipeline.
