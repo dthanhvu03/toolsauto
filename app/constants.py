@@ -24,7 +24,25 @@ class ViralStatus(StrEnum):
 class JobType(StrEnum):
     POST = "POST"
     COMMENT = "COMMENT"
+    STORY = "STORY"
     VERIFY_THREADS = "VERIFY_THREADS"
+
+class Platform(StrEnum):
+    FACEBOOK = "facebook"
+    THREADS = "threads"
+    TIKTOK = "tiktok"
+    INSTAGRAM = "instagram"
+
+class WorkflowAction(StrEnum):
+    """Action types supported by GenericAdapter.ActionExecutor."""
+    NAVIGATE = "navigate"
+    CLICK = "click"
+    FILL = "fill"
+    UPLOAD_FILE = "upload_file"
+    WAIT = "wait"
+    WAIT_VISIBLE = "wait_visible"
+    VERIFY = "verify"
+    CHECK_AUTH = "check_auth"
 
 # Sentinel marker for content orchestrator & queue
 AI_GENERATE_MARKER = "[AI_GENERATE]"

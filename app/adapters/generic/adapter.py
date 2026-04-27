@@ -18,9 +18,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from app.constants import JobType
+
 from playwright.sync_api import Playwright, BrowserContext, Page
 
 from app.adapters.contracts import AdapterInterface, PublishResult
+from app.adapters.common.decorators import playwright_safe_action
 from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.adapters.generic.action_executor import (
     ActionExecutor,
@@ -30,6 +33,16 @@ from app.adapters.generic.action_executor import (
 from app.config import SAFE_MODE
 
 logger = logging.getLogger(__name__)
+
+
+@playwright_safe_action(default=None, logger_name=__name__)
+def _safe_close_resource(resource: Any) -> None:
+    resource.close()
+
+
+@playwright_safe_action(default=None, logger_name=__name__)
+def _safe_stop_playwright(playwright: Playwright) -> None:
+    playwright.stop()
 
 try:
     from app.services.job_tracer import update_active_node
@@ -206,20 +219,11 @@ class GenericAdapter(AdapterInterface):
     def close_session(self) -> None:
         logger.info("GenericAdapter[%s]: Closing session.", self.platform)
         if self.page:
-            try:
-                self.page.close()
-            except Exception:
-                pass
+            _safe_close_resource(self.page)
         if self.context:
-            try:
-                self.context.close()
-            except Exception:
-                pass
+            _safe_close_resource(self.context)
         if self.playwright:
-            try:
-                self.playwright.stop()
-            except Exception:
-                pass
+            _safe_stop_playwright(self.playwright)
         self.page = None
         self.context = None
         self.playwright = None
@@ -243,7 +247,7 @@ class GenericAdapter(AdapterInterface):
         try:
             from app.services.workflow_registry import WorkflowRegistry
 
-            job_type = getattr(job, "job_type", "POST") or "POST"
+            job_type = getattr(job, "job_type", JobType.POST) or JobType.POST
             workflow = WorkflowRegistry.get_workflow(self.platform, job_type)
 
             if not workflow or not workflow.steps:

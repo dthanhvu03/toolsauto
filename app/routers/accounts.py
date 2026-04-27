@@ -1,13 +1,12 @@
-import logging
 from typing import List
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 import time
+import logging
 from app.database.core import get_db
 from app.services.account import AccountService
 from app.services.page_utils import PageUtils
-
 from app.main_templates import templates
 
 logger = logging.getLogger(__name__)
@@ -33,6 +32,7 @@ def get_accounts_table(request: Request, q: str = "", db: Session = Depends(get_
             if q in hay:
                 filtered.append(a)
         accounts = filtered
+    
     now = int(time.time())
     html_content = ""
     for account in accounts:
@@ -57,8 +57,8 @@ def create_account(
         AccountService.create_account(db, platform=platform, name=name, daily_limit=daily_limit, cooldown_seconds=cooldown_seconds)
     except Exception as e:
         logger.error("Failed to create account name=%s platform=%s: %s", name, platform, e)
-    accounts = AccountService.list_accounts(db)
     
+    accounts = AccountService.list_accounts(db)
     return templates.TemplateResponse(
         "fragments/accounts_table.html", 
         {"request": request, "accounts": accounts, "now": int(time.time())}
@@ -70,12 +70,10 @@ def start_account_login(account_id: int, request: Request, db: Session = Depends
     try:
         account = AccountService.start_login(db, account_id)
     except ValueError as e:
-        db.rollback()
         logger.warning(f"start_account_login blocked: {e}")
         account = AccountService.get_account(db, account_id)
         error_msg = str(e)
     except Exception as e:
-        db.rollback()
         logger.error(f"start_account_login error: {e}")
         account = AccountService.get_account(db, account_id)
         error_msg = "Có lỗi hệ thống xảy ra"
@@ -90,7 +88,6 @@ def confirm_account_login(account_id: int, request: Request, db: Session = Depen
     try:
         account = AccountService.confirm_login(db, account_id)
     except Exception as e:
-        db.rollback()
         logger.error(f"confirm_account_login error: {e}")
         account = AccountService.get_account(db, account_id)
         
@@ -104,7 +101,6 @@ def validate_account_session(account_id: int, request: Request, db: Session = De
     try:
         account = AccountService.validate_session(db, account_id)
     except Exception as e:
-        db.rollback()
         logger.error(f"validate_account_session error: {e}")
         account = AccountService.get_account(db, account_id)
         
@@ -119,6 +115,9 @@ def toggle_account(account_id: int, request: Request, db: Session = Depends(get_
         account = AccountService.toggle_account(db, account_id)
     except ValueError as e:
         logger.warning("toggle_account account_id=%s: %s", account_id, e)
+        account = AccountService.get_account(db, account_id)
+    except Exception as e:
+        logger.error("toggle_account error: %s", e)
         account = AccountService.get_account(db, account_id)
         
     return templates.TemplateResponse(
@@ -151,7 +150,6 @@ def update_account_limits(
             page_niches=page_niches or "",
         )
     except Exception as e:
-        db.rollback()
         logger.warning("update_limits account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
@@ -165,7 +163,6 @@ def reset_account_failures(account_id: int, request: Request, db: Session = Depe
     try:
         account = AccountService.reset_failures(db, account_id)
     except Exception as e:
-        db.rollback()
         logger.warning("reset_failures account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
@@ -181,12 +178,11 @@ def rename_account(
     name: str = Form(...), 
     db: Session = Depends(get_db)
 ):
-    account = AccountService.get_account(db, account_id)
-    if account and name and name.strip():
-        account.name = name.strip()
-        db.commit()
-        db.refresh(account)
-        
+    try:
+        account = AccountService.rename_account(db, account_id, name)
+    except Exception:
+        account = AccountService.get_account(db, account_id)
+
     return templates.TemplateResponse(
         "fragments/account_row.html", 
         {"request": request, "account": account, "now": int(time.time())}
@@ -197,7 +193,7 @@ def delete_account(account_id: int, request: Request, db: Session = Depends(get_
     try:
         AccountService.delete_account(db, account_id)
         return HTMLResponse("")
-    except ValueError:
+    except Exception:
         account = AccountService.get_account(db, account_id)
         return templates.TemplateResponse(
             "fragments/account_row.html", 
@@ -206,7 +202,6 @@ def delete_account(account_id: int, request: Request, db: Session = Depends(get_
 
 @router.get("/", response_class=HTMLResponse)
 def get_accounts_page(request: Request, db: Session = Depends(get_db)):
-    """Main Accounts Page - Now using Split View by default."""
     accounts = AccountService.list_accounts(db)
     first_account = accounts[0] if accounts else None
     return templates.TemplateResponse(
@@ -216,7 +211,6 @@ def get_accounts_page(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/split", response_class=HTMLResponse)
 def get_accounts_split_view_alias(request: Request, db: Session = Depends(get_db)):
-    """Alias for backward compatibility during transition."""
     return get_accounts_page(request, db)
 
 @router.get("/list", response_class=HTMLResponse)
@@ -258,7 +252,6 @@ def get_account_pages_tab(
     filter: str = "all", 
     db: Session = Depends(get_db)
 ):
-    """HTMX endpoint to return the Pages Management tab content for a specific account."""
     account = AccountService.get_account(db, account_id)
     if not account:
         return HTMLResponse(status_code=404)
@@ -272,8 +265,6 @@ def get_account_pages_tab(
 
 @router.get("/{account_id}/pages", response_class=HTMLResponse)
 def get_account_pages(account_id: int, request: Request, db: Session = Depends(get_db)):
-    # ... existing code ...
-    """HTMX endpoint to return <option> elements for a specific account's managed pages."""
     account = AccountService.get_account(db, account_id)
     html_content = '<option value="" selected>Cá nhân / Mặc định</option>'
     
@@ -289,31 +280,12 @@ def get_account_pages(account_id: int, request: Request, db: Session = Depends(g
 
 @router.post("/{account_id}/sync-pages", response_class=HTMLResponse)
 def sync_account_pages(account_id: int, request: Request, db: Session = Depends(get_db)):
-    """Triggers the background scraper for this account and returns updated row."""
-    import subprocess
-    import os
-    import threading
-    
     account = AccountService.get_account(db, account_id)
     if not account:
         return HTMLResponse(status_code=404)
         
-    def _run_scraper(acc_id):
-        import sys
-        script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "scrape_pages.py"))
-        env = os.environ.copy()
-        env["DISPLAY"] = ":99"
-        # Use sys.executable so it always uses the correct venv Python, never bare 'python'
-        python_bin = str(__import__("app.config", fromlist=["BASE_DIR"]).BASE_DIR / "venv" / "bin" / "python")
-        subprocess.run([python_bin, script_path, "--account", str(acc_id)], env=env, cwd=str(__import__("app.config", fromlist=["BASE_DIR"]).BASE_DIR))
-        
-    # Run in background to avoid blocking the UI
-    thread = threading.Thread(target=_run_scraper, args=(account_id,))
-    thread.daemon = True
-    thread.start()
+    AccountService.trigger_page_sync(db, account_id)
     
-    # Return immediately, the user will have to refresh or ping session to see results
-    # Or we can just pretend it's updating
     return templates.TemplateResponse(
         "fragments/account_row.html", 
         {"request": request, "account": account, "now": int(time.time()), "sync_started": True}

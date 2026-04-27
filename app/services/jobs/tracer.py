@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import datetime, timezone
 import app.config as config
+from app.constants import JobType
 try:
     import zoneinfo
     tz = zoneinfo.ZoneInfo(config.TIMEZONE)
@@ -29,7 +30,7 @@ def _get_canonical_nodes(platform: str, job_type: str, workflow_steps: list[str]
         nodes.append("feed_browse")
         
     # 3. Publish phase
-    if job_type.upper() == "POST":
+    if job_type.upper() == JobType.POST:
         nodes.append("post_content")
     else:
         nodes.append("type_comment")

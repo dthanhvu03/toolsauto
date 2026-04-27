@@ -1,6 +1,7 @@
 import logging
 from app.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
+from app.constants import Platform, JobType
 from app.services.media_processor import MediaProcessor
 from app.services.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
@@ -36,9 +37,13 @@ def get_adapter(platform: str) -> AdapterInterface:
     """
     from app.adapters.generic.adapter import GenericAdapter
 
+    from app.adapters.facebook.adapter import FacebookAdapter
+    from app.adapters.threads.adapter import ThreadsAdapter
+
     # Map of platforms that have dedicated (non-Generic) adapters
     _DEDICATED_ADAPTERS = {
-        "facebook": lambda: FacebookAdapter(),
+        Platform.FACEBOOK: lambda: FacebookAdapter(),
+        Platform.THREADS: lambda: ThreadsAdapter(),
     }
 
     registry_adapter: AdapterInterface | None = None
@@ -122,7 +127,7 @@ class Dispatcher:
                         source="db", template_preview=template[:50],
                         pool_size=len(cta_list))
             else:
-                if platform == "facebook":
+                if platform == Platform.FACEBOOK:
                     from app.adapters.facebook.adapter import FacebookAdapter
                     import random
                     template = random.choice(FacebookAdapter.CTA_POOL)
@@ -208,7 +213,7 @@ class Dispatcher:
             final_comment_text = Dispatcher._inject_cta(job.platform, job.auto_comment_text)
             
             # 5. Execute based on job_type
-            if job_type == "COMMENT":
+            if job_type == JobType.COMMENT:
                 # COMMENT job: navigate to post and add comment
                 logger.info("[Job %s] Dispatching COMMENT job on post: %s", job.id, job.post_url)
                 

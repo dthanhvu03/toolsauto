@@ -52,11 +52,12 @@ class QueueService:
                 WHERE j.status = 'PENDING'
                   AND (
                       -- POST jobs: use schedule_ts
-                      (j.job_type = 'POST' AND j.schedule_ts <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER))
+                      (UPPER(j.job_type) = 'POST' AND COALESCE(j.schedule_ts, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER))
                       OR
                       -- COMMENT jobs: use scheduled_at (delayed)
-                      (j.job_type = 'COMMENT' AND j.scheduled_at <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER))
+                      (UPPER(j.job_type) = 'COMMENT' AND COALESCE(j.scheduled_at, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER))
                   )
+                  AND ( :platform IS NULL OR j.platform = :platform OR j.platform LIKE '%' || :platform || '%' )
                   AND a.is_active = true
                   AND a.login_status = 'ACTIVE'
                   AND (a.last_post_ts IS NULL OR (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - a.last_post_ts) >= a.cooldown_seconds)
@@ -76,7 +77,7 @@ class QueueService:
         import time as _time
         for _attempt in range(3):
             try:
-                result = db.execute(text(sql))
+                result = db.execute(text(sql), {"platform": platform})
                 row = result.fetchone()
                 db.commit()
 
