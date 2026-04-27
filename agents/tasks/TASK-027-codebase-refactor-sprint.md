@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | TASK-027 |
-| **Status** | Planned |
+| **Status** | New |
 | **Priority** | P1 |
 | **Owner** | Antigravity |
 | **Executor** | Codex / Claude Code (theo từng Phase) |
@@ -15,70 +15,72 @@
 ---
 
 ## Objective
-Cấu trúc lại (Refactor) toàn bộ codebase ToolsAuto để tuân thủ các nguyên tắc thiết kế phần mềm tiêu chuẩn quốc tế: SOLID, Clean Architecture, DRY, theo 6 Phase độc lập.
+Cấu trúc lại (Refactor) codebase ToolsAuto để tuân thủ các nguyên tắc SOLID, Clean Architecture, DRY — chia thành 4 Phase độc lập.
+
+---
+
+## Pre-Research Notes (Phase 2 — Research)
+**Đã đọc `current-status.md` trước khi lập kế hoạch. Phát hiện các việc ĐÃ LÀM XONG, loại khỏi scope:**
+
+| Việc | Trạng thái | Tham chiếu |
+|---|---|---|
+| Tách `models.py` thành package | ✅ ĐÃ XONG | TASK-022 (archived) |
+| Deprecate `gemini_api.py` text path | ✅ ĐÃ XONG | TASK-023/024 (archived) |
+| AI Pipeline 2-tier fallback | ✅ ĐÃ XONG | ADR-006 (implemented) |
+| Service Test Baseline | ✅ ĐÃ XONG | TASK-021 (archived) |
+| Schedule AI Reporter Cron | ✅ ĐÃ XONG | TASK-020 (archived) |
+
+**Còn lại CẦN LÀM (scope thực tế của TASK-027):**
 
 ---
 
 ## Scope
-Refactor được chia thành **6 Phase** độc lập, mỗi Phase có thể triển khai và verify riêng:
+### Phase 1 — Schema Centralization (P0 — Dễ nhất)
+- Dời toàn bộ Pydantic BaseModel từ `routers/` sang `app/schemas/`
 
-### Phase 1 — Schema Centralization (P0 — Dễ nhất, làm đầu tiên)
-- Dời toàn bộ Pydantic BaseModel từ các file `routers/` sang `app/schemas/`
-- Tạo các file schema theo domain
+### Phase 2 — Thin Controller (P1)
+- Tách logic nghiệp vụ ra khỏi `routers/` sang `services/`
 
-### Phase 2 — Thin Controller (P1 — Sau Phase 1)
-- Tách logic nghiệp vụ (SQL thô, subprocess) ra khỏi `routers/`
-- Tạo Service layer tương ứng cho từng Router béo
-
-### Phase 3 — Kill Duplicate AI Pathway (P1)
-- Deprecate `gemini_api.py`, migrate 8 caller sang `ai_pipeline.py`
-- Giải quyết fallback strategy cho `content_orchestrator.py`
-
-### Phase 4 — DRY Error Handling (P2)
+### Phase 3 — DRY Error Handling (P2)
 - Tạo Playwright Decorator `@playwright_safe_action`
 - Apply vào `facebook/adapter.py` và `generic/adapter.py`
 
-### Phase 5 — Facebook Adapter Split (P2 — Opportunistic)
-- Tách God Object 2373 LOC thành facade + module con
-- Chỉ thực hiện khi có bug/feature chạm adapter
+### Phase 4 — Enum & Constants (P3)
+- Gom Magic Strings vào Enum class
 
-### Phase 6 — Enum & Constants (P3)
-- Gom tất cả Magic Strings vào các Enum class
-- Apply xuyên suốt dự án
+### Opportunistic (không lên lịch, chỉ làm khi có trigger)
+- Facebook Adapter Split — khi có bug/feature chạm adapter
 
 ## Out of Scope
-- Chuyển đổi Database Polling sang Message Queue (Redis/RabbitMQ) — đây là Phase riêng cho giai đoạn Scale
-- Tách `models.py` thành package — đã có TASK-022 riêng
-- Viết Unit Test — đã có TASK-021 riêng
+- ~~Kill Duplicate AI Pathway~~ → ĐÃ XONG (TASK-023/024, ADR-006)
+- ~~Tách models.py~~ → ĐÃ XONG (TASK-022)
+- ~~Schedule AI Reporter~~ → ĐÃ XONG (TASK-020)
+- ~~Service Test Baseline~~ → ĐÃ XONG (TASK-021)
+- Database Polling → Message Queue — giai đoạn Scale riêng
 
 ---
 
 ## Blockers
-- Phase 2 phụ thuộc Phase 1 (Schema phải tập trung trước khi Router được dọn)
-- Phase 5 là Opportunistic (chỉ thực hiện khi có lý do chạm adapter)
+- Phase 2 phụ thuộc Phase 1 (Schema phải tập trung trước)
 
 ---
 
 ## Acceptance Criteria
-- [ ] **Phase 1**: Không còn bất kỳ class BaseModel nào bên trong thư mục `app/routers/`. Mọi schema nằm trong `app/schemas/`.
-- [ ] **Phase 2**: Mọi file router < 500 LOC. Không còn câu SQL thô hoặc subprocess trong router.
-- [ ] **Phase 3**: `gemini_api.py` được đánh dấu `@deprecated`. Mọi caller chính thức đi qua `ai_pipeline.py`.
-- [ ] **Phase 4**: Không còn khối try-except Playwright bị lặp lại > 2 lần. Decorator `@playwright_safe_action` được sử dụng.
-- [ ] **Phase 5**: Class `FacebookAdapter` < 500 LOC (facade). Logic nằm trong module con.
-- [ ] **Phase 6**: Không còn Magic String `"facebook"`, `"POST"`, `"DONE"` trong code chính. Tất cả dùng Enum.
-- [ ] Mọi phase: Hệ thống chạy ổn định sau refactor (PM2 status OK, no crash trong 1h).
+- [ ] **Phase 1**: Không còn class BaseModel nào trong `app/routers/`. Mọi schema nằm trong `app/schemas/`.
+- [ ] **Phase 2**: Mọi file router < 500 LOC. Không còn SQL thô hoặc subprocess trong router.
+- [ ] **Phase 3**: Không còn khối try-except Playwright lặp > 2 lần. Decorator `@playwright_safe_action` được sử dụng.
+- [ ] **Phase 4**: Không còn Magic String `"facebook"`, `"POST"` trong code chính. Tất cả dùng Enum.
+- [ ] Mọi phase: `python -c "from app.main import app; print('OK')"` + PM2 status OK.
 
 ---
 
 ## Execution Notes
-*(Executor điền vào trong khi làm — không để trống khi Done)*
+*(Executor điền vào trong khi làm)*
 
 - [ ] Phase 1: Schema Centralization
 - [ ] Phase 2: Thin Controller
-- [ ] Phase 3: Kill Duplicate AI Pathway
-- [ ] Phase 4: DRY Error Handling
-- [ ] Phase 5: Facebook Adapter Split
-- [ ] Phase 6: Enum & Constants
+- [ ] Phase 3: DRY Error Handling
+- [ ] Phase 4: Enum & Constants
 
 ---
 
@@ -97,5 +99,4 @@ Refactor được chia thành **6 Phase** độc lập, mỗi Phase có thể tr
 ## Status History
 | Date | Status | Note |
 |---|---|---|
-| 2026-04-27 | New | Task được tạo bởi Anti sau Architecture Review |
-| 2026-04-27 | Planned | PLAN-027 được tạo, chia 6 Phase |
+| 2026-04-27 | New | Task được tạo bởi Anti sau Architecture Review. Đã research current-status.md, loại bỏ scope trùng lặp. |
