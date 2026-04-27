@@ -6,7 +6,6 @@ import json
 import glob
 import time
 import psutil
-import shutil
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo

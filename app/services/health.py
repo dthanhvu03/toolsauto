@@ -1,12 +1,52 @@
+import os
+import json
+import subprocess
+import logging
 import time
 import psutil
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_
 from app.database.models import SystemState, Job, Account
 from app.constants import AccountStatus, JobStatus
+import app.config as config
 
+logger = logging.getLogger(__name__)
 
 class HealthService:
+    @staticmethod
+    def get_gemini_health() -> dict:
+        cookie_path = str(config.BASE_DIR / "gemini_cookies.json")
+        invalid_flag = str(config.BASE_DIR / "gemini_cookies_invalid")
+        
+        is_valid = False
+        if os.path.exists(invalid_flag):
+            is_valid = False
+        elif os.path.exists(cookie_path):
+            try:
+                with open(cookie_path, "r") as f:
+                    cookies = json.load(f)
+                for c in cookies:
+                    if c.get("name") == "__Secure-1PSID":
+                        expiry = c.get("expiry", 0)
+                        if expiry > time.time():
+                            is_valid = True
+                        break
+            except Exception as e:
+                logger.error("Error reading cookies: %s", e)
+        return {"is_valid": is_valid}
+
+    @staticmethod
+    def start_gemini_login():
+        env = os.environ.copy()
+        env["DISPLAY"] = ":99"
+        python_bin = str(config.BASE_DIR / "venv" / "bin" / "python")
+        subprocess.Popen(
+            [python_bin, "scripts/login_gemini_bypass.py"], 
+            env=env, 
+            cwd=str(config.BASE_DIR),
+            start_new_session=True
+        )
+
     @staticmethod
     def get_system_health(db: Session, orphan_threshold_seconds: int = 300) -> dict:
         """
@@ -181,3 +221,16 @@ class HealthService:
                 "disk_used_gb": round(disk_used_gb, 1),
             }
         }
+    @staticmethod
+    def notify_worker_down():
+        from app.services.notifier_service import NotifierService
+        NotifierService.notify_worker_down()
+
+    @staticmethod
+    def sync_cookies(cookies: list):
+        cookie_path = str(config.BASE_DIR / "gemini_cookies.json")
+        invalid_flag = str(config.BASE_DIR / "gemini_cookies_invalid")
+        with open(cookie_path, "w") as f:
+            json.dump(cookies, f)
+        if os.path.exists(invalid_flag):
+            os.remove(invalid_flag)

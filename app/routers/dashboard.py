@@ -1,22 +1,13 @@
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 import time
-import datetime
 from app.database.core import get_db
-from app.database.models import Job, Account, DiscoveredChannel, IncidentGroup
-from app.services.worker import WorkerService
-from app.services.account import AccountService, get_discovery_keywords
+from app.services.account import AccountService
 from app.services.log_query_facade import LogQueryFacade
+from app.services.dashboard_service import DashboardService
 from app.utils.htmx import htmx_toast_response
-import app.config as config
-from app.services import settings as runtime_settings
-
-# Gắn FastAPI app state or custom dependencies later if needed.
-# Note: we need access to templates in routers. We'll import them from a shared location.
 from app.main_templates import templates
-from app.constants import JobStatus, ViralStatus
 
 
 router = APIRouter()
@@ -30,14 +21,12 @@ def index(request: Request, db: Session = Depends(get_db)):
 @router.get("/app", response_class=HTMLResponse)
 def app_overview(request: Request, db: Session = Depends(get_db)):
     """SaaS UI (beta): overview page (no long tables)."""
-    accounts = db.query(Account).all()
-    state = WorkerService.get_or_create_state(db)
+    overview = DashboardService.get_overview_data(db)
     return templates.TemplateResponse(
         "pages/app_overview.html",
         {
             "request": request,
-            "accounts": accounts,
-            "state": state,
+            **overview,
             "now": int(time.time()),
         }
     )
@@ -51,164 +40,21 @@ def app_overview_legacy(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/app/overview/page-posting-stats", response_class=HTMLResponse)
 def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_db)):
-    """
-    HTMX fragment: show today's per-page posting usage (DONE) + remaining vs cap.
-    Cap is runtime setting POSTS_PER_PAGE_PER_DAY (0 = disabled).
-    """
-    try:
-        cap = int(runtime_settings.get_effective(db, "publish.posts_per_page_per_day") or 0)
-    except Exception:
-        cap = int(getattr(config, "POSTS_PER_PAGE_PER_DAY", 0) or 0)
-
-    tz = getattr(config, "TIMEZONE", "Asia/Ho_Chi_Minh")
-    now_dt = datetime.datetime.now(datetime.timezone.utc)
-    try:
-        from zoneinfo import ZoneInfo
-        now_dt = datetime.datetime.now(ZoneInfo(tz))
-    except Exception:
-        pass
-    today_start = int(datetime.datetime.combine(now_dt.date(), datetime.time.min, tzinfo=getattr(now_dt, "tzinfo", None)).timestamp())
-
-    rows = (
-        db.query(Job.target_page, func.count(Job.id))
-        .filter(Job.target_page.isnot(None), Job.status == JobStatus.DONE, Job.finished_at >= today_start)
-        .group_by(Job.target_page)
-        .order_by(func.count(Job.id).desc())
-        .limit(50)
-        .all()
-    )
-
-    stats = []
-    for page_url, done_cnt in rows:
-        used = int(done_cnt or 0)
-        remaining = None
-        if cap > 0:
-            remaining = max(0, cap - used)
-        stats.append(
-            {
-                "page_url": page_url,
-                "used": used,
-                "cap": cap,
-                "remaining": remaining,
-            }
-        )
-
+    """HTMX fragment: show today's per-page posting usage (DONE) + remaining vs cap."""
+    stats_data = DashboardService.get_page_posting_stats(db)
     return templates.TemplateResponse(
         "fragments/page_posting_stats.html",
-        {
-            "request": request,
-            "today_start": today_start,
-            "cap": cap,
-            "stats": stats,
-        },
+        {"request": request, **stats_data},
     )
 
 
 @router.get("/app/overview/page-reup-stats", response_class=HTMLResponse)
 def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)):
-    """
-    HTMX fragment: show today's per-page REUP intake usage + remaining vs cap.
-    We treat a job as ViralStatus.REUP if its media_path/processed_media_path is under config.REUP_DIR.
-    Cap is runtime setting REUP_VIDEOS_PER_PAGE_PER_DAY (0 = disabled).
-    """
-    try:
-        cap = int(runtime_settings.get_effective(db, "publish.reup_videos_per_page_per_day") or 0)
-    except Exception:
-        cap = int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0)
-
-    tz = getattr(config, "TIMEZONE", "Asia/Ho_Chi_Minh")
-    now_dt = datetime.datetime.now(datetime.timezone.utc)
-    try:
-        from zoneinfo import ZoneInfo
-        now_dt = datetime.datetime.now(ZoneInfo(tz))
-    except Exception:
-        pass
-    today_start = int(datetime.datetime.combine(now_dt.date(), datetime.time.min, tzinfo=getattr(now_dt, "tzinfo", None)).timestamp())
-
-    reup_dir = str(config.REUP_DIR).rstrip("/")
-    like_reup = f"{reup_dir}/%"
-    active_statuses = [JobStatus.AWAITING_STYLE, JobStatus.AI_PROCESSING, JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING]
-
-    # Build page url -> name index from accounts.managed_pages_list
-    page_name_index: dict[str, str] = {}
-    try:
-        accounts = db.query(Account).all()
-        for acc in accounts:
-            for p in (acc.managed_pages_list or []):
-                p_url = AccountService.normalize_page_url(p.get("url"))
-                if not p_url:
-                    continue
-                if p.get("name") and p_url not in page_name_index:
-                    page_name_index[p_url] = str(p.get("name"))
-    except Exception:
-        page_name_index = {}
-
-    # Active REUP jobs created today
-    rows_active = (
-        db.query(Job.target_page, func.count(Job.id))
-        .filter(
-            Job.target_page.isnot(None),
-            Job.status.in_(active_statuses),
-            Job.created_at >= today_start,
-            (
-                Job.media_path.ilike(like_reup)
-                | Job.processed_media_path.ilike(like_reup)
-            ),
-        )
-        .group_by(Job.target_page)
-        .all()
-    )
-    active_map = {str(tp): int(cnt or 0) for tp, cnt in rows_active if tp}
-
-    # DONE REUP jobs finished today
-    rows_done = (
-        db.query(Job.target_page, func.count(Job.id))
-        .filter(
-            Job.target_page.isnot(None),
-            Job.status == JobStatus.DONE,
-            Job.finished_at >= today_start,
-            (
-                Job.media_path.ilike(like_reup)
-                | Job.processed_media_path.ilike(like_reup)
-            ),
-        )
-        .group_by(Job.target_page)
-        .all()
-    )
-    done_map = {str(tp): int(cnt or 0) for tp, cnt in rows_done if tp}
-
-    pages = sorted(
-        {*(active_map.keys()), *(done_map.keys())},
-        key=lambda p: (-(active_map.get(p, 0) + done_map.get(p, 0)), p),
-    )
-
-    stats = []
-    for page_url in pages[:50]:
-        norm = AccountService.normalize_page_url(page_url)
-        used = int(active_map.get(page_url, 0) + done_map.get(page_url, 0))
-        remaining = None
-        if cap > 0:
-            remaining = max(0, cap - used)
-        stats.append(
-            {
-                "page_url": page_url,
-                "page_name": page_name_index.get(norm) or "",
-                "used": used,
-                "cap": cap,
-                "remaining": remaining,
-                "active": int(active_map.get(page_url, 0)),
-                "done": int(done_map.get(page_url, 0)),
-            }
-        )
-
+    """HTMX fragment: show today's per-page REUP intake usage + remaining vs cap."""
+    stats_data = DashboardService.get_page_reup_stats(db)
     return templates.TemplateResponse(
         "fragments/page_reup_stats.html",
-        {
-            "request": request,
-            "today_start": today_start,
-            "cap": cap,
-            "stats": stats,
-        },
+        {"request": request, **stats_data},
     )
 
 @router.get("/app/jobs", response_class=HTMLResponse)
@@ -326,15 +172,7 @@ def app_logs_domain_events(
 @router.get("/app/logs/ai-analytics", response_class=HTMLResponse)
 def app_logs_ai_analytics(request: Request, db: Session = Depends(get_db)):
     """HTMX fragment: AI Analytics tab (Health Report card + Top Incidents table)."""
-    groups = (
-        db.query(IncidentGroup)
-        .order_by(
-            IncidentGroup.occurrence_count.desc(),
-            IncidentGroup.last_seen_at.desc(),
-        )
-        .limit(50)
-        .all()
-    )
+    groups = DashboardService.get_ai_analytics(db)
     return templates.TemplateResponse(
         "fragments/ai_analytics_tab.html",
         {"request": request, "groups": groups},
@@ -345,19 +183,12 @@ def app_logs_ai_analytics(request: Request, db: Session = Depends(get_db)):
 def app_logs_ai_report_live(request: Request, db: Session = Depends(get_db)):
     """HTMX fragment: generate a live AI health report from the last 24h of incidents."""
     import html as _html
-    from datetime import datetime, timedelta, timezone
-
-    since = datetime.now(timezone.utc) - timedelta(days=1)
-    groups = (
-        db.query(IncidentGroup)
-        .filter(
-            IncidentGroup.last_seen_at >= since,
-            IncidentGroup.status.in_(["open", "acknowledged"]),
-        )
-        .order_by(IncidentGroup.occurrence_count.desc())
-        .limit(20)
-        .all()
-    )
+    from datetime import datetime
+    
+    report_data = DashboardService.get_ai_report_data(db)
+    groups = report_data["groups"]
+    text = report_data["text"]
+    meta = report_data["meta"]
 
     if not groups:
         return HTMLResponse(
@@ -366,19 +197,7 @@ def app_logs_ai_report_live(request: Request, db: Session = Depends(get_db)):
             '</div>'
         )
 
-    # Reuse the prompt builder from the ai_reporter worker so UI and Telegram report stay in sync.
-    from workers.ai_reporter import _build_prompt
-    from app.services.ai_runtime import pipeline
-
-    prompt = _build_prompt(groups)
-    try:
-        text, meta = pipeline.generate_text(prompt)
-    except Exception as exc:
-        return HTMLResponse(
-            f'<div class="text-sm text-red-600 p-3">AI pipeline error: {_html.escape(str(exc))}</div>'
-        )
-
-    if not (meta.get("ok") and text):
+    if not (meta.get("ok", True) and text):
         reason = meta.get("fail_reason", "empty response")
         return HTMLResponse(
             f'<div class="text-sm text-red-600 p-3">'
@@ -394,8 +213,6 @@ def app_logs_ai_report_live(request: Request, db: Session = Depends(get_db)):
     except Exception:
         body_html = "<pre class='whitespace-pre-wrap text-sm'>" + _html.escape(text) + "</pre>"
 
-    # ADR-006: surface fallback mode prominently — reader must know if output
-    # came from native Gemini path instead of the canonical 9Router.
     fallback_banner = ""
     if meta.get("fallback_used"):
         primary = _html.escape(str(meta.get("primary_fail_reason") or "unknown"))
@@ -426,13 +243,7 @@ def app_logs_incident_ack(
     signature: str, request: Request, db: Session = Depends(get_db)
 ):
     """Mark an incident group as acknowledged. Returns the updated row HTML for HTMX swap."""
-    from datetime import datetime, timezone
-
-    group = (
-        db.query(IncidentGroup)
-        .filter(IncidentGroup.error_signature == signature)
-        .first()
-    )
+    group = DashboardService.acknowledge_incident(db, signature)
     if not group:
         return HTMLResponse(
             '<tr><td colspan="7" class="px-3 py-2 text-xs text-red-600">'
@@ -440,12 +251,6 @@ def app_logs_incident_ack(
             '</td></tr>',
             status_code=404,
         )
-
-    group.status = "acknowledged"
-    group.acknowledged_by = "dashboard"
-    group.acknowledged_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(group)
 
     return templates.TemplateResponse(
         "fragments/incident_group_row.html",
@@ -466,46 +271,10 @@ def app_control_plane(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/app/settings", response_class=HTMLResponse)
 def app_settings(request: Request, db: Session = Depends(get_db)):
-    grouped = runtime_settings.list_specs_by_section()
-    overrides = runtime_settings.get_overrides(db, use_cache=False)
-    effective: dict[str, dict] = {}
-    for key, spec in runtime_settings.SETTINGS.items():
-        default_val = spec.default_getter()
-        has_override = (key in overrides) and (not spec.env_only)
-        ov = overrides.get(key, None) if not spec.env_only else None
-        effective[key] = {
-            "key": key,
-            "type": spec.type,
-            "title": spec.title,
-            "section": spec.section,
-            "description": spec.description,
-            "default": default_val,
-            "override": ov,
-            "has_override": has_override,
-            "min": spec.min,
-            "max": spec.max,
-            "choices": spec.choices or [],
-            "enum_labels": spec.enum_labels or {},
-            "unit": spec.unit,
-            "source": runtime_settings.resolve_setting_source(spec, has_override),
-            "is_secret": spec.is_secret,
-            "restart_required": spec.restart_required,
-            "env_only": spec.env_only,
-            "pair_with": spec.pair_with,
-        }
-    section_counts = {
-        sec: runtime_settings.section_visible_count(specs) for sec, specs in grouped.items()
-    }
+    ctx = DashboardService.get_settings_context(db, request.query_params)
     return templates.TemplateResponse(
         "pages/app_settings.html",
-        {
-            "request": request,
-            "sections": grouped,
-            "effective": effective,
-            "section_counts": section_counts,
-            "pair_skip": runtime_settings.pair_secondary_keys(),
-            "message": request.query_params.get("m") or "",
-        },
+        {"request": request, **ctx},
     )
 
 
@@ -516,10 +285,9 @@ def app_settings_save(
     key: str = Form(...),
     value: str = Form(""),
 ):
-    # updated_by: best-effort; no auth system yet
     updated_by = request.client.host if request.client else None
     try:
-        runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
+        DashboardService.save_setting(db, key=key, value=value, updated_by=updated_by)
     except ValueError:
         return JSONResponse({"success": False, "error": "Không thể lưu: key hoặc giá trị không hợp lệ."}, status_code=400)
     
@@ -536,7 +304,7 @@ def app_settings_reset(
 ):
     updated_by = request.client.host if request.client else None
     try:
-        runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
+        DashboardService.reset_setting(db, key=key, updated_by=updated_by)
     except ValueError:
         return htmx_toast_response("Không thể đặt lại.", "error", refresh_page=False)
     return htmx_toast_response("Đã đặt lại về mặc định.", "success", refresh_page=False)
@@ -544,42 +312,10 @@ def app_settings_reset(
 
 @router.post("/app/settings/bulk-save", response_class=HTMLResponse)
 async def app_settings_bulk_save(request: Request, db: Session = Depends(get_db)):
-    """
-    Bulk save settings from a single form submission.
-    Rule:
-    - If submitted value == default => remove override (reset) if exists; else no-op.
-    - Else => upsert override.
-    """
     form = await request.form()
     updated_by = request.client.host if request.client else None
-
-    overrides = runtime_settings.get_overrides(db, use_cache=False)
-    changed = 0
-    reset = 0
-
-    for key in runtime_settings.SETTINGS.keys():
-        spec = runtime_settings.SETTINGS[key]
-        if spec.env_only:
-            continue
-        if key not in form:
-            continue
-        raw = form.get(key)
-        try:
-            v = runtime_settings.normalize_for_compare(key, raw)
-            d = runtime_settings.default_value(key)
-        except Exception:
-            continue
-
-        if v == d:
-            if key in overrides:
-                runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
-                reset += 1
-            continue
-
-        runtime_settings.upsert_setting(db, key=key, raw_value=str(raw), updated_by=updated_by)
-        changed += 1
-
-    return htmx_toast_response(f"Đã lưu {changed} thay đổi; đặt lại {reset} mục về mặc định.", "success", refresh_page=False)
+    results = DashboardService.bulk_save_settings(db, dict(form), updated_by)
+    return htmx_toast_response(f"Đã lưu {results['changed']} thay đổi; đặt lại {results['reset']} mục về mặc định.", "success", refresh_page=False)
 
 @router.get("/app/viral/table", response_class=HTMLResponse)
 def app_viral_table(
@@ -593,69 +329,21 @@ def app_viral_table(
     db: Session = Depends(get_db),
 ):
     """SaaS UI: paginated viral table with filters (does not change ingestion logic)."""
-    import math
-    from app.database.models import ViralMaterial, Account
-
-    per_page = max(50, min(200, int(per_page or 100)))
-    page = max(1, int(page or 1))
-    q = (q or "").strip()
-    status = (status or "").strip()
-    platform = (platform or "").strip()
-    min_views = int(min_views or 0)
-
-    query = db.query(ViralMaterial)
-    if platform:
-        query = query.filter(ViralMaterial.platform == platform)
-    if status:
-        query = query.filter(ViralMaterial.status == status)
-    if min_views > 0:
-        query = query.filter(ViralMaterial.views >= min_views)
-    if q:
-        query = query.filter(ViralMaterial.url.ilike(f"%{q}%"))
-
-    total = query.count()
-    total_pages = max(1, int(math.ceil(total / per_page))) if total else 1
-    page = min(page, total_pages)
-
-    items = (
-        query.order_by(ViralMaterial.created_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
+    table_data = DashboardService.get_viral_materials(
+        db, page=page, per_page=per_page, q=q, status=status, platform=platform, min_views=min_views
     )
-    accounts = {acc.id: acc.name for acc in db.query(Account).all()}
-    # render uses viral_row.html expecting item + account_name
     return templates.TemplateResponse(
         "fragments/app_viral_table.html",
-        {
-            "request": request,
-            "items": [{"item": it, "account_name": accounts.get(it.scraped_by_account_id, "Unknown")} for it in items],
-            "page": page,
-            "per_page": per_page,
-            "total": total,
-            "total_pages": total_pages,
-        },
+        {"request": request, **table_data},
     )
 
 @router.get("/queue/panel", response_class=HTMLResponse)
 def queue_panel(request: Request, db: Session = Depends(get_db)):
     """Small dashboard panel: queue/backlog summary by status + viral NEW/FAILED."""
-    from sqlalchemy import text
-    from app.database.models import ViralMaterial
-
-    rows = db.execute(text("SELECT status, COUNT(*) FROM jobs GROUP BY status")).fetchall()
-    counts = {str(s): int(c) for s, c in rows}
-    viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.NEW).count()
-    viral_failed = db.query(ViralMaterial).filter(ViralMaterial.status == JobStatus.FAILED).count()
-
+    stats = DashboardService.get_queue_stats(db)
     return templates.TemplateResponse(
         "fragments/queue_panel.html",
-        {
-            "request": request,
-            "counts": counts,
-            "viral_new": viral_new,
-            "viral_failed": viral_failed,
-        },
+        {"request": request, **stats},
     )
 
 @router.get("/tiktok-links", response_class=HTMLResponse)
@@ -674,17 +362,15 @@ def app_tiktok_links(request: Request, db: Session = Depends(get_db)):
 @router.get("/r/{code}")
 def redirect_tracking(code: str, db: Session = Depends(get_db)):
     """Redirect tracking link and increment click counter."""
-    job = db.query(Job).filter(Job.tracking_code == code).first()
-    if not job or not job.affiliate_url:
+    affiliate_url = DashboardService.track_redirect_click(db, code)
+    if not affiliate_url:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Tracking link not found or no affiliate URL set.")
-    job.click_count = (job.click_count or 0) + 1
-    db.commit()
-    return RedirectResponse(job.affiliate_url, status_code=302)
+    return RedirectResponse(affiliate_url, status_code=302)
 
 @router.get("/discovery/panel", response_class=HTMLResponse)
 def get_discovery_panel(request: Request, db: Session = Depends(get_db)):
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
+    channels = DashboardService.get_discovery_channels(db)
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels}
@@ -692,19 +378,7 @@ def get_discovery_panel(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/discovery/{channel_id}/approve", response_class=HTMLResponse)
 def approve_discovered_channel(channel_id: int, request: Request, target_page: str = Form(""), db: Session = Depends(get_db)):
-    channel = db.query(DiscoveredChannel).filter(DiscoveredChannel.id == channel_id).first()
-    if channel and channel.status == ViralStatus.NEW:
-        channel.status = "APPROVED"
-        account = channel.account
-        if account:
-            AccountService.append_competitor_url_if_missing(
-                account,
-                channel.channel_url,
-                target_page if target_page else None,
-            )
-        db.commit()
-    
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
+    channels = DashboardService.approve_discovery(db, channel_id, target_page)
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels}
@@ -712,11 +386,7 @@ def approve_discovered_channel(channel_id: int, request: Request, target_page: s
 
 @router.post("/discovery/{channel_id}/reject", response_class=HTMLResponse)
 def reject_discovered_channel(channel_id: int, request: Request, db: Session = Depends(get_db)):
-    channel = db.query(DiscoveredChannel).filter(DiscoveredChannel.id == channel_id).first()
-    if channel and channel.status == ViralStatus.NEW:
-        channel.status = "REJECTED"
-        db.commit()
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
+    channels = DashboardService.reject_discovery(db, channel_id)
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels}
@@ -724,37 +394,8 @@ def reject_discovered_channel(channel_id: int, request: Request, db: Session = D
 
 @router.post("/discovery/force-scan", response_class=HTMLResponse)
 def force_discovery_scan(request: Request, db: Session = Depends(get_db)):
-    """Manually trigger competitor discovery scan for all active accounts (bypasses 2-5AM schedule).
-    Uses per-page niches when set, else account-level niche_topics."""
-    import random
-    import logging
-    logger = logging.getLogger(__name__)
-
-    from app.services.discovery_scraper import DiscoveryScraper
-
-    accounts = db.query(Account).filter(Account.is_active == True).all()
-
-    scraper = DiscoveryScraper()
-    total_found = 0
-    scan_log = []
-
-    for acc in accounts:
-        keywords = get_discovery_keywords(acc)
-        if not keywords:
-            continue
-
-        selected = random.sample(keywords, min(2, len(keywords)))
-        for kw in selected:
-            try:
-                found = scraper.discover_for_keyword(kw, acc.id, db)
-                total_found += found
-                scan_log.append(f"✅ '{acc.name}' / kw='{kw}': {found} kênh mới")
-            except Exception as e:
-                scan_log.append(f"❌ '{acc.name}' / kw='{kw}': lỗi {str(e)[:80]}")
-
-    logger.info("[DISCOVERY] Force scan complete. %d new channels found.", total_found)
-
-    channels = db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
+    """Manually trigger competitor discovery scan."""
+    channels, scan_log, total_found = DashboardService.run_force_discovery(db)
     return templates.TemplateResponse(
         "fragments/discovery_panel.html",
         {"request": request, "channels": channels, "scan_log": scan_log, "total_found": total_found}
@@ -763,45 +404,4 @@ def force_discovery_scan(request: Request, db: Session = Depends(get_db)):
 @router.get("/app/overview/chart-data")
 def app_overview_chart_data(db: Session = Depends(get_db)):
     """JSON endpoint for ApexCharts performance data."""
-    import datetime
-    from app.database.models import Job
-    import app.config as config
-    
-    tz_str = getattr(config, "TIMEZONE", "Asia/Ho_Chi_Minh")
-    try:
-        from zoneinfo import ZoneInfo
-        tz = ZoneInfo(tz_str)
-    except Exception:
-        tz = datetime.timezone.utc
-        
-    now = datetime.datetime.now(tz)
-    
-    categories = []
-    queued_data = []
-    published_data = []
-    
-    for i in range(6, -1, -1):
-        target_date = now - datetime.timedelta(days=i)
-        start_dt = datetime.datetime.combine(target_date.date(), datetime.time.min, tzinfo=tz)
-        end_dt = start_dt + datetime.timedelta(days=1)
-        
-        start_ts = int(start_dt.timestamp())
-        end_ts = int(end_dt.timestamp())
-        
-        # Format label 'Mon', 'Tue', etc.
-        label = target_date.strftime("%a")
-        categories.append(label)
-        
-        q_count = db.query(Job).filter(Job.created_at >= start_ts, Job.created_at < end_ts).count()
-        p_count = db.query(Job).filter(Job.status == JobStatus.DONE, Job.finished_at >= start_ts, Job.finished_at < end_ts).count()
-        
-        queued_data.append(q_count)
-        published_data.append(p_count)
-        
-    return {
-        "categories": categories,
-        "series": [
-            {"name": "Jobs Queued", "data": queued_data},
-            {"name": "Published", "data": published_data}
-        ]
-    }
+    return DashboardService.get_chart_data(db)

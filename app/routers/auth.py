@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, Depends, HTTPException, Form, Response
+from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from itsdangerous import URLSafeTimedSerializer
 import app.config as config
 import secrets
 from app.main_templates import templates

@@ -3,28 +3,14 @@ Keyword blacklist management + violation analytics.
 """
 from __future__ import annotations
 
-import csv
-import io
-import json
 import logging
-import time
-from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel
-from sqlalchemy.exc import IntegrityError
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.database.core import get_db
-from app.database.models import ComplianceAllowlist, KeywordBlacklist, ViolationLog
-from app.main_templates import templates
-from app.services.fb_compliance import (
-    Severity,
-    compliance_checker,
-    invalidate_keyword_cache,
-)
-
+from app.schemas.compliance import KeywordCreateBody, KeywordUpdateBody, TestCheckBody
 from app.services import compliance_service
 
 logger = logging.getLogger(__name__)
