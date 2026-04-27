@@ -115,11 +115,15 @@
   - CORRECTION: `auth_service.py` was not created. `app/routers/auth.py` still contains inline credential, token, and cookie logic; previous AuthService claim is invalid.
   - CORRECTION: `insights_service.py` and `compliance_service.py` existed before this pass; they are existing/extended service files, not new skeleton services.
   - FOLLOW-UP: cosmetic dead imports remain in several routers after extraction.
-- [ ] Phase 1-B follow-up: decide whether to open a narrow auth extraction + dead-import cleanup task, or leave for the next router pass.
-- [ ] Phase 2: Global Enum Migration (Pending)
-- [ ] Phase 3: DRY Adapter Refactor (Pending)
-- [ ] Phase 4: AI Pipeline Unification (Pending)
-- [ ] Phase 5: Data Retention (Pending)
+- [x] Phase 1 SIGN-OFF & COMMIT (2026-04-27, commit `07fa5c3`)
+  - 41 files, +5,627/-5,678. 8 new service files tracked.
+  - 3 critical bug Anti để lại đã fix: `viral_service.py` + `threads_service.py` thiếu `Any` import; `compliance.py` thiếu schema imports (`KeywordCreateBody/UpdateBody/TestCheckBody`) — sẽ 500 ở first POST nếu không fix.
+  - ~80 dead imports cleaned (router + 9 service files).
+  - TestClient smoke 12 endpoints PASS (401/307, no 500). pyflakes clean trên file đã touch.
+- [x] Phase 2: Global Enum Migration — DONE (commits `c47d810`, `b5af72e`, `9f8abf6`)
+- [ ] Phase 3: DRY Adapter Refactor (Pending — Codex)
+- [x] Phase 4: AI Pipeline Unification — DONE (commit `5257096` + ADR-006 work)
+- [ ] Phase 5: Data Retention (Pending — Codex)
 
 ---
 
