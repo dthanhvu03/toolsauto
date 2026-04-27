@@ -47,6 +47,12 @@ class ThreadsAdapter(AdapterInterface):
         'div[contenteditable="true"][data-lexical-editor="true"]',
         'div[role="textbox"][contenteditable="true"]',
     )
+    ATTACH_SELECTORS = (
+        'svg[aria-label="Attach media"]',
+        'svg[aria-label="Add media"]',
+        'div[role="button"][aria-label*="attach" i]',
+        'div[role="button"][aria-label*="media" i]',
+    )
     FILE_INPUT_SELECTORS = (
         'input[type="file"]',
         'input[type="file"][accept*="image"]',
@@ -158,6 +164,26 @@ class ThreadsAdapter(AdapterInterface):
                 try:
                     locator = self.page.locator(selector).first
                     if self._is_visible(locator):
+                        return locator
+                except Exception:
+                    continue
+            self.page.wait_for_timeout(250)
+        return None
+
+    def _find_first_present(
+        self,
+        selectors: tuple[str, ...],
+        timeout_ms: int = 5000,
+    ) -> Locator | None:
+        if not self.page:
+            return None
+
+        deadline = time.time() + (timeout_ms / 1000)
+        while time.time() < deadline:
+            for selector in selectors:
+                try:
+                    locator = self.page.locator(selector).first
+                    if locator.count() > 0:
                         return locator
                 except Exception:
                     continue
@@ -371,9 +397,17 @@ class ThreadsAdapter(AdapterInterface):
                         is_fatal=False,
                     )
 
-                file_input = self._find_first_visible(
-                    self.FILE_INPUT_SELECTORS,
+                attach_button = self._find_first_visible(
+                    self.ATTACH_SELECTORS,
                     timeout_ms=5000,
+                )
+                if attach_button:
+                    attach_button.click()
+                    self._sleep(1.0, 1.8)
+
+                file_input = self._find_first_present(
+                    self.FILE_INPUT_SELECTORS,
+                    timeout_ms=8000,
                 )
                 if not file_input:
                     return PublishResult(
