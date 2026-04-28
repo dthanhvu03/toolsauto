@@ -67,6 +67,10 @@ class ThreadsAdapter(AdapterInterface):
         'div[role="button"]:has-text("Post")',
         'button:has-text("Post")',
     )
+    PROFILE_BUTTON_SELECTORS = (
+        'div[role="button"]:has-text("Profile")',
+        'button:has-text("Profile")',
+    )
     ERROR_TEXTS = (
         "something went wrong",
         "try again later",
@@ -83,6 +87,7 @@ class ThreadsAdapter(AdapterInterface):
         self.context: BrowserContext | None = None
         self.page: Page | None = None
         self._session_status = SessionStatus.EXPIRED
+        self._own_handle: str | None = None
 
     def open_session(self, profile_path: str) -> bool:
         if self.playwright or self.context or self.page:
@@ -127,6 +132,18 @@ class ThreadsAdapter(AdapterInterface):
                 )
             else:
                 logger.info("ThreadsAdapter: Session opened successfully.")
+            if self._session_status != SessionStatus.NEEDS_LOGIN:
+                self._own_handle = self._discover_own_handle()
+                if self._own_handle:
+                    logger.info(
+                        "ThreadsAdapter: Discovered authenticated handle %s.",
+                        self._own_handle,
+                    )
+                else:
+                    logger.warning(
+                        "ThreadsAdapter: Could not discover authenticated handle for profile %s.",
+                        profile_path,
+                    )
             return True
         except Exception as exc:
             logger.error("ThreadsAdapter: Failed while opening session: %s", exc)
@@ -209,6 +226,142 @@ class ThreadsAdapter(AdapterInterface):
             return None
         return normalized.rstrip("/").split("/")[-1]
 
+    def _normalize_handle(self, value: str | None) -> str | None:
+        if not value:
+            return None
+
+        match = re.search(
+            r"(?:https?://(?:www\.)?threads\.(?:net|com))?/?(@[^/?#\"'>]+)",
+            str(value),
+            re.IGNORECASE,
+        )
+        if not match:
+            return None
+        return match.group(1).rstrip("/")
+
+    def _discover_own_handle(self) -> str | None:
+        if not self.page:
+            return None
+
+        def collect_grouped_handles() -> dict[str, list[str]]:
+            try:
+                candidates = self.page.evaluate(
+                    """
+                    () => {
+                        const buckets = [
+                            { selector: 'header a[href^="/@"]', source: 'header' },
+                            { selector: 'nav a[href^="/@"]', source: 'nav' },
+                            { selector: 'aside a[href^="/@"]', source: 'aside' },
+                            { selector: 'a[href^="/@"]', source: 'page' },
+                        ];
+                        const found = [];
+                        for (const bucket of buckets) {
+                            for (const node of document.querySelectorAll(bucket.selector)) {
+                                found.push({
+                                    href: node.getAttribute("href") || "",
+                                    source: bucket.source,
+                                });
+                            }
+                        }
+                        return found;
+                    }
+                    """
+                ) or []
+            except Exception as exc:
+                logger.warning("ThreadsAdapter: Failed to inspect DOM for own handle: %s", exc)
+                return {"header": [], "nav": [], "aside": [], "page": []}
+
+            grouped: dict[str, list[str]] = {"header": [], "nav": [], "aside": [], "page": []}
+            for candidate in candidates:
+                if not isinstance(candidate, dict):
+                    continue
+                handle = self._normalize_handle(candidate.get("href"))
+                source = str(candidate.get("source") or "page")
+                if not handle or source not in grouped:
+                    continue
+                if handle not in grouped[source]:
+                    grouped[source].append(handle)
+            return grouped
+
+        def pick_handle(grouped: dict[str, list[str]]) -> str | None:
+            for source in ("header", "nav", "aside"):
+                if len(grouped[source]) == 1:
+                    return grouped[source][0]
+
+            handle_votes: dict[str, int] = {}
+            for source in ("header", "nav", "aside", "page"):
+                for handle in grouped[source]:
+                    handle_votes[handle] = handle_votes.get(handle, 0) + 1
+            if not handle_votes:
+                return None
+
+            repeated_handles = [
+                handle for handle, count in sorted(handle_votes.items()) if count >= 2
+            ]
+            if len(repeated_handles) == 1:
+                return repeated_handles[0]
+
+            all_handles = sorted(handle_votes)
+            if len(all_handles) == 1:
+                return all_handles[0]
+
+            logger.warning(
+                "ThreadsAdapter: Own handle discovery was ambiguous: %s",
+                ", ".join(all_handles),
+            )
+            return None
+
+        current_handle = self._normalize_handle(self.page.url)
+        if current_handle:
+            return current_handle
+
+        picked_handle = pick_handle(collect_grouped_handles())
+        if picked_handle:
+            return picked_handle
+
+        profile_button = self._find_first_visible(self.PROFILE_BUTTON_SELECTORS, timeout_ms=3000)
+        if not profile_button:
+            return None
+
+        try:
+            profile_button.click(timeout=5000)
+        except Exception:
+            try:
+                profile_button.click(force=True, timeout=3000)
+            except Exception:
+                try:
+                    profile_button.evaluate("el => el.click()")
+                except Exception as exc:
+                    logger.warning(
+                        "ThreadsAdapter: Failed to activate Profile navigation while discovering handle: %s",
+                        exc,
+                    )
+                    return None
+
+        self._sleep(1.5, 2.5)
+
+        current_handle = self._normalize_handle(self.page.url)
+        if current_handle:
+            return current_handle
+
+        return pick_handle(collect_grouped_handles())
+
+    def _filter_post_urls_for_own_handle(self, candidates: list[str]) -> list[str]:
+        if not self._own_handle:
+            return []
+
+        handle_fragment = f"/{self._own_handle}/post/".lower()
+        filtered: list[str] = []
+        for candidate in candidates:
+            normalized = self._normalize_post_url(candidate)
+            if not normalized:
+                continue
+            if handle_fragment not in normalized.lower():
+                continue
+            if normalized not in filtered:
+                filtered.append(normalized)
+        return filtered
+
     def _collect_urls_from_payload(self, payload: object) -> list[str]:
         found: set[str] = set()
 
@@ -263,6 +416,57 @@ class ThreadsAdapter(AdapterInterface):
                 urls.append(normalized)
         return urls
 
+    def _capture_own_latest_post(
+        self,
+        observed_urls: list[str] | None = None,
+    ) -> tuple[str | None, str | None]:
+        if not self.page or not self._own_handle:
+            return None, None
+
+        profile_url = f"{self.HOME_URL.rstrip('/')}/{self._own_handle}"
+        profile_selector = f'a[href*="/{self._own_handle}/post/"]'
+        observed_match_candidates = self._filter_post_urls_for_own_handle(observed_urls or [])
+
+        try:
+            self.page.goto(profile_url, wait_until="domcontentloaded", timeout=60000)
+        except Exception as exc:
+            logger.warning(
+                "ThreadsAdapter: Failed to open own profile %s while capturing post: %s",
+                profile_url,
+                exc,
+            )
+            return None, None
+
+        self._sleep(2.0, 3.0)
+        if self._page_needs_login():
+            raise ThreadsSessionInvalidError("account session is logged out")
+
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            try:
+                profile_link = self.page.locator(profile_selector).first
+                if profile_link.count() > 0:
+                    href = profile_link.get_attribute("href")
+                    normalized = self._normalize_post_url(href)
+                    if normalized:
+                        if not observed_match_candidates or normalized in observed_match_candidates:
+                            return normalized, self._extract_post_id(normalized)
+            except Exception:
+                pass
+
+            profile_candidates = self._filter_post_urls_for_own_handle(
+                self._collect_urls_from_dom()
+            )
+            for candidate in observed_match_candidates:
+                if candidate in profile_candidates:
+                    return candidate, self._extract_post_id(candidate)
+            if profile_candidates:
+                return profile_candidates[0], self._extract_post_id(profile_candidates[0])
+
+            self._sleep(0.8, 1.4)
+
+        return None, None
+
     def _capture_post_reference(self, observed_urls: list[str]) -> tuple[str | None, str | None]:
         ordered_urls: list[str] = []
         for candidate in observed_urls + self._collect_urls_from_dom():
@@ -270,10 +474,11 @@ class ThreadsAdapter(AdapterInterface):
             if normalized and normalized not in ordered_urls:
                 ordered_urls.append(normalized)
 
-        if not ordered_urls:
+        filtered_urls = self._filter_post_urls_for_own_handle(ordered_urls)
+        if not filtered_urls:
             return None, None
 
-        post_url = ordered_urls[0]
+        post_url = filtered_urls[0]
         return post_url, self._extract_post_id(post_url)
 
     def _session_invalid_result(self, reason: str) -> PublishResult:
@@ -365,6 +570,17 @@ class ThreadsAdapter(AdapterInterface):
 
             if self._page_needs_login():
                 return self._session_invalid_result("account session is logged out")
+            if not self._own_handle:
+                self._own_handle = self._discover_own_handle()
+                if self._own_handle:
+                    logger.info(
+                        "ThreadsAdapter: Recovered authenticated handle %s before publish.",
+                        self._own_handle,
+                    )
+                self.page.goto(self.HOME_URL, wait_until="domcontentloaded", timeout=60000)
+                self._sleep(1.5, 2.5)
+                if self._page_needs_login():
+                    return self._session_invalid_result("account session is logged out")
 
             compose_button = self._find_first_visible(self.COMPOSE_SELECTORS, timeout_ms=12000)
             if not compose_button:
@@ -446,6 +662,7 @@ class ThreadsAdapter(AdapterInterface):
                     is_fatal=False,
                 )
 
+            observed_urls.clear()
             # Robust click fallback for Post button
             try:
                 post_button.click(timeout=10000)
@@ -456,7 +673,20 @@ class ThreadsAdapter(AdapterInterface):
                 except Exception:
                     logger.warning("ThreadsAdapter: Force click failed, trying JS click")
                     post_button.evaluate("el => el.click()")
-            self._sleep(2.0, 3.0)
+            self._sleep(3.0, 5.0)
+
+            post_url, external_post_id = self._capture_own_latest_post(observed_urls)
+            if post_url:
+                logger.info(
+                    "ThreadsAdapter: Publish completed for job %s with post_url=%s",
+                    job.id,
+                    post_url,
+                )
+                return PublishResult(
+                    ok=True,
+                    details={"post_url": post_url},
+                    external_post_id=external_post_id,
+                )
 
             deadline = time.time() + 30
             while time.time() < deadline:
@@ -559,3 +789,4 @@ class ThreadsAdapter(AdapterInterface):
         self.context = None
         self.page = None
         self._session_status = SessionStatus.EXPIRED
+        self._own_handle = None
