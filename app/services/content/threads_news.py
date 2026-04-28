@@ -109,11 +109,17 @@ class ThreadsNewsService:
                 if not prompt_template:
                     # Fallback default prompt - Single Post Version
                     prompt_template = (
-                        "Viết lại tin tức này thành 01 bài đăng Threads duy nhất, thu hút.\n"
-                        "Cấu trúc: [Tiêu đề hấp dẫn] + [Tóm tắt nội dung chính].\n"
-                        "Tổng độ dài PHẢI dưới 450 ký tự (để dành chỗ cho link nguồn).\n"
-                        "Tiêu đề: {title}\nTóm tắt: {summary}\nNguồn: {source_name}\n"
-                        'TRẢ VỀ JSON: {{"caption": "...", "reasoning": "..."}}'
+                        "Bạn là copywriter viết bài Threads tiếng Việt. Viết lại tin tức dưới đây thành MỘT bài đăng Threads duy nhất, hấp dẫn và tự nhiên.\n\n"
+                        "QUY TẮC BẮT BUỘC:\n"
+                        "1. Cấu trúc: Hook hấp dẫn (có thể dùng emoji) + tóm tắt 2-3 ý chính + câu hỏi/CTA gợi tương tác.\n"
+                        "2. Độ dài caption TỐI ĐA {max_chars} ký tự — KHÔNG bao gồm link.\n"
+                        "3. TUYỆT ĐỐI KHÔNG viết bất kỳ link, URL, placeholder dạng `[Link nguồn ...]`, `[xem tại ...]`, hay câu kiểu \"Xem chi tiết tại\", \"Đọc thêm tại\". Hệ thống sẽ tự động thêm dòng nguồn + URL vào cuối bài, bạn KHÔNG cần làm.\n"
+                        "4. KHÔNG nhắc tên báo nguồn ({source_name}) trong caption — hệ thống tự xử lý.\n"
+                        "5. Văn phong tự nhiên, gần gũi như người thật viết, không sến. Tránh hashtag dài.\n\n"
+                        "DỮ LIỆU:\n"
+                        "Tiêu đề gốc: {title}\n"
+                        "Tóm tắt gốc: {summary}\n\n"
+                        'TRẢ VỀ JSON ĐÚNG ĐỊNH DẠNG: {{"caption": "<bài viết hoàn chỉnh, không có link/source>", "reasoning": "<1 câu giải thích chiến lược>"}}'
                     )
                 
                 prompt = prompt_template.format(
