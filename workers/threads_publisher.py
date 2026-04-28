@@ -133,8 +133,10 @@ def process_single_job(db: Session) -> bool:
         )
         return False
 
+    logger.debug("[THREADS_PUBLISHER] Attempting to claim job for platform: %s", threads_platform)
     job = QueueService.claim_next_job(db, platform=threads_platform)
     if not job:
+        logger.debug("[THREADS_PUBLISHER] No eligible job found.")
         return False
 
     heartbeat_stop = threading.Event()
