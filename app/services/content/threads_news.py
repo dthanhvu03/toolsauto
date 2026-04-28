@@ -86,7 +86,7 @@ class ThreadsNewsService:
         return None
 
     def _download_image(self, url):
-        """Tai anh tu URL ve storage/media/threads/."""
+        """Tải ảnh từ URL về `storage/media/threads/`."""
         try:
             if not url:
                 return None
@@ -119,7 +119,7 @@ class ThreadsNewsService:
             return None
 
     def process_news_to_threads(self):
-        """Chuyen tin tuc moi thanh bai dang Threads."""
+        """Chuyển tin tức mới thành bài đăng Threads."""
         db = SessionLocal()
         try:
             now_ts = int(time.time())
@@ -227,21 +227,21 @@ class ThreadsNewsService:
                 prompt_template = runtime_settings.get_str("THREADS_AI_PROMPT", default="", db=db)
                 if not prompt_template:
                     prompt_template = (
-                        "Ban la copywriter viet bai Threads tieng Viet. Viet lai tin tuc duoi day thanh "
-                        "MOT bai dang Threads duy nhat, hap dan va tu nhien.\n\n"
-                        "QUY TAC BAT BUOC:\n"
-                        "1. Cau truc: Hook hap dan (co the dung emoji) + tom tat 2-3 y chinh + cau hoi/CTA goi tuong tac.\n"
-                        "2. Do dai caption TOI DA {max_chars} ky tu - KHONG bao gom link.\n"
-                        "3. TUYET DOI KHONG viet bat ky link, URL, placeholder dang `[Link nguon ...]`, "
-                        "`[xem tai ...]`, hay cau kieu \"Xem chi tiet tai\", \"Doc them tai\". He thong se tu dong "
-                        "them dong nguon + URL vao cuoi bai, ban KHONG can lam.\n"
-                        "4. KHONG nhac ten bao nguon ({source_name}) trong caption - he thong tu xu ly.\n"
-                        "5. Van phong tu nhien, gan gui nhu nguoi that viet, khong sen. Tranh hashtag dai.\n\n"
-                        "DU LIEU:\n"
-                        "Tieu de goc: {title}\n"
-                        "Tom tat goc: {summary}\n\n"
-                        'TRA VE JSON DUNG DINH DANG: {{"caption": "<bai viet hoan chinh, khong co link/source>", '
-                        '"reasoning": "<1 cau giai thich chien luoc>"}}'
+                        "Bạn là copywriter viết bài Threads tiếng Việt. Viết lại tin tức dưới đây thành "
+                        "MỘT bài đăng Threads duy nhất, hấp dẫn và tự nhiên.\n\n"
+                        "QUY TẮC BẮT BUỘC:\n"
+                        "1. Cấu trúc: Hook hấp dẫn (có thể dùng emoji) + tóm tắt 2-3 ý chính + câu hỏi/CTA gợi tương tác.\n"
+                        "2. Độ dài caption TỐI ĐA {max_chars} ký tự - KHÔNG bao gồm link.\n"
+                        "3. TUYỆT ĐỐI KHÔNG viết bất kỳ link, URL, placeholder dạng `[Link nguồn ...]`, "
+                        "`[xem tại ...]`, hay câu kiểu \"Xem chi tiết tại\", \"Đọc thêm tại\". Hệ thống sẽ tự động "
+                        "thêm dòng nguồn + URL vào cuối bài, bạn KHÔNG cần làm.\n"
+                        "4. KHÔNG nhắc tên báo nguồn ({source_name}) trong caption - hệ thống tự xử lý.\n"
+                        "5. Văn phong tự nhiên, gần gũi như người thật viết, không sến. Tránh hashtag dài.\n\n"
+                        "DỮ LIỆU:\n"
+                        "Tiêu đề gốc: {title}\n"
+                        "Tóm tắt gốc: {summary}\n\n"
+                        'TRẢ VỀ JSON ĐÚNG ĐỊNH DẠNG: {{"caption": "<bài viết hoàn chỉnh, không có link/source>", '
+                        '"reasoning": "<1 câu giải thích chiến lược>"}}'
                     )
 
                 prompt = prompt_template.format(
@@ -271,10 +271,10 @@ class ThreadsNewsService:
                         logger.warning(f"JSON parse failed for threads: {json_error}")
 
                 if not segments:
-                    segments = [{"caption": f"NONG: {article.title}\n\n{(article.summary or '')[:300]}...", "reasoning": "fallback"}]
+                    segments = [{"caption": f"NÓNG: {article.title}\n\n{(article.summary or '')[:300]}...", "reasoning": "fallback"}]
             except Exception as e:
                 logger.error(f"AI Generation failed: {e}")
-                segments = [{"caption": f"NONG: {article.title}\n\n{(article.summary or '')[:300]}...", "reasoning": "error_fallback"}]
+                segments = [{"caption": f"NÓNG: {article.title}\n\n{(article.summary or '')[:300]}...", "reasoning": "error_fallback"}]
 
             media_path = None
             if article.image_url:
@@ -283,7 +283,7 @@ class ThreadsNewsService:
             if segments:
                 seg = segments[0]
                 caption = re.sub(r"<[^>]*>", "", seg.get("caption", ""))
-                source_footer = f"\n\n(Nguon: {article.source_name})\n{article.source_url}"
+                source_footer = f"\n\n(Nguồn: {article.source_name})\n{article.source_url}"
 
                 if len(caption) + len(source_footer) > max_caption_length:
                     allowed_caption_len = max_caption_length - len(source_footer) - 5
