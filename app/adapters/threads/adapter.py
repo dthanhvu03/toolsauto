@@ -59,11 +59,13 @@ class ThreadsAdapter(AdapterInterface):
         'input[type="file"][accept*="video"]',
     )
     POST_BUTTON_SELECTORS = (
+        'div[role="dialog"] div[role="button"]:has-text("Post")',
+        'div[role="dialog"] button:has-text("Post")',
+        'div[role="dialog"] div[role="button"]:has-text("Đăng")',
+        'div[role="dialog"] div[role="button"][aria-label*="post" i]',
+        # Fallbacks:
         'div[role="button"]:has-text("Post")',
-        'div[role="button"]:has-text("Share")',
-        'div[role="button"]:has-text("Dang")',
         'button:has-text("Post")',
-        'button:has-text("Share")',
     )
     ERROR_TEXTS = (
         "something went wrong",
@@ -419,6 +421,17 @@ class ThreadsAdapter(AdapterInterface):
                 file_input.set_input_files(media_path)
                 self._sleep(4.0, 6.0)
 
+                # Wait for upload preview to be visible in the dialog
+                try:
+                    self.page.wait_for_selector(
+                        'div[role="dialog"] img, div[role="dialog"] video',
+                        state="visible",
+                        timeout=15000,
+                    )
+                    self._sleep(1.5, 2.5)
+                except Exception:
+                    logger.warning("ThreadsAdapter: Media preview did not appear in time.")
+
             post_button = self._find_first_visible(self.POST_BUTTON_SELECTORS, timeout_ms=10000)
             if not post_button:
                 return PublishResult(
@@ -433,7 +446,16 @@ class ThreadsAdapter(AdapterInterface):
                     is_fatal=False,
                 )
 
-            post_button.click()
+            # Robust click fallback for Post button
+            try:
+                post_button.click(timeout=10000)
+            except Exception:
+                logger.warning("ThreadsAdapter: Normal click blocked, trying force click")
+                try:
+                    post_button.click(force=True, timeout=5000)
+                except Exception:
+                    logger.warning("ThreadsAdapter: Force click failed, trying JS click")
+                    post_button.evaluate("el => el.click()")
             self._sleep(2.0, 3.0)
 
             deadline = time.time() + 30
