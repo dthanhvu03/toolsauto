@@ -59,5 +59,11 @@ Tích hợp kênh Threads vào hệ thống Auto Publisher. Mục tiêu là tự
 - [x] All changes committed and pushed to `develop` branch.
 
 ## Remaining
-- [ ] End-to-end production test: VPS deploy → scrape → AI generate → create job → publish to Threads.
-- [ ] Monitor `pm2 logs Threads_NewsWorker` after deploy for stability.
+- [x] End-to-end production test: VPS deploy → scrape → AI generate → create job → publish to Threads.
+- [x] Monitor `pm2 logs Threads_NewsWorker` after deploy for stability.
+
+## Closure (2026-04-29)
+- Status: **Done — fulfilled by later PLANs**.
+- End-to-end production test was delivered by PLAN-029 + PLAN-030 + PLAN-031 (all archived). Live VPS proof: job `613` (account Nguyen Ngoc Vi, profile `facebook_2`) and job `790` (account `senhora_consumista`) — see `agents/handoffs/current-status.md`.
+- Worker for Threads news scrape + publish has been running on VPS since commit `e96a51d`.
+- Archived from `agents/tasks/` root → `agents/tasks/archive/`.
