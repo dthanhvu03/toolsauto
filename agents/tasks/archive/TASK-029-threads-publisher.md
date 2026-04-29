@@ -4,13 +4,15 @@
 | Field | Value |
 |---|---|
 | **ID** | TASK-029 |
-| **Status** | In Progress |
+| **Status** | Done — Archived 2026-04-29 |
 | **Priority** | P1 |
 | **Owner** | Antigravity |
 | **Executor** | Codex |
 | **Related Plan** | PLAN-029 |
 | **Created** | 2026-04-27 |
-| **Updated** | 2026-04-27 |
+| **Updated** | 2026-04-29 |
+
+> **Closure note (2026-04-29 by Claude Code)**: PLAN-029 Anti Sign-off was APPROVED 2026-04-27 (AC #5, #6 PASS at sign-off; AC #1-4 deferred to VPS live verification). AC #1-4 are now PASS thanks to live VPS proofs job `613` (account `Nguyen Ngoc Vi`, profile `facebook_2`) and job `790` (account `senhora_consumista`) — see agents/handoffs/current-status.md. PLAN-029 file already self-declares `Archived: Yes — 2026-04-27`; this task is therefore moved to `agents/tasks/archive/` and PLAN-029 to `agents/plans/archive/`. Follow-up runtime bugs were split into PLAN-030 (upload), PLAN-031 (Post button overlay), PLAN-032 (post_url own-handle).
 
 ---
 
