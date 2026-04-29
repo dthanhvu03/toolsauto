@@ -2,6 +2,12 @@
 
 ## Recent Execution
 
+- **[2026-04-29] Doc cleanup — TASK-015 → active/, TASK-017 → archive/, prompt rewrite committed**
+  - **TASK-015** (`reverse-engineer-business-suite`) moved to `agents/tasks/active/` to match PLAN-015 location.
+  - **TASK-017** (`threads-news-automation`) closed and moved to `agents/tasks/archive/` — its remaining "end-to-end VPS production test" item was delivered by PLAN-029/030/031 trilogy (job 613 + job 790 proofs).
+  - **Prompt rewrite**: commit `19f8054 fix(threads-prompt): rewrite default prompt for hot world news` pushed to develop. Default prompt now enforces: scroll-stop hook (≤80 ký tự, 4 mẫu bắt buộc), 3-block structure (hook/body/CTA), forbids stale openers (NÓNG:, BREAKING:, …), trailing ellipsis, fabricated facts, hashtags. Emoji cap 2/post.
+  - **Anh Vu deploy [2026-04-29]**: anh báo đã deploy lên VPS (pull develop + alembic upgrade head + paste prompt mới vào RuntimeSetting `THREADS_AI_PROMPT` + set `THREADS_ACCOUNT_CATEGORY_MAP` + `pm2 restart Threads_Publisher`). Live publish proof chưa thu thập trong session này.
+
 - **[2026-04-29] PLAN-033 / TASK-033 - Threads World News Pipeline (Phase 1) — Codex execute DONE, Claude Code verified, VPS proof pending**
   - **Claude Code re-verify [2026-04-29]**:
     - Files đầy đủ: `app/services/content/topic_key.py`, `app/services/content/news_scraper.py`, `app/services/content/threads_news.py`, `app/database/models/threads.py`, `alembic/versions/9f1c2d3e4a5b_add_news_article_topic_key.py`, `tests/test_threads_world_news.py`.
