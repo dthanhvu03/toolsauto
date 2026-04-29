@@ -1,7 +1,7 @@
 """add topic_key to news_articles
 
 Revision ID: 9f1c2d3e4a5b
-Revises: f2a3b4c5d6e8
+Revises: c9d0e1f2a3b4
 Create Date: 2026-04-28 11:30:00.000000
 
 """
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 
 revision: str = "9f1c2d3e4a5b"
-down_revision: Union[str, Sequence[str], None] = "f2a3b4c5d6e8"
+down_revision: Union[str, Sequence[str], None] = "c9d0e1f2a3b4"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
