@@ -227,21 +227,33 @@ class ThreadsNewsService:
                 prompt_template = runtime_settings.get_str("THREADS_AI_PROMPT", default="", db=db)
                 if not prompt_template:
                     prompt_template = (
-                        "Bạn là copywriter viết bài Threads tiếng Việt. Viết lại tin tức dưới đây thành "
-                        "MỘT bài đăng Threads duy nhất, hấp dẫn và tự nhiên.\n\n"
+                        "Bạn là copywriter viết bài Threads tiếng Việt cho mảng tin thế giới nóng hổi. "
+                        "Viết lại tin dưới đây thành MỘT bài đăng Threads duy nhất, scroll-stop và tự nhiên.\n\n"
+                        "CẤU TRÚC BẮT BUỘC (3 block tách bằng dòng trống):\n"
+                        "Block 1 — HOOK (1 dòng, tối đa 80 ký tự): phải chứa 1 trong 4 yếu tố:\n"
+                        "  • Con số cụ thể (\"3 phút\", \"47 tỷ USD\", \"lần đầu sau 80 năm\")\n"
+                        "  • Mâu thuẫn/đảo chiều (\"Tưởng X, hóa ra Y\")\n"
+                        "  • Câu hỏi mở (\"Chuyện gì đang xảy ra ở…\")\n"
+                        "  • Hành động đang diễn ra (\"Vừa nổ ra…\", \"Đang lan rộng…\")\n"
+                        "Block 2 — BODY (2-4 dòng ngắn, mỗi ý 1 dòng, KHÔNG bullet/dấu gạch): 2-3 ý chính từ tin gốc.\n"
+                        "Block 3 — CTA (1 câu): câu hỏi mở ép người đọc trả lời. KHÔNG dùng \"Bạn nghĩ sao?\" "
+                        "(đã bão hòa) — hỏi cụ thể vào tình huống.\n\n"
                         "QUY TẮC BẮT BUỘC:\n"
-                        "1. Cấu trúc: Hook hấp dẫn (có thể dùng emoji) + tóm tắt 2-3 ý chính + câu hỏi/CTA gợi tương tác.\n"
-                        "2. Độ dài caption TỐI ĐA {max_chars} ký tự - KHÔNG bao gồm link.\n"
-                        "3. TUYỆT ĐỐI KHÔNG viết bất kỳ link, URL, placeholder dạng `[Link nguồn ...]`, "
-                        "`[xem tại ...]`, hay câu kiểu \"Xem chi tiết tại\", \"Đọc thêm tại\". Hệ thống sẽ tự động "
-                        "thêm dòng nguồn + URL vào cuối bài, bạn KHÔNG cần làm.\n"
-                        "4. KHÔNG nhắc tên báo nguồn ({source_name}) trong caption - hệ thống tự xử lý.\n"
-                        "5. Văn phong tự nhiên, gần gũi như người thật viết, không sến. Tránh hashtag dài.\n\n"
+                        "1. Caption TỐI ĐA {max_chars} ký tự (không tính dòng nguồn auto-append).\n"
+                        "2. TUYỆT ĐỐI KHÔNG viết link, URL, hoặc placeholder dạng `[Link nguồn …]`, "
+                        "`[xem tại …]`, \"Xem chi tiết tại\", \"Đọc thêm tại\". Hệ thống tự thêm nguồn + URL.\n"
+                        "3. KHÔNG nhắc tên báo nguồn ({source_name}) hay cụm \"theo báo …\", \"nguồn tin cho biết\".\n"
+                        "4. KHÔNG mở đầu bằng cụm sáo: \"NÓNG:\", \"TIN MỚI:\", \"Cập nhật:\", \"BREAKING:\".\n"
+                        "5. KHÔNG kết câu bằng dấu \"…\" (giật tít rẻ tiền).\n"
+                        "6. KHÔNG bịa số liệu, tên, địa danh, mốc thời gian không có trong Tóm tắt gốc.\n"
+                        "7. KHÔNG đưa nhận định/dự đoán cá nhân nếu tin gốc chỉ là sự kiện.\n"
+                        "8. Emoji tối đa 2 cái cho cả bài, đặt đúng chỗ. KHÔNG xài hashtag.\n"
+                        "9. Văn phong người thật, gần gũi, dứt khoát — không sến, không hoa mỹ.\n\n"
                         "DỮ LIỆU:\n"
                         "Tiêu đề gốc: {title}\n"
                         "Tóm tắt gốc: {summary}\n\n"
                         'TRẢ VỀ JSON ĐÚNG ĐỊNH DẠNG: {{"caption": "<bài viết hoàn chỉnh, không có link/source>", '
-                        '"reasoning": "<1 câu giải thích chiến lược>"}}'
+                        '"reasoning": "<1 câu giải thích chiến lược hook đã chọn>"}}'
                     )
 
                 prompt = prompt_template.format(
