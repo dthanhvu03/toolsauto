@@ -2,6 +2,34 @@
 
 ## Recent Execution
 
+- **[2026-04-29] PLAN-033 / TASK-033 - Threads World News Pipeline (Phase 1) — Codex execute DONE, Claude Code verified, VPS proof pending**
+  - **Claude Code re-verify [2026-04-29]**:
+    - Files đầy đủ: `app/services/content/topic_key.py`, `app/services/content/news_scraper.py`, `app/services/content/threads_news.py`, `app/database/models/threads.py`, `alembic/versions/9f1c2d3e4a5b_add_news_article_topic_key.py`, `tests/test_threads_world_news.py`.
+    - `py_compile` cả 5 file Phase 1 → `PY_COMPILE_OK`.
+    - `pytest tests/test_threads_world_news.py -q` → `12 passed in 1.25s`.
+    - `from app.main import app` → `APP_IMPORT_OK 207`.
+    - `RSS_SOURCES` count = 9 (VnExpress General/World/Current Affairs, Tuổi Trẻ General/World, Thanh Niên World, Dân Trí World, Vietnamnet World, 24h World) — đúng PLAN scope.
+    - `news_scraper.py:111` lưu `topic_key=compute_topic_key(item["title"])` khi insert.
+    - `threads_news.py` đọc 3 setting `THREADS_MAX_ARTICLE_AGE_HOURS / THREADS_TOPIC_DEDUP_HOURS / THREADS_ACCOUNT_CATEGORY_MAP`, có `_find_recent_topic_duplicate()` cho dedup, có age filter + category routing per-account.
+    - Migration head clean: `alembic heads` → `9f1c2d3e4a5b (head)` (đã được fix multi-head trong commit `3e14d09`).
+    - Git: PLAN-033 đã commit `c281a70`, follow-ups `3e14d09` (alembic heads chain), `b8596e1` (VN accents), `0ec2f60` (CI deploy trigger).
+  - **Acceptance Criteria local**: 4/5 PASS (criterion 5 — VPS live publish — vẫn pending).
+  - **Files**: [agents/plans/active/PLAN-033-threads-world-news.md](agents/plans/active/PLAN-033-threads-world-news.md), [agents/tasks/active/TASK-033-threads-world-news.md](agents/tasks/active/TASK-033-threads-world-news.md).
+  - **Status**: Phase 1 code + verify done. Còn chờ anh Vu approve migration trên VPS + chạy live publish account World để chốt criterion 5.
+
+- **[2026-04-28] PLAN-033 / TASK-033 - Threads World News Pipeline (Phase 1) — opened, Codex pending execute**
+  - **User decision**: yêu cầu mở rộng pipeline cho mảng tin thế giới nóng hổi; chỉ định Claude Code + Codex tự execute, bỏ Anti sign-off gate cho PLAN này.
+  - **Phase 1 scope** (PLAN-033):
+    1. `news_scraper.py` — thêm 5 RSS thế giới VN (Tuổi Trẻ, Thanh Niên, Dân Trí, Vietnamnet, Zing/24h) → tổng 9 RSS.
+    2. `NewsArticle.topic_key` (cột mới + migration + backfill) — hash từ keyword title sau khi loại stop-word VN.
+    3. Helper `compute_topic_key(title)` + unit test (≥8 cases).
+    4. `process_news_to_threads()` filter tuổi tin (`THREADS_MAX_ARTICLE_AGE_HOURS`, default 6).
+    5. Topic dedup (`THREADS_TOPIC_DEDUP_HOURS`, default 24) — 2 article cùng topic_key → 1 job.
+    6. Category routing per-account qua `THREADS_ACCOUNT_CATEGORY_MAP` (JSON RuntimeSetting).
+  - **Phase 2 (out-of-scope, plan riêng sau)**: RSS quốc tế gốc + AI dịch, voice persona rotation, trending HOT detection.
+  - **Files**: [agents/plans/active/PLAN-033-threads-world-news.md](agents/plans/active/PLAN-033-threads-world-news.md), [agents/tasks/active/TASK-033-threads-world-news.md](agents/tasks/active/TASK-033-threads-world-news.md).
+  - **Status**: Codex execute backend; Claude Code verify UX/handoff sau khi Codex hoàn thành.
+
 - **[2026-04-28] PLAN-032 / TASK-032 - Threads own-handle `post_url` capture implemented; VPS verify pending**
   - **Code change**: `app/adapters/threads/adapter.py` now stores `self._own_handle`, parses handle from both `threads.net` and `threads.com`, tries `_capture_own_latest_post()` first, filters fallback capture by own handle only, and clears `observed_urls` immediately before clicking Post so feed URLs collected earlier do not pollute the final capture.
   - **Static proof**:
@@ -86,6 +114,11 @@
 
 ## Next Action
 
+0. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
+   - Anh Vu approve migration `9f1c2d3e4a5b_add_news_article_topic_key.py` trước khi chạy trên VPS.
+   - Pull lên VPS → `alembic upgrade head` → restart `Threads_Publisher` (`pm2 restart`, không reload).
+   - Set `THREADS_ACCOUNT_CATEGORY_MAP` JSON cho account World qua RuntimeSetting.
+   - Chạy 1 chu kỳ scrape + publish thật, verify `post_url` đúng handle World account → chốt criterion 5 + Anti Sign-off.
 1. Pull this `PLAN-032` adapter diff onto VPS and restart `Threads_Publisher` with `pm2 restart` so Python re-imports the updated module.
 2. Run one controlled Threads publish for account `facebook_2`, then verify the new DB row stores the real account handle in `post_url` and `external_post_id`.
 3. If handle discovery still fails on VPS, capture that worker/log evidence too; the new adapter should now return no `post_url` instead of a viral false positive.
