@@ -68,6 +68,8 @@ class ThreadsAdapter(AdapterInterface):
         'button:has-text("Post")',
     )
     PROFILE_BUTTON_SELECTORS = (
+        'a[aria-label="Profile"]',
+        'a[aria-label="Trang ca nhan"]',
         'div[role="button"]:has-text("Profile")',
         'button:has-text("Profile")',
     )
@@ -82,12 +84,15 @@ class ThreadsAdapter(AdapterInterface):
         re.IGNORECASE,
     )
 
+    OWN_HANDLE_CACHE_FILENAME = "threads_own_handle.txt"
+
     def __init__(self) -> None:
         self.playwright: Playwright | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
         self._session_status = SessionStatus.EXPIRED
         self._own_handle: str | None = None
+        self._profile_path: str | None = None
 
     def open_session(self, profile_path: str) -> bool:
         if self.playwright or self.context or self.page:
@@ -111,6 +116,7 @@ class ThreadsAdapter(AdapterInterface):
             return False
 
         self.playwright, self.context, self.page = bundle
+        self._profile_path = profile_path
         try:
             self.page.goto(self.HOME_URL, wait_until="domcontentloaded", timeout=60000)
             self._sleep(2.0, 3.0)
@@ -133,17 +139,27 @@ class ThreadsAdapter(AdapterInterface):
             else:
                 logger.info("ThreadsAdapter: Session opened successfully.")
             if self._session_status != SessionStatus.NEEDS_LOGIN:
-                self._own_handle = self._discover_own_handle()
-                if self._own_handle:
+                cached = self._read_cached_own_handle()
+                if cached:
+                    self._own_handle = cached
                     logger.info(
-                        "ThreadsAdapter: Discovered authenticated handle %s.",
+                        "ThreadsAdapter: Loaded cached authenticated handle %s for profile %s.",
                         self._own_handle,
-                    )
-                else:
-                    logger.warning(
-                        "ThreadsAdapter: Could not discover authenticated handle for profile %s.",
                         profile_path,
                     )
+                else:
+                    self._own_handle = self._discover_own_handle()
+                    if self._own_handle:
+                        logger.info(
+                            "ThreadsAdapter: Discovered authenticated handle %s.",
+                            self._own_handle,
+                        )
+                        self._write_cached_own_handle(self._own_handle)
+                    else:
+                        logger.warning(
+                            "ThreadsAdapter: Could not discover authenticated handle for profile %s.",
+                            profile_path,
+                        )
             return True
         except Exception as exc:
             logger.error("ThreadsAdapter: Failed while opening session: %s", exc)
@@ -226,18 +242,74 @@ class ThreadsAdapter(AdapterInterface):
             return None
         return normalized.rstrip("/").split("/")[-1]
 
+    _PROFILE_ROOT_RE = re.compile(
+        r"^https?://(?:www\.)?threads\.(?:net|com)/(@[^/?#\"'>]+)"
+        r"(?:/(?:replies|media|reposts))?/?(?:[?#].*)?$",
+        re.IGNORECASE,
+    )
+
     def _normalize_handle(self, value: str | None) -> str | None:
+        """Return @handle ONLY if value is a profile root URL or a bare @handle token.
+
+        Reject post URLs like https://threads.net/@viral/post/DXxxx — those handles
+        belong to other authors and must NOT be accepted as the authenticated handle.
+        """
         if not value:
             return None
 
-        match = re.search(
-            r"(?:https?://(?:www\.)?threads\.(?:net|com))?/?(@[^/?#\"'>]+)",
-            str(value),
-            re.IGNORECASE,
-        )
-        if not match:
+        text = str(value).strip()
+        if not text:
             return None
-        return match.group(1).rstrip("/")
+
+        if "://" in text:
+            match = self._PROFILE_ROOT_RE.match(text)
+            if not match:
+                return None
+            return match.group(1).rstrip("/")
+
+        bare = re.match(r"^/?(@[^/?#\"'>]+)/?$", text)
+        if bare:
+            return bare.group(1).rstrip("/")
+        return None
+
+    def _url_is_profile_root(self, url: str | None) -> bool:
+        if not url:
+            return False
+        return bool(self._PROFILE_ROOT_RE.match(str(url).strip()))
+
+    def _own_handle_cache_path(self) -> str | None:
+        if not self._profile_path:
+            return None
+        return os.path.join(self._profile_path, self.OWN_HANDLE_CACHE_FILENAME)
+
+    def _read_cached_own_handle(self) -> str | None:
+        path = self._own_handle_cache_path()
+        if not path or not os.path.exists(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as fp:
+                raw = fp.read().strip()
+        except OSError as exc:
+            logger.warning("ThreadsAdapter: Failed to read own handle cache %s: %s", path, exc)
+            return None
+        if not raw:
+            return None
+        if not raw.startswith("@"):
+            raw = "@" + raw
+        if not re.match(r"^@[A-Za-z0-9_.]+$", raw):
+            logger.warning("ThreadsAdapter: Cached own handle %r looks invalid; ignoring.", raw)
+            return None
+        return raw
+
+    def _write_cached_own_handle(self, handle: str) -> None:
+        path = self._own_handle_cache_path()
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as fp:
+                fp.write(handle.strip())
+        except OSError as exc:
+            logger.warning("ThreadsAdapter: Failed to write own handle cache %s: %s", path, exc)
 
     def _discover_own_handle(self) -> str | None:
         if not self.page:
@@ -284,66 +356,104 @@ class ThreadsAdapter(AdapterInterface):
             return grouped
 
         def pick_handle(grouped: dict[str, list[str]]) -> str | None:
+            # Require the picked handle to repeat across >=2 chrome buckets
+            # (header/nav/aside) so a single viral suggestion in one bucket
+            # cannot be promoted to the authenticated handle.
+            chrome_votes: dict[str, int] = {}
             for source in ("header", "nav", "aside"):
-                if len(grouped[source]) == 1:
-                    return grouped[source][0]
-
-            handle_votes: dict[str, int] = {}
-            for source in ("header", "nav", "aside", "page"):
                 for handle in grouped[source]:
-                    handle_votes[handle] = handle_votes.get(handle, 0) + 1
-            if not handle_votes:
-                return None
+                    chrome_votes[handle] = chrome_votes.get(handle, 0) + 1
 
-            repeated_handles = [
-                handle for handle, count in sorted(handle_votes.items()) if count >= 2
-            ]
-            if len(repeated_handles) == 1:
-                return repeated_handles[0]
+            repeated_chrome = [h for h, c in chrome_votes.items() if c >= 2]
+            if len(repeated_chrome) == 1:
+                return repeated_chrome[0]
 
-            all_handles = sorted(handle_votes)
-            if len(all_handles) == 1:
-                return all_handles[0]
+            # No repetition — accept only when every chrome bucket agrees on
+            # the same single handle.
+            chrome_singletons = {
+                grouped[s][0] for s in ("header", "nav", "aside") if len(grouped[s]) == 1
+            }
+            if len(chrome_singletons) == 1:
+                return next(iter(chrome_singletons))
 
             logger.warning(
-                "ThreadsAdapter: Own handle discovery was ambiguous: %s",
-                ", ".join(all_handles),
+                "ThreadsAdapter: Own handle discovery was ambiguous: chrome=%s page=%s",
+                {k: v for k, v in chrome_votes.items()},
+                grouped.get("page", []),
             )
             return None
 
-        current_handle = self._normalize_handle(self.page.url)
-        if current_handle:
-            return current_handle
+        # Step 1 — accept current page.url ONLY if it is a true profile-root URL
+        # (rejects /@viral/post/... by design).
+        if self._url_is_profile_root(self.page.url):
+            current_handle = self._normalize_handle(self.page.url)
+            if current_handle:
+                return current_handle
 
-        picked_handle = pick_handle(collect_grouped_handles())
-        if picked_handle:
-            return picked_handle
-
+        # Step 2 — navigate to own profile via the Profile button. This is the most
+        # deterministic source of truth: the resulting URL is /@<own_handle>.
         profile_button = self._find_first_visible(self.PROFILE_BUTTON_SELECTORS, timeout_ms=3000)
-        if not profile_button:
-            return None
-
-        try:
-            profile_button.click(timeout=5000)
-        except Exception:
+        clicked = False
+        if profile_button:
             try:
-                profile_button.click(force=True, timeout=3000)
+                profile_button.click(timeout=5000)
+                clicked = True
             except Exception:
                 try:
-                    profile_button.evaluate("el => el.click()")
-                except Exception as exc:
-                    logger.warning(
-                        "ThreadsAdapter: Failed to activate Profile navigation while discovering handle: %s",
-                        exc,
+                    profile_button.click(force=True, timeout=3000)
+                    clicked = True
+                except Exception:
+                    try:
+                        profile_button.evaluate("el => el.click()")
+                        clicked = True
+                    except Exception as exc:
+                        logger.warning(
+                            "ThreadsAdapter: Failed to activate Profile navigation while discovering handle: %s",
+                            exc,
+                        )
+
+        if not clicked:
+            # JS fallback: Threads renders the profile entry as an SVG icon link
+            # without text or aria-label in some locales. Click the first <a>
+            # whose href starts with /@ and is NOT a /post/ deep link.
+            try:
+                clicked = bool(
+                    self.page.evaluate(
+                        """
+                        () => {
+                            const candidates = Array.from(
+                                document.querySelectorAll('a[href^="/@"]')
+                            ).filter(a => {
+                                const h = a.getAttribute('href') || '';
+                                return !h.includes('/post/');
+                            });
+                            const target = candidates.find(a =>
+                                a.closest('nav') || a.closest('header')
+                            ) || candidates[0];
+                            if (target) {
+                                target.click();
+                                return true;
+                            }
+                            return false;
+                        }
+                        """
                     )
-                    return None
+                )
+            except Exception as exc:
+                logger.warning(
+                    "ThreadsAdapter: JS profile-link fallback failed: %s", exc
+                )
 
-        self._sleep(1.5, 2.5)
+        if clicked:
+            self._sleep(1.5, 2.5)
+            if self._url_is_profile_root(self.page.url):
+                handle = self._normalize_handle(self.page.url)
+                if handle:
+                    return handle
 
-        current_handle = self._normalize_handle(self.page.url)
-        if current_handle:
-            return current_handle
-
+        # Step 3 — DOM scan as last-resort fallback. Require the picked handle to
+        # appear in >=2 of header/nav/aside (or be the only handle present) so a
+        # single viral suggestion cannot poison discovery.
         return pick_handle(collect_grouped_handles())
 
     def _filter_post_urls_for_own_handle(self, candidates: list[str]) -> list[str]:
@@ -790,3 +900,4 @@ class ThreadsAdapter(AdapterInterface):
         self.page = None
         self._session_status = SessionStatus.EXPIRED
         self._own_handle = None
+        self._profile_path = None
