@@ -14,6 +14,7 @@ on:
       - 'start.sh'
       - 'manage.py'
       - '.github/workflows/**'
+      - 'alembic/**'
 
 jobs:
   deploy:
