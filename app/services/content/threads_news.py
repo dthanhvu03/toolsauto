@@ -183,7 +183,12 @@ class ThreadsNewsService:
             if account_category:
                 article_query = article_query.filter(NewsArticle.category.ilike(account_category))
 
-            article = article_query.order_by(NewsArticle.published_at.desc(), NewsArticle.id.desc()).first()
+            # PLAN-034: prefer highest engagement_score; fall back to recency for legacy rows.
+            article = article_query.order_by(
+                NewsArticle.engagement_score.desc().nullslast(),
+                NewsArticle.published_at.desc(),
+                NewsArticle.id.desc(),
+            ).first()
             if not article:
                 if account_category:
                     logger.info(
@@ -304,6 +309,10 @@ class ThreadsNewsService:
 
                 final_caption = f"{caption}{source_footer}"
 
+                # schedule_ts marks the earliest moment the worker is allowed
+                # to claim this job. We default to now_ts so the dashboard's
+                # Schedule column shows a real time instead of "-"; the actual
+                # publish moment is gated further by account cooldown.
                 new_job = Job(
                     account_id=account.id,
                     platform="threads",
@@ -314,6 +323,7 @@ class ThreadsNewsService:
                     parent_job_id=None,
                     ai_reasoning=seg.get("reasoning", "single_post_v3"),
                     created_at=now_ts,
+                    schedule_ts=now_ts,
                     dedupe_key=f"{NEWS_JOB_PREFIX}{article.id}",
                 )
                 db.add(new_job)

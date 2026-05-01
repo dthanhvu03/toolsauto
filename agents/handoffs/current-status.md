@@ -2,6 +2,40 @@
 
 ## Recent Execution
 
+- **[2026-05-01] UX fix — PENDING jobs hiển thị ETA tuyệt đối (đã tính cooldown) thay vì ô trống**
+  - **Bug**: Anh Vu chụp screenshot dashboard PENDING jobs Threads chỉ thấy "Cooldown: 8m16s" mà không có thời điểm đăng cụ thể.
+  - **Root cause**: 2 vấn đề tách biệt:
+    1. `app/services/content/threads_news.py:307` tạo Job không set `schedule_ts` → cột Schedule render `None | format_time` = `"-"`.
+    2. `app/templates/fragments/job_row.html:248-264` chỉ tính cooldown relative (`remaining = cooldown_seconds - elapsed`), không suy ra ETA tuyệt đối, cũng không xét `schedule_ts` riêng.
+  - **Fix**:
+    - `threads_news.py`: thêm `schedule_ts=now_ts` vào Job constructor — job eligible ngay khi tạo, cooldown mới là gate cuối.
+    - `job_row.html` PENDING block: tính `eta = max(schedule_ts, account.last_post_ts + cooldown_seconds)` và hiển thị 2 dòng — countdown "Còn 8m19s" (orange) hoặc "Sẵn sàng" (emerald), kèm ETA tuyệt đối format `HH:MM:SS DD/MM/YYYY` (mono).
+  - **Verify**:
+    - `py_compile threads_news.py` PASS; `from app.main import app` → `APP_IMPORT_OK 207`.
+    - `pytest tests/test_threads_world_news.py -q` → `14 passed in 1.79s`.
+    - Jinja smoke 2 case: cooldown active → "Còn 8m19s" + ETA; ready → "Sẵn sàng" + ETA.
+  - **Pending VPS**: pull develop → `pm2 restart Threads_Publisher` (mới chạy threads_news code mới) + restart web server (nếu PM2 process riêng) để render template mới. Job PENDING cũ trong DB vẫn `schedule_ts=NULL` → ETA chỉ hiện cooldown component cho tới khi tạo job mới.
+
+- **[2026-05-01] PLAN-034 / TASK-034 — Threads article curation scoring (Phase 1) DONE local, VPS deploy pending ✅**
+  - **Anh Vu duyệt PLAN** lúc anh quay lại; Claude Code execute autonomous.
+  - **7 bước hoàn tất**:
+    1. Column `NewsArticle.engagement_score` + migration `a8e7f6d5c4b3` (down_revision `9f1c2d3e4a5b`); seed RuntimeSetting `THREADS_SOURCE_WEIGHTS = {}`.
+    2. `app/services/content/article_scorer.py` — pure function `compute_score()` 4 signal (recency 40% / source 20% / hot marker 15% / topic competition 25%), score round trong [0, 100].
+    3. `tests/test_article_scorer.py` 10 cases — 10/10 PASS in 0.05s.
+    4. `news_scraper.py:_rescore_recent_articles()` tính score batch sau insert (đọc weights từ RuntimeSetting, count topic_key trong 24h gần nhất).
+    5. `threads_news.py:186` đổi `order_by` → `engagement_score.desc().nullslast()` ưu tiên.
+    6. `tests/test_threads_world_news.py` thêm 2 case: selection theo score + scraper populate score → 14/14 PASS.
+    7. Smoke realistic: 3 article giả lập (24h kinh tế / VnExpress NÓNG / Tuổi Trẻ sốc cùng topic), weights `{"VnExpress":1.3,"Tuổi Trẻ":1.2,"24h":0.7}` → score 23.84 / 82.05 / 76.94 — selection chính xác.
+  - **Verify**: `alembic upgrade head` clean → head `a8e7f6d5c4b3`; `py_compile` 5 file PASS; `from app.main import app` → 207 routes; 24/24 test PASS. (18 fail khác trong suite là pre-existing FacebookAdapter/Playwright unrelated.)
+  - **Files** (7): `app/database/models/threads.py`, `alembic/versions/a8e7f6d5c4b3_add_news_engagement_score.py`, `app/services/content/article_scorer.py`, `app/services/content/news_scraper.py`, `app/services/content/threads_news.py`, `tests/test_article_scorer.py`, `tests/test_threads_world_news.py`.
+  - **Pending VPS**:
+    1. Pull develop → `cd /root/toolsauto && git pull origin develop`.
+    2. `venv/bin/alembic upgrade head` (sẽ chạy migration `a8e7f6d5c4b3`).
+    3. Tuỳ chọn: set `THREADS_SOURCE_WEIGHTS` JSON qua RuntimeSetting nếu muốn weight cụ thể; default `{}` = neutral (mọi nguồn = 1.0).
+    4. `pm2 restart Threads_Publisher` (restart, KHÔNG reload).
+    5. Theo dõi 1 chu kỳ scrape kế tiếp: DB confirm `news_articles.engagement_score IS NOT NULL` cho article mới scrape.
+    6. Sau 1-2 chu kỳ publish: confirm bài chọn đúng score cao nhất (xem log `Processing article '...'`).
+
 - **[2026-05-01] 🐛 Fix Threads duplicate-publish bug (3-4 lần) — code DONE local, VPS deploy pending**
   - **Root cause**: Sau click Post thành công (post LIVE trên Threads), nếu adapter không capture được `post_url` → trả `ok=False, is_fatal=False` → worker `mark_failed_or_retry` → status PENDING + backoff → re-claim → **publish lại** trên Threads. `max_tries=3` → đăng tối đa 3 lần. Sau PLAN-032 (`_capture_post_reference` strict trả `(None,None)` khi không match own-handle) bug càng nặng vì mọi capture-miss đều thành retry.
   - **Fix A (root)** — convert capture-fail thành success-without-URL:

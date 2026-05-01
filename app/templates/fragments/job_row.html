@@ -246,21 +246,41 @@
         </button>
 
         {% elif job.status == 'PENDING' %}
-        {# Cooldown indicator — shows remaining wait time if account is cooling down #}
+        {# Effective ETA = max(schedule_ts, account.last_post_ts + cooldown_seconds).
+           Schedule_ts alone doesn't reflect cooldown gating; this gives the user
+           the actual earliest publish moment. #}
+        {% set sched_eta = job.schedule_ts or 0 %}
+        {% set cooldown_eta = 0 %}
         {% if job.account and job.account.last_post_ts %}
-        {% set elapsed = now - job.account.last_post_ts %}
-        {% set remaining = job.account.cooldown_seconds - elapsed %}
-        {% if remaining > 0 %}
-        <div class="mb-2 flex items-center gap-1 text-orange-500 text-xs font-medium"
-            title="Account đang cooldown, job sẽ tự chạy khi hết thời gian chờ">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Cooldown: {{ (remaining / 60)|int }}m{{ (remaining % 60)|int }}s
-        </div>
+        {% set cooldown_eta = job.account.last_post_ts + (job.account.cooldown_seconds or 0) %}
         {% endif %}
+        {% set eta = sched_eta if sched_eta > cooldown_eta else cooldown_eta %}
+        {% set remaining = eta - now %}
+        {% if eta > 0 %}
+        <div class="mb-2 flex flex-col gap-0.5 text-xs"
+             title="Thời điểm sớm nhất worker sẽ claim job này (đã tính cả cooldown account)">
+            {% if remaining > 0 %}
+            <div class="flex items-center gap-1 text-orange-500 font-medium">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Còn {{ (remaining / 60)|int }}m{{ (remaining % 60)|int }}s
+            </div>
+            {% else %}
+            <div class="flex items-center gap-1 text-emerald-600 font-medium">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                Sẵn sàng
+            </div>
+            {% endif %}
+            <div class="text-gray-400 text-[10px] font-mono">
+                {{ eta | format_time }}
+            </div>
+        </div>
         {% endif %}
         <button hx-post="/jobs/{{ job.id }}/force-run" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             onclick="this.textContent='...'; this.disabled=true;"
