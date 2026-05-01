@@ -2,6 +2,7 @@ from email.utils import parsedate_to_datetime
 import logging
 import re
 import time
+from collections import Counter
 from typing import Dict, List
 import xml.etree.ElementTree as ET
 
@@ -9,7 +10,9 @@ import requests
 
 from app.database.core import SessionLocal
 from app.database.models import NewsArticle
+from app.services.content.article_scorer import compute_score
 from app.services.content.topic_key import compute_topic_key
+from app.services.platform import settings as runtime_settings
 
 logger = logging.getLogger("app.services.news_scraper")
 
@@ -81,6 +84,10 @@ class NewsScraper:
         db = SessionLocal()
         new_count = 0
         try:
+            source_weights = runtime_settings.get_json(
+                "THREADS_SOURCE_WEIGHTS", default={}, db=db
+            ) or {}
+
             for source in RSS_SOURCES:
                 logger.info(f"Scraping {source['name']} - {source['category']}...")
                 items = self.fetch_rss(source["url"])
@@ -121,12 +128,50 @@ class NewsScraper:
                         if "unique constraint" not in str(e).lower():
                             logger.error(f"Error adding article {item['link']}: {e}")
 
+            # PLAN-034 — recompute engagement_score for all NEW articles within
+            # the active window (24h) so topic-competition counts reflect any
+            # batch we just added.
+            self._rescore_recent_articles(db, source_weights)
+
             logger.info(f"Finished scraping. Added {new_count} new articles.")
         except Exception as e:
             logger.error(f"Error in scrape_all: {e}")
         finally:
             db.close()
         return new_count
+
+    def _rescore_recent_articles(self, db, source_weights: dict) -> None:
+        """Compute engagement_score for NEW articles published within the last 24h."""
+        now_ts = int(time.time())
+        window_start = now_ts - 24 * 3600
+        articles = (
+            db.query(NewsArticle)
+            .filter(
+                NewsArticle.status == "NEW",
+                NewsArticle.published_at.isnot(None),
+                NewsArticle.published_at >= window_start,
+            )
+            .all()
+        )
+        if not articles:
+            return
+
+        topic_counts = Counter(a.topic_key for a in articles if a.topic_key)
+        for article in articles:
+            try:
+                article.engagement_score = compute_score(
+                    article,
+                    all_topic_counts=topic_counts,
+                    source_weights=source_weights,
+                    now_ts=now_ts,
+                )
+            except Exception as exc:
+                logger.warning("Failed to score article %s: %s", article.id, exc)
+        try:
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.error("Failed to persist engagement_score batch: %s", exc)
 
 
 if __name__ == "__main__":

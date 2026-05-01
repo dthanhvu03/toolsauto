@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String, Text
 
 from app.database.models.base import Base, now_ts
 
@@ -20,6 +20,7 @@ class NewsArticle(Base):
     category = Column(String, nullable=True, index=True)
     topic_key = Column(String, nullable=True, index=True)
     published_at = Column(Integer, nullable=True, index=True)  # Unix TS từ RSS
+    engagement_score = Column(Float, nullable=True, index=True)  # PLAN-034 curation score
 
     # Processing status
     status = Column(String, default="NEW", index=True)  # NEW, DRAFTED, POSTED, SKIPPED

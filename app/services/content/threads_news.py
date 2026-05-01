@@ -183,7 +183,12 @@ class ThreadsNewsService:
             if account_category:
                 article_query = article_query.filter(NewsArticle.category.ilike(account_category))
 
-            article = article_query.order_by(NewsArticle.published_at.desc(), NewsArticle.id.desc()).first()
+            # PLAN-034: prefer highest engagement_score; fall back to recency for legacy rows.
+            article = article_query.order_by(
+                NewsArticle.engagement_score.desc().nullslast(),
+                NewsArticle.published_at.desc(),
+                NewsArticle.id.desc(),
+            ).first()
             if not article:
                 if account_category:
                     logger.info(
