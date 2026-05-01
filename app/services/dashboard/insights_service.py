@@ -708,7 +708,7 @@ def get_market_benchmark(
         SELECT AVG(views), AVG(likes), AVG(comments), AVG(shares),
                COUNT(DISTINCT reel_url), MAX(views)
         FROM competitor_reels
-        WHERE scraped_at >= :cutoff
+        WHERE recorded_at >= :cutoff
     """), {"cutoff": cutoff}).fetchone()
 
     def _s(row, idx, default=0):
@@ -755,8 +755,12 @@ def get_competitor_top(
     from sqlalchemy import text
 
     days = _validate_days(days)
+    # The competitor_reels schema only stores reel_url, page_url, scrape_date,
+    # views/likes/comments/shares, caption, recorded_at — there is no
+    # page_name, platform, or published_date column. The "date" sort therefore
+    # falls back to the latest scrape time.
     _sort_map = {"views": "max_views", "likes": "max_likes",
-                 "comments": "max_comments", "date": "published_date"}
+                 "comments": "max_comments", "date": "latest_recorded_at"}
     order_col = _sort_map.get(sort_by or "views", "max_views")
 
     if page < 1: page = 1
@@ -767,34 +771,43 @@ def get_competitor_top(
     cutoff = now - (days * 86400)
 
     total = db.execute(text(
-        "SELECT COUNT(DISTINCT reel_url) FROM competitor_reels WHERE scraped_at >= :cutoff"
+        "SELECT COUNT(DISTINCT reel_url) FROM competitor_reels WHERE recorded_at >= :cutoff"
     ), {"cutoff": cutoff}).scalar() or 0
 
     rows = db.execute(text(f"""
-        SELECT reel_url, page_name, page_url, platform,
-               MAX(views)    as max_views,
-               MAX(likes)    as max_likes,
-               MAX(comments) as max_comments,
-               MAX(shares)   as max_shares,
-               caption, published_date
+        SELECT reel_url,
+               MAX(page_url)    as page_url,
+               MAX(views)       as max_views,
+               MAX(likes)       as max_likes,
+               MAX(comments)    as max_comments,
+               MAX(shares)      as max_shares,
+               MAX(caption)     as caption,
+               MAX(scrape_date) as latest_scrape_date,
+               MAX(recorded_at) as latest_recorded_at
         FROM competitor_reels
-        WHERE scraped_at >= :cutoff
+        WHERE recorded_at >= :cutoff
         GROUP BY reel_url
         ORDER BY {order_col} DESC NULLS LAST
         LIMIT :limit OFFSET :offset
     """), {"cutoff": cutoff, "limit": limit, "offset": offset}).fetchall()
 
+    def _page_name_from_url(url: str) -> str:
+        if not url:
+            return ""
+        slug = url.rstrip("/").split("/")[-1]
+        return slug.split("?")[0] if slug else ""
+
     data = [{
         "reel_url":       r[0],
-        "page_name":      r[1] or "",
-        "page_url":       r[2] or "",
-        "platform":       r[3] or "facebook",
-        "views":          int(r[4] or 0),
-        "likes":          int(r[5] or 0),
-        "comments":       int(r[6] or 0),
-        "shares":         int(r[7] or 0),
-        "caption":        r[8] or "",
-        "published_date": r[9] or "",
+        "page_url":       r[1] or "",
+        "page_name":      _page_name_from_url(r[1]),
+        "platform":       "facebook",
+        "views":          int(r[2] or 0),
+        "likes":          int(r[3] or 0),
+        "comments":       int(r[4] or 0),
+        "shares":         int(r[5] or 0),
+        "caption":        r[6] or "",
+        "published_date": r[7] or "",
     } for r in rows]
 
     return {
@@ -826,7 +839,7 @@ def get_trending_topics(
 
     rows = db.execute(text("""
         SELECT caption, views FROM competitor_reels
-        WHERE scraped_at >= :cutoff
+        WHERE recorded_at >= :cutoff
           AND caption IS NOT NULL AND caption != ''
         ORDER BY views DESC
         LIMIT 500
@@ -861,9 +874,11 @@ def get_trending_topics(
         limit = 25
     topics = sorted(freq.items(), key=lambda x: -x[1])[:limit]
 
+    # Field names match the dashboard contract (insights.html loadTrendingTopics):
+    # frontend reads `json.data` and `json.reels_analyzed`, not `topics` / `total_captions_analyzed`.
     return {
-        "status":                  "success",
-        "topics":                  [{"word": w, "count": c} for w, c in topics],
-        "total_captions_analyzed": len(rows),
-        "days":                    days,
+        "status":         "success",
+        "data":           [{"word": w, "count": c} for w, c in topics],
+        "reels_analyzed": len(rows),
+        "days":           days,
     }

@@ -2,6 +2,24 @@
 
 ## Recent Execution
 
+- **[2026-05-01] 🐛 Fix Competitive Intelligence (Insights dashboard) — 3 endpoint crash 500 + 1 contract mismatch**
+  - **Triệu chứng**: anh báo "check Competitive Intelligence trong insight". Inspect: 3 API endpoint trên `/insights/api/...` đều có bug.
+  - **Bug 1** — Trending Topics không bao giờ hiện data:
+    - Frontend `insights.html:1406-1410` đọc `json.data` + `json.reels_analyzed`.
+    - Backend `insights_service.get_trending_topics()` trả `topics` + `total_captions_analyzed`.
+    - → Mismatch tên field, frontend luôn render "Chưa có dữ liệu". Fix: rename keys backend cho khớp frontend (single consumer).
+  - **Bug 2** — 3 endpoint crash 500 vì query column không tồn tại trong `competitor_reels`:
+    - Schema thật chỉ có: `id, reel_url, scrape_date, page_url, views, likes, comments, shares, caption, recorded_at`.
+    - Service queries `WHERE scraped_at >= :cutoff` — không có cột `scraped_at`. Fix: đổi → `recorded_at` (Unix TS).
+    - `get_competitor_top` SELECT `page_name, platform, published_date` — không có cột nào trong các cột trên. Fix: derive `page_name` từ `page_url`, hardcode `platform="facebook"` (competitor_reels là FB-only by design), drop `published_date` (sort "date" giờ dựa `recorded_at`).
+  - **Bug 3** — PostgreSQL strict GROUP BY: `page_url` không nằm trong GROUP BY → fix wrap `MAX(page_url)`.
+  - **Verify** sau fix:
+    - `trending-topics`: 10 topics, top: `xuhuong (36)`, `shopee (27)`, `https (25)`, `người (20)`, `nhà (20)` — 266 reels analyzed.
+    - `market-benchmark`: `has_competitor_data=True`, `market.reel_count=289`, `market.avg_likes=57160.9`, `our.post_count=144`.
+    - `competitor-top` sort=likes: top 3 reels có `likes=3.8M / 1.6M / 1.5M`.
+  - **Bug còn lại — KHÔNG phải insight UI**: 293/293 row `competitor_reels` có `views=0` và `page_url=''` rỗng. Likes/comments/shares lưu đúng, nhưng views + page_url scraper bỏ qua. Hậu quả: Market Gap card hiện `0×` mãi (chia AVG(views) ours / AVG(views) market khi market = 0). Cần điều tra `app/services/scraper/` (suggested-reels GQL parser) — out of scope task UX này, mở task riêng nếu anh muốn.
+  - **Files** (1): `app/services/dashboard/insights_service.py` — 3 SQL fix + key rename + GROUP BY fix.
+
 - **[2026-05-01] UX fix — PENDING jobs hiển thị ETA tuyệt đối (đã tính cooldown) thay vì ô trống**
   - **Bug**: Anh Vu chụp screenshot dashboard PENDING jobs Threads chỉ thấy "Cooldown: 8m16s" mà không có thời điểm đăng cụ thể.
   - **Root cause**: 2 vấn đề tách biệt:
