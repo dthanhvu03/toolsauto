@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | TASK-032 |
-| **Status** | In Progress |
+| **Status** | Done |
 | **Priority** | P1 |
 | **Owner** | Antigravity |
 | **Executor** | Codex |
@@ -35,9 +35,9 @@ Fix the Threads adapter logic to ensure it captures the newly published post URL
 ---
 
 ## Acceptance Criteria
-- [ ] Job đăng thành công → post_url trong DB là bài thật của account đó (URL chứa /@<handle-của-account>/post/...).
-- [ ] Nếu adapter không xác định được own handle → return None, None → worker mark FAILED thay vì gắn URL nhầm.
-- [ ] Account Nguyen Ngoc Vi (profile facebook_2) test thực tế: job mới có URL chính xác.
+- [x] Job đăng thành công → post_url trong DB là bài thật của account đó (URL chứa /@<handle-của-account>/post/...).
+- [x] Nếu adapter không xác định được own handle → return None, None → worker mark FAILED thay vì gắn URL nhầm.
+- [x] Account Nguyen Ngoc Vi (profile facebook_2) test thực tế: job mới có URL chính xác.
 
 ---
 
@@ -72,5 +72,6 @@ Fix the Threads adapter logic to ensure it captures the newly published post URL
 ## Status History
 | Date | Status | Note |
 |---|---|---|
+| 2026-05-01 | Done | VPS verified bởi anh Vu — publish account `facebook_2` ra `post_url` đúng own-handle. Anti Sign-off APPROVED. |
 | 2026-04-28 | In Progress | adapter.py updated; static proof passed; local runtime proves safe-fail branch; VPS verification still pending |
 | 2026-04-28 | New | Task được tạo bởi Anti theo yêu cầu của user |

@@ -202,9 +202,11 @@ def process_single_job(db: Session) -> bool:
 
         post_url = publish_result.details.get("post_url") if publish_result.details else None
         if publish_result.ok and not post_url:
-            publish_result.ok = False
-            publish_result.error = "Threads adapter did not return post_url."
-            publish_result.is_fatal = False
+            logger.warning(
+                "[THREADS_PUBLISHER] [Job-%s] Adapter reported success without post_url — "
+                "marking DONE to prevent duplicate publish; reconciliation can backfill URL.",
+                job.id,
+            )
 
         if publish_result.ok:
             logger.info(

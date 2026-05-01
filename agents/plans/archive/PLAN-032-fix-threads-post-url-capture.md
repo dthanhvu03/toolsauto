@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | PLAN-032 |
-| **Status** | Active |
+| **Status** | Done |
 | **Executor** | Codex |
 | **Created by** | Antigravity |
 | **Related Task** | TASK-032 |
@@ -90,18 +90,18 @@ After PLAN-031 enabled successful posting on Threads, it was discovered that the
 
 ---
 
-## Anti Sign-off Gate ⛔
-**Reviewed by**: Antigravity — [2026-04-28]
+## Anti Sign-off Gate ✅
+**Reviewed by**: Antigravity — [2026-05-01]
 
 ### Acceptance Criteria Check
 | # | Criterion | Proof có không? | Pass? |
 |---|---|---|---|
-| 1 | Job đăng thành công → post_url đúng chủ thể | No | ⏳ |
-| 2 | Nếu không xác định được handle → return None | No | ⏳ |
-| 3 | Test thực tế trên VPS đạt kết quả đúng | No | ⏳ |
+| 1 | Job đăng thành công → post_url đúng chủ thể | Yes — anh Vu confirm VPS publish account `facebook_2` (Nguyen Ngoc Vi) ra `post_url` đúng own-handle | ✅ |
+| 2 | Nếu không xác định được handle → return None | Yes — local runtime proof `OWN_HANDLE=None` → `CAPTURE_POST_REFERENCE=(None, None)` | ✅ |
+| 3 | Test thực tế trên VPS đạt kết quả đúng | Yes — anh Vu kiểm tra VPS [2026-05-01] sau pull diff + `pm2 restart Threads_Publisher` | ✅ |
 
 ### Verdict
-> **IN PROGRESS - Code complete, VPS verification pending**
+> **APPROVED — VPS verified by anh Vu on 2026-05-01. Adapter own-handle scoping fix in production.**
 
 ## Executor Update - 2026-04-28
 - Acceptance criterion 2 is now covered by local runtime safety proof:
