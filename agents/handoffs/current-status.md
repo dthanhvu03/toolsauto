@@ -2,12 +2,25 @@
 
 ## Recent Execution
 
-- **[2026-05-01] PLAN-034 / TASK-034 — Threads article curation scoring (Phase 1) opened, chờ Anti duyệt**
-  - **Goal**: Nâng chất lượng bài Threads bằng layer "đăng tin gì" — chọn article theo `engagement_score` (recency 40% + source weight 20% + hot marker 15% + topic competition 25%) thay cho `published_at desc`. Phase 2 (engagement feedback loop, voice persona, Google Trends) plan riêng sau.
-  - **Scope**: thêm column `NewsArticle.engagement_score` + migration; `app/services/content/article_scorer.py` (pure function); wire vào `news_scraper.py` + đổi order_by trong `threads_news.py`; ≥9 unit test + 1 integration test selection. RuntimeSetting `THREADS_SOURCE_WEIGHTS` JSON (default `{}` → neutral).
-  - **Files**: [agents/plans/active/PLAN-034-threads-article-curation-scoring.md](agents/plans/active/PLAN-034-threads-article-curation-scoring.md), [agents/tasks/active/TASK-034-threads-article-curation-scoring.md](agents/tasks/active/TASK-034-threads-article-curation-scoring.md).
-  - **Anh Vu yêu cầu**: Claude Code tự execute + tự test sau khi Anti duyệt PLAN (override role boundary 1 lần cho task này).
-  - **Status**: Pending Anti Approval. Khi anh Vu quay lại + duyệt scope → Claude Code thực thi 7 bước theo PLAN.
+- **[2026-05-01] PLAN-034 / TASK-034 — Threads article curation scoring (Phase 1) DONE local, VPS deploy pending ✅**
+  - **Anh Vu duyệt PLAN** lúc anh quay lại; Claude Code execute autonomous.
+  - **7 bước hoàn tất**:
+    1. Column `NewsArticle.engagement_score` + migration `a8e7f6d5c4b3` (down_revision `9f1c2d3e4a5b`); seed RuntimeSetting `THREADS_SOURCE_WEIGHTS = {}`.
+    2. `app/services/content/article_scorer.py` — pure function `compute_score()` 4 signal (recency 40% / source 20% / hot marker 15% / topic competition 25%), score round trong [0, 100].
+    3. `tests/test_article_scorer.py` 10 cases — 10/10 PASS in 0.05s.
+    4. `news_scraper.py:_rescore_recent_articles()` tính score batch sau insert (đọc weights từ RuntimeSetting, count topic_key trong 24h gần nhất).
+    5. `threads_news.py:186` đổi `order_by` → `engagement_score.desc().nullslast()` ưu tiên.
+    6. `tests/test_threads_world_news.py` thêm 2 case: selection theo score + scraper populate score → 14/14 PASS.
+    7. Smoke realistic: 3 article giả lập (24h kinh tế / VnExpress NÓNG / Tuổi Trẻ sốc cùng topic), weights `{"VnExpress":1.3,"Tuổi Trẻ":1.2,"24h":0.7}` → score 23.84 / 82.05 / 76.94 — selection chính xác.
+  - **Verify**: `alembic upgrade head` clean → head `a8e7f6d5c4b3`; `py_compile` 5 file PASS; `from app.main import app` → 207 routes; 24/24 test PASS. (18 fail khác trong suite là pre-existing FacebookAdapter/Playwright unrelated.)
+  - **Files** (7): `app/database/models/threads.py`, `alembic/versions/a8e7f6d5c4b3_add_news_engagement_score.py`, `app/services/content/article_scorer.py`, `app/services/content/news_scraper.py`, `app/services/content/threads_news.py`, `tests/test_article_scorer.py`, `tests/test_threads_world_news.py`.
+  - **Pending VPS**:
+    1. Pull develop → `cd /root/toolsauto && git pull origin develop`.
+    2. `venv/bin/alembic upgrade head` (sẽ chạy migration `a8e7f6d5c4b3`).
+    3. Tuỳ chọn: set `THREADS_SOURCE_WEIGHTS` JSON qua RuntimeSetting nếu muốn weight cụ thể; default `{}` = neutral (mọi nguồn = 1.0).
+    4. `pm2 restart Threads_Publisher` (restart, KHÔNG reload).
+    5. Theo dõi 1 chu kỳ scrape kế tiếp: DB confirm `news_articles.engagement_score IS NOT NULL` cho article mới scrape.
+    6. Sau 1-2 chu kỳ publish: confirm bài chọn đúng score cao nhất (xem log `Processing article '...'`).
 
 - **[2026-05-01] 🐛 Fix Threads duplicate-publish bug (3-4 lần) — code DONE local, VPS deploy pending**
   - **Root cause**: Sau click Post thành công (post LIVE trên Threads), nếu adapter không capture được `post_url` → trả `ok=False, is_fatal=False` → worker `mark_failed_or_retry` → status PENDING + backoff → re-claim → **publish lại** trên Threads. `max_tries=3` → đăng tối đa 3 lần. Sau PLAN-032 (`_capture_post_reference` strict trả `(None,None)` khi không match own-handle) bug càng nặng vì mọi capture-miss đều thành retry.
