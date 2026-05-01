@@ -591,6 +591,50 @@ class ThreadsAdapter(AdapterInterface):
         post_url = filtered_urls[0]
         return post_url, self._extract_post_id(post_url)
 
+    def _caption_signature(self, caption: str) -> str:
+        # Strip auto-appended source footer added by threads_news (`\n\n(Nguồn: ...)`)
+        head = (caption or "").split("(Nguồn:")[0].strip()
+        return head[:60].strip()
+
+    def _check_already_published(self, caption: str) -> tuple[str | None, str | None]:
+        """Scan own profile for a recent post matching this caption — used on retry to avoid duplicate publish."""
+        if not self.page or not self._own_handle:
+            return None, None
+        signature = self._caption_signature(caption)
+        if len(signature) < 20:
+            return None, None
+
+        profile_url = f"{self.HOME_URL.rstrip('/')}/{self._own_handle}"
+        try:
+            self.page.goto(profile_url, wait_until="domcontentloaded", timeout=30000)
+        except Exception as exc:
+            logger.warning("ThreadsAdapter: already-published probe — profile open failed: %s", exc)
+            return None, None
+        self._sleep(2.0, 3.0)
+        if self._page_needs_login():
+            raise ThreadsSessionInvalidError("account session is logged out")
+
+        try:
+            profile_selector = f'a[href*="/{self._own_handle}/post/"]'
+            links = self.page.locator(profile_selector)
+            count = min(links.count(), 5)
+            for i in range(count):
+                link = links.nth(i)
+                href = link.get_attribute("href")
+                normalized = self._normalize_post_url(href)
+                if not normalized:
+                    continue
+                try:
+                    article = link.locator("xpath=ancestor::article[1]")
+                    article_text = article.inner_text(timeout=2000) if article.count() > 0 else ""
+                except Exception:
+                    article_text = ""
+                if signature and signature in article_text:
+                    return normalized, self._extract_post_id(normalized)
+        except Exception as exc:
+            logger.warning("ThreadsAdapter: already-published probe failed: %s", exc)
+        return None, None
+
     def _session_invalid_result(self, reason: str) -> PublishResult:
         message = f"SessionInvalid: {reason}"
         return PublishResult(
@@ -691,6 +735,29 @@ class ThreadsAdapter(AdapterInterface):
                 self._sleep(1.5, 2.5)
                 if self._page_needs_login():
                     return self._session_invalid_result("account session is logged out")
+
+            # Idempotency guard: if this is a retry, check own profile for an
+            # already-published post matching the caption signature before re-publishing.
+            if (getattr(job, "tries", 0) or 0) > 0 and self._own_handle:
+                existing_url, existing_id = self._check_already_published(caption)
+                if existing_url:
+                    logger.warning(
+                        "ThreadsAdapter: Job %s tries=%s — found previously published post %s, skipping re-publish.",
+                        job.id,
+                        job.tries,
+                        existing_url,
+                    )
+                    return PublishResult(
+                        ok=True,
+                        details={"post_url": existing_url},
+                        external_post_id=existing_id,
+                    )
+                # Probe navigated away from HOME_URL — go back before composing.
+                try:
+                    self.page.goto(self.HOME_URL, wait_until="domcontentloaded", timeout=60000)
+                    self._sleep(1.5, 2.5)
+                except Exception:
+                    pass
 
             compose_button = self._find_first_visible(self.COMPOSE_SELECTORS, timeout_ms=12000)
             if not compose_button:
@@ -822,10 +889,19 @@ class ThreadsAdapter(AdapterInterface):
 
                 self._sleep(1.0, 1.8)
 
+            # Post button click was confirmed (compose dialog accepted Post action),
+            # so the post is live on Threads even though we couldn't capture the URL.
+            # Returning ok=False here would trigger retry → duplicate post on Threads.
+            # Instead, mark the job DONE without post_url; reconciliation can backfill later.
+            logger.warning(
+                "ThreadsAdapter: Job %s — Post action committed but post_url could not be captured. "
+                "Marking DONE without URL to avoid duplicate publish.",
+                job.id,
+            )
             return PublishResult(
-                ok=False,
-                error="Publish action completed but post_url could not be captured.",
-                is_fatal=False,
+                ok=True,
+                details={"post_url": None},
+                external_post_id=None,
             )
         except ThreadsSessionInvalidError as exc:
             logger.error("ThreadsAdapter: Session invalid while publishing: %s", exc)
