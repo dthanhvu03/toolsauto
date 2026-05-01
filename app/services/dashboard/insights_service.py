@@ -696,17 +696,34 @@ def get_market_benchmark(
     now = int(_time.time())
     cutoff = now - (days * 86400)
 
+    # Capture both AVG and per-metric coverage (% of rows with metric > 0).
+    # Coverage is the only honest way to know whether a side-by-side gap is
+    # meaningful — averages hide the case where most rows are missing the
+    # signal entirely (e.g. our scraper only fills views, competitor scraper
+    # only fills likes).
     our = db.execute(text("""
         SELECT AVG(views), AVG(likes), AVG(comments), AVG(shares),
-               COUNT(DISTINCT post_url), MAX(views)
+               COUNT(DISTINCT post_url), MAX(views), MAX(likes),
+               COUNT(*),
+               SUM(CASE WHEN views > 0 THEN 1 ELSE 0 END),
+               SUM(CASE WHEN likes > 0 THEN 1 ELSE 0 END),
+               SUM(CASE WHEN comments > 0 THEN 1 ELSE 0 END)
         FROM page_insights
         WHERE recorded_at >= :cutoff
           AND (:platform IS NULL OR platform = :platform)
     """), {"cutoff": cutoff, "platform": platform}).fetchone()
 
+    # NB: the competitor_reels scraper currently does not capture `views`
+    # (always 0) or `page_url` (always empty). likes/comments/shares are
+    # the only reliable engagement signals on the market side, so the
+    # benchmark falls back to likes when views are missing.
     mkt = db.execute(text("""
         SELECT AVG(views), AVG(likes), AVG(comments), AVG(shares),
-               COUNT(DISTINCT reel_url), MAX(views)
+               COUNT(DISTINCT reel_url), MAX(views), MAX(likes),
+               COUNT(*),
+               SUM(CASE WHEN views > 0 THEN 1 ELSE 0 END),
+               SUM(CASE WHEN likes > 0 THEN 1 ELSE 0 END),
+               SUM(CASE WHEN comments > 0 THEN 1 ELSE 0 END)
         FROM competitor_reels
         WHERE recorded_at >= :cutoff
     """), {"cutoff": cutoff}).fetchone()
@@ -715,30 +732,70 @@ def get_market_benchmark(
         v = row[idx] if row else None
         return round(v or default, 1)
 
-    our_avg   = _s(our, 0)
-    mkt_avg   = _s(mkt, 0)
-    gap_ratio = round(mkt_avg / max(our_avg, 1), 1)
+    our_views = _s(our, 0)
+    our_likes = _s(our, 1)
+    mkt_views = _s(mkt, 0)
+    mkt_likes = _s(mkt, 1)
+
+    # Coverage gate — only run a gap comparison if BOTH sides have at least
+    # 50% of rows populated for that metric. Otherwise the AVG is dominated
+    # by zeros and the ratio is meaningless (e.g. 88% of our pages have no
+    # likes captured, so AVG(likes)=8.8 vs market 57k would print 6495x).
+    _MIN_COVERAGE = 0.5
+
+    def _cov(row, total_idx, populated_idx):
+        if not row:
+            return 0.0
+        total = int(row[total_idx] or 0)
+        pop = int(row[populated_idx] or 0)
+        return (pop / total) if total > 0 else 0.0
+
+    our_views_cov = _cov(our, 7, 8)
+    our_likes_cov = _cov(our, 7, 9)
+    mkt_views_cov = _cov(mkt, 7, 8)
+    mkt_likes_cov = _cov(mkt, 7, 9)
+
+    if (our_views_cov >= _MIN_COVERAGE and mkt_views_cov >= _MIN_COVERAGE
+            and our_views > 0 and mkt_views > 0):
+        gap_ratio = round(mkt_views / max(our_views, 1), 1)
+        gap_basis = "views"
+    elif (our_likes_cov >= _MIN_COVERAGE and mkt_likes_cov >= _MIN_COVERAGE
+            and our_likes > 0 and mkt_likes > 0):
+        gap_ratio = round(mkt_likes / max(our_likes, 1), 1)
+        gap_basis = "likes"
+    else:
+        gap_ratio = None
+        gap_basis = None
 
     return {
         "status": "success",
         "days": days,
         "our": {
-            "avg_views":    our_avg,
-            "avg_likes":    _s(our, 1),
+            "avg_views":    our_views,
+            "avg_likes":    our_likes,
             "avg_comments": _s(our, 2),
             "avg_shares":   _s(our, 3),
             "post_count":   int(our[4] or 0) if our else 0,
             "max_views":    int(our[5] or 0) if our else 0,
+            "max_likes":    int(our[6] or 0) if our else 0,
         },
         "market": {
-            "avg_views":    mkt_avg,
-            "avg_likes":    _s(mkt, 1),
+            "avg_views":    mkt_views,
+            "avg_likes":    mkt_likes,
             "avg_comments": _s(mkt, 2),
             "avg_shares":   _s(mkt, 3),
             "reel_count":   int(mkt[4] or 0) if mkt else 0,
             "max_views":    int(mkt[5] or 0) if mkt else 0,
+            "max_likes":    int(mkt[6] or 0) if mkt else 0,
         },
         "gap_ratio":          gap_ratio,
+        "gap_basis":          gap_basis,  # "views" | "likes" | None
+        "coverage": {
+            "our_views":    round(our_views_cov, 2),
+            "our_likes":    round(our_likes_cov, 2),
+            "market_views": round(mkt_views_cov, 2),
+            "market_likes": round(mkt_likes_cov, 2),
+        },
         "has_competitor_data": (int(mkt[4] or 0) if mkt else 0) > 0,
     }
 
@@ -837,11 +894,13 @@ def get_trending_topics(
     now = int(_time.time())
     cutoff = now - (days * 86400)
 
+    # Weight topics by likes — competitor_reels.views is currently always 0
+    # (scraper limitation), so likes is the only usable engagement signal.
     rows = db.execute(text("""
-        SELECT caption, views FROM competitor_reels
+        SELECT caption, likes FROM competitor_reels
         WHERE recorded_at >= :cutoff
           AND caption IS NOT NULL AND caption != ''
-        ORDER BY views DESC
+        ORDER BY likes DESC
         LIMIT 500
     """), {"cutoff": cutoff}).fetchall()
 
@@ -861,10 +920,12 @@ def get_trending_topics(
     }
 
     freq: dict = {}
-    for (cap, views) in rows:
+    for (cap, likes) in rows:
         if not cap:
             continue
-        weight = max(1, min(int(views or 1) // 1000, 10))  # views boost, capped at 10×
+        # Likes-based weight (competitor_reels.views is always 0 — scraper limitation).
+        # Cap at 10x so one mega-viral post does not dominate the cloud.
+        weight = max(1, min(int(likes or 1) // 5000, 10))
         words = _re.findall(r'[a-zA-ZÀ-ỹ\u00C0-\u024F\u1E00-\u1EFF]{3,}', cap.lower())
         for w in words:
             if w not in STOPWORDS:
