@@ -207,6 +207,105 @@ def test_process_news_to_threads_marks_duplicate_topic_as_skipped(isolated_sessi
         session.close()
 
 
+def test_process_news_to_threads_picks_highest_engagement_score(isolated_session_factory):
+    """PLAN-034: when multiple eligible NEW articles exist, the one with the
+    highest engagement_score must be selected — not the most recent."""
+    now_ts = int(time.time())
+    session = isolated_session_factory()
+    try:
+        session.add(Account(id=1, name="threads-world", platform="threads", is_active=True))
+
+        # Newest but lowest score → should be skipped.
+        newest_low_score = NewsArticle(
+            source_url="https://example.test/newest-low",
+            source_name="Test Source",
+            title="Tin thuong moi nhat",
+            summary="Tin moi nhat nhung diem thap",
+            category="World",
+            topic_key=compute_topic_key("Tin thuong moi nhat"),
+            published_at=now_ts - 60,
+            status="NEW",
+            engagement_score=20.0,
+        )
+        # Older but highest score → should be selected.
+        older_high_score = NewsArticle(
+            source_url="https://example.test/older-high",
+            source_name="Test Source",
+            title="Tin nong dang dang",
+            summary="Tin co diem cao",
+            category="World",
+            topic_key=compute_topic_key("Tin nong dang dang"),
+            published_at=now_ts - 1800,
+            status="NEW",
+            engagement_score=85.0,
+        )
+        # Mid-recency mid-score → tiebreaker check.
+        mid_article = NewsArticle(
+            source_url="https://example.test/mid",
+            source_name="Test Source",
+            title="Tin trung binh",
+            summary="Tin trung binh",
+            category="World",
+            topic_key=compute_topic_key("Tin trung binh"),
+            published_at=now_ts - 600,
+            status="NEW",
+            engagement_score=50.0,
+        )
+        session.add_all([newest_low_score, older_high_score, mid_article])
+        session.commit()
+
+        service = threads_news_module.ThreadsNewsService()
+        service.process_news_to_threads()
+
+        session.refresh(older_high_score)
+        session.refresh(newest_low_score)
+        session.refresh(mid_article)
+        jobs = session.query(Job).order_by(Job.id.asc()).all()
+
+        assert len(jobs) == 1
+        assert jobs[0].dedupe_key == f"threads_news_v2_{older_high_score.id}"
+        assert older_high_score.status == "DRAFTED"
+        assert newest_low_score.status == "NEW"
+        assert mid_article.status == "NEW"
+    finally:
+        session.close()
+
+
+def test_scrape_all_populates_engagement_score(monkeypatch, isolated_session_factory):
+    """PLAN-034: NewsScraper.scrape_all should compute engagement_score for each new article."""
+    from app.services.content import news_scraper as news_scraper_module
+
+    monkeypatch.setattr(news_scraper_module, "SessionLocal", isolated_session_factory)
+
+    def fake_fetch(self, url):
+        slug = url.replace("https://", "").replace("/", "-")
+        return [
+            {
+                "title": f"NÓNG: Tin nong {slug}",
+                "link": f"https://example.test/{slug}",
+                "summary": "Tom tat",
+                "pub_date": "Mon, 28 Apr 2099 10:00:00 GMT",
+                "image_url": "",
+            }
+        ]
+
+    monkeypatch.setattr(NewsScraper, "fetch_rss", fake_fetch)
+
+    scraper = NewsScraper()
+    scraper.scrape_all()
+
+    session = isolated_session_factory()
+    try:
+        articles = session.query(NewsArticle).all()
+        assert len(articles) == 9
+        assert all(a.engagement_score is not None for a in articles)
+        assert all(0.0 <= a.engagement_score <= 100.0 for a in articles)
+        # Hot marker present in every title → score should be well above the no-bonus floor.
+        assert all(a.engagement_score >= 15.0 for a in articles)
+    finally:
+        session.close()
+
+
 def test_process_news_to_threads_applies_account_category_map(isolated_session_factory):
     now_ts = int(time.time())
     session = isolated_session_factory()
