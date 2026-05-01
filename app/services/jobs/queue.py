@@ -67,7 +67,8 @@ class QueueService:
                       WHERE j2.account_id = j.account_id
                         AND j2.status = 'RUNNING'
                   )
-                ORDER BY j.schedule_ts ASC
+                -- Fair-share: account lâu chưa post nhất lên trước, tránh 1 account dồn nhiều job chiếm hết queue.
+                ORDER BY COALESCE(a.last_post_ts, 0) ASC, j.schedule_ts ASC
                 LIMIT 1
             )
             RETURNING *;

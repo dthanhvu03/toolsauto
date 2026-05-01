@@ -2,6 +2,23 @@
 
 ## Recent Execution
 
+- **[2026-05-02] PLAN-035 / TASK-035 — Fair-share job claim ordering (DONE local, VPS deploy pending) ✅**
+  - **Triệu chứng anh Vu báo**: "threads chiếm hết các jobs". Khi 1 account có nhiều PENDING jobs (vd Threads news scraper batch tạo nhiều article cùng schedule_ts ≈ now), worker claim FIFO theo `schedule_ts ASC` → account A drain hết queue của nó trước khi tới B.
+  - **Root cause** ([app/services/jobs/queue.py:70](app/services/jobs/queue.py#L70)): `ORDER BY j.schedule_ts ASC` thuần FIFO, không xét fairness giữa các account.
+  - **Fix**: 1 dòng — đổi thành `ORDER BY COALESCE(a.last_post_ts, 0) ASC, j.schedule_ts ASC`. Account chưa post (NULL→0) hoặc lâu chưa post nhất lên trước; tie-break bằng schedule_ts. Account đang trong cooldown vẫn bị WHERE filter trước.
+  - **Verify** (5/5 AC PASS):
+    1. `py_compile app/services/jobs/queue.py` → PY_COMPILE_OK.
+    2. `from app.main import app` → APP_IMPORT_OK 207.
+    3. **Live DB simulation**: 2 account giả (A có 3 jobs schedule_ts=now-400/-300/-200, B có 1 job schedule_ts=now-100, last_post_ts cả 2 = NULL). Claim 4 lần liên tiếp (mark DONE + update `last_post_ts=now()` sau mỗi claim). Thứ tự = `[A1, B1, A2, A3]` — đúng kỳ vọng. Trước fix: FIFO sẽ là `[A1, A2, A3, B1]` (B đợi A drain hết). Sau fix: B được xen vào claim #2 ngay sau khi A post job đầu tiên.
+    4. `pytest tests/test_threads_world_news.py tests/test_article_scorer.py -q` → 24/24 PASS in 1.28s, không regression.
+    5. `git diff --stat` chỉ list `app/services/jobs/queue.py` (3 lines: 1 ORDER BY + 1 comment). Đúng minimal-diff rule.
+  - **Files** (1): [app/services/jobs/queue.py](app/services/jobs/queue.py).
+  - **Pending VPS**:
+    1. Pull develop → `cd /root/toolsauto && git pull origin develop`.
+    2. `pm2 restart Threads_Publisher Publisher AI_Generator` (mọi worker dùng QueueService — restart vì Python module cache, KHÔNG reload).
+    3. Theo dõi 1-2 chu kỳ scrape Threads + dashboard PENDING list: confirm queue claim xen kẽ giữa các account thay vì 1 account dồn dập.
+  - **Archived**: PLAN-035 → `agents/plans/archive/`; TASK-035 → `agents/tasks/archive/`.
+
 - **[2026-05-01] Competitive Intelligence — Phase 2: refactor UI/UX theo data thật (likes-first, coverage gate)**
   - Tiếp theo round fix schema/contract (entry dưới): em đọc lại schema thật của `competitor_reels` và `page_insights`, phát hiện không metric nào populate đầy đủ trên CẢ 2 phía → so sánh views-vs-views không khả thi, so sánh likes-vs-likes cũng misleading.
   - **Data quality (last 30d)**:
@@ -222,11 +239,13 @@
 
 ## Next Action
 
-0. **Threads dup-publish fix [2026-05-01]**: anh Vu commit + push develop → VPS pull → `pm2 restart Threads_Publisher` → bulk reset FAILED jobs có lỗi `post_url could not be captured` → theo dõi 1-2 chu kỳ publish, verify không còn dup.
+0. **PLAN-035 fair-share queue [2026-05-02]**: anh Vu pull develop → VPS `pm2 restart Threads_Publisher Publisher AI_Generator` → theo dõi dashboard PENDING list, confirm queue luân phiên account thay vì 1 account dồn dập.
 
-1. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
+1. **Threads dup-publish fix [2026-05-01]**: anh Vu commit + push develop → VPS pull → `pm2 restart Threads_Publisher` → bulk reset FAILED jobs có lỗi `post_url could not be captured` → theo dõi 1-2 chu kỳ publish, verify không còn dup.
+
+2. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
    - Anh Vu approve migration `9f1c2d3e4a5b_add_news_article_topic_key.py` trước khi chạy trên VPS.
    - Pull lên VPS → `alembic upgrade head` → restart `Threads_Publisher` (`pm2 restart`, không reload).
    - Set `THREADS_ACCOUNT_CATEGORY_MAP` JSON cho account World qua RuntimeSetting.
    - Chạy 1 chu kỳ scrape + publish thật, verify `post_url` đúng handle World account → chốt criterion 5 + Anti Sign-off.
-2. Revisit older `PLAN-031` text-only proof gap only if acceptance criterion is still required.
+3. Revisit older `PLAN-031` text-only proof gap only if acceptance criterion is still required.
