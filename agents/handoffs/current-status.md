@@ -2,6 +2,20 @@
 
 ## Recent Execution
 
+- **[2026-05-01] UX fix — PENDING jobs hiển thị ETA tuyệt đối (đã tính cooldown) thay vì ô trống**
+  - **Bug**: Anh Vu chụp screenshot dashboard PENDING jobs Threads chỉ thấy "Cooldown: 8m16s" mà không có thời điểm đăng cụ thể.
+  - **Root cause**: 2 vấn đề tách biệt:
+    1. `app/services/content/threads_news.py:307` tạo Job không set `schedule_ts` → cột Schedule render `None | format_time` = `"-"`.
+    2. `app/templates/fragments/job_row.html:248-264` chỉ tính cooldown relative (`remaining = cooldown_seconds - elapsed`), không suy ra ETA tuyệt đối, cũng không xét `schedule_ts` riêng.
+  - **Fix**:
+    - `threads_news.py`: thêm `schedule_ts=now_ts` vào Job constructor — job eligible ngay khi tạo, cooldown mới là gate cuối.
+    - `job_row.html` PENDING block: tính `eta = max(schedule_ts, account.last_post_ts + cooldown_seconds)` và hiển thị 2 dòng — countdown "Còn 8m19s" (orange) hoặc "Sẵn sàng" (emerald), kèm ETA tuyệt đối format `HH:MM:SS DD/MM/YYYY` (mono).
+  - **Verify**:
+    - `py_compile threads_news.py` PASS; `from app.main import app` → `APP_IMPORT_OK 207`.
+    - `pytest tests/test_threads_world_news.py -q` → `14 passed in 1.79s`.
+    - Jinja smoke 2 case: cooldown active → "Còn 8m19s" + ETA; ready → "Sẵn sàng" + ETA.
+  - **Pending VPS**: pull develop → `pm2 restart Threads_Publisher` (mới chạy threads_news code mới) + restart web server (nếu PM2 process riêng) để render template mới. Job PENDING cũ trong DB vẫn `schedule_ts=NULL` → ETA chỉ hiện cooldown component cho tới khi tạo job mới.
+
 - **[2026-05-01] PLAN-034 / TASK-034 — Threads article curation scoring (Phase 1) DONE local, VPS deploy pending ✅**
   - **Anh Vu duyệt PLAN** lúc anh quay lại; Claude Code execute autonomous.
   - **7 bước hoàn tất**:
