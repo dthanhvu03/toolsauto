@@ -2,6 +2,13 @@
 
 ## Recent Execution
 
+- **[2026-05-01] PLAN-034 / TASK-034 — Threads article curation scoring (Phase 1) opened, chờ Anti duyệt**
+  - **Goal**: Nâng chất lượng bài Threads bằng layer "đăng tin gì" — chọn article theo `engagement_score` (recency 40% + source weight 20% + hot marker 15% + topic competition 25%) thay cho `published_at desc`. Phase 2 (engagement feedback loop, voice persona, Google Trends) plan riêng sau.
+  - **Scope**: thêm column `NewsArticle.engagement_score` + migration; `app/services/content/article_scorer.py` (pure function); wire vào `news_scraper.py` + đổi order_by trong `threads_news.py`; ≥9 unit test + 1 integration test selection. RuntimeSetting `THREADS_SOURCE_WEIGHTS` JSON (default `{}` → neutral).
+  - **Files**: [agents/plans/active/PLAN-034-threads-article-curation-scoring.md](agents/plans/active/PLAN-034-threads-article-curation-scoring.md), [agents/tasks/active/TASK-034-threads-article-curation-scoring.md](agents/tasks/active/TASK-034-threads-article-curation-scoring.md).
+  - **Anh Vu yêu cầu**: Claude Code tự execute + tự test sau khi Anti duyệt PLAN (override role boundary 1 lần cho task này).
+  - **Status**: Pending Anti Approval. Khi anh Vu quay lại + duyệt scope → Claude Code thực thi 7 bước theo PLAN.
+
 - **[2026-05-01] 🐛 Fix Threads duplicate-publish bug (3-4 lần) — code DONE local, VPS deploy pending**
   - **Root cause**: Sau click Post thành công (post LIVE trên Threads), nếu adapter không capture được `post_url` → trả `ok=False, is_fatal=False` → worker `mark_failed_or_retry` → status PENDING + backoff → re-claim → **publish lại** trên Threads. `max_tries=3` → đăng tối đa 3 lần. Sau PLAN-032 (`_capture_post_reference` strict trả `(None,None)` khi không match own-handle) bug càng nặng vì mọi capture-miss đều thành retry.
   - **Fix A (root)** — convert capture-fail thành success-without-URL:
