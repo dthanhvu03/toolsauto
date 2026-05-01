@@ -543,8 +543,8 @@
                         Top Competitor Reels
                     </h3>
                     <div id="compSortBtns" class="flex gap-1">
-                        <button data-sort="views"    onclick="setCompSort(this)" class="comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600">Views</button>
-                        <button data-sort="likes"    onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Likes</button>
+                        <button data-sort="likes"    onclick="setCompSort(this)" class="comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600">Likes</button>
+                        <button data-sort="comments" onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Comments</button>
                         <button data-sort="date"     onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Date</button>
                     </div>
                 </div>
@@ -554,9 +554,9 @@
                         <thead>
                             <tr class="border-b border-gray-100">
                                 <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Caption</th>
-                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3 hidden md:table-cell">Page</th>
-                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Views</th>
-                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 hidden sm:table-cell">Likes</th>
+                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3 hidden md:table-cell">Date</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Likes</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 hidden sm:table-cell">Comments</th>
                             </tr>
                         </thead>
                         <tbody id="compTableBody">
@@ -1318,7 +1318,7 @@
     // ── Competitive Intelligence ─────────────────────────────────────────────
     let _compPage = 1;
     let _compTotalPages = 1;
-    let _compSort = 'views';
+    let _compSort = 'likes';
 
     function setCompSort(btn) {
         document.querySelectorAll('#compSortBtns .comp-sort').forEach(b => {
@@ -1364,30 +1364,44 @@
 
             document.getElementById('benchNoData').classList.add('hidden');
 
+            // gap_basis = "views" | "likes" | null. null means neither side has
+            // a comparable metric (e.g. competitor scraper drops views, our
+            // pages have no likes data). Show "N/A" instead of a misleading 0×.
             const gap = json.gap_ratio;
-            gapEl.innerHTML = `${gap.toFixed(1)}<span class="text-2xl">×</span>`;
-            ['text-amber-600','text-emerald-600','text-red-600'].forEach(c => gapEl.classList.remove(c));
-            if (gap >= 2) {
-                gapEl.classList.add('text-red-600');
-                document.getElementById('benchGapLabel').textContent = `Thị trường mạnh hơn ${gap.toFixed(1)}× — cơ hội tăng trưởng lớn`;
-            } else if (gap >= 1.2) {
-                gapEl.classList.add('text-amber-600');
-                document.getElementById('benchGapLabel').textContent = `Bạn đang theo sau ${gap.toFixed(1)}× — cần đẩy mạnh content`;
-            } else if (gap > 0.8) {
-                gapEl.classList.add('text-emerald-600');
-                document.getElementById('benchGapLabel').textContent = `Bạn ngang thị trường — duy trì đà`;
+            const basis = json.gap_basis;
+            const basisLabel = basis === 'likes' ? ' (theo likes)' : '';
+            ['text-amber-600','text-emerald-600','text-red-600','text-slate-400'].forEach(c => gapEl.classList.remove(c));
+            if (gap === null || gap === undefined) {
+                gapEl.innerHTML = 'N/A';
+                gapEl.classList.add('text-slate-400');
+                document.getElementById('benchGapLabel').textContent = 'Chưa đủ metric đối xứng để so sánh';
             } else {
-                gapEl.classList.add('text-emerald-600');
-                document.getElementById('benchGapLabel').textContent = `Bạn đang DẪN ĐẦU thị trường ${(1 / gap).toFixed(1)}×`;
+                gapEl.innerHTML = `${gap.toFixed(1)}<span class="text-2xl">×</span>`;
+                if (gap >= 2) {
+                    gapEl.classList.add('text-red-600');
+                    document.getElementById('benchGapLabel').textContent = `Thị trường mạnh hơn ${gap.toFixed(1)}×${basisLabel} — cơ hội tăng trưởng lớn`;
+                } else if (gap >= 1.2) {
+                    gapEl.classList.add('text-amber-600');
+                    document.getElementById('benchGapLabel').textContent = `Bạn đang theo sau ${gap.toFixed(1)}×${basisLabel} — cần đẩy mạnh content`;
+                } else if (gap > 0.8) {
+                    gapEl.classList.add('text-emerald-600');
+                    document.getElementById('benchGapLabel').textContent = `Bạn ngang thị trường${basisLabel} — duy trì đà`;
+                } else {
+                    gapEl.classList.add('text-emerald-600');
+                    document.getElementById('benchGapLabel').textContent = `Bạn đang DẪN ĐẦU thị trường ${(1 / gap).toFixed(1)}×${basisLabel}`;
+                }
             }
 
-            document.getElementById('ourAvgViews').textContent  = formatK(our.avg_views);
-            document.getElementById('ourAvgLikes').textContent  = formatK(our.avg_likes);
-            document.getElementById('ourMaxViews').textContent  = formatK(our.max_views);
+            // Show "—" instead of "0" for metrics the scraper does not capture
+            // (avoids the misleading "Avg Views: 0" on the market column).
+            const fmt = v => (v && v > 0) ? formatK(v) : '—';
+            document.getElementById('ourAvgViews').textContent  = fmt(our.avg_views);
+            document.getElementById('ourAvgLikes').textContent  = fmt(our.avg_likes);
+            document.getElementById('ourMaxViews').textContent  = fmt(our.max_views);
             document.getElementById('ourPostCount').textContent = our.post_count;
-            document.getElementById('mktAvgViews').textContent  = formatK(mkt.avg_views);
-            document.getElementById('mktAvgLikes').textContent  = formatK(mkt.avg_likes);
-            document.getElementById('mktMaxViews').textContent  = formatK(mkt.max_views);
+            document.getElementById('mktAvgViews').textContent  = fmt(mkt.avg_views);
+            document.getElementById('mktAvgLikes').textContent  = fmt(mkt.avg_likes);
+            document.getElementById('mktMaxViews').textContent  = mkt.max_likes > 0 ? formatK(mkt.max_likes) : fmt(mkt.max_views);
             document.getElementById('mktReelCount').textContent = mkt.reel_count;
         } catch (e) {
             console.error('Benchmark load error:', e);
@@ -1459,11 +1473,11 @@
             return;
         }
         tbody.innerHTML = data.map(r => {
-            const cap      = r.caption || (r.page_name || 'Competitor') + ' Reel';
+            const cap      = r.caption || 'Competitor reel';
             const capShort = cap.length > 55 ? cap.slice(0, 55) + '…' : cap;
-            const viewsCls = r.views >= 100000
+            const likesCls = r.likes >= 100000
                 ? 'text-orange-600 font-black'
-                : r.views >= 10000
+                : r.likes >= 10000
                     ? 'text-amber-600 font-bold'
                     : 'text-gray-700 font-semibold';
             return `<tr class="border-b border-gray-50 hover:bg-amber-50/40 transition-colors cursor-pointer group"
@@ -1472,10 +1486,10 @@
                     <div class="text-[12px] font-semibold text-gray-800 group-hover:text-amber-700 transition-colors truncate" title="${cap.replace(/"/g,'&quot;')}">${capShort}</div>
                 </td>
                 <td class="py-2.5 pr-3 hidden md:table-cell">
-                    <span class="text-[11px] text-slate-500 truncate max-w-[90px] block">${r.page_name || '—'}</span>
+                    <span class="text-[11px] text-slate-500 truncate max-w-[90px] block">${r.published_date || '—'}</span>
                 </td>
-                <td class="py-2.5 pr-3 text-right text-[13px] ${viewsCls}">${r.views > 0 ? formatK(r.views) : '<span class="text-slate-300">—</span>'}</td>
-                <td class="py-2.5 text-right text-[12px] text-rose-500 font-semibold hidden sm:table-cell">${r.likes > 0 ? formatK(r.likes) : '<span class="text-slate-300">—</span>'}</td>
+                <td class="py-2.5 pr-3 text-right text-[13px] ${likesCls}">${r.likes > 0 ? formatK(r.likes) : '<span class="text-slate-300">—</span>'}</td>
+                <td class="py-2.5 text-right text-[12px] text-indigo-500 font-semibold hidden sm:table-cell">${r.comments > 0 ? formatK(r.comments) : '<span class="text-slate-300">—</span>'}</td>
             </tr>`;
         }).join('');
     }
