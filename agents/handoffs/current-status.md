@@ -2,6 +2,37 @@
 
 ## Recent Execution
 
+- **[2026-05-01] 🐛 Fix Threads duplicate-publish bug (3-4 lần) — code DONE local, VPS deploy pending**
+  - **Root cause**: Sau click Post thành công (post LIVE trên Threads), nếu adapter không capture được `post_url` → trả `ok=False, is_fatal=False` → worker `mark_failed_or_retry` → status PENDING + backoff → re-claim → **publish lại** trên Threads. `max_tries=3` → đăng tối đa 3 lần. Sau PLAN-032 (`_capture_post_reference` strict trả `(None,None)` khi không match own-handle) bug càng nặng vì mọi capture-miss đều thành retry.
+  - **Fix A (root)** — convert capture-fail thành success-without-URL:
+    - `app/adapters/threads/adapter.py:825-829` đổi `ok=False, is_fatal=False` → `ok=True, details={"post_url": None}`. Job mark DONE với `post_url=NULL` thay vì retry → publish lại.
+    - `workers/threads_publisher.py:204-207` bỏ block ép `ok=False` khi thiếu `post_url`, chỉ log warning.
+  - **Fix B (idempotency guard)** — pre-publish check trên retry:
+    - Helper mới `_caption_signature(caption)`: lấy 60 ký tự đầu trước footer `(Nguồn: ...)`.
+    - Helper mới `_check_already_published(caption)`: navigate own profile, scan 5 post link đầu, match signature trong `<article>` text.
+    - `publish()` đầu hàm: nếu `job.tries > 0` và `_own_handle` available → probe profile; nếu thấy bài đã đăng → trả `ok=True, post_url=<existing>`, không click Post lần 2.
+  - **Verify local**:
+    - `venv/bin/python -m py_compile app/adapters/threads/adapter.py workers/threads_publisher.py` → `PY_COMPILE_OK`.
+    - `from app.main import app` → `APP_IMPORT_OK 207`.
+    - Helper smoke: `_caption_signature("NÓNG: Bộ Y tế ... (Nguồn: VnExpress) ...")` → `'NÓNG: Bộ Y tế cảnh báo dịch tay chân miệng\\n\\nBài viết đầy đủ'` (60 ký tự, không dính footer).
+    - `git diff --stat`: `adapter.py +79/-3`, `threads_publisher.py +5/-3` → 2 file, đúng minimal-diff rule.
+  - **Pending**:
+    1. Anh Vu commit + push develop (suggested message: `fix(threads): prevent duplicate publish on capture-miss + add retry idempotency guard`).
+    2. VPS pull + `pm2 restart Threads_Publisher` (restart, không reload — Python module cache).
+    3. Bulk reset stuck jobs Threads bị duplicate trên VPS nếu còn:
+       ```sql
+       UPDATE jobs SET status='DONE', last_error='Marked DONE manually after dup-publish fix [2026-05-01]'
+       WHERE platform='threads' AND status='FAILED'
+         AND last_error LIKE '%post_url could not be captured%';
+       ```
+    4. Theo dõi 1-2 chu kỳ publish kế tiếp: confirm không còn duplicate; nếu `post_url=NULL` (capture trượt) thì đó là expected, post vẫn live trên Threads, không retry.
+
+- **[2026-05-01] PLAN-032 / TASK-032 — VPS verified DONE, archived ✅**
+  - Anh Vu confirm đã pull adapter diff lên VPS, `pm2 restart Threads_Publisher`, chạy 1 controlled publish account `facebook_2` (Nguyen Ngoc Vi) → `post_url` / `external_post_id` đúng own-handle. Bug bắt nhầm URL viral feed (job 613 cũ với `@campuchino.iu9x`) đã được fix trên production.
+  - **Anti Sign-off**: APPROVED — 3/3 AC PASS. Acceptance criterion 1 và 3 chốt bằng VPS attestation từ anh Vu [2026-05-01].
+  - **Archived**: PLAN-032 → `agents/plans/archive/`; TASK-032 → `agents/tasks/archive/`.
+  - **System impact**: Threads pipeline trên VPS giờ vừa publish thành công (P029+P030+P031) vừa lưu `post_url` đúng chủ thể (P032). End-to-end production-ready.
+
 - **[2026-04-29] Doc cleanup — TASK-015 → active/, TASK-017 → archive/, prompt rewrite committed**
   - **TASK-015** (`reverse-engineer-business-suite`) moved to `agents/tasks/active/` to match PLAN-015 location.
   - **TASK-017** (`threads-news-automation`) closed and moved to `agents/tasks/archive/` — its remaining "end-to-end VPS production test" item was delivered by PLAN-029/030/031 trilogy (job 613 + job 790 proofs).
@@ -105,14 +136,15 @@
 - **Git branch**: `develop`
 - **Threads pipeline**: News scrape -> AI gen -> `PENDING` Threads job -> `Threads_Publisher` -> Playwright publish -> DB update (`post_url`, `external_post_id`)
 - **Latest local Threads publish proof**: Job `790` published successfully with `post_url=https://www.threads.net/@senhora_consumista/post/DXp-D0hjvPF`
-- **Current Threads priority**: `PLAN-032` is active because VPS job `613` showed `post_url` ownership can still be wrong even when the publish itself succeeds.
+- **Current Threads priority**: PLAN-032 closed [2026-05-01]. Còn lại PLAN-033 Phase 1 chờ VPS migration approve + live publish criterion 5.
 - **Threads pipeline status**: ✅✅ End-to-end working **trên VPS production** (commit `e96a51d` merge P031). Live proof job 613 (account `Nguyen Ngoc Vi`, profile `facebook_2`) post thành công: `https://www.threads.net/@campuchino.iu9x/post/DXpDgbYj12x`, status DONE, cooldown 48s tới poll tiếp. Trilogy PLAN-029 + P030 + P031 hoàn tất production verification.
 - **AI pipeline baseline**: prior service-layer tests remain at `18/18 PASS`
 
 ## Open Risks
 
-- `PLAN-032` still lacks live VPS proof that a fresh publish for account `facebook_2` stores the correct own-handle `post_url`.
-- Local Threads profiles in this workspace all open `https://www.threads.com/` without a discoverable own handle, so the success path could not be reproduced locally.
+- Threads dup-publish fix [2026-05-01] chưa có VPS proof — chờ pull + `pm2 restart` + 1-2 chu kỳ verify trước khi đóng risk.
+- `_check_already_published` dựa vào `caption_signature` 60 ký tự đầu — nếu 2 article khác nhau có 60 ký tự đầu giống hệt (rất hiếm cho tin world news) sẽ false-positive skip publish; chấp nhận trade-off vì topic_dedup đã chặn ở layer trên.
+- `post_url=NULL` cho job DONE: dashboard / NotifierService phải chấp nhận URL trống. Đã check `notify_job_done(job, post_url=post_url)` cho `post_url=None` — cần monitor 1 chu kỳ thật để confirm không crash.
 
 - `PLAN-031` still lacks independent live proof for the text-only Threads publish branch.
 - VPS/PM2 verification for the PLAN-031 overlay fix has not been repeated in this turn; current proof is local WSL log + DB evidence.
@@ -120,14 +152,11 @@
 
 ## Next Action
 
-0. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
+0. **Threads dup-publish fix [2026-05-01]**: anh Vu commit + push develop → VPS pull → `pm2 restart Threads_Publisher` → bulk reset FAILED jobs có lỗi `post_url could not be captured` → theo dõi 1-2 chu kỳ publish, verify không còn dup.
+
+1. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
    - Anh Vu approve migration `9f1c2d3e4a5b_add_news_article_topic_key.py` trước khi chạy trên VPS.
    - Pull lên VPS → `alembic upgrade head` → restart `Threads_Publisher` (`pm2 restart`, không reload).
    - Set `THREADS_ACCOUNT_CATEGORY_MAP` JSON cho account World qua RuntimeSetting.
    - Chạy 1 chu kỳ scrape + publish thật, verify `post_url` đúng handle World account → chốt criterion 5 + Anti Sign-off.
-1. Pull this `PLAN-032` adapter diff onto VPS and restart `Threads_Publisher` with `pm2 restart` so Python re-imports the updated module.
-2. Run one controlled Threads publish for account `facebook_2`, then verify the new DB row stores the real account handle in `post_url` and `external_post_id`.
-3. If handle discovery still fails on VPS, capture that worker/log evidence too; the new adapter should now return no `post_url` instead of a viral false positive.
-4. Claude Code verify the `PLAN-032` / `TASK-032` artifact updates and the adapter diff before VPS handoff.
-5. After VPS proof is collected, update the `PLAN-032` Anti Sign-off block with the real DB/log evidence.
-6. Revisit the older `PLAN-031` text-only proof gap only if that acceptance criterion is still required after `PLAN-032` closes.
+2. Revisit older `PLAN-031` text-only proof gap only if acceptance criterion is still required.
