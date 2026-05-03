@@ -17,8 +17,8 @@ setup_shared_logger("app")
 logger = setup_shared_logger("threads_auto_reply")
 
 from sqlalchemy.orm import Session
-from app.database.core import SessionLocal
-from app.database.models import Account, ThreadsInteraction
+from app.core.database.core import SessionLocal
+from app.core.database.models import Account, ThreadsInteraction
 from app.services.ai_runtime import pipeline
 
 async def process_account(account: Account, db: Session):

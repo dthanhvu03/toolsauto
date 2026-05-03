@@ -157,7 +157,7 @@ def worker_status() -> None:
     """Print worker row from system_state (heartbeat, job, safe mode)."""
     import time
 
-    from app.database.core import SessionLocal
+    from app.core.database.core import SessionLocal
     from app.services.worker import WorkerService
 
     with SessionLocal() as db:
@@ -194,7 +194,7 @@ def worker_restart(
 @viral_app.command("scan")
 def viral_scan() -> None:
     """TikTok competitor channel scan → new ViralMaterial rows."""
-    from app.database.core import SessionLocal
+    from app.core.database.core import SessionLocal
     from app.services.viral_scan import run_tiktok_competitor_scan
 
     with SessionLocal() as db:
@@ -205,7 +205,7 @@ def viral_scan() -> None:
 @viral_app.command("process")
 def viral_process() -> None:
     """Download / queue viral materials (yt-dlp pipeline)."""
-    from app.database.core import SessionLocal
+    from app.core.database.core import SessionLocal
     from app.services.viral_processor import ViralProcessorService
 
     svc = ViralProcessorService()
@@ -219,7 +219,7 @@ def viral_clean(
     force: bool = typer.Option(False, "--force", "-f", help="Bypass maintenance hourly throttle"),
 ) -> None:
     """Orphan target cleanup + stale NEW virals (same as maintenance helper)."""
-    from app.database.core import SessionLocal
+    from app.core.database.core import SessionLocal
     from workers import maintenance as maint
 
     if force:

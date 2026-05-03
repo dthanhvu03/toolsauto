@@ -1,7 +1,7 @@
 import sys
 import json
-from app.database.core import SessionLocal
-from app.database.models import ViralMaterial, Account, Job
+from app.core.database.core import SessionLocal
+from app.core.database.models import ViralMaterial, Account, Job
 
 db = SessionLocal()
 materials = db.query(ViralMaterial).order_by(ViralMaterial.id.desc()).limit(10).all()

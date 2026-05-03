@@ -164,7 +164,7 @@ def _clear_material_error(mat) -> None:
 
 def _get_download_source_account(db, mat):
     """Pick an active account whose browser profile can provide source cookies."""
-    from app.database.models import Account
+    from app.core.database.models import Account
 
     if mat.platform not in {"instagram", "facebook"}:
         return None
@@ -265,7 +265,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
     Tải video vào content/reup/<platform>/ để phân loại rõ ràng.
     If only_material_id is set, skip fair-queue gathering and process that row only.
     """
-    from app.database.models import ViralMaterial, Job, Account
+    from app.core.database.models import ViralMaterial, Job, Account
 
     if only_material_id is not None:
         mat = db.query(ViralMaterial).filter(ViralMaterial.id == only_material_id).first()
@@ -372,7 +372,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             ):
                 from datetime import datetime, time as time_obj
                 from zoneinfo import ZoneInfo
-                from app.database.models import Job, Account
+                from app.core.database.models import Job, Account
 
                 # Resolve target account/page *without* downloading media
                 target_account = default_account
@@ -708,7 +708,7 @@ class ViralProcessorService:
         _process_viral_materials(db)
 
     def download_and_queue(self, db: Session, material_id: int) -> bool:
-        from app.database.models import ViralMaterial
+        from app.core.database.models import ViralMaterial
 
         mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
         if not mat:

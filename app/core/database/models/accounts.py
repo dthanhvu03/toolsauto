@@ -4,7 +4,7 @@ from sqlalchemy import Boolean, Column, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.config import PROFILES_DIR
-from app.database.models.base import Base, now_ts
+from app.core.database.models.base import Base, now_ts
 
 
 class Account(Base):
@@ -248,7 +248,7 @@ class Account(Base):
 
         # Lazy import to avoid circular dependency between accounts.py and jobs.py.
         from sqlalchemy import desc
-        from app.database.models.jobs import Job
+        from app.core.database.models.jobs import Job
 
         last_job = db.query(Job).filter(
             Job.account_id == self.id,

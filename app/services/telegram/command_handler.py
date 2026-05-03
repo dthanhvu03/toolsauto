@@ -31,7 +31,7 @@ class TelegramCommandHandler:
             self.client.send_message(f"❓ Lệnh /{cmd} không hỗ trợ.")
 
     def _cmd_status(self, args=None):
-        from app.database.core import SessionLocal
+        from app.core.database.core import SessionLocal
         from app.services.worker import WorkerService
         with SessionLocal() as db:
             status = WorkerService.get_status(db)
@@ -39,21 +39,21 @@ class TelegramCommandHandler:
         self.client.send_message(f"{status_icon} Worker status: <b>{status}</b>")
 
     def _cmd_pause(self, args=None):
-        from app.database.core import SessionLocal
+        from app.core.database.core import SessionLocal
         from app.services.worker import WorkerService
         with SessionLocal() as db:
             WorkerService.set_status(db, JobStatus.PAUSED)
         self.client.send_message("🟠 Worker đã <b>tạm dừng</b>!")
 
     def _cmd_resume(self, args=None):
-        from app.database.core import SessionLocal
+        from app.core.database.core import SessionLocal
         from app.services.worker import WorkerService
         with SessionLocal() as db:
             WorkerService.set_status(db, JobStatus.RUNNING)
         self.client.send_message("🟢 Worker đã <b>tiếp tục chạy</b>!")
 
     def _cmd_health(self, args=None):
-        from app.database.core import SessionLocal
+        from app.core.database.core import SessionLocal
         from app.services.health import HealthService
         def _fetch():
             with SessionLocal() as db:
@@ -73,8 +73,8 @@ class TelegramCommandHandler:
         self.client.send_message(msg)
 
     def _cmd_jobs(self, args=None):
-        from app.database.core import SessionLocal
-        from app.database.models import Job
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import Job
         with SessionLocal() as db:
             pending = db.query(Job).filter(Job.status == JobStatus.PENDING).count()
             draft = db.query(Job).filter(Job.status == JobStatus.DRAFT).count()
@@ -85,8 +85,8 @@ class TelegramCommandHandler:
         self.client.send_message(msg)
 
     def _cmd_drafts(self, args=None):
-        from app.database.core import SessionLocal
-        from app.database.models import Job
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import Job
         with SessionLocal() as db:
             drafts = db.query(Job).filter(Job.status == JobStatus.DRAFT).all()
             if not drafts:
@@ -110,7 +110,7 @@ class TelegramCommandHandler:
         if not args or len(args) < 2:
             self.client.send_message("⚠️ Cú pháp: /viral <min_views> <max_videos>")
             return
-        from app.database.core import SessionLocal
+        from app.core.database.core import SessionLocal
         from app.services.worker import WorkerService
         with SessionLocal() as db:
             state = WorkerService.get_or_create_state(db)

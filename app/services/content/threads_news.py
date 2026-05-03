@@ -8,8 +8,8 @@ import time
 import requests
 
 import app.config as config
-from app.database.core import SessionLocal
-from app.database.models import Account, Job, NewsArticle
+from app.core.database.core import SessionLocal
+from app.core.database.models import Account, Job, NewsArticle
 from app.services.ai_runtime import pipeline
 from app.services.content.topic_key import compute_topic_key
 from app.services.content_orchestrator import ContentOrchestrator

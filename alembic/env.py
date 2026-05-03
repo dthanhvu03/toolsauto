@@ -11,8 +11,8 @@ from alembic import context
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.config import DATABASE_URL
-from app.database.core import Base, engine
-import app.database.models  # noqa: F401 — register all models on Base.metadata
+from app.core.database.core import Base, engine
+import app.core.database.models  # noqa: F401 — register all models on Base.metadata
 
 config = context.config
 target_metadata = Base.metadata

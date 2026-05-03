@@ -42,8 +42,8 @@ def _get_canonical_nodes(platform: str, job_type: str, workflow_steps: list[str]
 
 def _update_state_in_db(job_id: int, transform_fn) -> None:
     """Helper to cleanly and safely open a short transaction to modify the current tracer state."""
-    from app.database.core import SessionLocal
-    from app.database.models import SystemState
+    from app.core.database.core import SessionLocal
+    from app.core.database.models import SystemState
     try:
         with SessionLocal() as db:
             state = db.query(SystemState).filter(SystemState.id == 1).first()
@@ -68,8 +68,8 @@ def _update_state_in_db(job_id: int, transform_fn) -> None:
 
 def start_job_trace(job_id: int, platform: str, job_type: str, workflow_steps: list[str]) -> None:
     """Initialize a brand new trace session for a job."""
-    from app.database.core import SessionLocal
-    from app.database.models import SystemState
+    from app.core.database.core import SessionLocal
+    from app.core.database.models import SystemState
     
     node_names = _get_canonical_nodes(platform, job_type, workflow_steps)
     nodes_payload = [{"name": n, "state": "pending"} for n in node_names]
@@ -169,8 +169,8 @@ def finish_job_trace(job_id: int, status: str = "completed", error: str = None) 
 
 def clear_trace() -> None:
     """Completely purges the UI tracer. Call only when worker is truly idle."""
-    from app.database.core import SessionLocal
-    from app.database.models import SystemState
+    from app.core.database.core import SessionLocal
+    from app.core.database.models import SystemState
     try:
         with SessionLocal() as db:
             state = db.query(SystemState).filter(SystemState.id == 1).first()

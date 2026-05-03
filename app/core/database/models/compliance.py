@@ -1,6 +1,6 @@
 from sqlalchemy import Boolean, Column, Integer, String, Text
 
-from app.database.models.base import Base, now_ts
+from app.core.database.models.base import Base, now_ts
 
 
 class KeywordBlacklist(Base):

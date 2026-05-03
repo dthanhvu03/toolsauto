@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.main_templates import templates
 from app.services.threads_service import ThreadsService
 import logging

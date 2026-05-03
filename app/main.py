@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 import logging
 
 # Ensure models are loaded (relationships, mappers)
-from app.database import models  # noqa: F401
+from app.core.database import models  # noqa: F401
 
 # Schema: apply migrations with `python manage.py db upgrade` (Alembic), not at startup.
 

@@ -1,5 +1,5 @@
 import logging
-from app.database.models import Job
+from app.core.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
 from app.constants import Platform, JobType
 from app.services.media_processor import MediaProcessor

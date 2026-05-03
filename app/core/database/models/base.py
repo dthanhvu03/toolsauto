@@ -5,7 +5,7 @@ reach across packages. Keep this file minimal — no domain models here.
 """
 import time
 
-from app.database.core import Base  # noqa: F401  (re-exported)
+from app.core.database.core import Base  # noqa: F401  (re-exported)
 
 
 def now_ts() -> int:

@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
-from app.database.models import Job
+from app.core.database.models import Job
 from app.services.ai_runtime import pipeline
 from app.services.content_orchestrator import ContentOrchestrator
 

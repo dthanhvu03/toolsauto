@@ -17,7 +17,7 @@ setup_shared_logger("app")
 logger = setup_shared_logger(__name__ if __name__ != "__main__" else "maintenance")
 
 from sqlalchemy.orm import Session
-from app.database.core import SessionLocal
+from app.core.database.core import SessionLocal
 from app.services.worker import WorkerService
 from app.services.cleanup import CleanupService
 from app.services.metrics_checker import MetricsChecker
@@ -43,7 +43,7 @@ _last_boost_ts = 0
 
 def _pending_backlog(db: Session) -> int:
     """Count jobs that indicate backlog; used to decide whether to skip heavy maintenance tasks."""
-    from app.database.models import Job
+    from app.core.database.models import Job
     return db.query(Job).filter(
         Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
     ).count()
@@ -81,7 +81,7 @@ def _cleanup_orphaned_virals(db: Session):
     _last_orphan_cleanup_ts = now
     
     try:
-        from app.database.models import Account, ViralMaterial
+        from app.core.database.models import Account, ViralMaterial
         accounts = db.query(Account).filter(Account.is_active == True).all()
         
         active_pages = set()
@@ -355,7 +355,7 @@ def _run_competitor_discovery(db):
     _last_discovery_ts = now
     logger.info("[DISCOVERY] Starting nightly competitor discovery scan...")
 
-    from app.database.models import Account
+    from app.core.database.models import Account
     from app.services.discovery_scraper import DiscoveryScraper
     from app.services.account import get_discovery_keywords
 

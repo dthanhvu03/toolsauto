@@ -1,5 +1,5 @@
 import logging
-from app.database.core import SessionLocal
+from app.core.database.core import SessionLocal
 import workers.maintenance as m
 logging.basicConfig(level=logging.INFO)
 with SessionLocal() as db:

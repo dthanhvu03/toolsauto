@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import logging
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.services.ai_service import AIService
 
 router = APIRouter(prefix="/ai", tags=["ai"])

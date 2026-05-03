@@ -6,7 +6,7 @@ import time
 import psutil
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_
-from app.database.models import SystemState, Job, Account
+from app.core.database.models import SystemState, Job, Account
 from app.constants import AccountStatus, JobStatus
 import app.config as config
 

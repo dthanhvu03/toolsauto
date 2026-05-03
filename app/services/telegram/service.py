@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, Any
 from sqlalchemy.orm import Session
-from app.database.models import Job
+from app.core.database.models import Job
 from app.services.job import JobService
 from app.services.telegram_client import TelegramClient
 from app.constants import JobStatus

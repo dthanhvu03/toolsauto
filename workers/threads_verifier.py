@@ -31,8 +31,8 @@ setup_shared_logger("app")
 logger = setup_shared_logger("threads_verifier")
 
 from sqlalchemy.orm import Session
-from app.database.core import SessionLocal
-from app.database.models import Account, Job
+from app.core.database.core import SessionLocal
+from app.core.database.models import Account, Job
 from app.constants import JobType, JobStatus
 
 # ---------- Configuration ----------

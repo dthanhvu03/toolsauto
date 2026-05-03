@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session
 import time
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.services.account import AccountService
 from app.services.log_query_facade import LogQueryFacade
 from app.services.dashboard_service import DashboardService

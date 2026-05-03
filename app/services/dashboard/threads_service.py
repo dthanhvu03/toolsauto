@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any, Dict, List, Tuple
 from sqlalchemy.orm import Session
-from app.database.models import Account, Job, NewsArticle, RuntimeSetting
+from app.core.database.models import Account, Job, NewsArticle, RuntimeSetting
 from app.constants import JobType, JobStatus
 
 logger = logging.getLogger(__name__)
