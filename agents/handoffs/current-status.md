@@ -251,6 +251,8 @@
 
 ## Open Risks
 
+- **PLAN-036 chưa có VPS proof [2026-05-03]** — code đã verified local + Anti APPROVED post-hoc, develop đã push, chờ anh Vu pull + `pm2 restart` + monitor 1-2 chu kỳ FB jobs 792/793 cho account share.
+- **Process violation Codex bypass Anti sign-off [2026-05-03]** — đã thêm `Gate` rule vào `agents/templates/plan.template.md`. Cần monitor PLAN tiếp theo xem Codex có tôn trọng gate mới không; nếu lặp lại thì cần ADR enforcement.
 - Threads dup-publish fix [2026-05-01] chưa có VPS proof — chờ pull + `pm2 restart` + 1-2 chu kỳ verify trước khi đóng risk.
 - `_check_already_published` dựa vào `caption_signature` 60 ký tự đầu — nếu 2 article khác nhau có 60 ký tự đầu giống hệt (rất hiếm cho tin world news) sẽ false-positive skip publish; chấp nhận trade-off vì topic_dedup đã chặn ở layer trên.
 - `post_url=NULL` cho job DONE: dashboard / NotifierService phải chấp nhận URL trống. Đã check `notify_job_done(job, post_url=post_url)` cho `post_url=None` — cần monitor 1 chu kỳ thật để confirm không crash.
@@ -261,9 +263,18 @@
 
 ## Next Action
 
-0. **PLAN-036 per-platform cooldown [2026-05-03]**: VPS pull develop → `pm2 restart Threads_Publisher Publisher AI_Generator` → monitor account 3 FB jobs (792, 793) and confirm threads DONE no longer gates FB on the same shared account.
+0. **PLAN-036 per-platform cooldown [2026-05-03]** — DEPLOY READY:
+   - **Develop đã push** [Claude Code 2026-05-03]: 3 commit `aee6347` (docs) + `7606113` (queue fix) + `ae99fbf` (PLAN-035 fair-share) lên `origin/develop`.
+   - **Anh Vu chạy trên VPS**:
+     ```
+     cd /root/toolsauto && git pull origin develop
+     pm2 restart Threads_Publisher Publisher AI_Generator
+     pm2 logs --lines 50
+     ```
+   - **Verify post-deploy**: theo dõi account 3 (Hoang Khoa) FB jobs 792/793 — phải chuyển PENDING → RUNNING → DONE độc lập với threads activity. Sau khi anh confirm OK, Claude Code archive PLAN-036 + TASK-036.
+   - **Bundled deploy**: chu kỳ này deploy cả PLAN-035 (fair-share account fairness) lẫn PLAN-036 (per-platform cooldown) — 1 lần `pm2 restart` đủ.
 
-1. **PLAN-035 fair-share queue [2026-05-02]**: anh Vu pull develop → VPS `pm2 restart Threads_Publisher Publisher AI_Generator` → theo dõi dashboard PENDING list, confirm queue luân phiên account thay vì 1 account dồn dập.
+1. ~~**PLAN-035 fair-share queue [2026-05-02]**~~ — gộp vào item #0 (cùng push, cùng restart).
 
 2. **Threads dup-publish fix [2026-05-01]**: anh Vu commit + push develop → VPS pull → `pm2 restart Threads_Publisher` → bulk reset FAILED jobs có lỗi `post_url could not be captured` → theo dõi 1-2 chu kỳ publish, verify không còn dup.
 
