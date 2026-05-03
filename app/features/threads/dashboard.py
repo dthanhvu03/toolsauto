@@ -202,8 +202,8 @@ class ThreadsService:
             db.commit()
     @staticmethod
     def trigger_news_scrape(db: Session):
-        from app.services.news_scraper import NewsScraper
-        from app.services.threads_news import ThreadsNewsService
+        from app.features.threads.service.news_scraper import NewsScraper
+        from app.features.threads.service.threads_news import ThreadsNewsService
         
         try:
             scraper = NewsScraper()
