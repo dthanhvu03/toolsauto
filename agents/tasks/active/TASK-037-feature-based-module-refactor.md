@@ -1,11 +1,12 @@
 # TASK-037 — Refactor sang feature-based architecture
 
-**Status**: Planned (chờ Anti sign-off)
+**Status**: Approved (Anti sign-off 2026-05-03) — Phase 0 DONE, Phase 1 ready for Codex
 **Plan**: [PLAN-037](../../plans/active/PLAN-037-feature-based-module-refactor.md)
+**ADR**: [ADR-007](../../decisions/ADR-007-module-boundary.md)
 **Executor**: Codex (heavy file-move + import update)
 **Verifier**: Claude Code (per-phase smoke + handoff)
 
-> **Gate**: KHÔNG execute trước khi PLAN-037 Status = Approved (Anti sign-off).
+> **Gate**: PLAN-037 Status = Approved (Anti sign-off 2026-05-03). Codex MAY execute Phase 1.
 
 ## Background
 
@@ -15,11 +16,11 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 
 ## Steps (5 phases — mỗi phase 1 PR + Anti review)
 
-### Phase 0 — ADR module boundary
-1. [ ] Anti / Claude Code viết `agents/decisions/ADR-007-module-boundary.md`.
-2. [ ] Chốt danh sách core / features / platform (PLAN-037 đề xuất sơ bộ).
-3. [ ] Định nghĩa import rule: `features/foo/` chỉ được import `core/*`, KHÔNG import `features/bar/`.
-4. [ ] Anti sign-off ADR-007.
+### Phase 0 — ADR module boundary ✅
+1. [x] Anti / Claude Code viết `agents/decisions/ADR-007-module-boundary.md`.
+2. [x] Chốt danh sách core / features / platform — **7 core + 9 features + 3 platform** (3 điều chỉnh từ bản đề xuất sơ bộ: compliance → FB feature, db_admin added, notifier source corrected).
+3. [x] Định nghĩa import rule: `features/foo/` chỉ được import `core/*`, KHÔNG import `features/bar/`.
+4. [x] Anti sign-off ADR-007.
 
 ### Phase 1 — Carve out `app/core/`
 5. [ ] Move `app/database/` → `app/core/database/`. Update import + verify.
