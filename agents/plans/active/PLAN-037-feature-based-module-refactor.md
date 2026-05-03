@@ -281,3 +281,46 @@ All 4 commits inspected — **pure file move + import path update**, zero behavi
 > **Phase 1 APPROVED. Phase 2 (pilot Threads feature) is CLEARED.**
 >
 > Codex or Claude Code may execute TASK-037 steps 10–16.
+
+---
+
+## Phase 2 Execution Notes
+
+**Executed by**: Codex — 2026-05-03
+**Status**: Code/static-smoke done. PM2/VPS runtime proof pending.
+
+### Commits
+
+- `894d18b` — Step A skeleton `app/features/threads/{,service,workers}/__init__.py`.
+- `ab9101e` — Step B adapter moved to `app/features/threads/adapter.py`.
+- `f715fee` — Step C service files moved to `app/features/threads/service/`.
+- `6f71310` — Step D dashboard service moved to `app/features/threads/dashboard.py`.
+- `44f0fba` — Step E router moved to `app/features/threads/router.py` and `app/main.py` import updated.
+- `eea48e3` — Step F worker entries moved to `app/features/threads/workers/`; existing PM2 Threads script paths updated.
+
+### Verification Proof
+
+```text
+$ find app -name '*.py' | xargs venv/bin/python -m py_compile
+PASS (pre-existing app/adapters/facebook/adapter.py SyntaxWarning only)
+
+$ venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"
+ROUTES 207
+
+$ venv/bin/pytest tests/test_threads_world_news.py tests/test_article_scorer.py -q
+24 passed in 1.79s
+
+$ venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co
+77 tests collected, 11 errors
+
+$ venv/bin/python -c "import app.features.threads.workers.publisher, app.features.threads.workers.news_worker, app.features.threads.workers.auto_reply, app.features.threads.workers.verifier; print('THREADS_WORKER_IMPORT_OK')"
+THREADS_WORKER_IMPORT_OK
+```
+
+### Runtime Gap
+
+- PM2 restart was not run in local execution to avoid live worker side effects.
+- `ecosystem.config.js` had existing entries for `Threads_AutoReply`, `Threads_NewsWorker`, and `Threads_Publisher`; all three script paths now point to `app/features/threads/workers/*`.
+- No existing verifier PM2 entry was present in `ecosystem.config.js`; Codex did not add a new process because that would change runtime behavior.
+
+Execution Done. Cần Claude Code verify + handoff.
