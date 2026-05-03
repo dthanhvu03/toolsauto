@@ -2,6 +2,24 @@
 
 ## Recent Execution
 
+- **[2026-05-03] PLAN-037 Phase 2 CODE DONE (local static smoke PASS) — pilot `app/features/threads/` ✅**
+  - **6 move commits on `develop`**:
+    - `894d18b` Step A: skeleton `app/features/threads/{,service,workers}/__init__.py`.
+    - `ab9101e` Step B: `app/adapters/threads/adapter.py` → `app/features/threads/adapter.py`; dispatcher import updated.
+    - `f715fee` Step C: `news_scraper.py`, `threads_news.py`, `topic_key.py`, `article_scorer.py` → `app/features/threads/service/`; direct + package-level imports fixed; `app/services.__init__` aliases updated.
+    - `6f71310` Step D: `app/services/dashboard/threads_service.py` → `app/features/threads/dashboard.py`; `threads_service` alias updated.
+    - `44f0fba` Step E: `app/routers/threads.py` → `app/features/threads/router.py`; `app/main.py` imports router from feature path; route count unchanged.
+    - `eea48e3` Step F: 4 worker entries → `app/features/threads/workers/`; `ecosystem.config.js` updated for existing `Threads_AutoReply`, `Threads_NewsWorker`, `Threads_Publisher` PM2 entries.
+  - **Smoke proof (after final move)**:
+    - `find app -name '*.py' | xargs venv/bin/python -m py_compile` → PASS (only pre-existing Facebook adapter SyntaxWarning).
+    - `venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"` → `ROUTES 207`.
+    - `venv/bin/pytest tests/test_threads_world_news.py tests/test_article_scorer.py -q` → `24 passed in 1.79s`.
+    - `venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co` → `77 tests collected, 11 errors` (baseline unchanged).
+    - Worker import smoke: `THREADS_WORKER_IMPORT_OK`.
+  - **Risk / pending proof**:
+    - `ecosystem.config.js` had no existing verifier PM2 entry, so no verifier script path was added; adding a new PM2 process would change runtime behavior.
+    - PM2 restart and VPS 24h monitor were not run locally to avoid live worker side effects. Need Claude/ops deploy verify before marking TASK-037 steps 15–16 fully done.
+
 - **[2026-05-03] PLAN-037 Phase 1 DONE + Anti APPROVED (Verdict B) Phase 2 CLEARED — carve `app/core/` ✅**
   - **Anh Vu chỉ thị Claude Code execute thay Codex** (Codex hết quota tới 2:13 PM, autonomous mode active).
   - **4 moves độc lập, mỗi move 1 commit, smoke gate per move**:
