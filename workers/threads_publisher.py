@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.dispatcher import Dispatcher
 from app.constants import JobStatus, Platform
-from app.database.core import SessionLocal
+from app.core.database.core import SessionLocal
 from app.services import settings as runtime_settings
 from app.services.account import AccountService
 from app.services.job import JobService
@@ -86,7 +86,7 @@ def process_single_job(db: Session) -> bool:
     """Claim and process one eligible Threads job."""
     global CURRENT_JOB_ID
 
-    from app.database.models import Job
+    from app.core.database.models import Job
     from app.services.settings import apply_runtime_overrides_to_config
 
     apply_runtime_overrides_to_config(db)

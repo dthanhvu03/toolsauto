@@ -12,7 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
 
-from app.database.models.base import Base
+from app.core.database.models.base import Base
 
 
 class IncidentLog(Base):

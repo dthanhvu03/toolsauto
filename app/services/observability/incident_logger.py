@@ -12,8 +12,8 @@ from sqlalchemy import case
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.database.core import SessionLocal
-from app.database.models import IncidentGroup, IncidentLog
+from app.core.database.core import SessionLocal
+from app.core.database.models import IncidentGroup, IncidentLog
 
 
 logger = logging.getLogger(__name__)

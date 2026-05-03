@@ -10,7 +10,7 @@ from playwright.sync_api import BrowserContext, Locator, Page, Playwright
 from app.adapters.common.decorators import playwright_safe_action
 from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.adapters.contracts import AdapterInterface, PublishResult
-from app.database.models import Job
+from app.core.database.models import Job
 
 logger = logging.getLogger(__name__)
 

@@ -7,8 +7,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.database.core import SessionLocal
-from app.database.models import Job, JobEvent, Account
+from app.core.database.core import SessionLocal
+from app.core.database.models import Job, JobEvent, Account
 from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC
 from app.constants import JobStatus, JobType
 from app.utils.logger import setup_shared_logger

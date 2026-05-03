@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, "/home/vu/toolsauto")
-from app.database.core import SessionLocal
-from app.database.models import Job, Account
+from app.core.database.core import SessionLocal
+from app.core.database.models import Job, Account
 
 db = SessionLocal()
 

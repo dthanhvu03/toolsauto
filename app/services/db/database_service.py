@@ -1,6 +1,6 @@
 from sqlalchemy import text, inspect
 from sqlalchemy.orm import Session
-from app.database.core import engine
+from app.core.database.core import engine
 import csv
 import io
 import logging

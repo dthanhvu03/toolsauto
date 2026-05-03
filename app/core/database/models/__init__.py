@@ -2,7 +2,7 @@
 
 Historical layout had a single `app/database/models.py` file. After the
 TASK-022 split, models live in domain submodules. Every previous import path
-of the form `from app.database.models import X` continues to work because
+of the form `from app.core.database.models import X` continues to work because
 each class is re-exported below.
 
 When adding a new model:
@@ -10,23 +10,23 @@ When adding a new model:
 2. Add it to the import block AND `__all__` below.
 """
 
-from app.database.models.base import Base, now_ts
+from app.core.database.models.base import Base, now_ts
 
 # Domain models — order chosen for human readability, not import dependency.
 # SQLAlchemy resolves cross-table relationships via string names, so import
 # order does not matter for ORM correctness.
-from app.database.models.accounts import Account
-from app.database.models.jobs import Job, JobEvent
-from app.database.models.viral import (
+from app.core.database.models.accounts import Account
+from app.core.database.models.jobs import Job, JobEvent
+from app.core.database.models.viral import (
     AffiliateLink,
     CompetitorReel,
     DiscoveredChannel,
     PageInsight,
     ViralMaterial,
 )
-from app.database.models.incidents import IncidentGroup, IncidentLog
-from app.database.models.threads import NewsArticle, ThreadsInteraction
-from app.database.models.settings import (
+from app.core.database.models.incidents import IncidentGroup, IncidentLog
+from app.core.database.models.threads import NewsArticle, ThreadsInteraction
+from app.core.database.models.settings import (
     AuditLog,
     CtaTemplate,
     PlatformConfig,
@@ -36,7 +36,7 @@ from app.database.models.settings import (
     SystemState,
     WorkflowDefinition,
 )
-from app.database.models.compliance import (
+from app.core.database.models.compliance import (
     ComplianceAllowlist,
     ComplianceRegexRule,
     KeywordBlacklist,

@@ -5,7 +5,7 @@ import math
 from typing import Any, List, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
-from app.database.models import Job, Account, DiscoveredChannel, IncidentGroup, ViralMaterial
+from app.core.database.models import Job, Account, DiscoveredChannel, IncidentGroup, ViralMaterial
 from app.services.worker import WorkerService
 from app.constants import JobStatus, ViralStatus
 from app.services import settings as runtime_settings

@@ -5,7 +5,7 @@ CRUD for: platform_configs, workflow_definitions,
 """
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
-from app.database.core import get_db
+from app.core.database.core import get_db
 import logging
 
 from app.services import platform_config_service

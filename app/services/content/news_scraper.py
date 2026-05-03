@@ -8,8 +8,8 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from app.database.core import SessionLocal
-from app.database.models import NewsArticle
+from app.core.database.core import SessionLocal
+from app.core.database.models import NewsArticle
 from app.services.content.article_scorer import compute_score
 from app.services.content.topic_key import compute_topic_key
 from app.services.platform import settings as runtime_settings

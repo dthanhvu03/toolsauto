@@ -7,7 +7,7 @@ import logging
 from zoneinfo import ZoneInfo
 from app.config import TIMEZONE
 
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.services.job import JobService
 
 from app.main_templates import templates

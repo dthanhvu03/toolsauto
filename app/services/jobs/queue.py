@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
-from app.database.models import Job
+from app.core.database.models import Job
 from app.constants import AccountStatus, JobStatus
 from app.utils.logger import setup_shared_logger
 

@@ -11,7 +11,7 @@ from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR, DATA_DIR, FACEBOOK_HOST
 from playwright.sync_api import Playwright, BrowserContext, Page, Locator, TimeoutError
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.adapters.common.decorators import playwright_safe_action
-from app.database.models import Job
+from app.core.database.models import Job
 from app.utils.human_behavior import human_type, human_scroll, pre_post_delay
 import json
 import unicodedata

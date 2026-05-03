@@ -11,10 +11,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import app.services.ai_runtime as ai_runtime
-from app.database.models.accounts import Account
-from app.database.models.jobs import Job
-from app.database.models.settings import RuntimeSetting
-from app.database.models.threads import NewsArticle
+from app.core.database.models.accounts import Account
+from app.core.database.models.jobs import Job
+from app.core.database.models.settings import RuntimeSetting
+from app.core.database.models.threads import NewsArticle
 from app.services.content import threads_news as threads_news_module
 from app.services.content.news_scraper import NewsScraper, RSS_SOURCES
 from app.services.content.topic_key import compute_topic_key

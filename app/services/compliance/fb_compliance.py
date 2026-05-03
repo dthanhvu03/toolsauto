@@ -36,8 +36,8 @@ def _load_compliance_from_db() -> None:
     try:
         from sqlalchemy import select
 
-        from app.database.core import SessionLocal
-        from app.database.models import (
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import (
             ComplianceAllowlist,
             ComplianceRegexRule,
             KeywordBlacklist,
@@ -354,8 +354,8 @@ def log_violation(
     content_type: str = "comment",
     rewritten: Optional[str] = None,
 ) -> None:
-    from app.database.core import SessionLocal
-    from app.database.models import ViolationLog
+    from app.core.database.core import SessionLocal
+    from app.core.database.models import ViolationLog
 
     try:
         with SessionLocal() as db:

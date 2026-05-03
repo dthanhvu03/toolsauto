@@ -11,8 +11,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from app.database.core import get_db
-from app.database import models
+from app.core.database.core import get_db
+from app.core.database import models
 from app.main_templates import templates
 from app import config
 

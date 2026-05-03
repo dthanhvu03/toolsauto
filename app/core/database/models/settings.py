@@ -5,7 +5,7 @@ than domain entities.
 """
 from sqlalchemy import Boolean, Column, Integer, JSON, String, Text
 
-from app.database.models.base import Base, now_ts
+from app.core.database.models.base import Base, now_ts
 
 
 class SystemState(Base):

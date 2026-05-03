@@ -3,7 +3,7 @@ from pathlib import Path
 from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 
-from app.database.models.base import Base, now_ts
+from app.core.database.models.base import Base, now_ts
 
 
 class Job(Base):

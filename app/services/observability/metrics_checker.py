@@ -14,7 +14,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, select
 
-from app.database.models import Job, Account
+from app.core.database.models import Job, Account
 from app.config import TIMEZONE, CONTENT_PROFILES_DIR, FACEBOOK_HOST
 from app.constants import JobStatus
 

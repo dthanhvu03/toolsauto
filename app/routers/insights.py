@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from app.database.core import get_db
+from app.core.database.core import get_db
 
 from app.services import insights_service
 

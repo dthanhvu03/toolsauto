@@ -6,7 +6,7 @@ from typing import Any, Callable
 from sqlalchemy.orm import Session
 
 import app.config as config
-from app.database.models import RuntimeSetting, RuntimeSettingAudit
+from app.core.database.models import RuntimeSetting, RuntimeSettingAudit
 
 
 @dataclass(frozen=True)
@@ -867,7 +867,7 @@ def get(key: str, db: Session = None, default: Any = None) -> Any:
         overrides = get_overrides(session, use_cache=True)
         return overrides.get(key, spec.default_getter())
 
-    from app.database.core import SessionLocal
+    from app.core.database.core import SessionLocal
     if db is not None:
         return _fetch(db)
     else:

@@ -15,8 +15,8 @@ logger = setup_shared_logger("threads_news_worker")
 
 from app.services.news_scraper import NewsScraper
 from app.services.threads_news import ThreadsNewsService
-from app.database.core import SessionLocal
-from app.database.models import RuntimeSetting
+from app.core.database.core import SessionLocal
+from app.core.database.models import RuntimeSetting
 
 def _get_scrape_cycle_seconds():
     """Read THREADS_SCRAPE_CYCLE_MIN from DB, default 30 min."""

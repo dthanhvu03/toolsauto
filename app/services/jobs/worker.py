@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.database.models import SystemState, now_ts
+from app.core.database.models import SystemState, now_ts
 from typing import Optional
 from app.constants import JobStatus
 

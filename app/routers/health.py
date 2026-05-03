@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 import time
 import logging
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.services.health import HealthService
 import app.config as config
 from app.main_templates import templates

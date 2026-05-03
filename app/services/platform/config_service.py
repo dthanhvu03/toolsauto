@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.main_templates import templates
 from app.services.workflow_registry import invalidate
 from app.config import MCP_PROXY_PORT
@@ -164,7 +164,7 @@ def add_platform(payload: dict, db: Session = Depends(get_db)):
 from typing import Any
 from playwright.sync_api import Playwright, BrowserContext, Page, Locator
 from app.adapters.contracts import AdapterInterface, PublishResult
-from app.database.models import Job
+from app.core.database.models import Job
 
 logger = logging.getLogger(__name__)
 
@@ -796,7 +796,7 @@ def preview_switch_api(
 ):
     """Compute diff between two presets for impact preview modal."""
     from app.services.workflow_registry import WorkflowRegistry, PRESET_DESCRIPTIONS
-    from app.database.core import SessionLocal
+    from app.core.database.core import SessionLocal
     from sqlalchemy import text as sa_text
 
     db = SessionLocal()

@@ -123,7 +123,7 @@ class SystemMonitorService:
     def maybe_alert_queue_and_resources(self, db: Session) -> None:
         """Telegram alerts for queue congestion and RAM/Chrome pressure (cooldown)."""
         try:
-            from app.database.models import Job, ViralMaterial
+            from app.core.database.models import Job, ViralMaterial
 
             pending = db.query(Job).filter(Job.status == JobStatus.PENDING).count()
             drafts = db.query(Job).filter(Job.status == JobStatus.DRAFT).count()

@@ -5,8 +5,8 @@ import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.database.core import SessionLocal
-from app.database.models import Account
+from app.core.database.core import SessionLocal
+from app.core.database.models import Account
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

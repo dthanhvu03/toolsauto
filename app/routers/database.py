@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 import logging
 
 from app.main_templates import templates
-from app.database.core import get_db
+from app.core.database.core import get_db
 from sqlalchemy.orm import Session
 
 from app.services.database_service import DatabaseService

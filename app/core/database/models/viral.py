@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 
-from app.database.models.base import Base, now_ts
+from app.core.database.models.base import Base, now_ts
 
 
 class ViralMaterial(Base):
