@@ -2,6 +2,42 @@
 
 ## Recent Execution
 
+- **[2026-05-01] Competitive Intelligence — Phase 2: refactor UI/UX theo data thật (likes-first, coverage gate)**
+  - Tiếp theo round fix schema/contract (entry dưới): em đọc lại schema thật của `competitor_reels` và `page_insights`, phát hiện không metric nào populate đầy đủ trên CẢ 2 phía → so sánh views-vs-views không khả thi, so sánh likes-vs-likes cũng misleading.
+  - **Data quality (last 30d)**:
+    - `competitor_reels` (293 rows): `views` 0/293, `page_url` 0/293 (scraper bỏ qua); `likes` 290/293 ✅, `comments` 268/293 ✅, `shares` 265/293 ✅, `caption` 266/293 ✅.
+    - `page_insights` (419 rows): `views` 419/419 ✅; `likes` 50/419 (12%); `comments` 14/419; `shares` 2/419.
+  - **Refactor backend** (`insights_service.py` +60/-12):
+    - `get_market_benchmark`: SELECT thêm `MAX(likes)`, `COUNT(*)`, `SUM(CASE WHEN col>0 THEN 1...)` cho views/likes/comments → tính coverage% per metric.
+    - **Coverage gate 50%**: chỉ tính `gap_ratio` khi BOTH sides có ≥50% row populate metric đó. Thử views trước, fallback likes; nếu cả 2 fail → `gap_ratio=None`, `gap_basis=None`. Với data hiện tại: views (our 100%, market 0%) FAIL; likes (our 17%, market 99%) FAIL → gap=None, frontend hiện "N/A".
+    - Trả thêm `coverage` dict + `max_likes` cho cả our/market.
+    - `get_trending_topics`: weight đổi từ views (luôn 0) → **likes** (`weight = clamp(likes // 5000, 1, 10)`). ORDER BY likes DESC LIMIT 500.
+  - **Refactor frontend** (`insights.html` +44/-32):
+    - `loadBenchmark`: handle `gap_ratio === null` → render "N/A" slate-400 + label "Chưa đủ metric đối xứng để so sánh"; khi có gap, label kèm "(theo likes)" nếu `gap_basis === "likes"`.
+    - `formatK` fallback "—" thay vì "0" cho metric scraper không capture (avg_views market = 0 → hiện "—" thay vì gây hiểu lầm).
+    - Top reel market panel fallback `max_likes` khi `max_views=0`.
+    - **Top Competitor Reels table**: đổi cột "Page" (rỗng) → "Date" (`scrape_date YYYY-MM-DD`); cột "Views" (luôn 0) → bỏ; thêm cột "Comments". Default sort `likes` thay vì `views`. Nút sort: Likes / Comments / Date (bỏ Views vì vô nghĩa).
+  - **Verify** live DB: gap_ratio=None (correct), trending top 5 = `người (67), xuhuong (53), nhà (47), con (44), nay (42)` (likes-weighted), competitor sort=comments hoạt động.
+  - **Files** (2): `app/services/dashboard/insights_service.py`, `app/templates/pages/insights.html`.
+
+- **[2026-05-01] 🐛 Fix Competitive Intelligence (Insights dashboard) — 3 endpoint crash 500 + 1 contract mismatch**
+  - **Triệu chứng**: anh báo "check Competitive Intelligence trong insight". Inspect: 3 API endpoint trên `/insights/api/...` đều có bug.
+  - **Bug 1** — Trending Topics không bao giờ hiện data:
+    - Frontend `insights.html:1406-1410` đọc `json.data` + `json.reels_analyzed`.
+    - Backend `insights_service.get_trending_topics()` trả `topics` + `total_captions_analyzed`.
+    - → Mismatch tên field, frontend luôn render "Chưa có dữ liệu". Fix: rename keys backend cho khớp frontend (single consumer).
+  - **Bug 2** — 3 endpoint crash 500 vì query column không tồn tại trong `competitor_reels`:
+    - Schema thật chỉ có: `id, reel_url, scrape_date, page_url, views, likes, comments, shares, caption, recorded_at`.
+    - Service queries `WHERE scraped_at >= :cutoff` — không có cột `scraped_at`. Fix: đổi → `recorded_at` (Unix TS).
+    - `get_competitor_top` SELECT `page_name, platform, published_date` — không có cột nào trong các cột trên. Fix: derive `page_name` từ `page_url`, hardcode `platform="facebook"` (competitor_reels là FB-only by design), drop `published_date` (sort "date" giờ dựa `recorded_at`).
+  - **Bug 3** — PostgreSQL strict GROUP BY: `page_url` không nằm trong GROUP BY → fix wrap `MAX(page_url)`.
+  - **Verify** sau fix:
+    - `trending-topics`: 10 topics, top: `xuhuong (36)`, `shopee (27)`, `https (25)`, `người (20)`, `nhà (20)` — 266 reels analyzed.
+    - `market-benchmark`: `has_competitor_data=True`, `market.reel_count=289`, `market.avg_likes=57160.9`, `our.post_count=144`.
+    - `competitor-top` sort=likes: top 3 reels có `likes=3.8M / 1.6M / 1.5M`.
+  - **Bug còn lại — KHÔNG phải insight UI**: 293/293 row `competitor_reels` có `views=0` và `page_url=''` rỗng. Likes/comments/shares lưu đúng, nhưng views + page_url scraper bỏ qua. Hậu quả: Market Gap card hiện `0×` mãi (chia AVG(views) ours / AVG(views) market khi market = 0). Cần điều tra `app/services/scraper/` (suggested-reels GQL parser) — out of scope task UX này, mở task riêng nếu anh muốn.
+  - **Files** (1): `app/services/dashboard/insights_service.py` — 3 SQL fix + key rename + GROUP BY fix.
+
 - **[2026-05-01] UX fix — PENDING jobs hiển thị ETA tuyệt đối (đã tính cooldown) thay vì ô trống**
   - **Bug**: Anh Vu chụp screenshot dashboard PENDING jobs Threads chỉ thấy "Cooldown: 8m16s" mà không có thời điểm đăng cụ thể.
   - **Root cause**: 2 vấn đề tách biệt:
