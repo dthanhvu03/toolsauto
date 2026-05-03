@@ -2,7 +2,7 @@
 
 ## Recent Execution
 
-- **[2026-05-03] PLAN-037 Phase 1 DONE — carve `app/core/` ✅**
+- **[2026-05-03] PLAN-037 Phase 1 DONE + Anti APPROVED (Verdict B) Phase 2 CLEARED — carve `app/core/` ✅**
   - **Anh Vu chỉ thị Claude Code execute thay Codex** (Codex hết quota tới 2:13 PM, autonomous mode active).
   - **4 moves độc lập, mỗi move 1 commit, smoke gate per move**:
     - `ef64c50` Move A: `app/database/` → `app/core/database/`. 92 file, 174+/174-. Bao gồm alembic/env.py + manage.py + workers/* + tests/* (find-based sed cover gitignored).
