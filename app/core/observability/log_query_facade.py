@@ -2,8 +2,8 @@ from typing import Optional, Tuple, List, Dict
 from sqlalchemy.orm import Session
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from app.services.log_query_service import LogQueryService
-from app.services.log_service import LogService
+from app.core.observability.log_query_service import LogQueryService
+from app.core.observability.log_service import LogService
 from app.schemas.log import CanonicalLogEvent
 
 class LogQueryFacade:

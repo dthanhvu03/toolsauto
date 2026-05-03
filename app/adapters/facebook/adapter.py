@@ -21,7 +21,7 @@ from app.adapters.facebook.core.session import FacebookSessionManager
 from app.adapters.facebook.pages.reels import FacebookReelsPage
 
 logger = logging.getLogger(__name__)
-from app.services.runtime_events import emit as rt_emit
+from app.core.observability.runtime_events import emit as rt_emit
 from app.services.job_tracer import update_active_node
 from app.services.notifier_service import NotifierService
 
@@ -304,7 +304,7 @@ class FacebookAdapter(AdapterInterface):
         meta = getattr(self, "_last_selector_meta", None)
         if not meta:
             return
-        from app.services.runtime_events import record_selector_outcome
+        from app.core.observability.runtime_events import record_selector_outcome
         record_selector_outcome(meta[0], meta[1], meta[2],
                                 matched=matched, matched_index=idx,
                                 total_tried=total)

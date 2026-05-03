@@ -24,7 +24,7 @@ from app.adapters.dispatcher import Dispatcher
 from app.services.worker import WorkerService
 from app.services.account import AccountService
 from app.adapters.facebook.adapter import PageMismatchError
-from app.services.system_monitor import SystemMonitorService
+from app.core.observability.system_monitor import SystemMonitorService
 import app.config as config
 from app.services import settings as runtime_settings
 from app.services.notifier_service import NotifierService

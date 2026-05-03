@@ -13,7 +13,7 @@ from typing import ClassVar
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
 import app.config as config
-from app.services.log_normalizer import LogNormalizer
+from app.core.observability.log_normalizer import LogNormalizer
 
 _TS_PREFIX_RE = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})"
