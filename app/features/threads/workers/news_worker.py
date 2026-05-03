@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 # Repo root on sys.path
-_root = Path(__file__).resolve().parent.parent
+_root = Path(__file__).resolve().parents[4]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
@@ -13,8 +13,8 @@ from app.utils.logger import setup_shared_logger
 setup_shared_logger("app")
 logger = setup_shared_logger("threads_news_worker")
 
-from app.services.news_scraper import NewsScraper
-from app.services.threads_news import ThreadsNewsService
+from app.features.threads.service.news_scraper import NewsScraper
+from app.features.threads.service.threads_news import ThreadsNewsService
 from app.core.database.core import SessionLocal
 from app.core.database.models import RuntimeSetting
 
