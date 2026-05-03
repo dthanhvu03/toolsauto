@@ -11,7 +11,7 @@ import app.config as config
 from app.core.database.core import SessionLocal
 from app.core.database.models import Account, Job, NewsArticle
 from app.services.ai_runtime import pipeline
-from app.services.content.topic_key import compute_topic_key
+from app.features.threads.service.topic_key import compute_topic_key
 from app.services.content_orchestrator import ContentOrchestrator
 from app.services.platform import settings as runtime_settings
 
