@@ -2,6 +2,23 @@
 
 ## Recent Execution
 
+- **[2026-05-03] PLAN-037 Phase 1 DONE — carve `app/core/` ✅**
+  - **Anh Vu chỉ thị Claude Code execute thay Codex** (Codex hết quota tới 2:13 PM, autonomous mode active).
+  - **4 moves độc lập, mỗi move 1 commit, smoke gate per move**:
+    - `ef64c50` Move A: `app/database/` → `app/core/database/`. 92 file, 174+/174-. Bao gồm alembic/env.py + manage.py + workers/* + tests/* (find-based sed cover gitignored).
+    - `225f83c` Move B: `app/services/observability/` → `app/core/observability/`. 25 file. Shim mở rộng `_ALIASES` support absolute path + `create_module()` detect prefix.
+    - `cd0f60a` Move C: `app/services/ai/` → `app/core/ai/`. 9 file. 0 direct callsites (tất cả qua shim).
+    - `df7a5d9` Move D: `app/services/jobs/` → `app/core/queue/`. 7 file. 0 direct callsites.
+  - **Smoke gates per move**: py_compile PASS, `from app.main import app` → ROUTES 207, alembic heads → `a8e7f6d5c4b3`, pytest 77 collected / 11 errors (== baseline).
+  - **Pytest baseline điều chỉnh**: ban đầu em đo nhầm "100/5", thực tế post-Move A = 12 errors (do tests/* untracked có 11 broken imports pre-existing trỏ tới `app.core.observability.X`/`workflow_registry`/`gemini_rpa`/`job` không tồn tại). Move B làm test_incident_logger resolve được → 11 errors. C+D giữ nguyên 11.
+  - **Bài học từ pitfall**:
+    - `git mv app/database app/core/database` với target chưa tồn tại tạo nested `app/core/database/database/`. Workaround: dùng plain `mv` rồi `git add -A` để git detect rename.
+    - Bash sed loop `${n}\b` qua wsl.exe có thể có escape issue. Workaround: dùng Python regex script với explicit NAMES list, encoding=utf-8 + try/except UnicodeDecodeError.
+    - Shim `app/services/__init__.py` cần update alias values + `create_module()` cho cross-package import.
+  - **Push develop**: 4 commits đẩy lên `origin/develop`.
+  - **Files**: PLAN-037, TASK-037 (Phase 1 ticked), handoff. ADR-007 không đụng (đã commit Phase 0).
+  - **Next**: Anti review Phase 1 commits → sign-off → Phase 2 (pilot Threads feature).
+
 - **[2026-05-03] PLAN-037 / TASK-037 — Feature-based architecture refactor (APPROVED — Phase 0 DONE, Phase 1 ready)**
   - **Anh Vu yêu cầu**: codebase hiện không phân biệt core / base module / feature → tổ chức lại theo feature-based.
   - **Diagnose hiện trạng**: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker. Mọi feature bị xé ra rải vào 4-5 thư mục layer (vd Threads pipeline đụng 7 file ở 5 thư mục).
@@ -301,11 +318,10 @@
 
 ## Next Action
 
-0. **PLAN-037 feature-based refactor [2026-05-03]** — **APPROVED, Phase 1 ready**:
-   - Anti sign-off DONE. ADR-007 committed. Phase 0 complete.
-   - Codex execute Phase 1: carve `app/core/` (database → queue → observability → ai → settings → notifier → db_admin).
-   - Claude Code verify per-phase + handoff.
-   - Mỗi phase end → PR + Anti review trước khi tiến phase tiếp.
+0. **PLAN-037 Phase 2 — pilot Threads feature**:
+   - Anti review 4 commits Phase 1 (`ef64c50`, `225f83c`, `cd0f60a`, `df7a5d9`) trên `origin/develop` → sign-off.
+   - Codex (hoặc Claude Code) execute Phase 2: tạo `app/features/threads/` skeleton, move adapter + 4 service file (news_scraper, threads_news, topic_key, article_scorer) + dashboard + router + 4 worker entry. Cập nhật `ecosystem.config.js`.
+   - Smoke per-move + VPS deploy + 24h monitor → 1 threads publish thành công.
 
 1. **PLAN-036 per-platform cooldown [2026-05-03]** — DEPLOY READY:
    - **Develop đã push** [Claude Code 2026-05-03]: 3 commit `aee6347` (docs) + `7606113` (queue fix) + `ae99fbf` (PLAN-035 fair-share) lên `origin/develop`.
