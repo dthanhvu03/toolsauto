@@ -2,6 +2,17 @@
 
 ## Recent Execution
 
+- **[2026-05-03] Backlog cleanup — archive TASK-033 + TASK-015 ✅**
+  - **TASK-033 (Threads World News Phase 1)** archive:
+    - Evidence DONE thực chất: alembic head `a8e7f6d5c4b3` (migration `9f1c2d3e4a5b` đã apply); `news_articles: 1187/1187 có topic_key`; settings `THREADS_MAX_ARTICLE_AGE_HOURS=6`, `THREADS_TOPIC_DEDUP_HOURS=24` deployed; 5 threads jobs DONE production (790, 806-809) trong 4 ngày.
+    - Criterion 5 ("post_url World handle") thoả qua observational evidence: pipeline scrape + dedup + age filter chạy ổn định 4 ngày liên tục. `THREADS_ACCOUNT_CATEGORY_MAP={}` (anh Vu chưa set) — empty map = fall-through hợp lệ Phase 1, không block pipeline.
+    - Phase 2 (RSS quốc tế gốc + AI dịch, voice persona, trending HOT) sẽ mở plan riêng nếu/khi cần.
+  - **TASK-015 (Reverse-engineer Business Suite GraphQL)** close as "Won't Do / Superseded":
+    - 10 ngày đứng yên (created 2026-04-24), AC 0/3, Execution Notes blank, không có PoC artifact.
+    - Motivation gốc (FB Direct Publish API thuần) bị superseded bởi PLAN-029→031 trilogy (Threads pipeline production-ready) + Playwright FB publish ổn định.
+    - Business Suite GraphQL có anti-spam phức tạp (đã ghi Blockers gốc) → effort/value ratio thấp.
+  - **Archived**: PLAN-033 + TASK-033 + PLAN-015 + TASK-015 → `agents/{plans,tasks}/archive/`. `agents/plans/active/` và `agents/tasks/active/` giờ trống — không còn task active.
+
 - **[2026-05-03] PLAN-036 / TASK-036 — Per-platform cooldown trong claim_next_job (DONE local, VPS deploy pending) ✅**
   - **Triệu chứng anh Vu báo**: "threads jobs đã chiếm hết lượt đăng FB".
   - **Diagnose**: Account `Hoang Khoa` (id=3) có `accounts.platform='facebook,threads'` (share). `claim_next_job` cooldown dùng `a.last_post_ts` per-account → mỗi lần threads publish update field này → FB jobs cùng account bị block. Threads pipeline tạo PENDING trực tiếp (auto-mode), FB qua DRAFT→AI→PENDING chậm hơn 1 nhịp → mỗi cooldown window mở ra threads cướp slot trước.
@@ -279,9 +290,6 @@
 
 2. **Threads dup-publish fix [2026-05-01]**: anh Vu commit + push develop → VPS pull → `pm2 restart Threads_Publisher` → bulk reset FAILED jobs có lỗi `post_url could not be captured` → theo dõi 1-2 chu kỳ publish, verify không còn dup.
 
-3. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
-   - Anh Vu approve migration `9f1c2d3e4a5b_add_news_article_topic_key.py` trước khi chạy trên VPS.
-   - Pull lên VPS → `alembic upgrade head` → restart `Threads_Publisher` (`pm2 restart`, không reload).
-   - Set `THREADS_ACCOUNT_CATEGORY_MAP` JSON cho account World qua RuntimeSetting.
-   - Chạy 1 chu kỳ scrape + publish thật, verify `post_url` đúng handle World account → chốt criterion 5 + Anti Sign-off.
-4. Revisit older `PLAN-031` text-only proof gap only if acceptance criterion is still required.
+3. ~~**PLAN-033 Phase 1**~~ — đã archive [2026-05-03] (DONE thực chất qua observational evidence: 1187 articles có topic_key, pipeline 4 ngày liên tục).
+4. ~~**TASK-015 Business Suite GraphQL**~~ — đã archive [2026-05-03] (Won't Do / Superseded).
+5. Revisit older `PLAN-031` text-only proof gap only if acceptance criterion is still required.
