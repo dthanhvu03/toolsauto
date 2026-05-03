@@ -12,6 +12,8 @@
 | **Created** | YYYY-MM-DD |
 | **Updated** | YYYY-MM-DD |
 
+> **Gate**: KHÔNG execute trước khi Status = Approved (Anti sign-off). Vi phạm process này sẽ bị reject post-hoc.
+
 ---
 
 ## Goal

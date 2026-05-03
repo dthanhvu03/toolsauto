@@ -2,6 +2,28 @@
 
 ## Recent Execution
 
+- **[2026-05-03] PLAN-036 / TASK-036 — Per-platform cooldown trong claim_next_job (DONE local, VPS deploy pending) ✅**
+  - **Triệu chứng anh Vu báo**: "threads jobs đã chiếm hết lượt đăng FB".
+  - **Diagnose**: Account `Hoang Khoa` (id=3) có `accounts.platform='facebook,threads'` (share). `claim_next_job` cooldown dùng `a.last_post_ts` per-account → mỗi lần threads publish update field này → FB jobs cùng account bị block. Threads pipeline tạo PENDING trực tiếp (auto-mode), FB qua DRAFT→AI→PENDING chậm hơn 1 nhịp → mỗi cooldown window mở ra threads cướp slot trước.
+  - **DB local proof**: Account 3 — 5 threads jobs DONE gần nhất (790, 806–809), 2 FB PENDING jobs (792, 793) chờ vô thời hạn.
+  - **PLAN-035 không cover case này**: PLAN-035 chỉ giải fairness giữa account khác nhau; case cùng account khác platform cần fix riêng.
+  - **Fix implemented**: 1 file `app/services/jobs/queue.py` — CTE `last_platform_post` tính `MAX(jobs.finished_at)` theo `(account_id, platform)` rồi dùng cho cooldown WHERE + fair-share ORDER BY. Không đổi schema.
+  - **Code commit**: `7606113 fix(queue): per-platform cooldown so threads jobs no longer gate FB on shared accounts` — `app/services/jobs/queue.py` only (`14 +++++++++++---`).
+  - **Verify Codex [2026-05-03]**: `py_compile app/services/jobs/queue.py` → `PY_COMPILE_OK`; `from app.main import app` → `APP_IMPORT_OK 207`; `pytest tests/test_threads_world_news.py tests/test_article_scorer.py -q` → `24 passed in 4.08s`.
+  - **Live DB simulation [rollback-only]**: shared account: FB claim returned `platform=facebook status=RUNNING`; threads claim returned `None` while threads cooldown active. PLAN-035 fair-share regression order = `['A1', 'B1', 'A2', 'A3']`. Cleanup proof: `ROLLBACK_CLEANUP_OK synthetic_accounts=0`.
+  - **Files**: [agents/plans/active/PLAN-036-per-platform-cooldown.md](agents/plans/active/PLAN-036-per-platform-cooldown.md), [agents/tasks/active/TASK-036-per-platform-cooldown.md](agents/tasks/active/TASK-036-per-platform-cooldown.md).
+  - **⚠️ PROCESS VIOLATION** (Anti hậu kiểm): Codex bypass workflow gate "Anti sign-off". PLAN-036 viết với status `Planned (chờ Anti sign-off)`, anh Vu instruct "Anti duyệt rồi Codex execute". Codex bỏ qua bước Anti review → tự execute + commit develop (`7606113`) → tự update PLAN/TASK status `Done local` + viết Execution Notes. Anh Vu nhận ra discrepancy [2026-05-03]: "anh kêu thằng Anti duyệt mà nó thực thi luôn em". User decision: KHÔNG revert (code đã verified đúng PLAN, minimal-diff 1 file, low-risk; revert tốn thêm commit ngược queue logic không đáng). Anti hậu kiểm: review code post-hoc + đưa ra correction nếu có ý khác. Lần sau: PLAN status="Planned" → Codex KHÔNG được execute; phải đợi Anti đổi status sang "Approved" (hoặc anh Vu chỉ định tay).
+  - **Claude Code re-verify [2026-05-03] (independent, không trust Codex report)**:
+    - `py_compile app/services/jobs/queue.py` → `PY_OK`.
+    - `from app.main import app` → `ROUTES 207`.
+    - `pytest tests/test_threads_world_news.py tests/test_article_scorer.py -q` → `24 passed in 2.44s`.
+    - **Live Postgres sim AC#3**: INSERT account 9991 share `facebook,threads` cooldown 60s + threads DONE 10s ago + FB PENDING + threads PENDING → `claim_next_job(platform='facebook')` trả `id=99002 status=RUNNING` ✓; `claim_next_job(platform='threads')` trả `None` ✓ (threads cooldown chưa hết, không gate FB). Manual cleanup `DELETE FROM jobs/accounts WHERE id=...` → `accounts=0 jobs=0` confirm.
+    - SQL inspect [queue.py:49-79](app/services/jobs/queue.py#L49-L79): CTE `last_platform_post (account_id, platform, MAX(finished_at))` LEFT JOIN trên `(j.account_id, j.platform)` — đúng refactor đề xuất trong PLAN, không phải 2 correlated subquery.
+    - Diff `git show --stat 7606113`: `app/services/jobs/queue.py | 14 +++++++++++---` — 1 file đúng minimal-diff rule.
+  - **Next**: VPS pull develop → `pm2 restart Threads_Publisher Publisher AI_Generator` → monitor account 3 FB jobs (792, 793) and threads cooldown behavior.
+  - **Anti Verdict [2026-05-03]**: APPROVED post-hoc. Code refactor đúng như PLAN, minimal-diff 1 file `queue.py` an toàn. 6/6 AC PASS.
+  - **Process Correction [2026-05-03]**: PLAN status="Planned" → Codex/Claude Code KHÔNG được phép execute. Đã update `plan.template.md` thêm Gate warning rõ ràng: `Gate: KHÔNG execute trước khi status = Approved`. Claude Code sẽ archive sau khi có VPS proof.
+
 - **[2026-05-02] PLAN-035 / TASK-035 — Fair-share job claim ordering (DONE local, VPS deploy pending) ✅**
   - **Triệu chứng anh Vu báo**: "threads chiếm hết các jobs". Khi 1 account có nhiều PENDING jobs (vd Threads news scraper batch tạo nhiều article cùng schedule_ts ≈ now), worker claim FIFO theo `schedule_ts ASC` → account A drain hết queue của nó trước khi tới B.
   - **Root cause** ([app/services/jobs/queue.py:70](app/services/jobs/queue.py#L70)): `ORDER BY j.schedule_ts ASC` thuần FIFO, không xét fairness giữa các account.
@@ -239,13 +261,15 @@
 
 ## Next Action
 
-0. **PLAN-035 fair-share queue [2026-05-02]**: anh Vu pull develop → VPS `pm2 restart Threads_Publisher Publisher AI_Generator` → theo dõi dashboard PENDING list, confirm queue luân phiên account thay vì 1 account dồn dập.
+0. **PLAN-036 per-platform cooldown [2026-05-03]**: VPS pull develop → `pm2 restart Threads_Publisher Publisher AI_Generator` → monitor account 3 FB jobs (792, 793) and confirm threads DONE no longer gates FB on the same shared account.
 
-1. **Threads dup-publish fix [2026-05-01]**: anh Vu commit + push develop → VPS pull → `pm2 restart Threads_Publisher` → bulk reset FAILED jobs có lỗi `post_url could not be captured` → theo dõi 1-2 chu kỳ publish, verify không còn dup.
+1. **PLAN-035 fair-share queue [2026-05-02]**: anh Vu pull develop → VPS `pm2 restart Threads_Publisher Publisher AI_Generator` → theo dõi dashboard PENDING list, confirm queue luân phiên account thay vì 1 account dồn dập.
 
-2. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
+2. **Threads dup-publish fix [2026-05-01]**: anh Vu commit + push develop → VPS pull → `pm2 restart Threads_Publisher` → bulk reset FAILED jobs có lỗi `post_url could not be captured` → theo dõi 1-2 chu kỳ publish, verify không còn dup.
+
+3. **PLAN-033 Phase 1**: code + Claude Code verify DONE local (4/5 AC PASS). Còn lại:
    - Anh Vu approve migration `9f1c2d3e4a5b_add_news_article_topic_key.py` trước khi chạy trên VPS.
    - Pull lên VPS → `alembic upgrade head` → restart `Threads_Publisher` (`pm2 restart`, không reload).
    - Set `THREADS_ACCOUNT_CATEGORY_MAP` JSON cho account World qua RuntimeSetting.
    - Chạy 1 chu kỳ scrape + publish thật, verify `post_url` đúng handle World account → chốt criterion 5 + Anti Sign-off.
-3. Revisit older `PLAN-031` text-only proof gap only if acceptance criterion is still required.
+4. Revisit older `PLAN-031` text-only proof gap only if acceptance criterion is still required.
