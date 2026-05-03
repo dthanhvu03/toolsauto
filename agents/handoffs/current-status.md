@@ -2,6 +2,27 @@
 
 ## Recent Execution
 
+- **[2026-05-03] PLAN-037 / TASK-037 — Feature-based architecture refactor (Planned, chờ Anti sign-off)**
+  - **Anh Vu yêu cầu**: codebase hiện không phân biệt core / base module / feature → tổ chức lại theo feature-based.
+  - **Diagnose hiện trạng**: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker. Mọi feature bị xé ra rải vào 4-5 thư mục layer (vd Threads pipeline đụng 7 file ở 5 thư mục).
+  - **Approach 5 phase**:
+    - Phase 0: ADR-007 module boundary (chốt danh sách core / feature / platform + import rule).
+    - Phase 1: carve `app/core/` (database, queue, observability, ai).
+    - Phase 2: pilot `app/features/threads/` (clean nhất).
+    - Phase 3: 8 feature còn lại theo thứ tự rủi ro tăng dần (instagram → … → facebook_publisher).
+    - Phase 4: tách `services/content/orchestrator.py` 651 dòng.
+    - Phase 5: lint guard import-linter + cập nhật RULES + CLAUDE.md.
+  - **Estimate**: 10-14 ngày Codex full-time + Anti review per-phase. Chia 2 sprint.
+  - **Files**: [agents/plans/active/PLAN-037-feature-based-module-refactor.md](agents/plans/active/PLAN-037-feature-based-module-refactor.md), [agents/tasks/active/TASK-037-feature-based-module-refactor.md](agents/tasks/active/TASK-037-feature-based-module-refactor.md).
+  - **Gate**: status="Planned" — Codex KHÔNG được execute trước khi Anti sign-off (đã có rule trong template từ PLAN-036 process correction).
+  - **Next**: Anti review PLAN-037, đặc biệt: (1) chốt danh sách module boundary (sơ bộ trong PLAN), (2) duyệt approach 5 phase incremental, (3) viết ADR-007 trước khi Phase 1 bắt đầu.
+
+- **[2026-05-03] Repo cleanup — restore mcp_server.py to root + xoá maintenance/ ✅**
+  - Phát hiện: route `POST /platform-config/mcp-inspector/start` expect `mcp_server.py` ở project root, file lại nằm `maintenance/archive/mcp_server.py` → MCP Inspector button trong dashboard đã broken.
+  - Fix: `git mv maintenance/archive/mcp_server.py mcp_server.py`. Verify: `import mcp_server` → `MCP_SERVER_IMPORT_OK n8n-lite-debug`; `app import` 207 routes.
+  - Xoá `maintenance/` toàn bộ (10 file tracked + 3 PNG untracked, ~348K stale debug scripts + scratch).
+  - Commit `e0bf849`, push develop. `.cursor/mcp.json` (root config) giờ khớp với file thật.
+
 - **[2026-05-03] Backlog cleanup — archive TASK-033 + TASK-015 ✅**
   - **TASK-033 (Threads World News Phase 1)** archive:
     - Evidence DONE thực chất: alembic head `a8e7f6d5c4b3` (migration `9f1c2d3e4a5b` đã apply); `news_articles: 1187/1187 có topic_key`; settings `THREADS_MAX_ARTICLE_AGE_HOURS=6`, `THREADS_TOPIC_DEDUP_HOURS=24` deployed; 5 threads jobs DONE production (790, 806-809) trong 4 ngày.
@@ -275,7 +296,13 @@
 
 ## Next Action
 
-0. **PLAN-036 per-platform cooldown [2026-05-03]** — DEPLOY READY:
+0. **PLAN-037 feature-based refactor [2026-05-03]** — chờ Anti sign-off:
+   - Anti review PLAN-037 + chốt danh sách module boundary (core / features / platform) trong ADR-007.
+   - Duyệt approach 5 phase incremental + estimate 10-14 ngày.
+   - Sau Anti APPROVED → Codex execute Phase 0 (viết ADR-007) → Phase 1 (carve core).
+   - Claude Code verify per-phase + handoff.
+
+1. **PLAN-036 per-platform cooldown [2026-05-03]** — DEPLOY READY:
    - **Develop đã push** [Claude Code 2026-05-03]: 3 commit `aee6347` (docs) + `7606113` (queue fix) + `ae99fbf` (PLAN-035 fair-share) lên `origin/develop`.
    - **Anh Vu chạy trên VPS**:
      ```
