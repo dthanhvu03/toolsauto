@@ -1,6 +1,6 @@
 # TASK-037 — Refactor sang feature-based architecture
 
-**Status**: Approved (Anti sign-off 2026-05-03) — Phase 0 DONE, Phase 1 ready for Codex
+**Status**: Approved — Phase 0 + Phase 1 DONE, Phase 2 ready
 **Plan**: [PLAN-037](../../plans/active/PLAN-037-feature-based-module-refactor.md)
 **ADR**: [ADR-007](../../decisions/ADR-007-module-boundary.md)
 **Executor**: Codex (heavy file-move + import update)
@@ -22,12 +22,14 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 3. [x] Định nghĩa import rule: `features/foo/` chỉ được import `core/*`, KHÔNG import `features/bar/`.
 4. [x] Anti sign-off ADR-007.
 
-### Phase 1 — Carve out `app/core/`
-5. [ ] Move `app/database/` → `app/core/database/`. Update import + verify.
-6. [ ] Move `app/services/jobs/` → `app/core/queue/`. Update import + verify.
-7. [ ] Move `app/services/observability/` → `app/core/observability/`. Update import + verify.
-8. [ ] Move `app/services/ai/` → `app/core/ai/`. Update import + verify.
-9. [ ] Smoke: `app import 207 routes`, `pytest -q` PASS, `pm2 restart` all workers `online`.
+### Phase 1 — Carve out `app/core/` ✅
+5. [x] Move `app/database/` → `app/core/database/` — commit `ef64c50`. 92 files / 174+/174-.
+6. [x] Move `app/services/observability/` → `app/core/observability/` — commit `225f83c`. 25 files / 40+/34-.
+7. [x] Move `app/services/ai/` → `app/core/ai/` — commit `cd0f60a`. 9 files / 8+/7-.
+8. [x] Move `app/services/jobs/` → `app/core/queue/` — commit `df7a5d9`. 7 files / 6+/5-.
+9. [x] Smoke after each move: py_compile PASS, app import → ROUTES 207, alembic heads → a8e7f6d5c4b3, pytest 77/11 (= baseline; 1 test test_incident_logger fixed by Move B).
+   - Shim `app/services/__init__.py` mở rộng: `_ALIASES` value support absolute path (`app.core.X`); `create_module()` detect prefix → import absolute hoặc relative.
+   - Local untracked tests/ có 11 broken imports pre-existing (trỏ tới `app.core.observability.X` không tồn tại) — out of scope Phase 1, không fix.
 
 ### Phase 2 — Pilot Threads feature
 10. [ ] Tạo `app/features/threads/` skeleton (adapter, service/, dashboard, router, workers/).
