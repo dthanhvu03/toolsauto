@@ -12,8 +12,8 @@ Flow:
 3. Periodically checks login state every CHECK_INTERVAL seconds
 4. If logged in → marks as Connected. If timeout → marks as Failed.
 
-Run with: python workers/threads_verifier.py
-Manage with PM2: pm2 start workers/threads_verifier.py --name threads-verifier --interpreter python3
+Run with: python app/features/threads/workers/verifier.py
+Manage with PM2: pm2 start app/features/threads/workers/verifier.py --name threads-verifier --interpreter python3
 """
 import time
 import sys
@@ -21,8 +21,8 @@ import os
 import asyncio
 from pathlib import Path
 
-# Repo root on sys.path so `python workers/threads_verifier.py` works without PYTHONPATH=.
-_root = Path(__file__).resolve().parent.parent
+# Repo root on sys.path so this worker works without PYTHONPATH=.
+_root = Path(__file__).resolve().parents[4]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 

@@ -8,7 +8,7 @@ from playwright.async_api import async_playwright
 import hashlib
 
 # Repo root on sys.path
-_root = Path(__file__).resolve().parent.parent
+_root = Path(__file__).resolve().parents[4]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
