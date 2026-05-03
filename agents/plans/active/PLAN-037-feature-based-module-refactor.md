@@ -1,6 +1,7 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Planned (chờ Anti sign-off)
+**Status**: Approved (Anti sign-off 2026-05-03)
+**ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)
 
@@ -39,7 +40,12 @@ Mỗi feature owns: adapter, service logic, router, worker entry, templates riê
 
 ## Scope
 
-### Đề xuất phân loại sơ bộ (Anti review để chốt)
+### Phân loại chốt (ADR-007 là authoritative — xem chi tiết trong ADR)
+
+> **⚠️ 3 điều chỉnh từ bản đề xuất sơ bộ (Anti review 2026-05-03)**:
+> 1. `compliance/` → KHÔNG vào core. Toàn bộ vào `features/facebook_publisher/compliance/` (FBComplianceChecker = FB-specific, chưa có consumer thứ 2).
+> 2. Thêm `core/db_admin/` ← `services/db/` (ACL, sql_validator, database_service) — cross-feature shared infra.
+> 3. `core/notifier/` source chính xác là `services/telegram/notifier/` (notifiers/ directory thực tế rỗng).
 
 **Core** (không biết feature):
 - `app/core/database/` ← `app/database/`
@@ -203,3 +209,35 @@ venv/bin/lint-imports
 - Multi-tenant feature loading (vd disable `viral_intake` qua config).
 - Module-level test coverage gap.
 - `ecosystem.config.js` → `pm2.config.ts` cho type safety.
+
+---
+
+## Anti Sign-off Gate
+
+**Reviewed by**: Antigravity — 2026-05-03
+
+### Review Summary
+
+1. **Module boundary (ADR-007)**: APPROVED. 7 core + 9 features + 3 platform. 3 adjustments from original proposal applied (compliance → FB feature, db_admin added, notifier source corrected).
+2. **5-phase approach**: APPROVED. Incremental migration with per-phase PR + verify is the right strategy for 30K LOC codebase.
+3. **Estimate 10-14 ngày**: REASONABLE. 2 sprint split (Phase 0-2 / Phase 3-5) is correct cadence.
+4. **ADR-007**: WRITTEN and committed as Phase 0 deliverable.
+5. **Risk mitigations**: Adequate — re-export shim (ADR-005) stays during migration, worker shim 1 sprint, per-phase rollback via git revert.
+
+### Acceptance Criteria Pre-check
+
+| # | Criterion | Pre-approved? |
+|---|---|---|
+| AC1 | ADR-007 committed + Anti sign-off | ✅ Done |
+| AC2 | Per-phase smoke (routes + pytest + pm2) | ✅ Criteria clear |
+| AC3 | pm2 worker online ≥5min | ✅ Criteria clear |
+| AC4 | Live smoke (post-Phase 2 + 3) | ✅ Criteria clear |
+| AC5 | Lint guard (Phase 5) | ✅ Criteria clear |
+| AC6 | Rollback plan (per-phase commit) | ✅ Criteria clear |
+| AC7 | Updated RULES.md + CLAUDE.md | ✅ Criteria clear |
+
+### Verdict
+
+> **APPROVED** — Codex có thể bắt đầu execute Phase 1 (carve `app/core/`). Mỗi phase end phải có PR + Anti review trước khi tiến phase tiếp.
+>
+> **Ordering**: Phase 1 bắt đầu với `database/` → `queue/` → `observability/` → `ai/` → `settings/` → `notifier/` → `db_admin/`. ADR-007 là tài liệu gốc cho module boundary — khi có conflict giữa PLAN và ADR, ADR thắng.
