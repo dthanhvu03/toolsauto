@@ -29,7 +29,7 @@ from app.services.account import AccountService
 from app.services.job import JobService
 from app.services.job_queue import QueueService
 from app.services.notifier_service import NotifierService
-from app.services.system_monitor import SystemMonitorService
+from app.core.observability.system_monitor import SystemMonitorService
 from app.services.worker import WorkerService
 
 

@@ -2,7 +2,7 @@ import math
 import logging
 from typing import Optional, List, Tuple, Dict, Literal
 from app.schemas.log import CanonicalLogEvent
-from app.services.log_normalizer import LogNormalizer
+from app.core.observability.log_normalizer import LogNormalizer
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 

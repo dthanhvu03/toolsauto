@@ -34,16 +34,17 @@ _ALIASES = {
     "notifiers": "telegram.notifier",
     "notifiers.base": "telegram.notifier.base",
     "notifiers.telegram": "telegram.notifier.telegram",
-    "incident_logger": "observability.incident_logger",
-    "log_normalizer": "observability.log_normalizer",
-    "log_query_facade": "observability.log_query_facade",
-    "log_query_service": "observability.log_query_service",
-    "log_service": "observability.log_service",
-    "metrics_checker": "observability.metrics_checker",
-    "system_monitor": "observability.system_monitor",
-    "audit_logger": "observability.audit_logger",
-    "runtime_events": "observability.runtime_events",
-    "health": "observability.health",
+    # PLAN-037 Phase 1 Move B: observability moved to app.core.observability
+    "incident_logger": "app.core.observability.incident_logger",
+    "log_normalizer": "app.core.observability.log_normalizer",
+    "log_query_facade": "app.core.observability.log_query_facade",
+    "log_query_service": "app.core.observability.log_query_service",
+    "log_service": "app.core.observability.log_service",
+    "metrics_checker": "app.core.observability.metrics_checker",
+    "system_monitor": "app.core.observability.system_monitor",
+    "audit_logger": "app.core.observability.audit_logger",
+    "runtime_events": "app.core.observability.runtime_events",
+    "health": "app.core.observability.health",
     "job": "jobs.job",
     "job_queue": "jobs.queue",
     "job_tracer": "jobs.tracer",
@@ -90,7 +91,12 @@ class _ServiceAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 
     def create_module(self, spec):
         old_name = spec.name[len(f"{__name__}."):]
-        target = import_module(f"{__name__}.{_ALIASES[old_name]}")
+        target_path = _ALIASES[old_name]
+        # Absolute path (PLAN-037 moved-to-core) vs relative-to-app.services
+        if target_path.startswith("app."):
+            target = import_module(target_path)
+        else:
+            target = import_module(f"{__name__}.{target_path}")
         sys.modules[spec.name] = target
         if "." not in old_name:
             globals()[old_name] = target

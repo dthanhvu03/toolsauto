@@ -7,7 +7,7 @@ from app.services.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
 
 logger = logging.getLogger(__name__)
-from app.services.runtime_events import emit as rt_emit
+from app.core.observability.runtime_events import emit as rt_emit
 from app.services import job_tracer
 
 from app.adapters.facebook.adapter import FacebookAdapter, PageMismatchError
@@ -86,7 +86,7 @@ class Dispatcher:
     def _log_dispatch_incident(job: Job, exc: BaseException, feature: str | None = None, severity: str = "error"):
         """Best-effort structured incident logging at the dispatcher boundary."""
         try:
-            from app.services.incident_logger import IncidentLogger
+            from app.core.observability.incident_logger import IncidentLogger
 
             account = getattr(job, "account", None)
             IncidentLogger.log_incident(

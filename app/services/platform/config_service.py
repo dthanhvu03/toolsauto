@@ -786,7 +786,7 @@ def runtime_config_api(platform: str = "facebook", job_type: str = "POST"):
 
 
 def selector_health_api():
-    from app.services.runtime_events import get_enriched_selector_health
+    from app.core.observability.runtime_events import get_enriched_selector_health
     return get_enriched_selector_health()
 
 
@@ -910,7 +910,7 @@ def overview_warnings_api(
     from app.services.workflow_registry import (
         WorkflowRegistry, PRESET_DESCRIPTIONS, get_cache_status,
     )
-    from app.services.runtime_events import get_enriched_selector_health
+    from app.core.observability.runtime_events import get_enriched_selector_health
 
     warnings = []
 

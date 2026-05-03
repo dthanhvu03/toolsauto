@@ -185,7 +185,7 @@ def get_selector_health() -> str:
 
     Useful for debugging which selectors are failing on the live DOM.
     """
-    from app.services.runtime_events import get_selector_health as _get_health
+    from app.core.observability.runtime_events import get_selector_health as _get_health
     import time as _time
 
     stats = _get_health()
@@ -347,7 +347,7 @@ def preview_selector_resolution(
         key: Selector key, e.g. "account_menu_button"
     """
     from app.services.workflow_registry import WorkflowRegistry
-    from app.services.runtime_events import get_selector_health
+    from app.core.observability.runtime_events import get_selector_health
 
     # DB selectors
     db_items = WorkflowRegistry.get_selectors(platform, f"{category}:{key}")

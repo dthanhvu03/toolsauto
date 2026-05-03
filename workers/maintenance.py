@@ -20,9 +20,9 @@ from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
 from app.services.worker import WorkerService
 from app.services.cleanup import CleanupService
-from app.services.metrics_checker import MetricsChecker
+from app.core.observability.metrics_checker import MetricsChecker
 from app.services.notifier_service import NotifierService, TelegramNotifier
-from app.services.system_monitor import SystemMonitorService
+from app.core.observability.system_monitor import SystemMonitorService
 from app.services.viral_processor import ViralProcessorService
 import app.config as config
 from app.services import settings as runtime_settings
