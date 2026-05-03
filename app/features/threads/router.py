@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 from app.main_templates import templates
-from app.services.threads_service import ThreadsService
+from app.features.threads.dashboard import ThreadsService
 import logging
 
 router = APIRouter(prefix="/threads", tags=["Threads"])
