@@ -37,7 +37,7 @@ class QueueService:
         #    so we will enforce the hard limit here loosely, and validate rigorously in JobService if needed, 
         #    but the prompt asks for inline validation if possible to avoid locking invalid jobs.)
         
-        # sqlite3 claim with strict isolation lock + Account Mutex
+        # claim with strict isolation lock + Account Mutex
         sql = """
             UPDATE jobs
             SET 
@@ -46,9 +46,17 @@ class QueueService:
                 last_heartbeat_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER),
                 started_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
             WHERE id = (
+                WITH last_platform_post AS (
+                    SELECT account_id, platform, MAX(finished_at) AS last_ts
+                    FROM jobs
+                    WHERE status = 'DONE'
+                    GROUP BY account_id, platform
+                )
                 SELECT j.id
                 FROM jobs j
                 JOIN accounts a ON j.account_id = a.id
+                LEFT JOIN last_platform_post lpp 
+                  ON lpp.account_id = j.account_id AND lpp.platform = j.platform
                 WHERE j.status = 'PENDING'
                   AND (
                       -- POST jobs: use schedule_ts
@@ -60,7 +68,7 @@ class QueueService:
                   AND ( :platform IS NULL OR j.platform = :platform OR j.platform LIKE '%' || :platform || '%' )
                   AND a.is_active = true
                   AND a.login_status = 'ACTIVE'
-                  AND (a.last_post_ts IS NULL OR (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - a.last_post_ts) >= a.cooldown_seconds)
+                  AND (lpp.last_ts IS NULL OR (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - lpp.last_ts) >= a.cooldown_seconds)
                   -- Account-level Mutex: Ensure this account has NO other RUNNING jobs
                   AND NOT EXISTS (
                       SELECT 1 FROM jobs j2
@@ -68,7 +76,7 @@ class QueueService:
                         AND j2.status = 'RUNNING'
                   )
                 -- Fair-share: account lâu chưa post nhất lên trước, tránh 1 account dồn nhiều job chiếm hết queue.
-                ORDER BY COALESCE(a.last_post_ts, 0) ASC, j.schedule_ts ASC
+                ORDER BY COALESCE(lpp.last_ts, 0) ASC, j.schedule_ts ASC
                 LIMIT 1
             )
             RETURNING *;
