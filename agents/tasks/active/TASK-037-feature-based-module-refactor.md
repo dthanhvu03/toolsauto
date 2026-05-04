@@ -41,7 +41,7 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 16. [ ] VPS deploy + 24h monitor → 1 threads publish thành công. Pending controlled deploy/runtime proof.
 
 ### Phase 3 — Carve remaining features (theo thứ tự rủi ro)
-17. [ ] `instagram` (low risk).
+17. [x] `instagram` (low risk) — code commit `2fee8f6`.
 18. [ ] `tiktok` (low risk).
 19. [ ] `affiliates` (medium).
 20. [ ] `system_panel` + `workflow_registry` (medium).
@@ -84,6 +84,70 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 ## Acceptance Trace (Anti per-phase)
 
 Sau mỗi phase commit, Anti chấm theo PLAN-037 §"Acceptance Criteria" (`AC2` smoke, `AC3` pm2 online, `AC4` live publish post-Phase 2 + post-Phase 3, `AC5` lint guard, `AC6` rollback test, `AC7` doc updates).
+
+## Phase 3 Step 17 — Instagram Execution Notes
+
+**Executed by**: Codex — 2026-05-04
+**Status**: Code/static-smoke done. Claude Code / Anti per-feature review pending.
+**Code commit**: `2fee8f6` — `refactor(P037-Phase3): move instagram to app/features/instagram/ (no behavior change)`
+
+### Scope completed
+
+- Moved `app/adapters/instagram/adapter.py` → `app/features/instagram/adapter.py`.
+- Moved `app/adapters/instagram/selectors.py` → `app/features/instagram/selectors.py`.
+- Added empty `app/features/instagram/__init__.py`.
+- Removed `app/adapters/instagram/` after clearing generated `__pycache__`; source path verified gone.
+- Updated in-module selector import to `app.features.instagram.selectors`.
+- Updated allowed collateral A: `app/templates/pages/platform_config.html` `KNOWN_ADAPTERS["instagram"]`.
+- Updated allowed collateral B: Alembic migration `b4c8f0e9d3a1_p037_p3_instagram_adapter_path.py`.
+- Updated allowed collateral C: dispatcher defensive fallback for `Platform.INSTAGRAM`.
+
+### Verification Proof
+
+```text
+$ find app -name '*.py' | xargs venv/bin/python -m py_compile && echo PY_COMPILE_OK
+PY_COMPILE_OK
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+  return self.page.evaluate("""
+
+$ venv/bin/python - <<'PY'
+from app.main import app
+print("ROUTES", len(app.routes))
+PY
+ROUTES 207
+
+$ venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co
+77 tests collected, 11 errors in 74.29s (0:01:14)
+
+$ venv/bin/python - <<'PY'
+from app.features.instagram.adapter import InstagramAdapter
+print("IG_OK")
+PY
+IG_OK
+
+$ venv/bin/alembic upgrade head
+INFO  [alembic.runtime.migration] Running upgrade a8e7f6d5c4b3 -> b4c8f0e9d3a1, P037 Phase 3: update platform_configs.adapter_class for instagram
+
+$ venv/bin/python - <<'PY'
+from app.core.database.core import SessionLocal
+from sqlalchemy import text
+db = SessionLocal()
+r = db.execute(text("SELECT adapter_class FROM platform_configs WHERE platform='instagram'")).scalar()
+assert r == 'app.features.instagram.adapter.InstagramAdapter', r
+print('DB_MIGRATION_OK', r)
+db.close()
+PY
+DB_MIGRATION_OK app.features.instagram.adapter.InstagramAdapter
+
+$ git diff --cached --find-renames --stat
+6 files changed, 36 insertions(+), 2 deletions(-)
+```
+
+### Risk Log
+
+- Local DB has been advanced to Alembic revision `b4c8f0e9d3a1`.
+- PM2/VPS runtime proof was not run for Instagram because this step only moves adapter/config path and does not add a worker.
+- Pytest collection remained at the Phase 2 baseline (`77/11`); the 11 collection errors are pre-existing and not in new Instagram files.
 
 ## Risks (xem chi tiết PLAN-037 §"Risks")
 

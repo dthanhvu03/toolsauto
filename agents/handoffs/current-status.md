@@ -2,6 +2,13 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 17 CODE DONE — `app/features/instagram/`**
+  - **Code commit**: `2fee8f6` — `refactor(P037-Phase3): move instagram to app/features/instagram/ (no behavior change)`.
+  - **Scope**: moved `adapter.py` + `selectors.py` from `app/adapters/instagram/` to `app/features/instagram/`, added empty feature `__init__.py`, removed old source directory, updated selector import only.
+  - **Allowed collateral**: template `KNOWN_ADAPTERS["instagram"]` path, Alembic migration `b4c8f0e9d3a1`, dispatcher `Platform.INSTAGRAM` fallback.
+  - **Smoke proof**: `py_compile` PASS (pre-existing Facebook SyntaxWarning only), `ROUTES 207`, pytest collection `77 tests collected, 11 errors` (baseline match), `IG_OK`, `alembic upgrade head` applied `a8e7f6d5c4b3 -> b4c8f0e9d3a1`, DB row `platform_configs.instagram.adapter_class = app.features.instagram.adapter.InstagramAdapter`.
+  - **Risk / pending**: local DB now at Alembic `b4c8f0e9d3a1`; VPS must run `venv/bin/alembic upgrade head`. No PM2 proof needed for Instagram because no worker was moved. Stop before Step 18 (`tiktok`) pending per-feature review.
+
 - **[2026-05-04] PLAN-037 Phase 2 DONE + Anti APPROVED (Verdict A) Phase 3 CLEARED — pilot `app/features/threads/` ✅**
   - **Anti Sign-off**: APPROVED. Verified all 6 commits (pure moves/import updates), no logic changes.
   - **Verification**: `py_compile` PASS, `routes 207`, tests `24/24` PASS, collection `77/11` (baseline match). Directory structure (11 files) and `ecosystem.config.js` worker paths correct. `app/services/__init__.py` aliases successfully updated. ADR-007 boundary rules fully respected (0 cross-feature imports).
