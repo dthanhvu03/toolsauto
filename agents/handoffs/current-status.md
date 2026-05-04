@@ -2,6 +2,44 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 20 DONE + Anti APPROVED (Verdict B) Step 21 CLEARED — `app/features/system_panel/` ✅**
+  - **Anti Sign-off**: APPROVED with follow-up (Verdict B). Verified code move and import updates for the `system_panel` and `workflow_registry`.
+  - **Verification**: Directory structure mapped perfectly (`__init__.py`, `service.py`, `workflow_registry.py`, `router.py`). Shim `_ALIASES` and direct callsite routing (dispatcher, adapters, config_service) updated correctly. `py_compile`, `ROUTES 207`, tests `77/11` (baseline), and WR identity check PASSED.
+  - **Boundary Evaluation (ADR-007)**: `workflow_registry` is imported by multiple features (e.g., `features/threads/adapter`, `features/tiktok/adapter`, Facebook, etc.). Leaving it in `features/system_panel/` creates a `features/` -> `features/` dependency, which violates ADR-007.
+  - **Follow-up Action**: Create a sub-step/follow-up task to move `workflow_registry.py` from `app/features/system_panel/` to `app/core/workflow/` (or `app/core/workflow_registry/`) to comply with the architecture rules. `system_panel`'s service and router can remain as a feature that interacts with it.
+  - **Action**: Step 21 (`insights`) is now open for execution by Codex.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 19 DONE + Anti APPROVED (Verdict A) Step 20 CLEARED — `app/features/affiliates/` ✅**
+  - **Anti Sign-off**: APPROVED. Verified code move and import updates for the `affiliates` feature.
+  - **Verification**: Directory structure mapped perfectly. Shim `_ALIASES` and direct `app/main.py` routing updated without regressions. `py_compile`, `ROUTES 207`, tests `77/11` (baseline), and custom module load checks all PASSED. Zero cross-feature imports.
+  - **Process Check**: Acknowledged the missed untracked `__init__.py` in the initial commit, immediately rectified in `2e79a2f`.
+  - **Action**: Step 20 (`system_panel` + `workflow_registry`) is now open for execution by Codex. Note that this is a medium risk component affecting 13+ callsites.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 18 DONE + Anti APPROVED (Verdict A) Step 19 CLEARED — `app/features/tiktok/` ✅**
+  - **Anti Sign-off**: APPROVED. Verified collateral updates (`platform_config.html`, `c7d9e1f2a3b4`, `dispatcher.py`) are strictly scoped to Tiktok path migration and correctly applied.
+  - **Verification**: `py_compile` PASS, `ROUTES 207`, tests `77/11` (baseline match), `alembic head` applied correctly, `TiktokAdapter` python import successful. `app/features/tiktok/` contains correctly migrated files. ADR-007 boundary rules fully respected (0 cross-feature imports).
+  - **Action**: Step 19 (`affiliates`) is now open for execution by Codex. Note that Step 19 is a medium risk component and DOES NOT use the collateral pattern from Steps 17/18.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 18 CODE DONE — `app/features/tiktok/`**
+  - **Code commit**: `d4514f6` — `refactor(P037-Phase3): move tiktok to app/features/tiktok/ (no behavior change)`.
+  - **Scope**: moved `adapter.py` + `selectors.py` from `app/adapters/tiktok/` to `app/features/tiktok/`, added empty feature `__init__.py`, removed old source directory after clearing generated `__pycache__`, updated selector import only.
+  - **Allowed collateral**: template `platform_config.html` tiktok placeholder + `KNOWN_ADAPTERS` path, Alembic migration `c7d9e1f2a3b4`, dispatcher `Platform.TIKTOK` fallback. `Platform.TIKTOK` exists in `app/constants.py`.
+  - **Smoke proof**: `bash smoke.sh` baseline PASS (`ROUTES: 207`, `IMPORT OK`); `py_compile` PASS (pre-existing Facebook SyntaxWarning only); `ROUTES 207`; pytest collection `77 tests collected, 11 errors` (baseline match); `TT_OK`; `alembic upgrade head` applied `b4c8f0e9d3a1 -> c7d9e1f2a3b4`; DB row `platform_configs.tiktok.adapter_class = app.features.tiktok.adapter.TiktokAdapter`.
+  - **Risk / pending**: local DB now at Alembic `c7d9e1f2a3b4`; VPS must run `venv/bin/alembic upgrade head`. No PM2 proof needed for Tiktok because no worker was moved. Stop before Step 19 (`affiliates`) pending Anti per-feature review.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 17 DONE + Anti APPROVED (Verdict A) Step 18 CLEARED — `app/features/instagram/` ✅**
+  - **Anti Sign-off**: APPROVED. Verified collateral updates (`platform_config.html`, `b4c8f0e9d3a1`, `dispatcher.py`) are strictly scoped to Instagram path migration.
+  - **Verification**: `py_compile` PASS, `ROUTES 207`, tests `77/11` (baseline), `alembic head` applied, `InstagramAdapter` python import successful. `app/features/instagram/` contains correctly migrated files. ADR-007 boundary rules fully respected.
+  - **Pattern Note**: The collateral update pattern (template + alembic DB row + dispatcher fallback) is pre-authorized to be repeated for `tiktok` (Step 18) and `facebook_publisher` (Step 24).
+  - **Action**: Step 18 (`tiktok`) is now open for execution by Codex.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 17 CODE DONE — `app/features/instagram/`**
+  - **Code commit**: `2fee8f6` — `refactor(P037-Phase3): move instagram to app/features/instagram/ (no behavior change)`.
+  - **Scope**: moved `adapter.py` + `selectors.py` from `app/adapters/instagram/` to `app/features/instagram/`, added empty feature `__init__.py`, removed old source directory, updated selector import only.
+  - **Allowed collateral**: template `KNOWN_ADAPTERS["instagram"]` path, Alembic migration `b4c8f0e9d3a1`, dispatcher `Platform.INSTAGRAM` fallback.
+  - **Smoke proof**: `py_compile` PASS (pre-existing Facebook SyntaxWarning only), `ROUTES 207`, pytest collection `77 tests collected, 11 errors` (baseline match), `IG_OK`, `alembic upgrade head` applied `a8e7f6d5c4b3 -> b4c8f0e9d3a1`, DB row `platform_configs.instagram.adapter_class = app.features.instagram.adapter.InstagramAdapter`.
+  - **Risk / pending**: local DB now at Alembic `b4c8f0e9d3a1`; VPS must run `venv/bin/alembic upgrade head`. No PM2 proof needed for Instagram because no worker was moved. Stop before Step 18 (`tiktok`) pending per-feature review.
+
 - **[2026-05-04] PLAN-037 Phase 2 DONE + Anti APPROVED (Verdict A) Phase 3 CLEARED — pilot `app/features/threads/` ✅**
   - **Anti Sign-off**: APPROVED. Verified all 6 commits (pure moves/import updates), no logic changes.
   - **Verification**: `py_compile` PASS, `routes 207`, tests `24/24` PASS, collection `77/11` (baseline match). Directory structure (11 files) and `ecosystem.config.js` worker paths correct. `app/services/__init__.py` aliases successfully updated. ADR-007 boundary rules fully respected (0 cross-feature imports).

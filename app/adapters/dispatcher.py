@@ -3,7 +3,7 @@ from app.core.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
 from app.constants import Platform, JobType
 from app.services.media_processor import MediaProcessor
-from app.services.workflow_registry import WorkflowRegistry
+from app.features.system_panel.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
 
 logger = logging.getLogger(__name__)
@@ -39,11 +39,15 @@ def get_adapter(platform: str) -> AdapterInterface:
 
     from app.adapters.facebook.adapter import FacebookAdapter
     from app.features.threads.adapter import ThreadsAdapter
+    from app.features.instagram.adapter import InstagramAdapter
+    from app.features.tiktok.adapter import TiktokAdapter
 
     # Map of platforms that have dedicated (non-Generic) adapters
     _DEDICATED_ADAPTERS = {
         Platform.FACEBOOK: lambda: FacebookAdapter(),
         Platform.THREADS: lambda: ThreadsAdapter(),
+        Platform.INSTAGRAM: lambda: InstagramAdapter(),
+        Platform.TIKTOK: lambda: TiktokAdapter(),
     }
 
     registry_adapter: AdapterInterface | None = None
