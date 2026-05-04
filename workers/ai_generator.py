@@ -120,8 +120,8 @@ def process_draft_job(db: Session):
     heartbeat_thread.start()
     
     try:
-        from app.services.content_orchestrator import ContentOrchestrator
-        from app.services.content_orchestrator import OutputContractViolation
+        from app.core.orchestrator import ContentOrchestrator
+        from app.core.orchestrator import OutputContractViolation
         import re
         
         target_video = job.resolved_processed_media_path if job.resolved_processed_media_path else job.resolved_media_path

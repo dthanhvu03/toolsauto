@@ -52,7 +52,7 @@ _ALIASES = {
     "job_tracer": "app.core.queue.tracer",
     "worker": "app.core.queue.worker",
     "cleanup": "app.core.queue.cleanup",
-    "content_orchestrator": "content.orchestrator",
+    "content_orchestrator": "app.core.orchestrator",  # TASK-039: moved to core (ADR-007)
     "media_processor": "content.media_processor",
     "video_protector": "content.video_protector",
     "news_scraper": "app.features.threads.service.news_scraper",
