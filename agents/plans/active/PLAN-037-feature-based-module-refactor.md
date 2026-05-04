@@ -1,6 +1,6 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 18 APPROVED, Step 19 affiliates ready (Anti sign-off 2026-05-04)
+**Status**: Phase 3 Step 19 APPROVED, Step 20 system_panel ready (Anti sign-off 2026-05-04)
 **ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)
@@ -382,6 +382,18 @@ All 6 commits inspected — **pure file move + import path update**, zero behavi
 - **Collaterals Verified**: `app/templates/pages/platform_config.html` lines 354 and 720 updated, `alembic/versions/c7d9e1f2a3b4...` DB migration created, `app/adapters/dispatcher.py` `Platform.TIKTOK` fallback correctly added.
 - **Smoke Gates**: `py_compile`, `ROUTES 207`, `pytest 77/11`, `alembic head`, and `python import` all passed cleanly. ADR-007 module boundaries respected (0 cross-feature imports).
 - **Next Step Note**: Step 19 (affiliates) is a medium risk component and DOES NOT use the collateral pattern from Steps 17/18.
+
+---
+
+## Phase 3: Step 19 (Affiliates) Sign-off
+
+**Reviewed by**: Antigravity — 2026-05-04
+**Verdict**: **A — APPROVED Step 19 → mở Step 20 (system_panel + workflow_registry)**
+
+- **Scope Verified**: `app/features/affiliates/` created with `ai.py`, `service.py`, `router.py`, and `__init__.py`. Replaced the previous ones in `app/services/compliance/` and `app/routers/affiliates.py`.
+- **Imports & Shims**: Verified updates in `app/main.py`, `app/routers/manual_job.py`, `app/routers/pages.py`, and `workers/ai_generator.py`. Shim aliases `affiliate_ai` and `affiliate_service` correctly mapped. No DB migrations (Alembic at `c7d9e1f2a3b4`).
+- **Smoke Gates**: `py_compile`, `ROUTES 207`, `pytest 77/11`, `AFF_OK`, `AFF_AI_OK`, `AFF_ROUTER_OK`, `SHIM_OK`. ADR-007 module boundaries respected.
+- **Process Review**: The missing `__init__.py` was caught and fixed in a fast-follow chore commit. Confirmed that future step executions involving `git mv` and new directories must `git add -A` to track `__init__.py` files properly.
 
 ---
 
