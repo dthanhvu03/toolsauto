@@ -1,6 +1,6 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 18 CODE DONE, Anti review pending (2026-05-04)
+**Status**: Phase 3 Step 18 APPROVED, Step 19 affiliates ready (Anti sign-off 2026-05-04)
 **ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)
@@ -371,6 +371,17 @@ All 6 commits inspected — **pure file move + import path update**, zero behavi
 - **Collaterals Verified**: `app/templates/pages/platform_config.html` (KNOWN_ADAPTERS dict updated), `app/adapters/dispatcher.py` (import path updated), `alembic/versions/b4c8f0e9d3a1_...` (DB adapter_class updated).
 - **Smoke Gates**: `py_compile`, `ROUTES 207`, `pytest 77/11`, `alembic head`, and `python import` all passed cleanly.
 - **Pattern Note**: This exact collateral pattern (Template update + Alembic DB update + Dispatcher fallback) WILL REPEAT for **tiktok** (Step 18) and **facebook_publisher** (Step 24). Both have `KNOWN_ADAPTERS` entries in the template and DB rows pointing to their adapter paths. Codex is pre-authorized to apply these 3 collateral changes in those steps.
+
+---
+
+## Phase 3: Step 18 (TikTok) Sign-off
+
+**Reviewed by**: Antigravity — 2026-05-04
+**Verdict**: **A — APPROVED Step 18 → mở Step 19 (affiliates)**
+
+- **Collaterals Verified**: `app/templates/pages/platform_config.html` lines 354 and 720 updated, `alembic/versions/c7d9e1f2a3b4...` DB migration created, `app/adapters/dispatcher.py` `Platform.TIKTOK` fallback correctly added.
+- **Smoke Gates**: `py_compile`, `ROUTES 207`, `pytest 77/11`, `alembic head`, and `python import` all passed cleanly. ADR-007 module boundaries respected (0 cross-feature imports).
+- **Next Step Note**: Step 19 (affiliates) is a medium risk component and DOES NOT use the collateral pattern from Steps 17/18.
 
 ---
 

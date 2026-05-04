@@ -2,6 +2,11 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 18 DONE + Anti APPROVED (Verdict A) Step 19 CLEARED — `app/features/tiktok/` ✅**
+  - **Anti Sign-off**: APPROVED. Verified collateral updates (`platform_config.html`, `c7d9e1f2a3b4`, `dispatcher.py`) are strictly scoped to Tiktok path migration and correctly applied.
+  - **Verification**: `py_compile` PASS, `ROUTES 207`, tests `77/11` (baseline match), `alembic head` applied correctly, `TiktokAdapter` python import successful. `app/features/tiktok/` contains correctly migrated files. ADR-007 boundary rules fully respected (0 cross-feature imports).
+  - **Action**: Step 19 (`affiliates`) is now open for execution by Codex. Note that Step 19 is a medium risk component and DOES NOT use the collateral pattern from Steps 17/18.
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 18 CODE DONE — `app/features/tiktok/`**
   - **Code commit**: `d4514f6` — `refactor(P037-Phase3): move tiktok to app/features/tiktok/ (no behavior change)`.
   - **Scope**: moved `adapter.py` + `selectors.py` from `app/adapters/tiktok/` to `app/features/tiktok/`, added empty feature `__init__.py`, removed old source directory after clearing generated `__pycache__`, updated selector import only.
