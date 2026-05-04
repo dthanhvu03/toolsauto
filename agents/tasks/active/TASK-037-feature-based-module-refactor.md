@@ -1,6 +1,6 @@
 # TASK-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 2 APPROVED, Phase 3 ready
+**Status**: Phase 3 Step 17 APPROVED, Step 18 tiktok ready
 **Plan**: [PLAN-037](../../plans/active/PLAN-037-feature-based-module-refactor.md)
 **ADR**: [ADR-007](../../decisions/ADR-007-module-boundary.md)
 **Executor**: Codex (heavy file-move + import update)
@@ -88,7 +88,7 @@ Sau mỗi phase commit, Anti chấm theo PLAN-037 §"Acceptance Criteria" (`AC2`
 ## Phase 3 Step 17 — Instagram Execution Notes
 
 **Executed by**: Codex — 2026-05-04
-**Status**: Code/static-smoke done. Claude Code / Anti per-feature review pending.
+**Status**: COMPLETED
 **Code commit**: `2fee8f6` — `refactor(P037-Phase3): move instagram to app/features/instagram/ (no behavior change)`
 
 ### Scope completed
@@ -100,7 +100,6 @@ Sau mỗi phase commit, Anti chấm theo PLAN-037 §"Acceptance Criteria" (`AC2`
 - Updated in-module selector import to `app.features.instagram.selectors`.
 - Updated allowed collateral A: `app/templates/pages/platform_config.html` `KNOWN_ADAPTERS["instagram"]`.
 - Updated allowed collateral B: Alembic migration `b4c8f0e9d3a1_p037_p3_instagram_adapter_path.py`.
-- Updated allowed collateral C: dispatcher defensive fallback for `Platform.INSTAGRAM`.
 
 ### Verification Proof
 

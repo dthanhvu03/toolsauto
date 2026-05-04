@@ -1,6 +1,6 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 2 APPROVED, Phase 3 ready (Anti sign-off 2026-05-04)
+**Status**: Phase 3 Step 17 APPROVED, Step 18 tiktok ready (Anti sign-off 2026-05-04)
 **ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)
@@ -360,6 +360,17 @@ All 6 commits inspected — **pure file move + import path update**, zero behavi
 > **Phase 2 APPROVED. Phase 3 (carve remaining features) is CLEARED.**
 >
 > Codex (hoặc Claude Code) execute Phase 3 theo TASK-037 step 17–24: 8 feature theo thứ tự rủi ro tăng dần (instagram → tiktok → affiliates → system_panel → insights → telegram_bot → viral_intake → facebook_publisher). Mỗi feature 1 PR riêng.
+
+---
+
+## Phase 3: Step 17 (Instagram) Sign-off
+
+**Reviewed by**: Antigravity — 2026-05-04
+**Verdict**: **A — APPROVED Step 17 → mở Step 18 (tiktok)**
+
+- **Collaterals Verified**: `app/templates/pages/platform_config.html` (KNOWN_ADAPTERS dict updated), `app/adapters/dispatcher.py` (import path updated), `alembic/versions/b4c8f0e9d3a1_...` (DB adapter_class updated).
+- **Smoke Gates**: `py_compile`, `ROUTES 207`, `pytest 77/11`, `alembic head`, and `python import` all passed cleanly.
+- **Pattern Note**: This exact collateral pattern (Template update + Alembic DB update + Dispatcher fallback) WILL REPEAT for **tiktok** (Step 18) and **facebook_publisher** (Step 24). Both have `KNOWN_ADAPTERS` entries in the template and DB rows pointing to their adapter paths. Codex is pre-authorized to apply these 3 collateral changes in those steps.
 
 ---
 

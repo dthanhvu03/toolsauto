@@ -2,6 +2,12 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 17 DONE + Anti APPROVED (Verdict A) Step 18 CLEARED — `app/features/instagram/` ✅**
+  - **Anti Sign-off**: APPROVED. Verified collateral updates (`platform_config.html`, `b4c8f0e9d3a1`, `dispatcher.py`) are strictly scoped to Instagram path migration.
+  - **Verification**: `py_compile` PASS, `ROUTES 207`, tests `77/11` (baseline), `alembic head` applied, `InstagramAdapter` python import successful. `app/features/instagram/` contains correctly migrated files. ADR-007 boundary rules fully respected.
+  - **Pattern Note**: The collateral update pattern (template + alembic DB row + dispatcher fallback) is pre-authorized to be repeated for `tiktok` (Step 18) and `facebook_publisher` (Step 24).
+  - **Action**: Step 18 (`tiktok`) is now open for execution by Codex.
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 17 CODE DONE — `app/features/instagram/`**
   - **Code commit**: `2fee8f6` — `refactor(P037-Phase3): move instagram to app/features/instagram/ (no behavior change)`.
   - **Scope**: moved `adapter.py` + `selectors.py` from `app/adapters/instagram/` to `app/features/instagram/`, added empty feature `__init__.py`, removed old source directory, updated selector import only.
