@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 import app.config as config
-from app.services.notifier_service import NotifierService
+from app.core.notifier.service import NotifierService
 from app.constants import JobStatus, ViralStatus
 
 

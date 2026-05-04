@@ -223,7 +223,7 @@ class HealthService:
         }
     @staticmethod
     def notify_worker_down():
-        from app.services.notifier_service import NotifierService
+        from app.core.notifier.service import NotifierService
         NotifierService.notify_worker_down()
 
     @staticmethod

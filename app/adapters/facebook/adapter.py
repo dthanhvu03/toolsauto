@@ -23,7 +23,7 @@ from app.adapters.facebook.pages.reels import FacebookReelsPage
 logger = logging.getLogger(__name__)
 from app.core.observability.runtime_events import emit as rt_emit
 from app.services.job_tracer import update_active_node
-from app.services.notifier_service import NotifierService
+from app.core.notifier.service import NotifierService
 
 _FB_HOST_NETLOC = urlparse(FACEBOOK_HOST).netloc.lower()
 _FB_HOST_NETLOCS = {
