@@ -418,7 +418,7 @@ def _run_strategic_boost(db):
     _last_boost_ts = now
     logger.info("🕒 Starting Autonomous Strategic Boosting Scan...")
     try:
-        from app.features.viral_intake.strategic import PageStrategicService
+        from app.core.strategic import PageStrategicService
         PageStrategicService.run_auto_boost(db)
     except Exception as e:
         logger.error(f"[STRATEGIC] Auto-boost failed: {e}")

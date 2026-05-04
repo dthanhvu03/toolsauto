@@ -241,7 +241,7 @@ def get_page_analysis(platform: str = None, db: Session = Depends(get_db)):
     Strategic Analysis: Categorize pages based on growth momentum and engagement.
     Uses the centralized PageStrategicService with platform filtering.
     """
-    from app.features.viral_intake.strategic import PageStrategicService
+    from app.core.strategic import PageStrategicService
     analysis = PageStrategicService.get_page_analysis(db, platform=platform)
     return {"status": "success", "data": analysis}
 
