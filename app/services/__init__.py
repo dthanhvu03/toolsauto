@@ -12,10 +12,10 @@ import sys
 
 
 _ALIASES = {
-    "settings": "platform.settings",
-    "account": "platform.account",
-    "page_utils": "platform.page_utils",
-    "platform_config_service": "platform.config_service",
+    "settings": "app.core.settings",
+    "account": "app.core.account",
+    "page_utils": "app.core.page_utils",
+    "platform_config_service": "app.core.config_service",
     "workflow_registry": "app.core.workflow_registry",  # TASK-038: moved to core (ADR-007)
     # PLAN-037 Phase 1 Move C: ai moved to app.core.ai
     "ai_native_fallback": "app.core.ai.native_fallback",
@@ -53,11 +53,11 @@ _ALIASES = {
     "worker": "app.core.queue.worker",
     "cleanup": "app.core.queue.cleanup",
     "content_orchestrator": "app.core.orchestrator",  # TASK-039: moved to core (ADR-007)
-    "media_processor": "content.media_processor",
-    "video_protector": "content.video_protector",
+    "media_processor": "app.features.facebook.media_processor",
+    "video_protector": "app.features.viral_intake.video_protector",
     "news_scraper": "app.features.threads.service.news_scraper",
     "threads_news": "app.features.threads.service.threads_news",
-    "yt_dlp_path": "content.yt_dlp_path",
+    "yt_dlp_path": "app.core.yt_dlp_path",
     "discovery_scraper": "app.features.viral_intake.discovery_scraper",
     "tiktok_scraper": "app.features.viral_intake.tiktok_scraper",
     "viral_processor": "app.features.viral_intake.processor",
@@ -69,14 +69,14 @@ _ALIASES = {
     "compliance_service": "app.core.compliance.service",
     "affiliate_ai": "app.features.affiliates.ai",
     "affiliate_service": "app.features.affiliates.service",
-    "dashboard_service": "dashboard.dashboard_service",
-    "ai_studio_service": "dashboard.ai_studio_service",
+    "dashboard_service": "app.platform.dashboard_service",
+    "ai_studio_service": "app.features.system_panel.ai_studio_service",
     "syspanel_service": "app.features.system_panel.service",
     "insights_service": "app.features.insights.service",
     "threads_service": "app.features.threads.dashboard",
-    "database_service": "db.database_service",
-    "db_acl": "db.acl",
-    "sql_validator": "db.sql_validator",
+    "database_service": "app.core.db_admin.database_service",
+    "db_acl": "app.core.db_admin.acl",
+    "sql_validator": "app.core.db_admin.sql_validator",
 }
 
 

@@ -17,7 +17,7 @@ import time
 from urllib.parse import quote
 
 from app.config import TIKTOK_HOST
-from app.services.yt_dlp_path import yt_dlp_binary
+from app.core.yt_dlp_path import yt_dlp_binary
 from app.constants import ViralStatus
 
 
