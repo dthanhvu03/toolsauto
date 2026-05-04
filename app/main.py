@@ -14,11 +14,12 @@ from app.utils.logger import setup_shared_logger
 logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fastapi")
 
 # Import routers
-from app.routers import auth, dashboard, jobs, accounts, worker, health, telegram, viral, pages, manual_job, database, compliance, platform_config, ai, ai_studio
+from app.routers import auth, dashboard, jobs, accounts, worker, health, viral, pages, manual_job, database, compliance, platform_config, ai, ai_studio
 from app.features.threads import router as threads
 from app.features.affiliates import router as affiliates
 from app.features.system_panel import router as syspanel
 from app.features.insights import router as insights
+from app.features.telegram_bot import router as telegram
 from app.core.notifier.service import NotifierService, TelegramNotifier
 import app.config as config
 

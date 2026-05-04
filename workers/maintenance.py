@@ -436,7 +436,7 @@ def run_loop():
         logger.info("Telegram notifier registered.")
         
         # Start polling thread cho inline button callbacks
-        from app.services.telegram_poller import TelegramPoller
+        from app.features.telegram_bot.poller import TelegramPoller
         CURRENT_POLLER = TelegramPoller(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)
         CURRENT_POLLER.start()
         

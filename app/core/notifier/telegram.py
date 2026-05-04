@@ -8,7 +8,7 @@ class TelegramNotifier(BaseNotifier):
     """Gửi tin nhắn qua Telegram Bot API dùng TelegramClient."""
 
     def __init__(self, bot_token: str, chat_id: str):
-        from app.services.telegram_client import TelegramClient
+        from app.features.telegram_bot.client import TelegramClient
         self.client = TelegramClient(bot_token, chat_id)
         self._chat_id = str(chat_id).strip()
 
