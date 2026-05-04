@@ -22,7 +22,7 @@ def upgrade() -> None:
     """Upgrade schema."""
     op.execute(
         "UPDATE platform_configs "
-        "SET adapter_class = 'app.features.facebook_publisher.adapter.FacebookAdapter' "
+        "SET adapter_class = 'app.features.facebook.adapter.FacebookAdapter' "
         "WHERE adapter_class = 'app.adapters.facebook.adapter.FacebookAdapter'"
     )
 
@@ -32,5 +32,5 @@ def downgrade() -> None:
     op.execute(
         "UPDATE platform_configs "
         "SET adapter_class = 'app.adapters.facebook.adapter.FacebookAdapter' "
-        "WHERE adapter_class = 'app.features.facebook_publisher.adapter.FacebookAdapter'"
+        "WHERE adapter_class = 'app.features.facebook.adapter.FacebookAdapter'"
     )

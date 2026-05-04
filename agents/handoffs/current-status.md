@@ -2,6 +2,28 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 24 DONE + Phase 3 COMPLETED — `app/features/facebook/` ✅**
+  - **Scope**: Migrated Facebook Publisher feature (~6K LOC) including adapters, pages, core, selectors, engagement, compliance, and workers into `app/features/facebook/`.
+  - **Code Move + Imports (Commit 24A)**:
+    - Moved adapter, engagement, selectors, core, pages from `app/adapters/facebook/`.
+    - Moved compliance (`fb_compliance.py`, `service.py`) from `app/services/compliance/`.
+    - Moved worker (`workers/publisher.py`).
+    - Updated direct import paths via sed script in 33 files.
+    - Updated `publisher.py` `sys.path` to point 5 levels up to repo root.
+    - Updated shim aliases in `app/services/__init__.py` for `fb_compliance` and `compliance_service` to absolute paths.
+  - **Collaterals (Commit 24B)**:
+    - Updated `platform_config.html` `KNOWN_ADAPTERS['facebook']` to `app.features.facebook.adapter.FacebookAdapter`.
+    - Created and applied Alembic migration `883c60c7be10` to update `platform_configs` adapter_class row.
+    - Updated PM2 script paths for `FB_Publisher_1` and `FB_Publisher_2` in `ecosystem.config.js`.
+  - **Smoke Gates Passed**:
+    - `py_compile` PASS (only pre-existing SyntaxWarning).
+    - `ROUTES 207`.
+    - `pytest` baseline match (`77 tests collected, 11 errors`). Note: 3 tests relying on old `workers.publisher` import in `.gitignore` untracked files were fixed locally.
+    - Python import tests and dispatcher overriding tested and working seamlessly.
+  - **Status**: Phase 3 is 100% COMPLETE. 8/8 features carved safely.
+  - **Next**: Proceed to Phase 5 (Lint Guard via import-linter) after Anti's final validation. Phase 4 is skipped/superseded per TASK-039.
+  - **Note**: The user requested renaming the folder from `facebook_publisher` to `facebook` because there will be more features than just publisher. Done via an amend/re-commit workflow.
+
 - **[2026-05-04] Anti review Step 21+22+23 → Verdict A/A/B + 2 boundary debt task mở ra**
   - Step 21 insights: Verdict A APPROVED.
   - Step 22 telegram_bot + notifier→core: Verdict A APPROVED. VPS production proof.

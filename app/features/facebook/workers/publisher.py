@@ -5,7 +5,7 @@ import sys
 import os
 from pathlib import Path
 
-# Repo root on sys.path so `python app/features/facebook_publisher/workers/publisher.py` works without PYTHONPATH=.
+# Repo root on sys.path so `python app/features/facebook/workers/publisher.py` works without PYTHONPATH=.
 _root = Path(__file__).resolve().parent.parent.parent.parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
@@ -23,7 +23,7 @@ from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
 from app.services.worker import WorkerService
 from app.services.account import AccountService
-from app.features.facebook_publisher.adapter import PageMismatchError
+from app.features.facebook.adapter import PageMismatchError
 from app.core.observability.system_monitor import SystemMonitorService
 import app.config as config
 from app.services import settings as runtime_settings
@@ -214,7 +214,7 @@ def process_single_job(db: Session):
             return True
 
         # Facebook content compliance (hard block VIOLATION before browser)
-        from app.features.facebook_publisher.compliance.fb_compliance import check_before_publish, CompliancePublishError
+        from app.features.facebook.compliance.fb_compliance import check_before_publish, CompliancePublishError
         from app.core.database.models import now_ts
 
         try:
@@ -470,7 +470,7 @@ def _maybe_idle_engagement(db: Session):
         frequent engagement that triggers Meta anti-bot detection.
     """
     import random as _rand
-    from app.features.facebook_publisher.engagement import FacebookEngagementTask, parse_niche_topics
+    from app.features.facebook.engagement import FacebookEngagementTask, parse_niche_topics
 
     if not config.IDLE_ENGAGEMENT_ENABLED:
         return
@@ -537,7 +537,7 @@ def _maybe_idle_engagement(db: Session):
         pass
 
     # Open a temporary browser session (reuse adapter's session pattern)
-    from app.features.facebook_publisher.adapter import FacebookAdapter
+    from app.features.facebook.adapter import FacebookAdapter
     adapter = FacebookAdapter()
 
     try:
