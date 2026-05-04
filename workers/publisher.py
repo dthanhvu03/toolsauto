@@ -27,7 +27,7 @@ from app.adapters.facebook.adapter import PageMismatchError
 from app.core.observability.system_monitor import SystemMonitorService
 import app.config as config
 from app.services import settings as runtime_settings
-from app.services.notifier_service import NotifierService
+from app.core.notifier.service import NotifierService
 
 # Suicide Timer for Deadlock Prevention
 import threading
@@ -365,7 +365,7 @@ def process_single_job(db: Session):
 def run_loop():
     """Main Publisher loop."""
     global RUNNING
-    from app.services.notifier_service import TelegramNotifier
+    from app.core.notifier.service import TelegramNotifier
     import app.config as config
     from app.services import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))

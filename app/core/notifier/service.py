@@ -3,12 +3,12 @@ Notifier Service — Gửi thông báo qua các kênh khác nhau (Telegram, Emai
 
 Kiến trúc:
     TelegramClient     → Low-level API wrapper (telegram_client.py)
-    TelegramNotifier   → app.services.notifier_services/telegram.py (kế thừa BaseNotifier)
+    TelegramNotifier   → app.core.notifier.telegram.py (kế thừa BaseNotifier)
     NotifierService    → Facade (gọi tất cả channels)
     MediaProcessor     → extract/cleanup thumbnail cho notify_job_done
 
 Dùng:
-    from app.services.notifier_service import NotifierService, TelegramNotifier
+    from app.core.notifier.service import NotifierService, TelegramNotifier
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
     NotifierService.notify_job_done(job)
 """
@@ -17,8 +17,8 @@ import os
 from typing import Optional
 
 from app.services.media_processor import MediaProcessor
-from app.services.notifiers import BaseNotifier, TelegramNotifier
-from app.services import notifier_formatting as nf
+from app.core.notifier import BaseNotifier, TelegramNotifier
+from app.core.notifier import formatting as nf
 from app.constants import JobStatus
 
 

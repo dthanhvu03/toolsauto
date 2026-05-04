@@ -139,7 +139,7 @@ def _mark_material_failed(db, mat, reason: str) -> None:
 
     # Nhắn Telegram ngay nếu đây là job manual reup do user gửi
     if is_manual_reup:
-        from app.services.notifier_service import NotifierService
+        from app.core.notifier.service import NotifierService
         error_vi = reason
         if "no downloadable video stream" in reason.lower() or "slideshow" in reason.lower():
             error_vi = "Link này là dạng Ảnh trượt (Slideshow) hoặc Audio-only, bot chỉ hỗ trợ tải Video Mp4 tiêu chuẩn."
@@ -688,7 +688,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             logger.info("[VIRAL] Created AWAITING_STYLE Job #%s from %s material #%s → acc '%s'",
                         new_job.id, mat.platform, mat.id, target_account.name)
             
-            from app.services.notifier_service import NotifierService
+            from app.core.notifier.service import NotifierService
             NotifierService.notify_style_selection(new_job)
 
         except subprocess.TimeoutExpired:

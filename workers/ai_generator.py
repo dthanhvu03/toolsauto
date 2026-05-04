@@ -16,7 +16,7 @@ from app.services.job_queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_TICK_SECONDS
 from app.services.worker import WorkerService
-from app.services.notifier_service import NotifierService
+from app.core.notifier.service import NotifierService
 from app.features.affiliates.ai import AffiliateAIService
 from app.core.database.models import AffiliateLink
 import urllib3
@@ -484,7 +484,7 @@ def _auto_style_default(db):
             j.status = JobStatus.DRAFT
             
             # Optionally notify that it was auto-selected
-            from app.services.notifier_service import NotifierService
+            from app.core.notifier.service import NotifierService
             account_name = j.account.name if j.account else "Unknown"
             try:
                 NotifierService._broadcast(f"⏳ <b>Hết thời gian chờ (30 phút)</b>\nJob #{j.id} ({account_name}) đã tự động được chọn phong cách: NGẮN GỌN (SHORT).\nAI đang tiến hành viết nội dung...")
@@ -495,7 +495,7 @@ def _auto_style_default(db):
 def run_loop():
     """Main AI Generator loop."""
     global RUNNING, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME
-    from app.services.notifier_service import TelegramNotifier
+    from app.core.notifier.service import TelegramNotifier
     import app.config as config
     from app.services import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))

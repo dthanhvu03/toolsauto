@@ -4,7 +4,7 @@ import json
 from sqlalchemy import text, or_
 from sqlalchemy.orm import Session
 from app.core.database.models import PageInsight, ViralMaterial, Account, Job
-from app.services.notifier_service import NotifierService
+from app.core.notifier.service import NotifierService
 from app.constants import ViralStatus
 
 

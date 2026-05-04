@@ -79,7 +79,7 @@ class TelegramEventRouter:
     def _handle_style(self, callback_id: str, action: str, job_id: int, message_id: int, user_name: str):
         from app.core.database.core import SessionLocal
         from app.core.database.models import Job
-        from app.services.notifier_service import NotifierService
+        from app.core.notifier.service import NotifierService
         style = action.split("_")[1]
         with SessionLocal() as db:
             job = db.query(Job).filter(Job.id == job_id).first()

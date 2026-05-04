@@ -19,7 +19,7 @@ from app.features.threads import router as threads
 from app.features.affiliates import router as affiliates
 from app.features.system_panel import router as syspanel
 from app.features.insights import router as insights
-from app.services.notifier_service import NotifierService, TelegramNotifier
+from app.core.notifier.service import NotifierService, TelegramNotifier
 import app.config as config
 
 app = FastAPI(

@@ -273,7 +273,7 @@ class QueueService:
         # Telegram alert (best-effort, avoid spam by only sending when something recovered)
         if recovered_total > 0:
             try:
-                from app.services.notifier_service import NotifierService
+                from app.core.notifier.service import NotifierService
                 ids_preview = []
                 if stale_running_ids:
                     ids_preview.extend(stale_running_ids[:5])

@@ -21,7 +21,7 @@ import app.config as config
 from app.core.database.core import SessionLocal
 from app.core.database.models import IncidentGroup
 from app.services.ai_runtime import pipeline
-from app.services.notifier_service import NotifierService, TelegramNotifier
+from app.core.notifier.service import NotifierService, TelegramNotifier
 
 
 def _fetch_top_incidents(limit: int = 20) -> list[IncidentGroup]:
