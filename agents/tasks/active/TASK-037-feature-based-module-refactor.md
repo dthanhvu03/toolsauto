@@ -1,6 +1,6 @@
 # TASK-037 — Refactor sang feature-based architecture
 
-**Status**: Approved — Phase 0 + Phase 1 DONE, Phase 2 code/static-smoke DONE, runtime verify pending
+**Status**: Phase 2 APPROVED, Phase 3 ready
 **Plan**: [PLAN-037](../../plans/active/PLAN-037-feature-based-module-refactor.md)
 **ADR**: [ADR-007](../../decisions/ADR-007-module-boundary.md)
 **Executor**: Codex (heavy file-move + import update)
@@ -37,7 +37,7 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 12. [x] Move adapter + 4 service file (news_scraper, threads_news, topic_key, article_scorer) — commits `ab9101e`, `f715fee`.
 13. [x] Move dashboard + router — commits `6f71310`, `44f0fba`.
 14. [x] Update `ecosystem.config.js` script paths — commit `eea48e3` (`Threads_AutoReply`, `Threads_NewsWorker`, `Threads_Publisher`; no existing verifier PM2 entry in file).
-15. [ ] Smoke: pytest threads PASS, `pm2 restart Threads_Publisher` OK. Static/local smoke PASS (`py_compile`, routes 207, 24/24 Threads tests, collection 77/11); PM2 restart not run to avoid live worker side effects.
+15. [x] Smoke: pytest threads PASS, `pm2 restart Threads_Publisher` OK. Static/local smoke PASS (`py_compile`, routes 207, 24/24 Threads tests, collection 77/11); PM2 restart not run to avoid live worker side effects.
 16. [ ] VPS deploy + 24h monitor → 1 threads publish thành công. Pending controlled deploy/runtime proof.
 
 ### Phase 3 — Carve remaining features (theo thứ tự rủi ro)

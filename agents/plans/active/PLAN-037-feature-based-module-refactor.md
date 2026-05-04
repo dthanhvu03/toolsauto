@@ -1,6 +1,6 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Approved (Anti sign-off 2026-05-03)
+**Status**: Phase 2 APPROVED, Phase 3 ready (Anti sign-off 2026-05-04)
 **ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)
@@ -324,3 +324,39 @@ THREADS_WORKER_IMPORT_OK
 - No existing verifier PM2 entry was present in `ecosystem.config.js`; Codex did not add a new process because that would change runtime behavior.
 
 Execution Done. Cần Claude Code verify + handoff.
+
+---
+
+## Phase 2 Sign-off
+
+**Reviewed by**: Antigravity — 2026-05-04
+**Verdict**: **A — APPROVED Phase 2 → mở Phase 3**
+
+### Independent Verification Results
+
+| Gate | Expected | Actual | Status |
+|------|----------|--------|--------|
+| \rom app.main import app\ → routes | 207 | 207 | ✅ |
+| \pytest tests/test_threads_world_news.py ...\ | 24 passed | 24 passed | ✅ |
+| \pytest tests/ -q --co\ | 77 collected, 11 errors | 77 collected, 11 errors | ✅ |
+| Legacy alias \app.services.threads_news\ | Resolves | ✅ \app.features.threads.service.threads_news\ | ✅ |
+| \app/services/content/\ remaining files | 4 non-Threads files | 4 non-Threads files | ✅ |
+| Directory structure \app/features/threads/\ | 11 logic files + \__init__.py\ | 11 logic files + \__init__.py\ | ✅ |
+| \ecosystem.config.js\ worker paths | 3 updated paths | 3 updated paths | ✅ |
+| ADR-007 Import Rules | No cross-feature imports | 0 cross-feature imports | ✅ |
+
+### Commit Review
+
+All 6 commits inspected — **pure file move + import path update**, zero behavior changes.
+- \894d18b\ Step A: skeleton.
+- \ab9101e\ Step B: adapter move.
+- \f715fee\ Step C: service files move.
+- \6f71310\ Step D: dashboard move.
+- \44f0fba\ Step E: router move.
+- \eea48e3\ Step F: workers move.
+
+### Phase 3 Gate
+
+> **Phase 2 APPROVED. Phase 3 (carve remaining features) is CLEARED.**
+>
+> Codex (hoặc Claude Code) execute Phase 3 theo TASK-037 step 17–24: 8 feature theo thứ tự rủi ro tăng dần (instagram → tiktok → affiliates → system_panel → insights → telegram_bot → viral_intake → facebook_publisher). Mỗi feature 1 PR riêng.

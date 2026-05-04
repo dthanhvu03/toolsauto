@@ -2,6 +2,11 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 2 DONE + Anti APPROVED (Verdict A) Phase 3 CLEARED — pilot `app/features/threads/` ✅**
+  - **Anti Sign-off**: APPROVED. Verified all 6 commits (pure moves/import updates), no logic changes.
+  - **Verification**: `py_compile` PASS, `routes 207`, tests `24/24` PASS, collection `77/11` (baseline match). Directory structure (11 files) and `ecosystem.config.js` worker paths correct. `app/services/__init__.py` aliases successfully updated. ADR-007 boundary rules fully respected (0 cross-feature imports).
+  - **Action**: Phase 3 (carving remaining features) is now open. Codex/Claude Code will execute Phase 3 per TASK-037 steps 17-24.
+
 - **[2026-05-03] PLAN-037 Phase 2 CODE DONE (local static smoke PASS) — pilot `app/features/threads/` ✅**
   - **6 move commits on `develop`**:
     - `894d18b` Step A: skeleton `app/features/threads/{,service,workers}/__init__.py`.
