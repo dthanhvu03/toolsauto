@@ -18,7 +18,7 @@ module.exports = {
   apps: [
     {
       name: "FB_Publisher_1",
-      script: "workers/publisher.py",
+      script: "app/features/facebook_publisher/workers/publisher.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,       // 10 minutes — allow in-flight Playwright job to finish
@@ -32,7 +32,7 @@ module.exports = {
     },
     {
       name: "FB_Publisher_2",
-      script: "workers/publisher.py",
+      script: "app/features/facebook_publisher/workers/publisher.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,       // 10 minutes
