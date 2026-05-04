@@ -1,6 +1,6 @@
 # TASK-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 20 APPROVED (with follow-up), Step 21 insights ready
+**Status**: Phase 3 Step 23 viral_intake code/static-smoke done; Claude Code / Anti review pending
 **Plan**: [PLAN-037](../../plans/active/PLAN-037-feature-based-module-refactor.md)
 **ADR**: [ADR-007](../../decisions/ADR-007-module-boundary.md)
 **Executor**: Codex (heavy file-move + import update)
@@ -47,7 +47,7 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 20. [x] `system_panel` + `workflow_registry` (medium) — code commit `498569e`. (Anti Verdict B: Follow-up move workflow_registry to core/)
 21. [x] `insights` (medium) — code commit `29c087c`.
 22. [x] `telegram_bot` (medium — shared notifier) — notifier core commit `66c9826`, telegram bot commit `f3bbb64`.
-23. [ ] `viral_intake` (high — orchestrator 651 dòng).
+23. [x] `viral_intake` (high — orchestrator 651 dòng) — code/static-smoke done in the Step 23 refactor commit.
 24. [ ] `facebook_publisher` (highest — adapter 6500 dòng + engagement + compliance).
 
 ### Phase 4 — Cleanup orchestrator
@@ -272,6 +272,84 @@ IMPORT OK
 - Static/local smoke only; no PM2 restart or VPS live publish proof in this step.
 - `TelegramNotifier` now resolves `TelegramClient` through `app.features.telegram_bot.client`, matching the requested file placement while preserving behavior.
 - Do not proceed to Step 23 (`viral_intake`) until Anti per-feature review is complete.
+
+## Phase 3 Step 23 — Viral Intake Execution Notes
+
+**Executed by**: Codex — 2026-05-04
+**Status**: COMPLETED (code/static-smoke); Anti review pending
+**Code commit**: Step 23 refactor commit (`refactor(P037-Phase3): move viral_intake to app/features/viral_intake/ (no behavior change)`)
+
+### Scope completed
+
+- Added empty `app/features/viral_intake/__init__.py`.
+- Moved `app/services/viral/discovery_scraper.py` → `app/features/viral_intake/discovery_scraper.py`.
+- Moved `app/services/viral/processor.py` → `app/features/viral_intake/processor.py`.
+- Moved `app/services/viral/reup_processor.py` → `app/features/viral_intake/reup_processor.py`.
+- Moved `app/services/viral/scan.py` → `app/features/viral_intake/scan.py`.
+- Moved `app/services/viral/service.py` → `app/features/viral_intake/service.py`.
+- Moved `app/services/viral/strategic.py` → `app/features/viral_intake/strategic.py`.
+- Moved `app/services/viral/tiktok_scraper.py` → `app/features/viral_intake/tiktok_scraper.py`.
+- Moved `app/routers/viral.py` → `app/features/viral_intake/router.py`.
+- Removed old `app/services/viral/` and `app/routers/viral.py`.
+- Updated direct imports in `app/main.py`, `app/services/dashboard/dashboard_service.py`, `app/features/insights/service.py`, `workers/maintenance.py`, `manage.py`, and moved viral intake modules.
+- Updated 7 `app/services/__init__.py` shim aliases to `app.features.viral_intake.*`.
+- Did not touch `app/services/content/orchestrator.py` or other Phase 4-reserved content files.
+
+### Verification Proof
+
+```text
+$ find app -name '*.py' -print0 | xargs -0 venv/bin/python -m py_compile && echo PY_COMPILE_OK
+PY_COMPILE_OK
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+
+$ venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"
+ROUTES 207
+
+$ venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co
+77 tests collected, 11 errors in 76.31s (0:01:16)
+
+$ venv/bin/python -c "from app.features.viral_intake.processor import ViralProcessorService; print('VP_OK')"
+VP_OK
+$ venv/bin/python -c "from app.features.viral_intake.scan import run_tiktok_competitor_scan; print('VS_OK')"
+VS_OK
+$ venv/bin/python -c "from app.features.viral_intake.discovery_scraper import DiscoveryScraper; print('DS_OK')"
+DS_OK
+$ venv/bin/python -c "from app.features.viral_intake.strategic import PageStrategicService; print('STR_OK')"
+STR_OK
+$ venv/bin/python -c "from app.features.viral_intake.service import ViralService; print('VSVC_OK')"
+VSVC_OK
+$ venv/bin/python -c "from app.features.viral_intake.tiktok_scraper import *; print('TS_OK')"
+TS_OK
+$ venv/bin/python -c "from app.features.viral_intake.reup_processor import *; print('REUP_OK')"
+REUP_OK
+$ venv/bin/python -c "from app.features.viral_intake.router import router; print('VIRAL_ROUTER_OK', len(router.routes))"
+VIRAL_ROUTER_OK 4
+
+$ venv/bin/python -c "from app.services.viral_processor import ViralProcessorService; print('VP_SHIM_OK')"
+VP_SHIM_OK
+$ venv/bin/python -c "from app.services.viral_scan import run_tiktok_competitor_scan; print('VS_SHIM_OK')"
+VS_SHIM_OK
+$ venv/bin/python -c "from app.services.discovery_scraper import DiscoveryScraper; print('DS_SHIM_OK')"
+DS_SHIM_OK
+$ venv/bin/python -c "from app.services.strategic import PageStrategicService; print('STR_SHIM_OK')"
+STR_SHIM_OK
+
+$ venv/bin/python -c "import workers.maintenance; print('MAINT_IMPORT_OK')"
+MAINT_IMPORT_OK
+$ venv/bin/python -c "import workers.publisher; print('PUB_IMPORT_OK')"
+PUB_IMPORT_OK
+$ venv/bin/python -c "import manage; print('MANAGE_IMPORT_OK')"
+MANAGE_IMPORT_OK
+$ venv/bin/python -c "from app.features.insights.service import *; print('INS_VIRAL_INTEGRATION_OK')"
+INS_VIRAL_INTEGRATION_OK
+```
+
+### Risk Log
+
+- Static/local smoke only; no PM2 restart or VPS runtime proof in this step.
+- Maintenance worker import smoke passed, reducing immediate production crash risk after deploy, but live worker restart/monitor is still required.
+- `app/services/content/orchestrator.py` remains unmoved for Phase 4.
+- Do not proceed to Step 24 (`facebook_publisher`) until Anti per-feature review is complete.
 
 ## Risks (xem chi tiết PLAN-037 §"Risks")
 

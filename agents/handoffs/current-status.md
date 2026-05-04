@@ -2,6 +2,20 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 23 CODE DONE — `app/features/viral_intake/` ✅**
+  - **Scope**: moved 7 viral intake modules from `app/services/viral/` plus `app/routers/viral.py` into `app/features/viral_intake/`. Removed old `app/services/viral/` and `app/routers/viral.py`.
+  - **Preserved boundary**: did not touch `app/services/content/orchestrator.py`, `media_processor.py`, `video_protector.py`, or `yt_dlp_path.py`; Phase 4 remains reserved.
+  - **Import updates**: direct callsites moved to `app.features.viral_intake.*`; `app/main.py` imports viral router from feature path; `app/services/__init__.py` keeps 7 legacy aliases for backward compatibility.
+  - **Smoke proof**:
+    - `find app -name '*.py' -print0 | xargs -0 venv/bin/python -m py_compile` → `PY_COMPILE_OK` (pre-existing Facebook SyntaxWarning only).
+    - `venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"` → `ROUTES 207`.
+    - `venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co` → `77 tests collected, 11 errors` (baseline match).
+    - New feature imports: `VP_OK`, `VS_OK`, `DS_OK`, `STR_OK`, `VSVC_OK`, `TS_OK`, `REUP_OK`, `VIRAL_ROUTER_OK 4`.
+    - Shim imports: `VP_SHIM_OK`, `VS_SHIM_OK`, `DS_SHIM_OK`, `STR_SHIM_OK`.
+    - Worker/import critical: `MAINT_IMPORT_OK`, `PUB_IMPORT_OK`, `MANAGE_IMPORT_OK`, `INS_VIRAL_INTEGRATION_OK`.
+  - **Risk**: PM2/VPS runtime proof not run locally. Maintenance worker import is statically verified; deploy still needs controlled PM2 restart/monitor.
+  - **Next**: Claude Code / Anti verify Step 23. Do **not** proceed to Step 24 `facebook_publisher` until review clears it.
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 22 DONE — telegram_bot + retroactive notifier→core ✅**
   - **2 commits trên develop**:
     - `66c9826` Commit 22A: notifier carve sang `app/core/notifier/` (5 file: __init__.py + base.py + formatting.py + service.py + telegram.py). Retroactive Phase 1 work — notifier là shared infrastructure used by 18+ callsites (FB, threads, viral, observability, queue, workers). Critical path.

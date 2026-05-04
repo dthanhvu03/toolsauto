@@ -109,7 +109,7 @@ class DiscoveryScraper:
 
         Returns dict with stats or None if channel can't be analyzed.
         """
-        from app.services.tiktok_scraper import TikTokScraper
+        from app.features.viral_intake.tiktok_scraper import TikTokScraper
 
         scraper = TikTokScraper()
         videos = scraper.scrape_channel(channel_url, max_videos=max_videos, min_views=0)

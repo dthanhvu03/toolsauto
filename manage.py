@@ -195,7 +195,7 @@ def worker_restart(
 def viral_scan() -> None:
     """TikTok competitor channel scan → new ViralMaterial rows."""
     from app.core.database.core import SessionLocal
-    from app.services.viral_scan import run_tiktok_competitor_scan
+    from app.features.viral_intake.scan import run_tiktok_competitor_scan
 
     with SessionLocal() as db:
         n, ch = run_tiktok_competitor_scan(db)
@@ -206,7 +206,7 @@ def viral_scan() -> None:
 def viral_process() -> None:
     """Download / queue viral materials (yt-dlp pipeline)."""
     from app.core.database.core import SessionLocal
-    from app.services.viral_processor import ViralProcessorService
+    from app.features.viral_intake.processor import ViralProcessorService
 
     svc = ViralProcessorService()
     with SessionLocal() as db:
