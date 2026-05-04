@@ -13,8 +13,8 @@ from app.config import FACEBOOK_HOST, INSTAGRAM_HOST
 
 def update_account_status(account_id: int, status: str, error: str = None):
     try:
-        from app.database.core import SessionLocal
-        from app.database.models import Account
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import Account
         
         db = SessionLocal()
         account = db.query(Account).filter(Account.id == account_id).first()

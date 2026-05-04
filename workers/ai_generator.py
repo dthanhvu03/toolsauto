@@ -11,14 +11,14 @@ _root = Path(__file__).resolve().parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 from sqlalchemy.orm import Session
-from app.database.core import SessionLocal
+from app.core.database.core import SessionLocal
 from app.services.job_queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_TICK_SECONDS
 from app.services.worker import WorkerService
 from app.services.notifier_service import NotifierService
 from app.services.affiliate_ai import AffiliateAIService
-from app.database.models import AffiliateLink
+from app.core.database.models import AffiliateLink
 import urllib3
 
 # Setup Logging
@@ -152,7 +152,7 @@ def process_draft_job(db: Session):
 
         # Fetch available affiliate keywords from DB to let AI match products
         try:
-            from app.database.models import AffiliateLink
+            from app.core.database.models import AffiliateLink
             aff_keywords = [link.keyword for link in db.query(AffiliateLink).all()]
         except Exception:
             aff_keywords = []
@@ -226,7 +226,7 @@ def process_draft_job(db: Session):
             if matched_aff_kw and matched_aff_kw in aff_keywords:
                 # Find the corresponding template
                 try:
-                    from app.database.models import AffiliateLink
+                    from app.core.database.models import AffiliateLink
                     aff_link = db.query(AffiliateLink).filter(AffiliateLink.keyword == matched_aff_kw).first()
                     if aff_link:
                         # Thay thế placeholder [LINK] bằng URL thực tế
@@ -467,7 +467,7 @@ def _check_gemini_circuit(db):
 
 def _auto_style_default(db):
     """If a job has been AWAITING_STYLE for > 30 minutes, default to 'short' and move to DRAFT."""
-    from app.database.models import Job
+    from app.core.database.models import Job
     import time
     
     threshold_ts = int(time.time()) - 1800 # 30 mins
@@ -504,7 +504,7 @@ def run_loop():
     
     # ─── MANGAGE STUCK JOBS ON STARTUP ───
     try:
-        from app.database.models import Job
+        from app.core.database.models import Job
         with SessionLocal() as db:
             stuck_jobs = db.query(Job).filter(Job.status == JobStatus.AI_PROCESSING).update({"status": JobStatus.DRAFT})
             if stuck_jobs > 0:

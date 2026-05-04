@@ -107,7 +107,7 @@ module.exports = {
     },
     {
       name: "Threads_AutoReply",
-      script: "workers/threads_auto_reply.py",
+      script: "app/features/threads/workers/auto_reply.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 60000,
@@ -120,7 +120,7 @@ module.exports = {
     },
     {
       name: "Threads_NewsWorker",
-      script: "workers/threads_news_worker.py",
+      script: "app/features/threads/workers/news_worker.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 60000,
@@ -133,7 +133,7 @@ module.exports = {
     },
     {
       name: "Threads_Publisher",
-      script: "workers/threads_publisher.py",
+      script: "app/features/threads/workers/publisher.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,

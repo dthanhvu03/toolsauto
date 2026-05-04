@@ -63,7 +63,7 @@ class WorkflowConfig:
 
 def _load_all() -> dict:
     """Load all config from DB into cache dict."""
-    from app.database.core import SessionLocal
+    from app.core.database.core import SessionLocal
     from sqlalchemy import text
 
     db = SessionLocal()
@@ -312,7 +312,7 @@ class WorkflowRegistry:
     @staticmethod
     def list_presets(platform: str, job_type: str) -> list[dict]:
         """List all presets (active + inactive) for a platform:job_type."""
-        from app.database.core import SessionLocal
+        from app.core.database.core import SessionLocal
         from sqlalchemy import text as sa_text
         db = SessionLocal()
         try:
@@ -335,7 +335,7 @@ class WorkflowRegistry:
     @staticmethod
     def apply_preset(preset_name: str) -> str:
         """Activate a preset by name, deactivating siblings for same platform:job_type."""
-        from app.database.core import SessionLocal
+        from app.core.database.core import SessionLocal
         from sqlalchemy import text as sa_text
         db = SessionLocal()
         try:

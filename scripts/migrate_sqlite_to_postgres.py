@@ -43,8 +43,8 @@ from sqlalchemy.orm import sessionmaker
 
 # ── Defaults from app config ───────────────────────────────────────────────────
 from app.config import DATABASE_URL as DEFAULT_PG_URL, DB_PATH as DEFAULT_SQLITE_PATH
-import app.database.models  # noqa: F401 — register all models
-from app.database.core import Base
+import app.core.database.models  # noqa: F401 — register all models
+from app.core.database.core import Base
 
 # Tables ordered so FK parents come before children
 TABLE_ORDER = [

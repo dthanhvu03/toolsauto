@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from sqlalchemy import text, and_, or_
 from sqlalchemy.orm import Session
 
-from app.database.core import SessionLocal
-from app.database.models import Job, ViralMaterial
+from app.core.database.core import SessionLocal
+from app.core.database.models import Job, ViralMaterial
 
 
 def normalize_video_url(url: str) -> str:

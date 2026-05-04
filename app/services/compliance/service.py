@@ -16,8 +16,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.database.core import get_db
-from app.database.models import ComplianceAllowlist, KeywordBlacklist, ViolationLog
+from app.core.database.core import get_db
+from app.core.database.models import ComplianceAllowlist, KeywordBlacklist, ViolationLog
 from app.main_templates import templates
 from app.services.fb_compliance import (
     Severity,

@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from sqlalchemy import text  # noqa: E402
 
-from app.database.core import engine  # noqa: E402
+from app.core.database.core import engine  # noqa: E402
 import app.config as config  # noqa: E402
 
 

@@ -44,8 +44,8 @@ class TelegramEventRouter:
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
 
     def _handle_approve(self, callback_id: str, job_id: int, message_id: int, user_name: str):
-        from app.database.core import SessionLocal
-        from app.database.models import Job
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import Job
         from app.services.job import JobService
         with SessionLocal() as db:
             job = db.query(Job).filter(Job.id == job_id).first()
@@ -61,8 +61,8 @@ class TelegramEventRouter:
         self.client.send_message(f"✅ Approved Job #{job_id} by {user_name}")
 
     def _handle_cancel(self, callback_id: str, job_id: int, message_id: int, user_name: str):
-        from app.database.core import SessionLocal
-        from app.database.models import Job
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import Job
         from app.services.job import JobService
         with SessionLocal() as db:
             job = db.query(Job).filter(Job.id == job_id).first()
@@ -77,8 +77,8 @@ class TelegramEventRouter:
         self.client.send_message(f"❌ Cancelled Job #{job_id} by {user_name}")
 
     def _handle_style(self, callback_id: str, action: str, job_id: int, message_id: int, user_name: str):
-        from app.database.core import SessionLocal
-        from app.database.models import Job
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import Job
         from app.services.notifier_service import NotifierService
         style = action.split("_")[1]
         with SessionLocal() as db:

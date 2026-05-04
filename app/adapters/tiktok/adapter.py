@@ -20,7 +20,7 @@ from app.adapters.contracts import AdapterInterface, PublishResult
 from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.adapters.common.locator import LocatorStrategy, LocatorCandidate
 from app.adapters.tiktok.selectors import HEURISTIC_SELECTORS
-from app.database.models import Job
+from app.core.database.models import Job
 from app.config import SAFE_MODE, LOGS_DIR, TIKTOK_HOST, TIKTOK_UPLOAD_URL
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ except ImportError:
     def update_active_node(*a, **kw): pass
 
 try:
-    from app.services.runtime_events import emit as rt_emit
+    from app.core.observability.runtime_events import emit as rt_emit
 except ImportError:
     def rt_emit(*a, **kw): pass
 

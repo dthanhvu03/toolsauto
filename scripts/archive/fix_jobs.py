@@ -1,8 +1,8 @@
 import re
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.database.core import SessionLocal
-from app.database.models import Job, ViralMaterial
+from app.core.database.core import SessionLocal
+from app.core.database.models import Job, ViralMaterial
 
 db = SessionLocal()
 jobs = db.query(Job).filter(Job.status.in_(['PENDING', 'DRAFT', 'AWAITING_STYLE', 'AI_PROCESSING'])).all()

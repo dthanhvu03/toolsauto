@@ -16,7 +16,7 @@ setup_shared_logger("app")  # capture all app.adapters.* logs into the same file
 logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publisher")
 
 from sqlalchemy.orm import Session
-from app.database.core import SessionLocal
+from app.core.database.core import SessionLocal
 from app.services.job_queue import QueueService
 from app.services.job import JobService
 from app.config import WORKER_CRASH_THRESHOLD_SECONDS
@@ -24,7 +24,7 @@ from app.adapters.dispatcher import Dispatcher
 from app.services.worker import WorkerService
 from app.services.account import AccountService
 from app.adapters.facebook.adapter import PageMismatchError
-from app.services.system_monitor import SystemMonitorService
+from app.core.observability.system_monitor import SystemMonitorService
 import app.config as config
 from app.services import settings as runtime_settings
 from app.services.notifier_service import NotifierService
@@ -76,7 +76,7 @@ def check_crash_recovery(db: Session):
         logger.warning("Recovered %s crashed jobs. Sent back to PENDING.", recovered_count)
 
     # Reset accounts stuck in ENGAGING (stale lock from crashed engagement)
-    from app.database.models import Account
+    from app.core.database.models import Account
     stale_engaging = db.query(Account).filter(
         Account.login_status == AccountStatus.ENGAGING
     ).all()
@@ -94,7 +94,7 @@ def process_single_job(db: Session):
     """
     global CURRENT_JOB_ID
     
-    from app.database.models import Job
+    from app.core.database.models import Job
     from app.services.settings import apply_runtime_overrides_to_config
 
     # Apply runtime overrides (DB) to this process config
@@ -215,7 +215,7 @@ def process_single_job(db: Session):
 
         # Facebook content compliance (hard block VIOLATION before browser)
         from app.services.fb_compliance import check_before_publish, CompliancePublishError
-        from app.database.models import now_ts
+        from app.core.database.models import now_ts
 
         try:
             job_type = getattr(job, "job_type", JobType.POST) or JobType.POST
@@ -477,7 +477,7 @@ def _maybe_idle_engagement(db: Session):
 
     # Auto-disable idle engagement when backlog is high (protect 8GB RAM machines)
     try:
-        from app.database.models import Job
+        from app.core.database.models import Job
         threshold = int(os.getenv("IDLE_ENGAGEMENT_DISABLE_WHEN_PENDING", "10"))
         backlog = db.query(Job).filter(
             Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
@@ -490,7 +490,7 @@ def _maybe_idle_engagement(db: Session):
         pass
 
     # Pick a random active Facebook account
-    from app.database.models import Account
+    from app.core.database.models import Account
     import time as _time
     now = _time.time()
 
