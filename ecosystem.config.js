@@ -22,7 +22,7 @@ module.exports = {
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,       // 10 minutes — allow in-flight Playwright job to finish
-      listen_timeout: 10000,      // 10s to start
+
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 5000,
@@ -36,7 +36,7 @@ module.exports = {
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,       // 10 minutes
-      listen_timeout: 10000,
+
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 5000,
@@ -137,7 +137,7 @@ module.exports = {
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,
-      listen_timeout: 10000,
+
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 5000,
