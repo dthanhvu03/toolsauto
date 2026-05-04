@@ -40,12 +40,14 @@ def get_adapter(platform: str) -> AdapterInterface:
     from app.adapters.facebook.adapter import FacebookAdapter
     from app.features.threads.adapter import ThreadsAdapter
     from app.features.instagram.adapter import InstagramAdapter
+    from app.features.tiktok.adapter import TiktokAdapter
 
     # Map of platforms that have dedicated (non-Generic) adapters
     _DEDICATED_ADAPTERS = {
         Platform.FACEBOOK: lambda: FacebookAdapter(),
         Platform.THREADS: lambda: ThreadsAdapter(),
         Platform.INSTAGRAM: lambda: InstagramAdapter(),
+        Platform.TIKTOK: lambda: TiktokAdapter(),
     }
 
     registry_adapter: AdapterInterface | None = None
