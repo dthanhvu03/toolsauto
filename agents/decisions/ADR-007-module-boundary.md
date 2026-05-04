@@ -38,10 +38,14 @@ app/
 | `app/core/observability/` | `app/services/observability/` | Logging, metrics, incidents, health check, audit |
 | `app/core/ai/` | `app/services/ai/` | Brain factory, Gemini client, pipeline, fallback |
 | `app/core/notifier/` | `app/services/telegram/notifier/` | Generic notification dispatch (base + formatting + service) |
-| `app/core/settings/` | `app/services/platform/settings.py` + `app/config.py` | RuntimeSetting, global config |
+| `app/core/settings.py` | `app/services/platform/settings.py` | RuntimeSetting, global config |
+| `app/core/account.py` | `app/services/platform/account.py` | Account management, login state, profile paths |
+| `app/core/config_service.py` | `app/services/platform/config_service.py` | Platform-wide configuration management |
+| `app/core/page_utils.py` | `app/services/platform/page_utils.py` | Generic web page utilities |
+| `app/core/yt_dlp_path.py` | `app/services/content/yt_dlp_path.py` | Shared downloader infrastructure |
 | `app/core/db_admin/` | `app/services/db/` | DB management tools (ACL, SQL validator, database service) |
 | `app/core/compliance/` | `app/features/facebook/compliance/` | Content compliance engine (keywords, regex, AI rewrite) |
-| `app/core/strategic/` | `app/features/viral_intake/strategic.py` | Strategic growth analysis (page growth, strategic advice) |
+| `app/core/strategic.py` | `app/features/viral_intake/strategic.py` | Strategic growth analysis (page growth, strategic advice) |
 
 > **Note**: `app/core/compliance/` và `app/core/strategic/` đã được chuyển lên core ở Phase 5 sau khi phát hiện có nhiều consumer (Cross-feature usage).
 
@@ -49,7 +53,7 @@ app/
 
 | Feature | Chứa gì | Workers |
 |---|---|---|
-| `app/features/threads_publisher/` | adapter + news_scraper + threads_news + topic_key + article_scorer + dashboard + router | threads_publisher, threads_news_worker, threads_auto_reply, threads_verifier |
+| `app/features/threads/` | adapter + news_scraper + threads_news + topic_key + article_scorer + dashboard + router | threads_publisher, threads_news_worker, threads_auto_reply, threads_verifier |
 | `app/features/facebook/` | adapter + media_processor + reup_pipeline + router | publisher (FB) |
 | `app/features/instagram/` | adapter + router (minimal) | — |
 | `app/features/tiktok/` | adapter (read-only viral discovery) | — |
@@ -71,11 +75,11 @@ app/
 
 | Item | PLAN-037 đề xuất | ADR-007 quyết định | Lý do |
 |---|---|---|---|
-| `compliance/` | `core/compliance/` (generic) + FB tách feature | **Toàn bộ vào `features/facebook_publisher/compliance/`** | `fb_compliance.py` named `FBComplianceChecker`, prompt chứa "Facebook", `check_before_publish` raise `CompliancePublishError` cho FB context. `service.py` CRUD/router cũng ref `fb_compliance`. Chưa có compliance cho Threads/IG. Nếu sau cần generic → extract lên core lúc đó. |
+| `compliance/` | `core/compliance/` (generic) + FB tách feature | `core/compliance/` | Chuyển lên core để hỗ trợ đa kênh (Facebook, Affiliates) và tránh dependency chéo. |
 | `notifier` position | `core/notifier/` từ `notifier_service.py` + telegram generic broadcast | `core/notifier/` từ `telegram/notifier/` (base + formatting + service) | `notifiers/` directory thực tế rỗng; logic notifier thật nằm trong `telegram/notifier/`. Tách notifier base khỏi telegram_bot feature. |
 | `db_admin` | Không đề cập | `core/db_admin/` từ `services/db/` (ACL, sql_validator, database_service) | DB management tools là cross-feature shared infra. |
-| `video_protector` | Không rõ placement | `features/viral_intake/` | Video protector dùng cho reup pipeline (watermark, video processing). |
-| `media_processor` | Không rõ placement | `features/facebook_publisher/` | Media processor xử lý FB-specific media (image/video for FB post). |
+| `video_protector` | Không rõ | `features/viral_intake/` | Video protector dùng cho reup pipeline (watermark, video processing). |
+| `media_processor` | Không rõ | `features/facebook/` | Media processor xử lý FB-specific media (image/video for FB post). |
 | `ai_studio_service` | Không đề cập | `features/system_panel/` | AI Studio dashboard là admin panel feature. |
 
 ### Import rules (CỨNG — lint guard Phase 5)

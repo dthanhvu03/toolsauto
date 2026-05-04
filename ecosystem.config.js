@@ -46,7 +46,7 @@ module.exports = {
     },
     {
       name: "AI_Generator_1",
-      script: "workers/ai_generator.py",
+      script: "app/features/viral_intake/workers/ai_generator.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 300000,       // 5 minutes
@@ -59,7 +59,7 @@ module.exports = {
     },
     {
       name: "AI_Generator_2",
-      script: "workers/ai_generator.py",
+      script: "app/features/viral_intake/workers/ai_generator.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 300000,       // 5 minutes
@@ -72,7 +72,7 @@ module.exports = {
     },
     {
       name: "Maintenance",
-      script: "workers/maintenance.py",
+      script: "app/features/system_panel/workers/maintenance.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 60000,        // 1 minute

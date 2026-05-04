@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 from app.core.database.models import ComplianceAllowlist, KeywordBlacklist, ViolationLog
 from app.main_templates import templates
-from app.core.compliance.fb_compliance import (
+from app.core.compliance.facebook_compliance import (
     Severity,
     compliance_checker,
     invalidate_keyword_cache,

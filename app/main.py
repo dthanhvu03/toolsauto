@@ -14,10 +14,25 @@ from app.utils.logger import setup_shared_logger
 logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fastapi")
 
 # Import routers
-from app.routers import auth, dashboard, jobs, accounts, worker, health, pages, manual_job, database, compliance, platform_config, ai, ai_studio
+# Core & Platform Routers
+from app.platform.auth import router as auth
+from app.platform.dashboard_shell import router as dashboard
+from app.platform.health import router as health
+from app.core.db_admin import router as database
+from app.core.compliance import router as compliance
+from app.core.ai import router as ai
+
+# Feature Routers
+from app.features.jobs import router as jobs
+from app.features.accounts import router as accounts
 from app.features.threads import router as threads
 from app.features.affiliates import router as affiliates
-from app.features.system_panel import router as syspanel
+from app.features.system_panel import router as system_panel
+from app.features.system_panel import worker_router as worker
+from app.features.system_panel import config_router as platform_config
+from app.features.system_panel import ai_studio_router as ai_studio
+from app.features.facebook import pages_router as pages
+from app.features.facebook import manual_job_router as manual_job
 from app.features.insights import router as insights
 from app.features.telegram_bot import router as telegram
 from app.features.viral_intake import router as viral
@@ -45,7 +60,7 @@ app.include_router(health.router)
 app.include_router(telegram.router)
 app.include_router(viral.router)
 app.include_router(insights.router)
-app.include_router(syspanel.router)
+app.include_router(system_panel.router)
 app.include_router(pages.router)
 app.include_router(manual_job.router)
 app.include_router(affiliates.router)

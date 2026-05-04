@@ -8,7 +8,7 @@ from app.core.database.core import get_db
 from app.services.account import AccountService
 from app.services.page_utils import PageUtils
 from app.main_templates import templates
-from app.features.affiliates.service import AffiliateService
+from app.core.compliance.facebook_compliance import compliance_checker, Severity
 
 router = APIRouter(prefix="/pages", tags=["pages"])
 logger = logging.getLogger(__name__)
@@ -43,8 +43,8 @@ def update_page(
     if raw_niches:
         n_list_to_check = [n.strip() for n in raw_niches.split(",") if n.strip()]
         for kw in n_list_to_check:
-            comp_data = AffiliateService.compliance_check(kw)
-            if comp_data.get("status") == "VIOLATION":
+            result = compliance_checker.check(kw)
+            if result.status == Severity.VIOLATION:
                 msg = f"❌ Vi phạm chính sách tại từ khóa: '{kw}'"
                 response = HTMLResponse(content="")
                 response.headers["HX-Trigger"] = json.dumps({"showMessage": {"text": msg, "type": "error"}})

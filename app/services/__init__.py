@@ -65,7 +65,7 @@ _ALIASES = {
     "viral_service": "app.features.viral_intake.service",
     "reup_processor": "app.features.viral_intake.reup_processor",
     "strategic": "app.core.strategic",
-    "fb_compliance": "app.core.compliance.fb_compliance",
+    "fb_compliance": "app.core.compliance.facebook_compliance",
     "compliance_service": "app.core.compliance.service",
     "affiliate_ai": "app.features.affiliates.ai",
     "affiliate_service": "app.features.affiliates.service",

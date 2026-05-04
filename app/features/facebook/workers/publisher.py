@@ -214,7 +214,7 @@ def process_single_job(db: Session):
             return True
 
         # Facebook content compliance (hard block VIOLATION before browser)
-        from app.core.compliance.fb_compliance import check_before_publish, CompliancePublishError
+        from app.core.compliance.facebook_compliance import check_before_publish, CompliancePublishError
         from app.core.database.models import now_ts
 
         try:
