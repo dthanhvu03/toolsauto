@@ -3,7 +3,7 @@ from app.core.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
 from app.constants import Platform, JobType
 from app.services.media_processor import MediaProcessor
-from app.features.system_panel.workflow_registry import WorkflowRegistry
+from app.core.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
 
 logger = logging.getLogger(__name__)
