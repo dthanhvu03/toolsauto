@@ -2,6 +2,16 @@
 
 ## Recent Execution
 
+- **[2026-05-04] Anti review Step 21+22+23 → Verdict A/A/B + 2 boundary debt task mở ra**
+  - Step 21 insights: Verdict A APPROVED.
+  - Step 22 telegram_bot + notifier→core: Verdict A APPROVED. VPS production proof.
+  - Step 23 viral_intake: Verdict B APPROVED with follow-up.
+    - Issue: viral_intake/processor import legacy `app.services.content.orchestrator` (qua shim), tạo dependency vòng. Sẽ phá khi Phase 4 tách orchestrator.
+    - Anti revised approach: KHÔNG split orchestrator như PLAN-037 §"Phase 4" gốc. Move whole orchestrator sang `app/core/orchestrator.py`.
+  - **2 task mới mở**: [TASK-038](agents/tasks/active/TASK-038-workflow-registry-to-core.md) (workflow_registry→core, Step 20 follow-up) + [TASK-039](agents/tasks/active/TASK-039-orchestrator-to-core.md) (orchestrator→core, Step 23 follow-up).
+  - **Anti recommend order**: TASK-038 + TASK-039 TRƯỚC Step 24 + Phase 5. Clean state cho Step 24 HIGHEST RISK + Phase 5 lint guard.
+  - **Phase 3 status**: 7/8 features carved + VPS production-verified. Step 24 facebook_publisher GATE — chờ TASK-038+039 done.
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 23 CODE DONE — `app/features/viral_intake/` ✅**
   - **Scope**: moved 7 viral intake modules from `app/services/viral/` plus `app/routers/viral.py` into `app/features/viral_intake/`. Removed old `app/services/viral/` and `app/routers/viral.py`.
   - **Preserved boundary**: did not touch `app/services/content/orchestrator.py`, `media_processor.py`, `video_protector.py`, or `yt_dlp_path.py`; Phase 4 remains reserved.
