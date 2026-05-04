@@ -12,13 +12,15 @@
       - Moved `media_processor.py` → `app/features/facebook/`.
       - Moved `video_protector.py` → `app/features/viral_intake/`.
       - Moved `ai_studio_service.py` → `app/features/system_panel/`.
-  - **Import Integrity**: Updated all shims in `app/services/__init__.py`. Verified zero broken contracts via `import-linter`.
-  - **Status**: Codebase is fully modernized and strictly modularized. Ready for next phase of development.
+  - **Status**: Codebase is 100% modularized and ADR-007 compliant.
+  - **Final Cleanup**:
+    - Deleted `app/routers/` completely (all routers moved to platform/core/features).
+    - Deleted root `workers/` completely (all entry points moved to respective features).
+    - Updated `ecosystem.config.js` to match new worker paths.
   - **Open Issues**:
-    - `SyntaxWarning: invalid escape sequence '\d'` in `app/features/facebook/adapter.py:1630` (Non-breaking, legacy regex).
+    - `SyntaxWarning: invalid escape sequence '\d'` in `app/features/facebook/adapter.py:1630` (Non-breaking).
   - **Next Steps**:
-    - **Shim Deletion**: After 1-2 weeks of stability, start removing shim aliases in `app/services/__init__.py` and updating callsites to absolute paths.
-    - **Schema Migration**: Consider moving schemas in `app/schemas/` to their respective feature/core modules for 100% self-containment.
+    - **Shim Deletion**: Monitor stability for 1 week then remove `app/services/__init__.py`.
 
 - **[2026-05-04] PLAN-037 Phase 3 Step 24 DONE + Phase 3 COMPLETED — `app/features/facebook/` ✅**
   - **Scope**: Migrated Facebook Publisher feature (~6K LOC) including adapters, pages, core, selectors, engagement, compliance, and workers into `app/features/facebook/`.

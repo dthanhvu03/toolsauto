@@ -28,7 +28,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "2G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "FB_Publisher_2",
@@ -42,7 +42,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "2G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "AI_Generator_1",
@@ -55,7 +55,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "AI_Generator_2",
@@ -68,7 +68,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Maintenance",
@@ -80,7 +80,7 @@ module.exports = {
       min_uptime: 30000,
       restart_delay: 5000,
       autorestart: true,
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "9Router_Gateway",
@@ -103,7 +103,7 @@ module.exports = {
       min_uptime: 30000,
       restart_delay: 3000,
       autorestart: true,
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Threads_AutoReply",
@@ -116,7 +116,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Threads_NewsWorker",
@@ -129,7 +129,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Threads_Publisher",
@@ -143,7 +143,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
   ],
 };

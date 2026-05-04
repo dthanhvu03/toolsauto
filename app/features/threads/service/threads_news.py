@@ -13,7 +13,7 @@ from app.core.database.models import Account, Job, NewsArticle
 from app.services.ai_runtime import pipeline
 from app.features.threads.service.topic_key import compute_topic_key
 from app.core.orchestrator import ContentOrchestrator
-from app.services.platform import settings as runtime_settings
+from app.core import settings as runtime_settings
 
 logger = logging.getLogger("app.services.threads_news")
 
