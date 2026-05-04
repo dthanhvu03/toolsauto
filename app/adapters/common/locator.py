@@ -231,7 +231,7 @@ class LocatorStrategy:
         
         This replaces the old _get_dynamic_selectors + _wait_and_locate_array pattern.
         """
-        from app.features.system_panel.workflow_registry import WorkflowRegistry
+        from app.core.workflow_registry import WorkflowRegistry
 
         candidates: list[LocatorCandidate] = []
 

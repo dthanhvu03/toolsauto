@@ -16,7 +16,7 @@ _ALIASES = {
     "account": "platform.account",
     "page_utils": "platform.page_utils",
     "platform_config_service": "platform.config_service",
-    "workflow_registry": "app.features.system_panel.workflow_registry",
+    "workflow_registry": "app.core.workflow_registry",  # TASK-038: moved to core (ADR-007)
     # PLAN-037 Phase 1 Move C: ai moved to app.core.ai
     "ai_native_fallback": "app.core.ai.native_fallback",
     "ai_pipeline": "app.core.ai.pipeline",

@@ -234,7 +234,7 @@ class GenericAdapter(AdapterInterface):
     def _load_platform_config(self) -> None:
         """Load platform config from WorkflowRegistry."""
         try:
-            from app.features.system_panel.workflow_registry import WorkflowRegistry
+            from app.core.workflow_registry import WorkflowRegistry
             self._platform_config = WorkflowRegistry.get_platform_config(self.platform)
         except Exception as e:
             logger.warning(
@@ -245,7 +245,7 @@ class GenericAdapter(AdapterInterface):
     def _load_workflow_steps(self, job) -> list[StepConfig]:
         """Load and parse workflow steps from DB."""
         try:
-            from app.features.system_panel.workflow_registry import WorkflowRegistry
+            from app.core.workflow_registry import WorkflowRegistry
 
             job_type = getattr(job, "job_type", JobType.POST) or JobType.POST
             workflow = WorkflowRegistry.get_workflow(self.platform, job_type)

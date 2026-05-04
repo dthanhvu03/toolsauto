@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database.core import get_db
 from app.main_templates import templates
-from app.features.system_panel.workflow_registry import invalidate
+from app.core.workflow_registry import invalidate
 from app.config import MCP_PROXY_PORT
 from app.constants import WorkflowAction
 import json, time, logging
@@ -107,7 +107,7 @@ def platform_config_page(request: Request):
 # ─── Cache Invalidation ──────────────────────────────────────────
 
 def invalidate_cache():
-    from app.features.system_panel.workflow_registry import invalidate
+    from app.core.workflow_registry import invalidate
     invalidate()
     return JSONResponse({"success": True, "message": "Cache cleared"})
 
@@ -332,7 +332,7 @@ def test_workflow(workflow_id: int, payload: dict = {}, db: Session = Depends(ge
     Checks: step schema, selector coverage, value sources.
     Does NOT launch a browser.
     """
-    from app.features.system_panel.workflow_registry import WorkflowRegistry
+    from app.core.workflow_registry import WorkflowRegistry
 
     # Load workflow
     row = db.execute(text(
@@ -768,12 +768,12 @@ def reorder_cta(payload: dict, db: Session = Depends(get_db)):
 # ─── Phase 3D: Presets API ────────────────────────────────────────
 
 def list_presets_api(platform: str = "facebook", job_type: str = "POST"):
-    from app.features.system_panel.workflow_registry import WorkflowRegistry
+    from app.core.workflow_registry import WorkflowRegistry
     return WorkflowRegistry.list_presets(platform, job_type)
 
 
 def apply_preset_api(payload: dict):
-    from app.features.system_panel.workflow_registry import WorkflowRegistry
+    from app.core.workflow_registry import WorkflowRegistry
     name = payload.get("name", "")
     msg = WorkflowRegistry.apply_preset(name)
     ok = "activated" in msg
@@ -781,7 +781,7 @@ def apply_preset_api(payload: dict):
 
 
 def runtime_config_api(platform: str = "facebook", job_type: str = "POST"):
-    from app.features.system_panel.workflow_registry import WorkflowRegistry
+    from app.core.workflow_registry import WorkflowRegistry
     return WorkflowRegistry.get_runtime_snapshot(platform, job_type)
 
 
@@ -795,7 +795,7 @@ def preview_switch_api(
     platform: str = "facebook", job_type: str = "POST"
 ):
     """Compute diff between two presets for impact preview modal."""
-    from app.features.system_panel.workflow_registry import WorkflowRegistry, PRESET_DESCRIPTIONS
+    from app.core.workflow_registry import WorkflowRegistry, PRESET_DESCRIPTIONS
     from app.core.database.core import SessionLocal
     from sqlalchemy import text as sa_text
 
@@ -907,7 +907,7 @@ def overview_warnings_api(
     platform: str = "facebook", job_type: str = "POST"
 ):
     """Compute aggregated warnings for Overview alert banner."""
-    from app.features.system_panel.workflow_registry import (
+    from app.core.workflow_registry import (
         WorkflowRegistry, PRESET_DESCRIPTIONS, get_cache_status,
     )
     from app.core.observability.runtime_events import get_enriched_selector_health
