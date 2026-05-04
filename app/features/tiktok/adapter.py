@@ -19,7 +19,7 @@ from playwright.sync_api import Playwright, BrowserContext, Page, Locator
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.adapters.common.locator import LocatorStrategy, LocatorCandidate
-from app.adapters.tiktok.selectors import HEURISTIC_SELECTORS
+from app.features.tiktok.selectors import HEURISTIC_SELECTORS
 from app.core.database.models import Job
 from app.config import SAFE_MODE, LOGS_DIR, TIKTOK_HOST, TIKTOK_UPLOAD_URL
 
