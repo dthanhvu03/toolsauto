@@ -1,6 +1,6 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 23 viral_intake code/static-smoke done; Claude Code / Anti review pending
+**Status**: Phase 3 Step 24 facebook_publisher done. Phase 3 COMPLETED. Ready for Phase 5 (Lint Guard).
 **ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)

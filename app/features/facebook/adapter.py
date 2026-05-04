@@ -16,9 +16,9 @@ from app.utils.human_behavior import human_type, human_scroll, pre_post_delay
 import json
 import unicodedata
 from collections import deque
-from app.features.facebook_publisher.selectors import SELECTORS
-from app.features.facebook_publisher.core.session import FacebookSessionManager
-from app.features.facebook_publisher.pages.reels import FacebookReelsPage
+from app.features.facebook.selectors import SELECTORS
+from app.features.facebook.core.session import FacebookSessionManager
+from app.features.facebook.pages.reels import FacebookReelsPage
 
 logger = logging.getLogger(__name__)
 from app.core.observability.runtime_events import emit as rt_emit
