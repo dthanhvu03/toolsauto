@@ -1,6 +1,6 @@
 # TASK-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 18 APPROVED, Step 19 affiliates ready
+**Status**: Phase 3 Step 20 APPROVED (with follow-up), Step 21 insights ready
 **Plan**: [PLAN-037](../../plans/active/PLAN-037-feature-based-module-refactor.md)
 **ADR**: [ADR-007](../../decisions/ADR-007-module-boundary.md)
 **Executor**: Codex (heavy file-move + import update)
@@ -44,7 +44,7 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 17. [x] `instagram` (low risk) — code commit `2fee8f6`.
 18. [x] `tiktok` (low risk) — code commit `d4514f6`.
 19. [x] `affiliates` (medium) — code commit `f564c54`.
-20. [x] `system_panel` + `workflow_registry` (medium) — code commit `498569e`.
+20. [x] `system_panel` + `workflow_registry` (medium) — code commit `498569e`. (Anti Verdict B: Follow-up move workflow_registry to core/)
 21. [ ] `insights` (medium — đụng dashboard).
 22. [ ] `telegram_bot` (medium — shared notifier).
 23. [ ] `viral_intake` (high — orchestrator 651 dòng).
