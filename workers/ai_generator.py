@@ -17,7 +17,7 @@ from app.services.job import JobService
 from app.config import WORKER_TICK_SECONDS
 from app.services.worker import WorkerService
 from app.services.notifier_service import NotifierService
-from app.services.affiliate_ai import AffiliateAIService
+from app.features.affiliates.ai import AffiliateAIService
 from app.core.database.models import AffiliateLink
 import urllib3
 
