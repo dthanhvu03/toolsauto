@@ -186,7 +186,7 @@ class CompliancePublishError(ValueError):
     """Raised when content must not be published (VIOLATION)."""
 
 
-class FBComplianceChecker:
+class FacebookComplianceChecker:
     def _mask_allowlisted_phrases(self, content_lower: str) -> str:
         """Replace allowlisted substrings so keyword scan ignores them."""
         masked = content_lower
@@ -341,7 +341,7 @@ class FBComplianceChecker:
         )
 
 
-compliance_checker = FBComplianceChecker()
+compliance_checker = FacebookComplianceChecker()
 
 
 def log_violation(

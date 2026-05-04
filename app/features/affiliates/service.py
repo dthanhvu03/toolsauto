@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.core.database.models import AffiliateLink
-from app.core.compliance.fb_compliance import compliance_checker, Severity, log_violation
+from app.core.compliance.facebook_compliance import compliance_checker, Severity, log_violation
 from app.features.affiliates.ai import AffiliateAIService
 from app.services.gemini_rpa import GeminiRPAService
 from app.services.gemini_api import GeminiAPIService

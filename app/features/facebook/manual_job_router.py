@@ -4,7 +4,7 @@ import logging
 from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 from app.main_templates import templates
-from app.features.affiliates.service import AffiliateService
+from app.core.compliance.facebook_compliance import compliance_checker, Severity
 from app.services.job import JobService
 from app.config import CONTENT_DIR
 
@@ -42,9 +42,9 @@ async def manual_job_create(
 ):
     caption_text = (caption or "").strip()
     if caption_text:
-        comp_data = AffiliateService.compliance_check(caption_text)
-        if comp_data.get("status") == "VIOLATION":
-            violations = ", ".join([v["evidence"] for v in comp_data.get("violations", [])])
+        result = compliance_checker.check(caption_text)
+        if result.status == Severity.VIOLATION:
+            violations = ", ".join([v.evidence for v in result.violations])
             msg = f"❌ Không thể tạo Job: Nội dung vi phạm chính sách Facebook ({violations})"
             return HTMLResponse(f'<div class="p-3 text-sm rounded bg-rose-50 text-rose-800 border border-rose-200 font-medium">{msg}</div>')
 
