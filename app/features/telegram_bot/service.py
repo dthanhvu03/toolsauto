@@ -3,7 +3,7 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 from app.core.database.models import Job
 from app.services.job import JobService
-from app.services.telegram_client import TelegramClient
+from app.features.telegram_bot.client import TelegramClient
 from app.constants import JobStatus
 from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 

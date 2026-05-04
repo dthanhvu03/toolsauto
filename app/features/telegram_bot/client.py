@@ -5,7 +5,7 @@ Tách riêng API call khỏi business logic (NotifierService).
 Chỉ chịu trách nhiệm: gọi HTTP → Telegram server → trả kết quả.
 
 Dùng:
-    from app.services.telegram_client import TelegramClient
+    from app.features.telegram_bot.client import TelegramClient
     client = TelegramClient(bot_token, chat_id)
     client.send_message("Hello!")
     client.send_photo("/path/to/img.jpg", "Caption here")

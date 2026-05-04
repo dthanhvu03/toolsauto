@@ -2,8 +2,8 @@ import threading
 import logging
 import time
 import os
-from app.services.telegram_command_handler import TelegramCommandHandler
-from app.services.telegram_event_router import TelegramEventRouter
+from app.features.telegram_bot.command_handler import TelegramCommandHandler
+from app.features.telegram_bot.event_router import TelegramEventRouter
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ class TelegramPoller:
     LOCK_FILE = "/tmp/telegram_poller.lock"
 
     def __init__(self, bot_token: str, chat_id: str, poll_timeout: int = 30):
-        from app.services.telegram_client import TelegramClient
+        from app.features.telegram_bot.client import TelegramClient
         self.client = TelegramClient(bot_token, chat_id)
         self.authorized_chat_id = str(chat_id)
         self.poll_timeout = poll_timeout
