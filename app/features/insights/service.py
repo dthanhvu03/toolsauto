@@ -153,7 +153,7 @@ def get_top_posts(
         SELECT
             post_url,
             REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/') as canonical_url,
-            ROW_NUMBER() OVER (PARTITION BY 
+            ROW_NUMBER() OVER (PARTITION BY
                 REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
                 ORDER BY recorded_at DESC
             ) as rn
@@ -175,7 +175,7 @@ def get_top_posts(
         SELECT
             post_url, page_name, platform, views, likes, comments, shares, caption,
             published_date, recorded_at,
-            ROW_NUMBER() OVER (PARTITION BY 
+            ROW_NUMBER() OVER (PARTITION BY
                 REPLACE(REPLACE(RTRIM(LOWER(post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
                 ORDER BY recorded_at DESC
             ) as rn
@@ -190,8 +190,8 @@ def get_top_posts(
         (l1.views - COALESCE(l2.views, 0)) as velocity,
         CASE WHEN l1.views > 0 THEN (CAST(l1.likes AS FLOAT) / l1.views) * 100 ELSE 0 END as eng_rate
     FROM RankedInsights l1
-    LEFT JOIN RankedInsights l2 ON 
-        REPLACE(REPLACE(RTRIM(LOWER(l1.post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/') = 
+    LEFT JOIN RankedInsights l2 ON
+        REPLACE(REPLACE(RTRIM(LOWER(l1.post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/') =
         REPLACE(REPLACE(RTRIM(LOWER(l2.post_url), '/'), 'web.facebook.com', 'www.facebook.com'), '/reels/', '/reel/')
         AND l2.rn = 2
     WHERE l1.rn = 1
@@ -241,7 +241,7 @@ def get_page_analysis(platform: str = None, db: Session = Depends(get_db)):
     Strategic Analysis: Categorize pages based on growth momentum and engagement.
     Uses the centralized PageStrategicService with platform filtering.
     """
-    from app.services.strategic import PageStrategicService
+    from app.features.viral_intake.strategic import PageStrategicService
     analysis = PageStrategicService.get_page_analysis(db, platform=platform)
     return {"status": "success", "data": analysis}
 

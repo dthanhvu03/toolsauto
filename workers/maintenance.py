@@ -23,7 +23,7 @@ from app.services.cleanup import CleanupService
 from app.core.observability.metrics_checker import MetricsChecker
 from app.core.notifier.service import NotifierService, TelegramNotifier
 from app.core.observability.system_monitor import SystemMonitorService
-from app.services.viral_processor import ViralProcessorService
+from app.features.viral_intake.processor import ViralProcessorService
 import app.config as config
 from app.services import settings as runtime_settings
 from app.constants import JobStatus, ViralStatus
@@ -177,7 +177,7 @@ def _scrape_tiktok_competitors(db):
     Chỉ chạy mỗi 1 giờ để tránh rate limit TikTok.
     """
     global _last_tiktok_scrape_ts
-    from app.services.viral_scan import run_tiktok_competitor_scan
+    from app.features.viral_intake.scan import run_tiktok_competitor_scan
 
     now = time.time()
     if (now - _last_tiktok_scrape_ts) < TIKTOK_SCRAPE_INTERVAL_SEC:
@@ -196,7 +196,7 @@ def _scrape_tiktok_competitors(db):
                 f"✅ Tìm thấy <b>{total_found}</b> video viral mới!"
             )
         else:
-            from app.services.viral_scan import get_default_min_views
+            from app.features.viral_intake.scan import get_default_min_views
             min_views = get_default_min_views(db)
             NotifierService._broadcast(
                 f"🎵 <b>TikTok Auto-Discovery</b>\n"
@@ -356,7 +356,7 @@ def _run_competitor_discovery(db):
     logger.info("[DISCOVERY] Starting nightly competitor discovery scan...")
 
     from app.core.database.models import Account
-    from app.services.discovery_scraper import DiscoveryScraper
+    from app.features.viral_intake.discovery_scraper import DiscoveryScraper
     from app.services.account import get_discovery_keywords
 
     accounts = db.query(Account).filter(Account.is_active == True).all()
@@ -418,7 +418,7 @@ def _run_strategic_boost(db):
     _last_boost_ts = now
     logger.info("🕒 Starting Autonomous Strategic Boosting Scan...")
     try:
-        from app.services.strategic import PageStrategicService
+        from app.features.viral_intake.strategic import PageStrategicService
         PageStrategicService.run_auto_boost(db)
     except Exception as e:
         logger.error(f"[STRATEGIC] Auto-boost failed: {e}")

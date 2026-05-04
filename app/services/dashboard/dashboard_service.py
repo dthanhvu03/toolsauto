@@ -10,7 +10,7 @@ from app.services.worker import WorkerService
 from app.constants import JobStatus, ViralStatus
 from app.services import settings as runtime_settings
 from app.services.account import AccountService, get_discovery_keywords
-from app.services.discovery_scraper import DiscoveryScraper
+from app.features.viral_intake.discovery_scraper import DiscoveryScraper
 import app.config as config
 
 logger = logging.getLogger(__name__)

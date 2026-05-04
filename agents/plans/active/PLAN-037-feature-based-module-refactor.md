@@ -1,6 +1,6 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 19 APPROVED, Step 20 system_panel ready (Anti sign-off 2026-05-04)
+**Status**: Phase 3 Step 23 viral_intake code/static-smoke done; Claude Code / Anti review pending
 **ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)
@@ -599,3 +599,79 @@ IMPORT OK
 - PM2/VPS runtime proof was not run locally for this no-behavior-change move.
 - `TelegramNotifier` uses `app.features.telegram_bot.client.TelegramClient` after the requested `client.py` feature move.
 - Stop before Step 23 (`viral_intake`) pending Anti per-feature review.
+
+---
+
+## Phase 3 Step 23 Execution Notes
+
+**Executed by**: Codex — 2026-05-04
+**Status**: Step 23 code/static-smoke done. Claude Code / Anti per-feature review pending.
+**Code commit**: Step 23 refactor commit (`refactor(P037-Phase3): move viral_intake to app/features/viral_intake/ (no behavior change)`)
+
+### Changes
+
+- Added empty `app/features/viral_intake/__init__.py`.
+- Moved 7 modules from `app/services/viral/` into `app/features/viral_intake/`: `discovery_scraper.py`, `processor.py`, `reup_processor.py`, `scan.py`, `service.py`, `strategic.py`, `tiktok_scraper.py`.
+- Moved `app/routers/viral.py` → `app/features/viral_intake/router.py`.
+- Removed old `app/services/viral/` and `app/routers/viral.py`.
+- Updated direct imports in the moved modules plus `app/main.py`, `app/services/dashboard/dashboard_service.py`, `app/features/insights/service.py`, `workers/maintenance.py`, and `manage.py`.
+- Updated `app/services/__init__.py` aliases for `discovery_scraper`, `tiktok_scraper`, `viral_processor`, `viral_scan`, `viral_service`, `reup_processor`, and `strategic`.
+- Did not touch `app/services/content/orchestrator.py`; Phase 4 remains reserved for orchestrator split.
+
+### Verification Proof
+
+```text
+$ find app -name '*.py' -print0 | xargs -0 venv/bin/python -m py_compile && echo PY_COMPILE_OK
+PY_COMPILE_OK
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+
+$ venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"
+ROUTES 207
+
+$ venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co
+77 tests collected, 11 errors in 76.31s (0:01:16)
+
+$ venv/bin/python -c "from app.features.viral_intake.processor import ViralProcessorService; print('VP_OK')"
+VP_OK
+$ venv/bin/python -c "from app.features.viral_intake.scan import run_tiktok_competitor_scan; print('VS_OK')"
+VS_OK
+$ venv/bin/python -c "from app.features.viral_intake.discovery_scraper import DiscoveryScraper; print('DS_OK')"
+DS_OK
+$ venv/bin/python -c "from app.features.viral_intake.strategic import PageStrategicService; print('STR_OK')"
+STR_OK
+$ venv/bin/python -c "from app.features.viral_intake.service import ViralService; print('VSVC_OK')"
+VSVC_OK
+$ venv/bin/python -c "from app.features.viral_intake.tiktok_scraper import *; print('TS_OK')"
+TS_OK
+$ venv/bin/python -c "from app.features.viral_intake.reup_processor import *; print('REUP_OK')"
+REUP_OK
+$ venv/bin/python -c "from app.features.viral_intake.router import router; print('VIRAL_ROUTER_OK', len(router.routes))"
+VIRAL_ROUTER_OK 4
+
+$ venv/bin/python -c "from app.services.viral_processor import ViralProcessorService; print('VP_SHIM_OK')"
+VP_SHIM_OK
+$ venv/bin/python -c "from app.services.viral_scan import run_tiktok_competitor_scan; print('VS_SHIM_OK')"
+VS_SHIM_OK
+$ venv/bin/python -c "from app.services.discovery_scraper import DiscoveryScraper; print('DS_SHIM_OK')"
+DS_SHIM_OK
+$ venv/bin/python -c "from app.services.strategic import PageStrategicService; print('STR_SHIM_OK')"
+STR_SHIM_OK
+
+$ venv/bin/python -c "import workers.maintenance; print('MAINT_IMPORT_OK')"
+MAINT_IMPORT_OK
+$ venv/bin/python -c "import workers.publisher; print('PUB_IMPORT_OK')"
+PUB_IMPORT_OK
+$ venv/bin/python -c "import manage; print('MANAGE_IMPORT_OK')"
+MANAGE_IMPORT_OK
+$ venv/bin/python -c "from app.features.insights.service import *; print('INS_VIRAL_INTEGRATION_OK')"
+INS_VIRAL_INTEGRATION_OK
+```
+
+### Risk / Pending
+
+- PM2/VPS runtime proof was not run locally for this no-behavior-change move.
+- Maintenance worker import smoke passed (`MAINT_IMPORT_OK`), but deploy still needs controlled restart/monitor.
+- `app/services/content/orchestrator.py` remains reserved for Phase 4 and was not edited.
+- Stop before Step 24 (`facebook_publisher`) pending Anti per-feature review.
+
+Execution Done. Cần Claude Code verify + handoff.

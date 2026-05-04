@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import time
 from app.core.database.core import get_db
 from app.main_templates import templates
-from app.services.viral_service import ViralService
+from app.features.viral_intake.service import ViralService
 
 router = APIRouter(prefix="/viral", tags=["viral"])
 

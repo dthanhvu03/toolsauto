@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Tuple
 from sqlalchemy.orm import Session
 from app.core.database.models import ViralMaterial, Account
 from app.services.worker import WorkerService
-from app.services.viral_scan import run_tiktok_competitor_scan, get_default_min_views
+from app.features.viral_intake.scan import run_tiktok_competitor_scan, get_default_min_views
 
 logger = logging.getLogger(__name__)
 

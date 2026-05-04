@@ -562,7 +562,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     continue
 
             # === Post-processing: watermark removal + anti-duplicate ===
-            from app.services.reup_processor import ReupProcessor
+            from app.features.viral_intake.reup_processor import ReupProcessor
             reup_result = ReupProcessor.process(
                 input_path=media_path,
                 platform=mat.platform or "unknown",
@@ -596,7 +596,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             resolved_target = mat.target_page
             if resolved_target and target_account:
                 try:
-                    from app.services.strategic import PageStrategicService
+                    from app.features.viral_intake.strategic import PageStrategicService
                     page_niches = PageStrategicService._lookup_page_niches(db, target_account.id, resolved_target)
                     top_posts_summary = PageStrategicService._get_top_posts_summary(db, resolved_target)
                     if page_niches or top_posts_summary:

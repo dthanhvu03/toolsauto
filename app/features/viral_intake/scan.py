@@ -11,7 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database.models import Account, ViralMaterial, SystemState
-from app.services.tiktok_scraper import TikTokScraper
+from app.features.viral_intake.tiktok_scraper import TikTokScraper
 import app.config as config
 from app.constants import ViralStatus
 
