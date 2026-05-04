@@ -43,7 +43,7 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 ### Phase 3 — Carve remaining features (theo thứ tự rủi ro)
 17. [x] `instagram` (low risk) — code commit `2fee8f6`.
 18. [x] `tiktok` (low risk) — code commit `d4514f6`.
-19. [ ] `affiliates` (medium).
+19. [x] `affiliates` (medium) — code commit `f564c54`.
 20. [ ] `system_panel` + `workflow_registry` (medium).
 21. [ ] `insights` (medium — đụng dashboard).
 22. [ ] `telegram_bot` (medium — shared notifier).
