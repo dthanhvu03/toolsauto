@@ -21,11 +21,9 @@ ADR-005 (services-layer reorg) đã gom nhóm theo domain dưới `app/services/
 ```
 app/
 ├── core/           ← shared infrastructure (no platform/feature knowledge)
-├── features/       ← self-contained feature modules
-├── platform/       ← cross-feature shell (auth, dashboard chrome, health)
-├── adapters/       ← [PHASE 2+] migrated INTO respective features/
-├── services/       ← [DEPRECATED after migration] legacy re-export shim (ADR-005)
-├── routers/        ← [DEPRECATED after migration] legacy router files
+├── features/       ← self-contained feature modules (services + routers + workers)
+├── platform/       ← cross-feature shell (auth, dashboard shell, health)
+├── services/       ← [DEPRECATED] legacy re-export shim (ADR-005)
 └── ...
 ```
 
@@ -53,15 +51,17 @@ app/
 
 | Feature | Chứa gì | Workers |
 |---|---|---|
-| `app/features/threads/` | adapter + news_scraper + threads_news + topic_key + article_scorer + dashboard + router | threads_publisher, threads_news_worker, threads_auto_reply, threads_verifier |
-| `app/features/facebook/` | adapter + media_processor + reup_pipeline + router | publisher (FB) |
-| `app/features/instagram/` | adapter + router (minimal) | — |
-| `app/features/tiktok/` | adapter (read-only viral discovery) | — |
-| `app/features/viral_intake/` | orchestrator + discovery + scan + tiktok_scraper + video_protector + reup_processor | ai_generator |
-| `app/features/insights/` | insights_service + router | — |
-| `app/features/affiliates/` | affiliate_ai + affiliate_service + router | — |
-| `app/features/telegram_bot/` | client + command_handler + event_router + poller + service | — |
-| `app/features/system_panel/` | syspanel_service + workflow_registry + manage routes + ai_studio_service | maintenance, ai_reporter |
+| `app/features/threads/` | adapter + service + workers + router | auto_reply, news_worker, publisher, verifier |
+| `app/features/facebook/` | adapter + service + workers + routers | publisher (FB) |
+| `app/features/instagram/` | adapter + router | — |
+| `app/features/tiktok/` | adapter | — |
+| `app/features/viral_intake/` | service + workers + router | ai_generator |
+| `app/features/insights/` | service + router | — |
+| `app/features/affiliates/` | service + router | — |
+| `app/features/telegram_bot/` | service + router | — |
+| `app/features/system_panel/` | service + workers + routers | maintenance, ai_reporter |
+| `app/features/jobs/` | service + router | — |
+| `app/features/accounts/` | service + router | — |
 
 ### Platform modules (3)
 
