@@ -1,6 +1,6 @@
 # PLAN-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 17 APPROVED, Step 18 tiktok ready (Anti sign-off 2026-05-04)
+**Status**: Phase 3 Step 18 CODE DONE, Anti review pending (2026-05-04)
 **ADR**: [ADR-007-module-boundary](../../decisions/ADR-007-module-boundary.md)
 **Owner**: Antigravity (architectural decision) — Codex execute — Claude Code verify
 **Related task**: [TASK-037](../../tasks/active/TASK-037-feature-based-module-refactor.md)
@@ -434,3 +434,75 @@ DB_MIGRATION_OK app.features.instagram.adapter.InstagramAdapter
 - Local DB alembic_version is now `b4c8f0e9d3a1`; VPS must run `venv/bin/alembic upgrade head` during deploy.
 - No PM2 restart was run locally; Instagram has no dedicated worker in this step.
 - Do not proceed to Step 18 (`tiktok`) until per-feature review is complete.
+
+---
+
+## Phase 3 Tiktok Execution Notes
+
+**Executed by**: Codex — 2026-05-04
+**Status**: Step 18 code/static-smoke done. Claude Code / Anti per-feature review pending.
+**Code commit**: `d4514f6` — `refactor(P037-Phase3): move tiktok to app/features/tiktok/ (no behavior change)`
+
+### Changes
+
+- `app/adapters/tiktok/adapter.py` → `app/features/tiktok/adapter.py`.
+- `app/adapters/tiktok/selectors.py` → `app/features/tiktok/selectors.py`.
+- Added empty `app/features/tiktok/__init__.py`.
+- Removed old `app/adapters/tiktok/` source directory after clearing generated `__pycache__`; source path verified gone.
+- Updated Tiktok selector import path only; no business logic edits.
+- Collateral A: updated `app/templates/pages/platform_config.html` tiktok placeholder and `KNOWN_ADAPTERS["tiktok"]`.
+- Collateral B: added Alembic data migration `c7d9e1f2a3b4_p037_p3_tiktok_adapter_path.py`.
+- Collateral C: added dispatcher `Platform.TIKTOK` fallback to `TiktokAdapter` because `Platform.TIKTOK` exists.
+
+### Verification Proof
+
+```text
+$ bash smoke.sh
+ROUTES:  207
+IMPORT OK
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+  return self.page.evaluate("""
+
+$ find app -name '*.py' -print0 | xargs -0 venv/bin/python -m py_compile
+PY_COMPILE_OK
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+  return self.page.evaluate("""
+
+$ venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"
+ROUTES 207
+
+$ venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co
+77 tests collected, 11 errors in 74.44s (0:01:14)
+
+$ venv/bin/python -c "from app.features.tiktok.adapter import TiktokAdapter; print('TT_OK')"
+TT_OK
+
+$ venv/bin/alembic upgrade head
+INFO  [alembic.runtime.migration] Running upgrade b4c8f0e9d3a1 -> c7d9e1f2a3b4, P037 Phase 3: update platform_configs.adapter_class for tiktok
+
+$ venv/bin/python - <<'PY'
+from app.core.database.core import SessionLocal
+from sqlalchemy import text
+db = SessionLocal()
+r = db.execute(text("SELECT adapter_class FROM platform_configs WHERE platform='tiktok'")).scalar()
+assert r == 'app.features.tiktok.adapter.TiktokAdapter', r
+print('DB_MIGRATION_OK', r)
+db.close()
+PY
+DB_MIGRATION_OK app.features.tiktok.adapter.TiktokAdapter
+
+$ venv/bin/alembic heads
+c7d9e1f2a3b4 (head)
+
+$ git diff --cached --find-renames --stat
+6 files changed, 34 insertions(+), 3 deletions(-)
+```
+
+### Risk / Pending
+
+- Local DB alembic_version is now `c7d9e1f2a3b4`.
+- PM2/VPS runtime proof was not run for Tiktok because this step only moves adapter/config path and does not add a worker.
+- Pytest collection remained at the Phase 2/Step 17 baseline (`77/11`); the 11 collection errors are pre-existing and not in new Tiktok files.
+- Do not proceed to Step 19 (`affiliates`) until per-feature review is complete.
+
+Execution Done. Cần Claude Code verify + handoff.
