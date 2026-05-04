@@ -18,7 +18,7 @@ from playwright.sync_api import Playwright, BrowserContext, Page
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.adapters.common.locator import LocatorStrategy, LocatorCandidate
-from app.adapters.instagram.selectors import HEURISTIC_SELECTORS
+from app.features.instagram.selectors import HEURISTIC_SELECTORS
 from app.core.database.models import Job
 from app.config import SAFE_MODE, LOGS_DIR, INSTAGRAM_HOST
 
