@@ -1,6 +1,6 @@
 # TASK-037 — Refactor sang feature-based architecture
 
-**Status**: Phase 3 Step 18 CODE DONE, Anti review pending
+**Status**: Phase 3 Step 18 APPROVED, Step 19 affiliates ready
 **Plan**: [PLAN-037](../../plans/active/PLAN-037-feature-based-module-refactor.md)
 **ADR**: [ADR-007](../../decisions/ADR-007-module-boundary.md)
 **Executor**: Codex (heavy file-move + import update)
