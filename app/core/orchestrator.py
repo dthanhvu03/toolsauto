@@ -4,7 +4,7 @@ ContentOrchestrator — Pipeline AI sinh nội dung cho video tự động.
 Flow: Video → Thumbnail (FFmpeg) → Gemini phân tích → Caption + Hashtags
 
 Dùng:
-    from app.services.content_orchestrator import ContentOrchestrator
+    from app.core.orchestrator import ContentOrchestrator
     orch = ContentOrchestrator()
     result = orch.generate_caption(video_path="/path/to/video.mp4", style="affiliate")
     # → {"caption": "...", "hashtags": ["#abc", ...], "keywords": ["..."]}
