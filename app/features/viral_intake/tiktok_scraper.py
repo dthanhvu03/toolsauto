@@ -15,7 +15,7 @@ import subprocess
 import time
 
 from app.config import TIKTOK_HOST
-from app.services.yt_dlp_path import yt_dlp_binary
+from app.core.yt_dlp_path import yt_dlp_binary
 
 logger = logging.getLogger(__name__)
 
