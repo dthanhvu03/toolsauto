@@ -11,13 +11,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import app.services.ai_runtime as ai_runtime
-from app.database.models.accounts import Account
-from app.database.models.jobs import Job
-from app.database.models.settings import RuntimeSetting
-from app.database.models.threads import NewsArticle
-from app.services.content import threads_news as threads_news_module
-from app.services.content.news_scraper import NewsScraper, RSS_SOURCES
-from app.services.content.topic_key import compute_topic_key
+from app.core.database.models.accounts import Account
+from app.core.database.models.jobs import Job
+from app.core.database.models.settings import RuntimeSetting
+from app.core.database.models.threads import NewsArticle
+from app.features.threads.service import threads_news as threads_news_module
+from app.features.threads.service.news_scraper import NewsScraper, RSS_SOURCES
+from app.features.threads.service.topic_key import compute_topic_key
 from app.services.platform import settings as runtime_settings
 
 
@@ -79,7 +79,7 @@ def test_compute_topic_key_different_event_pairs_diverge(left, right):
 
 
 def test_scrape_all_runs_once_and_saves_topic_key(monkeypatch, isolated_session_factory):
-    from app.services.content import news_scraper as news_scraper_module
+    from app.features.threads.service import news_scraper as news_scraper_module
 
     monkeypatch.setattr(news_scraper_module, "SessionLocal", isolated_session_factory)
 
@@ -273,7 +273,7 @@ def test_process_news_to_threads_picks_highest_engagement_score(isolated_session
 
 def test_scrape_all_populates_engagement_score(monkeypatch, isolated_session_factory):
     """PLAN-034: NewsScraper.scrape_all should compute engagement_score for each new article."""
-    from app.services.content import news_scraper as news_scraper_module
+    from app.features.threads.service import news_scraper as news_scraper_module
 
     monkeypatch.setattr(news_scraper_module, "SessionLocal", isolated_session_factory)
 

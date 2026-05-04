@@ -266,8 +266,8 @@ def main():
     parser.add_argument("--account", type=int, help="Specific account ID to scrape")
     args = parser.parse_args()
 
-    from app.database.core import SessionLocal
-    from app.database.models import Account
+    from app.core.database.core import SessionLocal
+    from app.core.database.models import Account
 
     with SessionLocal() as db:
         query = db.query(Account).filter(Account.is_active == True)

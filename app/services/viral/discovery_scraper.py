@@ -140,7 +140,7 @@ class DiscoveryScraper:
 
         Returns number of new channels saved.
         """
-        from app.database.models import DiscoveredChannel
+        from app.core.database.models import DiscoveredChannel
 
         videos = self.search_hashtag(keyword, max_results=20)
         if not videos:

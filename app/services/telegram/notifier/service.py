@@ -155,7 +155,7 @@ class NotifierService:
     def notify_daily_summary(cls, db):
         """Báo cáo tổng hợp cuối ngày — số job theo trạng thái + metrics."""
         import time as time_mod
-        from app.database.models import Job
+        from app.core.database.models import Job
 
         now = int(time_mod.time())
         since = now - 86400  # 24 hours ago

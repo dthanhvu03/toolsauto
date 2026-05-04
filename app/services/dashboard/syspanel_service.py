@@ -10,8 +10,8 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from app.main_templates import templates
-from app.database.core import SessionLocal, engine
-from app.database.models import Job, Account
+from app.core.database.core import SessionLocal, engine
+from app.core.database.models import Job, Account
 from app.constants import JobStatus
 from app.config import (
     TIMEZONE,

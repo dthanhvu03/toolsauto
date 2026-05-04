@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 from abc import ABC, abstractmethod
-from app.database.models import Job
+from app.core.database.models import Job
 
 @dataclass
 class PublishResult:

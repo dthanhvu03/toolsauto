@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.services.telegram_service import TelegramService
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])

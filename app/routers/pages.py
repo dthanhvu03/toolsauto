@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import time
 import json
 import logging
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.services.account import AccountService
 from app.services.page_utils import PageUtils
 from app.main_templates import templates

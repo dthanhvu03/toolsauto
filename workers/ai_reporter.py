@@ -18,8 +18,8 @@ setup_shared_logger("app")
 logger = setup_shared_logger(__name__ if __name__ != "__main__" else "ai_reporter")
 
 import app.config as config
-from app.database.core import SessionLocal
-from app.database.models import IncidentGroup
+from app.core.database.core import SessionLocal
+from app.core.database.models import IncidentGroup
 from app.services.ai_runtime import pipeline
 from app.services.notifier_service import NotifierService, TelegramNotifier
 

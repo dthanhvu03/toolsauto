@@ -1,12 +1,12 @@
 from sqlalchemy import text, inspect
 from sqlalchemy.orm import Session
-from app.database.core import engine
+from app.core.database.core import engine
 import csv
 import io
 import logging
 from app.services.db_acl import check_table_permission
 from app.services.sql_validator import analyze_sql, SQLRiskLevel
-from app.services.audit_logger import audit_log
+from app.core.observability.audit_logger import audit_log
 
 logger = logging.getLogger(__name__)
 

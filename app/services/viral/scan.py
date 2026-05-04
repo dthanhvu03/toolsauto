@@ -10,7 +10,7 @@ from urllib.parse import urlparse, parse_qs
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.database.models import Account, ViralMaterial, SystemState
+from app.core.database.models import Account, ViralMaterial, SystemState
 from app.services.tiktok_scraper import TikTokScraper
 import app.config as config
 from app.constants import ViralStatus

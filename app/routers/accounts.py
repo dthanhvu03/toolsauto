@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 import time
 import logging
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.services.account import AccountService
 from app.services.page_utils import PageUtils
 from app.main_templates import templates
@@ -37,7 +37,7 @@ def get_accounts_table(request: Request, q: str = "", db: Session = Depends(get_
     html_content = ""
     for account in accounts:
         if account.login_error:
-            from app.services.log_normalizer import LogNormalizer
+            from app.core.observability.log_normalizer import LogNormalizer
             account.login_error = LogNormalizer._translate_message(account.login_error)
         html_content += templates.get_template("fragments/account_row.html").render(
             {"request": request, "account": account, "now": now}
@@ -237,7 +237,7 @@ def get_account_details_view(account_id: int, request: Request, db: Session = De
     if not account:
         return HTMLResponse(status_code=404)
     if account.login_error:
-        from app.services.log_normalizer import LogNormalizer
+        from app.core.observability.log_normalizer import LogNormalizer
         account.login_error = LogNormalizer._translate_message(account.login_error)
     return templates.TemplateResponse(
         "fragments/account_details.html", 

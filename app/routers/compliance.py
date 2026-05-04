@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.schemas.compliance import KeywordCreateBody, KeywordUpdateBody, TestCheckBody
 from app.services import compliance_service
 

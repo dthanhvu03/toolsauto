@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 import logging
-from app.database.core import get_db
+from app.core.database.core import get_db
 from app.main_templates import templates
 from app.services.affiliate_service import AffiliateService
 from app.schemas.affiliates import (

@@ -6,7 +6,7 @@ import signal
 from typing import Any, List, Optional
 
 from sqlalchemy.orm import Session
-from app.database.models import Account, Job
+from app.core.database.models import Account, Job
 from app.config import CONTENT_PROFILES_DIR, FACEBOOK_HOST, INSTAGRAM_HOST
 import logging
 from app.constants import AccountStatus, JobStatus, ViralStatus
@@ -604,7 +604,7 @@ class AccountService:
         """Data for TikTok Links templates (no Request object)."""
         import math
 
-        from app.database.models import ViralMaterial
+        from app.core.database.models import ViralMaterial
 
         tab = (query_params.get("tab") or "viral").strip()
         q = (query_params.get("q") or "").strip().lower()

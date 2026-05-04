@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.content.article_scorer import compute_score
+from app.features.threads.service.article_scorer import compute_score
 
 
 class _Article:

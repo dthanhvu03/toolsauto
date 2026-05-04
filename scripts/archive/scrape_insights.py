@@ -379,7 +379,7 @@ def _save_competitor_reels(db_session, competitor_reels: list, account_id: int):
     Upsert competitor reels harvested from GQL[5] suggested stream.
     Dedup: one row per (reel_url, scrape_date).  If seen again same day → update metrics.
     """
-    from app.database.models import CompetitorReel
+    from app.core.database.models import CompetitorReel
     from sqlalchemy import text as _sql_text
 
     today = datetime.date.today().isoformat()
@@ -434,7 +434,7 @@ def _save_competitor_reels(db_session, competitor_reels: list, account_id: int):
 
 
 def scrape_insights_for_page(page, db_session, account_id, target_url, platform="facebook"):
-    from app.database.models import PageInsight, now_ts
+    from app.core.database.models import PageInsight, now_ts
 
     logger.info(f"  -> Scraping {platform.upper()}: {target_url}")
     try:
@@ -640,8 +640,8 @@ def scrape_insights_for_page(page, db_session, account_id, target_url, platform=
 
 
 def main():
-    from app.database.core import SessionLocal
-    from app.database.models import Account
+    from app.core.database.core import SessionLocal
+    from app.core.database.models import Account
 
     logger.info("Initializing Multi-Platform Insights Scraper...")
     with SessionLocal() as db:
