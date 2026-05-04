@@ -36,7 +36,7 @@ def get_workflow_steps(platform: str, job_type: str = "POST") -> str:
         platform: Platform name, e.g. "facebook"
         job_type: Job type, e.g. "POST" or "COMMENT"
     """
-    from app.services.workflow_registry import WorkflowRegistry
+    from app.features.system_panel.workflow_registry import WorkflowRegistry
 
     wf = WorkflowRegistry.get_workflow(platform, job_type)
     if not wf:
@@ -67,7 +67,7 @@ def get_cta_templates(platform: str, locale: str = "vi") -> str:
         platform: Platform name, e.g. "facebook"
         locale: Locale filter, e.g. "vi" or "*"
     """
-    from app.services.workflow_registry import WorkflowRegistry
+    from app.features.system_panel.workflow_registry import WorkflowRegistry
 
     templates = WorkflowRegistry.get_cta_templates(platform, locale=locale)
     if templates == ["{link}"]:
@@ -111,7 +111,7 @@ def inject_cta(platform: str, text: str, locale: str = "vi") -> str:
 #  Tool 4 — preview_step_toggles
 # ═══════════════════════════════════════════════════════════════
 
-from app.services.workflow_registry import KNOWN_TOGGLEABLE_STEPS
+from app.features.system_panel.workflow_registry import KNOWN_TOGGLEABLE_STEPS
 
 
 @mcp.tool()
@@ -126,7 +126,7 @@ def preview_step_toggles(platform: str, job_type: str = "POST") -> str:
         platform: Platform name, e.g. "facebook"
         job_type: Job type, e.g. "POST" or "COMMENT"
     """
-    from app.services.workflow_registry import WorkflowRegistry
+    from app.features.system_panel.workflow_registry import WorkflowRegistry
 
     wf = WorkflowRegistry.get_workflow(platform, job_type)
     if not wf or not wf.steps:
@@ -166,7 +166,7 @@ def invalidate_workflow_cache() -> str:
     After calling this the next registry read will reload all config
     from the database.  Useful after manually editing DB rows.
     """
-    from app.services.workflow_registry import invalidate
+    from app.features.system_panel.workflow_registry import invalidate
 
     invalidate()
     return "WorkflowRegistry cache invalidated ✓. Next read will reload from DB."
@@ -214,7 +214,7 @@ def get_selector_health() -> str:
 # ═══════════════════════════════════════════════════════════════
 
 # Import from centralized source
-from app.services.workflow_registry import PRESET_DESCRIPTIONS as _PRESET_DESCRIPTIONS
+from app.features.system_panel.workflow_registry import PRESET_DESCRIPTIONS as _PRESET_DESCRIPTIONS
 
 @mcp.tool()
 def list_presets(platform: str, job_type: str = "POST") -> str:
@@ -222,7 +222,7 @@ def list_presets(platform: str, job_type: str = "POST") -> str:
 
     Shows active and inactive presets with their steps, timing, and description.
     """
-    from app.services.workflow_registry import WorkflowRegistry
+    from app.features.system_panel.workflow_registry import WorkflowRegistry
 
     presets = WorkflowRegistry.list_presets(platform, job_type)
     if not presets:
@@ -253,7 +253,7 @@ def apply_preset(preset_name: str) -> str:
     then activates the specified one. Takes effect immediately
     via cache invalidation.
     """
-    from app.services.workflow_registry import WorkflowRegistry
+    from app.features.system_panel.workflow_registry import WorkflowRegistry
     return WorkflowRegistry.apply_preset(preset_name)
 
 # ═══════════════════════════════════════════════════════════════
@@ -272,7 +272,7 @@ def preview_runtime_config(platform: str, job_type: str = "POST") -> str:
         platform: Platform name, e.g. "facebook"
         job_type: Job type, e.g. "POST" or "COMMENT"
     """
-    from app.services.workflow_registry import WorkflowRegistry
+    from app.features.system_panel.workflow_registry import WorkflowRegistry
 
     wf = WorkflowRegistry.get_workflow(platform, job_type)
 
@@ -346,7 +346,7 @@ def preview_selector_resolution(
         category: Selector category, e.g. "switch_menu"
         key: Selector key, e.g. "account_menu_button"
     """
-    from app.services.workflow_registry import WorkflowRegistry
+    from app.features.system_panel.workflow_registry import WorkflowRegistry
     from app.core.observability.runtime_events import get_selector_health
 
     # DB selectors

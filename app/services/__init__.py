@@ -16,7 +16,7 @@ _ALIASES = {
     "account": "platform.account",
     "page_utils": "platform.page_utils",
     "platform_config_service": "platform.config_service",
-    "workflow_registry": "platform.workflow_registry",
+    "workflow_registry": "app.features.system_panel.workflow_registry",
     # PLAN-037 Phase 1 Move C: ai moved to app.core.ai
     "ai_native_fallback": "app.core.ai.native_fallback",
     "ai_pipeline": "app.core.ai.pipeline",
@@ -71,7 +71,7 @@ _ALIASES = {
     "affiliate_service": "app.features.affiliates.service",
     "dashboard_service": "dashboard.dashboard_service",
     "ai_studio_service": "dashboard.ai_studio_service",
-    "syspanel_service": "dashboard.syspanel_service",
+    "syspanel_service": "app.features.system_panel.service",
     "insights_service": "dashboard.insights_service",
     "threads_service": "app.features.threads.dashboard",
     "database_service": "db.database_service",

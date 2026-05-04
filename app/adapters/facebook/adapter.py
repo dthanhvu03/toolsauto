@@ -256,7 +256,7 @@ class FacebookAdapter(AdapterInterface):
 
     def _get_dynamic_selectors(self, category: str, key: str, fallback_static: str) -> list[str]:
         """Fetch DB selectors first, mix with static fallback."""
-        from app.services.workflow_registry import WorkflowRegistry
+        from app.features.system_panel.workflow_registry import WorkflowRegistry
         db_selectors = []
         try:
             db_selectors = WorkflowRegistry.get_selector_values("facebook", f"{category}:{key}")
@@ -310,7 +310,7 @@ class FacebookAdapter(AdapterInterface):
                                 total_tried=total)
 
     def _get_dynamic_timing(self, key: str, default: int) -> int:
-        from app.services.workflow_registry import WorkflowRegistry
+        from app.features.system_panel.workflow_registry import WorkflowRegistry
         val = default
         try:
             val = WorkflowRegistry.get_timing("facebook", "POST", key, default)
