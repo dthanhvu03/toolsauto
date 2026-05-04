@@ -46,7 +46,7 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 19. [x] `affiliates` (medium) — code commit `f564c54`.
 20. [x] `system_panel` + `workflow_registry` (medium) — code commit `498569e`. (Anti Verdict B: Follow-up move workflow_registry to core/)
 21. [x] `insights` (medium) — code commit `29c087c`.
-22. [ ] `telegram_bot` (medium — shared notifier).
+22. [x] `telegram_bot` (medium — shared notifier) — notifier core commit `66c9826`, telegram bot commit `f3bbb64`.
 23. [ ] `viral_intake` (high — orchestrator 651 dòng).
 24. [ ] `facebook_publisher` (highest — adapter 6500 dòng + engagement + compliance).
 
@@ -212,6 +212,66 @@ $ git diff --cached --find-renames --stat
 - PM2/VPS runtime proof was not run for Tiktok because this step only moves adapter/config path and does not add a worker.
 - Pytest collection remained at the Phase 2/Step 17 baseline (`77/11`); the 11 collection errors are pre-existing and not in new Tiktok files.
 - Stop before Step 19 (`affiliates`) pending Anti per-feature review.
+
+## Phase 3 Step 22 — Telegram Bot + Notifier Execution Notes
+
+**Executed by**: Codex — 2026-05-04
+**Status**: COMPLETED (code/static-smoke); Anti review pending
+**Code commits**:
+- `66c9826` — `refactor(P037-Phase3): move notifier → app/core/notifier/ (no behavior change)`
+- `f3bbb64` — `refactor(P037-Phase3): move telegram bot → app/features/telegram_bot/ (no behavior change)`
+
+### Scope completed
+
+- Moved `app/services/telegram/notifier/` → `app/core/notifier/`.
+- Updated notifier callsites from `app.services.notifier_service` to `app.core.notifier.service`.
+- Updated notifier shim aliases to `app.core.notifier.*`.
+- Moved Telegram bot files from `app/services/telegram/` + `app/routers/telegram.py` → `app/features/telegram_bot/`.
+- Removed `app/services/telegram/` and `app/routers/telegram.py`.
+- Updated Telegram bot shim aliases to `app.features.telegram_bot.*`.
+- Updated `app/main.py` router registration to import Telegram router from feature path.
+
+### Verification Proof
+
+```text
+$ find app -name '*.py' | xargs venv/bin/python -m py_compile && echo PY_COMPILE_OK
+PY_COMPILE_OK
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+
+$ venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"
+ROUTES 207
+
+$ venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co
+77 tests collected, 11 errors in 74.71s (baseline match)
+
+$ venv/bin/python -c "from app.core.notifier.service import NotifierService, TelegramNotifier; print('NOTIFIER_OK')"
+NOTIFIER_OK
+
+$ venv/bin/python -c "from app.services.notifier_service import NotifierService; print('NOTIFIER_SHIM_OK')"
+NOTIFIER_SHIM_OK
+
+$ venv/bin/python -c "from app.features.telegram_bot.service import TelegramService; print('TG_OK')"
+TG_OK
+
+$ venv/bin/python -c "from app.features.telegram_bot.router import router; print('TG_ROUTER_OK', len(router.routes))"
+TG_ROUTER_OK 1
+
+$ venv/bin/python -c "from app.services.telegram_service import TelegramService; print('TG_SHIM_OK')"
+TG_SHIM_OK
+
+$ venv/bin/python -c "from app.features.threads.workers.publisher import *; print('THREADS_PUBLISHER_IMPORT_OK')"
+THREADS_PUBLISHER_IMPORT_OK
+
+$ bash smoke.sh
+ROUTES:  207
+IMPORT OK
+```
+
+### Risk Log
+
+- Static/local smoke only; no PM2 restart or VPS live publish proof in this step.
+- `TelegramNotifier` now resolves `TelegramClient` through `app.features.telegram_bot.client`, matching the requested file placement while preserving behavior.
+- Do not proceed to Step 23 (`viral_intake`) until Anti per-feature review is complete.
 
 ## Risks (xem chi tiết PLAN-037 §"Risks")
 

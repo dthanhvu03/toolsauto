@@ -2,6 +2,25 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 22 DONE — telegram_bot + retroactive notifier→core ✅**
+  - **2 commits trên develop**:
+    - `66c9826` Commit 22A: notifier carve sang `app/core/notifier/` (5 file: __init__.py + base.py + formatting.py + service.py + telegram.py). Retroactive Phase 1 work — notifier là shared infrastructure used by 18+ callsites (FB, threads, viral, observability, queue, workers). Critical path.
+    - `f3bbb64` Commit 22B: telegram bot files + router → `app/features/telegram_bot/` (5 bot file + router.py).
+  - **`app/services/telegram/` xoá hoàn toàn** sau Commit 22B.
+  - **Smoke proof**:
+    - 22A: NOTIFIER_OK + NOTIFIER_SHIM_OK + 4 worker import OK (publisher, ai_generator, maintenance, threads_publisher).
+    - 22B: TG_OK + TG_ROUTER_OK 1 + TG_SHIM_OK + Threads pipeline import OK.
+    - Both: py_compile PASS, ROUTES 207, pytest 77/11 baseline.
+  - **Claude Code re-verify [2026-05-04]**: NOTIFIER_SHIM_IDENTITY_OK (no double load). smoke.sh PASS.
+  - **Process**: 2 commit BẮT BUỘC TÁCH (granular rollback). Codex tuân đúng.
+  - **Risk**: PM2/VPS proof chưa run, chờ CI/CD deploy + Threads_Publisher restart confirm.
+  - **Next**: Anti review Step 22. Step 23 viral_intake (HIGH RISK — orchestrator 651 dòng).
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 21 DONE — `app/features/insights/` ✅**
+  - 2 commits: `29c087c` move + `2ca1f4d` tick.
+  - INS_ROUTER_OK 14 (insights router 14 routes).
+  - Anti review Step 21 vẫn pending (gộp với Step 20 + 22).
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 20 DONE + Anti APPROVED (Verdict B) Step 21 CLEARED — `app/features/system_panel/` ✅**
   - **Anti Sign-off**: APPROVED with follow-up (Verdict B). Verified code move and import updates for the `system_panel` and `workflow_registry`.
   - **Verification**: Directory structure mapped perfectly (`__init__.py`, `service.py`, `workflow_registry.py`, `router.py`). Shim `_ALIASES` and direct callsite routing (dispatcher, adapters, config_service) updated correctly. `py_compile`, `ROUTES 207`, tests `77/11` (baseline), and WR identity check PASSED.
