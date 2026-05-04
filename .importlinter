@@ -1,0 +1,24 @@
+[importlinter]
+root_package = app
+
+[importlinter:contract:core-isolated]
+name = Core should not import features or platform
+type = forbidden
+source_modules =
+    app.core
+forbidden_modules =
+    app.features
+
+[importlinter:contract:features-independent]
+name = Features should be independent
+type = independence
+modules =
+    app.features.threads
+    app.features.facebook
+    app.features.instagram
+    app.features.tiktok
+    app.features.viral_intake
+    app.features.insights
+    app.features.affiliates
+    app.features.telegram_bot
+    app.features.system_panel

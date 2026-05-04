@@ -11,7 +11,7 @@ class TelegramPoller:
     LOCK_FILE = "/tmp/telegram_poller.lock"
 
     def __init__(self, bot_token: str, chat_id: str, poll_timeout: int = 30):
-        from app.features.telegram_bot.client import TelegramClient
+        from app.core.notifier.telegram_client import TelegramClient
         self.client = TelegramClient(bot_token, chat_id)
         self.authorized_chat_id = str(chat_id)
         self.poll_timeout = poll_timeout
