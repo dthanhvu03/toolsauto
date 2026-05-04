@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import logging
 from app.core.database.core import get_db
 from app.main_templates import templates
-from app.services.affiliate_service import AffiliateService
+from app.features.affiliates.service import AffiliateService
 from app.schemas.affiliates import (
     BatchImportRequest,
     AIGenerateRequest,

@@ -8,7 +8,7 @@ from app.core.database.core import get_db
 from app.services.account import AccountService
 from app.services.page_utils import PageUtils
 from app.main_templates import templates
-from app.services.affiliate_service import AffiliateService
+from app.features.affiliates.service import AffiliateService
 
 router = APIRouter(prefix="/pages", tags=["pages"])
 logger = logging.getLogger(__name__)
