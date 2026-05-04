@@ -45,7 +45,7 @@ Repo size: 30K LOC, 12 service subdir, 5 adapter platform, 19 router, 8 worker.
 18. [x] `tiktok` (low risk) — code commit `d4514f6`.
 19. [x] `affiliates` (medium) — code commit `f564c54`.
 20. [x] `system_panel` + `workflow_registry` (medium) — code commit `498569e`. (Anti Verdict B: Follow-up move workflow_registry to core/)
-21. [ ] `insights` (medium — đụng dashboard).
+21. [x] `insights` (medium) — code commit `29c087c`.
 22. [ ] `telegram_bot` (medium — shared notifier).
 23. [ ] `viral_intake` (high — orchestrator 651 dòng).
 24. [ ] `facebook_publisher` (highest — adapter 6500 dòng + engagement + compliance).
