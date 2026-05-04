@@ -2,6 +2,12 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 19 DONE + Anti APPROVED (Verdict A) Step 20 CLEARED — `app/features/affiliates/` ✅**
+  - **Anti Sign-off**: APPROVED. Verified code move and import updates for the `affiliates` feature.
+  - **Verification**: Directory structure mapped perfectly. Shim `_ALIASES` and direct `app/main.py` routing updated without regressions. `py_compile`, `ROUTES 207`, tests `77/11` (baseline), and custom module load checks all PASSED. Zero cross-feature imports.
+  - **Process Check**: Acknowledged the missed untracked `__init__.py` in the initial commit, immediately rectified in `2e79a2f`.
+  - **Action**: Step 20 (`system_panel` + `workflow_registry`) is now open for execution by Codex. Note that this is a medium risk component affecting 13+ callsites.
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 18 DONE + Anti APPROVED (Verdict A) Step 19 CLEARED — `app/features/tiktok/` ✅**
   - **Anti Sign-off**: APPROVED. Verified collateral updates (`platform_config.html`, `c7d9e1f2a3b4`, `dispatcher.py`) are strictly scoped to Tiktok path migration and correctly applied.
   - **Verification**: `py_compile` PASS, `ROUTES 207`, tests `77/11` (baseline match), `alembic head` applied correctly, `TiktokAdapter` python import successful. `app/features/tiktok/` contains correctly migrated files. ADR-007 boundary rules fully respected (0 cross-feature imports).
