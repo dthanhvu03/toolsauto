@@ -529,3 +529,73 @@ $ git diff --cached --find-renames --stat
 - Do not proceed to Step 19 (`affiliates`) until per-feature review is complete.
 
 Execution Done. Cần Claude Code verify + handoff.
+
+---
+
+## Phase 3 Step 22 Execution Notes
+
+**Executed by**: Codex — 2026-05-04
+**Status**: Step 22 code/static-smoke done. Claude Code / Anti per-feature review pending.
+**Code commits**:
+- `66c9826` — `refactor(P037-Phase3): move notifier → app/core/notifier/ (no behavior change)`
+- `f3bbb64` — `refactor(P037-Phase3): move telegram bot → app/features/telegram_bot/ (no behavior change)`
+
+### Changes
+
+- `app/services/telegram/notifier/` → `app/core/notifier/`.
+- `app/services/telegram/{client,command_handler,event_router,poller,service}.py` → `app/features/telegram_bot/`.
+- `app/routers/telegram.py` → `app/features/telegram_bot/router.py`.
+- Removed `app/services/telegram/` after notifier and bot files were moved.
+- Updated `app/services/__init__.py` aliases for notifier and Telegram bot compatibility.
+- Updated direct notifier and Telegram callsites, including workers and `app.features.threads.workers.publisher`.
+
+### Verification Proof
+
+```text
+$ find app -name '*.py' | xargs venv/bin/python -m py_compile && echo PY_COMPILE_OK
+PY_COMPILE_OK
+app/adapters/facebook/adapter.py:1630: SyntaxWarning: invalid escape sequence '\d'
+
+$ venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"
+ROUTES 207
+
+$ venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co
+77 tests collected, 11 errors in 74.71s (baseline match)
+
+$ venv/bin/python -c "from app.core.notifier.service import NotifierService, TelegramNotifier; print('NOTIFIER_OK')"
+NOTIFIER_OK
+
+$ venv/bin/python -c "from app.services.notifier_service import NotifierService; print('NOTIFIER_SHIM_OK')"
+NOTIFIER_SHIM_OK
+
+$ venv/bin/python -c "import workers.publisher; print('WORKER_PUBLISHER_OK')"
+WORKER_PUBLISHER_OK
+
+$ venv/bin/python -c "import workers.ai_generator; print('WORKER_AI_GENERATOR_OK')"
+WORKER_AI_GENERATOR_OK
+
+$ venv/bin/python -c "import workers.maintenance; print('WORKER_MAINTENANCE_OK')"
+WORKER_MAINTENANCE_OK
+
+$ venv/bin/python -c "from app.features.telegram_bot.service import TelegramService; print('TG_OK')"
+TG_OK
+
+$ venv/bin/python -c "from app.features.telegram_bot.router import router; print('TG_ROUTER_OK', len(router.routes))"
+TG_ROUTER_OK 1
+
+$ venv/bin/python -c "from app.services.telegram_service import TelegramService; print('TG_SHIM_OK')"
+TG_SHIM_OK
+
+$ venv/bin/python -c "from app.features.threads.workers.publisher import *; print('THREADS_PUBLISHER_IMPORT_OK')"
+THREADS_PUBLISHER_IMPORT_OK
+
+$ bash smoke.sh
+ROUTES:  207
+IMPORT OK
+```
+
+### Risk / Pending
+
+- PM2/VPS runtime proof was not run locally for this no-behavior-change move.
+- `TelegramNotifier` uses `app.features.telegram_bot.client.TelegramClient` after the requested `client.py` feature move.
+- Stop before Step 23 (`viral_intake`) pending Anti per-feature review.
