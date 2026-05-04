@@ -2,6 +2,13 @@
 
 ## Recent Execution
 
+- **[2026-05-04] PLAN-037 Phase 3 Step 20 DONE + Anti APPROVED (Verdict B) Step 21 CLEARED — `app/features/system_panel/` ✅**
+  - **Anti Sign-off**: APPROVED with follow-up (Verdict B). Verified code move and import updates for the `system_panel` and `workflow_registry`.
+  - **Verification**: Directory structure mapped perfectly (`__init__.py`, `service.py`, `workflow_registry.py`, `router.py`). Shim `_ALIASES` and direct callsite routing (dispatcher, adapters, config_service) updated correctly. `py_compile`, `ROUTES 207`, tests `77/11` (baseline), and WR identity check PASSED.
+  - **Boundary Evaluation (ADR-007)**: `workflow_registry` is imported by multiple features (e.g., `features/threads/adapter`, `features/tiktok/adapter`, Facebook, etc.). Leaving it in `features/system_panel/` creates a `features/` -> `features/` dependency, which violates ADR-007.
+  - **Follow-up Action**: Create a sub-step/follow-up task to move `workflow_registry.py` from `app/features/system_panel/` to `app/core/workflow/` (or `app/core/workflow_registry/`) to comply with the architecture rules. `system_panel`'s service and router can remain as a feature that interacts with it.
+  - **Action**: Step 21 (`insights`) is now open for execution by Codex.
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 19 DONE + Anti APPROVED (Verdict A) Step 20 CLEARED — `app/features/affiliates/` ✅**
   - **Anti Sign-off**: APPROVED. Verified code move and import updates for the `affiliates` feature.
   - **Verification**: Directory structure mapped perfectly. Shim `_ALIASES` and direct `app/main.py` routing updated without regressions. `py_compile`, `ROUTES 207`, tests `77/11` (baseline), and custom module load checks all PASSED. Zero cross-feature imports.

@@ -72,7 +72,7 @@ _ALIASES = {
     "dashboard_service": "dashboard.dashboard_service",
     "ai_studio_service": "dashboard.ai_studio_service",
     "syspanel_service": "app.features.system_panel.service",
-    "insights_service": "dashboard.insights_service",
+    "insights_service": "app.features.insights.service",
     "threads_service": "app.features.threads.dashboard",
     "database_service": "db.database_service",
     "db_acl": "db.acl",
