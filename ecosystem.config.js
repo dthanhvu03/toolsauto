@@ -18,35 +18,35 @@ module.exports = {
   apps: [
     {
       name: "FB_Publisher_1",
-      script: "workers/publisher.py",
+      script: "app/features/facebook/workers/publisher.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,       // 10 minutes — allow in-flight Playwright job to finish
-      listen_timeout: 10000,      // 10s to start
+
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "2G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "FB_Publisher_2",
-      script: "workers/publisher.py",
+      script: "app/features/facebook/workers/publisher.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,       // 10 minutes
-      listen_timeout: 10000,
+
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "2G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "AI_Generator_1",
-      script: "workers/ai_generator.py",
+      script: "app/features/viral_intake/workers/ai_generator.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 300000,       // 5 minutes
@@ -55,11 +55,11 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "AI_Generator_2",
-      script: "workers/ai_generator.py",
+      script: "app/features/viral_intake/workers/ai_generator.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 300000,       // 5 minutes
@@ -68,11 +68,11 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Maintenance",
-      script: "workers/maintenance.py",
+      script: "app/features/system_panel/workers/maintenance.py",
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 60000,        // 1 minute
@@ -80,7 +80,7 @@ module.exports = {
       min_uptime: 30000,
       restart_delay: 5000,
       autorestart: true,
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "9Router_Gateway",
@@ -103,7 +103,7 @@ module.exports = {
       min_uptime: 30000,
       restart_delay: 3000,
       autorestart: true,
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Threads_AutoReply",
@@ -116,7 +116,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Threads_NewsWorker",
@@ -129,7 +129,7 @@ module.exports = {
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
       name: "Threads_Publisher",
@@ -137,13 +137,13 @@ module.exports = {
       interpreter: VENV_PYTHON,
       cwd: PROJECT_ROOT,
       kill_timeout: 600000,
-      listen_timeout: 10000,
+
       max_restarts: 10,
       min_uptime: 30000,
       restart_delay: 5000,
       autorestart: true,
       max_memory_restart: "1G",
-      env: { PYTHONUNBUFFERED: "1" },
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
   ],
 };
