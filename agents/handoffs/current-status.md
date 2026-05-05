@@ -2,6 +2,17 @@
 
 ## Recent Execution
 
+- **[2026-05-05] BUGFIX — Maintenance backlog gate starves FB pipeline ✅**
+  - **Triệu chứng (anh Vu báo)**: "Threads chiếm hết bài đăng của Facebook" — FB_Publisher đói job, Threads_Publisher đăng đều.
+  - **Root cause**: `_pending_backlog()` trong [maintenance.py:44](app/features/system_panel/workers/maintenance.py#L44) đếm jobs **không filter platform**. Pipeline FB phụ thuộc `ViralProcessorService.process_all()` (gated bởi `MAINT_SKIP_HEAVY_WHEN_PENDING=10`), trong khi pipeline Threads (`threads_news`) tự sinh job độc lập, không qua gate. Mỗi khi Threads xếp ≥10 job DRAFT/PENDING, gate đóng → viral ingest skip → FB không có nhiên liệu mới.
+  - **Asymmetry**:
+    - FB: `ViralMaterial → [maintenance gate] → Job(facebook)` ← bị gate
+    - Threads: `NewsArticle → [scheduler riêng] → Job(threads)` ← không bị gate
+  - **Fix (minimal-diff)**: thêm `Job.platform == "facebook"` vào `_pending_backlog()`. Backlog gate giờ chỉ phản ánh áp lực của FB pipeline (đúng intent gate vì heavy task được gate chỉ feed FB). Đổi log message `[MAINT] Backlog=` → `[MAINT] FB backlog=` cho rõ.
+  - **Verify**: `py_compile PY_COMPILE_OK`.
+  - **Chưa làm**: smoke ROUTES + pytest baseline; chưa commit/push (chờ anh Vu confirm trước khi auto-deploy qua develop).
+  - **File sửa**: `app/features/system_panel/workers/maintenance.py` (1 hàm + 1 log line).
+
 - **[2026-05-04] PLAN-037 FULLY COMPLETED — Final Structural Alignment ✅**
   - **Scope**: Final migration of legacy services to `core/`, `platform/`, and `features/` to achieve 100% compliance with ADR-007.
   - **Architectural Cleanup (Commit ea60298)**:
@@ -14,6 +25,9 @@
       - Moved `ai_studio_service.py` → `app/features/system_panel/`.
   - **Status**: Codebase is 100% modularized and ADR-007 compliant.
   - **Final Cleanup**:
+    - [x] Final Stability Pass: Fixed worker imports and PYTHONPATH issues after directory deletion.
+    - [x] System Status: All PM2 processes are ONLINE and functional.
+    - [x] Deployment: Changes pushed to `develop` (Commit `dbb0a25`).
     - Deleted `app/routers/` completely (all routers moved to platform/core/features).
     - Deleted root `workers/` completely (all entry points moved to respective features).
     - Updated `ecosystem.config.js` to match new worker paths.
