@@ -2,6 +2,14 @@
 
 ## Recent Execution
 
+- **[2026-05-05] FOLLOW-UP — Backlog gate phải LIKE '%facebook%' để bắt multi-platform account ✅**
+  - **Phát hiện qua audit DB production**: Account #2 "Nguyen Ngoc Vi" có `platform="facebook,threads"` (comma-separated, 1 account = 2 platform). Manual upload từ account này tạo Job với `platform="facebook,threads"`.
+  - **Bug commit trước (`7cddc39`)**: filter `Job.platform == "facebook"` (exact equality) MISS jobs có `platform="facebook,threads"` → backlog under-count → gate có thể mở sai khi FB thật ra đang bận.
+  - **Fix**: `Job.platform.like("%facebook%")` — match cả "facebook" lẫn "facebook,threads"; vẫn loại trừ pure "threads".
+  - **Profile sharing**: Audit cho thấy 2 account có 2 `profile_path` UNIQUE riêng biệt (facebook_1, facebook_2) → KHÔNG cần Phương án A profile mutex. Account-level mutex hiện có đã đủ (1 RUNNING/account_id).
+  - **Verify**: py_compile PY_COMPILE_OK.
+  - **File sửa**: `app/features/system_panel/workers/maintenance.py:44-58` (1 hàm, đổi `==` → `LIKE`).
+
 - **[2026-05-05] BUGFIX — Maintenance backlog gate starves FB pipeline ✅**
   - **Triệu chứng (anh Vu báo)**: "Threads chiếm hết bài đăng của Facebook" — FB_Publisher đói job, Threads_Publisher đăng đều.
   - **Root cause**: `_pending_backlog()` trong [maintenance.py:44](app/features/system_panel/workers/maintenance.py#L44) đếm jobs **không filter platform**. Pipeline FB phụ thuộc `ViralProcessorService.process_all()` (gated bởi `MAINT_SKIP_HEAVY_WHEN_PENDING=10`), trong khi pipeline Threads (`threads_news`) tự sinh job độc lập, không qua gate. Mỗi khi Threads xếp ≥10 job DRAFT/PENDING, gate đóng → viral ingest skip → FB không có nhiên liệu mới.
