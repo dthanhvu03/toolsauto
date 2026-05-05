@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 # Repo root on sys.path so `python workers/ai_generator.py` works without PYTHONPATH=.
-_root = Path(__file__).resolve().parent.parent
+_root = Path(__file__).resolve().parents[4]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 from sqlalchemy.orm import Session

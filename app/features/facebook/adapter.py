@@ -1627,7 +1627,7 @@ class FacebookAdapter(AdapterInterface):
     def _extract_page_id_from_current_page(self) -> str | None:
         """Attempt to extract the actual Facebook Page ID from the current page's metadata or script blobs."""
         if not self.page: return None
-        return self.page.evaluate("""
+        return self.page.evaluate(r"""
             () => {
                 // 1. Check App Links (Meta tags)
                 const appLink = document.querySelector('meta[property="al:android:url"], meta[property="al:ios:url"]');
@@ -1649,7 +1649,7 @@ class FacebookAdapter(AdapterInterface):
                 // 3. Check for userID (if we are on /me and it resolved to the page)
                 match = html.match(/\"userID\":\"(\d+)\"/);
                 if (match) return match[1];
-
+                
                 return null;
             }
         """)
