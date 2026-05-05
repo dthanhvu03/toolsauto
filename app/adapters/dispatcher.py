@@ -3,14 +3,14 @@ from app.core.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
 from app.constants import Platform, JobType
 from app.services.media_processor import MediaProcessor
-from app.features.system_panel.workflow_registry import WorkflowRegistry
+from app.core.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
 
 logger = logging.getLogger(__name__)
 from app.core.observability.runtime_events import emit as rt_emit
 from app.services import job_tracer
 
-from app.adapters.facebook.adapter import FacebookAdapter, PageMismatchError
+from app.features.facebook.adapter import FacebookAdapter, PageMismatchError
 
 class DummyAdapter(AdapterInterface):
     """A dummy adapter for scaffolding and testing."""
@@ -37,7 +37,7 @@ def get_adapter(platform: str) -> AdapterInterface:
     """
     from app.adapters.generic.adapter import GenericAdapter
 
-    from app.adapters.facebook.adapter import FacebookAdapter
+    from app.features.facebook.adapter import FacebookAdapter
     from app.features.threads.adapter import ThreadsAdapter
     from app.features.instagram.adapter import InstagramAdapter
     from app.features.tiktok.adapter import TiktokAdapter
@@ -132,7 +132,7 @@ class Dispatcher:
                         pool_size=len(cta_list))
             else:
                 if platform == Platform.FACEBOOK:
-                    from app.adapters.facebook.adapter import FacebookAdapter
+                    from app.features.facebook.adapter import FacebookAdapter
                     import random
                     template = random.choice(FacebookAdapter.CTA_POOL)
                     rt_emit("cta_injected", platform=platform, locale=locale,

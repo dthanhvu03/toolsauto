@@ -2,6 +2,105 @@
 
 ## Recent Execution
 
+- **[2026-05-05] BUGFIX — Maintenance backlog gate starves FB pipeline ✅**
+  - **Triệu chứng (anh Vu báo)**: "Threads chiếm hết bài đăng của Facebook" — FB_Publisher đói job, Threads_Publisher đăng đều.
+  - **Root cause**: `_pending_backlog()` trong [maintenance.py:44](app/features/system_panel/workers/maintenance.py#L44) đếm jobs **không filter platform**. Pipeline FB phụ thuộc `ViralProcessorService.process_all()` (gated bởi `MAINT_SKIP_HEAVY_WHEN_PENDING=10`), trong khi pipeline Threads (`threads_news`) tự sinh job độc lập, không qua gate. Mỗi khi Threads xếp ≥10 job DRAFT/PENDING, gate đóng → viral ingest skip → FB không có nhiên liệu mới.
+  - **Asymmetry**:
+    - FB: `ViralMaterial → [maintenance gate] → Job(facebook)` ← bị gate
+    - Threads: `NewsArticle → [scheduler riêng] → Job(threads)` ← không bị gate
+  - **Fix (minimal-diff)**: thêm `Job.platform == "facebook"` vào `_pending_backlog()`. Backlog gate giờ chỉ phản ánh áp lực của FB pipeline (đúng intent gate vì heavy task được gate chỉ feed FB). Đổi log message `[MAINT] Backlog=` → `[MAINT] FB backlog=` cho rõ.
+  - **Verify**: `py_compile PY_COMPILE_OK`.
+  - **Chưa làm**: smoke ROUTES + pytest baseline; chưa commit/push (chờ anh Vu confirm trước khi auto-deploy qua develop).
+  - **File sửa**: `app/features/system_panel/workers/maintenance.py` (1 hàm + 1 log line).
+
+- **[2026-05-04] PLAN-037 FULLY COMPLETED — Final Structural Alignment ✅**
+  - **Scope**: Final migration of legacy services to `core/`, `platform/`, and `features/` to achieve 100% compliance with ADR-007.
+  - **Architectural Cleanup (Commit ea60298)**:
+    - **Core**: Moved `account.py`, `settings.py`, `config_service.py`, `page_utils.py`, `yt_dlp_path.py` to `app/core/`.
+    - **DB Admin**: Moved `app/services/db/` to `app/core/db_admin/`.
+    - **Platform**: Created `app/platform/` and moved `dashboard_service.py`.
+    - **Feature Specific**:
+      - Moved `media_processor.py` → `app/features/facebook/`.
+      - Moved `video_protector.py` → `app/features/viral_intake/`.
+      - Moved `ai_studio_service.py` → `app/features/system_panel/`.
+  - **Status**: Codebase is 100% modularized and ADR-007 compliant.
+  - **Final Cleanup**:
+    - [x] Final Stability Pass: Fixed worker imports and PYTHONPATH issues after directory deletion.
+    - [x] System Status: All PM2 processes are ONLINE and functional.
+    - [x] Deployment: Changes pushed to `develop` (Commit `dbb0a25`).
+    - Deleted `app/routers/` completely (all routers moved to platform/core/features).
+    - Deleted root `workers/` completely (all entry points moved to respective features).
+    - Updated `ecosystem.config.js` to match new worker paths.
+  - **Open Issues**:
+    - `SyntaxWarning: invalid escape sequence '\d'` in `app/features/facebook/adapter.py:1630` (Non-breaking).
+  - **Next Steps**:
+    - **Shim Deletion**: Monitor stability for 1 week then remove `app/services/__init__.py`.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 24 DONE + Phase 3 COMPLETED — `app/features/facebook/` ✅**
+  - **Scope**: Migrated Facebook Publisher feature (~6K LOC) including adapters, pages, core, selectors, engagement, compliance, and workers into `app/features/facebook/`.
+  - **Code Move + Imports (Commit 24A)**:
+    - Moved adapter, engagement, selectors, core, pages from `app/adapters/facebook/`.
+    - Moved compliance (`fb_compliance.py`, `service.py`) from `app/services/compliance/`.
+    - Moved worker (`workers/publisher.py`).
+    - Updated direct import paths via sed script in 33 files.
+    - Updated `publisher.py` `sys.path` to point 5 levels up to repo root.
+    - Updated shim aliases in `app/services/__init__.py` for `fb_compliance` and `compliance_service` to absolute paths.
+  - **Collaterals (Commit 24B)**:
+    - Updated `platform_config.html` `KNOWN_ADAPTERS['facebook']` to `app.features.facebook.adapter.FacebookAdapter`.
+    - Created and applied Alembic migration `883c60c7be10` to update `platform_configs` adapter_class row.
+    - Updated PM2 script paths for `FB_Publisher_1` and `FB_Publisher_2` in `ecosystem.config.js`.
+  - **Smoke Gates Passed**:
+    - `py_compile` PASS (only pre-existing SyntaxWarning).
+    - `ROUTES 207`.
+    - `pytest` baseline match (`77 tests collected, 11 errors`). Note: 3 tests relying on old `workers.publisher` import in `.gitignore` untracked files were fixed locally.
+    - Python import tests and dispatcher overriding tested and working seamlessly.
+  - **Status**: Phase 3 is 100% COMPLETE. 8/8 features carved safely.
+  - **Next**: Proceed to Phase 5 (Lint Guard via import-linter) after Anti's final validation. Phase 4 is skipped/superseded per TASK-039.
+  - **Note**: The user requested renaming the folder from `facebook_publisher` to `facebook` because there will be more features than just publisher. Done via an amend/re-commit workflow.
+
+- **[2026-05-04] Anti review Step 21+22+23 → Verdict A/A/B + 2 boundary debt task mở ra**
+  - Step 21 insights: Verdict A APPROVED.
+  - Step 22 telegram_bot + notifier→core: Verdict A APPROVED. VPS production proof.
+  - Step 23 viral_intake: Verdict B APPROVED with follow-up.
+    - Issue: viral_intake/processor import legacy `app.services.content.orchestrator` (qua shim), tạo dependency vòng. Sẽ phá khi Phase 4 tách orchestrator.
+    - Anti revised approach: KHÔNG split orchestrator như PLAN-037 §"Phase 4" gốc. Move whole orchestrator sang `app/core/orchestrator.py`.
+  - **2 task mới mở**: [TASK-038](agents/tasks/active/TASK-038-workflow-registry-to-core.md) (workflow_registry→core, Step 20 follow-up) + [TASK-039](agents/tasks/active/TASK-039-orchestrator-to-core.md) (orchestrator→core, Step 23 follow-up).
+  - **Anti recommend order**: TASK-038 + TASK-039 TRƯỚC Step 24 + Phase 5. Clean state cho Step 24 HIGHEST RISK + Phase 5 lint guard.
+  - **Phase 3 status**: 7/8 features carved + VPS production-verified. Step 24 facebook_publisher GATE — chờ TASK-038+039 done.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 23 CODE DONE — `app/features/viral_intake/` ✅**
+  - **Scope**: moved 7 viral intake modules from `app/services/viral/` plus `app/routers/viral.py` into `app/features/viral_intake/`. Removed old `app/services/viral/` and `app/routers/viral.py`.
+  - **Preserved boundary**: did not touch `app/services/content/orchestrator.py`, `media_processor.py`, `video_protector.py`, or `yt_dlp_path.py`; Phase 4 remains reserved.
+  - **Import updates**: direct callsites moved to `app.features.viral_intake.*`; `app/main.py` imports viral router from feature path; `app/services/__init__.py` keeps 7 legacy aliases for backward compatibility.
+  - **Smoke proof**:
+    - `find app -name '*.py' -print0 | xargs -0 venv/bin/python -m py_compile` → `PY_COMPILE_OK` (pre-existing Facebook SyntaxWarning only).
+    - `venv/bin/python -c "from app.main import app; print('ROUTES', len(app.routes))"` → `ROUTES 207`.
+    - `venv/bin/pytest tests/ -q --ignore=tests/test_facebook_engagement.py --co` → `77 tests collected, 11 errors` (baseline match).
+    - New feature imports: `VP_OK`, `VS_OK`, `DS_OK`, `STR_OK`, `VSVC_OK`, `TS_OK`, `REUP_OK`, `VIRAL_ROUTER_OK 4`.
+    - Shim imports: `VP_SHIM_OK`, `VS_SHIM_OK`, `DS_SHIM_OK`, `STR_SHIM_OK`.
+    - Worker/import critical: `MAINT_IMPORT_OK`, `PUB_IMPORT_OK`, `MANAGE_IMPORT_OK`, `INS_VIRAL_INTEGRATION_OK`.
+  - **Risk**: PM2/VPS runtime proof not run locally. Maintenance worker import is statically verified; deploy still needs controlled PM2 restart/monitor.
+  - **Next**: Claude Code / Anti verify Step 23. Do **not** proceed to Step 24 `facebook_publisher` until review clears it.
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 22 DONE — telegram_bot + retroactive notifier→core ✅**
+  - **2 commits trên develop**:
+    - `66c9826` Commit 22A: notifier carve sang `app/core/notifier/` (5 file: __init__.py + base.py + formatting.py + service.py + telegram.py). Retroactive Phase 1 work — notifier là shared infrastructure used by 18+ callsites (FB, threads, viral, observability, queue, workers). Critical path.
+    - `f3bbb64` Commit 22B: telegram bot files + router → `app/features/telegram_bot/` (5 bot file + router.py).
+  - **`app/services/telegram/` xoá hoàn toàn** sau Commit 22B.
+  - **Smoke proof**:
+    - 22A: NOTIFIER_OK + NOTIFIER_SHIM_OK + 4 worker import OK (publisher, ai_generator, maintenance, threads_publisher).
+    - 22B: TG_OK + TG_ROUTER_OK 1 + TG_SHIM_OK + Threads pipeline import OK.
+    - Both: py_compile PASS, ROUTES 207, pytest 77/11 baseline.
+  - **Claude Code re-verify [2026-05-04]**: NOTIFIER_SHIM_IDENTITY_OK (no double load). smoke.sh PASS.
+  - **Process**: 2 commit BẮT BUỘC TÁCH (granular rollback). Codex tuân đúng.
+  - **Risk**: PM2/VPS proof chưa run, chờ CI/CD deploy + Threads_Publisher restart confirm.
+  - **Next**: Anti review Step 22. Step 23 viral_intake (HIGH RISK — orchestrator 651 dòng).
+
+- **[2026-05-04] PLAN-037 Phase 3 Step 21 DONE — `app/features/insights/` ✅**
+  - 2 commits: `29c087c` move + `2ca1f4d` tick.
+  - INS_ROUTER_OK 14 (insights router 14 routes).
+  - Anti review Step 21 vẫn pending (gộp với Step 20 + 22).
+
 - **[2026-05-04] PLAN-037 Phase 3 Step 20 DONE + Anti APPROVED (Verdict B) Step 21 CLEARED — `app/features/system_panel/` ✅**
   - **Anti Sign-off**: APPROVED with follow-up (Verdict B). Verified code move and import updates for the `system_panel` and `workflow_registry`.
   - **Verification**: Directory structure mapped perfectly (`__init__.py`, `service.py`, `workflow_registry.py`, `router.py`). Shim `_ALIASES` and direct callsite routing (dispatcher, adapters, config_service) updated correctly. `py_compile`, `ROUTES 207`, tests `77/11` (baseline), and WR identity check PASSED.

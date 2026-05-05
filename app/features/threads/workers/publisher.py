@@ -28,7 +28,7 @@ from app.services import settings as runtime_settings
 from app.services.account import AccountService
 from app.services.job import JobService
 from app.services.job_queue import QueueService
-from app.services.notifier_service import NotifierService
+from app.core.notifier.service import NotifierService
 from app.core.observability.system_monitor import SystemMonitorService
 from app.services.worker import WorkerService
 
@@ -339,7 +339,7 @@ def run_loop() -> None:
     """Main Threads publisher loop."""
     global RUNNING
 
-    from app.services.notifier_service import TelegramNotifier
+    from app.core.notifier.service import TelegramNotifier
 
     NotifierService.register(
         TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)

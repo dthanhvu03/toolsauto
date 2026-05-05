@@ -82,7 +82,8 @@
       "Read(//home/vu/toolsauto/agents/tasks/archive/**)",
       "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/tasks/archive/**)",
       "Read(//home/vu/toolsauto/agents/handoffs/**)",
-      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/handoffs/**)"
+      "Read(///wsl.localhost/Ubuntu/home/vu/toolsauto/agents/handoffs/**)",
+      "Bash(wsl.exe bash *)"
     ],
     "additionalDirectories": [
       "\\home\\vu\\toolsauto\\app\\services",
