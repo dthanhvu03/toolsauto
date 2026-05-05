@@ -687,7 +687,7 @@ def main():
                         headless=True,
                         viewport={"width": 1280, "height": 720},
                         args=["--disable-blink-features=AutomationControlled",
-                              "--no-first-run", "--disable-infobars"]
+                              "--no-first-run", "--disable-infobars", "--disable-dev-shm-usage"]
                     )
                     page = context.pages[0] if context.pages else context.new_page()
 

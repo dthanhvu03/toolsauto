@@ -12,7 +12,7 @@ from app.core.database.core import SessionLocal
 from app.core.database.models import NewsArticle
 from app.features.threads.service.article_scorer import compute_score
 from app.features.threads.service.topic_key import compute_topic_key
-from app.core import settings as runtime_settings
+from app.services import settings as runtime_settings
 
 logger = logging.getLogger("app.services.news_scraper")
 

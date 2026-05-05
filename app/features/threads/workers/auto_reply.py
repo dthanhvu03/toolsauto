@@ -29,7 +29,7 @@ async def process_account(account: Account, db: Session):
             context = await p.chromium.launch_persistent_context(
                 user_data_dir=account.resolved_profile_path,
                 headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"]
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
             )
             
             page = await context.new_page()
