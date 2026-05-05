@@ -42,9 +42,16 @@ _last_boost_ts = 0
 
 
 def _pending_backlog(db: Session) -> int:
-    """Count jobs that indicate backlog; used to decide whether to skip heavy maintenance tasks."""
+    """Count Facebook-pipeline backlog only.
+
+    Why: the heavy tasks gated below (viral ingest, tiktok scan, competitor discovery)
+    only feed the Facebook pipeline. Threads has its own independent producer
+    (threads_news) that bypasses this gate, so counting Threads jobs here would
+    starve FB whenever Threads backlog alone crossed the threshold.
+    """
     from app.core.database.models import Job
     return db.query(Job).filter(
+        Job.platform == "facebook",
         Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
     ).count()
 
@@ -504,7 +511,7 @@ def run_loop():
                     backlog = _pending_backlog(db)
                     if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:
                         logger.info(
-                            "[MAINT] Backlog=%d >= %d. Skipping heavy tasks (viral ingest/tiktok scan/discovery) this sweep.",
+                            "[MAINT] FB backlog=%d >= %d. Skipping heavy tasks (viral ingest/tiktok scan/discovery) this sweep.",
                             backlog,
                             MAINT_SKIP_HEAVY_WHEN_PENDING,
                         )
