@@ -48,10 +48,14 @@ def _pending_backlog(db: Session) -> int:
     only feed the Facebook pipeline. Threads has its own independent producer
     (threads_news) that bypasses this gate, so counting Threads jobs here would
     starve FB whenever Threads backlog alone crossed the threshold.
+
+    Note: Job.platform may be a comma-separated multi-platform value (e.g.
+    "facebook,threads") for accounts that post to both. LIKE '%facebook%' captures
+    those too; pure "threads" jobs are correctly excluded.
     """
     from app.core.database.models import Job
     return db.query(Job).filter(
-        Job.platform == "facebook",
+        Job.platform.like("%facebook%"),
         Job.status.in_([JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DRAFT, JobStatus.AI_PROCESSING, JobStatus.AWAITING_STYLE])
     ).count()
 
