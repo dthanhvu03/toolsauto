@@ -4,16 +4,10 @@ import logging
 from app.config import BASE_DIR
 import app.config as config
 
-from app.services import syspanel_service
+from app.features.system_panel import service as syspanel_service
+from app.core.pm2_apps import PM2_SAFE_NAMES
 
 APP_DIR = str(BASE_DIR)
-PM2_SAFE_NAMES = {
-    "FB_Publisher_1", "FB_Publisher_2",
-    "AI_Generator_1", "AI_Generator_2",
-    "Maintenance", "Web_Dashboard", "9Router_Gateway",
-    # Legacy (single-instance)
-    "FB_Publisher", "AI_Generator",
-}
 PERSONA_FILE = str(config.STORAGE_DB_DIR / "config" / "ai_persona.json")
 DEFAULT_PERSONA = (
     "Bạn là chuyên gia content sáng tạo, viết tiếng Việt tự nhiên, gần gũi với người dùng Facebook Việt Nam. "

@@ -5,8 +5,8 @@ import time
 import json
 import logging
 from app.core.database.core import get_db
-from app.services.account import AccountService
-from app.services.page_utils import PageUtils
+from app.core.account import AccountService
+from app.core.page_utils import PageUtils
 from app.main_templates import templates
 from app.core.compliance.facebook_compliance import compliance_checker, Severity
 

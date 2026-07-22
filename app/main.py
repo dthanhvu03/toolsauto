@@ -38,6 +38,9 @@ from app.features.telegram_bot import router as telegram
 from app.features.viral_intake import router as viral
 from app.core.notifier.service import NotifierService, TelegramNotifier
 import app.config as config
+from app.bootstrap_hooks import register_feature_hooks
+
+register_feature_hooks()
 
 app = FastAPI(
     title="Auto Publisher Dashboard",
@@ -86,10 +89,15 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 async def cookie_auth_middleware(request: Request, call_next):
     path = request.url.path
     
-    # Allowed paths without Auth
-    # /favicon.ico and /docs just in case, but we disabled docs above.
-    allowed_prefixes = ("/health", "/static", "/login", "/favicon.ico")
-    if any(path.startswith(p) for p in allowed_prefixes):
+    # Public paths (no session). Gemini login/ping require auth; cookie-sync uses X-Api-Secret.
+    public_exact = {
+        "/health",
+        "/health/json",
+        "/health/ui",
+        "/health/gemini/cookie-sync",
+    }
+    public_prefixes = ("/static", "/login", "/favicon.ico")
+    if path in public_exact or any(path.startswith(p) for p in public_prefixes):
         return await call_next(request)
         
     token = request.cookies.get("session_token")

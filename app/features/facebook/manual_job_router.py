@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 from app.main_templates import templates
 from app.core.compliance.facebook_compliance import compliance_checker, Severity
-from app.services.job import JobService
+from app.core.queue.job import JobService
 from app.config import CONTENT_DIR
 
 router = APIRouter(prefix="/jobs/manual", tags=["manual-jobs"])
@@ -15,7 +15,7 @@ MANUAL_DIR = str(CONTENT_DIR / "manual")
 
 @router.get("/form", response_class=HTMLResponse)
 def manual_job_form(request: Request, db: Session = Depends(get_db)):
-    from app.services.account import AccountService
+    from app.core.account import AccountService
     accounts = AccountService.get_active_accounts(db)
     pages_by_acc = []
     for acc in accounts:

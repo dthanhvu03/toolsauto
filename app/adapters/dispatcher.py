@@ -2,13 +2,13 @@ import logging
 from app.core.database.models import Job
 from app.adapters.contracts import PublishResult, AdapterInterface
 from app.constants import Platform, JobType
-from app.services.media_processor import MediaProcessor
+from app.features.facebook.media_processor import MediaProcessor
 from app.core.workflow_registry import WorkflowRegistry
 from app.config import FFMPEG_ENABLED, FFMPEG_PROFILE
 
 logger = logging.getLogger(__name__)
 from app.core.observability.runtime_events import emit as rt_emit
-from app.services import job_tracer
+from app.core.queue import tracer as job_tracer
 
 from app.features.facebook.adapter import FacebookAdapter, PageMismatchError
 

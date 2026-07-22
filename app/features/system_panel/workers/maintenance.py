@@ -6,8 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Repo root on sys.path so `python workers/maintenance.py` works without PYTHONPATH=.
-_root = Path(__file__).resolve().parent.parent
+# Repo root on sys.path so this worker works without PYTHONPATH=.
+_root = Path(__file__).resolve().parents[4]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
@@ -18,14 +18,15 @@ logger = setup_shared_logger(__name__ if __name__ != "__main__" else "maintenanc
 
 from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
-from app.services.worker import WorkerService
-from app.services.cleanup import CleanupService
+from app.core.queue.worker import WorkerService
+from app.core.queue.cleanup import CleanupService
 from app.core.observability.metrics_checker import MetricsChecker
 from app.core.notifier.service import NotifierService, TelegramNotifier
 from app.core.observability.system_monitor import SystemMonitorService
-from app.features.viral_intake.processor import ViralProcessorService
+from app.core import feature_hooks
+from app.bootstrap_hooks import register_feature_hooks
 import app.config as config
-from app.services import settings as runtime_settings
+from app.core import settings as runtime_settings
 from app.constants import JobStatus, ViralStatus
 
 RUNNING = True
@@ -184,7 +185,6 @@ def _scrape_tiktok_competitors(db):
     Chỉ chạy mỗi 1 giờ để tránh rate limit TikTok.
     """
     global _last_tiktok_scrape_ts
-    from app.features.viral_intake.scan import run_tiktok_competitor_scan
 
     now = time.time()
     if (now - _last_tiktok_scrape_ts) < TIKTOK_SCRAPE_INTERVAL_SEC:
@@ -193,7 +193,7 @@ def _scrape_tiktok_competitors(db):
     _last_tiktok_scrape_ts = now
     logger.info("[TIKTOK] Running hourly TikTok competitor scan...")
 
-    total_found, num_channels = run_tiktok_competitor_scan(db)
+    total_found, num_channels = feature_hooks.call("viral.tiktok_scan", db)
 
     try:
         if total_found > 0:
@@ -203,8 +203,7 @@ def _scrape_tiktok_competitors(db):
                 f"✅ Tìm thấy <b>{total_found}</b> video viral mới!"
             )
         else:
-            from app.features.viral_intake.scan import get_default_min_views
-            min_views = get_default_min_views(db)
+            min_views = feature_hooks.call("viral.min_views", db)
             NotifierService._broadcast(
                 f"🎵 <b>TikTok Auto-Discovery</b>\n"
                 f"🔍 Quét {num_channels} kênh đối thủ\n"
@@ -363,8 +362,7 @@ def _run_competitor_discovery(db):
     logger.info("[DISCOVERY] Starting nightly competitor discovery scan...")
 
     from app.core.database.models import Account
-    from app.features.viral_intake.discovery_scraper import DiscoveryScraper
-    from app.services.account import get_discovery_keywords
+    from app.core.account import get_discovery_keywords
 
     accounts = db.query(Account).filter(Account.is_active == True).all()
 
@@ -372,7 +370,6 @@ def _run_competitor_discovery(db):
         logger.info("[DISCOVERY] No active accounts.")
         return
 
-    scraper = DiscoveryScraper()
     total_found = 0
 
     for acc in accounts:
@@ -388,7 +385,7 @@ def _run_competitor_discovery(db):
             if not RUNNING:
                 return
             try:
-                found = scraper.discover_for_keyword(kw, acc.id, db)
+                found = feature_hooks.call("viral.discover_keyword", kw, acc.id, db)
                 total_found += found
                 logger.info("[DISCOVERY] Keyword '%s' for '%s': %d new channels", kw, acc.name, found)
             except Exception as e:
@@ -436,6 +433,7 @@ def run_loop():
     global RUNNING, CURRENT_POLLER
     logger.info("Maintenance Worker started. Press Ctrl+C to stop.")
 
+    register_feature_hooks()
     register_signals()
     
     if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
@@ -443,8 +441,11 @@ def run_loop():
         logger.info("Telegram notifier registered.")
         
         # Start polling thread cho inline button callbacks
-        from app.features.telegram_bot.poller import TelegramPoller
-        CURRENT_POLLER = TelegramPoller(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)
+        CURRENT_POLLER = feature_hooks.call(
+            "telegram.make_poller",
+            config.TELEGRAM_BOT_TOKEN,
+            config.TELEGRAM_CHAT_ID,
+        )
         CURRENT_POLLER.start()
         
     logger.info(
@@ -461,7 +462,7 @@ def run_loop():
                 try:
                     # Apply runtime overrides from DB (app/settings) so cap values take effect immediately.
                     try:
-                        from app.services.settings import apply_runtime_overrides_to_config
+                        from app.core.settings import apply_runtime_overrides_to_config
                         apply_runtime_overrides_to_config(db)
                     except Exception:
                         db.rollback()
@@ -494,7 +495,7 @@ def run_loop():
 
                     # 3. Recover crashed/stale jobs (Self-healing)
                     logger.info("Checking for crashed/stale jobs to recover...")
-                    from app.services.job_queue import QueueService
+                    from app.core.queue.queue import QueueService
                     recovered = QueueService.recover_crashed_jobs(db, config.WORKER_CRASH_THRESHOLD_SECONDS)
                     if recovered > 0:
                         logger.warning(f"Self-healing: Recovered {recovered} stale jobs.")
@@ -517,7 +518,7 @@ def run_loop():
                         )
                     else:
                         # 4. Process viral materials → AWAITING_STYLE jobs (yt-dlp heavy)
-                        ViralProcessorService().process_all(db)
+                        feature_hooks.call("viral.process_all", db)
 
                         # 5. Auto-discover TikTok competitor videos (hourly)
                         _scrape_tiktok_competitors(db)

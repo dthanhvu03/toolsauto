@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 import logging
 from app.core.database.core import get_db
-from app.services.ai_service import AIService
+from app.core.ai.service import AIService
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 logger = logging.getLogger(__name__)

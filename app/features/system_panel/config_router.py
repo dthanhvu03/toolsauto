@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 import logging
 
-from app.services import platform_config_service
+from app.core import config_service as platform_config_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/platform-config", tags=["platform-config"])

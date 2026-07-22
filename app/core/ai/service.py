@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from app.core.database.models import Job
-from app.services.ai_runtime import pipeline
+from app.core.ai.runtime import pipeline
 from app.core.orchestrator import ContentOrchestrator
 
 logger = logging.getLogger(__name__)

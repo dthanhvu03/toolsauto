@@ -32,7 +32,7 @@ ALLOWED_VIDEO_EXTS = {".mp4", ".webm", ".mkv", ".mov"}
 def _get_runtime_int(db, key: str, fallback: int) -> int:
     """Read a runtime setting from DB; fallback to config default."""
     try:
-        from app.services import settings as runtime_settings
+        from app.core import settings as runtime_settings
         return int(runtime_settings.get_effective(db, key))
     except Exception:
         return fallback

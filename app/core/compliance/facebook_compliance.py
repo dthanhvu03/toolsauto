@@ -257,7 +257,7 @@ class FacebookComplianceChecker:
         violations: list[ViolationItem],
         product_category: str = "general",
     ) -> str:
-        from app.services.gemini_api import GeminiAPIService
+        from app.core.ai.runtime import pipeline
 
         violation_list = "\n".join(
             [f"- [{v.category}] {v.evidence}: {v.suggestion}" for v in violations]
@@ -282,10 +282,11 @@ class FacebookComplianceChecker:
         )
 
         try:
-            api = GeminiAPIService()
-            result = api.ask(prompt)
+            from app.core.ai.runtime import pipeline
+
+            result, meta = pipeline.generate_text(prompt)
             if not result:
-                logger.error("[Compliance] Rewrite returned empty from API")
+                logger.error("[Compliance] Rewrite empty from pipeline meta=%s", meta)
                 return content
             if "[REJECT]" in result:
                 logger.warning("[Compliance] AI rejected rewrite for: %s", content[:50])

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 from app.core.database.core import get_db
 
-from app.services import insights_service
+from app.features.insights import service as insights_service
 
 CACHE_TTL = 3600  # 1 hour
 COMMENTARY_CACHE_TTL = 1800  # 30 min — AI calls are slow & expensive

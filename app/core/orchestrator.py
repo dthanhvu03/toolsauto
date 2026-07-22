@@ -17,7 +17,7 @@ import time
 import logging
 import json
 import re
-from app.services.ai_runtime import pipeline
+from app.core.ai.runtime import pipeline
 import app.config as config
 
 logger = logging.getLogger(__name__)
@@ -418,7 +418,7 @@ Audio Transcript (có thể bắt chữ bị sai do giọng AI):
             context_block += f"\n- Fanpage đăng bài: {page_name or 'Không rõ'}\n- Lĩnh vực/Niche của page: {niches_str}"
 
         # ─── New V3 Component: Multi-Brain Intelligence Factory ───
-        from app.services.brain_factory import BrainFactory
+        from app.core.ai.brain_factory import BrainFactory
         
         # Determine Primary Niche for Specialized Persona
         primary_niche = "general"
@@ -531,7 +531,7 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
     def _fallback_rpa_generation(self, prompt: str, target_image: str, default_result: dict) -> dict:
         """Fallback RPA cũ, sẽ gỡ bỏ ở Phase 4."""
         if not getattr(self, "gemini", None):
-            from app.services.gemini_rpa import GeminiRPAService
+            from app.core.ai.gemini_rpa import GeminiRPAService
             self.gemini = GeminiRPAService()
             
         result = dict(default_result)
@@ -666,7 +666,7 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
     def generate_comments(self, keywords: list, count: int = 5) -> list:
         """Sinh comment affiliate dựa trên keywords."""
         if not self.gemini:
-            from app.services.gemini_rpa import GeminiRPAService
+            from app.core.ai.gemini_rpa import GeminiRPAService
             self.gemini = GeminiRPAService()
 
         kw_str = ", ".join(keywords[:5])

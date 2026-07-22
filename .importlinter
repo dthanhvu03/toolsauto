@@ -22,3 +22,5 @@ modules =
     app.features.affiliates
     app.features.telegram_bot
     app.features.system_panel
+    app.features.accounts
+    app.features.jobs

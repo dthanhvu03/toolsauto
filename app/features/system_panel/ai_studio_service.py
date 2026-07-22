@@ -1,9 +1,9 @@
 import json
 import logging
 from typing import Dict, Any, Tuple, Optional
-from app.services.brain_factory import BrainFactory
-from app.services.gemini_api import GeminiAPIService
-from app.services import settings as runtime_settings
+from app.core.ai.brain_factory import BrainFactory
+from app.core.ai.runtime import pipeline
+from app.core import settings as runtime_settings
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -40,8 +40,9 @@ class AIStudioService:
     async def run_test(prompt_content: str, niche: str) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[list]]:
         try:
             mega_prompt = BrainFactory.build_caption_prompt(prompt_content, niche)
-            api = GeminiAPIService()
-            result = await api.ask_async(mega_prompt)
+            result, meta = await pipeline.generate_text_async(mega_prompt)
+            if not result:
+                raise RuntimeError(f"AI pipeline failed: {meta}")
             
             cleaned = BrainFactory.clean_json_blocks(result)
             try:

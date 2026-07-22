@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any
 from sqlalchemy.orm import Session
 from app.core.database.models import Job
-from app.services.job import JobService
+from app.core.queue.job import JobService
 from app.core.notifier.telegram_client import TelegramClient
 from app.constants import JobStatus
 from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID

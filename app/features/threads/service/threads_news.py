@@ -10,12 +10,12 @@ import requests
 import app.config as config
 from app.core.database.core import SessionLocal
 from app.core.database.models import Account, Job, NewsArticle
-from app.services.ai_runtime import pipeline
+from app.core.ai.runtime import pipeline
 from app.features.threads.service.topic_key import compute_topic_key
 from app.core.orchestrator import ContentOrchestrator
 from app.core import settings as runtime_settings
 
-logger = logging.getLogger("app.services.threads_news")
+logger = logging.getLogger("app.features.threads.service.threads_news")
 
 NEWS_JOB_PREFIX = "threads_news_v2_"
 RECENT_JOB_STATUSES = ("PENDING", "RUNNING", "DONE")

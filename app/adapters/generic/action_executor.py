@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Optional tracer imports
 try:
-    from app.services.job_tracer import update_active_node
+    from app.core.queue.tracer import update_active_node
 except ImportError:
     def update_active_node(*a, **kw): pass
 

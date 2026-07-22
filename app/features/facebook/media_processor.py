@@ -23,7 +23,7 @@ from app.config import (
     FFMPEG_WATERMARK_PATH, FFMPEG_WATERMARK_POSITION, FFMPEG_WATERMARK_OPACITY,
     DRM_ENABLED, DRM_WATERMARK_TEXT
 )
-from app.services.video_protector import VideoProtector
+from app.core.media.video_protector import VideoProtector
 
 logger = logging.getLogger(__name__)
 

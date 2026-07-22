@@ -3,8 +3,9 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 import time
 import logging
+import secrets
 from app.core.database.core import get_db
-from app.services.health import HealthService
+from app.core.observability.health import HealthService
 import app.config as config
 from app.main_templates import templates
 
@@ -69,14 +70,21 @@ def start_gemini_login():
 
 @router.post("/gemini/cookie-sync")
 async def cookie_sync(request: Request, x_api_secret: str = Header(None)):
-    expected_secret = getattr(config, 'COOKIE_SYNC_SECRET', "vuxuandao2026")
-    if not x_api_secret or x_api_secret != expected_secret:
+    expected_secret = getattr(config, "COOKIE_SYNC_SECRET", "") or ""
+    if not expected_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="COOKIE_SYNC_SECRET is not configured",
+        )
+    if not x_api_secret or not secrets.compare_digest(x_api_secret, expected_secret):
         raise HTTPException(status_code=403, detail="Invalid API Secret")
     try:
         cookies = await request.json()
         HealthService.sync_cookies(cookies)
         logger.info("✅ Đã nhận và cập nhật Cookie Gemini mới từ Chrome Extension!")
         return {"status": "success", "message": "Cookies synced successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Lỗi khi xử lý cookie sync từ Extension: %s", e)
         raise HTTPException(status_code=400, detail=str(e))

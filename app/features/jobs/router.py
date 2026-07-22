@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from app.config import TIMEZONE
 
 from app.core.database.core import get_db
-from app.services.job import JobService
+from app.core.queue.job import JobService
 
 from app.main_templates import templates
 
@@ -126,7 +126,7 @@ def create_job(
     target_page: str = Form(""),
     db: Session = Depends(get_db)
 ):
-    from app.services.account import AccountService
+    from app.core.account import AccountService
     accounts = AccountService.get_active_accounts(db)
     try:
         from datetime import datetime
@@ -154,7 +154,7 @@ async def bulk_create_jobs(
     target_page: str = Form(""),
     db: Session = Depends(get_db)
 ):
-    from app.services.account import AccountService
+    from app.core.account import AccountService
     accounts = AccountService.get_active_accounts(db)
     try:
         batch_id = JobService.bulk_create_jobs_from_uploads(

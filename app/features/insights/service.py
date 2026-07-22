@@ -387,7 +387,7 @@ def get_ai_commentary(
     Cached 30 min per (page_url, platform, days) combination.
     """
     from sqlalchemy import text as _text
-    from app.services.ai_runtime import pipeline
+    from app.core.ai.runtime import pipeline
 
     days = _validate_days(days)
     cache_key = f"ai_commentary_{days}_{platform or 'all'}_{page_url or 'all'}"
@@ -507,7 +507,7 @@ def get_ai_roadmap(
     import json
     import re as _re
     from sqlalchemy import text as _text
-    from app.services.ai_runtime import pipeline
+    from app.core.ai.runtime import pipeline
 
     days = _validate_days(days)
     cache_key = f"ai_roadmap_{days}_{platform or 'all'}_{page_url or 'all'}"

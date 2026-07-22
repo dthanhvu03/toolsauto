@@ -14,6 +14,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 
 import app.config as config
 from app.core.observability.log_normalizer import LogNormalizer
+from app.core.pm2_apps import PM2_LOG_MAP as _PM2_LOG_MAP
 
 _TS_PREFIX_RE = re.compile(
     r"^(?P<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})"
@@ -47,12 +48,7 @@ _TECH_KEYWORDS = [
 class LogService:
     """Read and tail whitelisted PM2 log files under candidate directories."""
 
-    PM2_LOG_MAP: ClassVar[dict[str, dict[str, str]]] = {
-        "AI_Generator": {"out": "AI-Generator-1-out.log", "error": "AI-Generator-1-error.log"},
-        "FB_Publisher": {"out": "FB-Publisher-1-out.log", "error": "FB-Publisher-1-error.log"},
-        "Maintenance": {"out": "Maintenance-out.log", "error": "Maintenance-error.log"},
-        "Web_Dashboard": {"out": "Web-Dashboard-out.log", "error": "Web-Dashboard-error.log"},
-    }
+    PM2_LOG_MAP: ClassVar[dict[str, dict[str, str]]] = _PM2_LOG_MAP
 
     @staticmethod
     def get_log_path(fname: str) -> Path:

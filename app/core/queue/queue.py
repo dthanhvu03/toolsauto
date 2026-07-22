@@ -65,14 +65,15 @@ class QueueService:
                       -- COMMENT jobs: use scheduled_at (delayed)
                       (UPPER(j.job_type) = 'COMMENT' AND COALESCE(j.scheduled_at, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER))
                   )
-                  AND ( :platform IS NULL OR j.platform = :platform OR j.platform LIKE '%' || :platform || '%' )
+                  AND ( :platform IS NULL OR j.platform = :platform )
                   AND a.is_active = true
                   AND a.login_status = 'ACTIVE'
                   AND (lpp.last_ts IS NULL OR (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - lpp.last_ts) >= a.cooldown_seconds)
-                  -- Account-level Mutex: Ensure this account has NO other RUNNING jobs
+                  -- Per-platform mutex: shared facebook+threads accounts can run one job per platform.
                   AND NOT EXISTS (
                       SELECT 1 FROM jobs j2
                       WHERE j2.account_id = j.account_id
+                        AND j2.platform = j.platform
                         AND j2.status = 'RUNNING'
                   )
                 -- Fair-share: account lâu chưa post nhất lên trước, tránh 1 account dồn nhiều job chiếm hết queue.
@@ -195,11 +196,28 @@ class QueueService:
             if stale_running_ids:
                 logger.debug("[recover.update_running] ids=%s", stale_running_ids[:10])
                 placeholders = ', '.join(f':id_{i}' for i in range(len(stale_running_ids)))
+                # Cap tries: PENDING if under max_tries, else FAILED (matches mark_failed_or_retry).
                 sql_running = f"""
                     UPDATE jobs
                     SET
-                        status = 'PENDING',
-                        tries = tries + 1
+                        tries = tries + 1,
+                        status = CASE
+                            WHEN (tries + 1) >= COALESCE(max_tries, 3) THEN 'FAILED'
+                            ELSE 'PENDING'
+                        END,
+                        finished_at = CASE
+                            WHEN (tries + 1) >= COALESCE(max_tries, 3)
+                            THEN CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
+                            ELSE finished_at
+                        END,
+                        last_error = CASE
+                            WHEN (tries + 1) >= COALESCE(max_tries, 3)
+                            THEN COALESCE(last_error, 'Exceeded max_tries after crash recovery')
+                            ELSE last_error
+                        END,
+                        locked_at = NULL,
+                        last_heartbeat_at = NULL,
+                        started_at = NULL
                     WHERE id IN ({placeholders})
                 """
                 params = {f'id_{i}': jid for i, jid in enumerate(stale_running_ids)}

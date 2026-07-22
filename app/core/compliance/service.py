@@ -653,11 +653,11 @@ def ai_suggest_keywords(db: Session = Depends(get_db)):
     )
 
     try:
-        from app.services.gemini_api import GeminiAPIService
+        from app.core.ai.runtime import pipeline
 
-        api = GeminiAPIService()
-        raw = api.ask(prompt)
+        raw, meta = pipeline.generate_text(prompt)
         if not raw or not str(raw).strip():
+            logger.error("[Compliance] AI suggest empty meta=%s", meta)
             return JSONResponse(
                 {"error": "AI không trả về nội dung."},
                 status_code=503,

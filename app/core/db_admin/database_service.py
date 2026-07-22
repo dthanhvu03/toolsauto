@@ -4,8 +4,8 @@ from app.core.database.core import engine
 import csv
 import io
 import logging
-from app.services.db_acl import check_table_permission
-from app.services.sql_validator import analyze_sql, SQLRiskLevel
+from app.core.db_admin.acl import check_table_permission
+from app.core.db_admin.sql_validator import analyze_sql, SQLRiskLevel
 from app.core.observability.audit_logger import audit_log
 
 logger = logging.getLogger(__name__)
@@ -66,10 +66,39 @@ class DatabaseService:
 
     @staticmethod
     def execute_sql(db: Session, raw_sql: str, confirmed: bool, client_host: str):
-        risk, normalized_sql = analyze_sql(raw_sql)
+        try:
+            risk, normalized_sql, tables, stmt_type = analyze_sql(raw_sql)
+        except ValueError as e:
+            return {"status": "error", "message": str(e)}
         
         if risk == SQLRiskLevel.DANGEROUS:
             return {"status": "error", "message": "Câu lệnh này bị chặn hoàn toàn vì lý do an toàn (DANGEROUS)."}
+
+        # Enforce table ACL for any data-modifying statement.
+        if risk == SQLRiskLevel.MODERATE:
+            import app.config as _config
+            if not getattr(_config, "SQL_CONSOLE_WRITES_ENABLED", False):
+                return {
+                    "status": "error",
+                    "message": (
+                        "SQL writes bị tắt (SQL_CONSOLE_WRITES_ENABLED=false). "
+                        "Chỉ SELECT được phép qua console."
+                    ),
+                }
+            if not tables:
+                return {
+                    "status": "error",
+                    "message": "Không xác định được bảng mục tiêu — từ chối thực thi.",
+                }
+            for table_name in tables:
+                if not check_table_permission(table_name, stmt_type):
+                    return {
+                        "status": "error",
+                        "message": (
+                            f"Bảng '{table_name}' không được phép {stmt_type.upper()} "
+                            "qua SQL console (ACL)."
+                        ),
+                    }
             
         if risk == SQLRiskLevel.MODERATE and not confirmed:
             return {
@@ -110,6 +139,12 @@ class DatabaseService:
 
     @staticmethod
     def delete_row(db: Session, table_name: str, pk_values: dict, client_host: str):
+        import app.config as _config
+        if not getattr(_config, "SQL_CONSOLE_WRITES_ENABLED", False):
+            raise ValueError(
+                "SQL writes bị tắt (SQL_CONSOLE_WRITES_ENABLED=false). "
+                "Không thể xóa row qua UI."
+            )
         if not check_table_permission(table_name, "delete"):
             raise ValueError(f"Bảng '{table_name}' không được phép xóa dữ liệu qua UI.")
             

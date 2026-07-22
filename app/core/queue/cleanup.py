@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.database.models import IncidentLog, Job, JobEvent
 from app.config import CONTENT_DIR
 from app.constants import JobStatus
-from app.services import settings as runtime_settings
+from app.core import settings as runtime_settings
 
 
 logger = logging.getLogger(__name__)

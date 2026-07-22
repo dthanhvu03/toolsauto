@@ -22,7 +22,7 @@ from app.features.facebook.pages.reels import FacebookReelsPage
 
 logger = logging.getLogger(__name__)
 from app.core.observability.runtime_events import emit as rt_emit
-from app.services.job_tracer import update_active_node
+from app.core.queue.tracer import update_active_node
 from app.core.notifier.service import NotifierService
 
 _FB_HOST_NETLOC = urlparse(FACEBOOK_HOST).netloc.lower()
@@ -1627,7 +1627,7 @@ class FacebookAdapter(AdapterInterface):
     def _extract_page_id_from_current_page(self) -> str | None:
         """Attempt to extract the actual Facebook Page ID from the current page's metadata or script blobs."""
         if not self.page: return None
-        return self.page.evaluate("""
+        return self.page.evaluate(r"""
             () => {
                 // 1. Check App Links (Meta tags)
                 const appLink = document.querySelector('meta[property="al:android:url"], meta[property="al:ios:url"]');

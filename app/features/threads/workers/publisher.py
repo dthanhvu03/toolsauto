@@ -24,34 +24,28 @@ from sqlalchemy.orm import Session
 from app.adapters.dispatcher import Dispatcher
 from app.constants import JobStatus, Platform
 from app.core.database.core import SessionLocal
-from app.services import settings as runtime_settings
-from app.services.account import AccountService
-from app.services.job import JobService
-from app.services.job_queue import QueueService
+from app.core import settings as runtime_settings
+from app.core.account import AccountService
+from app.core.queue.job import JobService
+from app.core.queue.queue import QueueService
 from app.core.notifier.service import NotifierService
-from app.core.observability.system_monitor import SystemMonitorService
-from app.services.worker import WorkerService
+from app.core.queue.worker import WorkerService
 
+
+from app.core.queue.publisher_runtime import (
+    kill_if_stuck as _kill_if_stuck_shared,
+    start_heartbeat_thread,
+    claim_precheck,
+    postpone_if_sleeping,
+    recover_stale_jobs,
+)
 
 RUNNING = True
 CURRENT_JOB_ID = None
 
 
 def kill_if_stuck(label: str, timeout: int) -> threading.Timer:
-    """Hard timeout for potentially blocked publish flows."""
-
-    def suicide() -> None:
-        logger.error(
-            "[FATAL DEADLOCK] %s hung for over %ss. Exiting to trigger restart.",
-            label,
-            timeout,
-        )
-        os._exit(1)
-
-    timer = threading.Timer(timeout, suicide)
-    timer.daemon = True
-    timer.start()
-    return timer
+    return _kill_if_stuck_shared(logger, label, timeout)
 
 
 def handle_sigterm(signum, frame) -> None:
@@ -73,64 +67,24 @@ def register_signals() -> None:
 
 
 def check_crash_recovery(db: Session) -> None:
-    """Resets stale RUNNING jobs back to PENDING."""
-    logger.info("Checking for stale jobs to recover...")
-    recovered_count = QueueService.recover_crashed_jobs(
-        db, config.WORKER_CRASH_THRESHOLD_SECONDS
-    )
-    if recovered_count > 0:
-        logger.warning("Recovered %s stale jobs back to queue.", recovered_count)
+    recover_stale_jobs(db, logger, config.WORKER_CRASH_THRESHOLD_SECONDS)
 
 
 def process_single_job(db: Session) -> bool:
     """Claim and process one eligible Threads job."""
     global CURRENT_JOB_ID
 
-    from app.core.database.models import Job
-    from app.services.settings import apply_runtime_overrides_to_config
-
-    apply_runtime_overrides_to_config(db)
     threads_platform = (
         Platform.THREADS.value if hasattr(Platform.THREADS, "value") else str(Platform.THREADS)
     )
-    max_concurrent_accounts = runtime_settings.get_int(
-        "publish.max_concurrent_accounts", 1, db=db
-    )
-
-    running_threads_count = db.query(Job).filter(
-        Job.status == JobStatus.RUNNING,
-        Job.platform.like(f"%{threads_platform}%"),
-    ).count()
-    if running_threads_count >= max_concurrent_accounts:
-        logger.info(
-            "[THREADS_PUBLISHER] Safety limit reached: %s/%s active Threads jobs.",
-            running_threads_count,
-            max_concurrent_accounts,
-        )
-        return False
-
-    health = SystemMonitorService().check_health()
-    ram_threshold = runtime_settings.get_int(
-        "worker.publisher.ram_threshold", 95, db=db
-    )
-    if health.get("ram_percent") and health["ram_percent"] > ram_threshold:
-        logger.warning(
-            "[THREADS_PUBLISHER] RAM pressure high (%s%%). Pausing claim.",
-            health["ram_percent"],
-        )
-        return False
-
-    max_browsers = runtime_settings.get_int(
-        "worker.publisher.max_browser_instances", 15, db=db
-    )
-    if (
-        health.get("chrome_playwright_count")
-        and health["chrome_playwright_count"] >= max_browsers
+    if not claim_precheck(
+        db,
+        logger,
+        platform=threads_platform,
+        prefix="[THREADS_PUBLISHER] ",
+        default_max_concurrent=1,
+        fuzzy_platform=True,
     ):
-        logger.warning(
-            "[THREADS_PUBLISHER] Too many browsers open (%s). Pausing claim.",
-            health["chrome_playwright_count"],
-        )
         return False
 
     logger.debug("[THREADS_PUBLISHER] Attempting to claim job for platform: %s", threads_platform)
@@ -141,15 +95,7 @@ def process_single_job(db: Session) -> bool:
 
     heartbeat_stop = threading.Event()
     try:
-        if job.account and getattr(job.account, "is_sleeping", False):
-            logger.info(
-                "[THREADS_PUBLISHER] [Job-%s] Account '%s' is sleeping. Postponing 10 minutes.",
-                job.id,
-                job.account.name,
-            )
-            job.status = JobStatus.PENDING
-            job.schedule_ts = int(time.time()) + 600
-            db.commit()
+        if postpone_if_sleeping(db, job, logger, prefix="[THREADS_PUBLISHER] "):
             return True
 
         CURRENT_JOB_ID = job.id
@@ -160,27 +106,9 @@ def process_single_job(db: Session) -> bool:
             job.platform,
         )
 
-        heartbeat_interval = 60
-
-        def heartbeat_loop(job_id: int) -> None:
-            while not heartbeat_stop.is_set():
-                try:
-                    with SessionLocal() as hb_db:
-                        JobService.update_heartbeat(hb_db, job_id)
-                except Exception as hb_err:
-                    logger.debug(
-                        "[THREADS_PUBLISHER] [Job-%s] Heartbeat refresh failed: %s",
-                        job_id,
-                        hb_err,
-                    )
-                heartbeat_stop.wait(heartbeat_interval)
-
-        heartbeat_thread = threading.Thread(
-            target=heartbeat_loop,
-            args=(job.id,),
-            daemon=True,
+        heartbeat_thread = start_heartbeat_thread(
+            job.id, heartbeat_stop, interval=60, logger=logger
         )
-        heartbeat_thread.start()
 
         suicide_timer = kill_if_stuck(
             f"Threads Job {job.id} Publish",

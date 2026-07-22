@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 import time
 import logging
 from app.core.database.core import get_db
-from app.services.account import AccountService
-from app.services.page_utils import PageUtils
+from app.core.account import AccountService
+from app.core.page_utils import PageUtils
 from app.main_templates import templates
 
 logger = logging.getLogger(__name__)

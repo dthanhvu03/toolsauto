@@ -37,7 +37,12 @@ class PageStrategicService:
                 return PageStrategicService._cache[cache_key]
 
         # 2. Calculate Base Metrics from DB
-        platform_filter = f"WHERE platform = '{platform}'" if platform else ""
+        params = {}
+        platform_filter = ""
+        if platform:
+            # Parameterized — never interpolate user input into SQL.
+            platform_filter = "WHERE platform = :platform"
+            params["platform"] = platform
         
         sql = f"""
         WITH PageSnapshots AS (
@@ -75,7 +80,7 @@ class PageStrategicService:
         ORDER BY growth_abs DESC
         """
         
-        results = db.execute(text(sql)).fetchall()
+        results = db.execute(text(sql), params).fetchall()
         
         analysis = []
         batch_data = []
@@ -131,7 +136,7 @@ class PageStrategicService:
         # 3. AI Batch AI Analysis (9Router)
         if analysis:
             try:
-                from app.services.ai_runtime import pipeline
+                from app.core.ai.runtime import pipeline
                 if pipeline.enabled:
                     data_str = "\n".join([f"- {d['name']}: {d['views']} views, {d['growth']} growth, {d['engagement']} eng, status: {d['status']}" for d in batch_data])
                     

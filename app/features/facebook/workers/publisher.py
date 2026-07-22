@@ -17,17 +17,25 @@ logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publish
 
 from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
-from app.services.job_queue import QueueService
-from app.services.job import JobService
+from app.core.queue.queue import QueueService
+from app.core.queue.job import JobService
 from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
-from app.services.worker import WorkerService
-from app.services.account import AccountService
+from app.core.queue.worker import WorkerService
+from app.core.account import AccountService
 from app.features.facebook.adapter import PageMismatchError
-from app.core.observability.system_monitor import SystemMonitorService
 import app.config as config
-from app.services import settings as runtime_settings
+from app.core import settings as runtime_settings
 from app.core.notifier.service import NotifierService
+
+from app.core.queue.publisher_runtime import (
+    kill_if_stuck as _kill_if_stuck_shared,
+    clear_claim_locks,
+    start_heartbeat_thread,
+    claim_precheck,
+    postpone_if_sleeping,
+    recover_stale_jobs,
+)
 
 # Suicide Timer for Deadlock Prevention
 import threading
@@ -35,19 +43,7 @@ from app.constants import AccountStatus, JobStatus, JobType
 
 
 def kill_if_stuck(label: str, timeout: int):
-    """
-    Sets a hard timeout for blocking operations like browser driving.
-    If the timeout is reached, the worker forcefully exits (suicide)
-    so that PM2 or systemd can restart it clean, avoiding zombie hangs.
-    """
-    def suicide():
-        logger.error(f"[FATAL DEADLOCK] {label} hung for over {timeout}s! Committing suicide (os._exit) to trigger restart.")
-        os._exit(1)
-        
-    timer = threading.Timer(timeout, suicide)
-    timer.daemon = True
-    timer.start()
-    return timer
+    return _kill_if_stuck_shared(logger, label, timeout)
 
 RUNNING = True
 CURRENT_JOB_ID = None
@@ -70,10 +66,7 @@ def register_signals():
 
 def check_crash_recovery(db: Session):
     """Resets jobs stuck in RUNNING based on stale heartbeats."""
-    logger.info("Checking for crashed (stale heartbeat) jobs to recover...")
-    recovered_count = QueueService.recover_crashed_jobs(db, WORKER_CRASH_THRESHOLD_SECONDS)
-    if recovered_count > 0:
-        logger.warning("Recovered %s crashed jobs. Sent back to PENDING.", recovered_count)
+    recover_stale_jobs(db, logger, WORKER_CRASH_THRESHOLD_SECONDS)
 
     # Reset accounts stuck in ENGAGING (stale lock from crashed engagement)
     from app.core.database.models import Account
@@ -95,30 +88,15 @@ def process_single_job(db: Session):
     global CURRENT_JOB_ID
     
     from app.core.database.models import Job
-    from app.services.settings import apply_runtime_overrides_to_config
 
-    # Apply runtime overrides (DB) to this process config
-    apply_runtime_overrides_to_config(db)
-    MAX_CONCURRENT_ACCOUNTS = runtime_settings.get_int('publish.max_concurrent_accounts', 2, db=db)
-    
-    # Pre-check: Limit concurrent Facebook accounts
-    running_fb_count = db.query(Job).filter(
-        Job.status == JobStatus.RUNNING, 
-        Job.platform == "facebook"
-    ).count()
-    if running_fb_count >= MAX_CONCURRENT_ACCOUNTS:
-        logger.info(f"⏳ Giới hạn an toàn: Đang có {running_fb_count}/{MAX_CONCURRENT_ACCOUNTS} acc FB chạy. Tạm dừng nhận job mới...")
-        return False
-
-    # Adaptive Throttling: Pause if system resources are under pressure
-    health = SystemMonitorService().check_health()
-    ram_threshold = runtime_settings.get_int("worker.publisher.ram_threshold", 95, db=db)
-    if health.get("ram_percent") and health["ram_percent"] > ram_threshold:
-        logger.warning(f"🛑 Hệ thống quá tải RAM ({health['ram_percent']}%). Tạm dừng claim job trong 60s...")
-        return False
-    max_browsers = runtime_settings.get_int("worker.publisher.max_browser_instances", 15, db=db)
-    if health.get("chrome_playwright_count") and health["chrome_playwright_count"] >= max_browsers:
-        logger.warning(f"🛑 Quá nhiều trình duyệt đang mở ({health['chrome_playwright_count']}). Tạm dừng claim job...")
+    if not claim_precheck(
+        db,
+        logger,
+        platform="facebook",
+        prefix="[PUBLISHER] ",
+        default_max_concurrent=2,
+        fuzzy_platform=False,
+    ):
         return False
 
     logger.debug("[DB][claim_next_job] Attempting to claim next job")
@@ -128,7 +106,6 @@ def process_single_job(db: Session):
         return False
     logger.debug("[DB][claim_next_job] Claimed job_id=%s", job.id)
 
-    import threading
     heartbeat_stop = threading.Event()
     
     try:
@@ -166,43 +143,21 @@ def process_single_job(db: Session):
                             job.id, job.target_page, effective_daily_limit)
                 job.status = JobStatus.PENDING
                 job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
+                clear_claim_locks(job)
                 db.commit()
                 return True
 
         # Xin ý kiến giấc ngủ (Human Rest Cycle)
-        if job.account and getattr(job.account, 'is_sleeping', False):
-            logger.info("[PUBLISHER] [Job-%s] [SLEEP_WINDOW] Account '%s' is sleeping (%s - %s). Postponing 10 minutes.", 
-                        job.id, job.account.name, job.account.sleep_start_time, job.account.sleep_end_time)
-            job.status = JobStatus.PENDING
-            job.schedule_ts = int(time.time()) + 600
-            db.commit()
+        if postpone_if_sleeping(db, job, logger, prefix="[PUBLISHER] "):
             return True
             
         CURRENT_JOB_ID = job.id
         logger.info("[PUBLISHER] [Job-%s] [CLAIM] Account='%s' Platform=%s", job.id, job.account.name, job.platform)
         
         # Keep Job.last_heartbeat_at fresh while dispatch/publish is running.
-        # Otherwise QueueService.recover_crashed_jobs() may treat it as stale and reset RUNNING -> PENDING.
-        # [HB-Fix] Force interval to 60s to reduce DB load per Priority 2.
-        heartbeat_interval = 60
-
-        def _heartbeat_loop(job_id: int):
-            while not heartbeat_stop.is_set():
-                try:
-                    with SessionLocal() as hb_db:
-                        JobService.update_heartbeat(hb_db, job_id)
-                except Exception as hb_err:
-                    # [HB-Fix] Log at DEBUG level to reduce main log noise per Priority 1.
-                    logger.debug("[PUBLISHER] [Job-%s] [HEARTBEAT] Refresh failed: %s", job_id, hb_err)
-                # Wait with stop support
-                heartbeat_stop.wait(heartbeat_interval)
-
-        heartbeat_thread = threading.Thread(
-            target=_heartbeat_loop,
-            args=(job.id,),
-            daemon=True,
+        heartbeat_thread = start_heartbeat_thread(
+            job.id, heartbeat_stop, interval=60, logger=logger
         )
-        heartbeat_thread.start()
 
         # SAFETY GUARD: Never publish a job with un-processed AI placeholder
         from app.constants import AI_GENERATE_MARKER
@@ -367,7 +322,7 @@ def run_loop():
     global RUNNING
     from app.core.notifier.service import TelegramNotifier
     import app.config as config
-    from app.services import settings as runtime_settings
+    from app.core import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
     
     logger.info("Publisher Worker started. Press Ctrl+C to stop.")
