@@ -3,42 +3,23 @@
 ## System State
 
 - **Product**: ToolsAuto — auto-publish (Facebook / Threads + related).
-- **Architecture**: ADR-007 (`core` / `features` / `platform`). Overlap cleanup [2026-07-22] committed locally.
-- **Onboarding**: [docs/TREE.md](../../docs/TREE.md), root [README.md](../../README.md).
+- **Architecture**: ADR-007 (`core` / `features` / `platform`).
+- **Local Windows**: web up `http://127.0.0.1:8001`; Postgres Docker `toolsauto_postgres` → host `:5434`; `.env` + `venv` ready.
+- **Onboarding**: [docs/TREE.md](../../docs/TREE.md), root [README.md](../../README.md), [start.ps1](../../start.ps1).
 - **Active plans/tasks**: none.
 
 ## Done This Session [2026-07-22]
 
-### A–C) Security + debt + tree 1A
-(see prior notes)
-
-### D) Overlap cleanup (ops → consolidate)
-
-**Phase 1 — ops**
-- `start.sh` / `stop.sh` align với `ecosystem.config.js`.
-- Single source [`app/core/pm2_apps.py`](../../app/core/pm2_apps.py).
-
-**Phase 2 — consolidate**
-- Shared [`publisher_runtime.py`](../../app/core/queue/publisher_runtime.py): kill/locks/heartbeat/resource gate + `claim_precheck` / `postpone_if_sleeping`.
-- Affiliate / compliance / ai_studio text → **pipeline** (không GeminiAPI trực tiếp).
-- `VideoProtector` → `app/core/media/`; notifier thumb → `app/core/media/thumbnail.py`.
-- ADR-007 hooks: `feature_hooks` + `bootstrap_hooks`.
-
-### E) Tighten AI + publisher loop
-
-- FB + Threads publishers dùng `claim_precheck`, `postpone_if_sleeping`, `start_heartbeat_thread`.
-- Guard: `tests/test_overlap_cleanup.py` assert publishers dùng shared helpers.
-- Proof: `pytest` guards — 9 passed; Codacy clean trên runtime + test (Lizard complexity pre-existing trên publishers).
-
-**Cố ý giữ**: Orchestrator RPA fallback caption/vision (ADR-006).
+- Commit `5e33f87` — security harden + overlap cleanup + tests/docs.
+- Local bootstrap: `.env`, Docker Postgres `:5434`, `venv` (web deps), schema `create_all` + alembic stamp, `start.ps1`, uvicorn `:8001`.
 
 ## Unfinished + Blockers
 
-- Push remote / VPS restart PM2 — tùy user.
-- Local Windows: dùng `venv\Scripts\` + uvicorn; `start.sh`/ecosystem `venv/bin/python` là path Linux/VPS.
+- Full `requirements.txt` trên Python 3.14 Windows fail (`uvloop`, gRPC/protobuf). Worker/AI stack → Python 3.12 hoặc VPS Linux.
+- Chưa `git push`. Chưa start PM2 workers trên Windows (`ecosystem` dùng `venv/bin/python`).
 
 ## Next Action
 
-1. Push nếu cần deploy.
-2. Local: `.env` + `venv` + Postgres + `python manage.py db upgrade` + `uvicorn app.main:app`.
-3. Optional: DRY sâu hơn body `process_single_job`.
+1. Mở http://127.0.0.1:8001 — login `admin` / `admin123` (local `.env`).
+2. Push commit khi cần deploy VPS.
+3. Optional: cài Python 3.12 để `pip install -r requirements.txt` đầy đủ cho workers.
