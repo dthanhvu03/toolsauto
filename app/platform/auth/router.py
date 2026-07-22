@@ -16,9 +16,9 @@ def get_signer():
 async def login_page(request: Request, username: str = None, password: str = None):
     """
     Render the premium login UI.
-    Supports E2E debug login if username and password query params match config.
+    Query-param login is opt-in via ALLOW_QUERY_LOGIN (off by default — credentials leak to logs/Referer).
     """
-    if username and password:
+    if username and password and getattr(config, "ALLOW_QUERY_LOGIN", False):
         if secrets.compare_digest(username.strip(), config.ADMIN_USERNAME) and \
            secrets.compare_digest(password.strip(), config.ADMIN_PASSWORD):
             

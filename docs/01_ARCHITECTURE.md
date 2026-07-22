@@ -1,60 +1,40 @@
-# Architecture: FastAPI + HTMX + Tailwind + Worker
+# Architecture: FastAPI + HTMX + Workers (PM2)
 
-## Core Components
+> Tree map cho người mới: **[TREE.md](TREE.md)**. Module boundary: **[ADR-007](../agents/decisions/ADR-007-module-boundary.md)**.
 
-1. **FastAPI App (Dashboard & API)**
+## Core components
 
-- Giao diện Admin với HTML (Jinja2 templates) + TailwindCSS
-- Sử dụng HTMX cho các tương tác động (SPA-like feel): load bảng Jobs, Accounts, cập nhật trạng thái Worker.
-- Routes chính: `/` (dashboard), `/jobs/...`, `/accounts/...`, `/worker/...`, `/health`
-- Link Tracking endpoint: `/r/{code}` (chuyển hướng + đếm click affiliate)
-- Webhook cho Telegram: `/telegram/callback` (xử lý inline buttons)
+1. **FastAPI app (dashboard & API)** — `app/main.py`
+   - Jinja2 + Tailwind + HTMX
+   - Cookie session auth (`platform/auth`)
+   - Routers gắn từ `platform/*`, `features/*/router.py`, `core/*/router.py`
 
-2. **Database (SQLite + SQLAlchemy)**
+2. **Database** — PostgreSQL + SQLAlchemy (`app/core/database/`)
+   - Alembic migrations ở `alembic/`
+   - Bảng chính: `accounts`, `jobs`, `job_events`, `news_articles`, insights/compliance, …
 
-- Sử dụng SQLAlchemy ORM thao tác với file SQLite (`data/auto_publisher.db`).
-- Có Alembic dùng để quản lý database migrations.
-- Các bảng chính: `accounts`, `jobs`, `job_events`, `system_state`.
+3. **Job queue** — `app/core/queue/`
+   - Atomic `claim_next_job` (per-platform cooldown + fair-share + per-platform mutex)
+   - Crash recovery, tracer, cleanup
 
-3. **Worker Service (`worker.py` - 24/7 Background Process)**
+4. **Workers (PM2)** — entry trong `app/features/*/workers/`
+   - `FB_Publisher_*`, `Threads_Publisher`, `AI_Generator_*`, `Maintenance`, …
+   - Config: `ecosystem.config.js` + `start.sh`
 
-- Vòng lặp polling liên tục để xử lý luồng công việc tự động.
-- Xử lý các loại Job:
-  - **DRAFT AI Jobs**: Gọi `ContentOrchestrator` & `Gemini RPA` để tạo caption tự động.
-  - **PENDING Publish Jobs**: Đẩy bài qua các Adapters.
-- Các dịch vụ đi kèm chạy ngầm trong Worker:
-  - `CleanupService`: Xóa dọn các tệp tin tạm, media đã đăng thành công tránh rác ổ cứng.
-  - `MetricsChecker`: Quét cập nhật lượt views (sau 24h) từ các post đã đăng.
-  - `TelegramPoller`: Lắng nghe lệnh từ Bot Telegram (inline button clicks).
-  - Quản lý trạng thái an toàn: Panic Mode (Safe mode), Crash Recovery.
+5. **Adapters** — shared layer `app/adapters/`
+   - `dispatcher.py` chọn adapter theo `job.platform`
+   - Platform-specific adapters sống trong `features/<platform>/adapter.py`
+   - `contracts.py` + `common/` (session, locator, decorators)
 
-4. **Adapter Layer (`adapters/`)**
+6. **AI** — `app/core/ai/` (pipeline, Gemini API/RPA, fallback)
+   - Viral / DRAFT generation: `features/viral_intake/`
 
-- `Dispatcher`: Trạm trung chuyển định tuyến job cho đúng adapter tương ứng.
-- **Facebook Adapter**: Dùng Playwright với persistent profile để đẩy video Reels, post bài.
-- **Gemini RPA**: Dùng `undetected_chromedriver` ghép nối session vào Web UI của Gemini để mượn sức mạnh AI tạo nội dung/phân tích video tự động (Bypass API Key).
+## Process model
 
-## Process Model
+- Web: uvicorn (`Web_Dashboard`)
+- Workers: PM2 processes độc lập (không còn single `worker.py` 24/7)
+- Prefer `pm2 restart <name>` sau deploy Python (không dùng `reload` cho module cache)
 
-- Khuyên dùng `tmux` để chạy độc lập 2 process:
-  1. `uvicorn app.main:app --host 0.0.0.0 --port 8000` (Web UI)
-  2. `python worker.py` (Background Worker)
+## Layout rules
 
-## Cơ Cấu Thư Mục
-
-```text
-auto_publisher/
-├── app/                  # Chứa toàn bộ logic FastAPI, Services, Models
-│   ├── adapters/         # Logic auto publish lên MXH (Facebook...)
-│   ├── database/         # Models ORM, Core DB setup
-│   ├── services/         # Layer business logic (Queue, Job, Account, Metrics, Telegram...)
-│   └── templates/        # Jinja2 HTML templates, HTMX fragments
-├── content/              # Thư mục chứa media người dùng đẩy lên
-├── data/                 # CSDL SQLite lưu tại đây
-├── docs/                 # Tài liệu hệ thống
-├── profiles/             # Các thư mục profile Chrome/Firefox (UserDataDir) của Playwright
-├── debug_steps/          # Nơi lưu screenshot mỗi khi RPA lỗi để fix bug
-├── logs/                 # Ghi log file
-├── worker.py             # Script chạy background worker
-└── main.py               # (Linker) Chạy file gốc của ứng dụng (trỏ vào app.main)
-```
+Xem [TREE.md](TREE.md). Không thêm module mới vào package legacy `app.services` (đã xóa).

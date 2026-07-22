@@ -2,7 +2,7 @@
 
 Per ADR-006 (Phương án A + Guardrails) and PLAN-022, the canonical text path is:
 
-    from app.services.ai_runtime import pipeline
+    from app.core.ai.runtime import pipeline
     text, meta = pipeline.generate_text(prompt)   # 9Router → native auto-fallback
 
 Native text fallback now lives in `app/services/ai_native_fallback.py`.
@@ -31,8 +31,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 warnings.warn(
-    "app.services.gemini_api is DEPRECATED for the text path. "
-    "Use app.services.ai_runtime.pipeline.generate_text() (ADR-006). "
+    "app.core.ai.gemini_api is DEPRECATED for the text path. "
+    "Use app.core.ai.runtime.pipeline.generate_text() (ADR-006). "
     "Vision/async paths are still allowed temporarily.",
     DeprecationWarning,
     stacklevel=2,

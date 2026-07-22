@@ -25,7 +25,7 @@ from app.config import SAFE_MODE, LOGS_DIR, INSTAGRAM_HOST
 logger = logging.getLogger(__name__)
 
 try:
-    from app.services.job_tracer import update_active_node
+    from app.core.queue.tracer import update_active_node
 except ImportError:
     def update_active_node(*a, **kw): pass
 

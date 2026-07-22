@@ -22,13 +22,12 @@ data/
 __pycache__/
 .agents/
 
-# Test & Debug files
-test_*.py
-debug_*.py
+# Test & Debug files (scratch at repo root / scripts only — keep tests/ tracked)
+/test_*.py
+/debug_*.py
 run_manual_test.py
 *.png
 test_out*.txt
-tests/
 scripts/debug_*.py
 scripts/test_*.py
 scripts/demo_*.sh
@@ -78,3 +77,7 @@ content/reup/
 # log files
 logs/
 storage/
+
+
+#Ignore cursor AI rules
+.cursor\rules\codacy.mdc

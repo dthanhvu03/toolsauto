@@ -334,7 +334,7 @@ class AICaptionPipeline:
         """Generate caption JSON with 9Router → Native Gemini Vision fallback (PLAN-025).
 
         Tier 1: 9Router (canonical, multimodal).
-        Tier 2: Native Gemini vision via `app.services.ai_native_fallback.call_native_gemini_vision`.
+        Tier 2: Native Gemini vision via `app.core.ai.native_fallback.call_native_gemini_vision`.
                 Only fires when an image is provided AND Tier 1 fails (router disabled,
                 circuit open, HTTP error, or output validation failure).
         Tier 3 does not exist — caller (orchestrator) decides what to do (RPA, poorman).
@@ -404,7 +404,7 @@ class AICaptionPipeline:
             primary_fail,
         )
         # Lazy import — pipeline must NOT import google.genai directly (ADR-006).
-        from app.services.ai_native_fallback import call_native_gemini_vision
+        from app.core.ai.native_fallback import call_native_gemini_vision
 
         native_start = time.perf_counter()
         native_text, native_meta = call_native_gemini_vision(prompt, image_path)
@@ -481,7 +481,7 @@ class AICaptionPipeline:
         """Call 9Router with native-Gemini fallback (per ADR-006).
 
         Tier 1: 9Router (canonical).
-        Tier 2: Native Gemini via `app.services.ai_native_fallback` — only if
+        Tier 2: Native Gemini via `app.core.ai.native_fallback` — only if
                 Tier 1 fails AND fallback is permitted (router disabled,
                 circuit open, or 9Router HTTP error all qualify).
         Tier 3 does not exist: if both fail, return error meta and let the
@@ -531,7 +531,7 @@ class AICaptionPipeline:
             primary_fail_reason,
         )
         # Lazy import to keep ai_pipeline.py free of google.genai (per ADR-006 isolation).
-        from app.services.ai_native_fallback import call_native_gemini
+        from app.core.ai.native_fallback import call_native_gemini
 
         native_start = time.perf_counter()
         native_text, native_meta = call_native_gemini(prompt)
@@ -617,7 +617,7 @@ class AICaptionPipeline:
             "[AI FALLBACK ASYNC] 9Router failed (reason=%s); switching to native Gemini",
             primary_fail_reason,
         )
-        from app.services.ai_native_fallback import call_native_gemini_async
+        from app.core.ai.native_fallback import call_native_gemini_async
 
         native_start = time.perf_counter()
         native_text, native_meta = await call_native_gemini_async(prompt)

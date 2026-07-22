@@ -7,9 +7,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.core.database.models import AffiliateLink
 from app.core.compliance.facebook_compliance import compliance_checker, Severity, log_violation
-from app.features.affiliates.ai import AffiliateAIService
-from app.services.gemini_rpa import GeminiRPAService
-from app.services.gemini_api import GeminiAPIService
+from app.core.ai.affiliate_text import AffiliateAIService
+from app.core.ai.runtime import pipeline
 from app.constants import JobStatus
 
 logger = logging.getLogger(__name__)
@@ -180,21 +179,19 @@ class AffiliateService:
         )
 
         raw_response = None
-        source = "rpa"
-        
+        source = "pipeline"
+
         try:
-            rpa = GeminiRPAService(max_retries=1)
-            raw_response = rpa.ask(prompt)
-        except Exception:
-            pass
-            
+            raw_response, meta = pipeline.generate_text(prompt)
+            if meta.get("fallback_used"):
+                source = meta.get("provider") or "pipeline_fallback"
+            elif not meta.get("ok"):
+                source = "pipeline_failed"
+        except Exception as e:
+            logger.error("[AffiliateService.ai_generate] pipeline error: %s", e)
+
         if not raw_response:
-            source = "api"
-            api = GeminiAPIService()
-            raw_response = api.ask(prompt)
-            
-        if not raw_response:
-            return {"error": "Cả hai engine AI đều thất bại.", "status_code": 503}
+            return {"error": "AI pipeline thất bại.", "status_code": 503}
             
         try:
             match = re.search(r'\{.*\}', raw_response, re.DOTALL)

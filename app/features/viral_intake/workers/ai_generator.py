@@ -12,12 +12,12 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
-from app.services.job_queue import QueueService
-from app.services.job import JobService
+from app.core.queue.queue import QueueService
+from app.core.queue.job import JobService
 from app.config import WORKER_TICK_SECONDS
-from app.services.worker import WorkerService
+from app.core.queue.worker import WorkerService
 from app.core.notifier.service import NotifierService
-from app.features.affiliates.ai import AffiliateAIService
+from app.core.ai.affiliate_text import AffiliateAIService
 from app.core.database.models import AffiliateLink
 import urllib3
 
@@ -26,7 +26,7 @@ from app.utils.logger import setup_shared_logger
 logger = setup_shared_logger(__name__ if __name__ != "__main__" else "ai_generator")
 
 import app.config as config
-from app.services import settings as runtime_settings
+from app.core import settings as runtime_settings
 from app.constants import JobStatus
 
 
@@ -69,7 +69,7 @@ def process_draft_job(db: Session):
 
     # Apply runtime overrides (DB) to this process config (Whisper/limits/toggles)
     try:
-        from app.services.settings import apply_runtime_overrides_to_config
+        from app.core.settings import apply_runtime_overrides_to_config
         apply_runtime_overrides_to_config(db)
     except Exception:
         pass
@@ -497,7 +497,7 @@ def run_loop():
     global RUNNING, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME
     from app.core.notifier.service import TelegramNotifier
     import app.config as config
-    from app.services import settings as runtime_settings
+    from app.core import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
 
     logger.info("AI Worker started. Press Ctrl+C to stop.")

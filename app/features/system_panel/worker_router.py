@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 import time
 from app.core.database.core import get_db
-from app.services.worker import WorkerService
+from app.core.queue.worker import WorkerService
 from app.main_templates import templates
 from app.constants import JobStatus
 

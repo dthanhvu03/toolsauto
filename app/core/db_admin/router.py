@@ -6,7 +6,7 @@ from app.main_templates import templates
 from app.core.database.core import get_db
 from sqlalchemy.orm import Session
 
-from app.services.database_service import DatabaseService
+from app.core.db_admin.database_service import DatabaseService
 
 router = APIRouter(prefix="/database", tags=["database"])
 logger = logging.getLogger(__name__)

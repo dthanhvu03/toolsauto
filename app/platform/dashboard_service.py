@@ -1,16 +1,15 @@
 import logging
 import datetime
-import random
 import math
 from typing import Any, List, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
 from app.core.database.models import Job, Account, DiscoveredChannel, IncidentGroup, ViralMaterial
-from app.services.worker import WorkerService
+from app.core.queue.worker import WorkerService
 from app.constants import JobStatus, ViralStatus
-from app.services import settings as runtime_settings
-from app.services.account import AccountService, get_discovery_keywords
-from app.features.viral_intake.discovery_scraper import DiscoveryScraper
+from app.core import settings as runtime_settings
+from app.core.account import AccountService
+from app.core import feature_hooks
 import app.config as config
 
 logger = logging.getLogger(__name__)
@@ -282,25 +281,7 @@ class DashboardService:
 
     @staticmethod
     def run_force_discovery(db: Session) -> Tuple[List[DiscoveredChannel], List[str], int]:
-        scraper = DiscoveryScraper()
-        total_found = 0
-        scan_log = []
-        accounts = db.query(Account).filter(Account.is_active == True).all()
-
-        for acc in accounts:
-            keywords = get_discovery_keywords(acc)
-            if not keywords:
-                continue
-
-            selected = random.sample(keywords, min(2, len(keywords)))
-            for kw in selected:
-                try:
-                    found = scraper.discover_for_keyword(kw, acc.id, db)
-                    total_found += found
-                    scan_log.append(f"✅ '{acc.name}' / kw='{kw}': {found} kênh mới")
-                except Exception as e:
-                    scan_log.append(f"❌ '{acc.name}' / kw='{kw}': lỗi {str(e)[:80]}")
-
+        total_found, scan_log = feature_hooks.call("viral.force_discovery", db)
         channels = DashboardService.get_discovery_channels(db)
         return channels, scan_log, total_found
 
@@ -377,7 +358,7 @@ class DashboardService:
     def get_ai_report_data(db: Session) -> Dict[str, Any]:
         from datetime import datetime, timedelta, timezone
         from workers.ai_reporter import _build_prompt
-        from app.services.ai_runtime import pipeline
+        from app.core.ai.runtime import pipeline
 
         since = datetime.now(timezone.utc) - timedelta(days=1)
         groups = (

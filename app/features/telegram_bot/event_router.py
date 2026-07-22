@@ -46,7 +46,7 @@ class TelegramEventRouter:
     def _handle_approve(self, callback_id: str, job_id: int, message_id: int, user_name: str):
         from app.core.database.core import SessionLocal
         from app.core.database.models import Job
-        from app.services.job import JobService
+        from app.core.queue.job import JobService
         with SessionLocal() as db:
             job = db.query(Job).filter(Job.id == job_id).first()
             if not job or job.status != JobStatus.DRAFT:
@@ -63,7 +63,7 @@ class TelegramEventRouter:
     def _handle_cancel(self, callback_id: str, job_id: int, message_id: int, user_name: str):
         from app.core.database.core import SessionLocal
         from app.core.database.models import Job
-        from app.services.job import JobService
+        from app.core.queue.job import JobService
         with SessionLocal() as db:
             job = db.query(Job).filter(Job.id == job_id).first()
             if not job or job.status not in (JobStatus.DRAFT, JobStatus.PENDING):

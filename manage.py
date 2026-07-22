@@ -158,7 +158,7 @@ def worker_status() -> None:
     import time
 
     from app.core.database.core import SessionLocal
-    from app.services.worker import WorkerService
+    from app.core.queue.worker import WorkerService
 
     with SessionLocal() as db:
         state = WorkerService.get_or_create_state(db)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database.core import get_db
 from app.schemas.compliance import KeywordCreateBody, KeywordUpdateBody, TestCheckBody
-from app.services import compliance_service
+from app.core.compliance import service as compliance_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/compliance", tags=["compliance"])

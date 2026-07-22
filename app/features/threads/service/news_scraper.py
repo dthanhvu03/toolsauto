@@ -14,7 +14,7 @@ from app.features.threads.service.article_scorer import compute_score
 from app.features.threads.service.topic_key import compute_topic_key
 from app.core import settings as runtime_settings
 
-logger = logging.getLogger("app.services.news_scraper")
+logger = logging.getLogger("app.features.threads.service.news_scraper")
 
 RSS_SOURCES = [
     {"name": "VnExpress", "url": "https://vnexpress.net/rss/tin-moi-nhat.rss", "category": "General"},

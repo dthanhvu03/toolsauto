@@ -20,7 +20,7 @@ logger = setup_shared_logger(__name__ if __name__ != "__main__" else "ai_reporte
 import app.config as config
 from app.core.database.core import SessionLocal
 from app.core.database.models import IncidentGroup
-from app.services.ai_runtime import pipeline
+from app.core.ai.runtime import pipeline
 from app.core.notifier.service import NotifierService, TelegramNotifier
 
 

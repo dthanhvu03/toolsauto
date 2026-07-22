@@ -31,7 +31,7 @@ _last_alert_ts: dict[str, float] = {}
 
 def _get_runtime_int(db, key: str, fallback: int) -> int:
     try:
-        from app.services import settings as runtime_settings
+        from app.core import settings as runtime_settings
 
         return int(runtime_settings.get_effective(db, key))
     except Exception:

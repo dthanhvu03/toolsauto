@@ -63,10 +63,20 @@ DATABASE_URL = os.environ.get("DATABASE_URL") or "postgresql+psycopg2://admin:ad
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
 SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+COOKIE_SYNC_SECRET = os.getenv("COOKIE_SYNC_SECRET", "").strip()
+# Opt-in only: GET /login?username=&password= (leaks to logs/Referer). Keep off in production.
+ALLOW_QUERY_LOGIN = os.getenv("ALLOW_QUERY_LOGIN", "false").strip().lower() in {"1", "true", "yes"}
+# SQL console: SELECT always allowed (auth); writes require explicit opt-in.
+SQL_CONSOLE_WRITES_ENABLED = os.getenv("SQL_CONSOLE_WRITES_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
+# System panel: git reset / pm2 delete all / restart-all require explicit opt-in.
+SYSPANEL_DESTRUCTIVE_ENABLED = os.getenv("SYSPANEL_DESTRUCTIVE_ENABLED", "false").strip().lower() in {"1", "true", "yes"}
 
-if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+if not ADMIN_USERNAME or not ADMIN_PASSWORD or not SECRET_KEY:
     import sys
-    print("CRITICAL: ADMIN_USERNAME and ADMIN_PASSWORD must be set in .env for production deployment.", file=sys.stderr)
+    print(
+        "CRITICAL: ADMIN_USERNAME, ADMIN_PASSWORD, and SECRET_KEY must be set in .env.",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 # Worker Settings

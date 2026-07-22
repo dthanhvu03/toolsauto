@@ -9,6 +9,7 @@ import psutil
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from app.core.pm2_apps import PM2_SAFE_NAMES
 from app.main_templates import templates
 from app.core.database.core import SessionLocal, engine
 from app.core.database.models import Job, Account
@@ -28,8 +29,10 @@ from app.config import (
     CONTENT_MEDIA_DIR,
     CONTENT_VIDEO_DIR,
     CONTENT_PROCESSED_DIR,
+    SYSPANEL_DESTRUCTIVE_ENABLED,
     iter_pm2_log_directories,
 )
+from pathlib import Path
 import app.config as config
 
 router = APIRouter(prefix="/syspanel", tags=["syspanel"])
@@ -94,14 +97,8 @@ def _colorize_log_lines(escaped: str) -> str:
     return "\n".join(result)
 
 
-# Whitelist PM2 process names (including _1/_2 scaling convention)
-PM2_SAFE_NAMES = {
-    "FB_Publisher_1", "FB_Publisher_2",
-    "AI_Generator_1", "AI_Generator_2",
-    "Maintenance", "Web_Dashboard", "9Router_Gateway",
-    # Legacy (single-instance)
-    "FB_Publisher", "AI_Generator",
-}
+# Whitelist PM2 process names — single source: app.core.pm2_apps
+# (PM2_SAFE_NAMES imported above)
 
 
 def _parse_pm2_proc(p: dict) -> dict:
@@ -388,23 +385,45 @@ def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "e
 # ─── Screenshot Serve ─────────────────────────────────────────────────────────
 
 def serve_screenshot(path: str):
-    """Serve a screenshot image by absolute path (security: must be within APP_DIR)."""
-    abs_path = os.path.abspath(path)
-    if not abs_path.startswith(APP_DIR):
+    """Serve a screenshot image by absolute path (must resolve under APP_DIR)."""
+    try:
+        abs_path = Path(path).resolve()
+        root = Path(APP_DIR).resolve()
+        abs_path.relative_to(root)
+    except (OSError, ValueError):
         return HTMLResponse("Forbidden", status_code=403)
-    if not os.path.exists(abs_path):
+    if not abs_path.exists() or not abs_path.is_file():
         return HTMLResponse("Not found", status_code=404)
-    return FileResponse(abs_path)
+    return FileResponse(str(abs_path))
 
 
 # ─── Action Commands ──────────────────────────────────────────────────────────
 
+def _destructive_blocked(action: str) -> HTMLResponse | None:
+    if SYSPANEL_DESTRUCTIVE_ENABLED:
+        return None
+    return _html_output(
+        f"Blocked: '{action}' requires SYSPANEL_DESTRUCTIVE_ENABLED=true in .env"
+    )
+
+
 def cmd_git_pull():
-    out = run_cmd("git fetch origin && git reset --hard origin/develop")
-    return _html_output(f"$ git fetch + reset --hard origin/develop\n\n{out}")
+    blocked = _destructive_blocked("git reset --hard")
+    if blocked:
+        return blocked
+    # Prefer current upstream branch; fall back to develop for legacy VPS scripts.
+    out = run_cmd(
+        "git fetch origin && "
+        "branch=$(git rev-parse --abbrev-ref HEAD) && "
+        "git reset --hard \"origin/$branch\""
+    )
+    return _html_output(f"$ git fetch + reset --hard origin/<current-branch>\n\n{out}")
 
 
 def cmd_pm2_restart():
+    blocked = _destructive_blocked("pm2 restart all")
+    if blocked:
+        return blocked
     out = run_cmd("pm2 restart all")
     return _html_output(f"$ pm2 restart all\n\n{out}")
 
@@ -450,6 +469,9 @@ def cmd_pm2_start():
 
 
 def cmd_pm2_stop():
+    blocked = _destructive_blocked("pm2 delete all")
+    if blocked:
+        return blocked
     out = run_cmd("pm2 delete all")
     return _html_output(f"$ pm2 delete all\n\n{out}")
 
@@ -720,8 +742,8 @@ def save_persona(system_prompt: str = Form("")):
 # ─── 9Router UI ───────────────────────────────────────────────────────────────
 
 def frag_9router_tuner(request: Request):
-    from app.services.ai_runtime import pipeline
-    from app.services.ai_pipeline import AICaptionPipeline
+    from app.core.ai.runtime import pipeline
+    from app.core.ai.pipeline import AICaptionPipeline
 
     # Config fields: read from this process's pipeline singleton (always up-to-date via reload_config)
     with pipeline._config_lock:
@@ -760,7 +782,7 @@ def cmd_save_9router_config(
     api_key: str = Form(""),
     default_model: str = Form("")
 ):
-    from app.services.ai_runtime import pipeline
+    from app.core.ai.runtime import pipeline
     
     config_path = pipeline.CONFIG_PATH
     is_enabled = enabled.lower() == "true"
@@ -803,7 +825,7 @@ def cmd_test_9router_connection(
     api_key: str = Form(""),
     default_model: str = Form("")
 ):
-    from app.services.ai_runtime import pipeline
+    from app.core.ai.runtime import pipeline
     
     temp_key = api_key.strip()
     if temp_key and "••••••" in temp_key:

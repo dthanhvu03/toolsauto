@@ -5,7 +5,7 @@ Kiến trúc:
     TelegramClient     → Low-level API wrapper (telegram_client.py)
     TelegramNotifier   → app.core.notifier.telegram.py (kế thừa BaseNotifier)
     NotifierService    → Facade (gọi tất cả channels)
-    MediaProcessor     → extract/cleanup thumbnail cho notify_job_done
+    MediaProcessor     → (legacy note) thumbnail helpers now in app.core.media.thumbnail
 
 Dùng:
     from app.core.notifier.service import NotifierService, TelegramNotifier
@@ -16,7 +16,7 @@ import logging
 import os
 from typing import Optional
 
-from app.services.media_processor import MediaProcessor
+from app.core.media import thumbnail as media_thumb
 from app.core.notifier import BaseNotifier, TelegramNotifier
 from app.core.notifier import formatting as nf
 from app.constants import JobStatus
@@ -86,11 +86,11 @@ class NotifierService:
         msg = nf.job_done_message(job, post_url)
 
         video_path = job.resolved_processed_media_path or job.resolved_media_path
-        thumb_path = MediaProcessor.extract_thumbnail(video_path, job.id)
+        thumb_path = media_thumb.extract_thumbnail(video_path, job.id)
 
         if thumb_path:
             cls._broadcast_photo(thumb_path, msg)
-            MediaProcessor.cleanup_thumbnail(thumb_path)
+            media_thumb.cleanup_thumbnail(thumb_path)
         else:
             cls._broadcast(msg)
 
@@ -109,7 +109,7 @@ class NotifierService:
         sent_video = False
         if video_path and os.path.exists(video_path):
             try:
-                if MediaProcessor.telegram_video_within_size_limit(video_path):
+                if media_thumb.telegram_video_within_size_limit(video_path):
                     cls._broadcast_video(video_path, msg, buttons)
                     sent_video = True
                 else:
@@ -130,7 +130,7 @@ class NotifierService:
         sent_video = False
         if video_path and os.path.exists(video_path):
             try:
-                if MediaProcessor.telegram_video_within_size_limit(video_path):
+                if media_thumb.telegram_video_within_size_limit(video_path):
                     cls._broadcast_video(video_path, msg, buttons)
                     sent_video = True
                 else:

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 from app.main_templates import templates
 from app.utils.htmx import htmx_toast_response
-from app.services.ai_studio_service import AIStudioService
+from app.features.system_panel.ai_studio_service import AIStudioService
 import logging
 import json
 

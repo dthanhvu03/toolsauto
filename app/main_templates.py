@@ -5,7 +5,7 @@ import app.config as config
 import time
 import os
 
-from app.services.video_protector import EVIDENCE_FILE
+from app.core.media.video_protector import EVIDENCE_FILE
 import json
 import logging
 

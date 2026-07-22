@@ -57,9 +57,13 @@ class JobService:
         tracking_url = f"/r/{tracking_code}"
         
         initial_status = JobStatus.DRAFT if caption and "[AI_GENERATE]" in caption else JobStatus.PENDING
+
+        # Job.platform must be a single adapter key — never copy "facebook,threads" wholesale.
+        raw_platform = (account.platform or "").strip()
+        job_platform = raw_platform.split(",")[0].strip() if raw_platform else raw_platform
         
         new_job = Job(
-            platform=account.platform,
+            platform=job_platform,
             account_id=account.id,
             media_path=norm_path,
             caption=caption,
@@ -406,7 +410,7 @@ class JobService:
         from datetime import datetime
         from zoneinfo import ZoneInfo
         from app.config import MAX_FILES_PER_BATCH, TIMEZONE
-        from app.services.account import AccountService
+        from app.core.account import AccountService
         
         if len(media_files) > MAX_FILES_PER_BATCH:
             raise ValueError(f"Limit {MAX_FILES_PER_BATCH} files.")

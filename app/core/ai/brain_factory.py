@@ -1,5 +1,5 @@
 import logging
-from app.services import settings as runtime_settings
+from app.core import settings as runtime_settings
 
 logger = logging.getLogger(__name__)
 
