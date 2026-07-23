@@ -166,6 +166,81 @@ def postpone_if_sleeping(db: Session, job, logger: logging.Logger, prefix: str =
     return True
 
 
+def postpone_if_daily_limit(db: Session, job, logger: logging.Logger, prefix: str = "") -> bool:
+    """
+    Enforce daily publish cap after claim; postpone to tomorrow if exceeded.
+
+    Gate order (publish):
+      1) claim cooldown (account.cooldown_seconds via finished_at)
+      2) this daily cap
+      3) sleep window
+      4) post_delay sleep after DONE
+
+    Cap resolution:
+      - publish.posts_per_page_per_day > 0 and job.target_page → count DONE today on that page (+ platform)
+      - else account.daily_limit > 0 → count DONE today for account (+ page if set) on platform
+      - 0 = OFF
+    """
+    from datetime import datetime, time as time_obj
+    from zoneinfo import ZoneInfo
+
+    import app.config as app_config
+    from app.constants import JobStatus
+    from app.core.database.models import Job
+
+    page_cap = 0
+    try:
+        page_cap = int(runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db) or 0)
+    except Exception:
+        page_cap = 0
+
+    use_page_scope = bool(page_cap > 0 and (job.target_page or "").strip())
+    effective = page_cap if use_page_scope else 0
+    if not effective and job.account:
+        effective = int(getattr(job.account, "daily_limit", 0) or 0)
+
+    if not job.account or effective <= 0:
+        return False
+
+    today_start = int(
+        datetime.combine(
+            datetime.now(ZoneInfo(app_config.TIMEZONE)).date(),
+            time_obj.min,
+        ).timestamp()
+    )
+
+    q = db.query(Job).filter(
+        Job.status == JobStatus.DONE,
+        Job.finished_at >= today_start,
+        Job.platform == job.platform,
+    )
+    if use_page_scope:
+        q = q.filter(Job.target_page == job.target_page)
+    else:
+        q = q.filter(Job.account_id == job.account_id)
+        if job.target_page:
+            q = q.filter(Job.target_page == job.target_page)
+
+    posted_today = q.count()
+    if posted_today < effective:
+        return False
+
+    scope = job.target_page if use_page_scope else (job.target_page or f"account#{job.account_id}")
+    logger.info(
+        "%s[Job-%s] [DAILY_LIMIT] '%s' reached %s/%s. Postpone to tomorrow.",
+        prefix,
+        job.id,
+        scope,
+        posted_today,
+        effective,
+    )
+    job.status = JobStatus.PENDING
+    job.schedule_ts = today_start + 86400 + 3600  # tomorrow ~01:00 local
+    clear_claim_locks(job)
+    db.commit()
+    return True
+
+
 def refresh_runtime_settings(db: Session) -> None:
     apply_runtime_overrides_to_config(db)
 

@@ -166,11 +166,27 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-4">
                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Công suất đăng bài</div>
-                {% include "fragments/page_posting_stats.html" with context %}
+                <div id="page-posting-stats"
+                     hx-get="/app/overview/page-posting-stats"
+                     hx-trigger="load"
+                     hx-swap="outerHTML">
+                    <div class="app-card p-5 animate-pulse">
+                        <div class="h-4 w-48 bg-gray-200 rounded mb-3"></div>
+                        <div class="h-20 bg-gray-100 rounded"></div>
+                    </div>
+                </div>
             </div>
             <div class="space-y-4">
                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Intake pipeline reup</div>
-                {% include "fragments/page_reup_stats.html" with context %}
+                <div id="page-reup-stats"
+                     hx-get="/app/overview/page-reup-stats"
+                     hx-trigger="load"
+                     hx-swap="outerHTML">
+                    <div class="app-card p-5 animate-pulse">
+                        <div class="h-4 w-48 bg-gray-200 rounded mb-3"></div>
+                        <div class="h-20 bg-gray-100 rounded"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

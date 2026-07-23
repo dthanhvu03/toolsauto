@@ -36,6 +36,7 @@ from app.core.queue.publisher_runtime import (
     kill_if_stuck as _kill_if_stuck_shared,
     start_heartbeat_thread,
     claim_precheck,
+    postpone_if_daily_limit,
     postpone_if_sleeping,
     recover_stale_jobs,
 )
@@ -95,6 +96,10 @@ def process_single_job(db: Session) -> bool:
 
     heartbeat_stop = threading.Event()
     try:
+        # Same daily gate as Facebook (posts_per_page if page set, else account.daily_limit)
+        if postpone_if_daily_limit(db, job, logger, prefix="[THREADS_PUBLISHER] "):
+            return True
+
         if postpone_if_sleeping(db, job, logger, prefix="[THREADS_PUBLISHER] "):
             return True
 
