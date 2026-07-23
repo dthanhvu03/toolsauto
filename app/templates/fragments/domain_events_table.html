@@ -4,7 +4,14 @@
     <div class="h-48 flex flex-col items-center justify-center text-center border border-gray-200 rounded-xl bg-gray-50">
         <svg class="w-10 h-10 text-gray-400 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
         <div class="text-gray-600 font-medium">Không tìm thấy sự kiện nào</div>
-        <div class="text-[11px] text-gray-400 mt-1">Điều chỉnh bộ lọc để xem các log khác.</div>
+        <div class="text-[11px] text-gray-400 mt-1 max-w-sm mx-auto">
+          {% if filters and (filters.source or filters.level or filters.job_id or filters.q) %}
+          Điều chỉnh bộ lọc để xem các log khác.
+          {% else %}
+          Nguồn: <code>job_events</code>, <code>violation_log</code>, <code>audit_logs</code>, <code>runtime_settings_audit</code>.
+          DB trống = chưa có job/audit — không phải lỗi query.
+          {% endif %}
+        </div>
     </div>
     {% else %}
     <div class="overflow-x-auto border border-gray-200 rounded-xl bg-white shadow-sm">

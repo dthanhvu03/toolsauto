@@ -28,6 +28,7 @@ class SettingSpec:
     env_only: bool = False  # value from process env only; not persisted to runtime_settings
     pair_with: str | None = None  # render this row as a paired min/max with the other key
     env_var_name: str | None = None  # os.environ key for source badge (default: key.upper() + overrides)
+    studio_only: bool = False  # edit on AI Studio only; hidden from /app/settings form
 
 
 def _getattr_default(name: str) -> Callable[[], Any]:
@@ -200,6 +201,7 @@ SETTINGS: dict[str, SettingSpec] = {
         title="Template Fallback Caption",
         section="AI & Whisper",
         description="Mẫu caption dự phòng. Các mẫu cách nhau bởi dấu |",
+        studio_only=True,
     ),
     "ai.fallback_hashtag_pool": SettingSpec(
         key="ai.fallback_hashtag_pool",
@@ -209,48 +211,57 @@ SETTINGS: dict[str, SettingSpec] = {
         title="Template Fallback Hashtag",
         section="AI & Whisper",
         description="Mẫu bộ tag dự phòng. Cụm bộ tag cách nhau bởi dấu |, trong mỗi bộ các tag cách nhau bởi dấu phẩy",
+        studio_only=True,
     ),
     "ai.prompt.beauty": SettingSpec(
         key="ai.prompt.beauty",
         env_var_name="PERSONA_PROMPT_BEAUTY", type="text", default_getter=_getattr_default("PERSONA_PROMPT_BEAUTY"),
         title="Prompt: Hệ Beauty/Skincare", section="AI Prompt Personas",
+        studio_only=True,
     ),
     "ai.prompt.fashion": SettingSpec(
         key="ai.prompt.fashion",
         env_var_name="PERSONA_PROMPT_FASHION", type="text", default_getter=_getattr_default("PERSONA_PROMPT_FASHION"),
         title="Prompt: Hệ Fashion/Outfit", section="AI Prompt Personas",
+        studio_only=True,
     ),
     "ai.prompt.tech": SettingSpec(
         key="ai.prompt.tech",
         env_var_name="PERSONA_PROMPT_TECH", type="text", default_getter=_getattr_default("PERSONA_PROMPT_TECH"),
         title="Prompt: Hệ Tech/Công nghệ", section="AI Prompt Personas",
+        studio_only=True,
     ),
     "ai.prompt.home": SettingSpec(
         key="ai.prompt.home",
         env_var_name="PERSONA_PROMPT_HOME", type="text", default_getter=_getattr_default("PERSONA_PROMPT_HOME"),
         title="Prompt: Hệ Gia dụng/Nhà cửa", section="AI Prompt Personas",
+        studio_only=True,
     ),
     "ai.prompt.funny": SettingSpec(
         key="ai.prompt.funny",
         env_var_name="PERSONA_PROMPT_FUNNY", type="text", default_getter=_getattr_default("PERSONA_PROMPT_FUNNY"),
         title="Prompt: Hệ Hài hước/Meme", section="AI Prompt Personas",
+        studio_only=True,
     ),
     "ai.prompt.general": SettingSpec(
         key="ai.prompt.general",
         env_var_name="PERSONA_PROMPT_GENERAL", type="text", default_getter=_getattr_default("PERSONA_PROMPT_GENERAL"),
         title="Prompt: Khung chuẩn (General)", section="AI Prompt Personas",
+        studio_only=True,
     ),
     "ai.prompt.visual_hook": SettingSpec(
         key="ai.prompt.visual_hook",
         env_var_name="VISUAL_HOOK_INSTRUCTION", type="text", default_getter=_getattr_default("VISUAL_HOOK_INSTRUCTION"),
         title="Prompt: Luật phân tích Visual Hook", section="AI Prompt Configs",
         description="Quy tắc phân tích hook hình ảnh 3s đầu.",
+        studio_only=True,
     ),
     "ai.prompt.engagement_secrets": SettingSpec(
         key="ai.prompt.engagement_secrets",
         env_var_name="ENGAGEMENT_SECRETS", type="text", default_getter=_getattr_default("ENGAGEMENT_SECRETS"),
         title="Prompt: Bí mật thuật toán (Engagement)", section="AI Prompt Configs",
         description="Luật viết để tăng tương tác (tò mò, hashtag...).",
+        studio_only=True,
     ),
     "ai.max_caption_length": SettingSpec(
         key="ai.max_caption_length",
@@ -735,6 +746,7 @@ TRẢ VỀ JSON LIST (Mảng các object):
         title="AI Prompt viết bài Threads",
         section="Threads Auto",
         description="Template prompt gửi cho Gemini. Dùng {title}, {summary}, {source_name}, {max_chars} làm biến thay thế.",
+        studio_only=True,
     ),
 }
 
@@ -777,6 +789,27 @@ def resolve_setting_source(spec: SettingSpec, has_db_override: bool) -> str:
 def pair_secondary_keys() -> frozenset[str]:
     """Keys that are rendered inside their partner row (pair_with)."""
     return frozenset(s.pair_with for s in SETTINGS.values() if s.pair_with)
+
+
+AI_STUDIO_TEMPLATE_KEYS: tuple[str, ...] = tuple(
+    k for k, s in SETTINGS.items() if s.studio_only
+)
+
+
+def is_studio_only(spec: SettingSpec) -> bool:
+    return spec.studio_only
+
+
+def list_specs_for_settings_ui() -> dict[str, list[SettingSpec]]:
+    """Settings page sections — excludes AI Studio–only prompt/template keys."""
+    grouped: dict[str, list[SettingSpec]] = {}
+    for spec in SETTINGS.values():
+        if spec.studio_only:
+            continue
+        grouped.setdefault(spec.section, []).append(spec)
+    for sec in grouped:
+        grouped[sec].sort(key=lambda s: s.title.lower())
+    return dict(sorted(grouped.items(), key=lambda kv: kv[0].lower()))
 
 
 def section_visible_count(specs: list[SettingSpec]) -> int:

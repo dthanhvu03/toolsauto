@@ -15,8 +15,11 @@ router = APIRouter()
 @router.get("/app/ai-studio", response_class=HTMLResponse)
 def app_ai_studio(request: Request, db: Session = Depends(get_db)):
     ctx = AIStudioService.get_studio_context(db)
+    ctx.setdefault("platforms", {})
+    initial_key = (request.query_params.get("key") or "").strip()
     return templates.TemplateResponse("pages/app_ai_studio.html", {
         "request": request,
+        "initial_key": initial_key,
         **ctx
     })
 
@@ -31,6 +34,8 @@ def ai_studio_save(
     try:
         AIStudioService.save_setting(db, key=key, value=value, updated_by=updated_by)
         return htmx_toast_response("Đã lưu cấu hình thành công!", "success", refresh_page=False)
+    except ValueError as e:
+        return htmx_toast_response(str(e), "error", refresh_page=False)
     except Exception as e:
         return htmx_toast_response(f"Lỗi: {e}", "error", refresh_page=False)
 

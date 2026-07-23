@@ -1,7 +1,7 @@
 {% extends "layouts/app.html" %}
 
-{% block title %}Overview • Auto Publisher{% endblock %}
-{% block page_title %}Overview{% endblock %}
+{% block title %}Tổng quan • Auto Publisher{% endblock %}
+{% block page_title %}Tổng quan{% endblock %}
 {% block page_subtitle %}Nhìn nhanh bottleneck và lối tắt thao tác.{% endblock %}
 
 {% block head_extra %}
@@ -16,25 +16,25 @@
         <h2 class="text-base font-semibold font-display text-gray-900 mb-5 flex items-center gap-2">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-            </svg> Workspace Quick Access
+            </svg> Lối tắt nhanh
         </h2>
         
         <div class="flex flex-col sm:flex-row sm:flex-wrap gap-3">
-            <a href="/app/jobs" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+            <a href="/app/jobs" class="cave-btn cave-btn-primary h-auto py-2.5 px-4 text-sm gap-2">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
-                Job Tracker
+                Hàng đợi job
             </a>
-            <a href="/app/viral" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+            <a href="/app/viral" class="cave-btn h-auto py-2.5 px-4 text-sm gap-2 border-[var(--color-torch-border)] text-[var(--color-torch)] bg-[var(--color-torch-dim)]">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                Viral Content
+                Nội dung viral
             </a>
-            <a href="/app/accounts" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+            <a href="/app/accounts" class="cave-btn cave-btn-success h-auto py-2.5 px-4 text-sm gap-2">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                Profiles Setup
+                Tài khoản
             </a>
-            <a href="/app/tiktok-links" class="flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 active:scale-95">
+            <a href="/app/tiktok-links" class="cave-btn h-auto py-2.5 px-4 text-sm gap-2">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
-                TikTok Source
+                Link TikTok
             </a>
         </div>
     </div>
@@ -45,16 +45,16 @@
             <div>
                 <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
                     <svg class="w-5 h-5 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
-                    System Performance
+                    Hiệu năng hệ thống
                 </h2>
-                <p class="text-[11px] font-medium text-gray-400 mt-0.5">Viral Discovery vs Video Processing (Last 7 Days)</p>
+                <p class="text-[11px] font-medium text-gray-400 mt-0.5">Viral discovery vs xử lý video (7 ngày gần nhất)</p>
             </div>
             <div class="flex items-center gap-2">
                 <span id="stat-queued" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-wider border border-indigo-100">
-                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Queued: ...
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Hàng đợi: …
                 </span>
                 <span id="stat-published" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 text-[10px] font-bold uppercase tracking-wider border border-orange-100">
-                    <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> Published: ...
+                    <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> Đã đăng: …
                 </span>
             </div>
         </div>
@@ -67,9 +67,9 @@
         <div class="p-4 md:p-5 border-b border-gray-100 flex items-center justify-between">
             <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
                 <svg class="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"></path></svg>
-                Active Automation Nodes
+                Node automation đang chạy
             </h2>
-            <a href="/app/accounts" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider">Configure</a>
+            <a href="/app/accounts" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors uppercase tracking-wider">Cấu hình</a>
         </div>
         <div class="bg-slate-50/50">
             {% include 'fragments/overview_accounts_table.html' %}
@@ -80,7 +80,7 @@
     <div class="md:col-span-2 xl:col-span-2 2xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
         <h2 class="text-base font-semibold font-display text-gray-900 mb-4 flex items-center gap-2">
             <svg class="w-5 h-5 text-indigo-500" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> 
-            Worker Control & Backlog
+            Worker & backlog
         </h2>
         
         <div class="space-y-6">
@@ -99,7 +99,7 @@
     <div class="md:col-span-1 xl:col-span-1 2xl:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
         <h2 class="text-base font-semibold font-display text-gray-900 mb-4 flex items-center gap-2">
             <svg class="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-            Create Quick Job
+            Tạo job nhanh
         </h2>
         <div class="flex-1">
             {% include 'fragments/create_job_form.html' %}
@@ -110,7 +110,7 @@
     <div class="md:col-span-1 xl:col-span-1 2xl:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full overflow-hidden">
         <h2 class="text-base font-semibold font-display text-gray-900 mb-4 flex items-center gap-2">
             <svg class="w-5 h-5 text-indigo-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg> 
-            Threads News Control
+            Điều khiển Threads News
         </h2>
         
         <div id="threads-news-control" hx-get="/threads/news-panel" hx-trigger="load, every 60s">
@@ -130,12 +130,12 @@
     <div class="md:col-span-1 xl:col-span-1 2xl:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
         <h2 class="text-base font-semibold font-display text-gray-900 mb-4 flex items-center gap-2">
             <svg class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
-            Competitor Intelligence
+            Đối thủ cạnh tranh
         </h2>
         <div id="discovery-panel" hx-get="/discovery/panel" hx-trigger="load">
             <div class="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-6 text-center animate-pulse">
                 <div class="w-8 h-8 mx-auto bg-gray-200 rounded-full flex items-center justify-center mb-2"></div>
-                <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Loading Logs...</p>
+                <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Đang tải log…</p>
             </div>
         </div>
         
@@ -146,7 +146,7 @@
                     <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
                     <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
                 </span>
-                <span class="font-extrabold text-orange-800 text-[10px] tracking-widest uppercase">Memory Alert</span>
+                <span class="font-extrabold text-orange-800 text-[10px] tracking-widest uppercase">Cảnh báo RAM</span>
             </div>
             <p class="text-[11px] text-orange-900/70 font-medium leading-relaxed">
                 Khi backlog đầy, ưu tiên xử lý DRAFT và tạm dừng lấy Viral. Cần chú ý RAM chạy Xvfb.
@@ -158,15 +158,15 @@
     <div class="md:col-span-2 xl:col-span-3 2xl:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col h-full">
         <h2 class="text-base font-semibold font-display text-gray-900 mb-5 flex items-center gap-2">
             <svg class="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"></path></svg>
-            System Operations Limits
+            Giới hạn vận hành
         </h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-4">
-                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Posting Capacity</div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Công suất đăng bài</div>
                 {% include "fragments/page_posting_stats.html" with context %}
             </div>
             <div class="space-y-4">
-                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Reup Pipeline Intake</div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">Intake pipeline reup</div>
                 {% include "fragments/page_reup_stats.html" with context %}
             </div>
         </div>
@@ -184,15 +184,16 @@ document.addEventListener("DOMContentLoaded", function() {
             const totalQueued = data.series[0].data.reduce((a, b) => a + b, 0);
             const totalPublished = data.series[1].data.reduce((a, b) => a + b, 0);
             
-            document.getElementById('stat-queued').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span> Queued: ${totalQueued}`;
-            document.getElementById('stat-published').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> Published: ${totalPublished}`;
+            document.getElementById('stat-queued').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-[var(--color-torch)]"></span> Hàng đợi: ${totalQueued}`;
+            document.getElementById('stat-published').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-[var(--color-moss)]"></span> Đã đăng: ${totalPublished}`;
 
             var options = {
                 series: data.series,
                 chart: {
                     height: 280,
                     type: 'area',
-                    fontFamily: 'Inter, sans-serif',
+                    fontFamily: 'Figtree, sans-serif',
+                    background: 'transparent',
                     toolbar: { show: false },
                     zoom: { enabled: false },
                     animations: {
@@ -209,18 +210,18 @@ document.addEventListener("DOMContentLoaded", function() {
                         }
                     }
                 },
-                colors: ['#4f46e5', '#f97316'],
+                colors: ['#e09a3e', '#7d9a6a'],
                 dataLabels: { enabled: false },
                 stroke: {
                     curve: 'smooth',
-                    width: 3
+                    width: 2.5
                 },
                 fill: {
                     type: 'gradient',
                     gradient: {
                         shadeIntensity: 1,
-                        opacityFrom: 0.45,
-                        opacityTo: 0.05,
+                        opacityFrom: 0.35,
+                        opacityTo: 0.04,
                         stops: [20, 100]
                     }
                 },
@@ -229,24 +230,24 @@ document.addEventListener("DOMContentLoaded", function() {
                     axisBorder: { show: false },
                     axisTicks: { show: false },
                     labels: {
-                        style: { colors: '#94a3b8', fontSize: '11px', fontWeight: 600 }
+                        style: { colors: '#9a9186', fontSize: '11px', fontWeight: 600 }
                     }
                 },
                 yaxis: {
                     labels: {
-                        style: { colors: '#94a3b8', fontSize: '11px', fontWeight: 500 },
+                        style: { colors: '#9a9186', fontSize: '11px', fontWeight: 500 },
                         formatter: function (val) { return Math.floor(val) }
                     }
                 },
                 grid: {
-                    borderColor: '#f1f5f9',
+                    borderColor: 'rgba(69, 63, 54, 0.45)',
                     strokeDashArray: 4,
                     yaxis: { lines: { show: true } }
                 },
                 legend: { show: false },
                 tooltip: {
-                    theme: 'light',
-                    y: { formatter: function (val) { return val + " videos" } }
+                    theme: 'dark',
+                    y: { formatter: function (val) { return val + " video" } }
                 }
             };
 

@@ -5,6 +5,7 @@ import os
 import json
 import glob
 import time
+import shutil
 import psutil
 import logging
 from datetime import datetime
@@ -24,7 +25,9 @@ from app.config import (
     FAILED_DIR,
     REUP_DIR,
     THUMB_DIR,
+    THREADS_MEDIA_DIR,
     LOGS_DIR,
+    DEBUG_STEPS_DIR,
     VNC_PORT,
     CONTENT_MEDIA_DIR,
     CONTENT_VIDEO_DIR,
@@ -132,25 +135,74 @@ def _parse_pm2_proc(p: dict) -> dict:
 
 
 def _get_pm2_processes():
+    """
+    Returns (procs, meta).
+    meta.mode: ok | empty | missing | error
+    """
+    meta = {"mode": "empty", "detail": ""}
     try:
-        result = subprocess.run("pm2 jlist", shell=True, capture_output=True, text=True, timeout=10)
-        data = json.loads(result.stdout)
-        return [_parse_pm2_proc(p) for p in data]
-    except Exception:
-        return []
+        which = shutil.which("pm2")
+        if not which:
+            # Windows local thường chạy start.ps1/uvicorn — không cài PM2
+            meta = {
+                "mode": "missing",
+                "detail": "Không tìm thấy lệnh `pm2` trên PATH. Máy local thường chạy Web qua start.ps1 — không phải hệ thống down.",
+            }
+            return [], meta
+        result = subprocess.run(
+            "pm2 jlist",
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        raw = (result.stdout or "").strip()
+        if not raw:
+            err = (result.stderr or "").strip()
+            meta = {
+                "mode": "empty" if result.returncode == 0 else "error",
+                "detail": err or "pm2 jlist không trả về process nào.",
+            }
+            return [], meta
+        data = json.loads(raw)
+        procs = [_parse_pm2_proc(p) for p in data]
+        meta = {"mode": "ok" if procs else "empty", "detail": ""}
+        return procs, meta
+    except Exception as e:
+        return [], {"mode": "error", "detail": str(e)}
 
 
 def _get_pm2_process_by_name(name: str) -> dict | None:
     """Fetch a single PM2 process by name, for HTMX partial row swap."""
-    try:
-        result = subprocess.run("pm2 jlist", shell=True, capture_output=True, text=True, timeout=10)
-        data = json.loads(result.stdout)
-        for p in data:
-            if p.get("name") == name:
-                return _parse_pm2_proc(p)
-    except Exception:
-        pass
+    procs, _meta = _get_pm2_processes()
+    for p in procs:
+        if p.get("name") == name:
+            return p
     return None
+
+
+def _dir_file_stats(path: Path) -> dict:
+    """Đếm file đệ quy + size (MB chính xác hơn round GB sớm)."""
+    count = 0
+    total_bytes = 0
+    if not path.is_dir():
+        return {"count": 0, "size_gb": 0.0, "size_mb": 0.0, "exists": False}
+    try:
+        for f in path.rglob("*"):
+            try:
+                if f.is_file():
+                    count += 1
+                    total_bytes += f.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return {
+        "count": count,
+        "size_gb": round(total_bytes / (1024**3), 3),
+        "size_mb": round(total_bytes / (1024**2), 1),
+        "exists": True,
+    }
 
 
 def _get_content_stats():
@@ -162,37 +214,84 @@ def _get_content_stats():
         "processed": CONTENT_PROCESSED_DIR,
         "reup": REUP_DIR,
         "thumbnails": THUMB_DIR,
+        "threads_media": THREADS_MEDIA_DIR,
     }
-    stats = {}
-    for folder, path in mapping.items():
-        path = str(path)
-        if os.path.isdir(path):
-            files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-            total_bytes = sum(os.path.getsize(os.path.join(path, f)) for f in files)
-            stats[folder] = {"count": len(files), "size_gb": round(total_bytes / (1024**3), 2)}
-        else:
-            stats[folder] = {"count": 0, "size_gb": 0}
-    return stats
+    return {folder: _dir_file_stats(Path(path)) for folder, path in mapping.items()}
+
+
+def _safe_tz():
+    """IANA zone nếu có; Windows thiếu tzdata → local timezone."""
+    try:
+        return ZoneInfo(TIMEZONE)
+    except Exception:
+        return datetime.now().astimezone().tzinfo
+
+
+def _format_ts(ts: float, fmt: str = "%H:%M %d/%m") -> str:
+    return datetime.fromtimestamp(ts, tz=_safe_tz()).strftime(fmt)
 
 
 def _get_screenshots():
-    dirs = [
-        str(LOGS_DIR),
-        str(CONTENT_DIR),
-        APP_DIR,
+    """
+    Thu thập screenshot debug/bot.
+    Adapter ghi logs/<platform>/job_*.png và logs/debug_steps/ — cần scan đệ quy.
+    Không quét CONTENT_DIR / APP_DIR (tránh ảnh content & file trong venv).
+    """
+    roots = [
+        Path(LOGS_DIR),
+        Path(DEBUG_STEPS_DIR),
+        Path(DATA_DIR),  # debug_comment_*.png legacy
     ]
-    shots = []
-    for d in dirs:
-        if os.path.isdir(d):
-            for f in glob.glob(os.path.join(d, "*.png")) + glob.glob(os.path.join(d, "*.jpg")):
-                shots.append((os.path.getmtime(f), f))
-    shots.sort(reverse=True)
-    return [f for _, f in shots[:12]]
+    exts = {".png", ".jpg", ".jpeg", ".webp"}
+    skip_dir_names = {
+        "venv", ".venv", "node_modules", ".git", "profiles",
+        "Cache", "Cache_Data", "__pycache__", "backups",
+    }
+    name_ok = (
+        "job_", "debug_", "timeout_", "gemini_", "video_upload",
+        "screenshot", "fail", "error", "proof",
+    )
+
+    shots: list[tuple[float, Path]] = []
+    seen: set[str] = set()
+    logs_root = Path(LOGS_DIR).resolve()
+
+    for root in roots:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        for f in root.rglob("*"):
+            try:
+                if not f.is_file() or f.suffix.lower() not in exts:
+                    continue
+                if any(part in skip_dir_names for part in f.parts):
+                    continue
+                resolved = f.resolve()
+                under_logs = logs_root == resolved.parent or logs_root in resolved.parents
+                if not under_logs:
+                    low = f.name.lower()
+                    if not any(tok in low for tok in name_ok):
+                        continue
+                key = str(resolved)
+                if key in seen:
+                    continue
+                seen.add(key)
+                shots.append((f.stat().st_mtime, f))
+            except OSError:
+                continue
+
+    shots.sort(key=lambda x: x[0], reverse=True)
+    return [str(p) for _, p in shots[:24]]
 
 
 # ─── Main Page ───────────────────────────────────────────────────────────────
 
 def get_syspanel(request: Request):
+    # One-shot: nếu VPS còn ai_persona.json lệch DB → đẩy vào AI Studio general.
+    try:
+        migrate_persona_file_to_studio_if_needed()
+    except Exception as e:
+        logger.warning("persona migrate skipped: %s", e)
     return templates.TemplateResponse("pages/syspanel.html", {"request": request})
 
 
@@ -201,7 +300,14 @@ def get_syspanel(request: Request):
 def frag_metrics(request: Request):
     cpu = psutil.cpu_percent(interval=0.2)
     mem = psutil.virtual_memory()
-    disk = psutil.disk_usage("/")
+    # Disk của ổ chứa project (không dùng "/" — trên Windows dễ nhầm ổ khác)
+    disk_path = str(BASE_DIR)
+    try:
+        disk = psutil.disk_usage(disk_path)
+    except OSError:
+        disk = psutil.disk_usage("/")
+        disk_path = "/"
+    disk_label = Path(disk_path).drive or disk_path
     net = psutil.net_io_counters()
     boot_ts = psutil.boot_time()
     uptime_secs = int(time.time() - boot_ts)
@@ -222,6 +328,7 @@ def frag_metrics(request: Request):
         "mem_used": round(mem.used / 1024**3, 2), "mem_total": round(mem.total / 1024**3, 2),
         "disk_pct": disk.percent, "disk_color": color(disk.percent),
         "disk_used": round(disk.used / 1024**3, 2), "disk_total": round(disk.total / 1024**3, 2),
+        "disk_label": disk_label,
         "net_sent_mb": round(net.bytes_sent / 1024**2, 1),
         "net_recv_mb": round(net.bytes_recv / 1024**2, 1),
         "uptime": f"{h}h {m}m",
@@ -230,9 +337,12 @@ def frag_metrics(request: Request):
 
 
 def frag_pm2(request: Request):
-    procs = _get_pm2_processes()
+    procs, meta = _get_pm2_processes()
     return templates.TemplateResponse("fragments/syspanel/pm2_table.html", {
-        "request": request, "procs": procs
+        "request": request,
+        "procs": procs,
+        "pm2_mode": meta.get("mode", "empty"),
+        "pm2_detail": meta.get("detail", ""),
     })
 
 
@@ -269,8 +379,8 @@ def frag_content_stats(request: Request):
 
 
 def frag_gemini_cookies(request: Request):
-    cookie_path = os.path.join(APP_DIR, "gemini_cookies.json")
-    invalid_flag = os.path.join(APP_DIR, "gemini_cookies_invalid")
+    cookie_path = str(config.GEMINI_COOKIES_FILE)
+    invalid_flag = str(config.GEMINI_COOKIES_INVALID_FLAG)
 
     has_invalid_flag = os.path.exists(invalid_flag)
     file_exists = os.path.exists(cookie_path)
@@ -284,7 +394,7 @@ def frag_gemini_cookies(request: Request):
         try:
             file_size = round(os.path.getsize(cookie_path) / 1024, 1)
             mtime = os.path.getmtime(cookie_path)
-            file_mtime = datetime.fromtimestamp(mtime, tz=ZoneInfo(TIMEZONE)).strftime("%H:%M:%S %d/%m/%Y")
+            file_mtime = _format_ts(mtime, "%H:%M:%S %d/%m/%Y")
             with open(cookie_path) as f:
                 cookies = json.load(f)
             # Extract key cookies info
@@ -294,7 +404,7 @@ def frag_gemini_cookies(request: Request):
                 if c.get("name") in KEY_NAMES:
                     expiry = c.get("expiry", 0)
                     expired = expiry > 0 and expiry < now_ts
-                    exp_str = datetime.fromtimestamp(expiry, tz=ZoneInfo(TIMEZONE)).strftime("%d/%m/%Y") if expiry else "session"
+                    exp_str = _format_ts(expiry, "%d/%m/%Y") if expiry else "session"
                     key_cookies.append({
                         "name": c.get("name"),
                         "domain": c.get("domain", ""),
@@ -323,13 +433,21 @@ def frag_gemini_cookies(request: Request):
 
 def frag_screenshots(request: Request):
     shots = _get_screenshots()
-    # return paths relative for URL serving
+    root = Path(APP_DIR).resolve()
     rel_shots = []
     for s in shots:
-        rel = os.path.relpath(s, APP_DIR)
-        name = os.path.basename(s)
-        mtime = datetime.fromtimestamp(os.path.getmtime(s), tz=ZoneInfo(TIMEZONE))
-        rel_shots.append({"path": s, "name": name, "mtime": mtime.strftime("%H:%M %d/%m")})
+        abs_path = Path(s).resolve()
+        try:
+            rel = abs_path.relative_to(root).as_posix()
+        except ValueError:
+            # Ngoài APP_DIR — vẫn serve bằng abs (serve sẽ chặn nếu ngoài root)
+            rel = str(abs_path)
+        name = abs_path.name
+        try:
+            mtime = _format_ts(abs_path.stat().st_mtime)
+        except OSError:
+            mtime = "—"
+        rel_shots.append({"path": rel, "name": name, "mtime": mtime})
     return templates.TemplateResponse("fragments/syspanel/screenshots.html", {
         "request": request, "shots": rel_shots
     })
@@ -385,10 +503,15 @@ def get_logs(request: Request, worker: str = "Web_Dashboard", log_type: str = "e
 # ─── Screenshot Serve ─────────────────────────────────────────────────────────
 
 def serve_screenshot(path: str):
-    """Serve a screenshot image by absolute path (must resolve under APP_DIR)."""
+    """Serve screenshot by relative path under APP_DIR (hoặc abs trong APP_DIR)."""
     try:
-        abs_path = Path(path).resolve()
+        raw = (path or "").strip()
+        candidate = Path(raw)
         root = Path(APP_DIR).resolve()
+        if candidate.is_absolute():
+            abs_path = candidate.resolve()
+        else:
+            abs_path = (root / candidate).resolve()
         abs_path.relative_to(root)
     except (OSError, ValueError):
         return HTMLResponse("Forbidden", status_code=403)
@@ -509,9 +632,16 @@ def cmd_stop_vnc():
 
 
 def cmd_cleanup_db():
-    venv = "source venv/bin/activate && " if os.path.exists(os.path.join(APP_DIR, "venv")) else ""
-    out = run_cmd(f"{venv}python scripts/fix_garbage_pages.py")
-    return _html_output(f"$ python scripts/fix_garbage_pages.py\n\n{out}")
+    """Chạy script dọn page rác — path archive; dùng interpreter hiện tại (Windows/Linux)."""
+    import sys
+    script = os.path.join(APP_DIR, "scripts", "archive", "fix_garbage_pages.py")
+    if not os.path.isfile(script):
+        return _html_output(
+            "Cleanup script không còn ở scripts/fix_garbage_pages.py "
+            "(đã chuyển sang scripts/archive/). Không chạy được."
+        )
+    out = run_cmd(f'"{sys.executable}" "{script}"')
+    return _html_output(f"$ python scripts/archive/fix_garbage_pages.py\n\n{out}")
 
 
 def cmd_db_vacuum():
@@ -526,9 +656,12 @@ def cmd_db_vacuum():
 
 
 def cmd_db_backup():
-    """Backup PostgreSQL database using pg_dump."""
+    """Backup PostgreSQL database using pg_dump (local PATH hoặc docker exec)."""
     try:
+        import gzip
+        import shutil
         from urllib.parse import urlparse
+
         parsed = urlparse(DATABASE_URL.replace("postgresql+psycopg2://", "postgresql://"))
         db_host = parsed.hostname or "localhost"
         db_port = str(parsed.port or 5432)
@@ -538,26 +671,70 @@ def cmd_db_backup():
 
         backup_dir = DATA_DIR / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now(tz=ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
+        try:
+            ts = datetime.now(tz=ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
+        except Exception:
+            # Windows thiếu tzdata / IANA zone → fallback local time
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_path = backup_dir / f"{db_name}_{ts}.sql.gz"
+        backup_path_str = str(backup_path)
 
         env = os.environ.copy()
         if db_pass:
             env["PGPASSWORD"] = db_pass
 
-        backup_path_str = str(backup_path)
-        cmd = f"pg_dump -h {db_host} -p {db_port} -U {db_user} {db_name} | gzip > '{backup_path_str}'"
-        result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
-            timeout=300, env=env
-        )
-        if result.returncode != 0:
-            err = (result.stderr or "").strip()
-            return _html_output(f"Backup failed (exit {result.returncode}):\n{err}")
+        dump_bytes = None
+        method = ""
+
+        if shutil.which("pg_dump"):
+            method = "pg_dump"
+            result = subprocess.run(
+                [
+                    "pg_dump",
+                    "-h", db_host,
+                    "-p", db_port,
+                    "-U", db_user,
+                    "-d", db_name,
+                    "--no-owner",
+                    "--no-acl",
+                ],
+                capture_output=True,
+                timeout=300,
+                env=env,
+            )
+            if result.returncode != 0:
+                err = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+                return _html_output(f"Backup failed (exit {result.returncode}):\n{err}")
+            dump_bytes = result.stdout
+        elif shutil.which("docker"):
+            container = (os.getenv("POSTGRES_DOCKER_CONTAINER") or "toolsauto_postgres").strip()
+            method = f"docker exec {container}"
+            cmd = [
+                "docker", "exec",
+                "-e", f"PGPASSWORD={db_pass}",
+                container,
+                "pg_dump", "-U", db_user, "-d", db_name, "--no-owner", "--no-acl",
+            ]
+            result = subprocess.run(cmd, capture_output=True, timeout=300)
+            if result.returncode != 0:
+                err = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+                return _html_output(
+                    f"Backup failed via docker (exit {result.returncode}):\n{err}\n"
+                    f"Hint: set POSTGRES_DOCKER_CONTAINER=... or install pg_dump in PATH."
+                )
+            dump_bytes = result.stdout
+        else:
+            return _html_output(
+                "Backup failed: không tìm thấy `pg_dump` trong PATH và không có `docker`.\n"
+                "Cài PostgreSQL client tools hoặc chạy Postgres trong Docker (toolsauto_postgres)."
+            )
+
+        with gzip.open(backup_path_str, "wb") as fh:
+            fh.write(dump_bytes or b"")
 
         size_mb = os.path.getsize(backup_path_str) / 1024**2
         return _html_output(
-            f"Backup created successfully:\n"
+            f"Backup created successfully ({method}):\n"
             f"File: {backup_path_str}\n"
             f"Size: {size_mb:.2f} MB"
         )
@@ -589,13 +766,13 @@ def cmd_db_info():
             )).scalar()
             lines.append(f"Active Connections: {conns}")
 
-            # Top 10 tables by size
+            # Top 10 tables by size (join on relid — tránh AmbiguousColumn relname)
             rows = conn.execute(sa_text(
-                "SELECT relname AS table, "
+                "SELECT c.relname AS table_name, "
                 "pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size, "
-                "n_live_tup AS row_count "
+                "s.n_live_tup AS row_count "
                 "FROM pg_class c "
-                "JOIN pg_stat_user_tables s ON c.relname = s.relname "
+                "JOIN pg_stat_user_tables s ON s.relid = c.oid "
                 "WHERE c.relkind = 'r' "
                 "ORDER BY pg_total_relation_size(c.oid) DESC "
                 "LIMIT 10"
@@ -687,8 +864,8 @@ def cmd_cancel_stuck():
 
 def cmd_clear_gemini_cookies():
     """Delete Gemini cookie file and invalid flag."""
-    cookie_path = os.path.join(APP_DIR, "gemini_cookies.json")
-    invalid_flag = os.path.join(APP_DIR, "gemini_cookies_invalid")
+    cookie_path = str(config.GEMINI_COOKIES_FILE)
+    invalid_flag = str(config.GEMINI_COOKIES_INVALID_FLAG)
     msgs = []
     if os.path.exists(cookie_path):
         os.unlink(cookie_path)
@@ -701,42 +878,79 @@ def cmd_clear_gemini_cookies():
     return _html_output("\n".join(msgs))
 
 
-# ─── Persona Tuner ────────────────────────────────────────────────────────────
+# ─── Persona Tuner (retired → AI Studio) ──────────────────────────────────────
 
-PERSONA_FILE = str(config.STORAGE_DB_DIR / "config" / "ai_persona.json")
-DEFAULT_PERSONA = (
-    "Bạn là chuyên gia content sáng tạo, viết tiếng Việt tự nhiên, gần gũi với người dùng Facebook Việt Nam. "
-    "Hãy viết caption hấp dẫn, giàu cảm xúc, phù hợp với chủ đề video, có thể dùng emoji vừa phải."
-)
+PERSONA_FILE = str(config.AI_PERSONA_FILE)  # giữ path; không xóa file nếu còn trên disk
+_PERSONA_MIGRATED_FLAG = PERSONA_FILE + ".migrated_to_studio"
 
 
-def _load_persona() -> str:
+def migrate_persona_file_to_studio_if_needed() -> None:
+    """Nếu còn ai_persona.json và khác ai.prompt.general → upsert một lần rồi đánh dấu."""
+    if os.path.exists(_PERSONA_MIGRATED_FLAG):
+        return
+    if not os.path.isfile(PERSONA_FILE):
+        # Không có file → đánh dấu luôn để khỏi check mỗi request
+        try:
+            open(_PERSONA_MIGRATED_FLAG, "a", encoding="utf-8").close()
+        except Exception:
+            pass
+        return
+
     try:
-        if os.path.exists(PERSONA_FILE):
-            with open(PERSONA_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return data.get("system_prompt", DEFAULT_PERSONA)
+        with open(PERSONA_FILE, "r", encoding="utf-8") as f:
+            file_prompt = (json.load(f).get("system_prompt") or "").strip()
     except Exception:
-        pass
-    return DEFAULT_PERSONA
+        return
+    if not file_prompt:
+        open(_PERSONA_MIGRATED_FLAG, "a", encoding="utf-8").close()
+        return
 
-
-def get_persona(request: Request):
-    prompt = _load_persona()
-    return templates.TemplateResponse("fragments/syspanel/persona_tuner.html", {
-        "request": request,
-        "prompt": prompt,
-    })
-
-
-def save_persona(system_prompt: str = Form("")):
+    from app.core import settings as runtime_settings
+    db = SessionLocal()
     try:
-        os.makedirs(os.path.dirname(PERSONA_FILE), exist_ok=True)
-        with open(PERSONA_FILE, "w", encoding="utf-8") as f:
-            json.dump({"system_prompt": system_prompt.strip()}, f, ensure_ascii=False, indent=2)
-        return _html_output("✅ Đã lưu Persona AI mới! Bot sẽ dùng giọng văn này từ job tiếp theo.")
-    except Exception as e:
-        return _html_output(f"❌ Lỗi: {e}")
+        db_prompt = (runtime_settings.get_str("ai.prompt.general", db=db) or "").strip()
+        if file_prompt != db_prompt:
+            runtime_settings.upsert_setting(
+                db,
+                "ai.prompt.general",
+                file_prompt,
+                updated_by="syspanel_persona_retire",
+            )
+            logger.info("Migrated ai_persona.json → ai.prompt.general (%d chars)", len(file_prompt))
+        open(_PERSONA_MIGRATED_FLAG, "w", encoding="utf-8").write(
+            "migrated_or_skipped\n"
+        )
+    finally:
+        db.close()
+
+
+def _persona_retired_html() -> str:
+    return (
+        '<div class="text-sm text-[var(--color-mist)] leading-relaxed space-y-2">'
+        '<p>AI Persona Tuner trên Panel hệ thống đã <strong class="text-[var(--color-ink-soft)]">ngừng dùng</strong>.</p>'
+        '<p>Sửa giọng văn / prompt tại '
+        '<a class="text-[var(--color-torch)] font-semibold underline" href="/app/ai-studio">AI Studio</a> '
+        '(key <code>ai.prompt.*</code> — nguồn pipeline).</p>'
+        '</div>'
+    )
+
+
+def get_persona_retired(request: Request):
+    return HTMLResponse(_persona_retired_html(), status_code=410)
+
+
+def save_persona_retired(system_prompt: str = Form("")):
+    # Không ghi ai_persona.json — tránh UI giả hiệu lực.
+    _ = system_prompt
+    msg = (
+        "Persona tuner đã retired. Không lưu file.\n"
+        "Hãy sửa trên AI Studio: /app/ai-studio (ai.prompt.general / niche)."
+    )
+    escaped = msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return HTMLResponse(
+        f"<pre class='text-sm text-green-400 font-mono whitespace-pre-wrap leading-relaxed'>{escaped}</pre>",
+        status_code=410,
+    )
 
 
 # ─── 9Router UI ───────────────────────────────────────────────────────────────
@@ -805,7 +1019,7 @@ def cmd_save_9router_config(
     data["default_model"] = default_model.strip()
     
     try:
-        # Đảm bảo thư mục (data/config) tồn tại trước khi ghi file
+        # Đảm bảo thư mục runtime config tồn tại trước khi ghi file
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         
         with open(config_path, "w", encoding="utf-8") as f:

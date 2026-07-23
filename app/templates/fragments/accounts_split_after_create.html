@@ -1,0 +1,13 @@
+{# HTMX: main body ignored when hx-swap="none"; OOB updates list + detail pane #}
+<div id="accountList" hx-swap-oob="innerHTML">
+  {% for account in accounts %}
+  {% include "fragments/account_list_item.html" %}
+  {% endfor %}
+</div>
+{% if created_account %}
+<div id="accountDetailArea" hx-swap-oob="innerHTML">
+  {% with account=created_account %}
+  {% include "fragments/account_details.html" %}
+  {% endwith %}
+</div>
+{% endif %}

@@ -1,15 +1,29 @@
 # ToolsAuto local start (Windows)
 # Usage: .\start.ps1 [-Port 8001] [-SkipMigrate]
 param(
-    [int]$Port = 8001,
+    [int]$Port = 0,
     [switch]$SkipMigrate
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+if ($Port -le 0) {
+    if ($env:WEB_PORT) {
+        $Port = [int]$env:WEB_PORT
+    } else {
+        # Load default from app.config if PYTHONPATH works; else 8002
+        $Port = 8002
+        if (Test-Path "venv\Scripts\python.exe") {
+            $env:PYTHONPATH = $PSScriptRoot
+            $p = & .\venv\Scripts\python.exe -c 'import app.config as c; print(c.WEB_PORT)' 2>$null
+            if ($p) { $Port = [int]$p }
+        }
+    }
+}
+
 if (-not (Test-Path ".env")) {
-    Write-Error "Missing .env — copy from .env.example and fill ADMIN_*, SECRET_KEY, DATABASE_URL"
+    Write-Error "Missing .env - copy from .env.example and fill ADMIN_*, SECRET_KEY, DATABASE_URL"
 }
 
 if (-not (Test-Path "venv\Scripts\python.exe")) {
@@ -19,7 +33,7 @@ if (-not (Test-Path "venv\Scripts\python.exe")) {
 $env:PYTHONPATH = $PSScriptRoot
 $py = Join-Path $PSScriptRoot "venv\Scripts\python.exe"
 
-Write-Host "=== ToolsAuto — local start (port $Port) ===" -ForegroundColor Cyan
+Write-Host "=== ToolsAuto - local start (port $Port) ===" -ForegroundColor Cyan
 
 if (-not $SkipMigrate) {
     Write-Host "DB schema upgrade..." -ForegroundColor Yellow

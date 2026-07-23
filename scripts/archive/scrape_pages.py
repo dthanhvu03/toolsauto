@@ -270,14 +270,13 @@ def main():
     from app.core.database.models import Account
 
     with SessionLocal() as db:
-        query = db.query(Account).filter(Account.is_active == True)
         if args.account:
-            query = query.filter(Account.id == args.account)
-
-        accounts = query.all()
+            accounts = db.query(Account).filter(Account.id == args.account).all()
+        else:
+            accounts = db.query(Account).filter(Account.is_active == True).all()
 
         if not accounts:
-            logger.error("No active accounts found.")
+            logger.error("No accounts found%s.", f" for id={args.account}" if args.account else " (active)")
             return 1
 
         logger.info("=" * 60)
@@ -286,11 +285,12 @@ def main():
         logger.info("=" * 60)
 
         for account in accounts:
-            if not account.profile_path:
+            profile = getattr(account, "resolved_profile_path", None) or account.profile_path
+            if not profile:
                 logger.warning("  Account %d (%s) has no profile_path. Skipping.", account.id, account.name)
                 continue
 
-            pages = scrape_pages_for_account(account.id, account.profile_path, account.name)
+            pages = scrape_pages_for_account(account.id, profile, account.name)
 
             if pages:
                 account.managed_pages = json.dumps(pages, ensure_ascii=False)

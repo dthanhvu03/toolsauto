@@ -1,0 +1,1070 @@
+/**
+ * ToolsAuto — Cave Design Tokens
+ * Single source of truth for color, type, space, radius, elevation, motion.
+ * Load after /static/app.css so component overrides win.
+ *
+ * Naming:
+ *   --color-*   palette & semantic color
+ *   --font-*    families
+ *   --text-*    type scale (size + line-height pair via utility)
+ *   --space-*   spacing scale
+ *   --radius-*  corner radius
+ *   --size-*    control heights / icon boxes
+ *   --z-*       stacking
+ *   --ease-* / --dur-*  motion
+ */
+
+:root {
+  /* ── Color: stone / torch / moss ───────────────────────── */
+  --color-void: #0c0b0a;
+  --color-deep: #141210;
+  --color-stone: #1c1916;
+  --color-face: #25211c;
+  --color-ledge: #2f2a24;
+  --color-edge: #453f36;
+  --color-ash: #6b6358;
+  --color-mist: #9a9186;
+  --color-ink: #ebe4d8;
+  --color-ink-soft: #cfc6b8;
+  --color-ink-inverse: #1a1208;
+
+  --color-torch: #e09a3e;
+  --color-torch-dim: rgba(224, 154, 62, 0.14);
+  --color-torch-border: rgba(224, 154, 62, 0.4);
+  --color-ember: #c46b2b;
+
+  --color-moss: #7d9a6a;
+  --color-moss-dim: rgba(125, 154, 106, 0.14);
+  --color-moss-border: rgba(125, 154, 106, 0.4);
+  --color-lichen: #a8c48f;
+
+  --color-danger: #c47a6a;
+  --color-danger-dim: rgba(163, 84, 58, 0.16);
+  --color-danger-border: rgba(163, 84, 58, 0.45);
+  --color-danger-deep: #a3543a;
+
+  --color-info: #7a9bb8;
+  --color-info-dim: rgba(122, 155, 184, 0.14);
+
+  /* Platform accents — muted into cave stone (not neon brand) */
+  --color-fb: #4a5c72;
+  --color-ig-from: #8a5a4a;
+  --color-ig-to: #6a4558;
+
+  /* Semantic aliases (use these in UI) */
+  --color-bg: var(--color-void);
+  --color-bg-elevated: var(--color-deep);
+  --color-surface: var(--color-stone);
+  --color-surface-raised: var(--color-face);
+  --color-surface-sunken: var(--color-deep);
+  --color-border: var(--color-edge);
+  --color-border-strong: var(--color-ash);
+  --color-text: var(--color-ink);
+  --color-text-muted: var(--color-mist);
+  --color-text-faint: var(--color-ash);
+  --color-primary: var(--color-torch);
+  --color-primary-hover: var(--color-ember);
+  --color-success: var(--color-moss);
+  --color-warning: var(--color-torch);
+  --color-focus-ring: rgba(224, 154, 62, 0.22);
+
+  /* Legacy bridge (existing templates use these) */
+  --bg: var(--color-bg);
+  --surface: var(--color-surface);
+  --text: var(--color-text);
+  --muted: var(--color-text-muted);
+  --border: var(--color-border);
+  --primary: var(--color-primary);
+  --primaryHover: var(--color-primary-hover);
+
+  /* ── Typography ────────────────────────────────────────── */
+  --font-sans: "Figtree", system-ui, sans-serif;
+  --font-display: "Syne", "Figtree", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --text-2xs: 0.625rem;   /* 10px — labels, badges */
+  --text-xs: 0.6875rem;   /* 11px — meta, captions */
+  --text-sm: 0.75rem;     /* 12px — secondary UI */
+  --text-md: 0.875rem;    /* 14px — body / nav */
+  --text-lg: 1rem;        /* 16px — emphasis */
+  --text-xl: 1.25rem;     /* 20px — section title */
+  --text-2xl: 1.5rem;     /* 24px — page title */
+  --text-3xl: 1.875rem;   /* 30px — hero (rare) */
+
+  --leading-none: 1;
+  --leading-tight: 1.25;
+  --leading-snug: 1.375;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-wider: 0.08em;
+  --tracking-widest: 0.14em;
+
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* ── Spacing (4px base) ────────────────────────────────── */
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4 */
+  --space-2: 0.5rem;    /* 8 */
+  --space-3: 0.75rem;   /* 12 */
+  --space-4: 1rem;      /* 16 */
+  --space-5: 1.25rem;   /* 20 */
+  --space-6: 1.5rem;    /* 24 */
+  --space-8: 2rem;      /* 32 */
+  --space-10: 2.5rem;   /* 40 */
+  --space-12: 3rem;     /* 48 */
+
+  /* ── Radius ────────────────────────────────────────────── */
+  --radius-sm: 0.375rem;  /* 6 */
+  --radius-md: 0.5rem;    /* 8 */
+  --radius-lg: 0.75rem;   /* 12 */
+  --radius-xl: 1rem;      /* 16 */
+  --radius-2xl: 1.25rem;  /* 20 */
+  --radius-pill: 9999px;
+
+  /* ── Control sizes ─────────────────────────────────────── */
+  --size-control-xs: 1.75rem;  /* 28 — icon btn compact */
+  --size-control-sm: 2rem;     /* 32 */
+  --size-control-md: 2.25rem;  /* 36 — default btn */
+  --size-control-lg: 2.5rem;   /* 40 */
+  --size-icon-sm: 0.875rem;    /* 14 */
+  --size-icon-md: 1rem;        /* 16 */
+  --size-icon-lg: 1.25rem;     /* 20 */
+  --size-avatar-sm: 2rem;
+  --size-avatar-md: 2.5rem;
+  --size-avatar-lg: 3.5rem;
+  --size-sidebar: 16rem;       /* 256 — matches lg:w-64 */
+  --size-rail: 20rem;          /* 320 — accounts list */
+  --size-rail-lg: 23.75rem;    /* 380 */
+
+  /* ── Elevation / atmosphere ────────────────────────────── */
+  --shadow-soft: 0 1px 0 rgba(0, 0, 0, 0.35);
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --glow-torch: 0 0 10px rgba(224, 154, 62, 0.45);
+  --glow-moss: 0 0 8px rgba(125, 154, 106, 0.4);
+
+  --gradient-torch: linear-gradient(135deg, var(--color-torch), var(--color-ember));
+  --gradient-chamber:
+    radial-gradient(ellipse 90% 55% at 12% -10%, rgba(224, 154, 62, 0.12), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 92% 110%, rgba(125, 154, 106, 0.08), transparent 50%),
+    linear-gradient(165deg, #12100e 0%, var(--color-void) 48%, #10140f 100%);
+
+  /* ── Motion ────────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 350ms;
+
+  /* ── Z-index ───────────────────────────────────────────── */
+  --z-base: 1;
+  --z-sticky: 30;
+  --z-overlay: 40;
+  --z-sidebar: 50;
+  --z-toast: 100;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Base
+   ═══════════════════════════════════════════════════════════ */
+
+html {
+  font-size: 16px;
+}
+
+body.theme-cave {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+body.theme-cave .font-display,
+body.theme-cave h1,
+body.theme-cave h2,
+body.theme-cave h3,
+body.theme-cave h4 {
+  font-family: var(--font-display);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Type utilities
+   ═══════════════════════════════════════════════════════════ */
+
+.text-cave-2xs { font-size: var(--text-2xs); line-height: var(--leading-tight); }
+.text-cave-xs  { font-size: var(--text-xs);  line-height: var(--leading-snug); }
+.text-cave-sm  { font-size: var(--text-sm);  line-height: var(--leading-snug); }
+.text-cave-md  { font-size: var(--text-md);  line-height: var(--leading-normal); }
+.text-cave-lg  { font-size: var(--text-lg);  line-height: var(--leading-normal); }
+.text-cave-xl  { font-size: var(--text-xl);  line-height: var(--leading-tight); }
+.text-cave-2xl { font-size: var(--text-2xl); line-height: var(--leading-tight); }
+
+.label-cave {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Component primitives (tokenized)
+   ═══════════════════════════════════════════════════════════ */
+
+.cave-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+}
+
+.cave-card-raised {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+}
+
+.cave-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--size-control-md);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-ink-soft);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  transition: border-color var(--dur-base) var(--ease-standard),
+              color var(--dur-base) var(--ease-standard),
+              background var(--dur-base) var(--ease-standard),
+              filter var(--dur-fast) var(--ease-standard),
+              transform var(--dur-fast) var(--ease-standard);
+}
+.cave-btn:hover {
+  border-color: var(--color-torch-border);
+  color: var(--color-torch);
+}
+.cave-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cave-btn-primary {
+  border-color: transparent;
+  background: var(--gradient-torch);
+  color: var(--color-ink-inverse);
+}
+.cave-btn-primary:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  color: var(--color-ink-inverse);
+  border-color: transparent;
+}
+
+.cave-btn-ghost {
+  background: transparent;
+  border-color: var(--color-border);
+}
+
+.cave-btn-danger {
+  background: var(--color-danger-dim);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+.cave-btn-danger:hover {
+  background: var(--color-danger-deep);
+  color: var(--color-ink);
+  border-color: var(--color-danger-deep);
+}
+
+.cave-btn-success {
+  background: var(--color-moss-dim);
+  border-color: var(--color-moss-border);
+  color: var(--color-lichen);
+}
+
+.cave-input,
+.cave-select,
+.cave-textarea {
+  width: 100%;
+  height: var(--size-control-lg);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  outline: none;
+  transition: border-color var(--dur-base) var(--ease-standard),
+              box-shadow var(--dur-base) var(--ease-standard);
+}
+.cave-textarea {
+  height: auto;
+  min-height: 6rem;
+  padding: var(--space-3);
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+.cave-input::placeholder,
+.cave-textarea::placeholder {
+  color: var(--color-text-faint);
+}
+.cave-input:focus,
+.cave-select:focus,
+.cave-textarea:focus {
+  border-color: var(--color-torch);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.cave-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+.cave-badge-torch {
+  background: var(--color-torch-dim);
+  border-color: var(--color-torch-border);
+  color: var(--color-torch);
+}
+.cave-badge-moss {
+  background: var(--color-moss-dim);
+  border-color: var(--color-moss-border);
+  color: var(--color-lichen);
+}
+.cave-badge-danger {
+  background: var(--color-danger-dim);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.cave-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-ash);
+}
+.cave-dot-torch,
+.torch-dot {
+  background: var(--color-torch);
+  box-shadow: var(--glow-torch);
+  animation: cave-torch-pulse 2.4s ease-in-out infinite;
+}
+.cave-dot-moss,
+.moss-dot {
+  background: var(--color-moss);
+  box-shadow: var(--glow-moss);
+}
+
+.cave-banner {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+}
+.cave-banner-ok {
+  background: var(--color-moss-dim);
+  border-color: var(--color-moss-border);
+  color: var(--color-lichen);
+}
+.cave-banner-warn {
+  background: var(--color-torch-dim);
+  border-color: var(--color-torch-border);
+  color: var(--color-torch);
+}
+.cave-banner-err {
+  background: var(--color-danger-dim);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.cave-chamber {
+  position: relative;
+  background: var(--gradient-chamber);
+  color: var(--color-text);
+}
+.cave-chamber::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+  animation: cave-drift 28s ease-in-out infinite alternate;
+}
+
+.cave-rail {
+  background: linear-gradient(180deg, rgba(37, 33, 28, 0.96), rgba(20, 18, 16, 0.98));
+  border-right: 1px solid var(--color-border);
+  backdrop-filter: blur(8px);
+}
+
+.cave-scrollbar::-webkit-scrollbar { width: 6px; }
+.cave-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.cave-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-edge);
+  border-radius: 8px;
+}
+.cave-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--color-ash); }
+
+@keyframes cave-torch-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+@keyframes cave-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-1.5%, 1%, 0); }
+}
+@keyframes cave-chamber-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Shell: sidebar / nav / page chrome
+   ═══════════════════════════════════════════════════════════ */
+
+body.theme-cave aside#sidebar {
+  background: var(--color-deep) !important;
+  border-color: var(--color-border) !important;
+}
+body.theme-cave aside#sidebar .font-bold {
+  font-family: var(--font-display);
+  color: var(--color-ink);
+  letter-spacing: var(--tracking-tight);
+}
+body.theme-cave .nav-section-label {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-text-faint);
+}
+body.theme-cave .nav-item {
+  border-radius: var(--radius-md);
+  color: var(--color-mist) !important;
+  font-size: var(--text-md);
+  transition: background var(--dur-base) var(--ease-standard), color var(--dur-base) var(--ease-standard);
+}
+body.theme-cave .nav-item:hover {
+  background: var(--color-torch-dim) !important;
+  color: var(--color-ink) !important;
+}
+body.theme-cave .nav-item.is-active,
+body.theme-cave .nav-item.bg-indigo-50 {
+  background: var(--color-torch-dim) !important;
+  color: var(--color-torch) !important;
+  font-weight: var(--weight-semibold);
+}
+body.theme-cave .nav-item svg {
+  color: inherit !important;
+  opacity: 0.85;
+}
+body.theme-cave .nav-item.is-active svg,
+body.theme-cave .nav-item.bg-indigo-50 svg {
+  color: var(--color-torch) !important;
+  opacity: 1;
+}
+
+body.theme-cave main > div > .flex.flex-col .text-2xl {
+  color: var(--color-ink) !important;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+}
+body.theme-cave main .text-slate-500 {
+  color: var(--color-mist) !important;
+  font-size: var(--text-xs);
+}
+
+/* Mobile topbar */
+body.theme-cave .lg\:hidden.sticky {
+  background: var(--color-deep) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Theme bridge — remap Tailwind sáng → palette hang động
+   Load SAU Tailwind CDN trong layouts/app.html
+   ═══════════════════════════════════════════════════════════ */
+
+/* Surfaces */
+body.theme-cave .bg-white,
+body.theme-cave .bg-white\/60,
+body.theme-cave .bg-white\/80,
+body.theme-cave .bg-white\/95 {
+  background-color: var(--color-surface) !important;
+}
+body.theme-cave .bg-slate-50,
+body.theme-cave .bg-slate-50\/30,
+body.theme-cave .bg-slate-50\/50,
+body.theme-cave .bg-slate-50\/70,
+body.theme-cave .bg-gray-50,
+body.theme-cave .bg-gray-50\/50,
+body.theme-cave .bg-gray-100,
+body.theme-cave .bg-slate-100,
+body.theme-cave .bg-zinc-50,
+body.theme-cave .bg-neutral-50 {
+  background-color: var(--color-surface-raised) !important;
+}
+body.theme-cave .bg-slate-200,
+body.theme-cave .bg-gray-200 {
+  background-color: var(--color-ledge) !important;
+}
+
+/* Primary / indigo / purple / violet / blue → torch (không tím neon) */
+body.theme-cave .bg-indigo-50,
+body.theme-cave .bg-indigo-50\/20,
+body.theme-cave .bg-indigo-50\/50,
+body.theme-cave .bg-indigo-50\/60,
+body.theme-cave .bg-indigo-100,
+body.theme-cave .bg-purple-50,
+body.theme-cave .bg-purple-100,
+body.theme-cave .bg-violet-50,
+body.theme-cave .bg-violet-100,
+body.theme-cave .bg-fuchsia-50,
+body.theme-cave .bg-blue-50,
+body.theme-cave .bg-blue-100,
+body.theme-cave .bg-sky-50,
+body.theme-cave .bg-sky-100,
+body.theme-cave .bg-cyan-50 {
+  background-color: var(--color-torch-dim) !important;
+}
+body.theme-cave .bg-indigo-400,
+body.theme-cave .bg-indigo-500,
+body.theme-cave .bg-indigo-600,
+body.theme-cave .bg-indigo-700,
+body.theme-cave .bg-purple-500,
+body.theme-cave .bg-purple-600,
+body.theme-cave .bg-purple-700,
+body.theme-cave .bg-violet-500,
+body.theme-cave .bg-violet-600,
+body.theme-cave .bg-violet-700,
+body.theme-cave .bg-blue-500,
+body.theme-cave .bg-blue-600,
+body.theme-cave .bg-blue-700,
+body.theme-cave .bg-sky-500,
+body.theme-cave .bg-sky-600,
+body.theme-cave .hover\:bg-indigo-500:hover,
+body.theme-cave .hover\:bg-indigo-600:hover,
+body.theme-cave .hover\:bg-indigo-700:hover,
+body.theme-cave .hover\:bg-purple-600:hover,
+body.theme-cave .hover\:bg-purple-700:hover,
+body.theme-cave .hover\:bg-violet-600:hover,
+body.theme-cave .hover\:bg-blue-600:hover,
+body.theme-cave .hover\:bg-blue-700:hover {
+  background: var(--gradient-torch) !important;
+  color: var(--color-ink-inverse) !important;
+  border-color: transparent !important;
+}
+body.theme-cave .hover\:bg-indigo-50:hover,
+body.theme-cave .hover\:bg-indigo-50\/40:hover,
+body.theme-cave .hover\:bg-indigo-50\/60:hover,
+body.theme-cave .hover\:bg-indigo-100:hover,
+body.theme-cave .hover\:bg-purple-50:hover {
+  background-color: var(--color-torch-dim) !important;
+}
+
+body.theme-cave .text-indigo-400,
+body.theme-cave .text-indigo-500,
+body.theme-cave .text-indigo-600,
+body.theme-cave .text-indigo-700,
+body.theme-cave .text-indigo-800,
+body.theme-cave .text-indigo-900,
+body.theme-cave .text-indigo-950,
+body.theme-cave .text-purple-600,
+body.theme-cave .text-purple-700,
+body.theme-cave .text-purple-800,
+body.theme-cave .text-violet-600,
+body.theme-cave .text-violet-700,
+body.theme-cave .text-blue-600,
+body.theme-cave .text-blue-700,
+body.theme-cave .text-blue-800,
+body.theme-cave .text-sky-600,
+body.theme-cave .text-sky-700,
+body.theme-cave .hover\:text-indigo-600:hover,
+body.theme-cave .hover\:text-indigo-700:hover,
+body.theme-cave .hover\:text-indigo-800:hover {
+  color: var(--color-torch) !important;
+}
+
+body.theme-cave .border-indigo-100,
+body.theme-cave .border-indigo-200,
+body.theme-cave .border-indigo-600,
+body.theme-cave .border-purple-200,
+body.theme-cave .border-violet-200,
+body.theme-cave .border-blue-100,
+body.theme-cave .border-blue-200,
+body.theme-cave .border-blue-600 {
+  border-color: var(--color-torch-border) !important;
+}
+
+/* Success — moss (không xanh lá chói) */
+body.theme-cave .bg-green-50,
+body.theme-cave .bg-green-100,
+body.theme-cave .bg-emerald-50,
+body.theme-cave .bg-emerald-100,
+body.theme-cave .bg-teal-50 {
+  background-color: var(--color-moss-dim) !important;
+}
+body.theme-cave .bg-green-400,
+body.theme-cave .bg-green-500,
+body.theme-cave .bg-green-600,
+body.theme-cave .bg-emerald-500,
+body.theme-cave .bg-emerald-600,
+body.theme-cave .bg-teal-500 {
+  background-color: var(--color-moss) !important;
+  color: var(--color-ink-inverse) !important;
+}
+body.theme-cave .text-green-500,
+body.theme-cave .text-green-600,
+body.theme-cave .text-green-700,
+body.theme-cave .text-green-800,
+body.theme-cave .text-emerald-500,
+body.theme-cave .text-emerald-600,
+body.theme-cave .text-emerald-700,
+body.theme-cave .text-teal-600,
+body.theme-cave .text-teal-700 {
+  color: var(--color-lichen) !important;
+}
+body.theme-cave .border-green-200,
+body.theme-cave .border-emerald-200,
+body.theme-cave .border-teal-200 {
+  border-color: var(--color-moss-border) !important;
+}
+
+/* Warning — torch muted */
+body.theme-cave .bg-amber-50,
+body.theme-cave .bg-amber-100,
+body.theme-cave .bg-yellow-50,
+body.theme-cave .bg-yellow-100,
+body.theme-cave .bg-orange-50,
+body.theme-cave .bg-orange-100 {
+  background-color: var(--color-torch-dim) !important;
+}
+body.theme-cave .bg-amber-400,
+body.theme-cave .bg-amber-500,
+body.theme-cave .bg-yellow-400,
+body.theme-cave .bg-yellow-500,
+body.theme-cave .bg-orange-500,
+body.theme-cave .bg-orange-600,
+body.theme-cave .hover\:bg-orange-600:hover,
+body.theme-cave .bg-teal-500,
+body.theme-cave .bg-teal-600,
+body.theme-cave .hover\:bg-teal-700:hover,
+body.theme-cave .bg-emerald-600,
+body.theme-cave .hover\:bg-emerald-700:hover,
+body.theme-cave .bg-gray-900,
+body.theme-cave .hover\:bg-gray-800:hover {
+  background: var(--gradient-torch) !important;
+  color: var(--color-ink-inverse) !important;
+  border-color: transparent !important;
+}
+body.theme-cave .bg-emerald-600,
+body.theme-cave .hover\:bg-emerald-700:hover,
+body.theme-cave .bg-teal-500,
+body.theme-cave .bg-teal-600,
+body.theme-cave .hover\:bg-teal-700:hover {
+  background: var(--color-moss) !important;
+  color: var(--color-ink-inverse) !important;
+}
+body.theme-cave .text-amber-600,
+body.theme-cave .text-amber-700,
+body.theme-cave .text-amber-800,
+body.theme-cave .text-yellow-600,
+body.theme-cave .text-yellow-700,
+body.theme-cave .text-orange-600,
+body.theme-cave .text-orange-700 {
+  color: var(--color-torch) !important;
+}
+body.theme-cave .border-amber-200,
+body.theme-cave .border-yellow-200,
+body.theme-cave .border-orange-200,
+body.theme-cave .ring-yellow-400 {
+  border-color: var(--color-torch-border) !important;
+  --tw-ring-color: var(--color-torch-border) !important;
+}
+
+/* Danger — muted clay (không đỏ neon) */
+body.theme-cave .bg-red-50,
+body.theme-cave .bg-red-100,
+body.theme-cave .bg-rose-50,
+body.theme-cave .bg-rose-50\/50,
+body.theme-cave .bg-rose-100 {
+  background-color: var(--color-danger-dim) !important;
+}
+body.theme-cave .bg-red-500,
+body.theme-cave .bg-red-600,
+body.theme-cave .bg-rose-500,
+body.theme-cave .bg-rose-600,
+body.theme-cave .bg-rose-700,
+body.theme-cave .hover\:bg-rose-50:hover,
+body.theme-cave .hover\:bg-rose-100:hover,
+body.theme-cave .hover\:bg-rose-600:hover,
+body.theme-cave .hover\:bg-rose-700:hover {
+  background-color: var(--color-danger-deep) !important;
+  color: var(--color-ink) !important;
+  border-color: var(--color-danger-border) !important;
+}
+body.theme-cave .hover\:bg-rose-50:hover,
+body.theme-cave .hover\:bg-rose-100:hover {
+  background-color: var(--color-danger-dim) !important;
+  color: var(--color-danger) !important;
+}
+body.theme-cave .text-red-500,
+body.theme-cave .text-red-600,
+body.theme-cave .text-red-700,
+body.theme-cave .text-red-800,
+body.theme-cave .text-rose-500,
+body.theme-cave .text-rose-600,
+body.theme-cave .text-rose-700 {
+  color: var(--color-danger) !important;
+}
+body.theme-cave .border-red-200,
+body.theme-cave .border-rose-200 {
+  border-color: var(--color-danger-border) !important;
+}
+
+/* Neutrals / borders / text */
+body.theme-cave .border-gray-50,
+body.theme-cave .border-gray-100,
+body.theme-cave .border-gray-200,
+body.theme-cave .border-gray-300,
+body.theme-cave .border-slate-100,
+body.theme-cave .border-slate-200,
+body.theme-cave .border-slate-300 {
+  border-color: var(--color-border) !important;
+}
+body.theme-cave .text-gray-900,
+body.theme-cave .text-slate-900,
+body.theme-cave .text-gray-800,
+body.theme-cave .text-gray-700,
+body.theme-cave .text-slate-800,
+body.theme-cave .text-slate-700 {
+  color: var(--color-ink) !important;
+}
+body.theme-cave .text-gray-600,
+body.theme-cave .text-gray-500,
+body.theme-cave .text-gray-400,
+body.theme-cave .text-gray-300,
+body.theme-cave .text-slate-600,
+body.theme-cave .text-slate-500,
+body.theme-cave .text-slate-400 {
+  color: var(--color-mist) !important;
+}
+/* Không remap mọi .text-white — chỉ khi nằm trên surface sáng cũ */
+body.theme-cave .bg-white.text-white,
+body.theme-cave .bg-gray-100.text-white {
+  color: var(--color-ink) !important;
+}
+/* Primary filled: chữ tối trên torch */
+body.theme-cave .bg-indigo-600,
+body.theme-cave .bg-indigo-700,
+body.theme-cave .bg-indigo-500,
+body.theme-cave .bg-purple-600,
+body.theme-cave .bg-purple-700,
+body.theme-cave .bg-purple-500,
+body.theme-cave .bg-violet-600,
+body.theme-cave .bg-blue-600,
+body.theme-cave .bg-blue-700,
+body.theme-cave .bg-blue-500,
+body.theme-cave .bg-sky-600,
+body.theme-cave .app-btn-primary,
+body.theme-cave .cave-btn-primary {
+  color: var(--color-ink-inverse) !important;
+}
+
+body.theme-cave input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+body.theme-cave textarea,
+body.theme-cave select {
+  background-color: var(--color-surface-sunken) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-ink) !important;
+}
+body.theme-cave input:focus,
+body.theme-cave textarea:focus,
+body.theme-cave select:focus {
+  border-color: var(--color-torch) !important;
+  box-shadow: 0 0 0 3px var(--color-focus-ring) !important;
+}
+body.theme-cave .placeholder\:text-gray-400::placeholder,
+body.theme-cave input::placeholder,
+body.theme-cave textarea::placeholder {
+  color: var(--color-ash) !important;
+}
+
+/* Shadows — bỏ glow trắng nhẹ */
+body.theme-cave .shadow-sm,
+body.theme-cave .shadow,
+body.theme-cave .shadow-md,
+body.theme-cave .shadow-lg,
+body.theme-cave .shadow-xl {
+  box-shadow: var(--shadow-soft) !important;
+}
+
+/* Tabs / segmented control */
+body.theme-cave .tab-btn {
+  color: var(--color-mist) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 1px solid transparent;
+}
+body.theme-cave .tab-btn.is-active,
+body.theme-cave .tab-btn.bg-white,
+body.theme-cave .tab-btn.shadow-sm,
+body.theme-cave .tab-btn.text-gray-800 {
+  background: var(--color-torch-dim) !important;
+  color: var(--color-torch) !important;
+  border-color: var(--color-torch-border) !important;
+  box-shadow: none !important;
+  font-weight: var(--weight-semibold);
+}
+
+/* Legacy app-* */
+body.theme-cave .app-card {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+}
+body.theme-cave .app-btn {
+  height: var(--size-control-md);
+  border-radius: var(--radius-md);
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+}
+body.theme-cave .app-btn-primary {
+  background: var(--gradient-torch) !important;
+  color: var(--color-ink-inverse) !important;
+  border-color: transparent !important;
+}
+body.theme-cave .app-input,
+body.theme-cave .app-select {
+  height: var(--size-control-lg);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-ink) !important;
+}
+body.theme-cave .app-badge {
+  border-radius: var(--radius-md);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+}
+body.theme-cave .app-badge-green {
+  background: var(--color-moss-dim) !important;
+  color: var(--color-lichen) !important;
+  border-color: var(--color-moss-border) !important;
+}
+body.theme-cave .app-badge-amber {
+  background: var(--color-torch-dim) !important;
+  color: var(--color-torch) !important;
+  border-color: var(--color-torch-border) !important;
+}
+body.theme-cave .app-badge-red {
+  background: var(--color-danger-dim) !important;
+  color: var(--color-danger) !important;
+  border-color: var(--color-danger-border) !important;
+}
+body.theme-cave .app-badge-blue {
+  background: var(--color-info-dim) !important;
+  color: var(--color-info) !important;
+  border-color: rgba(122, 155, 184, 0.4) !important;
+}
+body.theme-cave .app-badge-slate {
+  background: var(--color-ledge) !important;
+  color: var(--color-mist) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* Table header / empty */
+body.theme-cave thead,
+body.theme-cave thead th {
+  color: var(--color-ash) !important;
+  background: color-mix(in srgb, var(--color-deep) 80%, transparent) !important;
+  border-color: var(--color-border) !important;
+}
+body.theme-cave tbody tr {
+  border-color: var(--color-border) !important;
+}
+body.theme-cave tbody tr:hover {
+  background: var(--color-torch-dim) !important;
+}
+
+/* Dropzone dashed */
+body.theme-cave .border-dashed {
+  border-color: var(--color-edge) !important;
+}
+
+/* Gradient utilities indigo/purple → torch */
+body.theme-cave .bg-gradient-to-r.from-indigo-500,
+body.theme-cave .bg-gradient-to-r.from-indigo-600,
+body.theme-cave .bg-gradient-to-br.from-indigo-500,
+body.theme-cave .bg-gradient-to-br.from-indigo-600,
+body.theme-cave .from-indigo-500,
+body.theme-cave .from-indigo-600,
+body.theme-cave .from-purple-500,
+body.theme-cave .from-purple-600,
+body.theme-cave [class*="from-indigo-"][class*="to-purple-"],
+body.theme-cave [class*="from-indigo-"][class*="via-indigo-"] {
+  background-image: var(--gradient-torch) !important;
+  color: var(--color-ink-inverse) !important;
+}
+
+/* Component aliases used across pages */
+body.theme-cave .section-card,
+body.theme-cave .threads-card,
+body.theme-cave .insight-card {
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-ink);
+}
+
+/* HTMX — hide busy text until request (không dùng max-width:0 — phá overlay) */
+.htmx-indicator {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-standard);
+}
+.htmx-request.htmx-indicator,
+.htmx-request .htmx-indicator {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Accounts shell — flex fill (không fixed đè header)
+   ═══════════════════════════════════════════════════════════ */
+
+body.theme-cave:has(.accounts-chamber) {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body.theme-cave:has(.accounts-chamber) > .min-h-screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+
+body.theme-cave:has(.accounts-chamber) main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body.theme-cave:has(.accounts-chamber) main > div {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+/* Compact page chrome — không chiếm 80px+ rồi bị chamber đè */
+body.theme-cave:has(.accounts-chamber) main > div > .flex.flex-col {
+  flex-shrink: 0;
+  margin-bottom: 0 !important;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-deep);
+  gap: var(--space-2) !important;
+}
+
+body.theme-cave:has(.accounts-chamber) main > div > .flex.flex-col .text-2xl {
+  font-size: var(--text-lg) !important;
+}
+
+/* Mobile accounts: ẩn subtitle + header trùng (đã có title trên topbar) */
+@media (max-width: 1023px) {
+  body.theme-cave:has(.accounts-chamber) main > div > .flex.flex-col {
+    display: none !important;
+  }
+}
+
+.accounts-chamber {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+.accounts-rail {
+  width: min(var(--size-rail), 42%);
+  max-width: var(--size-rail-lg);
+  min-width: 14rem;
+}
+
+@media (min-width: 1024px) {
+  .accounts-rail {
+    width: var(--size-rail-lg);
+    max-width: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .accounts-chamber {
+    flex-direction: column;
+  }
+  .accounts-rail {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    height: 42%;
+    min-height: 12rem;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+
+/* Sidebar: ẩn scrollbar (vẫn cuộn được) — tránh vệt sáng Windows giữa nav & content */
+body.theme-cave aside#sidebar {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+body.theme-cave aside#sidebar::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none;
+}

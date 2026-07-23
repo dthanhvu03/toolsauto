@@ -34,22 +34,33 @@ def ping_gemini_ui():
     health = HealthService.get_gemini_health()
     if health["is_valid"]:
         return HTMLResponse('''
-            <button id="gemini-badge" hx-get="/health/gemini/ping" hx-target="#gemini-badge" hx-swap="outerHTML" 
-                class="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 h-9 bg-green-50 border border-green-200 rounded-lg shadow-sm text-xs sm:text-sm font-medium text-green-700 hover:bg-green-100 transition-all cursor-pointer whitespace-nowrap shrink-0">
-                <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] animate-pulse"></span>
-                Gemini: Active
+            <button id="gemini-badge" hx-get="/health/gemini/ping" hx-target="closest [data-gemini-slot]" hx-swap="innerHTML"
+                class="cave-badge cave-badge-moss inline-flex items-center gap-1.5 h-9 px-3 cursor-pointer hover:brightness-110 transition">
+                <span class="cave-dot cave-dot-moss"></span>
+                Gemini: Hoạt động
             </button>
         ''')
     else:
         return HTMLResponse('''
-            <div id="gemini-badge" class="flex items-center gap-1.5 bg-red-50 p-1 rounded-lg border border-red-200 shadow-sm h-9 whitespace-nowrap shrink-0">
-                <span class="flex items-center gap-1.5 text-red-600 text-xs sm:text-sm font-medium px-1 sm:px-2 shrink-0">
-                    <span class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]"></span> Gemini: Expired
+            <div id="gemini-badge" class="inline-flex items-center gap-1 h-8 sm:h-9 p-0.5 sm:p-1 max-w-full rounded-[var(--radius-lg)] border border-[var(--color-danger-border)] bg-[var(--color-danger-dim)] whitespace-nowrap shrink min-w-0">
+                <span class="hidden md:inline-flex items-center gap-1.5 text-[var(--color-danger)] text-cave-xs font-semibold px-2 shrink-0">
+                    <span class="cave-dot" style="background:var(--color-danger-deep)"></span>
+                    Gemini: Hết hạn
                 </span>
-                <button hx-post="/health/gemini/login" hx-target="#gemini-badge" hx-swap="outerHTML"
-                    class="px-2 sm:px-3 h-full bg-red-600 text-white text-[10px] sm:text-xs font-semibold rounded hover:bg-red-700 transition shrink-0 uppercase tracking-wide">
-                    Login
+                <span class="md:hidden inline-flex items-center pl-1.5 shrink-0" title="Gemini: Hết hạn">
+                    <span class="cave-dot" style="background:var(--color-danger-deep)"></span>
+                </span>
+                <button hx-post="/health/gemini/login" hx-target="closest [data-gemini-slot]" hx-swap="innerHTML"
+                    type="button"
+                    title="Mở Chrome đăng nhập Google AI Studio — không phải đăng nhập app"
+                    aria-label="Làm mới cookie Gemini Web qua Chrome"
+                    class="cave-btn cave-btn-primary h-full px-2 sm:px-2.5 text-[10px] tracking-wide shrink-0">
+                    Cookie
                 </button>
+                <a href="/syspanel" title="Quản lý cookie thủ công"
+                    class="hidden lg:inline-flex px-2 h-full items-center text-[10px] font-semibold text-[var(--color-mist)] hover:text-[var(--color-torch)] shrink-0">
+                    Panel hệ thống
+                </a>
             </div>
         ''')
 
@@ -58,15 +69,18 @@ def start_gemini_login():
     try:
         HealthService.start_gemini_login()
         return HTMLResponse('''
-            <button id="gemini-badge" hx-get="/health/gemini/ping" hx-target="#gemini-badge" hx-trigger="every 5s" hx-swap="outerHTML"
-                class="inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 h-9 bg-amber-50 border border-amber-200 rounded-lg shadow-sm text-xs sm:text-sm font-medium text-amber-700 animate-pulse whitespace-nowrap shrink-0">
-                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <button id="gemini-badge" hx-get="/health/gemini/ping" hx-target="closest [data-gemini-slot]" hx-trigger="every 5s" hx-swap="innerHTML"
+                class="cave-badge cave-badge-torch inline-flex items-center gap-1.5 h-9 px-3 animate-pulse">
+                <svg class="w-3.5 h-3.5 animate-spin text-[var(--color-torch)]" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                 Chrome...
             </button>
         ''')
     except Exception as e:
         logger.error("Failed to launch Chrome: %s", e)
-        return HTMLResponse(f"<button id='gemini-badge' class='inline-flex items-center px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg border border-red-200'>Lỗi mở Chrome</button>")
+        return HTMLResponse(
+            "<button id='gemini-badge' class='cave-badge cave-badge-danger inline-flex items-center h-9 px-3'>"
+            "Lỗi mở Chrome</button>"
+        )
 
 @router.post("/gemini/cookie-sync")
 async def cookie_sync(request: Request, x_api_secret: str = Header(None)):

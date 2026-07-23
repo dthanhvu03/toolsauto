@@ -14,13 +14,13 @@ import logging
 import subprocess
 import time
 
-from app.config import TIKTOK_HOST
+from app.config import TIKTOK_HOST, TIKTOK_RATE_LIMITS_FILE
 from app.core.yt_dlp_path import yt_dlp_binary
 
 logger = logging.getLogger(__name__)
 
 # Rate limit tracker persisted to disk (survives worker restart)
-_RATE_LIMIT_FILE = "/tmp/tiktok_rate_limits.json"
+_RATE_LIMIT_FILE = str(TIKTOK_RATE_LIMITS_FILE)
 RATE_LIMIT_BACKOFF_HOURS = 3
 
 

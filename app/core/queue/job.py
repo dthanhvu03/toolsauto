@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database.core import SessionLocal
 from app.core.database.models import Job, JobEvent, Account
-from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC
+from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC, CONTENT_MEDIA_DIR
 from app.constants import JobStatus, JobType
 from app.utils.logger import setup_shared_logger
 
@@ -126,7 +126,7 @@ class JobService:
             
         ext = os.path.splitext(media_file.filename)[1].lower() or (".mp4" if "video" in media_file.content_type else ".jpg")
         unique_filename = f"{uuid.uuid4().hex}{ext}"
-        media_dir = os.path.abspath("content/media")
+        media_dir = str(CONTENT_MEDIA_DIR)
         os.makedirs(media_dir, exist_ok=True)
         saved_path = os.path.join(media_dir, unique_filename)
         
@@ -419,9 +419,9 @@ class JobService:
         if not account or not account.is_active:
             raise ValueError("Invalid account.")
         
-        media_dir = os.path.abspath("content/media")
+        media_dir = str(CONTENT_MEDIA_DIR)
         os.makedirs(media_dir, exist_ok=True)
-        
+
         files_data = []
         last_valid_ts = account.last_post_ts or 0
         clean_affiliate = affiliate_url.strip() if affiliate_url else None
