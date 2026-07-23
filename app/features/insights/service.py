@@ -956,11 +956,41 @@ def list_boost_proposals(db: Session = Depends(get_db)):
     return {"status": "success", "data": PageStrategicService.list_boost_proposals(db)}
 
 
+def _page_snapshot_map(db: Session) -> dict:
+    from app.core.strategic import PageStrategicService
+
+    by_page = {}
+    for item in PageStrategicService.get_page_analysis(db) or []:
+        url = item.get("page_url") or ""
+        if url:
+            by_page[url] = item
+    return by_page
+
+
 def approve_boost_proposal(db: Session, material_id: int):
     from fastapi import HTTPException
+    from app.core.boost_outcomes import record_boost_approval
     from app.core.strategic import PageStrategicService
 
     try:
+        mat = (
+            db.query(models.ViralMaterial)
+            .filter(models.ViralMaterial.id == material_id)
+            .first()
+        )
+        if not mat:
+            raise ValueError("Đề xuất boost không tồn tại hoặc đã xử lý.")
+
+        snap = (_page_snapshot_map(db).get(mat.target_page or "") or {})
+        record_boost_approval(
+            material_id=mat.id,
+            target_page=mat.target_page,
+            page_name=snap.get("page_name"),
+            material_url=mat.url,
+            views_before=snap.get("views"),
+            growth_pct_before=snap.get("growth_pct"),
+            status_before=snap.get("status"),
+        )
         mat = PageStrategicService.approve_boost_proposal(db, material_id)
         return {"status": "success", "id": mat.id, "new_status": mat.status}
     except ValueError as e:
@@ -976,3 +1006,10 @@ def reject_boost_proposal(db: Session, material_id: int):
         return {"status": "success", "id": mat.id, "new_status": mat.status}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def list_boost_outcomes(db: Session = Depends(get_db)):
+    """Closed-loop: approved boosts vs current page growth delta."""
+    from app.core.boost_outcomes import list_outcomes_with_delta
+
+    return {"status": "success", "data": list_outcomes_with_delta(_page_snapshot_map(db))}

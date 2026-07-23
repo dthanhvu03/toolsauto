@@ -254,6 +254,7 @@ def update_account_limits(
     competitor_urls: str = Form(""),
     target_pages: List[str] = Form(None),
     page_niches: str = Form(""),
+    update_distribution: str = Form(""),
     db: Session = Depends(get_db)
 ):
     try:
@@ -265,6 +266,7 @@ def update_account_limits(
             competitor_urls=competitor_urls,
             target_pages=target_pages or [],
             page_niches=page_niches or "",
+            update_distribution=(update_distribution or "").strip() in ("1", "true", "on", "yes"),
         )
     except Exception as e:
         logger.warning("update_limits account_id=%s: %s", account_id, e)
@@ -357,11 +359,46 @@ def get_account_pages_tab(
         return HTMLResponse(status_code=404)
         
     pages_list = PageUtils.build_page_view_models(account, q=q, filter_str=filter)
+    managed_n = len(account.managed_pages_list or [])
+    on_n = len(account.target_pages_list or [])
     
     return templates.TemplateResponse(
-        "fragments/pages_table.html", 
-        {"request": request, "pages": pages_list, "now": int(time.time()), "is_account_scoped": True}
+        "fragments/account_pages_tab.html", 
+        {
+            "request": request,
+            "account": account,
+            "pages": pages_list,
+            "now": int(time.time()),
+            "is_account_scoped": True,
+            "filter": filter or "all",
+            "q": q or "",
+            "on_count": on_n,
+            "managed_count": managed_n,
+        }
     )
+
+
+@router.post("/{account_id}/apply-global-niches", response_class=HTMLResponse)
+def apply_global_niches(account_id: int, request: Request, db: Session = Depends(get_db)):
+    toast = None
+    try:
+        account, n = AccountService.apply_global_niches_to_empty_pages(db, account_id)
+        toast = (
+            f"Đã copy Global Categories vào {n} page thiếu niche." if n else "Mọi page đã có niche — không đổi.",
+            "success",
+        )
+    except ValueError as e:
+        account = AccountService.get_account(db, account_id)
+        toast = (str(e), "error")
+    except Exception as e:
+        logger.error("apply_global_niches account_id=%s: %s", account_id, e)
+        account = AccountService.get_account(db, account_id)
+        toast = (f"Lỗi: {e}", "error")
+
+    if not account:
+        return HTMLResponse(status_code=404)
+    # Reload pages tab fragment with toast on account shell
+    return _account_ui_response(request, account, toast=toast)
 
 @router.get("/{account_id}/pages", response_class=HTMLResponse)
 def get_account_pages(account_id: int, request: Request, db: Session = Depends(get_db)):

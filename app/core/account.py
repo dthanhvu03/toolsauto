@@ -225,28 +225,24 @@ class AccountService:
         competitor_urls: str = "",
         target_pages: list[str] | None = None,
         page_niches: str = "",
+        update_distribution: bool = False,
     ) -> Account:
         import json as _json
         if not (0 <= daily_limit <= 200):
             raise ValueError("daily_limit must be between 0 and 200.")
         if not (0 <= cooldown_seconds <= 86400):
             raise ValueError("cooldown_seconds must be between 0 and 86400.")
-            
+
         try:
             account = AccountService.get_account(db, account_id)
             if not account:
                 raise ValueError(f"Account {account_id} not found.")
-                
+
             account.daily_limit = daily_limit
             account.cooldown_seconds = cooldown_seconds
-
-            # Multi-target pages
-            pages = [p.strip() for p in (target_pages or []) if p and p.strip()]
-            account.target_pages_list = pages
-            
             account.sleep_start_time = sleep_start_time.strip() if sleep_start_time else None
             account.sleep_end_time = sleep_end_time.strip() if sleep_end_time else None
-            
+
             # Process niche_topics: convert comma-separated to JSON array
             raw_niche = (niche_topics or "").strip()
             if raw_niche:
@@ -256,83 +252,120 @@ class AccountService:
                 account.niche_topics = raw_niche
             else:
                 account.niche_topics = None
-                
-            # Process competitor_urls: parse "url → target_page" lines into JSON objects
-            raw_urls = (competitor_urls or "").strip()
-            if raw_urls:
-                if raw_urls.startswith("["):
-                    account.competitor_urls = raw_urls
-                else:
-                    entries = []
-                    for line in raw_urls.replace('\r', '').split('\n'):
-                        line = line.strip()
-                        if not line:
-                            continue
-                        if ' → ' in line:
-                            url_part, tp_part = line.split(' → ', 1)
-                            url_part = url_part.strip()
-                            tp_part = tp_part.strip() or None
-                            if tp_part == "None":
-                                tp_part = None
-                            entries.append({"url": url_part, "target_page": tp_part})
-                        else:
-                            entries.append({"url": line, "target_page": None})
-                    account.competitor_urls = _json.dumps(entries, ensure_ascii=False) if entries else None
-            else:
-                account.competitor_urls = None
 
-            # Process page_niches: JSON mapping page_url -> [niches]
-            raw_page_niches = (page_niches or "").strip()
-            if raw_page_niches:
-                try:
-                    data = _json.loads(raw_page_niches)
-                except Exception:
-                    data = {}
-                # Normalize to dict[str, list[str]] before assigning
-                mapping: dict[str, list[str]] = {}
-                if isinstance(data, dict):
-                    for url, niches in data.items():
-                        if not url:
-                            continue
-                        if not isinstance(niches, list):
-                            niches = [niches]
-                        cleaned = [str(n).strip() for n in niches if str(n).strip()]
-                        if cleaned:
-                            mapping[str(url).strip()] = cleaned
-                elif isinstance(data, list):
-                    for item in data:
-                        if not isinstance(item, dict):
-                            continue
-                        url = str(item.get("page_url") or "").strip()
-                        if not url:
-                            continue
-                        niches = item.get("niches") or []
-                        if not isinstance(niches, list):
-                            niches = [niches]
-                        cleaned = [str(n).strip() for n in niches if str(n).strip()]
-                        if cleaned:
-                            mapping[url] = cleaned
-                account.page_niches_map = mapping
-            else:
-                account.page_niches = None
+            # Target pages / competitors / page niches — chỉ khi form gửi update_distribution
+            # (Config tab VIP tách riêng; tránh Commit Config xóa Active Targets).
+            if update_distribution:
+                pages = [p.strip() for p in (target_pages or []) if p and p.strip()]
+                account.target_pages_list = pages
+
+                raw_urls = (competitor_urls or "").strip()
+                if raw_urls:
+                    if raw_urls.startswith("["):
+                        account.competitor_urls = raw_urls
+                    else:
+                        entries = []
+                        for line in raw_urls.replace("\r", "").split("\n"):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            if " → " in line:
+                                url_part, tp_part = line.split(" → ", 1)
+                                url_part = url_part.strip()
+                                tp_part = tp_part.strip() or None
+                                if tp_part == "None":
+                                    tp_part = None
+                                entries.append({"url": url_part, "target_page": tp_part})
+                            else:
+                                entries.append({"url": line, "target_page": None})
+                        account.competitor_urls = (
+                            _json.dumps(entries, ensure_ascii=False) if entries else None
+                        )
+                else:
+                    account.competitor_urls = None
+
+                raw_page_niches = (page_niches or "").strip()
+                if raw_page_niches:
+                    try:
+                        data = _json.loads(raw_page_niches)
+                    except Exception:
+                        data = {}
+                    mapping: dict[str, list[str]] = {}
+                    if isinstance(data, dict):
+                        for url, niches in data.items():
+                            if not url:
+                                continue
+                            if not isinstance(niches, list):
+                                niches = [niches]
+                            cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                            if cleaned:
+                                mapping[str(url).strip()] = cleaned
+                    elif isinstance(data, list):
+                        for item in data:
+                            if not isinstance(item, dict):
+                                continue
+                            url = str(item.get("page_url") or "").strip()
+                            if not url:
+                                continue
+                            niches = item.get("niches") or []
+                            if not isinstance(niches, list):
+                                niches = [niches]
+                            cleaned = [str(n).strip() for n in niches if str(n).strip()]
+                            if cleaned:
+                                mapping[url] = cleaned
+                    account.page_niches_map = mapping
+                else:
+                    account.page_niches = None
 
             db.commit()
             db.refresh(account)
             logger.info(
-                "Updated limits for account %s: daily_limit=%s, cooldown=%s, niche=%s, sleep=%s-%s, competitors=%s, page_niches=%s",
+                "Updated limits for account %s: daily_limit=%s, cooldown=%s, niche=%s, sleep=%s-%s, distribution=%s",
                 account_id,
                 daily_limit,
                 cooldown_seconds,
                 account.niche_topics,
                 account.sleep_start_time,
                 account.sleep_end_time,
-                account.competitor_urls,
-                account.page_niches,
+                update_distribution,
             )
             return account
         except Exception as e:
             db.rollback()
             raise e
+
+    @staticmethod
+    def apply_global_niches_to_empty_pages(db: Session, account_id: int) -> tuple[Account, int]:
+        """Copy account.niche_topics vào page thiếu niche. Trả (account, số page cập nhật)."""
+        account = AccountService.get_account(db, account_id)
+        if not account:
+            raise ValueError(f"Account {account_id} not found.")
+
+        raw = (account.niche_topics_list or "").strip()
+        if not raw:
+            raise ValueError("Chưa có Global Categories để copy.")
+
+        global_niches = [n.strip() for n in raw.split(",") if n.strip()]
+        if not global_niches:
+            raise ValueError("Chưa có Global Categories để copy.")
+
+        mapping = dict(account.page_niches_map or {})
+        updated = 0
+        for page in account.managed_pages_list or []:
+            url = (page.get("url") or "").strip()
+            if not url:
+                continue
+            existing = mapping.get(url) or []
+            if existing:
+                continue
+            mapping[url] = list(global_niches)
+            updated += 1
+
+        if updated:
+            account.page_niches_map = mapping
+            db.commit()
+            db.refresh(account)
+        return account, updated
 
     @staticmethod
     def update_page_config(db: Session, account_id: int, url: str, is_active: bool, niches: str, competitors: str) -> bool:

@@ -2,24 +2,25 @@
 
 ## System State
 
-- **Product**: ToolsAuto — auto-publish (Facebook / Threads + related).
-- **Local Windows**: **http://127.0.0.1:8002** (`.\start.ps1`).
-- **AI**: `AIUseCases` facade.
+- Local: **http://127.0.0.1:8002**
+- AI: `AIUseCases` · VIP monetize/viral/strategic: `cf981bc`
 
 ## Done This Session [2026-07-23]
 
-### Commits trước
-- `9fbd8d3` AIUseCases · `f5748a9` Cave/storage/Settings split
+### Accounts UX split
+- **Configuration** = limit / cooldown / sleep / global niche / sync only (Cave skin).
+- **Target Pages** = cockpit ON/OFF + niche chips + sources + filter + Copy global.
+- `update_limits(..., update_distribution=False)` — Commit Config **không** xóa target pages.
+- `pages_table.html` Cave skin; `account_pages_tab.html` mới.
+- **Legacy `account_row`**: slim Config-only + CTA Split View / Target Pages (không còn form distribution, không gửi `update_distribution=1`).
 
-### VIP harden (PLAN-039 / TASK-041) — chưa commit
-1. **Monetize:** AI inject parity tracking + DRAFT edit auto-comment + compliance gate lúc inject.
-2. **Viral:** reup hard-fail (không fallback gốc); FFmpeg không `nice` trên Windows; badge Anti-dupe trên job.
-3. **Strategic:** tìm material tiktok; `BOOST_PENDING` + Insights Approve/Reject; persist BOOST_CONTEXT.
-
-Proof: `pytest tests/test_vip_monetize_strategic.py tests/test_ai_use_cases.py` → 9 passed.
+### VIP sâu hơn
+1. **Viral UI `_reup` preview** — `ViralService.find_reup_path`, `GET /viral/{id}/reup-preview`, badge Anti-dupe trên `viral_row.html`.
+2. **Insights closed-loop** — Approve ghi snapshot `storage/db/config/boost_outcomes.json`; panel **Closed-loop Boost** + `GET /insights/api/boost-outcomes` (Δ growth / Δ views).
+3. Approve panel boost đã có từ trước.
 
 ## Next Action
 
-1. Owner verify UI: Jobs DRAFT comment · Insights boost panel · Viral FAILED nếu reup lỗi.
-2. Commit khi user yêu cầu.
-3. Archive PLAN-038/040 + PLAN-039/TASK-041 khi confirm.
+1. Owner F5: Viral (preview nếu có `_reup`), Insights (Approve → Closed-loop), Accounts legacy grid vs Split.
+2. Commit khi user yêu cầu (Accounts split + VIP sâu).
+3. Archive PLAN-038/039 + TASK-040/041 sau Owner confirm UI.

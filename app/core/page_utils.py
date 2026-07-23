@@ -34,9 +34,16 @@ class PageUtils:
                 continue
             if filter_str == "paused" and is_active:
                 continue
-            
+
             niches = ", ".join(page_niches.get(url, []))
             comps = competitors.get(url, "")
+            niche_list = page_niches.get(url, []) or []
+            comp_count = len([c for c in (comps or "").split("\n") if c.strip()]) if isinstance(comps, str) else len(comps or [])
+
+            if filter_str == "missing_niche" and niche_list:
+                continue
+            if filter_str == "no_competitors" and comp_count > 0:
+                continue
             
             if q:
                 # Allow searching by page name, url, niche, or parent account name

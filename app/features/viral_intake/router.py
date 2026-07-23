@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Request, Form, HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
 import time
 from app.core.database.core import get_db
+from app.core.database.models import ViralMaterial
 from app.main_templates import templates
 from app.features.viral_intake.service import ViralService
 
@@ -25,11 +26,18 @@ def _render_viral_tbody(request: Request, db: Session, scan_message: str | None 
             f'Hiển thị {showing} / {data["total_count"]} video (sắp theo views giảm dần, tối đa {ViralService.VIRAL_TABLE_LIMIT})'
             f'</td></tr>'
         )
+    reup_by_id = data.get("reup_by_id") or {}
     for item in data["materials"]:
         acc_name = data["accounts"].get(item.scraped_by_account_id, "Unknown")
         parts.append(
             templates.get_template("fragments/viral_row.html").render(
-                {"request": request, "item": item, "account_name": acc_name, "now": now}
+                {
+                    "request": request,
+                    "item": item,
+                    "account_name": acc_name,
+                    "now": now,
+                    "has_reup": bool(reup_by_id.get(item.id)),
+                }
             )
         )
     if not parts:
@@ -81,3 +89,20 @@ def save_viral_settings(viral_min_views: int = Form(10000), viral_max_videos_per
 def delete_material(material_id: int, db: Session = Depends(get_db)):
     ViralService.delete_material(db, material_id)
     return HTMLResponse(content="")
+
+
+@router.get("/{material_id}/reup-preview")
+def reup_preview(material_id: int, db: Session = Depends(get_db)):
+    """Stream anti-dupe (_reup) video for Viral UI preview."""
+    mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+    if not mat:
+        raise HTTPException(status_code=404, detail="Material not found")
+    path = ViralService.find_reup_path(mat.id, mat.platform)
+    if not path:
+        raise HTTPException(status_code=404, detail="Chưa có file _reup (anti-dupe)")
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=f"viral_{material_id}_reup.mp4",
+        content_disposition_type="inline",
+    )
