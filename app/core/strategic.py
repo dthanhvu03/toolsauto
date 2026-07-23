@@ -136,8 +136,8 @@ class PageStrategicService:
         # 3. AI Batch AI Analysis (9Router)
         if analysis:
             try:
-                from app.core.ai.runtime import pipeline
-                if pipeline.enabled:
+                from app.core.ai.use_cases import AIPurpose, AIUseCases
+                if AIUseCases.is_enabled():
                     data_str = "\n".join([f"- {d['name']}: {d['views']} views, {d['growth']} growth, {d['engagement']} eng, status: {d['status']}" for d in batch_data])
                     
                     prompt = f"""Bạn là chuyên gia phân tích chiến lược Social Media. 
@@ -153,7 +153,9 @@ Dữ liệu:
 
 Kết quả:"""
                     
-                    ai_text, meta = pipeline.generate_text(prompt)
+                    ai_text, meta = AIUseCases.generate_text(
+                        prompt, purpose=AIPurpose.STRATEGIC_ADVICE
+                    )
                     
                     if ai_text and meta.get("ok"):
                         print(f"[STRATEGIC] Raw AI Response for {len(batch_data)} pages:\n{ai_text}")

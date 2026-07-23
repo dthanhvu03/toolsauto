@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.core.database.models import AffiliateLink
 from app.core.compliance.facebook_compliance import compliance_checker, Severity, log_violation
 from app.core.ai.affiliate_text import AffiliateAIService
-from app.core.ai.runtime import pipeline
+from app.core.ai.use_cases import AIUseCases
 from app.constants import JobStatus
 
 logger = logging.getLogger(__name__)
@@ -169,20 +169,13 @@ class AffiliateService:
 
     @staticmethod
     def ai_generate(product_name: str, category: str, price: str, commission_rate: str) -> Dict[str, Any]:
-        prompt = (
-            f"Hãy đóng vai chuyên gia Affiliate Marketing. Sản phẩm: {product_name}. "
-            f"Danh mục: {category}. Giá: {price}đ. % Hoa hồng: {commission_rate}%. "
-            "Tạo 3-5 keywords NGẮN GỌN để nhận diện khi tìm kiếm nội dung, và 3 mẫu bình luận (1 natural, 1 urgency, 1 review). "
-            "Mỗi bình luận PHẢI có chứa chính xác chuỗi '[LINK]' để hệ thống thay bằng URL sau này. "
-            "Trả kết quả về ĐÚNG json có định dạng sau, KHÔNG BỌC TRONG MARKDOWN, KHÔNG CÓ TEXT THỪA: "
-            '{"keywords": ["kw1", "kw2"], "comments": [{"style": "natural", "text": "..."}, {"style": "urgency", "text": "..."}, {"style": "review", "text": "..."}]}'
-        )
-
         raw_response = None
         source = "pipeline"
 
         try:
-            raw_response, meta = pipeline.generate_text(prompt)
+            raw_response, meta = AIUseCases.generate_affiliate_bundle(
+                product_name, category, price, commission_rate
+            )
             if meta.get("fallback_used"):
                 source = meta.get("provider") or "pipeline_fallback"
             elif not meta.get("ok"):

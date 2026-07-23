@@ -4,7 +4,7 @@ import json
 import re
 from typing import Optional
 
-from app.core.ai.runtime import pipeline
+from app.core.ai.use_cases import AIUseCases
 
 logger = logging.getLogger(__name__)
 
@@ -14,19 +14,10 @@ class AffiliateAIService:
     def generate_comment(keyword: str, url: str) -> Optional[str]:
         """
         Persuasive affiliate comment template.
-        Uses pipeline (9Router → native Gemini fallback), not direct RPA/API.
+        Uses AIUseCases → pipeline (9Router → native Gemini fallback), not direct RPA/API.
         """
-        prompt = (
-            f"Hãy đóng vai chuyên gia Affiliate Marketing. Sản phẩm có từ khóa nhận diện là: '{keyword}'. "
-            f"URL sản phẩm: {url}. "
-            "Hãy tạo 1 mẫu bình luận cực kỳ hấp dẫn, tự nhiên để chèn vào bài viết. "
-            "Bình luận PHẢI có chứa chính xác chuỗi '[LINK]' để hệ thống thay bằng URL sau này. "
-            "Trả về kết quả dưới dạng JSON (không markdown): "
-            '{"comment": "Nội dung bình luận ở đây [LINK]"}'
-        )
-
         try:
-            raw_response, meta = pipeline.generate_text(prompt)
+            raw_response, meta = AIUseCases.generate_affiliate_comment(keyword, url)
             logger.info("[AffiliateAI] pipeline meta=%s", meta)
         except Exception as e:
             logger.error("[AffiliateAI] pipeline error: %s", e)

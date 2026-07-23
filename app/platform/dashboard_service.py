@@ -245,7 +245,7 @@ class DashboardService:
         rows = db.execute(text("SELECT status, COUNT(*) FROM jobs GROUP BY status")).fetchall()
         counts = {str(s): int(c) for s, c in rows}
         viral_new = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.NEW).count()
-        viral_failed = db.query(ViralMaterial).filter(ViralMaterial.status == JobStatus.FAILED).count()
+        viral_failed = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.FAILED).count()
         return {
             "counts": counts,
             "viral_new": viral_new,
@@ -287,7 +287,7 @@ class DashboardService:
 
     @staticmethod
     def get_settings_context(db: Session, query_params: Dict[str, Any] = None) -> Dict[str, Any]:
-        grouped = runtime_settings.list_specs_by_section()
+        grouped = runtime_settings.list_specs_for_settings_ui()
         overrides = runtime_settings.get_overrides(db, use_cache=False)
         effective: dict[str, dict] = {}
         for key, spec in runtime_settings.SETTINGS.items():
@@ -357,8 +357,7 @@ class DashboardService:
     @staticmethod
     def get_ai_report_data(db: Session) -> Dict[str, Any]:
         from datetime import datetime, timedelta, timezone
-        from workers.ai_reporter import _build_prompt
-        from app.core.ai.runtime import pipeline
+        from app.core.ai.use_cases import AIUseCases
 
         since = datetime.now(timezone.utc) - timedelta(days=1)
         groups = (
@@ -375,9 +374,8 @@ class DashboardService:
         if not groups:
             return {"groups": [], "text": None, "meta": {}}
 
-        prompt = _build_prompt(groups)
         try:
-            text, meta = pipeline.generate_text(prompt)
+            text, meta = AIUseCases.generate_incident_report(groups)
             return {"groups": groups, "text": text, "meta": meta}
         except Exception as exc:
             return {"groups": groups, "text": None, "meta": {"ok": False, "fail_reason": str(exc)}}

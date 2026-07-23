@@ -3,23 +3,24 @@
 ## System State
 
 - **Product**: ToolsAuto — auto-publish (Facebook / Threads + related).
-- **Architecture**: ADR-007 (`core` / `features` / `platform`).
-- **Local Windows**: web up `http://127.0.0.1:8001`; Postgres Docker `toolsauto_postgres` → host `:5434`; `.env` + `venv` ready.
-- **Onboarding**: [docs/TREE.md](../../docs/TREE.md), root [README.md](../../README.md), [start.ps1](../../start.ps1).
-- **Active plans/tasks**: none.
+- **Local Windows**: **http://127.0.0.1:8002** (`.\start.ps1`).
+- **AI**: Feature code → **`AIUseCases`** (facade + domain prompts); transport = `AICaptionPipeline` (9Router → Gemini).
 
-## Done This Session [2026-07-22]
+## Done This Session [2026-07-23]
 
-- Commit `5e33f87` — security harden + overlap cleanup + tests/docs.
-- Local bootstrap: `.env`, Docker Postgres `:5434`, `venv` (web deps), schema `create_all` + alembic stamp, `start.ps1`, uvicorn `:8001`.
+### AIUseCases tầng 2 (đào sâu)
+- Domain methods + prompts gom vào `app/core/ai/use_cases.py`:
+  - affiliate comment/bundle, compliance rewrite, threads reply, incident report
+  - `is_enabled()` thay `pipeline.enabled`
+- Callers thin: `affiliate_text`, affiliates `ai_generate`, `facebook_compliance.rewrite`, Threads `auto_reply`, `ai_reporter`, dashboard live report.
+- Dọn: orchestrator bỏ `sys_pipeline`; strategic dùng `AIUseCases.is_enabled()`.
+- ADR-006 §6: canonical entry = `AIUseCases`.
+- Test: `tests/test_ai_use_cases.py` (mock pipeline).
 
-## Unfinished + Blockers
-
-- Full `requirements.txt` trên Python 3.14 Windows fail (`uvloop`, gRPC/protobuf). Worker/AI stack → Python 3.12 hoặc VPS Linux.
-- Chưa `git push`. Chưa start PM2 workers trên Windows (`ecosystem` dùng `venv/bin/python`).
+### Tầng 1 trước đó
+- Primitive facade + migrate call sites + `meta["purpose"]`.
 
 ## Next Action
 
-1. Mở http://127.0.0.1:8001 — login `admin` / `admin123` (local `.env`).
-2. Push commit khi cần deploy VPS.
-3. Optional: cài Python 3.12 để `pip install -r requirements.txt` đầy đủ cho workers.
+1. (Optional) Syspanel 9Router tuner vẫn đọc `pipeline` — OK (ops).
+2. Commit khi user yêu cầu.

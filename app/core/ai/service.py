@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from app.core.database.models import Job
-from app.core.ai.runtime import pipeline
+from app.core.ai.use_cases import AIPurpose, AIUseCases
 from app.core.orchestrator import ContentOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,9 @@ class AIService:
         if caption_context:
             prompt = f"Gợi ý / Text nháp: {caption_context}\n{prompt}"
 
-        payload, meta = pipeline.generate_caption(prompt)
+        payload, meta = AIUseCases.generate_caption(
+            prompt, purpose=AIPurpose.CAPTION_SIMPLE
+        )
         final_caption = payload.caption if payload else ""
         if payload and getattr(payload, "hashtags", None):
             final_caption += "\n\n" + " ".join(payload.hashtags)
