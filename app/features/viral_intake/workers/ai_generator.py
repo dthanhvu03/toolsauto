@@ -151,9 +151,13 @@ def process_draft_job(db: Session):
                     break
 
         # Fetch available affiliate keywords from DB to let AI match products
+        aff_by_keyword: dict = {}
         try:
             from app.core.database.models import AffiliateLink
-            aff_keywords = [link.keyword for link in db.query(AffiliateLink).all()]
+            for link in db.query(AffiliateLink).all():
+                if link.keyword:
+                    aff_by_keyword[link.keyword.lower().strip()] = link
+            aff_keywords = [link.keyword for link in aff_by_keyword.values()]
         except Exception:
             aff_keywords = []
 
@@ -221,24 +225,47 @@ def process_draft_job(db: Session):
             # Pass AI generated keywords to notifier temporarily
             job._ai_keywords = ai_result.get("keywords") or []
             
-            # Xử lý Affiliate Link Injector
-            matched_aff_kw = ai_result.get("affiliate_keyword")
-            if matched_aff_kw and matched_aff_kw in aff_keywords:
-                # Find the corresponding template
+            # Affiliate injector — tracking parity với bulk create
+            matched_aff_kw = (ai_result.get("affiliate_keyword") or "").strip()
+            aff_link = aff_by_keyword.get(matched_aff_kw.lower()) if matched_aff_kw else None
+            if aff_link:
                 try:
-                    from app.core.database.models import AffiliateLink
-                    aff_link = db.query(AffiliateLink).filter(AffiliateLink.keyword == matched_aff_kw).first()
-                    if aff_link:
-                        # Thay thế placeholder [LINK] bằng URL thực tế
-                        comment_text = aff_link.comment_template.replace("[LINK]", aff_link.url)
-                        # Gán thẳng vào auto_comment_text của Job
-                        job.auto_comment_text = comment_text
-                        logger.info("[AI_GEN] [Job-%s] [AFFILIATE] Auto-injected keyword: %s", job.id, matched_aff_kw)
-                except Exception as e:
-                    logger.error("[AI_GEN] [Job-%s] [AFFILIATE_ERR] Error attaching Affiliate Link: %s", job.id, e)
+                    from app.core.compliance.facebook_compliance import compliance_checker, Severity
+                    from app.core.queue.job import JobService as _JobSvc
 
-            
+                    template = aff_link.comment_template or "Xem thêm tại [LINK]"
+                    # Compliance gate lúc inject (WARNING → rewrite; VIOLATION → bỏ comment)
+                    probe = template.replace("[LINK]", aff_link.url)
+                    comp = compliance_checker.check_and_rewrite(probe, product_category="general")
+                    if comp.status == Severity.VIOLATION:
+                        logger.warning(
+                            "[AI_GEN] [Job-%s] [AFFILIATE] Skip inject — VIOLATION keyword=%s",
+                            job.id, aff_link.keyword,
+                        )
+                    else:
+                        safe_template = template
+                        if comp.rewritten:
+                            safe_template = comp.rewritten.replace(aff_link.url, "[LINK]")
+                        _JobSvc.attach_affiliate_to_job(
+                            job,
+                            affiliate_url=aff_link.url,
+                            comment_template=safe_template,
+                        )
+                        logger.info(
+                            "[AI_GEN] [Job-%s] [AFFILIATE] Injected keyword=%s tracking=%s",
+                            job.id, aff_link.keyword, job.tracking_code,
+                        )
+                except Exception as e:
+                    logger.error("[AI_GEN] [Job-%s] [AFFILIATE_ERR] %s", job.id, e)
+
             db.commit()
+            if job.affiliate_url and job.tracking_code:
+                try:
+                    from app.core.queue.job import JobService as _JobSvc
+                    _JobSvc._register_vercel_tracking(job)
+                    db.commit()
+                except Exception:
+                    pass
             logger.info("[AI_GEN] [Job-%s] [DRAFT_READY] AI generation complete. Awaiting user approval.", job.id)
             NotifierService.notify_draft_ready(job)
             try:

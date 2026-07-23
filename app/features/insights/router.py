@@ -122,3 +122,18 @@ def get_trending_topics(
 ):
     return insights_service.get_trending_topics(days, limit, db)
 
+
+@router.get("/api/boost-proposals")
+def list_boost_proposals(db: Session = Depends(get_db)):
+    return insights_service.list_boost_proposals(db)
+
+
+@router.post("/api/boost-proposals/{material_id}/approve")
+def approve_boost_proposal(material_id: int, db: Session = Depends(get_db)):
+    return insights_service.approve_boost_proposal(db, material_id)
+
+
+@router.post("/api/boost-proposals/{material_id}/reject")
+def reject_boost_proposal(material_id: int, db: Session = Depends(get_db)):
+    return insights_service.reject_boost_proposal(db, material_id)
+

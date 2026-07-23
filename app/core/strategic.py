@@ -216,13 +216,14 @@ Kết quả:"""
         return []
 
     @staticmethod
-    def _find_niche_material(db: Session, platform: str, niches: list[str]) -> ViralMaterial | None:
+    def _find_niche_material(db: Session, niches: list[str], source_platforms: list[str] | None = None) -> ViralMaterial | None:
         """Find a NEW ViralMaterial whose title matches any of the niche keywords."""
         if not niches:
             return None
+        platforms = source_platforms or ["tiktok", "facebook"]
         filters = [ViralMaterial.title.ilike(f"%{kw}%") for kw in niches]
         return db.query(ViralMaterial).filter(
-            ViralMaterial.platform == platform,
+            ViralMaterial.platform.in_(platforms),
             ViralMaterial.status == ViralStatus.NEW,
             ViralMaterial.title.isnot(None),
             or_(*filters)
@@ -249,82 +250,98 @@ Kết quả:"""
     @staticmethod
     def run_auto_boost(db: Session):
         """
-        Scan FB pages only. If any page is EXPLODING, autonomously trigger
-        a niche-matched reup job with top-post context for AI caption.
+        Scan FB pages. If EXPLODING → đề xuất BOOST_PENDING (chờ Approve trên Insights).
+        Material nguồn: tiktok (và facebook) NEW — không lọc theo platform page.
         """
-        logger.info("[STRATEGIC] Running autonomous FB growth scan...")
-        # ── FB-only: không boost TikTok pages ──
+        logger.info("[STRATEGIC] Running autonomous FB growth scan (propose BOOST_PENDING)...")
         pages = PageStrategicService.get_page_analysis(db, platform="facebook")
         exploding_pages = [p for p in pages if "EXPLODING" in p["status"]]
-        
+
         if not exploding_pages:
             logger.info("[STRATEGIC] No exploding FB pages detected.")
             return
 
+        source_platforms = ["tiktok", "facebook"]
         boosted_count = 0
         for p in exploding_pages:
-            # 1. Check cooldown (Session Binge Window: giảm xuống 1h để mớm liên tục video cùng niche)
-            last_boost = db.query(ViralMaterial).filter(
-                ViralMaterial.target_page == p["page_url"],
-                ViralMaterial.status == ViralStatus.REUP,
-                ViralMaterial.created_at >= int(time.time()) - 3600  # 1h (Session Binge Window)
-            ).first()
+            # Cooldown: đề xuất/reup gần đây theo updated_at
+            last_boost = (
+                db.query(ViralMaterial)
+                .filter(
+                    ViralMaterial.target_page == p["page_url"],
+                    ViralMaterial.status.in_([ViralStatus.REUP, ViralStatus.BOOST_PENDING]),
+                    ViralMaterial.updated_at >= int(time.time()) - 3600,
+                )
+                .first()
+            )
             if last_boost:
-                logger.debug("[STRATEGIC] Page '%s' still in 1h Binge Window cooldown, skipping.", p["page_name"])
+                logger.debug("[STRATEGIC] Page '%s' still in 1h boost cooldown, skipping.", p["page_name"])
                 continue
 
-            # 2. Lookup page niches for smart material matching
             page_niches = PageStrategicService._lookup_page_niches(
                 db, p["account_id"], p["page_url"]
             )
 
-            # 3. Find best candidate: niche-match first, fallback to highest views
             material = None
             niche_matched = False
             if page_niches:
                 material = PageStrategicService._find_niche_material(
-                    db, p["platform"], page_niches
+                    db, page_niches, source_platforms=source_platforms
                 )
                 if material:
                     niche_matched = True
-                    logger.info("[STRATEGIC] Niche-matched material #%s for page '%s' (niches: %s)",
-                                material.id, p["page_name"], page_niches)
+                    logger.info(
+                        "[STRATEGIC] Niche-matched material #%s for page '%s' (niches: %s)",
+                        material.id,
+                        p["page_name"],
+                        page_niches,
+                    )
 
             if not material:
-                material = db.query(ViralMaterial).filter(
-                    ViralMaterial.platform == p["platform"],
-                    ViralMaterial.status == ViralStatus.NEW
-                ).order_by(ViralMaterial.views.desc()).first()
+                material = (
+                    db.query(ViralMaterial)
+                    .filter(
+                        ViralMaterial.platform.in_(source_platforms),
+                        ViralMaterial.status == ViralStatus.NEW,
+                    )
+                    .order_by(ViralMaterial.views.desc())
+                    .first()
+                )
 
             if not material:
                 logger.info("[STRATEGIC] No NEW material available for page '%s'.", p["page_name"])
                 continue
 
-            logger.info("[STRATEGIC] 🚀 AUTO-BOOSTING page '%s' (%s) with material #%s %s",
-                        p["page_name"], p["page_url"], material.id, material.url)
-
-            # 4. Build BOOST_CONTEXT for AI caption generation
-            top_posts_summary = PageStrategicService._get_top_posts_summary(db, p["page_url"])
             niches_str = ",".join(page_niches) if page_niches else "general"
-            
+            top_posts_summary = PageStrategicService._get_top_posts_summary(db, p["page_url"])
             boost_context = (
-                f"Page đang EXPLODING (+{p['growth_pct']}%), "
-                f"niche={niches_str}"
+                f"Page đang EXPLODING (+{p['growth_pct']}%), niche={niches_str}"
             )
             if top_posts_summary:
                 boost_context += f", top_posts=[{top_posts_summary}]"
 
-            # 5. Inject into reup pipeline with BOOST_CONTEXT
-            material.status = ViralStatus.REUP
+            # Persist BOOST_CONTEXT trên title (không cần migration cột)
+            clean_title = material.title or ""
+            if "### BOOST_CONTEXT:" in clean_title:
+                import re as _re
+                clean_title = _re.sub(r"\s*###\s*BOOST_CONTEXT:.*?###\s*", " ", clean_title).strip()
+            material.title = f"{clean_title} ### BOOST_CONTEXT: {boost_context} ###".strip()
+            material.status = ViralStatus.BOOST_PENDING
             material.target_page = p["page_url"]
             material.scraped_by_account_id = p["account_id"]
-            
-            # 6. Notify via Telegram (enriched with niche info)
+
+            logger.info(
+                "[STRATEGIC] 📋 BOOST_PENDING page '%s' material #%s %s",
+                p["page_name"],
+                material.id,
+                material.url,
+            )
+
             try:
                 niche_display = ", ".join(page_niches) if page_niches else "chưa set"
                 match_label = "✅ Niche-match" if niche_matched else "📊 Top views"
                 msg = (
-                    f"🚀 <b>SMART BOOST</b> (FB)\n"
+                    f"📋 <b>BOOST ĐỀ XUẤT</b> — chờ Approve trên Insights\n"
                     f"📄 Page: <code>{p['page_name']}</code>\n"
                     f"🔥 Status: <b>{p['status']}</b> (+{p['growth_pct']}%)\n"
                     f"🏷 Niche: <b>{niche_display}</b>\n"
@@ -334,11 +351,71 @@ Kết quả:"""
                 NotifierService._broadcast(msg)
             except Exception as ne:
                 logger.error("Failed to send boost notification: %s", ne)
-            
+
             boosted_count += 1
 
         if boosted_count > 0:
             db.commit()
-            logger.info("[STRATEGIC] Autonomous scan complete. Boosted %d FB pages.", boosted_count)
+            logger.info("[STRATEGIC] Proposed %d BOOST_PENDING items.", boosted_count)
         else:
-            logger.info("[STRATEGIC] Scan complete. No eligible FB pages (cooldown or no material).")
+            logger.info("[STRATEGIC] Scan complete. No eligible proposals.")
+
+    @staticmethod
+    def list_boost_proposals(db: Session) -> list[dict]:
+        rows = (
+            db.query(ViralMaterial)
+            .filter(ViralMaterial.status == ViralStatus.BOOST_PENDING)
+            .order_by(ViralMaterial.updated_at.desc())
+            .limit(50)
+            .all()
+        )
+        out = []
+        for m in rows:
+            ctx = ""
+            if m.title and "### BOOST_CONTEXT:" in m.title:
+                import re as _re
+                match = _re.search(r"###\s*BOOST_CONTEXT:\s*(.+?)\s*###", m.title)
+                if match:
+                    ctx = match.group(1).strip()
+            display_title = m.title or m.url
+            if "### BOOST_CONTEXT:" in display_title:
+                import re as _re
+                display_title = _re.sub(r"\s*###\s*BOOST_CONTEXT:.*?###\s*", " ", display_title).strip()
+            out.append(
+                {
+                    "id": m.id,
+                    "url": m.url,
+                    "title": display_title,
+                    "views": m.views or 0,
+                    "platform": m.platform,
+                    "target_page": m.target_page,
+                    "boost_context": ctx,
+                    "account_id": m.scraped_by_account_id,
+                }
+            )
+        return out
+
+    @staticmethod
+    def approve_boost_proposal(db: Session, material_id: int) -> ViralMaterial:
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat or mat.status != ViralStatus.BOOST_PENDING:
+            raise ValueError("Đề xuất boost không tồn tại hoặc đã xử lý.")
+        mat.status = ViralStatus.REUP
+        db.commit()
+        logger.info("[STRATEGIC] Approved BOOST → REUP material #%s", mat.id)
+        return mat
+
+    @staticmethod
+    def reject_boost_proposal(db: Session, material_id: int) -> ViralMaterial:
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat or mat.status != ViralStatus.BOOST_PENDING:
+            raise ValueError("Đề xuất boost không tồn tại hoặc đã xử lý.")
+        # Trả về NEW, giữ URL; gỡ marker BOOST_CONTEXT khỏi title
+        if mat.title and "### BOOST_CONTEXT:" in mat.title:
+            import re as _re
+            mat.title = _re.sub(r"\s*###\s*BOOST_CONTEXT:.*?###\s*", " ", mat.title).strip() or mat.title
+        mat.status = ViralStatus.NEW
+        mat.target_page = None
+        db.commit()
+        logger.info("[STRATEGIC] Rejected BOOST_PENDING material #%s → NEW", mat.id)
+        return mat

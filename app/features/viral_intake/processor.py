@@ -576,7 +576,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     pass
                 media_path = reup_result.output_path
             else:
-                logger.warning("[VIRAL] Post-processing failed (%s), dùng file gốc.", reup_result.error)
+                reason = f"Reup anti-dupe failed: {reup_result.error or 'unknown'}"
+                logger.error("[VIRAL] %s — không dùng file gốc (VIP hard-fail).", reason)
+                try:
+                    os.remove(media_path)
+                except OSError:
+                    pass
+                _mark_material_failed(db, mat, reason)
+                continue
 
             # Chọn account: ưu tiên acc do user chỉ định, fallback acc mặc định
             target_account = default_account
@@ -592,9 +599,21 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             safe_title = (mat.title or "").replace('"', "'").strip()
             caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###" if safe_title else f"[AI_GENERATE] Context: Video {mat.platform} {mat.views} views."
 
-            # Inject BOOST_CONTEXT nếu material có target_page (từ Smart Boost hoặc manual reup)
+            # Inject BOOST_CONTEXT: ưu tiên marker đã persist trên material.title (Strategic)
             resolved_target = mat.target_page
-            if resolved_target and target_account:
+            import re as _re
+            _boost_from_title = None
+            if mat.title:
+                _m = _re.search(r"###\s*BOOST_CONTEXT:\s*(.+?)\s*###", mat.title)
+                if _m:
+                    _boost_from_title = _m.group(1).strip()
+                    # Làm sạch title trước khi đưa vào ORIGINAL_VIRAL_TITLE
+                    safe_title = _re.sub(r"\s*###\s*BOOST_CONTEXT:.*?###\s*", " ", safe_title).strip()
+                    if safe_title:
+                        caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###"
+            if _boost_from_title:
+                caption_metadata += f" ### BOOST_CONTEXT: {_boost_from_title} ###"
+            elif resolved_target and target_account:
                 try:
                     from app.core.strategic import PageStrategicService
                     page_niches = PageStrategicService._lookup_page_niches(db, target_account.id, resolved_target)

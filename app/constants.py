@@ -18,6 +18,7 @@ class AccountStatus(StrEnum):
 class ViralStatus(StrEnum):
     NEW = "NEW"
     REUP = "REUP"
+    BOOST_PENDING = "BOOST_PENDING"  # Strategic đề xuất — chờ Approve trên Insights
     DRAFTED = "DRAFTED"
     FAILED = "FAILED"
 
