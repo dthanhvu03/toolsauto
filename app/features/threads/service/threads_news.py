@@ -10,7 +10,7 @@ import requests
 import app.config as config
 from app.core.database.core import SessionLocal
 from app.core.database.models import Account, Job, NewsArticle
-from app.core.ai.runtime import pipeline
+from app.core.ai.use_cases import AIPurpose, AIUseCases
 from app.features.threads.service.topic_key import compute_topic_key
 from app.core.orchestrator import ContentOrchestrator
 from app.core import settings as runtime_settings
@@ -86,12 +86,12 @@ class ThreadsNewsService:
         return None
 
     def _download_image(self, url):
-        """Tải ảnh từ URL về `storage/media/threads/`."""
+        """Tải ảnh từ URL về THREADS_MEDIA_DIR (storage/media/threads)."""
         try:
             if not url:
                 return None
 
-            media_dir = os.path.join(str(config.STORAGE_DIR), "media", "threads")
+            media_dir = str(config.THREADS_MEDIA_DIR)
             os.makedirs(media_dir, exist_ok=True)
 
             url_hash = hashlib.md5(url.encode()).hexdigest()
@@ -268,7 +268,9 @@ class ThreadsNewsService:
                     max_chars=max_chars_per_segment,
                 )
 
-                ai_result, meta = pipeline.generate_text(prompt)
+                ai_result, meta = AIUseCases.generate_text(
+                    prompt, purpose=AIPurpose.THREADS_NEWS
+                )
                 if ai_result:
                     try:
                         start_obj = ai_result.find("{")

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
-_root = Path(__file__).resolve().parent.parent
+_root = Path(__file__).resolve().parents[4]
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
@@ -20,7 +20,7 @@ logger = setup_shared_logger(__name__ if __name__ != "__main__" else "ai_reporte
 import app.config as config
 from app.core.database.core import SessionLocal
 from app.core.database.models import IncidentGroup
-from app.core.ai.runtime import pipeline
+from app.core.ai.use_cases import AIUseCases
 from app.core.notifier.service import NotifierService, TelegramNotifier
 
 
@@ -40,40 +40,6 @@ def _fetch_top_incidents(limit: int = 20) -> list[IncidentGroup]:
         )
     finally:
         db.close()
-
-
-def _incident_rows_for_prompt(groups: list[IncidentGroup]) -> str:
-    lines = []
-    for idx, group in enumerate(groups, 1):
-        lines.append(
-            "\n".join(
-                [
-                    f"{idx}. signature={group.error_signature}",
-                    f"   platform={group.last_platform or '-'} worker={group.last_worker_name or '-'}",
-                    f"   severity={group.severity_max} count={group.occurrence_count}",
-                    f"   last_seen={group.last_seen_at}",
-                    f"   sample={group.last_sample_message or '-'}",
-                    f"   job_id={group.last_job_id or '-'} account_id={group.last_account_id or '-'}",
-                ]
-            )
-        )
-    return "\n\n".join(lines)
-
-
-def _build_prompt(groups: list[IncidentGroup]) -> str:
-    return f"""
-Bạn là AI vận hành hệ thống ToolsAuto. Hãy viết Daily Health Report bằng tiếng Việt, ngắn gọn, có Markdown.
-
-Yêu cầu:
-- Không bịa nguyên nhân nếu evidence chưa đủ.
-- Mỗi nhận định root cause phải gắn với signature/job/platform/count.
-- Chỉ đề xuất hành động vận hành an toàn; không đề xuất tự sửa code, không auto-healing.
-- Format gồm: Tóm tắt, Top lỗi, Khả năng nguyên nhân, Hành động đề xuất, Cần người kiểm tra.
-
-Dữ liệu top incident groups trong 24h:
-
-{_incident_rows_for_prompt(groups)}
-""".strip()
 
 
 def _fallback_report(groups: list[IncidentGroup], reason: str) -> str:
@@ -96,9 +62,8 @@ def build_report(groups: list[IncidentGroup]) -> str:
     if not groups:
         return "<b>Daily Health Report</b>\nKhông có incident mới trong 24h."
 
-    prompt = _build_prompt(groups)
     try:
-        response, meta = pipeline.generate_text(prompt)
+        response, meta = AIUseCases.generate_incident_report(groups)
         if meta.get("ok") and response:
             header = "<b>Daily Health Report</b>"
             # Per ADR-006: surface fallback usage so reader knows output came from

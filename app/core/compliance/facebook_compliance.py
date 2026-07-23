@@ -257,34 +257,12 @@ class FacebookComplianceChecker:
         violations: list[ViolationItem],
         product_category: str = "general",
     ) -> str:
-        from app.core.ai.runtime import pipeline
-
-        violation_list = "\n".join(
-            [f"- [{v.category}] {v.evidence}: {v.suggestion}" for v in violations]
-        )
-
-        prompt = (
-            f"Bạn là chuyên gia nội dung Facebook tuân thủ chính sách "
-            f"cho thị trường Việt Nam.\n\n"
-            f"Viết lại comment/caption sau để tuân thủ chính sách "
-            f"Facebook, đồng thời giữ nguyên ý nghĩa marketing:\n\n"
-            f"Nội dung gốc:\n{content}\n\n"
-            f"Vi phạm cần sửa:\n{violation_list}\n\n"
-            f"Danh mục sản phẩm: {product_category}\n\n"
-            f"Yêu cầu:\n"
-            f"- Xóa/thay thế các từ vi phạm\n"
-            f"- Giữ nguyên [LINK] nếu có\n"
-            f"- Dùng tiếng Việt tự nhiên\n"
-            f"- Tối đa 3 emoji\n"
-            f"- Dưới 300 ký tự nếu là comment\n"
-            f"- Nếu không thể sửa an toàn, trả về: [REJECT]\n\n"
-            f"Chỉ trả về nội dung đã viết lại, không giải thích."
-        )
-
         try:
-            from app.core.ai.runtime import pipeline
+            from app.core.ai.use_cases import AIUseCases
 
-            result, meta = pipeline.generate_text(prompt)
+            result, meta = AIUseCases.rewrite_for_facebook_compliance(
+                content, violations, product_category
+            )
             if not result:
                 logger.error("[Compliance] Rewrite empty from pipeline meta=%s", meta)
                 return content

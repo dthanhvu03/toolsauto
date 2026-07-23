@@ -117,3 +117,20 @@ Toi xac nhan dong vote `@Codex = Phuong an B` trong bang la dung voi quan diem k
 - Test phai mock ca 9Router va native Gemini: 9Router success, 9Router fail/native success, ca hai fail, circuit open/native success, native output invalid.
 
 **Ket luan Codex:** B la target sach hon cho P3. A co the chap nhan nhu transitional reliability layer neu Owner uu tien uptime, nhung implementation phai co lap, co cap, co metadata, va co test.
+
+---
+
+## 6. Implementation note (2026-07-23) — Canonical entry = `AIUseCases`
+
+**Owner đã vận hành theo Phương án A** (9Router → Native Gemini, cap 2 tầng, `meta.fallback_used` surface).
+
+**Caller contract (sau unify):**
+- Feature / worker code gọi **`app.core.ai.use_cases.AIUseCases`**, không import `runtime.pipeline` trực tiếp (trừ ops/syspanel tuner).
+- Primitive: `generate_text` / `generate_text_async` / `generate_caption` — stamp `meta["purpose"]` qua `AIPurpose`.
+- Domain helpers (prompt nằm trong facade):
+  - `generate_affiliate_comment` / `generate_affiliate_bundle`
+  - `rewrite_for_facebook_compliance`
+  - `generate_threads_reply`
+  - `generate_incident_report`
+- `AIUseCases.is_enabled()` thay cho `pipeline.enabled` ở strategic path.
+- Transport vẫn là `AICaptionPipeline` (9Router → native). Syspanel 9Router ops được phép đọc `pipeline` trực tiếp.

@@ -19,7 +19,7 @@ logger = setup_shared_logger("threads_auto_reply")
 from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
 from app.core.database.models import Account, ThreadsInteraction
-from app.core.ai.runtime import pipeline
+from app.core.ai.use_cases import AIUseCases
 
 async def process_account(account: Account, db: Session):
     logger.info(f"Processing Threads auto-reply for account: {account.name}")
@@ -72,8 +72,9 @@ async def process_account(account: Account, db: Session):
                     logger.info(f"New interaction from {username}: {content_snippet[:50]}...")
                     
                     # Generate AI response
-                    prompt = f"Bạn là một người dùng Threads thân thiện, hài hước và tinh tế. Hãy viết một câu trả lời ngắn gọn (dưới 20 từ) cho bình luận sau: '{content_snippet}'. Hãy dùng ngôn ngữ tự nhiên, trẻ trung."
-                    ai_reply, ai_meta = await pipeline.generate_text_async(prompt)
+                    ai_reply, ai_meta = await AIUseCases.generate_threads_reply(
+                        content_snippet
+                    )
                     logger.info(
                         "Threads auto-reply AI result: ok=%s provider=%s model=%s fallback_used=%s",
                         ai_meta.get("ok"),

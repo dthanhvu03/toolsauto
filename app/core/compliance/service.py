@@ -237,16 +237,17 @@ async def bulk_import_keywords(
             if dup:
                 skipped += 1
                 continue
-            db.execute(
-                text(
-                    """
-                    INSERT INTO keyword_blacklist
-                    (keyword, category, severity, source, is_active, created_at, updated_at)
-                    VALUES (:kw, :cat, :sev, 'bulk_import', 1, :now, :now)
-                    """
-                ),
-                {"kw": keyword, "cat": category, "sev": severity, "now": now},
-            )
+            with db.begin_nested():
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO keyword_blacklist
+                        (keyword, category, severity, source, is_active, created_at, updated_at)
+                        VALUES (:kw, :cat, :sev, 'bulk_import', true, :now, :now)
+                        """
+                    ),
+                    {"kw": keyword, "cat": category, "sev": severity, "now": now},
+                )
             imported += 1
         except Exception as e:
             errors.append(f"Dòng {i} '{keyword}': {e!s}")
@@ -653,9 +654,11 @@ def ai_suggest_keywords(db: Session = Depends(get_db)):
     )
 
     try:
-        from app.core.ai.runtime import pipeline
+        from app.core.ai.use_cases import AIPurpose, AIUseCases
 
-        raw, meta = pipeline.generate_text(prompt)
+        raw, meta = AIUseCases.generate_text(
+            prompt, purpose=AIPurpose.COMPLIANCE_SUGGEST
+        )
         if not raw or not str(raw).strip():
             logger.error("[Compliance] AI suggest empty meta=%s", meta)
             return JSONResponse(

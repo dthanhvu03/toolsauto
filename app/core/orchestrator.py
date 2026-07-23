@@ -17,7 +17,7 @@ import time
 import logging
 import json
 import re
-from app.core.ai.runtime import pipeline
+from app.core.ai.use_cases import AIPurpose, AIUseCases
 import app.config as config
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,6 @@ class ContentOrchestrator:
         return cls._whisper_model
 
     def __init__(self):
-        self.sys_pipeline = pipeline
         self.gemini = None  # Lazy load in fallback
         os.makedirs(THUMB_DIR, exist_ok=True)
 
@@ -501,7 +500,9 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
         t0 = time.time()
         
         # Gọi Pipeline thay cho RPA
-        payload, meta = self.sys_pipeline.generate_caption(prompt, target_image)
+        payload, meta = AIUseCases.generate_caption(
+            prompt, target_image, purpose=AIPurpose.CAPTION
+        )
         logger.info("9Router Pipeline trả về [%s]: %s (%.1fs)", 
                     meta.get("status"), meta.get("fail_reason", "none"), time.time() - t0)
 

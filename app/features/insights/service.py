@@ -84,7 +84,7 @@ def get_growth_metrics(
             MAX(likes) as latest_likes
         FROM page_insights
         WHERE recorded_at >= :cutoff
-        GROUP BY time_label, post_url
+        GROUP BY time_label, post_url, platform, page_url
     )
     SELECT
         time_label,
@@ -387,7 +387,7 @@ def get_ai_commentary(
     Cached 30 min per (page_url, platform, days) combination.
     """
     from sqlalchemy import text as _text
-    from app.core.ai.runtime import pipeline
+    from app.core.ai.use_cases import AIPurpose, AIUseCases
 
     days = _validate_days(days)
     cache_key = f"ai_commentary_{days}_{platform or 'all'}_{page_url or 'all'}"
@@ -466,7 +466,9 @@ Avg views/bài: {avg_views:,} | Engagement rate: {eng_rate}% | Tổng bài track
 
 Nhận xét chiến lược ngắn gọn (plain text):"""
 
-    text, meta = pipeline.generate_text(prompt)
+    text, meta = AIUseCases.generate_text(
+        prompt, purpose=AIPurpose.INSIGHTS_COMMENTARY
+    )
 
     if not text:
         fallback = (
@@ -507,7 +509,7 @@ def get_ai_roadmap(
     import json
     import re as _re
     from sqlalchemy import text as _text
-    from app.core.ai.runtime import pipeline
+    from app.core.ai.use_cases import AIPurpose, AIUseCases
 
     days = _validate_days(days)
     cache_key = f"ai_roadmap_{days}_{platform or 'all'}_{page_url or 'all'}"
@@ -571,7 +573,9 @@ Trả về JSON array (chỉ JSON thuần, không có markdown, không có text 
   {{"step": "04", "category": "Automate", "title": "...", "description": "...", "theme": "orange"}}
 ]"""
 
-    text, meta = pipeline.generate_text(prompt)
+    text, meta = AIUseCases.generate_text(
+        prompt, purpose=AIPurpose.INSIGHTS_ROADMAP
+    )
 
     steps = None
     if text:
