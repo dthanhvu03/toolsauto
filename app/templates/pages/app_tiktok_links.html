@@ -18,7 +18,7 @@
       </a>
     </div>
     <div class="text-xs text-[var(--muted)]">
-      Viral: {{ viral_total }} | Competitors: {{ competitor_total }}
+      Viral: {{ viral_total }} | Đối thủ: {{ competitor_total }}
     </div>
   </div>
 
@@ -26,19 +26,19 @@
     <input type="hidden" name="tab" value="{{ tab }}">
     <div class="flex items-end gap-3 flex-wrap">
       <div>
-        <label class="block text-xs text-[var(--muted)] mb-1">Search</label>
+        <label class="block text-xs text-[var(--muted)] mb-1">Tìm kiếm</label>
         <input name="q" value="{{ q }}" placeholder="URL / @handle / account / page..."
           class="app-input md:w-[520px]" />
       </div>
       <div>
-        <label class="block text-xs text-[var(--muted)] mb-1">Quick filter (local)</label>
-        <input id="localFilter" placeholder="lọc nhanh ngay trên page…" class="app-input w-72" />
+        <label class="block text-xs text-[var(--muted)] mb-1">Lọc nhanh (local)</label>
+        <input id="localFilter" placeholder="lọc nhanh ngay trên trang…" class="app-input w-72" />
       </div>
       {% if tab != 'competitors' %}
       <div>
-        <label class="block text-xs text-[var(--muted)] mb-1">Status</label>
+        <label class="block text-xs text-[var(--muted)] mb-1">Trạng thái</label>
         <select name="status" class="app-select">
-          <option value="" {% if not status %}selected{% endif %}>All</option>
+          <option value="" {% if not status %}selected{% endif %}>Tất cả</option>
           <option value="NEW" {% if status=='NEW' %}selected{% endif %}>NEW</option>
           <option value="DRAFTED" {% if status=='DRAFTED' %}selected{% endif %}>DRAFTED</option>
           <option value="FAILED" {% if status=='FAILED' %}selected{% endif %}>FAILED</option>
@@ -46,11 +46,11 @@
         </select>
       </div>
       <div>
-        <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
+        <label class="block text-xs text-[var(--muted)] mb-1">Views tối thiểu</label>
         <input name="min_views" type="number" min="0" step="500" value="{{ min_views }}" class="app-input w-32" />
       </div>
       <div>
-        <label class="block text-xs text-[var(--muted)] mb-1">Per page</label>
+        <label class="block text-xs text-[var(--muted)] mb-1">Mỗi trang</label>
         <select name="per_page" class="app-select">
           <option value="100" {% if per_page==100 %}selected{% endif %}>100</option>
           <option value="200" {% if per_page==200 %}selected{% endif %}>200</option>
@@ -58,11 +58,11 @@
         </select>
       </div>
       {% endif %}
-      <button class="app-btn app-btn-primary">Apply</button>
-      <button type="button" id="copyAll" class="app-btn">Copy all visible</button>
+      <button class="app-btn app-btn-primary">Áp dụng</button>
+      <button type="button" id="copyAll" class="app-btn">Sao chép tất cả đang hiện</button>
       {% if tab == 'competitors' %}
-      <button type="button" id="expandAll" class="app-btn">Expand all</button>
-      <button type="button" id="collapseAll" class="app-btn">Collapse all</button>
+      <button type="button" id="expandAll" class="app-btn">Mở tất cả</button>
+      <button type="button" id="collapseAll" class="app-btn">Thu tất cả</button>
       {% endif %}
       <span id="stat" class="text-xs text-[var(--muted)]"></span>
     </div>
@@ -96,14 +96,14 @@
         {% endif %}
       </div>
       <button type="button" class="copyGroup app-btn h-9 border-slate-900 bg-slate-900 text-white hover:bg-slate-950"
-        data-copy-group="tp:{{ tp }}">Copy group</button>
+        data-copy-group="tp:{{ tp }}">Sao chép nhóm</button>
     </summary>
     <div class="p-4">
       {% for acc_name, urls in accmap.items() %}
       <details class="mb-3 border border-slate-100 rounded-lg" data-collapse="acc" open>
         <summary class="px-3 py-2 flex items-center justify-between cursor-pointer select-none">
           <div class="text-sm font-medium text-gray-900">{{ acc_name }}</div>
-          <button type="button" class="copyGroup app-btn h-9" data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Copy
+          <button type="button" class="copyGroup app-btn h-9" data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Sao chép
             account</button>
         </summary>
         <div class="p-3 grid md:grid-cols-2 gap-2">
@@ -112,7 +112,7 @@
             data-hay="{{ (tp ~ ' ' ~ acc_name ~ ' ' ~ u) | lower }}">
             <a class="text-blue-700 hover:underline break-all text-sm" href="{{ u }}" target="_blank"
               rel="noreferrer">{{ u }}</a>
-            <button type="button" class="copyOne app-btn h-9" data-copy="{{ u }}">Copy</button>
+            <button type="button" class="copyOne app-btn h-9" data-copy="{{ u }}">Sao chép</button>
           </div>
           {% endfor %}
         </div>
@@ -130,20 +130,20 @@
 <div class="mt-4 app-card p-4">
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-sm font-semibold">Video viral TikTok</h2>
-    <span class="text-xs text-[var(--muted)]">Showing {{ viral_rows|length }} / {{ viral_total }}</span>
+    <span class="text-xs text-[var(--muted)]">Đang hiện {{ viral_rows|length }} / {{ viral_total }}</span>
   </div>
 
   <div class="overflow-x-auto">
     <table class="min-w-full table-auto border-collapse">
       <thead>
         <tr class="bg-gray-50 border-b">
-          <th class="app-table-th">Status</th>
+          <th class="app-table-th">Trạng thái</th>
           <th class="app-table-th">Views</th>
           <th class="app-table-th">Page</th>
-          <th class="app-table-th">Niches</th>
-          <th class="app-table-th">Age</th>
+          <th class="app-table-th">Niche</th>
+          <th class="app-table-th">Tuổi</th>
           <th class="app-table-th">URL</th>
-          <th class="app-table-th text-right">Copy</th>
+          <th class="app-table-th text-right">Sao chép</th>
         </tr>
       </thead>
       <tbody class="bg-white">
@@ -196,7 +196,7 @@
               v.url }}</a>
           </td>
           <td class="px-3 py-2 text-right">
-            <button type="button" class="copyOne app-btn h-9" data-copy="{{ v.url }}">Copy</button>
+            <button type="button" class="copyOne app-btn h-9" data-copy="{{ v.url }}">Sao chép</button>
           </td>
         </tr>
         {% endfor %}
@@ -211,16 +211,16 @@
   </div>
 
   <div class="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-    <div class="text-xs text-[var(--muted)]">Page {{ page }} / {{ total_pages }}</div>
+    <div class="text-xs text-[var(--muted)]">Trang {{ page }} / {{ total_pages }}</div>
     <div class="flex gap-2">
       {% if page > 1 %}
       <a class="app-btn h-9"
         href="/app/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page-1 }}">←
-        Prev</a>
+        Trước</a>
       {% endif %}
       {% if page < total_pages %} <a class="app-btn h-9"
         href="/app/tiktok-links?tab=viral&q={{ q }}&status={{ status }}&min_views={{ min_views }}&per_page={{ per_page }}&page={{ page+1 }}">
-        Next →</a>
+        Sau →</a>
         {% endif %}
     </div>
   </div>
@@ -240,7 +240,7 @@
   function updateStat() {
     const total = document.querySelectorAll('.row').length;
     const vis = visibleRows().length;
-    stat.textContent = `Showing ${vis}/${total}`;
+    stat.textContent = `Đang hiện ${vis}/${total}`;
   }
   function applyLocalFilter() {
     const q = (localFilter?.value || '').trim().toLowerCase();
@@ -265,8 +265,8 @@
       const txt = btn.getAttribute('data-copy') || '';
       if (!txt) return;
       await copyText(txt);
-      btn.textContent = 'Copied';
-      setTimeout(() => btn.textContent = 'Copy', 900);
+      btn.textContent = 'Đã sao chép';
+      setTimeout(() => btn.textContent = 'Sao chép', 900);
       return;
     }
     const g = e.target.closest('.copyGroup');
@@ -278,8 +278,8 @@
         if (u) urls.push(u);
       });
       await copyText(urls.join('\\n'));
-      g.textContent = 'Copied';
-      setTimeout(() => g.textContent = g.classList.contains('bg-slate-900') ? 'Copy group' : 'Copy account', 900);
+      g.textContent = 'Đã sao chép';
+      setTimeout(() => g.textContent = g.classList.contains('bg-slate-900') ? 'Sao chép nhóm' : 'Sao chép account', 900);
     }
   });
   copyAll.addEventListener('click', async () => {
@@ -289,8 +289,8 @@
       .map(b => b.getAttribute('data-copy'))
       .filter(Boolean);
     await copyText(urls.join('\\n'));
-    copyAll.textContent = 'Copied';
-    setTimeout(() => copyAll.textContent = 'Copy all visible', 900);
+    copyAll.textContent = 'Đã sao chép';
+    setTimeout(() => copyAll.textContent = 'Sao chép tất cả đang hiện', 900);
   });
   if (localFilter) {
     localFilter.addEventListener('input', () => {

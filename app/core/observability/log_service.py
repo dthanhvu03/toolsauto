@@ -215,14 +215,38 @@ class LogService:
         proc = (proc or "").strip()
         kind = (kind or "").strip()
         if proc == "ALL":
-            return PlainTextResponse(LogService.tail_all(kind=kind, lines=lines, category=category))
+            text = LogService.tail_all(kind=kind, lines=lines, category=category)
+            return PlainTextResponse(LogService._friendly_missing_pm2_tail(text))
         if proc not in LogService.PM2_LOG_MAP:
             return PlainTextResponse(f"[invalid proc] {proc}\n", status_code=400)
         if kind not in ("out", "error"):
             return PlainTextResponse(f"[invalid kind] {kind}\n", status_code=400)
         fname = LogService.PM2_LOG_MAP[proc][kind]
         path = str(LogService.get_log_path(fname))
-        return PlainTextResponse(LogService.tail_file(path, lines=lines, category=category))
+        text = LogService.tail_file(path, lines=lines, category=category)
+        return PlainTextResponse(LogService._friendly_missing_pm2_tail(text))
+
+    @staticmethod
+    def _friendly_missing_pm2_tail(text: str) -> str:
+        """Local Windows / không PM2: tránh tường [missing] trông như hệ thống lỗi."""
+        lines = [ln for ln in (text or "").splitlines() if ln.strip()]
+        if not lines:
+            return (
+                "Không có dòng log nào.\n"
+                "Local thường chạy start.ps1 (không ghi ~/.pm2/logs). "
+                "Tab PM2 Logs dùng trên VPS khi worker chạy qua PM2.\n"
+            )
+        if all("[missing]" in ln for ln in lines):
+            return (
+                "Không tìm thấy file PM2 log trên máy này.\n"
+                "Local Windows: Web chạy qua start.ps1 / uvicorn — không dùng PM2, "
+                "nên ~/.pm2/logs trống là bình thường.\n"
+                "Trên VPS: kiểm tra `pm2 list` và quyền đọc thư mục log.\n"
+                "\n--- Chi tiết đường dẫn ---\n"
+                + "\n".join(lines)
+                + "\n"
+            )
+        return text if text.endswith("\n") else text + "\n"
 
     @staticmethod
     def sse_log_stream(

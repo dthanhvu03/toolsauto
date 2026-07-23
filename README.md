@@ -22,7 +22,7 @@ docker start toolsauto_postgres
 # docker run -d --name toolsauto_postgres -e POSTGRES_USER=admin -e POSTGRES_PASSWORD=admin -e POSTGRES_DB=toolsauto_db -p 5434:5432 postgres:16-alpine
 
 # .env: ADMIN_*, SECRET_KEY, DATABASE_URL=postgresql+psycopg2://admin:admin@127.0.0.1:5434/toolsauto_db
-.\start.ps1          # mặc định http://127.0.0.1:8001 (tránh conflict :8000)
+.\start.ps1          # mặc định http://127.0.0.1:8002 — login admin / admin (xem .env)
 # Lưu ý Windows + Python 3.14: `pip install -r requirements.txt` có thể fail (uvloop/gRPC).
 # Web tối thiểu đã cài vào venv; worker/AI full stack nên dùng Python 3.12 trên VPS.
 ```
@@ -32,4 +32,4 @@ docker start toolsauto_postgres
 - Workers: `ecosystem.config.js` + PM2 / `./start.sh`
 - Tests: `pytest tests/ -q`
 
-Chi tiết docs: [docs/README.md](docs/README.md).
+Chi tiết cấu hình: [docs/CONFIG.md](docs/CONFIG.md). Map code: [docs/TREE.md](docs/TREE.md).

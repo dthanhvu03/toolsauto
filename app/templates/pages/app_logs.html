@@ -1,8 +1,8 @@
 {% extends "layouts/app.html" %}
 
-{% block title %}Logs • Auto Publisher{% endblock %}
-{% block page_title %}Logs{% endblock %}
-{% block page_subtitle %}Observability Hub — AI Analytics, Domain Events, PM2 Logs.{% endblock %}
+{% block title %}Nhật ký • Auto Publisher{% endblock %}
+{% block page_title %}Nhật ký hệ thống{% endblock %}
+{% block page_subtitle %}Hub quan sát — AI Analytics, Domain Events, PM2 Logs.{% endblock %}
 
 {% block content %}
 {% set current_category = request.query_params.get('category', 'user') %}
@@ -38,10 +38,10 @@
   <!-- =================== TAB PANE 1: AI ANALYTICS =================== -->
   <div id="ai-analytics-pane" data-tab-pane="ai"
        hx-get="/app/logs/ai-analytics"
-       hx-trigger="load, loadAITab from:body"
+       hx-trigger="loadAITab from:body"
        hx-swap="innerHTML">
     <div class="p-8 text-center text-sm text-gray-500 border border-gray-200 rounded-lg bg-gray-50">
-      Loading AI Analytics…
+      Đang tải AI Analytics…
     </div>
   </div>
 
@@ -121,7 +121,7 @@
          hx-trigger="loadDomainEvents from:body"
          hx-include="#logFilterForm">
       <div class="p-8 text-center text-[var(--muted)] text-sm border border-[var(--border)] rounded-lg bg-black/50">
-        Loading...
+        Đang tải…
       </div>
     </div>
   </div>
@@ -135,21 +135,26 @@
             <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Process</label>
             <select id="pm2-proc" class="w-full h-8 bg-white border border-gray-300 rounded-md text-xs text-gray-900 px-2">
               <option value="ALL">ALL</option>
-              <option value="AI_Generator">AI_Generator</option>
-              <option value="FB_Publisher">FB_Publisher</option>
+              <option value="AI_Generator_1">AI_Generator_1</option>
+              <option value="AI_Generator_2">AI_Generator_2</option>
+              <option value="FB_Publisher_1">FB_Publisher_1</option>
+              <option value="FB_Publisher_2">FB_Publisher_2</option>
               <option value="Maintenance">Maintenance</option>
               <option value="Web_Dashboard">Web_Dashboard</option>
+              <option value="Threads_Publisher">Threads_Publisher</option>
+              <option value="Threads_NewsWorker">Threads_NewsWorker</option>
+              <option value="Threads_AutoReply">Threads_AutoReply</option>
             </select>
           </div>
           <div class="w-28">
-            <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Kind</label>
+            <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Loại</label>
             <select id="pm2-kind" class="w-full h-8 bg-white border border-gray-300 rounded-md text-xs text-gray-900 px-2">
               <option value="out">stdout</option>
               <option value="error">stderr</option>
             </select>
           </div>
           <div class="w-24">
-            <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Lines</label>
+            <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Số dòng</label>
             <input id="pm2-lines" type="number" value="200" min="20" max="2000"
                    class="w-full h-8 bg-white border border-gray-300 rounded-md text-xs text-gray-900 px-2" />
           </div>
@@ -159,11 +164,11 @@
                   id="pm2-refresh-btn"
                   class="h-8 px-3 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors inline-flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0A8.003 8.003 0 0119.418 15m0 0H15"></path></svg>
-            Tail / Refresh
+            Tail / Làm mới
           </button>
         </div>
       </div>
-      <pre id="pm2-output" class="m-0 p-3 bg-gray-900 text-green-300 text-[11px] leading-relaxed overflow-x-auto max-h-[60vh] whitespace-pre-wrap">Bấm <b>Tail / Refresh</b> để fetch log gần nhất từ pm2.</pre>
+      <pre id="pm2-output" class="m-0 p-3 bg-gray-900 text-green-300 text-[11px] leading-relaxed overflow-x-auto max-h-[60vh] whitespace-pre-wrap">Bấm <b>Tail / Làm mới</b> để lấy log gần nhất từ PM2.</pre>
     </div>
   </div>
 
@@ -278,7 +283,7 @@
     const kind = document.getElementById('pm2-kind').value;
     const lines = document.getElementById('pm2-lines').value || 200;
     const out = document.getElementById('pm2-output');
-    out.textContent = 'Loading…';
+    out.textContent = 'Đang tải…';
     try {
       const url = `/app/logs/tail?proc=${encodeURIComponent(proc)}&kind=${encodeURIComponent(kind)}&lines=${encodeURIComponent(lines)}`;
       const resp = await fetch(url, { headers: { 'Accept': 'text/plain' }});

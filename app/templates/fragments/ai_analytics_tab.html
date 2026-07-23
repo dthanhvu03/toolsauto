@@ -9,7 +9,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
         </svg>
         <div>
-          <div class="text-sm font-semibold text-gray-900">AI Health Report</div>
+          <div class="text-sm font-semibold text-gray-900">Báo cáo sức khỏe AI</div>
           <div class="text-[11px] text-gray-500">Tổng hợp incident 24h gần nhất, sinh bằng 9Router pipeline.</div>
         </div>
       </div>
@@ -22,7 +22,7 @@
         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
         </svg>
-        Generate Live Report
+        Tạo báo cáo live
         <span id="ai-report-spinner" class="htmx-indicator inline-block w-3.5 h-3.5 ml-1">
           <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -33,7 +33,11 @@
     </div>
     <div id="ai-report-body" class="px-4 py-4 text-sm text-gray-800 min-h-[80px]">
       <div class="text-xs text-gray-500 italic">
-        Chưa có báo cáo. Bấm <b>Generate Live Report</b> để gọi AI tổng hợp 20 incident groups gần nhất trong 24h.
+        {% if not groups %}
+        Chưa có incident trong 24h — bấm <b>Tạo báo cáo live</b> sẽ báo hệ thống ổn định (không gọi AI).
+        {% else %}
+        Chưa có báo cáo. Bấm <b>Tạo báo cáo live</b> để gọi AI tổng hợp tối đa 20 incident groups gần nhất trong 24h.
+        {% endif %}
       </div>
     </div>
   </div>
@@ -46,7 +50,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
         </svg>
         <div>
-          <div class="text-sm font-semibold text-gray-900">Top Incidents</div>
+          <div class="text-sm font-semibold text-gray-900">Top incident</div>
           <div class="text-[11px] text-gray-500">Sắp xếp theo tần suất cao nhất. Dữ liệu live từ <code>incident_groups</code>.</div>
         </div>
       </div>
@@ -55,7 +59,7 @@
               hx-get="/app/logs/ai-analytics"
               hx-target="#ai-analytics-pane"
               hx-swap="innerHTML">
-        Refresh
+        Làm mới
       </button>
     </div>
     <div class="overflow-x-auto">
@@ -64,18 +68,22 @@
           <tr class="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-wider text-gray-500">
             <th class="px-3 py-2 font-bold">Signature</th>
             <th class="px-3 py-2 font-bold">Platform / Sev</th>
-            <th class="px-3 py-2 font-bold text-right">Count</th>
-            <th class="px-3 py-2 font-bold">Last Seen</th>
+            <th class="px-3 py-2 font-bold text-right">Số lần</th>
+            <th class="px-3 py-2 font-bold">Lần cuối</th>
             <th class="px-3 py-2 font-bold">Sample</th>
-            <th class="px-3 py-2 font-bold">Status</th>
-            <th class="px-3 py-2 font-bold text-right">Action</th>
+            <th class="px-3 py-2 font-bold">Trạng thái</th>
+            <th class="px-3 py-2 font-bold text-right">Thao tác</th>
           </tr>
         </thead>
         <tbody>
           {% if not groups %}
             <tr>
-              <td colspan="7" class="px-3 py-8 text-center text-xs text-gray-500 italic">
-                Chưa có incident nào được ghi nhận. Hệ thống đang sạch ✨
+              <td colspan="7" class="px-3 py-8 text-center text-xs text-gray-500">
+                <div class="italic mb-1">Chưa có dòng nào trong <code>incident_groups</code>.</div>
+                <div class="text-[11px] text-gray-400 max-w-md mx-auto">
+                  Incident chỉ được ghi khi dispatcher/worker gọi <code>IncidentLogger</code> (job fail có exception).
+                  DB local trống sau khi chưa chạy publish = bình thường, không phải lỗi query.
+                </div>
               </td>
             </tr>
           {% else %}

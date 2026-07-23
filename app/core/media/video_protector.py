@@ -16,12 +16,12 @@ from pathlib import Path
 from PIL import Image
 import imagehash
 
-from app.config import CONTENT_DIR, DATA_DIR
+from app.config import CONTENT_DIR, DRM_EVIDENCE_FILE
 
 logger = logging.getLogger(__name__)
 
 # Where to store the pHash evidence log
-EVIDENCE_FILE = DATA_DIR / "drm_evidence.json"
+EVIDENCE_FILE = DRM_EVIDENCE_FILE
 
 class VideoProtector:
     

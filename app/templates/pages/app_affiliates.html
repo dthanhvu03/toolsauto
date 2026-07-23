@@ -9,66 +9,67 @@
 <script src="{{ config.CDN_PAPAPARSE }}"></script>
 <style>
 /* ─── Tab System ─── */
-.aff-tab-btn { position: relative; padding: .625rem 1rem; font-size: .8125rem; font-weight: 600; color: #64748b; border-bottom: 2px solid transparent; transition: all .2s ease; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
-.aff-tab-btn:hover { color: #4f46e5; }
-.aff-tab-btn.active { color: #4f46e5; border-bottom-color: #4f46e5; }
+.aff-tab-btn { position: relative; padding: .625rem 1rem; font-size: .8125rem; font-weight: 600; color: var(--color-mist); border-bottom: 2px solid transparent; transition: all .2s ease; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
+.aff-tab-btn:hover { color: var(--color-torch); }
+.aff-tab-btn.active { color: var(--color-torch); border-bottom-color: var(--color-torch); }
 .aff-tab-btn svg { width: 1rem; height: 1rem; }
 .aff-tab-content { display: none; animation: affFadeIn .25s ease; }
 .aff-tab-content.active { display: block; }
 @keyframes affFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ─── CSV Drop Zone ─── */
-.csv-drop-zone { border: 2px dashed #c7d2fe; border-radius: .75rem; padding: 2rem; text-align: center; cursor: pointer; transition: all .25s ease; background: #fafbff; }
-.csv-drop-zone:hover, .csv-drop-zone.dragover { border-color: #6366f1; background: #eef2ff; box-shadow: 0 0 0 4px rgba(99,102,241,.08); }
+.csv-drop-zone { border: 2px dashed var(--color-edge); border-radius: .75rem; padding: 2rem; text-align: center; cursor: pointer; transition: all .25s ease; background: var(--color-surface-sunken); color: var(--color-mist); }
+.csv-drop-zone:hover, .csv-drop-zone.dragover { border-color: var(--color-torch); background: var(--color-torch-dim); box-shadow: 0 0 0 4px var(--color-focus-ring); }
 .csv-drop-zone.dragover { transform: scale(1.01); }
 
 /* ─── AI Result Cards ─── */
-.ai-result-card { background: rgba(255,255,255,.85); backdrop-filter: blur(12px); border: 1px solid #e0e7ff; border-radius: .75rem; padding: 1rem; transition: all .2s ease; }
-.ai-result-card:hover { border-color: #818cf8; box-shadow: 0 4px 16px rgba(99,102,241,.1); transform: translateY(-1px); }
+.ai-result-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .75rem; padding: 1rem; transition: all .2s ease; color: var(--color-ink); }
+.ai-result-card:hover { border-color: var(--color-torch-border); box-shadow: var(--shadow-soft); transform: translateY(-1px); }
 
 /* ─── Style badges ─── */
-.style-natural { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
-.style-urgency { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
-.style-review { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.style-natural { background: var(--color-moss-dim); color: var(--color-lichen); border: 1px solid var(--color-moss-border); }
+.style-urgency { background: var(--color-torch-dim); color: var(--color-torch); border: 1px solid var(--color-torch-border); }
+.style-review { background: var(--color-info-dim); color: var(--color-info); border: 1px solid rgba(122, 155, 184, 0.4); }
 
 /* ─── Preview table ─── */
-.csv-preview-table th { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; padding: .5rem .75rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
-.csv-preview-table td { font-size: 13px; padding: .5rem .75rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-.csv-preview-table tr.invalid td { background: #fef2f2; }
-.csv-preview-table tr.valid td { background: #fff; }
-.csv-preview-table tr:hover td { background: #f8fafc; }
+.csv-preview-table th { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-ash); padding: .5rem .75rem; background: var(--color-deep); border-bottom: 1px solid var(--color-border); }
+.csv-preview-table td { font-size: 13px; padding: .5rem .75rem; border-bottom: 1px solid var(--color-border); vertical-align: middle; color: var(--color-ink); }
+.csv-preview-table tr.invalid td { background: var(--color-danger-dim); }
+.csv-preview-table tr.valid td { background: var(--color-surface); }
+.csv-preview-table tr:hover td { background: var(--color-torch-dim); }
 
 /* ─── Keyword chips ─── */
-.ai-keyword-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .25rem .75rem; border-radius: 9999px; font-size: .75rem; font-weight: 500; background: #eef2ff; color: #4338ca; border: 1px solid #c7d2fe; cursor: pointer; transition: all .15s ease; }
-.ai-keyword-chip:hover { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.ai-keyword-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .25rem .75rem; border-radius: 9999px; font-size: .75rem; font-weight: 500; background: var(--color-torch-dim); color: var(--color-torch); border: 1px solid var(--color-torch-border); cursor: pointer; transition: all .15s ease; }
+.ai-keyword-chip:hover { background: var(--gradient-torch); color: var(--color-ink-inverse); border-color: transparent; }
 
 /* ─── Loading shimmer ─── */
-.ai-shimmer { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: .5rem; }
+.ai-shimmer { background: linear-gradient(90deg, var(--color-ledge) 25%, var(--color-edge) 50%, var(--color-ledge) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: .5rem; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* ─── Drawer ─── */
 .aff-drawer-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
+    background: rgba(12, 11, 10, 0.65); backdrop-filter: blur(4px);
     z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
 }
 .aff-drawer-overlay.active { opacity: 1; pointer-events: auto; }
 .aff-drawer {
     position: fixed; top: 0; right: 0; bottom: 0; width: 100%; max-width: 480px;
-    background: white; z-index: 50; transform: translateX(100%);
+    background: var(--color-surface); z-index: 50; transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column;
+    box-shadow: var(--shadow-panel); display: flex; flex-direction: column;
+    color: var(--color-ink); border-left: 1px solid var(--color-border);
 }
 .aff-drawer.active { transform: translateX(0); }
 
 /* ─── Affiliate List & Pagination ─── */
-.aff-card { background: #fff; border: 1px solid #e2e8f0; border-radius: .75rem; padding: .75rem 1rem; transition: all .2s ease; }
-.aff-card:hover { border-color: #cbd5e1; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05); }
-.aff-keyword-badge { display: inline-flex; align-items: center; background: #f8fafc; color: #334155; font-size: .8125rem; font-weight: 600; padding: .25rem .625rem; border-radius: .375rem; border: 1px solid #e2e8f0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.aff-action-btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .375rem; transition: all .15s ease; cursor: pointer; }
-.aff-page-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; height: 2rem; padding: 0 .5rem; font-size: .8125rem; font-weight: 500; color: #475569; background: #fff; border: 1px solid #e2e8f0; border-radius: .375rem; transition: all .15s ease; cursor: pointer; }
-.aff-page-btn:hover:not(:disabled) { background: #f8fafc; border-color: #cbd5e1; color: #1e293b; }
-.aff-page-btn.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+.aff-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .75rem; padding: .75rem 1rem; transition: all .2s ease; color: var(--color-ink); }
+.aff-card:hover { border-color: var(--color-torch-border); box-shadow: var(--shadow-soft); }
+.aff-keyword-badge { display: inline-flex; align-items: center; background: var(--color-ledge); color: var(--color-ink-soft); font-size: .8125rem; font-weight: 600; padding: .25rem .625rem; border-radius: .375rem; border: 1px solid var(--color-border); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aff-action-btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .375rem; transition: all .15s ease; cursor: pointer; color: var(--color-mist); }
+.aff-page-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; height: 2rem; padding: 0 .5rem; font-size: .8125rem; font-weight: 500; color: var(--color-mist); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: .375rem; transition: all .15s ease; cursor: pointer; }
+.aff-page-btn:hover:not(:disabled) { background: var(--color-torch-dim); border-color: var(--color-torch-border); color: var(--color-torch); }
+.aff-page-btn.active { background: var(--gradient-torch); border-color: transparent; color: var(--color-ink-inverse); }
 </style>
 {% endblock %}
 
@@ -111,7 +112,7 @@
             <div class="aff-tab-content active p-5" id="tabManual">
                 <h3 class="text-base font-semibold text-gray-800 mb-4" id="formTitle">Tạo Link Affiliate Mới</h3>
                 <form hx-post="/affiliates/save" hx-swap="none"
-                    hx-on::after-request="if(event.detail.successful) { this.reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới'; }"
+                    hx-on::after-request="if(event.detail.successful) { this.reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới'; document.getElementById('formError').textContent=''; closeDrawer(); }"
                     class="space-y-4">
 
                     <input type="hidden" name="link_id" id="link_id" value="0">
@@ -132,7 +133,7 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Câu Bình Luận Mẫu</label>
-                        <textarea name="comment_template" id="comment_template" rows="3"
+                        <textarea name="comment_template" id="comment_template" rows="3" required
                             placeholder="Đang flashsale ae mua lẹ không hết: [LINK]"
                             class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
                         <p id="complianceManualHint" class="text-xs mt-1 hidden"></p>
@@ -145,7 +146,7 @@
                             Thêm Mới
                         </button>
                         <button type="button"
-                            onclick="document.forms[0].reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới';"
+                            onclick="document.getElementById('link_id').form.reset(); document.getElementById('link_id').value='0'; document.getElementById('formTitle').innerText='Tạo Link Affiliate Mới'; document.getElementById('btnSubmit').innerText='Thêm Mới'; document.getElementById('formError').textContent='';"
                             class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded text-sm transition-colors">
                             Hủy
                         </button>
@@ -253,7 +254,7 @@
                             class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
                     <button onclick="runAiGenerate()" id="aiGenerateBtn"
-                        class="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-2.5 rounded-lg text-sm transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-95">
+                        class="w-full cave-btn cave-btn-primary h-auto py-2.5 rounded-lg text-sm flex items-center justify-center gap-2">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
                         AI Generate
                     </button>
@@ -271,7 +272,7 @@
                         <div class="ai-shimmer h-16 w-full"></div>
                         <div class="ai-shimmer h-16 w-full"></div>
                     </div>
-                    <p class="text-[11px] text-gray-400">Gemini RPA có thể mất 30-60 giây. Nếu RPA thất bại sẽ tự fallback sang API.</p>
+                    <p class="text-[11px] text-gray-400">AI pipeline (9Router → Gemini fallback) có thể mất vài chục giây. Badge Gemini hết hạn / thiếu API key sẽ trả lỗi 503.</p>
                 </div>
 
                 <!-- AI Result Area -->
@@ -338,7 +339,7 @@
                     </button>
                     {% endif %}
                     {% if ai_generate_enabled %}
-                    <button onclick="openDrawer('ai')" class="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium py-2 px-3 lg:px-4 rounded-lg text-sm transition-all shadow shadow-indigo-200 flex items-center gap-1.5">
+                    <button onclick="openDrawer('ai')" class="cave-btn cave-btn-primary h-auto py-2 px-3 lg:px-4 rounded-lg text-sm flex items-center gap-1.5">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
                         <span class="hidden lg:inline">AI Generate</span>
                     </button>
@@ -399,7 +400,11 @@ function switchTab(tabId, btn) {
 document.body.addEventListener("htmx:responseError", function (evt) {
     try {
         const data = JSON.parse(evt.detail.xhr.response);
-        if (data.error) showToast(data.error, 'error');
+        if (data.error) {
+            showToast(data.error, 'error');
+            const fe = document.getElementById('formError');
+            if (fe) fe.textContent = data.error;
+        }
     } catch (e) { showToast("Lỗi máy chủ.", 'error'); }
 });
 
@@ -414,15 +419,24 @@ document.getElementById('btnSearch').addEventListener('click', doSearch);
 document.getElementById('searchKeyword').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
 
 // Edit Affiliate (from table fragment)
+window.editAffiliateFromBtn = function (btn) {
+    try {
+        const d = JSON.parse(btn.getAttribute('data-aff') || '{}');
+        editAffiliate(d.id, d.kw || '', d.url || '', d.tpl || '');
+    } catch (e) {
+        showToast('Không đọc được dữ liệu link để sửa.', 'error');
+    }
+};
 window.editAffiliate = function (id, keyword, url, template) {
     openDrawer('manual');
     document.getElementById('link_id').value = id;
     document.getElementById('keyword').value = keyword;
     document.getElementById('url').value = url;
-    document.getElementById('comment_template').value = template;
+    document.getElementById('comment_template').value = template || '';
     document.getElementById('formTitle').innerText = 'Chỉnh sửa Link: ' + keyword;
     document.getElementById('btnSubmit').innerText = 'Lưu Thay Đổi';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const fe = document.getElementById('formError');
+    if (fe) fe.textContent = '';
 };
 
 // ════════════════════════════════════════
@@ -685,7 +699,9 @@ async function runAiGenerate() {
         if (!res.ok) {
             if (data.status === 'VIOLATION' && data.violations && data.violations.length) {
                 const msg = data.violations.join('\n• ');
-                showToast('❌ Nội dung vi phạm chính sách FB:\\n• ' + msg, 'error');
+                showToast('❌ Nội dung vi phạm chính sách FB:\n• ' + msg, 'error');
+            } else if (res.status === 503) {
+                showToast((data.error || 'AI pipeline thất bại.') + ' Kiểm tra Gemini (badge Hết hạn / COOKIE) hoặc GEMINI_API_KEY.', 'error');
             } else {
                 showToast(data.error || 'Lỗi AI', 'error');
             }
@@ -708,7 +724,11 @@ async function runAiGenerate() {
 
 function renderAiResult(data) {
     const area = document.getElementById('aiResultArea');
-    const sourceLabel = data.source === 'api' ? 'Gemini API' : 'Gemini RPA';
+    const src = data.source || '';
+    let sourceLabel = 'AI pipeline';
+    if (src.includes('fallback') || src === 'native_gemini') sourceLabel = 'Gemini (fallback)';
+    else if (src.includes('failed')) sourceLabel = 'Pipeline lỗi';
+    else if (src === 'api') sourceLabel = 'Gemini API';
     
     let html = `
         <div class="mb-3 flex items-center justify-between">

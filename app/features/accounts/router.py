@@ -1,7 +1,8 @@
-from typing import List
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+import json
 import time
 import logging
 from app.core.database.core import get_db
@@ -13,7 +14,54 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
-@router.get("/table", response_class=HTMLResponse)
+
+def _render_accounts_list_html(request: Request, accounts: List, highlight_id: int | None = None) -> str:
+    now = int(time.time())
+    html_content = ""
+    for account in accounts:
+        html_content += templates.get_template("fragments/account_list_item.html").render(
+            {
+                "request": request,
+                "account": account,
+                "now": now,
+                "highlight_id": highlight_id,
+            }
+        )
+    return html_content
+
+
+def _wants_account_details(request: Request, account_id: int) -> bool:
+    """Split View HTMX targets #account-{id}; grid cards use account_row."""
+    target = (request.headers.get("hx-target") or "").strip()
+    if target == f"#account-{account_id}":
+        return True
+    current = request.headers.get("hx-current-url") or ""
+    return "/app/accounts" in current
+
+
+def _account_ui_response(
+    request: Request,
+    account,
+    *,
+    toast: Optional[Tuple[str, str]] = None,
+    **extra,
+) -> HTMLResponse:
+    now = int(time.time())
+    if account and account.login_error and not extra.get("cookie_import_error"):
+        from app.core.observability.log_normalizer import LogNormalizer
+        account.login_error = LogNormalizer._translate_message(account.login_error)
+    ctx = {"request": request, "account": account, "now": now, **extra}
+    headers = {}
+    if toast:
+        msg, toast_type = toast
+        headers["HX-Trigger"] = json.dumps({"showMessage": {"msg": msg, "type": toast_type}})
+    fragment = (
+        "fragments/account_details.html"
+        if account and _wants_account_details(request, account.id)
+        else "fragments/account_row.html"
+    )
+    return templates.TemplateResponse(fragment, ctx, headers=headers)
+
 def get_accounts_table(request: Request, q: str = "", db: Session = Depends(get_db)):
     accounts = AccountService.list_accounts(db)
     q = (q or "").strip().lower()
@@ -51,18 +99,83 @@ def create_account(
     platform: str = Form("facebook"),
     daily_limit: int = Form(3),
     cooldown_seconds: int = Form(1800),
-    db: Session = Depends(get_db)
+    ui: str = Form("grid"),
+    db: Session = Depends(get_db),
 ):
-    try:
-        AccountService.create_account(db, platform=platform, name=name, daily_limit=daily_limit, cooldown_seconds=cooldown_seconds)
-    except Exception as e:
-        logger.error("Failed to create account name=%s platform=%s: %s", name, platform, e)
-    
+    created_id: int | None = None
+    platform_norm = (platform or "facebook").strip().lower()
+    if platform_norm not in ("facebook", "instagram"):
+        platform_norm = "facebook"
+    name_clean = (name or "").strip()
+    if not name_clean:
+        logger.warning("create_account rejected: empty name")
+    else:
+        try:
+            new_acc = AccountService.create_account(
+                db,
+                platform=platform_norm,
+                name=name_clean,
+                daily_limit=daily_limit,
+                cooldown_seconds=cooldown_seconds,
+            )
+            created_id = new_acc.id
+        except Exception as e:
+            logger.error("Failed to create account name=%s platform=%s: %s", name, platform, e)
+
+    if (ui or "").strip().lower() == "split":
+        accounts = AccountService.list_accounts(db)
+        created_account = AccountService.get_account(db, created_id) if created_id else None
+        return templates.TemplateResponse(
+            "fragments/accounts_split_after_create.html",
+            {
+                "request": request,
+                "accounts": accounts,
+                "created_account": created_account,
+                "highlight_id": created_id,
+                "now": int(time.time()),
+            },
+        )
+
     accounts = AccountService.list_accounts(db)
     return templates.TemplateResponse(
-        "fragments/accounts_table.html", 
-        {"request": request, "accounts": accounts, "now": int(time.time())}
+        "fragments/accounts_table.html",
+        {"request": request, "accounts": accounts, "now": int(time.time())},
     )
+
+@router.post("/{account_id}/import-cookies", response_class=HTMLResponse)
+def import_account_cookies(
+    account_id: int,
+    request: Request,
+    cookies_json: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    cookie_import_ok = None
+    cookie_import_error = None
+    try:
+        AccountService.import_cookies_from_json(db, account_id, cookies_json)
+        cookie_import_ok = "Đã import cookie và cập nhật session."
+    except ValueError as e:
+        cookie_import_error = str(e)
+    except Exception as e:
+        logger.error("import_account_cookies account_id=%s: %s", account_id, e)
+        cookie_import_error = f"Lỗi import: {e}"
+
+    account = AccountService.get_account(db, account_id)
+    if not account:
+        return HTMLResponse(status_code=404)
+    toast = None
+    if cookie_import_ok:
+        toast = (cookie_import_ok, "success")
+    elif cookie_import_error:
+        toast = (cookie_import_error, "error")
+    return _account_ui_response(
+        request,
+        account,
+        toast=toast,
+        cookie_import_ok=cookie_import_ok,
+        cookie_import_error=cookie_import_error,
+    )
+
 
 @router.post("/{account_id}/start-login", response_class=HTMLResponse)
 def start_account_login(account_id: int, request: Request, db: Session = Depends(get_db)):
@@ -78,10 +191,7 @@ def start_account_login(account_id: int, request: Request, db: Session = Depends
         account = AccountService.get_account(db, account_id)
         error_msg = "Có lỗi hệ thống xảy ra"
         
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time()), "start_login_error": error_msg}
-    )
+    return _account_ui_response(request, account, start_login_error=error_msg)
 
 @router.post("/{account_id}/confirm-login", response_class=HTMLResponse)
 def confirm_account_login(account_id: int, request: Request, db: Session = Depends(get_db)):
@@ -91,23 +201,33 @@ def confirm_account_login(account_id: int, request: Request, db: Session = Depen
         logger.error(f"confirm_account_login error: {e}")
         account = AccountService.get_account(db, account_id)
         
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time())}
-    )
+    return _account_ui_response(request, account)
 
 @router.post("/{account_id}/validate-session", response_class=HTMLResponse)
 def validate_account_session(account_id: int, request: Request, db: Session = Depends(get_db)):
+    toast = None
     try:
         account = AccountService.validate_session(db, account_id)
+        if not account:
+            return HTMLResponse(status_code=404)
+        status = (account.login_status or "").upper()
+        if status == "ACTIVE":
+            toast = ("Session còn hợp lệ — ACTIVE.", "success")
+        elif status == "INVALID":
+            toast = (
+                account.login_error or "Session hết hạn / chưa đăng nhập — cần import cookie hoặc đăng nhập lại.",
+                "error",
+            )
+        elif account.login_error:
+            toast = (account.login_error, "warning")
+        else:
+            toast = (f"Đã kiểm tra — trạng thái: {account.login_status or 'UNKNOWN'}.", "info")
     except Exception as e:
-        logger.error(f"validate_account_session error: {e}")
+        logger.error("validate_account_session error: %s", e)
         account = AccountService.get_account(db, account_id)
-        
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time())}
-    )
+        toast = (f"Kiểm tra session lỗi: {e}", "error")
+
+    return _account_ui_response(request, account, toast=toast)
 
 @router.post("/{account_id}/toggle", response_class=HTMLResponse)
 def toggle_account(account_id: int, request: Request, db: Session = Depends(get_db)):
@@ -120,10 +240,7 @@ def toggle_account(account_id: int, request: Request, db: Session = Depends(get_
         logger.error("toggle_account error: %s", e)
         account = AccountService.get_account(db, account_id)
         
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time())}
-    )
+    return _account_ui_response(request, account)
 
 @router.post("/{account_id}/update-limits", response_class=HTMLResponse)
 def update_account_limits(
@@ -153,10 +270,7 @@ def update_account_limits(
         logger.warning("update_limits account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time())}
-    )
+    return _account_ui_response(request, account)
 
 @router.post("/{account_id}/reset-failures", response_class=HTMLResponse)
 def reset_account_failures(account_id: int, request: Request, db: Session = Depends(get_db)):
@@ -166,10 +280,7 @@ def reset_account_failures(account_id: int, request: Request, db: Session = Depe
         logger.warning("reset_failures account_id=%s: %s", account_id, e)
         account = AccountService.get_account(db, account_id)
         
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time())}
-    )
+    return _account_ui_response(request, account)
 
 @router.post("/{account_id}/rename", response_class=HTMLResponse)
 def rename_account(
@@ -183,10 +294,7 @@ def rename_account(
     except Exception:
         account = AccountService.get_account(db, account_id)
 
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time())}
-    )
+    return _account_ui_response(request, account)
 
 @router.post("/{account_id}/delete", response_class=HTMLResponse)
 def delete_account(account_id: int, request: Request, db: Session = Depends(get_db)):
@@ -195,10 +303,7 @@ def delete_account(account_id: int, request: Request, db: Session = Depends(get_
         return HTMLResponse("")
     except Exception:
         account = AccountService.get_account(db, account_id)
-        return templates.TemplateResponse(
-            "fragments/account_row.html", 
-            {"request": request, "account": account, "now": int(time.time())}
-        )
+        return _account_ui_response(request, account)
 
 @router.get("/", response_class=HTMLResponse)
 def get_accounts_page(request: Request, db: Session = Depends(get_db)):
@@ -223,13 +328,8 @@ def get_accounts_list(request: Request, q: str = "", db: Session = Depends(get_d
             if q in (a.name or "").lower() or q in (a.platform or "").lower():
                 filtered.append(a)
         accounts = filtered
-    
-    html_content = ""
-    for account in accounts:
-        html_content += templates.get_template("fragments/account_list_item.html").render(
-            {"request": request, "account": account, "now": int(time.time())}
-        )
-    return HTMLResponse(content=html_content)
+
+    return HTMLResponse(content=_render_accounts_list_html(request, accounts))
 
 @router.get("/{account_id}/details", response_class=HTMLResponse)
 def get_account_details_view(account_id: int, request: Request, db: Session = Depends(get_db)):
@@ -283,10 +383,19 @@ def sync_account_pages(account_id: int, request: Request, db: Session = Depends(
     account = AccountService.get_account(db, account_id)
     if not account:
         return HTMLResponse(status_code=404)
-        
-    AccountService.trigger_page_sync(db, account_id)
-    
-    return templates.TemplateResponse(
-        "fragments/account_row.html", 
-        {"request": request, "account": account, "now": int(time.time()), "sync_started": True}
-    )
+
+    toast = None
+    try:
+        AccountService.trigger_page_sync(db, account_id)
+        toast = (
+            "Đã chạy Sync Managed Pages nền — đợi 20–60s rồi F5 hoặc mở lại account để thấy danh sách page.",
+            "success",
+        )
+    except ValueError as e:
+        toast = (str(e), "error")
+    except Exception as e:
+        logger.error("sync_account_pages account_id=%s: %s", account_id, e)
+        toast = (f"Không chạy được sync: {e}", "error")
+
+    account = AccountService.get_account(db, account_id)
+    return _account_ui_response(request, account, toast=toast, sync_started=True)

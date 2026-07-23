@@ -94,14 +94,14 @@ def app_logs(request: Request):
 
 
 @router.get("/app/logs/tail")
-def app_logs_tail(proc: str = "ai-worker", kind: str = "out", lines: int = 200, category: str = "user"):
+def app_logs_tail(proc: str = "ALL", kind: str = "out", lines: int = 200, category: str = "user"):
     """Return last N lines for whitelisted pm2 log files."""
     return LogQueryFacade.get_system_tail(proc, kind, lines, category=category)
 
 
 @router.get("/app/logs/stream")
 def app_logs_stream(
-    proc: str = "ai-worker",
+    proc: str = "ALL",
     kind: str = "out",
     level: str = "",
     q: str = "",

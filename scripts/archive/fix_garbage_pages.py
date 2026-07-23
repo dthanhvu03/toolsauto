@@ -3,7 +3,7 @@ import sys
 import json
 import logging
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.core.database.core import SessionLocal
 from app.core.database.models import Account

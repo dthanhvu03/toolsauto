@@ -7,17 +7,43 @@
 {% block head_extra %}
 <style>
     .threads-card {
-        @apply bg-white rounded-2xl border border-slate-100 shadow-sm transition-all duration-200 hover:shadow-md;
+        background: var(--color-surface) !important;
+        border: 1px solid var(--color-border) !important;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-soft);
+        color: var(--color-ink);
+        transition: border-color var(--dur-base) var(--ease-standard), box-shadow var(--dur-base) var(--ease-standard);
+    }
+    .threads-card:hover {
+        border-color: var(--color-torch-border) !important;
+        box-shadow: var(--shadow-panel);
     }
     .threads-gradient-text {
-        background: linear-gradient(135deg, #4f46e5 0%, #a855f7 100%);
+        background: var(--gradient-torch);
         -webkit-background-clip: text;
+        background-clip: text;
         -webkit-text-fill-color: transparent;
     }
-    .threads-badge-success { @apply bg-emerald-50 text-emerald-700 border-emerald-100; }
-    .threads-badge-pending { @apply bg-indigo-50 text-indigo-700 border-indigo-100; }
-    .threads-badge-failed { @apply bg-rose-50 text-rose-700 border-rose-100; }
-    .threads-badge-verifying { @apply bg-amber-50 text-amber-700 border-amber-200; }
+    .threads-badge-success {
+        background: var(--color-moss-dim) !important;
+        color: var(--color-lichen) !important;
+        border: 1px solid var(--color-moss-border) !important;
+    }
+    .threads-badge-pending {
+        background: var(--color-torch-dim) !important;
+        color: var(--color-torch) !important;
+        border: 1px solid var(--color-torch-border) !important;
+    }
+    .threads-badge-failed {
+        background: var(--color-danger-dim) !important;
+        color: var(--color-danger) !important;
+        border: 1px solid var(--color-danger-border) !important;
+    }
+    .threads-badge-verifying {
+        background: var(--color-torch-dim) !important;
+        color: var(--color-torch) !important;
+        border: 1px solid var(--color-torch-border) !important;
+    }
     @keyframes spin-slow { to { transform: rotate(360deg); } }
     .animate-spin-slow { animation: spin-slow 2s linear infinite; }
 </style>
@@ -70,7 +96,7 @@
             {% for acc in linked_accounts %}
             <div class="flex items-center justify-between p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
                 <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs font-black shadow-sm">
+                    <div class="w-9 h-9 rounded-lg flex items-center justify-center text-[var(--color-ink-inverse)] text-xs font-black" style="background: var(--gradient-torch);">
                         {{ (acc.name or '?')[0] | upper }}
                     </div>
                     <div>
@@ -169,7 +195,7 @@
                 {% endfor %}
             </select>
             <button type="submit"
-                    class="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-xs font-bold rounded-lg shadow-sm transition-all active:scale-95 whitespace-nowrap">
+                    class="px-4 py-2 cave-btn cave-btn-primary h-auto text-xs rounded-lg whitespace-nowrap">
                 Ket noi Threads
             </button>
         </form>
@@ -263,9 +289,9 @@
                     <div class="text-center py-6 text-xs text-slate-400 italic">Chua co job Threads nao.</div>
                     {% endif %}
                     {% for job in jobs %}
-                    <div class="relative pl-6 border-l-2 {% if job.status == 'COMPLETED' %}border-emerald-200{% elif job.status == 'FAILED' %}border-rose-200{% else %}border-indigo-200 animate-pulse{% endif %} pb-4 last:pb-0">
+                    <div class="relative pl-6 border-l-2 {% if job.status == 'DONE' %}border-emerald-200{% elif job.status == 'FAILED' %}border-rose-200{% else %}border-indigo-200 animate-pulse{% endif %} pb-4 last:pb-0">
                         <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full border-2 border-white
-                            {% if job.status == 'COMPLETED' %}bg-emerald-500{% elif job.status == 'FAILED' %}bg-rose-500{% else %}bg-indigo-500{% endif %}"></div>
+                            {% if job.status == 'DONE' %}bg-emerald-500{% elif job.status == 'FAILED' %}bg-rose-500{% else %}bg-indigo-500{% endif %}"></div>
                         <div class="flex flex-col gap-1">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Job #{{ job.id }}</span>
@@ -274,7 +300,7 @@
                             <div class="text-xs font-bold text-slate-800 line-clamp-1">{{ job.caption | default('(no caption)', true) | truncate(80, true, '...') }}</div>
                             <div class="flex items-center gap-2 mt-1">
                                 <span class="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest
-                                    {% if job.status == 'COMPLETED' %}threads-badge-success
+                                    {% if job.status == 'DONE' %}threads-badge-success
                                     {% elif job.status == 'FAILED' %}threads-badge-failed
                                     {% else %}threads-badge-pending{% endif %}">
                                     {{ job.status }}

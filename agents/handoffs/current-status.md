@@ -4,23 +4,16 @@
 
 - **Product**: ToolsAuto — auto-publish (Facebook / Threads + related).
 - **Local Windows**: **http://127.0.0.1:8002** (`.\start.ps1`).
-- **AI**: Feature code → **`AIUseCases`** (facade + domain prompts); transport = `AICaptionPipeline` (9Router → Gemini).
+- **AI**: Feature code → **`AIUseCases`**; transport = `AICaptionPipeline`.
 
 ## Done This Session [2026-07-23]
 
-### AIUseCases tầng 2 (đào sâu)
-- Domain methods + prompts gom vào `app/core/ai/use_cases.py`:
-  - affiliate comment/bundle, compliance rewrite, threads reply, incident report
-  - `is_enabled()` thay `pipeline.enabled`
-- Callers thin: `affiliate_text`, affiliates `ai_generate`, `facebook_compliance.rewrite`, Threads `auto_reply`, `ai_reporter`, dashboard live report.
-- Dọn: orchestrator bỏ `sys_pipeline`; strategic dùng `AIUseCases.is_enabled()`.
-- ADR-006 §6: canonical entry = `AIUseCases`.
-- Test: `tests/test_ai_use_cases.py` (mock pipeline).
-
-### Tầng 1 trước đó
-- Primitive facade + migrate call sites + `meta["purpose"]`.
+### Commits
+1. `9fbd8d3` — AIUseCases facade + domain methods + ADR-006 §6 + tests.
+2. Remaining working tree — storage layout centralization, Settings↔AI Studio split (PLAN-038/TASK-040), Cave UX, syspanel/audit fixes, docs/tests.
 
 ## Next Action
 
-1. (Optional) Syspanel 9Router tuner vẫn đọc `pipeline` — OK (ops).
-2. Commit khi user yêu cầu.
+1. Verify local `.\start.ps1` sau commit.
+2. Archive PLAN-038 / TASK-040 khi Owner confirm Done trên UI.
+3. Push khi user yêu cầu.

@@ -33,25 +33,34 @@
     </div>
   </div>
 
-  <div class="flex flex-wrap gap-1 p-1 bg-gray-100 rounded-xl w-fit" role="tablist">
+  <div id="compliance-empty-banner" class="hidden rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div class="font-semibold">Blacklist đang trống</div>
+    <div class="text-xs mt-1 text-amber-800">
+      4 chỉ số = 0 vì DB local chưa có <code>keyword_blacklist</code> / <code>violation_log</code> — không phải lỗi query.
+      Khi chưa có từ khóa active, checker gần như không chặn nội dung (chỉ còn regex nếu có).
+      Thêm thủ công, Import CSV, hoặc AI đề xuất sau khi đã có lịch sử vi phạm.
+    </div>
+  </div>
+
+  <div class="flex flex-wrap gap-1 p-1 rounded-xl w-fit border border-[var(--color-border)] bg-[var(--color-surface-raised)]" role="tablist">
     <button type="button" onclick="switchTab('keywords')" id="tab-keywords"
-            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all bg-white shadow-sm text-gray-800">
+            class="tab-btn is-active px-4 py-2 rounded-lg text-sm font-medium transition-all">
       Từ khóa
     </button>
     <button type="button" onclick="switchTab('violations')" id="tab-violations"
-            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all">
       Lịch sử
     </button>
     <button type="button" onclick="switchTab('tester')" id="tab-tester"
-            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all">
       Kiểm tra
     </button>
     <button type="button" onclick="switchTab('allowlist')" id="tab-allowlist"
-            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all">
       Cho phép
     </button>
     <button type="button" onclick="switchTab('analytics')" id="tab-analytics"
-            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all text-gray-500">
+            class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition-all">
       Thống kê
     </button>
   </div>
@@ -412,15 +421,13 @@ function ensureCategoryOption(sel, cat) {
 
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.remove('bg-white', 'shadow-sm', 'text-gray-800');
-    btn.classList.add('text-gray-500');
+    btn.classList.remove('is-active', 'bg-white', 'shadow-sm', 'text-gray-800');
   });
   document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
 
   const btn = document.getElementById('tab-' + tab);
   if (btn) {
-    btn.classList.add('bg-white', 'shadow-sm', 'text-gray-800');
-    btn.classList.remove('text-gray-500');
+    btn.classList.add('is-active');
   }
   const pane = document.getElementById('tab-content-' + tab);
   if (pane) pane.classList.remove('hidden');
@@ -432,24 +439,42 @@ function switchTab(tab) {
 
 async function loadKeywords() {
   const res = await fetch('/compliance/keywords');
+  if (!res.ok) {
+    document.getElementById('keywords-tbody').innerHTML =
+      '<tr><td colspan="6" class="text-center py-8 text-red-500 text-sm">Không tải được từ khóa (HTTP ' + res.status + ').</td></tr>';
+    return;
+  }
   allKeywords = await res.json();
+  if (!Array.isArray(allKeywords)) allKeywords = [];
   renderTable(allKeywords);
   document.getElementById('keyword-count').textContent = `${allKeywords.length} từ khóa`;
 }
 
 async function loadAnalytics() {
   const res = await fetch('/compliance/analytics?days=30');
+  if (!res.ok) return;
   const data = await res.json();
   document.getElementById('stat-total-keywords').textContent = data.total_keywords ?? 0;
   document.getElementById('stat-total-violations').textContent = data.total_violations ?? 0;
   document.getElementById('stat-blocked-today').textContent = data.blocked_today ?? 0;
   document.getElementById('stat-rewritten').textContent = data.rewritten_count ?? 0;
+  const banner = document.getElementById('compliance-empty-banner');
+  if (banner) {
+    const empty = (data.total_keywords ?? 0) === 0 && (data.total_violations ?? 0) === 0;
+    banner.classList.toggle('hidden', !empty);
+  }
 }
 
 function renderTable(keywords) {
   const tbody = document.getElementById('keywords-tbody');
   if (!keywords.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400 text-sm">Chưa có từ khóa nào</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-gray-500 text-sm">
+      <div class="italic mb-1">Chưa có từ khóa nào</div>
+      <div class="text-[11px] text-gray-400 max-w-md mx-auto">
+        Bảng <code>keyword_blacklist</code> trống. Dùng <b>Thêm từ khóa</b> hoặc <b>Import CSV</b>
+        (file mẫu khi trống có 1 dòng ví dụ).
+      </div>
+    </td></tr>`;
     return;
   }
   tbody.innerHTML = keywords.map(kw => `

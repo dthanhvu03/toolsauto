@@ -31,7 +31,7 @@
     <!-- Disk -->
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div class="flex items-center justify-between mb-2">
-            <span class="text-xs font-medium text-gray-500">Disk</span>
+            <span class="text-xs font-medium text-gray-500">Disk {{ disk_label }}</span>
             <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
@@ -54,6 +54,7 @@
         </div>
         <div class="text-sm font-bold text-emerald-600">↑ {{ net_sent_mb }} MB</div>
         <div class="text-sm font-bold text-blue-600">↓ {{ net_recv_mb }} MB</div>
+        <div class="text-[10px] text-gray-400 mt-1">Tích lũy từ boot OS</div>
     </div>
     <!-- Uptime -->
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
@@ -65,6 +66,6 @@
             </svg>
         </div>
         <div class="text-xl font-bold text-indigo-600">{{ uptime }}</div>
-        <div class="text-xs text-gray-400 mt-1">Server online</div>
+        <div class="text-xs text-gray-400 mt-1">OS boot (không phải app)</div>
     </div>
 </div>

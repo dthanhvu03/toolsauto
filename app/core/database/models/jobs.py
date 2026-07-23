@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from sqlalchemy import Boolean, Column, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 
@@ -16,27 +14,9 @@ class Job(Base):
 
     @property
     def resolved_media_path(self) -> str:
-        if not self.media_path:
-            return ""
-        from app.config import REUP_DIR, CONTENT_DIR
-        p = Path(self.media_path)
-        if p.exists():
-            return str(p.absolute())
-        # Rebase relative to CONTENT_DIR or REUP_DIR if missing
-        try:
-            if "reup_videos/" in self.media_path:
-                suffix = self.media_path.split("reup_videos/", 1)[1]
-                rebased = REUP_DIR / suffix
-                if rebased.exists():
-                    return str(rebased.absolute())
-            elif "content/" in self.media_path:
-                suffix = self.media_path.split("content/", 1)[1]
-                rebased = CONTENT_DIR / suffix
-                if rebased.exists():
-                    return str(rebased.absolute())
-        except Exception:
-            pass
-        return self.media_path
+        from app.core.storage_paths import resolve_media_path
+
+        return resolve_media_path(self.media_path)
 
     caption = Column(String)
     schedule_ts = Column(Integer, index=True)
@@ -63,27 +43,9 @@ class Job(Base):
 
     @property
     def resolved_processed_media_path(self) -> str:
-        if not self.processed_media_path:
-            return ""
-        from app.config import REUP_DIR, CONTENT_DIR
-        p = Path(self.processed_media_path)
-        if p.exists():
-            return str(p.absolute())
-        # Rebase relative to CONTENT_DIR or REUP_DIR if missing
-        try:
-            if "reup_videos/" in self.processed_media_path:
-                suffix = self.processed_media_path.split("reup_videos/", 1)[1]
-                rebased = REUP_DIR / suffix
-                if rebased.exists():
-                    return str(rebased.absolute())
-            elif "content/" in self.processed_media_path:
-                suffix = self.processed_media_path.split("content/", 1)[1]
-                rebased = CONTENT_DIR / suffix
-                if rebased.exists():
-                    return str(rebased.absolute())
-        except Exception:
-            pass
-        return self.processed_media_path
+        from app.core.storage_paths import resolve_media_path
+
+        return resolve_media_path(self.processed_media_path)
 
     # Post-Publish Metrics (Phase 14 & 17)
     post_url = Column(String, nullable=True)  # URL of the published post

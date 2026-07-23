@@ -1,20 +1,32 @@
 import os
+import shutil
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file (if exists) at the very start
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env from repo root only; never override existing process env (PM2/system).
+load_dotenv(BASE_DIR / ".env", override=False)
 
 # Storage Layout (PLAN-003)
 STORAGE_DIR = Path(os.getenv("STORAGE_DIR", str(BASE_DIR / "storage")))
 STORAGE_DB_DIR = STORAGE_DIR / "db"
+# Runtime JSON/state (ADR: not at repo root — survives deploy git reset on untracked storage/)
+RUNTIME_CONFIG_DIR = STORAGE_DB_DIR / "config"
+GEMINI_COOKIES_FILE = RUNTIME_CONFIG_DIR / "gemini_cookies.json"
+GEMINI_COOKIES_INVALID_FLAG = RUNTIME_CONFIG_DIR / "gemini_cookies_invalid"
+AI_PERSONA_FILE = RUNTIME_CONFIG_DIR / "ai_persona.json"
+NINE_ROUTER_CONFIG_FILE = RUNTIME_CONFIG_DIR / "9router_config.json"
+NINE_ROUTER_RUNTIME_FILE = RUNTIME_CONFIG_DIR / "9router_runtime.json"
+DRM_EVIDENCE_FILE = RUNTIME_CONFIG_DIR / "drm_evidence.json"
+TIKTOK_RATE_LIMITS_FILE = RUNTIME_CONFIG_DIR / "tiktok_rate_limits.json"
+
 STORAGE_PROFILES_DIR = STORAGE_DIR / "profiles"
 STORAGE_MEDIA_DIR = STORAGE_DIR / "media"
 STORAGE_REUP_DIR = STORAGE_MEDIA_DIR / "reup"
 STORAGE_THUMBS_DIR = STORAGE_MEDIA_DIR / "thumbs"
 STORAGE_CONTENT_DIR = STORAGE_MEDIA_DIR / "content"
+THREADS_MEDIA_DIR = STORAGE_MEDIA_DIR / "threads"
 
 LEGACY_DATA_DIR = BASE_DIR / "data"
 LEGACY_CONTENT_DIR = BASE_DIR / "content"
@@ -26,7 +38,7 @@ LEGACY_OUTPUTS_DIR = BASE_DIR / "outputs"
 # Storage cutover mode:
 # - legacy (default): keeps current runtime paths stable.
 # - storage: routes runtime to storage/ layout.
-STORAGE_LAYOUT_MODE = (os.getenv("STORAGE_LAYOUT_MODE", "legacy") or "legacy").strip().lower()
+STORAGE_LAYOUT_MODE = (os.getenv("STORAGE_LAYOUT_MODE", "storage") or "storage").strip().lower()
 if STORAGE_LAYOUT_MODE not in {"legacy", "storage"}:
     STORAGE_LAYOUT_MODE = "legacy"
 
@@ -50,6 +62,7 @@ DONE_DIR = CONTENT_DIR / "done"
 FAILED_DIR = CONTENT_DIR / "failed"
 CONTENT_PROFILES_DIR = PROFILES_DIR
 LOGS_DIR = BASE_DIR / "logs"
+DEBUG_STEPS_DIR = LOGS_DIR / "debug_steps"
 CONTENT_MEDIA_DIR = CONTENT_DIR / "media"
 CONTENT_VIDEO_DIR = CONTENT_DIR / "videos"
 CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
@@ -58,6 +71,9 @@ CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
 DB_PATH = os.environ.get("DB_PATH") or str(DATA_DIR / "auto_publisher.db")
 # Change default to PostgreSQL, but allow env override
 DATABASE_URL = os.environ.get("DATABASE_URL") or "postgresql+psycopg2://admin:admin@localhost/toolsauto_db"
+
+# Local dev web (start.ps1 / manage.py serve)
+WEB_PORT = int(os.getenv("WEB_PORT", "8002"))
 
 # Authentication & Security
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
@@ -242,7 +258,7 @@ CDN_HTMX = (os.getenv("CDN_HTMX") or "https://unpkg.com/htmx.org@1.9.10").strip(
 CDN_TAILWIND = (os.getenv("CDN_TAILWIND") or "https://cdn.tailwindcss.com").strip()
 CDN_CHARTJS = (os.getenv("CDN_CHARTJS") or "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js").strip()
 CDN_APEXCHARTS = (os.getenv("CDN_APEXCHARTS") or "https://cdn.jsdelivr.net/npm/apexcharts").strip()
-CDN_GOOGLE_FONTS = (os.getenv("CDN_GOOGLE_FONTS") or "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap").strip()
+CDN_GOOGLE_FONTS = (os.getenv("CDN_GOOGLE_FONTS") or "https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap").strip()
 CDN_CODEMIRROR_CSS = (os.getenv("CDN_CODEMIRROR_CSS") or "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css").strip()
 CDN_CODEMIRROR_THEME = (os.getenv("CDN_CODEMIRROR_THEME") or "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css").strip()
 CDN_CODEMIRROR_JS = (os.getenv("CDN_CODEMIRROR_JS") or "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js").strip()
@@ -256,28 +272,63 @@ PUBLISHER_PUBLISH_DEADLINE_SEC = int(os.getenv("PUBLISHER_PUBLISH_DEADLINE_SEC",
 PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC = int(
     os.getenv("PUBLISHER_IDLE_ENGAGEMENT_DEADLINE_SEC", "1200")
 )
-PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_DEFAULT_TIMEOUT_MS", "60000"))
 MAINT_LOOP_SLEEP_SEC = int(os.getenv("MAINT_LOOP_SLEEP_SEC", "300"))
 STRATEGIC_BOOST_INTERVAL_SEC = int(os.getenv("STRATEGIC_BOOST_INTERVAL_SEC", "7200"))
 COMMENT_JOB_DELAY_MIN_SEC = int(os.getenv("COMMENT_JOB_DELAY_MIN_SEC", "120"))
 COMMENT_JOB_DELAY_MAX_SEC = int(os.getenv("COMMENT_JOB_DELAY_MAX_SEC", "300"))
 IDLE_ENGAGEMENT_COOLDOWN_MINUTES = int(os.getenv("IDLE_ENGAGEMENT_COOLDOWN_MINUTES", "45"))
 
+
+def _migrate_runtime_file(target: Path, *legacy: Path) -> None:
+    """Copy legacy runtime JSON into RUNTIME_CONFIG_DIR once (backward compatible)."""
+    if target.exists():
+        return
+    for leg in legacy:
+        if not leg or leg == target or not leg.exists():
+            continue
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(leg, target)
+            return
+        except OSError:
+            continue
+
+
+def migrate_legacy_runtime_config_files() -> None:
+    legacy_data_config = DATA_DIR / "config"
+    _migrate_runtime_file(
+        GEMINI_COOKIES_FILE,
+        BASE_DIR / "gemini_cookies.json",
+    )
+    _migrate_runtime_file(
+        GEMINI_COOKIES_INVALID_FLAG,
+        BASE_DIR / "gemini_cookies_invalid",
+    )
+    _migrate_runtime_file(AI_PERSONA_FILE, legacy_data_config / "ai_persona.json")
+    _migrate_runtime_file(NINE_ROUTER_CONFIG_FILE, legacy_data_config / "9router_config.json")
+    _migrate_runtime_file(NINE_ROUTER_RUNTIME_FILE, legacy_data_config / "9router_runtime.json")
+    _migrate_runtime_file(DRM_EVIDENCE_FILE, DATA_DIR / "drm_evidence.json")
+    _migrate_runtime_file(TIKTOK_RATE_LIMITS_FILE, Path("/tmp/tiktok_rate_limits.json"))
+
+
 # Ensure directories exist
 for d in [
     STORAGE_DIR,
     STORAGE_DB_DIR,
+    RUNTIME_CONFIG_DIR,
     STORAGE_PROFILES_DIR,
     STORAGE_MEDIA_DIR,
     STORAGE_REUP_DIR,
     STORAGE_THUMBS_DIR,
     STORAGE_CONTENT_DIR,
+    THREADS_MEDIA_DIR,
     CONTENT_DIR,
     DONE_DIR,
     FAILED_DIR,
     REUP_DIR,
     PROFILES_DIR,
     LOGS_DIR,
+    DEBUG_STEPS_DIR,
     THUMB_DIR,
     CONTENT_MEDIA_DIR,
     CONTENT_VIDEO_DIR,
@@ -285,3 +336,5 @@ for d in [
     OUTPUTS_DIR,
 ]:
     d.mkdir(parents=True, exist_ok=True)
+
+migrate_legacy_runtime_config_files()

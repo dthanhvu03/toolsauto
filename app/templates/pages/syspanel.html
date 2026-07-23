@@ -3,28 +3,38 @@
 {% block title %}System Panel — Auto Publisher{% endblock %}
 
 {% block head_extra %}
-<script src="{{ config.CDN_TAILWIND }}"></script>
-<link
-    href="{{ config.CDN_GOOGLE_FONTS }}"
-    rel="stylesheet">
-<script>
-    tailwind.config = {
-        theme: {
-            extend: {
-                fontFamily: {
-                    sans: ['Inter', 'sans-serif'],
-                    display: ['Outfit', 'sans-serif'],
-                }
-            }
-        }
+<style>
+    .section-card {
+      background: var(--color-surface) !important;
+      border: 1px solid var(--color-border) !important;
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-soft);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+      color: var(--color-ink);
     }
-</script>
-<style type="text/tailwindcss">
-    h1, h2, h3, h4, .font-display { font-family: 'Outfit', sans-serif; }
-    .section-card { @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-6; }
-    .action-btn { @apply flex items-center justify-center w-full sm:w-auto gap-2 px-4 py-2.5 whitespace-nowrap [&>svg]:shrink-0 rounded-xl shadow-sm font-medium text-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-95 select-none cursor-pointer; }
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      white-space: nowrap;
+      border-radius: var(--radius-lg);
+      font-weight: var(--weight-medium);
+      font-size: var(--text-sm);
+      padding: 0.625rem 1rem;
+      transition: transform var(--dur-fast) var(--ease-standard), filter var(--dur-fast) var(--ease-standard);
+      cursor: pointer;
+      user-select: none;
+    }
+    @media (min-width: 640px) {
+      .action-btn { width: auto; }
+    }
+    .action-btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    .action-btn:active { transform: scale(0.97); }
+    .action-btn > svg { flex-shrink: 0; }
     .htmx-request { opacity: 0.6; pointer-events: none; }
-    /* PM2 row button spinner: hidden by default, shown when HTMX request is in flight */
     .htmx-spinner { display: none; }
     .htmx-request .htmx-spinner { display: inline-block; }
     .htmx-request .btn-label { display: none; }
@@ -256,18 +266,25 @@
         </div>
     </div>
 
-    <!-- AI Persona Tuner -->
-    <div class="lg:col-span-1 2xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col">
-        <div class="flex items-center justify-between gap-3 mb-4">
-            <h2 class="text-base font-semibold font-display text-gray-900 flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <!-- AI prompt → AI Studio (persona tuner syspanel đã retired) -->
+    <div class="lg:col-span-1 2xl:col-span-2 rounded-2xl border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] p-4 md:p-5 flex flex-col justify-center gap-3">
+        <div>
+            <h2 class="text-base font-semibold font-display text-[var(--color-ink)] flex items-center gap-2">
+                <svg class="w-5 h-5 text-[var(--color-torch)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg> AI Persona Tuner
-                <span class="text-[10px] font-normal text-gray-400 bg-gray-50 border border-gray-100 rounded-full px-2 py-0.5">Giọng văn Bot</span>
+                </svg>
+                Giọng văn / Persona
             </h2>
+            <p class="text-sm text-[var(--color-mist)] mt-2 leading-relaxed">
+                Persona và prompt caption chỉ sửa trên <strong class="text-[var(--color-ink-soft)]">AI Studio</strong>
+                (nguồn thật cho pipeline). Tuner cũ trên Panel hệ thống đã gỡ vì không còn gắn worker.
+            </p>
         </div>
-        <div hx-get="/syspanel/persona" hx-trigger="load" hx-swap="innerHTML"></div>
+        <a href="/app/ai-studio"
+           class="cave-btn cave-btn-primary h-auto self-start px-4 py-2 text-sm font-semibold">
+            Mở AI Studio →
+        </a>
     </div>
 
     <div class="lg:col-span-1 2xl:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 flex flex-col">

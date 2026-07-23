@@ -4,6 +4,7 @@ Bắt đầu ở đây nếu mới vào repo.
 
 | Doc | Nội dung |
 |-----|----------|
+| [CONFIG.md](CONFIG.md) | **.env + config.py + storage/db/config** — map cấu hình tập trung |
 | [TREE.md](TREE.md) | **Map thư mục + “đọc feature X từ đâu”** |
 | [01_ARCHITECTURE.md](01_ARCHITECTURE.md) | Tổng quan FastAPI / queue / workers / adapters |
 | [ADR-007](../agents/decisions/ADR-007-module-boundary.md) | Module boundary (core / features / platform) |

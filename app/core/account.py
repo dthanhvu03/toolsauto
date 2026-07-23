@@ -150,21 +150,48 @@ class AccountService:
     def trigger_page_sync(db: Session, account_id: int) -> bool:
         import threading
         import sys
-        
+
         account = AccountService.get_account(db, account_id)
         if not account:
             return False
-            
-        def _run_scraper(acc_id):
-            from app.config import BASE_DIR
-            script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "scrape_pages.py"))
+
+        from app.config import BASE_DIR, LOGS_DIR
+
+        script_path = os.path.abspath(os.path.join(str(BASE_DIR), "scripts", "archive", "scrape_pages.py"))
+        if not os.path.isfile(script_path):
+            logger.error("trigger_page_sync: script not found: %s", script_path)
+            raise ValueError(f"Không tìm thấy script sync pages: {script_path}")
+
+        def _run_scraper(acc_id: int) -> None:
             env = os.environ.copy()
-            env["DISPLAY"] = ":99"
-            python_bin = str(BASE_DIR / "venv" / "bin" / "python")
-            subprocess.run([python_bin, script_path, "--account", str(acc_id)], env=env, cwd=str(BASE_DIR))
-            
-        thread = threading.Thread(target=_run_scraper, args=(account_id,))
-        thread.daemon = True
+            env["PYTHONPATH"] = str(BASE_DIR)
+            # DISPLAY only needed on Linux VNC hosts; ignore on Windows.
+            env.setdefault("DISPLAY", ":99")
+            os.makedirs(LOGS_DIR, exist_ok=True)
+            log_file = os.path.join(LOGS_DIR, f"sync_pages_account_{acc_id}.log")
+            try:
+                with open(log_file, "a", encoding="utf-8") as log_handle:
+                    log_handle.write(f"\n--- Sync pages started account={acc_id} ---\n")
+                    log_handle.flush()
+                    result = subprocess.run(
+                        [sys.executable, script_path, "--account", str(acc_id)],
+                        env=env,
+                        cwd=str(BASE_DIR),
+                        stdout=log_handle,
+                        stderr=log_handle,
+                    )
+                    log_handle.write(f"--- Sync pages finished exit={result.returncode} ---\n")
+                if result.returncode != 0:
+                    logger.warning(
+                        "trigger_page_sync account_id=%s exited %s — see %s",
+                        acc_id,
+                        result.returncode,
+                        log_file,
+                    )
+            except Exception as e:
+                logger.exception("trigger_page_sync account_id=%s failed: %s", acc_id, e)
+
+        thread = threading.Thread(target=_run_scraper, args=(account_id,), daemon=True)
         thread.start()
         return True
 
@@ -416,6 +443,82 @@ class AccountService:
         except Exception as e:
             db.rollback()
             raise e
+
+    @classmethod
+    def import_cookies_from_json(cls, db: Session, account_id: int, cookies_json: str) -> Account:
+        """Import browser cookie JSON into the account Playwright profile and verify session."""
+        from app.core.account_cookies import cookies_for_playwright, parse_cookie_json
+
+        account = cls.get_account(db, account_id)
+        if not account:
+            raise ValueError("Không tìm thấy tài khoản.")
+
+        running_jobs = db.query(Job).filter(
+            Job.account_id == account_id,
+            Job.status == JobStatus.RUNNING,
+        ).count()
+        if running_jobs > 0:
+            raise ValueError("Tài khoản đang chạy job — không import cookie lúc này.")
+
+        profile = account.resolved_profile_path
+        if not profile or not os.path.isdir(profile):
+            raise ValueError("Thư mục profile chưa sẵn sàng — thử tạo lại account.")
+
+        raw_items = parse_cookie_json(cookies_json)
+        pw_cookies = cookies_for_playwright(raw_items, account.platform)
+        if not pw_cookies:
+            raise ValueError(
+                "Không có cookie phù hợp "
+                + ("Instagram (.instagram.com)" if account.platform == "instagram" else "Facebook (.facebook.com)")
+                + " trong JSON."
+            )
+
+        cls.kill_login_process(db, account)
+
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as e:
+            raise ValueError(
+                "Máy server chưa cài Playwright — chạy: pip install playwright && python -m playwright install chromium"
+            ) from e
+
+        login_url = cls.get_login_url(account.platform)
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch_persistent_context(
+                    user_data_dir=profile,
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--window-size=1280,720"],
+                )
+                page = browser.pages[0] if browser.pages else browser.new_page()
+                page.set_default_timeout(45000)
+                page.goto(login_url, wait_until="domcontentloaded")
+                browser.add_cookies(pw_cookies)
+                page.goto(login_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(2500)
+                is_logged_in = cls.is_logged_in(page, account.platform)
+                browser.close()
+
+            if is_logged_in:
+                account.login_status = AccountStatus.ACTIVE
+                account.login_error = None
+            else:
+                account.login_status = AccountStatus.INVALID
+                account.login_error = (
+                    "Cookie đã ghi vào profile nhưng chưa vào được session — "
+                    "export đủ cookie đăng nhập (FB: c_user, xs…) hoặc dùng Chrome Playwright."
+                )
+            account.login_process_pid = None
+            db.commit()
+            db.refresh(account)
+            return account
+        except Exception as e:
+            account.login_status = AccountStatus.INVALID
+            account.login_error = f"Import cookie thất bại: {str(e)[:200]}"
+            account.login_process_pid = None
+            db.commit()
+            db.refresh(account)
+            raise ValueError(account.login_error) from e
 
     @classmethod
     def start_login(cls, db: Session, account_id: int):

@@ -62,9 +62,9 @@ class ThreadsService:
     @staticmethod
     def get_dashboard_data(db: Session) -> Dict[str, Any]:
         stats = {
-            "pending": db.query(Job).filter(Job.platform == "threads", Job.status == "PENDING").count(),
-            "success": db.query(Job).filter(Job.platform == "threads", Job.status == "COMPLETED").count(),
-            "failed": db.query(Job).filter(Job.platform == "threads", Job.status == "FAILED").count(),
+            "pending": db.query(Job).filter(Job.platform == "threads", Job.status == JobStatus.PENDING).count(),
+            "success": db.query(Job).filter(Job.platform == "threads", Job.status == JobStatus.DONE).count(),
+            "failed": db.query(Job).filter(Job.platform == "threads", Job.status == JobStatus.FAILED).count(),
         }
         latest_articles = db.query(NewsArticle).order_by(NewsArticle.id.desc()).limit(10).all()
         threads_jobs = db.query(Job).filter(Job.platform == "threads").order_by(Job.id.desc()).limit(10).all()

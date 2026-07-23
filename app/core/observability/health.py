@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 class HealthService:
     @staticmethod
     def get_gemini_health() -> dict:
-        cookie_path = str(config.BASE_DIR / "gemini_cookies.json")
-        invalid_flag = str(config.BASE_DIR / "gemini_cookies_invalid")
+        cookie_path = str(config.GEMINI_COOKIES_FILE)
+        invalid_flag = str(config.GEMINI_COOKIES_INVALID_FLAG)
         
         is_valid = False
         if os.path.exists(invalid_flag):
@@ -228,8 +228,8 @@ class HealthService:
 
     @staticmethod
     def sync_cookies(cookies: list):
-        cookie_path = str(config.BASE_DIR / "gemini_cookies.json")
-        invalid_flag = str(config.BASE_DIR / "gemini_cookies_invalid")
+        cookie_path = str(config.GEMINI_COOKIES_FILE)
+        invalid_flag = str(config.GEMINI_COOKIES_INVALID_FLAG)
         with open(cookie_path, "w") as f:
             json.dump(cookies, f)
         if os.path.exists(invalid_flag):

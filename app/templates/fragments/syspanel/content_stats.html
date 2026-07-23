@@ -51,8 +51,12 @@
         <div class="text-xs text-gray-400 mt-0.5">
             {% if data.size_gb >= 1 %}
             {{ data.size_gb }} GB
+            {% elif data.size_mb is defined and data.size_mb > 0 %}
+            {{ data.size_mb }} MB
+            {% elif data.count > 0 %}
+            &lt; 0.1 MB
             {% else %}
-            {{ (data.size_gb * 1024) | round(0) | int }} MB
+            0 MB
             {% endif %}
         </div>
     </div>

@@ -2,17 +2,11 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse
 import logging
 from app.config import BASE_DIR
-import app.config as config
 
 from app.features.system_panel import service as syspanel_service
 from app.core.pm2_apps import PM2_SAFE_NAMES
 
 APP_DIR = str(BASE_DIR)
-PERSONA_FILE = str(config.STORAGE_DB_DIR / "config" / "ai_persona.json")
-DEFAULT_PERSONA = (
-    "Bạn là chuyên gia content sáng tạo, viết tiếng Việt tự nhiên, gần gũi với người dùng Facebook Việt Nam. "
-    "Hãy viết caption hấp dẫn, giàu cảm xúc, phù hợp với chủ đề video, có thể dùng emoji vừa phải."
-)
 router = APIRouter(prefix="/syspanel", tags=["syspanel"])
 logger = logging.getLogger(__name__)
 
@@ -124,11 +118,11 @@ def cmd_clear_gemini_cookies():
 
 @router.get("/persona", response_class=HTMLResponse)
 def get_persona(request: Request):
-    return syspanel_service.get_persona(request)
+    return syspanel_service.get_persona_retired(request)
 
 @router.post("/persona", response_class=HTMLResponse)
 def save_persona(system_prompt: str = Form("")):
-    return syspanel_service.save_persona(system_prompt)
+    return syspanel_service.save_persona_retired(system_prompt)
 
 @router.get("/fragments/9router-tuner", response_class=HTMLResponse)
 def frag_9router_tuner(request: Request):

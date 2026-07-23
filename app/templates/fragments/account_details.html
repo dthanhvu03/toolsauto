@@ -1,55 +1,74 @@
-<div id="account-{{ account.id }}" class="flex flex-col h-full bg-white animate-in fade-in duration-300">
+﻿<div id="account-{{ account.id }}" class="flex flex-col h-full animate-in fade-in duration-300 cave-detail">
     <!-- 1. Header Section -->
-    <div class="p-5 md:p-6 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50/30">
+    <div class="p-5 md:p-6 border-b border-[var(--color-edge)] flex flex-wrap items-center justify-between gap-4 bg-[var(--color-stone)]/40">
         <div class="flex items-center gap-4">
             <div class="relative">
                 <div
-                    class="w-14 h-14 rounded-2xl {% if account.platform=='facebook' %}bg-blue-600{% elif account.platform=='instagram' %}bg-gradient-to-tr from-pink-500 to-purple-600{% else %}bg-gray-800{% endif %} flex items-center justify-center shadow-md text-white">
+                    class="w-14 h-14 rounded-2xl {% if account.platform=='facebook' %}bg-[var(--color-fb)]{% elif account.platform=='instagram' %}{% else %}bg-[var(--color-ledge)]{% endif %} flex items-center justify-center text-[var(--color-ink)] ring-1 ring-[var(--color-edge)]"
+                    {% if account.platform=='instagram' %}style="background: linear-gradient(to top right, var(--color-ig-from), var(--color-ig-to));"{% endif %}>
                     <span class="font-bold text-xl tracking-tight font-display">{{ account.platform[0]|upper }}</span>
                 </div>
                 {% if account.is_active %}
-                <div
-                    class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-sm">
-                </div>
+                <div class="absolute -top-1 -right-1 w-4 h-4 rounded-full moss-dot border-2 border-[var(--color-deep)]"></div>
                 {% endif %}
             </div>
             <div>
                 <div class="flex items-center gap-2.5">
-                    <h2 class="text-xl font-bold text-gray-900 font-display leading-none">{{ account.name }}</h2>
+                    <h2 class="text-xl font-bold text-[var(--color-ink)] font-display leading-none">{{ account.name }}</h2>
                     <span
-                        class="px-1.5 py-0.5 rounded bg-gray-100 text-[9px] font-bold text-gray-500 uppercase tracking-widest border border-gray-200">{{
+                        class="px-1.5 py-0.5 rounded bg-[var(--color-face)] text-[9px] font-bold text-[var(--color-mist)] uppercase tracking-widest border border-[var(--color-edge)]">{{
                         account.platform }}</span>
                 </div>
                 <div class="flex items-center gap-3 mt-2">
                     <div class="flex items-center gap-1.5">
                         <div
-                            class="w-1.5 h-1.5 rounded-full {% if account.login_status == 'ACTIVE' %}bg-emerald-500{% else %}bg-red-500{% endif %}">
+                            class="w-1.5 h-1.5 rounded-full {% if account.login_status == 'ACTIVE' %}torch-dot{% else %}bg-[var(--color-danger-deep)]{% endif %}">
                         </div>
                         <span
-                            class="text-[10px] font-bold {% if account.login_status == 'ACTIVE' %}text-emerald-600{% else %}text-red-500{% endif %} uppercase tracking-wider">
+                            class="text-[10px] font-bold {% if account.login_status == 'ACTIVE' %}text-[var(--color-torch)]{% else %}text-[var(--color-danger)]{% endif %} uppercase tracking-wider">
                             {{ account.login_status or 'NEW' }} SESSION
                         </span>
                     </div>
-                    <span class="text-[10px] text-gray-300 font-mono">Profile ID: #{{ account.id }}</span>
+                    <span class="text-[10px] text-[var(--color-ash)] font-mono">Hang #{{ account.id }}</span>
                 </div>
+                {% if account.login_error %}
+                <p class="mt-1.5 text-[10px] text-[var(--color-torch)]/90 max-w-md leading-snug" title="{{ account.login_error }}">{{ account.login_error|truncate(120, True, '…') }}</p>
+                {% endif %}
             </div>
         </div>
 
         <div class="flex items-center gap-2">
-            {% if account.login_status in ['NEW', 'INVALID', None] %}
+            {% if account.login_status == 'LOGGING_IN' %}
+            <button type="button" hx-post="/accounts/{{ account.id }}/confirm-login" hx-target="#account-{{ account.id }}"
+                hx-swap="outerHTML"
+                class="h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all border border-[var(--color-moss)]/50 bg-[var(--color-moss)]/15 text-[var(--color-lichen)] hover:bg-[var(--color-moss)] hover:text-[var(--color-deep)] flex items-center gap-1.5">
+                Xác nhận đăng nhập
+            </button>
+            {% elif account.login_status in ['NEW', 'INVALID', None] %}
             <button type="button" hx-post="/accounts/{{ account.id }}/start-login" hx-target="#account-{{ account.id }}"
                 hx-swap="outerHTML"
-                class="h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white shadow-sm flex items-center gap-1.5"
-                onclick="this.disabled=true; this.innerHTML='<div class=\'w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin\'></div> WAIT...';">
+                class="h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all border border-[var(--color-torch)]/40 bg-[var(--color-torch)]/10 text-[var(--color-torch)] hover:bg-[var(--color-torch)] hover:text-[var(--color-ink-inverse)] flex items-center gap-1.5"
+                onclick="this.disabled=true; this.innerHTML='<div class=\'w-3 h-3 border-2 border-[var(--color-torch)] border-t-transparent rounded-full animate-spin\'></div> WAIT...';">
                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
                 </svg> Đăng nhập lại
             </button>
+            {% elif account.login_status == 'ACTIVE' %}
+            <button type="button" hx-post="/accounts/{{ account.id }}/validate-session" hx-target="#account-{{ account.id }}"
+                hx-swap="outerHTML"
+                hx-indicator="#validate-session-spinner-{{ account.id }}"
+                hx-disabled-elt="this"
+                class="h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-wider border border-[var(--color-edge)] bg-[var(--color-face)] text-[var(--color-mist)] hover:border-[var(--color-torch)]/50 hover:text-[var(--color-torch)] disabled:opacity-60 inline-flex items-center gap-2">
+                <span>Kiểm tra session</span>
+                <span id="validate-session-spinner-{{ account.id }}"
+                    class="htmx-indicator text-[9px] text-[var(--color-torch)] normal-case tracking-normal"
+                    aria-hidden="true">đang kiểm…</span>
+            </button>
             {% endif %}
             <button type="button" hx-post="/accounts/{{ account.id }}/toggle" hx-target="#account-{{ account.id }}"
                 hx-swap="outerHTML"
-                class="h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all border shadow-sm flex items-center gap-1.5
-                    {% if account.is_active %}bg-emerald-50 border-emerald-100 text-emerald-600 hover:bg-emerald-100{% else %}bg-gray-50 border-gray-100 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600{% endif %}">
+                class="h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-wider transition-all border flex items-center gap-1.5
+                    {% if account.is_active %}bg-[var(--color-moss)]/15 border-[var(--color-moss)]/40 text-[var(--color-lichen)] hover:bg-[var(--color-moss)]/25{% else %}bg-[var(--color-face)] border-[var(--color-edge)] text-[var(--color-ash)] hover:border-[var(--color-torch)]/40 hover:text-[var(--color-torch)]{% endif %}">
                 {% if account.is_active %}
                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
@@ -62,7 +81,7 @@
             </button>
             <button type="button" hx-post="/accounts/{{ account.id }}/delete" hx-target="#account-{{ account.id }}"
                 hx-swap="none" hx-confirm="Terminate this account?"
-                class="w-9 h-9 flex items-center justify-center rounded-lg bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                class="w-9 h-9 flex items-center justify-center rounded-lg bg-[var(--color-danger-dim)] text-[var(--color-danger)] border border-[var(--color-danger-border)] hover:bg-[var(--color-danger-deep)] hover:text-[var(--color-ink)] transition-all">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -71,19 +90,88 @@
         </div>
     </div>
 
+    {% if cookie_import_ok %}
+    <div id="cookie-import-feedback" class="mx-5 md:mx-6 mt-3 rounded-xl border border-[var(--color-moss)]/50 bg-[var(--color-moss)]/15 px-4 py-3 text-xs text-[var(--color-lichen)] font-semibold">
+        ✓ {{ cookie_import_ok }}
+    </div>
+    {% elif cookie_import_error %}
+    <div id="cookie-import-feedback" class="mx-5 md:mx-6 mt-3 rounded-xl border border-[var(--color-danger-deep)]/50 bg-[var(--color-danger-deep)]/15 px-4 py-3 text-xs text-[var(--color-danger)] font-medium">
+        ✕ {{ cookie_import_error }}
+    </div>
+    {% endif %}
+
+    {% if account.login_status in ['NEW', 'INVALID', None, ''] %}
+    <div class="mx-5 md:mx-6 mt-3 rounded-xl border border-[var(--color-torch)]/35 bg-[var(--color-torch)]/08 px-4 py-3">
+        <p class="text-[11px] font-bold text-[var(--color-torch)] uppercase tracking-wider mb-2">Import cookie (JSON)</p>
+        <p class="text-[11px] text-[var(--color-mist)] mb-2 leading-relaxed">
+            Chưa có session hoặc session hết hạn. Export từ Cookie-Editor trên tab
+            {% if account.platform == 'instagram' %}instagram.com{% else %}facebook.com{% endif %}
+            — FB cần <code class="text-[10px] bg-[var(--color-deep)] px-1 rounded text-[var(--color-torch)]">c_user</code>, <code class="text-[10px] bg-[var(--color-deep)] px-1 rounded text-[var(--color-torch)]">xs</code>.
+        </p>
+        <form hx-post="/accounts/{{ account.id }}/import-cookies" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+            hx-indicator="#cookie-import-spinner-{{ account.id }}"
+            hx-disabled-elt="find button[type=submit]"
+            class="space-y-2">
+            <p class="text-[10px] text-[var(--color-mist)]">Bắt buộc dán <strong class="text-[var(--color-ink)]">JSON thật</strong> từ file export — không gửi dòng placeholder trong ô.</p>
+            <textarea name="cookies_json" rows="5" required
+                placeholder='[{"name":"c_user","value":"...","domain":".facebook.com",...}]'
+                class="w-full text-[11px] font-mono bg-[var(--color-void)] border border-[var(--color-edge)] rounded-lg px-3 py-2 outline-none resize-y min-h-[100px] text-[var(--color-ink)]"></textarea>
+            <div class="flex items-center gap-3">
+                <button type="submit"
+                    class="h-9 px-4 rounded-lg bg-gradient-to-r from-[var(--color-torch)] to-[var(--color-ember)] text-[var(--color-ink-inverse)] text-[10px] font-bold uppercase tracking-wider disabled:opacity-60">
+                    Áp dụng cookie vào profile
+                </button>
+                <span id="cookie-import-spinner-{{ account.id }}"
+                    class="htmx-indicator text-[10px] font-bold text-[var(--color-torch)] uppercase tracking-wider"
+                    aria-hidden="true">
+                    Đang ghi cookie vào Playwright… (10–40s)
+                </span>
+            </div>
+        </form>
+    </div>
+    {% elif account.login_status == 'ACTIVE' %}
+    <div class="mx-5 md:mx-6 mt-3 rounded-xl border border-[var(--color-moss)]/35 bg-[var(--color-moss)]/10 px-4 py-2.5 text-[11px] text-[var(--color-lichen)]">
+        Session đang <strong class="text-[var(--color-ink)]">ACTIVE</strong> — đèn hang còn sáng. Không cần import lại trừ khi FB đá session.
+    </div>
+    <details class="mx-5 md:mx-6 mt-2 rounded-xl border border-[var(--color-edge)] bg-[var(--color-deep)]/60 px-4 py-2 group" {% if cookie_import_ok or cookie_import_error %}open{% endif %}>
+        <summary class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider cursor-pointer select-none py-1 hover:text-[var(--color-torch)]">
+            Cập nhật cookie (nâng cao)
+        </summary>
+        <form hx-post="/accounts/{{ account.id }}/import-cookies" hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
+            hx-indicator="#cookie-overwrite-spinner-{{ account.id }}"
+            hx-disabled-elt="find button[type=submit]"
+            class="space-y-2 pt-2 pb-1">
+            <textarea name="cookies_json" rows="4" required
+                placeholder='Dán JSON cookie mới để thay session...'
+                class="w-full text-[11px] font-mono bg-[var(--color-void)] border border-[var(--color-edge)] rounded-lg px-3 py-2 outline-none resize-y text-[var(--color-ink)]"></textarea>
+            <div class="flex flex-wrap items-center gap-3">
+                <button type="submit"
+                    class="h-8 px-3 rounded-lg bg-[var(--color-ledge)] border border-[var(--color-edge)] hover:border-[var(--color-torch)]/50 text-[var(--color-ink)] text-[10px] font-bold uppercase tracking-wider disabled:opacity-60">
+                    Ghi đè cookie
+                </button>
+                <span id="cookie-overwrite-spinner-{{ account.id }}"
+                    class="htmx-indicator text-[10px] font-bold text-[var(--color-torch)] uppercase tracking-wider"
+                    aria-hidden="true">
+                    Đang ghi đè… Playwright (10–40s) — chờ toast góc phải
+                </span>
+            </div>
+        </form>
+    </details>
+    {% endif %}
+
     <!-- 1.5 Tab Navigation -->
-    <div class="flex items-center gap-6 px-6 border-b border-gray-100 bg-white shrink-0 mt-2">
-        <button type="button" onclick="switchAccountTab('config', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-indigo-600 text-indigo-600 transition-colors">Configuration</button>
-        <button type="button" onclick="switchAccountTab('pages', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-transparent text-gray-400 hover:text-gray-600 transition-colors">Target Pages</button>
+    <div class="flex items-center gap-6 px-6 border-b border-[var(--color-edge)] shrink-0 mt-2">
+        <button type="button" onclick="switchAccountTab('config', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-[var(--color-torch)] text-[var(--color-torch)] transition-colors">Configuration</button>
+        <button type="button" onclick="switchAccountTab('pages', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-transparent text-[var(--color-ash)] hover:text-[var(--color-mist)] transition-colors">Target Pages</button>
     </div>
 
     <!-- 2. Body Section -->
-    <div class="flex-1 overflow-y-auto custom-scrollbar bg-white relative">
+    <div class="flex-1 overflow-y-auto cave-scrollbar relative">
         
         <!-- Tab 1: Config -->
         <div id="tab-config" class="account-tab-content p-5 md:p-8">
             <form hx-post="/accounts/{{ account.id }}/update-limits" hx-target="#account-{{ account.id }}"
-            hx-swap="innerHTML" class="max-w-4xl mx-auto space-y-8">
+            hx-swap="outerHTML" class="max-w-4xl mx-auto space-y-8">
             <input type="hidden" name="competitor_urls" value="">
             <input type="hidden" name="page_niches" value="">
 
@@ -127,12 +215,12 @@
                         <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Global
                             Categories</label>
                         <textarea name="niche_topics" placeholder="decor, fashion, pets..."
-                            class="w-full bg-indigo-50/20 border border-indigo-100 rounded-2xl px-4 py-3 text-xs font-semibold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all min-h-[96px]">{{ account.niche_topics_list }}</textarea>
+                            class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-2xl px-4 py-3 text-xs font-semibold text-[var(--color-ink)] outline-none transition-all min-h-[96px]">{{ account.niche_topics_list }}</textarea>
                     </div>
 
                     <button type="button" hx-post="/accounts/{{ account.id }}/sync-pages"
                         hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
-                        class="w-full h-10 bg-white border border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm"
+                        class="w-full h-10 bg-[var(--color-face)] border border-[var(--color-edge)] text-[var(--color-torch)] hover:border-[var(--color-torch)]/60 hover:bg-[var(--color-torch)]/10 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                         onclick="this.disabled=true; this.querySelector('span').innerText='SYNCING...';">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -148,7 +236,7 @@
                 <div class="flex items-center justify-between pb-1 px-1">
                     <h3 class="text-[10px] font-black text-gray-900 uppercase tracking-widest">Active Targets List</h3>
                     <span
-                        class="text-[9px] font-bold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">{{
+                        class="text-[9px] font-bold text-[var(--color-torch)] bg-[var(--color-torch)]/10 px-2 py-0.5 rounded-full border border-[var(--color-torch)]/25">{{
                         account.managed_pages_list|length }} Slots</span>
                 </div>
 
@@ -160,7 +248,7 @@
                     {% set is_checked = page.url in account.target_pages_list %}
                     {% set niches_val = ', '.join(page_niches.get(page.url, [])) %}
 
-                    <div class="p-4 rounded-2xl border transition-all duration-300 {% if is_checked %}bg-emerald-50/10 border-emerald-200 shadow-sm shadow-emerald-50{% else %}bg-slate-50/30 border-gray-100{% endif %}"
+                    <div class="p-4 rounded-2xl border transition-all duration-300 {% if is_checked %}cave-target-on border-[var(--color-moss)]/45{% else %}bg-[var(--color-face)] border-[var(--color-edge)]{% endif %}"
                         data-page-block>
                         <div class="flex items-center justify-between gap-3 mb-3">
                             <label class="flex items-center gap-2.5 cursor-pointer min-w-0">
@@ -170,13 +258,16 @@
                                 <div class="truncate">
                                     <span class="block text-xs font-bold text-gray-800 leading-tight"
                                         title="{{ page.url }}">{{ page.name }}</span>
-                                    <span class="block text-[9px] text-gray-400 font-mono truncate uppercase mt-0.5">{{
-                                        page.url.split('php?id=')[-1]|truncate(12) }}</span>
+                                    {% if 'php?id=' in page.url %}
+                                    <span class="block text-[9px] text-gray-400 font-mono truncate mt-0.5" title="{{ page.url }}">ID {{ page.url.split('php?id=')[-1].split('&')[0]|truncate(18, True, '…') }}</span>
+                                    {% else %}
+                                    <span class="block text-[9px] text-gray-400 font-mono truncate mt-0.5 lowercase" title="{{ page.url }}">{{ page.url|replace('https://www.facebook.com/', '')|replace('https://facebook.com/', '')|truncate(28, True, '…') }}</span>
+                                    {% endif %}
                                 </div>
                             </label>
                             {% if is_checked %}
                             <span
-                                class="text-[8px] font-black text-emerald-600 border border-emerald-200 px-1.5 py-0.5 rounded uppercase">On</span>
+                                class="text-[8px] font-black text-[var(--color-lichen)] border border-[var(--color-moss)]/40 px-1.5 py-0.5 rounded uppercase">On</span>
                             {% endif %}
                         </div>
 
@@ -205,10 +296,10 @@
             </div>
 
             <!-- Commit Button Container -->
-            <div class="pt-4 pb-12 sticky bottom-0 bg-gradient-to-t from-white to-transparent flex justify-end px-8">
+            <div class="pt-4 pb-12 sticky bottom-0 bg-gradient-to-t from-[var(--color-void)] via-[var(--color-void)]/90 to-transparent flex justify-end px-8">
                 <button type="submit"
-                    class="h-9 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-black text-[10px] uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2 shadow-md shadow-indigo-100">
-                    <svg class="w-3.5 h-3.5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    class="h-10 px-6 bg-gradient-to-r from-[var(--color-torch)] to-[var(--color-ember)] hover:brightness-105 text-[var(--color-ink-inverse)] rounded-lg font-black text-[10px] uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
                     </svg>
                     Commit Configuration
@@ -278,32 +369,30 @@
             var container = block.querySelector('[data-comp-container]');
             if (container) {
                 container.style.display = cb.checked ? '' : 'none';
-                block.classList.remove('bg-emerald-50/10', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50', 'bg-slate-50/30', 'border-gray-100');
+                block.classList.remove('cave-target-on', 'bg-emerald-50/10', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50', 'bg-slate-50/30', 'border-gray-100', 'bg-[var(--color-face)]', 'border-[var(--color-edge)]');
                 if (cb.checked) {
-                    block.classList.add('bg-emerald-50/10', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50');
+                    block.classList.add('cave-target-on');
+                    block.style.borderColor = 'rgba(125, 154, 106, 0.45)';
                 } else {
-                    block.classList.add('bg-slate-50/30', 'border-gray-100');
+                    block.classList.add('bg-[var(--color-face)]', 'border-[var(--color-edge)]');
+                    block.style.borderColor = '';
                 }
             }
         }
 
         function switchAccountTab(tabId, btnEl) {
-            // Hide all contents
             document.querySelectorAll('.account-tab-content').forEach(function(el) {
                 el.style.display = 'none';
             });
-            // Show target content
             var target = document.getElementById('tab-' + tabId);
             if(target) target.style.display = 'block';
 
-            // Reset all buttons
             document.querySelectorAll('.account-tab-btn').forEach(function(btn) {
-                btn.classList.remove('border-indigo-600', 'text-indigo-600');
-                btn.classList.add('border-transparent', 'text-gray-400');
+                btn.classList.remove('border-[var(--color-torch)]', 'text-[var(--color-torch)]', 'border-[var(--color-torch)]', 'text-[var(--color-torch)]', 'border-indigo-600', 'text-indigo-600');
+                btn.classList.add('border-transparent', 'text-[var(--color-ash)]');
             });
-            // Highlight active button
-            btnEl.classList.remove('border-transparent', 'text-gray-400');
-            btnEl.classList.add('border-indigo-600', 'text-indigo-600');
+            btnEl.classList.remove('border-transparent', 'text-[var(--color-ash)]', 'text-[var(--color-ash)]', 'text-gray-400');
+            btnEl.classList.add('border-[var(--color-torch)]', 'text-[var(--color-torch)]');
         }
     </script>
 </div>

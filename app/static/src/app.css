@@ -4,13 +4,14 @@
 
 @layer base {
   :root{
-    --bg: #F8FAFC;
-    --surface: #FFFFFF;
-    --text: #0F172A;
-    --muted: #475569;
-    --border: #E2E8F0;
-    --primary: #4F46E5;
-    --primaryHover: #4338CA;
+    /* Cave theme — keep in sync with /static/cave-tokens.css */
+    --bg: #0c0b0a;
+    --surface: #1c1916;
+    --text: #ebe4d8;
+    --muted: #9a9186;
+    --border: #453f36;
+    --primary: #e09a3e;
+    --primaryHover: #c46b2b;
   }
   html, body {
     height: 100%;

@@ -2,89 +2,116 @@
 
 {% block title %}AI Studio • Auto Publisher{% endblock %}
 {% block page_title %}AI Prompt Studio{% endblock %}
-{% block page_subtitle %}Quản lý Persona, cấu hình thuật toán và test nội dung trực tiếp với Google Gemini.{% endblock %}
+{% block page_subtitle %}Thư viện prompt (Facebook caption + Threads). Placeholder Threads: {title}, {summary}, {source_name}, {max_chars}. Sandbox Gemini cho persona Facebook.{% endblock %}
 
 {% block head_extra %}
 <script>
+  var NAV_ACTIVE = ['bg-[var(--color-torch-dim)]', 'border-[var(--color-torch-border)]', 'text-[var(--color-torch)]'];
+  var NAV_IDLE = ['border-transparent', 'text-[var(--color-mist)]', 'hover:bg-[var(--color-torch-dim)]'];
+
   function selectPrompt(key, title, content) {
     document.getElementById('current-prompt-key').value = key;
     document.getElementById('prompt-title').innerText = title;
-    document.getElementById('prompt-editor').value = decodeURIComponent(content);
-    
-    // update active states
-    document.querySelectorAll('.prompt-nav-item').forEach(el => {
-      if(el.dataset.key === key) {
-        el.classList.add('bg-indigo-50', 'border-indigo-100', 'text-indigo-700');
-        el.classList.remove('border-transparent', 'text-gray-500', 'hover:bg-gray-50');
+    document.getElementById('prompt-editor').value = content;
+    document.querySelectorAll('.prompt-nav-item').forEach(function (el) {
+      NAV_ACTIVE.forEach(function (c) { el.classList.remove(c); });
+      NAV_IDLE.forEach(function (c) { el.classList.remove(c); });
+      // legacy class cleanup
+      ['bg-indigo-50', 'border-indigo-100', 'text-indigo-700', 'border-transparent', 'text-gray-500', 'hover:bg-gray-50'].forEach(function (c) {
+        el.classList.remove(c);
+      });
+      if (el.dataset.key === key) {
+        NAV_ACTIVE.forEach(function (c) { el.classList.add(c); });
       } else {
-        el.classList.remove('bg-indigo-50', 'border-indigo-100', 'text-indigo-700');
-        el.classList.add('border-transparent', 'text-gray-500', 'hover:bg-gray-50');
+        NAV_IDLE.forEach(function (c) { el.classList.add(c); });
       }
     });
+  }
+  function activatePromptNav(btn) {
+    var key = btn.getAttribute('data-key');
+    var title = btn.getAttribute('data-title');
+    var raw = btn.getAttribute('data-value');
+    var value = '';
+    try {
+      value = raw ? JSON.parse(raw) : '';
+    } catch (e) {
+      value = raw || '';
+    }
+    selectPrompt(key, title, value);
   }
 </script>
 <style>
   .ai-editor {
     resize: vertical; min-height: 480px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 14px; line-height: 1.6;
+    background: var(--color-surface-sunken) !important;
+    border-color: var(--color-border) !important;
+    color: var(--color-ink) !important;
   }
-  
-  /* HTMX Loading States */
+  .ai-editor:focus {
+    border-color: var(--color-torch) !important;
+    box-shadow: 0 0 0 3px var(--color-focus-ring) !important;
+  }
   .htmx-loading-show { display: none; }
   .htmx-request .htmx-loading-show { display: block; }
   .htmx-request .htmx-loading-hide { display: none; }
-  .htmx-request button[type="submit"] { opacity: 0.7; pointer-events: none; }
-  .htmx-request button[type="submit"] { cursor: not-allowed; }
+  .htmx-request button[type="submit"] { opacity: 0.7; pointer-events: none; cursor: not-allowed; }
 </style>
 {% endblock %}
 
 {% block content %}
+{% macro prompt_nav_btn(info, title_prefix, extra_class='border-transparent text-[var(--color-mist)] hover:bg-[var(--color-torch-dim)]') %}
+<button type="button"
+  class="prompt-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors {{ extra_class }}"
+  data-key="{{ info.key }}"
+  data-title="{{ title_prefix }}: {{ info.label }}"
+  data-value="{{ info.value | tojson }}">
+  <span class="text-[var(--color-ash)] w-5 h-5 flex items-center justify-center">{{ info.icon|safe }}</span>
+  <span class="truncate">{{ info.label }}</span>
+</button>
+{% endmacro %}
+
 <div class="max-w-[1400px]">
   
   <div class="flex flex-col lg:flex-row gap-6 items-start">
     
     <!-- Left Sidebar (Navigation) -->
-    <div class="w-full lg:w-64 shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm sticky top-24">
-      <div class="p-4 border-b border-gray-50 bg-gray-50/50">
-        <div class="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-1">Library</div>
-        <div class="font-bold text-sm text-gray-900">AI Templates</div>
+    <div class="w-full lg:w-64 shrink-0 cave-card sticky top-24">
+      <div class="p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)]">
+        <div class="text-[10px] font-extrabold text-[var(--color-ash)] uppercase tracking-widest mb-1">Library</div>
+        <div class="font-bold text-sm text-[var(--color-ink)]">AI Templates</div>
       </div>
       
-      <div class="p-2 flex flex-col gap-1 max-h-[60vh] overflow-y-auto">
-        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mt-2 mb-1">Personas (Ngách)</div>
+      <div class="p-2 flex flex-col gap-1 max-h-[60vh] overflow-y-auto cave-scrollbar">
+        <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest px-2 mt-2 mb-1">Personas (Ngách)</div>
         {% for id, info in personas.items() %}
-        <button type="button" 
-          onclick="selectPrompt('{{ info.key }}', 'Persona: {{ info.label }}', encodeURIComponent(`{{ info.value | replace('`', '\\`') }}`))"
-          class="prompt-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors {% if loop.first %}bg-indigo-50 border-indigo-100 text-indigo-700{% else %}border-transparent text-gray-500 hover:bg-gray-50{% endif %}"
-          data-key="{{ info.key }}">
-          <span class="text-gray-400 w-5 h-5 flex items-center justify-center">{{ info.icon|safe }}</span>
-          <span class="truncate">{{ info.label }}</span>
-        </button>
+        {{ prompt_nav_btn(info, 'Persona', 'bg-[var(--color-torch-dim)] border-[var(--color-torch-border)] text-[var(--color-torch)]' if loop.first else 'border-transparent text-[var(--color-mist)] hover:bg-[var(--color-torch-dim)]') }}
         {% endfor %}
         
         <div class="my-2 border-t border-gray-100 mx-2"></div>
         
         <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-1">Configs (Lõi lõi)</div>
         {% for id, info in configs.items() %}
-        <button type="button" 
-          onclick="selectPrompt('{{ info.key }}', 'Config: {{ info.label }}', encodeURIComponent(`{{ info.value | replace('`', '\\`') }}`))"
-          class="prompt-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors border-transparent text-gray-500 hover:bg-gray-50"
-          data-key="{{ info.key }}">
-          <span class="text-gray-400 w-5 h-5 flex items-center justify-center">{{ info.icon|safe }}</span>
-          <span class="truncate">{{ info.label }}</span>
-        </button>
+        {{ prompt_nav_btn(info, 'Config') }}
+        {% endfor %}
+        
+        <div class="my-2 border-t border-gray-100 mx-2"></div>
+        
+        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-1">Platforms</div>
+        {% for id, info in (platforms or {}).items() %}
+        {{ prompt_nav_btn(info, 'Platform') }}
         {% endfor %}
       </div>
     </div>
 
     <!-- Center Panel (Editor) -->
-    <div class="flex-1 min-w-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="flex-1 min-w-0 cave-card overflow-hidden">
       <!-- Header -->
-      <div class="px-6 py-5 border-b border-gray-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-4">
+      <div class="px-6 py-5 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)] flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 id="prompt-title" class="text-lg font-display font-bold text-gray-900">Persona: {{ personas['general'].label }}</h2>
-          <p class="text-xs text-gray-500 mt-1 flex items-center gap-2">Chỉnh sửa nội dung prompt & Lưu trực tiếp vào Database.</p>
+          <h2 id="prompt-title" class="text-lg font-display font-bold text-[var(--color-ink)]">Persona: {{ personas['general'].label }}</h2>
+          <p class="text-xs text-[var(--color-mist)] mt-1 flex items-center gap-2">Chỉnh sửa nội dung prompt & Lưu trực tiếp vào Database.</p>
         </div>
       </div>
       
@@ -93,18 +120,18 @@
         <input type="hidden" name="key" id="current-prompt-key" value="{{ personas['general'].key }}">
         
         <div class="mb-3 flex flex-wrap items-center gap-2">
-          <span class="text-xs font-semibold text-gray-500 mr-2">Cú pháp chèn nhanh:</span>
-          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[POST_TITLE]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-gray-100 text-gray-600 hover:text-indigo-600 border border-gray-200 transition-colors">[[POST_TITLE]]</button>
-          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[GROUP_NAME]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-gray-100 text-gray-600 hover:text-indigo-600 border border-gray-200 transition-colors">[[GROUP_NAME]]</button>
-          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[LINK]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-gray-100 text-gray-600 hover:text-indigo-600 border border-gray-200 transition-colors">[[LINK]]</button>
+          <span class="text-xs font-semibold text-[var(--color-mist)] mr-2">Cú pháp chèn nhanh:</span>
+          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[POST_TITLE]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-[var(--color-ledge)] text-[var(--color-mist)] hover:text-[var(--color-torch)] border border-[var(--color-border)] transition-colors">[[POST_TITLE]]</button>
+          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[GROUP_NAME]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-[var(--color-ledge)] text-[var(--color-mist)] hover:text-[var(--color-torch)] border border-[var(--color-border)] transition-colors">[[GROUP_NAME]]</button>
+          <button type="button" onclick="document.getElementById('prompt-editor').value += ' [[LINK]]'" class="text-[10px] font-mono px-2 py-1 rounded bg-[var(--color-ledge)] text-[var(--color-mist)] hover:text-[var(--color-torch)] border border-[var(--color-border)] transition-colors">[[LINK]]</button>
         </div>
 
         <textarea name="value" id="prompt-editor"
-          class="ai-editor w-full rounded-xl border border-gray-200 bg-gray-50 p-4 text-gray-700 focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none transition-colors shadow-inner" 
+          class="ai-editor w-full rounded-xl border p-4 outline-none transition-colors shadow-inner" 
           spellcheck="false">{{ personas['general'].value }}</textarea>
 
         <div class="mt-6 flex justify-end">
-          <button type="submit" class="h-10 px-6 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-sm font-bold flex items-center gap-2 transition-all shadow-sm active:scale-95">
+          <button type="submit" class="cave-btn cave-btn-primary h-10 px-6 text-sm flex items-center gap-2">
             <svg class="w-4 h-4 htmx-loading-hide" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
             <svg class="w-4 h-4 htmx-loading-show animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
             <span class="htmx-loading-hide">Lưu xuống hệ thống</span>
@@ -115,10 +142,10 @@
     </div>
 
     <!-- Right Panel (Sandbox) -->
-    <div class="w-full lg:w-[380px] xl:w-[420px] shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden sticky top-24">
-      <div class="px-5 py-4 border-b border-gray-100 bg-emerald-50/40">
-        <h2 class="text-sm font-display font-bold text-gray-900 flex items-center gap-2">
-          <svg class="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+    <div class="w-full lg:w-[380px] xl:w-[420px] shrink-0 cave-card overflow-hidden sticky top-24">
+      <div class="px-5 py-4 border-b border-[var(--color-border)] bg-[var(--color-moss-dim)]">
+        <h2 class="text-sm font-display font-bold text-[var(--color-ink)] flex items-center gap-2">
+          <svg class="w-5 h-5 text-[var(--color-moss)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
           Gemini Live Sandbox
         </h2>
       </div>
@@ -167,4 +194,19 @@
 
   </div>
 </div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.prompt-nav-item').forEach(function (btn) {
+      btn.addEventListener('click', function () { activatePromptNav(btn); });
+    });
+    {% if initial_key %}
+    var key = {{ initial_key | tojson }};
+    var deeplink = document.querySelector('.prompt-nav-item[data-key="' + key + '"]');
+    if (deeplink) activatePromptNav(deeplink);
+    {% endif %}
+  });
+</script>
 {% endblock %}

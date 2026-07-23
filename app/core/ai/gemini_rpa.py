@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 import app.config as config
 
-COOKIE_PATH = str(config.BASE_DIR / "gemini_cookies.json")
-DEBUG_DIR = str(config.BASE_DIR / "debug_steps")
+COOKIE_PATH = str(config.GEMINI_COOKIES_FILE)
+DEBUG_DIR = str(config.DEBUG_STEPS_DIR)
 
 # Xvfb đã khởi động trong process này (tránh gọi nhiều lần)
 _xvfb_process = None
@@ -287,7 +287,7 @@ class GeminiRPAService:
             logger.error("Cookie hết hạn! Vui lòng đăng nhập lại.")
             # Ghi flag để UI dashboard hiển thị Expired ngay lập tức
             try:
-                invalid_path = str(config.BASE_DIR / "gemini_cookies_invalid")
+                invalid_path = str(config.GEMINI_COOKIES_INVALID_FLAG)
                 with open(invalid_path, "w") as f:
                     f.write(str(int(time.time())))
             except Exception:

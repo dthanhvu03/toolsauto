@@ -95,8 +95,8 @@ class CaptionPayload(BaseModel):
 
 
 class AICaptionPipeline:
-    CONFIG_PATH = str(config.DATA_DIR / "config" / "9router_config.json")
-    RUNTIME_STATE_PATH = str(config.DATA_DIR / "config" / "9router_runtime.json")
+    CONFIG_PATH = str(config.NINE_ROUTER_CONFIG_FILE)
+    RUNTIME_STATE_PATH = str(config.NINE_ROUTER_RUNTIME_FILE)
 
     def __init__(self):
         self._config_lock = threading.Lock()
