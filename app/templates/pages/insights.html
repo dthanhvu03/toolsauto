@@ -319,6 +319,23 @@
                 <p class="text-xs text-gray-400 italic">Đang tải outcomes…</p>
             </div>
         </div>
+
+        <!-- VIP: Reup A/B presets -->
+        <div id="reupVariantsPanel" class="insight-card p-5 mt-2">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <h4 class="text-sm font-display font-bold text-gray-900">Reup Anti-dupe Variants</h4>
+                    <p class="text-[11px] text-gray-500 mt-0.5">safe / aggressive / reels_short — đếm theo material ingest + re-process</p>
+                </div>
+                <button type="button" onclick="loadReupVariants()"
+                    class="text-[10px] font-bold uppercase tracking-wider text-[var(--color-torch)] hover:underline">
+                    Làm mới
+                </button>
+            </div>
+            <div id="reupVariantsList" class="space-y-2 text-sm text-gray-600">
+                <p class="text-xs text-gray-400 italic">Đang tải variants…</p>
+            </div>
+        </div>
     </div>
 
     <!-- Metrics Grid -->
@@ -1190,6 +1207,7 @@
             });
             loadBoostProposals();
             loadBoostOutcomes();
+            loadReupVariants();
         } catch (err) {
             console.error("Strategic Analysis load error:", err);
         }
@@ -1297,6 +1315,37 @@
         } catch (err) {
             console.error('Boost outcomes load error:', err);
             box.innerHTML = '<p class="text-xs text-red-500">Không tải được closed-loop outcomes.</p>';
+        }
+    }
+
+    async function loadReupVariants() {
+        const box = document.getElementById('reupVariantsList');
+        if (!box) return;
+        try {
+            const res = await fetch('/insights/api/reup-variants');
+            const json = await res.json();
+            const rows = json.data || [];
+            if (!rows.length) {
+                box.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có reup variant. Chạy ingest/re-process để ghi preset.</p>';
+                return;
+            }
+            box.innerHTML = rows.map((r) => {
+                const when = r.last_at ? new Date(r.last_at * 1000).toLocaleString('vi-VN') : '';
+                return `
+                <div class="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
+                    <div>
+                        <div class="text-xs font-bold text-gray-900">${String(r.preset || '').replace(/</g,'&lt;')}</div>
+                        <div class="text-[10px] text-gray-400 mt-0.5">${when ? 'last ' + when : ''}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="text-sm font-bold text-gray-900">${Number(r.count || 0)}</div>
+                        <div class="text-[10px] text-gray-400">avg ${Number(r.avg_runtime_ms || 0)}ms</div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (err) {
+            console.error('Reup variants load error:', err);
+            box.innerHTML = '<p class="text-xs text-red-500">Không tải được reup variants.</p>';
         }
     }
 

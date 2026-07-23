@@ -142,3 +142,11 @@ def reject_boost_proposal(material_id: int, db: Session = Depends(get_db)):
 def list_boost_outcomes(db: Session = Depends(get_db)):
     return insights_service.list_boost_outcomes(db)
 
+
+@router.get("/api/reup-variants")
+def list_reup_variants():
+    """A/B anti-dupe preset usage for closed-loop Insights."""
+    from app.features.viral_intake.reup_variants import list_variant_stats
+
+    return {"data": list_variant_stats()}
+

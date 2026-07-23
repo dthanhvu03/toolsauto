@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import shutil
 from glob import glob
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -185,3 +186,78 @@ class ViralService:
         if material:
             db.delete(material)
             db.commit()
+
+    @staticmethod
+    def reprocess_reup(
+        db: Session,
+        material_id: int,
+        preset: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """Re-run anti-dupe on the latest _reup file, keeping old output if new pass fails."""
+        material = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not material:
+            return False, "Không tìm thấy viral material."
+
+        source_path = ViralService.find_reup_path(material.id, material.platform)
+        if not source_path or not os.path.isfile(source_path):
+            return False, "Chưa có file _reup để re-process."
+
+        from app.features.viral_intake.reup_config import resolve_preset
+        from app.features.viral_intake.reup_processor import ReupProcessor
+        from app.features.viral_intake.reup_variants import record_reup_variant
+
+        niches: list[str] = []
+        if material.target_page and material.scraped_by_account_id:
+            try:
+                from app.core.strategic import PageStrategicService
+                niches = PageStrategicService._lookup_page_niches(
+                    db, material.scraped_by_account_id, material.target_page,
+                ) or []
+            except Exception:
+                niches = []
+        resolved_preset = resolve_preset(
+            page_url=material.target_page,
+            niches=niches,
+            explicit=preset,
+            material_id=material.id,
+        )
+
+        work_path = f"{source_path}.reprocess-src.mp4"
+        try:
+            shutil.copy2(source_path, work_path)
+        except OSError as e:
+            return False, f"Không thể chuẩn bị file re-process: {e}"
+
+        try:
+            result = ReupProcessor.process(
+                input_path=work_path,
+                platform=material.platform or "unknown",
+                output_dir=os.path.dirname(source_path),
+                preset=resolved_preset,
+                force=True,
+                output_path=source_path,
+            )
+            if not result.success or not result.output_path:
+                return False, result.error or "Re-process anti-dupe thất bại."
+
+            try:
+                record_reup_variant(
+                    material_id=material.id,
+                    preset=resolved_preset,
+                    platform=material.platform,
+                    target_page=material.target_page,
+                    metrics=result.metrics,
+                    source="reprocess",
+                )
+            except Exception:
+                pass
+
+            material.last_error = None
+            db.commit()
+            return True, f"Đã re-process anti-dupe (preset={resolved_preset})."
+        finally:
+            try:
+                if os.path.exists(work_path):
+                    os.remove(work_path)
+            except OSError:
+                pass
