@@ -12,6 +12,20 @@ from app.core.queue import tracer as job_tracer
 
 from app.features.facebook.adapter import FacebookAdapter, PageMismatchError
 
+# Canonical job.platform / registry keys — see app.constants.Platform
+_PLATFORM_ALIASES: dict[str, str] = {
+    "fb": Platform.FACEBOOK,
+}
+
+
+def normalize_platform(platform: str | None) -> str:
+    """Return a single canonical platform key (lowercase StrEnum value)."""
+    if not platform:
+        return ""
+    key = str(platform).strip().lower()
+    return _PLATFORM_ALIASES.get(key, key)
+
+
 class DummyAdapter(AdapterInterface):
     """A dummy adapter for scaffolding and testing."""
     def open_session(self, profile_path: str) -> bool:
@@ -33,8 +47,11 @@ def get_adapter(platform: str) -> AdapterInterface:
     """
     Prefer DB-driven adapter from WorkflowRegistry (platform_configs.adapter_class).
     Fall back to legacy routing if Registry fails or returns DummyAdapter/GenericAdapter
-    for platforms that have dedicated adapters (facebook, tiktok, instagram).
+    for platforms that have dedicated adapters (facebook, threads, tiktok, instagram).
+
+    ``platform`` is normalized via ``normalize_platform`` — must match ``app.constants.Platform``.
     """
+    platform = normalize_platform(platform)
     from app.adapters.generic.adapter import GenericAdapter
 
     from app.features.facebook.adapter import FacebookAdapter
@@ -115,6 +132,7 @@ class Dispatcher:
     @staticmethod
     def _inject_cta(platform: str, text: str, locale: str = "vi") -> str:
         """Inject random CTA into raw link text using Registry phase 2."""
+        platform = normalize_platform(platform)
         if not text: return text
         lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
         if all(l.startswith('http') for l in lines) and lines:
@@ -148,7 +166,10 @@ class Dispatcher:
     
     @staticmethod
     def dispatch(job: Job, db=None) -> PublishResult:
-        adapter = get_adapter(job.platform)
+        platform_key = normalize_platform(getattr(job, "platform", None))
+        if platform_key and platform_key != getattr(job, "platform", None):
+            job.platform = platform_key
+        adapter = get_adapter(platform_key or getattr(job, "platform", ""))
         if not adapter:
             return PublishResult(ok=False, is_fatal=True, error="Unknown platform adapter")
             
