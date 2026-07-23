@@ -3,25 +3,24 @@
 ## System State
 
 - Local: **http://127.0.0.1:8002**
-- AI: `AIUseCases` · VIP: `d3c0ed2` · Perf N+1: working tree (uncommitted)
+- **PLAN-040 platform silos:** Done (commits on branch; sidebar + dispatch + hooks)
+- Prior: VIP `d3c0ed2` · Perf N+1 uncommitted (separate from silos work)
 
 ## Done This Session [2026-07-23]
 
-### VIP (committed)
-- Accounts Config/Target split + Viral `_reup` preview + Insights closed-loop → `d3c0ed2`
+### PLAN-040 — Platform silos (phases 0–5)
 
-### Perf N+1 (implemented, chưa commit)
-1. Viral table: `batch_reup_by_id` (1 walk disk + 1 Job batch)
-2. Jobs + Discovery: `selectinload(account)`
-3. `scan.py`: prefetch normalized URL set
-4. `processor.py`: prefetch NEW **per account** (A queries, cap/limit) + REUP cap GROUP BY
-5. `strategic.run_auto_boost`: batch cooldown/accounts/top posts; niche pool + **SQL fallback** nếu miss
-6. `discovery_scraper` + `ai_generator` cache/selectinload
+1. **Inventory** in `agents/plans/archive/PLAN-040-platform-silos.md`
+2. **Dispatch:** `normalize_platform()` + `app/adapters/README.md`; public `__init__.py` for facebook/instagram/tiktok
+3. **Docs:** FB ownership of `core.strategic`; viral TikTok→FB silo note
+4. **UI:** Sidebar sections Chung / Facebook / Threads / Giám sát / Cấu hình (`app/templates/layouts/app.html`)
+5. **Maintenance:** `facebook.strategic_boost` feature hook (`bootstrap_hooks.py`)
+6. **ADR-008** platform silo surfaces
 
-**Review pass 2:** siết memory starve + niche miss; chưa có benchmark SQL runtime.
+**Smoke:** `py -3 -c "import app.main"` failed in agent shell (no sqlalchemy on default interpreter); re-run in project venv before deploy.
 
 ## Next Action
 
-1. Commit perf N+1 khi Owner OK.
-2. Optional: log timer `get_viral_table_data` để đo trước/sau.
-3. Archive PLAN-038/039 + TASK-040/041 sau UI confirm.
+1. Owner: confirm sidebar grouping in browser.
+2. Optional: commit perf N+1 batch (separate from silos).
+3. Archive PLAN-038/039 + TASK-040/041 when settings split confirmed.
