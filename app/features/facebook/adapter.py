@@ -839,12 +839,10 @@ class FacebookAdapter(AdapterInterface):
                         job_id=job.id, reason="not in active_steps")
             else:
                 try:
-                    if target_page_url:
-                        pre_reels_url = target_page_url.rstrip('/') + '/reels_tab' if '?' not in target_page_url else target_page_url + '&sk=reels_tab'
-                    else:
-                        pre_reels_url = f"{FACEBOOK_HOST}/me/reels_tab"
-                    self._safe_goto(pre_reels_url, wait_until="domcontentloaded", timeout=15000)
-                    self.page.wait_for_timeout(6000)
+                    reels_pre = FacebookReelsPage(self.page, self.logger)
+                    if not reels_pre.navigate_to_reels_tab(target_page_url):
+                        raise RuntimeError("navigate_to_reels_tab failed")
+                    self.page.wait_for_timeout(3000)
                     for link in self.page.locator('a').all():
                         try:
                             href = link.get_attribute("href")
@@ -854,8 +852,12 @@ class FacebookAdapter(AdapterInterface):
                                 if full not in pre_existing_reels:
                                     pre_existing_reels.append(full)
                         except Exception as e:
-                            self.logger.warning("FacebookAdapter: Swallowed exception at line 610: %s", e)
-                    self.logger.info("FacebookAdapter: Pre-scanned %d existing reels before posting.", len(pre_existing_reels))
+                            self.logger.warning("FacebookAdapter: Swallowed exception during pre_scan link: %s", e)
+                    self.logger.info(
+                        "FacebookAdapter: Pre-scanned %d existing reels before posting (url=%s).",
+                        len(pre_existing_reels),
+                        FacebookReelsPage.reels_tab_url(target_page_url),
+                    )
                 except Exception as e:
                     self.logger.warning("FacebookAdapter: Pre-scan reels failed: %s. Proceeding without.", e)
 
@@ -924,8 +926,25 @@ class FacebookAdapter(AdapterInterface):
 
             try:
                 file_input.set_input_files(job.media_path)
-                self.logger.info("FacebookAdapter: Media attached. Waiting for preview...")
-                self.page.wait_for_timeout(self._get_dynamic_timing("upload_settle_wait", 8000))
+                self.logger.info("FacebookAdapter: Media attached. Waiting for preview/Next ready...")
+                upload_timeout = self._get_dynamic_timing("upload_settle_wait", 60000)
+                # Dynamic timing may still be a short settle; treat values <15s as minimum settle only.
+                if upload_timeout < 15000:
+                    ready = reels.wait_until_upload_ready(
+                        surface,
+                        timeout_ms=60000,
+                        min_wait_ms=max(upload_timeout, 1500),
+                    )
+                else:
+                    ready = reels.wait_until_upload_ready(
+                        surface,
+                        timeout_ms=upload_timeout,
+                        min_wait_ms=1500,
+                    )
+                if not ready:
+                    self.logger.warning(
+                        "FacebookAdapter: Upload ready wait timed out — continuing with best-effort surface."
+                    )
             except Exception as e:
                 reels.log_surface_inventory(surface, "upload_media_failed")
                 return self._failure_result(
@@ -954,32 +973,30 @@ class FacebookAdapter(AdapterInterface):
             ]
             
             found_caption = False
-            for loop_idx in range(15): # Max 15 attempts (roughly 30-40 seconds)
+            for loop_idx in range(15):  # Max ~15 attempts with smart Next wait
                 # 1. Check if we are already at the caption screen
                 caption_loc = self._wait_and_locate_array(caption_selectors, timeout_ms=1000)
                 if caption_loc:
                     self.logger.info("FacebookAdapter: Đã thấy khu vực nhập caption (Step 3).")
                     found_caption = True
                     break
-                    
-                # 2. If not, look for a "Next" button and click it
+
+                # 2. Wait for an enabled Next, then click to advance
                 surface = reels.find_active_publish_surface()
-                next_btn = reels.find_next_button(surface)
+                next_btn = reels.wait_until_next_enabled(surface, timeout_ms=4000, poll_ms=800)
                 if next_btn and self._is_visible(next_btn):
-                    is_disabled = next_btn.get_attribute("aria-disabled") == "true"
-                    if not is_disabled:
-                        self.logger.info("FacebookAdapter: Found 'Next' button, clicking to advance...")
-                        try:
-                            next_btn.click(timeout=3000, force=True)
-                            self.page.wait_for_timeout(2000) # Wait for animation
-                        except Exception as e:
-                            self.logger.warning("FacebookAdapter: Click Next error: %s", e)
-                    else:
-                        self.logger.debug("FacebookAdapter: 'Next' button is disabled (video processing?), waiting...")
+                    self.logger.info("FacebookAdapter: Found enabled 'Next' button, clicking to advance...")
+                    try:
+                        next_btn.click(timeout=3000, force=True)
+                        self.page.wait_for_timeout(1500)
+                    except Exception as e:
+                        self.logger.warning("FacebookAdapter: Click Next error: %s", e)
                 else:
-                    self.logger.debug("FacebookAdapter: No 'Next' button and no 'Caption' box yet. Waiting...")
-                
-                self.page.wait_for_timeout(1000)
+                    self.logger.debug(
+                        "FacebookAdapter: No enabled Next yet (video processing?). loop=%s",
+                        loop_idx,
+                    )
+                    self.page.wait_for_timeout(1000)
 
             if not found_caption:
                 self.logger.warning("FacebookAdapter: Chờ khu vực caption quá lâu hoặc không thấy qua list selectors.")

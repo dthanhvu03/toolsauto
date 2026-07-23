@@ -3,16 +3,14 @@
 ## System State
 
 - Local: **http://127.0.0.1:8002**
-- Latest: harden poll + Threads checkpoint + daily claim skip (working tree → commit)
+- FB Reels harden: unify `/reels/` URL + smart upload/Next waits (working tree → commit)
 
 ## Done This Session [2026-07-23]
 
-- Reup VIP A+B+C (`ee2d45d`) + gate cleanup / overview storm (`e8fb193`)
-- Poll softer: worker 30s, jobs 15s, queue/viral 60s
-- Threads: checkpoint URL/content markers + `checkpointed` → INVALID
-- Claim: `claim_next_job_respecting_daily` skip tới 5 job đã full daily trong cùng tick
+- Ops harden `f6c789c` (poll/checkpoint/daily skip)
+- Reels patch: `reels_tab_url` dùng chung pre_scan+verify; `wait_until_upload_ready` / `wait_until_next_enabled`
 
 ## Next Action
 
-1. Owner F5 overview/jobs (ít GET hơn)
-2. Optional push remote khi cần deploy
+1. Owner chạy 1 job Reels thật → DONE + post_url
+2. Nếu fail: checklist `logs/fb/job_*`

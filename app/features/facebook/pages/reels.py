@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 from playwright.sync_api import Locator, Page
@@ -766,6 +767,102 @@ class FacebookReelsPage:
         except Exception as e:
             self.logger.debug("FacebookAdapter: Modal neutralization step encountered an issue: %s", e)
 
+    @staticmethod
+    def reels_tab_url(target_page_url: str | None = None) -> str:
+        """Single URL scheme for pre_scan + post_verify (avoid reels_tab vs /reels/ drift)."""
+        if target_page_url:
+            base = target_page_url.split("?")[0].rstrip("/")
+            return f"{base}/reels/"
+        return f"{FACEBOOK_HOST}/me/reels/"
+
+    def wait_until_next_enabled(
+        self,
+        surface: Page | Locator,
+        *,
+        timeout_ms: int = 45000,
+        poll_ms: int = 1000,
+    ) -> Locator | None:
+        """Poll until Next is visible and not aria-disabled; return locator or None."""
+        if not self.page:
+            return None
+        deadline = time.time() + max(1, timeout_ms) / 1000.0
+        while time.time() < deadline:
+            surface = self.find_active_publish_surface()
+            btn = self.find_next_button(surface)
+            if btn and self._is_visible(btn):
+                try:
+                    disabled = (btn.get_attribute("aria-disabled") or "").lower() == "true"
+                except Exception:
+                    disabled = False
+                if not disabled:
+                    return btn
+            self.page.wait_for_timeout(poll_ms)
+        return self.find_next_button(self.find_active_publish_surface())
+
+    def wait_until_upload_ready(
+        self,
+        surface: Page | Locator,
+        *,
+        timeout_ms: int = 60000,
+        poll_ms: int = 1000,
+        min_wait_ms: int = 1500,
+    ) -> bool:
+        """
+        After set_input_files: wait until composer looks ready
+        (Next/Post enabled, or video/preview signals), instead of fixed sleep.
+        """
+        if not self.page:
+            return False
+        if min_wait_ms > 0:
+            self.page.wait_for_timeout(min_wait_ms)
+        deadline = time.time() + max(1, timeout_ms) / 1000.0
+        while time.time() < deadline:
+            surface = self.find_active_publish_surface()
+            next_btn = self.find_next_button(surface)
+            if next_btn and self._is_visible(next_btn):
+                try:
+                    disabled = (next_btn.get_attribute("aria-disabled") or "").lower() == "true"
+                except Exception:
+                    disabled = False
+                if not disabled:
+                    self.logger.info("FacebookAdapter: Upload ready — Next enabled.")
+                    return True
+            post_btn = self.find_post_button(surface)
+            if post_btn and self._is_visible(post_btn):
+                self.logger.info("FacebookAdapter: Upload ready — Post already visible.")
+                return True
+            # Preview / progress hints (best-effort; FB DOM varies)
+            try:
+                ready_hint = self.page.evaluate(
+                    """() => {
+                        const t = (document.body && document.body.innerText || '').toLowerCase();
+                        if (t.includes('đang xử lý') || t.includes('processing') || t.includes('uploading')) {
+                            return 'busy';
+                        }
+                        const video = document.querySelector('[role="dialog"] video, video');
+                        if (video) return 'video';
+                        const imgs = document.querySelectorAll('[role="dialog"] img');
+                        for (const img of imgs) {
+                            const r = img.getBoundingClientRect();
+                            if (r.width > 80 && r.height > 80) return 'preview_img';
+                        }
+                        return '';
+                    }"""
+                )
+                if ready_hint in ("video", "preview_img") and next_btn and self._is_visible(next_btn):
+                    try:
+                        disabled = (next_btn.get_attribute("aria-disabled") or "").lower() == "true"
+                    except Exception:
+                        disabled = True
+                    if not disabled:
+                        self.logger.info("FacebookAdapter: Upload ready — preview + Next (%s).", ready_hint)
+                        return True
+            except Exception:
+                pass
+            self.page.wait_for_timeout(poll_ms)
+        self.logger.warning("FacebookAdapter: Upload ready wait timed out after %sms.", timeout_ms)
+        return False
+
     # ── Fast-Track Verification Helpers ───────────────────────────────────────────
 
     def find_success_toast_link(self) -> str | None:
@@ -808,20 +905,14 @@ class FacebookReelsPage:
         return None
 
     def navigate_to_reels_tab(self, target_page_url: str | None = None) -> bool:
-        """Navigates directly to the Reels tab for faster verification."""
-        if not self.page: return False
+        """Navigates directly to the Reels tab for faster verification / pre_scan."""
+        if not self.page:
+            return False
         try:
-            if target_page_url:
-                # Page: facebook.com/pagename/reels
-                base = target_page_url.split("?")[0].rstrip("/")
-                reels_url = f"{base}/reels/"
-            else:
-                # Personal: facebook.com/me/reels
-                reels_url = f"{FACEBOOK_HOST}/me/reels/"
-            
-            self.logger.info("FacebookAdapter: Navigating to Reels tab for fast verification: %s", reels_url)
+            reels_url = self.reels_tab_url(target_page_url)
+            self.logger.info("FacebookAdapter: Navigating to Reels tab: %s", reels_url)
             self.page.goto(reels_url, wait_until="domcontentloaded", timeout=15000)
-            self.page.wait_for_timeout(3000) # Wait for React content
+            self.page.wait_for_timeout(3000)  # Wait for React content
             return True
         except Exception as e:
             self.logger.warning("FacebookAdapter: Navigation to Reels tab failed: %s", e)

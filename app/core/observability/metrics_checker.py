@@ -152,9 +152,9 @@ class MetricsChecker:
                 page.set_default_timeout(20000)  # slightly longer just in case
                 
                 try:
-                    # STRATEGY 3: To bypass geoblocking/soft-blocking generic reel urls on headless
-                    # navigate directly to the user's reels tab and find the specific thumbnail
-                    page.goto(f"{FACEBOOK_HOST}/me/reels_tab", wait_until="domcontentloaded")
+                    # STRATEGY 3: navigate to reels tab (same URL scheme as publisher pre_scan/verify)
+                    from app.features.facebook.pages.reels import FacebookReelsPage
+                    page.goto(FacebookReelsPage.reels_tab_url(None), wait_until="domcontentloaded")
                     page.wait_for_timeout(5000)
                     
                     # Extract pairs of (URL, count) from all reel thumbnails in the grid
