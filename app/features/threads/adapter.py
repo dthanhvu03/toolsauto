@@ -27,6 +27,34 @@ class ThreadsAdapter(AdapterInterface):
         'input[name="password"]',
         'input[autocomplete="username"]',
         'input[autocomplete="current-password"]',
+        'form[action*="login"]',
+        'button:has-text("Log in")',
+        'button:has-text("Đăng nhập")',
+        'div[role="button"]:has-text("Log in")',
+        'div[role="button"]:has-text("Đăng nhập")',
+    )
+    # URL / content markers that mean session is dead or challenged (do not bypass).
+    CHECKPOINT_URL_MARKERS = (
+        "/login",
+        "/checkpoint/",
+        "/challenge/",
+        "/auth_platform",
+        "/consent/",
+        "two_factor",
+        "suspended",
+        "disabled",
+        "confirmemail",
+        "accountquality",
+    )
+    CHECKPOINT_CONTENT_MARKERS = (
+        '"is_logged_out":true',
+        '"is_logged_out": true',
+        "we suspended your account",
+        "your account has been disabled",
+        "confirm you're human",
+        "xác nhận bạn là người",
+        "enter the login code",
+        "nhập mã đăng nhập",
     )
     AUTH_INDICATORS = (
         'a[href="/notifications"]',
@@ -641,25 +669,46 @@ class ThreadsAdapter(AdapterInterface):
             ok=False,
             is_fatal=True,
             error=message,
-            details={"invalidate_account": True},
+            details={"invalidate_account": True, "checkpointed": True},
         )
+
+    def _is_checkpointed(self) -> bool:
+        """True when URL/content looks like login, checkpoint, or challenge."""
+        return self._page_needs_login()
 
     def _page_needs_login(self) -> bool:
         if not self.page:
             return True
 
         current_url = (self.page.url or "").lower()
-        if "login" in current_url:
+        if any(marker in current_url for marker in self.CHECKPOINT_URL_MARKERS):
             return True
 
-        content = self.page.content()
-        if '"is_logged_out":true' in content or '"is_logged_out": true' in content:
+        try:
+            content = (self.page.content() or "").lower()
+        except Exception:
+            content = ""
+        if content and any(marker in content for marker in self.CHECKPOINT_CONTENT_MARKERS):
             return True
 
         for selector in self.LOGIN_INDICATORS:
             try:
                 if self.page.locator(selector).count() > 0:
-                    return True
+                    # Avoid false positive when compose UI also has password-like fields
+                    if any(ok in current_url for ok in ("/login", "checkpoint", "challenge")):
+                        return True
+                    # On home/compose: login inputs strongly imply logged-out wall
+                    if "threads.net" in current_url or "threads.com" in current_url:
+                        auth_ok = False
+                        for auth_sel in self.AUTH_INDICATORS:
+                            try:
+                                if self.page.locator(auth_sel).count() > 0:
+                                    auth_ok = True
+                                    break
+                            except Exception:
+                                continue
+                        if not auth_ok:
+                            return True
             except Exception:
                 continue
         return False

@@ -27,7 +27,6 @@ from app.core.database.core import SessionLocal
 from app.core import settings as runtime_settings
 from app.core.account import AccountService
 from app.core.queue.job import JobService
-from app.core.queue.queue import QueueService
 from app.core.notifier.service import NotifierService
 from app.core.queue.worker import WorkerService
 
@@ -36,7 +35,7 @@ from app.core.queue.publisher_runtime import (
     kill_if_stuck as _kill_if_stuck_shared,
     start_heartbeat_thread,
     claim_precheck,
-    postpone_if_daily_limit,
+    claim_next_job_respecting_daily,
     postpone_if_sleeping,
     recover_stale_jobs,
 )
@@ -89,17 +88,21 @@ def process_single_job(db: Session) -> bool:
         return False
 
     logger.debug("[THREADS_PUBLISHER] Attempting to claim job for platform: %s", threads_platform)
-    job = QueueService.claim_next_job(db, platform=threads_platform)
+    job, claim_note = claim_next_job_respecting_daily(
+        db,
+        platform=threads_platform,
+        logger=logger,
+        prefix="[THREADS_PUBLISHER] ",
+    )
     if not job:
-        logger.debug("[THREADS_PUBLISHER] No eligible job found.")
+        if claim_note == "daily_exhausted":
+            logger.info("[THREADS_PUBLISHER] All claimed candidates hit daily limit this tick.")
+        else:
+            logger.debug("[THREADS_PUBLISHER] No eligible job found.")
         return False
 
     heartbeat_stop = threading.Event()
     try:
-        # Same daily gate as Facebook (posts_per_page if page set, else account.daily_limit)
-        if postpone_if_daily_limit(db, job, logger, prefix="[THREADS_PUBLISHER] "):
-            return True
-
         if postpone_if_sleeping(db, job, logger, prefix="[THREADS_PUBLISHER] "):
             return True
 
@@ -195,6 +198,9 @@ def process_single_job(db: Session) -> bool:
                 NotifierService.notify_job_failed(job, publish_result.error)
 
             if publish_result.details and publish_result.details.get("invalidate_account"):
+                reason = publish_result.error or "Session invalid"
+                if publish_result.details.get("checkpointed"):
+                    reason = f"Checkpoint/login: {reason}"
                 logger.error(
                     "[THREADS_PUBLISHER] [Job-%s] [ACCOUNT_INVALID] Disabling account '%s'.",
                     job.id,
@@ -203,12 +209,12 @@ def process_single_job(db: Session) -> bool:
                 AccountService.invalidate_account(
                     db=db,
                     account_id=job.account.id,
-                    reason=publish_result.error or "Session invalid",
+                    reason=reason,
                 )
                 if job.account:
                     NotifierService.notify_account_invalid(
                         job.account.name,
-                        publish_result.error or "Session invalid",
+                        reason,
                     )
     except Exception as exc:
         try:

@@ -17,7 +17,6 @@ logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fb_publish
 
 from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
-from app.core.queue.queue import QueueService
 from app.core.queue.job import JobService
 from app.config import WORKER_CRASH_THRESHOLD_SECONDS
 from app.adapters.dispatcher import Dispatcher
@@ -33,7 +32,7 @@ from app.core.queue.publisher_runtime import (
     clear_claim_locks,
     start_heartbeat_thread,
     claim_precheck,
-    postpone_if_daily_limit,
+    claim_next_job_respecting_daily,
     postpone_if_sleeping,
     recover_stale_jobs,
 )
@@ -101,19 +100,20 @@ def process_single_job(db: Session):
         return False
 
     logger.debug("[DB][claim_next_job] Attempting to claim next job")
-    job = QueueService.claim_next_job(db, platform="facebook")
+    job, claim_note = claim_next_job_respecting_daily(
+        db, platform="facebook", logger=logger, prefix="[PUBLISHER] ",
+    )
     if not job:
-        logger.debug("[DB][claim_next_job] No eligible job claimed")
+        if claim_note == "daily_exhausted":
+            logger.info("[PUBLISHER] All claimed candidates hit daily limit this tick.")
+        else:
+            logger.debug("[DB][claim_next_job] No eligible job claimed")
         return False
     logger.debug("[DB][claim_next_job] Claimed job_id=%s", job.id)
 
     heartbeat_stop = threading.Event()
     
     try:
-        # Enforce Daily Limit (per-page setting, else account.daily_limit) — shared with Threads
-        if postpone_if_daily_limit(db, job, logger, prefix="[PUBLISHER] "):
-            return True
-
         # Xin ý kiến giấc ngủ (Human Rest Cycle)
         if postpone_if_sleeping(db, job, logger, prefix="[PUBLISHER] "):
             return True
