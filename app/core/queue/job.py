@@ -261,7 +261,14 @@ class JobService:
                 break
         
     @staticmethod
-    def get_jobs_paged(db: Session, status: str = "active", page: int = 1, per_page: int = 20, q: str = "") -> dict:
+    def get_jobs_paged(
+        db: Session,
+        status: str = "active",
+        page: int = 1,
+        per_page: int = 20,
+        q: str = "",
+        platform: str = "",
+    ) -> dict:
         from sqlalchemy import or_
         query = db.query(Job)
         
@@ -270,6 +277,10 @@ class JobService:
             query = query.filter(Job.status.in_([JobStatus.AWAITING_STYLE, JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING, JobStatus.AI_PROCESSING]))
         elif status in (JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELLED):
             query = query.filter(Job.status == status)
+
+        platform = (platform or "").strip().lower()
+        if platform and platform != "all":
+            query = query.filter(Job.platform == platform)
 
         # Search filter
         q = (q or "").strip()

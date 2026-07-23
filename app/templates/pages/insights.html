@@ -117,6 +117,12 @@
     color: var(--color-ink) !important;
     box-shadow: var(--shadow-panel);
   }
+  #aiStrategicPulse.insights-fb-emphasis {
+    box-shadow: 0 0 0 2px var(--color-torch-border), var(--shadow-panel);
+  }
+  #aiStrategicPulse.insights-fb-muted {
+    opacity: 0.72;
+  }
   #aiStrategicPulse .ai-pulse-muted { color: var(--color-mist) !important; }
   #aiStrategicPulse .ai-pulse-soft { color: var(--color-ink-soft) !important; }
 
@@ -156,7 +162,10 @@
 {% endblock %}
 
 {% block page_title %}Market Intelligence{% endblock %}
-{% block page_subtitle %}Phân tích hiệu năng nội dung & dự báo tăng trưởng.{% endblock %}
+{% block page_subtitle %}
+<span id="insightsSubtitleText">Phân tích hiệu năng &amp; boost chiến lược cho trang Facebook.</span>
+<span id="insightsProductBadge" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)]">Facebook</span>
+{% endblock %}
 
 {% block content %}
 <div class="w-full space-y-6 animate-fade-in insights-cave">
@@ -171,8 +180,9 @@
             </div>
             <div class="flex-1 space-y-2 min-w-0">
                 <div class="flex items-center justify-between flex-wrap gap-2">
-                    <h2 class="text-base font-bold text-[var(--color-ink)] flex items-center gap-2">
+                    <h2 class="text-base font-bold text-[var(--color-ink)] flex items-center gap-2 flex-wrap">
                         AI Strategic Analyst
+                        <span id="aiStrategicPlatformBadge" class="px-2 py-0.5 bg-[var(--color-torch-dim)] text-[var(--color-torch)] text-[9px] rounded-md uppercase tracking-wider font-extrabold border border-[var(--color-torch-border)] hidden">Facebook Boost</span>
                         <span class="px-2 py-0.5 bg-[var(--color-torch-dim)] text-[var(--color-torch)] text-[9px] rounded-md uppercase tracking-wider font-extrabold border border-[var(--color-torch-border)]">9router Live</span>
                     </h2>
                     <span id="aiModelLabel" class="text-[10px] ai-pulse-muted font-mono">STATUS: Đang tải...</span>
@@ -224,7 +234,7 @@
                 <span class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest">Platform</span>
                 <select id="platformSelect" onchange="loadData()" aria-label="Select Social Platform"
                     class="bg-transparent border-none text-[var(--color-torch)] font-bold text-sm focus:ring-0 cursor-pointer">
-                    <option value="">Universal</option>
+                    <option value="">Tất cả nền tảng</option>
                     <option value="facebook" selected>Facebook</option>
                     <option value="tiktok">TikTok</option>
                     <option value="instagram">Instagram</option>
@@ -721,6 +731,39 @@
         return document.getElementById('daysSelect')?.value || 7;
     }
 
+    function syncInsightsPlatformChrome() {
+        const platform = document.getElementById('platformSelect')?.value || 'facebook';
+        const isFb = platform === 'facebook';
+        const pulse = document.getElementById('aiStrategicPulse');
+        const fbBadge = document.getElementById('insightsProductBadge');
+        const aiBadge = document.getElementById('aiStrategicPlatformBadge');
+        const sub = document.getElementById('insightsSubtitleText');
+        if (pulse) {
+            pulse.classList.toggle('insights-fb-emphasis', isFb);
+            pulse.classList.toggle('insights-fb-muted', !isFb && platform !== '');
+        }
+        if (fbBadge) fbBadge.classList.toggle('hidden', !isFb);
+        if (aiBadge) aiBadge.classList.toggle('hidden', !isFb);
+        if (sub) {
+            sub.textContent = isFb
+                ? 'Phân tích hiệu năng & boost chiến lược cho trang Facebook.'
+                : 'Phân tích đa nền tảng — boost chiến lược chủ yếu dành cho Facebook.';
+        }
+        const url = new URL(window.location.href);
+        if (!platform) url.searchParams.delete('platform');
+        else url.searchParams.set('platform', platform);
+        window.history.replaceState({}, '', url.toString());
+    }
+
+    function initInsightsFromQuery() {
+        const url = new URL(window.location.href);
+        const qp = url.searchParams.get('platform');
+        const sel = document.getElementById('platformSelect');
+        if (sel && qp) sel.value = qp;
+        else if (sel && !qp) sel.value = 'facebook';
+        syncInsightsPlatformChrome();
+    }
+
     function buildQuery(extra) {
         const pageUrl = document.getElementById('pageSelect').value;
         const platform = document.getElementById('platformSelect').value;
@@ -733,6 +776,7 @@
     }
 
     async function loadData() {
+        syncInsightsPlatformChrome();
         currentPage = 1; // reset pagination on filter change
         try {
             // 1. Growth Data
@@ -1697,6 +1741,7 @@
     // DOM is already ready since this script is at the end of <body>
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
+            initInsightsFromQuery();
             loadDataStatus();
             loadData();
             loadLibrary();
@@ -1705,6 +1750,7 @@
             loadCompetitorTop();
         });
     } else {
+        initInsightsFromQuery();
         loadDataStatus();
         loadData();
         loadLibrary();

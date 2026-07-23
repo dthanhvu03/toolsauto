@@ -23,10 +23,13 @@ def get_jobs_table(
     page: int = 1,
     per_page: int = 20,
     q: str = "",
+    platform: str = "",
     db: Session = Depends(get_db)
 ):
     """HTMX fragment: Returns the full jobs table with filter + pagination."""
-    res = JobService.get_jobs_paged(db, status=status, page=page, per_page=per_page, q=q)
+    res = JobService.get_jobs_paged(
+        db, status=status, page=page, per_page=per_page, q=q, platform=platform
+    )
     
     return templates.TemplateResponse(
         "fragments/jobs_table.html", 
@@ -34,6 +37,7 @@ def get_jobs_table(
             "request": request, 
             "jobs": res["jobs"], 
             "current_status": status,
+            "current_platform": platform,
             "current_page": res["page"],
             "total_pages": res["total_pages"],
             "total_jobs": res["total"],

@@ -6,6 +6,16 @@
 
 {% block content %}
 <div class="app-card p-4">
+  <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+    <div class="flex gap-2 flex-wrap items-center">
+      <span class="text-[10px] font-bold uppercase tracking-widest text-[var(--color-ash)] mr-1">Nền tảng</span>
+      <button data-platform="all" class="jobPlatformTab app-chip app-chip-active">Tất cả</button>
+      <button data-platform="facebook" class="jobPlatformTab app-chip">Facebook</button>
+      <button data-platform="threads" class="jobPlatformTab app-chip">Threads</button>
+      <button data-platform="instagram" class="jobPlatformTab app-chip">Instagram</button>
+      <button data-platform="tiktok" class="jobPlatformTab app-chip">TikTok</button>
+    </div>
+  </div>
   <div class="flex items-center justify-between gap-3 flex-wrap">
     <div class="flex gap-2 flex-wrap">
       <button data-status="active" class="jobTab app-chip app-chip-active">Active</button>
@@ -93,20 +103,32 @@
 
 <script>
   let currentStatus = 'active';
+  let currentPlatform = 'all';
   let currentQ = '';
   let debounceTimer = null;
 
   function setQueryParams(next) {
     const url = new URL(window.location.href);
     Object.entries(next).forEach(([k, v]) => {
-      if (v === '' || v === null || v === undefined) url.searchParams.delete(k);
+      if (v === '' || v === null || v === undefined || (k === 'platform' && v === 'all')) url.searchParams.delete(k);
       else url.searchParams.set(k, v);
     });
     window.history.replaceState({}, '', url.toString());
   }
+  function syncPlatformTabs() {
+    document.querySelectorAll('.jobPlatformTab').forEach(t => {
+      const pf = t.getAttribute('data-platform');
+      if (pf === currentPlatform) {
+        t.classList.add('app-chip-active');
+      } else {
+        t.classList.remove('app-chip-active');
+      }
+    });
+  }
   function initFromQuery() {
     const url = new URL(window.location.href);
     currentStatus = url.searchParams.get('status') || 'active';
+    currentPlatform = url.searchParams.get('platform') || 'all';
     currentQ = url.searchParams.get('q') || '';
     const qEl = document.getElementById('jobQ');
     if (qEl) qEl.value = currentQ;
@@ -119,13 +141,24 @@
         t.classList.remove('app-chip-active');
       }
     });
+    syncPlatformTabs();
   }
   function refreshJobs(page = 1) {
     const q = encodeURIComponent(currentQ || '');
-    setQueryParams({ status: currentStatus, q: currentQ, page: String(page) });
-    const url = `/jobs/table?status=${encodeURIComponent(currentStatus)}&page=${page}&per_page=20&q=${q}`;
+    setQueryParams({ status: currentStatus, platform: currentPlatform, q: currentQ, page: String(page) });
+    let url = `/jobs/table?status=${encodeURIComponent(currentStatus)}&page=${page}&per_page=20&q=${q}`;
+    if (currentPlatform && currentPlatform !== 'all') {
+      url += `&platform=${encodeURIComponent(currentPlatform)}`;
+    }
     htmx.ajax('GET', url, { target: '#jobs-table-body', swap: 'outerHTML' });
   }
+  document.querySelectorAll('.jobPlatformTab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentPlatform = btn.getAttribute('data-platform') || 'all';
+      syncPlatformTabs();
+      refreshJobs(1);
+    });
+  });
   document.querySelectorAll('.jobTab').forEach(btn => {
     btn.addEventListener('click', () => {
       currentStatus = btn.getAttribute('data-status');
