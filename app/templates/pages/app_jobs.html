@@ -1,13 +1,36 @@
 {% extends "layouts/app.html" %}
 {% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
-{% block title %}Jobs • Auto Publisher{% endblock %}
-{% block page_breadcrumb %}{{ silo_breadcrumb('Chung', 'Hàng đợi job') }}{% endblock %}
-{% block page_title %}Hàng đợi job{% endblock %}
-{% block page_subtitle %}Pagination + search, không cần lướt dài.{% endblock %}
+{% block title %}{% if jobs_silo_locked %}Hàng đợi {{ jobs_platform_label }}{% else %}Jobs{% endif %} • Auto Publisher{% endblock %}
+{% block page_breadcrumb %}
+{% if jobs_silo_locked and jobs_platform == 'threads' %}
+{{ silo_breadcrumb('Threads', 'Hàng đợi Threads') }}
+{% elif jobs_silo_locked and jobs_platform == 'facebook' %}
+{{ silo_breadcrumb('Facebook', 'Hàng đợi Facebook') }}
+{% elif jobs_silo_locked %}
+{{ silo_breadcrumb(jobs_platform_label, 'Hàng đợi ' ~ jobs_platform_label) }}
+{% else %}
+{{ silo_breadcrumb('Chung', 'Hàng đợi job') }}
+{% endif %}
+{% endblock %}
+{% block page_title %}{% if jobs_silo_locked %}Hàng đợi {{ jobs_platform_label }}{% else %}Hàng đợi job{% endif %}{% endblock %}
+{% block page_subtitle %}{% if jobs_silo_locked %}Chỉ job {{ jobs_platform_label }} — đổi trạng thái / tìm kiếm bên dưới.{% else %}Pagination + search, không cần lướt dài.{% endif %}{% endblock %}
 
 {% block content %}
-<div class="app-card p-4">
+<div class="app-card p-4" data-jobs-silo="{% if jobs_silo_locked %}{{ jobs_platform }}{% else %}{% endif %}">
+  {% if jobs_silo_locked %}
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div class="flex items-center gap-2 flex-wrap">
+      <span class="app-badge border border-[var(--color-torch)]/40 bg-[var(--color-torch)]/10 text-[var(--color-torch)] text-[10px] font-bold uppercase tracking-wider">
+        Silo {{ jobs_platform_label }}
+      </span>
+      <span class="text-[11px] text-[var(--color-mist)]">Không hiện MXH khác trong hàng đợi này.</span>
+    </div>
+    <a href="/app/jobs" class="text-[11px] font-bold text-[var(--color-torch)] hover:underline">
+      ← Xem tất cả nền tảng
+    </a>
+  </div>
+  {% else %}
   <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
     <div class="flex gap-2 flex-wrap items-center" role="group" aria-label="Lọc nền tảng job">
       <span class="text-[10px] font-bold uppercase tracking-widest text-[var(--color-ash)] mr-1">Nền tảng</span>
@@ -18,20 +41,22 @@
       <button type="button" data-platform="tiktok" class="jobPlatformTab app-chip" aria-pressed="false">TikTok</button>
     </div>
   </div>
+  {% endif %}
+
   <div class="flex items-center justify-between gap-3 flex-wrap">
     <div class="flex gap-2 flex-wrap">
-      <button data-status="active" class="jobTab app-chip app-chip-active">Active</button>
-      <button data-status="all" class="jobTab app-chip">All</button>
-      <button data-status="DRAFT" class="jobTab app-chip">Draft</button>
-      <button data-status="PENDING" class="jobTab app-chip">Pending</button>
-      <button data-status="DONE" class="jobTab app-chip">Done</button>
-      <button data-status="FAILED" class="jobTab app-chip">Failed</button>
+      <button type="button" data-status="active" class="jobTab app-chip app-chip-active">Active</button>
+      <button type="button" data-status="all" class="jobTab app-chip">All</button>
+      <button type="button" data-status="DRAFT" class="jobTab app-chip">Draft</button>
+      <button type="button" data-status="PENDING" class="jobTab app-chip">Pending</button>
+      <button type="button" data-status="DONE" class="jobTab app-chip">Done</button>
+      <button type="button" data-status="FAILED" class="jobTab app-chip">Failed</button>
     </div>
     <div class="flex items-center gap-2">
       <input id="jobQ" class="app-input w-80 max-w-full" placeholder="Search: id, account, target page, caption..." />
-      <button id="jobSearchBtn" class="app-btn app-btn-primary">Search</button>
+      <button type="button" id="jobSearchBtn" class="app-btn app-btn-primary">Search</button>
       <span id="job-total-badge" class="app-badge"></span>
-      <button
+      <button type="button"
         onclick="document.getElementById('manualJobDialog').showModal(); htmx.ajax('GET', '/jobs/manual/form', {target:'#manual-job-modal-body', swap:'innerHTML'})"
         class="app-btn app-btn-primary ml-2 gap-1.5">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,7 +67,6 @@
     </div>
   </div>
 
-  <!-- ─── Manual Job Modal ────────────────────────────────────────── -->
   <dialog id="manualJobDialog" class="rounded-lg shadow-xl border border-gray-200 p-0 w-full max-w-md overflow-hidden"
     style="margin: auto;">
     <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-indigo-600">
@@ -50,7 +74,7 @@
         <p class="text-white font-semibold text-sm"><svg class="w-4 h-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>Đăng bài khẩn cấp</p>
         <p class="text-indigo-200 text-xs">Job lên đầu hàng chờ ngay lập tức</p>
       </div>
-      <button onclick="document.getElementById('manualJobDialog').close()"
+      <button type="button" onclick="document.getElementById('manualJobDialog').close()"
         class="w-7 h-7 flex items-center justify-center rounded-full text-white hover:bg-indigo-700 transition-colors text-xs font-bold">✕</button>
     </div>
     <div id="manual-job-modal-body" class="bg-white">
@@ -64,7 +88,6 @@
     </div>
   </dialog>
 
-  <!-- ─── Job Details Modal ────────────────────────────────────────── -->
   <dialog id="jobDetailsDialog" class="rounded-2xl shadow-2xl border-none p-0 w-full max-w-2xl overflow-hidden backdrop:bg-gray-900/50 backdrop:backdrop-blur-sm"
     style="margin: auto;">
     <div id="job-details-modal-body" class="bg-white min-h-[400px]">
@@ -77,7 +100,6 @@
       </div>
     </div>
   </dialog>
-
 
   <div class="mt-4 overflow-x-auto">
     <table class="min-w-full table-auto border-collapse">
@@ -93,7 +115,9 @@
           <th class="app-table-th">Actions</th>
         </tr>
       </thead>
-      <tbody id="jobs-table-body" hx-get="/jobs/table?status=active&page=1&per_page=20" hx-trigger="load"
+      <tbody id="jobs-table-body"
+        hx-get="/jobs/table?status=active&page=1&per_page=20{% if jobs_silo_locked %}&platform={{ jobs_platform }}{% endif %}"
+        hx-trigger="load"
         hx-swap="outerHTML">
         <tr>
           <td colspan="8" class="p-4 text-sm text-gray-500">Đang tải...</td>
@@ -104,20 +128,27 @@
 </div>
 
 <script>
+  const JOBS_SILO_LOCKED = {{ 'true' if jobs_silo_locked else 'false' }};
+  const JOBS_SILO_PLATFORM = {{ (jobs_platform if jobs_silo_locked else '')|tojson }};
   let currentStatus = 'active';
-  let currentPlatform = 'all';
+  let currentPlatform = JOBS_SILO_LOCKED ? JOBS_SILO_PLATFORM : 'all';
   let currentQ = '';
   let debounceTimer = null;
 
   function setQueryParams(next) {
     const url = new URL(window.location.href);
     Object.entries(next).forEach(([k, v]) => {
+      if (JOBS_SILO_LOCKED && k === 'platform') {
+        url.searchParams.set('platform', JOBS_SILO_PLATFORM);
+        return;
+      }
       if (v === '' || v === null || v === undefined || (k === 'platform' && v === 'all')) url.searchParams.delete(k);
       else url.searchParams.set(k, v);
     });
     window.history.replaceState({}, '', url.toString());
   }
   function syncPlatformTabs() {
+    if (JOBS_SILO_LOCKED) return;
     document.querySelectorAll('.jobPlatformTab').forEach(t => {
       const pf = t.getAttribute('data-platform');
       const active = pf === currentPlatform;
@@ -128,7 +159,11 @@
   function initFromQuery() {
     const url = new URL(window.location.href);
     currentStatus = url.searchParams.get('status') || 'active';
-    currentPlatform = url.searchParams.get('platform') || 'all';
+    if (JOBS_SILO_LOCKED) {
+      currentPlatform = JOBS_SILO_PLATFORM;
+    } else {
+      currentPlatform = url.searchParams.get('platform') || 'all';
+    }
     currentQ = url.searchParams.get('q') || '';
     const qEl = document.getElementById('jobQ');
     if (qEl) qEl.value = currentQ;
@@ -136,7 +171,6 @@
       const st = t.getAttribute('data-status');
       if (st === currentStatus) {
         t.classList.add('app-chip-active');
-        t.classList.remove('bg-white', 'text-slate-700');
       } else {
         t.classList.remove('app-chip-active');
       }
@@ -144,6 +178,7 @@
     syncPlatformTabs();
   }
   function refreshJobs(page = 1) {
+    if (JOBS_SILO_LOCKED) currentPlatform = JOBS_SILO_PLATFORM;
     const q = encodeURIComponent(currentQ || '');
     setQueryParams({ status: currentStatus, platform: currentPlatform, q: currentQ, page: String(page) });
     let url = `/jobs/table?status=${encodeURIComponent(currentStatus)}&page=${page}&per_page=20&q=${q}`;
@@ -154,6 +189,7 @@
   }
   document.querySelectorAll('.jobPlatformTab').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (JOBS_SILO_LOCKED) return;
       currentPlatform = btn.getAttribute('data-platform') || 'all';
       syncPlatformTabs();
       refreshJobs(1);

@@ -58,9 +58,26 @@ def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)
     )
 
 @router.get("/app/jobs", response_class=HTMLResponse)
-def app_jobs(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI (beta): Jobs page wrapper (uses existing /jobs/table fragment)."""
-    return templates.TemplateResponse("pages/app_jobs.html", {"request": request})
+def app_jobs(request: Request, db: Session = Depends(get_db), platform: str | None = None):
+    """SaaS UI: Jobs page. ?platform=threads locks silo (hide cross-MXH chips)."""
+    raw = (platform or request.query_params.get("platform") or "").strip().lower()
+    allowed = {"facebook", "threads", "instagram", "tiktok"}
+    locked = raw if raw in allowed else None
+    labels = {
+        "facebook": "Facebook",
+        "threads": "Threads",
+        "instagram": "Instagram",
+        "tiktok": "TikTok",
+    }
+    return templates.TemplateResponse(
+        "pages/app_jobs.html",
+        {
+            "request": request,
+            "jobs_platform": locked or "all",
+            "jobs_silo_locked": bool(locked),
+            "jobs_platform_label": labels.get(locked or "", ""),
+        },
+    )
 
 @router.get("/app/viral", response_class=HTMLResponse)
 def app_viral(request: Request, db: Session = Depends(get_db)):
