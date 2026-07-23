@@ -2,6 +2,8 @@
 
 Thu thập / bảo vệ video viral → tạo DRAFT/PENDING job (chủ yếu feed Facebook).
 
+**Silo:** TikTok **source** (scrapers) → Facebook **sink** (jobs/pages). UI nav grouped under sidebar “Facebook”.
+
 | Entry | Path |
 |-------|------|
 | HTTP | `router.py` |

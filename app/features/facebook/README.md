@@ -10,3 +10,5 @@
 | Workers (PM2) | `workers/publisher.py` (`FB_Publisher_1/2`) |
 
 Flat layout (không bắt buộc `service/`). Depends on: `app.core.queue`, `app.core.compliance`, `app.adapters.*`.
+
+**Strategic boost / page growth:** implemented in `app.core.strategic.PageStrategicService` (FB-owned; shared via core for Insights + viral_intake).
