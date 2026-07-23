@@ -1,10 +1,20 @@
 <tr id="viral-{{ item.id }}" class="border-b text-sm hover:bg-gray-50">
     <td class="p-3 align-top text-gray-500 font-mono text-xs">{{ item.id }}</td>
     <td class="p-3 align-top text-center">
-        {% if item.thumbnail_url %}
+        {% if has_reup %}
+        <div class="relative w-20 mx-auto">
+            <video
+                src="/viral/{{ item.id }}/reup-preview"
+                class="w-20 h-20 object-cover rounded-md shadow-sm border border-emerald-200 bg-black"
+                muted playsinline preload="metadata"
+                controls
+                title="Anti-dupe _reup preview"></video>
+            <span class="absolute -top-1 -right-1 text-[8px] font-black uppercase tracking-wide bg-emerald-600 text-white px-1 py-0.5 rounded">Anti-dupe</span>
+        </div>
+        {% elif item.thumbnail_url %}
             <img src="{{ item.thumbnail_url }}" alt="thumbnail" class="w-16 h-16 object-cover rounded-md shadow-sm border border-gray-100 mx-auto" onerror="this.src='data:image/svg+xml;utf8,<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23cbd5e1\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' xmlns=\'http://www.w3.org/2000/svg\'><rect x=\'3\' y=\'3\' width=\'18\' height=\'18\' rx=\'2\' ry=\'2\'></rect><circle cx=\'8.5\' cy=\'8.5\' r=\'1.5\'></circle><polyline points=\'21 15 16 10 5 21\'></polyline></svg>'">
         {% else %}
-            <div class="w-16 h-16 bg-gray-50 rounded-md border border-gray-100 flex items-center justify-center mx-auto mx-auto text-gray-300">
+            <div class="w-16 h-16 bg-gray-50 rounded-md border border-gray-100 flex items-center justify-center mx-auto text-gray-300">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </div>
         {% endif %}
@@ -14,6 +24,10 @@
             class="text-blue-600 hover:text-blue-800 underline truncate block max-w-xs" title="{{ item.url }}">
             {{ item.title or item.url }}
         </a>
+        {% if has_reup %}
+        <a href="/viral/{{ item.id }}/reup-preview" target="_blank"
+            class="mt-1 inline-flex text-[10px] font-bold text-emerald-700 hover:underline">Mở _reup.mp4</a>
+        {% endif %}
     </td>
     <td class="p-3 align-top font-medium text-purple-700">
         {{ "{:,}".format(item.views) }}
@@ -40,6 +54,9 @@
         {% else %}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">{{
             item.status }}</span>
+        {% if has_reup %}
+        <div class="mt-1 text-[10px] font-bold text-emerald-700">Đã anti-dupe</div>
+        {% endif %}
         {% endif %}
     </td>
     <td class="p-3 align-top text-right">

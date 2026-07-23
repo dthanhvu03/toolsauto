@@ -162,236 +162,115 @@
     <!-- 1.5 Tab Navigation -->
     <div class="flex items-center gap-6 px-6 border-b border-[var(--color-edge)] shrink-0 mt-2">
         <button type="button" onclick="switchAccountTab('config', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-[var(--color-torch)] text-[var(--color-torch)] transition-colors">Configuration</button>
-        <button type="button" onclick="switchAccountTab('pages', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-transparent text-[var(--color-ash)] hover:text-[var(--color-mist)] transition-colors">Target Pages</button>
+        <button type="button" onclick="switchAccountTab('pages', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-transparent text-[var(--color-ash)] hover:text-[var(--color-mist)] transition-colors">
+            Target Pages
+            <span class="ml-1.5 text-[9px] font-bold normal-case tracking-normal text-[var(--color-torch)] bg-[var(--color-torch)]/10 border border-[var(--color-torch)]/25 px-1.5 py-0.5 rounded-full">
+                {{ account.target_pages_list|length }} ON / {{ account.managed_pages_list|length }}
+            </span>
+        </button>
     </div>
 
-    <!-- 2. Body Section -->
     <div class="flex-1 overflow-y-auto cave-scrollbar relative">
-        
-        <!-- Tab 1: Config -->
         <div id="tab-config" class="account-tab-content p-5 md:p-8">
             <form hx-post="/accounts/{{ account.id }}/update-limits" hx-target="#account-{{ account.id }}"
-            hx-swap="outerHTML" class="max-w-4xl mx-auto space-y-8">
-            <input type="hidden" name="competitor_urls" value="">
-            <input type="hidden" name="page_niches" value="">
+            hx-swap="outerHTML" class="max-w-3xl mx-auto space-y-8">
+
+            <div class="rounded-xl border border-[var(--color-edge)] bg-[var(--color-face)]/60 px-4 py-3 text-[11px] text-[var(--color-mist)] leading-relaxed">
+                <strong class="text-[var(--color-ink)]">Configuration</strong> = nhịp đăng (limit, cooldown, sleep) + Global Categories.
+                Page ON/OFF, niche từng page, source đối thủ → tab <button type="button" onclick="document.querySelectorAll('.account-tab-btn')[1]?.click()" class="text-[var(--color-torch)] font-bold underline">Target Pages</button>.
+            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <!-- Group A: Limits -->
                 <div class="space-y-5">
-                    <h3 class="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">Execution Metrics
-                    </h3>
+                    <h3 class="text-[10px] font-black text-[var(--color-ash)] uppercase tracking-[0.2em] px-1">Execution Metrics</h3>
                     <div class="grid grid-cols-2 gap-4">
                         <div class="space-y-1.5">
-                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Daily
-                                Limit</label>
-                            <input type="number" name="daily_limit" value="{{ account.daily_limit }}"
-                                class="w-full bg-slate-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+                            <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Daily Limit</label>
+                            <input type="number" name="daily_limit" value="{{ account.daily_limit }}" min="0" max="200"
+                                class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-xl px-4 py-2.5 text-xs font-bold text-[var(--color-ink)] focus:border-[var(--color-torch)]/50 outline-none">
                         </div>
                         <div class="space-y-1.5">
-                            <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Cooldown
-                                (s)</label>
-                            <input type="number" name="cooldown_seconds" value="{{ account.cooldown_seconds }}"
-                                class="w-full bg-slate-50 border border-gray-100 rounded-xl px-4 py-2.5 text-xs font-bold text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all">
+                            <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Cooldown (s)</label>
+                            <input type="number" name="cooldown_seconds" value="{{ account.cooldown_seconds }}" min="0" max="86400"
+                                class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-xl px-4 py-2.5 text-xs font-bold text-[var(--color-ink)] focus:border-[var(--color-torch)]/50 outline-none">
                         </div>
                     </div>
                     <div class="space-y-1.5">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Bot
-                            Sleep</label>
-                        <div class="flex items-center gap-2.5 p-2 bg-slate-50 rounded-xl border border-gray-100">
+                        <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Bot Sleep</label>
+                        <div class="flex items-center gap-2.5 p-2 bg-[var(--color-deep)] rounded-xl border border-[var(--color-edge)]">
                             <input type="time" name="sleep_start_time" value="{{ account.sleep_start_time or '' }}"
-                                class="flex-1 bg-white border border-gray-100 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-100">
-                            <span class="text-gray-300 font-black">~</span>
+                                class="flex-1 bg-[var(--color-void)] border border-[var(--color-edge)] rounded-lg px-2.5 py-1.5 text-xs font-bold text-[var(--color-ink)] outline-none">
+                            <span class="text-[var(--color-ash)] font-black">~</span>
                             <input type="time" name="sleep_end_time" value="{{ account.sleep_end_time or '' }}"
-                                class="flex-1 bg-white border border-gray-100 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-indigo-100">
+                                class="flex-1 bg-[var(--color-void)] border border-[var(--color-edge)] rounded-lg px-2.5 py-1.5 text-xs font-bold text-[var(--color-ink)] outline-none">
                         </div>
+                        <p class="text-[10px] text-[var(--color-ash)] px-1">Khung giờ bot nghỉ (giảm pattern bot).</p>
                     </div>
                 </div>
 
-                <!-- Group B: Taxonomy -->
                 <div class="space-y-5">
-                    <h3 class="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] px-1">Taxonomy &
-                        Operations</h3>
+                    <h3 class="text-[10px] font-black text-[var(--color-ash)] uppercase tracking-[0.2em] px-1">Taxonomy &amp; Sync</h3>
                     <div class="space-y-1.5">
-                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">Global
-                            Categories</label>
+                        <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Global Categories</label>
                         <textarea name="niche_topics" placeholder="decor, fashion, pets..."
-                            class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-2xl px-4 py-3 text-xs font-semibold text-[var(--color-ink)] outline-none transition-all min-h-[96px]">{{ account.niche_topics_list }}</textarea>
+                            class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-2xl px-4 py-3 text-xs font-semibold text-[var(--color-ink)] outline-none focus:border-[var(--color-torch)]/50 min-h-[96px]">{{ account.niche_topics_list }}</textarea>
+                        <p class="text-[10px] text-[var(--color-ash)] px-1 leading-relaxed">
+                            Fallback toàn account. <strong class="text-[var(--color-mist)]">Page niche</strong> (tab Target Pages) ưu tiên khi match viral / boost.
+                        </p>
                     </div>
-
                     <button type="button" hx-post="/accounts/{{ account.id }}/sync-pages"
                         hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
-                        class="w-full h-10 bg-[var(--color-face)] border border-[var(--color-edge)] text-[var(--color-torch)] hover:border-[var(--color-torch)]/60 hover:bg-[var(--color-torch)]/10 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                        class="w-full h-10 bg-[var(--color-face)] border border-[var(--color-edge)] text-[var(--color-torch)] hover:border-[var(--color-torch)]/60 hover:bg-[var(--color-torch)]/10 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2"
                         onclick="this.disabled=true; this.querySelector('span').innerText='SYNCING...';">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                         <span>Sync Managed Pages</span>
                     </button>
+                    <p class="text-[10px] text-[var(--color-ash)] px-1">Chạy nền ~20–60s — rồi mở lại account / tab Target Pages.</p>
                 </div>
             </div>
 
-            <!-- Distribution Section -->
-            <div class="space-y-5 pt-8 border-t border-gray-50" data-pages-group="acc-{{ account.id }}">
-                <div class="flex items-center justify-between pb-1 px-1">
-                    <h3 class="text-[10px] font-black text-gray-900 uppercase tracking-widest">Active Targets List</h3>
-                    <span
-                        class="text-[9px] font-bold text-[var(--color-torch)] bg-[var(--color-torch)]/10 px-2 py-0.5 rounded-full border border-[var(--color-torch)]/25">{{
-                        account.managed_pages_list|length }} Slots</span>
+            <div class="rounded-2xl border border-dashed border-[var(--color-edge)] bg-[var(--color-deep)]/40 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <p class="text-xs font-bold text-[var(--color-ink)]">Active targets</p>
+                    <p class="text-[11px] text-[var(--color-ash)] mt-1">{{ account.target_pages_list|length }} page đang ON · {{ account.managed_pages_list|length }} managed</p>
                 </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {% if account.managed_pages_list|length > 0 %}
-                    {% set grouped = account.competitor_urls_grouped %}
-                    {% set page_niches = account.page_niches_map %}
-                    {% for page in account.managed_pages_list %}
-                    {% set is_checked = page.url in account.target_pages_list %}
-                    {% set niches_val = ', '.join(page_niches.get(page.url, [])) %}
-
-                    <div class="p-4 rounded-2xl border transition-all duration-300 {% if is_checked %}cave-target-on border-[var(--color-moss)]/45{% else %}bg-[var(--color-face)] border-[var(--color-edge)]{% endif %}"
-                        data-page-block>
-                        <div class="flex items-center justify-between gap-3 mb-3">
-                            <label class="flex items-center gap-2.5 cursor-pointer min-w-0">
-                                <input type="checkbox" name="target_pages" value="{{ page.url }}" {% if is_checked
-                                    %}checked{% endif %} onchange="toggleCompetitorBox(this)"
-                                    class="rounded-md border-gray-300 text-emerald-500 focus:ring-emerald-400 h-4.5 w-4.5 transition-all">
-                                <div class="truncate">
-                                    <span class="block text-xs font-bold text-gray-800 leading-tight"
-                                        title="{{ page.url }}">{{ page.name }}</span>
-                                    {% if 'php?id=' in page.url %}
-                                    <span class="block text-[9px] text-gray-400 font-mono truncate mt-0.5" title="{{ page.url }}">ID {{ page.url.split('php?id=')[-1].split('&')[0]|truncate(18, True, '…') }}</span>
-                                    {% else %}
-                                    <span class="block text-[9px] text-gray-400 font-mono truncate mt-0.5 lowercase" title="{{ page.url }}">{{ page.url|replace('https://www.facebook.com/', '')|replace('https://facebook.com/', '')|truncate(28, True, '…') }}</span>
-                                    {% endif %}
-                                </div>
-                            </label>
-                            {% if is_checked %}
-                            <span
-                                class="text-[8px] font-black text-[var(--color-lichen)] border border-[var(--color-moss)]/40 px-1.5 py-0.5 rounded uppercase">On</span>
-                            {% endif %}
-                        </div>
-
-                        <div class="space-y-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-[9px] font-bold text-gray-300 uppercase shrink-0 w-8">Niche:</span>
-                                <input type="text" data-page-niche="{{ page.url }}" value="{{ niches_val }}"
-                                    placeholder="Page niches..."
-                                    class="flex-1 bg-white border border-gray-100 rounded-lg px-2 py-1.5 text-[11px] font-semibold text-gray-700 outline-none focus:ring-1 focus:ring-indigo-200">
-                            </div>
-                            <div class="space-y-1.5" style="{% if not is_checked %}display:none;{% endif %}"
-                                data-comp-container>
-                                <textarea data-comp-page="{{ page.url }}" rows="3" placeholder="Competitor links..."
-                                    class="w-full bg-white border border-gray-100 rounded-xl px-3 py-2 text-[10px] font-mono text-gray-500 outline-none focus:ring-1 focus:ring-indigo-100 resize-none">{{ grouped.get(page.url, '') }}</textarea>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                    {% else %}
-                    <div
-                        class="col-span-full py-16 border-2 border-dashed border-gray-50 rounded-[32px] flex flex-col items-center justify-center text-gray-300">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.2em]">Sync pages to get started</p>
-                    </div>
-                    {% endif %}
-                </div>
+                <button type="button" onclick="document.querySelectorAll('.account-tab-btn')[1]?.click()"
+                    class="h-9 px-4 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-[var(--color-torch)]/40 bg-[var(--color-torch)]/10 text-[var(--color-torch)] hover:bg-[var(--color-torch)]/20">
+                    Quản lý Target Pages →
+                </button>
             </div>
 
-            <!-- Commit Button Container -->
-            <div class="pt-4 pb-12 sticky bottom-0 bg-gradient-to-t from-[var(--color-void)] via-[var(--color-void)]/90 to-transparent flex justify-end px-8">
+            <div class="pt-2 pb-10 sticky bottom-0 bg-gradient-to-t from-[var(--color-void)] via-[var(--color-void)]/90 to-transparent flex justify-end">
                 <button type="submit"
-                    class="h-10 px-6 bg-gradient-to-r from-[var(--color-torch)] to-[var(--color-ember)] hover:brightness-105 text-[var(--color-ink-inverse)] rounded-lg font-black text-[10px] uppercase tracking-[0.15em] transition-all flex items-center justify-center gap-2">
-                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                    </svg>
+                    class="h-10 px-6 bg-gradient-to-r from-[var(--color-torch)] to-[var(--color-ember)] hover:brightness-105 text-[var(--color-ink-inverse)] rounded-lg font-black text-[10px] uppercase tracking-[0.15em] flex items-center justify-center gap-2">
                     Commit Configuration
                 </button>
             </div>
         </form>
         </div>
 
-        <!-- Tab 2: Target Pages -->
-        <div id="tab-pages" class="account-tab-content p-5 md:p-8" style="display:none;" 
-             hx-get="/accounts/{{ account.id }}/pages-tab" 
-             hx-trigger="load, pagesChanged from:body">
-             <div class="py-16 flex justify-center text-gray-300">
-                 <div class="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        <div id="tab-pages" class="account-tab-content p-5 md:p-8" style="display:none;"
+             hx-get="/accounts/{{ account.id }}/pages-tab"
+             hx-trigger="revealed once, pagesChanged from:body">
+             <div class="py-16 flex justify-center text-[var(--color-ash)]">
+                 <div class="w-8 h-8 border-2 border-[var(--color-torch)] border-t-transparent rounded-full animate-spin"></div>
              </div>
         </div>
-
     </div>
 
-    <!-- Scripts -->
     <script>
-        (function () {
-            var row = document.getElementById('account-{{ account.id }}');
-            if (!row) return;
-            var form = row.querySelector('form');
-            if (!form) return;
-            form.addEventListener('htmx:configRequest', function (evt) {
-                var group = row.querySelector('[data-pages-group]');
-                if (!group) return;
-
-                var entries = [];
-                group.querySelectorAll('textarea[data-comp-page]').forEach(function (ta) {
-                    var pageUrl = ta.getAttribute('data-comp-page');
-                    var lines = ta.value.split('\n');
-                    lines.forEach(function (line) {
-                        line = line.trim();
-                        if (!line) return;
-                        entries.push({
-                            url: line,
-                            target_page: (pageUrl === '_unassigned') ? null : pageUrl
-                        });
-                    });
-                });
-                evt.detail.parameters['competitor_urls'] = JSON.stringify(entries);
-
-                var pageNiches = {};
-                group.querySelectorAll('input[data-page-niche]').forEach(function (inp) {
-                    var pageUrl = inp.getAttribute('data-page-niche');
-                    if (!pageUrl) return;
-                    var raw = inp.value || '';
-                    var parts = raw.split(',');
-                    var niches = [];
-                    parts.forEach(function (p) {
-                        var v = p.trim();
-                        if (v) niches.push(v);
-                    });
-                    if (niches.length > 0) {
-                        pageNiches[pageUrl] = niches;
-                    }
-                });
-                evt.detail.parameters['page_niches'] = JSON.stringify(pageNiches);
-            });
-        })();
-
-        function toggleCompetitorBox(cb) {
-            var block = cb.closest('[data-page-block]');
-            var container = block.querySelector('[data-comp-container]');
-            if (container) {
-                container.style.display = cb.checked ? '' : 'none';
-                block.classList.remove('cave-target-on', 'bg-emerald-50/10', 'border-emerald-200', 'shadow-sm', 'shadow-emerald-50', 'bg-slate-50/30', 'border-gray-100', 'bg-[var(--color-face)]', 'border-[var(--color-edge)]');
-                if (cb.checked) {
-                    block.classList.add('cave-target-on');
-                    block.style.borderColor = 'rgba(125, 154, 106, 0.45)';
-                } else {
-                    block.classList.add('bg-[var(--color-face)]', 'border-[var(--color-edge)]');
-                    block.style.borderColor = '';
-                }
-            }
-        }
-
         function switchAccountTab(tabId, btnEl) {
-            document.querySelectorAll('.account-tab-content').forEach(function(el) {
-                el.style.display = 'none';
-            });
+            document.querySelectorAll('.account-tab-content').forEach(function(el) { el.style.display = 'none'; });
             var target = document.getElementById('tab-' + tabId);
-            if(target) target.style.display = 'block';
-
+            if (target) {
+                target.style.display = 'block';
+                if (tabId === 'pages' && window.htmx) { htmx.trigger(target, 'revealed'); }
+            }
             document.querySelectorAll('.account-tab-btn').forEach(function(btn) {
-                btn.classList.remove('border-[var(--color-torch)]', 'text-[var(--color-torch)]', 'border-[var(--color-torch)]', 'text-[var(--color-torch)]', 'border-indigo-600', 'text-indigo-600');
+                btn.classList.remove('border-[var(--color-torch)]', 'text-[var(--color-torch)]');
                 btn.classList.add('border-transparent', 'text-[var(--color-ash)]');
             });
-            btnEl.classList.remove('border-transparent', 'text-[var(--color-ash)]', 'text-[var(--color-ash)]', 'text-gray-400');
+            btnEl.classList.remove('border-transparent', 'text-[var(--color-ash)]');
             btnEl.classList.add('border-[var(--color-torch)]', 'text-[var(--color-torch)]');
         }
     </script>

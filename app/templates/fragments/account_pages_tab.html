@@ -1,0 +1,66 @@
+{# Target Pages cockpit — account-scoped #}
+{% set on_count = on_count|default(0) %}
+{% set managed_count = managed_count|default(pages|length) %}
+{% set filter = filter|default('all') %}
+{% set q = q|default('') %}
+
+<div class="space-y-5" id="account-pages-cockpit">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+            <h3 class="text-sm font-display font-bold text-[var(--color-ink)]">Target Pages</h3>
+            <p class="text-[11px] text-[var(--color-ash)] mt-1 leading-relaxed max-w-xl">
+                Bật/tắt page đăng, gắn <strong class="text-[var(--color-mist)]">niche theo page</strong> (ưu tiên khi match viral/boost),
+                và kênh đối thủ (Source Nodes). Global Categories ở tab Configuration chỉ là fallback.
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border border-[var(--color-torch)]/30 bg-[var(--color-torch)]/10 text-[var(--color-torch)]">
+                {{ on_count }} ON / {{ managed_count }} managed
+            </span>
+            <button type="button"
+                hx-post="/accounts/{{ account.id }}/apply-global-niches"
+                hx-target="#account-{{ account.id }}"
+                hx-swap="outerHTML"
+                class="h-8 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-[var(--color-edge)] bg-[var(--color-face)] text-[var(--color-mist)] hover:border-[var(--color-torch)]/50 hover:text-[var(--color-torch)]">
+                Copy global → page thiếu niche
+            </button>
+            <button type="button"
+                hx-post="/accounts/{{ account.id }}/sync-pages"
+                hx-target="#account-{{ account.id }}"
+                hx-swap="outerHTML"
+                class="h-8 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider border border-[var(--color-torch)]/40 bg-[var(--color-torch)]/10 text-[var(--color-torch)] hover:bg-[var(--color-torch)]/20">
+                Sync pages
+            </button>
+        </div>
+    </div>
+
+    <form class="flex flex-col sm:flex-row gap-2"
+          hx-get="/accounts/{{ account.id }}/pages-tab"
+          hx-target="#tab-pages"
+          hx-swap="innerHTML"
+          hx-trigger="submit, change from:select">
+        <input type="search" name="q" value="{{ q }}" placeholder="Tìm page / niche…"
+            class="flex-1 h-9 rounded-lg bg-[var(--color-deep)] border border-[var(--color-edge)] px-3 text-xs text-[var(--color-ink)] outline-none focus:border-[var(--color-torch)]/50">
+        <select name="filter"
+            class="h-9 rounded-lg bg-[var(--color-deep)] border border-[var(--color-edge)] px-3 text-xs font-semibold text-[var(--color-ink)] outline-none">
+            <option value="all" {% if filter == 'all' %}selected{% endif %}>Tất cả</option>
+            <option value="active" {% if filter == 'active' %}selected{% endif %}>Đang ON</option>
+            <option value="paused" {% if filter == 'paused' %}selected{% endif %}>Tắt</option>
+            <option value="missing_niche" {% if filter == 'missing_niche' %}selected{% endif %}>Thiếu niche</option>
+            <option value="no_competitors" {% if filter == 'no_competitors' %}selected{% endif %}>Chưa có source</option>
+        </select>
+        <button type="submit"
+            class="h-9 px-4 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[var(--color-ledge)] border border-[var(--color-edge)] text-[var(--color-ink)] hover:border-[var(--color-torch)]/40">
+            Lọc
+        </button>
+    </form>
+
+    {% if pages %}
+    {% include "fragments/pages_table.html" %}
+    {% else %}
+    <div class="py-16 border border-dashed border-[var(--color-edge)] rounded-2xl flex flex-col items-center justify-center text-[var(--color-ash)] gap-2">
+        <p class="text-[10px] font-bold uppercase tracking-[0.2em]">Không có page khớp bộ lọc</p>
+        <p class="text-[11px]">Sync Managed Pages hoặc đổi filter.</p>
+    </div>
+    {% endif %}
+</div>

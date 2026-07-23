@@ -290,6 +290,23 @@
                 <p class="text-xs text-gray-400 italic">Đang tải đề xuất…</p>
             </div>
         </div>
+
+        <!-- VIP: Closed-loop — boost → đo lại growth -->
+        <div id="boostOutcomesPanel" class="insight-card p-5 mt-2">
+            <div class="flex items-center justify-between mb-3">
+                <div>
+                    <h4 class="text-sm font-display font-bold text-gray-900">Closed-loop Boost</h4>
+                    <p class="text-[11px] text-gray-500 mt-0.5">Snapshot lúc Approve → so với growth page hiện tại</p>
+                </div>
+                <button type="button" onclick="loadBoostOutcomes()"
+                    class="text-[10px] font-bold uppercase tracking-wider text-[var(--color-torch)] hover:underline">
+                    Làm mới
+                </button>
+            </div>
+            <div id="boostOutcomesList" class="space-y-2 text-sm text-gray-600">
+                <p class="text-xs text-gray-400 italic">Đang tải outcomes…</p>
+            </div>
+        </div>
     </div>
 
     <!-- Metrics Grid -->
@@ -1126,6 +1143,7 @@
                 list.appendChild(card);
             });
             loadBoostProposals();
+            loadBoostOutcomes();
         } catch (err) {
             console.error("Strategic Analysis load error:", err);
         }
@@ -1181,6 +1199,59 @@
             alert('Lỗi mạng khi duyệt boost');
         }
         loadBoostProposals();
+        if (action === 'approve') loadBoostOutcomes();
+    }
+
+    async function loadBoostOutcomes() {
+        const box = document.getElementById('boostOutcomesList');
+        if (!box) return;
+        try {
+            const res = await fetch('/insights/api/boost-outcomes');
+            const json = await res.json();
+            const rows = json.data || [];
+            if (!rows.length) {
+                box.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có boost đã duyệt. Approve một đề xuất để bắt đầu đo closed-loop.</p>';
+                return;
+            }
+            box.innerHTML = rows.map((r) => {
+                const gDelta = Number(r.growth_delta || 0);
+                const vDelta = Number(r.views_delta || 0);
+                const gCls = gDelta > 0 ? 'text-emerald-600' : (gDelta < 0 ? 'text-rose-600' : 'text-slate-500');
+                const vCls = vDelta > 0 ? 'text-emerald-600' : (vDelta < 0 ? 'text-rose-600' : 'text-slate-500');
+                const when = r.approved_at ? new Date(r.approved_at * 1000).toLocaleString('vi-VN') : '';
+                const pageLabel = (r.page_name || r.target_page || 'page').replace(/</g, '&lt;');
+                const statusNow = r.has_current ? (r.status_now || '—') : 'chưa có snapshot page';
+                return `
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs font-bold text-gray-900 truncate">${pageLabel}</div>
+                        <div class="text-[11px] text-gray-500 mt-0.5">
+                            material #${r.material_id}
+                            ${r.material_url ? ` · <a class="text-indigo-600 underline" href="${r.material_url}" target="_blank">source</a>` : ''}
+                            ${when ? ` · duyệt ${when}` : ''}
+                        </div>
+                        <div class="text-[10px] text-gray-400 mt-1">
+                            trước: ${Number(r.growth_pct_before||0).toFixed(1)}% · ${Number(r.views_before||0).toLocaleString()} views
+                            ${r.status_before ? ` · ${String(r.status_before).replace(/</g,'&lt;')}` : ''}
+                            → nay: ${statusNow.replace(/</g,'&lt;')}
+                        </div>
+                    </div>
+                    <div class="flex gap-4 shrink-0 text-right">
+                        <div>
+                            <div class="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Δ growth</div>
+                            <div class="text-sm font-bold ${gCls}">${gDelta > 0 ? '+' : ''}${gDelta.toFixed(1)}%</div>
+                        </div>
+                        <div>
+                            <div class="text-[9px] uppercase tracking-wider text-gray-400 font-bold">Δ views</div>
+                            <div class="text-sm font-bold ${vCls}">${vDelta > 0 ? '+' : ''}${Number(vDelta).toLocaleString()}</div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch (err) {
+            console.error('Boost outcomes load error:', err);
+            box.innerHTML = '<p class="text-xs text-red-500">Không tải được closed-loop outcomes.</p>';
+        }
     }
 
     let _commentaryAbort = null;

@@ -137,3 +137,8 @@ def approve_boost_proposal(material_id: int, db: Session = Depends(get_db)):
 def reject_boost_proposal(material_id: int, db: Session = Depends(get_db)):
     return insights_service.reject_boost_proposal(db, material_id)
 
+
+@router.get("/api/boost-outcomes")
+def list_boost_outcomes(db: Session = Depends(get_db)):
+    return insights_service.list_boost_outcomes(db)
+
