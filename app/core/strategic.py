@@ -14,8 +14,10 @@ logger = logging.getLogger(__name__)
 class PageStrategicService:
     """
     Strategic Analysis & Autonomous Boosting Service.
-    Identifies high-growth 'exploding' FB pages and automatically pushes
-    niche-matched content with context-aware AI captions.
+
+    **Product ownership:** Facebook growth & auto-boost (Insights UI, viral reup targets).
+    Lives in ``app.core`` because ``insights`` and ``viral_intake`` consume it without
+    importing ``features.facebook`` (ADR-007 Rule 2).
     """
     _cache = {}
     _cache_ts = {}  # timestamp per platform key
