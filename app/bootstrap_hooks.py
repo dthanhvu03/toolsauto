@@ -51,9 +51,15 @@ def register_feature_hooks() -> None:
     def telegram_make_poller(token: str, chat_id: str):
         return TelegramPoller(token, chat_id)
 
+    def facebook_strategic_boost(db: Session):
+        from app.core.strategic import PageStrategicService
+
+        return PageStrategicService.run_auto_boost(db)
+
     feature_hooks.register("viral.process_all", viral_process_all)
     feature_hooks.register("viral.tiktok_scan", viral_tiktok_scan)
     feature_hooks.register("viral.min_views", viral_min_views)
     feature_hooks.register("viral.force_discovery", viral_force_discovery)
     feature_hooks.register("viral.discover_keyword", viral_discover_keyword)
     feature_hooks.register("telegram.make_poller", telegram_make_poller)
+    feature_hooks.register("facebook.strategic_boost", facebook_strategic_boost)
