@@ -620,14 +620,55 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     _mark_material_failed(db, mat, reason)
                     continue
 
+            # Chọn account sớm để resolve anti-dupe preset theo page/niche
+            target_account = default_account
+            if mat.scraped_by_account_id:
+                specified_acc = active_accounts_by_id.get(mat.scraped_by_account_id)
+                if specified_acc:
+                    target_account = specified_acc
+
             # === Post-processing: watermark removal + anti-duplicate ===
+            from app.features.viral_intake.reup_config import resolve_preset
             from app.features.viral_intake.reup_processor import ReupProcessor
+            from app.features.viral_intake.reup_variants import record_reup_variant
+
+            preset_page = mat.target_page
+            preset_niches: list[str] = []
+            if preset_page and target_account:
+                try:
+                    from app.core.strategic import PageStrategicService
+                    preset_niches = PageStrategicService._lookup_page_niches(
+                        db, target_account.id, preset_page,
+                    ) or []
+                except Exception:
+                    preset_niches = []
+            reup_preset = resolve_preset(
+                page_url=preset_page,
+                niches=preset_niches,
+                material_id=mat.id,
+            )
             reup_result = ReupProcessor.process(
                 input_path=media_path,
                 platform=mat.platform or "unknown",
+                preset=reup_preset,
             )
             if reup_result.success and reup_result.output_path:
-                logger.info("[VIRAL] Post-processed: %s", reup_result.output_path)
+                logger.info(
+                    "[VIRAL] Post-processed preset=%s: %s",
+                    reup_preset,
+                    reup_result.output_path,
+                )
+                try:
+                    record_reup_variant(
+                        material_id=mat.id,
+                        preset=reup_preset,
+                        platform=mat.platform,
+                        target_page=preset_page,
+                        metrics=reup_result.metrics,
+                        source="ingest",
+                    )
+                except Exception as rec_err:
+                    logger.warning("[VIRAL] record_reup_variant failed: %s", rec_err)
                 # Xóa file gốc, dùng file đã xử lý
                 try:
                     os.remove(media_path)
@@ -643,13 +684,6 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     pass
                 _mark_material_failed(db, mat, reason)
                 continue
-
-            # Chọn account: ưu tiên acc do user chỉ định, fallback acc mặc định
-            target_account = default_account
-            if mat.scraped_by_account_id:
-                specified_acc = active_accounts_by_id.get(mat.scraped_by_account_id)
-                if specified_acc:
-                    target_account = specified_acc
 
             # Tạo Job DRAFT với AI_GENERATE và cắm cờ ORIGINAL_VIRAL_TITLE để truyền context
             import random

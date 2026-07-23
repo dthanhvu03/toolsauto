@@ -60,6 +60,27 @@
         {% endif %}
     </td>
     <td class="p-3 align-top text-right">
+        {% if has_reup %}
+        <div class="mb-2 flex flex-col items-end gap-1">
+            <select name="preset" id="reup-preset-{{ item.id }}"
+                class="text-[10px] border border-emerald-200 rounded px-1 py-0.5 text-emerald-800 bg-white"
+                title="Preset anti-dupe" aria-label="Preset anti-dupe">
+                <option value="">auto</option>
+                <option value="safe">safe</option>
+                <option value="aggressive">aggressive</option>
+                <option value="reels_short">reels_short</option>
+            </select>
+            <button
+                class="flex items-center justify-center min-w-[44px] min-h-[36px] text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 px-2 py-1 rounded transition text-[11px] font-bold"
+                hx-post="/viral/{{ item.id }}/reprocess"
+                hx-include="#reup-preset-{{ item.id }}"
+                hx-swap="none"
+                title="Chạy lại anti-dupe trên file _reup hiện tại" aria-label="Chạy lại anti-dupe">
+                Re-process
+            </button>
+        </div>
+        {% endif %}
+
         <button
             class="flex items-center justify-center min-w-[44px] min-h-[44px] text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded transition"
             hx-post="/viral/{{ item.id }}/delete" hx-target="#viral-{{ item.id }}" hx-swap="outerHTML"

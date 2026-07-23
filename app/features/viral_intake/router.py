@@ -1,11 +1,15 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
 import time
 from app.core.database.core import get_db
 from app.core.database.models import ViralMaterial
+from app.utils.htmx import htmx_toast_response
 from app.main_templates import templates
 from app.features.viral_intake.service import ViralService
+
 
 router = APIRouter(prefix="/viral", tags=["viral"])
 
@@ -89,6 +93,20 @@ def save_viral_settings(viral_min_views: int = Form(10000), viral_max_videos_per
 def delete_material(material_id: int, db: Session = Depends(get_db)):
     ViralService.delete_material(db, material_id)
     return HTMLResponse(content="")
+
+
+@router.post("/{material_id}/reprocess", response_class=HTMLResponse)
+def reprocess_material(
+    material_id: int,
+    preset: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    ok, message = ViralService.reprocess_reup(db, material_id, preset=preset)
+    return htmx_toast_response(
+        message,
+        type="success" if ok else "error",
+        refresh_page=True,
+    )
 
 
 @router.get("/{material_id}/reup-preview")
