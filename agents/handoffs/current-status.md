@@ -22,5 +22,5 @@
 
 ## Next Action
 
-1. Owner F5: `/app/accounts?platform=facebook`, `/app/jobs?platform=threads`, `/insights?platform=facebook`, `/threads`, breadcrumb trên các trang silo.
-2. Optional: commit perf N+1 batch (tách khỏi silos).
+1. Owner F5: `/app/jobs?platform=threads` — **không** còn chip FB/IG/TikTok (silo khóa); `/app/jobs` vẫn có chip Tất cả.
+2. Archive PLAN-038/039 + TASK-040/041 khi Owner confirm.
