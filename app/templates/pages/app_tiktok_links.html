@@ -1,7 +1,9 @@
 {% extends "layouts/app.html" %}
+{% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
 {% block title %}TikTok Links • Auto Publisher{% endblock %}
-{% block page_title %}TikTok Links{% endblock %}
+{% block page_breadcrumb %}{{ silo_breadcrumb('Facebook', 'Nguồn TikTok') }}{% endblock %}
+{% block page_title %}Nguồn TikTok{% endblock %}
 {% block page_subtitle %}Theo dõi kênh đối thủ + video viral TikTok trong SaaS UI.{% endblock %}
 
 {% block content %}

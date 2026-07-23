@@ -1,0 +1,9 @@
+{# DRY breadcrumb cho trang silo — dùng: {% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %} #}
+{% macro silo_breadcrumb(silo, label) %}
+<nav class="silo-breadcrumb flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-ash)]"
+    aria-label="Ngữ cảnh nền tảng">
+    <span class="text-[var(--color-mist)]">{{ silo }}</span>
+    <span class="text-[var(--color-edge)] select-none" aria-hidden="true">›</span>
+    <span class="text-[var(--color-torch)]">{{ label }}</span>
+</nav>
+{% endmacro %}

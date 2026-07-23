@@ -1,6 +1,8 @@
 {% extends "layouts/app.html" %}
+{% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
 {% block title %}Vi phạm FB • Auto Publisher{% endblock %}
+{% block page_breadcrumb %}{{ silo_breadcrumb('Facebook', 'Vi phạm Facebook') }}{% endblock %}
 {% block page_title %}Quản lý vi phạm Facebook{% endblock %}
 {% block page_subtitle %}Từ khóa, nhật ký kiểm tra, tester và thống kê.{% endblock %}
 

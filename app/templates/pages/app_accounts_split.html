@@ -1,5 +1,7 @@
 {% extends "layouts/app.html" %}
 
+{% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
+
 {% block title %}Hang tài khoản — Auto Publisher{% endblock %}
 
 {% block head_extra %}
@@ -30,6 +32,8 @@
 </style>
 {% endblock %}
 
+{% block page_breadcrumb %}{{ silo_breadcrumb('Chung', 'Tài khoản') }}{% endblock %}
+
 {% block page_title %}
 <div class="flex items-center gap-2.5">
     <div class="p-1.5 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-stone)]">
@@ -52,7 +56,13 @@
 {% block content %}
 <div class="cave-chamber accounts-chamber flex overflow-hidden min-h-0">
     <div class="cave-rail accounts-rail flex flex-col shrink-0 relative z-[var(--z-base)] min-h-0">
-        <div class="p-[var(--space-4)] border-b border-[var(--color-border)] shrink-0">
+        <div class="p-[var(--space-4)] border-b border-[var(--color-border)] shrink-0 space-y-[var(--space-3)]">
+            <div class="flex gap-2 flex-wrap items-center" role="group" aria-label="Lọc nền tảng tài khoản">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-[var(--color-ash)] mr-0.5">Nền tảng</span>
+                <button type="button" data-platform="all" class="accountPlatformTab app-chip app-chip-active" aria-pressed="true">Tất cả</button>
+                <button type="button" data-platform="facebook" class="accountPlatformTab app-chip" aria-pressed="false">Facebook</button>
+                <button type="button" data-platform="instagram" class="accountPlatformTab app-chip" aria-pressed="false">Instagram</button>
+            </div>
             <div class="relative">
                 <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[var(--color-ash)]">
                     <svg class="w-[var(--size-icon-sm)] h-[var(--size-icon-sm)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,14 +70,15 @@
                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                 </div>
-                <input id="splitQ" hx-get="/accounts/list" hx-trigger="keyup changed delay:300ms"
-                    hx-target="#accountList"
+                <input id="splitQ" name="q" hx-get="/accounts/list" hx-trigger="keyup changed delay:300ms"
+                    hx-target="#accountList" hx-include="#accountListPlatform"
                     class="cave-input pl-9"
                     placeholder="Tìm trong hang..." />
+                <input type="hidden" id="accountListPlatform" name="platform" value="all" />
             </div>
         </div>
 
-        <div id="accountList" hx-get="/accounts/list" hx-trigger="load" class="flex-1 min-h-0 overflow-y-auto cave-scrollbar">
+        <div id="accountList" hx-get="/accounts/list" hx-trigger="load" hx-include="#accountListPlatform" class="flex-1 min-h-0 overflow-y-auto cave-scrollbar">
             <div class="p-[var(--space-10)] flex flex-col items-center justify-center text-[var(--color-ash)] gap-[var(--space-3)]">
                 <div class="w-6 h-6 border-2 border-[var(--color-torch)] border-t-transparent rounded-full animate-spin"></div>
                 <span class="label-cave">Mở hang...</span>
@@ -121,4 +132,56 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+  let accountListPlatform = 'all';
+  function accountListUrl() {
+    const q = encodeURIComponent(document.getElementById('splitQ')?.value || '');
+    let url = `/accounts/list?q=${q}`;
+    if (accountListPlatform && accountListPlatform !== 'all') {
+      url += `&platform=${encodeURIComponent(accountListPlatform)}`;
+    }
+    return url;
+  }
+  function syncAccountPlatformTabs() {
+    document.querySelectorAll('.accountPlatformTab').forEach(t => {
+      const pf = t.getAttribute('data-platform');
+      const active = pf === accountListPlatform;
+      t.classList.toggle('app-chip-active', active);
+      t.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    const hidden = document.getElementById('accountListPlatform');
+    if (hidden) hidden.value = accountListPlatform === 'all' ? 'all' : accountListPlatform;
+  }
+  function setAccountQueryParams() {
+    const url = new URL(window.location.href);
+    if (!accountListPlatform || accountListPlatform === 'all') url.searchParams.delete('platform');
+    else url.searchParams.set('platform', accountListPlatform);
+    window.history.replaceState({}, '', url.toString());
+  }
+  function refreshAccountList() {
+    syncAccountPlatformTabs();
+    setAccountQueryParams();
+    htmx.ajax('GET', accountListUrl(), { target: '#accountList', swap: 'innerHTML' });
+  }
+  window.resetAccountPlatformFilter = function () {
+    accountListPlatform = 'all';
+    refreshAccountList();
+  };
+  function initAccountPlatformFromQuery() {
+    const url = new URL(window.location.href);
+    accountListPlatform = url.searchParams.get('platform') || 'all';
+    syncAccountPlatformTabs();
+  }
+  document.querySelectorAll('.accountPlatformTab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      accountListPlatform = btn.getAttribute('data-platform') || 'all';
+      refreshAccountList();
+    });
+  });
+  initAccountPlatformFromQuery();
+  if (accountListPlatform !== 'all') refreshAccountList();
+</script>
 {% endblock %}

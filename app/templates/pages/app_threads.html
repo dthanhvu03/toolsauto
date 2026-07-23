@@ -1,8 +1,10 @@
 {% extends "layouts/app.html" %}
+{% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
-{% block title %}Threads Master - Auto Publisher{% endblock %}
-{% block page_title %}Threads Master{% endblock %}
-{% block page_subtitle %}He thong tu dong hoa tin tuc va tuong tac tren nen tang Threads.{% endblock %}
+{% block title %}Threads • Auto Publisher{% endblock %}
+{% block page_breadcrumb %}{{ silo_breadcrumb('Threads', 'Workspace') }}{% endblock %}
+{% block page_title %}Workspace Threads{% endblock %}
+{% block page_subtitle %}Cockpit tin tức, hàng đợi và kết nối tài khoản trên nền tảng Threads.{% endblock %}
 
 {% block head_extra %}
 <style>

@@ -491,6 +491,19 @@ body.theme-cave .nav-item.bg-indigo-50 svg {
   color: var(--color-torch) !important;
   opacity: 1;
 }
+body.theme-cave .nav-item:focus-visible {
+  outline: 2px solid var(--color-torch-border);
+  outline-offset: 2px;
+}
+
+body.theme-cave .silo-breadcrumb {
+  margin-bottom: var(--space-1);
+}
+
+body.theme-cave .app-chip:focus-visible {
+  outline: 2px solid var(--color-torch-border);
+  outline-offset: 2px;
+}
 
 body.theme-cave main > div > .flex.flex-col .text-2xl {
   color: var(--color-ink) !important;
