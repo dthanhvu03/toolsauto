@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Implemented — chờ Owner verify UI |
+| **Status** | Done · **Archived** 2026-07-23 (Owner UI OK) |
 
 | **Priority** | P1 |
 | **Executor** | Claude Code (+ thin backend wiring) |

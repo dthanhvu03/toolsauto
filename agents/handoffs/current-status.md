@@ -3,24 +3,18 @@
 ## System State
 
 - Local: **http://127.0.0.1:8002**
-- **PLAN-040 platform silos:** Done (sidebar + dispatch + hooks)
-- **Frontend silo UX (c6f0f19 + polish session):** Done — breadcrumb silo, accounts `?platform=`, jobs/insights/threads polish, sidebar insights active rule
+- VIP monetize/viral/strategic · Perf N+1 · PLAN-040 platform silos · Frontend silo UX — **Done**
+- Latest UI: Jobs silo lock `f7c96b4` (Owner F5 OK)
 
 ## Done This Session [2026-07-23]
 
-### Platform silo UX polish (hoàn thiện sau c6f0f19)
-
-1. **Breadcrumb DRY** (`fragments/silo_breadcrumb.html` + `page_breadcrumb` trong `layouts/app.html`): Facebook/Threads/Chung trên viral, tiktok-links, insights, compliance, threads, jobs, accounts.
-2. **Accounts** (`app_accounts_split.html`, `accounts/router.py`): Chip lọc nền tảng + `?platform=`; empty state; badge platform trên list item.
-3. **Sidebar** (`app.html`): Insights active chỉ khi `platform=facebook` (mặc định); focus-visible nav/chip trong `cave-tokens.css`.
-4. **Jobs** (`app_jobs.html`, `jobs_table.html`): Empty state theo nền tảng; aria-pressed chip; tiêu đề VI.
-5. **Insights** (`insights.html`): Tiêu đề/subtitle/badge wrap mobile; copy Phân tích & boost.
-6. **Threads** (`app_threads.html`): Workspace cockpit + breadcrumb + subtitle VI.
-7. **Viral / TikTok links / Compliance**: Breadcrumb + tiêu đề rõ silo Facebook.
-
-**Smoke (venv):** `venv\Scripts\python.exe -c "import app.main"` → **ok**
+- VIP Accounts Config/Target + Viral `_reup` + Insights closed-loop
+- Perf N+1 batch (`5ed8daf`)
+- PLAN-040 silos + RecursionError hotfix + frontend silo UX + Jobs platform lock
+- **Archive:** PLAN-038/039 → `agents/plans/archive/` · TASK-040/041 → `agents/tasks/archive/`
 
 ## Next Action
 
-1. Owner F5: `/app/jobs?platform=threads` — **không** còn chip FB/IG/TikTok (silo khóa); `/app/jobs` vẫn có chip Tất cả.
-2. Archive PLAN-038/039 + TASK-040/041 khi Owner confirm.
+1. Idle — không còn PLAN/TASK active bắt buộc.
+2. Push remote chỉ khi Owner yêu cầu.
+3. Optional sau: lint ADR-007 Rule 2 (features↔features).

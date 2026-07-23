@@ -4,7 +4,7 @@
 |---|---|
 | **ID** | TASK-041 |
 | **Plan** | PLAN-039 |
-| **Status** | Implemented — chờ verify |
+| **Status** | Done · **Archived** 2026-07-23 (Owner UI OK) |
 
 | **Assignee** | Claude Code |
 | **Created** | 2026-07-23 |

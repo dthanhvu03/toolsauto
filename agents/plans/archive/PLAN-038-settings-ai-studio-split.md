@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | Done (2026-07-22) |
+| **Status** | Done (2026-07-22) · **Archived** 2026-07-23 |
 | **Priority** | P2 |
 | **Executor** | Claude Code (UX + metadata filter); Codex chỉ nếu cần sửa validation bulk-save |
 | **Related Task** | TASK-040 |

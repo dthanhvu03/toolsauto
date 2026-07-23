@@ -4,7 +4,7 @@
 | Field | Value |
 |---|---|
 | **ID** | TASK-040 |
-| **Status** | Verified |
+| **Status** | Verified · **Archived** 2026-07-23 |
 | **Priority** | P2 |
 | **Owner** | Antigravity / User intake |
 | **Executor** | Claude Code |
