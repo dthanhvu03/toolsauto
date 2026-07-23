@@ -7,7 +7,6 @@ import json
 import logging
 from urllib.parse import urlparse, parse_qs
 
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.database.models import Account, ViralMaterial, SystemState
@@ -94,6 +93,13 @@ def run_tiktok_competitor_scan(db: Session) -> tuple[int, int]:
     scraper = TikTokScraper()
     total_found = 0
 
+    # Prefetch normalized URL set once — tránh N+1 .first() mỗi video
+    existing_norm_urls = {
+        _normalize_video_url(u)
+        for (u,) in db.query(ViralMaterial.url).all()
+        if u
+    }
+
     default_min_views = get_default_min_views(db)
     default_max_videos = get_default_max_videos_per_channel(db)
     for account_id, channel_url, channel_target_page in tiktok_channels:
@@ -113,14 +119,7 @@ def run_tiktok_competitor_scan(db: Session) -> tuple[int, int]:
             norm_url = _normalize_video_url(raw_url)
             if not norm_url:
                 continue
-            # Trùng video đã quét trước đó (bất kể target_page / account). So khớp cả URL đã chuẩn hóa và URL có query.
-            existing = db.query(ViralMaterial).filter(
-                or_(
-                    ViralMaterial.url == norm_url,
-                    ViralMaterial.url.like(norm_url + "?%"),
-                )
-            ).first()
-            if existing:
+            if norm_url in existing_norm_urls:
                 continue
 
             mat = ViralMaterial(
@@ -133,6 +132,7 @@ def run_tiktok_competitor_scan(db: Session) -> tuple[int, int]:
                 status=ViralStatus.NEW,
             )
             db.add(mat)
+            existing_norm_urls.add(norm_url)
             total_found += 1
 
         db.commit()

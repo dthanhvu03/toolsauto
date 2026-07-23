@@ -162,7 +162,7 @@ def _clear_material_error(mat) -> None:
     mat.last_error = None
 
 
-def _get_download_source_account(db, mat):
+def _get_download_source_account(db, mat, accounts_by_id=None, platform_fallback=None):
     """Pick an active account whose browser profile can provide source cookies."""
     from app.core.database.models import Account
 
@@ -171,14 +171,27 @@ def _get_download_source_account(db, mat):
 
     preferred = None
     if mat.scraped_by_account_id:
-        preferred = db.query(Account).filter(
-            Account.id == mat.scraped_by_account_id,
-            Account.is_active == True,
-            Account.login_status == AccountStatus.ACTIVE,
-            Account.platform == mat.platform,
-        ).first()
+        if accounts_by_id is not None:
+            cand = accounts_by_id.get(mat.scraped_by_account_id)
+            if (
+                cand
+                and cand.is_active
+                and cand.login_status == AccountStatus.ACTIVE
+                and cand.platform == mat.platform
+            ):
+                preferred = cand
+        else:
+            preferred = db.query(Account).filter(
+                Account.id == mat.scraped_by_account_id,
+                Account.is_active == True,
+                Account.login_status == AccountStatus.ACTIVE,
+                Account.platform == mat.platform,
+            ).first()
     if preferred:
         return preferred
+
+    if platform_fallback is not None:
+        return platform_fallback.get(mat.platform)
 
     return db.query(Account).filter(
         Account.is_active == True,
@@ -280,9 +293,10 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
 
         # Use a fair per-account distribution rather than a global limit
         # This prevents an account with 1M+ view videos from starving other accounts
-        active_accounts = db.query(Account.id).filter(Account.is_active == True).all()
+        active_accounts = db.query(Account).filter(Account.is_active == True).all()
         active_acc_ids = [acc.id for acc in active_accounts]
-    
+        active_accounts_by_id = {acc.id: acc for acc in active_accounts}
+
         limit_per_acc = max(1, _get_runtime_int(db, "MAINT_VIRAL_LIMIT", config.MAINT_VIRAL_LIMIT)) // max(1, len(active_acc_ids))
         if limit_per_acc < 2:
             limit_per_acc = 2
@@ -291,45 +305,48 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
         # First, always grab REUP materials (manual/boosted) since they are high priority
         reups = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.REUP).all()
         materials.extend(reups)
-    
-        # Then, fairly grab NEW materials per account and per target_page to prevent starvation
-        for acc_id in active_acc_ids:
-            acc = db.query(Account).filter(Account.id == acc_id).first()
-            if not acc:
-                continue
-            
-            # Determine all target pages this account is responsible for
+
+        # Prefetch NEW theo account (A queries, không A×P) — mỗi acc cắt trần để tránh load cả bảng.
+        from collections import defaultdict
+
+        new_by_acc_page: dict = defaultdict(list)
+        new_by_acc_general: dict = defaultdict(list)
+        new_by_acc_all: dict = defaultdict(list)
+        per_acc_fetch = max(limit_per_acc * 4, 24)
+        for acc in active_accounts:
+            new_mats = (
+                db.query(ViralMaterial)
+                .filter(
+                    ViralMaterial.status == ViralStatus.NEW,
+                    ViralMaterial.scraped_by_account_id == acc.id,
+                )
+                .order_by(ViralMaterial.views.desc())
+                .limit(per_acc_fetch)
+                .all()
+            )
+            for m in new_mats:
+                new_by_acc_all[acc.id].append(m)
+                if m.target_page:
+                    new_by_acc_page[(acc.id, m.target_page)].append(m)
+                else:
+                    new_by_acc_general[acc.id].append(m)
+
+        for acc in active_accounts:
             pages = set()
             if acc.target_pages_list:
                 pages.update(acc.target_pages_list)
             if acc.target_page:
                 pages.add(acc.target_page)
-            
+
             if not pages:
-                # Fallback for accounts without explicit target pages
-                acc_materials = db.query(ViralMaterial).filter(
-                    ViralMaterial.status == ViralStatus.NEW,
-                    ViralMaterial.scraped_by_account_id == acc_id
-                ).order_by(ViralMaterial.views.desc()).limit(limit_per_acc).all()
-                materials.extend(acc_materials)
+                materials.extend(new_by_acc_all.get(acc.id, [])[:limit_per_acc])
             else:
                 limit_per_page = max(1, limit_per_acc // len(pages))
                 for page_url in pages:
-                    # Fetch top materials specifically for this page
-                    page_materials = db.query(ViralMaterial).filter(
-                        ViralMaterial.status == ViralStatus.NEW,
-                        ViralMaterial.scraped_by_account_id == acc_id,
-                        ViralMaterial.target_page == page_url
-                    ).order_by(ViralMaterial.views.desc()).limit(limit_per_page).all()
-                    materials.extend(page_materials)
-                
-                # Allow fallback for videos scraped without a specific target_page
-                general_materials = db.query(ViralMaterial).filter(
-                    ViralMaterial.status == ViralStatus.NEW,
-                    ViralMaterial.scraped_by_account_id == acc_id,
-                    ViralMaterial.target_page.is_(None)
-                ).order_by(ViralMaterial.views.desc()).limit(limit_per_acc).all()
-                materials.extend(general_materials)
+                    materials.extend(
+                        new_by_acc_page.get((acc.id, page_url), [])[:limit_per_page]
+                    )
+                materials.extend(new_by_acc_general.get(acc.id, [])[:limit_per_acc])
 
         # Sort the final combined list by views so the highest views across the picked batch get processed first
         materials.sort(key=lambda m: (m.status != ViralStatus.REUP, -m.views))
@@ -340,19 +357,82 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
     logger.info("[VIRAL] Found %d materials to process (fair distribution).", len(materials))
 
     # Lấy account mặc định (fallback nếu material không chỉ định acc)
-    default_account = db.query(Account).filter(
-        Account.is_active == True,
-        Account.login_status == AccountStatus.ACTIVE,
-        Account.platform == "facebook",
-    ).first()
+    if only_material_id is not None:
+        active_accounts_by_id = {
+            acc.id: acc for acc in db.query(Account).filter(Account.is_active == True).all()
+        }
 
+    default_account = next(
+        (
+            acc
+            for acc in active_accounts_by_id.values()
+            if acc.login_status == AccountStatus.ACTIVE and acc.platform == "facebook"
+        ),
+        None,
+    )
+    if not default_account:
+        default_account = db.query(Account).filter(
+            Account.is_active == True,
+            Account.login_status == AccountStatus.ACTIVE,
+            Account.platform == "facebook",
+        ).first()
 
-    # Bug #6 Fix: Batch pre-fetch active accounts to avoid N+1 queries in loop
-    active_accounts_by_id = {acc.id: acc for acc in db.query(Account).filter(Account.is_active == True).all()}
+    platform_fallback = {}
+    for acc in active_accounts_by_id.values():
+        if (
+            acc.login_status == AccountStatus.ACTIVE
+            and acc.platform in {"instagram", "facebook"}
+            and acc.platform not in platform_fallback
+        ):
+            platform_fallback[acc.platform] = acc
 
     if not default_account:
         logger.warning("[VIRAL] No active Facebook account found. Skipping viral ingestion.")
         return
+
+    # Batch REUP daily caps by target_page (2 GROUP BY thay vì 2 count/material)
+    reup_cap = int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0)
+    reup_active_today: dict = {}
+    reup_posted_today: dict = {}
+    today_start = None
+    if reup_cap > 0:
+        from datetime import datetime, time as time_obj
+        from zoneinfo import ZoneInfo
+        from sqlalchemy import func
+
+        today_start = int(
+            datetime.combine(
+                datetime.now(ZoneInfo(config.TIMEZONE)).date(),
+                time_obj.min,
+            ).timestamp()
+        )
+        active_statuses = [
+            JobStatus.AWAITING_STYLE,
+            JobStatus.AI_PROCESSING,
+            JobStatus.DRAFT,
+            JobStatus.PENDING,
+            JobStatus.RUNNING,
+        ]
+        reup_active_today = dict(
+            db.query(Job.target_page, func.count(Job.id))
+            .filter(
+                Job.target_page.isnot(None),
+                Job.status.in_(active_statuses),
+                Job.created_at >= today_start,
+            )
+            .group_by(Job.target_page)
+            .all()
+        )
+        reup_posted_today = dict(
+            db.query(Job.target_page, func.count(Job.id))
+            .filter(
+                Job.target_page.isnot(None),
+                Job.status == JobStatus.DONE,
+                Job.finished_at >= today_start,
+            )
+            .group_by(Job.target_page)
+            .all()
+        )
 
     reup_base = str(config.REUP_DIR)
     yt_dlp_bin = _resolve_yt_dlp_binary()
@@ -362,19 +442,13 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             # Tạo thư mục theo platform: reup/tiktok/, reup/facebook/, reup/youtube/...
             platform_dir = os.path.join(reup_base, mat.platform or "unknown")
             os.makedirs(platform_dir, exist_ok=True)
-            source_account = _get_download_source_account(db, mat)
+            source_account = _get_download_source_account(
+                db, mat, accounts_by_id=active_accounts_by_id, platform_fallback=platform_fallback
+            )
 
             # If this sweep is processing REUP materials, optionally cap intake per target_page/day.
             # This prevents lag spikes by limiting how many REUP-derived jobs can enter the pipeline.
-            if (
-                mat.status == ViralStatus.REUP
-                and int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0) > 0
-            ):
-                from datetime import datetime, time as time_obj
-                from zoneinfo import ZoneInfo
-                from app.core.database.models import Job, Account
-
-                # Resolve target account/page *without* downloading media
+            if mat.status == ViralStatus.REUP and reup_cap > 0:
                 target_account = default_account
                 if mat.scraped_by_account_id:
                     specified_acc = active_accounts_by_id.get(mat.scraped_by_account_id)
@@ -386,38 +460,23 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     resolved_target = target_account.pick_next_target_page(db)
 
                 if resolved_target:
-                    today_start = int(
-                        datetime.combine(
-                            datetime.now(ZoneInfo(config.TIMEZONE)).date(),
-                            time_obj.min,
-                        ).timestamp()
+                    used = int(reup_active_today.get(resolved_target, 0)) + int(
+                        reup_posted_today.get(resolved_target, 0)
                     )
-
-                    cap = int(config.REUP_VIDEOS_PER_PAGE_PER_DAY)
-                    active_statuses = [JobStatus.AWAITING_STYLE, JobStatus.AI_PROCESSING, JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING]
-
-                    active_today = db.query(Job).filter(
-                        Job.target_page == resolved_target,
-                        Job.status.in_(active_statuses),
-                        Job.created_at >= today_start,
-                    ).count()
-
-                    posted_today = db.query(Job).filter(
-                        Job.target_page == resolved_target,
-                        Job.status == JobStatus.DONE,
-                        Job.finished_at >= today_start,
-                    ).count()
-
-                    if (active_today + posted_today) >= cap:
+                    if used >= reup_cap:
                         logger.info(
                             "[REUP CAP] Skip material #%s (%s) for page '%s': active+posted today=%s >= cap=%s",
                             mat.id,
                             mat.url,
                             resolved_target,
-                            active_today + posted_today,
-                            cap,
+                            used,
+                            reup_cap,
                         )
                         continue
+                    # Local bump so same sweep không vượt cap khi nhiều REUP cùng page
+                    reup_active_today[resolved_target] = int(
+                        reup_active_today.get(resolved_target, 0)
+                    ) + 1
 
             preflight_cmd = _extend_yt_dlp_with_cookies([
                 yt_dlp_bin,

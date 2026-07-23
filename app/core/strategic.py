@@ -204,9 +204,7 @@ Kết quả:"""
         return PageStrategicService._cache.get(cache_key, analysis)
 
     @staticmethod
-    def _lookup_page_niches(db: Session, account_id: int, page_url: str) -> list[str]:
-        """Lookup niche keywords for a specific page from Account.page_niches."""
-        account = db.query(Account).filter(Account.id == account_id).first()
+    def _lookup_page_niches_from_account(account: Account | None, page_url: str) -> list[str]:
         if not account:
             return []
         pn_map = account.page_niches_map or {}
@@ -214,6 +212,25 @@ Kết quả:"""
             if page_url in p_url or p_url in page_url:
                 return niches if isinstance(niches, list) else []
         return []
+
+    @staticmethod
+    def _lookup_page_niches(db: Session, account_id: int, page_url: str) -> list[str]:
+        """Lookup niche keywords for a specific page from Account.page_niches."""
+        account = db.query(Account).filter(Account.id == account_id).first()
+        return PageStrategicService._lookup_page_niches_from_account(account, page_url)
+
+    @staticmethod
+    def _find_niche_material_in_pool(
+        pool: list[ViralMaterial], niches: list[str]
+    ) -> ViralMaterial | None:
+        if not niches or not pool:
+            return None
+        lowered = [kw.lower() for kw in niches if kw]
+        for mat in pool:
+            title = (mat.title or "").lower()
+            if any(kw in title for kw in lowered):
+                return mat
+        return None
 
     @staticmethod
     def _find_niche_material(db: Session, niches: list[str], source_platforms: list[str] | None = None) -> ViralMaterial | None:
@@ -230,6 +247,16 @@ Kết quả:"""
         ).order_by(ViralMaterial.views.desc()).first()
 
     @staticmethod
+    def _summarize_top_posts(top_posts: list) -> str:
+        if not top_posts:
+            return ""
+        parts = []
+        for tp in top_posts:
+            cap_preview = (tp.caption or "")[:60].replace('"', "'")
+            parts.append(f'"{cap_preview}..." ({tp.views:,} views)')
+        return "; ".join(parts)
+
+    @staticmethod
     def _get_top_posts_summary(db: Session, page_url: str, limit: int = 3) -> str:
         """Get a short summary of top-performing posts for context injection."""
         top_posts = db.query(PageInsight).filter(
@@ -237,15 +264,7 @@ Kết quả:"""
             PageInsight.caption.isnot(None),
             PageInsight.caption != ""
         ).order_by(PageInsight.views.desc()).limit(limit).all()
-
-        if not top_posts:
-            return ""
-        
-        parts = []
-        for tp in top_posts:
-            cap_preview = (tp.caption or "")[:60].replace('"', "'")
-            parts.append(f'"{cap_preview}..." ({tp.views:,} views)')
-        return "; ".join(parts)
+        return PageStrategicService._summarize_top_posts(top_posts)
 
     @staticmethod
     def run_auto_boost(db: Session):
@@ -262,32 +281,80 @@ Kết quả:"""
             return
 
         source_platforms = ["tiktok", "facebook"]
+        page_urls = [p["page_url"] for p in exploding_pages if p.get("page_url")]
+        account_ids = {p["account_id"] for p in exploding_pages if p.get("account_id")}
+
+        accounts_by_id = {
+            a.id: a
+            for a in db.query(Account).filter(Account.id.in_(account_ids)).all()
+        } if account_ids else {}
+
+        cooldown_cutoff = int(time.time()) - 3600
+        cooling_pages = {
+            url
+            for (url,) in db.query(ViralMaterial.target_page)
+            .filter(
+                ViralMaterial.target_page.in_(page_urls),
+                ViralMaterial.status.in_([ViralStatus.REUP, ViralStatus.BOOST_PENDING]),
+                ViralMaterial.updated_at >= cooldown_cutoff,
+            )
+            .distinct()
+            .all()
+        } if page_urls else set()
+
+        from collections import defaultdict
+
+        top_posts_by_page: dict[str, list] = defaultdict(list)
+        if page_urls:
+            posts = (
+                db.query(PageInsight)
+                .filter(
+                    PageInsight.page_url.in_(page_urls),
+                    PageInsight.caption.isnot(None),
+                    PageInsight.caption != "",
+                )
+                .order_by(PageInsight.views.desc())
+                .all()
+            )
+            for tp in posts:
+                bucket = top_posts_by_page[tp.page_url]
+                if len(bucket) < 3:
+                    bucket.append(tp)
+
+        # Pool NEW materials once; consume as assigned (tránh query top-NEW mỗi page)
+        material_pool = (
+            db.query(ViralMaterial)
+            .filter(
+                ViralMaterial.platform.in_(source_platforms),
+                ViralMaterial.status == ViralStatus.NEW,
+            )
+            .order_by(ViralMaterial.views.desc())
+            .limit(200)
+            .all()
+        )
+
         boosted_count = 0
         for p in exploding_pages:
-            # Cooldown: đề xuất/reup gần đây theo updated_at
-            last_boost = (
-                db.query(ViralMaterial)
-                .filter(
-                    ViralMaterial.target_page == p["page_url"],
-                    ViralMaterial.status.in_([ViralStatus.REUP, ViralStatus.BOOST_PENDING]),
-                    ViralMaterial.updated_at >= int(time.time()) - 3600,
-                )
-                .first()
-            )
-            if last_boost:
+            if p["page_url"] in cooling_pages:
                 logger.debug("[STRATEGIC] Page '%s' still in 1h boost cooldown, skipping.", p["page_name"])
                 continue
 
-            page_niches = PageStrategicService._lookup_page_niches(
-                db, p["account_id"], p["page_url"]
+            account = accounts_by_id.get(p["account_id"])
+            page_niches = PageStrategicService._lookup_page_niches_from_account(
+                account, p["page_url"]
             )
 
             material = None
             niche_matched = False
             if page_niches:
-                material = PageStrategicService._find_niche_material(
-                    db, page_niches, source_platforms=source_platforms
+                material = PageStrategicService._find_niche_material_in_pool(
+                    material_pool, page_niches
                 )
+                if not material:
+                    # Fallback SQL: pool top-200 có thể miss niche thấp views (giữ behavior cũ)
+                    material = PageStrategicService._find_niche_material(
+                        db, page_niches, source_platforms=source_platforms
+                    )
                 if material:
                     niche_matched = True
                     logger.info(
@@ -297,23 +364,19 @@ Kết quả:"""
                         page_niches,
                     )
 
-            if not material:
-                material = (
-                    db.query(ViralMaterial)
-                    .filter(
-                        ViralMaterial.platform.in_(source_platforms),
-                        ViralMaterial.status == ViralStatus.NEW,
-                    )
-                    .order_by(ViralMaterial.views.desc())
-                    .first()
-                )
+            if not material and material_pool:
+                material = material_pool[0]
 
             if not material:
                 logger.info("[STRATEGIC] No NEW material available for page '%s'.", p["page_name"])
                 continue
 
+            material_pool = [m for m in material_pool if m.id != material.id]
+
             niches_str = ",".join(page_niches) if page_niches else "general"
-            top_posts_summary = PageStrategicService._get_top_posts_summary(db, p["page_url"])
+            top_posts_summary = PageStrategicService._summarize_top_posts(
+                top_posts_by_page.get(p["page_url"], [])
+            )
             boost_context = (
                 f"Page đang EXPLODING (+{p['growth_pct']}%), niche={niches_str}"
             )
@@ -329,6 +392,7 @@ Kết quả:"""
             material.status = ViralStatus.BOOST_PENDING
             material.target_page = p["page_url"]
             material.scraped_by_account_id = p["account_id"]
+            cooling_pages.add(p["page_url"])
 
             logger.info(
                 "[STRATEGIC] 📋 BOOST_PENDING page '%s' material #%s %s",

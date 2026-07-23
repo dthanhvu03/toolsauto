@@ -2,7 +2,7 @@ import logging
 import datetime
 import math
 from typing import Any, List, Dict, Tuple
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import func, text
 from app.core.database.models import Job, Account, DiscoveredChannel, IncidentGroup, ViralMaterial
 from app.core.queue.worker import WorkerService
@@ -254,7 +254,13 @@ class DashboardService:
 
     @staticmethod
     def get_discovery_channels(db: Session) -> List[DiscoveredChannel]:
-        return db.query(DiscoveredChannel).filter(DiscoveredChannel.status == ViralStatus.NEW).order_by(DiscoveredChannel.score.desc()).all()
+        return (
+            db.query(DiscoveredChannel)
+            .options(selectinload(DiscoveredChannel.account))
+            .filter(DiscoveredChannel.status == ViralStatus.NEW)
+            .order_by(DiscoveredChannel.score.desc())
+            .all()
+        )
 
     @staticmethod
     def approve_discovery(db: Session, channel_id: int, target_page: str = "") -> List[DiscoveredChannel]:

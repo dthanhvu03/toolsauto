@@ -5,7 +5,7 @@ import time
 import os
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database.core import SessionLocal
 from app.core.database.models import Job, JobEvent, Account
@@ -290,7 +290,13 @@ class JobService:
         total_pages = max(1, (total + per_page - 1) // per_page)
         page = max(1, min(page, total_pages))
         
-        jobs = query.order_by(Job.schedule_ts.desc()).offset((page - 1) * per_page).limit(per_page).all()
+        jobs = (
+            query.options(selectinload(Job.account))
+            .order_by(Job.schedule_ts.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
         return {
             "jobs": jobs,
             "total": total,

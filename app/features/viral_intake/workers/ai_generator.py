@@ -38,6 +38,28 @@ GEMINI_CONSECUTIVE_FAILURES = 0
 GEMINI_CIRCUIT_OPEN = False
 GEMINI_CIRCUIT_RESET_TIME = 0
 
+# Affiliate keyword cache (avoid full-table scan mỗi job AI)
+_AFF_CACHE_TS = 0.0
+_AFF_CACHE_BY_KW: dict = {}
+_AFF_CACHE_TTL_SEC = 60.0
+
+
+def _get_affiliate_by_keyword(db: Session) -> dict:
+    global _AFF_CACHE_TS, _AFF_CACHE_BY_KW
+    now = time.time()
+    if _AFF_CACHE_BY_KW and (now - _AFF_CACHE_TS) < _AFF_CACHE_TTL_SEC:
+        return _AFF_CACHE_BY_KW
+    by_kw: dict = {}
+    try:
+        for link in db.query(AffiliateLink).all():
+            if link.keyword:
+                by_kw[link.keyword.lower().strip()] = link
+    except Exception:
+        by_kw = {}
+    _AFF_CACHE_BY_KW = by_kw
+    _AFF_CACHE_TS = now
+    return by_kw
+
 # Infra backoff (when chromedriver/UI freezes / local read timeouts)
 GEMINI_INFRA_BACKOFF_LEVEL = 0
 GEMINI_NEXT_ALLOWED_TS = 0
@@ -151,15 +173,8 @@ def process_draft_job(db: Session):
                     break
 
         # Fetch available affiliate keywords from DB to let AI match products
-        aff_by_keyword: dict = {}
-        try:
-            from app.core.database.models import AffiliateLink
-            for link in db.query(AffiliateLink).all():
-                if link.keyword:
-                    aff_by_keyword[link.keyword.lower().strip()] = link
-            aff_keywords = [link.keyword for link in aff_by_keyword.values()]
-        except Exception:
-            aff_keywords = []
+        aff_by_keyword = _get_affiliate_by_keyword(db)
+        aff_keywords = [link.keyword for link in aff_by_keyword.values()]
 
         try:
             ai_result = orchestrator.generate_caption(
@@ -495,14 +510,20 @@ def _check_gemini_circuit(db):
 def _auto_style_default(db):
     """If a job has been AWAITING_STYLE for > 30 minutes, default to 'short' and move to DRAFT."""
     from app.core.database.models import Job
+    from sqlalchemy.orm import selectinload
     import time
     
     threshold_ts = int(time.time()) - 1800 # 30 mins
     
-    jobs_to_update = db.query(Job).filter(
-        Job.status == JobStatus.AWAITING_STYLE,
-        Job.created_at < threshold_ts
-    ).all()
+    jobs_to_update = (
+        db.query(Job)
+        .options(selectinload(Job.account))
+        .filter(
+            Job.status == JobStatus.AWAITING_STYLE,
+            Job.created_at < threshold_ts,
+        )
+        .all()
+    )
     
     if jobs_to_update:
         logger.info("Auto-defaulting %d AWAITING_STYLE jobs to 'short' (30m timeout passed)", len(jobs_to_update))

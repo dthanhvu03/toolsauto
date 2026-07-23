@@ -149,14 +149,18 @@ class DiscoveryScraper:
         channels = self.extract_unique_channels(videos)
         logger.info("[DISCOVERY] Keyword '%s': %d unique channels to analyze", keyword, len(channels))
 
+        existing_urls = {
+            u
+            for (u,) in db.query(DiscoveredChannel.channel_url)
+            .filter(DiscoveredChannel.account_id == account_id)
+            .all()
+            if u
+        }
+
         saved = 0
         for ch in channels:
             # Skip if already discovered for this account
-            existing = db.query(DiscoveredChannel).filter(
-                DiscoveredChannel.channel_url == ch["channel_url"],
-                DiscoveredChannel.account_id == account_id,
-            ).first()
-            if existing:
+            if ch["channel_url"] in existing_urls:
                 continue
 
             stats = self.analyze_channel(ch["channel_url"])
@@ -181,6 +185,7 @@ class DiscoveryScraper:
                 status=ViralStatus.NEW,
             )
             db.add(record)
+            existing_urls.add(ch["channel_url"])
             saved += 1
             logger.info("[DISCOVERY] Saved channel '%s' (score=%.1f) for account %d",
                         ch["channel_name"], stats["score"], account_id)
