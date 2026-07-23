@@ -148,7 +148,11 @@ SETTINGS: dict[str, SettingSpec] = {
         default_getter=_getattr_default("POSTS_PER_PAGE_PER_DAY"),
         title="Giới hạn bài đăng / Page / ngày",
         section="Giới hạn đăng bài",
-        description="Số bài tối đa mỗi Fan Page trong một ngày (0 = tắt giới hạn theo cấu hình này).",
+        description=(
+            "Gate #2 lúc publish (sau cooldown claim). >0: đếm DONE hôm nay theo target_page + platform "
+            "(FB + Threads nếu có page). =0: fallback account.daily_limit. "
+            "Thứ tự gate: (1) cooldown_seconds claim → (2) daily này → (3) sleep window → (4) post_delay."
+        ),
         min=0,
         max=200,
         unit="bài",
@@ -160,7 +164,10 @@ SETTINGS: dict[str, SettingSpec] = {
         default_getter=_getattr_default("REUP_VIDEOS_PER_PAGE_PER_DAY"),
         title="Giới hạn Reup / Page / ngày",
         section="Giới hạn đăng bài",
-        description="Số video reup tối đa mỗi Page mỗi ngày (0 = không áp giới hạn qua setting này).",
+        description=(
+            "Gate intake (trước khi tạo job viral→pipeline), tách với daily publish. "
+            "0 = tắt. Nên ≤ posts_per_page/daily_limit để tránh backlog job PENDING."
+        ),
         min=0,
         max=200,
         unit="video",
@@ -648,7 +655,11 @@ SETTINGS: dict[str, SettingSpec] = {
         default_getter=lambda: 180,
         title="Giới hạn thời gian (Cooldown)",
         section="Threads Auto",
-        description="Khoảng thời gian tối thiểu (phút) giữa 2 bài đăng tự động trên Threads để tránh spam.",
+        description=(
+            "Chặn TẠO job news (global mọi Threads), không thay daily_limit lúc publish. "
+            "Publish vẫn qua: claim cooldown_seconds → account.daily_limit / posts_per_page → post_delay. "
+            "Đơn vị phút; đếm theo job.created_at."
+        ),
         min=10,
         max=1440,
         unit="phút",

@@ -266,19 +266,19 @@
         </button>
 
         {% elif job.status == 'PENDING' %}
-        {# Effective ETA = max(schedule_ts, account.last_post_ts + cooldown_seconds).
-           Schedule_ts alone doesn't reflect cooldown gating; this gives the user
-           the actual earliest publish moment. #}
+        {# ETA = max(schedule_ts, claim cooldown from DONE.finished_at + cooldown_seconds). #}
         {% set sched_eta = job.schedule_ts or 0 %}
         {% set cooldown_eta = 0 %}
-        {% if job.account and job.account.last_post_ts %}
+        {% if job.claim_cooldown_eta is defined and job.claim_cooldown_eta %}
+        {% set cooldown_eta = job.claim_cooldown_eta %}
+        {% elif job.account and job.account.last_post_ts %}
         {% set cooldown_eta = job.account.last_post_ts + (job.account.cooldown_seconds or 0) %}
         {% endif %}
         {% set eta = sched_eta if sched_eta > cooldown_eta else cooldown_eta %}
         {% set remaining = eta - now %}
         {% if eta > 0 %}
         <div class="mb-2 flex flex-col gap-0.5 text-xs"
-             title="Thời điểm sớm nhất worker sẽ claim job này (đã tính cả cooldown account)">
+             title="Sớm nhất worker claim được (schedule + cooldown theo finished_at platform)">
             {% if remaining > 0 %}
             <div class="flex items-center gap-1 text-orange-500 font-medium">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24"

@@ -33,6 +33,7 @@ from app.core.queue.publisher_runtime import (
     clear_claim_locks,
     start_heartbeat_thread,
     claim_precheck,
+    postpone_if_daily_limit,
     postpone_if_sleeping,
     recover_stale_jobs,
 )
@@ -109,43 +110,9 @@ def process_single_job(db: Session):
     heartbeat_stop = threading.Event()
     
     try:
-        # Enforce Daily Limit (per-page logic)
-        effective_daily_limit = 0
-        try:
-            # Runtime cap overrides account setting (if set)
-            effective_daily_limit = runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db)
-        except Exception:
-            effective_daily_limit = 0
-        if (not effective_daily_limit) and job.account:
-            effective_daily_limit = int(getattr(job.account, "daily_limit", 0) or 0)
-
-        if job.account and effective_daily_limit > 0:
-            from datetime import datetime, time as time_obj
-            from zoneinfo import ZoneInfo
-            import app.config as app_config
-            today_start = int(datetime.combine(datetime.now(ZoneInfo(app_config.TIMEZONE)).date(), time_obj.min).timestamp())
-            
-            # Count DONE jobs today for this SPECIFIC target_page.
-            q = db.query(Job).filter(
-                Job.target_page == job.target_page,
-                Job.status == JobStatus.DONE,
-                Job.finished_at >= today_start
-            )
-            if not runtime_settings.get_int("publish.posts_per_page_per_day", 0, db=db):
-                q = q.filter(Job.account_id == job.account_id)
-            
-            logger.debug("[DB][daily_limit_count] Counting DONE jobs for target_page=%s", job.target_page)
-            posted_today = q.count()
-            logger.debug("[DB][daily_limit_count] posted_today=%s, effective_daily_limit=%s", posted_today, effective_daily_limit)
-
-            if posted_today >= effective_daily_limit:
-                logger.info("[PUBLISHER] [Job-%s] [DAILY_LIMIT] Page '%s' reached limit (%s). Postponed to tomorrow.",
-                            job.id, job.target_page, effective_daily_limit)
-                job.status = JobStatus.PENDING
-                job.schedule_ts = today_start + 86400 + 3600  # Tomorrow 1 AM
-                clear_claim_locks(job)
-                db.commit()
-                return True
+        # Enforce Daily Limit (per-page setting, else account.daily_limit) — shared with Threads
+        if postpone_if_daily_limit(db, job, logger, prefix="[PUBLISHER] "):
+            return True
 
         # Xin ý kiến giấc ngủ (Human Rest Cycle)
         if postpone_if_sleeping(db, job, logger, prefix="[PUBLISHER] "):

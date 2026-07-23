@@ -308,12 +308,53 @@ class JobService:
             .limit(per_page)
             .all()
         )
+        # Align UI ETA with claim gate: last DONE.finished_at per (account, platform)
+        JobService._attach_claim_cooldown_etas(db, jobs)
         return {
             "jobs": jobs,
             "total": total,
             "total_pages": total_pages,
             "page": page
         }
+
+    @staticmethod
+    def _attach_claim_cooldown_etas(db: Session, jobs: list) -> None:
+        """Set job.claim_cooldown_eta = last_finished_at + cooldown_seconds (claim source of truth)."""
+        from sqlalchemy import func
+
+        pairs = {
+            (j.account_id, (j.platform or "").strip().lower())
+            for j in jobs
+            if j.account_id and j.status == JobStatus.PENDING
+        }
+        if not pairs:
+            return
+
+        account_ids = {a for a, _ in pairs}
+        rows = (
+            db.query(Job.account_id, Job.platform, func.max(Job.finished_at))
+            .filter(
+                Job.account_id.in_(account_ids),
+                Job.status == JobStatus.DONE,
+                Job.finished_at.isnot(None),
+            )
+            .group_by(Job.account_id, Job.platform)
+            .all()
+        )
+        last_by_pair = {
+            (int(aid), (plat or "").strip().lower()): int(ts or 0)
+            for aid, plat, ts in rows
+        }
+        for job in jobs:
+            if job.status != JobStatus.PENDING or not job.account_id:
+                continue
+            plat = (job.platform or "").strip().lower()
+            last_ts = last_by_pair.get((int(job.account_id), plat), 0)
+            cooldown = int(getattr(job.account, "cooldown_seconds", 0) or 0) if job.account else 0
+            if last_ts > 0 and cooldown > 0:
+                setattr(job, "claim_cooldown_eta", last_ts + cooldown)
+            else:
+                setattr(job, "claim_cooldown_eta", 0)
 
     @staticmethod
     def create_high_priority_manual_job(db: Session, account_id: int, target_page: str, caption: str = None, media_path: str = None) -> Job:

@@ -23,21 +23,17 @@ class QueueService:
     def claim_next_job(db: Session, platform: Optional[str] = None) -> Optional[Job]: # pylint: disable=unused-argument
         """
         Atomically claims the next PENDING job that is ready to run.
-        Uses SQLite RETURNING to avoid SELECT->UPDATE race condition.
-        Evaluates cooldown and daily limits inline via subquery.
+
+        Gates in SQL:
+          - schedule_ts / scheduled_at due
+          - account is_active + login_status=ACTIVE
+          - per-platform cooldown: now - MAX(DONE.finished_at) >= cooldown_seconds
+          - no other RUNNING job for same account+platform (mutex)
+          - fair-share ORDER BY oldest last post first
+
+        Daily publish caps are NOT in this query — enforced after claim via
+        publisher_runtime.postpone_if_daily_limit (FB + Threads).
         """
-        
-        # SQLite raw SQL for atomic update + validation
-        # We find a job where:
-        # 1. status = PENDING
-        # 2. schedule_ts <= now
-        # 3. account is active
-        # 4. account cooldown has passed (now - last_post_ts >= cooldown_seconds) or last_post_ts is null
-        # 5. daily limit has not been reached (this is hard to do fully in SQLite without a complex join,
-        #    so we will enforce the hard limit here loosely, and validate rigorously in JobService if needed, 
-        #    but the prompt asks for inline validation if possible to avoid locking invalid jobs.)
-        
-        # claim with strict isolation lock + Account Mutex
         sql = """
             UPDATE jobs
             SET 

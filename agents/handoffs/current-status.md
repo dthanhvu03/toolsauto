@@ -3,17 +3,16 @@
 ## System State
 
 - Local: **http://127.0.0.1:8002**
-- VIP monetize/viral/strategic · Perf N+1 · PLAN-040 platform silos · Frontend silo UX — **Done**
-- **Reup VIP Phase A+B+C** — ready to commit (promote-temp giữ file cũ khi gate fail)
+- Reup VIP A+B+C: `ee2d45d`
+- Overview HTMX load-storm + publish gate cleanup — committing
 
 ## Done This Session [2026-07-23]
 
-- VIP Accounts Config/Target + Viral `_reup` + Insights closed-loop
-- Perf N+1 · PLAN-040 silos · frontend silo UX · archive PLAN/TASK
-- **Reup VIP A+B+C:** quality gate + presets + audio trim/logo opt-in + Insights variants
-- Review fix: `_promote_temp` validate temp rồi `os.replace` — không xóa `_reup` cũ khi gate fail
+- Reup VIP A+B+C
+- Overview: stats poll không còn load-storm (`load` 1 lần → `every 60s`)
+- Gate cleanup: `postpone_if_daily_limit` FB+Threads, reup via runtime_settings, ETA=finished_at, Settings gate copy
 
 ## Next Action
 
-1. Owner F5 Viral Re-process + Insights Reup Variants
-2. Optional: map `page_presets` / `niche_presets` / `brand_logo_enabled` trong `reup_presets.json`
+1. Owner F5 Tổng quan + Jobs ETA + Settings descriptions
+2. Optional: giảm worker_status `every 5s` nếu vẫn thấy ồn

@@ -391,7 +391,11 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
         return
 
     # Batch REUP daily caps by target_page (2 GROUP BY thay vì 2 count/material)
-    reup_cap = int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0)
+    reup_cap = _get_runtime_int(
+        db,
+        "publish.reup_videos_per_page_per_day",
+        int(getattr(config, "REUP_VIDEOS_PER_PAGE_PER_DAY", 0) or 0),
+    )
     reup_active_today: dict = {}
     reup_posted_today: dict = {}
     today_start = None
