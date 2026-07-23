@@ -21,6 +21,5 @@
 
 ## Next Action
 
-1. Owner F5: Viral (preview nếu có `_reup`), Insights (Approve → Closed-loop), Accounts legacy grid vs Split.
-2. Commit khi user yêu cầu (Accounts split + VIP sâu).
-3. Archive PLAN-038/039 + TASK-040/041 sau Owner confirm UI.
+1. Owner F5: Viral / Insights closed-loop / Accounts Config↔Target (commit `d3c0ed2` đã lên).
+2. Archive PLAN-038/039 + TASK-040/041 sau Owner confirm UI.
