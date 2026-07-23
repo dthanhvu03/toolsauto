@@ -1,19 +1,21 @@
 {% extends "layouts/app.html" %}
+{% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
 {% block title %}Jobs • Auto Publisher{% endblock %}
-{% block page_title %}Jobs{% endblock %}
+{% block page_breadcrumb %}{{ silo_breadcrumb('Chung', 'Hàng đợi job') }}{% endblock %}
+{% block page_title %}Hàng đợi job{% endblock %}
 {% block page_subtitle %}Pagination + search, không cần lướt dài.{% endblock %}
 
 {% block content %}
 <div class="app-card p-4">
   <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
-    <div class="flex gap-2 flex-wrap items-center">
+    <div class="flex gap-2 flex-wrap items-center" role="group" aria-label="Lọc nền tảng job">
       <span class="text-[10px] font-bold uppercase tracking-widest text-[var(--color-ash)] mr-1">Nền tảng</span>
-      <button data-platform="all" class="jobPlatformTab app-chip app-chip-active">Tất cả</button>
-      <button data-platform="facebook" class="jobPlatformTab app-chip">Facebook</button>
-      <button data-platform="threads" class="jobPlatformTab app-chip">Threads</button>
-      <button data-platform="instagram" class="jobPlatformTab app-chip">Instagram</button>
-      <button data-platform="tiktok" class="jobPlatformTab app-chip">TikTok</button>
+      <button type="button" data-platform="all" class="jobPlatformTab app-chip app-chip-active" aria-pressed="true">Tất cả</button>
+      <button type="button" data-platform="facebook" class="jobPlatformTab app-chip" aria-pressed="false">Facebook</button>
+      <button type="button" data-platform="threads" class="jobPlatformTab app-chip" aria-pressed="false">Threads</button>
+      <button type="button" data-platform="instagram" class="jobPlatformTab app-chip" aria-pressed="false">Instagram</button>
+      <button type="button" data-platform="tiktok" class="jobPlatformTab app-chip" aria-pressed="false">TikTok</button>
     </div>
   </div>
   <div class="flex items-center justify-between gap-3 flex-wrap">
@@ -118,11 +120,9 @@
   function syncPlatformTabs() {
     document.querySelectorAll('.jobPlatformTab').forEach(t => {
       const pf = t.getAttribute('data-platform');
-      if (pf === currentPlatform) {
-        t.classList.add('app-chip-active');
-      } else {
-        t.classList.remove('app-chip-active');
-      }
+      const active = pf === currentPlatform;
+      t.classList.toggle('app-chip-active', active);
+      t.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
   }
   function initFromQuery() {

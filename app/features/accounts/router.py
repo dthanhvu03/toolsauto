@@ -15,8 +15,50 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
 
-def _render_accounts_list_html(request: Request, accounts: List, highlight_id: int | None = None) -> str:
+def _filter_accounts_list(accounts: List, q: str = "", platform: str = ""):
+    q = (q or "").strip().lower()
+    pf = (platform or "").strip().lower()
+    if pf and pf != "all":
+        accounts = [a for a in accounts if (getattr(a, "platform", "") or "").lower() == pf]
+    if q:
+        filtered = []
+        for a in accounts:
+            if q in (a.name or "").lower() or q in (a.platform or "").lower():
+                filtered.append(a)
+        accounts = filtered
+    return accounts
+
+
+def _platform_filter_label(platform: str) -> str:
+    labels = {
+        "facebook": "Facebook",
+        "instagram": "Instagram",
+        "threads": "Threads",
+        "tiktok": "TikTok",
+    }
+    pf = (platform or "").strip().lower()
+    if not pf or pf == "all":
+        return ""
+    return labels.get(pf, pf.capitalize())
+
+
+def _render_accounts_list_html(request: Request, accounts: List, highlight_id: int | None = None, platform: str = "") -> str:
     now = int(time.time())
+    if not accounts:
+        label = _platform_filter_label(platform)
+        if label:
+            return (
+                f'<div class="p-[var(--space-8)] text-center text-cave-xs text-[var(--color-ash)] leading-relaxed">'
+                f'Không có tài khoản <strong class="text-[var(--color-mist)]">{label}</strong> trong hang.'
+                f'<button type="button" class="block mx-auto mt-3 text-[var(--color-torch)] font-bold uppercase tracking-wider text-[10px]" '
+                f'onclick="window.resetAccountPlatformFilter && window.resetAccountPlatformFilter()">Xem tất cả</button>'
+                f"</div>"
+            )
+        return (
+            '<div class="p-[var(--space-8)] text-center text-cave-xs text-[var(--color-ash)]">'
+            "Chưa có hang nào — thêm profile ở cột trái."
+            "</div>"
+        )
     html_content = ""
     for account in accounts:
         html_content += templates.get_template("fragments/account_list_item.html").render(
@@ -321,17 +363,10 @@ def get_accounts_split_view_alias(request: Request, db: Session = Depends(get_db
     return get_accounts_page(request, db)
 
 @router.get("/list", response_class=HTMLResponse)
-def get_accounts_list(request: Request, q: str = "", db: Session = Depends(get_db)):
+def get_accounts_list(request: Request, q: str = "", platform: str = "", db: Session = Depends(get_db)):
     accounts = AccountService.list_accounts(db)
-    q = (q or "").strip().lower()
-    if q:
-        filtered = []
-        for a in accounts:
-            if q in (a.name or "").lower() or q in (a.platform or "").lower():
-                filtered.append(a)
-        accounts = filtered
-
-    return HTMLResponse(content=_render_accounts_list_html(request, accounts))
+    accounts = _filter_accounts_list(accounts, q=q, platform=platform)
+    return HTMLResponse(content=_render_accounts_list_html(request, accounts, platform=platform))
 
 @router.get("/{account_id}/details", response_class=HTMLResponse)
 def get_account_details_view(account_id: int, request: Request, db: Session = Depends(get_db)):

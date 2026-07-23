@@ -1,7 +1,9 @@
 {% extends "layouts/app.html" %}
+{% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
 {% block title %}Viral • Auto Publisher{% endblock %}
-{% block page_title %}Viral{% endblock %}
+{% block page_breadcrumb %}{{ silo_breadcrumb('Facebook', 'Nội dung viral') }}{% endblock %}
+{% block page_title %}Nội dung viral{% endblock %}
 {% block page_subtitle %}Pagination + filter để không phải lướt dài.{% endblock %}
 
 {% block content %}

@@ -6,8 +6,17 @@
     {% for job in jobs %}
     {% include 'fragments/job_row.html' %}
     {% else %}
+    {% set pf_labels = {'facebook': 'Facebook', 'threads': 'Threads', 'instagram': 'Instagram', 'tiktok': 'TikTok'} %}
+    {% set pf_name = pf_labels.get(current_platform, current_platform) if current_platform else '' %}
     <tr>
-        <td colspan="8" class="px-4 py-4 text-center text-gray-500">Không có job nào với bộ lọc này. Local trống jobs là bình thường nếu chưa chạy publish.</td>
+        <td colspan="8" class="px-4 py-8 text-center text-[var(--color-mist)] text-sm">
+            {% if pf_name %}
+            Không có job <strong class="text-[var(--color-ink)]">{{ pf_name }}</strong> với bộ lọc này.
+            {% else %}
+            Không có job nào với bộ lọc này.
+            {% endif %}
+            <span class="block text-xs text-[var(--color-ash)] mt-1">Local trống jobs là bình thường nếu chưa chạy publish.</span>
+        </td>
     </tr>
     {% endfor %}
 

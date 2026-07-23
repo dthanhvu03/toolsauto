@@ -22,7 +22,12 @@
             <span class="cave-dot cave-dot-moss"></span>
             {% endif %}
         </div>
-        <p class="text-cave-2xs text-[var(--color-ash)] font-medium truncate uppercase tracking-wider">{{ account.platform }}</p>
+        <p class="text-cave-2xs text-[var(--color-ash)] font-medium truncate flex items-center gap-1.5">
+            <span class="inline-flex px-1.5 py-0.5 rounded-[var(--radius-sm)] text-[9px] font-bold uppercase tracking-wider border
+                {% if account.platform=='facebook' %}border-[var(--color-fb)]/40 text-[var(--color-ink)] bg-[color-mix(in_srgb,var(--color-fb)_25%,transparent)]
+                {% elif account.platform=='instagram' %}border-[var(--color-ig-from)]/40 text-[var(--color-ink)] bg-[color-mix(in_srgb,var(--color-ig-from)_20%,transparent)]
+                {% else %}border-[var(--color-edge)] text-[var(--color-mist)] bg-[var(--color-ledge)]{% endif %}">{{ account.platform }}</span>
+        </p>
     </div>
 
     <div class="opacity-0 group-hover:opacity-100 transition-opacity">

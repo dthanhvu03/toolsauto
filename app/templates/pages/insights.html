@@ -1,4 +1,5 @@
 {% extends "layouts/app.html" %}
+{% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
 {% block title %}Page Insights | Premium Analytics{% endblock %}
 
@@ -161,10 +162,11 @@
 </style>
 {% endblock %}
 
-{% block page_title %}Market Intelligence{% endblock %}
+{% block page_breadcrumb %}{{ silo_breadcrumb('Facebook', 'Phân tích & boost') }}{% endblock %}
+{% block page_title %}Phân tích &amp; boost{% endblock %}
 {% block page_subtitle %}
 <span id="insightsSubtitleText">Phân tích hiệu năng &amp; boost chiến lược cho trang Facebook.</span>
-<span id="insightsProductBadge" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)]">Facebook</span>
+<span id="insightsProductBadge" class="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] shrink-0">Facebook</span>
 {% endblock %}
 
 {% block content %}
