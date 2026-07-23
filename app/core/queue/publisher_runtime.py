@@ -241,6 +241,37 @@ def postpone_if_daily_limit(db: Session, job, logger: logging.Logger, prefix: st
     return True
 
 
+def claim_next_job_respecting_daily(
+    db: Session,
+    *,
+    platform: str,
+    logger: logging.Logger,
+    prefix: str = "",
+    max_skips: int = 5,
+):
+    """
+    Claim next job; if daily cap forces postpone, try another candidate (same tick).
+    Returns (job, 'daily_exhausted'|'empty'|None).
+      - (job, None) ready to publish (daily OK; caller still runs sleep check)
+      - (None, 'empty') no PENDING eligible
+      - (None, 'daily_exhausted') only hit daily-limited jobs this tick
+    """
+    from app.core.queue.queue import QueueService
+
+    skipped_daily = 0
+    for _ in range(max(1, int(max_skips))):
+        job = QueueService.claim_next_job(db, platform=platform)
+        if not job:
+            if skipped_daily:
+                return None, "daily_exhausted"
+            return None, "empty"
+        if postpone_if_daily_limit(db, job, logger, prefix=prefix):
+            skipped_daily += 1
+            continue
+        return job, None
+    return None, "daily_exhausted"
+
+
 def refresh_runtime_settings(db: Session) -> None:
     apply_runtime_overrides_to_config(db)
 

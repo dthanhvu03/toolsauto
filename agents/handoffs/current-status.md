@@ -3,16 +3,16 @@
 ## System State
 
 - Local: **http://127.0.0.1:8002**
-- Reup VIP A+B+C: `ee2d45d`
-- Overview HTMX load-storm + publish gate cleanup — committing
+- Latest: harden poll + Threads checkpoint + daily claim skip (working tree → commit)
 
 ## Done This Session [2026-07-23]
 
-- Reup VIP A+B+C
-- Overview: stats poll không còn load-storm (`load` 1 lần → `every 60s`)
-- Gate cleanup: `postpone_if_daily_limit` FB+Threads, reup via runtime_settings, ETA=finished_at, Settings gate copy
+- Reup VIP A+B+C (`ee2d45d`) + gate cleanup / overview storm (`e8fb193`)
+- Poll softer: worker 30s, jobs 15s, queue/viral 60s
+- Threads: checkpoint URL/content markers + `checkpointed` → INVALID
+- Claim: `claim_next_job_respecting_daily` skip tới 5 job đã full daily trong cùng tick
 
 ## Next Action
 
-1. Owner F5 Tổng quan + Jobs ETA + Settings descriptions
-2. Optional: giảm worker_status `every 5s` nếu vẫn thấy ồn
+1. Owner F5 overview/jobs (ít GET hơn)
+2. Optional push remote khi cần deploy

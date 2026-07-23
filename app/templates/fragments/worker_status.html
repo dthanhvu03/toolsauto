@@ -1,6 +1,6 @@
 <div id="worker-status-panel"
     class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-8 flex flex-col xl:flex-row justify-between xl:items-center w-full"
-    hx-get="/worker/status" hx-trigger="every 5s">
+    hx-get="/worker/status" hx-trigger="every 30s" hx-swap="outerHTML">
     <div class="flex-1 flex flex-wrap items-center gap-4 xl:gap-6 mb-5 xl:mb-0">
         <div class="min-w-[120px]">
             <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Worker Status</h3>
