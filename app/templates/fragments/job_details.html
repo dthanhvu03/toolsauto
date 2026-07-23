@@ -135,8 +135,20 @@
                 <div class="text-[10px] font-mono text-gray-600">{{ job.tracking_code or '-' }}</div>
             </div>
             <div class="col-span-2">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Affiliate URL</div>
+                <div class="text-[10px] font-mono text-gray-600 break-all">{{ job.affiliate_url or '-' }}</div>
+            </div>
+            <div class="col-span-2">
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Auto comment</div>
+                <div class="text-xs text-gray-700 whitespace-pre-wrap bg-indigo-50/50 p-2 rounded-lg border border-indigo-100">{{ job.auto_comment_text or '—' }}</div>
+            </div>
+            <div class="col-span-2">
                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Media Path</div>
-                <div class="text-[10px] font-mono text-gray-600 break-all bg-gray-50 p-2 rounded-lg border border-gray-100">{{ job.media_path or '-' }}</div>
+                <div class="text-[10px] font-mono text-gray-600 break-all bg-gray-50 p-2 rounded-lg border border-gray-100">{{ job.media_path or '-' }}
+                {% if job.media_path and '_reup' in (job.media_path or '') %}
+                <span class="ml-2 text-emerald-700 font-bold">· Anti-dupe OK</span>
+                {% endif %}
+                </div>
             </div>
         </div>
 

@@ -157,7 +157,11 @@ class ReupProcessor:
         # Build FFmpeg command
         vf = cls._build_filter_chain(platform, width, height)
 
-        cmd = ["nice", "-n", "19", "ffmpeg", "-y", "-i", input_path]
+        import sys
+        if sys.platform.startswith("win"):
+            cmd = ["ffmpeg", "-y", "-i", input_path]
+        else:
+            cmd = ["nice", "-n", "19", "ffmpeg", "-y", "-i", input_path]
 
         # Duration limit
         if duration > cls.MAX_REELS_DURATION:

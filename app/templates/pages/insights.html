@@ -276,6 +276,20 @@
         <div id="analysisList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <!-- Analysis cards injected here -->
         </div>
+
+        <!-- VIP: Boost proposals awaiting Approve -->
+        <div id="boostProposalsPanel" class="insight-card p-5 mt-2">
+            <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-display font-bold text-gray-900">Đề xuất Boost (chờ duyệt)</h4>
+                <button type="button" onclick="loadBoostProposals()"
+                    class="text-[10px] font-bold uppercase tracking-wider text-[var(--color-torch)] hover:underline">
+                    Làm mới
+                </button>
+            </div>
+            <div id="boostProposalsList" class="space-y-3 text-sm text-gray-600">
+                <p class="text-xs text-gray-400 italic">Đang tải đề xuất…</p>
+            </div>
+        </div>
     </div>
 
     <!-- Metrics Grid -->
@@ -1111,9 +1125,62 @@
                 `;
                 list.appendChild(card);
             });
+            loadBoostProposals();
         } catch (err) {
             console.error("Strategic Analysis load error:", err);
         }
+    }
+
+    async function loadBoostProposals() {
+        const box = document.getElementById('boostProposalsList');
+        if (!box) return;
+        try {
+            const res = await fetch('/insights/api/boost-proposals');
+            const json = await res.json();
+            const rows = json.data || [];
+            if (!rows.length) {
+                box.innerHTML = '<p class="text-xs text-gray-400 italic">Chưa có đề xuất boost. Maintenance sẽ tạo khi có page EXPLODING + material NEW.</p>';
+                return;
+            }
+            box.innerHTML = rows.map((r) => `
+                <div class="flex flex-col md:flex-row md:items-center gap-3 p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]" id="boost-row-${r.id}">
+                    <div class="flex-1 min-w-0">
+                        <a href="${r.url}" target="_blank" class="text-indigo-600 font-semibold truncate block">${(r.title || r.url || '').replace(/</g,'&lt;')}</a>
+                        <div class="text-[11px] text-gray-500 mt-1">
+                            #${r.id} · ${r.platform || '-'} · ${Number(r.views||0).toLocaleString()} views
+                            ${r.target_page ? ` · → <span class="font-mono">${r.target_page}</span>` : ''}
+                        </div>
+                        ${r.boost_context ? `<p class="text-[11px] text-amber-800 mt-1 italic">${String(r.boost_context).replace(/</g,'&lt;')}</p>` : ''}
+                    </div>
+                    <div class="flex gap-2 shrink-0">
+                        <button type="button"
+                            class="px-3 py-1.5 rounded text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700"
+                            onclick="decideBoost(${r.id}, 'approve')">Approve → Reup</button>
+                        <button type="button"
+                            class="px-3 py-1.5 rounded text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100"
+                            onclick="decideBoost(${r.id}, 'reject')">Reject</button>
+                    </div>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error('Boost proposals load error:', err);
+            box.innerHTML = '<p class="text-xs text-red-500">Không tải được đề xuất boost.</p>';
+        }
+    }
+
+    async function decideBoost(id, action) {
+        const btnRow = document.getElementById('boost-row-' + id);
+        if (btnRow) btnRow.style.opacity = '0.5';
+        try {
+            const res = await fetch(`/insights/api/boost-proposals/${id}/${action}`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.detail || 'Thao tác thất bại');
+            }
+        } catch (e) {
+            alert('Lỗi mạng khi duyệt boost');
+        }
+        loadBoostProposals();
     }
 
     let _commentaryAbort = null;

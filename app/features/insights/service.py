@@ -947,3 +947,32 @@ def get_trending_topics(
         "reels_analyzed": len(rows),
         "days":           days,
     }
+
+
+# ── Strategic boost proposals (VIP human-in-the-loop) ─────────────────────
+def list_boost_proposals(db: Session = Depends(get_db)):
+    from app.core.strategic import PageStrategicService
+
+    return {"status": "success", "data": PageStrategicService.list_boost_proposals(db)}
+
+
+def approve_boost_proposal(db: Session, material_id: int):
+    from fastapi import HTTPException
+    from app.core.strategic import PageStrategicService
+
+    try:
+        mat = PageStrategicService.approve_boost_proposal(db, material_id)
+        return {"status": "success", "id": mat.id, "new_status": mat.status}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def reject_boost_proposal(db: Session, material_id: int):
+    from fastapi import HTTPException
+    from app.core.strategic import PageStrategicService
+
+    try:
+        mat = PageStrategicService.reject_boost_proposal(db, material_id)
+        return {"status": "success", "id": mat.id, "new_status": mat.status}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

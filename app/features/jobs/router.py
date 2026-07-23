@@ -114,6 +114,20 @@ def update_job_caption(job_id: int, request: Request, caption: str = Form(""), d
     job = JobService.get_job_by_id(db, job_id)
     return templates.TemplateResponse("fragments/job_row.html", {"request": request, "job": job, "now": int(time.time())})
 
+@router.post("/{job_id}/auto-comment", response_class=HTMLResponse)
+def update_job_auto_comment(
+    job_id: int,
+    request: Request,
+    auto_comment_text: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        JobService.update_job_auto_comment(db, job_id, auto_comment_text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    job = JobService.get_job_by_id(db, job_id)
+    return templates.TemplateResponse("fragments/job_row.html", {"request": request, "job": job, "now": int(time.time())})
+
 @router.post("/create", response_class=HTMLResponse)
 def create_job(
     request: Request,

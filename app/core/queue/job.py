@@ -351,6 +351,47 @@ class JobService:
             JobService._log_event(db, job.id, "INFO", "Job caption updated manually")
 
     @staticmethod
+    def update_job_auto_comment(db: Session, job_id: int, auto_comment_text: str):
+        """DRAFT-only: operator edits affiliate comment before Approve."""
+        job = JobService.get_job_by_id(db, job_id)
+        if not job or job.status != JobStatus.DRAFT:
+            raise ValueError("Chỉ sửa auto-comment khi job ở DRAFT.")
+        cleaned = (auto_comment_text or "").strip() or None
+        job.auto_comment_text = cleaned
+        db.commit()
+        JobService._log_event(db, job.id, "INFO", "Job auto_comment updated manually")
+
+    @staticmethod
+    def attach_affiliate_to_job(
+        job: Job,
+        *,
+        affiliate_url: str,
+        comment_template: str,
+    ) -> None:
+        """
+        Parity với bulk create: tracking_code + affiliate_url + comment dùng tracking URL.
+        Gọi trước db.commit(); có thể gọi _register_vercel_tracking sau commit nếu cần.
+        """
+        import uuid
+        import app.config as config
+
+        url = (affiliate_url or "").strip()
+        if not url:
+            return
+
+        tracking_code = job.tracking_code or str(uuid.uuid4())[:8]
+        job.tracking_code = tracking_code
+        job.affiliate_url = url
+
+        vurl = (getattr(config, "VERCEL_REDIRECT_URL", None) or "").strip().rstrip("/")
+        full_turl = f"{vurl}/r/{tracking_code}" if vurl else f"/r/{tracking_code}"
+        job.tracking_url = full_turl
+
+        template = comment_template or ""
+        comment = template.replace("[LINK]", full_turl).replace("{tracking_url}", full_turl)
+        job.auto_comment_text = comment.strip() or None
+
+    @staticmethod
     def bulk_create_jobs(db: Session, account_id: int, files_data: list) -> str:
         """
         files_data: list of dict { 'final_path', 'caption', 'adjusted_ts', 'dedupe_key', 'tracking_code', 'clean_affiliate', 'final_auto_comment', 'target_page', 'initial_status' }
