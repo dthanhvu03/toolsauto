@@ -17,7 +17,12 @@
 5. **Maintenance:** `facebook.strategic_boost` feature hook (`bootstrap_hooks.py`)
 6. **ADR-008** platform silo surfaces
 
-**Smoke:** `py -3 -c "import app.main"` failed in agent shell (no sqlalchemy on default interpreter); re-run in project venv before deploy.
+**Smoke (venv):** `venv\Scripts\python.exe -c "import app.main"` → **ok** (after lazy-`__getattr__` fix for facebook/instagram/tiktok `__init__.py`).
+
+### Hotfix — PLAN-040 phase 1 import loop
+
+- **Root cause:** `__getattr__` loaded `pages_router` / `manual_job_router` via `from app.features.facebook import …`, re-triggering `__getattr__` → `RecursionError` on `import app.main`.
+- **Fix:** `importlib.import_module("app.features.<pkg>.<submod>")` for on-disk submodules; same pattern on instagram/tiktok adapters.
 
 ## Next Action
 
