@@ -1,9 +1,11 @@
 import os
+import sys
 import json
 import subprocess
 import logging
 import time
 import psutil
+from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_
 from app.core.database.models import SystemState, Job, Account
@@ -11,6 +13,9 @@ from app.constants import AccountStatus, JobStatus
 import app.config as config
 
 logger = logging.getLogger(__name__)
+
+_GEMINI_LOGIN_SCRIPT = Path("scripts") / "login_gemini_bypass.py"
+
 
 class HealthService:
     @staticmethod
@@ -37,14 +42,25 @@ class HealthService:
 
     @staticmethod
     def start_gemini_login():
+        """Spawn Gemini cookie login in a detached process (visible Chrome)."""
+        script = (config.BASE_DIR / _GEMINI_LOGIN_SCRIPT).resolve()
+        if not script.is_file():
+            raise FileNotFoundError(f"Missing Gemini login script: {script}")
+        python_bin = sys.executable
+        if not python_bin or not Path(python_bin).exists():
+            raise FileNotFoundError(f"Python executable not found: {python_bin!r}")
+
         env = os.environ.copy()
-        env["DISPLAY"] = ":99"
-        python_bin = str(config.BASE_DIR / "venv" / "bin" / "python")
+        # Xvfb display is Linux-only; do not force it on Windows local runs.
+        if os.name != "nt":
+            env["DISPLAY"] = env.get("DISPLAY") or ":99"
+
+        logger.info("Launching Gemini login: %s %s", python_bin, script)
         subprocess.Popen(
-            [python_bin, "scripts/login_gemini_bypass.py"], 
-            env=env, 
+            [python_bin, str(script)],
+            env=env,
             cwd=str(config.BASE_DIR),
-            start_new_session=True
+            start_new_session=True,
         )
 
     @staticmethod

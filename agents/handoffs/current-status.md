@@ -3,14 +3,25 @@
 ## System State
 
 - Local: **http://127.0.0.1:8002**
-- FB Reels harden: unify `/reels/` URL + smart upload/Next waits (working tree → commit)
+- Gemini cookies: **valid**
+- **PLAN-041 đầy đủ:** cross-account media guard (create/bulk/viral/manual) + docs + UI badges
+- Migration: `f4a1b2c3d4e5`
+- Tests: `tests/test_cross_account_media_guard.py` — **5 passed**
 
-## Done This Session [2026-07-23]
+## Done This Session [2026-07-24]
 
-- Ops harden `f6c789c` (poll/checkpoint/daily skip)
-- Reels patch: `reels_tab_url` dùng chung pre_scan+verify; `wait_until_upload_ready` / `wait_until_next_enabled`
+- Phase 1 guard + Phase 3 UI/docs
+- Manual job path gated; error toast đỏ khi trùng
+- Schema doc cập nhật `content_hash` / `viral_material_id`
+- Job row/details: **Reup** vs **Media guard** tách nhãn
+
+## Unfinished + Blockers
+
+- Chưa commit (reels + gemini + PLAN-041 full)
+- VPS: cần `alembic upgrade head` khi deploy
+- Job cũ chưa backfill hash (lazy)
 
 ## Next Action
 
-1. Owner chạy 1 job Reels thật → DONE + post_url
-2. Nếu fail: checklist `logs/fb/job_*`
+1. Owner bảo **commit** nếu ship
+2. Deploy VPS → migrate

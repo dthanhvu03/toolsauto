@@ -787,6 +787,22 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             else:
                 calc_schedule = int(time.time()) + random.randint(300, 3600)
 
+            from app.core.media.content_hash import assert_media_not_blocked, sha256_file
+
+            media_hash = sha256_file(media_path)
+            try:
+                assert_media_not_blocked(
+                    db,
+                    platform="facebook",
+                    content_hash=media_hash,
+                    viral_material_id=mat.id,
+                )
+            except ValueError as guard_err:
+                reason = str(guard_err)
+                logger.warning("[VIRAL] Skip material #%s: %s", mat.id, reason)
+                _mark_material_failed(db, mat, reason[:200])
+                continue
+
             new_job = Job(
                 platform="facebook",
                 account_id=target_account.id,
@@ -794,7 +810,9 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 caption=caption_metadata,
                 status=JobStatus.AWAITING_STYLE,
                 schedule_ts=calc_schedule,
-                target_page=resolved_target
+                target_page=resolved_target,
+                content_hash=media_hash,
+                viral_material_id=mat.id,
             )
             db.add(new_job)
             mat.status = ViralStatus.DRAFTED

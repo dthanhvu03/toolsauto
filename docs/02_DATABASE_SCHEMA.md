@@ -38,7 +38,10 @@ Trung tâm lưu trữ các tác vụ đăng bài, AI sinh caption và tracking.
   - `last_error`, `error_type` (`RETRYABLE` / `FATAL`)
 - **Idempotency & Processing**:
   - `external_post_id` (TEXT): ID của post trả về từ Facebook
-  - `dedupe_key` (TEXT): Hash chống upload trùng trong bulk
+  - `dedupe_key` (TEXT): Hash chống upload trùng **trong cùng 1 account** (bulk)
+  - `content_hash` (TEXT, nullable): SHA-256 bytes media — chống đăng trùng **cross-account** cùng `platform` (PLAN-041). Chặn khi status ∈ PENDING/RUNNING/DONE/DRAFT/AI_PROCESSING/AWAITING_STYLE; FAILED/CANCELLED không chặn.
+  - `viral_material_id` (INT, FK → viral_materials.id, nullable): 1 material viral → tối đa 1 job active
+  - Unique partial (Postgres): `(platform, content_hash)` và `(viral_material_id)` trên các status blocking ở trên
   - `batch_id` (TEXT): UUID gom nhóm upload
   - `processed_media_path` (TEXT): Đường dẫn sau khi xử lý (vd encode FFmpeg)
 - **Post-Publish Metrics**:

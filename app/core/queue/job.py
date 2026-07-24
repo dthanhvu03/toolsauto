@@ -31,7 +31,19 @@ class JobService:
         return db.query(JobEvent).filter(JobEvent.job_id == job_id).order_by(JobEvent.id.desc()).limit(limit).all()
     
     @staticmethod
-    def create_job(db: Session, account_id: int, media_path: str, caption: str, schedule_ts: int, randomize_caption: bool, dedupe_key: str = None, affiliate_url: str = None, target_page: str = None) -> Job:
+    def create_job(
+        db: Session,
+        account_id: int,
+        media_path: str,
+        caption: str,
+        schedule_ts: int,
+        randomize_caption: bool,
+        dedupe_key: str = None,
+        affiliate_url: str = None,
+        target_page: str = None,
+        viral_material_id: int | None = None,
+        content_hash: str | None = None,
+    ) -> Job:
         """Creates a new PENDING job with strict validations."""
         # 1. Validate Account
         account = db.query(Account).filter(Account.id == account_id).first()
@@ -50,6 +62,20 @@ class JobService:
             
         if not os.path.exists(norm_path):
             raise ValueError(f"Media file not found at path: {norm_path}")
+
+        # Job.platform must be a single adapter key — never copy "facebook,threads" wholesale.
+        raw_platform = (account.platform or "").strip()
+        job_platform = raw_platform.split(",")[0].strip() if raw_platform else raw_platform
+
+        from app.core.media.content_hash import assert_media_not_blocked, sha256_file
+
+        resolved_hash = content_hash or sha256_file(norm_path)
+        assert_media_not_blocked(
+            db,
+            platform=job_platform,
+            content_hash=resolved_hash,
+            viral_material_id=viral_material_id,
+        )
             
         # 4. Create Job with tracking
         import uuid
@@ -57,10 +83,6 @@ class JobService:
         tracking_url = f"/r/{tracking_code}"
         
         initial_status = JobStatus.DRAFT if caption and "[AI_GENERATE]" in caption else JobStatus.PENDING
-
-        # Job.platform must be a single adapter key — never copy "facebook,threads" wholesale.
-        raw_platform = (account.platform or "").strip()
-        job_platform = raw_platform.split(",")[0].strip() if raw_platform else raw_platform
         
         new_job = Job(
             platform=job_platform,
@@ -74,7 +96,9 @@ class JobService:
             tracking_code=tracking_code,
             tracking_url=tracking_url,
             affiliate_url=affiliate_url.strip() if affiliate_url and affiliate_url.strip() else None,
-            target_page=target_page.strip() if target_page and target_page.strip() else None
+            target_page=target_page.strip() if target_page and target_page.strip() else None,
+            content_hash=resolved_hash,
+            viral_material_id=viral_material_id,
         )
         
         from sqlalchemy.exc import IntegrityError
@@ -84,7 +108,9 @@ class JobService:
             db.commit()
         except IntegrityError:
             db.rollback()
-            raise ValueError("Duplicate job detected (same account + file combination). Skipped.")
+            raise ValueError(
+                "Duplicate job detected (same account+file or cross-account media guard). Skipped."
+            )
         db.refresh(new_job)
         
         # 5. Handle Caption Randomization with Deterministic Salt
@@ -358,19 +384,39 @@ class JobService:
 
     @staticmethod
     def create_high_priority_manual_job(db: Session, account_id: int, target_page: str, caption: str = None, media_path: str = None) -> Job:
+        from app.core.media.content_hash import assert_media_not_blocked, sha256_file
+
+        platform = "facebook"
+        content_hash = None
+        if media_path:
+            content_hash = sha256_file(media_path)
+            assert_media_not_blocked(
+                db,
+                platform=platform,
+                content_hash=content_hash,
+            )
         job = Job(
-            platform="facebook",
+            platform=platform,
             account_id=account_id,
             target_page=target_page,
             caption=caption,
             media_path=media_path,
             status=JobStatus.PENDING,
-            schedule_ts=int(time.time()) - 999999, # Priority boost
+            schedule_ts=int(time.time()) - 999999,  # Priority boost
             tries=0,
             max_tries=3,
+            content_hash=content_hash,
         )
+        from sqlalchemy.exc import IntegrityError
+
         db.add(job)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise ValueError(
+                "Duplicate job detected (same account+file or cross-account media guard). Skipped."
+            )
         db.refresh(job)
         JobService._log_event(db, job.id, "INFO", "High-priority manual job created")
         return job
@@ -460,6 +506,15 @@ class JobService:
         jobs_to_insert = []
         
         for data in files_data:
+            from app.core.media.content_hash import assert_media_not_blocked, sha256_file
+
+            media_hash = data.get("content_hash") or sha256_file(data["final_path"])
+            assert_media_not_blocked(
+                db,
+                platform=data["platform"],
+                content_hash=media_hash,
+                viral_material_id=data.get("viral_material_id"),
+            )
             job = Job(
                 platform=data['platform'],
                 account_id=account_id,
@@ -474,7 +529,9 @@ class JobService:
                 tracking_url=f"/r/{data['tracking_code']}",
                 affiliate_url=data['clean_affiliate'],
                 auto_comment_text=data['final_auto_comment'],
-                target_page=data['target_page']
+                target_page=data['target_page'],
+                content_hash=media_hash,
+                viral_material_id=data.get("viral_material_id"),
             )
             jobs_to_insert.append(job)
 
