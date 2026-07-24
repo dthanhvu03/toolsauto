@@ -134,6 +134,16 @@
                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Tracking Code</div>
                 <div class="text-[10px] font-mono text-gray-600">{{ job.tracking_code or '-' }}</div>
             </div>
+            <div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Content Hash (cross-account)</div>
+                <div class="text-[10px] font-mono text-gray-600 truncate" title="{{ job.content_hash or '' }}">
+                    {% if job.content_hash %}{{ job.content_hash[:16] }}{% if job.content_hash|length > 16 %}…{% endif %}{% else %}-{% endif %}
+                </div>
+            </div>
+            <div>
+                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Viral Material ID</div>
+                <div class="text-[10px] font-mono text-gray-600">{{ job.viral_material_id or '-' }}</div>
+            </div>
             <div class="col-span-2">
                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Affiliate URL</div>
                 <div class="text-[10px] font-mono text-gray-600 break-all">{{ job.affiliate_url or '-' }}</div>
@@ -146,7 +156,10 @@
                 <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Media Path</div>
                 <div class="text-[10px] font-mono text-gray-600 break-all bg-gray-50 p-2 rounded-lg border border-gray-100">{{ job.media_path or '-' }}
                 {% if job.media_path and '_reup' in (job.media_path or '') %}
-                <span class="ml-2 text-emerald-700 font-bold">· Anti-dupe OK</span>
+                <span class="ml-2 text-emerald-700 font-bold" title="Đã qua ReupProcessor (biến đổi video)">· Reup OK</span>
+                {% endif %}
+                {% if job.content_hash %}
+                <span class="ml-2 text-sky-700 font-bold" title="Đã gắn content_hash — chặn đăng trùng cross-account cùng platform">· Media guard</span>
                 {% endif %}
                 </div>
             </div>

@@ -51,11 +51,13 @@ async def manual_job_create(
     try:
         job = JobService.create_manual_job_with_file(db, account_id, target_page, caption_text, media)
         msg = f"✅ Job #{job.id} đã được thêm vào Queue với độ ưu tiên tối đa!"
+        return HTMLResponse(
+            f'<div class="p-3 text-sm rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">{msg}</div>'
+            f'<script>if(window.refreshJobs) window.refreshJobs(1); setTimeout(() => document.getElementById("manualJobDialog").close(), 2000);</script>'
+        )
     except Exception as e:
-        logger.error(f"Manual job create error: {e}")
+        logger.error("Manual job create error: %s", e)
         msg = f"❌ Lỗi tạo Job: {e}"
-
-    return HTMLResponse(
-        f'<div class="p-3 text-sm rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">{msg}</div>'
-        f'<script>if(window.refreshJobs) window.refreshJobs(1); setTimeout(() => document.getElementById("manualJobDialog").close(), 2000);</script>'
-    )
+        return HTMLResponse(
+            f'<div class="p-3 text-sm rounded bg-rose-50 text-rose-800 border border-rose-200 font-medium">{msg}</div>'
+        )

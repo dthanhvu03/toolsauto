@@ -77,8 +77,11 @@ def start_gemini_login():
         ''')
     except Exception as e:
         logger.error("Failed to launch Chrome: %s", e)
+        detail = str(e).replace('"', "'")[:120]
         return HTMLResponse(
-            "<button id='gemini-badge' class='cave-badge cave-badge-danger inline-flex items-center h-9 px-3'>"
+            "<button id='gemini-badge' "
+            f"title=\"{detail}\" "
+            "class='cave-badge cave-badge-danger inline-flex items-center h-9 px-3'>"
             "Lỗi mở Chrome</button>"
         )
 

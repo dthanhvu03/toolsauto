@@ -179,7 +179,13 @@
                 </svg>{{ job.click_count }} clicks</span>
             {% endif %}
             {% if job.media_path and '_reup' in (job.media_path or '') %}
-            <span class="text-emerald-700 font-semibold text-[10px]" title="Đã qua ReupProcessor anti-dupe">Anti-dupe</span>
+            <span class="text-emerald-700 font-semibold text-[10px]" title="Đã qua ReupProcessor (biến đổi video, không phải cross-account)">Reup</span>
+            {% endif %}
+            {% if job.content_hash %}
+            <span class="text-sky-700 font-semibold text-[10px]" title="content_hash={{ job.content_hash }} — chặn trùng media cross-account cùng platform">Media guard</span>
+            {% endif %}
+            {% if job.viral_material_id %}
+            <span class="text-violet-700 font-semibold text-[10px]" title="viral_material_id={{ job.viral_material_id }}">Viral #{{ job.viral_material_id }}</span>
             {% endif %}
             {% if job.auto_comment_text %}
             <span class="text-indigo-600 font-semibold text-[10px]" title="{{ job.auto_comment_text }}">Affiliate comment</span>

@@ -40,6 +40,9 @@ class Job(Base):
     dedupe_key = Column(String, nullable=True, index=True)  # hash(account_id + media_uuid) — prevents double-upload
     batch_id = Column(String, nullable=True, index=True)  # UUID grouping bulk uploads
     processed_media_path = Column(String, nullable=True)  # FFmpeg output path (preserves original)
+    # Cross-account media guard (PLAN-041): same file / viral material cannot publish twice on same platform
+    content_hash = Column(String, nullable=True, index=True)
+    viral_material_id = Column(Integer, ForeignKey("viral_materials.id", ondelete="SET NULL"), nullable=True, index=True)
 
     @property
     def resolved_processed_media_path(self) -> str:
