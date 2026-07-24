@@ -17,11 +17,11 @@
 
 ## Unfinished + Blockers
 
-- Chưa commit (reels + gemini + PLAN-041 full)
-- VPS: cần `alembic upgrade head` khi deploy
+- VPS: cần `alembic upgrade head` khi deploy (`f4a1b2c3d4e5`)
 - Job cũ chưa backfill hash (lazy)
+- `.codacy/` local untracked (không commit)
 
 ## Next Action
 
-1. Owner bảo **commit** nếu ship
-2. Deploy VPS → migrate
+1. Deploy VPS → migrate nếu cần
+2. Owner `git push` khi muốn publish (local ahead 25 commits)
