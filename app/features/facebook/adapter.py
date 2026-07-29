@@ -85,6 +85,27 @@ class FacebookAdapter(AdapterInterface):
 
     _REEL_ID_RE = re.compile(r"/reel/([a-zA-Z0-9_-]+)", re.IGNORECASE)
     _SHARE_RE = re.compile(r"/share/[rv]/([a-zA-Z0-9_-]+)", re.IGNORECASE)
+    _BARE_FB_ID_RE = re.compile(
+        r"(?:https?://)?(?:www\.)?facebook\.com/(?:reel/)?(\d{10,})/?$",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _extract_reel_id(cls, url: str | None) -> str | None:
+        """Pull reel/post id from /reel/{id}, bare facebook.com/{id}, or share links."""
+        if not url:
+            return None
+        u = str(url).strip().split("#")[0].split("?")[0].rstrip("/")
+        m = cls._REEL_ID_RE.search(u)
+        if m and m.group(1).isdigit():
+            return m.group(1)
+        m = cls._SHARE_RE.search(u)
+        if m:
+            return m.group(1)
+        m = cls._BARE_FB_ID_RE.search(u)
+        if m:
+            return m.group(1)
+        return None
 
     def _normalize_post_url(self, url: str | None) -> str | None:
         """Return a stable, valid FB post URL (prefer reel with id), else None."""
@@ -107,6 +128,10 @@ class FacebookAdapter(AdapterInterface):
         # accept share links
         if self._SHARE_RE.search(u):
             return u
+        # bare facebook.com/{numeric_id} → normalize to /reel/{id} for MetricsChecker
+        bare = self._BARE_FB_ID_RE.search(u)
+        if bare:
+            return f"{FACEBOOK_HOST}/reel/{bare.group(1)}"
         # accept videos/posts if they look non-trivial
         if ("/videos/" in u or "/posts/" in u) and len(u) > 30:
             return u
@@ -132,34 +157,63 @@ class FacebookAdapter(AdapterInterface):
         if not self.page:
             return None
 
-        # A. Direct Reels Tab (fastest path)
+        pre_ids = sorted(
+            {
+                rid
+                for href in (pre_existing_reels or [])
+                if (rid := self._extract_reel_id(href))
+            }
+        )
+
+        # A. Direct Reels Tab (fastest path) — only real /reel/{digits} links
         if reels.navigate_to_reels_tab(target_page_url):
-            found_href = self.page.evaluate("""
-                ([salt, pre_reels]) => {
-                    const links = document.querySelectorAll('a[href*="/reel/"], a[href*="/share/r/"], a[href*="/share/v/"]');
-                    // Priority 1: Salt in ancestor
+            self.page.wait_for_timeout(2500)
+            try:
+                self.page.mouse.wheel(0, 1200)
+                self.page.wait_for_timeout(1500)
+            except Exception:
+                pass
+            found_href = self.page.evaluate(
+                """
+                ([salt, preIds]) => {
+                    const pre = new Set(preIds || []);
+                    const links = Array.from(document.querySelectorAll('a[href*="/reel/"]'));
+                    const parsed = [];
                     for (const a of links) {
-                        let el = a;
-                        for (let i = 0; i < 15 && el; i++) {
-                            if (el.textContent && el.textContent.indexOf(salt) >= 0) {
-                                return a.getAttribute('href');
+                        const raw = a.getAttribute('href') || a.href || '';
+                        const m = raw.match(/\\/reel\\/(\\d{8,})/);
+                        if (!m) continue;
+                        parsed.push({ id: m[1], href: raw, el: a });
+                    }
+                    // Priority 1: Salt in ancestor
+                    if (salt) {
+                        for (const item of parsed) {
+                            let el = item.el;
+                            for (let i = 0; i < 15 && el; i++) {
+                                if (el.textContent && el.textContent.indexOf(salt) >= 0) {
+                                    return item.href;
+                                }
+                                el = el.parentElement;
                             }
-                            el = el.parentElement;
                         }
                     }
-                    // Priority 2: Newest item not in pre_reels
-                    if (!salt && links.length > 0) {
-                        const firstHref = links[0].getAttribute('href');
-                        if (firstHref && !pre_reels.includes(firstHref)) return firstHref;
+                    // Priority 2: first reel id not seen in pre-scan (newest on grid)
+                    for (const item of parsed) {
+                        if (!pre.has(item.id)) return item.href;
                     }
                     return null;
                 }
-            """, [salt, pre_existing_reels])
+                """,
+                [salt or "", pre_ids],
+            )
 
             if found_href:
                 post_url = self._normalize_post_url(found_href)
                 if post_url:
-                    self.logger.info("FacebookAdapter: Post URL captured via Reels tab scan: %s", post_url)
+                    self.logger.info(
+                        "FacebookAdapter: Post URL captured via Reels tab scan: %s",
+                        post_url,
+                    )
                     return post_url
 
         # B. Deep-dive only on later attempts
@@ -168,7 +222,8 @@ class FacebookAdapter(AdapterInterface):
             latest_links = self.page.evaluate("""
                 () => Array.from(document.querySelectorAll('a[href*="/reel/"]'))
                     .map(a => a.getAttribute('href'))
-                    .slice(0, 5)
+                    .filter(h => h && /\\/reel\\/\\d{8,}/.test(h))
+                    .slice(0, 8)
             """) or []
 
             for href in latest_links:
@@ -442,36 +497,47 @@ class FacebookAdapter(AdapterInterface):
             return
 
         actual_url = self.page.url
-        
-        # 1. URL Substring check (Slug or ID)
-        identifier = ""
-        if "id=" in expected_target:
-            # Handle profile.php?id=123
-            match = re.search(r"id=(\d+)", expected_target)
-            if match:
-                identifier = match.group(1)
-        else:
-            # Handle facebook.com/SlugName
-            parts = expected_target.rstrip("/").split("/")
-            if parts:
-                identifier = parts[-1].split("?")[0]
 
-        if identifier and identifier in actual_url:
-            self.logger.debug("FacebookAdapter: [Identity] URL verification passed for '%s' (%s)", identifier, context)
-            return
+        # Collect identifiers: numeric id AND vanity slug (URL may have both).
+        identifiers: list[str] = []
+        id_match = re.search(r"[?&]id=(\d+)", expected_target)
+        if id_match:
+            identifiers.append(id_match.group(1))
+
+        path = expected_target.split("?", 1)[0].rstrip("/")
+        slug = path.split("/")[-1] if path else ""
+        if slug and slug.lower() not in {"", "www.facebook.com", "facebook.com", "profile.php", "pages"}:
+            identifiers.append(slug)
+
+        for identifier in identifiers:
+            if identifier and identifier in actual_url:
+                self.logger.debug(
+                    "FacebookAdapter: [Identity] URL verification passed for '%s' (%s)",
+                    identifier,
+                    context,
+                )
+                return
 
         # 2. Page Title / Header check (Fallback)
         try:
             page_title = self.page.title()
-            # If slug is in title (common for pages)
-            if identifier.lower() in page_title.lower():
-                 self.logger.debug("FacebookAdapter: [Identity] Title verification passed for '%s' (%s)", identifier, context)
-                 return
+            for identifier in identifiers:
+                if identifier and identifier.lower() in page_title.lower():
+                    self.logger.debug(
+                        "FacebookAdapter: [Identity] Title verification passed for '%s' (%s)",
+                        identifier,
+                        context,
+                    )
+                    return
         except Exception:
             pass
 
         # If we reach here, identity is suspicious
-        self.logger.error("FacebookAdapter: [Identity] Verification FAILED for '%s'. Actual URL: %s", expected_target, actual_url)
+        self.logger.error(
+            "FacebookAdapter: [Identity] Verification FAILED for '%s'. Actual URL: %s",
+            expected_target,
+            actual_url,
+        )
         raise PageMismatchError(expected_target, actual_url)
 
 
@@ -1127,25 +1193,25 @@ class FacebookAdapter(AdapterInterface):
                     entrypoint_used,
                 )
 
-            # ── Post-publish verification: FAST TRACK ──
+            # ── Post-publish verification: prefer public /reel/{id} (MetricsChecker) ──
             self.logger.info("FacebookAdapter: [Phase 5] Bước 5/5: Kiểm tra và lấy link bài viết vừa đăng...")
             update_active_node(job.id, "post_verify")
             post_url = None
+            url_source = None  # toast | redirect | reels_scan | profile_sweep | delayed_scan | graphql_fallback
             salt = publish_salt
-            
-            # 0. The Ultimate Fast-Track: GraphQL ID
-            if post_id_from_graphql:
-                post_url = f"{FACEBOOK_HOST}/{post_id_from_graphql}"
-                self.logger.info("FacebookAdapter: 🎯 [Thành công] Xác minh bài viết qua GraphQL ID: %s", post_url)
-            
+            graphql_id = post_id_from_graphql
+
+            # GraphQL id alone is NOT enough — often not the public /reel/{id} permalink.
+            # Prefer toast → redirect → Reels tab diff; GraphQL only as last resort.
+
             # 1. Immediate catch: Success Toast
-            if not post_url:
-                self.logger.info("FacebookAdapter: [Fast-Track] Kiểm tra thông báo Success Toast...")
-                toast_link = reels.find_success_toast_link()
-                if toast_link:
-                    post_url = self._normalize_post_url(toast_link)
-                    if post_url:
-                        self.logger.info("FacebookAdapter: 🎯 [Thành công] Lấy URL qua Toast: %s", post_url)
+            self.logger.info("FacebookAdapter: [Fast-Track] Kiểm tra thông báo Success Toast...")
+            toast_link = reels.find_success_toast_link()
+            if toast_link:
+                post_url = self._normalize_post_url(toast_link)
+                if post_url:
+                    url_source = "toast"
+                    self.logger.info("FacebookAdapter: 🎯 [Thành công] Lấy URL qua Toast: %s", post_url)
 
             # 2. Immediate catch: Redirect URL
             if not post_url:
@@ -1154,19 +1220,24 @@ class FacebookAdapter(AdapterInterface):
                     normalized = self._normalize_post_url(current_url)
                     if normalized:
                         post_url = normalized
+                        url_source = "redirect"
                         self.logger.info("FacebookAdapter: Post URL captured via current URL redirect: %s", post_url)
                 except Exception:
                     pass
 
             if not post_url:
-                self.logger.info("FacebookAdapter: Fast-track immediate capture missed. Starting profiling scan...")
+                self.logger.info(
+                    "FacebookAdapter: Scanning Reels tab for new /reel/{{id}} (graphql_id=%s)...",
+                    graphql_id,
+                )
                 # Reduce post-click cooldown if we already waited in reels.wait_for_post_submission
-                self.page.wait_for_timeout(4000) 
+                self.page.wait_for_timeout(4000)
 
                 # Try up to 3 attempts with increasing depth
                 for attempt in range(3):
-                    if post_url: break
-                    
+                    if post_url:
+                        break
+
                     self.logger.info("FacebookAdapter: Verification attempt %d/3...", attempt + 1)
                     post_url = self._scan_reels_for_new_post(
                         reels=reels,
@@ -1176,6 +1247,7 @@ class FacebookAdapter(AdapterInterface):
                         attempt=attempt,
                     )
                     if post_url:
+                        url_source = "reels_scan"
                         break
 
                     # C. Profile Refresh (Final fallback)
@@ -1187,8 +1259,9 @@ class FacebookAdapter(AdapterInterface):
                             self.page.wait_for_timeout(5000)
                             # Expand just a bit
                             more = self.page.locator('div[role="button"]:has-text("See more"), div[role="button"]:has-text("Xem thêm")').first
-                            if self._is_visible(more): more.click(timeout=2000)
-                            
+                            if self._is_visible(more):
+                                more.click(timeout=2000)
+
                             # Final JS sweep
                             found_href = self.page.evaluate("""
                                 (salt) => {
@@ -1208,13 +1281,26 @@ class FacebookAdapter(AdapterInterface):
                             if found_href:
                                 post_url = self._normalize_post_url(found_href)
                                 if post_url:
+                                    url_source = "profile_sweep"
                                     self.logger.info("FacebookAdapter: Post URL captured via final profile refresh sweep: %s", post_url)
-                        except Exception: pass
+                        except Exception:
+                            pass
 
                     if not post_url and attempt < 2:
                         wait_sec = 8 if attempt == 0 else 15
                         self.logger.info("FacebookAdapter: No new reel found yet. Waiting %ds before retry...", wait_sec)
                         self.page.wait_for_timeout(wait_sec * 1000)
+
+            # Last resort: GraphQL → /reel/{id} (may still be wrong entity id)
+            if not post_url and graphql_id:
+                candidate = self._normalize_post_url(f"{FACEBOOK_HOST}/reel/{graphql_id}")
+                if candidate:
+                    post_url = candidate
+                    url_source = "graphql_fallback"
+                    self.logger.warning(
+                        "FacebookAdapter: Using GraphQL id as /reel/ fallback (verify manually): %s",
+                        post_url,
+                    )
 
             if not post_url and submission_status == "success":
                 self.logger.warning("[Job %s] Post URL not found. Waiting 3 min then retrying scan...", job.id)
@@ -1230,6 +1316,7 @@ class FacebookAdapter(AdapterInterface):
                 except Exception as e:
                     self.logger.debug("FacebookAdapter: Delayed scan raised error: %s", e)
                 if post_url:
+                    url_source = "delayed_scan"
                     self.logger.info("[Job %s] Post verified on delayed scan: %s", job.id, post_url)
                 else:
                     self.logger.warning("[Job %s] Still unverified after delayed scan.", job.id)
@@ -1245,19 +1332,23 @@ class FacebookAdapter(AdapterInterface):
                         flow_mode, entrypoint_used
                     )
             else:
-                self.logger.info("[Job %s] Post verified: %s", job.id, post_url)
+                self.logger.info("[Job %s] Post verified via %s: %s", job.id, url_source, post_url)
 
             self._capture_failure_artifacts(job.id, "post_verification_final")
 
             return PublishResult(
                 ok=True,
-                external_post_id=f"fb_post_{job.id}",
+                external_post_id=(
+                    f"fb_gql_{graphql_id}" if graphql_id else f"fb_post_{job.id}"
+                ),
                 details=self._build_publish_details(
                     flow_mode,
                     entrypoint_used,
                     post_url=post_url,
+                    graphql_id=graphql_id,
                     msg="Post submitted." if post_url else "Post submitted but URL unverified.",
-                    verified=bool(post_url),
+                    verified=bool(post_url) and url_source != "graphql_fallback",
+                    verified_via=url_source or "unverified",
                 ),
             )
 

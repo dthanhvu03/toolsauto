@@ -160,12 +160,12 @@ def process_single_job(db: Session) -> bool:
 
             apply_runtime_overrides_to_config(db)
             delay_sec = runtime_settings.get_int(
-                "publish.post_delay_min_sec",
+                "publish.delay_min_sec",
                 config.POST_DELAY_MIN_SEC,
                 db=db,
             )
             delay_cap = runtime_settings.get_int(
-                "publish.post_delay_max_sec",
+                "publish.delay_max_sec",
                 config.POST_DELAY_MAX_SEC,
                 db=db,
             )

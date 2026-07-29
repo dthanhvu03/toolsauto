@@ -20,10 +20,18 @@ logger = logging.getLogger(__name__)
 
 
 def get_default_min_views(db: Session) -> int:
-    """Lấy ngưỡng view tối thiểu: ưu tiên system_state.viral_min_views, không có thì dùng config."""
+    """Lấy ngưỡng view: SystemState → runtime_settings → config."""
     state = db.query(SystemState).filter(SystemState.id == 1).first()
     if state and getattr(state, "viral_min_views", None) is not None:
         return int(state.viral_min_views)
+    try:
+        from app.core import settings as runtime_settings
+
+        v = runtime_settings.get_effective(db, "viral.min_views")
+        if v is not None:
+            return int(v)
+    except Exception:
+        pass
     return getattr(config, "VIRAL_MIN_VIEWS", 10000)
 
 
@@ -33,6 +41,15 @@ def get_default_max_videos_per_channel(db: Session) -> int:
     val = None
     if state and getattr(state, "viral_max_videos_per_channel", None) is not None:
         val = int(state.viral_max_videos_per_channel)
+    if val is None:
+        try:
+            from app.core import settings as runtime_settings
+
+            v = runtime_settings.get_effective(db, "viral.max_videos_per_channel")
+            if v is not None:
+                val = int(v)
+        except Exception:
+            val = None
     if val is None:
         val = getattr(config, "VIRAL_MAX_VIDEOS_PER_CHANNEL", 50)
     if val <= 0:

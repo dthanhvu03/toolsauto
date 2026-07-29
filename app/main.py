@@ -54,6 +54,19 @@ app = FastAPI(
 if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
 
+
+@app.on_event("startup")
+def _load_runtime_settings_on_startup():
+    """Apply DB overrides (Telegram / Gemini / …) so web process matches Settings UI."""
+    try:
+        from app.core.database.core import SessionLocal
+        from app.core.settings import load_runtime_settings_into_process
+
+        with SessionLocal() as db:
+            load_runtime_settings_into_process(db)
+    except Exception:
+        logger.exception("startup: load_runtime_settings_into_process failed")
+
 # Include routers
 app.include_router(auth.router)
 app.include_router(dashboard.router)

@@ -30,9 +30,74 @@ _STATUS_LABELS_VI = {
     JobStatus.CANCELLED: "Đã hủy",
 }
 
+# (needle_lower, title_vi, hint_vi) — first match wins
+_MESSAGE_HUMANIZE: list[tuple[str, str, str]] = [
+    (
+        "file_inputs",
+        "Lỗi kỹ thuật khi mở form đăng Reel",
+        "Hệ thống gặp bug nội bộ lúc quét nút upload. Đã vá — thử Đăng lại / Retry nếu bài chưa lên.",
+    ),
+    (
+        "apply_runtime_overrides_to_config",
+        "Lỗi sau khi đăng (bước nghỉ)",
+        "Bài có thể đã đăng thành công; chỉ lệch bước cooldown. Kiểm tra link bài / page trước khi đăng lại.",
+    ),
+    (
+        "page mismatch",
+        "Không khớp fanpage đích",
+        "Trình duyệt đang ở page khác với Target Page. Kiểm tra cookie / quyền quản lý page.",
+    ),
+    (
+        "unexpected playwright error",
+        "Lỗi trình duyệt khi đăng",
+        "Playwright gặp sự cố giữa chừng. Thường retry được — xem chi tiết kỹ thuật bên dưới.",
+    ),
+    (
+        "playwright error",
+        "Lỗi trình duyệt khi đăng",
+        "Không hoàn tất thao tác trên Facebook. Thử lại hoặc kiểm tra session tài khoản.",
+    ),
+    (
+        "job_forced",
+        "Đã đẩy chạy ngay",
+        "Lịch đăng được kéo về hiện tại để worker lấy job.",
+    ),
+    (
+        "job approved",
+        "Đã duyệt — chờ đăng",
+        "Job chuyển sang hàng chờ Publisher.",
+    ),
+    (
+        "job marked done",
+        "Đăng thành công",
+        "Job đã hoàn tất trên hệ thống.",
+    ),
+    (
+        "restored after successful publish",
+        "Khôi phục trạng thái Xong",
+        "Bài đã đăng; hệ thống chỉnh lại trạng thái sau lỗi phụ.",
+    ),
+    (
+        "manual short caption",
+        "Đã lưu caption thủ công",
+        "Caption do người vận hành nhập (không qua AI).",
+    ),
+    (
+        "cancelled",
+        "Đã hủy job",
+        "Job bị dừng thủ công hoặc do hệ thống.",
+    ),
+    (
+        "checkpoint",
+        "Facebook yêu cầu xác minh tài khoản",
+        "Cần mở trình duyệt / cookie và xử lý checkpoint trước khi đăng tiếp.",
+    ),
+]
 
-def now_ts():
+
+def now_ts() -> int:
     return int(time.time())
+
 
 class JobService:
     VALID_EXTENSIONS = ('.mp4', '.jpg', '.jpeg', '.png')
@@ -49,6 +114,45 @@ class JobService:
     def status_label_vi(status: str | None) -> str:
         key = (status or "").strip()
         return _STATUS_LABELS_VI.get(key, key or "—")
+
+    @staticmethod
+    def humanize_job_message(message: str | None) -> dict[str, Any]:
+        """Map raw job/event text → title + hint for operators (keep raw for support)."""
+        raw = (message or "").strip()
+        if not raw:
+            return {"title": "—", "hint": "", "raw": "", "is_technical": False}
+        low = raw.lower()
+        for needle, title, hint in _MESSAGE_HUMANIZE:
+            if needle in low:
+                return {"title": title, "hint": hint, "raw": raw, "is_technical": True}
+        # Soft ops labels
+        if low.startswith("job ") or "_" in raw and raw.upper() == raw:
+            return {"title": raw.replace("_", " ").strip(), "hint": "", "raw": raw, "is_technical": False}
+        return {"title": raw, "hint": "", "raw": raw, "is_technical": False}
+
+    @staticmethod
+    def humanize_event_meta(meta: str | None) -> str:
+        """is_fatal=False, tries=4/3 → tiếng Việt ngắn."""
+        raw = (meta or "").strip()
+        if not raw or raw == "{}":
+            return ""
+        low = raw.lower()
+        if "restored after successful publish" in low:
+            return "Khôi phục sau khi đăng thành công"
+        if raw.strip().lower() == "success":
+            return "Thành công"
+        fatal_m = re.search(r"is_fatal\s*=\s*(True|False)", raw, re.I)
+        tries_m = re.search(r"tries\s*=\s*(\d+)\s*/\s*(\d+)", raw, re.I)
+        parts: list[str] = []
+        if fatal_m:
+            parts.append(
+                "Lỗi chặn hẳn" if fatal_m.group(1).lower() == "true" else "Có thể thử lại"
+            )
+        if tries_m:
+            parts.append(f"Lần thử {tries_m.group(1)}/{tries_m.group(2)}")
+        if parts:
+            return " · ".join(parts)
+        return raw
 
     @staticmethod
     def parse_caption_for_ui(caption: str | None) -> dict[str, Any]:
@@ -129,14 +233,32 @@ class JobService:
         caption_view = JobService.parse_caption_for_ui(job.caption)
         milestones = [] if events else JobService.build_job_milestones(job)
         media_name = os.path.basename(job.media_path) if job.media_path else ""
+        event_views = []
+        for event in events:
+            view = JobService.humanize_job_message(event.message)
+            event_views.append(
+                {
+                    "level": event.level,
+                    "ts": event.ts,
+                    "title": view["title"],
+                    "hint": view["hint"],
+                    "raw": view["raw"],
+                    "is_technical": view["is_technical"],
+                    "meta_label": JobService.humanize_event_meta(event.meta_json),
+                    "meta_raw": event.meta_json or "",
+                }
+            )
+        last_error_view = JobService.humanize_job_message(job.last_error)
         return {
             "job": job,
             "events": events,
+            "event_views": event_views,
             "milestones": milestones,
             "caption_view": caption_view,
             "status_label": JobService.status_label_vi(job.status),
             "media_name": media_name,
             "has_reup": bool(job.media_path and "_reup" in (job.media_path or "").replace("\\", "/")),
+            "last_error_view": last_error_view,
         }
     
     @staticmethod

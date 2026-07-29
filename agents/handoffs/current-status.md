@@ -2,17 +2,26 @@
 
 ## System State
 
-- Local: **http://127.0.0.1:8002** (Web only)
-- **PLAN-044:** brand intro + UI upload; join đã khớp fps/audio + fade ~0.28s
+- Local: **http://127.0.0.1:8002** (web only; Publisher/Maintenance chạy tay khi trial)
+- Reels 1080 opt-in ON
+- Job **#5** (Viral #4 → kids0810): **DONE** — `post_url` đã backfill đúng `/reel/`
 
-## Done This Session [2026-07-24]
+## Done This Session
 
-- Brand intro Phase 1–2 + UI upload Target Pages
-- **Intro join mượt hơn:** match WxH/fps/sample_rate của body; scale `cover`; `xfade`/`acrossfade` (~0.28s)
+- Prefer public `/reel/{id}` sau publish (toast → redirect → Reels scan; GraphQL chỉ last resort)
+- Normalize bare `facebook.com/{id}` → `/reel/{id}`
+- Backfill Job #5: match caption trên grid kids0810
+- Helpers smoke OK (`_extract_reel_id` / `_normalize_post_url`)
+
+## Post URL (Job #5)
+
+https://www.facebook.com/reel/1580284210125564
+
+(URL GraphQL cũ `facebook.com/1034881886179835` không phải permalink công khai.)
 
 ## Next Action
 
-1. Owner: upload intro → BẬT → **Reup lại** 1 clip để nghe/nhìn điểm nối
-2. Muốn cắt cứng: set `"intro_fade_sec": 0` trong `reup_presets.json`
-3. Muốn letterbox thay crop: `"intro_scale_mode": "contain"`
+1. Anh mở link trên xác nhận Reel kids0810
+2. (Tuỳ chọn) chạy MetricsChecker / Maintenance để quét views Job #5
+3. Lần đăng sau: log `verified_via` = toast|redirect|reels_scan (không còn graphql_fallback nếu scan OK)
 4. Commit khi yêu cầu

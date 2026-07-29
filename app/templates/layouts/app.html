@@ -416,10 +416,14 @@
         }, type === 'warning' ? 8000 : 3000);
     };
 
-    // HTMX Toast trigger listener
+    // HTMX Toast trigger listener (HTMX 1 detail object | HTMX 2 may wrap in array)
     document.body.addEventListener('showMessage', function(evt) {
-        if (evt.detail) {
-            window.showToast(evt.detail.msg || evt.detail.message, evt.detail.type || 'success');
+        let d = evt.detail;
+        if (Array.isArray(d)) d = d[0];
+        if (d && typeof d === 'object') {
+            window.showToast(d.msg || d.message || String(d), d.type || 'success');
+        } else if (typeof d === 'string') {
+            window.showToast(d, 'success');
         }
     });
 

@@ -45,6 +45,35 @@ class NotifierService:
         logger.info("Registered notifier: %s", type(channel).__name__)
 
     @classmethod
+    def replace(cls, channel: BaseNotifier):
+        """Thay channel cùng channel_key (sau khi đổi token/chat trên Settings)."""
+        key = getattr(channel, "channel_key", None) and channel.channel_key()
+        if key:
+            cls._channels = [
+                ch
+                for ch in cls._channels
+                if not (getattr(ch, "channel_key", None) and ch.channel_key() == key)
+            ]
+        cls._channels.append(channel)
+        logger.info("Replaced notifier: %s (%s)", type(channel).__name__, key)
+
+    @classmethod
+    def unregister_prefix(cls, prefix: str) -> None:
+        """Gỡ mọi channel có channel_key bắt đầu bằng prefix (vd. telegram:)."""
+        before = len(cls._channels)
+        cls._channels = [
+            ch
+            for ch in cls._channels
+            if not (
+                getattr(ch, "channel_key", None)
+                and str(ch.channel_key() or "").startswith(prefix)
+            )
+        ]
+        removed = before - len(cls._channels)
+        if removed:
+            logger.info("Unregistered %s notifier(s) with prefix %s", removed, prefix)
+
+    @classmethod
     def _broadcast(cls, message: str):
         """Gửi text message tới tất cả channels."""
         for ch in cls._channels:

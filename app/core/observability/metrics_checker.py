@@ -124,7 +124,13 @@ class MetricsChecker:
                     CONTENT_PROFILES_DIR / f"facebook_{getattr(job, 'account_id', 0)}"
                 )
 
-            reel_id_match = re.search(r'/reel/(\d+)', job.post_url)
+            reel_id_match = re.search(r'/reel/(\d+)', job.post_url or "")
+            if not reel_id_match:
+                # Publisher sometimes stores bare https://www.facebook.com/{id}
+                reel_id_match = re.search(
+                    r'(?:facebook\.com)/(?:reel/)?(\d{8,})/?$',
+                    (job.post_url or "").rstrip("/"),
+                )
             if not reel_id_match:
                 logger.warning("[MetricsChecker] Could not extract reel ID from job %s: %s", job.id, job.post_url)
                 return 0
@@ -152,9 +158,18 @@ class MetricsChecker:
                 page.set_default_timeout(20000)  # slightly longer just in case
                 
                 try:
-                    # STRATEGY 3: navigate to reels tab (same URL scheme as publisher pre_scan/verify)
+                    # Prefer fanpage Reels tab (target_page); /me/reels misses page posts.
                     from app.features.facebook.pages.reels import FacebookReelsPage
-                    page.goto(FacebookReelsPage.reels_tab_url(None), wait_until="domcontentloaded")
+                    reels_url = FacebookReelsPage.reels_tab_url(
+                        getattr(job, "target_page", None)
+                    )
+                    logger.info(
+                        "[MetricsChecker] Job %s open reels tab: %s (reel_id=%s)",
+                        job.id,
+                        reels_url,
+                        reel_id,
+                    )
+                    page.goto(reels_url, wait_until="domcontentloaded")
                     page.wait_for_timeout(5000)
                     
                     # Extract pairs of (URL, count) from all reel thumbnails in the grid

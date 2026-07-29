@@ -205,7 +205,7 @@ def process_single_job(db: Session):
 
                 import random
                 # Re-apply overrides in case settings changed while publishing
-                apply_runtime_overrides_to_config(db)
+                runtime_settings.apply_runtime_overrides_to_config(db)
                 from app.config import POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC
                 delay_sec = random.randint(POST_DELAY_MIN_SEC, POST_DELAY_MAX_SEC)
                 logger.info("[PUBLISHER] [Job-%s] [COOLDOWN] Nghỉ %ss trước job tiếp theo.", job.id, delay_sec)
@@ -396,6 +396,25 @@ def _maybe_idle_engagement(db: Session):
 
     if not config.IDLE_ENGAGEMENT_ENABLED:
         return
+
+    # Probabilistic skip (Settings: IDLE_ENGAGEMENT_PROBABILITY)
+    try:
+        from app.core import settings as runtime_settings
+
+        prob = float(
+            runtime_settings.get(
+                "IDLE_ENGAGEMENT_PROBABILITY",
+                db=db,
+                default=getattr(config, "IDLE_ENGAGEMENT_PROBABILITY", 0.30),
+            )
+            or 0.30
+        )
+        prob = max(0.0, min(1.0, prob))
+        if _rand.random() > prob:
+            logger.debug("[IDLE] Skipped by probability (p=%.2f)", prob)
+            return
+    except Exception:
+        pass
 
     # Auto-disable idle engagement when backlog is high (protect 8GB RAM machines)
     try:

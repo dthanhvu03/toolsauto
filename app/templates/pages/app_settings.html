@@ -189,7 +189,7 @@
                     {% if row.env_only %}
                       <div class="rounded-lg border border-amber-100 bg-white/80 px-3 py-2 text-sm text-gray-700">
                         {% if row.is_secret %}
-                          {% if cur %}<span class="font-mono tracking-widest">••••••••</span> <span class="text-xs text-gray-500">(đã cấu hình)</span>{% else %}<span class="text-gray-500">Chưa đặt trong môi trường</span>{% endif %}
+                          {% if row.has_value %}<span class="font-mono tracking-widest">••••••••</span> <span class="text-xs text-gray-500">(đã cấu hình)</span>{% else %}<span class="text-gray-500">Chưa đặt trong môi trường</span>{% endif %}
                         {% else %}
                           <code class="text-sm font-mono break-all">{{ cur }}</code>
                         {% endif %}
@@ -235,7 +235,8 @@
                       <div class="space-y-1.5">
                         <span class="text-[10px] text-gray-400 font-mono bg-white border border-gray-100 px-1.5 py-0.5 rounded">{{ row.key }}</span>
                         {% if row.is_secret %}
-                          <input type="password" name="{{ row.key }}" value="{{ cur }}" autocomplete="off"
+                          <input type="password" name="{{ row.key }}" value="" autocomplete="new-password"
+                            placeholder="{% if row.has_value %}•••••••• (đã có — để trống giữ nguyên){% else %}Nhập giá trị mới{% endif %}"
                             class="w-full h-9 text-sm font-mono border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none" />
                         {% else %}
                           <input name="{{ row.key }}" value="{{ cur }}"
@@ -249,11 +250,15 @@
                   {% if not row.env_only %}
                   <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-100/80">
                     <div class="text-[10px] text-gray-400">
+                      {% if row.is_secret %}
+                        {% if row.has_value %}Đang có giá trị{% if row.has_override %} (override DB){% else %} (.env / mặc định){% endif %}{% else %}Chưa có giá trị{% endif %}
+                      {% else %}
                       Mặc định: <code class="font-mono text-gray-500 bg-white px-1 py-0.5 rounded border border-gray-50">{{ row.default }}</code>
                       {% if row.min is not none or row.max is not none %}
                         <span class="ml-1 text-gray-300 tabular-nums" title="Min / max hợp lệ">
                           ({% if row.min is not none %}{{ row.min }}{% endif %}{% if row.min is not none and row.max is not none %}–{% endif %}{% if row.max is not none %}{{ row.max }}{% endif %})
                         </span>
+                      {% endif %}
                       {% endif %}
                     </div>
                     <button type="submit" form="reset-form-{{ row.key }}"

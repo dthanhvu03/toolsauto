@@ -128,9 +128,20 @@
         {% if job.last_error %}
         <div class="p-4 rounded-2xl bg-[var(--color-danger-dim)] border border-[var(--color-danger-border)] border-l-4 border-l-[var(--color-danger)]">
             <h4 class="text-xs font-bold text-[var(--color-danger)] uppercase tracking-widest mb-2">Lỗi gần nhất</h4>
-            <div class="text-xs font-mono text-[var(--color-ink)] break-words bg-[var(--color-ledge)] p-2 rounded-lg border border-[var(--color-danger-border)]">
-                {{ job.last_error }}
-            </div>
+            <p class="text-sm font-semibold text-[var(--color-ink)] leading-snug">{{ last_error_view.title }}</p>
+            {% if last_error_view.hint %}
+            <p class="mt-1.5 text-[11px] text-[var(--color-ink-soft)] leading-relaxed">{{ last_error_view.hint }}</p>
+            {% endif %}
+            {% if last_error_view.is_technical and last_error_view.raw %}
+            <details class="mt-2 group">
+                <summary class="cursor-pointer text-[10px] font-bold text-[var(--color-mist)] hover:text-[var(--color-ink-soft)] select-none">
+                    Chi tiết kỹ thuật (dev)
+                </summary>
+                <div class="mt-1.5 text-[10px] font-mono text-[var(--color-ink)] break-words bg-[var(--color-ledge)] p-2 rounded-lg border border-[var(--color-danger-border)]">
+                    {{ last_error_view.raw }}
+                </div>
+            </details>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -141,21 +152,33 @@
                    class="text-[10px] font-bold text-[var(--color-torch)] hover:brightness-110 underline underline-offset-2">Mở Logs đầy đủ →</a>
             </div>
             <div class="space-y-3 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-[var(--border)]">
-                {% if events %}
-                    {% for event in events %}
+                {% if event_views %}
+                    {% for ev in event_views %}
                     <div class="flex gap-4 relative">
                         <div class="w-6 h-6 rounded-full bg-[var(--color-face)] border-2 border-[var(--border)] flex items-center justify-center shrink-0 z-10">
-                            <div class="w-2 h-2 rounded-full {% if event.level == 'ERROR' %}bg-[var(--color-danger)]{% elif event.level == 'WARN' %}bg-[var(--color-torch)]{% else %}bg-[var(--color-lichen)]{% endif %}"></div>
+                            <div class="w-2 h-2 rounded-full {% if ev.level == 'ERROR' %}bg-[var(--color-danger)]{% elif ev.level == 'WARN' %}bg-[var(--color-torch)]{% else %}bg-[var(--color-lichen)]{% endif %}"></div>
                         </div>
-                        <div class="flex-1 pb-2">
+                        <div class="flex-1 pb-2 min-w-0">
                             <div class="flex items-center justify-between gap-2">
-                                <p class="text-xs font-bold text-[var(--color-ink)]">{{ event.message }}</p>
-                                <span class="text-[10px] font-medium text-[var(--color-mist)] shrink-0">{{ event.ts | format_time }}</span>
+                                <p class="text-xs font-bold text-[var(--color-ink)] leading-snug">{{ ev.title }}</p>
+                                <span class="text-[10px] font-medium text-[var(--color-mist)] shrink-0">{{ ev.ts | format_time }}</span>
                             </div>
-                            {% if event.meta_json and event.meta_json != '{}' %}
-                            <div class="mt-1 text-[10px] text-[var(--color-mist)] font-mono bg-[var(--color-stone)] p-1.5 rounded border border-[var(--border)] truncate max-w-full" title="{{ event.meta_json }}">
-                                {{ event.meta_json }}
-                            </div>
+                            {% if ev.hint %}
+                            <p class="mt-0.5 text-[11px] text-[var(--color-ink-soft)] leading-relaxed">{{ ev.hint }}</p>
+                            {% endif %}
+                            {% if ev.meta_label %}
+                            <div class="mt-1 text-[10px] text-[var(--color-mist)]">{{ ev.meta_label }}</div>
+                            {% endif %}
+                            {% if ev.is_technical and ev.raw and ev.raw != ev.title %}
+                            <details class="mt-1">
+                                <summary class="cursor-pointer text-[10px] text-[var(--color-ash)] hover:text-[var(--color-mist)] select-none">Raw kỹ thuật</summary>
+                                <div class="mt-1 text-[10px] text-[var(--color-mist)] font-mono bg-[var(--color-stone)] p-1.5 rounded border border-[var(--border)] break-words" title="{{ ev.raw }}">
+                                    {{ ev.raw }}
+                                </div>
+                                {% if ev.meta_raw and ev.meta_raw != '{}' and ev.meta_raw != ev.meta_label %}
+                                <div class="mt-1 text-[10px] text-[var(--color-ash)] font-mono truncate" title="{{ ev.meta_raw }}">{{ ev.meta_raw }}</div>
+                                {% endif %}
+                            </details>
                             {% endif %}
                         </div>
                     </div>

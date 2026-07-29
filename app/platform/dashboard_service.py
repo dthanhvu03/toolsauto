@@ -25,10 +25,12 @@ class DashboardService:
     @staticmethod
     def save_setting(db: Session, key: str, value: str, updated_by: str = None) -> None:
         runtime_settings.upsert_setting(db, key=key, raw_value=value, updated_by=updated_by)
+        runtime_settings.load_runtime_settings_into_process(db)
 
     @staticmethod
     def reset_setting(db: Session, key: str, updated_by: str = None) -> None:
         runtime_settings.reset_setting(db, key=key, updated_by=updated_by)
+        runtime_settings.load_runtime_settings_into_process(db)
 
     @staticmethod
     def track_redirect_click(db: Session, code: str) -> str | None:
@@ -312,16 +314,23 @@ class DashboardService:
         effective: dict[str, dict] = {}
         for key, spec in runtime_settings.SETTINGS.items():
             default_val = spec.default_getter()
-            has_override = (key in overrides) and (not spec.env_only)
-            ov = overrides.get(key, None) if not spec.env_only else None
+            has_override = key in overrides
+            ov = overrides.get(key, None)
+            # Secrets: don't echo into HTML value attrs — placeholder + keep_blank on save
+            display_override = ov
+            display_default = default_val
+            if spec.is_secret:
+                display_override = "" if ov else None
+                display_default = ""
             effective[key] = {
                 "key": key,
                 "type": spec.type,
                 "title": spec.title,
                 "section": spec.section,
                 "description": spec.description,
-                "default": default_val,
-                "override": ov,
+                "default": display_default if spec.is_secret else default_val,
+                "override": display_override if spec.is_secret else ov,
+                "has_value": bool(str(ov if has_override else default_val or "").strip()),
                 "has_override": has_override,
                 "min": spec.min,
                 "max": spec.max,
@@ -330,6 +339,7 @@ class DashboardService:
                 "unit": spec.unit,
                 "source": runtime_settings.resolve_setting_source(spec, has_override),
                 "is_secret": spec.is_secret,
+                "keep_blank": spec.keep_blank,
                 "restart_required": spec.restart_required,
                 "env_only": spec.env_only,
                 "pair_with": spec.pair_with,
@@ -355,8 +365,14 @@ class DashboardService:
             spec = runtime_settings.SETTINGS[key]
             if spec.env_only or key not in form_data:
                 continue
-            
+
             raw = form_data.get(key)
+            raw_s = "" if raw is None else str(raw).strip()
+
+            # Password / secret: empty submit = keep current (do not wipe / reset)
+            if (spec.keep_blank or spec.is_secret) and raw_s == "":
+                continue
+
             try:
                 v = runtime_settings.normalize_for_compare(key, raw)
                 d = runtime_settings.default_value(key)
@@ -371,7 +387,10 @@ class DashboardService:
 
             runtime_settings.upsert_setting(db, key=key, raw_value=str(raw), updated_by=updated_by)
             changed += 1
-            
+
+        if changed or reset:
+            runtime_settings.load_runtime_settings_into_process(db)
+
         return {"changed": changed, "reset": reset}
 
     @staticmethod
