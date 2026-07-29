@@ -185,7 +185,14 @@ async def bulk_create_jobs(
  
 @router.get("/{job_id}/details", response_class=HTMLResponse)
 def get_job_details(job_id: int, request: Request, db: Session = Depends(get_db)):
-    job = JobService.get_job_by_id(db, job_id)
-    if not job: raise HTTPException(status_code=404)
-    events = JobService.get_job_events(db, job_id, limit=20)
-    return templates.TemplateResponse("fragments/job_details.html", {"request": request, "job": job, "events": events, "now": int(time.time())})
+    ctx = JobService.get_job_details_context(db, job_id)
+    if not ctx:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        "fragments/job_details.html",
+        {
+            "request": request,
+            "now": int(time.time()),
+            **ctx,
+        },
+    )

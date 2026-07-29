@@ -10,6 +10,7 @@ from urllib.parse import urlparse, parse_qs
 from sqlalchemy.orm import Session
 
 from app.core.database.models import Account, ViralMaterial, SystemState
+from app.core.account import AccountService
 from app.features.viral_intake.tiktok_scraper import TikTokScraper
 import app.config as config
 from app.constants import ViralStatus
@@ -72,10 +73,10 @@ def run_tiktok_competitor_scan(db: Session) -> tuple[int, int]:
 
         for entry in data:
             if isinstance(entry, dict):
-                url = entry.get("url", "")
+                url = AccountService.normalize_tiktok_source_url(entry.get("url", ""))
                 tp_raw = entry.get("target_page") or entry.get("target_pages")
             else:
-                url = str(entry)
+                url = AccountService.normalize_tiktok_source_url(str(entry))
                 tp_raw = None
             if "tiktok.com/@" not in url.lower():
                 continue

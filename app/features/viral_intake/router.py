@@ -59,7 +59,41 @@ def get_viral_table(request: Request, db: Session = Depends(get_db)):
 @router.post("/force-scan", response_class=HTMLResponse)
 def force_scan(request: Request, db: Session = Depends(get_db)):
     _, _, msg = ViralService.force_scan(db)
-    return HTMLResponse(content=_render_viral_tbody(request, db, scan_message=msg))
+    toast_type = "error" if msg.startswith("❌") else "success"
+    return htmx_toast_response(
+        msg, type=toast_type, extra_triggers={"refreshViralTable": True}
+    )
+
+
+@router.post("/process-new", response_class=HTMLResponse)
+def process_new(limit: int = Form(3), db: Session = Depends(get_db)):
+    """Manual Smart bridge: download/reup/queue up to N NEW materials."""
+    ok, _fail, msg = ViralService.process_new_batch(db, limit=limit)
+    toast_type = "success" if ok > 0 else "error"
+    return htmx_toast_response(
+        msg, type=toast_type, extra_triggers={"refreshViralTable": True}
+    )
+
+
+@router.post("/{material_id}/process", response_class=HTMLResponse)
+def process_one(material_id: int, db: Session = Depends(get_db)):
+    ok, msg = ViralService.process_material(db, material_id)
+    return htmx_toast_response(
+        msg,
+        type="success" if ok else "error",
+        extra_triggers={"refreshViralTable": True},
+    )
+
+
+@router.post("/{material_id}/retry", response_class=HTMLResponse)
+def retry_one(material_id: int, db: Session = Depends(get_db)):
+    """Alias VIP: Thử lại FAILED (cùng pipeline process)."""
+    ok, msg = ViralService.process_material(db, material_id)
+    return htmx_toast_response(
+        msg,
+        type="success" if ok else "error",
+        extra_triggers={"refreshViralTable": True},
+    )
 
 
 def _render_viral_settings(viral_min_views: int, viral_max_videos: int, saved: bool = False) -> str:
@@ -109,12 +143,30 @@ def reprocess_material(
     )
 
 
+@router.get("/{material_id}/reup-thumb")
+def reup_thumb(material_id: int, db: Session = Depends(get_db)):
+    """Serve 1-frame jpeg from _reup (cached). Lightweight table thumbnail."""
+    mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+    if not mat:
+        raise HTTPException(status_code=404, detail="Không tìm thấy material")
+    path = ViralService.ensure_reup_thumbnail(mat.id, mat.platform)
+    if not path:
+        raise HTTPException(status_code=404, detail="Chưa có thumbnail reup")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        filename=f"viral_{material_id}_reup.jpg",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @router.get("/{material_id}/reup-preview")
 def reup_preview(material_id: int, db: Session = Depends(get_db)):
     """Stream anti-dupe (_reup) video for Viral UI preview."""
     mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
     if not mat:
-        raise HTTPException(status_code=404, detail="Material not found")
+        raise HTTPException(status_code=404, detail="Không tìm thấy material")
     path = ViralService.find_reup_path(mat.id, mat.platform)
     if not path:
         raise HTTPException(status_code=404, detail="Chưa có file _reup (anti-dupe)")

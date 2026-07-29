@@ -20,13 +20,14 @@ class ViralMaterial(Base):
     target_page = Column(String, nullable=True)  # Used for manual /reup targeting specific pages
 
     # AI Processing status
-    status = Column(String, default="NEW", index=True)  # NEW, DOWNLOADED, DRAFTED, FAILED
+    status = Column(String, default="NEW", index=True)  # NEW, PROCESSING, REUP, DRAFTED, FAILED, BOOST_PENDING
     last_error = Column(String, nullable=True)
+    process_tries = Column(Integer, default=0)  # Intake attempts (download/reup); cap retry
 
     @property
     def thumbnail_url(self) -> str:
         """Returns the relative path to the generated thumbnail collage, or empty string if not downloaded."""
-        if self.status in ("NEW", "FAILED") or not self.url:
+        if self.status in ("NEW", "FAILED", "PROCESSING") or not self.url:
             return ""
         import hashlib
         fhash = hashlib.md5(self.url.encode()).hexdigest()

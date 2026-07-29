@@ -25,21 +25,22 @@
         <td colspan="8" class="px-4 py-3">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <span class="text-xs text-gray-500">
-                    {{ total_jobs|default(0) }} total · Page {{ current_page|default(1) }} of {{ total_pages|default(1)
-                    }}
+                    {{ total_jobs|default(0) }} mục · Trang {{ current_page|default(1) }} / {{ total_pages|default(1) }}
                 </span>
                 <div class="flex gap-2">
                     {% if current_page|default(1) > 1 %}
                     <button
                         hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page - 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}{{ pf_suffix }}"
-                        hx-target="#jobs-table-body" hx-swap="outerHTML" class="app-btn min-h-[44px] min-w-[44px]">
-                        ← Prev
+                        hx-target="#jobs-table-body" hx-swap="outerHTML" class="app-btn min-h-[44px] min-w-[44px]"
+                        aria-label="Trang trước">
+                        ← Trước
                     </button>
                     {% endif %}
                     {% if current_page|default(1) < total_pages|default(1) %} <button
                         hx-get="/jobs/table?status={{ current_status|default('active') }}&page={{ current_page + 1 }}{% if q %}&q={{ q|urlencode }}{% endif %}{{ pf_suffix }}"
-                        hx-target="#jobs-table-body" hx-swap="outerHTML" class="app-btn min-h-[44px] min-w-[44px]">
-                        Next →
+                        hx-target="#jobs-table-body" hx-swap="outerHTML" class="app-btn min-h-[44px] min-w-[44px]"
+                        aria-label="Trang sau">
+                        Sau →
                         </button>
                         {% endif %}
                 </div>
@@ -49,9 +50,8 @@
 </tbody>
 
 <script>
-    // Update total badge in header
     (function () {
         const badge = document.getElementById('job-total-badge');
-        if (badge) badge.textContent = '{{ total_jobs|default(0) }} jobs';
+        if (badge) badge.textContent = '{{ total_jobs|default(0) }} job';
     })();
 </script>

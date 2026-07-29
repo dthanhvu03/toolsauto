@@ -100,8 +100,9 @@
                         {% if comp_list %}
                         {% for c_url in comp_list if c_url and c_url.strip() %}
                         <div class="flex items-center justify-between p-2 rounded-lg border border-[var(--color-edge)] bg-[var(--color-deep)]/40">
+                            {% set _handle = (c_url.split('@')[-1].split('?')[0].split('/')[0]) if '@' in c_url else c_url %}
                             <span class="text-[11px] font-medium text-[var(--color-mist)] truncate" title="{{ c_url }}">
-                                {{ c_url.split('@')[-1] if '@' in c_url else c_url.split('/')[-1] if '/' in c_url else c_url }}
+                                @{{ _handle }}
                             </span>
                             <button type="button"
                                 onclick="const form=this.closest('form'); const tx_rem=form.querySelector('textarea[name=competitors]'); tx_rem.value=tx_rem.value.split('\n').filter(x=>x.trim()!='{{ c_url }}').join('\n'); form.dispatchEvent(new Event('submit'));"
@@ -121,9 +122,9 @@
                 <div class="flex gap-2">
                     <input type="text" id="newComp-{{ loop.index0 }}-{{ p.account_id }}"
                         class="flex-1 bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-xl px-3 py-2 text-xs text-[var(--color-ink)] placeholder:text-[var(--color-ash)] focus:border-[var(--color-torch)]/50 outline-none"
-                        placeholder="URL / @channel…">
+                        placeholder="Dán tiktok.com/@channel hoặc @channel">
                     <button type="button"
-                        onclick="const inp=document.getElementById('newComp-{{ loop.index0 }}-{{ p.account_id }}'); if(!inp.value)return; const form=this.closest('form'); const tx=form.querySelector('textarea[name=competitors]'); tx.value += (tx.value ? '\n' : '') + inp.value.trim(); inp.value=''; form.dispatchEvent(new Event('submit'));"
+                        onclick="(function(){const inp=document.getElementById('newComp-{{ loop.index0 }}-{{ p.account_id }}'); if(!inp||!inp.value.trim())return; let v=inp.value.trim().split('?')[0].split('#')[0].replace(/\/$/,''); let h=''; const at=v.indexOf('@'); if(at>=0){h=v.slice(at+1).split('/')[0];} else if(v.toLowerCase().includes('tiktok.com/')){h=v.split(/tiktok\.com\//i)[1].split('/')[0];} else if(!v.includes('/')&&!v.includes(' ')){h=v.replace(/^@/,'');} if(h){v='https://www.tiktok.com/@'+h;} const form=inp.closest('form'); const tx=form.querySelector('textarea[name=competitors]'); const lines=(tx.value||'').split('\n').map(x=>x.trim()).filter(Boolean); if(!lines.some(x=>x.toLowerCase()===v.toLowerCase())){tx.value=lines.concat([v]).join('\n');} inp.value=''; form.dispatchEvent(new Event('submit'));})()"
                         class="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-[var(--color-torch)] text-[var(--color-ink-inverse)] hover:brightness-105">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4" /></svg>
                     </button>

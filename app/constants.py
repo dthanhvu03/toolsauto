@@ -17,6 +17,7 @@ class AccountStatus(StrEnum):
     
 class ViralStatus(StrEnum):
     NEW = "NEW"
+    PROCESSING = "PROCESSING"  # Đang download/reup — tránh double-pick
     REUP = "REUP"
     BOOST_PENDING = "BOOST_PENDING"  # Strategic đề xuất — chờ Approve trên Insights
     DRAFTED = "DRAFTED"

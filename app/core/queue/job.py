@@ -1,9 +1,10 @@
 """
 Service layer for managing Job entities and their lifecycle.
 """
-import time
 import os
-from typing import Optional
+import re
+import time
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,6 +15,20 @@ from app.constants import JobStatus, JobType
 from app.utils.logger import setup_shared_logger
 
 logger = setup_shared_logger(__name__)
+
+_AI_TITLE_RE = re.compile(r"###\s*ORIGINAL_VIRAL_TITLE:\s*(.*?)\s*###", re.DOTALL | re.IGNORECASE)
+_AI_BOOST_RE = re.compile(r"###\s*BOOST_CONTEXT:\s*(.*?)\s*###", re.DOTALL | re.IGNORECASE)
+
+_STATUS_LABELS_VI = {
+    JobStatus.AWAITING_STYLE: "Chờ chọn style",
+    JobStatus.DRAFT: "Nháp",
+    JobStatus.PENDING: "Chờ đăng",
+    JobStatus.RUNNING: "Đang đăng",
+    JobStatus.AI_PROCESSING: "AI đang viết",
+    JobStatus.DONE: "Xong",
+    JobStatus.FAILED: "Lỗi",
+    JobStatus.CANCELLED: "Đã hủy",
+}
 
 
 def now_ts():
@@ -29,6 +44,100 @@ class JobService:
     @staticmethod
     def get_job_events(db: Session, job_id: int, limit: int = 50) -> list[JobEvent]:
         return db.query(JobEvent).filter(JobEvent.job_id == job_id).order_by(JobEvent.id.desc()).limit(limit).all()
+
+    @staticmethod
+    def status_label_vi(status: str | None) -> str:
+        key = (status or "").strip()
+        return _STATUS_LABELS_VI.get(key, key or "—")
+
+    @staticmethod
+    def parse_caption_for_ui(caption: str | None) -> dict[str, Any]:
+        """Split AI metadata caption into human-readable fields for Job details modal."""
+        raw = caption or ""
+        awaiting_ai = "[AI_GENERATE]" in raw
+        title_m = _AI_TITLE_RE.search(raw)
+        boost_m = _AI_BOOST_RE.search(raw)
+        viral_title = (title_m.group(1).strip() if title_m else "") or ""
+        boost_context = (boost_m.group(1).strip() if boost_m else "") or ""
+        display = raw
+        if awaiting_ai:
+            display = viral_title or "(Chưa có caption — chờ AI sau khi chọn style)"
+        return {
+            "raw": raw,
+            "awaiting_ai": awaiting_ai,
+            "viral_title": viral_title,
+            "boost_context": boost_context,
+            "display": display,
+            "char_count": len(display),
+        }
+
+    @staticmethod
+    def build_job_milestones(job: Job) -> list[dict[str, Any]]:
+        """Synthetic timeline when JobEvent rows are empty (common right after viral create)."""
+        items: list[dict[str, Any]] = []
+        created = getattr(job, "created_at", None) or 0
+        if created:
+            items.append({
+                "ts": int(created),
+                "level": "INFO",
+                "message": "Job được tạo",
+                "meta": f"status ban đầu → {job.status}",
+            })
+        if job.viral_material_id:
+            items.append({
+                "ts": int(created or 0),
+                "level": "INFO",
+                "message": f"Gắn viral material #{job.viral_material_id}",
+                "meta": "Pipeline viral → job",
+            })
+        if job.media_path and "_reup" in (job.media_path or "").replace("\\", "/"):
+            items.append({
+                "ts": int(created or 0),
+                "level": "INFO",
+                "message": "Media đã qua reup (anti-dupe)",
+                "meta": os.path.basename(job.media_path or ""),
+            })
+        if job.content_hash:
+            items.append({
+                "ts": int(created or 0),
+                "level": "INFO",
+                "message": "Đã gắn content_hash (media guard)",
+                "meta": (job.content_hash or "")[:16] + "…",
+            })
+        if job.status == JobStatus.AWAITING_STYLE:
+            items.append({
+                "ts": int(created or 0),
+                "level": "WARN",
+                "message": "Đang chờ chọn style trên Telegram",
+                "meta": "≈30 phút không chọn → tự short",
+            })
+        if job.finished_at:
+            items.append({
+                "ts": int(job.finished_at),
+                "level": "INFO" if job.status == JobStatus.DONE else "WARN",
+                "message": f"Kết thúc với trạng thái {JobService.status_label_vi(job.status)}",
+                "meta": job.status,
+            })
+        return items
+
+    @staticmethod
+    def get_job_details_context(db: Session, job_id: int) -> Optional[dict[str, Any]]:
+        job = JobService.get_job_by_id(db, job_id)
+        if not job:
+            return None
+        events = JobService.get_job_events(db, job_id, limit=20)
+        caption_view = JobService.parse_caption_for_ui(job.caption)
+        milestones = [] if events else JobService.build_job_milestones(job)
+        media_name = os.path.basename(job.media_path) if job.media_path else ""
+        return {
+            "job": job,
+            "events": events,
+            "milestones": milestones,
+            "caption_view": caption_view,
+            "status_label": JobService.status_label_vi(job.status),
+            "media_name": media_name,
+            "has_reup": bool(job.media_path and "_reup" in (job.media_path or "").replace("\\", "/")),
+        }
     
     @staticmethod
     def create_job(

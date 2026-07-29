@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import random
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -37,17 +36,17 @@ def _get_runtime_int(db, key: str, fallback: int) -> int:
     except Exception:
         return fallback
 
-def _resolve_yt_dlp_binary() -> str:
-    """Prefer PATH, fallback to the project's venv binary."""
-    binary = shutil.which("yt-dlp")
-    if binary:
-        return binary
+def _resolve_yt_dlp_binary():
+    """Prefer PATH / venv Scripts / python -m yt_dlp (Windows-safe)."""
+    from app.core.yt_dlp_path import yt_dlp_binary
 
-    bundled = config.BASE_DIR / "venv" / "bin" / "yt-dlp"
-    if bundled.exists():
-        return str(bundled)
+    return yt_dlp_binary()
 
-    return "yt-dlp"
+
+def _yt_dlp_argv(*args: str) -> list[str]:
+    from app.core.yt_dlp_path import yt_dlp_cmd
+
+    return yt_dlp_cmd(*args)
 
 
 def _entry_has_video_stream(entry: dict) -> bool:
@@ -132,13 +131,16 @@ def _apply_material_metadata(mat, info_data: dict) -> None:
 
 
 def _mark_material_failed(db, mat, reason: str) -> None:
-    is_manual_reup = (mat.status == ViralStatus.REUP)
-    mat.status = JobStatus.FAILED
+    was_manual_reup = bool(getattr(mat, "_was_manual_reup", False)) or False
+    # Prefer flag set at begin; fallback if REUP somehow still set
+    if mat.status == ViralStatus.REUP:
+        was_manual_reup = True
+    mat.status = ViralStatus.FAILED
     mat.last_error = (reason or "Unknown error")[:255]
     db.commit()
 
     # Nhắn Telegram ngay nếu đây là job manual reup do user gửi
-    if is_manual_reup:
+    if was_manual_reup:
         from app.core.notifier.service import NotifierService
         error_vi = reason
         if "no downloadable video stream" in reason.lower() or "slideshow" in reason.lower():
@@ -160,6 +162,62 @@ def _mark_material_failed(db, mat, reason: str) -> None:
 
 def _clear_material_error(mat) -> None:
     mat.last_error = None
+
+
+VIRAL_PROCESS_MAX_TRIES = 3
+STALE_PROCESSING_SEC = 30 * 60
+
+_NON_RETRYABLE_MARKERS = (
+    "slideshow",
+    "no downloadable video stream",
+    "audio-only",
+    "private",
+    "cross-account guard",
+    "media guard",
+    "cannot read video dimensions",
+    "ffprobe",
+    "ffmpeg",
+)
+
+
+def _is_retryable_error(reason: str | None) -> bool:
+    text = (reason or "").lower()
+    if not text:
+        return True
+    return not any(m in text for m in _NON_RETRYABLE_MARKERS)
+
+
+def _recover_stale_processing(db) -> int:
+    """PROCESSING quá lâu (crash/timeout HTTP) → trả về NEW để vòng sau lấy lại."""
+    from app.core.database.models import ViralMaterial
+    from app.core.database.models.base import now_ts
+
+    cutoff = int(now_ts()) - STALE_PROCESSING_SEC
+    rows = (
+        db.query(ViralMaterial)
+        .filter(
+            ViralMaterial.status == ViralStatus.PROCESSING,
+            ViralMaterial.updated_at < cutoff,
+        )
+        .all()
+    )
+    for mat in rows:
+        mat.status = ViralStatus.NEW
+        mat.last_error = ((mat.last_error or "") + " | stale PROCESSING recovered")[:255]
+    if rows:
+        db.commit()
+        logger.warning("[VIRAL] Recovered %d stale PROCESSING → NEW", len(rows))
+    return len(rows)
+
+
+def _begin_processing(db, mat) -> None:
+    """Claim material + bump tries before heavy download/reup."""
+    mat._was_manual_reup = mat.status == ViralStatus.REUP  # type: ignore[attr-defined]
+    tries = int(getattr(mat, "process_tries", 0) or 0) + 1
+    mat.process_tries = tries
+    mat.status = ViralStatus.PROCESSING
+    _clear_material_error(mat)
+    db.commit()
 
 
 def _get_download_source_account(db, mat, accounts_by_id=None, platform_fallback=None):
@@ -285,11 +343,13 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
         if not mat:
             logger.warning("[VIRAL] No viral_material id=%s", only_material_id)
             return
-        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP):
+        allowed = (ViralStatus.NEW, ViralStatus.REUP, ViralStatus.FAILED)
+        if mat.status not in allowed:
             logger.info("[VIRAL] Skip material id=%s status=%s", only_material_id, mat.status)
             return
         materials = [mat]
     else:
+        _recover_stale_processing(db)
 
         # Use a fair per-account distribution rather than a global limit
         # This prevents an account with 1M+ view videos from starving other accounts
@@ -305,6 +365,21 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
         # First, always grab REUP materials (manual/boosted) since they are high priority
         reups = db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.REUP).all()
         materials.extend(reups)
+
+        # Retryable FAILED (tries remaining) — limited, after REUP
+        failed_retry = (
+            db.query(ViralMaterial)
+            .filter(
+                ViralMaterial.status == ViralStatus.FAILED,
+                ViralMaterial.process_tries < VIRAL_PROCESS_MAX_TRIES,
+            )
+            .order_by(ViralMaterial.views.desc())
+            .limit(max(2, limit_per_acc))
+            .all()
+        )
+        for fm in failed_retry:
+            if _is_retryable_error(fm.last_error):
+                materials.append(fm)
 
         # Prefetch NEW theo account (A queries, không A×P) — mỗi acc cắt trần để tránh load cả bảng.
         from collections import defaultdict
@@ -439,7 +514,6 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
         )
 
     reup_base = str(config.REUP_DIR)
-    yt_dlp_bin = _resolve_yt_dlp_binary()
 
     for mat in materials:
         try:
@@ -482,15 +556,20 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         reup_active_today.get(resolved_target, 0)
                     ) + 1
 
-            preflight_cmd = _extend_yt_dlp_with_cookies([
-                yt_dlp_bin,
-                "--no-playlist",
-                "--skip-download",
-                "--dump-single-json",
-                "--no-warnings",
-                "--add-header", f"User-Agent: {YT_DLP_USER_AGENT}",
-                mat.url,
-            ], source_account)
+            _begin_processing(db, mat)
+
+            preflight_cmd = _extend_yt_dlp_with_cookies(
+                _yt_dlp_argv(
+                    "--no-playlist",
+                    "--skip-download",
+                    "--dump-single-json",
+                    "--no-warnings",
+                    "--add-header",
+                    f"User-Agent: {YT_DLP_USER_AGENT}",
+                    mat.url,
+                ),
+                source_account,
+            )
             logger.info("[VIRAL] Preflight metadata [%s]: %s", mat.platform, mat.url)
             preflight = subprocess.run(preflight_cmd, capture_output=True, text=True, timeout=60)
 
@@ -552,15 +631,20 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             if not download_success and not fallback_used_successfully:
                 # Tải video bằng yt-dlp vào thư mục platform riêng
                 output_template = os.path.join(platform_dir, f"viral_{mat.id}_%(id)s.%(ext)s")
-                cmd = _extend_yt_dlp_with_cookies([
-                    yt_dlp_bin,
-                    "--no-playlist",
-                    "--max-filesize", "100M",
-                    "--write-info-json",
-                    "--add-header", f"User-Agent: {YT_DLP_USER_AGENT}",
-                    "-o", output_template,
-                    mat.url,
-                ], source_account)
+                cmd = _extend_yt_dlp_with_cookies(
+                    _yt_dlp_argv(
+                        "--no-playlist",
+                        "--max-filesize",
+                        "100M",
+                        "--write-info-json",
+                        "--add-header",
+                        f"User-Agent: {YT_DLP_USER_AGENT}",
+                        "-o",
+                        output_template,
+                        mat.url,
+                    ),
+                    source_account,
+                )
                 logger.info("[VIRAL] Downloading [%s]: %s", mat.platform, mat.url)
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
@@ -655,6 +739,9 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 input_path=media_path,
                 platform=mat.platform or "unknown",
                 preset=reup_preset,
+                page_url=preset_page,
+                niches=preset_niches,
+                account_id=target_account.id if target_account else None,
             )
             if reup_result.success and reup_result.output_path:
                 logger.info(
@@ -679,6 +766,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 except OSError:
                     pass
                 media_path = reup_result.output_path
+                try:
+                    from app.features.viral_intake.service import ViralService as _VS
+
+                    _VS.ensure_reup_thumbnail(
+                        mat.id, mat.platform, video_path=media_path
+                    )
+                except Exception as thumb_err:
+                    logger.debug("[VIRAL] reup thumb skip #%s: %s", mat.id, thumb_err)
             else:
                 reason = f"Reup anti-dupe failed: {reup_result.error or 'unknown'}"
                 logger.error("[VIRAL] %s — không dùng file gốc (VIP hard-fail).", reason)
@@ -848,7 +943,7 @@ class ViralProcessorService:
         if not mat:
             logger.warning("[VIRAL] download_and_queue: unknown material id=%s", material_id)
             return False
-        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP):
+        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP, ViralStatus.FAILED):
             logger.info("[VIRAL] download_and_queue: skip id=%s status=%s", material_id, mat.status)
             return False
         _process_viral_materials(db, only_material_id=material_id)

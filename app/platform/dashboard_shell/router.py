@@ -364,15 +364,16 @@ def queue_panel(request: Request, db: Session = Depends(get_db)):
     )
 
 @router.get("/tiktok-links", response_class=HTMLResponse)
-def tiktok_links(request: Request, db: Session = Depends(get_db)):
-    """UI riêng để theo dõi link TikTok (kênh đối thủ + video viral TikTok)."""
-    ctx = AccountService.build_tiktok_links_context_data(db, request.query_params)
-    return templates.TemplateResponse("pages/tiktok_links.html", {"request": request, **ctx})
+def tiktok_links(request: Request):
+    """Legacy URL → SaaS Nguồn TikTok (competitors inventory)."""
+    q = request.url.query
+    dest = "/app/tiktok-links" + (f"?{q}" if q else "")
+    return RedirectResponse(url=dest, status_code=302)
 
 
 @router.get("/app/tiktok-links", response_class=HTMLResponse)
 def app_tiktok_links(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI (beta): TikTok Links page (keeps /tiktok-links legacy)."""
+    """SaaS UI: TikTok competitor source inventory (viral list → /app/viral)."""
     ctx = AccountService.build_tiktok_links_context_data(db, request.query_params)
     return templates.TemplateResponse("pages/app_tiktok_links.html", {"request": request, **ctx})
 

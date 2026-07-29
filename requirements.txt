@@ -112,6 +112,7 @@ trio==0.33.0
 trio-websocket==0.12.2
 typer==0.24.1
 typing_extensions==4.15.0
+tzdata==2026.3
 undetected-chromedriver==3.5.5
 uritemplate==4.2.0
 urllib3==2.6.3

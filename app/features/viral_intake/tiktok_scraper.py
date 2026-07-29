@@ -15,7 +15,7 @@ import subprocess
 import time
 
 from app.config import TIKTOK_HOST, TIKTOK_RATE_LIMITS_FILE
-from app.core.yt_dlp_path import yt_dlp_binary
+from app.core.yt_dlp_path import yt_dlp_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -77,14 +77,14 @@ class TikTokScraper:
             )
             return []
 
-        cmd = [
-            yt_dlp_binary(),
+        cmd = yt_dlp_cmd(
             "--flat-playlist",
             "--dump-json",
-            "--playlist-end", str(max_videos),
+            "--playlist-end",
+            str(max_videos),
             "--no-warnings",
             channel_url,
-        ]
+        )
 
         logger.info("[TIKTOK] Scraping channel: %s (max=%d videos)", channel_url, max_videos)
 
@@ -95,6 +95,15 @@ class TikTokScraper:
                 text=True,
                 timeout=60,
             )
+        except FileNotFoundError:
+            logger.error(
+                "[TIKTOK] yt-dlp not found. Install: pip install yt-dlp==2026.3.3 "
+                "(resolved cmd=%s)",
+                cmd,
+            )
+            raise FileNotFoundError(
+                "Không tìm thấy yt-dlp. Chạy: pip install yt-dlp==2026.3.3"
+            ) from None
         except subprocess.TimeoutExpired:
             logger.error("[TIKTOK] yt-dlp timeout for channel: %s", channel_url)
             return []

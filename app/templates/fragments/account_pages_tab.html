@@ -55,6 +55,15 @@
         </button>
     </form>
 
+    <div class="rounded-2xl border border-[var(--color-torch-border)]/40 bg-[var(--color-torch-dim)]/30 p-1">
+      <div id="intro-upload-panel"
+           hx-get="/viral/intros/panel/{{ account.id }}"
+           hx-trigger="load"
+           hx-swap="outerHTML">
+        <div class="p-4 text-[11px] text-[var(--color-mist)]">Đang tải panel intro brand…</div>
+      </div>
+    </div>
+
     {% if pages %}
     {% include "fragments/pages_table.html" %}
     {% else %}

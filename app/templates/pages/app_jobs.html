@@ -1,7 +1,7 @@
 {% extends "layouts/app.html" %}
 {% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
-{% block title %}{% if jobs_silo_locked %}Hàng đợi {{ jobs_platform_label }}{% else %}Jobs{% endif %} • Auto Publisher{% endblock %}
+{% block title %}{% if jobs_silo_locked %}Hàng đợi {{ jobs_platform_label }}{% else %}Hàng đợi job{% endif %} • Auto Publisher{% endblock %}
 {% block page_breadcrumb %}
 {% if jobs_silo_locked and jobs_platform == 'threads' %}
 {{ silo_breadcrumb('Threads', 'Hàng đợi Threads') }}
@@ -14,10 +14,16 @@
 {% endif %}
 {% endblock %}
 {% block page_title %}{% if jobs_silo_locked %}Hàng đợi {{ jobs_platform_label }}{% else %}Hàng đợi job{% endif %}{% endblock %}
-{% block page_subtitle %}{% if jobs_silo_locked %}Chỉ job {{ jobs_platform_label }} — đổi trạng thái / tìm kiếm bên dưới.{% else %}Pagination + search, không cần lướt dài.{% endif %}{% endblock %}
+{% block page_subtitle %}{% if jobs_silo_locked %}Chỉ job {{ jobs_platform_label }} — lọc trạng thái / tìm kiếm bên dưới.{% else %}Theo dõi · duyệt · đổi lịch · xem log. Phân trang + tìm kiếm.{% endif %}{% endblock %}
 
 {% block content %}
 <div class="app-card p-4" data-jobs-silo="{% if jobs_silo_locked %}{{ jobs_platform }}{% else %}{% endif %}">
+  <div class="mb-3 px-3 py-2 rounded-lg border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[11px] text-[var(--color-ink)] leading-relaxed">
+    <strong class="text-[var(--color-torch)]">Local Web</strong>
+    (<code class="px-1 rounded bg-[var(--color-ledge)] text-[10px]">start.ps1</code>)
+    chỉ chạy dashboard —
+    <strong>Duyệt / Chạy ngay</strong> đổi trạng thái DB, nhưng đăng thật cần worker trên VPS (Publisher / AI / Maintenance).
+  </div>
   {% if jobs_silo_locked %}
   <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
     <div class="flex items-center gap-2 flex-wrap">
@@ -44,17 +50,17 @@
   {% endif %}
 
   <div class="flex items-center justify-between gap-3 flex-wrap">
-    <div class="flex gap-2 flex-wrap">
-      <button type="button" data-status="active" class="jobTab app-chip app-chip-active">Active</button>
-      <button type="button" data-status="all" class="jobTab app-chip">All</button>
-      <button type="button" data-status="DRAFT" class="jobTab app-chip">Draft</button>
-      <button type="button" data-status="PENDING" class="jobTab app-chip">Pending</button>
-      <button type="button" data-status="DONE" class="jobTab app-chip">Done</button>
-      <button type="button" data-status="FAILED" class="jobTab app-chip">Failed</button>
+    <div class="flex gap-2 flex-wrap" role="group" aria-label="Lọc trạng thái job">
+      <button type="button" data-status="active" class="jobTab app-chip app-chip-active" title="Đang chờ / đang chạy">Đang xử lý</button>
+      <button type="button" data-status="all" class="jobTab app-chip">Tất cả</button>
+      <button type="button" data-status="DRAFT" class="jobTab app-chip" title="DRAFT">Nháp</button>
+      <button type="button" data-status="PENDING" class="jobTab app-chip" title="PENDING">Chờ đăng</button>
+      <button type="button" data-status="DONE" class="jobTab app-chip" title="DONE">Xong</button>
+      <button type="button" data-status="FAILED" class="jobTab app-chip" title="FAILED">Lỗi</button>
     </div>
     <div class="flex items-center gap-2">
-      <input id="jobQ" class="app-input w-80 max-w-full" placeholder="Search: id, account, target page, caption..." />
-      <button type="button" id="jobSearchBtn" class="app-btn app-btn-primary">Search</button>
+      <input id="jobQ" class="app-input w-80 max-w-full" placeholder="Tìm: id, tài khoản, target page, caption…" />
+      <button type="button" id="jobSearchBtn" class="app-btn app-btn-primary">Tìm</button>
       <span id="job-total-badge" class="app-badge"></span>
       <button type="button"
         onclick="document.getElementById('manualJobDialog').showModal(); htmx.ajax('GET', '/jobs/manual/form', {target:'#manual-job-modal-body', swap:'innerHTML'})"
@@ -88,15 +94,15 @@
     </div>
   </dialog>
 
-  <dialog id="jobDetailsDialog" class="rounded-2xl shadow-2xl border-none p-0 w-full max-w-2xl overflow-hidden backdrop:bg-gray-900/50 backdrop:backdrop-blur-sm"
+  <dialog id="jobDetailsDialog" class="rounded-2xl shadow-2xl border border-[var(--border)] p-0 w-full max-w-2xl overflow-hidden bg-[var(--color-face)] text-[var(--color-ink)] backdrop:bg-black/60 backdrop:backdrop-blur-sm"
     style="margin: auto;">
-    <div id="job-details-modal-body" class="bg-white min-h-[400px]">
+    <div id="job-details-modal-body" class="bg-[var(--color-face)] min-h-[400px] text-[var(--color-ink)]">
       <div class="p-12 flex flex-col items-center justify-center gap-3">
-        <svg class="w-8 h-8 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+        <svg class="w-8 h-8 animate-spin text-[var(--color-torch)]" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
         </svg>
-        <span class="text-sm font-medium text-gray-500 tracking-wide">Đang phân tích dữ liệu Job...</span>
+        <span class="text-sm font-medium text-[var(--color-mist)] tracking-wide">Đang tải chi tiết job…</span>
       </div>
     </div>
   </dialog>
@@ -106,13 +112,13 @@
       <thead>
         <tr class="bg-gray-50 border-b">
           <th class="app-table-th">ID</th>
-          <th class="app-table-th">Status</th>
-          <th class="app-table-th">Platform</th>
-          <th class="app-table-th">Schedule</th>
-          <th class="app-table-th">Tries</th>
-          <th class="app-table-th">Metrics</th>
-          <th class="app-table-th">Error</th>
-          <th class="app-table-th">Actions</th>
+          <th class="app-table-th">Trạng thái</th>
+          <th class="app-table-th">Nền tảng</th>
+          <th class="app-table-th">Lịch đăng</th>
+          <th class="app-table-th">Lần thử</th>
+          <th class="app-table-th" title="Views/clicks sau khi đăng (DONE)">Số liệu</th>
+          <th class="app-table-th">Lỗi / Ghi chú</th>
+          <th class="app-table-th">Thao tác</th>
         </tr>
       </thead>
       <tbody id="jobs-table-body"
