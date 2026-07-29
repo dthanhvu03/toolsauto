@@ -1,18 +1,35 @@
-{# Brand intro upload — PLAN-044 Phase 2. Target: #intro-upload-panel #}
+{# Brand intro / outro / hook — PLAN-044/045. Target: #intro-upload-panel #}
 {% set i = intro %}
 <div id="intro-upload-panel"
-     class="rounded-2xl border border-[var(--border)] bg-[var(--color-stone)] p-4 space-y-4">
+     class="rounded-2xl border border-[var(--border)] bg-[var(--color-stone)] p-4 space-y-4 relative">
+  <div id="intro-upload-busy"
+       class="htmx-indicator absolute inset-0 z-10 rounded-2xl bg-[var(--color-deep)]/70 flex items-center justify-center">
+    <div class="rounded-xl border border-[var(--color-torch-border)] bg-[var(--color-face)] px-4 py-3 text-sm font-semibold text-[var(--color-ink)] shadow-lg">
+      Đang tải lên… chờ chút
+    </div>
+  </div>
+
+  {% if flash %}
+  <div class="rounded-xl border px-3 py-2.5 text-sm font-semibold
+       {% if flash_type == 'error' %}
+       border-[var(--color-danger-border)] bg-[var(--color-danger)]/15 text-[var(--color-danger)]
+       {% else %}
+       border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)]
+       {% endif %}">
+    {{ flash }}
+  </div>
+  {% endif %}
+
   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
     <div class="min-w-0">
       <h4 class="text-sm font-bold text-[var(--color-ink)]">Intro brand (≤{{ i.intro_max_sec|int }}s)</h4>
       <p class="text-[11px] text-[var(--color-mist)] mt-1 leading-relaxed max-w-2xl">
-        Upload video intro của anh — hệ thống ghép vào đầu file reup theo thứ tự:
-        <strong class="text-[var(--color-ink-soft)]">Page → Niche → Account → Default</strong>.
-        Chỉ dùng asset anh có quyền.
+        Upload <strong class="text-[var(--color-ink-soft)]">nhiều clip</strong> cùng Page/Account (tối đa {{ i.intro_pool_max|default(8) }}) — lúc reup <strong>random</strong> 1 cái.
+        Thứ tự: Page → Niche → Account → Default.
       </p>
     </div>
     <form hx-post="/viral/intros/toggle" hx-target="#intro-upload-panel" hx-swap="outerHTML"
-          class="flex items-center gap-2 shrink-0">
+          hx-indicator="#intro-upload-busy" class="flex items-center gap-2 shrink-0">
       <input type="hidden" name="account_id" value="{{ account.id }}">
       <input type="hidden" name="enabled" value="{% if i.intro_enabled %}off{% else %}on{% endif %}">
       <button type="submit"
@@ -20,7 +37,7 @@
               {% if i.intro_enabled %}
               border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)]
               {% else %}
-              border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)] hover:border-[var(--color-torch-border)]
+              border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)]
               {% endif %}">
         {% if i.intro_enabled %}Đang BẬT — bấm để tắt{% else %}Đang TẮT — bấm để bật{% endif %}
       </button>
@@ -28,108 +45,145 @@
   </div>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-    {# Default #}
-    <div class="rounded-xl border border-[var(--border)] bg-[var(--color-face)] p-3 space-y-2">
+    <div class="rounded-xl border bg-[var(--color-face)] p-3 space-y-2 {% if i.default_file %}border-[var(--color-moss-border)]{% else %}border-[var(--border)]{% endif %}">
       <div class="flex items-center justify-between gap-2">
         <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--color-mist)]">Default (mọi page)</span>
-        {% if i.default_name %}
-        <span class="text-[10px] text-[var(--color-lichen)] truncate max-w-[10rem]" title="{{ i.default_file }}">{{ i.default_name }}</span>
+        {% if i.default_pool_count %}
+        <span class="text-[10px] font-bold text-[var(--color-lichen)]">✓ Pool {{ i.default_pool_count }}/{{ i.intro_pool_max }}</span>
         {% else %}
         <span class="text-[10px] text-[var(--color-ash)] italic">Chưa có</span>
         {% endif %}
       </div>
+      {% if i.default_pool %}
+      <ul class="space-y-1 max-h-24 overflow-y-auto cave-scrollbar">
+        {% for f in i.default_pool %}
+        <li class="flex items-center justify-between gap-2 text-[10px] text-[var(--color-ink-soft)] bg-[var(--color-deep)]/40 rounded px-2 py-1">
+          <span class="truncate font-mono" title="{{ f.rel }}">{{ f.name }}</span>
+          <form hx-post="/viral/intros/delete-file" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+                hx-indicator="#intro-upload-busy" hx-confirm="Xóa clip này khỏi pool?">
+            <input type="hidden" name="account_id" value="{{ account.id }}">
+            <input type="hidden" name="file_path" value="{{ f.rel }}">
+            <button type="submit" class="text-[var(--color-danger)] hover:underline shrink-0">Xóa</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
       <form hx-post="/viral/intros/upload" hx-encoding="multipart/form-data"
-            hx-target="#intro-upload-panel" hx-swap="outerHTML"
-            class="flex flex-col gap-2">
+            hx-target="#intro-upload-panel" hx-swap="outerHTML" hx-indicator="#intro-upload-busy">
         <input type="hidden" name="account_id" value="{{ account.id }}">
         <input type="hidden" name="scope" value="default">
-        <label class="flex flex-col items-center justify-center gap-1 min-h-[72px] rounded-lg border border-dashed border-[var(--border)] bg-[var(--color-deep)]/40 cursor-pointer hover:border-[var(--color-torch-border)] px-2 py-3">
-          <span class="text-[11px] font-semibold text-[var(--color-ink-soft)]">Chọn / kéo mp4</span>
-          <span class="text-[10px] text-[var(--color-ash)]">mp4 · mov · tối đa 40MB</span>
+        <label class="flex flex-col items-center justify-center gap-1 min-h-[56px] rounded-lg border border-dashed border-[var(--border)] bg-[var(--color-deep)]/40 cursor-pointer hover:border-[var(--color-torch-border)] px-2 py-2">
+          <span class="text-[11px] font-semibold text-[var(--color-ink-soft)]">+ Thêm clip vào pool</span>
+          <span class="text-[10px] text-[var(--color-ash)]">mp4 · tối đa {{ i.intro_pool_max }} clip</span>
           <input type="file" name="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required
-                 class="text-[10px] text-[var(--color-mist)] w-full max-w-full"
-                 onchange="this.form.requestSubmit()">
+                 class="text-[10px] text-[var(--color-mist)] w-full max-w-full" onchange="this.form.requestSubmit()">
         </label>
       </form>
-      {% if i.default_file %}
+      {% if i.default_pool_count %}
       <form hx-post="/viral/intros/delete" hx-target="#intro-upload-panel" hx-swap="outerHTML"
-            hx-confirm="Xóa intro default?">
-        <input type="hidden" name="account_id" value="{{ account.id }}">
-        <input type="hidden" name="scope" value="default">
-        <button type="submit" class="text-[10px] text-[var(--color-danger)] hover:underline">Xóa default</button>
+            hx-indicator="#intro-upload-busy" hx-confirm="Xóa CẢ pool default?">
+        <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="default">
+        <button type="submit" class="text-[10px] text-[var(--color-danger)] hover:underline">Xóa cả pool default</button>
       </form>
       {% endif %}
     </div>
 
-    {# Account #}
-    <div class="rounded-xl border border-[var(--border)] bg-[var(--color-face)] p-3 space-y-2">
+    <div class="rounded-xl border bg-[var(--color-face)] p-3 space-y-2 {% if i.account_pool_count %}border-[var(--color-moss-border)]{% else %}border-[var(--border)]{% endif %}">
       <div class="flex items-center justify-between gap-2">
         <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--color-mist)]">Theo account #{{ account.id }}</span>
-        {% if i.account_name %}
-        <span class="text-[10px] text-[var(--color-lichen)] truncate max-w-[10rem]" title="{{ i.account_file }}">{{ i.account_name }}</span>
+        {% if i.account_pool_count %}
+        <span class="text-[10px] font-bold text-[var(--color-lichen)]">✓ Pool {{ i.account_pool_count }}/{{ i.intro_pool_max }}</span>
         {% else %}
         <span class="text-[10px] text-[var(--color-ash)] italic">Chưa có</span>
         {% endif %}
       </div>
+      {% if i.account_pool %}
+      <ul class="space-y-1 max-h-24 overflow-y-auto cave-scrollbar">
+        {% for f in i.account_pool %}
+        <li class="flex items-center justify-between gap-2 text-[10px] text-[var(--color-ink-soft)] bg-[var(--color-deep)]/40 rounded px-2 py-1">
+          <span class="truncate font-mono" title="{{ f.rel }}">{{ f.name }}</span>
+          <form hx-post="/viral/intros/delete-file" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+                hx-indicator="#intro-upload-busy" hx-confirm="Xóa clip này khỏi pool?">
+            <input type="hidden" name="account_id" value="{{ account.id }}">
+            <input type="hidden" name="file_path" value="{{ f.rel }}">
+            <button type="submit" class="text-[var(--color-danger)] hover:underline shrink-0">Xóa</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
       <form hx-post="/viral/intros/upload" hx-encoding="multipart/form-data"
-            hx-target="#intro-upload-panel" hx-swap="outerHTML"
-            class="flex flex-col gap-2">
+            hx-target="#intro-upload-panel" hx-swap="outerHTML" hx-indicator="#intro-upload-busy">
         <input type="hidden" name="account_id" value="{{ account.id }}">
         <input type="hidden" name="scope" value="account">
-        <label class="flex flex-col items-center justify-center gap-1 min-h-[72px] rounded-lg border border-dashed border-[var(--border)] bg-[var(--color-deep)]/40 cursor-pointer hover:border-[var(--color-torch-border)] px-2 py-3">
-          <span class="text-[11px] font-semibold text-[var(--color-ink-soft)]">Upload intro account</span>
+        <label class="flex flex-col items-center justify-center gap-1 min-h-[56px] rounded-lg border border-dashed border-[var(--border)] bg-[var(--color-deep)]/40 cursor-pointer hover:border-[var(--color-torch-border)] px-2 py-2">
+          <span class="text-[11px] font-semibold text-[var(--color-ink-soft)]">+ Thêm intro account</span>
           <input type="file" name="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required
-                 class="text-[10px] text-[var(--color-mist)] w-full max-w-full"
-                 onchange="this.form.requestSubmit()">
+                 class="text-[10px] text-[var(--color-mist)] w-full max-w-full" onchange="this.form.requestSubmit()">
         </label>
       </form>
-      {% if i.account_file %}
+      {% if i.account_pool_count %}
       <form hx-post="/viral/intros/delete" hx-target="#intro-upload-panel" hx-swap="outerHTML"
-            hx-confirm="Xóa intro của account này?">
-        <input type="hidden" name="account_id" value="{{ account.id }}">
-        <input type="hidden" name="scope" value="account">
-        <button type="submit" class="text-[10px] text-[var(--color-danger)] hover:underline">Xóa account intro</button>
+            hx-indicator="#intro-upload-busy" hx-confirm="Xóa CẢ pool account?">
+        <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="account">
+        <button type="submit" class="text-[10px] text-[var(--color-danger)] hover:underline">Xóa cả pool account</button>
       </form>
       {% endif %}
     </div>
   </div>
 
-  {# Per-page quick list #}
   {% if i.pages %}
   <div class="border-t border-[var(--border)] pt-3 space-y-2">
     <div class="text-[10px] font-bold uppercase tracking-wider text-[var(--color-mist)]">Intro theo Target Page</div>
     <div class="space-y-2 max-h-64 overflow-y-auto cave-scrollbar pr-1">
       {% for row in i.pages %}
-      <div class="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--color-face)] px-3 py-2">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-2 rounded-lg border px-3 py-2
+           {% if row.resolved %}border-[var(--color-moss-border)] bg-[var(--color-moss-dim)]/30{% else %}border-[var(--border)] bg-[var(--color-face)]{% endif %}">
         <div class="min-w-0 flex-1">
           <div class="text-xs font-semibold text-[var(--color-ink)] truncate" title="{{ row.url }}">{{ row.name }}</div>
-          <div class="text-[10px] text-[var(--color-ash)] truncate">
-            {% if row.resolved_name %}
-            <span class="text-[var(--color-lichen)]">{{ row.resolved_name }}</span>
+          <div class="text-[10px] truncate">
+            {% if row.pool_count %}
+            <span class="font-bold text-[var(--color-lichen)]">✓ Pool {{ row.pool_count }}/{{ i.intro_pool_max }} — reup random</span>
             {% else %}
-            Dùng account / default nếu có
+            <span class="text-[var(--color-ash)]">Chưa upload — dùng account / default nếu có</span>
             {% endif %}
           </div>
+          {% if row.pool %}
+          <ul class="mt-1 space-y-0.5">
+            {% for f in row.pool %}
+            <li class="flex items-center gap-2 text-[10px] text-[var(--color-mist)]">
+              <span class="font-mono truncate">{{ f.name }}</span>
+              <form hx-post="/viral/intros/delete-file" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+                    hx-indicator="#intro-upload-busy" hx-confirm="Xóa clip này?">
+                <input type="hidden" name="account_id" value="{{ account.id }}">
+                <input type="hidden" name="file_path" value="{{ f.rel }}">
+                <button type="submit" class="text-[var(--color-danger)] hover:underline">Xóa</button>
+              </form>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
         </div>
         <form hx-post="/viral/intros/upload" hx-encoding="multipart/form-data"
-              hx-target="#intro-upload-panel" hx-swap="outerHTML"
+              hx-target="#intro-upload-panel" hx-swap="outerHTML" hx-indicator="#intro-upload-busy"
               class="flex items-center gap-2 shrink-0">
           <input type="hidden" name="account_id" value="{{ account.id }}">
           <input type="hidden" name="scope" value="page">
           <input type="hidden" name="page_url" value="{{ row.url }}">
           <label class="h-8 px-2 rounded-md border border-[var(--border)] text-[10px] font-bold text-[var(--color-torch)] cursor-pointer hover:bg-[var(--color-torch-dim)] inline-flex items-center">
-            Upload
+            + Thêm
             <input type="file" name="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required
                    class="hidden" onchange="this.form.requestSubmit()">
           </label>
         </form>
-        {% if row.resolved %}
+        {% if row.pool_count %}
         <form hx-post="/viral/intros/delete" hx-target="#intro-upload-panel" hx-swap="outerHTML"
-              hx-confirm="Xóa intro của page này?">
+              hx-indicator="#intro-upload-busy" hx-confirm="Xóa CẢ pool page này?">
           <input type="hidden" name="account_id" value="{{ account.id }}">
           <input type="hidden" name="scope" value="page">
           <input type="hidden" name="page_url" value="{{ row.url }}">
-          <button type="submit" class="h-8 px-2 text-[10px] text-[var(--color-danger)] hover:underline">Xóa</button>
+          <button type="submit" class="h-8 px-2 text-[10px] text-[var(--color-danger)] hover:underline">Xóa pool</button>
         </form>
         {% endif %}
       </div>
@@ -137,4 +191,132 @@
     </div>
   </div>
   {% endif %}
+
+  <div class="border-t border-[var(--border)] pt-4 space-y-3">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      <div>
+        <h4 class="text-sm font-bold text-[var(--color-ink)]">Outro brand (≤{{ i.outro_max_sec|int }}s)</h4>
+        <p class="text-[11px] text-[var(--color-mist)] mt-1">Ghép cuối clip — CTA / follow.</p>
+      </div>
+      <form hx-post="/viral/intros/toggle-outro" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+            hx-indicator="#intro-upload-busy" class="shrink-0">
+        <input type="hidden" name="account_id" value="{{ account.id }}">
+        <input type="hidden" name="enabled" value="{% if i.outro_enabled %}off{% else %}on{% endif %}">
+        <button type="submit" class="h-9 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider border
+          {% if i.outro_enabled %}border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)]
+          {% else %}border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)]{% endif %}">
+          {% if i.outro_enabled %}Outro BẬT{% else %}Outro TẮT{% endif %}
+        </button>
+      </form>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="rounded-xl border bg-[var(--color-face)] p-3 space-y-2 {% if i.outro_default_file %}border-[var(--color-moss-border)]{% else %}border-[var(--border)]{% endif %}">
+        <div class="flex justify-between text-[10px] font-bold uppercase text-[var(--color-mist)]">
+          <span>Outro default</span>
+          <span class="{% if i.outro_default_name %}font-bold text-[var(--color-lichen)]{% else %}text-[var(--color-ash)] italic{% endif %}">
+            {% if i.outro_default_name %}✓ {{ i.outro_default_name }}{% else %}Chưa có{% endif %}
+          </span>
+        </div>
+        <form hx-post="/viral/intros/upload-outro" hx-encoding="multipart/form-data"
+              hx-target="#intro-upload-panel" hx-swap="outerHTML" hx-indicator="#intro-upload-busy">
+          <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="default">
+          <input type="file" name="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required
+                 class="text-[10px] w-full" onchange="this.form.requestSubmit()">
+        </form>
+        {% if i.outro_default_file %}
+        <form hx-post="/viral/intros/delete-outro" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+              hx-indicator="#intro-upload-busy" hx-confirm="Xóa outro default?">
+          <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="default">
+          <button type="submit" class="text-[10px] text-[var(--color-danger)] hover:underline">Xóa</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="rounded-xl border bg-[var(--color-face)] p-3 space-y-2 {% if i.outro_account_file %}border-[var(--color-moss-border)]{% else %}border-[var(--border)]{% endif %}">
+        <div class="flex justify-between text-[10px] font-bold uppercase text-[var(--color-mist)]">
+          <span>Outro account #{{ account.id }}</span>
+          <span class="{% if i.outro_account_name %}font-bold text-[var(--color-lichen)]{% else %}text-[var(--color-ash)] italic{% endif %}">
+            {% if i.outro_account_name %}✓ {{ i.outro_account_name }}{% else %}Chưa có{% endif %}
+          </span>
+        </div>
+        <form hx-post="/viral/intros/upload-outro" hx-encoding="multipart/form-data"
+              hx-target="#intro-upload-panel" hx-swap="outerHTML" hx-indicator="#intro-upload-busy">
+          <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="account">
+          <input type="file" name="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" required
+                 class="text-[10px] w-full" onchange="this.form.requestSubmit()">
+        </form>
+        {% if i.outro_account_file %}
+        <form hx-post="/viral/intros/delete-outro" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+              hx-indicator="#intro-upload-busy" hx-confirm="Xóa outro account?">
+          <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="account">
+          <button type="submit" class="text-[10px] text-[var(--color-danger)] hover:underline">Xóa</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="border-t border-[var(--border)] pt-4 space-y-3">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      <div>
+        <h4 class="text-sm font-bold text-[var(--color-ink)]">Hook text (≤{{ i.hook_max_sec|int }}s đầu nội dung)</h4>
+        <p class="text-[11px] text-[var(--color-mist)] mt-1">Chữ lớn đầu clip body. Tối đa 120 ký tự.</p>
+      </div>
+      <form hx-post="/viral/intros/toggle-hook" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+            hx-indicator="#intro-upload-busy" class="shrink-0">
+        <input type="hidden" name="account_id" value="{{ account.id }}">
+        <input type="hidden" name="enabled" value="{% if i.hook_enabled %}off{% else %}on{% endif %}">
+        <button type="submit" class="h-9 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider border
+          {% if i.hook_enabled %}border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)]
+          {% else %}border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)]{% endif %}">
+          {% if i.hook_enabled %}Hook BẬT{% else %}Hook TẮT{% endif %}
+        </button>
+      </form>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <form hx-post="/viral/intros/save-hook" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+            hx-indicator="#intro-upload-busy"
+            class="rounded-xl border border-[var(--border)] bg-[var(--color-face)] p-3 space-y-2">
+        <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="default">
+        <label class="text-[10px] font-bold uppercase text-[var(--color-mist)]">Hook default</label>
+        <input name="text" value="{{ i.hook_default_text }}" maxlength="120"
+               class="w-full h-9 text-sm border border-[var(--border)] rounded-lg px-3 bg-[var(--color-deep)] text-[var(--color-ink)]"
+               placeholder="VD: Đừng bỏ lỡ mẹo này…">
+        <button type="submit" class="text-[10px] font-bold text-[var(--color-torch)] hover:underline">Lưu default</button>
+      </form>
+      <form hx-post="/viral/intros/save-hook" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+            hx-indicator="#intro-upload-busy"
+            class="rounded-xl border border-[var(--border)] bg-[var(--color-face)] p-3 space-y-2">
+        <input type="hidden" name="account_id" value="{{ account.id }}"><input type="hidden" name="scope" value="account">
+        <label class="text-[10px] font-bold uppercase text-[var(--color-mist)]">Hook account #{{ account.id }}</label>
+        <input name="text" value="{{ i.hook_account_text }}" maxlength="120"
+               class="w-full h-9 text-sm border border-[var(--border)] rounded-lg px-3 bg-[var(--color-deep)] text-[var(--color-ink)]"
+               placeholder="Hook riêng account">
+        <button type="submit" class="text-[10px] font-bold text-[var(--color-torch)] hover:underline">Lưu account</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="border-t border-[var(--border)] pt-4">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      <div class="min-w-0">
+        <h4 class="text-sm font-bold text-[var(--color-ink)]">
+          Reels 1080×{{ i.reels_target_height|default(1920) }}
+        </h4>
+        <p class="text-[11px] text-[var(--color-mist)] mt-1 leading-relaxed max-w-2xl">
+          Opt-in: cover+crop ra <strong class="text-[var(--color-ink-soft)]">{{ i.reels_target_width|default(1080) }}×{{ i.reels_target_height|default(1920) }}</strong>
+          (lanczos) + encode CRF sạch hơn. Không upscale 4K — phù hợp FB Reels / TikTok.
+        </p>
+      </div>
+      <form hx-post="/viral/intros/toggle-reels-1080" hx-target="#intro-upload-panel" hx-swap="outerHTML"
+            hx-indicator="#intro-upload-busy" class="shrink-0">
+        <input type="hidden" name="account_id" value="{{ account.id }}">
+        <input type="hidden" name="enabled" value="{% if i.reels_1080_enabled %}off{% else %}on{% endif %}">
+        <button type="submit" class="h-9 px-3 rounded-lg text-[10px] font-bold uppercase tracking-wider border
+          {% if i.reels_1080_enabled %}border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)]
+          {% else %}border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)]{% endif %}">
+          {% if i.reels_1080_enabled %}1080 BẬT{% else %}1080 TẮT{% endif %}
+        </button>
+      </form>
+    </div>
+  </div>
 </div>

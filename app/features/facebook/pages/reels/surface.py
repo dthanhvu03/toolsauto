@@ -61,6 +61,7 @@ class SurfaceMixin:
         return visible_buttons
 
     def _surface_file_input_labels(self, surface: Page | Locator) -> list[str]:
+        file_inputs: list[str] = []
         inputs = surface.locator("input[type='file']")
         for idx in range(min(inputs.count(), 10)):
             input_el = inputs.nth(idx)
@@ -72,6 +73,7 @@ class SurfaceMixin:
         return file_inputs
 
     def _surface_textbox_labels(self, surface: Page | Locator) -> list[str]:
+        textboxes: list[str] = []
         boxes = surface.locator('div[contenteditable="true"], div[role="textbox"], textarea')
         for idx in range(min(boxes.count(), 10)):
             box = boxes.nth(idx)

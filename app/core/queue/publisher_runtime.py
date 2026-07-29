@@ -257,9 +257,13 @@ def claim_next_job_respecting_daily(
       - (None, 'daily_exhausted') only hit daily-limited jobs this tick
     """
     from app.core.queue.queue import QueueService
+    import app.config as config
+
+    skip_cap = max(1, int(getattr(config, "WORKER_MAX_BATCH_SIZE", max_skips) or max_skips))
+    skip_cap = min(50, max(skip_cap, int(max_skips)))
 
     skipped_daily = 0
-    for _ in range(max(1, int(max_skips))):
+    for _ in range(skip_cap):
         job = QueueService.claim_next_job(db, platform=platform)
         if not job:
             if skipped_daily:

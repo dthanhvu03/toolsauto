@@ -25,14 +25,26 @@ class SettingSpec:
     # UX / policy (optional)
     is_secret: bool = False
     restart_required: bool = False
-    env_only: bool = False  # value from process env only; not persisted to runtime_settings
+    env_only: bool = False  # legacy: if True, UI read-only and not persisted (prefer False + DB override)
     pair_with: str | None = None  # render this row as a paired min/max with the other key
     env_var_name: str | None = None  # os.environ key for source badge (default: key.upper() + overrides)
     studio_only: bool = False  # edit on AI Studio only; hidden from /app/settings form
+    # When True and form submits empty string, keep existing DB/env value (password fields).
+    keep_blank: bool = False
 
 
 def _getattr_default(name: str) -> Callable[[], Any]:
     return lambda: getattr(config, name)
+
+
+# Snapshot process env at import (before dashboard overrides mutate os.environ).
+_ENV_BOOTSTRAP: dict[str, str] = {
+    "TELEGRAM_BOT_TOKEN": (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip(),
+    "TELEGRAM_CHAT_ID": (os.environ.get("TELEGRAM_CHAT_ID") or "").strip(),
+    "GOOGLE_API_KEY": (
+        (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+    ),
+}
 
 
 SETTINGS: dict[str, SettingSpec] = {
@@ -67,10 +79,10 @@ SETTINGS: dict[str, SettingSpec] = {
         default_getter=_getattr_default("WORKER_MAX_BATCH_SIZE"),
         title="Số job xử lý tối đa mỗi vòng",
         section="Hệ thống Worker",
-        description="Giới hạn số job lấy ra xử lý trong một chu kỳ quét, tránh quá tải khi hàng đợi lớn.",
+        description="Giới hạn số lần thử claim job khác khi hit daily-cap trong 1 tick (map WORKER_MAX_BATCH_SIZE).",
         min=1,
         max=50,
-        unit="job",
+        unit="lần",
     ),
     "worker.max_files_per_batch": SettingSpec(
         key="worker.max_files_per_batch",
@@ -614,10 +626,11 @@ SETTINGS: dict[str, SettingSpec] = {
         type="str",
         default_getter=_getattr_default("TELEGRAM_BOT_TOKEN"),
         title="Telegram bot token",
-        section="Tích hợp (chỉ .env)",
-        description="Token BotFather — chỉ cấu hình qua biến môi trường TELEGRAM_BOT_TOKEN, không lưu DB.",
+        section="Tích hợp",
+        description="Token từ @BotFather. Lưu trên web (DB) ưu tiên hơn .env; để trống khi lưu = giữ giá trị hiện tại.",
         is_secret=True,
-        env_only=True,
+        keep_blank=True,
+        restart_required=True,
         env_var_name="TELEGRAM_BOT_TOKEN",
     ),
     "GOOGLE_API_KEY": SettingSpec(
@@ -625,10 +638,10 @@ SETTINGS: dict[str, SettingSpec] = {
         type="str",
         default_getter=_getattr_default("GOOGLE_API_KEY"),
         title="Google / Gemini API key",
-        section="Tích hợp (chỉ .env)",
-        description="Dùng GEMINI_API_KEY hoặc GOOGLE_API_KEY trong .env (config gộp qua GOOGLE_API_KEY), không lưu DB.",
+        section="Tích hợp",
+        description="API key AI Studio / Gemini. Lưu trên web ưu tiên hơn GEMINI_API_KEY / GOOGLE_API_KEY trong .env.",
         is_secret=True,
-        env_only=True,
+        keep_blank=True,
         env_var_name="GOOGLE_API_KEY",
     ),
     "TELEGRAM_CHAT_ID": SettingSpec(
@@ -636,9 +649,10 @@ SETTINGS: dict[str, SettingSpec] = {
         type="str",
         default_getter=_getattr_default("TELEGRAM_CHAT_ID"),
         title="Telegram chat ID",
-        section="Tích hợp (chỉ .env)",
-        description="ID chat/channel nhận thông báo — chỉ cấu hình qua TELEGRAM_CHAT_ID trong .env.",
-        env_only=True,
+        section="Tích hợp",
+        description="ID chat/channel nhận thông báo (@userinfobot). Có thể sửa trên web.",
+        keep_blank=True,
+        restart_required=True,
         env_var_name="TELEGRAM_CHAT_ID",
     ),
     "THREADS_AUTO_MODE": SettingSpec(
@@ -951,7 +965,7 @@ def get_json(key: str, default: Any = None, db: Session = None) -> Any:
 
 def apply_runtime_overrides_to_config(db: Session) -> dict[str, Any]:
     """
-    Apply DB overrides to this process's in-memory config module variables.
+    Apply DB overrides to this process's in-memory config module + os.environ.
     Returns the effective overrides applied.
     """
     overrides = get_overrides(db, use_cache=True)
@@ -959,9 +973,59 @@ def apply_runtime_overrides_to_config(db: Session) -> dict[str, Any]:
         sp = SETTINGS.get(key)
         if sp and sp.env_only:
             continue
-        if hasattr(config, key):
-            setattr(config, key, value)
+        _push_config_value(key, value)
     return overrides
+
+
+def _push_config_value(key: str, value: Any) -> None:
+    """Write override into config module and matching process env vars."""
+    if value is None:
+        return
+    sp = SETTINGS.get(key)
+    ev = env_var_name_for(sp) if sp else key.upper()
+    # Flat keys (SAFE_MODE) and dotted keys (worker.tick_seconds → WORKER_TICK_SECONDS)
+    attr_candidates = [key]
+    if ev and ev not in attr_candidates:
+        attr_candidates.append(ev)
+
+    if key == "GOOGLE_API_KEY":
+        s = str(value)
+        setattr(config, "GOOGLE_API_KEY", s)
+        setattr(config, "GEMINI_API_KEY", s)
+        os.environ["GOOGLE_API_KEY"] = s
+        os.environ["GEMINI_API_KEY"] = s
+        return
+
+    for attr in attr_candidates:
+        if hasattr(config, attr):
+            setattr(config, attr, value)
+            break
+
+    if ev:
+        os.environ[ev] = str(value)
+
+
+def refresh_integration_notifiers() -> None:
+    """Re-bind Telegram notifier from current config (after dashboard save)."""
+    try:
+        from app.core.notifier.service import NotifierService, TelegramNotifier
+
+        token = (getattr(config, "TELEGRAM_BOT_TOKEN", None) or "").strip()
+        chat = (getattr(config, "TELEGRAM_CHAT_ID", None) or "").strip()
+        if token and chat:
+            NotifierService.replace(TelegramNotifier(token, chat))
+        else:
+            NotifierService.unregister_prefix("telegram:")
+    except Exception:
+        logger = __import__("logging").getLogger(__name__)
+        logger.exception("refresh_integration_notifiers failed")
+
+
+def load_runtime_settings_into_process(db: Session) -> dict[str, Any]:
+    """Startup / after-save: DB overrides → config → notifier."""
+    applied = apply_runtime_overrides_to_config(db)
+    refresh_integration_notifiers()
+    return applied
 
 
 def upsert_setting(db: Session, key: str, raw_value: str | None, updated_by: str | None = None) -> Any:
@@ -997,6 +1061,9 @@ def upsert_setting(db: Session, key: str, raw_value: str | None, updated_by: str
     global _cache_ts, _cache_values
     _cache_ts = 0.0
     _cache_values = {}
+    _push_config_value(key, value)
+    if key in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+        refresh_integration_notifiers()
     return value
 
 
@@ -1023,6 +1090,34 @@ def reset_setting(db: Session, key: str, updated_by: str | None = None) -> None:
     global _cache_ts, _cache_values
     _cache_ts = 0.0
     _cache_values = {}
+    _restore_config_after_reset(key)
+    if key in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "GOOGLE_API_KEY"):
+        apply_runtime_overrides_to_config(db)
+        refresh_integration_notifiers()
+
+
+def _restore_config_after_reset(key: str) -> None:
+    """After deleting DB override, put config/env back to process-boot .env snapshot."""
+    if key not in _ENV_BOOTSTRAP and not hasattr(config, key):
+        return
+    boot = _ENV_BOOTSTRAP.get(key, "")
+    if key == "GOOGLE_API_KEY":
+        setattr(config, "GOOGLE_API_KEY", boot)
+        setattr(config, "GEMINI_API_KEY", boot)
+        if boot:
+            os.environ["GOOGLE_API_KEY"] = boot
+            os.environ["GEMINI_API_KEY"] = boot
+        else:
+            os.environ.pop("GOOGLE_API_KEY", None)
+            os.environ.pop("GEMINI_API_KEY", None)
+        return
+    if hasattr(config, key):
+        setattr(config, key, boot)
+    ev = env_var_name_for(SETTINGS[key]) if key in SETTINGS else key
+    if boot:
+        os.environ[ev] = boot
+    else:
+        os.environ.pop(ev, None)
 
 
 def list_sections() -> list[str]:

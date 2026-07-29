@@ -28,9 +28,9 @@ Danh sách đầy đủ + default: [`app/config.py`](../app/config.py).
 - Default từ env (hoặc hằng số) cho worker, FFmpeg, viral, CDN, Playwright, …
 - **Registry runtime tunables** (metadata): [`app/core/settings.py`](../app/core/settings.py) → key `worker.*`, `publish.*`, `ai.*`, …
 
-**Chỉnh qua dashboard (System → Config):** ghi bảng Postgres `runtime_settings`; worker gọi `apply_runtime_overrides_to_config(db)` để đồng bộ vào `config` in-memory.
+**Chỉnh qua dashboard (`/app/settings`):** ghi bảng Postgres `runtime_settings`; web/worker gọi `apply_runtime_overrides_to_config` / `load_runtime_settings_into_process` để đồng bộ vào `config` in-memory.
 
-**Chỉ .env (`env_only`):** Telegram token/chat, Google API key — không lưu DB.
+**Tích hợp (Telegram token/chat, Google API key):** sửa được trên Settings; ưu tiên DB override hơn `.env`. Secret để trống khi Lưu = giữ giá trị hiện tại. Reset = trở về snapshot `.env` lúc process start.
 
 ## 3. `storage/db/config/` (file JSON runtime)
 

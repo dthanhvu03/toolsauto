@@ -26,8 +26,11 @@ from typing import Any, Optional
 
 from app.features.viral_intake.reup_config import (
     load_reup_config,
+    list_media_pool,
     normalize_preset,
     resolve_intro_path,
+    resolve_outro_path,
+    resolve_hook_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -258,6 +261,8 @@ class ReupProcessor:
         height: int,
         preset: str,
         logo_path: Optional[str] = None,
+        target_w: Optional[int] = None,
+        target_h: Optional[int] = None,
     ) -> tuple[str, float, dict[str, Any]]:
         """
         Build FFmpeg video filter chain.
@@ -287,6 +292,17 @@ class ReupProcessor:
         zoom = random.uniform(float(knobs["zoom_lo"]), float(knobs["zoom_hi"]))
         filters.append(f"crop=iw*{zoom:.3f}:ih*{zoom:.3f}")
 
+        tw = int(target_w or 0)
+        th = int(target_h or 0)
+        reels_canvas = False
+        if tw >= 640 and th >= 640 and tw % 2 == 0 and th % 2 == 0:
+            # Cover → exact Reels canvas (lanczos). Không upscale 4K.
+            filters.append(
+                f"scale={tw}:{th}:force_original_aspect_ratio=increase:flags=lanczos,"
+                f"crop={tw}:{th},setsar=1"
+            )
+            reels_canvas = True
+
         applied = {
             "preset": preset,
             "speed_factor": round(speed_factor, 4),
@@ -295,6 +311,9 @@ class ReupProcessor:
             "brightness": round(brightness, 3),
             "zoom": round(zoom, 3),
             "logo": bool(logo_path),
+            "reels_1080": reels_canvas,
+            "target_width": tw if reels_canvas else 0,
+            "target_height": th if reels_canvas else 0,
         }
 
         # Logo overlay needs filter_complex — handled separately in process()
@@ -490,6 +509,9 @@ class ReupProcessor:
             os.replace(intro_out, body_path)
             metrics["intro_applied"] = True
             metrics["intro_path"] = resolved
+            metrics["intro_pool_size"] = len(
+                list_media_pool(str(Path(resolved).parent))
+            ) if resolved else 0
             metrics["intro_max_sec"] = max_sec
             metrics["intro_fade_sec"] = fade_sec
             metrics["intro_scale_mode"] = scale_mode
@@ -511,6 +533,302 @@ class ReupProcessor:
                 pass
         return body_path
 
+    @staticmethod
+    def _escape_drawtext(text: str) -> str:
+        # ffmpeg drawtext special chars
+        return (
+            (text or "")
+            .replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "\\'")
+            .replace("%", "\\%")
+        )
+
+    @classmethod
+    def _maybe_apply_hook(
+        cls,
+        body_path: str,
+        *,
+        page_url: Optional[str],
+        niches: Optional[list[str]],
+        account_id: Optional[int],
+        hook_text: Optional[str],
+        metrics: dict[str, Any],
+    ) -> str:
+        """Burn hook text onto first N seconds of body (before intro)."""
+        cfg = load_reup_config()
+        max_sec = float(cfg.get("hook_max_sec") or 2.0)
+        max_sec = max(0.5, min(4.0, max_sec))
+        text = resolve_hook_text(
+            page_url=page_url,
+            niches=niches,
+            account_id=account_id,
+            explicit=hook_text,
+        )
+        metrics["hook_enabled"] = bool(cfg.get("hook_enabled"))
+        metrics["hook_text"] = text
+        if not text:
+            metrics["hook_applied"] = False
+            return body_path
+
+        info = cls._get_video_info(body_path)
+        w = int(info.get("width") or 0)
+        h = int(info.get("height") or 0)
+        if w < 16 or h < 16:
+            metrics["hook_applied"] = False
+            metrics["hook_error"] = "invalid dimensions"
+            return body_path
+
+        fontsize = max(28, min(64, int(w * 0.055)))
+        escaped = cls._escape_drawtext(text)
+        # Safe-ish upper third for Reels/TikTok
+        y_expr = "h*0.16"
+        vf = (
+            f"drawtext=text='{escaped}':fontsize={fontsize}:fontcolor=white:"
+            f"borderw=3:bordercolor=black@0.85:x=(w-text_w)/2:y={y_expr}:"
+            f"enable='between(t,0,{max_sec:.3f})'"
+        )
+        out = body_path + ".with_hook.tmp.mp4"
+        cmd = [
+            _ffmpeg_bin(),
+            "-y",
+            "-i",
+            body_path,
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "veryfast",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            out,
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            if result.returncode != 0 or not os.path.isfile(out) or os.path.getsize(out) < 1024:
+                err = (result.stderr or "hook drawtext failed")[-200:]
+                logger.warning("[ReupProcessor] hook skip: %s", err)
+                metrics["hook_applied"] = False
+                metrics["hook_error"] = err[:160]
+                try:
+                    if os.path.isfile(out):
+                        os.remove(out)
+                except OSError:
+                    pass
+                return body_path
+            os.replace(out, body_path)
+            metrics["hook_applied"] = True
+            metrics["hook_max_sec"] = max_sec
+            logger.info("[ReupProcessor] Hook applied (%ss): %s", max_sec, text[:40])
+        except Exception as e:
+            metrics["hook_applied"] = False
+            metrics["hook_error"] = str(e)[:160]
+            try:
+                if os.path.isfile(out):
+                    os.remove(out)
+            except OSError:
+                pass
+        return body_path
+
+    @classmethod
+    def _maybe_apply_outro(
+        cls,
+        body_path: str,
+        *,
+        page_url: Optional[str],
+        niches: Optional[list[str]],
+        account_id: Optional[int],
+        outro_path: Optional[str],
+        metrics: dict[str, Any],
+    ) -> str:
+        """If outro resolves, append after body and return final path."""
+        cfg = load_reup_config()
+        max_sec = float(cfg.get("outro_max_sec") or 2.5)
+        fade_sec = float(cfg.get("outro_fade_sec") if cfg.get("outro_fade_sec") is not None else 0.28)
+        scale_mode = str(cfg.get("outro_scale_mode") or "cover")
+        resolved = resolve_outro_path(
+            page_url=page_url,
+            niches=niches,
+            account_id=account_id,
+            explicit=outro_path,
+        )
+        metrics["outro_enabled"] = bool(cfg.get("outro_enabled"))
+        metrics["outro_resolved"] = resolved
+        if not resolved:
+            metrics["outro_applied"] = False
+            return body_path
+
+        # Reuse prepend filter stack but with body as [0] and outro as [1]
+        # Easiest: call _prepend_intro with swapped roles via a dedicated append helper.
+        outro_out = body_path + ".with_outro.tmp.mp4"
+        ok, err = cls._append_outro(
+            main_path=body_path,
+            outro_path=resolved,
+            output_path=outro_out,
+            max_outro_sec=max_sec,
+            fade_sec=fade_sec,
+            scale_mode=scale_mode,
+        )
+        if not ok:
+            logger.warning("[ReupProcessor] outro skip: %s", err)
+            metrics["outro_applied"] = False
+            metrics["outro_error"] = (err or "")[:160]
+            try:
+                if os.path.isfile(outro_out):
+                    os.remove(outro_out)
+            except OSError:
+                pass
+            return body_path
+
+        try:
+            os.replace(outro_out, body_path)
+            metrics["outro_applied"] = True
+            metrics["outro_path"] = resolved
+            metrics["outro_max_sec"] = max_sec
+            metrics["outro_fade_sec"] = fade_sec
+            logger.info(
+                "[ReupProcessor] Outro applied (%ss): %s",
+                max_sec,
+                os.path.basename(resolved),
+            )
+        except OSError as e:
+            metrics["outro_applied"] = False
+            metrics["outro_error"] = str(e)[:160]
+            try:
+                if os.path.isfile(outro_out):
+                    os.remove(outro_out)
+            except OSError:
+                pass
+        return body_path
+
+    @classmethod
+    def _append_outro(
+        cls,
+        main_path: str,
+        outro_path: str,
+        output_path: str,
+        max_outro_sec: float = 2.5,
+        fade_sec: float = 0.28,
+        scale_mode: str = "cover",
+    ) -> tuple[bool, str | None]:
+        """Join main + [outro ≤ max] → output_path (match main WxH/fps/audio)."""
+        main = cls._get_video_info(main_path)
+        outro_info = cls._get_video_info(outro_path)
+        w = int(main.get("width") or 0)
+        h = int(main.get("height") or 0)
+        if w < 16 or h < 16:
+            return False, "main video has invalid dimensions"
+
+        max_outro_sec = max(0.5, min(5.0, float(max_outro_sec or 2.5)))
+        outro_src_dur = float(outro_info.get("duration") or 0)
+        outro_dur = min(max_outro_sec, outro_src_dur) if outro_src_dur > 0.05 else max_outro_sec
+        outro_dur = max(0.5, outro_dur)
+
+        fps = float(main.get("fps") or 30.0)
+        sr = int(main.get("sample_rate") or 44100)
+        outro_has_audio = bool(outro_info.get("has_audio"))
+        main_has_audio = bool(main.get("has_audio"))
+        main_dur = float(main.get("duration") or 1.0)
+        if main_dur < 0.5:
+            main_dur = 1.0
+
+        mode = (scale_mode or "cover").strip().lower()
+        if mode == "contain":
+            scale_chain = (
+                f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black"
+            )
+        else:
+            scale_chain = (
+                f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                f"crop={w}:{h}"
+            )
+
+        v_main = f"[0:v]setpts=PTS-STARTPTS,setsar=1,fps={fps:.3f},format=yuv420p[v0]"
+        v_outro = (
+            f"[1:v]trim=duration={outro_dur:.3f},setpts=PTS-STARTPTS,"
+            f"{scale_chain},setsar=1,fps={fps:.3f},format=yuv420p[v1]"
+        )
+        a_fmt = f"aformat=sample_rates={sr}:channel_layouts=stereo"
+        parts = [v_main, v_outro]
+        if main_has_audio:
+            parts.append(f"[0:a]asetpts=PTS-STARTPTS,{a_fmt}[a0]")
+        else:
+            parts.append(
+                f"anullsrc=channel_layout=stereo:sample_rate={sr},"
+                f"atrim=0:{main_dur:.3f},asetpts=PTS-STARTPTS[a0]"
+            )
+        if outro_has_audio:
+            parts.append(
+                f"[1:a]atrim=0:{outro_dur:.3f},asetpts=PTS-STARTPTS,{a_fmt}[a1]"
+            )
+        else:
+            parts.append(
+                f"anullsrc=channel_layout=stereo:sample_rate={sr},"
+                f"atrim=0:{outro_dur:.3f},asetpts=PTS-STARTPTS[a1]"
+            )
+
+        fade = max(0.0, min(0.5, float(fade_sec or 0.0)))
+        if fade > 0.04 and main_dur > (fade + 0.12) and outro_dur > (fade + 0.12):
+            offset = main_dur - fade
+            parts.append(
+                f"[v0][v1]xfade=transition=fade:duration={fade:.3f}:offset={offset:.3f}[outv]"
+            )
+            parts.append(f"[a0][a1]acrossfade=d={fade:.3f}:c1=tri:c2=tri[outa]")
+        else:
+            parts.append("[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]")
+
+        filter_complex = ";".join(parts)
+        cmd = [
+            _ffmpeg_bin(),
+            "-y",
+            "-i",
+            main_path,
+            "-i",
+            outro_path,
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[outv]",
+            "-map",
+            "[outa]",
+            "-r",
+            f"{fps:.3f}",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "veryfast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ar",
+            str(sr),
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                return False, (result.stderr or "ffmpeg outro concat failed")[-240:]
+            if not os.path.isfile(output_path) or os.path.getsize(output_path) < 1024:
+                return False, "outro concat produced empty file"
+            return True, None
+        except subprocess.TimeoutExpired:
+            return False, "outro concat timeout"
+        except Exception as e:
+            return False, str(e)
+
     @classmethod
     def process(
         cls,
@@ -524,9 +842,11 @@ class ReupProcessor:
         niches: Optional[list[str]] = None,
         account_id: Optional[int] = None,
         intro_path: Optional[str] = None,
+        outro_path: Optional[str] = None,
+        hook_text: Optional[str] = None,
     ) -> ReupResult:
         """
-        Pre-process video reup: watermark crop + anti-dupe + duration cap + optional brand intro.
+        Pre-process video reup: anti-dupe + hook text + brand intro + brand outro.
 
         Args:
             input_path: Path to downloaded video
@@ -535,8 +855,8 @@ class ReupProcessor:
             preset: safe | aggressive | reels_short
             force: overwrite existing _reup output
             output_path: explicit output path (optional)
-            page_url / niches / account_id: resolve brand intro (PLAN-044)
-            intro_path: explicit intro override
+            page_url / niches / account_id: resolve brand intro/outro/hook
+            intro_path / outro_path / hook_text: explicit overrides
         """
         started_at = time.time()
         preset_key = normalize_preset(preset)
@@ -550,6 +870,30 @@ class ReupProcessor:
         if head_trim > 0.5:
             head_trim = 0.5
 
+        reels_1080 = bool(cfg.get("reels_1080_enabled"))
+        target_w = target_h = None
+        x264_preset = "ultrafast"
+        if reels_1080:
+            try:
+                tw = int(cfg.get("reels_target_width") or 1080)
+                th = int(cfg.get("reels_target_height") or 1920)
+            except (TypeError, ValueError):
+                tw, th = 1080, 1920
+            # Even dims only; clamp to social-safe canvas (no 4K)
+            tw = max(640, min(1080, tw - (tw % 2)))
+            th = max(640, min(1920, th - (th % 2)))
+            target_w, target_h = tw, th
+            try:
+                crf = int(cfg.get("reels_1080_crf") or 23)
+            except (TypeError, ValueError):
+                crf = 23
+            crf = max(16, min(28, crf))
+            x264_preset = str(cfg.get("reels_1080_x264_preset") or "veryfast").strip() or "veryfast"
+            if x264_preset not in (
+                "ultrafast", "superfast", "veryfast", "faster", "fast", "medium",
+            ):
+                x264_preset = "veryfast"
+
         if not os.path.exists(input_path):
             return ReupResult(success=False, error=f"File not found: {input_path}")
 
@@ -562,8 +906,14 @@ class ReupProcessor:
             return ReupResult(success=False, error="Cannot read video dimensions")
 
         logger.info(
-            "[ReupProcessor] Input: %s (%s) preset=%s — %dx%d, %.1fs",
-            os.path.basename(input_path), platform, preset_key, width, height, duration,
+            "[ReupProcessor] Input: %s (%s) preset=%s reels1080=%s — %dx%d, %.1fs",
+            os.path.basename(input_path),
+            platform,
+            preset_key,
+            reels_1080,
+            width,
+            height,
+            duration,
         )
 
         if not output_dir:
@@ -586,7 +936,13 @@ class ReupProcessor:
 
         logo_path = cls._resolve_logo_path()
         vf, speed_factor, applied = cls._build_filter_chain(
-            platform, width, height, preset_key, logo_path=logo_path,
+            platform,
+            width,
+            height,
+            preset_key,
+            logo_path=logo_path,
+            target_w=target_w,
+            target_h=target_h,
         )
 
         if sys.platform.startswith("win"):
@@ -636,14 +992,21 @@ class ReupProcessor:
         cmd += [
             "-c:v", "libx264",
             "-crf", str(crf),
-            "-preset", "ultrafast",
+            "-preset", x264_preset,
+            "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", "128k",
             "-movflags", "+faststart",
             temp_path,
         ]
 
-        logger.info("[ReupProcessor] Filters preset=%s: %s", preset_key, vf)
+        logger.info(
+            "[ReupProcessor] Filters preset=%s crf=%s x264=%s: %s",
+            preset_key,
+            crf,
+            x264_preset,
+            vf,
+        )
 
         def _fast_trim_fallback() -> ReupResult:
             if duration <= max_duration:
@@ -733,8 +1096,18 @@ class ReupProcessor:
                 "filters": vf,
                 "head_trim_sec": head_trim,
                 "max_duration": max_duration,
+                "crf": crf,
+                "x264_preset": x264_preset,
                 **applied,
             }
+            output_path = cls._maybe_apply_hook(
+                output_path,
+                page_url=page_url,
+                niches=niches,
+                account_id=account_id,
+                hook_text=hook_text,
+                metrics=metrics,
+            )
             output_path = cls._maybe_apply_intro(
                 output_path,
                 page_url=page_url,
@@ -743,8 +1116,16 @@ class ReupProcessor:
                 intro_path=intro_path,
                 metrics=metrics,
             )
-            if metrics.get("intro_applied"):
-                # Refresh size/duration after intro concat
+            output_path = cls._maybe_apply_outro(
+                output_path,
+                page_url=page_url,
+                niches=niches,
+                account_id=account_id,
+                outro_path=outro_path,
+                metrics=metrics,
+            )
+            if metrics.get("intro_applied") or metrics.get("outro_applied") or metrics.get("hook_applied"):
+                # Refresh size/duration after VIP stages
                 try:
                     out_info2 = cls._get_video_info(output_path)
                     metrics["output_duration"] = round(float(out_info2.get("duration") or 0), 2)

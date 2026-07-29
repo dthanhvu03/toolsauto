@@ -5,7 +5,7 @@ from app.core.database.models import Job
 from app.core.queue.job import JobService
 from app.core.notifier.telegram_client import TelegramClient
 from app.constants import JobStatus
-from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+import app.config as config
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class TelegramService:
         except ValueError:
             return False
 
-        client = TelegramClient(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
+        client = TelegramClient(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID)
         job = db.query(Job).filter(Job.id == job_id).first()
 
         if not job:
