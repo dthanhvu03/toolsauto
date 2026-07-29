@@ -2,9 +2,11 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 from glob import glob
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.config as config
@@ -57,6 +59,68 @@ class ViralService:
         except Exception as e:
             logger.debug("[VIRAL] reup job lookup failed: %s", e)
         return None
+
+    @staticmethod
+    def reup_thumb_path(material_id: int) -> str:
+        """Cached jpeg path for table thumbnail (one frame from _reup)."""
+        thumb_dir = str(config.THUMB_DIR)
+        os.makedirs(thumb_dir, exist_ok=True)
+        return os.path.join(thumb_dir, f"viral_{material_id}_reup.jpg")
+
+    @staticmethod
+    def ensure_reup_thumbnail(
+        material_id: int,
+        platform: str | None = None,
+        video_path: str | None = None,
+    ) -> Optional[str]:
+        """Extract 1 frame (~1s) from reup mp4 → small jpeg. Cache if newer than video."""
+        out = ViralService.reup_thumb_path(material_id)
+        src = video_path or ViralService.find_reup_path(material_id, platform)
+        if not src or not os.path.isfile(src):
+            return out if os.path.isfile(out) and os.path.getsize(out) > 0 else None
+
+        try:
+            if os.path.isfile(out) and os.path.getsize(out) > 0:
+                if os.path.getmtime(out) >= os.path.getmtime(src):
+                    return out
+        except OSError:
+            pass
+
+        ffmpeg = ViralService.resolve_ffmpeg()
+        if not ffmpeg:
+            logger.warning("[VIRAL] ensure_reup_thumbnail: ffmpeg missing for #%s", material_id)
+            return None
+
+        tmp = out + ".tmp.jpg"
+        try:
+            cmd = [
+                ffmpeg,
+                "-y",
+                "-ss",
+                "1",
+                "-i",
+                src,
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=160:-2",
+                "-q:v",
+                "5",
+                tmp,
+            ]
+            subprocess.run(cmd, capture_output=True, timeout=20, check=False)
+            if os.path.isfile(tmp) and os.path.getsize(tmp) > 0:
+                os.replace(tmp, out)
+                return out
+        except Exception as e:
+            logger.debug("[VIRAL] thumb extract failed #%s: %s", material_id, e)
+        finally:
+            try:
+                if os.path.isfile(tmp):
+                    os.remove(tmp)
+            except OSError:
+                pass
+        return out if os.path.isfile(out) and os.path.getsize(out) > 0 else None
 
     @staticmethod
     def _index_reup_ids_from_disk() -> Set[int]:
@@ -153,6 +217,186 @@ class ViralService:
         }
 
     @staticmethod
+    def batch_jobs_by_material(
+        db: Session, material_ids: Set[int]
+    ) -> Dict[int, Dict[str, Any]]:
+        """Latest job snapshot per viral_material_id (id, status, affiliate flag)."""
+        if not material_ids:
+            return {}
+        rows = (
+            db.query(Job)
+            .filter(Job.viral_material_id.in_(material_ids))
+            .order_by(Job.id.desc())
+            .all()
+        )
+        out: Dict[int, Dict[str, Any]] = {}
+        for job in rows:
+            mid = job.viral_material_id
+            if mid is None or mid in out:
+                continue
+            out[mid] = {
+                "job_id": job.id,
+                "job_status": job.status,
+                "has_affiliate": bool(job.affiliate_url or job.auto_comment_text),
+            }
+        return out
+
+    @staticmethod
+    def pipeline_banner(db: Session) -> Dict[str, Any]:
+        """UI hint when NEW exists but no viral-linked jobs yet (local Web-only)."""
+        from app.constants import ViralStatus
+
+        counts = dict(
+            db.query(ViralMaterial.status, func.count(ViralMaterial.id))
+            .group_by(ViralMaterial.status)
+            .all()
+        )
+        new_count = int(counts.get(ViralStatus.NEW, 0) or 0)
+        processing_count = int(counts.get(ViralStatus.PROCESSING, 0) or 0)
+        failed_count = int(counts.get(ViralStatus.FAILED, 0) or 0)
+        drafted_count = int(counts.get(ViralStatus.DRAFTED, 0) or 0)
+        jobs_viral = (
+            db.query(Job)
+            .filter(Job.viral_material_id.isnot(None))
+            .count()
+        )
+        return {
+            "status_counts": {
+                "NEW": new_count,
+                "PROCESSING": processing_count,
+                "DRAFTED": drafted_count,
+                "FAILED": failed_count,
+            },
+            "new_count": new_count,
+            "processing_count": processing_count,
+            "failed_count": failed_count,
+            "drafted_count": drafted_count,
+            "jobs_viral": jobs_viral,
+            "show_worker_banner": new_count > 0 and jobs_viral == 0,
+            "ffmpeg_ok": ViralService.ffmpeg_available(),
+        }
+
+    @staticmethod
+    def _winget_links_dir() -> Optional[str]:
+        local = os.environ.get("LOCALAPPDATA") or ""
+        if not local:
+            return None
+        path = os.path.join(local, "Microsoft", "WinGet", "Links")
+        return path if os.path.isdir(path) else None
+
+    @staticmethod
+    def _ensure_ffmpeg_on_path() -> None:
+        """If winget installed ffmpeg but shell PATH stale, prepend Links for this process."""
+        links = ViralService._winget_links_dir()
+        if not links:
+            return
+        path_env = os.environ.get("PATH") or ""
+        if links.lower() in path_env.lower():
+            return
+        os.environ["PATH"] = links + os.pathsep + path_env
+
+    @staticmethod
+    def resolve_ffmpeg() -> Optional[str]:
+        ViralService._ensure_ffmpeg_on_path()
+        found = shutil.which("ffmpeg")
+        if found:
+            return found
+        links = ViralService._winget_links_dir()
+        if links:
+            candidate = os.path.join(links, "ffmpeg.exe")
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
+    @staticmethod
+    def resolve_ffprobe() -> Optional[str]:
+        ViralService._ensure_ffmpeg_on_path()
+        found = shutil.which("ffprobe")
+        if found:
+            return found
+        links = ViralService._winget_links_dir()
+        if links:
+            candidate = os.path.join(links, "ffprobe.exe")
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
+    @staticmethod
+    def ffmpeg_available() -> bool:
+        """True if ffprobe/ffmpeg resolvable (PATH or WinGet Links on Windows)."""
+        return bool(ViralService.resolve_ffprobe() or ViralService.resolve_ffmpeg())
+
+    @staticmethod
+    def process_material(db: Session, material_id: int) -> Tuple[bool, str]:
+        """Download + reup + queue one NEW/REUP/FAILED material (manual Smart bridge)."""
+        from app.constants import ViralStatus
+        from app.features.viral_intake.processor import ViralProcessorService
+
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat:
+            return False, f"Không tìm thấy material #{material_id}."
+        if mat.status == ViralStatus.PROCESSING:
+            return False, f"#{material_id} đang xử lý (PROCESSING) — đợi xong hoặc chờ recover stale."
+        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP, ViralStatus.FAILED):
+            return False, f"#{material_id} trạng thái={mat.status} — chỉ xử lý NEW/REUP/FAILED."
+
+        if not ViralService.ffmpeg_available():
+            return (
+                False,
+                "Thiếu ffmpeg/ffprobe trên PATH — cài rồi thử lại (reup cần ffprobe).",
+            )
+
+        ViralProcessorService().download_and_queue(db, material_id)
+        db.refresh(mat)
+        tries = int(getattr(mat, "process_tries", 0) or 0)
+        if mat.status == ViralStatus.DRAFTED:
+            job = (
+                db.query(Job)
+                .filter(Job.viral_material_id == material_id)
+                .order_by(Job.id.desc())
+                .first()
+            )
+            jid = f" → Job #{job.id} ({job.status})" if job else ""
+            return True, f"✅ #{material_id} đã tạo job{jid} (lần thử={tries})"
+        if mat.status == ViralStatus.FAILED:
+            err = (mat.last_error or "không rõ")[:100]
+            return False, f"❌ #{material_id} lỗi (FAILED, lần thử={tries}): {err}"
+        return True, f"#{material_id} xong — trạng thái={mat.status} lần thử={tries}"
+
+    @staticmethod
+    def process_new_batch(db: Session, limit: int = 3) -> Tuple[int, int, str]:
+        """Process up to ``limit`` NEW materials (views desc)."""
+        from app.constants import ViralStatus
+
+        if not ViralService.ffmpeg_available():
+            return 0, 0, "Thiếu ffmpeg/ffprobe trên PATH — không thể reup. Cài rồi thử lại."
+
+        limit = max(1, min(10, int(limit or 3)))
+        mats = (
+            db.query(ViralMaterial)
+            .filter(ViralMaterial.status == ViralStatus.NEW)
+            .order_by(ViralMaterial.views.desc())
+            .limit(limit)
+            .all()
+        )
+        if not mats:
+            return 0, 0, "Không còn video mới (NEW) để xử lý."
+
+        ok = 0
+        fail = 0
+        notes: list[str] = []
+        for mat in mats:
+            success, msg = ViralService.process_material(db, mat.id)
+            notes.append(msg)
+            if success:
+                ok += 1
+            else:
+                fail += 1
+        summary = f"Đã xử lý {ok + fail}/{len(mats)} (thành công={ok}, lỗi={fail})."
+        detail = " | ".join(notes[:3])
+        return ok, fail, f"{summary} {detail}"[:280]
+
+    @staticmethod
     def force_scan(db: Session) -> Tuple[int, int, str]:
         try:
             total_found, num_channels = run_tiktok_competitor_scan(db)
@@ -164,6 +408,9 @@ class ViralService:
                 default_min = get_default_min_views(db)
                 msg = f"Đã quét {num_channels} kênh. 0 video đạt ngưỡng {default_min:,} views."
             return total_found, num_channels, msg
+        except FileNotFoundError as e:
+            msg = f"❌ Lỗi quét: {str(e)[:160]}"
+            return 0, 0, msg
         except Exception as e:
             msg = f"❌ Lỗi quét: {str(e)[:120]}"
             return 0, 0, msg
@@ -200,7 +447,7 @@ class ViralService:
 
         source_path = ViralService.find_reup_path(material.id, material.platform)
         if not source_path or not os.path.isfile(source_path):
-            return False, "Chưa có file _reup để re-process."
+            return False, "Chưa có file _reup để chạy lại."
 
         from app.features.viral_intake.reup_config import resolve_preset
         from app.features.viral_intake.reup_processor import ReupProcessor
@@ -226,7 +473,7 @@ class ViralService:
         try:
             shutil.copy2(source_path, work_path)
         except OSError as e:
-            return False, f"Không thể chuẩn bị file re-process: {e}"
+            return False, f"Không thể chuẩn bị file để chạy lại reup: {e}"
 
         try:
             result = ReupProcessor.process(
@@ -236,9 +483,12 @@ class ViralService:
                 preset=resolved_preset,
                 force=True,
                 output_path=source_path,
+                page_url=material.target_page,
+                niches=niches,
+                account_id=material.scraped_by_account_id,
             )
             if not result.success or not result.output_path:
-                return False, result.error or "Re-process anti-dupe thất bại."
+                return False, result.error or "Chạy lại anti-dupe thất bại."
 
             try:
                 record_reup_variant(
@@ -254,7 +504,7 @@ class ViralService:
 
             material.last_error = None
             db.commit()
-            return True, f"Đã re-process anti-dupe (preset={resolved_preset})."
+            return True, f"Đã chạy lại anti-dupe (preset={resolved_preset})."
         finally:
             try:
                 if os.path.exists(work_path):

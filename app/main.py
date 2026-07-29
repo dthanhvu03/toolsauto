@@ -36,6 +36,7 @@ from app.features.facebook import manual_job_router as manual_job
 from app.features.insights import router as insights
 from app.features.telegram_bot import router as telegram
 from app.features.viral_intake import router as viral
+from app.features.viral_intake import intro_router as viral_intros
 from app.core.notifier.service import NotifierService, TelegramNotifier
 import app.config as config
 from app.bootstrap_hooks import register_feature_hooks
@@ -61,6 +62,7 @@ app.include_router(accounts.router)
 app.include_router(worker.router)
 app.include_router(health.router)
 app.include_router(telegram.router)
+app.include_router(viral_intros.router)
 app.include_router(viral.router)
 app.include_router(insights.router)
 app.include_router(system_panel.router)

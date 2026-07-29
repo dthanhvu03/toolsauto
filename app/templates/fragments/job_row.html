@@ -97,20 +97,21 @@
         {% endif %}
     </td>
     <td class="px-4 py-2 text-sm align-top pt-3">
-        {% set text = job.status %}
-        {% if job.status == 'DONE' %}
-        {% set tone = 'green' %}
-        {% elif job.status in ['PENDING','AWAITING_STYLE','DRAFT'] %}
-        {% set tone = 'amber' %}
-        {% elif job.status in ['RUNNING','AI_PROCESSING'] %}
-        {% set tone = 'blue' %}
-        {% elif job.status == 'FAILED' %}
-        {% set tone = 'red' %}
-        {% elif job.status == 'CANCELLED' %}
-        {% set tone = 'slate' %}
-        {% else %}
-        {% set tone = 'default' %}
-        {% endif %}
+        {% set _st = job.status %}
+        {% set _map = {
+            'DONE': ('Xong', 'green', 'DONE'),
+            'AWAITING_STYLE': ('Chờ chọn style', 'amber', 'AWAITING_STYLE'),
+            'DRAFT': ('Nháp', 'amber', 'DRAFT'),
+            'PENDING': ('Chờ đăng', 'amber', 'PENDING'),
+            'RUNNING': ('Đang đăng', 'blue', 'RUNNING'),
+            'AI_PROCESSING': ('AI đang viết', 'blue', 'AI_PROCESSING'),
+            'FAILED': ('Lỗi', 'red', 'FAILED'),
+            'CANCELLED': ('Đã hủy', 'slate', 'CANCELLED')
+        } %}
+        {% set _row = _map.get(_st, (_st, 'default', _st)) %}
+        {% set text = _row[0] %}
+        {% set tone = _row[1] %}
+        {% set title = _row[2] %}
         {% include 'ui/badge.html' with context %}
     </td>
     <td class="px-4 py-2 text-sm align-top pt-3">
@@ -119,7 +120,7 @@
         <span class="text-gray-400">({{ job.account.name }})</span>
         {% else %}
         <span class="text-gray-400">{{ job.platform }}</span>
-        <span class="text-red-400 italic text-xs">(Deleted Account)</span>
+        <span class="text-red-400 italic text-xs">(Tài khoản đã xóa)</span>
         {% endif %}
         {% if job.target_page %}
         <div class="mt-1 text-[10px] text-indigo-500 truncate max-w-[120px]" title="{{ job.target_page }}">
@@ -137,8 +138,8 @@
     </td>
     <td class="px-4 py-2 text-sm text-gray-500 align-top pt-3">{{ job.tries }}/{{ job.max_tries }}</td>
     <td class="px-4 py-2 text-sm align-top pt-3">
-        {% if job.status == 'DONE' %}
         <div class="flex flex-col gap-1 text-xs">
+        {% if job.status == 'DONE' %}
             {% if job.post_url %}
             <a href="{{ job.post_url }}" target="_blank"
                 class="text-blue-500 hover:text-blue-700 truncate max-w-[120px] block" title="{{ job.post_url }}"><svg
@@ -146,7 +147,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
-                Post</a>
+                Xem post</a>
             {% endif %}
             {% if job.view_24h is not none %}
             <span class="text-emerald-600 font-semibold"><svg class="w-3 h-3 inline-block mr-0.5" fill="none"
@@ -157,51 +158,40 @@
                         d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>{{ "{:,}".format(job.view_24h) }} views</span>
             {% elif job.metrics_checked %}
-            <span class="text-gray-400"><svg class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>0 views</span>
+            <span class="text-gray-400">0 views</span>
             {% else %}
-            <span class="text-gray-300 italic"><svg class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>Chờ quét</span>
+            <span class="text-gray-400 italic" title="Worker MetricsChecker sẽ quét sau ~24h">Chờ quét views</span>
             {% endif %}
             {% if job.click_count and job.click_count > 0 %}
-            <span class="text-amber-600 font-semibold"><svg class="w-3 h-3 inline-block mr-0.5" fill="none"
-                    viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                </svg>{{ job.click_count }} clicks</span>
+            <span class="text-amber-600 font-semibold">{{ job.click_count }} clicks</span>
             {% endif %}
+        {% elif job.status == 'AWAITING_STYLE' %}
+            <span class="text-cyan-600/80 italic" title="Chọn style trên Telegram trước khi AI viết caption">Chưa đăng · chờ style</span>
+        {% elif job.status == 'DRAFT' %}
+            <span class="text-amber-600/80 italic" title="Duyệt nháp để đưa vào hàng chờ đăng">Chưa đăng · nháp</span>
+        {% elif job.status in ['PENDING', 'RUNNING', 'AI_PROCESSING'] %}
+            <span class="text-gray-400 italic" title="Số liệu (views/clicks) chỉ có sau khi đăng xong">Chưa có số liệu</span>
+        {% elif job.status == 'FAILED' %}
+            <span class="text-gray-400 italic">Chưa đo được</span>
+        {% else %}
+            <span class="text-gray-300">—</span>
+        {% endif %}
             {% if job.media_path and '_reup' in (job.media_path or '') %}
-            <span class="text-emerald-700 font-semibold text-[10px]" title="Đã qua ReupProcessor (biến đổi video, không phải cross-account)">Reup</span>
+            <span class="text-emerald-700 font-semibold text-[10px]" title="Đã qua ReupProcessor (anti-dupe)">Reup</span>
             {% endif %}
             {% if job.content_hash %}
-            <span class="text-sky-700 font-semibold text-[10px]" title="content_hash={{ job.content_hash }} — chặn trùng media cross-account cùng platform">Media guard</span>
+            <span class="text-sky-700 font-semibold text-[10px]" title="content_hash — chặn trùng media cross-account">Media guard</span>
             {% endif %}
             {% if job.viral_material_id %}
-            <span class="text-violet-700 font-semibold text-[10px]" title="viral_material_id={{ job.viral_material_id }}">Viral #{{ job.viral_material_id }}</span>
+            <a href="/app/viral?q={{ job.viral_material_id }}" class="text-violet-700 font-semibold text-[10px] hover:underline" title="Mở viral #{{ job.viral_material_id }}">Viral #{{ job.viral_material_id }}</a>
             {% endif %}
             {% if job.auto_comment_text %}
-            <span class="text-indigo-600 font-semibold text-[10px]" title="{{ job.auto_comment_text }}">Affiliate comment</span>
+            <span class="text-indigo-600 font-semibold text-[10px]" title="{{ job.auto_comment_text }}">Comment affiliate</span>
             {% endif %}
             {% if job.tracking_code %}
-            <span class="text-gray-400 font-mono text-[10px]" title="/r/{{ job.tracking_code }}"><svg
-                    class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>{{ job.tracking_code
-                }}</span>
+            <span class="text-gray-400 font-mono text-[10px]" title="/r/{{ job.tracking_code }}">{{ job.tracking_code }}</span>
             {% endif %}
         </div>
-        {% else %}
-        <span class="text-gray-300">-</span>
-        {% endif %}
     </td>
     <td class="px-4 py-2 text-sm max-w-xs align-top pt-3" title="{{ job.last_error }}">
         {% if job.status == 'DRAFT' %}
@@ -211,7 +201,7 @@
                 class="text-xs border border-gray-300 rounded p-1 w-full text-gray-700 bg-yellow-50 focus:ring-1 focus:ring-indigo-500 whitespace-pre-wrap">{{ job.caption }}</textarea>
             <div class="flex justify-start">
                 <button type="submit" class="text-[10px] text-gray-500 hover:text-indigo-600 underline"
-                    onclick="this.textContent='Saving...'">Lưu caption</button>
+                    onclick="this.textContent='Đang lưu…'">Lưu caption</button>
             </div>
         </form>
         <form hx-post="/jobs/{{ job.id }}/auto-comment" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
@@ -225,7 +215,7 @@
             {% endif %}
             <div class="flex justify-start">
                 <button type="submit" class="text-[10px] text-indigo-600 hover:text-indigo-800 underline"
-                    onclick="this.textContent='Saving...'">Lưu comment</button>
+                    onclick="this.textContent='Đang lưu…'">Lưu comment</button>
             </div>
         </form>
         {% elif job.status == 'AWAITING_STYLE' %}
@@ -233,42 +223,43 @@
                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-            </svg>Vui lòng check Telegram để chọn
-            Style...</span>
+            </svg>Mở Telegram để chọn style (≈30 phút sẽ tự chọn short)</span>
         {% else %}
-        <span class="text-red-500 truncate block">{{ job.last_error or '-' }}</span>
+        <span class="text-red-500 truncate block">{{ job.last_error or '—' }}</span>
         {% endif %}
     </td>
     <td class="px-4 py-2 text-sm font-medium align-top pt-2">
         {% if job.status == 'AWAITING_STYLE' %}
         <button hx-post="/jobs/{{ job.id }}/cancel" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             onclick="this.textContent='...'; this.disabled=true;"
-            class="block w-24 text-center text-red-600 hover:text-red-900 bg-red-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition">
-            Cancel
+            class="block w-24 text-center text-red-600 hover:text-red-900 bg-red-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition"
+            title="Hủy job này">
+            Hủy
         </button>
 
         {% elif job.status == 'DRAFT' %}
         <button hx-post="/jobs/{{ job.id }}/approve" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             onclick="this.textContent='...'; this.disabled=true;"
-            class="block w-24 text-center text-white hover:bg-indigo-700 bg-indigo-600 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition font-bold mb-2">
-            Approve
+            class="block w-24 text-center text-white hover:bg-indigo-700 bg-indigo-600 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition font-bold mb-2"
+            title="Đưa vào hàng chờ đăng (cần worker VPS để đăng thật)">
+            Duyệt
         </button>
         <button hx-post="/jobs/{{ job.id }}/cancel" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             onclick="this.textContent='...'; this.disabled=true;"
             class="block w-24 text-center text-red-600 hover:text-red-900 bg-red-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition">
-            Delete Draft
+            Xóa nháp
         </button>
 
         {% elif job.status == 'FAILED' %}
         <button hx-post="/jobs/{{ job.id }}/retry" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             onclick="this.textContent='...'; this.disabled=true;"
             class="block w-24 text-center text-indigo-600 hover:text-indigo-900 bg-indigo-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition mb-1">
-            Retry
+            Thử lại
         </button>
         <button hx-post="/jobs/{{ job.id }}/reset-draft" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
-            hx-confirm="Reset job #{{ job.id }} về DRAFT?" onclick="this.textContent='...'; this.disabled=true;"
+            hx-confirm="Đưa job #{{ job.id }} về nháp (DRAFT)?" onclick="this.textContent='...'; this.disabled=true;"
             class="block w-24 text-center text-amber-600 hover:text-amber-900 bg-amber-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition">
-            ↩ Reset DRAFT
+            ↩ Về nháp
         </button>
 
         {% elif job.status == 'PENDING' %}
@@ -310,13 +301,14 @@
         {% endif %}
         <button hx-post="/jobs/{{ job.id }}/force-run" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             onclick="this.textContent='...'; this.disabled=true;"
-            class="block w-24 text-center text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition mb-1">
-            Force Run
+            class="block w-24 text-center text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition mb-1"
+            title="Bỏ qua lịch/cooldown — vẫn cần worker VPS để đăng">
+            Chạy ngay
         </button>
         <button hx-post="/jobs/{{ job.id }}/cancel" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             onclick="this.textContent='...'; this.disabled=true;"
             class="block w-24 text-center text-red-600 hover:text-red-900 bg-red-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition mb-2">
-            Cancel
+            Hủy
         </button>
         <form hx-post="/jobs/{{ job.id }}/reschedule" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
             class="flex flex-col gap-1 items-start text-xs border-t border-gray-100 pt-2 w-28">
@@ -325,7 +317,7 @@
             <input type="time" name="new_time" required value="{{ job.schedule_ts | time_only }}"
                 class="border border-gray-200 rounded px-1 py-0.5 w-full bg-gray-50 text-gray-700">
             <button type="submit"
-                class="bg-gray-100 border border-gray-200 text-gray-700 hover:bg-gray-200 px-2 py-1 rounded w-full shadow-sm">Reschedule</button>
+                class="bg-gray-100 border border-gray-200 text-gray-700 hover:bg-gray-200 px-2 py-1 rounded w-full shadow-sm">Đổi lịch</button>
         </form>
 
         {% elif job.status == 'AI_PROCESSING' %}
@@ -336,12 +328,12 @@
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                 </path>
             </svg>
-            AI Đang Viết...
+            AI đang viết…
         </span>
         <button hx-post="/jobs/{{ job.id }}/reset-draft" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
-            hx-confirm="Reset job #{{ job.id }} về DRAFT?" onclick="this.textContent='...'; this.disabled=true;"
+            hx-confirm="Đưa job #{{ job.id }} về nháp (DRAFT)?" onclick="this.textContent='...'; this.disabled=true;"
             class="block w-24 text-center text-amber-600 hover:text-amber-900 bg-amber-50 px-2 py-1 rounded text-xs select-none shadow-sm cursor-pointer transition">
-            ↩ Reset DRAFT
+            ↩ Về nháp
         </button>
 
         {% elif job.status == 'RUNNING' %}
@@ -352,32 +344,31 @@
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                 </path>
             </svg>
-            Publishing...
+            Đang đăng…
         </span>
 
         {% elif job.status == 'CANCELLED' %}
-        <span class="text-stone-300 text-xs block w-24 text-center">--</span>
+        <span class="text-stone-300 text-xs block w-24 text-center">—</span>
 
         {% else %}
-        {# DONE — optionally link to external post #}
         {% if job.external_post_id and not job.external_post_id.startswith('safe_mode') %}
         <span class="text-green-400 text-xs"><svg class="w-3 h-3 inline-block mr-0.5" fill="none" viewBox="0 0 24 24"
                 stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>Posted</span>
+            </svg>Đã đăng</span>
         {% else %}
-        <span class="text-gray-300 text-xs text-center block w-24">--</span>
+        <span class="text-gray-300 text-xs text-center block w-24">—</span>
         {% endif %}
         {% endif %}
         
         <button onclick="document.getElementById('jobDetailsDialog').showModal(); htmx.ajax('GET', '/jobs/{{ job.id }}/details', {target:'#job-details-modal-body', swap:'innerHTML'})"
            class="block w-24 text-center text-indigo-600 hover:text-indigo-900 border border-indigo-100 bg-indigo-50/30 px-2 py-1 rounded text-[10px] select-none hover:bg-indigo-50 cursor-pointer transition mt-2 font-bold shadow-sm">
-            View Details
+            Chi tiết
         </button>
 
         <a href="/app/logs?tab=domain&job_id={{ job.id }}" target="_blank"
            class="block w-24 text-center text-slate-500 hover:text-slate-800 border border-slate-200 px-2 py-1 rounded text-[10px] select-none hover:bg-slate-50 cursor-pointer transition mt-2">
-            View Logs
+            Xem log
         </a>
 
     </td>

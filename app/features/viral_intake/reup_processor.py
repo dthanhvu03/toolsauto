@@ -24,9 +24,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from app.features.viral_intake.reup_config import load_reup_config, normalize_preset
+from app.features.viral_intake.reup_config import (
+    load_reup_config,
+    normalize_preset,
+    resolve_intro_path,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _ffmpeg_bin() -> str:
+    from app.features.viral_intake.service import ViralService
+
+    return ViralService.resolve_ffmpeg() or "ffmpeg"
+
+
+def _ffprobe_bin() -> str:
+    from app.features.viral_intake.service import ViralService
+
+    return ViralService.resolve_ffprobe() or "ffprobe"
 
 
 @dataclass
@@ -84,12 +100,37 @@ class ReupProcessor:
     }
 
     @staticmethod
+    def _parse_rate(raw: Any, default: float) -> float:
+        """Parse ffprobe rate like '30/1' or '29.97' → float."""
+        if raw is None or raw == "" or raw == "0/0":
+            return default
+        try:
+            s = str(raw).strip()
+            if "/" in s:
+                a, b = s.split("/", 1)
+                den = float(b)
+                if den == 0:
+                    return default
+                return float(a) / den
+            return float(s)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return default
+
+    @staticmethod
     def _get_video_info(video_path: str) -> dict:
-        """Lấy thông tin video: duration, width, height."""
+        """Lấy thông tin video: duration, WxH, fps, sample_rate, has_audio."""
+        empty = {
+            "duration": 0.0,
+            "width": 0,
+            "height": 0,
+            "has_audio": False,
+            "fps": 30.0,
+            "sample_rate": 44100,
+        }
         try:
             result = subprocess.run(
                 [
-                    "ffprobe", "-v", "quiet",
+                    _ffprobe_bin(), "-v", "quiet",
                     "-print_format", "json",
                     "-show_format", "-show_streams",
                     video_path,
@@ -105,15 +146,26 @@ class ReupProcessor:
                 (s for s in data.get("streams", []) if s.get("codec_type") == "audio"),
                 {},
             )
+            fps = ReupProcessor._parse_rate(
+                video_stream.get("avg_frame_rate") or video_stream.get("r_frame_rate"),
+                30.0,
+            )
+            if fps < 12 or fps > 60:
+                fps = 30.0
+            sr = int(audio_stream.get("sample_rate") or 44100)
+            if sr < 8000 or sr > 96000:
+                sr = 44100
             return {
                 "duration": float(data.get("format", {}).get("duration", 0)),
                 "width": int(video_stream.get("width", 0)),
                 "height": int(video_stream.get("height", 0)),
                 "has_audio": bool(audio_stream),
+                "fps": round(fps, 3),
+                "sample_rate": sr,
             }
         except Exception:
             logger.exception("[ReupProcessor] ffprobe failed")
-            return {"duration": 0, "width": 0, "height": 0, "has_audio": False}
+            return empty
 
     @classmethod
     def _validate_output(
@@ -249,6 +301,217 @@ class ReupProcessor:
         return ",".join(filters), speed_factor, applied
 
     @classmethod
+    def _prepend_intro(
+        cls,
+        main_path: str,
+        intro_path: str,
+        output_path: str,
+        max_intro_sec: float = 3.0,
+        fade_sec: float = 0.28,
+        scale_mode: str = "cover",
+    ) -> tuple[bool, str | None]:
+        """
+        Join [intro ≤ max_intro_sec] + main → output_path.
+
+        Khớp theo video chính: WxH, fps, sample_rate, yuv420p, SAR=1.
+        Scale intro cover (crop) hoặc contain (pad). Optional xfade/acrossfade.
+        """
+        main = cls._get_video_info(main_path)
+        intro_info = cls._get_video_info(intro_path)
+        w = int(main.get("width") or 0)
+        h = int(main.get("height") or 0)
+        if w < 16 or h < 16:
+            return False, "main video has invalid dimensions"
+
+        max_intro_sec = max(0.5, min(5.0, float(max_intro_sec or 3.0)))
+        intro_src_dur = float(intro_info.get("duration") or 0)
+        intro_dur = min(max_intro_sec, intro_src_dur) if intro_src_dur > 0.05 else max_intro_sec
+        intro_dur = max(0.5, intro_dur)
+
+        fps = float(main.get("fps") or 30.0)
+        sr = int(main.get("sample_rate") or 44100)
+        intro_has_audio = bool(intro_info.get("has_audio"))
+        main_has_audio = bool(main.get("has_audio"))
+        main_dur = float(main.get("duration") or 1.0)
+        if main_dur < 0.5:
+            main_dur = 1.0
+
+        mode = (scale_mode or "cover").strip().lower()
+        if mode == "contain":
+            scale_chain = (
+                f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black"
+            )
+        else:
+            # cover: full-bleed, crop center — khớp khung hình body
+            scale_chain = (
+                f"scale={w}:{h}:force_original_aspect_ratio=increase,"
+                f"crop={w}:{h}"
+            )
+
+        # Normalize both legs to identical geometry / timing base
+        v_intro = (
+            f"[0:v]trim=duration={intro_dur:.3f},setpts=PTS-STARTPTS,"
+            f"{scale_chain},setsar=1,fps={fps:.3f},format=yuv420p[v0]"
+        )
+        v_main = (
+            f"[1:v]setpts=PTS-STARTPTS,setsar=1,fps={fps:.3f},format=yuv420p[v1]"
+        )
+
+        a_fmt = f"aformat=sample_rates={sr}:channel_layouts=stereo"
+        parts = [v_intro, v_main]
+        if intro_has_audio:
+            parts.append(
+                f"[0:a]atrim=0:{intro_dur:.3f},asetpts=PTS-STARTPTS,{a_fmt}[a0]"
+            )
+        else:
+            parts.append(
+                f"anullsrc=channel_layout=stereo:sample_rate={sr},"
+                f"atrim=0:{intro_dur:.3f},asetpts=PTS-STARTPTS[a0]"
+            )
+        if main_has_audio:
+            parts.append(f"[1:a]asetpts=PTS-STARTPTS,{a_fmt}[a1]")
+        else:
+            parts.append(
+                f"anullsrc=channel_layout=stereo:sample_rate={sr},"
+                f"atrim=0:{main_dur:.3f},asetpts=PTS-STARTPTS[a1]"
+            )
+
+        fade = max(0.0, min(0.5, float(fade_sec or 0.0)))
+        # Need headroom so xfade offset stays inside intro
+        if fade > 0.04 and intro_dur > (fade + 0.12):
+            offset = intro_dur - fade
+            parts.append(
+                f"[v0][v1]xfade=transition=fade:duration={fade:.3f}:offset={offset:.3f}[outv]"
+            )
+            parts.append(
+                f"[a0][a1]acrossfade=d={fade:.3f}:c1=tri:c2=tri[outa]"
+            )
+        else:
+            parts.append("[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]")
+
+        filter_complex = ";".join(parts)
+
+        cmd = [
+            _ffmpeg_bin(),
+            "-y",
+            "-i",
+            intro_path,
+            "-i",
+            main_path,
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[outv]",
+            "-map",
+            "[outa]",
+            "-r",
+            f"{fps:.3f}",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "23",
+            "-preset",
+            "veryfast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ar",
+            str(sr),
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                err = (result.stderr or "ffmpeg intro concat failed")[-240:]
+                return False, err
+            if not os.path.isfile(output_path) or os.path.getsize(output_path) < 1024:
+                return False, "intro concat produced empty file"
+            return True, None
+        except subprocess.TimeoutExpired:
+            return False, "intro concat timeout"
+        except Exception as e:
+            return False, str(e)
+
+    @classmethod
+    def _maybe_apply_intro(
+        cls,
+        body_path: str,
+        *,
+        page_url: Optional[str],
+        niches: Optional[list[str]],
+        account_id: Optional[int],
+        intro_path: Optional[str],
+        metrics: dict[str, Any],
+    ) -> str:
+        """If intro resolves, prepend onto body and return final path (else body_path)."""
+        cfg = load_reup_config()
+        max_sec = float(cfg.get("intro_max_sec") or 3.0)
+        fade_sec = float(cfg.get("intro_fade_sec") if cfg.get("intro_fade_sec") is not None else 0.28)
+        scale_mode = str(cfg.get("intro_scale_mode") or "cover")
+        resolved = resolve_intro_path(
+            page_url=page_url,
+            niches=niches,
+            account_id=account_id,
+            explicit=intro_path,
+        )
+        metrics["intro_enabled"] = bool(cfg.get("intro_enabled"))
+        metrics["intro_resolved"] = resolved
+        if not resolved:
+            metrics["intro_applied"] = False
+            return body_path
+
+        intro_out = body_path + ".with_intro.tmp.mp4"
+        ok, err = cls._prepend_intro(
+            main_path=body_path,
+            intro_path=resolved,
+            output_path=intro_out,
+            max_intro_sec=max_sec,
+            fade_sec=fade_sec,
+            scale_mode=scale_mode,
+        )
+        if not ok:
+            logger.warning("[ReupProcessor] intro skip: %s", err)
+            metrics["intro_applied"] = False
+            metrics["intro_error"] = (err or "")[:160]
+            try:
+                if os.path.isfile(intro_out):
+                    os.remove(intro_out)
+            except OSError:
+                pass
+            return body_path
+
+        try:
+            os.replace(intro_out, body_path)
+            metrics["intro_applied"] = True
+            metrics["intro_path"] = resolved
+            metrics["intro_max_sec"] = max_sec
+            metrics["intro_fade_sec"] = fade_sec
+            metrics["intro_scale_mode"] = scale_mode
+            logger.info(
+                "[ReupProcessor] Intro applied (%ss fade=%.2fs mode=%s): %s → %s",
+                max_sec,
+                fade_sec,
+                scale_mode,
+                os.path.basename(resolved),
+                os.path.basename(body_path),
+            )
+        except OSError as e:
+            metrics["intro_applied"] = False
+            metrics["intro_error"] = str(e)[:160]
+            try:
+                if os.path.isfile(intro_out):
+                    os.remove(intro_out)
+            except OSError:
+                pass
+        return body_path
+
+    @classmethod
     def process(
         cls,
         input_path: str,
@@ -257,9 +520,13 @@ class ReupProcessor:
         preset: Optional[str] = None,
         force: bool = False,
         output_path: Optional[str] = None,
+        page_url: Optional[str] = None,
+        niches: Optional[list[str]] = None,
+        account_id: Optional[int] = None,
+        intro_path: Optional[str] = None,
     ) -> ReupResult:
         """
-        Pre-process video reup: watermark crop + anti-dupe + duration cap.
+        Pre-process video reup: watermark crop + anti-dupe + duration cap + optional brand intro.
 
         Args:
             input_path: Path to downloaded video
@@ -268,6 +535,8 @@ class ReupProcessor:
             preset: safe | aggressive | reels_short
             force: overwrite existing _reup output
             output_path: explicit output path (optional)
+            page_url / niches / account_id: resolve brand intro (PLAN-044)
+            intro_path: explicit intro override
         """
         started_at = time.time()
         preset_key = normalize_preset(preset)
@@ -321,9 +590,9 @@ class ReupProcessor:
         )
 
         if sys.platform.startswith("win"):
-            cmd = ["ffmpeg", "-y"]
+            cmd = [_ffmpeg_bin(), "-y"]
         else:
-            cmd = ["nice", "-n", "19", "ffmpeg", "-y"]
+            cmd = ["nice", "-n", "19", _ffmpeg_bin(), "-y"]
 
         # Phase C: micro head-trim changes audio fingerprint slightly
         if head_trim > 0 and duration > (head_trim + 2.0):
@@ -382,7 +651,7 @@ class ReupProcessor:
 
             logger.info("[ReupProcessor] Emergency fast-trim > %.0fs...", max_duration)
             trim_cmd = [
-                "ffmpeg", "-y", "-i", input_path,
+                _ffmpeg_bin(), "-y", "-i", input_path,
                 "-t", str(max_duration),
                 "-c", "copy",
                 temp_path,
@@ -466,12 +735,31 @@ class ReupProcessor:
                 "max_duration": max_duration,
                 **applied,
             }
+            output_path = cls._maybe_apply_intro(
+                output_path,
+                page_url=page_url,
+                niches=niches,
+                account_id=account_id,
+                intro_path=intro_path,
+                metrics=metrics,
+            )
+            if metrics.get("intro_applied"):
+                # Refresh size/duration after intro concat
+                try:
+                    out_info2 = cls._get_video_info(output_path)
+                    metrics["output_duration"] = round(float(out_info2.get("duration") or 0), 2)
+                    metrics["output_size_mb"] = round(
+                        os.path.getsize(output_path) / 1024 / 1024, 2
+                    )
+                except OSError:
+                    pass
+                metrics["runtime_ms"] = int((time.time() - started_at) * 1000)
             logger.info(
                 "[ReupProcessor] Done preset=%s runtime=%sms: %.1fMB → %.1fMB | %s",
                 preset_key,
-                runtime_ms,
+                metrics["runtime_ms"],
                 in_size,
-                out_size,
+                metrics.get("output_size_mb", out_size),
                 os.path.basename(output_path),
             )
             return ReupResult(success=True, output_path=output_path, metrics=metrics)

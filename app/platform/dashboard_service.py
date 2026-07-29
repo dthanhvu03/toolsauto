@@ -231,13 +231,27 @@ class DashboardService:
             .all()
         )
         accounts = {acc.id: acc.name for acc in db.query(Account).all()}
-        
+        from app.features.viral_intake.service import ViralService
+
+        reup_by_id = ViralService.batch_reup_by_id(db, items)
+        jobs_by_id = ViralService.batch_jobs_by_material(db, {it.id for it in items})
+        banner = ViralService.pipeline_banner(db)
+
         return {
-            "items": [{"item": it, "account_name": accounts.get(it.scraped_by_account_id, "Unknown")} for it in items],
+            "items": [
+                {
+                    "item": it,
+                    "account_name": accounts.get(it.scraped_by_account_id, "Unknown"),
+                    "has_reup": bool(reup_by_id.get(it.id)),
+                    "job": jobs_by_id.get(it.id),
+                }
+                for it in items
+            ],
             "page": page,
             "per_page": per_page,
             "total": total,
             "total_pages": total_pages,
+            **banner,
         }
 
     @staticmethod

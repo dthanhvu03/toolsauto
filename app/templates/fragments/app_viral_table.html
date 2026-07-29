@@ -1,41 +1,78 @@
-<div id="viral-table" class="border border-[var(--border)] rounded-lg overflow-x-auto">
+<div id="viral-table" class="border border-[var(--border)] rounded-lg overflow-x-auto bg-[var(--color-stone)]">
+  {% if not ffmpeg_ok %}
+  <div class="px-4 py-3 border-b border-[var(--color-danger-border)] bg-[var(--color-danger-dim)] text-sm text-[var(--color-ink)] leading-relaxed">
+    <strong class="text-[var(--color-danger)]">Thiếu ffmpeg/ffprobe</strong> trên PATH —
+    nút Xử lý sẽ lỗi ở bước reup. Cài ffmpeg rồi mở lại terminal
+    (<code class="px-1 rounded bg-[var(--color-ledge)] text-[12px]">winget install Gyan.FFmpeg</code>).
+  </div>
+  {% endif %}
+  {% if show_worker_banner %}
+  <div class="px-4 py-3 border-b border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-sm text-[var(--color-ink)] leading-relaxed">
+    Có <strong class="text-[var(--color-torch)]">{{ new_count }}</strong> video
+    <strong class="text-[var(--color-torch)]">mới</strong> chưa vào pipeline
+    <span class="text-[var(--color-ink-soft)]">(chưa có job gắn viral)</span>.
+    Local <code class="px-1 rounded bg-[var(--color-ledge)] text-[var(--color-ink)] text-[12px]">start.ps1</code> chỉ chạy Web —
+    bấm <strong class="text-[var(--color-torch)]">Xử lý 1/3 mới</strong> bên trên, hoặc chạy worker Maintenance trên VPS.
+    <a href="/app/jobs" class="ml-1 font-semibold text-[var(--color-torch)] underline underline-offset-2 hover:brightness-110">Hàng đợi job →</a>
+  </div>
+  {% elif new_count and new_count > 0 %}
+  <div class="px-4 py-2 border-b border-[var(--border)] bg-[var(--color-face)] text-xs text-[var(--color-ink-soft)]">
+    {{ new_count }} video mới · {{ jobs_viral|default(0) }} job gắn viral trong hệ thống.
+  </div>
+  {% endif %}
+
+  <div class="px-4 py-2.5 border-b border-[var(--border)] bg-[var(--color-face)] flex flex-wrap gap-2 items-center text-[11px]">
+    <button type="button" class="px-2 py-1 rounded border border-sky-400/30 bg-sky-500/10 text-sky-200 font-semibold"
+      onclick="document.getElementById('vStatus').value='NEW'; window.refreshViral(1)" title="NEW">Mới {{ status_counts.NEW|default(0) }}</button>
+    <button type="button" class="px-2 py-1 rounded border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] font-semibold"
+      onclick="document.getElementById('vStatus').value='PROCESSING'; window.refreshViral(1)" title="PROCESSING">Đang xử lý {{ status_counts.PROCESSING|default(0) }}</button>
+    <button type="button" class="px-2 py-1 rounded border border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)] font-semibold"
+      onclick="document.getElementById('vStatus').value='DRAFTED'; window.refreshViral(1)" title="DRAFTED">Đã tạo job {{ status_counts.DRAFTED|default(0) }}</button>
+    <button type="button" class="px-2 py-1 rounded border border-[var(--color-danger-border)] bg-[var(--color-danger-dim)] text-[var(--color-danger)] font-semibold"
+      onclick="document.getElementById('vStatus').value='FAILED'; window.refreshViral(1)" title="FAILED">Lỗi {{ status_counts.FAILED|default(0) }}</button>
+    <button type="button" class="px-2 py-1 rounded border border-[var(--border)] text-[var(--color-mist)]"
+      onclick="document.getElementById('vStatus').value=''; window.refreshViral(1)">Tất cả</button>
+  </div>
+
   <div
-    class="px-4 py-3 bg-gray-50 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-    <div class="text-xs text-[var(--muted)]">
-      {{ total|default(0) }} total · Page {{ page }} / {{ total_pages }}
+    class="px-4 py-3 bg-[var(--color-face)] border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div class="text-xs text-[var(--color-mist)]">
+      {{ total|default(0) }} mục · Trang {{ page }} / {{ total_pages }}
+      <span id="viral-process-indicator" class="htmx-indicator text-[var(--color-torch)] font-medium ml-2">Đang xử lý (yt-dlp + reup)…</span>
     </div>
     <div class="flex gap-2">
       {% if page > 1 %}
-      <button class="app-btn min-h-[44px] min-w-[44px]" aria-label="Previous Page"
-        onclick="window.refreshViral({{ page - 1 }})">← Prev</button>
+      <button class="app-btn min-h-[44px] min-w-[44px]" aria-label="Trang trước"
+        onclick="window.refreshViral({{ page - 1 }})">← Trước</button>
       {% endif %}
-      {% if page < total_pages %} <button class="app-btn min-h-[44px] min-w-[44px]" aria-label="Next Page"
-        onclick="window.refreshViral({{ page + 1 }})">Next
-        →</button>
+      {% if page < total_pages %} <button class="app-btn min-h-[44px] min-w-[44px]" aria-label="Trang sau"
+        onclick="window.refreshViral({{ page + 1 }})">Sau →</button>
         {% endif %}
     </div>
   </div>
 
   <table class="min-w-full table-fixed border-collapse">
-    <thead class="bg-white">
-      <tr class="border-b border-[var(--border)] text-xs text-gray-500">
+    <thead class="bg-[var(--color-deep)]">
+      <tr class="border-b border-[var(--border)] text-xs text-[var(--color-mist)]">
         <th class="w-16 px-4 py-2 text-left uppercase">ID</th>
-        <th class="w-24 px-4 py-2 text-center uppercase">Thumbnail</th>
-        <th class="w-[38%] px-4 py-2 text-left uppercase">Title / URL</th>
-        <th class="w-36 px-4 py-2 text-left uppercase">Views</th>
-        <th class="w-52 px-4 py-2 text-center uppercase">Account</th>
-        <th class="w-64 px-4 py-2 text-left uppercase">Status</th>
-        <th class="w-20 px-4 py-2 text-right uppercase">Actions</th>
+        <th class="w-24 px-4 py-2 text-center uppercase">Ảnh</th>
+        <th class="w-[38%] px-4 py-2 text-left uppercase">Tiêu đề / URL</th>
+        <th class="w-36 px-4 py-2 text-left uppercase">Lượt xem</th>
+        <th class="w-52 px-4 py-2 text-center uppercase">Tài khoản</th>
+        <th class="w-64 px-4 py-2 text-left uppercase">Trạng thái / Job</th>
+        <th class="w-28 px-4 py-2 text-right uppercase">Thao tác</th>
       </tr>
     </thead>
-    <tbody class="bg-white">
+    <tbody class="bg-[var(--color-stone)]">
       {% for row in items %}
       {% set item = row.item %}
       {% set account_name = row.account_name %}
+      {% set has_reup = row.has_reup %}
+      {% set job = row.job %}
       {% include 'fragments/viral_row.html' %}
       {% else %}
       <tr>
-        <td colspan="7" class="p-4 text-center text-sm text-[var(--muted)]">No results.</td>
+        <td colspan="7" class="p-4 text-center text-sm text-[var(--muted)]">Không có kết quả.</td>
       </tr>
       {% endfor %}
     </tbody>

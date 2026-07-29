@@ -56,6 +56,15 @@ Trung tâm lưu trữ các tác vụ đăng bài, AI sinh caption và tracking.
 - `auto_comment_text` (TEXT): Mẫu bình luận chèn link sau khi đăng.
 - Timestamps: `locked_at`, `last_heartbeat_at`, `started_at`, `finished_at`, `created_at`
 
+### 2b. `viral_materials` (PLAN-043)
+
+Kho video quét / intake trước khi tạo job.
+
+- `status`: `NEW` → `PROCESSING` → `DRAFTED` | `FAILED` (+ `REUP`, `BOOST_PENDING`)
+- `process_tries` (INT, default 0): số lần intake; auto-retry FAILED retryable khi &lt; 3
+- `last_error` (TEXT): lý do FAILED
+- Stale `PROCESSING` &gt; 30 phút → recover về `NEW`
+
 ### 3. `system_state`
 
 Trạng thái global của Worker để điều khiển từ Dashboard.

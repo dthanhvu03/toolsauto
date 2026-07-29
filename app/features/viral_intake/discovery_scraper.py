@@ -17,7 +17,7 @@ import time
 from urllib.parse import quote
 
 from app.config import TIKTOK_HOST
-from app.core.yt_dlp_path import yt_dlp_binary
+from app.core.yt_dlp_path import yt_dlp_cmd
 from app.constants import ViralStatus
 
 
@@ -37,19 +37,24 @@ class DiscoveryScraper:
         tag = keyword.strip().replace(" ", "").lower()
         url = f"{TIKTOK_HOST}/tag/{quote(tag)}"
 
-        cmd = [
-            yt_dlp_binary(),
+        cmd = yt_dlp_cmd(
             "--flat-playlist",
             "--dump-json",
-            "--playlist-end", str(max_results),
+            "--playlist-end",
+            str(max_results),
             "--no-warnings",
             url,
-        ]
+        )
 
         logger.info("[DISCOVERY] Searching hashtag '%s' → %s (max %d)", keyword, url, max_results)
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        except FileNotFoundError:
+            logger.error(
+                "[DISCOVERY] yt-dlp not found. Install: pip install yt-dlp==2026.3.3"
+            )
+            return []
         except subprocess.TimeoutExpired:
             logger.error("[DISCOVERY] yt-dlp timeout for hashtag: %s", keyword)
             return []

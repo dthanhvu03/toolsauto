@@ -8,6 +8,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+# Refresh PATH from Machine+User so winget tools (ffmpeg) work without closing Cursor
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path", "User")
+
 if ($Port -le 0) {
     if ($env:WEB_PORT) {
         $Port = [int]$env:WEB_PORT

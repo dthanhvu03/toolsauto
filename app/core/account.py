@@ -391,8 +391,22 @@ class AccountService:
                 del current_niches[url]
             acc.page_niches_map = current_niches
             
-            # 3. Update competitor_urls
-            comp_urls = [c.strip() for c in competitors.replace("\r\n", "\n").split("\n") if c.strip()]
+            # 3. Update competitor_urls (normalize TikTok pastes so scan keeps @handle)
+            comp_urls = [
+                AccountService.normalize_tiktok_source_url(c)
+                for c in competitors.replace("\r\n", "\n").split("\n")
+                if c.strip()
+            ]
+            comp_urls = [c for c in comp_urls if c]
+            # de-dupe preserve order
+            seen: set[str] = set()
+            unique_comps: list[str] = []
+            for c_url in comp_urls:
+                key = c_url.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                unique_comps.append(c_url)
             try:
                 raw_comps = json.loads(acc.competitor_urls or "[]") if acc.competitor_urls else []
                 if not isinstance(raw_comps, list):
@@ -401,7 +415,7 @@ class AccountService:
                 raw_comps = []
                 
             new_comps = [c for c in raw_comps if not (isinstance(c, dict) and c.get('target_page') == url)]
-            for c_url in comp_urls:
+            for c_url in unique_comps:
                 new_comps.append({"target_page": url, "url": c_url})
                 
             acc.competitor_urls = json.dumps(new_comps, ensure_ascii=False) if new_comps else None
@@ -708,6 +722,41 @@ class AccountService:
         return u.rstrip("/")
 
     @staticmethod
+    def normalize_tiktok_source_url(raw: str | None) -> str:
+        """Normalize pasted TikTok source to https://www.tiktok.com/@handle.
+
+        Accepts: full URL, tiktok.com/@x, @x, or bare handle.
+        """
+        s = (raw or "").strip()
+        if not s:
+            return ""
+        s = s.split("?")[0].split("#")[0].strip().rstrip("/")
+        lower = s.lower()
+
+        handle = ""
+        if "tiktok.com/" in lower:
+            # tiktok.com/@handle or www.tiktok.com/@handle (with/without scheme)
+            at = s.find("@")
+            if at >= 0:
+                handle = s[at + 1 :].strip().strip("/")
+            else:
+                # tiktok.com/handle without @
+                path = s.split("tiktok.com/", 1)[-1]
+                handle = path.strip().strip("/")
+        elif s.startswith("@"):
+            handle = s[1:].strip().strip("/")
+        elif "/" not in s and " " not in s and "." not in s:
+            # bare handle: rinabeauty859
+            handle = s.strip()
+        else:
+            return s
+
+        handle = handle.split("/")[0].strip()
+        if not handle:
+            return s
+        return f"https://www.tiktok.com/@{handle}"
+
+    @staticmethod
     def extract_tiktok_competitors(account: Account) -> list[dict[str, Any]]:
         """Return list of {url, target_page} filtered to TikTok competitor URLs for an account."""
         out: list[dict[str, Any]] = []
@@ -730,6 +779,7 @@ class AccountService:
                 tp = None
             if not url:
                 continue
+            url = AccountService.normalize_tiktok_source_url(url)
             if "tiktok.com/@" not in url.lower():
                 continue
             out.append({"url": url, "target_page": tp})
@@ -738,11 +788,7 @@ class AccountService:
     @staticmethod
     def build_tiktok_links_context_data(db: Session, query_params: Any) -> dict[str, Any]:
         """Data for TikTok Links templates (no Request object)."""
-        import math
-
-        from app.core.database.models import ViralMaterial
-
-        tab = (query_params.get("tab") or "viral").strip()
+        tab = (query_params.get("tab") or "competitors").strip()
         q = (query_params.get("q") or "").strip().lower()
         status = (query_params.get("status") or "").strip().upper()
         try:
@@ -758,6 +804,11 @@ class AccountService:
         except Exception:
             per_page = 200
         per_page = max(50, min(500, per_page))
+
+        # Role split (PLAN-042): this page is competitor inventory only.
+        # Viral video list lives on /app/viral — skip heavy viral query.
+        if tab == "viral":
+            tab = "competitors"
 
         accounts = db.query(Account).order_by(Account.name.asc()).all()
         competitor_groups: dict[str, dict[str, list[str]]] = {}
@@ -801,25 +852,6 @@ class AccountService:
                 competitor_groups.setdefault(tp, {}).setdefault(acc.name, []).append(url)
                 competitor_total += 1
 
-        viral_query = db.query(ViralMaterial).filter(ViralMaterial.platform == "tiktok")
-        if status:
-            viral_query = viral_query.filter(ViralMaterial.status == status)
-        if min_views > 0:
-            viral_query = viral_query.filter(ViralMaterial.views >= min_views)
-        if q:
-            viral_query = viral_query.filter(ViralMaterial.url.ilike(f"%{q}%"))
-
-        viral_total = viral_query.count()
-        total_pages = max(1, int(math.ceil(viral_total / per_page))) if viral_total else 1
-        if page > total_pages:
-            page = total_pages
-        viral_rows = (
-            viral_query.order_by(ViralMaterial.created_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-            .all()
-        )
-
         return {
             "tab": tab,
             "q": q,
@@ -827,11 +859,11 @@ class AccountService:
             "min_views": min_views,
             "page": page,
             "per_page": per_page,
-            "total_pages": total_pages,
+            "total_pages": 1,
             "competitor_total": competitor_total,
             "competitor_groups": competitor_groups,
-            "viral_rows": viral_rows,
-            "viral_total": viral_total,
+            "viral_rows": [],
+            "viral_total": 0,
             "page_index": {
                 k: {"name": v.get("name"), "niches": sorted(list(v.get("niches") or []))}
                 for k, v in page_index.items()

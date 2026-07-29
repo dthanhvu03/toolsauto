@@ -81,3 +81,9 @@ storage/
 
 #Ignore cursor AI rules
 .cursor\rules\codacy.mdc
+
+# Codacy CLI local binary cache (do not commit)
+.codacy-cli-v2/
+.codacy/logs/
+.codacy/tools-configs/
+.codacy/cli-config.yaml

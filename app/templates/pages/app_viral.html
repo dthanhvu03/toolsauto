@@ -4,31 +4,54 @@
 {% block title %}Viral • Auto Publisher{% endblock %}
 {% block page_breadcrumb %}{{ silo_breadcrumb('Facebook', 'Nội dung viral') }}{% endblock %}
 {% block page_title %}Nội dung viral{% endblock %}
-{% block page_subtitle %}Pagination + filter để không phải lướt dài.{% endblock %}
+{% block page_subtitle %}Luồng VIP: quét → xử lý → job duyệt. Bộ đếm + thử lại + kiểm tra ffmpeg.{% endblock %}
 
 {% block content %}
+  <style>
+    .viral-busy-btn.htmx-request { opacity: 0.85; cursor: wait; }
+    .viral-busy-btn.htmx-request .btn-idle { display: none !important; }
+    .viral-busy-btn .btn-busy { display: none !important; }
+    .viral-busy-btn.htmx-request .btn-busy {
+      display: inline-flex !important;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+    #viral-busy-bar:not(.hidden) { display: flex; }
+  </style>
+
+  <div id="viral-busy-bar"
+       class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[120] items-center gap-3 px-4 py-3 rounded-xl border border-[var(--color-torch-border)] bg-[var(--color-face)] shadow-[var(--shadow-panel)] text-sm text-[var(--color-ink)]">
+    <svg class="animate-spin h-4 w-4 text-[var(--color-torch)] shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path>
+    </svg>
+    <span id="viral-busy-text">Đang xử lý video… có thể mất 1–2 phút (yt-dlp + reup).</span>
+  </div>
+
   <div class="app-card p-4">
-    <div class="sticky top-[56px] lg:top-0 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 border-b border-slate-200 -mx-4 px-4 py-3 rounded-t-xl">
+    <div class="sticky top-[56px] lg:top-0 z-10 bg-[var(--color-stone)]/95 backdrop-blur border-b border-[var(--border)] -mx-4 px-4 py-3 rounded-t-xl">
       <div class="flex items-end justify-between gap-3 flex-wrap">
         <div class="flex items-end gap-3 flex-wrap">
         <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Search URL</label>
-          <input id="vQ" class="app-input w-72 max-w-full" placeholder="tiktok.com / reel / ..." />
+          <label class="block text-xs text-[var(--muted)] mb-1">Tìm URL</label>
+          <input id="vQ" class="app-input w-72 max-w-full" placeholder="tiktok.com / reel / …" />
         </div>
         <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Status</label>
+          <label class="block text-xs text-[var(--muted)] mb-1">Trạng thái</label>
           <select id="vStatus" class="app-select">
-            <option value="">All</option>
-            <option value="NEW">NEW</option>
-            <option value="DRAFTED">DRAFTED</option>
-            <option value="FAILED">FAILED</option>
-            <option value="REUP">REUP</option>
+            <option value="">Tất cả</option>
+            <option value="NEW">Mới (NEW)</option>
+            <option value="PROCESSING">Đang xử lý</option>
+            <option value="DRAFTED">Đã tạo job</option>
+            <option value="FAILED">Lỗi (FAILED)</option>
+            <option value="REUP">Reup</option>
+            <option value="BOOST_PENDING">Chờ boost</option>
           </select>
         </div>
         <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Platform</label>
+          <label class="block text-xs text-[var(--muted)] mb-1">Nền tảng</label>
           <select id="vPlatform" class="app-select">
-            <option value="">All</option>
+            <option value="">Tất cả</option>
             <option value="tiktok">tiktok</option>
             <option value="facebook">facebook</option>
             <option value="youtube">youtube</option>
@@ -36,11 +59,11 @@
           </select>
         </div>
         <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
+          <label class="block text-xs text-[var(--muted)] mb-1">Views tối thiểu</label>
           <input id="vMin" type="number" min="0" step="500" value="0" class="app-input w-32" />
         </div>
         <div>
-          <label class="block text-xs text-[var(--muted)] mb-1">Per page</label>
+          <label class="block text-xs text-[var(--muted)] mb-1">Mỗi trang</label>
           <select id="vPer" class="app-select">
             <option value="50">50</option>
             <option value="100" selected>100</option>
@@ -49,22 +72,46 @@
         </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <button class="app-btn" id="vPresetNew">NEW</button>
-          <button class="app-btn" id="vPresetFailed">FAILED</button>
-          <button id="vApply" class="app-btn app-btn-primary">Apply</button>
-          <label class="inline-flex items-center gap-2 text-sm text-slate-700 select-none">
-            <input id="vAuto" type="checkbox" class="h-4 w-4 rounded border-slate-300" />
-            Auto-refresh
+          <button class="app-btn" id="vPresetNew" title="Lọc NEW">Mới</button>
+          <button class="app-btn" id="vPresetFailed" title="Lọc FAILED">Lỗi</button>
+          <button id="vApply" class="app-btn app-btn-primary">Áp dụng</button>
+          <label class="inline-flex items-center gap-2 text-sm text-[var(--color-ink-soft)] select-none">
+            <input id="vAuto" type="checkbox" class="h-4 w-4 rounded border-[var(--border)]" />
+            Tự làm mới
           </label>
-          <button id="vForceScan" class="app-btn border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  hx-post="/viral/force-scan" hx-target="#viral-table" hx-swap="outerHTML">Quét ngay</button>
+          <button id="vForceScan" class="viral-busy-btn app-btn border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] hover:brightness-110"
+                  hx-post="/viral/force-scan" hx-swap="none"
+                  hx-indicator="this" hx-disabled-elt="this">
+            <span class="btn-idle">Quét ngay</span>
+            <span class="btn-busy htmx-indicator">Đang quét…</span>
+          </button>
+          <button class="viral-busy-btn app-btn border-indigo-400/40 bg-indigo-500/15 text-indigo-200 hover:brightness-110"
+                  hx-post="/viral/process-new" hx-vals='{"limit": 1}' hx-swap="none"
+                  hx-indicator="this" hx-disabled-elt="this"
+                  title="Tải + reup + tạo job cho 1 video NEW (views cao nhất)">
+            <span class="btn-idle">Xử lý 1 mới</span>
+            <span class="btn-busy htmx-indicator">Đang chạy…</span>
+          </button>
+          <button class="viral-busy-btn app-btn border-[var(--color-torch-border)] bg-[var(--color-torch)] text-[var(--color-ink-inverse)] hover:brightness-110"
+                  hx-post="/viral/process-new" hx-vals='{"limit": 3}' hx-swap="none"
+                  hx-indicator="this" hx-disabled-elt="this"
+                  title="Xử lý tối đa 3 video NEW — có thể mất vài phút">
+            <span class="btn-idle">Xử lý 3 mới</span>
+            <span class="btn-busy htmx-indicator">Đang chạy…</span>
+          </button>
+          <span id="viral-scan-indicator" class="htmx-indicator text-[var(--color-torch)] text-xs font-medium">Đang quét…</span>
         </div>
       </div>
+      <p class="mt-2 text-[11px] text-[var(--color-mist)]">
+        Cấu hình kênh nguồn: <a class="underline text-[var(--color-torch)]" href="/app/accounts">Tài khoản → Target Pages</a>
+        · Kho kênh: <a class="underline text-[var(--color-torch)]" href="/app/tiktok-links">Nguồn TikTok</a>
+        · Job: <a class="underline text-[var(--color-torch)]" href="/app/jobs">Hàng đợi</a>
+      </p>
     </div>
 
     <div class="mt-4 overflow-x-auto">
       <div id="viral-table" hx-get="/app/viral/table?page=1&per_page=100" hx-trigger="load" hx-swap="outerHTML">
-        <div class="p-4 text-sm text-[var(--muted)]">Đang tải...</div>
+        <div class="p-4 text-sm text-[var(--muted)]">Đang tải…</div>
       </div>
     </div>
   </div>
@@ -130,6 +177,43 @@
     initViralFromQuery();
     const initPage = parseInt(new URL(window.location.href).searchParams.get('page') || '1', 10) || 1;
     refreshViral(initPage);
+
+    function isViralBusyRequest(path) {
+      return /\/viral\/(\d+\/(process|retry)|process-new|force-scan)/.test(path || '');
+    }
+    function setViralBusy(on, text) {
+      const bar = document.getElementById('viral-busy-bar');
+      const label = document.getElementById('viral-busy-text');
+      if (!bar) return;
+      if (text && label) label.textContent = text;
+      bar.classList.toggle('hidden', !on);
+    }
+    document.body.addEventListener('refreshViralTable', () => {
+      const page = parseInt(new URL(window.location.href).searchParams.get('page') || '1', 10) || 1;
+      refreshViral(page);
+    });
+    document.body.addEventListener('htmx:beforeRequest', (evt) => {
+      const path = evt.detail?.pathInfo?.requestPath
+        || evt.detail?.requestConfig?.path
+        || evt.detail?.elt?.getAttribute?.('hx-post')
+        || '';
+      if (!isViralBusyRequest(path)) return;
+      const idMatch = path.match(/\/viral\/(\d+)\//);
+      const msg = idMatch
+        ? `Đang xử lý video #${idMatch[1]}… có thể mất 1–2 phút.`
+        : 'Đang chạy pipeline viral… có thể mất 1–2 phút.';
+      setViralBusy(true, msg);
+      if (typeof window.showToast === 'function') {
+        window.showToast(msg, 'warning');
+      }
+    });
+    document.body.addEventListener('htmx:afterRequest', (evt) => {
+      const path = evt.detail?.pathInfo?.requestPath
+        || evt.detail?.requestConfig?.path
+        || evt.detail?.elt?.getAttribute?.('hx-post')
+        || '';
+      if (!isViralBusyRequest(path)) return;
+      setViralBusy(false);
+    });
   </script>
 {% endblock %}
-

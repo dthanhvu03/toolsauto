@@ -413,7 +413,7 @@
                 toast.classList.add('toast-exit');
                 setTimeout(() => toast.remove(), 300);
             }
-        }, 3000);
+        }, type === 'warning' ? 8000 : 3000);
     };
 
     // HTMX Toast trigger listener
