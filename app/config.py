@@ -60,12 +60,16 @@ else:
     OUTPUTS_DIR = LEGACY_OUTPUTS_DIR
 
 # Backward-compatible aliases used across the codebase.
+# DONE_DIR / FAILED_DIR: legacy archive folders — cleanup deletes media in place (no move).
+# Not mkdir'd; kept for path/docs compat only.
 DONE_DIR = CONTENT_DIR / "done"
 FAILED_DIR = CONTENT_DIR / "failed"
 CONTENT_PROFILES_DIR = PROFILES_DIR
 LOGS_DIR = BASE_DIR / "logs"
 DEBUG_STEPS_DIR = LOGS_DIR / "debug_steps"
 CONTENT_MEDIA_DIR = CONTENT_DIR / "media"
+# Legacy alias only — no job inbox/watcher. Do not drop files here expecting jobs.
+# Prefer CONTENT_MEDIA_DIR (UI upload) or REUP_DIR (viral). Kept for path compat; not mkdir'd.
 CONTENT_VIDEO_DIR = CONTENT_DIR / "videos"
 CONTENT_PROCESSED_DIR = CONTENT_DIR / "processed"
 
@@ -327,15 +331,12 @@ for d in [
     STORAGE_OUTROS_DIR,
     THREADS_MEDIA_DIR,
     CONTENT_DIR,
-    DONE_DIR,
-    FAILED_DIR,
     REUP_DIR,
     PROFILES_DIR,
     LOGS_DIR,
     DEBUG_STEPS_DIR,
     THUMB_DIR,
     CONTENT_MEDIA_DIR,
-    CONTENT_VIDEO_DIR,
     CONTENT_PROCESSED_DIR,
     OUTPUTS_DIR,
 ]:

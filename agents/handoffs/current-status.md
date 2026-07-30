@@ -2,26 +2,17 @@
 
 ## System State
 
-- Local: **http://127.0.0.1:8002** (web only; Publisher/Maintenance chạy tay khi trial)
-- Reels 1080 opt-in ON
-- Job **#5** (Viral #4 → kids0810): **DONE** — `post_url` đã backfill đúng `/reel/`
+- Local: **http://127.0.0.1:8002** (web only khi `start.ps1`)
+- Legacy content folders soft-retired: `videos/`, `done/`, `failed/` (ẩn System panel, không mkdir)
+- Vẫn dùng: `media/`, `processed/`, `outputs/`, `reup/`
 
 ## Done This Session
 
-- Prefer public `/reel/{id}` sau publish (toast → redirect → Reels scan; GraphQL chỉ last resort)
-- Normalize bare `facebook.com/{id}` → `/reel/{id}`
-- Backfill Job #5: match caption trên grid kids0810
-- Helpers smoke OK (`_extract_reel_id` / `_normalize_post_url`)
-
-## Post URL (Job #5)
-
-https://www.facebook.com/reel/1580284210125564
-
-(URL GraphQL cũ `facebook.com/1034881886179835` không phải permalink công khai.)
+- Soft-retire `videos/` + `done/` + `failed/` (panel/docs/config mkdir)
+- Sửa docstring cleanup: delete in place, không archive vào `done/`/`failed/`
+- Alias config giữ để compat; không xóa folder vật lý trên đĩa
 
 ## Next Action
 
-1. Anh mở link trên xác nhận Reel kids0810
-2. (Tuỳ chọn) chạy MetricsChecker / Maintenance để quét views Job #5
-3. Lần đăng sau: log `verified_via` = toast|redirect|reels_scan (không còn graphql_fallback nếu scan OK)
-4. Commit khi yêu cầu
+1. Anh dùng UI → `…/content/media/` hoặc Viral → `storage/media/reup/`
+2. Commit khi yêu cầu

@@ -64,6 +64,16 @@ Lần đầu boot, `migrate_legacy_runtime_config_files()` copy từ vị trí c
 | `DEBUG_STEPS_DIR` | `logs/debug_steps/` | cùng |
 | `RUNTIME_CONFIG_DIR` | `storage/db/config/` | cùng |
 
+**Inbox / legacy folders:** Các path sau là legacy — **không** watcher, **không** archive job vào đó; System panel không hiện stats:
+
+| Alias | Path | Thực tế |
+|-------|------|---------|
+| `CONTENT_VIDEO_DIR` | `…/content/videos/` | Không phải inbox. Upload UI → `CONTENT_MEDIA_DIR`; viral → `REUP_DIR`. |
+| `DONE_DIR` | `…/content/done/` | Cleanup **xóa** media job DONE tại chỗ (không move vào đây). |
+| `FAILED_DIR` | `…/content/failed/` | Cleanup **xóa** media job FAILED tại chỗ. |
+
+**Đang dùng:** `CONTENT_MEDIA_DIR` (upload), `CONTENT_PROCESSED_DIR` (ffmpeg), `OUTPUTS_DIR` (temp / SystemMonitor), `REUP_DIR` (viral). Root `content/` chỉ khi `STORAGE_LAYOUT_MODE=legacy`; mặc định runtime là `storage/media/content/`. Scope docs cũ “upload + inbox” chưa ship.
+
 **Quy tắc code:** không hardcode `content/media` hay `reup_videos/` — import từ `app.config`. Rebase path DB cũ: [`app/core/storage_paths.py`](../app/core/storage_paths.py).
 
 ## Ops khác (không phải app config)
