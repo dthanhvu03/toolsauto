@@ -6,7 +6,12 @@ from typing import Dict, List, Tuple, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.core.database.models import AffiliateLink
-from app.core.compliance.facebook_compliance import compliance_checker, Severity, log_violation
+from app.core.compliance.facebook_compliance import (
+    compliance_checker,
+    Severity,
+    log_violation,
+    apply_content_type_policy,
+)
 from app.core.ai.affiliate_text import AffiliateAIService
 from app.core.ai.use_cases import AIUseCases
 from app.constants import JobStatus
@@ -50,7 +55,11 @@ class AffiliateService:
         if not keyword or not url or not comment_template:
             return False, {"error": "Vui lòng nhập đầy đủ Keyword, URL và Câu bình luận."}
 
-        save_check = compliance_checker.check(comment_template)
+        save_check = apply_content_type_policy(
+            compliance_checker.check(comment_template),
+            "manual_save",
+            job_id=None,
+        )
         if save_check.status == Severity.VIOLATION:
             log_violation(
                 content=comment_template,

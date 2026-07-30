@@ -362,6 +362,42 @@ def log_violation(
         logger.error("[Compliance] Failed to log violation: %s", e)
 
 
+# Categories blocked on captions only — COMMENT / affiliate templates may include links.
+_CAPTION_ONLY_CATEGORIES = frozenset({"direct_link"})
+
+
+def apply_content_type_policy(
+    result: ComplianceResult,
+    content_type: str,
+    *,
+    job_id: Optional[int] = None,
+) -> ComplianceResult:
+    """Drop caption-only categories when scanning comment-like content."""
+    ct = (content_type or "").strip().lower()
+    if ct not in {"comment", "manual_save", "affiliate_template"}:
+        return result
+    violations = list(result.violations)
+    if not violations:
+        return result
+    skipped = [v for v in violations if v.category in _CAPTION_ONLY_CATEGORIES]
+    if not skipped:
+        return result
+    logger.info(
+        "[Compliance] %s: skipping caption-only hits %s (job_id=%s)",
+        ct,
+        [v.evidence for v in skipped],
+        job_id,
+    )
+    kept = [v for v in violations if v.category not in _CAPTION_ONLY_CATEGORIES]
+    if any(v.severity == Severity.VIOLATION for v in kept):
+        status = Severity.VIOLATION
+    elif kept:
+        status = Severity.WARNING
+    else:
+        status = Severity.SAFE
+    return ComplianceResult(status=status, violations=kept)
+
+
 def check_before_publish(
     comment_text: str,
     *,
@@ -370,8 +406,15 @@ def check_before_publish(
 ) -> str:
     """
     Hard block VIOLATION. SAFE and WARNING pass through (WARNING logged if any hits).
+
+    For comments, skip direct_link hits (http/shopee/…) so affiliate comments can post;
+    those rules still hard-block captions.
     """
-    result = compliance_checker.check(comment_text)
+    result = apply_content_type_policy(
+        compliance_checker.check(comment_text),
+        content_type,
+        job_id=job_id,
+    )
 
     if result.violations:
         log_violation(
