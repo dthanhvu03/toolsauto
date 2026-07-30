@@ -126,7 +126,7 @@
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Affiliate URL</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">URL affiliate</label>
                         <input type="url" name="url" id="url" required placeholder="https://shope.ee/..."
                             class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
@@ -138,6 +138,13 @@
                             class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
                         <p id="complianceManualHint" class="text-xs mt-1 hidden"></p>
                         <p class="text-xs text-gray-500 mt-1">Ghi rõ từ <b>[LINK]</b>. Hệ thống sẽ thay thế nó bằng URL bên trên.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Hoa hồng % <span class="text-gray-400 font-normal">(tuỳ chọn)</span></label>
+                        <input type="number" name="commission_rate" id="commission_rate" step="0.1" min="0" max="100"
+                            placeholder="VD: 15"
+                            class="w-full border border-[var(--border)] rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
 
                     <div class="pt-2 flex gap-2">
@@ -158,7 +165,7 @@
             <!-- ═══ TAB 2: Import CSV ═══ -->
             {% if csv_import_enabled %}
             <div class="aff-tab-content p-5" id="tabCsv">
-                <h3 class="text-base font-semibold text-gray-800 mb-1">Import CSV Hàng Loạt</h3>
+                <h3 class="text-base font-semibold text-gray-800 mb-1">Nhập CSV hàng loạt</h3>
                 <p class="text-xs text-gray-500 mb-4">Upload file CSV chứa danh sách affiliate links. Parse 100% phía client.</p>
 
                 <!-- CSV Template Download -->
@@ -190,7 +197,7 @@
                         <table class="csv-preview-table w-full text-left">
                             <thead class="sticky top-0 z-10"><tr>
                                 <th class="w-8"><input type="checkbox" id="csvCheckAll" checked onchange="csvToggleAll(this.checked)"></th>
-                                <th>Keyword</th>
+                                <th>Từ khóa</th>
                                 <th>URL</th>
                                 <th>Comment</th>
                                 <th>%</th>
@@ -219,7 +226,7 @@
             <!-- ═══ TAB 3: AI Generate ═══ -->
             {% if ai_generate_enabled %}
             <div class="aff-tab-content p-5" id="tabAi">
-                <h3 class="text-base font-semibold text-gray-800 mb-1">AI Generate</h3>
+                <h3 class="text-base font-semibold text-gray-800 mb-1">AI tạo</h3>
                 <p class="text-xs text-gray-500 mb-4">Nhập tên sản phẩm để AI tự động tạo keywords & comments.</p>
 
                 <div class="space-y-3">
@@ -335,13 +342,13 @@
                     {% if csv_import_enabled %}
                     <button onclick="openDrawer('csv')" class="bg-white border border-[var(--border)] hover:bg-gray-50 text-gray-700 font-medium py-2 px-3 lg:px-4 rounded-lg text-sm transition-colors flex items-center gap-1.5 shadow-sm">
                         <svg class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                        <span class="hidden lg:inline">Import CSV</span>
+                        <span class="hidden lg:inline">Nhập CSV</span>
                     </button>
                     {% endif %}
                     {% if ai_generate_enabled %}
                     <button onclick="openDrawer('ai')" class="cave-btn cave-btn-primary h-auto py-2 px-3 lg:px-4 rounded-lg text-sm flex items-center gap-1.5">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                        <span class="hidden lg:inline">AI Generate</span>
+                        <span class="hidden lg:inline">AI tạo</span>
                     </button>
                     {% endif %}
                 </div>
@@ -422,17 +429,19 @@ document.getElementById('searchKeyword').addEventListener('keydown', (e) => { if
 window.editAffiliateFromBtn = function (btn) {
     try {
         const d = JSON.parse(btn.getAttribute('data-aff') || '{}');
-        editAffiliate(d.id, d.kw || '', d.url || '', d.tpl || '');
+        editAffiliate(d.id, d.kw || '', d.url || '', d.tpl || '', d.rate);
     } catch (e) {
         showToast('Không đọc được dữ liệu link để sửa.', 'error');
     }
 };
-window.editAffiliate = function (id, keyword, url, template) {
+window.editAffiliate = function (id, keyword, url, template, rate) {
     openDrawer('manual');
     document.getElementById('link_id').value = id;
     document.getElementById('keyword').value = keyword;
     document.getElementById('url').value = url;
     document.getElementById('comment_template').value = template || '';
+    const rateEl = document.getElementById('commission_rate');
+    if (rateEl) rateEl.value = (rate != null && rate !== '') ? rate : '';
     document.getElementById('formTitle').innerText = 'Chỉnh sửa Link: ' + keyword;
     document.getElementById('btnSubmit').innerText = 'Lưu Thay Đổi';
     const fe = document.getElementById('formError');
@@ -738,7 +747,7 @@ function renderAiResult(data) {
         
         <!-- Keywords -->
         <div class="mb-4">
-            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Keywords</div>
+            <div class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Từ khóa</div>
             <div class="flex flex-wrap gap-1.5">
                 ${(data.keywords || []).map(k => `<span class="ai-keyword-chip" onclick="useKeyword('${esc(k)}')">${esc(k)}</span>`).join('')}
             </div>

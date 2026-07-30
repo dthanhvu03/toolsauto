@@ -113,14 +113,14 @@
 
         {% if job.target_page %}
         <div class="p-3 rounded-xl bg-[var(--color-stone)] border border-[var(--border)]">
-            <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1">Target Page</div>
+            <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1">Trang đích</div>
             <div class="text-xs text-[var(--color-torch)] break-all">{{ job.target_page }}</div>
         </div>
         {% endif %}
 
         {% if job.ai_reasoning %}
         <div class="p-4 rounded-2xl bg-[var(--color-torch-dim)] border border-[var(--color-torch-border)] border-l-4 border-l-[var(--color-torch)]">
-            <h4 class="text-xs font-bold text-[var(--color-torch)] uppercase tracking-widest mb-2">AI reasoning</h4>
+            <h4 class="text-xs font-bold text-[var(--color-torch)] uppercase tracking-widest mb-2">Lý giải AI</h4>
             <p class="text-sm text-[var(--color-ink-soft)] leading-relaxed italic">"{{ job.ai_reasoning }}"</p>
         </div>
         {% endif %}
@@ -211,21 +211,21 @@
 
         <div class="pt-4 border-t border-[var(--border)] grid grid-cols-2 gap-y-4 gap-x-8">
             <div>
-                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1" title="Khóa chống tạo job trùng (nếu có)">Dedupe key</div>
+                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1" title="Khóa chống tạo job trùng (nếu có)">Khóa chống trùng</div>
                 <div class="text-[10px] font-mono text-[var(--color-ink-soft)] truncate" title="{{ job.dedupe_key }}">{{ job.dedupe_key or '—' }}</div>
             </div>
             <div>
-                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1" title="Mã tracking affiliate /r/…">Tracking code</div>
+                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1" title="Mã tracking affiliate /r/…">Mã theo dõi</div>
                 <div class="text-[10px] font-mono text-[var(--color-ink-soft)]">{{ job.tracking_code or '—' }}</div>
             </div>
             <div>
-                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1" title="SHA media — chặn đăng trùng cross-account">Content hash</div>
+                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1" title="SHA media — chặn đăng trùng cross-account">Hash nội dung</div>
                 <div class="text-[10px] font-mono text-[var(--color-ink-soft)] truncate" title="{{ job.content_hash or '' }}">
                     {% if job.content_hash %}{{ job.content_hash[:16] }}{% if job.content_hash|length > 16 %}…{% endif %}{% else %}—{% endif %}
                 </div>
             </div>
             <div>
-                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1">Viral material</div>
+                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1">Vật liệu viral</div>
                 <div class="text-[10px] font-mono text-[var(--color-ink-soft)]">
                     {% if job.viral_material_id %}
                     <a href="/app/viral?q={{ job.viral_material_id }}" class="text-[var(--color-torch)] font-bold hover:underline">#{{ job.viral_material_id }}</a>
@@ -233,7 +233,7 @@
                 </div>
             </div>
             <div class="col-span-2">
-                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1">Affiliate URL</div>
+                <div class="text-[10px] font-bold text-[var(--color-mist)] uppercase tracking-widest mb-1">URL affiliate</div>
                 <div class="text-[10px] font-mono text-[var(--color-ink-soft)] break-all">{{ job.affiliate_url or '—' }}</div>
             </div>
             <div class="col-span-2">
@@ -253,7 +253,7 @@
                         {% endif %}
                         {% if job.content_hash %}
                         <span class="inline-flex items-center gap-1 text-[var(--color-torch)] font-bold" title="Đã gắn content_hash">
-                            <span class="w-1.5 h-1.5 rounded-full bg-[var(--color-torch)]"></span> Media guard
+                            <span class="w-1.5 h-1.5 rounded-full bg-[var(--color-torch)]"></span> Bảo vệ media
                         </span>
                         {% endif %}
                         {% if job.viral_material_id and has_reup %}

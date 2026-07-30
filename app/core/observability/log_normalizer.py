@@ -123,20 +123,42 @@ class LogNormalizer:
         msg = re.sub(r'\s+', ' ', msg) # Collapse spaces
             
         return msg
-            
-        return msg
 
     @staticmethod
     def normalize_domain_row(row_dict: Dict[str, Any], category: str = "all") -> CanonicalLogEvent:
         """
         Takes a raw dictionary returned from LogQueryService and converts it.
         """
-        msg = row_dict.get("message", "")
+        raw_msg = row_dict.get("message", "") or ""
+        msg = raw_msg
+        hint = None
+        message_raw = None
+
+        raw_ts = row_dict.get("timestamp")
+        ts_unix = None
+        try:
+            if isinstance(raw_ts, (int, float)):
+                ts_unix = int(raw_ts)
+            elif isinstance(raw_ts, str) and raw_ts.strip().isdigit():
+                ts_unix = int(raw_ts.strip())
+        except (TypeError, ValueError):
+            ts_unix = None
+
         if category == "user":
-            msg = LogNormalizer._translate_message(msg)
+            from app.core.queue.job import JobService
+
+            view = JobService.humanize_job_message(raw_msg)
+            if view.get("is_technical") or (view.get("title") and view["title"] != raw_msg):
+                msg = view["title"]
+                hint = view.get("hint") or None
+                message_raw = view.get("raw") or raw_msg
+            else:
+                msg = LogNormalizer._translate_message(raw_msg)
+                if msg != raw_msg:
+                    message_raw = raw_msg
 
         return CanonicalLogEvent(
-            timestamp=row_dict.get("timestamp"),
+            timestamp=raw_ts if raw_ts is not None else "",
             source=row_dict.get("source", "unknown"),
             source_type="domain",
             level=row_dict.get("level"),
@@ -144,5 +166,8 @@ class LogNormalizer:
             job_id=row_dict.get("job_id"),
             actor=row_dict.get("actor"),
             message=msg,
-            metadata=row_dict.get("metadata")
+            hint=hint,
+            message_raw=message_raw,
+            metadata=row_dict.get("metadata"),
+            ts_unix=ts_unix,
         )

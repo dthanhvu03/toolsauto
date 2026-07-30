@@ -155,7 +155,7 @@
               d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z">
             </path>
           </svg>
-          <span class="truncate">Link affiliate</span>
+          <span class="truncate">Kho affiliate</span>
         </a>
 
         {{ nav_section('Facebook') }}
@@ -191,7 +191,7 @@
               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
             </path>
           </svg>
-          <span class="truncate">Phân tích & boost</span>
+          <span class="truncate">Phân tích & tăng trưởng</span>
         </a>
 
         <a href="/compliance/"
@@ -436,9 +436,43 @@
                 window.location.href = data.redirect || '/login';
             }
         } catch (e) {
-            window.showToast("Failed to logout safely", "error");
+            window.showToast("Không thể đăng xuất an toàn", "error");
         }
     };
+
+    // Live countdown for [data-countdown-eta] (metrics / similar)
+    (function () {
+      function fmt(sec) {
+        if (sec <= 0) return null;
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.floor(sec % 60);
+        if (h > 0) return h + 'h' + String(m).padStart(2, '0') + 'm' + String(s).padStart(2, '0') + 's';
+        if (m > 0) return m + 'm' + String(s).padStart(2, '0') + 's';
+        return s + 's';
+      }
+      function tickCountdowns() {
+        const now = Math.floor(Date.now() / 1000);
+        document.querySelectorAll('[data-countdown-eta]').forEach((el) => {
+          const eta = parseInt(el.getAttribute('data-countdown-eta') || '0', 10);
+          const label = el.querySelector('[data-countdown-label]');
+          if (!eta) return;
+          const rem = eta - now;
+          const ready = el.getAttribute('data-countdown-ready') || 'Sẵn sàng';
+          if (rem <= 0) {
+            el.classList.remove('text-amber-600');
+            el.classList.add('text-emerald-600');
+            el.removeAttribute('data-countdown-eta');
+            el.textContent = ready;
+            return;
+          }
+          if (label) label.textContent = fmt(rem);
+        });
+      }
+      tickCountdowns();
+      setInterval(tickCountdowns, 1000);
+      document.body.addEventListener('htmx:afterSwap', tickCountdowns);
+    })();
   </script>
   {% block script_extra %}{% endblock %}
 </body>

@@ -128,8 +128,8 @@
               class="text-xs px-2 py-1 rounded bg-amber-50 text-amber-800 border border-amber-100">_unassigned</span>
             {% endif %}
           </div>
-          <button class="copyGroup text-xs bg-gray-900 hover:bg-black text-white px-2 py-1 rounded"
-            data-copy-group="tp:{{ tp }}">Copy group</button>
+                        <button class="copyGroup text-xs bg-gray-900 hover:bg-black text-white px-2 py-1 rounded"
+            data-copy-group="tp:{{ tp }}">Sao chép nhóm</button>
         </div>
         <div class="p-4">
           {% for acc_name, urls in accmap.items() %}
@@ -137,7 +137,7 @@
             <div class="flex items-center justify-between mb-1">
               <div class="text-sm font-medium text-gray-900">{{ acc_name }}</div>
               <button class="copyGroup text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
-                data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Copy account</button>
+                data-copy-group="tp:{{ tp }}|acc:{{ acc_name }}">Sao chép tài khoản</button>
             </div>
             <div class="grid md:grid-cols-2 gap-2">
               {% for u in urls %}
@@ -146,7 +146,7 @@
                 <a class="text-blue-600 hover:underline break-all text-sm" href="{{ u }}" target="_blank"
                   rel="noreferrer">{{ u }}</a>
                 <button class="copyOne text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-1 rounded"
-                  data-copy="{{ u }}">Copy</button>
+                  data-copy="{{ u }}">Sao chép</button>
               </div>
               {% endfor %}
             </div>
@@ -167,7 +167,7 @@
     <div class="bg-white p-6 rounded-lg shadow-md">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">Video viral TikTok</h2>
-        <span class="text-xs text-gray-500">Showing {{ viral_rows|length }} / {{ viral_total }}</span>
+        <span class="text-xs text-gray-500">Hiện {{ viral_rows|length }} / {{ viral_total }}</span>
       </div>
       <div class="overflow-x-auto">
         <table class="min-w-full table-auto border-collapse">
@@ -276,7 +276,7 @@
     function updateStat() {
       const total = document.querySelectorAll('.row').length;
       const vis = visibleRows().length;
-      stat.textContent = `Showing ${vis}/${total}`;
+      stat.textContent = `Hiện ${vis}/${total}`;
     }
 
     async function copyText(txt) {
@@ -300,7 +300,7 @@
         if (!txt) return;
         await copyText(txt);
         btn.textContent = 'Đã sao chép';
-        setTimeout(() => btn.textContent = 'Copy', 900);
+        setTimeout(() => btn.textContent = 'Sao chép', 900);
         return;
       }
 
@@ -317,7 +317,7 @@
         });
         await copyText(urls.join('\\n'));
         g.textContent = 'Đã sao chép';
-        setTimeout(() => g.textContent = g.classList.contains('bg-gray-900') ? 'Copy group' : 'Copy account', 900);
+        setTimeout(() => g.textContent = g.classList.contains('bg-gray-900') ? 'Sao chép nhóm' : 'Sao chép tài khoản', 900);
       }
     });
 

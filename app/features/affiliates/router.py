@@ -42,9 +42,19 @@ def save_affiliate(
     keyword: str = Form(...),
     url: str = Form(...),
     comment_template: str = Form(...),
+    commission_rate: str = Form(""),
     db: Session = Depends(get_db)
 ):
-    success, error_data = AffiliateService.save_link(db, link_id, keyword, url, comment_template)
+    rate = None
+    raw = (commission_rate or "").strip()
+    if raw:
+        try:
+            rate = float(raw.replace(",", "."))
+        except ValueError:
+            return JSONResponse({"error": "Commission rate không hợp lệ."}, status_code=400)
+    success, error_data = AffiliateService.save_link(
+        db, link_id, keyword, url, comment_template, commission_rate=rate
+    )
     if not success:
         return JSONResponse(error_data, status_code=error_data.get("status_code", 400))
             

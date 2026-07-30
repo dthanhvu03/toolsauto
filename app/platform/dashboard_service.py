@@ -448,7 +448,7 @@ class DashboardService:
         return {
             "categories": categories,
             "series": [
-                {"name": "Jobs Queued", "data": queued_data},
-                {"name": "Published", "data": published_data}
+                {"name": "Hàng đợi", "data": queued_data},
+                {"name": "Đã đăng", "data": published_data}
             ]
         }

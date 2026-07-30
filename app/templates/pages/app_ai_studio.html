@@ -1,7 +1,7 @@
 {% extends "layouts/app.html" %}
 
 {% block title %}AI Studio • Auto Publisher{% endblock %}
-{% block page_title %}AI Prompt Studio{% endblock %}
+{% block page_title %}Studio prompt AI{% endblock %}
 {% block page_subtitle %}Thư viện prompt (Facebook caption + Threads). Placeholder Threads: {title}, {summary}, {source_name}, {max_chars}. Sandbox Gemini cho persona Facebook.{% endblock %}
 
 {% block head_extra %}
@@ -79,7 +79,7 @@
     <!-- Left Sidebar (Navigation) -->
     <div class="w-full lg:w-64 shrink-0 cave-card sticky top-24">
       <div class="p-4 border-b border-[var(--color-border)] bg-[var(--color-surface-raised)]">
-        <div class="text-[10px] font-extrabold text-[var(--color-ash)] uppercase tracking-widest mb-1">Library</div>
+        <div class="text-[10px] font-extrabold text-[var(--color-ash)] uppercase tracking-widest mb-1">Thư viện</div>
         <div class="font-bold text-sm text-[var(--color-ink)]">AI Templates</div>
       </div>
       
@@ -98,7 +98,7 @@
         
         <div class="my-2 border-t border-gray-100 mx-2"></div>
         
-        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-1">Platforms</div>
+        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-1">Nền tảng</div>
         {% for id, info in (platforms or {}).items() %}
         {{ prompt_nav_btn(info, 'Platform') }}
         {% endfor %}

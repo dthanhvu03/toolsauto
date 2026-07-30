@@ -72,15 +72,15 @@
                 {% if account.is_active %}
                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                </svg> Stop Node
+                </svg> Dừng node
                 {% else %}
                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
-                </svg> Start Node
+                </svg> Bật node
                 {% endif %}
             </button>
             <button type="button" hx-post="/accounts/{{ account.id }}/delete" hx-target="#account-{{ account.id }}"
-                hx-swap="none" hx-confirm="Terminate this account?"
+                hx-swap="none" hx-confirm="Xóa tài khoản này?"
                 class="w-9 h-9 flex items-center justify-center rounded-lg bg-[var(--color-danger-dim)] text-[var(--color-danger)] border border-[var(--color-danger-border)] hover:bg-[var(--color-danger-deep)] hover:text-[var(--color-ink)] transition-all">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -161,9 +161,9 @@
 
     <!-- 1.5 Tab Navigation -->
     <div class="flex items-center gap-6 px-6 border-b border-[var(--color-edge)] shrink-0 mt-2">
-        <button type="button" onclick="switchAccountTab('config', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-[var(--color-torch)] text-[var(--color-torch)] transition-colors">Configuration</button>
+        <button type="button" onclick="switchAccountTab('config', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-[var(--color-torch)] text-[var(--color-torch)] transition-colors">Cấu hình</button>
         <button type="button" onclick="switchAccountTab('pages', this)" class="account-tab-btn py-3 text-xs uppercase tracking-wider font-bold border-b-2 border-transparent text-[var(--color-ash)] hover:text-[var(--color-mist)] transition-colors">
-            Target Pages
+            Trang đích
             <span class="ml-1.5 text-[9px] font-bold normal-case tracking-normal text-[var(--color-torch)] bg-[var(--color-torch)]/10 border border-[var(--color-torch)]/25 px-1.5 py-0.5 rounded-full">
                 {{ account.target_pages_list|length }} ON / {{ account.managed_pages_list|length }}
             </span>
@@ -176,16 +176,16 @@
             hx-swap="outerHTML" class="max-w-3xl mx-auto space-y-8">
 
             <div class="rounded-xl border border-[var(--color-edge)] bg-[var(--color-face)]/60 px-4 py-3 text-[11px] text-[var(--color-mist)] leading-relaxed">
-                <strong class="text-[var(--color-ink)]">Configuration</strong> = nhịp đăng (limit, cooldown, sleep) + Global Categories.
-                Page ON/OFF, niche từng page, source đối thủ → tab <button type="button" onclick="document.querySelectorAll('.account-tab-btn')[1]?.click()" class="text-[var(--color-torch)] font-bold underline">Target Pages</button>.
+                <strong class="text-[var(--color-ink)]">Cấu hình</strong> = nhịp đăng (limit, cooldown, sleep) + Global Categories.
+                Page ON/OFF, niche từng page, source đối thủ → tab <button type="button" onclick="document.querySelectorAll('.account-tab-btn')[1]?.click()" class="text-[var(--color-torch)] font-bold underline">Trang đích</button>.
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div class="space-y-5">
-                    <h3 class="text-[10px] font-black text-[var(--color-ash)] uppercase tracking-[0.2em] px-1">Execution Metrics</h3>
+                    <h3 class="text-[10px] font-black text-[var(--color-ash)] uppercase tracking-[0.2em] px-1">Chỉ số thực thi</h3>
                     <div class="grid grid-cols-2 gap-4">
                         <div class="space-y-1.5">
-                            <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Daily Limit</label>
+                            <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Giới hạn ngày</label>
                             <input type="number" name="daily_limit" value="{{ account.daily_limit }}" min="0" max="200"
                                 class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-xl px-4 py-2.5 text-xs font-bold text-[var(--color-ink)] focus:border-[var(--color-torch)]/50 outline-none">
                         </div>
@@ -196,7 +196,7 @@
                         </div>
                     </div>
                     <div class="space-y-1.5">
-                        <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Bot Sleep</label>
+                        <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Khung giờ nghỉ</label>
                         <div class="flex items-center gap-2.5 p-2 bg-[var(--color-deep)] rounded-xl border border-[var(--color-edge)]">
                             <input type="time" name="sleep_start_time" value="{{ account.sleep_start_time or '' }}"
                                 class="flex-1 bg-[var(--color-void)] border border-[var(--color-edge)] rounded-lg px-2.5 py-1.5 text-xs font-bold text-[var(--color-ink)] outline-none">
@@ -209,7 +209,7 @@
                 </div>
 
                 <div class="space-y-5">
-                    <h3 class="text-[10px] font-black text-[var(--color-ash)] uppercase tracking-[0.2em] px-1">Taxonomy &amp; Sync</h3>
+                    <h3 class="text-[10px] font-black text-[var(--color-ash)] uppercase tracking-[0.2em] px-1">Phân loại &amp; Đồng bộ</h3>
                     <div class="space-y-1.5">
                         <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Global Categories</label>
                         <textarea name="niche_topics" placeholder="decor, fashion, pets..."
@@ -221,9 +221,9 @@
                     <button type="button" hx-post="/accounts/{{ account.id }}/sync-pages"
                         hx-target="#account-{{ account.id }}" hx-swap="outerHTML"
                         class="w-full h-10 bg-[var(--color-face)] border border-[var(--color-edge)] text-[var(--color-torch)] hover:border-[var(--color-torch)]/60 hover:bg-[var(--color-torch)]/10 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2"
-                        onclick="this.disabled=true; this.querySelector('span').innerText='SYNCING...';">
+                        onclick="this.disabled=true; this.querySelector('span').innerText='ĐANG ĐỒNG BỘ...';">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                        <span>Sync Managed Pages</span>
+                        <span>Đồng bộ trang đã quản lý</span>
                     </button>
                     <p class="text-[10px] text-[var(--color-ash)] px-1">Chạy nền ~20–60s — rồi mở lại account / tab Target Pages.</p>
                 </div>
@@ -231,7 +231,7 @@
 
             <div class="rounded-2xl border border-dashed border-[var(--color-edge)] bg-[var(--color-deep)]/40 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <p class="text-xs font-bold text-[var(--color-ink)]">Active targets</p>
+                    <p class="text-xs font-bold text-[var(--color-ink)]">Target đang bật</p>
                     <p class="text-[11px] text-[var(--color-ash)] mt-1">{{ account.target_pages_list|length }} page đang ON · {{ account.managed_pages_list|length }} managed</p>
                 </div>
                 <button type="button" onclick="document.querySelectorAll('.account-tab-btn')[1]?.click()"
@@ -243,7 +243,7 @@
             <div class="pt-2 pb-10 sticky bottom-0 bg-gradient-to-t from-[var(--color-void)] via-[var(--color-void)]/90 to-transparent flex justify-end">
                 <button type="submit"
                     class="h-10 px-6 bg-gradient-to-r from-[var(--color-torch)] to-[var(--color-ember)] hover:brightness-105 text-[var(--color-ink-inverse)] rounded-lg font-black text-[10px] uppercase tracking-[0.15em] flex items-center justify-center gap-2">
-                    Commit Configuration
+                    Lưu cấu hình
                 </button>
             </div>
         </form>

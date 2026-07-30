@@ -19,7 +19,7 @@
 {% block content %}
 <div class="app-card p-4" data-jobs-silo="{% if jobs_silo_locked %}{{ jobs_platform }}{% else %}{% endif %}">
   <div class="mb-3 px-3 py-2 rounded-lg border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[11px] text-[var(--color-ink)] leading-relaxed">
-    <strong class="text-[var(--color-torch)]">Local Web</strong>
+    <strong class="text-[var(--color-torch)]">Web local</strong>
     (<code class="px-1 rounded bg-[var(--color-ledge)] text-[10px]">start.ps1</code>)
     chỉ chạy dashboard —
     <strong>Duyệt / Chạy ngay</strong> đổi trạng thái DB, nhưng đăng thật cần worker trên VPS (Publisher / AI / Maintenance).
@@ -59,7 +59,7 @@
       <button type="button" data-status="FAILED" class="jobTab app-chip" title="FAILED">Lỗi</button>
     </div>
     <div class="flex items-center gap-2">
-      <input id="jobQ" class="app-input w-80 max-w-full" placeholder="Tìm: id, tài khoản, target page, caption…" />
+      <input id="jobQ" class="app-input w-80 max-w-full" placeholder="Tìm: id, tài khoản, trang đích, caption…" />
       <button type="button" id="jobSearchBtn" class="app-btn app-btn-primary">Tìm</button>
       <span id="job-total-badge" class="app-badge"></span>
       <button type="button"

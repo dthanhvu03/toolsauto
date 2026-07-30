@@ -63,9 +63,24 @@ _MESSAGE_HUMANIZE: list[tuple[str, str, str]] = [
         "Lịch đăng được kéo về hiện tại để worker lấy job.",
     ),
     (
+        "job approved and moved to pending",
+        "Đã duyệt — đưa vào hàng chờ đăng",
+        "Publisher sẽ nhận job khi đến lịch / hết cooldown.",
+    ),
+    (
         "job approved",
         "Đã duyệt — chờ đăng",
         "Job chuyển sang hàng chờ Publisher.",
+    ),
+    (
+        "owner deploy: skip ai",
+        "Đã bỏ AI — dùng caption tay",
+        "Không chờ AI viết caption; nội dung do người vận hành nhập.",
+    ),
+    (
+        "skip ai + manual caption",
+        "Đã bỏ AI — dùng caption tay",
+        "Không chờ AI viết caption; nội dung do người vận hành nhập.",
     ),
     (
         "job marked done",
@@ -81,6 +96,16 @@ _MESSAGE_HUMANIZE: list[tuple[str, str, str]] = [
         "manual short caption",
         "Đã lưu caption thủ công",
         "Caption do người vận hành nhập (không qua AI).",
+    ),
+    (
+        "style skipped",
+        "Đã bỏ qua AI (Skip)",
+        "Job sang nháp để sửa caption tay rồi duyệt.",
+    ),
+    (
+        "style set to",
+        "Đã chọn style caption",
+        "AI worker sẽ viết caption theo style đã chọn.",
     ),
     (
         "cancelled",
@@ -567,12 +592,96 @@ class JobService:
         )
         # Align UI ETA with claim gate: last DONE.finished_at per (account, platform)
         JobService._attach_claim_cooldown_etas(db, jobs)
+        JobService._attach_metrics_etas(db, jobs)
         return {
             "jobs": jobs,
             "total": total,
             "total_pages": total_pages,
             "page": page
         }
+
+    @staticmethod
+    def _metrics_check_hours() -> float:
+        try:
+            return float(os.getenv("METRICS_CHECK_HOURS", "24"))
+        except (TypeError, ValueError):
+            return 24.0
+
+    @staticmethod
+    def _attach_metrics_etas(db: Session, jobs: list) -> None:
+        """Set job.metrics_eta = earliest unix ts MetricsChecker may pick this DONE job.
+
+        Rules (mirror MetricsChecker): finished_at + METRICS_CHECK_HOURS; max 1 check/account/day
+        so if account already checked today → wait until next local midnight; older unchecked
+        siblings on the same account each consume a day slot.
+        """
+        from app.core.observability.metrics_checker import today_start_ts
+
+        targets = [
+            j
+            for j in jobs
+            if j.status == JobStatus.DONE
+            and not j.metrics_checked
+            and j.finished_at
+            and j.post_url
+            and j.view_24h is None
+        ]
+        for j in jobs:
+            setattr(j, "metrics_eta", 0)
+
+        if not targets:
+            return
+
+        hours = JobService._metrics_check_hours()
+        day_start = today_start_ts()
+        tomorrow = day_start + 86400
+        account_ids = {int(j.account_id) for j in targets if j.account_id}
+
+        checked_today: set[int] = set()
+        if account_ids:
+            rows = (
+                db.query(Job.account_id)
+                .filter(
+                    Job.account_id.in_(account_ids),
+                    Job.last_metrics_check_ts >= day_start,
+                )
+                .distinct()
+                .all()
+            )
+            checked_today = {int(r[0]) for r in rows if r[0] is not None}
+
+        waiting_by_acc: dict[int, list] = {}
+        if account_ids:
+            waiting = (
+                db.query(Job)
+                .filter(
+                    Job.account_id.in_(account_ids),
+                    Job.status == JobStatus.DONE,
+                    Job.post_url.isnot(None),
+                    Job.finished_at.isnot(None),
+                    Job.metrics_checked.is_(False),
+                )
+                .order_by(Job.finished_at.asc(), Job.id.asc())
+                .all()
+            )
+            for w in waiting:
+                waiting_by_acc.setdefault(int(w.account_id), []).append(w)
+
+        delay = int(hours * 3600)
+        for job in targets:
+            aid = int(job.account_id) if job.account_id else 0
+            queue = waiting_by_acc.get(aid) or [job]
+            cursor = tomorrow if aid in checked_today else day_start
+            eta_for_job = 0
+            for qj in queue:
+                eligible = int(qj.finished_at or 0) + delay
+                slot = max(eligible, cursor)
+                if qj.id == job.id:
+                    eta_for_job = slot
+                    break
+                slot_day = day_start + max(0, (slot - day_start) // 86400) * 86400
+                cursor = slot_day + 86400
+            setattr(job, "metrics_eta", int(eta_for_job or (int(job.finished_at) + delay)))
 
     @staticmethod
     def _attach_claim_cooldown_etas(db: Session, jobs: list) -> None:
@@ -670,6 +779,33 @@ class JobService:
         return JobService.create_high_priority_manual_job(db, account_id, target_page, caption, media_path)
 
     @staticmethod
+    def apply_style(db: Session, job_id: int, style: str) -> Job:
+        """Web/Telegram parity: AWAITING_STYLE → DRAFT with ai_style or Skip AI."""
+        allowed = {"sales", "short", "daily", "humor", "skip"}
+        style = (style or "").strip().lower()
+        if style not in allowed:
+            raise ValueError(f"Style không hợp lệ: {style}")
+
+        job = JobService.get_job_by_id(db, job_id)
+        if not job:
+            raise ValueError("Không tìm thấy job.")
+        if job.status != JobStatus.AWAITING_STYLE:
+            raise ValueError("Chỉ chọn style khi job đang AWAITING_STYLE.")
+
+        if style == "skip":
+            job.status = JobStatus.DRAFT
+            if job.caption:
+                job.caption = job.caption.replace("[AI_GENERATE]", "").strip()
+            JobService._log_event(db, job.id, "INFO", "Style skipped — DRAFT for manual caption")
+        else:
+            job.ai_style = style
+            job.status = JobStatus.DRAFT
+            JobService._log_event(db, job.id, "INFO", f"Style set to {style} — DRAFT for AI caption")
+        db.commit()
+        db.refresh(job)
+        return job
+
+    @staticmethod
     def approve_job(db: Session, job_id: int):
         job = JobService.get_job_by_id(db, job_id)
         if job and job.status == JobStatus.DRAFT:
@@ -687,7 +823,7 @@ class JobService:
 
     @staticmethod
     def update_job_auto_comment(db: Session, job_id: int, auto_comment_text: str):
-        """DRAFT-only: operator edits affiliate comment before Approve."""
+        """Operator edits affiliate comment before Approve (DRAFT)."""
         job = JobService.get_job_by_id(db, job_id)
         if not job or job.status != JobStatus.DRAFT:
             raise ValueError("Chỉ sửa auto-comment khi job ở DRAFT.")

@@ -1,7 +1,7 @@
 {% extends "layouts/app.html" %}
 {% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
-{% block title %}Page Insights | Premium Analytics{% endblock %}
+{% block title %}Phân tích trang | Analytics{% endblock %}
 
 {% block head_extra %}
 <script src="{{ config.CDN_CHARTJS }}"></script>
@@ -163,7 +163,7 @@
 {% endblock %}
 
 {% block page_breadcrumb %}{{ silo_breadcrumb('Facebook', 'Phân tích & boost') }}{% endblock %}
-{% block page_title %}Phân tích &amp; boost{% endblock %}
+{% block page_title %}Phân tích &amp; tăng trưởng{% endblock %}
 {% block page_subtitle %}
 <span id="insightsSubtitleText">Phân tích hiệu năng &amp; boost chiến lược cho trang Facebook.</span>
 <span id="insightsProductBadge" class="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] shrink-0">Facebook</span>
@@ -222,7 +222,7 @@
         </div>
         <div class="filter-bar" role="toolbar" aria-label="Dashboard Filters">
             <div class="flex items-center space-x-2 px-3 min-w-0">
-                <span class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest shrink-0">Page</span>
+                <span class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest shrink-0">Trang</span>
                 <select id="pageSelect" onchange="loadData()" aria-label="Select Content Page"
                     class="bg-transparent border-none text-[var(--color-ink)] font-bold text-sm focus:ring-0 cursor-pointer min-w-0 flex-1">
                     <option value="">-- All Assets --</option>
@@ -233,7 +233,7 @@
             </div>
             <div class="h-6 w-[1px] bg-[var(--color-edge)] hidden sm:block"></div>
             <div class="flex items-center space-x-2 px-3">
-                <span class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest">Platform</span>
+                <span class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest">Nền tảng</span>
                 <select id="platformSelect" onchange="loadData()" aria-label="Select Social Platform"
                     class="bg-transparent border-none text-[var(--color-torch)] font-bold text-sm focus:ring-0 cursor-pointer">
                     <option value="">Tất cả nền tảng</option>
@@ -244,7 +244,7 @@
             </div>
             <div class="h-6 w-[1px] bg-[var(--color-edge)] hidden sm:block"></div>
             <div class="flex items-center space-x-2 px-3">
-                <span class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest">Range</span>
+                <span class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest">Khoảng thời gian</span>
                 <select id="daysSelect" onchange="loadData()" aria-label="Select Date Range"
                     class="bg-transparent border-none text-[var(--color-torch)] font-bold text-sm focus:ring-0 cursor-pointer">
                     <option value="7" selected>7 ngày</option>
@@ -373,7 +373,7 @@
                     <span id="globalEngRate" class="metric-value">--</span>
                     <span class="text-[var(--color-mist)] text-sm font-medium">avg%</span>
                 </div>
-                <p id="totalLikes" class="mt-3 text-[var(--color-mist)] text-sm font-medium">Collecting community feedback...</p>
+                <p id="totalLikes" class="mt-3 text-[var(--color-mist)] text-sm font-medium">Đang thu thập phản hồi cộng đồng...</p>
             </div>
         </div>
 
@@ -387,7 +387,7 @@
                 </div>
                 <div id="topViews" class="text-2xl font-display font-bold text-[var(--color-torch)] tracking-tight">--</div>
                 <div class="mt-3">
-                    <p id="topCaption" class="text-[var(--color-mist)] text-sm line-clamp-2 italic font-medium">Scanning for viral breakouts...</p>
+                    <p id="topCaption" class="text-[var(--color-mist)] text-sm line-clamp-2 italic font-medium">Đang quét bài viral nổi...</p>
                 </div>
             </div>
         </div>
@@ -411,7 +411,7 @@
 
         <div class="insight-card p-6 space-y-4 flex flex-col h-full min-w-0">
             <div class="flex items-center justify-between">
-                <h3 class="text-base font-display font-bold text-[var(--color-ink)]">Top Signals</h3>
+                <h3 class="text-base font-display font-bold text-[var(--color-ink)]">Tín hiệu nổi bật</h3>
                 <svg class="w-5 h-5 text-[var(--color-ash)]" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14.5h-2V13h2v3.5zm0-5.5h-2V7h2v4z" />
                 </svg>
@@ -432,24 +432,24 @@
     <!-- Row 4: Secondary Metrics -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-5 animate-slide-up" style="animation-delay: 0.3s;">
         <div class="insight-card p-5">
-            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">Avg Views / Post</div>
+            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">TB lượt xem / bài</div>
             <div id="avgViews" class="text-2xl font-display font-bold text-[var(--color-ink)]">--</div>
-            <div class="text-[10px] text-[var(--color-moss)] font-bold mt-1">High Velocity</div>
+            <div class="text-[10px] text-[var(--color-moss)] font-bold mt-1">Tốc độ cao</div>
         </div>
         <div class="insight-card p-5">
-            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">Total Shares</div>
+            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">Tổng chia sẻ</div>
             <div id="totalShares" class="text-2xl font-display font-bold text-[var(--color-ink)]">--</div>
-            <div class="text-[10px] text-[var(--color-torch)] font-bold mt-1">Viral Potential</div>
+            <div class="text-[10px] text-[var(--color-torch)] font-bold mt-1">Tiềm năng viral</div>
         </div>
         <div class="insight-card p-5">
-            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">Engagement Rate</div>
+            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">Tỷ lệ tương tác</div>
             <div id="avgEngRate" class="text-2xl font-display font-bold text-[var(--color-ink)]">--</div>
-            <div class="text-[10px] text-[var(--color-info)] font-bold mt-1">Community Strength</div>
+            <div class="text-[10px] text-[var(--color-info)] font-bold mt-1">Sức mạnh cộng đồng</div>
         </div>
         <div class="insight-card p-5">
-            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">Active Posts</div>
+            <div class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-widest mb-1">Bài đang theo dõi</div>
             <div id="activePostsCount" class="text-2xl font-display font-bold text-[var(--color-ink)]">--</div>
-            <div class="text-[10px] text-[var(--color-mist)] font-bold mt-1">System Tracking</div>
+            <div class="text-[10px] text-[var(--color-mist)] font-bold mt-1">Hệ thống theo dõi</div>
         </div>
     </div>
 
@@ -459,7 +459,7 @@
         <div class="lg:col-span-1 insight-card p-6 flex flex-col">
             <h3 class="text-sm font-bold text-gray-900 mb-6 flex items-center gap-2">
                 <span class="w-2 h-2 bg-[var(--color-torch)] rounded-full"></span>
-                Platform Distribution
+                Phân bố nền tảng
             </h3>
             <div id="platformChartContainer" class="flex-1 flex items-center justify-center relative">
                 <canvas id="platformChart" class="max-h-[250px]"></canvas>
@@ -552,7 +552,7 @@
                 </svg>
             </div>
             <div>
-                <h2 class="text-lg font-display font-black text-gray-900">Competitive Intelligence</h2>
+                <h2 class="text-lg font-display font-black text-gray-900">Tình báo đối thủ</h2>
                 <p class="text-xs text-slate-400 font-medium">Dữ liệu đối thủ tự động từ FB suggested-reels stream — cập nhật mỗi lần scrape</p>
             </div>
         </div>
@@ -564,9 +564,9 @@
             <div class="insight-card p-6 bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100 relative overflow-hidden">
                 <div class="absolute -right-6 -top-6 w-24 h-24 bg-amber-200/30 rounded-full blur-2xl"></div>
                 <div class="relative z-10">
-                    <div class="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-2">Market Gap</div>
+                    <div class="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-2">Khoảng trống thị trường</div>
                     <div id="benchGap" class="text-5xl font-display font-black text-amber-600 tracking-tight">--<span class="text-2xl">×</span></div>
-                    <p id="benchGapLabel" class="mt-2 text-xs text-slate-500 font-medium">Loading benchmark...</p>
+                    <p id="benchGapLabel" class="mt-2 text-xs text-slate-500 font-medium">Đang tải benchmark...</p>
                     <div id="benchNoData" class="hidden mt-3 text-xs text-amber-600 font-bold bg-amber-100 px-3 py-2 rounded-lg">
                         Chưa có data competitor — chạy scrape để thu thập
                     </div>
@@ -582,19 +582,19 @@
                         </div>
                         <div class="space-y-2">
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Avg Views</span>
+                                <span class="text-xs text-slate-500">TB lượt xem</span>
                                 <span id="ourAvgViews" class="text-sm font-black text-gray-900">--</span>
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Avg Likes</span>
+                                <span class="text-xs text-slate-500">TB thích</span>
                                 <span id="ourAvgLikes" class="text-sm font-bold text-rose-500">--</span>
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Top reel</span>
+                                <span class="text-xs text-slate-500">Reel top</span>
                                 <span id="ourMaxViews" class="text-sm font-bold text-indigo-600">--</span>
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Posts tracked</span>
+                                <span class="text-xs text-slate-500">Bài theo dõi</span>
                                 <span id="ourPostCount" class="text-sm font-bold text-gray-600">--</span>
                             </div>
                         </div>
@@ -605,19 +605,19 @@
                         </div>
                         <div class="space-y-2">
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Avg Views</span>
+                                <span class="text-xs text-slate-500">TB lượt xem</span>
                                 <span id="mktAvgViews" class="text-sm font-black text-gray-900">--</span>
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Avg Likes</span>
+                                <span class="text-xs text-slate-500">TB thích</span>
                                 <span id="mktAvgLikes" class="text-sm font-bold text-rose-500">--</span>
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Top reel</span>
+                                <span class="text-xs text-slate-500">Reel top</span>
                                 <span id="mktMaxViews" class="text-sm font-bold text-orange-600">--</span>
                             </div>
                             <div class="flex justify-between items-center">
-                                <span class="text-xs text-slate-500">Reels tracked</span>
+                                <span class="text-xs text-slate-500">Reel theo dõi</span>
                                 <span id="mktReelCount" class="text-sm font-bold text-gray-600">--</span>
                             </div>
                         </div>
@@ -653,9 +653,9 @@
                         Top Competitor Reels
                     </h3>
                     <div id="compSortBtns" class="flex gap-1">
-                        <button data-sort="likes"    onclick="setCompSort(this)" class="comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600">Likes</button>
-                        <button data-sort="comments" onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Comments</button>
-                        <button data-sort="date"     onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Date</button>
+                        <button data-sort="likes"    onclick="setCompSort(this)" class="comp-sort active px-2.5 py-1 rounded-lg text-[11px] font-bold border border-amber-200 bg-amber-50 text-amber-600">Thích</button>
+                        <button data-sort="comments" onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Bình luận</button>
+                        <button data-sort="date"     onclick="setCompSort(this)" class="comp-sort        px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Ngày</button>
                     </div>
                 </div>
 
@@ -664,13 +664,13 @@
                         <thead>
                             <tr class="border-b border-gray-100">
                                 <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Caption</th>
-                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3 hidden md:table-cell">Date</th>
-                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Likes</th>
-                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 hidden sm:table-cell">Comments</th>
+                                <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3 hidden md:table-cell">Ngày</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 pr-3">Thích</th>
+                                <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 hidden sm:table-cell">Bình luận</th>
                             </tr>
                         </thead>
                         <tbody id="compTableBody">
-                            <tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Loading...</td></tr>
+                            <tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Đang tải...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -693,12 +693,12 @@
             </h3>
             <!-- Sort controls -->
             <div class="flex items-center gap-2 flex-wrap">
-                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sort by:</span>
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Sắp xếp:</span>
                 <div id="librarySortBtns" class="flex gap-1">
-                    <button data-sort="views"     onclick="setLibrarySort(this)" class="sort-btn active px-3 py-1 rounded-lg text-xs font-bold border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)]">Views</button>
-                    <button data-sort="likes"     onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Likes</button>
-                    <button data-sort="comments"  onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Comments</button>
-                    <button data-sort="date"      onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Date</button>
+                    <button data-sort="views"     onclick="setLibrarySort(this)" class="sort-btn active px-3 py-1 rounded-lg text-xs font-bold border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)]">Lượt xem</button>
+                    <button data-sort="likes"     onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Thích</button>
+                    <button data-sort="comments"  onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Bình luận</button>
+                    <button data-sort="date"      onclick="setLibrarySort(this)" class="sort-btn        px-3 py-1 rounded-lg text-xs font-bold border border-gray-200 bg-white text-slate-500 hover:bg-gray-50">Ngày</button>
                 </div>
             </div>
         </div>
@@ -710,17 +710,17 @@
                     <tr class="border-b border-gray-100">
                         <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 w-8">#</th>
                         <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4">Caption</th>
-                        <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden md:table-cell">Page</th>
-                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4">Views</th>
-                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden sm:table-cell">Likes</th>
+                        <th class="text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden md:table-cell">Trang</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4">Lượt xem</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden sm:table-cell">Thích</th>
                         <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden sm:table-cell">Cmt</th>
-                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden lg:table-cell">Shares</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden lg:table-cell">Chia sẻ</th>
                         <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 pr-4 hidden lg:table-cell">Eng%</th>
-                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 hidden xl:table-cell">Published</th>
+                        <th class="text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-3 hidden xl:table-cell">Đăng lúc</th>
                     </tr>
                 </thead>
                 <tbody id="libraryTableBody">
-                    <tr><td colspan="9" class="py-10 text-center text-slate-400 text-sm animate-pulse">Loading reel data...</td></tr>
+                    <tr><td colspan="9" class="py-10 text-center text-slate-400 text-sm animate-pulse">Đang tải dữ liệu reel...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -808,7 +808,7 @@
                     document.getElementById('totalViews').innerText = formatK(totalViewsSum);
 
                     const totalLikes = jsonGrowth.data.reduce((sum, d) => sum + d.likes, 0);
-                    document.getElementById('totalLikes').innerText = `${formatK(totalLikes)} total interactions recorded.`;
+                    document.getElementById('totalLikes').innerText = `${formatK(totalLikes)} tương tác đã ghi nhận.`;
                     // globalEngRate is set accurately by loadSecondaryMetrics()
                 }
             }
@@ -852,7 +852,7 @@
     function renderPagination() {
         const container = document.getElementById('topPostsPagination');
         if (totalPages <= 1) {
-            container.innerHTML = '<p class="text-[10px] text-slate-400 text-center font-medium uppercase tracking-wider">Data refreshed every 12 hours automatically</p>';
+            container.innerHTML = '<p class="text-[10px] text-slate-400 text-center font-medium uppercase tracking-wider">Dữ liệu tự làm mới mỗi 12 giờ</p>';
             return;
         }
         container.innerHTML = `
@@ -999,7 +999,7 @@
         list.innerHTML = '';
 
         if (data.length === 0) {
-            list.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm">No signals found in this range.</div>';
+            list.innerHTML = '<div class="text-center py-10 text-slate-400 text-sm">Không có tín hiệu trong khoảng này.</div>';
             return;
         }
 
@@ -1237,10 +1237,10 @@
                     <div class="flex gap-2 shrink-0">
                         <button type="button"
                             class="px-3 py-1.5 rounded text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700"
-                            onclick="decideBoost(${r.id}, 'approve')">Approve → Reup</button>
+                            onclick="decideBoost(${r.id}, 'approve')">Duyệt → Reup</button>
                         <button type="button"
                             class="px-3 py-1.5 rounded text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100"
-                            onclick="decideBoost(${r.id}, 'reject')">Reject</button>
+                            onclick="decideBoost(${r.id}, 'reject')">Từ chối</button>
                     </div>
                 </div>
             `).join('');
@@ -1462,10 +1462,10 @@
 
             if (stale) {
                 dot.className = 'w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 animate-pulse';
-                text.innerHTML = `<span class="text-amber-600">Data cũ</span> &bull; cập nhật ${age_label} &bull; ${total_records.toLocaleString()} records`;
+                text.innerHTML = `<span class="text-amber-600">Data cũ</span> &bull; cập nhật ${age_label} &bull; ${total_records.toLocaleString()} bản ghi`;
             } else {
                 dot.className = 'w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0';
-                text.innerHTML = `Cập nhật lúc <strong>${last_updated}</strong> (${age_label}) &bull; ${total_records.toLocaleString()} records`;
+                text.innerHTML = `Cập nhật lúc <strong>${last_updated}</strong> (${age_label}) &bull; ${total_records.toLocaleString()} bản ghi`;
             }
         } catch (e) {
             document.getElementById('dataStatusText').textContent = 'Không thể kiểm tra trạng thái dữ liệu.';
@@ -1534,7 +1534,7 @@
         if (platform) params.push(`platform=${encodeURIComponent(platform)}`);
 
         const tbody = document.getElementById('libraryTableBody');
-        tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400 text-sm animate-pulse">Loading...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400 text-sm animate-pulse">Đang tải...</td></tr>';
 
         try {
             const res = await fetch('/insights/api/top-posts?' + params.join('&'));
@@ -1725,7 +1725,7 @@
     async function loadCompetitorTop(page) {
         if (page !== undefined) _compPage = page;
         const tbody = document.getElementById('compTableBody');
-        tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Loading...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="py-6 text-center text-slate-400 text-xs animate-pulse">Đang tải...</td></tr>';
 
         try {
             const platform = document.getElementById('platformSelect').value;
