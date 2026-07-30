@@ -2,18 +2,21 @@
 
 ## System State
 
-- Local Windows OK; OpenRouter key DB OK; caption Job #7 PASS
-- Compliance blacklist: **116** active (seed + research Meta/VN)
-- AI path: Gemini → OpenRouter → RPA → poorman
-- Settings UI: section **AI Keys**
+- **FB Pro Tasks** scoped theo **account + target page** (`/app/fb-pro-tasks/`)
+- Scope hiện tại: `FB Cookie Import · kids0810` — 30% (reels auto 2, posts/interactions manual)
+- Config v2: `storage/db/config/fb_pro_weekly_tasks.json` (scopes map)
 
 ## Done This Session
 
-- Fix iflow/9Router off, Chrome UC Windows, log rotate
-- OpenRouter wire + UI keys; real Job #7 caption xịn + affiliate
-- Seed/research FB blacklist; inject vào prompt AI
+- Tracker hybrid + multi-scope (migrate v1 → scopes)
+- Nav “Nhiệm vụ FB”; đếm Job lọc theo account/page
+
+## Unfinished / Blockers
+
+- Restart web nếu chưa thấy dropdown scope
+- Thêm account/page mới → tự hiện trong selector
 
 ## Next Action
 
-- Owner duyệt Job #7 / chạy DRAFT tiếp khi cần
+- Owner mở `/app/fb-pro-tasks/`, chọn scope, chỉnh số khớp Meta
 - Commit khi Owner bảo

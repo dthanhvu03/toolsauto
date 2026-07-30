@@ -34,6 +34,7 @@ from app.features.system_panel import ai_studio_router as ai_studio
 from app.features.facebook import pages_router as pages
 from app.features.facebook import manual_job_router as manual_job
 from app.features.insights import router as insights
+from app.features.fb_pro_tasks import router as fb_pro_tasks
 from app.features.telegram_bot import router as telegram
 from app.features.viral_intake import router as viral
 from app.features.viral_intake import intro_router as viral_intros
@@ -78,6 +79,7 @@ app.include_router(telegram.router)
 app.include_router(viral_intros.router)
 app.include_router(viral.router)
 app.include_router(insights.router)
+app.include_router(fb_pro_tasks.router)
 app.include_router(system_panel.router)
 app.include_router(pages.router)
 app.include_router(manual_job.router)

@@ -51,7 +51,8 @@ KEYWORDS = [
     ("làm giàu nhanh", "income_claim", "VIOLATION"),
     ("thu nhập thụ động", "income_claim", "WARNING"),
     ("cam kết lợi nhuận", "income_claim", "VIOLATION"),
-    # Direct link / platform spam in caption (prefer comment CTA)
+    # Direct link / platform spam — caption only (check_before_publish skips
+    # category=direct_link for content_type=comment so affiliate comments OK)
     ("http://", "direct_link", "VIOLATION"),
     ("https://", "direct_link", "VIOLATION"),
     ("shopee.vn", "direct_link", "VIOLATION"),
