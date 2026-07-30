@@ -20,9 +20,6 @@ from app.config import (
     DATABASE_URL,
     BASE_DIR,
     DATA_DIR,
-    CONTENT_DIR,
-    DONE_DIR,
-    FAILED_DIR,
     REUP_DIR,
     THUMB_DIR,
     THREADS_MEDIA_DIR,
@@ -30,7 +27,6 @@ from app.config import (
     DEBUG_STEPS_DIR,
     VNC_PORT,
     CONTENT_MEDIA_DIR,
-    CONTENT_VIDEO_DIR,
     CONTENT_PROCESSED_DIR,
     SYSPANEL_DESTRUCTIVE_ENABLED,
     iter_pm2_log_directories,
@@ -206,11 +202,10 @@ def _dir_file_stats(path: Path) -> dict:
 
 
 def _get_content_stats():
+    # No video/done/failed dirs: legacy empty folders — cleanup deletes media in place.
+    # Upload via UI → media/; viral → REUP_DIR; ffmpeg → processed. See docs/CONFIG.md.
     mapping = {
         "media": CONTENT_MEDIA_DIR,
-        "video": CONTENT_VIDEO_DIR,
-        "done": DONE_DIR,
-        "failed": FAILED_DIR,
         "processed": CONTENT_PROCESSED_DIR,
         "reup": REUP_DIR,
         "thumbnails": THUMB_DIR,

@@ -2,9 +2,12 @@
 Cleanup Service — Archives or deletes media files for completed/stale jobs.
 
 Policy:
-  - DONE jobs older than CLEANUP_DONE_AFTER_DAYS  → move file to content/done/
-  - FAILED jobs older than CLEANUP_FAILED_AFTER_DAYS → delete file (no value keeping)
+  - DONE jobs older than CLEANUP_DONE_AFTER_DAYS  → delete media from disk (platform already hosts it)
+  - FAILED jobs older than CLEANUP_FAILED_AFTER_DAYS → delete media (no archive folder)
+  - CANCELLED jobs → delete media immediately
   - Orphaned .tmp files in content/media/ older than 1 hour → delete (crashed writes)
+
+Note: DONE_DIR / FAILED_DIR under content/ are legacy empty folders (not written to).
 """
 
 import os
