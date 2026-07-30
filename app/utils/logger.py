@@ -3,6 +3,32 @@ import sys
 import logging
 from logging.handlers import TimedRotatingFileHandler
 
+
+class WindowsSafeTimedRotatingFileHandler(TimedRotatingFileHandler):
+    """TimedRotatingFileHandler that tolerates WinError 32 during rollover.
+
+    On Windows, web + workers often share the same app.log. Rename during
+    midnight rollover fails with PermissionError (file locked by another
+    process). Skip that rollover cycle instead of crashing the logger.
+    """
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except PermissionError as exc:
+            logging.getLogger(__name__).warning(
+                "Log rollover skipped (file locked): %s", exc
+            )
+        except OSError as exc:
+            # WinError 32 = ERROR_SHARING_VIOLATION
+            if getattr(exc, "winerror", None) == 32 or exc.errno in (13, 16):
+                logging.getLogger(__name__).warning(
+                    "Log rollover skipped (sharing violation): %s", exc
+                )
+                return
+            raise
+
+
 def setup_shared_logger(name: str) -> logging.Logger:
     """
     Configures a shared logger for the application and background workers.
@@ -47,11 +73,17 @@ def setup_shared_logger(name: str) -> logging.Logger:
     os.makedirs(logs_dir, exist_ok=True)
 
     log_file = os.path.join(logs_dir, "app.log")
-    file_handler = TimedRotatingFileHandler(
+    handler_cls = (
+        WindowsSafeTimedRotatingFileHandler
+        if os.name == "nt"
+        else TimedRotatingFileHandler
+    )
+    file_handler = handler_cls(
         filename=log_file,
         when="midnight",
         backupCount=7,
-        encoding="utf-8"
+        encoding="utf-8",
+        delay=True,
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(file_formatter)

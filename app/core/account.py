@@ -757,6 +757,23 @@ class AccountService:
         return f"https://www.tiktok.com/@{handle}"
 
     @staticmethod
+    def extract_tiktok_handle(url: str | None) -> str:
+        """Extract bare TikTok @handle from video or profile URL (lowercase, no @)."""
+        s = (url or "").strip()
+        if not s:
+            return ""
+        s = s.split("?")[0].split("#")[0].strip().rstrip("/")
+        at = s.find("@")
+        if at >= 0:
+            handle = s[at + 1 :].strip().strip("/")
+            return handle.split("/")[0].strip().lower()
+        # Fallback via normalize
+        norm = AccountService.normalize_tiktok_source_url(s)
+        if "/@" in norm:
+            return norm.rsplit("/@", 1)[-1].split("/")[0].strip().lower()
+        return ""
+
+    @staticmethod
     def extract_tiktok_competitors(account: Account) -> list[dict[str, Any]]:
         """Return list of {url, target_page} filtered to TikTok competitor URLs for an account."""
         out: list[dict[str, Any]] = []
@@ -852,6 +869,13 @@ class AccountService:
                 competitor_groups.setdefault(tp, {}).setdefault(acc.name, []).append(url)
                 competitor_total += 1
 
+        suggested_keywords: list[str] = []
+        for acc in accounts:
+            for kw in get_discovery_keywords(acc):
+                if kw and kw not in suggested_keywords:
+                    suggested_keywords.append(kw)
+        suggested_keywords = suggested_keywords[:24]
+
         return {
             "tab": tab,
             "q": q,
@@ -864,6 +888,7 @@ class AccountService:
             "competitor_groups": competitor_groups,
             "viral_rows": [],
             "viral_total": 0,
+            "suggested_keywords": suggested_keywords,
             "page_index": {
                 k: {"name": v.get("name"), "niches": sorted(list(v.get("niches") or []))}
                 for k, v in page_index.items()

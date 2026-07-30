@@ -5,6 +5,8 @@ import sys
 import os
 import threading
 from pathlib import Path
+import re
+import unicodedata
 
 # Repo root on sys.path so `python workers/ai_generator.py` works without PYTHONPATH=.
 _root = Path(__file__).resolve().parent.parent
@@ -42,6 +44,116 @@ GEMINI_CIRCUIT_RESET_TIME = 0
 _AFF_CACHE_TS = 0.0
 _AFF_CACHE_BY_KW: dict = {}
 _AFF_CACHE_TTL_SEC = 60.0
+
+
+_VI_STOPWORDS = {
+    "va", "la", "cua", "cho", "voi", "mot", "nhung", "cac", "dang", "se", "roi",
+    "nhe", "nha", "nhi", "qua", "rat", "deo", "day", "kia", "nay", "do", "video",
+    "clip", "review", "hang", "shop", "mua", "ban", "san", "pham", "duong", "dep",
+}
+
+
+def _normalize_text_for_match(value: str) -> str:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return ""
+    deaccent = "".join(ch for ch in unicodedata.normalize("NFD", raw) if unicodedata.category(ch) != "Mn")
+    deaccent = re.sub(r"[^a-z0-9]+", " ", deaccent)
+    return re.sub(r"\s+", " ", deaccent).strip()
+
+
+def _extract_affiliate_hints(ai_result: dict, caption_text: str) -> list[str]:
+    hints: list[str] = []
+    affiliate_keyword = (ai_result.get("affiliate_keyword") or "").strip()
+    if affiliate_keyword:
+        hints.append(affiliate_keyword)
+    for kw in (ai_result.get("keywords") or []):
+        text = str(kw).strip()
+        if text:
+            hints.append(text)
+    # Lấy thêm cụm từ từ caption để tăng tỉ lệ bắt trúng keyword kho.
+    for piece in re.findall(r"[A-Za-zÀ-ỹ0-9]{3,}(?:\s+[A-Za-zÀ-ỹ0-9]{3,}){0,2}", caption_text or ""):
+        hints.append(piece.strip())
+    # Deduplicate giữ thứ tự.
+    seen = set()
+    uniq: list[str] = []
+    for h in hints:
+        key = _normalize_text_for_match(h)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        uniq.append(h.strip())
+    return uniq
+
+
+def _match_affiliate_from_hints(aff_by_keyword: dict, ai_result: dict, caption_text: str):
+    matched_kw = (ai_result.get("affiliate_keyword") or "").strip()
+    if matched_kw:
+        direct = aff_by_keyword.get(matched_kw.lower())
+        if direct:
+            return direct, "direct_affiliate_keyword"
+
+    hints = _extract_affiliate_hints(ai_result, caption_text)
+    if not hints:
+        return None, "no_hints"
+
+    corpus = " ".join(_normalize_text_for_match(h) for h in hints)
+    best_link = None
+    best_score = 0
+    best_reason = "no_match"
+
+    for kw, link in aff_by_keyword.items():
+        kw_norm = _normalize_text_for_match(kw)
+        if not kw_norm:
+            continue
+        score = 0
+        if kw_norm in corpus:
+            score += 100 + len(kw_norm)
+        kw_tokens = [t for t in kw_norm.split() if len(t) >= 3 and t not in _VI_STOPWORDS]
+        overlap = sum(1 for t in kw_tokens if t in corpus)
+        score += overlap * 15
+        if score > best_score:
+            best_score = score
+            best_link = link
+            best_reason = f"hint_overlap={overlap}"
+
+    if best_link and best_score >= 25:
+        return best_link, best_reason
+    return None, "score_below_threshold"
+
+
+def _enqueue_affiliate_lookup(job_id: int, ai_result: dict, caption_text: str, reason: str) -> dict:
+    """
+    Lưu yêu cầu tra Shopee affiliate vào runtime queue (file JSON),
+    để operator/bot xử lý ở bước sau mà không cần migration DB.
+    """
+    from app.features.affiliates.lookup_queue import load_queue, save_queue
+
+    hints = _extract_affiliate_hints(ai_result, caption_text)[:8]
+    normalized_hints = [_normalize_text_for_match(x) for x in hints]
+    normalized_hints = [x for x in normalized_hints if x]
+    fingerprint = "|".join(normalized_hints[:3]) or f"job-{job_id}"
+    item = {
+        "job_id": job_id,
+        "reason": reason,
+        "affiliate_keyword": (ai_result.get("affiliate_keyword") or "").strip(),
+        "hints": hints,
+        "fingerprint": fingerprint,
+        "created_at": int(time.time()),
+        "status": "PENDING_LOOKUP",
+    }
+
+    queue = load_queue()
+    # Deduplicate theo fingerprint để tránh spam queue khi retry cùng 1 nội dung.
+    exists = any(
+        (q.get("fingerprint") == fingerprint and q.get("status") == "PENDING_LOOKUP")
+        for q in queue
+        if isinstance(q, dict)
+    )
+    if not exists:
+        queue.append(item)
+        save_queue(queue)
+    return item
 
 
 def _get_affiliate_by_keyword(db: Session) -> dict:
@@ -144,7 +256,6 @@ def process_draft_job(db: Session):
     try:
         from app.core.orchestrator import ContentOrchestrator
         from app.core.orchestrator import OutputContractViolation
-        import re
         
         target_video = job.resolved_processed_media_path if job.resolved_processed_media_path else job.resolved_media_path
         
@@ -241,8 +352,7 @@ def process_draft_job(db: Session):
             job._ai_keywords = ai_result.get("keywords") or []
             
             # Affiliate injector — tracking parity với bulk create
-            matched_aff_kw = (ai_result.get("affiliate_keyword") or "").strip()
-            aff_link = aff_by_keyword.get(matched_aff_kw.lower()) if matched_aff_kw else None
+            aff_link, aff_match_reason = _match_affiliate_from_hints(aff_by_keyword, ai_result, final_text)
             if aff_link:
                 try:
                     from app.core.compliance.facebook_compliance import compliance_checker, Severity
@@ -267,11 +377,24 @@ def process_draft_job(db: Session):
                             comment_template=safe_template,
                         )
                         logger.info(
-                            "[AI_GEN] [Job-%s] [AFFILIATE] Injected keyword=%s tracking=%s",
-                            job.id, aff_link.keyword, job.tracking_code,
+                            "[AI_GEN] [Job-%s] [AFFILIATE] Injected keyword=%s reason=%s tracking=%s",
+                            job.id, aff_link.keyword, aff_match_reason, job.tracking_code,
                         )
                 except Exception as e:
                     logger.error("[AI_GEN] [Job-%s] [AFFILIATE_ERR] %s", job.id, e)
+            else:
+                # Chưa khớp kho affiliate: đẩy vào lookup queue + log sự kiện để operator/bot tra Shopee.
+                try:
+                    queue_item = _enqueue_affiliate_lookup(job.id, ai_result, final_text, aff_match_reason)
+                    JobService._log_event(
+                        db,
+                        job.id,
+                        "INFO",
+                        "AFFILIATE_LOOKUP_REQUIRED",
+                        meta=str(queue_item),
+                    )
+                except Exception:
+                    pass
 
             db.commit()
             if job.affiliate_url and job.tracking_code:
@@ -595,6 +718,13 @@ def run_loop():
                 
                 # Check for affiliate links needing AI comments (Phase 3 SaaS Hardening)
                 _process_pending_affiliate_links(db)
+
+                # Auto-resolve Shopee lookup queue against warehouse when possible
+                try:
+                    from app.features.affiliates.lookup_queue import process_pending_against_warehouse
+                    process_pending_against_warehouse(db, limit=10)
+                except Exception as lookup_err:
+                    logger.debug("[AI_GEN] lookup queue process skipped: %s", lookup_err)
                 
                 found_job = process_draft_job(db)
                 

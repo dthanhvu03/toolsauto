@@ -155,6 +155,14 @@ PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv('PLAYWRIGHT_DEFAULT_TIMEOUT_MS', '
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_API_KEY = GEMINI_API_KEY  # alias
 
+# OpenRouter (OpenAI-compatible; use free models e.g. openrouter/free or *:free)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = (os.getenv("OPENROUTER_BASE_URL") or "https://openrouter.ai/api/v1").strip()
+OPENROUTER_MODEL = (os.getenv("OPENROUTER_MODEL") or "openrouter/free").strip()
+
+# When pipeline (9Router + native) fails, fall back to Gemini Web RPA (cookies).
+USE_RPA_FALLBACK = os.getenv("USE_RPA_FALLBACK", "true").lower() == "true"
+
 # 9Router Gateway (centralized; avoid hardcoded fallbacks in services)
 ROUTER_BASE_URL = (os.getenv("ROUTER_BASE_URL") or "http://localhost:20128/v1").strip()
 

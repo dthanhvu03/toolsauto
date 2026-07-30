@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from glob import glob
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -274,6 +275,75 @@ class ViralService:
             "jobs_viral": jobs_viral,
             "show_worker_banner": new_count > 0 and jobs_viral == 0,
             "ffmpeg_ok": ViralService.ffmpeg_available(),
+            "diversity": ViralService.source_diversity_stats(db),
+        }
+
+    @staticmethod
+    def source_diversity_stats(db: Session) -> Dict[str, Any]:
+        """Handle distribution for NEW (or window) — mono-source warn for UI banner."""
+        from app.core import settings as runtime_settings
+        from app.core.account import AccountService
+        from app.constants import ViralStatus
+
+        enabled = True
+        warn_pct = 70
+        window = "new"
+        mega_th = 2_000_000
+        try:
+            ev = runtime_settings.get_effective(db, "viral.diversify_enabled")
+            if ev is not None:
+                enabled = bool(ev) if isinstance(ev, bool) else str(ev).lower() in ("1", "true", "yes", "on")
+            wp = runtime_settings.get_effective(db, "viral.mono_source_warn_pct")
+            if wp is not None:
+                warn_pct = max(50, min(100, int(wp)))
+            w = runtime_settings.get_effective(db, "viral.mono_source_window")
+            if w:
+                window = str(w).strip().lower()
+            mt = runtime_settings.get_effective(db, "viral.mega_views_threshold")
+            if mt is not None:
+                mega_th = int(mt)
+        except Exception:
+            pass
+
+        q = db.query(ViralMaterial.url, ViralMaterial.views)
+        if window == "new":
+            q = q.filter(ViralMaterial.status == ViralStatus.NEW)
+        elif window == "24h":
+            q = q.filter(ViralMaterial.created_at >= int(time.time()) - 86400)
+        elif window == "7d":
+            q = q.filter(ViralMaterial.created_at >= int(time.time()) - 7 * 86400)
+        else:
+            q = q.filter(ViralMaterial.status == ViralStatus.NEW)
+
+        rows = q.all()
+        counts: Dict[str, int] = {}
+        for url, _views in rows:
+            h = AccountService.extract_tiktok_handle(url) or "unknown"
+            counts[h] = counts.get(h, 0) + 1
+        total = sum(counts.values())
+        top_handle = ""
+        top_count = 0
+        top_pct = 0.0
+        if counts:
+            top_handle, top_count = max(counts.items(), key=lambda x: x[1])
+            top_pct = round(100.0 * top_count / total, 1) if total else 0.0
+        distribution = sorted(
+            [{"handle": h, "count": c, "pct": round(100.0 * c / total, 1) if total else 0.0} for h, c in counts.items()],
+            key=lambda x: -x["count"],
+        )[:8]
+        warn = bool(enabled and total >= 3 and top_pct >= warn_pct)
+        return {
+            "enabled": enabled,
+            "total": total,
+            "window": window,
+            "warn_pct": warn_pct,
+            "warn": warn,
+            "top_handle": top_handle,
+            "top_count": top_count,
+            "top_pct": top_pct,
+            "distribution": distribution,
+            "mega_threshold": mega_th,
+            "unique_handles": len(counts),
         }
 
     @staticmethod
@@ -399,14 +469,20 @@ class ViralService:
     @staticmethod
     def force_scan(db: Session) -> Tuple[int, int, str]:
         try:
-            total_found, num_channels = run_tiktok_competitor_scan(db)
+            total_found, num_channels, skipped_quota, skipped_mega = run_tiktok_competitor_scan(db)
+            skip_bits = []
+            if skipped_quota:
+                skip_bits.append(f"quota={skipped_quota}")
+            if skipped_mega:
+                skip_bits.append(f"mega={skipped_mega}")
+            skip_suffix = f" · bỏ qua ({', '.join(skip_bits)})" if skip_bits else ""
             if num_channels == 0:
                 msg = "Không có kênh TikTok đối thủ nào trong cấu hình account."
             elif total_found > 0:
-                msg = f"✅ Đã quét thủ công: {total_found} video mới từ {num_channels} kênh."
+                msg = f"✅ Đã quét thủ công: {total_found} video mới từ {num_channels} kênh.{skip_suffix}"
             else:
                 default_min = get_default_min_views(db)
-                msg = f"Đã quét {num_channels} kênh. 0 video đạt ngưỡng {default_min:,} views."
+                msg = f"Đã quét {num_channels} kênh. 0 video đạt ngưỡng {default_min:,} views.{skip_suffix}"
             return total_found, num_channels, msg
         except FileNotFoundError as e:
             msg = f"❌ Lỗi quét: {str(e)[:160]}"
