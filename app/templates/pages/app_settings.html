@@ -92,6 +92,20 @@
                 <a href="/app/ai-studio" class="font-bold text-indigo-700 underline underline-offset-2 hover:text-indigo-900">AI Studio</a>
               </div>
             </div>
+            {% elif section == 'AI Keys' %}
+            <div class="px-4 md:px-5 pt-4">
+              <div class="rounded-xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-950 space-y-1.5">
+                <div class="font-semibold">Thứ tự caption AI</div>
+                <p class="text-[12px] text-emerald-900/85 leading-relaxed">
+                  Gemini native → OpenRouter (free) → Gemini RPA (cookie) → poorman.
+                  Lấy key:
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="font-semibold underline underline-offset-2">AI Studio</a>
+                  ·
+                  <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="font-semibold underline underline-offset-2">OpenRouter</a>
+                  (model <code class="font-mono text-[11px] bg-white/80 px-1 rounded">openrouter/free</code> ≈ 50 req/ngày không nạp tiền).
+                </p>
+              </div>
+            </div>
             {% endif %}
             <div class="p-4 md:p-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
               {% for spec in specs %}

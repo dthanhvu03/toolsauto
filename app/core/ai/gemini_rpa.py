@@ -12,6 +12,8 @@ import functools
 import subprocess
 import re
 import shutil
+import tempfile
+from pathlib import Path
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -31,10 +33,20 @@ DEBUG_DIR = str(config.DEBUG_STEPS_DIR)
 # Xvfb đã khởi động trong process này (tránh gọi nhiều lần)
 _xvfb_process = None
 
+_DRIVER_FATAL_MARKERS = (
+    "session not created",
+    "cannot connect to chrome",
+    "chrome not reachable",
+    "no such file",
+    "chromedriver executable",
+)
+
 
 def _ensure_virtual_display() -> None:
-    """Nếu DISPLAY=:0 hoặc trống → khởi động Xvfb :99 và ép DISPLAY=:99 để Chrome không mở cửa sổ thật."""
+    """Linux only: nếu DISPLAY=:0 hoặc trống → Xvfb :99. Windows dùng desktop thật."""
     global _xvfb_process
+    if os.name == "nt":
+        return
     display = os.environ.get("DISPLAY", "").strip()
     if display and display != ":0":
         return
@@ -63,15 +75,105 @@ def _ensure_virtual_display() -> None:
         _xvfb_process = None
 
 
+def _detect_chrome_binary() -> str | None:
+    """Resolve chrome.exe / google-chrome path (Windows + Linux)."""
+    env_bin = (os.environ.get("CHROME_BINARY") or os.environ.get("GOOGLE_CHROME_BIN") or "").strip()
+    candidates: list[str] = []
+    if env_bin:
+        candidates.append(env_bin)
+    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome"):
+        found = shutil.which(name)
+        if found:
+            candidates.append(found)
+    if os.name == "nt":
+        local = os.environ.get("LOCALAPPDATA", "")
+        pf = os.environ.get("PROGRAMFILES", r"C:\Program Files")
+        pf86 = os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+        candidates.extend(
+            [
+                os.path.join(pf, "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(pf86, "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(local, "Google", "Chrome", "Application", "chrome.exe"),
+            ]
+        )
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+
+def _windows_file_major_version(path: str) -> int | None:
+    """Read PE ProductVersion major via Win32 Version APIs (no Chrome launch)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        path_abs = os.path.abspath(path)
+        size = ctypes.windll.version.GetFileVersionInfoSizeW(path_abs, None)
+        if not size:
+            return None
+        data = ctypes.create_string_buffer(size)
+        if not ctypes.windll.version.GetFileVersionInfoW(path_abs, 0, size, data):
+            return None
+
+        class VS_FIXEDFILEINFO(ctypes.Structure):
+            _fields_ = [
+                ("dwSignature", wintypes.DWORD),
+                ("dwStrucVersion", wintypes.DWORD),
+                ("dwFileVersionMS", wintypes.DWORD),
+                ("dwFileVersionLS", wintypes.DWORD),
+                ("dwProductVersionMS", wintypes.DWORD),
+                ("dwProductVersionLS", wintypes.DWORD),
+                ("dwFileFlagsMask", wintypes.DWORD),
+                ("dwFileFlags", wintypes.DWORD),
+                ("dwFileOS", wintypes.DWORD),
+                ("dwFileType", wintypes.DWORD),
+                ("dwFileSubtype", wintypes.DWORD),
+                ("dwFileDateMS", wintypes.DWORD),
+                ("dwFileDateLS", wintypes.DWORD),
+            ]
+
+        lptr = ctypes.c_void_p()
+        llen = wintypes.UINT()
+        if not ctypes.windll.version.VerQueryValueW(data, "\\", ctypes.byref(lptr), ctypes.byref(llen)):
+            return None
+        info = ctypes.cast(lptr, ctypes.POINTER(VS_FIXEDFILEINFO)).contents
+        return int(info.dwProductVersionMS >> 16)
+    except Exception:
+        return None
+
+
 def _detect_chrome_major_version() -> int | None:
     """
     Detect installed Chrome/Chromium major version.
     Needed to avoid ChromeDriver mismatch (common cause of Gemini RPA failures).
     """
+    binary = _detect_chrome_binary()
+    if binary and os.name == "nt":
+        major = _windows_file_major_version(binary)
+        if major:
+            return major
+        # Fallback: versioned sibling folders next to chrome.exe
+        try:
+            for child in Path(binary).parent.iterdir():
+                if child.is_dir():
+                    m = re.match(r"^(\d+)\.", child.name)
+                    if m:
+                        return int(m.group(1))
+        except Exception:
+            pass
+
     candidates = ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser"]
+    if binary:
+        candidates = [binary] + candidates
     for bin_name in candidates:
         try:
-            out = subprocess.check_output([bin_name, "--version"], stderr=subprocess.STDOUT, text=True).strip()
+            out = subprocess.check_output(
+                [bin_name, "--version"],
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=10,
+            ).strip()
             # e.g. "Google Chrome 145.0.7632.116"
             m = re.search(r"(\d+)\.", out)
             if m:
@@ -84,7 +186,9 @@ def _detect_chrome_major_version() -> int | None:
 def _detect_chromedriver_major_version(driver_path: str) -> int | None:
     """Detect chromedriver major version from `chromedriver --version` output."""
     try:
-        out = subprocess.check_output([driver_path, "--version"], stderr=subprocess.STDOUT, text=True).strip()
+        out = subprocess.check_output(
+            [driver_path, "--version"], stderr=subprocess.STDOUT, text=True, timeout=10
+        ).strip()
         # e.g. "ChromeDriver 145.0.7632.0 ..."
         m = re.search(r"ChromeDriver\s+(\d+)\.", out)
         if m:
@@ -94,32 +198,45 @@ def _detect_chromedriver_major_version(driver_path: str) -> int | None:
     return None
 
 
+def _uc_cache_roots() -> list[str]:
+    roots = [
+        os.path.expanduser("~/.local/share/undetected_chromedriver"),
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "undetected_chromedriver"),
+        os.path.join(os.environ.get("APPDATA", ""), "undetected_chromedriver"),
+    ]
+    return [r for r in roots if r]
+
+
 def _ensure_uc_driver_matches_browser(target_major: int) -> None:
     """
-    undetected_chromedriver caches a patched driver at:
-    ~/.local/share/undetected_chromedriver/undetected_chromedriver
-    If it's for a different major version, UC can keep reusing it → SessionNotCreated.
-    We proactively remove the mismatched cache so UC re-downloads the correct version.
+    undetected_chromedriver caches a patched driver under ~/.local/share/... (Linux)
+    or AppData (Windows). Mismatched major → SessionNotCreated; purge cache.
     """
-    cache_root = os.path.expanduser("~/.local/share/undetected_chromedriver")
-    cached_driver = os.path.join(cache_root, "undetected_chromedriver")
-    if not os.path.exists(cached_driver):
-        return
-    cached_major = _detect_chromedriver_major_version(cached_driver)
-    if cached_major and cached_major != target_major:
-        logger.warning(
-            "Cached undetected_chromedriver major=%s mismatches Chrome major=%s. Removing cache to re-download.",
-            cached_major,
-            target_major,
-        )
-        try:
-            os.remove(cached_driver)
-        except Exception:
-            # If removal fails, fall back to nuking the cache directory.
-            try:
-                shutil.rmtree(cache_root, ignore_errors=True)
-            except Exception:
-                pass
+    names = ("undetected_chromedriver", "undetected_chromedriver.exe")
+    for cache_root in _uc_cache_roots():
+        for name in names:
+            cached_driver = os.path.join(cache_root, name)
+            if not os.path.exists(cached_driver):
+                continue
+            cached_major = _detect_chromedriver_major_version(cached_driver)
+            if cached_major and cached_major != target_major:
+                logger.warning(
+                    "Cached undetected_chromedriver major=%s mismatches Chrome major=%s. Removing cache to re-download.",
+                    cached_major,
+                    target_major,
+                )
+                try:
+                    os.remove(cached_driver)
+                except Exception:
+                    try:
+                        shutil.rmtree(cache_root, ignore_errors=True)
+                    except Exception:
+                        pass
+
+
+def _is_driver_fatal(err: BaseException) -> bool:
+    msg = str(err).lower()
+    return any(marker in msg for marker in _DRIVER_FATAL_MARKERS)
 
 
 class GeminiMaxRetriesExceeded(Exception):
@@ -142,10 +259,20 @@ def with_retry(max_retries=3, delay_sec=30):
                 except Exception as e:
                     last_err = e
                     logger.error(f"Attempt {attempt}/{max_retries} failed: {e}")
-                    if attempt < max_retries:
-                        logger.info(f"Waiting {delay_sec}s before next retry...")
-                        time.sleep(delay_sec)
-            logger.error("All 3 attempts failed. Tự động đánh dấu FAILED.")
+                    # Driver/session bootstrap failures won't heal with long waits.
+                    if _is_driver_fatal(e):
+                        wait = 2 if attempt < max_retries else 0
+                        if attempt >= min(2, max_retries):
+                            logger.error("Driver fatal after short retry. Aborting RPA.")
+                            raise GeminiMaxRetriesExceeded(
+                                f"Failed after {attempt} attempts (driver fatal). Last error: {last_err}"
+                            )
+                    else:
+                        wait = delay_sec if attempt < max_retries else 0
+                    if wait:
+                        logger.info(f"Waiting {wait}s before next retry...")
+                        time.sleep(wait)
+            logger.error("All attempts failed. Tự động đánh dấu FAILED.")
             raise GeminiMaxRetriesExceeded(f"Failed after {max_retries} attempts. Last error: {last_err}")
         return wrapper
     return decorator
@@ -203,11 +330,22 @@ class GeminiRPAService:
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-gpu")
-        
+
+        chrome_bin = _detect_chrome_binary()
+        if chrome_bin:
+            opts.binary_location = chrome_bin
+            logger.info("Chrome binary: %s", chrome_bin)
+        else:
+            logger.warning("Chrome binary not found in standard paths; UC may fail to start.")
+
         pm2_name = os.environ.get("name", "gemini_rpa_default").replace(" ", "_")
-        profile_path = f"/tmp/{os.getenv('APP_NAME', 'app')}_chrome_{pm2_name}"
+        profile_path = os.path.join(
+            tempfile.gettempdir(),
+            f"{os.getenv('APP_NAME', 'app')}_chrome_{pm2_name}",
+        )
+        os.makedirs(profile_path, exist_ok=True)
         logger.info("Using isolated Chromium profile: %s", profile_path)
-        
+
         try:
             major = _detect_chrome_major_version()
             if major:
@@ -215,15 +353,18 @@ class GeminiRPAService:
                 _ensure_uc_driver_matches_browser(major)
             else:
                 logger.warning("Could not detect Chrome major version; UC may download mismatched chromedriver.")
+            uc_kwargs = {
+                "options": opts,
+                "keep_alive": True,
+                "use_subprocess": True,
+                "user_data_dir": profile_path,
+            }
+            if major:
+                uc_kwargs["version_main"] = major
+            if chrome_bin:
+                uc_kwargs["browser_executable_path"] = chrome_bin
             # Let undetected_chromedriver automatically manage the driver executable
-            driver = uc.Chrome(
-                options=opts,
-                keep_alive=True,
-                use_subprocess=True,
-                user_data_dir=profile_path,
-                # Pin driver major to the installed browser to prevent SessionNotCreated
-                **({"version_main": major} if major else {}),
-            )
+            driver = uc.Chrome(**uc_kwargs)
             # Make webdriver commands more resilient to slow pages / large uploads
             try:
                 driver.set_page_load_timeout(180)

@@ -10,6 +10,7 @@ The module is text-only by design. Vision / async paths still live in
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import Optional, Tuple
 
@@ -38,6 +39,14 @@ COOLDOWN_SECONDS = 60
 # Module-level cooldown state. Shared between text and vision paths because
 # rate-limiting is per-model on Google's side regardless of modality.
 _model_cooldowns: dict[str, float] = {}
+
+
+def _resolve_api_key() -> str:
+    """Prefer live config / env over stale import-time empty string."""
+    key = (getattr(config, "GEMINI_API_KEY", None) or getattr(config, "GOOGLE_API_KEY", None) or "").strip()
+    if key:
+        return key
+    return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
 
 
 def _is_available(model_name: str) -> bool:
@@ -76,7 +85,7 @@ def call_native_gemini(prompt: str) -> Tuple[Optional[str], dict]:
         "fail_reason": None,
     }
 
-    api_key = getattr(config, "GEMINI_API_KEY", None)
+    api_key = _resolve_api_key()
     if not api_key:
         meta["fail_reason"] = "no_api_key"
         logger.warning("[AI FALLBACK] GEMINI_API_KEY not set; native fallback disabled")
@@ -166,7 +175,7 @@ async def call_native_gemini_async(prompt: str) -> Tuple[Optional[str], dict]:
         "fail_reason": None,
     }
 
-    api_key = getattr(config, "GEMINI_API_KEY", None)
+    api_key = _resolve_api_key()
     if not api_key:
         meta["fail_reason"] = "no_api_key"
         logger.warning("[AI FALLBACK ASYNC] GEMINI_API_KEY not set; native fallback disabled")
@@ -263,7 +272,7 @@ def call_native_gemini_vision(
         "fail_reason": None,
     }
 
-    api_key = getattr(config, "GEMINI_API_KEY", None)
+    api_key = _resolve_api_key()
     if not api_key:
         meta["fail_reason"] = "no_api_key"
         logger.warning(

@@ -44,6 +44,8 @@ _ENV_BOOTSTRAP: dict[str, str] = {
     "GOOGLE_API_KEY": (
         (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
     ),
+    "OPENROUTER_API_KEY": (os.environ.get("OPENROUTER_API_KEY") or "").strip(),
+    "OPENROUTER_MODEL": (os.environ.get("OPENROUTER_MODEL") or "openrouter/free").strip(),
 }
 
 
@@ -128,6 +130,81 @@ SETTINGS: dict[str, SettingSpec] = {
         min=0,
         max=500,
         unit="video",
+    ),
+    "viral.diversify_enabled": SettingSpec(
+        key="viral.diversify_enabled",
+        env_var_name="VIRAL_DIVERSIFY_ENABLED",
+        type="bool",
+        default_getter=lambda: True,
+        title="Đa dạng nguồn (Source Diversify)",
+        section="Quét TikTok & Viral",
+        description="Bật quota theo handle, cảnh báo mono-source và lọc/đánh dấu clip mega-views.",
+    ),
+    "viral.max_clips_per_handle_per_day": SettingSpec(
+        key="viral.max_clips_per_handle_per_day",
+        env_var_name="VIRAL_MAX_CLIPS_PER_HANDLE_PER_DAY",
+        type="int",
+        default_getter=lambda: 3,
+        title="Tối đa clip / handle / ngày",
+        section="Quét TikTok & Viral",
+        description="Số video tối đa thêm vào kho từ cùng một @handle trong một ngày (0 = tắt quota).",
+        min=0,
+        max=50,
+        unit="clip",
+    ),
+    "viral.quota_scope": SettingSpec(
+        key="viral.quota_scope",
+        env_var_name="VIRAL_QUOTA_SCOPE",
+        type="str",
+        default_getter=lambda: "page",
+        title="Phạm vi quota handle",
+        section="Quét TikTok & Viral",
+        description="Đếm quota theo target page hoặc toàn hệ thống.",
+        choices=["page", "global"],
+    ),
+    "viral.mono_source_warn_pct": SettingSpec(
+        key="viral.mono_source_warn_pct",
+        env_var_name="VIRAL_MONO_SOURCE_WARN_PCT",
+        type="int",
+        default_getter=lambda: 70,
+        title="Cảnh báo mono-source (%)",
+        section="Quét TikTok & Viral",
+        description="Hiện banner khi một @handle chiếm ≥ tỷ lệ này trong cửa sổ đếm (mặc định: status NEW).",
+        min=50,
+        max=100,
+        unit="%",
+    ),
+    "viral.mono_source_window": SettingSpec(
+        key="viral.mono_source_window",
+        env_var_name="VIRAL_MONO_SOURCE_WINDOW",
+        type="str",
+        default_getter=lambda: "new",
+        title="Cửa sổ đếm mono-source",
+        section="Quét TikTok & Viral",
+        description="new = chỉ status NEW; 24h / 7d = theo created_at.",
+        choices=["new", "24h", "7d"],
+    ),
+    "viral.mega_views_threshold": SettingSpec(
+        key="viral.mega_views_threshold",
+        env_var_name="VIRAL_MEGA_VIEWS_THRESHOLD",
+        type="int",
+        default_getter=lambda: 2_000_000,
+        title="Ngưỡng mega-views",
+        section="Quét TikTok & Viral",
+        description="Clip đạt số view này bị skip hoặc gắn badge Mega (0 = tắt).",
+        min=0,
+        max=50_000_000,
+        unit="view",
+    ),
+    "viral.mega_views_action": SettingSpec(
+        key="viral.mega_views_action",
+        env_var_name="VIRAL_MEGA_VIEWS_ACTION",
+        type="str",
+        default_getter=lambda: "flag",
+        title="Hành động mega-views",
+        section="Quét TikTok & Viral",
+        description="skip = không thêm vào kho; flag = vẫn thêm và hiện badge trên UI.",
+        choices=["skip", "flag"],
     ),
     "publish.delay_min_sec": SettingSpec(
         key="publish.delay_min_sec",
@@ -638,11 +715,41 @@ SETTINGS: dict[str, SettingSpec] = {
         type="str",
         default_getter=_getattr_default("GOOGLE_API_KEY"),
         title="Google / Gemini API key",
-        section="Tích hợp",
-        description="API key AI Studio / Gemini. Lưu trên web ưu tiên hơn GEMINI_API_KEY / GOOGLE_API_KEY trong .env.",
+        section="AI Keys",
+        description=(
+            "Key từ https://aistudio.google.com/apikey — caption native (ưu tiên). "
+            "Lưu trên web ưu tiên hơn .env. Để trống khi Lưu = giữ giá trị hiện tại."
+        ),
         is_secret=True,
         keep_blank=True,
         env_var_name="GOOGLE_API_KEY",
+    ),
+    "OPENROUTER_API_KEY": SettingSpec(
+        key="OPENROUTER_API_KEY",
+        type="str",
+        default_getter=_getattr_default("OPENROUTER_API_KEY"),
+        title="OpenRouter API key (free)",
+        section="AI Keys",
+        description=(
+            "Key free từ https://openrouter.ai/keys — dùng khi Gemini hết quota. "
+            "Model mặc định openrouter/free (tự chọn model miễn phí, có vision nếu cần)."
+        ),
+        is_secret=True,
+        keep_blank=True,
+        env_var_name="OPENROUTER_API_KEY",
+    ),
+    "OPENROUTER_MODEL": SettingSpec(
+        key="OPENROUTER_MODEL",
+        type="str",
+        default_getter=_getattr_default("OPENROUTER_MODEL"),
+        title="OpenRouter model",
+        section="AI Keys",
+        description=(
+            "Ví dụ: openrouter/free | google/gemini-2.0-flash-exp:free | "
+            "meta-llama/llama-3.2-11b-vision-instruct:free"
+        ),
+        keep_blank=True,
+        env_var_name="OPENROUTER_MODEL",
     ),
     "TELEGRAM_CHAT_ID": SettingSpec(
         key="TELEGRAM_CHAT_ID",
@@ -996,6 +1103,12 @@ def _push_config_value(key: str, value: Any) -> None:
         os.environ["GEMINI_API_KEY"] = s
         return
 
+    if key in ("OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENROUTER_BASE_URL"):
+        s = str(value)
+        setattr(config, key, s)
+        os.environ[key] = s
+        return
+
     for attr in attr_candidates:
         if hasattr(config, attr):
             setattr(config, attr, value)
@@ -1091,7 +1204,7 @@ def reset_setting(db: Session, key: str, updated_by: str | None = None) -> None:
     _cache_ts = 0.0
     _cache_values = {}
     _restore_config_after_reset(key)
-    if key in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "GOOGLE_API_KEY"):
+    if key in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "GOOGLE_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_MODEL"):
         apply_runtime_overrides_to_config(db)
         refresh_integration_notifiers()
 
@@ -1110,6 +1223,17 @@ def _restore_config_after_reset(key: str) -> None:
         else:
             os.environ.pop("GOOGLE_API_KEY", None)
             os.environ.pop("GEMINI_API_KEY", None)
+        return
+    if key in ("OPENROUTER_API_KEY", "OPENROUTER_MODEL"):
+        default = "openrouter/free" if key == "OPENROUTER_MODEL" else ""
+        val = boot or default
+        setattr(config, key, val)
+        if boot:
+            os.environ[key] = boot
+        else:
+            os.environ.pop(key, None)
+            if key == "OPENROUTER_MODEL":
+                setattr(config, key, default)
         return
     if hasattr(config, key):
         setattr(config, key, boot)

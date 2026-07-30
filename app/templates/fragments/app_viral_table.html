@@ -6,6 +6,31 @@
     (<code class="px-1 rounded bg-[var(--color-ledge)] text-[12px]">winget install Gyan.FFmpeg</code>).
   </div>
   {% endif %}
+  {% set div = diversity|default({}) %}
+  {% if div.get('warn') %}
+  <div class="px-4 py-3 border-b border-amber-500/40 bg-amber-500/10 text-sm text-[var(--color-ink)] leading-relaxed">
+    <strong class="text-amber-300">Nguồn quá tập trung</strong> —
+    <code class="px-1 rounded bg-[var(--color-ledge)] text-[12px]">@{{ div.top_handle }}</code>
+    chiếm <strong class="text-amber-200">{{ div.top_pct }}%</strong>
+    ({{ div.top_count }}/{{ div.total }} clip · cửa sổ {{ div.window }}) —
+    ngưỡng cảnh báo {{ div.warn_pct }}%.
+    Thêm kênh khác tại
+    <a href="/app/tiktok-links" class="font-semibold text-[var(--color-torch)] underline underline-offset-2">Nguồn TikTok</a>
+    hoặc Settings → quota handle/ngày.
+    {% if div.distribution %}
+    <div class="mt-1.5 text-[11px] text-[var(--color-mist)] flex flex-wrap gap-1.5">
+      {% for d in div.distribution[:5] %}
+      <span class="px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--color-face)]">@{{ d.handle }} {{ d.count }} ({{ d.pct }}%)</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% elif div.get('enabled') and div.get('total', 0) > 0 and div.get('unique_handles', 0) > 0 %}
+  <div class="px-4 py-2 border-b border-[var(--border)] bg-[var(--color-face)] text-[11px] text-[var(--color-mist)] flex flex-wrap gap-2 items-center">
+    <span>Nguồn: <strong class="text-[var(--color-ink)]">{{ div.unique_handles }}</strong> handle · top
+      <code class="text-[var(--color-torch)]">@{{ div.top_handle }}</code> {{ div.top_pct }}%</span>
+  </div>
+  {% endif %}
   {% if show_worker_banner %}
   <div class="px-4 py-3 border-b border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-sm text-[var(--color-ink)] leading-relaxed">
     Có <strong class="text-[var(--color-torch)]">{{ new_count }}</strong> video
@@ -69,6 +94,7 @@
       {% set account_name = row.account_name %}
       {% set has_reup = row.has_reup %}
       {% set job = row.job %}
+      {% set is_mega = row.is_mega|default(false) %}
       {% include 'fragments/viral_row.html' %}
       {% else %}
       <tr>

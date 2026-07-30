@@ -102,12 +102,13 @@ class AICaptionPipeline:
         self._config_lock = threading.Lock()
         self.circuit_breaker = CircuitBreaker(failure_ttl=1800, success_ttl=60, max_failures=3)
         
-        # Load initial config
+        # Load initial config — default OFF until 9router_config.json enables it.
+        # Avoids hanging on dead localhost:20128 / iflow with no credentials.
         default_router_url = config.ROUTER_BASE_URL
-        self.enabled = True
+        self.enabled = False
         self.base_url = default_router_url
         self.api_key = ""
-        self.default_model = "if/gemini-1.5-flash"
+        self.default_model = "gemini-2.0-flash"
         
         # Tracking states
         self.last_latency_ms = 0
@@ -127,17 +128,26 @@ class AICaptionPipeline:
 
     def reload_config(self) -> bool:
         if not os.path.exists(self.CONFIG_PATH):
+            with self._config_lock:
+                self.enabled = False
             return False
             
         try:
             with open(self.CONFIG_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 
-            enabled = bool(data.get("enabled", True))
+            enabled = bool(data.get("enabled", False))
             default_router_url = config.ROUTER_BASE_URL
             base_url = str(data.get("base_url", default_router_url))
             api_key = str(data.get("api_key", ""))
-            default_model = str(data.get("default_model", "if/gemini-1.5-flash"))
+            default_model = str(data.get("default_model", "gemini-2.0-flash"))
+            # Guard: iflow models need 9Router credentials; keep disabled if blank key + iflow
+            if enabled and default_model.startswith("if/") and not api_key:
+                logger.warning(
+                    "[9Router] model=%s but api_key empty → forcing enabled=false",
+                    default_model,
+                )
+                enabled = False
             
             with self._config_lock:
                 self.enabled = enabled
@@ -269,7 +279,8 @@ class AICaptionPipeline:
         }
 
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=120.0)
+            # Short connect timeout so dead localhost:20128 fails fast on Windows.
+            resp = requests.post(url, headers=headers, json=payload, timeout=(5.0, 90.0))
             
             if resp.status_code == 200:
                 data = resp.json()
@@ -281,7 +292,12 @@ class AICaptionPipeline:
             elif resp.status_code in [401, 403]:
                 return None, temp_model, FailReason.AUTH_ERROR
             else:
-                logger.error("Server API returned %s: %s", resp.status_code, resp.text[:200])
+                # Surface iflow / provider credential errors clearly
+                body_preview = (resp.text or "")[:300]
+                if "iflow" in body_preview.lower() or "no active credentials" in body_preview.lower():
+                    logger.error("9Router provider auth unavailable (status=%s)", resp.status_code)
+                    return None, temp_model, FailReason.AUTH_ERROR
+                logger.error("Server API returned %s: %s", resp.status_code, body_preview[:200])
                 return None, temp_model, FailReason.TEMPORARY_NETWORK
         except requests.Timeout:
             return None, temp_model, FailReason.TIMEOUT
@@ -309,7 +325,8 @@ class AICaptionPipeline:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            timeout = httpx.Timeout(90.0, connect=5.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(url, headers=headers, json=payload)
 
             if resp.status_code == 200:
@@ -322,7 +339,11 @@ class AICaptionPipeline:
             if resp.status_code in [401, 403]:
                 return None, temp_model, FailReason.AUTH_ERROR
 
-            logger.error("Server API returned %s: %s", resp.status_code, resp.text[:200])
+            body_preview = (resp.text or "")[:300]
+            if "iflow" in body_preview.lower() or "no active credentials" in body_preview.lower():
+                logger.error("9Router provider auth unavailable (status=%s)", resp.status_code)
+                return None, temp_model, FailReason.AUTH_ERROR
+            logger.error("Server API returned %s: %s", resp.status_code, body_preview[:200])
             return None, temp_model, FailReason.TEMPORARY_NETWORK
         except httpx.TimeoutException:
             return None, temp_model, FailReason.TIMEOUT
@@ -431,24 +452,56 @@ class AICaptionPipeline:
         else:
             native_fail_reason = native_meta.get("fail_reason") or "native_vision_failed"
 
-        # Both tiers failed.
+        # Tier 3 — OpenRouter free (OpenAI-compatible) when Gemini native fails.
+        logger.warning(
+            "[AI FALLBACK] native vision failed (reason=%s); trying OpenRouter",
+            native_fail_reason,
+        )
+        from app.core.ai.openrouter_fallback import call_openrouter
+
+        or_text, or_meta = call_openrouter(prompt, image_path)
+        or_latency = or_meta.get("latency_ms") or 0
+        if or_meta.get("ok") and or_text:
+            parsed_payload = self._extract_and_parse_json(or_text)
+            if parsed_payload:
+                meta.update({
+                    "status": "ok",
+                    "provider": "openrouter",
+                    "model": or_meta.get("model", "N/A"),
+                    "latency_ms": or_latency,
+                    "fail_reason": FailReason.NONE.value,
+                    "fallback_used": True,
+                    "primary_fail_reason": primary_fail,
+                    "native_fail_reason": native_fail_reason,
+                })
+                self._update_runtime_state(
+                    "openrouter", meta["model"], or_latency, "fallback_ok"
+                )
+                return parsed_payload, meta
+            or_fail = FailReason.INVALID_OUTPUT.value
+        else:
+            or_fail = or_meta.get("fail_reason") or "openrouter_failed"
+
+        # All API tiers failed — caller may use RPA / poorman.
         meta.update({
             "status": "error",
             "provider": "poorman",
-            "model": native_meta.get("model", actual_model),
-            "latency_ms": native_latency,
-            "fail_reason": native_fail_reason,
+            "model": or_meta.get("model") or native_meta.get("model", actual_model),
+            "latency_ms": or_latency or native_latency,
+            "fail_reason": or_fail,
             "fallback_used": True,
             "fallback_failed": True,
             "primary_fail_reason": primary_fail,
+            "native_fail_reason": native_fail_reason,
         })
         self._update_runtime_state(
-            "poorman", meta["model"], native_latency, f"both_tiers_failed:{native_fail_reason}"
+            "poorman", meta["model"], meta["latency_ms"], f"all_api_failed:{or_fail}"
         )
         logger.error(
-            "[AI FALLBACK] generate_caption both tiers failed (primary=%s, native=%s)",
+            "[AI FALLBACK] generate_caption all API tiers failed (primary=%s, native=%s, openrouter=%s)",
             primary_fail,
             native_fail_reason,
+            or_fail,
         )
         return None, meta
 
@@ -551,14 +604,32 @@ class AICaptionPipeline:
             )
             return native_text, merged
 
-        # Both tiers failed — final fail.
+        # Tier 3 — OpenRouter
+        from app.core.ai.openrouter_fallback import call_openrouter
+
+        or_text, or_meta = call_openrouter(prompt)
+        if or_meta.get("ok") and or_text:
+            merged.update({
+                "ok": True,
+                "provider": "openrouter",
+                "model": or_meta.get("model", "N/A"),
+                "latency_ms": or_meta.get("latency_ms", 0),
+                "native_fail_reason": native_meta.get("fail_reason"),
+            })
+            self._update_runtime_state(
+                "openrouter", merged["model"], merged["latency_ms"], "fallback_ok"
+            )
+            return or_text, merged
+
+        # All API tiers failed — final fail.
         merged["ok"] = False
-        merged["fail_reason"] = native_meta.get("fail_reason") or "native_fallback_failed"
+        merged["fail_reason"] = or_meta.get("fail_reason") or native_meta.get("fail_reason") or "native_fallback_failed"
         merged["fallback_failed"] = True
         logger.error(
-            "[AI FALLBACK] Both tiers failed (primary=%s, native=%s)",
+            "[AI FALLBACK] All API tiers failed (primary=%s, native=%s, openrouter=%s)",
             primary_fail_reason,
-            merged["fail_reason"],
+            native_meta.get("fail_reason"),
+            or_meta.get("fail_reason"),
         )
         return None, merged
 
@@ -640,13 +711,34 @@ class AICaptionPipeline:
             )
             return native_text, merged
 
+        from app.core.ai.openrouter_fallback import call_openrouter
+
+        or_text, or_meta = await asyncio.to_thread(call_openrouter, prompt)
+        if or_meta.get("ok") and or_text:
+            merged.update({
+                "ok": True,
+                "provider": "openrouter",
+                "model": or_meta.get("model", "N/A"),
+                "latency_ms": or_meta.get("latency_ms", 0),
+                "native_fail_reason": native_meta.get("fail_reason"),
+            })
+            await asyncio.to_thread(
+                self._update_runtime_state,
+                "openrouter",
+                merged["model"],
+                merged["latency_ms"],
+                "fallback_ok",
+            )
+            return or_text, merged
+
         merged["ok"] = False
-        merged["fail_reason"] = native_meta.get("fail_reason") or "native_fallback_failed"
+        merged["fail_reason"] = or_meta.get("fail_reason") or native_meta.get("fail_reason") or "native_fallback_failed"
         merged["fallback_failed"] = True
         logger.error(
-            "[AI FALLBACK ASYNC] Both tiers failed (primary=%s, native=%s)",
+            "[AI FALLBACK ASYNC] All API tiers failed (primary=%s, native=%s, openrouter=%s)",
             primary_fail_reason,
-            merged["fail_reason"],
+            native_meta.get("fail_reason"),
+            or_meta.get("fail_reason"),
         )
         return None, merged
 

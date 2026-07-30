@@ -193,7 +193,7 @@ def _scrape_tiktok_competitors(db):
     _last_tiktok_scrape_ts = now
     logger.info("[TIKTOK] Running hourly TikTok competitor scan...")
 
-    total_found, num_channels = feature_hooks.call("viral.tiktok_scan", db)
+    total_found, num_channels, *_rest = feature_hooks.call("viral.tiktok_scan", db)
 
     try:
         if total_found > 0:

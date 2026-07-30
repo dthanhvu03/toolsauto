@@ -1,0 +1,78 @@
+{% if items %}
+<div class="rounded-lg border border-amber-200 bg-amber-50/80 p-3 mb-2">
+  <div class="flex items-center justify-between gap-2 mb-2">
+    <div class="text-xs font-bold uppercase tracking-wide text-amber-800">
+      Chờ tra Shopee ({{ items|length }})
+    </div>
+    <div class="text-[10px] text-amber-700">AI nhận diện SP nhưng kho chưa có link khớp</div>
+  </div>
+  <div class="space-y-3 max-h-64 overflow-y-auto pr-1">
+    {% for item in items %}
+    <div class="bg-white border border-amber-100 rounded-lg p-3 text-sm">
+      <div class="flex flex-wrap items-center gap-2 mb-1">
+        <span class="font-semibold text-gray-800">Job #{{ item.job_id or '?' }}</span>
+        {% if item.search_query %}
+        <span class="text-xs px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">{{ item.search_query }}</span>
+        {% endif %}
+        <a href="{{ item.shopee_offer_url }}" target="_blank" rel="noopener"
+           class="text-xs text-orange-600 hover:underline ml-auto">Mở Product Offer →</a>
+        <a href="{{ item.shopee_custom_link_url }}" target="_blank" rel="noopener"
+           class="text-xs text-orange-600 hover:underline">Mở Custom Link →</a>
+      </div>
+      {% if item.hints %}
+      <div class="text-[11px] text-gray-500 mb-2 break-words">Hints: {{ item.hints|join(', ') }}</div>
+      {% endif %}
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-2 mb-2">
+        <div class="md:col-span-10">
+          <label class="block text-[10px] text-gray-500 mb-0.5">Keyword gợi ý (copy sang Shopee Affiliate search)</label>
+          <input type="text" readonly
+                 value="{{ item.search_query or '' }}"
+                 class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs bg-gray-50">
+        </div>
+        <div class="md:col-span-2 text-[10px] text-gray-500 self-end pb-1">
+          Assist mode: mở trang + tự dán tay để tránh bị flag bot.
+        </div>
+      </div>
+      <form hx-post="/affiliates/lookup-resolve"
+            hx-swap="none"
+            hx-on::after-request="if(event.detail.successful){ htmx.trigger(document.body,'affiliatesChanged'); }"
+            class="grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+        <input type="hidden" name="fingerprint" value="{{ item.fingerprint }}">
+        <div class="md:col-span-3">
+          <label class="block text-[10px] text-gray-500 mb-0.5">Keyword kho</label>
+          <input name="keyword" required
+                 value="{{ item.search_query or '' }}"
+                 class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+                 placeholder="vd: torriden serum">
+        </div>
+        <div class="md:col-span-5">
+          <label class="block text-[10px] text-gray-500 mb-0.5">Affiliate URL (s.shopee.vn/...)</label>
+          <input name="url" required
+                 class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+                 placeholder="https://s.shopee.vn/...">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-[10px] text-gray-500 mb-0.5">HH % (tuỳ chọn)</label>
+          <input name="commission_rate" type="text"
+                 class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+                 placeholder="11.5">
+        </div>
+        <div class="md:col-span-2 flex gap-1">
+          <button type="submit"
+                  class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium py-1.5 px-2 rounded">
+            Lưu link
+          </button>
+        </div>
+      </form>
+      <form hx-post="/affiliates/lookup-dismiss"
+            hx-swap="none"
+            hx-on::after-request="if(event.detail.successful){ htmx.trigger(document.body,'affiliatesChanged'); }"
+            class="mt-1">
+        <input type="hidden" name="fingerprint" value="{{ item.fingerprint }}">
+        <button type="submit" class="text-xs text-gray-500 hover:text-red-600">Bỏ qua item này</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}

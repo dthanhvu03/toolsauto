@@ -430,6 +430,26 @@ Audio Transcript (có thể bắt chữ bị sai do giọng AI):
         visual_hook_logic = BrainFactory.get_visual_hook_instruction()
         algo_secrets = BrainFactory.get_engagement_secrets()
 
+        # Inject live DB blacklist into prompt (empty → no extra line).
+        blacklist_prompt_extra = ""
+        try:
+            from app.core.compliance.facebook_compliance import _get_keywords
+
+            block_kw, warn_kw = _get_keywords()
+            phrases = []
+            for item in (block_kw + warn_kw)[:40]:
+                kw = (item.get("keyword") or "").strip()
+                if kw:
+                    phrases.append(kw)
+            if phrases:
+                blacklist_prompt_extra = (
+                    "- Danh sách từ khóa hệ thống đang chặn/cảnh báo (KHÔNG dùng nguyên văn): "
+                    + ", ".join(f'"{p}"' for p in phrases)
+                    + ".\n"
+                )
+        except Exception:
+            blacklist_prompt_extra = ""
+
         # ─── Fix G: Prompt placeholder trung tính, tránh ám thị domain sai ───
         mega_prompt = f"""# MEGA PROMPT: CHUYÊN GIA CONTENT FACEBOOK ADS & ACCESSTRADE
         
@@ -449,8 +469,12 @@ Bạn là một Chuyên gia Digital Marketing & Copywriter thực chiến tại 
 {algo_secrets}
 
 [FACEBOOK ADS COMPLIANCE & BEST PRACTICES]
-- TUYỆT ĐỐI KHÔNG dùng từ ngữ quy chụp thuộc tính cá nhân (Ví dụ: CẤM nói "Bạn đang bị mụn?", "Bạn đang béo?"). Hãy chuyển sang góc nhìn khách quan (Ví dụ: "Giải quyết tình trạng mụn...", "Mẹo giúp vóc dáng thon gọn...").
+- TUYỆT ĐỐI KHÔNG dùng từ ngữ quy chụp thuộc tính cá nhân (Ví dụ: CẤM nói "Bạn đang bị mụn?", "Bạn đang béo?"). Hãy chuyển sang góc nhìn khách quan (Ví dụ: "Giải pháp cho làn da mụn...", "Mẹo giúp vóc dáng thon gọn...").
 - TUYỆT ĐỐI KHÔNG đưa ra các cam kết tuyệt đối, sai sự thật (đặc biệt mảng Sức khỏe, Tài chính - YMYL).
+- Tránh từ/cụm dễ bị Meta giảm phân phối hoặc gắn spam: "chữa khỏi", "trị dứt điểm", "100% hiệu quả", "không tác dụng phụ", "ngay lập tức", "thần kỳ", "bí quyết", "đảm bảo", "rẻ nhất", "số 1", chèn URL/Shopee/Lazada vào caption.
+- Không viết cả dòng HOA dài; hạn chế !!! / ??? / emoji / hashtag dồn cụm.
+- Caption sales: CTA bằng bình luận từ khóa, KHÔNG dán link trong caption.
+{blacklist_prompt_extra}
 
 [CHỐNG ẢO GIÁC - ANTI-HALLUCINATION RULES]
 - TUYỆT ĐỐI KHÔNG được bịa ra tên người, tên app, tên thương hiệu nào không xuất hiện trong hình ảnh/transcript.

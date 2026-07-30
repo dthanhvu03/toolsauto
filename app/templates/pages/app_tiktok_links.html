@@ -26,7 +26,7 @@
     <div class="flex items-end gap-3 flex-wrap">
       <div>
         <label class="block text-xs text-[var(--muted)] mb-1">Tìm kiếm</label>
-        <input name="q" value="{{ q }}" placeholder="URL / @handle / account / page..."
+        <input name="q" value="{{ q }}" placeholder="URL / @handle / tài khoản / trang…"
           class="app-input md:w-[520px]" />
       </div>
       <div>
@@ -36,6 +36,20 @@
       <button class="app-btn app-btn-primary">Áp dụng</button>
     </div>
   </form>
+
+  {% if suggested_keywords %}
+  <div class="mt-3 pt-3 border-t border-[var(--border)]">
+    <div class="text-[10px] font-bold uppercase tracking-widest text-[var(--color-ash)] mb-2">Gợi ý tìm nguồn (theo niche page)</div>
+    <div class="flex flex-wrap gap-1.5">
+      {% for kw in suggested_keywords %}
+      <a href="https://www.tiktok.com/search?q={{ kw|urlencode }}" target="_blank" rel="noreferrer"
+         class="px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] hover:brightness-110"
+         title="Mở tìm kiếm TikTok">{{ kw }}</a>
+      {% endfor %}
+    </div>
+    <p class="mt-2 text-[11px] text-[var(--muted)]">Tìm kênh mới → thêm URL tại Tài khoản → Target Pages → quét lại ở Nội dung viral.</p>
+  </div>
+  {% endif %}
 </div>
 
 <div class="mt-4 app-card p-4">

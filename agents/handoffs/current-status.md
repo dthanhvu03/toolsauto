@@ -2,14 +2,18 @@
 
 ## System State
 
-- Syspanel metrics: sửa vỡ UI (bỏ ép 5 cột, nowrap số liệu, rút nhãn phụ VI)
-- UI đa màn đã Việt hóa trước đó
+- Local Windows OK; OpenRouter key DB OK; caption Job #7 PASS
+- Compliance blacklist: **116** active (seed + research Meta/VN)
+- AI path: Gemini → OpenRouter → RPA → poorman
+- Settings UI: section **AI Keys**
 
 ## Done This Session
 
-- Fix `fragments/syspanel/metrics.html` — Disk/Mạng/Uptime không còn xuống dòng xấu
+- Fix iflow/9Router off, Chrome UC Windows, log rotate
+- OpenRouter wire + UI keys; real Job #7 caption xịn + affiliate
+- Seed/research FB blacklist; inject vào prompt AI
 
 ## Next Action
 
-1. Reload `/syspanel` hard refresh để verify hàng số liệu
-2. Commit khi yêu cầu
+- Owner duyệt Job #7 / chạy DRAFT tiếp khi cần
+- Commit khi Owner bảo

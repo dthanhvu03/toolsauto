@@ -198,8 +198,8 @@ def viral_scan() -> None:
     from app.features.viral_intake.scan import run_tiktok_competitor_scan
 
     with SessionLocal() as db:
-        n, ch = run_tiktok_competitor_scan(db)
-    typer.echo(f"new_videos={n} channels_scanned={ch}")
+        n, ch, sq, sm = run_tiktok_competitor_scan(db)
+    typer.echo(f"new_videos={n} channels_scanned={ch} skipped_quota={sq} skipped_mega={sm}")
 
 
 @viral_app.command("process")

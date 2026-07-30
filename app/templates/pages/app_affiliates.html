@@ -291,7 +291,7 @@
 
     <!-- Compliance Review Modal (AI rewrite confirmation) -->
     <div id="compliance-review-modal"
-         class="hidden fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+         class="hidden fixed inset-0 bg-black/50 z-[60] items-center justify-center p-4">
         <div class="bg-white rounded-xl p-6 max-w-lg w-full shadow-xl">
             <h3 class="font-semibold text-amber-600 mb-4 text-sm">
                 ⚠️ AI đã viết lại để tuân thủ chính sách Facebook
@@ -352,6 +352,13 @@
                     </button>
                     {% endif %}
                 </div>
+            </div>
+
+            <div id="affiliateLookupPanel"
+                 class="mb-4 shrink-0"
+                 hx-get="/affiliates/lookup-panel"
+                 hx-trigger="load, affiliatesChanged from:body, every 60s"
+                 hx-swap="innerHTML">
             </div>
 
             <div id="affiliatesTable" class="flex-1 overflow-y-auto pr-2" hx-get="/affiliates/table" hx-trigger="load, affiliatesChanged from:body"
@@ -790,21 +797,30 @@ function showRewritePreview(original, rewritten) {
     const m = document.getElementById('compliance-review-modal');
     if (o) o.textContent = original || '';
     if (r) r.textContent = rewritten || '';
-    if (m) m.classList.remove('hidden');
+    if (m) {
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    }
 }
 
 function applyRewrite() {
     const r = document.getElementById('rewritten-comment');
     const m = document.getElementById('compliance-review-modal');
     if (r) document.getElementById('comment_template').value = r.textContent || '';
-    if (m) m.classList.add('hidden');
+    if (m) {
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+    }
     const tabBtn = document.getElementById('tabBtnManual');
     if (tabBtn) switchTab('manual', tabBtn);
 }
 
 function rejectRewrite() {
     const m = document.getElementById('compliance-review-modal');
-    if (m) m.classList.add('hidden');
+    if (m) {
+        m.classList.add('hidden');
+        m.classList.remove('flex');
+    }
 }
 
 let _complianceDebounce = null;

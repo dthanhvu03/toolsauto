@@ -5,6 +5,7 @@ import logging
 from app.core.database.core import get_db
 from app.main_templates import templates
 from app.features.affiliates.service import AffiliateService
+from app.features.affiliates import lookup_queue as aff_lookup
 from app.schemas.affiliates import (
     BatchImportRequest,
     AIGenerateRequest,
@@ -34,6 +35,60 @@ def get_affiliates_table(request: Request, q: str = "", page: int = 1, db: Sessi
         "total_pages": res["total_pages"],
         "q": q,
     })
+
+
+@router.get("/lookup-panel", response_class=HTMLResponse)
+def get_lookup_panel(request: Request, db: Session = Depends(get_db)):
+    # Best-effort auto-resolve trước khi render (kho vừa thêm link mới).
+    try:
+        aff_lookup.process_pending_against_warehouse(db, limit=20)
+    except Exception:
+        pass
+    items = aff_lookup.list_pending(limit=30)
+    return templates.TemplateResponse("fragments/affiliate_lookup_panel.html", {
+        "request": request,
+        "items": items,
+    })
+
+
+@router.post("/lookup-resolve")
+def lookup_resolve(
+    fingerprint: str = Form(...),
+    keyword: str = Form(...),
+    url: str = Form(...),
+    commission_rate: str = Form(""),
+    comment_template: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    rate = None
+    raw = (commission_rate or "").strip()
+    if raw:
+        try:
+            rate = float(raw.replace(",", "."))
+        except ValueError:
+            return JSONResponse({"error": "Commission rate không hợp lệ."}, status_code=400)
+    ok, err = aff_lookup.resolve_manual(
+        db,
+        fingerprint=fingerprint,
+        keyword=keyword,
+        url=url,
+        comment_template=comment_template,
+        commission_rate=rate,
+    )
+    if not ok:
+        return JSONResponse(err, status_code=400)
+    response = HTMLResponse(content="")
+    response.headers["HX-Trigger"] = "affiliatesChanged"
+    return response
+
+
+@router.post("/lookup-dismiss")
+def lookup_dismiss(fingerprint: str = Form(...)):
+    if not aff_lookup.dismiss(fingerprint):
+        return JSONResponse({"error": "Không tìm thấy item."}, status_code=404)
+    response = HTMLResponse(content="")
+    response.headers["HX-Trigger"] = "affiliatesChanged"
+    return response
 
 @router.post("/save")
 def save_affiliate(

@@ -43,6 +43,9 @@
     </td>
     <td class="p-3 align-top font-medium text-[var(--color-ink)]">
         {{ "{:,}".format(item.views) }}
+        {% if is_mega|default(false) %}
+        <span class="ml-1 inline-flex px-1 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide border border-rose-400/40 bg-rose-500/15 text-rose-300" title="Views ≥ ngưỡng mega — dễ cháy VN">Mega</span>
+        {% endif %}
     </td>
     <td class="p-3 align-top text-[var(--color-mist)] text-xs text-center">
         {{ account_name }}

@@ -238,6 +238,7 @@ class DashboardService:
         reup_by_id = ViralService.batch_reup_by_id(db, items)
         jobs_by_id = ViralService.batch_jobs_by_material(db, {it.id for it in items})
         banner = ViralService.pipeline_banner(db)
+        mega_th = int((banner.get("diversity") or {}).get("mega_threshold") or 0)
 
         return {
             "items": [
@@ -246,6 +247,7 @@ class DashboardService:
                     "account_name": accounts.get(it.scraped_by_account_id, "Unknown"),
                     "has_reup": bool(reup_by_id.get(it.id)),
                     "job": jobs_by_id.get(it.id),
+                    "is_mega": bool(mega_th > 0 and int(it.views or 0) >= mega_th),
                 }
                 for it in items
             ],
