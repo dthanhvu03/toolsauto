@@ -25,7 +25,7 @@
       <button id="btn-mcp-inspector" onclick="startMCPInspector()"
               class="cave-btn cave-btn-primary h-auto px-4 py-2 text-sm flex items-center gap-1.5">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
-        <span>MCP Debug</span>
+        <span>Gỡ lỗi MCP</span>
       </button>
       <button onclick="invalidateCache()"
               class="cave-btn h-auto px-4 py-2 text-sm">
@@ -38,10 +38,10 @@
   <div class="flex gap-1 mb-6 p-1 rounded-xl w-fit border border-[var(--color-border)] bg-[var(--color-surface-raised)]">
     {% for tab in [
       ('overview', '⚡ Tổng quan'),
-      ('platform', 'Platform'),
-      ('workflow', 'Workflow'),
+      ('platform', 'Nền tảng'),
+      ('workflow', 'Quy trình'),
       ('selectors', 'Selector'),
-      ('cta', 'CTA template'),
+      ('cta', 'Mẫu CTA'),
     ] %}
     <button onclick="switchTab('{{ tab[0] }}')"
             id="tab-{{ tab[0] }}"

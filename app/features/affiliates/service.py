@@ -35,7 +35,14 @@ class AffiliateService:
         }
 
     @staticmethod
-    def save_link(db: Session, link_id: int, keyword: str, url: str, comment_template: str) -> Tuple[bool, Dict[str, Any]]:
+    def save_link(
+        db: Session,
+        link_id: int,
+        keyword: str,
+        url: str,
+        comment_template: str,
+        commission_rate: float | None = None,
+    ) -> Tuple[bool, Dict[str, Any]]:
         keyword = keyword.strip()
         url = url.strip()
         comment_template = comment_template.strip()
@@ -70,6 +77,8 @@ class AffiliateService:
             link.keyword = keyword
             link.url = url
             link.comment_template = comment_template
+            if commission_rate is not None:
+                link.commission_rate = commission_rate
         else:
             existing = db.query(AffiliateLink).filter(AffiliateLink.keyword == keyword).first()
             if existing:
@@ -78,7 +87,8 @@ class AffiliateService:
             link = AffiliateLink(
                 keyword=keyword,
                 url=url,
-                comment_template=comment_template
+                comment_template=comment_template,
+                commission_rate=commission_rate,
             )
             db.add(link)
             

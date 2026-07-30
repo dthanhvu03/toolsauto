@@ -71,10 +71,10 @@
         </label>
         <select name="source" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
           <option value="">Tất cả nguồn</option>
-          <option value="job_events" {% if request.query_params.get('source') == 'job_events' %}selected{% endif %}>Job Events</option>
-          <option value="violation_log" {% if request.query_params.get('source') == 'violation_log' %}selected{% endif %}>Violation Logs</option>
-          <option value="audit_logs" {% if request.query_params.get('source') == 'audit_logs' %}selected{% endif %}>Audit Logs</option>
-          <option value="runtime_settings_audit" {% if request.query_params.get('source') == 'runtime_settings_audit' %}selected{% endif %}>Config Audit</option>
+          <option value="job_events" {% if request.query_params.get('source') == 'job_events' %}selected{% endif %}>Sự kiện job</option>
+          <option value="violation_log" {% if request.query_params.get('source') == 'violation_log' %}selected{% endif %}>Log vi phạm</option>
+          <option value="audit_logs" {% if request.query_params.get('source') == 'audit_logs' %}selected{% endif %}>Log kiểm toán</option>
+          <option value="runtime_settings_audit" {% if request.query_params.get('source') == 'runtime_settings_audit' %}selected{% endif %}>Kiểm toán cấu hình</option>
         </select>
       </div>
 
@@ -84,7 +84,7 @@
           Mức Độ
         </label>
         <select name="level" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
-          <option value="">ALL</option>
+          <option value="">Tất cả</option>
           <option value="ERROR" {% if request.query_params.get('level') == 'ERROR' %}selected{% endif %}>ERROR</option>
           <option value="WARNING" {% if request.query_params.get('level') == 'WARNING' %}selected{% endif %}>WARNING</option>
           <option value="INFO" {% if request.query_params.get('level') == 'INFO' %}selected{% endif %}>INFO</option>
@@ -92,7 +92,7 @@
       </div>
 
       <div class="w-28">
-        <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5">Job ID</label>
+        <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1.5">Mã job</label>
         <input type="number" name="job_id" value="{{ request.query_params.get('job_id', '') }}" class="w-full h-9 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow" placeholder="e.g. 123" />
       </div>
 
@@ -132,9 +132,9 @@
       <div class="flex items-end justify-between gap-3 flex-wrap px-4 py-3 border-b border-gray-100 bg-gray-50">
         <div class="flex items-end gap-3 flex-wrap">
           <div class="w-44">
-            <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Process</label>
+            <label class="block text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1">Tiến trình</label>
             <select id="pm2-proc" class="w-full h-8 bg-white border border-gray-300 rounded-md text-xs text-gray-900 px-2">
-              <option value="ALL">ALL</option>
+              <option value="ALL">Tất cả</option>
               <option value="AI_Generator_1">AI_Generator_1</option>
               <option value="AI_Generator_2">AI_Generator_2</option>
               <option value="FB_Publisher_1">FB_Publisher_1</option>

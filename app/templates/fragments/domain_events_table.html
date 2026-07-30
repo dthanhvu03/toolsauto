@@ -29,7 +29,7 @@
                 {% for ev in events %}
                 <tr class="hover:bg-gray-50 group transition-colors">
                     <td class="px-5 py-3 align-top font-mono text-[11px] text-gray-500">
-                        <span class="unix-ts" data-ts="{{ ev.timestamp }}">{{ ev.timestamp }}</span>
+                        <span class="unix-ts" data-ts="{{ ev.ts_unix or ev.timestamp }}">{{ ev.ts_unix or ev.timestamp }}</span>
                     </td>
                     <td class="px-5 py-3 align-top">
                         {% if ev.level == 'ERROR' or ev.level == 'FATAL' %}
@@ -82,7 +82,16 @@
                         {% endif %}
                     </td>
                     <td class="px-5 py-3 align-top w-full max-w-xl">
-                        <div class="text-gray-800 whitespace-normal break-words leading-relaxed">{{ ev.message }}</div>
+                        <div class="text-gray-800 whitespace-normal break-words leading-relaxed font-medium">{{ ev.message }}</div>
+                        {% if current_category == 'user' and ev.hint %}
+                        <div class="text-[11px] text-gray-500 mt-1 leading-snug">{{ ev.hint }}</div>
+                        {% endif %}
+                        {% if current_category == 'user' and ev.message_raw and ev.message_raw != ev.message %}
+                        <details class="mt-1.5 text-[10px] text-gray-400">
+                            <summary class="cursor-pointer hover:text-gray-600 select-none">Xem bản gốc (kỹ thuật)</summary>
+                            <div class="mt-1 font-mono text-gray-500 break-all whitespace-pre-wrap">{{ ev.message_raw }}</div>
+                        </details>
+                        {% endif %}
                         {% if ev.actor %}
                         <div class="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1">
                             <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
@@ -93,7 +102,7 @@
                         <details class="mt-2 text-[10px] text-gray-500 group-hover:text-gray-700 transition-colors">
                             <summary class="cursor-pointer hover:text-gray-900 select-none inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded border border-gray-200">
                                 <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
-                                Metadata
+                                {% if current_category == 'user' %}Chi tiết thêm{% else %}Metadata{% endif %}
                             </summary>
                             <div class="mt-1.5 p-3 bg-gray-50 border border-gray-200 rounded-lg font-mono break-all whitespace-pre-wrap text-emerald-700 overflow-x-auto shadow-inner metadata-json">
                                 {{ ev.metadata }}
@@ -146,12 +155,19 @@
     
     <script>
     document.querySelectorAll('#domain-events-container .unix-ts').forEach(el => {
-        const ts = parseInt(el.getAttribute('data-ts'), 10);
-        if (ts) {
-            const date = new Date(ts * 1000);
-            const pad = n => n.toString().padStart(2, '0');
-            el.textContent = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        const raw = (el.getAttribute('data-ts') || '').trim();
+        if (!raw) return;
+        let date;
+        if (/^\d+(\.\d+)?$/.test(raw)) {
+            const n = Number(raw);
+            // seconds vs ms
+            date = new Date(n > 1e12 ? n : n * 1000);
+        } else {
+            date = new Date(raw);
         }
+        if (Number.isNaN(date.getTime())) return;
+        const pad = n => n.toString().padStart(2, '0');
+        el.textContent = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     });
 
     // Pretty-print JSON for Tech view metadata

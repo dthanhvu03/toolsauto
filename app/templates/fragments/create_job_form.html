@@ -1,20 +1,20 @@
 <div id="create-job-form-container" class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-8">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h2 class="text-xl font-bold font-display text-gray-800">Bulk Upload Jobs</h2>
-        <span class="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">Max 50 files</span>
+        <h2 class="text-xl font-bold font-display text-gray-800">Tải lên hàng loạt</h2>
+        <span class="text-xs font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-full">Tối đa 50 file</span>
     </div>
 
     {% if error %}
     <div class="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
-        <strong class="font-bold">Error:</strong>
+        <strong class="font-bold">Lỗi:</strong>
         <span class="block sm:inline">{{ error }}</span>
     </div>
     {% endif %}
 
     {% if success %}
     <div class="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded relative" id="success-alert">
-        <strong class="font-bold">Success!</strong>
-        <span class="block sm:inline">{{ bulk_success_count }} Jobs enqueued into the orchestrator.</span>
+        <strong class="font-bold">Thành công!</strong>
+        <span class="block sm:inline">Đã đưa {{ bulk_success_count }} job vào hàng đợi.</span>
         <script>
             setTimeout(() => { const el = document.getElementById('success-alert'); if (el) el.remove(); }, 5000);
             htmx.trigger('#jobs-table-body', 'refresh');
@@ -24,10 +24,10 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Account</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Tài khoản</label>
             <select id="bulk-account-select" required onchange="recalculateSchedules()"
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow outline-none">
-                <option value="" disabled selected>Select Account...</option>
+                <option value="" disabled selected>Chọn tài khoản...</option>
                 {% for acc in accounts %}
                 <option value="{{ acc.id }}" data-last-post="{{ acc.last_post_ts or 0 }}"
                     data-cooldown="{{ acc.cooldown_seconds }}">
@@ -38,7 +38,7 @@
         </div>
 
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Base Start Time (Local)</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Giờ bắt đầu (giờ máy)</label>
             <input type="datetime-local" id="bulk-start-time" required onchange="recalculateSchedules()"
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow outline-none">
             <script>
@@ -58,21 +58,21 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
         </svg>
-        <p class="text-sm font-medium text-gray-700">Drop videos/images or folders here</p>
-        <p class="text-xs text-gray-500 mt-1">Or click to browse</p>
+        <p class="text-sm font-medium text-gray-700">Kéo thả video/ảnh hoặc thư mục vào đây</p>
+        <p class="text-xs text-gray-500 mt-1">Hoặc bấm để chọn file</p>
         <input type="file" id="file-input" multiple accept="video/*,image/*" class="hidden">
     </div>
 
     <!-- Global Controls (Hidden until files added) -->
     <div id="bulk-controls" class="hidden mb-6 bg-gray-50/50 p-6 rounded-xl border border-gray-200">
         <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Global Caption</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Caption chung</label>
             <div class="flex gap-2">
-                <input type="text" id="global-caption" placeholder="Caption to apply to all files..."
+                <input type="text" id="global-caption" placeholder="Caption áp dụng cho mọi file..."
                     class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow">
                 <button type="button" onclick="applyGlobalCaption()"
                     class="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium px-4 py-2 rounded-lg text-sm shadow-sm transition-all">
-                    Apply All
+                    Áp dụng tất cả
                 </button>
             </div>
         </div>
@@ -80,17 +80,17 @@
             <input id="bulk-randomize-caption" type="checkbox" value="true"
                 class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer">
             <label for="bulk-randomize-caption" class="ml-2 block text-sm font-medium text-gray-700 cursor-pointer">
-                Randomize Captions <span class="text-gray-400 font-normal">(Appends unique salt to each)</span>
+                Xáo caption <span class="text-gray-400 font-normal">(thêm mã ngẫu nhiên mỗi file)</span>
             </label>
         </div>
         <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Affiliate URL <span
-                    class="text-gray-400 font-normal">(optional — redirect target for click tracking)</span></label>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">URL affiliate <span
+                    class="text-gray-400 font-normal">(tùy chọn — đích redirect khi theo dõi click)</span></label>
             <input type="text" id="bulk-affiliate-url" placeholder="https://example.com/offer?ref=123"
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow">
         </div>
         <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Target Page <span
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Page đích <span
                     class="text-gray-400 font-normal">(tùy chọn — ghi đè Fanpage cho đợt này)</span></label>
             <div class="flex flex-col sm:flex-row gap-3">
                 <select id="bulk-target-page"
@@ -102,9 +102,9 @@
             </div>
         </div>
         <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">Auto Comment <span
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Comment tự động <span
                     class="text-gray-400 font-normal">(tùy chọn — comment tự động sau khi đăng)</span></label>
-            <textarea id="bulk-auto-comment" rows="2" placeholder="Paste link tracking hoặc viết comment tùy ý..."
+            <textarea id="bulk-auto-comment" rows="2" placeholder="Dán link tracking hoặc viết comment tùy ý..."
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow resize-y"></textarea>
             <p class="text-xs text-gray-500 mt-1.5">Nếu chỉ paste link, hệ thống sẽ tự wrap với CTA ngẫu nhiên.</p>
         </div>
@@ -120,7 +120,7 @@
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-2/4">
                         Caption</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-1/4">
-                        Schedule</th>
+                        Lịch đăng</th>
                     <th class="px-4 py-3"></th>
                 </tr>
             </thead>
@@ -132,10 +132,10 @@
 
     <!-- Submit Area -->
     <div class="flex items-center justify-between border-t border-gray-100 pt-6 mt-6">
-        <span id="file-counter" class="text-sm text-gray-500 font-medium">0 files queued</span>
+        <span id="file-counter" class="text-sm text-gray-500 font-medium">0 file trong hàng đợi</span>
         <button type="button" id="bulk-enqueue-btn" disabled onclick="submitBulkJobs()"
             class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 flex items-center gap-2 opacity-50 cursor-not-allowed hover:-translate-y-0.5">
-            Enqueue Bulk Jobs
+            Đưa vào hàng đợi
         </button>
     </div>
 
@@ -264,7 +264,7 @@
                     controlsEl.classList.add('hidden');
                     enqueueBtn.disabled = true;
                     enqueueBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    fileCounter.innerText = "0 files queued";
+                    fileCounter.innerText = "0 file trong hàng đợi";
                     return;
                 }
 
@@ -272,7 +272,7 @@
                 controlsEl.classList.remove('hidden');
                 enqueueBtn.disabled = false;
                 enqueueBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                fileCounter.innerText = `${fileQueue.length} files queued`;
+                fileCounter.innerText = `${fileQueue.length} file trong hàng đợi`;
 
                 tbody.innerHTML = '';
                 fileQueue.forEach((file, index) => {
@@ -359,16 +359,16 @@
             // --- Submission engine ---
             window.submitBulkJobs = async function () {
                 if (!accountSelect.value) {
-                    showToast("Please select an Account first.", 'error');
+                    showToast("Vui lòng chọn tài khoản trước.", 'error');
                     return;
                 }
                 if (!startTimeInput.value) {
-                    showToast("Please select a Base Start Time.", 'error');
+                    showToast("Vui lòng chọn giờ bắt đầu.", 'error');
                     return;
                 }
 
                 enqueueBtn.disabled = true;
-                enqueueBtn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Uploading Batch...';
+                enqueueBtn.innerHTML = '<svg class="animate-spin -ml-1 mr-2 h-4 w-4 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Đang tải lên...';
 
                 const formData = new FormData();
                 const targetPageSelect = document.getElementById('bulk-target-page').value;
@@ -397,10 +397,10 @@
                     // We physically swap the parent container DOM with the response
                     document.getElementById('create-job-form-container').outerHTML = htmlText;
                 } catch (err) {
-                    showToast("Network error occurred during bulk upload.", 'error');
+                    showToast("Lỗi mạng khi tải hàng loạt.", 'error');
                     console.error(err);
                     enqueueBtn.disabled = false;
-                    enqueueBtn.innerHTML = 'Enqueue Bulk Jobs';
+                    enqueueBtn.innerHTML = 'Đưa vào hàng đợi';
                 }
             };
 

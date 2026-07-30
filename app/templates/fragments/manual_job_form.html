@@ -24,7 +24,7 @@
                         d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>Target Page</label>
+                </svg>Trang đích</label>
             <div class="relative">
                 <select name="target_page"
                     onchange="document.getElementById('manual-acc-id').value = this.options[this.selectedIndex].dataset.accId"
@@ -78,7 +78,7 @@
                 </button>
             </label>
             <div class="relative flex flex-col w-full">
-                <textarea data-manual-caption-input name="caption" rows="2" placeholder="Nhập nội dung caption muốn đăng hoặc bấm Tạo thử bằng AI..."
+                <textarea data-manual-caption-input name="caption" rows="2" placeholder="Nhập caption muốn đăng hoặc bấm Tạo thử bằng AI..."
                     class="w-full border border-gray-200 rounded-t-lg px-3 py-2 text-sm text-gray-800 focus:ring-1 focus:ring-indigo-400 outline-none resize-none placeholder-gray-300 disabled:bg-gray-50 disabled:text-gray-500"></textarea>
                 
                 {% include 'fragments/ai_status_line.html' %}

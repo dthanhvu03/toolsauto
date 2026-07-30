@@ -46,7 +46,7 @@
                             </svg>
                         </button>
                         {% else %}
-                        <span class="text-[10px] text-gray-300 italic">No PK</span>
+                        <span class="text-[10px] text-gray-300 italic">Không có PK</span>
                         {% endif %}
                     </td>
                 </tr>
@@ -74,7 +74,7 @@
             Table <span class="font-mono font-medium text-gray-700">{{ table_name }}</span>
         </div>
         <div class="flex items-center gap-3">
-            <span>Showing <span class="font-medium text-gray-700">{{ rows | length }}</span> rows</span>
+            <span>Đang hiện <span class="font-medium text-gray-700">{{ rows | length }}</span> dòng</span>
             {% if total_rows is defined %}
             <span class="text-gray-300">|</span>
             <span>Total: <span class="font-medium text-gray-700">{{ total_rows }}</span></span>

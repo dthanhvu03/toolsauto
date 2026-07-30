@@ -53,6 +53,8 @@ def get_job_row(job_id: int, request: Request, db: Session = Depends(get_db)):
     job = JobService.get_job_by_id(db, job_id)
     if not job:
         raise HTTPException(status_code=404)
+    JobService._attach_metrics_etas(db, [job])
+    JobService._attach_claim_cooldown_etas(db, [job])
     return templates.TemplateResponse(
         "fragments/job_row.html", 
         {"request": request, "job": job, "now": int(time.time())}
@@ -111,6 +113,22 @@ def approve_job(job_id: int, request: Request, db: Session = Depends(get_db)):
     JobService.approve_job(db, job_id)
     job = JobService.get_job_by_id(db, job_id)
     return templates.TemplateResponse("fragments/job_row.html", {"request": request, "job": job, "now": int(time.time())})
+
+@router.post("/{job_id}/style", response_class=HTMLResponse)
+def apply_job_style(
+    job_id: int,
+    request: Request,
+    style: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        job = JobService.apply_style(db, job_id, style)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return templates.TemplateResponse(
+        "fragments/job_row.html",
+        {"request": request, "job": job, "now": int(time.time())},
+    )
 
 @router.post("/{job_id}/caption", response_class=HTMLResponse)
 def update_job_caption(job_id: int, request: Request, caption: str = Form(""), db: Session = Depends(get_db)):

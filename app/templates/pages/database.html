@@ -31,7 +31,7 @@
     <!-- ─── Sidebar: Table List ─────────────────────────────────────────── -->
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 w-full md:w-64 lg:w-72 flex-shrink-0 flex flex-col h-full overflow-hidden">
         <div class="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Tables in schema</h3>
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Bảng trong schema</h3>
             <button @click="openConsole()" class="p-1 px-2 text-[10px] cave-btn cave-btn-primary h-auto rounded font-bold">
                 SQL Console
             </button>
@@ -360,7 +360,7 @@ function dbExplorer() {
                     html += `</tbody></table></div>`;
                     container.innerHTML = html;
                 } else if (data.status === 'success') {
-                     container.innerHTML = `<div class="p-4 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 text-sm">Action successful!</div>`;
+                     container.innerHTML = `<div class="p-4 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 text-sm">Thao tác thành công!</div>`;
                 } else {
                     container.innerHTML = `<div class="p-4 bg-rose-50 text-rose-700 rounded-xl border border-rose-100 font-mono text-sm">Error: ${data.message}</div>`;
                 }

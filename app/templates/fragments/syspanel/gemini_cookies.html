@@ -3,7 +3,7 @@
 <div class="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl mb-4">
     <span class="w-6 h-6 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] shrink-0"></span>
     <div>
-        <div class="font-semibold text-emerald-700">Cookie Gemini Active</div>
+        <div class="font-semibold text-emerald-700">Cookie Gemini đang hoạt động</div>
         <div class="text-xs text-emerald-600 mt-0.5">{{ total_cookies }} cookies — Cập nhật lúc {{ file_mtime }} ({{
             file_size_kb }} KB)</div>
     </div>
@@ -46,15 +46,15 @@
 <div class="grid grid-cols-3 gap-3 mb-4 text-center">
     <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
         <div class="text-xl font-bold text-gray-800">{{ total_cookies }}</div>
-        <div class="text-xs text-gray-400">Total Cookies</div>
+        <div class="text-xs text-gray-400">Tổng cookie</div>
     </div>
     <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
         <div class="text-xl font-bold text-gray-800">{{ file_size_kb }} KB</div>
-        <div class="text-xs text-gray-400">File Size</div>
+        <div class="text-xs text-gray-400">Kích thước</div>
     </div>
     <div class="bg-gray-50 border border-gray-100 rounded-lg p-3">
         <div class="text-sm font-bold text-gray-700">{{ file_mtime or '—' }}</div>
-        <div class="text-xs text-gray-400">Last Synced</div>
+        <div class="text-xs text-gray-400">Đồng bộ lần cuối</div>
     </div>
 </div>
 
@@ -65,9 +65,9 @@
         <thead>
             <tr class="text-left text-gray-400 border-b border-gray-100">
                 <th class="pb-2 pr-3 font-medium">Cookie</th>
-                <th class="pb-2 pr-3 font-medium">Value (preview)</th>
+                <th class="pb-2 pr-3 font-medium">Giá trị (xem trước)</th>
                 <th class="pb-2 pr-3 font-medium">Domain</th>
-                <th class="pb-2 font-medium">Expires</th>
+                <th class="pb-2 font-medium">Hết hạn</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-gray-50">
@@ -105,7 +105,7 @@
 <div class="flex gap-2 mt-4 pt-4 border-t border-gray-100">
     <button hx-get="/syspanel/fragments/gemini-cookies" hx-target="#gemini-cookies-container" hx-swap="innerHTML"
         class="px-3 py-1.5 text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg font-medium transition-colors">
-        ↻ Refresh
+        ↻ Làm mới
     </button>
     <button hx-post="/syspanel/cmd/clear-gemini-cookies" hx-target="#terminal-output" hx-swap="innerHTML"
         hx-confirm="Xóa cookie Gemini hiện tại?" hx-on::before-request="terminalBusy('Clearing Gemini cookies...')"
@@ -113,6 +113,6 @@
         <svg class="w-3.5 h-3.5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg> Clear Cookies
+        </svg> Xóa cookie
     </button>
 </div>

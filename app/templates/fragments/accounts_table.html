@@ -1,6 +1,6 @@
 <div id="accounts-table-container" class="relative z-10">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 px-4">
-        <h2 class="text-lg font-bold font-display text-gray-800">Nodes Collection</h2>
+        <h2 class="text-lg font-bold font-display text-gray-800">Danh sách Node</h2>
         <!-- Quick Add Form -->
         <form hx-post="/accounts/create" hx-target="#accounts-table-container" hx-swap="outerHTML"
             class="flex flex-wrap gap-2 items-center">
@@ -9,11 +9,11 @@
                 <option value="facebook">facebook</option>
                 <option value="instagram">instagram</option>
             </select>
-            <input type="text" name="name" placeholder="Profile Name..." required
+            <input type="text" name="name" placeholder="Tên profile..." required
                 class="border border-gray-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-shadow outline-none shadow-sm w-[140px]">
             <button type="submit"
                 class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-xs tracking-wider uppercase shadow-sm transition-all hover:-translate-y-0.5 outline-none">
-                Add Node
+                Thêm node
             </button>
         </form>
     </div>

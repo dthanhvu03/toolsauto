@@ -75,7 +75,7 @@
       </button>
       <div class="flex gap-2 items-center flex-wrap">
         <label class="cursor-pointer bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
-          Import CSV
+          Nhập CSV
           <input type="file" accept=".csv" class="hidden" onchange="bulkImport(event)">
         </label>
         <a href="/compliance/keywords/sample-csv"
@@ -85,7 +85,7 @@
       </div>
       <a href="/compliance/export-keywords"
          class="inline-flex items-center bg-white border border-[var(--border)] px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50">
-        Export CSV
+        Xuất CSV
       </a>
       <button type="button" onclick="openAISuggest()"
               class="bg-purple-50 border border-purple-200 px-4 py-2 rounded-lg text-sm font-medium text-purple-700 hover:bg-purple-100">
@@ -211,7 +211,7 @@
           <tr class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
             <th class="px-4 py-3 text-left">Cụm từ</th>
             <th class="px-4 py-3 text-left">Lý do</th>
-            <th class="px-4 py-3 text-center">Active</th>
+            <th class="px-4 py-3 text-center">Đang bật</th>
             <th class="px-4 py-3 text-center">Xóa</th>
           </tr>
         </thead>
@@ -487,14 +487,14 @@ function renderTable(keywords) {
       </td>
       <td class="px-4 py-3">
         ${kw.severity === 'VIOLATION'
-          ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">BLOCK</span>'
-          : '<span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">WARN</span>'}
+          ? '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium">CHẶN</span>'
+          : '<span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">CẢNH BÁO</span>'}
       </td>
       <td class="px-4 py-3 text-xs text-gray-400">${esc(kw.source || '—')}</td>
       <td class="px-4 py-3 text-center">
         <button type="button" onclick="toggleKeyword(${kw.id})"
                 class="text-xs px-2 py-1 rounded border ${kw.is_active ? 'border-green-300 text-green-600' : 'border-gray-300 text-gray-400'}">
-          ${kw.is_active ? 'Active' : 'Tắt'}
+          ${kw.is_active ? 'Bật' : 'Tắt'}
         </button>
       </td>
       <td class="px-4 py-3 text-center">
