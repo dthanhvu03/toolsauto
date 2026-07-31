@@ -5,6 +5,7 @@ Provides:
 1. Dynamic (moving) visible watermarking filter generation for FFmpeg.
 2. Perceptual Fingerprinting (pHash) extraction and storage.
 """
+from __future__ import annotations
 
 import os
 import json
@@ -12,19 +13,56 @@ import logging
 import subprocess
 import time
 import shutil
-from pathlib import Path
 from PIL import Image
 import imagehash
 
 from app.config import CONTENT_DIR, DRM_EVIDENCE_FILE
+from app.core.media.ffmpeg_path import ffmpeg_bin, ffprobe_bin
 
 logger = logging.getLogger(__name__)
 
 # Where to store the pHash evidence log
 EVIDENCE_FILE = DRM_EVIDENCE_FILE
 
+# Prefer these fonts so drawtext works on Windows (Fontconfig often missing).
+_FONT_CANDIDATES = (
+    r"C:\Windows\Fonts\arial.ttf",
+    r"C:\Windows\Fonts\segoeui.ttf",
+    r"C:\Windows\Fonts\calibri.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/Library/Fonts/Arial.ttf",
+)
+
+
 class VideoProtector:
-    
+
+    @classmethod
+    def resolve_fontfile(cls) -> str | None:
+        """Absolute path to a TTF usable by FFmpeg drawtext, or None."""
+        for path in _FONT_CANDIDATES:
+            if path and os.path.isfile(path):
+                return path
+        return None
+
+    @classmethod
+    def ffmpeg_fontfile_arg(cls) -> str:
+        """
+        FFmpeg drawtext fontfile=… fragment (leading colon included), or empty.
+        Paths use forward slashes; drive-letter colon escaped for filtergraph.
+        """
+        font = cls.resolve_fontfile()
+        if not font:
+            return ""
+        # C:\Windows\Fonts\arial.ttf → C:/Windows/Fonts/arial.ttf → C\:/Windows/...
+        normalized = font.replace("\\", "/")
+        escaped = normalized.replace(":", "\\:")
+        return f":fontfile='{escaped}'"
+
+    # Backwards-compatible alias (was private when introduced in PLAN-048).
+    _ffmpeg_fontfile_arg = ffmpeg_fontfile_arg
+
     @classmethod
     def get_dynamic_watermark_filter(cls, text: str) -> str:
         """
@@ -36,13 +74,20 @@ class VideoProtector:
         # Escape for FFmpeg drawtext:
         # Colons need to be escaped as \:
         # Single quotes within a single-quoted string need to be escaped by breaking out, escaping, and going back in '\''
-        safe_text = text.replace("'", "'\\''").replace(":", "\\:")
-        
+        safe_text = (text or "z").replace("\\", "\\\\").replace("'", "'\\''").replace(":", "\\:")
+        font_arg = cls.ffmpeg_fontfile_arg()
+        if not font_arg and os.name == "nt":
+            logger.warning(
+                "[VideoProtector] No TTF font found for drawtext on Windows — "
+                "DRM watermark may fail. Install Arial under C:\\Windows\\Fonts."
+            )
+
         # x = w/2 + (w/3)*sin(t/2)
         # y = h/2 + (h/3)*cos(t/3)
         # This creates a non-repeating Lissajous-like curve
         return (
-            f"drawtext=text='{safe_text}':fontcolor=white@0.3:fontsize=(h/25):"
+            f"drawtext=text='{safe_text}':fontcolor=white@0.3:fontsize=(h/25)"
+            f"{font_arg}:"
             f"x='(w-text_w)/2 + (w/3)*sin(t/2)':"
             f"y='(h-text_h)/2 + (h/3)*cos(t/3)'"
         )
@@ -51,7 +96,7 @@ class VideoProtector:
     def _get_video_duration(cls, video_path: str) -> float:
         """Helper to get video duration using ffprobe."""
         cmd = [
-            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            ffprobe_bin(), "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", video_path
         ]
         try:
@@ -88,7 +133,7 @@ class VideoProtector:
             # Extract exactly 1 frame at the target timestamp. 
             # Moving -ss after -i for better stability on some FFmpeg builds.
             cmd = [
-                "ffmpeg", "-y", "-i", video_path,
+                ffmpeg_bin(), "-y", "-i", video_path,
                 "-ss", f"{ts:.3f}",
                 "-frames:v", "1", "-q:v", "2", str(tmp_img)
             ]
@@ -139,7 +184,7 @@ class VideoProtector:
         try:
             # Step 1: Extract Audio Window using FFmpeg
             ffmpeg_cmd = [
-                "ffmpeg", "-y", "-ss", str(start_time), "-t", str(window_duration),
+                ffmpeg_bin(), "-y", "-ss", str(start_time), "-t", str(window_duration),
                 "-i", video_path, "-vn", "-acodec", "pcm_s16le", "-ar", "44100", "-ac", "2",
                 str(tmp_wav)
             ]

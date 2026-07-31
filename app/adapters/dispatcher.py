@@ -200,6 +200,30 @@ class Dispatcher:
             if job.external_post_id:
                 logger.warning("[Job %s] DB Idempotency check: external_post_id %s already exists. Skipping publish.", job.id, job.external_post_id)
                 return PublishResult(ok=True, external_post_id=job.external_post_id, details={"msg": "Skipped due to DB idempotency"})
+
+            # 1b. Facebook Reels/POST requires video — fail before opening browser (Job #6 PNG case).
+            # error_code=VALIDATION marks it as operator input, not account health.
+            if (platform_key or "").lower() == "facebook":
+                from app.core.queue.job import JobService
+
+                jt = (job_type or JobType.POST)
+                if str(jt).upper() not in (str(JobType.COMMENT), str(JobType.FEED)):
+                    media_for_check = getattr(job, "resolved_media_path", None) or job.media_path
+                    try:
+                        JobService.assert_facebook_post_media(
+                            platform_key or job.platform,
+                            media_for_check,
+                            job_type=str(jt),
+                            require_media=True,
+                        )
+                    except ValueError as e:
+                        logger.error("[Job %s] Media gate blocked publish: %s", job.id, e)
+                        return PublishResult(
+                            ok=False,
+                            is_fatal=True,
+                            error=str(e),
+                            error_code=JobService.ERROR_TYPE_VALIDATION,
+                        )
             
             # 2. Open Session (if this fails, it's usually fatal or at least needs backoff)
             if not adapter.open_session(job.account.resolved_profile_path):
@@ -254,6 +278,32 @@ class Dispatcher:
                     job_tracer.finish_job_trace(job.id, "failed", result.error)
                 return result
             
+            # FEED job: bài chữ / bài ảnh lên tường hoặc Page (không qua Reels)
+            if job_type == JobType.FEED:
+                if not hasattr(adapter, "publish_feed"):
+                    from app.core.queue.job import JobService
+
+                    return PublishResult(
+                        ok=False,
+                        is_fatal=True,
+                        error=f"Adapter {job.platform} chưa hỗ trợ đăng bài feed.",
+                        error_code=JobService.ERROR_TYPE_VALIDATION,
+                    )
+                logger.info("[Job %s] Dispatching FEED job (media=%s)", job.id, bool(job.media_path))
+                original_caption = getattr(job, "caption", "")
+                if original_caption:
+                    job.caption = Dispatcher._inject_cta(job.platform, original_caption)
+                original_path = job.media_path
+                job.media_path = job.resolved_media_path or job.media_path
+                try:
+                    result = adapter.publish_feed(job)
+                finally:
+                    job.media_path = original_path
+                job_tracer.finish_job_trace(
+                    job.id, "completed" if result.ok else "failed", None if result.ok else result.error
+                )
+                return result
+
             # POST job: standard publish flow
             # N8n-lite: Inject CTA to caption if it exists
             original_caption = getattr(job, "caption", "")

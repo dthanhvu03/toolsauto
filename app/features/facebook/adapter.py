@@ -19,6 +19,7 @@ from collections import deque
 from app.features.facebook.selectors import SELECTORS
 from app.features.facebook.core.session import FacebookSessionManager
 from app.features.facebook.pages.reels import FacebookReelsPage
+from app.features.facebook.pages.feed_composer import FacebookFeedComposer
 
 logger = logging.getLogger(__name__)
 from app.core.observability.runtime_events import emit as rt_emit
@@ -1386,6 +1387,195 @@ class FacebookAdapter(AdapterInterface):
                 entrypoint_used,
             )
         
+    def publish_feed(self, job: Job) -> PublishResult:
+        """
+        Đăng bài feed: chữ thuần hoặc chữ + ảnh, lên tường cá nhân hoặc Page.
+
+        Khác publish(): không đi qua Reels, media là tùy chọn, và ảnh được chấp nhận.
+        Dùng cho JobType.FEED.
+        """
+        self.logger = JobLoggerAdapter(logger, {'job_id': job.id})
+        self.logger.info("FacebookAdapter: Đăng bài feed cho job %s", job.id)
+
+        if not self.page:
+            return PublishResult(ok=False, error="Playwright page is not initialized.", is_fatal=True)
+
+        if not self._is_session_alive():
+            return PublishResult(
+                ok=False,
+                error="Browser session is dead (page/context closed). Will retry with fresh session.",
+                is_fatal=False,
+            )
+
+        target_page_url = (getattr(job, "target_page", None) or "").strip() or None
+        flow_mode = "page_feed" if target_page_url else "personal_feed"
+        caption = (job.caption or "").strip()
+        media_path = getattr(job, "media_path", None)
+
+        if not caption and not media_path:
+            return self._failure_result(
+                job.id,
+                "empty_content",
+                "Bài feed phải có nội dung chữ hoặc ảnh.",
+                flow_mode,
+                None,
+                is_fatal=True,
+            )
+
+        composer = FacebookFeedComposer(self.page, self.logger)
+
+        # Link bài chỉ xuất hiện trong phản hồi GraphQL lúc đăng — DOM của Page
+        # không phơi href /posts/ ra ngay. Bắt như luồng Reels đang làm.
+        captured_urls: list[str] = []
+
+        seen_mutations: list[str] = []
+
+        def _capture_story_url(response):
+            try:
+                if "/api/graphql/" not in response.url:
+                    return
+                req_post = response.request.post_data or ""
+                # Tên mutation của composer đổi theo phiên bản FB, nên khớp rộng
+                # rồi lọc bằng nội dung phản hồi thay vì cố định một tên.
+                if not any(
+                    token in req_post
+                    for token in ("StoryCreate", "Composer", "FeedPost", "CometComposer")
+                ):
+                    return
+                name = next(
+                    (m.group(0) for m in re.finditer(r"[A-Za-z]+Mutation", req_post)), "unknown"
+                )
+                if name not in seen_mutations:
+                    seen_mutations.append(name)
+                payload = response.json()
+            except Exception:
+                return
+            for found in self._walk_for_post_urls(payload):
+                if found not in captured_urls:
+                    captured_urls.append(found)
+
+        try:
+            self.page.on("response", _capture_story_url)
+        except Exception:
+            pass
+
+        try:
+            destination = target_page_url or f"{FACEBOOK_HOST}/"
+            if not self._safe_goto(destination, wait_until="domcontentloaded"):
+                return self._failure_result(
+                    job.id, "navigate", f"Không mở được {destination}", flow_mode, None
+                )
+            self.page.wait_for_timeout(3000)
+
+            update_active_node(job.id, "feed_browse")
+            human_scroll(self.page)
+
+            update_active_node(job.id, "open_composer")
+            if not composer.open_composer():
+                return self._failure_result(
+                    job.id, "open_composer", "Không mở được hộp thoại soạn bài.", flow_mode, None
+                )
+
+            if caption:
+                update_active_node(job.id, "fill_caption")
+                if not composer.fill_text(caption):
+                    return self._failure_result(
+                        job.id, "fill_caption", "Không nhập được nội dung bài viết.", flow_mode, "composer"
+                    )
+
+            if media_path:
+                if not os.path.exists(media_path):
+                    return self._failure_result(
+                        job.id,
+                        "upload_media",
+                        f"Không tìm thấy file media: {media_path}",
+                        flow_mode,
+                        "composer",
+                        is_fatal=True,
+                    )
+                update_active_node(job.id, "upload_media")
+                if not composer.attach_media([media_path]):
+                    return self._failure_result(
+                        job.id, "upload_media", "Không đính kèm được media vào bài.", flow_mode, "composer"
+                    )
+
+            pre_post_delay(self.page)
+            update_active_node(job.id, "submit")
+            if not composer.submit():
+                return self._failure_result(
+                    job.id, "submit", "Bấm Đăng xong nhưng hộp thoại không đóng.", flow_mode, "composer"
+                )
+
+            self.page.wait_for_timeout(4000)
+            post_url = captured_urls[0] if captured_urls else self._find_latest_feed_post_url(target_page_url)
+            if not post_url:
+                # Không lấy được link không phải lỗi đăng — log để lần sau bắt đúng mutation.
+                self.logger.info(
+                    "FacebookAdapter: chưa lấy được link bài feed (mutation thấy được: %s)",
+                    seen_mutations or "không có",
+                )
+            details = self._build_publish_details(
+                flow_mode,
+                "composer",
+                post_url=post_url,
+                has_media=bool(media_path),
+            )
+            self.logger.info("FacebookAdapter: Đăng feed thành công (url=%s)", post_url)
+            return PublishResult(ok=True, details=details, external_post_id=post_url or None)
+
+        except PageMismatchError:
+            raise
+        except Exception as e:
+            self.logger.exception("FacebookAdapter: Lỗi khi đăng bài feed: %s", e)
+            return self._failure_result(job.id, "unexpected", str(e), flow_mode, "composer")
+        finally:
+            try:
+                self.page.remove_listener("response", _capture_story_url)
+            except Exception:
+                pass
+            # Không để lại hộp thoại nháp treo giữa màn hình cho job sau.
+            try:
+                composer.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _walk_for_post_urls(payload: Any, limit: int = 400) -> list[str]:
+        """Quét đệ quy JSON GraphQL, nhặt mọi chuỗi trông như link bài viết."""
+        found: list[str] = []
+        stack = [payload]
+        seen = 0
+        while stack and seen < limit:
+            node = stack.pop()
+            seen += 1
+            if isinstance(node, dict):
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+            elif isinstance(node, str):
+                if "facebook.com" in node and any(
+                    marker in node for marker in ("/posts/", "story_fbid=", "/permalink/", "pfbid")
+                ):
+                    cleaned = node.split("?")[0] if "story_fbid=" not in node else node
+                    if cleaned not in found:
+                        found.append(cleaned)
+        return found
+
+    @playwright_safe_action(default=None, logger_name=__name__)
+    def _find_latest_feed_post_url(self, target_page_url: str | None) -> str | None:
+        """Tìm link bài vừa đăng (best-effort — không có cũng không coi là thất bại)."""
+        if not self.page:
+            return None
+        for link in self.page.locator("a").all()[:200]:
+            try:
+                href = link.get_attribute("href") or ""
+            except Exception:
+                continue
+            if any(marker in href for marker in ("/posts/", "story_fbid=", "/permalink/")):
+                clean = href.split("?")[0] if "story_fbid=" not in href else href
+                return clean if clean.startswith("http") else f"{FACEBOOK_HOST}{clean}"
+        return None
+
     def check_published_state(self, job: Job) -> PublishResult:
         """
         Verify if a post exists on the remote timeline using the deterministic SHA256 salt.

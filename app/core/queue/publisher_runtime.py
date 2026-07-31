@@ -70,8 +70,14 @@ def start_heartbeat_thread(
 
 
 def resource_blocks_claim(db: Session, logger: logging.Logger, prefix: str = "") -> bool:
-    """Return True if RAM / browser pressure says pause claiming."""
-    health = SystemMonitorService().check_health()
+    """Return True if RAM / browser pressure says pause claiming.
+
+    Browser gate uses chrome_toolsauto_count (profiles under storage/profiles /
+    Playwright), NOT the machine-wide Chrome process count — personal Chrome
+    must not block publish on Windows (PLAN-048).
+    """
+    monitor = SystemMonitorService()
+    health = monitor.check_health()
     ram_threshold = runtime_settings.get_int("worker.publisher.ram_threshold", 95, db=db)
     if health.get("ram_percent") and health["ram_percent"] > ram_threshold:
         logger.warning(
@@ -83,12 +89,22 @@ def resource_blocks_claim(db: Session, logger: logging.Logger, prefix: str = "")
     max_browsers = runtime_settings.get_int(
         "worker.publisher.max_browser_instances", 15, db=db
     )
-    if health.get("chrome_playwright_count") and health["chrome_playwright_count"] >= max_browsers:
+    # Prefer ToolsAuto-scoped count. If missing (old monitor), do not fall back
+    # to machine-wide chrome_playwright_count — that falsely pauses on Windows.
+    toolsauto = health.get("chrome_toolsauto_count")
+    if toolsauto is None:
+        return False
+    if toolsauto >= max_browsers:
         logger.warning(
-            "%sBrowser instances high (%s). Pausing claim.",
+            "%sBrowser instances high (toolsauto=%s total=%s). Pausing claim.",
             prefix,
-            health["chrome_playwright_count"],
+            toolsauto,
+            health.get("chrome_playwright_count"),
         )
+        try:
+            monitor.alert_toolsauto_browser_pressure(int(toolsauto), int(max_browsers))
+        except Exception:
+            pass
         return True
     return False
 

@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.config as config
+from app.core.media import ffmpeg_path
 from app.core.database.models import Account, Job, ViralMaterial
 from app.core.queue.worker import WorkerService
 from app.features.viral_intake.scan import get_default_min_views, run_tiktok_competitor_scan
@@ -346,55 +347,28 @@ class ViralService:
             "unique_handles": len(counts),
         }
 
+    # ffmpeg discovery lives in app.core.media.ffmpeg_path (shared with the
+    # Facebook MediaProcessor); these stay as thin, backwards-compatible shims.
     @staticmethod
     def _winget_links_dir() -> Optional[str]:
-        local = os.environ.get("LOCALAPPDATA") or ""
-        if not local:
-            return None
-        path = os.path.join(local, "Microsoft", "WinGet", "Links")
-        return path if os.path.isdir(path) else None
+        return ffmpeg_path.winget_links_dir()
 
     @staticmethod
     def _ensure_ffmpeg_on_path() -> None:
-        """If winget installed ffmpeg but shell PATH stale, prepend Links for this process."""
-        links = ViralService._winget_links_dir()
-        if not links:
-            return
-        path_env = os.environ.get("PATH") or ""
-        if links.lower() in path_env.lower():
-            return
-        os.environ["PATH"] = links + os.pathsep + path_env
+        ffmpeg_path.ensure_ffmpeg_on_path()
 
     @staticmethod
     def resolve_ffmpeg() -> Optional[str]:
-        ViralService._ensure_ffmpeg_on_path()
-        found = shutil.which("ffmpeg")
-        if found:
-            return found
-        links = ViralService._winget_links_dir()
-        if links:
-            candidate = os.path.join(links, "ffmpeg.exe")
-            if os.path.isfile(candidate):
-                return candidate
-        return None
+        return ffmpeg_path.resolve_ffmpeg()
 
     @staticmethod
     def resolve_ffprobe() -> Optional[str]:
-        ViralService._ensure_ffmpeg_on_path()
-        found = shutil.which("ffprobe")
-        if found:
-            return found
-        links = ViralService._winget_links_dir()
-        if links:
-            candidate = os.path.join(links, "ffprobe.exe")
-            if os.path.isfile(candidate):
-                return candidate
-        return None
+        return ffmpeg_path.resolve_ffprobe()
 
     @staticmethod
     def ffmpeg_available() -> bool:
         """True if ffprobe/ffmpeg resolvable (PATH or WinGet Links on Windows)."""
-        return bool(ViralService.resolve_ffprobe() or ViralService.resolve_ffmpeg())
+        return ffmpeg_path.ffmpeg_available()
 
     @staticmethod
     def process_material(db: Session, material_id: int) -> Tuple[bool, str]:

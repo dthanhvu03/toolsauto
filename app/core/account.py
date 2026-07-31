@@ -223,6 +223,7 @@ class AccountService:
         sleep_start_time: str = "",
         sleep_end_time: str = "",
         competitor_urls: str = "",
+        engagement_page_urls: str = "",
         target_pages: list[str] | None = None,
         page_niches: str = "",
         update_distribution: bool = False,
@@ -252,6 +253,25 @@ class AccountService:
                 account.niche_topics = raw_niche
             else:
                 account.niche_topics = None
+
+            # Page FB để "dạo" khi rảnh — lưu JSON array, chỉ nhận link Facebook.
+            # Cột riêng, không dùng chung competitor_urls (vốn là nguồn reup TikTok).
+            raw_engage = (engagement_page_urls or "").replace("\r", "").strip()
+            if raw_engage:
+                urls = []
+                for line in raw_engage.replace(",", "\n").split("\n"):
+                    url = line.strip()
+                    if not url:
+                        continue
+                    if not url.startswith("http"):
+                        url = "https://" + url
+                    if "facebook.com" in url.lower() and url not in urls:
+                        urls.append(url)
+                account.engagement_page_urls = (
+                    _json.dumps(urls, ensure_ascii=False) if urls else None
+                )
+            else:
+                account.engagement_page_urls = None
 
             # Target pages / competitors / page niches — chỉ khi form gửi update_distribution
             # (Config tab VIP tách riêng; tránh Commit Config xóa Active Targets).

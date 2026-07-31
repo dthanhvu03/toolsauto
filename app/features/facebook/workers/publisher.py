@@ -63,6 +63,10 @@ def handle_sigterm(signum, frame):
 def register_signals():
     signal.signal(signal.SIGINT, handle_sigterm)
     signal.signal(signal.SIGTERM, handle_sigterm)
+    # Windows: the local supervisor stops children with CTRL_BREAK_EVENT, which
+    # arrives as SIGBREAK. Without this, shutdown is an abrupt TerminateProcess.
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, handle_sigterm)
 
 def check_crash_recovery(db: Session):
     """Resets jobs stuck in RUNNING based on stale heartbeats."""
@@ -112,7 +116,8 @@ def process_single_job(db: Session):
     logger.debug("[DB][claim_next_job] Claimed job_id=%s", job.id)
 
     heartbeat_stop = threading.Event()
-    
+    heartbeat_thread = None
+
     try:
         # Xin ý kiến giấc ngủ (Human Rest Cycle)
         if postpone_if_sleeping(db, job, logger, prefix="[PUBLISHER] "):
@@ -132,6 +137,25 @@ def process_single_job(db: Session):
             logger.warning("[PUBLISHER] [Job-%s] [VALIDATION] Caption still contains %s. Resetting to DRAFT.", job.id, AI_GENERATE_MARKER)
             job.status = JobStatus.DRAFT
             db.commit()
+            CURRENT_JOB_ID = None
+            return True
+
+        # Facebook POST/Reels: reject non-video before compliance/browser (Job #6).
+        # This is an operator input error, not an account failure — error_type
+        # VALIDATION keeps it out of the account circuit breaker.
+        _jt = getattr(job, "job_type", JobType.POST) or JobType.POST
+        try:
+            JobService.assert_facebook_post_media(
+                job.platform,
+                getattr(job, "resolved_media_path", None) or job.media_path,
+                job_type=_jt,
+                require_media=True,
+            )
+        except ValueError as e:
+            logger.error("[PUBLISHER] [Job-%s] [VALIDATION] %s", job.id, e)
+            JobService.mark_failed_or_retry(
+                db, job, str(e), is_fatal=True, error_type=JobService.ERROR_TYPE_VALIDATION
+            )
             CURRENT_JOB_ID = None
             return True
 
@@ -213,12 +237,20 @@ def process_single_job(db: Session):
             else:
                 logger.error("[PUBLISHER] [Job-%s] [FAILED] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
                 logger.debug("[DB][status_transition] Marking job_id=%s failed/retry", job.id)
+                # A media/input rejection from the dispatcher must not count
+                # toward the account circuit breaker.
+                if publish_result.error_code == JobService.ERROR_TYPE_VALIDATION:
+                    failure_type = JobService.ERROR_TYPE_VALIDATION
+                elif publish_result.is_fatal:
+                    failure_type = "FATAL"
+                else:
+                    failure_type = "RETRYABLE"
                 JobService.mark_failed_or_retry(
-                    db=db, 
-                    job=job, 
+                    db=db,
+                    job=job,
                     error_msg=publish_result.error or "Unknown failure",
                     is_fatal=publish_result.is_fatal,
-                    error_type="FATAL" if publish_result.is_fatal else "RETRYABLE"
+                    error_type=failure_type
                 )
                 if publish_result.is_fatal or job.tries >= job.max_tries:
                     NotifierService.notify_job_failed(job, publish_result.error)
@@ -253,6 +285,15 @@ def process_single_job(db: Session):
             JobService.mark_failed_or_retry(db, job, str(e), is_fatal=False)
         
     finally:
+        # Every exit path after the heartbeat started must stop it — early
+        # returns (AI marker, media gate, compliance block) included.
+        heartbeat_stop.set()
+        if heartbeat_thread is not None:
+            try:
+                heartbeat_thread.join(timeout=5)
+            except Exception:
+                logger.debug("[PUBLISHER] heartbeat join failed", exc_info=True)
+
         try:
             # Always reset failed transaction state before cleanup-path queries.
             db.rollback()
@@ -379,6 +420,41 @@ _last_engagement_ts: dict[int, float] = {}
 IDLE_COOLDOWN_MINUTES = config.IDLE_ENGAGEMENT_COOLDOWN_MINUTES
 
 
+def _record_engagement_session(db: Session, account, result: dict, started_at: int) -> None:
+    """
+    Ghi lại phiên nuôi tài khoản vào DB.
+
+    Log file xoay vòng là mất sạch lịch sử, không tra được acc nào nuôi bao lâu,
+    hành động gì, có bị checkpoint không. Lỗi ở đây không được làm hỏng phiên.
+    """
+    import time as _t
+
+    try:
+        from app.core.database.models import EngagementSession
+
+        urls = result.get("urls") or []
+        now = int(_t.time())
+        db.add(
+            EngagementSession(
+                account_id=account.id,
+                action=result.get("action"),
+                ok=bool(result.get("ok")),
+                checkpointed=bool(result.get("checkpointed")),
+                error=(result.get("error") or None),
+                target_url=(urls[0] if urls else None),
+                urls_touched=len(urls),
+                materials_scraped=len(result.get("scraped_materials") or []),
+                duration_sec=max(0, now - int(started_at or now)),
+                started_at=int(started_at or now),
+                finished_at=now,
+            )
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("[IDLE] Không ghi được lịch sử phiên engagement: %s", e)
+
+
 def _maybe_idle_engagement(db: Session):
     """
     When idle (no pending jobs), pick an account that hasn't engaged recently
@@ -392,7 +468,11 @@ def _maybe_idle_engagement(db: Session):
         frequent engagement that triggers Meta anti-bot detection.
     """
     import random as _rand
-    from app.features.facebook.engagement import FacebookEngagementTask, parse_niche_topics
+    from app.features.facebook.engagement import (
+        FacebookEngagementTask,
+        parse_competitor_urls,
+        parse_niche_topics,
+    )
 
     if not config.IDLE_ENGAGEMENT_ENABLED:
         return
@@ -456,10 +536,14 @@ def _maybe_idle_engagement(db: Session):
 
     account = _rand.choice(eligible_accounts)
     niche_keywords = parse_niche_topics(getattr(account, "niche_topics", None))
-    competitor_urls = parse_niche_topics(getattr(account, "competitor_urls", None))
+    # Page FB để dạo lấy từ cột riêng. `competitor_urls` là nguồn reup TikTok —
+    # dùng nhầm nó khiến spy_competitor mở URL rác (xem PLAN-050).
+    competitor_urls = parse_competitor_urls(getattr(account, "engagement_page_urls", None))
 
     logger.debug("[IDLE] Starting engagement session for account '%s' (niche: %s, competitors: %d)",
                 account.name, niche_keywords or "general", len(competitor_urls))
+
+    session_started_at = int(_time.time())
 
     # ── LOCK: Đánh dấu acc đang ENGAGING để Publisher không claim job cho acc này ──
     account.login_status = AccountStatus.ENGAGING
@@ -516,6 +600,7 @@ def _maybe_idle_engagement(db: Session):
         }
         action_label = action_labels.get(result.get("action"), result.get("action", ""))
         _update_engagement_status(db, AccountStatus.ENGAGING, f"{action_label} — {account.name}")
+        _record_engagement_session(db, account, result, started_at=session_started_at)
 
         if result.get("checkpointed"):
             logger.error("[IDLE] Account '%s' CHECKPOINTED during engagement! Quarantining.", account.name)

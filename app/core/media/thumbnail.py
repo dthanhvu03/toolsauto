@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 from typing import Optional
 
+from app.core.media.ffmpeg_path import ffmpeg_bin
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ def extract_thumbnail(video_path: str, job_id: int) -> Optional[str]:
     thumb_path = os.path.join(tempfile.gettempdir(), f"thumb_{job_id}.jpg")
     try:
         cmd = [
-            "ffmpeg", "-y",
+            ffmpeg_bin(), "-y",
             "-i", video_path,
             "-ss", "00:00:01",
             "-frames:v", "1",

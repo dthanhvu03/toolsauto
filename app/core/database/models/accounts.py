@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.config import PROFILES_DIR
@@ -60,8 +60,13 @@ class Account(Base):
     sleep_start_time = Column(String, nullable=True)  # e.g. "23:00"
     sleep_end_time = Column(String, nullable=True)  # e.g. "06:00"
 
-    # Clone Niche (Link đối thủ)
-    competitor_urls = Column(String, nullable=True)  # JSON list of URLs
+    # Clone Niche — nguồn REUP (TikTok). Lưu JSON [{"url","target_page"}].
+    # KHÔNG dùng cho idle engagement: đây là link TikTok, không phải page FB.
+    competitor_urls = Column(String, nullable=True)
+
+    # Idle Engagement — danh sách page/profile FB để "dạo" khi rảnh.
+    # JSON array URL hoặc chuỗi ngăn cách bằng dấu phẩy.
+    engagement_page_urls = Column(String, nullable=True)
 
     # Limits & Breakers
     daily_limit = Column(Integer, default=3)
@@ -111,6 +116,22 @@ class Account(Base):
             except Exception:
                 pass
         return self.niche_topics
+
+    @property
+    def engagement_page_urls_list(self) -> str:
+        """Hiển thị danh sách page FB để dạo, mỗi dòng một URL (cho textarea)."""
+        import json
+        raw = self.engagement_page_urls
+        if not raw:
+            return ""
+        if str(raw).strip().startswith("["):
+            try:
+                data = json.loads(raw)
+                if isinstance(data, list):
+                    return "\n".join(str(u).strip() for u in data if str(u).strip())
+            except Exception:
+                pass
+        return "\n".join(part.strip() for part in str(raw).split(",") if part.strip())
 
     @property
     def competitor_urls_list(self) -> str:
@@ -285,3 +306,31 @@ class Account(Base):
                 return start <= now or now <= end
         except Exception:
             return False
+
+
+class EngagementSession(Base):
+    """
+    Lịch sử một phiên "nuôi tài khoản" lúc rảnh.
+
+    Trước đây chỉ có log file, mà log xoay vòng là mất sạch — không tra được
+    acc nào nuôi bao lâu, hành động gì, có bị checkpoint không. Bảng này để
+    trả lời được câu "nuôi acc có tác dụng thật không".
+    """
+
+    __tablename__ = "engagement_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), index=True)
+
+    action = Column(String, nullable=True, index=True)  # watch_reels | scroll_news_feed | ...
+    ok = Column(Boolean, default=False)
+    checkpointed = Column(Boolean, default=False)
+    error = Column(String, nullable=True)
+
+    target_url = Column(String, nullable=True)
+    urls_touched = Column(Integer, default=0)
+    materials_scraped = Column(Integer, default=0)
+    duration_sec = Column(Integer, default=0)
+
+    started_at = Column(Integer, default=now_ts, index=True)
+    finished_at = Column(Integer, nullable=True)
