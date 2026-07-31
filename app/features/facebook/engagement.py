@@ -96,15 +96,17 @@ class FacebookEngagementTask:
             checkpointed – True if account was detected as logged-out
             urls    – list of URLs interacted with/watched
         """
-        # Build weighted action pool
+        # Trọng số chỉ chia cho hành động thật sự chạy được: không có page FB
+        # để dạo thì spy_competitor không được cấp phần nào, tránh cảnh 40% số
+        # phiên chỉ mở browser rồi thất bại (bug PLAN-050).
         actions = []
-        
+
         if competitor_urls:
             actions.append(("spy_competitor", 0.40))
-            
+
         actions.append(("scroll_news_feed", 0.30 if competitor_urls else 0.40))
         actions.append(("watch_reels", 0.15 if competitor_urls else 0.35))
-        
+
         if niche_keywords:
             actions.append(("search_topic", 0.15 if competitor_urls else 0.25))
 
@@ -140,7 +142,10 @@ class FacebookEngagementTask:
                 self._action_search_topic(keyword, max_duration)
             elif chosen == "spy_competitor":
                 target_url = random.choice(competitor_urls)
-                self._action_spy_competitor(target_url, max_duration)
+                if self._action_spy_competitor(target_url, max_duration) is False:
+                    result["error"] = f"Không mở được trang đối thủ: {target_url}"
+                    logger.warning("[ENGAGEMENT] %s", result["error"])
+                    return result
 
             result["ok"] = True
             result["urls"] = list(self.interacted_urls)
@@ -359,7 +364,8 @@ class FacebookEngagementTask:
             self.page.wait_for_timeout(random.randint(3000, 5000))
         except Exception as e:
             logger.warning("[ENGAGEMENT] Failed to visit competitor URL %s: %s", target_url, e)
-            return
+            # Trả False để run_random_action KHÔNG báo thành công giả.
+            return False
 
         self._checkpoint_guard()
         self.interacted_urls.add(self.page.url.split("?")[0])
@@ -572,6 +578,59 @@ class _CheckpointDetected(Exception):
 # ------------------------------------------------------------------
 # Utility: parse niche_topics JSON from Account model
 # ------------------------------------------------------------------
+
+def parse_competitor_urls(raw: str | None) -> list[str]:
+    """
+    Lấy ra danh sách URL Facebook dùng được từ cột `competitor_urls`.
+
+    Cột này lưu JSON các OBJECT của luồng reup, ví dụ:
+        [{"target_page": "https://www.facebook.com/abc", "url": "https://www.tiktok.com/@xyz"}]
+
+    Trước đây nó bị đưa thẳng qua parse_niche_topics(), biến cả object thành
+    chuỗi `{'target_page': ...}` rồi ghép thành `https://{'target_page'...` —
+    nên spy_competitor không bao giờ mở được trang nào.
+
+    Chỉ nhận URL facebook.com: engagement chạy trong trình duyệt đã đăng nhập FB,
+    mở link TikTok ở đó không nuôi tài khoản FB mà còn dễ bị đánh dấu bất thường.
+    """
+    if not raw:
+        return []
+
+    candidates: list[str] = []
+
+    def _collect(value):
+        if isinstance(value, str):
+            candidates.append(value)
+        elif isinstance(value, dict):
+            for key in ("competitor_url", "page_url", "target_page", "url"):
+                if isinstance(value.get(key), str):
+                    candidates.append(value[key])
+        elif isinstance(value, list):
+            for item in value:
+                _collect(item)
+
+    text = raw.strip() if isinstance(raw, str) else raw
+    if isinstance(text, str) and text.startswith(("[", "{")):
+        try:
+            _collect(json.loads(text))
+        except (json.JSONDecodeError, TypeError):
+            candidates.extend(part.strip() for part in text.split(","))
+    else:
+        _collect(text if not isinstance(text, str) else [p.strip() for p in text.split(",")])
+
+    urls: list[str] = []
+    for item in candidates:
+        url = (item or "").strip()
+        if not url:
+            continue
+        if not url.startswith("http"):
+            url = "https://" + url
+        if "facebook.com" not in url.lower():
+            continue
+        if url not in urls:
+            urls.append(url)
+    return urls
+
 
 def parse_niche_topics(raw: str | None) -> list[str]:
     """

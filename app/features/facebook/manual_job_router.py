@@ -38,6 +38,7 @@ async def manual_job_create(
     target_page: str = Form(...),
     caption: str = Form(""),
     media: UploadFile = File(None),
+    job_type: str = Form("POST"),
     db: Session = Depends(get_db)
 ):
     caption_text = (caption or "").strip()
@@ -49,8 +50,11 @@ async def manual_job_create(
             return HTMLResponse(f'<div class="p-3 text-sm rounded bg-rose-50 text-rose-800 border border-rose-200 font-medium">{msg}</div>')
 
     try:
-        job = JobService.create_manual_job_with_file(db, account_id, target_page, caption_text, media)
-        msg = f"✅ Job #{job.id} đã được thêm vào Queue với độ ưu tiên tối đa!"
+        job = JobService.create_manual_job_with_file(
+            db, account_id, target_page, caption_text, media, job_type=job_type
+        )
+        kind = "Bài feed" if (job_type or "").upper() == "FEED" else "Reels"
+        msg = f"✅ {kind} — Job #{job.id} đã vào Queue với độ ưu tiên tối đa!"
         return HTMLResponse(
             f'<div class="p-3 text-sm rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">{msg}</div>'
             f'<script>if(window.refreshJobs) window.refreshJobs(1); setTimeout(() => document.getElementById("manualJobDialog").close(), 2000);</script>'

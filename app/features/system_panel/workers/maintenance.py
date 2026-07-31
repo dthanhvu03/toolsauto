@@ -72,6 +72,9 @@ def handle_sigterm(signum, frame):
 def register_signals():
     signal.signal(signal.SIGINT, handle_sigterm)
     signal.signal(signal.SIGTERM, handle_sigterm)
+    # Windows: the local supervisor stops children with CTRL_BREAK_EVENT (SIGBREAK).
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, handle_sigterm)
 
 _last_orphan_cleanup_ts: float = 0
 
@@ -217,20 +220,27 @@ def _scrape_tiktok_competitors(db):
 _last_purge_ts: float = 0
 PURGE_INTERVAL_SEC = runtime_settings.get_int('worker.maintenance.purge_interval_sec', 3600)  # 1 giờ
 
-def _purge_zombies():
+def _purge_zombies(db: Session | None = None):
     global _last_purge_ts
-    import subprocess
-    import time
+
     now = time.time()
     if (now - _last_purge_ts) < PURGE_INTERVAL_SEC:
         return
-        
+
     _last_purge_ts = now
-    logger.info("🔪 Càn quét dọn dẹp Zombie Chrome/Xvfb...")
+    logger.info("Càn quét dọn dẹp Zombie Chrome/Xvfb / orphan ToolsAuto browsers...")
+    if os.name != "nt":
+        try:
+            subprocess.run("pkill -9 -f 'chrome.*defunct'", shell=True, check=False)
+        except OSError as e:
+            logger.warning("Failed to purge linux zombies: %s", e)
+
     try:
-        subprocess.run("pkill -9 -f 'chrome.*defunct'", shell=True, check=False)
-    except OSError as e:
-        logger.warning("Failed to purge zombies: %s", e)
+        killed = SystemMonitorService().purge_orphan_toolsauto_browsers(db=db)
+        if killed:
+            logger.info("Orphan ToolsAuto browsers purged: %s", killed)
+    except Exception as e:
+        logger.warning("Failed to purge ToolsAuto orphan browsers: %s", e)
 
 # ── Competitor Discovery (chạy 24h/lần, ban đêm) ──────────────────────
 _last_discovery_ts: float = 0
@@ -525,8 +535,9 @@ def run_loop():
                         # 7. Competitor Discovery (nightly, 24h interval)
                         _run_competitor_discovery(db)
 
-                    # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap
-                    _purge_zombies()
+                    # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap.
+                    # db is passed so profiles of RUNNING jobs are never touched.
+                    _purge_zombies(db)
 
                     # 8. Run Page Insights Scraper (12h interval)
                     _scrape_page_insights()

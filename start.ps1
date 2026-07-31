@@ -1,8 +1,12 @@
 # ToolsAuto local start (Windows)
-# Usage: .\start.ps1 [-Port 8001] [-SkipMigrate]
+# Usage:
+#   .\start.ps1                  # web only (legacy)
+#   .\start.ps1 -Stack           # web + maintenance + FB publisher (PLAN-048)
+#   .\start.ps1 -Port 8001 -Stack
 param(
     [int]$Port = 0,
-    [switch]$SkipMigrate
+    [switch]$SkipMigrate,
+    [switch]$Stack
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,4 +50,11 @@ if (-not $SkipMigrate) {
 
 Write-Host "Web: http://127.0.0.1:$Port" -ForegroundColor Green
 Write-Host "Login: values from .env (ADMIN_USERNAME / ADMIN_PASSWORD)" -ForegroundColor Green
-& $py manage.py serve --host 127.0.0.1 --port $Port --reload
+
+if ($Stack) {
+    Write-Host "Mode: STACK (web + maintenance + FB publisher)" -ForegroundColor Green
+    & $py manage.py stack --host 127.0.0.1 --port $Port --no-reload-web
+} else {
+    Write-Host "Mode: WEB only (use -Stack for supervised workers)" -ForegroundColor Yellow
+    & $py manage.py serve --host 127.0.0.1 --port $Port --reload
+}

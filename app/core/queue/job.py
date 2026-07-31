@@ -125,8 +125,88 @@ def now_ts() -> int:
 
 
 class JobService:
-    VALID_EXTENSIONS = ('.mp4', '.jpg', '.jpeg', '.png')
-    
+    # Single source of truth for accepted media. Anything advertised in an error
+    # message must be accepted by create_job, and vice versa.
+    VIDEO_EXTENSIONS = ('.mp4', '.mov', '.webm', '.mkv')
+    IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png')
+    VALID_EXTENSIONS = VIDEO_EXTENSIONS + IMAGE_EXTENSIONS
+    # Facebook POST/Reels composer only accepts video — images cause UI dead-ends (Job #6).
+    FACEBOOK_POST_VIDEO_EXTENSIONS = VIDEO_EXTENSIONS
+
+    # error_type values that describe operator/content input, not an unhealthy
+    # account: they must never move the account circuit breaker.
+    ERROR_TYPE_VALIDATION = "VALIDATION"
+    NON_ACCOUNT_ERROR_TYPES = frozenset({"VALIDATION", "COMPLIANCE"})
+
+    # Loại job Facebook KHÔNG đi qua composer Reels nên không bắt buộc video.
+    NON_REELS_JOB_TYPES = frozenset({"COMMENT", "FEED"})
+
+    @staticmethod
+    def assert_feed_media(media_path: str | None) -> None:
+        """
+        Bài feed: media là tùy chọn. Có thì phải là ảnh hoặc video hợp lệ.
+
+        Bài chữ thuần (media_path=None) là hợp lệ — đó chính là điểm khác Reels.
+        """
+        if not media_path or not str(media_path).strip():
+            return
+        ext = os.path.splitext(str(media_path))[1].lower()
+        allowed = JobService.VIDEO_EXTENSIONS + JobService.IMAGE_EXTENSIONS
+        if ext not in allowed:
+            raise ValueError(
+                "Bài feed Facebook chỉ nhận ảnh hoặc video "
+                f"({JobService._fmt_extensions(allowed)}). Nhận được '{ext or '(none)'}'."
+            )
+
+    @staticmethod
+    def _fmt_extensions(extensions: tuple[str, ...]) -> str:
+        return "/".join(extensions)
+
+    @staticmethod
+    def is_video_media_path(media_path: str | None) -> bool:
+        if not media_path:
+            return False
+        ext = os.path.splitext(str(media_path).strip())[1].lower()
+        return ext in JobService.VIDEO_EXTENSIONS
+
+    @staticmethod
+    def assert_facebook_post_media(
+        platform: str | None,
+        media_path: str | None,
+        job_type: str | None = "POST",
+        require_media: bool = False,
+    ) -> None:
+        """
+        Raise ValueError if a Facebook POST would upload non-video into Reels.
+
+        `require_media=False` (creation time) keeps caption-only manual jobs
+        creatable — the manual form advertises Media as optional. `require_media=True`
+        (publish time) rejects a missing file, because the Reels composer cannot
+        publish without one.
+        """
+        plat = ((platform or "").split(",")[0].strip().lower())
+        jt = (job_type or "POST").strip().upper()
+        if plat != "facebook" or jt in JobService.NON_REELS_JOB_TYPES:
+            # COMMENT không có media; FEED đi qua composer nên nhận cả ảnh lẫn
+            # bài chữ thuần — chỉ Reels (POST) mới bắt buộc video.
+            if jt == "FEED":
+                JobService.assert_feed_media(media_path)
+            return
+        if not media_path or not str(media_path).strip():
+            if require_media:
+                raise ValueError(
+                    "Facebook Reels/POST cần file video "
+                    f"({JobService._fmt_extensions(JobService.VIDEO_EXTENSIONS)}). Thiếu media."
+                )
+            return
+        if not JobService.is_video_media_path(media_path):
+            ext = os.path.splitext(str(media_path))[1].lower() or "(none)"
+            raise ValueError(
+                "Facebook Reels/POST chỉ nhận video "
+                f"({JobService._fmt_extensions(JobService.VIDEO_EXTENSIONS)}). "
+                f"Nhận được '{ext}' — không đăng ảnh vào Reels."
+            )
+
     @staticmethod
     def get_job_by_id(db: Session, job_id: int) -> Optional[Job]:
         return db.query(Job).filter(Job.id == job_id).first()
@@ -323,6 +403,8 @@ class JobService:
         raw_platform = (account.platform or "").strip()
         job_platform = raw_platform.split(",")[0].strip() if raw_platform else raw_platform
 
+        JobService.assert_facebook_post_media(job_platform, norm_path, job_type="POST")
+
         from app.core.media.content_hash import assert_media_not_blocked, sha256_file
 
         resolved_hash = content_hash or sha256_file(norm_path)
@@ -499,8 +581,9 @@ class JobService:
         
         JobService._log_event(db, job.id, "ERROR", error_msg, f"is_fatal={is_fatal}, tries={job.tries}/{job.max_tries}")
         
-        # Circuit Breaker logic
-        if is_fatal and job.account:
+        # Circuit Breaker logic — operator input errors (bad media, blocked
+        # content) say nothing about account health, so they never trip it.
+        if is_fatal and job.account and job.error_type not in JobService.NON_ACCOUNT_ERROR_TYPES:
             job.account.consecutive_fatal_failures += 1
             if job.account.consecutive_fatal_failures >= 3:
                 job.account.is_active = False
@@ -723,10 +806,20 @@ class JobService:
                 setattr(job, "claim_cooldown_eta", 0)
 
     @staticmethod
-    def create_high_priority_manual_job(db: Session, account_id: int, target_page: str, caption: str = None, media_path: str = None) -> Job:
+    def create_high_priority_manual_job(
+        db: Session,
+        account_id: int,
+        target_page: str,
+        caption: str = None,
+        media_path: str = None,
+        job_type: str = JobType.POST,
+    ) -> Job:
         from app.core.media.content_hash import assert_media_not_blocked, sha256_file
 
         platform = "facebook"
+        # POST = Reels (bắt buộc video). FEED = bài chữ/ảnh, media tùy chọn.
+        jt = (str(job_type) or JobType.POST).strip().upper()
+        JobService.assert_facebook_post_media(platform, media_path, job_type=jt)
         content_hash = None
         if media_path:
             content_hash = sha256_file(media_path)
@@ -741,6 +834,7 @@ class JobService:
             target_page=target_page,
             caption=caption,
             media_path=media_path,
+            job_type=jt,
             status=JobStatus.PENDING,
             schedule_ts=int(time.time()) - 999999,  # Priority boost
             tries=0,
@@ -762,21 +856,54 @@ class JobService:
         return job
 
     @staticmethod
-    def create_manual_job_with_file(db: Session, account_id: int, target_page: str, caption: str, media_file) -> Job:
+    def create_manual_job_with_file(
+        db: Session,
+        account_id: int,
+        target_page: str,
+        caption: str,
+        media_file,
+        job_type: str = JobType.POST,
+    ) -> Job:
         import uuid
         import shutil
         from app.config import CONTENT_DIR
         MANUAL_DIR = str(CONTENT_DIR / "manual")
-        
+
+        jt = (str(job_type) or JobType.POST).strip().upper()
+        # Reels mặc định .mp4; bài feed không có đuôi thì coi là ảnh .jpg.
+        default_ext = "jpg" if jt == JobType.FEED else "mp4"
+
         media_path = None
         if media_file and media_file.filename:
+            ext = media_file.filename.rsplit(".", 1)[-1] if "." in media_file.filename else default_ext
+            candidate = os.path.join(MANUAL_DIR, f"manual_{uuid.uuid4().hex[:8]}.{ext}")
+            # Validate before writing anything to disk — a rejected upload must
+            # not leave a file behind.
+            JobService.assert_facebook_post_media("facebook", candidate, job_type=jt)
             os.makedirs(MANUAL_DIR, exist_ok=True)
-            ext = media_file.filename.rsplit(".", 1)[-1] if "." in media_file.filename else "mp4"
-            media_path = os.path.join(MANUAL_DIR, f"manual_{uuid.uuid4().hex[:8]}.{ext}")
-            with open(media_path, "wb") as f:
+            with open(candidate, "wb") as f:
                 shutil.copyfileobj(media_file.file, f)
-        
-        return JobService.create_high_priority_manual_job(db, account_id, target_page, caption, media_path)
+            media_path = candidate
+
+        try:
+            return JobService.create_high_priority_manual_job(
+                db, account_id, target_page, caption, media_path, job_type=jt
+            )
+        except Exception:
+            JobService._discard_files([media_path])
+            raise
+
+    @staticmethod
+    def _discard_files(paths: list[str | None]) -> None:
+        """Best-effort removal of files written for a job that was never created."""
+        for path in paths:
+            if not path:
+                continue
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError as e:
+                logger.warning("[JobService] Could not remove orphan upload %s: %s", path, e)
 
     @staticmethod
     def apply_style(db: Session, job_id: int, style: str) -> Job:
@@ -871,7 +998,16 @@ class JobService:
         import hashlib
         batch_id = uuid.uuid4().hex
         jobs_to_insert = []
-        
+
+        # Validate the whole batch before touching the DB so one bad file cannot
+        # leave the batch half-inserted.
+        for data in files_data:
+            JobService.assert_facebook_post_media(
+                data.get("platform"),
+                data.get("final_path"),
+                job_type=data.get("job_type") or "POST",
+            )
+
         for data in files_data:
             from app.core.media.content_hash import assert_media_not_blocked, sha256_file
 
@@ -943,53 +1079,75 @@ class JobService:
             raise ValueError("Invalid account.")
         
         media_dir = str(CONTENT_MEDIA_DIR)
+
+        # Validate every filename BEFORE a single byte is written: a batch that
+        # is going to be rejected must not leave uploads in content/media/.
+        selected = [(i, mf) for i, mf in enumerate(media_files) if mf and mf.filename]
+        for _i, media_file in selected:
+            ext = os.path.splitext(media_file.filename)[1].lower()
+            if ext not in JobService.VALID_EXTENSIONS:
+                raise ValueError(
+                    f"Định dạng {ext or '(none)'} không được hỗ trợ. "
+                    f"Chấp nhận: {JobService._fmt_extensions(JobService.VALID_EXTENSIONS)}"
+                )
+            JobService.assert_facebook_post_media(
+                account.platform, media_file.filename, job_type="POST"
+            )
+
         os.makedirs(media_dir, exist_ok=True)
 
         files_data = []
+        written_paths: list[str] = []
         last_valid_ts = account.last_post_ts or 0
         clean_affiliate = affiliate_url.strip() if affiliate_url else None
         clean_auto_comment = auto_comment_text.strip() if auto_comment_text else None
-        
-        for i, media_file in enumerate(media_files):
-            if not media_file.filename: continue
-            
-            dt_naive = datetime.strptime(schedule_times[i], "%Y-%m-%dT%H:%M")
-            dt_aware = dt_naive.replace(tzinfo=ZoneInfo(TIMEZONE))
-            row_ts = int(dt_aware.timestamp())
-            adjusted_ts = max(row_ts, last_valid_ts + account.cooldown_seconds if last_valid_ts > 0 else row_ts)
-            last_valid_ts = adjusted_ts
-            
-            ext = os.path.splitext(media_file.filename)[1].lower()
-            unique_filename = f"{uuid.uuid4().hex}{ext}"
-            final_path = os.path.join(media_dir, unique_filename)
-            
-            with open(final_path, "wb") as f:
-                shutil.copyfileobj(media_file.file, f)
-                
-            dedupe_key = hashlib.sha256(f"{account_id}:{unique_filename}".encode()).hexdigest()[:16]
-            tracking_code = str(uuid.uuid4())[:8]
-            
-            final_comment = clean_auto_comment
-            if final_comment:
-                from app.config import VERCEL_REDIRECT_URL
-                vurl = (VERCEL_REDIRECT_URL or "").strip().rstrip("/")
-                full_turl = f"{vurl}/r/{tracking_code}" if vurl else f"/r/{tracking_code}"
-                final_comment = final_comment.replace("{tracking_url}", full_turl)
- 
-            files_data.append({
-                'platform': account.platform,
-                'final_path': final_path,
-                'caption': captions[i],
-                'adjusted_ts': adjusted_ts,
-                'dedupe_key': dedupe_key,
-                'tracking_code': tracking_code,
-                'clean_affiliate': clean_affiliate,
-                'final_auto_comment': final_comment,
-                'target_page': target_page.strip() if target_page else None,
-                'initial_status': JobStatus.DRAFT if "[AI_GENERATE]" in captions[i] else JobStatus.PENDING
-            })
- 
-        return JobService.bulk_create_jobs(db, account_id, files_data)
+
+        try:
+            for i, media_file in selected:
+                dt_naive = datetime.strptime(schedule_times[i], "%Y-%m-%dT%H:%M")
+                dt_aware = dt_naive.replace(tzinfo=ZoneInfo(TIMEZONE))
+                row_ts = int(dt_aware.timestamp())
+                adjusted_ts = max(row_ts, last_valid_ts + account.cooldown_seconds if last_valid_ts > 0 else row_ts)
+                last_valid_ts = adjusted_ts
+
+                ext = os.path.splitext(media_file.filename)[1].lower()
+                unique_filename = f"{uuid.uuid4().hex}{ext}"
+                final_path = os.path.join(media_dir, unique_filename)
+
+                with open(final_path, "wb") as f:
+                    shutil.copyfileobj(media_file.file, f)
+                written_paths.append(final_path)
+
+                dedupe_key = hashlib.sha256(f"{account_id}:{unique_filename}".encode()).hexdigest()[:16]
+                tracking_code = str(uuid.uuid4())[:8]
+
+                final_comment = clean_auto_comment
+                if final_comment:
+                    from app.config import VERCEL_REDIRECT_URL
+                    vurl = (VERCEL_REDIRECT_URL or "").strip().rstrip("/")
+                    full_turl = f"{vurl}/r/{tracking_code}" if vurl else f"/r/{tracking_code}"
+                    final_comment = final_comment.replace("{tracking_url}", full_turl)
+
+                files_data.append({
+                    'platform': account.platform,
+                    'final_path': final_path,
+                    'caption': captions[i],
+                    'adjusted_ts': adjusted_ts,
+                    'dedupe_key': dedupe_key,
+                    'tracking_code': tracking_code,
+                    'clean_affiliate': clean_affiliate,
+                    'final_auto_comment': final_comment,
+                    'target_page': target_page.strip() if target_page else None,
+                    'initial_status': JobStatus.DRAFT if "[AI_GENERATE]" in captions[i] else JobStatus.PENDING
+                })
+
+            return JobService.bulk_create_jobs(db, account_id, files_data)
+        except Exception:
+            # Any failure (validation, hash guard, DB) rolls the batch back to
+            # "nothing happened" — no half-written uploads left behind.
+            db.rollback()
+            JobService._discard_files(written_paths)
+            raise
 
     @staticmethod
     def rollback_to_pending(db: Session, job: Job, reason: str):
@@ -1061,12 +1219,18 @@ class JobService:
     @staticmethod
     def force_run_job(db: Session, job_id: int):
         """Sets schedule_ts to now for a PENDING job."""
-        now = now_ts()
-        rows_affected = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.PENDING).update({
-            "schedule_ts": now
-        })
-        if rows_affected == 0:
+        job = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.PENDING).first()
+        if not job:
             raise ValueError("Job is not in PENDING state or does not exist.")
+        # Force-run means "publish now": apply the publish-time rules so the
+        # operator learns immediately instead of watching the job fail.
+        JobService.assert_facebook_post_media(
+            job.platform,
+            job.media_path,
+            job_type=getattr(job, "job_type", None) or "POST",
+            require_media=True,
+        )
+        job.schedule_ts = now_ts()
         db.commit()
         JobService._log_event(db, job_id, "INFO", "JOB_FORCED")
 

@@ -266,5 +266,28 @@ def serve(
     uvicorn.run("app.main:app", host=host, port=port, reload=reload)
 
 
+@app.command("stack")
+def stack(
+    host: str = typer.Option("127.0.0.1", "--host", help="Web bind host"),
+    port: int = typer.Option(0, "--port", help="Web port (0 = app.config.WEB_PORT)"),
+    no_web: bool = typer.Option(False, "--no-web", help="Only maintenance + FB publisher"),
+    reload_web: bool = typer.Option(
+        False,
+        "--reload-web/--no-reload-web",
+        help="Pass --reload to web (creates extra process; off by default in stack)",
+    ),
+) -> None:
+    """Local supervisor: keep 1 web + 1 maintenance + 1 FB publisher (PLAN-048)."""
+    import app.config as config
+    from app.platform.local_supervisor import StackConfig, run_stack
+
+    resolved = port if port > 0 else int(getattr(config, "WEB_PORT", 8002) or 8002)
+    raise SystemExit(
+        run_stack(
+            StackConfig(host=host, port=resolved, no_web=no_web, reload_web=reload_web)
+        )
+    )
+
+
 if __name__ == "__main__":
     app()

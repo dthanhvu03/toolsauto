@@ -40,13 +40,39 @@
             </div>
         </div>
 
+        <!-- Loại bài -->
+        <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Loại bài</label>
+            <div class="grid grid-cols-2 gap-2" id="job-type-group">
+                <label class="cursor-pointer">
+                    <input type="radio" name="job_type" value="POST" class="peer hidden" checked
+                        onchange="window.syncManualJobType()">
+                    <div
+                        class="border border-gray-200 rounded-lg px-3 py-2 text-center text-xs peer-checked:border-indigo-500 peer-checked:bg-indigo-50 peer-checked:text-indigo-700 transition-colors">
+                        <div class="font-semibold">Reels</div>
+                        <div class="text-[11px] text-gray-400 normal-case">Bắt buộc video</div>
+                    </div>
+                </label>
+                <label class="cursor-pointer">
+                    <input type="radio" name="job_type" value="FEED" class="peer hidden"
+                        onchange="window.syncManualJobType()">
+                    <div
+                        class="border border-gray-200 rounded-lg px-3 py-2 text-center text-xs peer-checked:border-indigo-500 peer-checked:bg-indigo-50 peer-checked:text-indigo-700 transition-colors">
+                        <div class="font-semibold">Bài feed</div>
+                        <div class="text-[11px] text-gray-400 normal-case">Chữ hoặc chữ + ảnh</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
         <!-- Media Upload -->
         <div class="flex flex-col gap-1">
             <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider"><svg
                     class="w-3.5 h-3.5 inline-block mr-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                </svg>Media <span class="text-gray-300 font-normal normal-case">(tùy chọn)</span></label>
+                </svg><span id="media-label-text">Video</span> <span id="media-label-hint"
+                    class="text-gray-300 font-normal normal-case">(tùy chọn khi tạo — bắt buộc để đăng Reels)</span></label>
             <label for="media-upload"
                 class="flex flex-col items-center justify-center gap-1.5 border-2 border-dashed border-gray-200 rounded-lg p-5 cursor-pointer bg-gray-50 hover:bg-indigo-50 hover:border-indigo-400 transition-colors">
                 <span id="drop-icon"><svg class="w-6 h-6 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24"
@@ -54,8 +80,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                     </svg></span>
-                <span id="drop-label" class="text-xs text-gray-400">Click hoặc kéo thả ảnh / video vào đây</span>
-                <input type="file" name="media" id="media-upload" accept="image/*,video/*" class="hidden"
+                <span id="drop-label" class="text-xs text-gray-400">Click hoặc kéo thả video (.mp4/.mov/.webm/.mkv) vào đây</span>
+                <input type="file" name="media" id="media-upload" accept="video/*" class="hidden"
                     onchange="const f=this.files[0]; if(f){document.getElementById('drop-label').textContent=f.name; document.getElementById('drop-icon').innerHTML='<svg class=\'w-6 h-6 mx-auto text-emerald-500\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'currentColor\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z\'/></svg>';}">
             </label>
         </div>
@@ -86,6 +112,29 @@
         </div>
 
         <script>
+            // Đổi loại bài thì đổi luôn định dạng file được nhận, khớp với
+            // JobService.assert_facebook_post_media ở backend.
+            window.syncManualJobType = function () {
+                const selected = document.querySelector('input[name="job_type"]:checked');
+                const isFeed = selected && selected.value === 'FEED';
+                const input = document.getElementById('media-upload');
+                const dropLabel = document.getElementById('drop-label');
+                const labelText = document.getElementById('media-label-text');
+                const labelHint = document.getElementById('media-label-hint');
+
+                if (isFeed) {
+                    input.accept = 'image/*,video/*';
+                    labelText.textContent = 'Ảnh hoặc video';
+                    labelHint.textContent = '(tùy chọn — bỏ trống là bài chữ thuần)';
+                    dropLabel.textContent = 'Click hoặc kéo thả ảnh (.jpg/.png/.webp) hoặc video vào đây';
+                } else {
+                    input.accept = 'video/*';
+                    labelText.textContent = 'Video';
+                    labelHint.textContent = '(tùy chọn khi tạo — bắt buộc để đăng Reels)';
+                    dropLabel.textContent = 'Click hoặc kéo thả video (.mp4/.mov/.webm/.mkv) vào đây';
+                }
+            };
+
             let aiPreviewLoading = false;
 
             async function previewAiCaption(btnEl) {

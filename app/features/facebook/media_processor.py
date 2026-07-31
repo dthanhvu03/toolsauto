@@ -21,8 +21,9 @@ from typing import Optional
 from app.config import (
     FFMPEG_CRF, CONTENT_DIR,
     FFMPEG_WATERMARK_PATH, FFMPEG_WATERMARK_POSITION, FFMPEG_WATERMARK_OPACITY,
-    DRM_ENABLED, DRM_WATERMARK_TEXT
 )
+import app.config as app_config
+from app.core.media import ffmpeg_path
 from app.core.media.video_protector import VideoProtector
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,7 @@ class MediaProcessor:
         thumb_path = os.path.join(tempfile.gettempdir(), f"thumb_{job_id}.jpg")
         try:
             cmd = [
-                "ffmpeg", "-y",
+                cls._resolve_ffmpeg(), "-y",
                 "-i", video_path,
                 "-ss", "00:00:01",
                 "-frames:v", "1",
@@ -117,9 +118,22 @@ class MediaProcessor:
             )
             if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
                 return thumb_path
+            logger.warning(
+                "[MediaProcessor] Thumbnail for job %s produced no output file.", job_id
+            )
+        except FileNotFoundError as e:
+            logger.warning(
+                "[MediaProcessor] ffmpeg executable not found for job %s thumbnail: %s",
+                job_id,
+                e,
+            )
         except Exception as e:
-            logger.debug("[MediaProcessor] Thumbnail extraction failed for job %s: %s", job_id, e)
+            logger.warning(
+                "[MediaProcessor] Thumbnail extraction failed for job %s: %s", job_id, e
+            )
 
+        # Leave no half-written thumbnail behind.
+        cls.cleanup_thumbnail(thumb_path)
         return None
 
     @classmethod
@@ -139,6 +153,18 @@ class MediaProcessor:
         return os.path.getsize(video_path) / (1024 * 1024) <= max_mb
 
     @classmethod
+    def _resolve_ffmpeg(cls) -> str:
+        """Resolved ffmpeg (PATH / WinGet Links); bare name only as last resort."""
+        found = ffmpeg_path.resolve_ffmpeg()
+        if found:
+            return found
+        logger.warning(
+            "[MediaProcessor] ffmpeg not found on PATH or in WinGet Links — "
+            "falling back to bare 'ffmpeg'; video processing will fail if it is not installed."
+        )
+        return ffmpeg_path.FFMPEG_FALLBACK
+
+    @classmethod
     def _has_watermark(cls) -> bool:
         """Check if watermark is configured and file exists."""
         return bool(FFMPEG_WATERMARK_PATH) and os.path.exists(FFMPEG_WATERMARK_PATH)
@@ -148,15 +174,23 @@ class MediaProcessor:
         """
         Build the full FFmpeg command with optional static watermark and dynamic DRM watermark.
         """
-        cmd = ["nice", "-n", "19", "ffmpeg", "-y", "-i", input_path]
+        ffmpeg = cls._resolve_ffmpeg()
+        # `nice` is Unix-only — on Windows it becomes WinError 2 and skips watermark entirely.
+        if os.name == "nt":
+            cmd = [ffmpeg, "-y", "-i", input_path]
+        else:
+            cmd = ["nice", "-n", "19", ffmpeg, "-y", "-i", input_path]
 
         has_wm = cls._has_watermark()
         vf = profile_cfg["vf"]
 
-        # Determine DRM dynamic filter if enabled
+        # Read DRM flags at call time (runtime settings mutate app.config)
+        drm_enabled = bool(getattr(app_config, "DRM_ENABLED", False))
+        drm_text = getattr(app_config, "DRM_WATERMARK_TEXT", None) or "z"
+
         drm_filter = ""
-        if DRM_ENABLED:
-            drm_filter = VideoProtector.get_dynamic_watermark_filter(DRM_WATERMARK_TEXT)
+        if drm_enabled:
+            drm_filter = VideoProtector.get_dynamic_watermark_filter(drm_text)
 
         if has_wm:
             # Add watermark as second input
@@ -282,7 +316,7 @@ class MediaProcessor:
             os.rename(temp_output, output_path)
 
             # Extract pHash and audio fingerprint, then save evidence if DRM is enabled
-            if DRM_ENABLED and job and job.account and getattr(job.account, 'name', None):
+            if getattr(app_config, "DRM_ENABLED", False) and job and job.account and getattr(job.account, 'name', None):
                 try:
                     phash_data = VideoProtector.extract_phash(output_path)
                     audio_data = VideoProtector.extract_audio_fingerprint(output_path)

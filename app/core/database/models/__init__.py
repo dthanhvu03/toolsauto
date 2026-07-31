@@ -15,7 +15,7 @@ from app.core.database.models.base import Base, now_ts
 # Domain models — order chosen for human readability, not import dependency.
 # SQLAlchemy resolves cross-table relationships via string names, so import
 # order does not matter for ORM correctness.
-from app.core.database.models.accounts import Account
+from app.core.database.models.accounts import Account, EngagementSession
 from app.core.database.models.jobs import Job, JobEvent
 from app.core.database.models.viral import (
     AffiliateLink,
@@ -48,6 +48,7 @@ __all__ = [
     "now_ts",
     # accounts
     "Account",
+    "EngagementSession",
     # jobs
     "Job",
     "JobEvent",

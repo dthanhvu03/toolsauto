@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+from app.core.media import ffmpeg_path
 from app.features.viral_intake.reup_config import (
     load_reup_config,
     list_media_pool,
@@ -37,15 +38,11 @@ logger = logging.getLogger(__name__)
 
 
 def _ffmpeg_bin() -> str:
-    from app.features.viral_intake.service import ViralService
-
-    return ViralService.resolve_ffmpeg() or "ffmpeg"
+    return ffmpeg_path.ffmpeg_bin()
 
 
 def _ffprobe_bin() -> str:
-    from app.features.viral_intake.service import ViralService
-
-    return ViralService.resolve_ffprobe() or "ffprobe"
+    return ffmpeg_path.ffprobe_bin()
 
 
 @dataclass
@@ -583,9 +580,12 @@ class ReupProcessor:
         escaped = cls._escape_drawtext(text)
         # Safe-ish upper third for Reels/TikTok
         y_expr = "h*0.16"
+        from app.core.media.video_protector import VideoProtector
+
+        font_arg = VideoProtector.ffmpeg_fontfile_arg()
         vf = (
             f"drawtext=text='{escaped}':fontsize={fontsize}:fontcolor=white:"
-            f"borderw=3:bordercolor=black@0.85:x=(w-text_w)/2:y={y_expr}:"
+            f"borderw=3:bordercolor=black@0.85{font_arg}:x=(w-text_w)/2:y={y_expr}:"
             f"enable='between(t,0,{max_sec:.3f})'"
         )
         out = body_path + ".with_hook.tmp.mp4"

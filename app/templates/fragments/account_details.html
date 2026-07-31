@@ -216,6 +216,17 @@
                             class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-2xl px-4 py-3 text-xs font-semibold text-[var(--color-ink)] outline-none focus:border-[var(--color-torch)]/50 min-h-[96px]">{{ account.niche_topics_list }}</textarea>
                         <p class="text-[10px] text-[var(--color-ash)] px-1 leading-relaxed">
                             Fallback toàn account. <strong class="text-[var(--color-mist)]">Page niche</strong> (tab Target Pages) ưu tiên khi match viral / boost.
+                            Cũng dùng cho hành động <strong class="text-[var(--color-mist)]">Tìm kiếm chủ đề</strong> lúc nuôi acc.
+                        </p>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[10px] font-bold text-[var(--color-ash)] uppercase tracking-wider px-1">Page FB để dạo khi rảnh</label>
+                        <textarea name="engagement_page_urls" placeholder="https://www.facebook.com/page-doi-thu-1&#10;https://www.facebook.com/page-doi-thu-2"
+                            class="w-full bg-[var(--color-deep)] border border-[var(--color-edge)] rounded-2xl px-4 py-3 text-xs font-semibold text-[var(--color-ink)] outline-none focus:border-[var(--color-torch)]/50 min-h-[80px]">{{ account.engagement_page_urls_list }}</textarea>
+                        <p class="text-[10px] text-[var(--color-ash)] px-1 leading-relaxed">
+                            Mỗi dòng một link <strong class="text-[var(--color-mist)]">Facebook</strong> cùng ngách. Bỏ trống thì bot chỉ lướt feed / xem Reels.
+                            Khác với <strong class="text-[var(--color-mist)]">nguồn reup TikTok</strong> ở tab Target Pages.
                         </p>
                     </div>
                     <button type="button" hx-post="/accounts/{{ account.id }}/sync-pages"

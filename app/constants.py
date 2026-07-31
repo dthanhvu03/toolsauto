@@ -24,7 +24,8 @@ class ViralStatus(StrEnum):
     FAILED = "FAILED"
 
 class JobType(StrEnum):
-    POST = "POST"
+    POST = "POST"          # Facebook: Reels — bắt buộc video
+    FEED = "FEED"          # Facebook: bài feed — chữ thuần hoặc chữ + ảnh
     COMMENT = "COMMENT"
     STORY = "STORY"
     VERIFY_THREADS = "VERIFY_THREADS"

@@ -18,6 +18,7 @@ import logging
 import json
 import re
 from app.core.ai.use_cases import AIPurpose, AIUseCases
+from app.core.media.ffmpeg_path import ffmpeg_bin, ffprobe_bin
 import app.config as config
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,13 @@ class ContentOrchestrator:
     @staticmethod
     def _run_ffmpeg(cmd: list, timeout: int = 30, label: str = "ffmpeg") -> subprocess.CompletedProcess:
         """Chạy FFmpeg/ffprobe với check=True, log stderr khi fail."""
+        # Resolve the binary here so no call site has to: a bare "ffmpeg" is
+        # WinError 2 when WinGet's Links dir is missing from PATH.
+        cmd = list(cmd)
+        if cmd and cmd[0] == "ffmpeg":
+            cmd[0] = ffmpeg_bin()
+        elif cmd and cmd[0] == "ffprobe":
+            cmd[0] = ffprobe_bin()
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
             return result
