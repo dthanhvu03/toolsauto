@@ -44,6 +44,10 @@ gemini_cookies.json
 gemini_cookies_invalid
 ai_persona.json
 
+# Cookie/session dumps — KHÔNG BAO GIỜ commit (xem PLAN-051)
+*cookies*.json
+*_session.json
+
 # Inter-agent communication (internal only)
 .comms/
 

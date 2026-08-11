@@ -1,5 +1,46 @@
 # Current Status
 
+## ⚠️ CẢNH BÁO BẢO MẬT (2026-08-11) — chờ Owner xử lý
+
+`scratch/threads_cookies.json` chứa **cookie phiên thật** (FB `xs`/`c_user`,
+IG `sessionid`, TikTok `msToken`) bị commit ở `a723c0f` ngày 2026-04-25 trên repo
+**PUBLIC** `github.com/dthanhvu03/toolsauto`. Đã gỡ khỏi HEAD (PLAN-051) nhưng
+**vẫn còn trong lịch sử git**.
+
+Owner phải làm: (1) đổi mật khẩu + đăng xuất mọi phiên FB/IG/TikTok,
+(2) quyết chuyển repo private và/hoặc purge lịch sử.
+
+## System State (2026-08-11)
+
+- **Máy không chạy được stack**: interpreter `pythoncore-3.14-64` biến mất,
+  `venv\Scripts\python.exe` là stub trỏ vào đường dẫn đã mất → không chạy được
+  `pytest` lẫn worker. Registry HKCU vẫn trỏ path cũ.
+- Container `toolsauto_postgres` tắt 10 ngày, đã `docker start` lại để audit.
+- **CI đỏ từ 2026-07-29**, 5 commit cuối trên `main` chưa từng deploy:
+  workflow đặt Python 3.10 nhưng requirements ghim numpy 2.4.2 (cần ≥3.11).
+- Hàng đợi tắc: 7 job DRAFT `[AI_GENERATE]` + 2 PENDING, tất cả `is_approved=false`;
+  job #2 trỏ media đã bị xoá. `viral_materials` 11/11 kẹt DRAFTED.
+
+## Done 2026-08-11 — audit tính năng + dọn nợ kỹ thuật (PLAN-051)
+
+| Việc | Proof |
+|---|---|
+| Audit toàn bộ tính năng bằng DB thật + CI thật (không chỉ đọc doc) | Bảng row-count 26 bảng; `gh run list` 5 lần failure |
+| Gỡ cookie phiên khỏi git index + `.gitignore` chặn `*cookies*.json` | `git ls-files \| xargs grep` secret pattern → rỗng |
+| Xoá 731 dòng code chết (3 template, `gemini_api.py`, 2 shim) | grep 0 tham chiếu; ADR-006 §7 ghi closure |
+| Sửa docstring `native_fallback.py` chỉ sai chỗ vision | vision nằm ở `call_native_gemini_vision` từ TASK-025 |
+| ADR-009: `GenericAdapter` là code không thể chạm tới | `dispatcher.py:88` luôn ghi đè Registry cho cả 4 platform |
+
+Diff đang chờ Owner review, **chưa commit**: 9 file, −750 dòng.
+
+## Next Action (2026-08-11)
+
+1. **Owner:** đổi mật khẩu + đăng xuất mọi phiên FB/IG/TikTok (vô hiệu cookie đã rò)
+2. **Owner:** quyết repo private và/hoặc purge lịch sử git (thao tác phá huỷ)
+3. Cài lại Python 3.14 + dựng venv → mở lại pytest
+4. Bump `python-version` trong `deploy.yml` + xử `test_threads_world_news.py` → mở lại CI
+5. Owner chốt ADR-009 trước khi động vào `GenericAdapter`
+
 ## System State (2026-07-31)
 
 - PLAN-048 stack (supervisor + smart gate + orphan purge) đã qua vòng review/hardening

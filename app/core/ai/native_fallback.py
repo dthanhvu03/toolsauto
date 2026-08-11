@@ -4,8 +4,8 @@ Per ADR-006: this is the ONLY place in the codebase that imports `google.genai`
 for the canonical text path. `ai_pipeline.py` delegates here — it must NOT
 import `google.genai` directly. Keeps the dual-SDK complexity isolated.
 
-The module is text-only by design. Vision / async paths still live in
-`gemini_api.py` (legacy, deprecated) and will be migrated separately.
+Cả text lẫn vision đều nằm ở đây (`call_native_gemini` /
+`call_native_gemini_vision`). Legacy `gemini_api.py` đã xoá — PLAN-051.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import app.config as config
 
 logger = logging.getLogger(__name__)
 
-# Models tried in order. Tier list mirrors gemini_api.py for consistency.
+# Models tried in order, newest/fastest first.
 NATIVE_TEXT_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",

@@ -134,3 +134,18 @@ Toi xac nhan dong vote `@Codex = Phuong an B` trong bang la dung voi quan diem k
   - `generate_incident_report`
 - `AIUseCases.is_enabled()` thay cho `pipeline.enabled` ở strategic path.
 - Transport vẫn là `AICaptionPipeline` (9Router → native). Syspanel 9Router ops được phép đọc `pipeline` trực tiếp.
+
+---
+
+## 7. Closure (2026-08-11) — `gemini_api.py` đã xoá
+
+Điều kiện của Codex ở §5 ("chưa xoá `gemini_api.py` ngay; migrate caller từng bước")
+nay đã hoàn tất:
+
+- Text path: mọi caller đi qua `AIUseCases` (§6).
+- Vision path — thứ duy nhất còn giữ file này sống — đã nằm ở
+  `native_fallback.call_native_gemini_vision()` từ TASK-025.
+- Grep `app/`, `tests/`, `scripts/` (2026-08-11): **0 importer** của `gemini_api`.
+
+→ Xoá `app/core/ai/gemini_api.py` (296 dòng) trong PLAN-051. Hai tầng
+`9Router → native Gemini → fail` giữ nguyên, không đổi hành vi runtime.
