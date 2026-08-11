@@ -103,11 +103,41 @@ ADR-006 §7.
 platform trong enum → `GenericAdapter` (1015 dòng) là code không thể chạm tới, kể
 cả khi seed dữ liệu. Cần Owner chốt trước khi xoá.
 
+### D. Purge lịch sử git (Owner ra lệnh 2026-08-11)
+
+`git filter-repo` không dùng được (là script Python — máy đang không có Python),
+BFG cũng không (không có Java). Dùng `git filter-branch --index-filter` sẵn trong git 2.53.
+
+| Bước | Kết quả |
+|---|---|
+| Backup toàn bộ ref trước khi rewrite | `toolsauto-backup-pre-purge.bundle` (1010 MB) trong scratchpad phiên |
+| Commit dọn dẹp | `c82a3b2` |
+| Tạo local branch cho cả 13 remote branch (cả 13 đều dính secret) | Xong |
+| `filter-branch` xoá `scratch/threads_cookies.json`, `gemini_cookies.json`, `storage/db/config/gemini_cookies.json` khỏi `--all` | 13/13 branch rewrite |
+| Force-push 13 branch | Xong — `main` `7090b50 → d8a7e88` |
+| Xoá `refs/original`, `reflog expire`, `gc --prune=now` | Local: `git rev-list --all --objects \| grep threads_cookies` → **0** |
+| Kiểm lại origin | Không branch nào còn commit đụng file secret |
+
+### ⚠️ Purge KHÔNG đóng được lỗ hổng — bằng chứng
+
+```
+gh api "repos/dthanhvu03/toolsauto/contents/scratch/threads_cookies.json?ref=a723c0f"
+→ .size = 6908        # vẫn tải được công khai, sau khi đã force-push
+```
+
+GitHub giữ object mồ côi (dangling) và vẫn phục vụ theo SHA cho tới khi họ tự GC.
+Rewrite lịch sử chỉ cắt đường đi từ branch, không xoá object. Muốn đóng thật:
+
+- **Chuyển repo sang private** — cắt truy cập công khai ngay lập tức, hoặc
+- **Yêu cầu GitHub Support chạy GC** cho repo (kèm danh sách SHA), hoặc cả hai.
+
+Kết luận: **rotation vẫn là biện pháp bắt buộc**, không phải tuỳ chọn.
+
 ## Next
 
-1. **Owner — gấp:** đổi mật khẩu + "đăng xuất mọi phiên" trên Facebook, Instagram,
-   TikTok. Đây là thao tác duy nhất vô hiệu hoá được `xs` / `sessionid` đã rò.
-2. **Owner quyết:** chuyển repo sang private (chặn phơi nhiễm ngay) và/hoặc purge
-   lịch sử bằng `git filter-repo` + force-push — thao tác phá huỷ, cần lệnh trực tiếp.
-3. Commit diff hiện tại (9 file) sau khi Owner review.
+1. **Owner — gấp nhất:** đổi mật khẩu + "đăng xuất mọi phiên" trên Facebook,
+   Instagram, TikTok. Đây là thao tác duy nhất thực sự vô hiệu hoá `xs` /
+   `sessionid` đã rò — purge lịch sử không thay thế được.
+2. **Owner quyết:** private repo và/hoặc mở ticket GitHub Support để GC object mồ côi.
+3. Ai đã clone repo phải clone lại — mọi SHA đã đổi.
 4. Khôi phục Python → mở lại pytest → mới làm được nhóm C và refactor god object.
