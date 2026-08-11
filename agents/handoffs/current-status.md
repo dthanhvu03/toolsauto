@@ -10,9 +10,10 @@ IG `sessionid`, TikTok `msToken`) bị commit ở `a723c0f` ngày 2026-04-25 tr�
 **Nhưng object mồ côi vẫn tải được công khai theo SHA** (`gh api ...?ref=a723c0f`
 → 6908 bytes) cho tới khi GitHub tự GC.
 
-Owner vẫn phải làm: (1) **đổi mật khẩu + đăng xuất mọi phiên FB/IG/TikTok** —
-việc duy nhất thực sự vô hiệu hoá cookie đã rò; (2) quyết private repo và/hoặc
-ticket GitHub Support. Ai đã clone phải clone lại (mọi SHA đã đổi).
+Owner đã quyết: **giữ repo public, không mở ticket GC** — chấp nhận rủi ro còn lại.
+
+Việc duy nhất còn lại và bắt buộc: **đổi mật khẩu + đăng xuất mọi phiên
+FB/IG/TikTok**. Ai đã clone repo phải clone lại (mọi SHA đã đổi).
 
 ## System State (2026-08-11)
 

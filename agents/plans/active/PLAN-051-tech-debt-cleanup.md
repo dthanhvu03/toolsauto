@@ -133,6 +133,10 @@ Rewrite lịch sử chỉ cắt đường đi từ branch, không xoá object. M
 
 Kết luận: **rotation vẫn là biện pháp bắt buộc**, không phải tuỳ chọn.
 
+**Owner quyết (2026-08-11): không private repo, không mở ticket GitHub Support.**
+Chấp nhận rủi ro còn lại, dựa hoàn toàn vào việc đổi mật khẩu / đăng xuất phiên.
+→ Phiên sau đừng đề xuất lại; nếu cần xét lại thì phải có dữ kiện mới.
+
 ## Next
 
 1. **Owner — gấp nhất:** đổi mật khẩu + "đăng xuất mọi phiên" trên Facebook,
