@@ -54,13 +54,11 @@ class QueueService:
                 LEFT JOIN last_platform_post lpp 
                   ON lpp.account_id = j.account_id AND lpp.platform = j.platform
                 WHERE j.status = 'PENDING'
-                  AND (
-                      -- POST jobs: use schedule_ts
-                      (UPPER(j.job_type) = 'POST' AND COALESCE(j.schedule_ts, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER))
-                      OR
-                      -- COMMENT jobs: use scheduled_at (delayed)
-                      (UPPER(j.job_type) = 'COMMENT' AND COALESCE(j.scheduled_at, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER))
-                  )
+                  -- Due-check không liệt kê cứng job_type: mọi mốc thời gian có mặt
+                  -- trên job đều phải tới hạn. POST đặt schedule_ts, COMMENT đặt cả hai,
+                  -- FEED/STORY chỉ đặt schedule_ts — cả ba loại đều được nhặt đúng hạn.
+                  AND COALESCE(j.schedule_ts, j.scheduled_at, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
+                  AND COALESCE(j.scheduled_at, j.schedule_ts, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
                   AND ( :platform IS NULL OR j.platform = :platform )
                   AND a.is_active = true
                   AND a.login_status = 'ACTIVE'

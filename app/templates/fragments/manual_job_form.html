@@ -43,7 +43,7 @@
         <!-- Loại bài -->
         <div class="flex flex-col gap-1">
             <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Loại bài</label>
-            <div class="grid grid-cols-2 gap-2" id="job-type-group">
+            <div class="grid grid-cols-3 gap-2" id="job-type-group">
                 <label class="cursor-pointer">
                     <input type="radio" name="job_type" value="POST" class="peer hidden" checked
                         onchange="window.syncManualJobType()">
@@ -59,7 +59,16 @@
                     <div
                         class="border border-gray-200 rounded-lg px-3 py-2 text-center text-xs peer-checked:border-indigo-500 peer-checked:bg-indigo-50 peer-checked:text-indigo-700 transition-colors">
                         <div class="font-semibold">Bài feed</div>
-                        <div class="text-[11px] text-gray-400 normal-case">Chữ hoặc chữ + ảnh</div>
+                        <div class="text-[11px] text-gray-400 normal-case">Chữ, ảnh hoặc video dài</div>
+                    </div>
+                </label>
+                <label class="cursor-pointer">
+                    <input type="radio" name="job_type" value="STORY" class="peer hidden"
+                        onchange="window.syncManualJobType()">
+                    <div
+                        class="border border-gray-200 rounded-lg px-3 py-2 text-center text-xs peer-checked:border-indigo-500 peer-checked:bg-indigo-50 peer-checked:text-indigo-700 transition-colors">
+                        <div class="font-semibold">Tin</div>
+                        <div class="text-[11px] text-gray-400 normal-case">Ảnh/video, có link aff</div>
                     </div>
                 </label>
             </div>
@@ -116,19 +125,28 @@
             // JobService.assert_facebook_post_media ở backend.
             window.syncManualJobType = function () {
                 const selected = document.querySelector('input[name="job_type"]:checked');
-                const isFeed = selected && selected.value === 'FEED';
+                const kind = selected ? selected.value : 'POST';
                 const input = document.getElementById('media-upload');
                 const dropLabel = document.getElementById('drop-label');
                 const labelText = document.getElementById('media-label-text');
                 const labelHint = document.getElementById('media-label-hint');
 
-                if (isFeed) {
+                if (kind === 'STORY') {
+                    // Tin bắt buộc có media — backend chặn ngay lúc tạo job.
                     input.accept = 'image/*,video/*';
+                    input.required = true;
                     labelText.textContent = 'Ảnh hoặc video';
-                    labelHint.textContent = '(tùy chọn — bỏ trống là bài chữ thuần)';
+                    labelHint.textContent = '(bắt buộc — tin không có media thì không đăng được)';
+                    dropLabel.textContent = 'Click hoặc kéo thả ảnh (.jpg/.png/.webp) hoặc video vào đây';
+                } else if (kind === 'FEED') {
+                    input.accept = 'image/*,video/*';
+                    input.required = false;
+                    labelText.textContent = 'Ảnh hoặc video';
+                    labelHint.textContent = '(tùy chọn — bỏ trống là bài chữ thuần; video dài đăng ở đây)';
                     dropLabel.textContent = 'Click hoặc kéo thả ảnh (.jpg/.png/.webp) hoặc video vào đây';
                 } else {
                     input.accept = 'video/*';
+                    input.required = false;
                     labelText.textContent = 'Video';
                     labelHint.textContent = '(tùy chọn khi tạo — bắt buộc để đăng Reels)';
                     dropLabel.textContent = 'Click hoặc kéo thả video (.mp4/.mov/.webm/.mkv) vào đây';

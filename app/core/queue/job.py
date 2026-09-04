@@ -139,7 +139,11 @@ class JobService:
     NON_ACCOUNT_ERROR_TYPES = frozenset({"VALIDATION", "COMPLIANCE"})
 
     # Loại job Facebook KHÔNG đi qua composer Reels nên không bắt buộc video.
-    NON_REELS_JOB_TYPES = frozenset({"COMMENT", "FEED"})
+    NON_REELS_JOB_TYPES = frozenset({"COMMENT", "FEED", "STORY"})
+
+    # Loại job có thể gắn comment sau khi đăng. Story không nằm đây: story Facebook
+    # không có luồng bình luận công khai như bài viết.
+    COMMENTABLE_JOB_TYPES = frozenset({"POST", "FEED"})
 
     @staticmethod
     def assert_feed_media(media_path: str | None) -> None:
@@ -155,6 +159,67 @@ class JobService:
         if ext not in allowed:
             raise ValueError(
                 "Bài feed Facebook chỉ nhận ảnh hoặc video "
+                f"({JobService._fmt_extensions(allowed)}). Nhận được '{ext or '(none)'}'."
+            )
+
+    @staticmethod
+    def assert_comment_image(image_path: str | None) -> None:
+        """Ảnh comment: tuỳ chọn, nhưng có thì phải là ảnh (Facebook không cho video)."""
+        if not image_path or not str(image_path).strip():
+            return
+        ext = os.path.splitext(str(image_path))[1].lower()
+        if ext not in JobService.IMAGE_EXTENSIONS:
+            raise ValueError(
+                "Ảnh comment chỉ nhận "
+                f"{JobService._fmt_extensions(JobService.IMAGE_EXTENSIONS)}. "
+                f"Nhận được '{ext or '(none)'}'."
+            )
+
+    @staticmethod
+    def save_comment_image(image_file) -> str | None:
+        """
+        Lưu ảnh comment dùng chung cho cả lô. Trả None nếu không có file.
+
+        Kiểm định dạng TRƯỚC khi ghi byte nào xuống đĩa — lô bị từ chối không được
+        để lại file rác, đúng kỷ luật của `bulk_create_jobs_from_uploads`.
+        """
+        if not image_file or not getattr(image_file, "filename", None):
+            return None
+
+        import shutil
+        import uuid
+
+        from app.config import CONTENT_DIR
+
+        JobService.assert_comment_image(image_file.filename)
+        comment_dir = str(CONTENT_DIR / "comment_images")
+        ext = os.path.splitext(image_file.filename)[1].lower()
+        final_path = os.path.join(comment_dir, f"cmt_{uuid.uuid4().hex[:12]}{ext}")
+        os.makedirs(comment_dir, exist_ok=True)
+        with open(final_path, "wb") as f:
+            shutil.copyfileobj(image_file.file, f)
+        return final_path
+
+    @staticmethod
+    def assert_story_media(media_path: str | None) -> None:
+        """
+        Tin (story): media là BẮT BUỘC và phải là ảnh hoặc video.
+
+        Khác bài feed ở chỗ không có tin chữ thuần — Facebook không cho đăng tin
+        qua luồng này nếu không có ảnh/video, nên chặn ngay từ lúc tạo job thay vì
+        để job chết ở bước đăng.
+        """
+        if not media_path or not str(media_path).strip():
+            allowed = JobService.VIDEO_EXTENSIONS + JobService.IMAGE_EXTENSIONS
+            raise ValueError(
+                "Tin Facebook bắt buộc có ảnh hoặc video "
+                f"({JobService._fmt_extensions(allowed)}). Thiếu media."
+            )
+        ext = os.path.splitext(str(media_path))[1].lower()
+        allowed = JobService.VIDEO_EXTENSIONS + JobService.IMAGE_EXTENSIONS
+        if ext not in allowed:
+            raise ValueError(
+                "Tin Facebook chỉ nhận ảnh hoặc video "
                 f"({JobService._fmt_extensions(allowed)}). Nhận được '{ext or '(none)'}'."
             )
 
@@ -188,9 +253,11 @@ class JobService:
         jt = (job_type or "POST").strip().upper()
         if plat != "facebook" or jt in JobService.NON_REELS_JOB_TYPES:
             # COMMENT không có media; FEED đi qua composer nên nhận cả ảnh lẫn
-            # bài chữ thuần — chỉ Reels (POST) mới bắt buộc video.
+            # bài chữ thuần; STORY bắt buộc ảnh/video — chỉ Reels (POST) mới ép video.
             if jt == "FEED":
                 JobService.assert_feed_media(media_path)
+            elif jt == "STORY":
+                JobService.assert_story_media(media_path)
             return
         if not media_path or not str(media_path).strip():
             if require_media:
@@ -543,8 +610,10 @@ class JobService:
             
         JobService._log_event(db, job.id, "INFO", "Job marked DONE", details)
         
-        # Auto-create COMMENT job if POST has auto_comment_text
-        if job.job_type == JobType.POST and job.auto_comment_text and (post_url or job.post_url):
+        # Auto-create COMMENT job — cả Reels lẫn bài feed (ảnh / video dài).
+        # Không có post_url thì không tạo, vì COMMENT job cần link để điều hướng tới.
+        commentable = str(job.job_type or "").strip().upper() in JobService.COMMENTABLE_JOB_TYPES
+        if commentable and job.auto_comment_text and (post_url or job.post_url):
             import random
             delay = random.randint(COMMENT_JOB_DELAY_MIN_SEC, COMMENT_JOB_DELAY_MAX_SEC)
             comment_job = Job(
@@ -554,6 +623,7 @@ class JobService:
                 parent_job_id=job.id,
                 post_url=post_url or job.post_url,
                 auto_comment_text=job.auto_comment_text,
+                comment_image_path=job.comment_image_path,
                 status=JobStatus.PENDING,
                 scheduled_at=now_ts() + delay,
                 schedule_ts=now_ts() + delay,  # Also set for compatibility
@@ -870,10 +940,12 @@ class JobService:
         MANUAL_DIR = str(CONTENT_DIR / "manual")
 
         jt = (str(job_type) or JobType.POST).strip().upper()
-        # Reels mặc định .mp4; bài feed không có đuôi thì coi là ảnh .jpg.
-        default_ext = "jpg" if jt == JobType.FEED else "mp4"
+        # Reels mặc định .mp4; bài feed và tin không có đuôi thì coi là ảnh .jpg.
+        default_ext = "jpg" if jt in (JobType.FEED, JobType.STORY) else "mp4"
 
         media_path = None
+        if jt == JobType.STORY and not (media_file and media_file.filename):
+            JobService.assert_story_media(None)
         if media_file and media_file.filename:
             ext = media_file.filename.rsplit(".", 1)[-1] if "." in media_file.filename else default_ext
             candidate = os.path.join(MANUAL_DIR, f"manual_{uuid.uuid4().hex[:8]}.{ext}")
@@ -1032,6 +1104,7 @@ class JobService:
                 tracking_url=f"/r/{data['tracking_code']}",
                 affiliate_url=data['clean_affiliate'],
                 auto_comment_text=data['final_auto_comment'],
+                comment_image_path=data.get('comment_image_path'),
                 target_page=data['target_page'],
                 content_hash=media_hash,
                 viral_material_id=data.get("viral_material_id"),
@@ -1061,7 +1134,8 @@ class JobService:
         randomize_caption: bool,
         affiliate_url: str = "",
         auto_comment_text: str = "",
-        target_page: str = ""
+        target_page: str = "",
+        comment_image_file=None,
     ) -> str:
         import uuid
         import shutil
@@ -1094,6 +1168,10 @@ class JobService:
                 account.platform, media_file.filename, job_type="POST"
             )
 
+        # Ảnh comment cũng phải hợp lệ trước khi ghi bất cứ thứ gì xuống đĩa.
+        if comment_image_file and getattr(comment_image_file, "filename", None):
+            JobService.assert_comment_image(comment_image_file.filename)
+
         os.makedirs(media_dir, exist_ok=True)
 
         files_data = []
@@ -1102,7 +1180,12 @@ class JobService:
         clean_affiliate = affiliate_url.strip() if affiliate_url else None
         clean_auto_comment = auto_comment_text.strip() if auto_comment_text else None
 
+        comment_image_path = None
         try:
+            comment_image_path = JobService.save_comment_image(comment_image_file)
+            if comment_image_path:
+                written_paths.append(comment_image_path)
+
             for i, media_file in selected:
                 dt_naive = datetime.strptime(schedule_times[i], "%Y-%m-%dT%H:%M")
                 dt_aware = dt_naive.replace(tzinfo=ZoneInfo(TIMEZONE))
@@ -1138,6 +1221,7 @@ class JobService:
                     'clean_affiliate': clean_affiliate,
                     'final_auto_comment': final_comment,
                     'target_page': target_page.strip() if target_page else None,
+                    'comment_image_path': comment_image_path,
                     'initial_status': JobStatus.DRAFT if "[AI_GENERATE]" in captions[i] else JobStatus.PENDING
                 })
 

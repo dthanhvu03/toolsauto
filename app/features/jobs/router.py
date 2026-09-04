@@ -188,13 +188,15 @@ async def bulk_create_jobs(
     affiliate_url: str = Form(""),
     auto_comment_text: str = Form(""),
     target_page: str = Form(""),
+    comment_image: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
     from app.core.account import AccountService
     accounts = AccountService.get_active_accounts(db)
     try:
         batch_id = JobService.bulk_create_jobs_from_uploads(
-            db, account_id, media_files, captions, schedule_times, randomize_caption, affiliate_url, auto_comment_text, target_page
+            db, account_id, media_files, captions, schedule_times, randomize_caption,
+            affiliate_url, auto_comment_text, target_page, comment_image_file=comment_image
         )
         return templates.TemplateResponse("fragments/create_job_form.html", {"request": request, "accounts": accounts, "success": True, "bulk_success": True})
     except Exception as e:

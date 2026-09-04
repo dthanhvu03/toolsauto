@@ -200,8 +200,9 @@ def test_dispatcher_routes_feed_before_reels_flow():
     src = (ROOT / "app" / "adapters" / "dispatcher.py").read_text(encoding="utf-8")
     assert "if job_type == JobType.FEED:" in src
     assert "adapter.publish_feed(job)" in src
-    # Gate video-only phải bỏ qua FEED
-    assert "not in (str(JobType.COMMENT), str(JobType.FEED))" in src
+    # Gate video-only phải bỏ qua FEED — nay đọc từ một nguồn sự thật duy nhất
+    assert "not in JobService.NON_REELS_JOB_TYPES" in src
+    assert "FEED" in JobService.NON_REELS_JOB_TYPES
 
 
 def test_form_offers_both_job_types():

@@ -348,8 +348,15 @@ class TiktokAdapter(AdapterInterface):
         # Return not-found to let publisher proceed normally
         return PublishResult(ok=False, error="TikTok footprint check not implemented yet")
 
-    def post_comment(self, post_url: str, comment_text: str) -> PublishResult:
+    def post_comment(
+        self, post_url: str, comment_text: str, image_path: str | None = None
+    ) -> PublishResult:
         """Post a comment on a TikTok video."""
+        if image_path:
+            logger.warning(
+                "TikTok: chưa hỗ trợ đính ảnh vào comment — gửi comment chữ (job=%s)",
+                post_url,
+            )
         logger.info("TiktokAdapter: post_comment to %s", post_url)
         return PublishResult(ok=False, error="TikTok comment not implemented yet")
 

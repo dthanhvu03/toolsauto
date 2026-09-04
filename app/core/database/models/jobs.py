@@ -67,6 +67,13 @@ class Job(Base):
     parent_job_id = Column(Integer, nullable=True)  # COMMENT → link to parent POST
     scheduled_at = Column(Integer, nullable=True, index=True)  # Delayed execution timestamp
     auto_comment_text = Column(String, nullable=True)  # Comment content (multi-line)
+    comment_image_path = Column(String, nullable=True)  # Ảnh đính kèm comment (PLAN-055)
+
+    @property
+    def resolved_comment_image_path(self) -> str:
+        from app.core.storage_paths import resolve_media_path
+
+        return resolve_media_path(self.comment_image_path)
 
     # Timestamps for locking and lifecycle
     locked_at = Column(Integer, nullable=True)

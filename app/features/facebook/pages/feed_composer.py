@@ -72,6 +72,22 @@ POST_BUTTON_DENY: tuple[str, ...] = (
 IMAGE_EXTENSIONS: tuple[str, ...] = (".jpg", ".jpeg", ".png", ".webp", ".gif")
 VIDEO_EXTENSIONS: tuple[str, ...] = (".mp4", ".mov", ".webm", ".mkv")
 
+# Dấu hiệu media đã lên tới composer (thẻ video, hoặc ảnh preview dạng blob).
+MEDIA_PREVIEW_SELECTORS: tuple[str, ...] = (
+    'div[role="dialog"] video',
+    'div[role="dialog"] img[src^="blob:"]',
+    'div[role="dialog"] img[src^="data:"]',
+)
+
+# Ngân sách chờ upload (PLAN-056). Ảnh nhanh; video tính theo dung lượng.
+IMAGE_UPLOAD_WAIT_MS = 6_000
+VIDEO_UPLOAD_BASE_MS = 30_000
+VIDEO_UPLOAD_MS_PER_MB = 400
+VIDEO_UPLOAD_MAX_MS = 420_000  # 7 phút — trần để một file hỏng không treo job
+UNKNOWN_SIZE_FALLBACK_MB = 50
+MEDIA_POLL_MS = 1_000
+MEDIA_SETTLE_MS = 1_500
+
 
 class FacebookFeedComposer:
     """Điều khiển hộp thoại soạn bài feed của Facebook."""
@@ -191,6 +207,64 @@ class FacebookFeedComposer:
                 self.logger.error("FeedComposer: fill() cũng thất bại: %s", e2)
                 return False
 
+    @staticmethod
+    def upload_budget_ms(media_paths: list[str]) -> int:
+        """
+        Thời gian tối đa chờ Facebook nuốt xong media, tính theo dung lượng thật.
+
+        Trước đây chờ cứng 20s cho mọi video: clip 15 giây thì phí, video 10 phút thì
+        chưa upload xong đã bấm Đăng. Có trần để một file hỏng không treo job vô hạn.
+        """
+        if not any(FacebookFeedComposer.is_video(p) for p in media_paths):
+            return IMAGE_UPLOAD_WAIT_MS
+
+        total_mb = 0.0
+        for path in media_paths:
+            try:
+                total_mb += os.path.getsize(path) / (1024 * 1024)
+            except OSError:
+                # Không đọc được dung lượng thì cứ coi như video cỡ trung bình,
+                # thà chờ dư còn hơn bấm Đăng lúc chưa upload xong.
+                total_mb += UNKNOWN_SIZE_FALLBACK_MB
+
+        budget = VIDEO_UPLOAD_BASE_MS + int(total_mb * VIDEO_UPLOAD_MS_PER_MB)
+        return min(budget, VIDEO_UPLOAD_MAX_MS)
+
+    def media_preview_ready(self) -> bool:
+        """Đã thấy preview của media trong hộp thoại chưa."""
+        dlg = self.dialog()
+        scope = dlg if dlg is not None else self.page
+        for selector in MEDIA_PREVIEW_SELECTORS:
+            try:
+                if scope.locator(selector).count() > 0:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def wait_for_media_ready(self, media_paths: list[str]) -> bool:
+        """
+        Chờ tới khi có preview thật, tối đa bằng ngân sách theo dung lượng.
+
+        Trả False khi hết ngân sách mà vẫn chưa thấy gì — bên gọi vẫn thử bấm Đăng,
+        vì `submit()` còn một lớp bảo vệ nữa (nút Đăng bị khoá thì dừng).
+        """
+        budget_ms = self.upload_budget_ms(media_paths)
+        waited = 0
+        while waited < budget_ms:
+            if self.media_preview_ready():
+                # Cho preview ổn định một nhịp rồi mới đi tiếp.
+                self.page.wait_for_timeout(MEDIA_SETTLE_MS)
+                self.logger.info("FeedComposer: media đã có preview sau %.1fs", waited / 1000)
+                return True
+            self.page.wait_for_timeout(MEDIA_POLL_MS)
+            waited += MEDIA_POLL_MS
+
+        self.logger.warning(
+            "FeedComposer: hết %.0fs ngân sách mà chưa thấy preview media", budget_ms / 1000
+        )
+        return False
+
     def attach_media(self, media_paths: list[str]) -> bool:
         """Đính kèm ảnh (hoặc video) vào bài. Trả False nếu không đính được."""
         existing = [p for p in media_paths if p and os.path.exists(p)]
@@ -226,9 +300,8 @@ class FacebookFeedComposer:
             self.logger.error("FeedComposer: đính kèm media thất bại: %s", e)
             return False
 
-        # Ảnh cần vài giây để hiện preview; video lâu hơn.
-        wait_ms = 20000 if any(self.is_video(p) for p in existing) else 6000
-        self.page.wait_for_timeout(wait_ms)
+        # Chờ theo dung lượng thật, và dừng sớm ngay khi thấy preview.
+        self.wait_for_media_ready(existing)
         self.logger.info("FeedComposer: đã đính %d file", len(existing))
         return True
 

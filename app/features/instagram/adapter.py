@@ -363,7 +363,14 @@ class InstagramAdapter(AdapterInterface):
         logger.info("InstagramAdapter: check_published_state for job %s", job.id)
         return PublishResult(ok=False, error="Instagram footprint check not implemented yet")
 
-    def post_comment(self, post_url: str, comment_text: str) -> PublishResult:
+    def post_comment(
+        self, post_url: str, comment_text: str, image_path: str | None = None
+    ) -> PublishResult:
+        if image_path:
+            logger.warning(
+                "Instagram: chưa hỗ trợ đính ảnh vào comment — gửi comment chữ (job=%s)",
+                post_url,
+            )
         logger.info("InstagramAdapter: post_comment to %s", post_url)
         return PublishResult(ok=False, error="Instagram comment not implemented yet")
 

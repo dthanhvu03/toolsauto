@@ -192,7 +192,14 @@ class {class_name}(AdapterInterface):
         # TODO: Implement idempotency check
         return PublishResult(ok=False, is_fatal=False, error="Not implemented yet")
 
-    def post_comment(self, post_url: str, comment_text: str) -> PublishResult:
+    def post_comment(
+        self, post_url: str, comment_text: str, image_path: str | None = None
+    ) -> PublishResult:
+        if image_path:
+            logger.warning(
+                "{class_name}: chưa hỗ trợ đính ảnh vào comment — gửi comment chữ (%s)",
+                post_url,
+            )
         logger.info("{class_name}: Posting comment to %s", post_url)
         # TODO: Implement comment automation
         return PublishResult(ok=False, is_fatal=False, error="Not implemented yet")

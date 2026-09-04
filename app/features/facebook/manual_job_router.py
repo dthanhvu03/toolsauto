@@ -53,7 +53,7 @@ async def manual_job_create(
         job = JobService.create_manual_job_with_file(
             db, account_id, target_page, caption_text, media, job_type=job_type
         )
-        kind = "Bài feed" if (job_type or "").upper() == "FEED" else "Reels"
+        kind = {"FEED": "Bài feed", "STORY": "Tin"}.get((job_type or "").upper(), "Reels")
         msg = f"✅ {kind} — Job #{job.id} đã vào Queue với độ ưu tiên tối đa!"
         return HTMLResponse(
             f'<div class="p-3 text-sm rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-medium">{msg}</div>'

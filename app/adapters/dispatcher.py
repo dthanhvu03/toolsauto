@@ -207,7 +207,9 @@ class Dispatcher:
                 from app.core.queue.job import JobService
 
                 jt = (job_type or JobType.POST)
-                if str(jt).upper() not in (str(JobType.COMMENT), str(JobType.FEED)):
+                # Một nguồn sự thật cho "loại job nào không đi qua composer Reels" —
+                # thêm loại mới chỉ phải sửa JobService, không phải sửa cả hai nơi.
+                if str(jt).upper() not in JobService.NON_REELS_JOB_TYPES:
                     media_for_check = getattr(job, "resolved_media_path", None) or job.media_path
                     try:
                         JobService.assert_facebook_post_media(
@@ -267,7 +269,10 @@ class Dispatcher:
                 logger.info("[Job %s] Dispatching COMMENT job on post: %s", job.id, job.post_url)
                 
                 # N8n-lite: Inject CTA to comment
-                result = adapter.post_comment(job.post_url, final_comment_text)
+                comment_image = getattr(job, "resolved_comment_image_path", None) or None
+                result = adapter.post_comment(
+                    job.post_url, final_comment_text, image_path=comment_image
+                )
                 # COMMENT failures are NEVER fatal
                 if not result.ok:
                     result.is_fatal = False
@@ -297,6 +302,29 @@ class Dispatcher:
                 job.media_path = job.resolved_media_path or job.media_path
                 try:
                     result = adapter.publish_feed(job)
+                finally:
+                    job.media_path = original_path
+                job_tracer.finish_job_trace(
+                    job.id, "completed" if result.ok else "failed", None if result.ok else result.error
+                )
+                return result
+
+            # STORY job: đăng tin ảnh/video, không qua composer feed lẫn Reels
+            if job_type == JobType.STORY:
+                if not hasattr(adapter, "publish_story"):
+                    from app.core.queue.job import JobService
+
+                    return PublishResult(
+                        ok=False,
+                        is_fatal=True,
+                        error=f"Adapter {job.platform} chưa hỗ trợ đăng tin.",
+                        error_code=JobService.ERROR_TYPE_VALIDATION,
+                    )
+                logger.info("[Job %s] Dispatching STORY job", job.id)
+                original_path = job.media_path
+                job.media_path = job.resolved_processed_media_path or job.resolved_media_path or job.media_path
+                try:
+                    result = adapter.publish_story(job)
                 finally:
                     job.media_path = original_path
                 job_tracer.finish_job_trace(

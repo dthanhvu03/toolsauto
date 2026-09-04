@@ -207,7 +207,14 @@ class GenericAdapter(AdapterInterface):
         )
         return PublishResult(ok=False, error="Not implemented for generic adapter")
 
-    def post_comment(self, post_url: str, comment_text: str) -> PublishResult:
+    def post_comment(
+        self, post_url: str, comment_text: str, image_path: str | None = None
+    ) -> PublishResult:
+        if image_path:
+            logger.warning(
+                "GenericAdapter: chưa hỗ trợ đính ảnh vào comment — gửi comment chữ (job=%s)",
+                post_url,
+            )
         logger.info(
             "GenericAdapter[%s]: post_comment (not implemented)",
             self.platform,

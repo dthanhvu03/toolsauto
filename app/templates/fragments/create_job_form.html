@@ -107,6 +107,17 @@
             <textarea id="bulk-auto-comment" rows="2" placeholder="Dán link tracking hoặc viết comment tùy ý..."
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow resize-y"></textarea>
             <p class="text-xs text-gray-500 mt-1.5">Nếu chỉ paste link, hệ thống sẽ tự wrap với CTA ngẫu nhiên.</p>
+
+            <div class="mt-2 flex items-center gap-2">
+                <label for="bulk-comment-image"
+                    class="text-xs font-medium text-gray-600 border border-gray-300 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-50 hover:border-indigo-400 transition-colors">
+                    Ảnh kèm comment
+                </label>
+                <input type="file" id="bulk-comment-image" accept="image/jpeg,image/png" class="hidden"
+                    onchange="document.getElementById('bulk-comment-image-name').textContent = this.files[0] ? this.files[0].name : 'chưa chọn ảnh';">
+                <span id="bulk-comment-image-name" class="text-xs text-gray-400">chưa chọn ảnh</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Dùng chung cho cả lô, chỉ nhận .jpg/.jpeg/.png. Facebook chỉ cho 1 ảnh mỗi bình luận.</p>
         </div>
     </div>
 
@@ -404,6 +415,9 @@
                 formData.append('randomize_caption', document.getElementById('bulk-randomize-caption').checked);
                 formData.append('affiliate_url', document.getElementById('bulk-affiliate-url').value || '');
                 formData.append('auto_comment_text', document.getElementById('bulk-auto-comment').value || '');
+
+                const commentImage = document.getElementById('bulk-comment-image').files[0];
+                if (commentImage) formData.append('comment_image', commentImage);
                 formData.append('target_page', targetPageFinal);
 
                 fileQueue.forEach((file, index) => {

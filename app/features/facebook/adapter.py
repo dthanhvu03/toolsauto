@@ -20,6 +20,7 @@ from app.features.facebook.selectors import SELECTORS
 from app.features.facebook.core.session import FacebookSessionManager
 from app.features.facebook.pages.reels import FacebookReelsPage
 from app.features.facebook.pages.feed_composer import FacebookFeedComposer
+from app.features.facebook.pages.story_composer import FacebookStoryComposer
 
 logger = logging.getLogger(__name__)
 from app.core.observability.runtime_events import emit as rt_emit
@@ -1427,37 +1428,44 @@ class FacebookAdapter(AdapterInterface):
         # Link bài chỉ xuất hiện trong phản hồi GraphQL lúc đăng — DOM của Page
         # không phơi href /posts/ ra ngay. Bắt như luồng Reels đang làm.
         captured_urls: list[str] = []
+        # Link thấy trong phản hồi KHÔNG phải mutation (thường là bài cũ trên feed)
+        # — chỉ dùng khi mutation không cho gì, và chỉ sau khi đã bấm Đăng.
+        fallback_urls: list[str] = []
 
         seen_mutations: list[str] = []
 
         def _capture_story_url(response):
+            # Đọc MỌI phản hồi GraphQL rồi lọc bằng nội dung. PLAN-049 lọc trước
+            # theo tên mutation đoán sẵn nên composer feed đổi tên là hụt sạch link.
             try:
                 if "/api/graphql/" not in response.url:
                     return
+                payload = response.json()
+            except Exception:
+                return
+
+            found = self._post_url_from_payload(payload, target_page_url)
+            if not found:
+                return
+
+            # Phản hồi của truy vấn feed cũng chứa link bài — của người khác. Chỉ
+            # phản hồi mutation mới là bài vừa đăng, nên xếp hạng thay vì tin bừa
+            # cái đến trước.
+            try:
                 req_post = response.request.post_data or ""
-                # Tên mutation của composer đổi theo phiên bản FB, nên khớp rộng
-                # rồi lọc bằng nội dung phản hồi thay vì cố định một tên.
-                if not any(
-                    token in req_post
-                    for token in ("StoryCreate", "Composer", "FeedPost", "CometComposer")
-                ):
-                    return
+            except Exception:
+                req_post = ""
+            is_mutation = "Mutation" in req_post
+
+            bucket = captured_urls if is_mutation else fallback_urls
+            if found not in bucket:
+                bucket.append(found)
+            if is_mutation:
                 name = next(
                     (m.group(0) for m in re.finditer(r"[A-Za-z]+Mutation", req_post)), "unknown"
                 )
                 if name not in seen_mutations:
                     seen_mutations.append(name)
-                payload = response.json()
-            except Exception:
-                return
-            for found in self._walk_for_post_urls(payload):
-                if found not in captured_urls:
-                    captured_urls.append(found)
-
-        try:
-            self.page.on("response", _capture_story_url)
-        except Exception:
-            pass
 
         try:
             destination = target_page_url or f"{FACEBOOK_HOST}/"
@@ -1501,17 +1509,28 @@ class FacebookAdapter(AdapterInterface):
 
             pre_post_delay(self.page)
             update_active_node(job.id, "submit")
+            # Chỉ nghe từ đây: trước đó là lúc mở trang và cuộn feed, phản hồi
+            # toàn bài của người khác.
+            try:
+                self.page.on("response", _capture_story_url)
+            except Exception:
+                pass
             if not composer.submit():
                 return self._failure_result(
                     job.id, "submit", "Bấm Đăng xong nhưng hộp thoại không đóng.", flow_mode, "composer"
                 )
 
             self.page.wait_for_timeout(4000)
-            post_url = captured_urls[0] if captured_urls else self._find_latest_feed_post_url(target_page_url)
+            post_url = (
+                (captured_urls[0] if captured_urls else None)
+                or (fallback_urls[0] if fallback_urls else None)
+                or self._find_latest_feed_post_url(target_page_url)
+            )
             if not post_url:
                 # Không lấy được link không phải lỗi đăng — log để lần sau bắt đúng mutation.
                 self.logger.info(
-                    "FacebookAdapter: chưa lấy được link bài feed (mutation thấy được: %s)",
+                    "FacebookAdapter: chưa lấy được link bài feed "
+                    "(không phản hồi GraphQL nào chứa link hoặc post_id; mutation khớp: %s)",
                     seen_mutations or "không có",
                 )
             details = self._build_publish_details(
@@ -1540,8 +1559,65 @@ class FacebookAdapter(AdapterInterface):
                 pass
 
     @staticmethod
-    def _walk_for_post_urls(payload: Any, limit: int = 400) -> list[str]:
+    def _walk_for_post_ids(payload: Any, limit: int = 400) -> list[str]:
+        """
+        Nhặt id bài viết trong payload GraphQL khi không có sẵn link.
+
+        Composer feed trả về `post_id` / `story_fbid` dạng chuỗi số dài; ghép với
+        URL Page là ra permalink. Chỉ nhận chuỗi toàn số đủ dài để không vơ nhầm
+        mấy id ngắn của UI.
+        """
+        wanted_keys = ("post_id", "story_fbid", "legacy_story_hash_id")
+        found: list[str] = []
+        stack = [payload]
+        seen = 0
+        while stack and seen < limit:
+            node = stack.pop()
+            seen += 1
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key in wanted_keys and isinstance(value, (str, int)):
+                        text_value = str(value)
+                        if text_value.isdigit() and len(text_value) >= 8 and text_value not in found:
+                            found.append(text_value)
+                    stack.append(value)
+            elif isinstance(node, list):
+                stack.extend(node)
+        return found
+
+    @staticmethod
+    def _compose_post_url(post_id: str, target_page_url: str | None) -> str:
+        """Ghép permalink từ id bài. Có Page thì dùng slug Page, không thì về host gốc."""
+        base = (target_page_url or "").split("?")[0].rstrip("/")
+        if base:
+            return f"{base}/posts/{post_id}"
+        return f"{FACEBOOK_HOST}/{post_id}"
+
+    @classmethod
+    def _post_url_from_payload(cls, payload: Any, target_page_url: str | None) -> str | None:
+        """
+        Suy ra link bài từ một phản hồi GraphQL.
+
+        Lọc bằng *nội dung* payload chứ không đoán tên mutation — tên mutation của
+        composer đổi theo phiên bản Facebook, đó chính là lý do PLAN-049 hụt link.
+        Không suy ra được thì trả None, tuyệt đối không bịa link.
+        """
+        urls = cls._walk_for_post_urls(payload)
+        if urls:
+            return urls[0]
+        for post_id in cls._walk_for_post_ids(payload):
+            return cls._compose_post_url(post_id, target_page_url)
+        return None
+
+    POST_URL_MARKERS: tuple[str, ...] = ("/posts/", "story_fbid=", "/permalink/", "pfbid")
+    STORY_URL_MARKERS: tuple[str, ...] = ("/stories/",)
+
+    @staticmethod
+    def _walk_for_post_urls(
+        payload: Any, limit: int = 400, markers: tuple[str, ...] | None = None
+    ) -> list[str]:
         """Quét đệ quy JSON GraphQL, nhặt mọi chuỗi trông như link bài viết."""
+        markers = markers or FacebookAdapter.POST_URL_MARKERS
         found: list[str] = []
         stack = [payload]
         seen = 0
@@ -1553,9 +1629,7 @@ class FacebookAdapter(AdapterInterface):
             elif isinstance(node, list):
                 stack.extend(node)
             elif isinstance(node, str):
-                if "facebook.com" in node and any(
-                    marker in node for marker in ("/posts/", "story_fbid=", "/permalink/", "pfbid")
-                ):
+                if "facebook.com" in node and any(marker in node for marker in markers):
                     cleaned = node.split("?")[0] if "story_fbid=" not in node else node
                     if cleaned not in found:
                         found.append(cleaned)
@@ -1575,6 +1649,214 @@ class FacebookAdapter(AdapterInterface):
                 clean = href.split("?")[0] if "story_fbid=" not in href else href
                 return clean if clean.startswith("http") else f"{FACEBOOK_HOST}{clean}"
         return None
+
+    @staticmethod
+    def story_overlay_text(job: Job) -> str:
+        """
+        Chữ phủ lên tin. Ưu tiên link có đếm click, rồi tới link aff gốc.
+
+        Không có link nào thì dùng caption — tin không chữ vẫn đăng được nên trả
+        chuỗi rỗng cũng hợp lệ.
+        """
+        for value in (
+            getattr(job, "tracking_url", None),
+            getattr(job, "affiliate_url", None),
+            getattr(job, "caption", None),
+        ):
+            text = (value or "").strip()
+            if text:
+                return text
+        return ""
+
+    def _resolve_target_page_name(self, job: Job, target_page_url: str | None) -> str | None:
+        """Tên Page đích theo danh sách page tài khoản quản lý. None = không tra được."""
+        if not target_page_url or not getattr(job, "account", None):
+            return None
+        pages = getattr(job.account, "managed_pages_list", None) or []
+        for entry in pages:
+            page_url = (entry or {}).get("url", "")
+            if not page_url:
+                continue
+            if page_url in target_page_url or target_page_url in page_url:
+                return entry.get("name")
+            if "?id=" in target_page_url and "?id=" in page_url:
+                if target_page_url.split("?id=")[1].split("&")[0] == page_url.split("?id=")[1].split("&")[0]:
+                    return entry.get("name")
+        return None
+
+    def _story_author_mismatch(self, author_label: str | None, page_name: str | None) -> bool:
+        """
+        True khi chip tác giả trong hộp tạo tin rõ ràng KHÔNG phải Page đích.
+
+        Đọc không ra tên (None/rỗng) thì trả False: DOM của tin đổi liên tục, chặn
+        cứng ở đây sẽ khoá luôn tính năng. Chỉ chặn khi đọc được và lệch thật.
+        """
+        if not author_label or not page_name:
+            return False
+        return self._identity_key(page_name) not in self._identity_key(author_label)
+
+    @staticmethod
+    def _identity_key(text: str) -> str:
+        """
+        Chuẩn hoá tên để so khớp danh tính: bỏ dấu, thường hoá, gộp khoảng trắng.
+
+        `_normalize_fb_text` chỉ NFD nên vẫn còn dấu tổ hợp — tên Page lưu trong DB
+        lệch dấu so với nhãn Facebook đọc được sẽ bị coi là "người khác" và chặn oan.
+        Chặn nhầm ở đây tốn cả job, nên so khớp phải rộng rãi.
+        """
+        if not text:
+            return ""
+        decomposed = unicodedata.normalize("NFD", str(text))
+        stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+        return " ".join(stripped.replace("đ", "d").replace("Đ", "d").lower().split())
+
+    def publish_story(self, job: Job) -> PublishResult:
+        """
+        Đăng tin (story) ảnh hoặc video — JobType.STORY.
+
+        Tin bắt buộc có media: Facebook không có tin chữ thuần qua luồng này.
+        Link affiliate được phủ lên tin dưới dạng chữ (xem PLAN-054 mục Rủi ro:
+        sticker link bấm được chưa kiểm chứng).
+        """
+        self.logger = JobLoggerAdapter(logger, {'job_id': job.id})
+        self.logger.info("FacebookAdapter: Đăng tin cho job %s", job.id)
+
+        if not self.page:
+            return PublishResult(ok=False, error="Playwright page is not initialized.", is_fatal=True)
+
+        if not self._is_session_alive():
+            return PublishResult(
+                ok=False,
+                error="Browser session is dead (page/context closed). Will retry with fresh session.",
+                is_fatal=False,
+            )
+
+        target_page_url = (getattr(job, "target_page", None) or "").strip() or None
+        flow_mode = "page_story" if target_page_url else "personal_story"
+        media_path = getattr(job, "media_path", None)
+
+        if not media_path:
+            return self._failure_result(
+                job.id,
+                "empty_media",
+                "Tin Facebook bắt buộc có ảnh hoặc video.",
+                flow_mode,
+                None,
+                is_fatal=True,
+            )
+        if not os.path.exists(media_path):
+            return self._failure_result(
+                job.id,
+                "upload_media",
+                f"Không tìm thấy file media: {media_path}",
+                flow_mode,
+                None,
+                is_fatal=True,
+            )
+
+        composer = FacebookStoryComposer(self.page, self.logger)
+        overlay_text = self.story_overlay_text(job)
+        page_name = self._resolve_target_page_name(job, target_page_url)
+
+        captured_urls: list[str] = []
+
+        def _capture_story_link(response):
+            try:
+                if "/api/graphql/" not in response.url:
+                    return
+                payload = response.json()
+            except Exception:
+                return
+            for found in self._walk_for_post_urls(payload, markers=self.STORY_URL_MARKERS):
+                if found not in captured_urls:
+                    captured_urls.append(found)
+
+        try:
+            destination = target_page_url or f"{FACEBOOK_HOST}/"
+            if not self._safe_goto(destination, wait_until="domcontentloaded"):
+                return self._failure_result(
+                    job.id, "navigate", f"Không mở được {destination}", flow_mode, None
+                )
+            self.page.wait_for_timeout(3000)
+
+            update_active_node(job.id, "open_composer")
+            if not composer.open_composer():
+                return self._failure_result(
+                    job.id, "open_composer", "Không mở được luồng tạo tin.", flow_mode, None
+                )
+            composer.choose_photo_story()
+
+            update_active_node(job.id, "upload_media")
+            if not composer.attach_media(media_path):
+                return self._failure_result(
+                    job.id, "upload_media", "Không nạp được media vào tin.", flow_mode, "story_composer"
+                )
+
+            if overlay_text:
+                update_active_node(job.id, "fill_caption")
+                if not composer.add_text(overlay_text):
+                    # Tin không chữ vẫn có giá trị; chỉ mất link aff nên ghi cảnh báo.
+                    self.logger.warning(
+                        "FacebookAdapter: không phủ được chữ lên tin — tin sẽ lên mà không có link"
+                    )
+
+            # Chặn đăng nhầm danh nghĩa: chỉ chặn khi đọc được tên và lệch thật.
+            author_label = composer.read_author_name()
+            if self._story_author_mismatch(author_label, page_name):
+                return self._failure_result(
+                    job.id,
+                    "context_verification",
+                    f"Tin đang soạn dưới tên {author_label!r}, không phải Page {page_name!r}. Dừng để không đăng nhầm.",
+                    flow_mode,
+                    "story_composer",
+                    is_fatal=False,
+                )
+            if author_label is None:
+                self.logger.warning(
+                    "FacebookAdapter: không đọc được tên tác giả trong hộp tạo tin — đăng tiếp nhưng cần soát lại"
+                )
+
+            pre_post_delay(self.page)
+            update_active_node(job.id, "submit")
+            try:
+                self.page.on("response", _capture_story_link)
+            except Exception:
+                pass
+            if not composer.submit():
+                return self._failure_result(
+                    job.id,
+                    "submit",
+                    "Bấm chia sẻ xong nhưng hộp tạo tin không đóng.",
+                    flow_mode,
+                    "story_composer",
+                )
+
+            self.page.wait_for_timeout(4000)
+            story_url = captured_urls[0] if captured_urls else None
+            details = self._build_publish_details(
+                flow_mode,
+                "story_composer",
+                post_url=story_url,
+                has_overlay_text=bool(overlay_text),
+                author_label=author_label,
+            )
+            self.logger.info("FacebookAdapter: Đăng tin thành công (url=%s)", story_url)
+            return PublishResult(ok=True, details=details, external_post_id=story_url or None)
+
+        except PageMismatchError:
+            raise
+        except Exception as e:
+            self.logger.exception("FacebookAdapter: Lỗi khi đăng tin: %s", e)
+            return self._failure_result(job.id, "unexpected", str(e), flow_mode, "story_composer")
+        finally:
+            try:
+                self.page.remove_listener("response", _capture_story_link)
+            except Exception:
+                pass
+            try:
+                composer.close()
+            except Exception:
+                pass
 
     def check_published_state(self, job: Job) -> PublishResult:
         """
@@ -1675,10 +1957,70 @@ class FacebookAdapter(AdapterInterface):
         "Link bên dưới nhé\n{link}",
     ]
     
-    def post_comment(self, post_url: str, comment_text: str) -> PublishResult:
+    COMMENT_PHOTO_BUTTON_LABELS: tuple[str, ...] = (
+        "Đính kèm ảnh hoặc video",
+        "Đính kèm file",
+        "Chèn ảnh",
+        "Attach a photo or video",
+        "Attach a photo",
+        "Photo",
+    )
+
+    COMMENT_FILE_INPUT_SELECTORS: tuple[str, ...] = (
+        'form input[type="file"][accept*="image"]',
+        'input[type="file"][accept*="image"]',
+        'input[type="file"]',
+    )
+
+    def _attach_comment_image(self, image_path: str) -> bool:
+        """
+        Đính ảnh vào ô bình luận đang mở.
+
+        Trả False khi không đính được — bên gọi vẫn gửi comment chữ, vì mất ảnh
+        còn hơn mất cả bình luận (comment là bước phụ, không bao giờ fatal).
+        """
+        if not image_path or not os.path.exists(image_path):
+            self.logger.warning("FacebookAdapter: không tìm thấy ảnh comment: %s", image_path)
+            return False
+
+        # Khay đính kèm có thể chưa mở — bấm nút máy ảnh trước nếu thấy.
+        for label in self.COMMENT_PHOTO_BUTTON_LABELS:
+            try:
+                btn = self.page.get_by_label(label, exact=False).first
+                if btn.count() > 0 and btn.is_visible(timeout=1200):
+                    btn.click(timeout=5000)
+                    self.page.wait_for_timeout(1200)
+                    break
+            except Exception:
+                continue
+
+        for selector in self.COMMENT_FILE_INPUT_SELECTORS:
+            try:
+                loc = self.page.locator(selector).last
+                if loc.count() == 0:
+                    continue
+                loc.set_input_files(image_path, timeout=30000)
+                # Facebook cần vài giây dựng preview; gửi sớm là mất ảnh.
+                self.page.wait_for_timeout(6000)
+                self.logger.info("FacebookAdapter: đã đính ảnh vào comment (%s)", selector)
+                return True
+            except Exception as e:
+                self.logger.debug(
+                    "FacebookAdapter: đính ảnh qua %s không được: %s", selector, e
+                )
+                continue
+
+        self.logger.warning("FacebookAdapter: không tìm thấy input file của ô bình luận")
+        return False
+
+    def post_comment(
+        self, post_url: str, comment_text: str, image_path: str | None = None
+    ) -> PublishResult:
         """
         Navigate to a published post and add a comment.
         Non-fatal: failure returns ok=False but should NOT crash the parent job.
+
+        `image_path` (tuỳ chọn) đính kèm một ảnh vào bình luận — PLAN-055.
         """
         
         self.logger.info("FacebookAdapter: Posting comment on %s", post_url)
@@ -1908,6 +2250,15 @@ class FacebookAdapter(AdapterInterface):
                 rt_emit("step_skipped", platform="facebook", step_name="type_comment",
                         reason="not in active_steps")
             
+            # 5b. Đính ảnh nếu job có — hỏng thì vẫn gửi comment chữ.
+            image_attached = False
+            if image_path:
+                image_attached = self._attach_comment_image(image_path)
+                if not image_attached:
+                    self.logger.warning(
+                        "FacebookAdapter: gửi comment không kèm ảnh (đính ảnh thất bại)"
+                    )
+
             # 6. Random pause before submit (1–3 seconds)
             self.page.wait_for_timeout(random.randint(1000, 3000))
             
@@ -1919,7 +2270,9 @@ class FacebookAdapter(AdapterInterface):
             human_scroll(self.page)
             
             self.logger.info("FacebookAdapter: Comment posted successfully on %s", post_url)
-            return PublishResult(ok=True, details={"comment": final_comment})
+            return PublishResult(
+                ok=True, details={"comment": final_comment, "image_attached": image_attached}
+            )
             
         except Exception as e:
             self.logger.warning("FacebookAdapter: Failed to post comment: %s", e)
