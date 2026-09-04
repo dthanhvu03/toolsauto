@@ -91,3 +91,6 @@ storage/
 .codacy/logs/
 .codacy/tools-configs/
 .codacy/cli-config.yaml
+
+# Codacy CLI generated output
+.codacy/generated/
