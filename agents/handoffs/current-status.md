@@ -1,5 +1,197 @@
 # Current Status
 
+## Phiên 2026-08-21 (b) — AUDIT toàn diện repo (AUDIT ONLY, không sửa code)
+
+Báo cáo đầy đủ: `agents/audit/AUDIT-001-repo-wide-2026-08-21.md`
+
+### Đã làm
+- Kiểm toán toàn repo: dependency graph bằng AST (282 file), schema + row count trên
+  Postgres đang chạy, `EXPLAIN` câu SQL claim, chạy test suite (243 passed), đối chiếu
+  ADR với code thật. **Không sửa file nào ngoài báo cáo.**
+
+### Đã qua vòng FINAL VALIDATION (rev.2) — kết luận đã được siết lại
+
+Vòng validation tập trung concurrency/transaction/recovery/security. Thay đổi quan
+trọng nhất: **P0-1 không phải một lỗi mà là BA lỗi độc lập**, và **không bản vá đơn
+lẻ nào đóng được cả ba**. Bản rev.1 nói "hai P0 vá bằng một dòng" — điều đó **sai**
+và đã được gỡ.
+
+### P0-1 — ba bất biến đồng thời, ba bản vá khác nhau
+
+| | Bất biến | Trạng thái | Bản vá tối thiểu |
+|---|---|---|---|
+| **A** | 1 job PENDING → đúng 1 worker | ❌ **CONFIRMED vỡ** | `AND status='PENDING'` ở WHERE ngoài (`queue.py:44`) |
+| **B** | 1 `(account, platform)` → tối đa 1 job RUNNING | ❌ **PLAUSIBLE vỡ** (MEDIUM) | **Partial unique index** + bắt `IntegrityError`. Bản vá của A **không** chạm tới B |
+| **C** | Job đang chạy không bị recovery cướp | ❌ **CONFIRMED (cơ chế)** | `WORKER_CRASH_THRESHOLD_SECONDS` (120 s) phải **>** `PUBLISHER_PUBLISH_DEADLINE_SEC` (900 s) |
+
+**Evidence mới thu được trong vòng này (read-only, không ghi DB):**
+
+- `EXPLAIN` bản vá A trên Postgres thật: qual ngoài đổi thành
+  `Filter: (status='PENDING' AND id=$0)` → EvalPlanQual của worker thua fail → 0 row.
+  **A được đóng. HIGH.**
+- `EXPLAIN` phương án `FOR UPDATE OF j SKIP LOCKED`: **plan hợp lệ**, xuất hiện nút
+  `LockRows` giữa `Sort` và `Limit` → worker thua lấy ứng viên kế tiếp thay vì về tay
+  không. Là cải thiện thông lượng, **không thay thế** bản vá A.
+- B: khi hai worker chọn **hai row khác nhau** thì **không có xung đột khoá**, nên
+  EvalPlanQual không bao giờ chạy → outer predicate vô tác dụng. Điều kiện kích hoạt:
+  khoá sắp xếp hoà — `lpp.last_ts` luôn hoà trong cùng account, và
+  `create_high_priority_manual_job` (`job.py:908`) đặt `schedule_ts = now - 999999`
+  cho mọi job thủ công → hai job tạo cùng giây hoà tuyệt đối.
+  **Chưa chạy thí nghiệm 2 session ⇒ giữ ở PLAUSIBLE, không nâng lên CONFIRMED.**
+- C: `120 s` (ngưỡng recovery) < `900 s` (deadline job) < `420 s` (trần chờ upload
+  một video, PLAN-056). Hai nhịp heartbeat lỡ liên tiếp (60 s × 2) đủ để job khoẻ bị
+  đặt về PENDING rồi bị worker khác claim. Cửa chặn `check_published_state` chỉ chạy
+  khi `tries > 0` và **không phủ hết job type** (Instagram trả thẳng `ok=False`;
+  Facebook chỉ quét Reels, không quét feed/story).
+- Truy vấn live: hiện **0 job RUNNING**, không cặp `(account_id, platform)` nào >1
+  RUNNING ⇒ partial unique index tạo được ngay, không cần dọn dữ liệu. Cũng **chưa
+  thấy dấu vết đăng trùng** trong 14 job hiện có — nhưng đó là "chưa xảy ra", không
+  phải "không thể xảy ra".
+
+### P0-2 — là một CỤM ba lỗi, không phải một dòng
+
+(a) URL tương đối khi thiếu base URL · (b) `/r/{code}` sau tường auth ·
+(c) `tracking_url` ghi rồi mất vì không commit. Ba tầng khác nhau; sửa đúng hai trong
+ba vẫn để lại tính năng hỏng. **Điều kiện đóng: test end-to-end với client KHÔNG đăng
+nhập** (TEST C, §19 của report).
+
+### Ba test bắt buộc (đặc tả đầy đủ ở §19 của report)
+
+- **TEST A** — 1 job PENDING, 2 session claim đồng thời → đúng 1 nhận được.
+- **TEST B** — 2 job khác nhau **cùng account+platform**, `schedule_ts` bằng nhau,
+  2 session claim đồng thời → tối đa 1 RUNNING. ⚠️ **TEST B đỏ sau khi vá A là đúng
+  như dự đoán**, không phải bản vá hỏng. Nếu hoãn index: giữ `xfail` có ghi lý do,
+  **không xoá test, không tuyên bố B đã đóng, và chỉ chạy 1 publisher**.
+- **TEST C** — affiliate end-to-end tới `click_count`.
+
+### Phát hiện mới trong vòng validation
+
+- **`manage.py db backup` backup nhầm SQLite**, không phải Postgres (`manage.py:141`
+  `copy2(DB_PATH)`) — nhưng vẫn in `Backed up: ...` thành công. Bẫy vận hành thật.
+- **TD-18 nâng P2 → P1:** `serve_screenshot` đọc được `.env` ⇒ lộ `SECRET_KEY`, mà
+  `SECRET_KEY` chính là khoá **ký cookie phiên** (`auth/router.py:11`). Nghĩa là lỗ
+  này biến một phiên bị chiếm có thời hạn thành **quyền truy cập bền vững**. Lập luận
+  cũ "admin đã có SQL console nên vô hại" là sai — SQL console không đọc được file.
+- **`claim_next_verify_job`** (`threads/workers/verifier.py:259` + `:213`) là
+  read-then-act không nguyên tử. Giảm nhẹ: worker này **không được supervisor nào
+  khởi động** (không có trong `ecosystem.config.js`/`start.sh`/`start.ps1`/
+  `local_supervisor.py`). Phải vá **trước khi** bật.
+
+### Wording đã siết lại (evidence > assumption)
+
+- ~~"Mất DB thì không restore được"~~ → **"Không có PostgreSQL recovery path nào được
+  định nghĩa và kiểm chứng trong phạm vi hệ thống đang audit."** Snapshot hạ tầng của
+  nhà cung cấp VPS nằm ngoài phạm vi — "không tìm thấy" ≠ "không tồn tại".
+- ~~CSRF "đủ trên thực tế"~~ → **"Chấp nhận được dưới threat model một-admin hiện
+  tại"**, kèm 4 giả định và điều kiện phải review lại (thêm user, thêm JSON API,
+  tách subdomain, đổi `SameSite`, hoặc thêm GET có side-effect).
+
+### Next Action — thứ tự đã chốt lại sau validation
+
+**P0 (trước khi mở rộng tải / giao khách):**
+1. TD-01a outer predicate → TEST A xanh.
+2. TD-01c ngưỡng recovery ≥1200 s (> deadline 900 s).
+3. TD-01b partial unique index + bắt `IntegrityError` → TEST B xanh (hoặc `xfail` +
+   chỉ chạy 1 publisher).
+4. TD-02 cụm affiliate → TEST C xanh; nếu chưa xong → **gỡ "link aff đếm click" khỏi
+   mô tả combo trước khi bán tiếp**.
+5. Owner đổi mật khẩu + đăng xuất mọi phiên FB/IG/TikTok (nợ từ PLAN-051).
+
+**P1 (an toàn production):** bỏ `|| true` ở deploy · bump CI 3.12 · `lint-imports` ·
+`pg_dump` theo lịch + **thử restore một lần** · sửa TD-23 (`manage.py db backup`) ·
+TD-18 siết `serve_screenshot` · TD-09 bọc try/except từng bước maintenance · TD-08
+vòng đời media dùng chung · verify live 4 luồng PLAN-053→056 · TASK-055 · review +
+commit diff đang treo.
+
+**P2 (kiến trúc):** SR-4 conftest + chuyển test theo 8 bước ưu tiên · ADR-009 →
+SR-5 xoá tầng no-code · SR-2 port cho job type · TD-24 vá verifier trước khi bật.
+
+### Phát hiện P1 đáng chú ý
+- `alembic upgrade head || true` trong `deploy.yml:112` nuốt lỗi migration; **không có
+  backup PostgreSQL tự động** (pipeline chỉ `cp` file SQLite legacy; `pg_dump` là nút bấm tay).
+- ~49% test (13 file) là `read_text()` + `assert "chuỗi" in src`. `test_claim_mutex_is_per_platform`
+  đang XANH trong khi mutex thực sự vỡ vì race ở trên.
+- `import-linter` khai báo trong requirements + có `.importlinter` nhưng **không cài trong venv
+  và không có trong CI** ⇒ chưa từng chạy. Đang có 2 vi phạm thật:
+  `app/core/observability/metrics_checker.py:162` → `app.features.facebook`;
+  `app/features/insights/router.py:149` → `app.features.viral_intake`.
+- Job DONE xoá **cả file gốc** vô điều kiện; partial unique index chỉ chặn trùng trong cùng
+  platform ⇒ job facebook xong trước xoá file, job threads cùng file fail với lý do sai.
+- `maintenance.run_loop()` all-or-nothing: 12 việc trong một `try`, một scraper gãy chặn luôn
+  `recover_crashed_jobs` + purge zombie + insights.
+- UI `manual_job_form.html:140,146` quảng cáo `.webp` nhưng `JobService.IMAGE_EXTENSIONS`
+  không có `.webp` ⇒ drift thật, chặn oan người dùng.
+
+### Xác nhận lại bằng dữ liệu runtime
+- 4 bảng tầng no-code (`platform_configs`, `platform_selectors`, `cta_templates`,
+  `workflow_definitions`) đều **0 row** — ADR-009 vẫn đúng, vẫn chờ Owner chốt.
+- Alembic head `i7d4e5f6a7b8` khớp DB. 26 bảng, `accounts`=1 row, `jobs`=14 row.
+
+### Next Action — thứ tự đề xuất
+1. Vá P0-1 (`AND status='PENDING'`) + viết test concurrency thật (2 session Postgres).
+2. Vá P0-2 hoặc **gỡ "link aff đếm click" khỏi mô tả combo** cho tới khi chạy được.
+3. Owner: đổi mật khẩu + đăng xuất mọi phiên FB/IG/TikTok (việc còn nợ từ PLAN-051).
+4. Quick win 1 dòng: bỏ `|| true` ở deploy, bump CI lên Python 3.12, thêm `lint-imports`.
+5. Lên lịch `pg_dump` + **thử restore một lần**.
+6. Việc cũ chưa xong: verify live 4 luồng PLAN-053→056; TASK-055 khảo sát giỏ hàng;
+   review + commit diff đang treo.
+
+---
+
+## Phiên 2026-08-21 — bổ sung tính năng còn thiếu của Combo 2 (PLAN-052 → 056)
+
+Owner duyệt cho Claude Code execute cả backend đợt này — ghi ở **ADR-010**, hết hiệu
+lực sau PLAN-056.
+
+### System State (2026-08-21)
+
+- **Máy chạy lại được**: Python 3.14.7 hoạt động (handoff 2026-08-11 ghi interpreter
+  mất — nay đã khác). `pytest` chạy bình thường.
+- Container `toolsauto_postgres` đang **BẬT** (port 5434), đã `alembic upgrade head`
+  tới `i7d4e5f6a7b8`.
+- Test suite: **243 passed** (baseline đầu phiên 175), `--ignore=tests/test_threads_world_news.py`.
+- Stack vẫn **TẮT**. Chưa đăng thử bất cứ thứ gì lên Facebook trong phiên này.
+- Diff chưa commit: 16 file sửa, 6 file mới (2 page/adapter, 4 test), 1 migration.
+
+### Done This Session
+
+| Việc | Proof |
+|---|---|
+| **PLAN-052** Hàng đợi nhận mọi job_type — job FEED trước đây nằm PENDING vĩnh viễn | `git stash` code cũ → 2 test FEED/STORY đỏ; code mới → 9/9 xanh (SQL thật trên Postgres) |
+| **PLAN-053** Lấy `post_url` bài feed + auto-comment cho bài feed | 14 test; vá luôn rủi ro bắt nhầm link bài người khác lúc cuộn feed |
+| **PLAN-054** Đăng Story + phủ link aff lên tin | 23 test; `story_composer.py` mới; chặn đăng nhầm danh nghĩa Page |
+| **PLAN-055** Đính ảnh vào comment | 12 test; cột `comment_image_path` + migration; 4 adapter cùng chữ ký |
+| **PLAN-056** Video dài: chờ upload theo dung lượng thật thay vì cứng 20s | 9 test; có trần 7 phút, dừng sớm khi thấy preview |
+| **TASK-055** Giỏ hàng: chuyển thành khảo sát live, **không code mù** | Lý do + 7 bước khảo sát trong task |
+
+### Lỗi có sẵn phát hiện được trong lúc làm
+
+1. `claim_next_job` liệt kê cứng `POST`/`COMMENT` ⇒ **mọi job FEED không bao giờ chạy**.
+   Bài feed của PLAN-049 lên được là do gọi adapter trực tiếp, không qua hàng đợi.
+2. `_normalize_fb_text` chỉ NFD nên còn dấu tổ hợp — dùng để so tên Page sẽ **chặn oan**
+   khi tên lệch dấu. Đã thêm `_identity_key` riêng cho phép so danh tính.
+
+### Next Action — theo thứ tự
+
+1. **Owner mở phiên trình duyệt** để verify live 4 thứ chưa từng chạy thật:
+   - Đăng tin ảnh + tin video lên Page nháp (PLAN-054)
+   - Chữ trên tin có bấm được thành link không → quyết định có bán mục "link aff story" hay không
+   - Comment kèm ảnh dưới một Reels thật (PLAN-055)
+   - Đăng bài feed thật, xem log có bắt được `post_url` không (PLAN-053)
+   - Đăng video > 5 phút (PLAN-056)
+2. **TASK-055**: khảo sát giỏ hàng. Nếu Facebook không cho → **gỡ mục đó khỏi mô tả
+   combo Page Master trước khi bán tiếp**.
+3. Review + commit diff đang treo.
+4. Việc cũ chưa xong: bump `python-version` trong `deploy.yml` để mở lại CI (đỏ từ 2026-07-29).
+
+### Cảnh báo bán hàng (chưa được hứa với khách)
+
+- "Link aff bấm được trong story" — chưa kiểm chứng.
+- "Gắn giỏ hàng" — chưa có dòng code nào, chưa khảo sát.
+- "Tìm video theo từ khóa" — mới chỉ đúng với TikTok. **Douyin: 0%.** YouTube Short và
+  Facebook Page chỉ tải được khi dán link.
+
+
 ## ⚠️ CẢNH BÁO BẢO MẬT (2026-08-11) — chờ Owner xử lý
 
 `scratch/threads_cookies.json` chứa **cookie phiên thật** (FB `xs`/`c_user`,
