@@ -1,5 +1,79 @@
 # Current Status
 
+## Phiên 2026-09-04 — kiểm tra dự án + đưa diff treo lên main
+
+### System State (2026-09-04)
+
+- Python 3.14.7 + venv: chạy tốt. Test suite **243 passed / 12.1s**
+  (`--ignore=tests/test_threads_world_news.py`).
+- `toolsauto_postgres` **đã tắt 13 ngày**, phiên này `docker start` lại. Alembic
+  `i7d4e5f6a7b8` khớp DB.
+- DB thật: 1 account · jobs: 7 DRAFT, 2 PENDING (#2, #4 — facebook/POST,
+  `is_approved=false`), 4 DONE, 1 FAILED. **0 RUNNING.**
+- Stack vẫn **TẮT**. Bốn luồng live PLAN-053→056 vẫn **chưa từng verify thật**.
+- Working tree **sạch**, `main` == `origin/main`.
+
+### Done This Session
+
+| Việc | Proof |
+|---|---|
+| Kiểm tra lại toàn bộ kết luận audit sau 14 ngày | Cả 4 lỗi P0 + toàn bộ P1 **vẫn nguyên**, chưa vá dòng nào |
+| Commit + push diff treo 2 tuần lên `main` | 3 commit `8ee49f8`, `5e9537d`, `12176de`; `ea57b4b..12176de main -> main` |
+
+Ba commit đã đẩy:
+- `8ee49f8` feat — PLAN-052→056 (24 file, +1908/−68), gồm migration
+  `i7d4e5f6a7b8` và `story_composer.py`
+- `5e9537d` docs(agents) — 5 PLAN, 6 TASK, ADR-010, AUDIT-001, handoff
+- `12176de` chore(lint) — cấu hình Codacy CLI, `.gitignore` chặn `generated/`
+
+**Không tách được 5 commit theo từng PLAN**: `facebook/adapter.py` (+405 dòng) và
+`core/queue/job.py` bị PLAN-053/054/055/056 sửa đan xen, tách hunk sẽ tạo commit
+trung gian không chạy được test.
+
+### Rủi ro đã đóng trong phiên này
+
+**Lệch pha migration.** Trước phiên này DB đang ở `i7d4e5f6a7b8` nhưng revision đó
+**không tồn tại trong git** — deploy `main` sẽ khiến `alembic upgrade head` gặp
+revision lạ, mà `deploy.yml` có `|| true` nuốt lỗi ⇒ deploy vẫn báo xanh trong khi
+migration hỏng. Commit `8ee49f8` đóng khoảng lệch này.
+
+### Còn nguyên — KHÔNG có gì được vá trong phiên này
+
+- **P0-1a** `queue.py` outer predicate vẫn thiếu `AND status='PENDING'`
+- **P0-1b** không có partial unique index nào trong `alembic/versions/`
+- **P0-1c** `WORKER_CRASH_THRESHOLD_SECONDS=120` < `PUBLISHER_PUBLISH_DEADLINE_SEC=900`
+- **P0-2** `tracking_url` vẫn ghi `/r/{code}` tương đối; route vẫn sau tường auth
+- P1: `deploy.yml:30` vẫn `python-version: "3.10"`; 2 vi phạm import-linter;
+  `manage.py db backup` vẫn `copy2(DB_PATH)` (backup nhầm SQLite); drift `.webp`
+- **243 test xanh KHÔNG chứng minh gì cho P0** — TEST A/B/C (§19 của AUDIT-001)
+  chưa ai viết.
+
+### CI vẫn đỏ — lần thứ 6
+
+Run `33844459654` (2026-09-04) fail y hệt: workflow cài Python **3.10.21** trong khi
+`requirements.txt` ghim numpy 2.4.2 (cần ≥3.11). Push phiên này **chưa deploy được**.
+
+### Nhánh chưa xử
+
+`origin/develop`: đi sau main **78 commit**, đi trước **4 commit** (mới nhất
+2026-05-05, ~4 tháng): sidebar accordion, refactor sidebar SaaS, fix worker crash /
+imports / playwright `/dev/shm`, fix backlog count đa nền tảng. **Chưa merge** — cần
+Owner quyết vì 4 commit này nằm trên base đã cũ 78 commit, merge mù dễ kéo lùi UI.
+
+### Next Action
+
+1. Sửa `deploy.yml:30` → Python 3.12 để mở lại CI (1 dòng, chặn mọi deploy).
+2. Vá P0-1a + P0-1c (hai thay đổi nhỏ, độc lập), viết TEST A.
+3. P0-1b partial unique index + bắt `IntegrityError` → TEST B (hiện 0 RUNNING nên
+   tạo index được ngay, không cần dọn dữ liệu).
+4. P0-2 cụm affiliate → TEST C; nếu chưa xong thì **gỡ "link aff đếm click" khỏi mô
+   tả combo trước khi bán tiếp**.
+5. Owner: đổi mật khẩu + đăng xuất mọi phiên FB/IG/TikTok (nợ từ PLAN-051).
+6. Owner mở phiên trình duyệt verify live 4 luồng PLAN-053→056.
+7. Quyết số phận `origin/develop`.
+
+---
+
 ## Phiên 2026-08-21 (b) — AUDIT toàn diện repo (AUDIT ONLY, không sửa code)
 
 Báo cáo đầy đủ: `agents/audit/AUDIT-001-repo-wide-2026-08-21.md`
