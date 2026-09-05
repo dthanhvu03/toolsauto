@@ -50,6 +50,48 @@ _ENV_BOOTSTRAP: dict[str, str] = {
 
 
 SETTINGS: dict[str, SettingSpec] = {
+    "DRIVE_COPY_ENABLED": SettingSpec(
+        key="DRIVE_COPY_ENABLED",
+        type="bool",
+        default_getter=_getattr_default("DRIVE_COPY_ENABLED"),
+        title="Bat sao luu ngoai vi",
+        section="Sao luu Google Drive",
+        description=(
+            "Chep them mot ban sang thu muc Google Drive da gan. Backup hien nam cung o dia "
+            "voi du lieu, hong o la mat ca hai. Drive chua gan o thi chi ghi canh bao, "
+            "khong lam hong backup local."
+        ),
+    ),
+    "DRIVE_ROOT_DIR": SettingSpec(
+        key="DRIVE_ROOT_DIR",
+        type="str",
+        default_getter=_getattr_default("DRIVE_ROOT_DIR"),
+        title="Thu muc Drive",
+        section="Sao luu Google Drive",
+        description=(
+            "Duong dan thu muc Google Drive for Desktop, vi du G:/My Drive/ToolsAuto. "
+            "Kiem tra truoc bang: python manage.py drive check"
+        ),
+    ),
+    "DRIVE_COPY_BACKUPS": SettingSpec(
+        key="DRIVE_COPY_BACKUPS",
+        type="bool",
+        default_getter=_getattr_default("DRIVE_COPY_BACKUPS"),
+        title="Chep ban dump database",
+        section="Sao luu Google Drive",
+        description="Moi lan backup xong thi chep them mot ban vao Drive/backups.",
+    ),
+    "DRIVE_COPY_VIDEOS": SettingSpec(
+        key="DRIVE_COPY_VIDEOS",
+        type="bool",
+        default_getter=_getattr_default("DRIVE_COPY_VIDEOS"),
+        title="Chep video da xu ly",
+        section="Sao luu Google Drive",
+        description=(
+            "Chep video sau khi xu ly xong vao Drive/videos de mo duoc tu dien thoai. "
+            "Video nang, bat cai nay se ton bang thong tai len."
+        ),
+    ),
     "worker.tick_seconds": SettingSpec(
         key="worker.tick_seconds",
         env_var_name="WORKER_TICK_SECONDS",

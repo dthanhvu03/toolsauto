@@ -24,6 +24,15 @@ from typing import Optional
 
 import typer
 
+# Console Windows mac dinh cp1252: moi chuoi tieng Viet in ra deu nem
+# UnicodeEncodeError va giet lenh. errors="replace" de tham chi console cu cung chi
+# hien dau hoi thay vi lam hong ca tien trinh.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):  # pragma: no cover - stream khong ho tro
+        pass
+
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -221,6 +230,16 @@ def db_backup(
 
     typer.echo(f"Backed up ({how}): {dest} ({size:,} bytes)")
 
+    # Ban sao ngoai vi (ADR-012). Loi o day KHONG duoc lam backup that bai —
+    # ban local da co roi, Drive chi la ban thu hai.
+    from app.core import settings as runtime_settings
+    from app.core.storage import offsite
+
+    if runtime_settings.get_bool("DRIVE_COPY_BACKUPS", True):
+        copied = offsite.copy_out(dest, "backup")
+        if copied:
+            typer.echo(f"  -> Drive: {copied}")
+
     # Don dump cu de o dia VPS khong day dan — backup lam sap dia thi phan tac dung.
     if keep > 0:
         dumps = sorted(backup_dir.glob(f"{cfg['dbname']}_*.sql"), reverse=True)
@@ -230,6 +249,18 @@ def db_backup(
                 typer.echo(f"  pruned: {stale.name}")
             except OSError as exc:
                 typer.echo(f"  [WARN] khong xoa duoc {stale.name}: {exc}", err=True)
+
+
+@db_app.command("drive-check")
+def db_drive_check() -> None:
+    """Kiem tra thu muc Google Drive co dung duoc khong (ADR-012)."""
+    from app.core.storage import offsite
+
+    root = offsite.get_root()
+    ok, message = offsite.check_root(root)
+    typer.echo(("[OK] " if ok else "[LOI] ") + message)
+    if not ok:
+        raise typer.Exit(code=1)
 
 
 @worker_app.command("status")

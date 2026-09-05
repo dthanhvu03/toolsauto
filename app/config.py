@@ -10,6 +10,16 @@ load_dotenv(BASE_DIR / ".env", override=False)
 
 # Storage Layout (PLAN-003)
 STORAGE_DIR = Path(os.getenv("STORAGE_DIR", str(BASE_DIR / "storage")))
+
+# --- Sao luu ngoai vi sang thu muc dong bo dam may (ADR-012) ---
+# Backup nam cung o dia voi du lieu thi hong o la mat ca hai. DRIVE_ROOT_DIR tro
+# toi thu muc Google Drive for Desktop da gan (vi du "G:/My Drive/ToolsAuto").
+# CHI chep ban dump va video da xu ly. TUYET DOI khong chep DB dang chay hay
+# profile trinh duyet: Drive dong bo lien tuc se lam hong chung.
+DRIVE_COPY_ENABLED = os.getenv("DRIVE_COPY_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+DRIVE_ROOT_DIR = os.getenv("DRIVE_ROOT_DIR", "").strip()
+DRIVE_COPY_BACKUPS = os.getenv("DRIVE_COPY_BACKUPS", "true").strip().lower() in ("1", "true", "yes")
+DRIVE_COPY_VIDEOS = os.getenv("DRIVE_COPY_VIDEOS", "false").strip().lower() in ("1", "true", "yes")
 STORAGE_DB_DIR = STORAGE_DIR / "db"
 # Runtime JSON/state (ADR: not at repo root — survives deploy git reset on untracked storage/)
 RUNTIME_CONFIG_DIR = STORAGE_DB_DIR / "config"
