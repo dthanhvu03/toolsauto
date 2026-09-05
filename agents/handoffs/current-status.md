@@ -1,5 +1,67 @@
 # Current Status
 
+## Phiên 2026-09-05 (e) — Sao lưu ngoại vi sang Google Drive (ADR-012)
+
+### Đã xong, đã push — `fdb58bb`
+
+Owner có Drive **5 TB** (dùng 24,6 GB), Drive for Desktop **đã cài nhưng chưa đăng
+nhập** (chưa gắn ổ nào).
+
+**Đóng lỗ hổng lớn nhất còn lại:** backup đang nằm **cùng ổ đĩa với dữ liệu** — hỏng
+ổ `D:` là mất cả hai, đúng thứ backup sinh ra để chống.
+
+Hai quyết định giúp việc nhỏ đi nhiều:
+- **Không dùng Drive API/OAuth.** Drive for Desktop gắn ổ như thư mục thường ⇒ chỉ
+  thao tác file. Không phải giữ khoá bí mật nào.
+- **Không phải viết UI.** Trang `/app/settings` tự sinh giao diện từ `SETTINGS` theo
+  `section`, đã có sẵn lưu hàng loạt ⇒ chỉ khai báo 4 `SettingSpec`.
+
+Ba nguyên tắc, ghi trong docstring `app/core/storage/offsite.py`:
+1. **Sao chép, không di chuyển** — bản chính luôn ở máy
+2. **Drive lỗi không làm hỏng việc chính** — chưa gắn ổ / hết dung lượng chỉ ghi log
+3. **TUYỆT ĐỐI không chép DB đang chạy hay profile trình duyệt** — Drive đồng bộ liên
+   tục, hai thứ đó ghi liên tục ⇒ hỏng dữ liệu âm thầm; profile hỏng là mất phiên
+
+Thêm `manage.py db drive-check`, sai đường dẫn thoát mã 1.
+
+### Hai lỗi TỰ GÂY trong lúc làm — đều đã vá
+
+1. **`.gitignore` nuốt mất module.** Dòng `storage/` không neo gốc nên chặn **mọi**
+   thư mục tên `storage` ở mọi độ sâu. Commit `eeb75e3` đẩy lên **thiếu hẳn**
+   `app/core/storage/` trong khi `manage.py` import nó ⇒ **CI đỏ**. Đổi thành
+   `/storage/`, commit `fdb58bb` ⇒ **CI xanh**. Đã kiểm bằng clone sạch: 39 passed.
+2. **Tiếng Việt làm chết lệnh trên Windows.** Console cp1252 ⇒ `typer.echo` tiếng
+   Việt ném `UnicodeEncodeError`. Lỗi này **đã có sẵn từ trước** — thông báo lỗi
+   `pg_dump` cũng tiếng Việt, tức backup thất bại thật thì Owner nhận traceback thay
+   vì thông báo. `manage.py` nay ép stdout/stderr UTF-8 ⇒ vá luôn cái cũ.
+
+### Trạng thái
+- Windows **258 passed**; Linux container 39 passed; **CI xanh**
+- Working tree sạch, `main` == `origin/main`
+- Tính năng ở **mức B**: mới test bằng thư mục giả lập, **chưa chạy với Drive thật**
+
+### Nợ mới tạo ra (ghi để không quên)
+- Chưa dọn bản cũ bên Drive (local giữ 14 bản, Drive tích luỹ mãi)
+- **Chưa cảnh báo khi Drive im lặng hỏng** — quên đăng nhập Drive thì backup vẫn báo
+  thành công (đúng thiết kế) nhưng bản ngoại vi không có; chỉ phát hiện lúc cần khôi
+  phục, tức muộn nhất. Đáng làm tiếp: kiểm hằng tuần + báo Telegram
+
+### Next Action — khi Owner về nhà, dùng laptop
+
+1. **Mở Google Drive for Desktop, đăng nhập** → có ổ (thường `G:`).
+   ⚠️ Chọn chế độ **truyền phát (stream)**, KHÔNG chọn **sao chép (mirror)** — ổ `C:`
+   chỉ còn **8,6 GB trống**, mirror sẽ làm đầy ổ hệ thống.
+2. Tạo `G:\My Drive\ToolsAuto` → chạy `python manage.py db drive-check`
+3. Vào `/app/settings`, nhóm **"Sao luu Google Drive"**: bật + dán đường dẫn + lưu
+4. **Dựng 2 Page theo TASK-058**, thêm quản trị viên thứ hai **trước** khi đăng bài đầu
+5. Chạy `TASK-057` (30 phút) để nâng 5 luồng từ mức B lên A
+
+### Việc riêng, không liên quan Drive
+**Ổ `C:` chỉ còn 8,6 GB trống.** Windows dưới 10 GB bắt đầu sinh lỗi lạ. Nên dọn sớm,
+độc lập với mọi việc khác.
+
+---
+
 ## Phiên 2026-09-05 (d) — Tài khoản Facebook chết; xoay lại chiến lược
 
 ### ⛔ Sự kiện lớn nhất: Owner mất tài khoản Facebook VĨNH VIỄN
