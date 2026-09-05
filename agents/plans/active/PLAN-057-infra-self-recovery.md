@@ -110,3 +110,67 @@ nếu nó sai thì `upgrade head` ngay sau sẽ đỏ.
 - [ ] Chưa lên lịch backup định kỳ (mới có lệnh chạy tay chạy đúng).
 - [ ] Container cũ `toolsauto_postgres_old_20260905` + volume ẩn danh
       `9a3acb1502…` vẫn giữ. Chỉ xoá khi Owner xác nhận đã chạy ổn vài ngày.
+
+---
+
+## Mục A CHƯA ĐÓNG — CI lộ ra lỗi thứ ba, là lỗi có sẵn trong code production
+
+Run `33936616449` (commit `a9a5267`): **`5 failed, 223 passed, 15 skipped`**.
+
+Tiến bộ có thật: trước đây fail ở bước **Install dependencies** (Python 3.10),
+nay qua được và fail ở **Run unit tests** ⇒ bản vá Python + `--ignore` đã đúng.
+
+Nhưng lộ ra **nguyên nhân thứ ba**, không liên quan hạ tầng:
+
+```
+FAILED tests/test_orphan_browser_purge.py::test_other_project_chromium_is_left_alone
+FAILED tests/test_orphan_browser_purge.py::test_personal_chrome_is_left_alone
+FAILED tests/test_orphan_browser_purge.py::test_counts_separate_instances_from_helper_processes
+FAILED tests/test_process_scan.py::test_other_project_playwright_chromium_is_not_attributed
+FAILED tests/test_process_scan.py::test_personal_chrome_is_not_attributed
+```
+
+**Xanh trên Windows, đỏ trên Linux — mà VPS chạy Linux.**
+
+### Nguyên nhân (đã chứng minh trên container Linux thật, không suy đoán)
+
+`process_scan.py:553` thêm ứng viên `str(Path(user_data_dir).resolve())` để bắt
+được profile của chính mình khi đường dẫn là tương đối. Nhưng trên POSIX,
+`.resolve()` giải một đường dẫn **tương đối** theo **CWD**, mà CWD chính là thư mục
+dự án ToolsAuto.
+
+Chạy thật trong `python:3.12-slim`:
+
+```
+cmdline của trình duyệt NGƯỜI KHÁC : C:/Users/Admin/AppData/Local/Google/Chrome/User Data
+sau .resolve() trên Linux          : /repo/C:/Users/Admin/AppData/Local/Google/Chrome/User Data
+path_is_within(resolved, proj_root): True
+=> BỊ NHẬN NHẦM LÀ BROWSER TOOLSAUTO
+```
+
+`_attribute_browser_root` trả `"profile"` cho trình duyệt của người khác ⇒ orphan
+purge của PLAN-048 **được phép kill nó**. Đây đúng là bất biến mà chính test đó lập
+ra để bảo vệ ("never touch what you cannot attribute").
+
+### Vì sao tới giờ mới lộ
+
+CI chết ở bước cài dependency từ 2026-07-29 nên **chưa bao giờ chạy tới test trên
+Linux**. Lỗi nằm im từ PLAN-048. Máy dev là Windows nên `.resolve()` không
+relativize ⇒ test xanh, che mất lỗi.
+
+### Đánh giá rủi ro thật trên VPS
+
+Điều kiện kích hoạt là một browser có `--user-data-dir` **tương đối**. Worker của
+ToolsAuto truyền đường dẫn tuyệt đối, và VPS hiếm khi có browser lạ ⇒ rủi ro hiện
+tại **thấp**, nhưng code sai và bất biến an toàn đang vỡ trên đúng nền tảng
+production.
+
+### ESCALATION
+
+`app/core/process_scan.py` là core logic — ngoài vai trò Claude Code theo CLAUDE.md.
+Theo quy tắc "Phát hiện lỗi backend → DỪNG và báo Anti": **dừng ở đây, chờ Owner
+quyết**. Không tự sửa, và **không** dán `--ignore` lên 5 test này để CI xanh giả.
+
+Hướng vá tối thiểu (khi được duyệt): chỉ thêm ứng viên `.resolve()` khi
+`user_data_dir` **đã là đường dẫn tuyệt đối**, hoặc giải tương đối theo project root
+một cách tường minh thay vì theo CWD.
