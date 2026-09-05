@@ -80,7 +80,9 @@ content/reup/
 # Unified logs
 # log files
 logs/
-storage/
+# Neo goc: chi bo qua thu muc du lieu o goc du an. Khong neo thi mau nay chan
+# MOI thu muc ten storage o moi do sau — da tung nuot ca app/core/storage/.
+/storage/
 
 
 #Ignore cursor AI rules
