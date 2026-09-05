@@ -137,13 +137,13 @@
                     input.required = true;
                     labelText.textContent = 'Ảnh hoặc video';
                     labelHint.textContent = '(bắt buộc — tin không có media thì không đăng được)';
-                    dropLabel.textContent = 'Click hoặc kéo thả ảnh (.jpg/.png/.webp) hoặc video vào đây';
+                    dropLabel.textContent = 'Click hoặc kéo thả ảnh (.jpg/.png) hoặc video vào đây';
                 } else if (kind === 'FEED') {
                     input.accept = 'image/*,video/*';
                     input.required = false;
                     labelText.textContent = 'Ảnh hoặc video';
                     labelHint.textContent = '(tùy chọn — bỏ trống là bài chữ thuần; video dài đăng ở đây)';
-                    dropLabel.textContent = 'Click hoặc kéo thả ảnh (.jpg/.png/.webp) hoặc video vào đây';
+                    dropLabel.textContent = 'Click hoặc kéo thả ảnh (.jpg/.png) hoặc video vào đây';
                 } else {
                     input.accept = 'video/*';
                     input.required = false;

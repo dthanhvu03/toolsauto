@@ -8,6 +8,14 @@ source_modules =
     app.core
 forbidden_modules =
     app.features
+ignore_imports =
+    # HUP HOP LE (ADR-008): app.adapters.dispatcher la dich vu dispatch chinh thuc,
+    # no BUOC phai biet ca 4 adapter nen tang. Moi thu import dispatcher deu keo theo
+    # toan bo features — do la thiet ke, khong phai ro ri.
+    app.adapters.dispatcher -> app.features.**
+    # NO KY THUAT THAT — can vá, dung them cai moi vao day:
+    # core khong duoc biet mot nen tang cu the.
+    app.core.observability.metrics_checker -> app.features.facebook.pages.reels
 
 [importlinter:contract:features-independent]
 name = Features should be independent
@@ -24,3 +32,10 @@ modules =
     app.features.system_panel
     app.features.accounts
     app.features.jobs
+ignore_imports =
+    # HUP HOP LE (ADR-008): di qua dispatcher la cach chinh thuc de mot feature
+    # cham toi nen tang khac.
+    app.adapters.dispatcher -> app.features.**
+    # NO KY THUAT THAT — can vá, dung them cai moi vao day:
+    app.core.observability.metrics_checker -> app.features.facebook.pages.reels
+    app.features.insights.router -> app.features.viral_intake.reup_variants

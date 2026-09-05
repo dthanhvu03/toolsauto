@@ -86,3 +86,27 @@ def test_dispatcher_marks_media_gate_as_validation():
     src = _read(DISPATCHER)
     assert "ERROR_TYPE_VALIDATION" in src
     assert "require_media=True" in src
+
+
+def test_label_does_not_promise_formats_the_backend_rejects():
+    """
+    Chữ hiển thị cho người dùng phải khớp với định dạng thật sự nhận được.
+
+    Đã lệch một lần: nhãn kéo-thả quảng cáo `.webp` trong khi
+    `accept="image/jpeg,image/png"` và `JobService.IMAGE_EXTENSIONS` đều không có
+    `.webp` — người dùng chọn file webp rồi bị chặn oan mà không hiểu vì sao.
+
+    Nhãn nói dối không làm test nào đỏ, nên phải có test riêng canh nó.
+    """
+    from app.core.queue.job import JobService
+
+    for name in ("manual_job_form.html", "create_job_form.html"):
+        src = (FRAGMENTS / name).read_text(encoding="utf-8")
+        for ext in (".webp", ".gif", ".bmp", ".heic", ".avif"):
+            assert ext not in JobService.IMAGE_EXTENSIONS, (
+                f"{ext} nay da duoc ho tro — cap nhat test nay va nhan hien thi"
+            )
+            assert ext not in src, (
+                f"{name} nhac toi {ext} nhung JobService.IMAGE_EXTENSIONS khong nhan "
+                f"({JobService.IMAGE_EXTENSIONS}) — nguoi dung se bi chan oan"
+            )

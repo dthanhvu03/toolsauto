@@ -44,6 +44,15 @@ jobs:
           ALLOW_QUERY_LOGIN: "false"
         run: pytest tests/ -q --tb=short --ignore=tests/test_threads_world_news.py
 
+      # Chan RANH GIOI MODULE khoi muc them. import-linter khai bao trong
+      # requirements.txt va co .importlinter tu lau nhung CHUA TUNG chay o dau —
+      # nen 2 vi pham that da kip tich tu. Nay dong bang hien trang bang
+      # ignore_imports co ghi ly do; vi pham MOI se lam CI do.
+      - name: Check module boundaries
+        run: |
+          pip install import-linter
+          lint-imports
+
   deploy:
     needs: test
     # Owner da NGUNG VPS tu 2026-09-05 (chi phi), ToolsAuto chay tren may local.
