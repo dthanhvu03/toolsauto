@@ -1,7 +1,7 @@
 # ADR-011 — Ngoại lệ cho Claude Code vá P0 concurrency
 
 - **Ngày soạn**: 2026-09-05
-- **Trạng thái**: ĐỀ XUẤT — **chờ Owner duyệt**, chưa có hiệu lực
+- **Trạng thái**: **ĐÃ DUYỆT** — Owner duyệt 2026-09-05, có hiệu lực
 - **Liên quan**: ADR-010 (đã hết hiệu lực sau PLAN-056), AUDIT-001, PLAN-057
 
 ## Bối cảnh
@@ -31,7 +31,7 @@ tăng tải** — tức đúng thứ Owner vừa nói muốn làm.
 | P0-1a | `app/core/queue/queue.py` | Thêm `AND status='PENDING'` ở WHERE ngoài |
 | P0-1c | `app/config.py` | `WORKER_CRASH_THRESHOLD_SECONDS` 120 → ≥1200 (phải > deadline 900) |
 | P0-1b | `alembic/versions/` (file mới) | Partial unique index `(account_id, platform)` khi `status='RUNNING'` + bắt `IntegrityError` |
-| Test | `tests/` (file mới) | TEST A, TEST B, TEST C theo đặc tả AUDIT-001 §19 |
+| Test | `tests/` (file mới) | **TEST A + TEST B** theo đặc tả AUDIT-001 §19 |
 
 **Không** đụng adapter, không đụng luồng đăng bài, không refactor tiện thể.
 
@@ -55,5 +55,10 @@ xanh và TEST B xanh-hoặc-xfail-có-lý-do. Mọi backend khác vẫn cần PL
 
 ## Quyết định của Owner
 
-- [ ] Duyệt
-- [ ] Không duyệt — chuyển sang Antigravity ra PLAN
+- [x] **Duyệt** — Owner, 2026-09-05
+
+### Siết phạm vi khi duyệt
+
+Bản nháp liệt kê cả **TEST C**, nhưng TEST C kiểm **P0-2 affiliate** — phần đó
+**không** nằm trong bảng phạm vi. Đã gỡ. ADR này chỉ phủ **P0-1** (TEST A + TEST B).
+P0-2 / TEST C tách thành bước riêng, cần quyết định riêng.

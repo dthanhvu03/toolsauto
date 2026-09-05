@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 from app.core.database.models import Job
 from app.constants import AccountStatus, JobStatus
@@ -41,7 +42,12 @@ class QueueService:
                 locked_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER),
                 last_heartbeat_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER),
                 started_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
-            WHERE id = (
+            -- `status='PENDING'` ở qual NGOÀI là bắt buộc, không thừa: khi hai worker
+            -- tranh cùng một dòng, worker thua chờ khoá rồi chạy lại EvalPlanQual trên
+            -- bản ghi MỚI. Nếu qual ngoài chỉ có `id = $0` thì nó vẫn đúng và worker
+            -- thua ghi đè job đang RUNNING -> bài bị đăng hai lần.
+            WHERE status = 'PENDING'
+              AND id = (
                 WITH last_platform_post AS (
                     SELECT account_id, platform, MAX(finished_at) AS last_ts
                     FROM jobs
@@ -91,6 +97,15 @@ class QueueService:
                     job = db.query(Job).filter(Job.id == job_id).first()
                     return job
 
+                return None
+            except IntegrityError:
+                # Partial unique index `(account_id, platform) WHERE status='RUNNING'`
+                # (ADR-011). Worker khác đã giành được account+platform này trong cùng
+                # cửa sổ; ta thua một cách hợp lệ. Không phải lỗi — trả None để worker
+                # thử lại ở nhịp sau. KHÔNG retry tại chỗ: hàng đợi không đổi trong
+                # vài giây tới nên chỉ tốn thêm một vòng tranh chấp.
+                db.rollback()
+                logger.debug("[claim_next_job] thua mutex account+platform, bỏ qua nhịp này")
                 return None
             except Exception as _e:
                 db.rollback()

@@ -103,7 +103,13 @@ if not ADMIN_USERNAME or not ADMIN_PASSWORD or not SECRET_KEY:
 
 # Worker Settings
 WORKER_TICK_SECONDS = int(os.getenv("WORKER_TICK_SECONDS", "20"))
-WORKER_CRASH_THRESHOLD_SECONDS = int(os.getenv("WORKER_CRASH_THRESHOLD_SECONDS", "120")) # 2 minutes
+# PHAI lon hon PUBLISHER_PUBLISH_DEADLINE_SEC. Nguong nay tung la 120s trong khi
+# deadline mot job la 900s, nen mot job KHOE dang giu browser (PLAN-056 cho phep
+# cho upload toi 420s cho video dai) chi can lo 2 nhip heartbeat la bi dat ve
+# PENDING roi bi worker khac claim -> dang trung bai (AUDIT-001 P0-1C).
+# Danh doi co chu y: job crash that nam lau hon truoc khi duoc recover, doi lay
+# viec khong bao gio cuop job dang chay khoe.
+WORKER_CRASH_THRESHOLD_SECONDS = int(os.getenv("WORKER_CRASH_THRESHOLD_SECONDS", "1200")) # 20 minutes
 WORKER_MAX_BATCH_SIZE = int(os.getenv("WORKER_MAX_BATCH_SIZE", "3"))
 MAX_FILES_PER_BATCH = int(os.getenv("MAX_FILES_PER_BATCH", "50"))
 SAFE_MODE = os.getenv("SAFE_MODE", "false").lower() == "true"
