@@ -80,9 +80,12 @@ jobs:
               MARKER_FILE="storage/db/.migrated_to_pg"
             fi
 
-            # Backup database before deploying
+            # Giu lai ban sao SQLite legacy (chi con y nghia lich su — DB that
+            # la Postgres, duoc dump o buoc rieng ngay truoc khi chay migration).
             mkdir -p "$BACKUP_DIR"
-            cp "$DB_SOURCE" "$BACKUP_DIR/auto_publisher_$(date +%Y%m%d_%H%M%S).db" || true
+            if [ -f "$DB_SOURCE" ]; then
+              cp "$DB_SOURCE" "$BACKUP_DIR/auto_publisher_$(date +%Y%m%d_%H%M%S).db" || true
+            fi
 
             # Fetch latest changes and reset
             git fetch origin
@@ -107,6 +110,11 @@ jobs:
             # Update Python dependencies
             source venv/bin/activate
             pip install -r requirements.txt --quiet
+
+            # Backup Postgres THAT truoc khi migrate. Buoc nay khong duoc nuot loi:
+            # migration ben duoi da fail-hard, nen deploy do ma khong co ban dump
+            # dung duoc thi coi nhu khong co duong lui.
+            python manage.py db backup
 
             # Run database schema migrations (Alembic)
             python manage.py db stamp-if-needed || true

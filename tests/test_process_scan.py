@@ -6,6 +6,8 @@ ownership evidence, and the "never touch what you cannot attribute" rule.
 """
 from __future__ import annotations
 
+import os
+
 import app.config as config
 from app.core import process_scan
 from app.core.process_scan import (
@@ -13,6 +15,7 @@ from app.core.process_scan import (
     ProcessSnapshot,
     cmdline_matches_spec,
     extract_user_data_dir,
+    is_absolute_elsewhere,
     is_toolsauto_entrypoint,
     parse_entrypoint,
     path_is_within,
@@ -254,6 +257,35 @@ def test_personal_chrome_is_not_attributed():
     )
     snap = ProcessSnapshot([personal])
     assert snap.browser_attribution(snap.get(80)) is None
+
+
+def test_foreign_absolute_path_is_never_resolved_onto_our_cwd():
+    """
+    Regression: a --user-data-dir that only ANOTHER OS calls absolute must not be
+    fed to Path.resolve(), which rebases it onto the current directory.
+
+    On Linux "C:/Users/.../Chrome" is a *relative* path, so resolve() turned it
+    into "<project_root>/C:/Users/.../Chrome" -- inside our project root -- and
+    a stranger's browser was attributed to ToolsAuto, letting the orphan purge
+    kill it. The mirror case is "/home/..." on Windows, which is drive-relative
+    there. Both spellings must be rejected wherever they are not native.
+    """
+    windows_spelling = "C:/Users/Admin/AppData/Local/Google/Chrome/User Data"
+    posix_spelling = "/home/someone/.config/chromium"
+
+    if os.name == "nt":
+        # Native here: safe to resolve. The foreign one is the POSIX spelling.
+        assert not is_absolute_elsewhere(windows_spelling)
+        assert is_absolute_elsewhere(posix_spelling)
+    else:
+        assert is_absolute_elsewhere(windows_spelling)
+        assert not is_absolute_elsewhere(posix_spelling)
+
+    # A genuinely relative path stays resolvable on both platforms -- that is the
+    # case test_browser_with_relative_profile_path_is_attributed depends on.
+    assert not is_absolute_elsewhere("storage/profiles/acc_1")
+    assert not is_absolute_elsewhere(None)
+    assert not is_absolute_elsewhere("")
 
 
 def test_browser_root_vs_renderer():

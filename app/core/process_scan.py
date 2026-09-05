@@ -20,6 +20,7 @@ Attribution rules for browsers (deliberately conservative):
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Iterator, Optional, Sequence
@@ -250,6 +251,34 @@ def profile_roots() -> tuple[str, ...]:
         if normalized and normalized not in roots:
             roots.append(normalized)
     return tuple(roots)
+
+
+_WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:/")
+
+
+def is_absolute_elsewhere(value: str | None) -> bool:
+    """
+    True when `value` is absolute for a *different* OS than the one we run on,
+    and therefore parsed as RELATIVE here.
+
+    This matters because `Path.resolve()` rebases a relative path onto the
+    current working directory -- which for a scan is the project root. Without
+    this guard, someone else's `--user-data-dir=C:/Users/.../Chrome` resolves to
+    `<project_root>/C:/Users/.../Chrome` on Linux and is misread as ours, so the
+    orphan purge would be allowed to kill a browser we do not own.
+
+    Windows spelling ("C:/x") is relative on POSIX; POSIX spelling ("/x") is
+    drive-relative on Windows. Both are rejected; a path this OS calls absolute
+    is fine, because resolving it never consults the CWD.
+    """
+    if not value:
+        return False
+    text = str(value).strip().strip('"').replace("\\", "/")
+    if not text:
+        return False
+    if Path(text).is_absolute():
+        return False
+    return bool(_WINDOWS_ABS_RE.match(text)) or text.startswith("/")
 
 
 def path_is_within(child: str | os.PathLike[str] | None, parent: str) -> bool:
@@ -547,12 +576,15 @@ class ProcessSnapshot:
         if not user_data_dir:
             return None
         # Compare the raw value first, then the resolved one so a relative path
-        # or a symlinked profile dir is still recognised as ours.
+        # or a symlinked profile dir is still recognised as ours. Skip resolving
+        # a path that only another OS calls absolute: resolve() would rebase it
+        # onto our CWD and attribute a foreign browser to us.
         candidates = [user_data_dir]
-        try:
-            candidates.append(str(Path(user_data_dir).resolve()))
-        except OSError:
-            pass
+        if not is_absolute_elsewhere(user_data_dir):
+            try:
+                candidates.append(str(Path(user_data_dir).resolve()))
+            except OSError:
+                pass
         roots = (*self._profile_roots, self._project_root)
         for candidate in candidates:
             if any(path_is_within(candidate, root) for root in roots):

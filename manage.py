@@ -152,7 +152,11 @@ def _parse_db_url(url: str) -> dict:
 
 
 @db_app.command("backup")
-def db_backup() -> None:
+def db_backup(
+    keep: int = typer.Option(
+        14, "--keep", help="Giu lai N ban dump moi nhat, 0 = giu tat ca."
+    ),
+) -> None:
     """Dump database ra storage/db/backups/<db>_<timestamp>.sql.
 
     Postgres: dùng pg_dump trên PATH, nếu không có thì fallback `docker exec` vào
@@ -216,6 +220,16 @@ def db_backup() -> None:
         raise typer.Exit(code=1)
 
     typer.echo(f"Backed up ({how}): {dest} ({size:,} bytes)")
+
+    # Don dump cu de o dia VPS khong day dan — backup lam sap dia thi phan tac dung.
+    if keep > 0:
+        dumps = sorted(backup_dir.glob(f"{cfg['dbname']}_*.sql"), reverse=True)
+        for stale in dumps[keep:]:
+            try:
+                stale.unlink()
+                typer.echo(f"  pruned: {stale.name}")
+            except OSError as exc:
+                typer.echo(f"  [WARN] khong xoa duoc {stale.name}: {exc}", err=True)
 
 
 @worker_app.command("status")

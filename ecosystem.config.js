@@ -83,6 +83,20 @@ module.exports = {
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
+      // Backup Postgres hang ngay 03:00. autorestart:false + cron_restart => PM2
+      // chi danh thuc dung gio roi de tien trinh thoat, khong chay lien tuc.
+      // Truoc day khong co lich backup nao; lenh backup thu cong lai dump nham
+      // file SQLite legacy nen thuc te he thong chua tung co ban luu nao dung.
+      name: "DB_Backup",
+      script: "manage.py",
+      args: "db backup --keep 14",
+      interpreter: VENV_PYTHON,
+      cwd: PROJECT_ROOT,
+      autorestart: false,
+      cron_restart: "0 3 * * *",
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
+    },
+    {
       name: "9Router_Gateway",
       script: routerPath,
       interpreter: "node",
