@@ -83,6 +83,9 @@ module.exports = {
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
     {
+      // CHI CHAY TREN VPS - may local khong dung PM2 (start.ps1 -Stack ->
+      // local_supervisor.py). Lich backup o local dang ky bang Task Scheduler:
+      //   scripts/register_backup_task.ps1
       // Backup Postgres hang ngay 03:00. autorestart:false + cron_restart => PM2
       // chi danh thuc dung gio roi de tien trinh thoat, khong chay lien tuc.
       // Truoc day khong co lich backup nao; lenh backup thu cong lai dump nham
