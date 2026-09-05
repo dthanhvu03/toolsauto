@@ -174,3 +174,60 @@ quyết**. Không tự sửa, và **không** dán `--ignore` lên 5 test này đ
 Hướng vá tối thiểu (khi được duyệt): chỉ thêm ứng viên `.resolve()` khi
 `user_data_dir` **đã là đường dẫn tuyệt đối**, hoặc giải tương đối theo project root
 một cách tường minh thay vì theo CWD.
+
+---
+
+## Cập nhật 2026-09-05 (b) — mục A ĐÓNG phần test; lộ blocker cuối là SSH
+
+Commit `9996f4c`. Run `33937825138`:
+
+```
+job "test"   : success   <-- LẦN ĐẦU XANH kể từ 2026-07-29
+job "deploy" : failure   <-- ssh: handshake failed: unable to authenticate
+```
+
+### Lỗi attribution đã vá + chứng minh nhân quả
+
+`process_scan.py` gọi `.resolve()` cho mọi `--user-data-dir`. Trên POSIX
+`"C:/Users/.../Chrome"` là **tương đối**, nên `.resolve()` rebase nó lên CWD (thư mục
+dự án) ⇒ browser người khác thành `"profile"` của ToolsAuto ⇒ orphan purge được phép
+kill. Vá bằng `is_absolute_elsewhere()`: **thu hẹp** chứ không xoá `.resolve()`, vì
+`test_browser_with_relative_profile_path_is_attributed` cần nó cho đường dẫn tương
+đối thật.
+
+Chạy trong container `python:3.12-slim`:
+- code cũ → **5 failed, 41 passed** (đúng 5 test CI báo)
+- code mới → **47 passed**
+- Windows → **244 passed**, không hồi quy
+
+Thêm `test_foreign_absolute_path_is_never_resolved_onto_our_cwd`, có nhánh theo nền
+tảng nên **Windows cũng bắt được** — trước đây máy dev Windows không thể lộ lỗi này.
+
+### Quy trình mới: verify trên Linux trước khi push
+Lỗi lọt lưới 5 tuần vì máy dev là Windows. Nay chạy suite trong container Linux
+trước, không đẩy lên rồi chờ CI đoán.
+
+### Backup: xong cả lịch lẫn retention
+- PM2 app `DB_Backup`, `cron_restart "0 3 * * *"`, `autorestart:false`.
+- `db backup --keep 14` dọn dump cũ (đã chạy thật: prune đúng file cũ nhất).
+- `deploy.yml` thêm `manage.py db backup` **ngay trước migration**. Bước cũ dòng 85
+  chỉ `cp` file SQLite legacy — **cùng đúng lỗi backup nhầm đích**. Migration nay
+  fail-hard nên deploy đỏ mà không có dump dùng được là mất đường lui.
+
+## BLOCKER cuối — chỉ Owner xử được
+
+`ssh: handshake failed: unable to authenticate, attempted methods [none publickey]`
+
+Kết nối SSH **không xác thực được**, script deploy **chưa hề chạy** trên VPS.
+`VPS_HOST` / `VPS_USER` / `VPS_SSH_KEY` đều tồn tại nhưng đặt từ **2026-03-27**.
+Nguyên nhân khả dĩ: key đã xoay trên VPS, VPS dựng lại, hoặc user đổi.
+
+Claude Code **không có quyền truy cập VPS lẫn private key** ⇒ không kiểm chứng được
+từ đây. Cần Owner: thử `ssh` tay vào VPS, rồi cập nhật `VPS_SSH_KEY` (và
+`VPS_HOST`/`VPS_USER` nếu đổi).
+
+## Trạng thái Definition of Done
+- [x] A — CI **test job xanh** (run 33937825138). Pipeline đầy đủ còn chờ SSH.
+- [x] B — `|| true` đã gỡ khỏi `upgrade head`
+- [x] C — compose + `restart: unless-stopped`, dựng lại được, dữ liệu khớp 100%
+- [x] D — `pg_dump` thật, restore đã chứng minh, có lịch + retention

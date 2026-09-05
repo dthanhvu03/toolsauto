@@ -1,5 +1,42 @@
 # Current Status
 
+## Phiên 2026-09-05 (b) — PLAN-057 xong; blocker cuối là SSH key
+
+### Kết quả
+- **CI test job XANH lần đầu kể từ 2026-07-29** (run `33937825138`, commit `9996f4c`).
+- **PLAN-057 đóng cả 4 mục A/B/C/D.**
+- Deploy vẫn chưa chạy được: `ssh: handshake failed: unable to authenticate`.
+  Script deploy **chưa hề chạy** trên VPS. Secrets `VPS_HOST`/`VPS_USER`/`VPS_SSH_KEY`
+  tồn tại nhưng đặt từ **2026-03-27**. Claude Code không có quyền truy cập VPS lẫn
+  private key ⇒ **chỉ Owner xử được**.
+
+### Vá lỗi attribution trên Linux (lỗi có sẵn từ PLAN-048)
+`process_scan.py` `.resolve()` mọi `--user-data-dir`; trên POSIX `"C:/..."` là tương
+đối nên bị rebase lên CWD = thư mục dự án ⇒ browser người khác bị nhận là của
+ToolsAuto ⇒ orphan purge được phép kill. Vá bằng `is_absolute_elsewhere()` (thu hẹp,
+không xoá `.resolve()` vì test đường-dẫn-tương-đối cần nó).
+
+Proof nhân quả trong container Linux: code cũ **5 failed**, code mới **47 passed**;
+Windows **244 passed**. Thêm test có nhánh theo nền tảng để Windows cũng bắt được.
+
+### Quy trình mới
+Lỗi lọt lưới 5 tuần vì máy dev Windows. Nay **chạy suite trong container Linux trước
+khi push**, không đẩy lên rồi chờ CI đoán.
+
+### Backup — xong trọn
+PM2 `DB_Backup` cron `0 3 * * *`; `--keep 14` retention; `deploy.yml` dump Postgres
+**ngay trước migration** (bước cũ chỉ `cp` file SQLite legacy — cùng lỗi nhầm đích).
+
+### Next Action
+1. **Owner: sửa SSH.** `ssh` tay vào VPS rồi cập nhật `VPS_SSH_KEY`. Đây là thứ duy
+   nhất còn chặn lần deploy đầu tiên sau 5 tuần.
+2. **Owner: duyệt ADR-011** để sang Việc 2 (P0-1 concurrency).
+3. **Owner: đổi mật khẩu + đăng xuất phiên FB/IG/TikTok** — nợ từ PLAN-051, vẫn chưa làm.
+4. Xoá `toolsauto_postgres_old_20260905` + volume `9a3acb1502…` sau vài ngày chạy ổn.
+5. Verify live 4 luồng PLAN-053→056.
+
+---
+
 ## Phiên 2026-09-05 — PLAN-057: hạ tầng tự phục hồi (Việc 1)
 
 Owner giao "nâng cấp hệ thống để chạy trơn tru" → chia 3 việc, làm theo thứ tự.
