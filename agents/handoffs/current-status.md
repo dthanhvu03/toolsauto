@@ -1,5 +1,76 @@
 # Current Status
 
+## Phiên 2026-09-05 (d) — Tài khoản Facebook chết; xoay lại chiến lược
+
+### ⛔ Sự kiện lớn nhất: Owner mất tài khoản Facebook VĨNH VIỄN
+
+- Bài cuối đăng được: **2026-07-31 09:03 UTC**. Từ đó im lặng hoàn toàn.
+- Tổng đời tool: **4 bài** (3 POST + 1 COMMENT), trên **1 account**.
+- **Mất theo 3 Page**: Mẹ Sún Riviu, Da Đẹp Lì Tu (`kids0810`), Chàng nông dân.
+  Kiểm ở cửa sổ ẩn danh: không xem được.
+- Nguyên nhân **chưa chứng minh được**, giả thuyết mạnh nhất: cookie phiên bị commit
+  công khai lên GitHub 25/04, phơi ~3,5 tháng; account tên "FB Cookie Import"; chết
+  đúng trong khoảng đó.
+
+### Lỗ hổng lộ ra: tool KHÔNG BIẾT account chết
+
+`login_status` vẫn `ACTIVE`, `login_error` rỗng, `last_login_check` **chưa từng chạy**.
+Owner mất **5 tuần** mới biết, và chỉ vì Claude hỏi. Bật stack lên là tool sẽ mở
+browser đăng nhập lại vào tài khoản bị khoá — làm tình hình nặng thêm.
+
+**Đã xử lý ngay** (có backup trước, `toolsauto_db_20260905_172038.sql`):
+`accounts.id=2` → `is_active=false`, `login_status='INVALID'`, ghi `login_error`.
+Xác minh: **0 job claim được**. Không xoá gì, cả 14 job còn nguyên.
+Hoàn tác: `UPDATE accounts SET is_active=true, login_status='ACTIVE', login_error=NULL WHERE id=2`
+
+### Xoay chiến lược — Owner chốt hướng C (nghĩ lại cách tiếp cận)
+
+Con số ép phải xoay: phần **không đụng Facebook** (xưởng nội dung) chạy sạch
+**11/11, 0 lỗi**. Phần **đụng Facebook** (tự động đăng) chạy 3 ngày rồi mất tài sản.
+Tự động đăng tiết kiệm ~6 phút/ngày; xưởng nội dung tiết kiệm 20–30 phút/video.
+
+**Hướng đã chốt:**
+1. Cấu trúc trước (Business Manager, ≥2 admin, tài khoản chạy tool chỉ Biên tập viên)
+2. Dùng tool cho xưởng nội dung, **đăng tay**
+3. Quay lại tự động đăng sau, khi Page đã an toàn trong BM
+
+### Đính chính: tool CHƯA có khách nào
+
+Claude suy sai từ "combo Page Master" / "trước khi bán tiếp" trong handoff, kết luận
+đang có khách chịu rủi ro. Owner xác nhận **chỉ mình Owner dùng**. Handoff ghi *ý
+định*, không phải *thực tế* — bài học: hỏi câu một nghĩa.
+
+May mắn thật sự: sai lầm cấu trúc này trả bằng tài sản của Owner, **không phải của
+khách**.
+
+### Tài liệu mới — `docs/sales/`
+
+| File | Dùng để |
+|---|---|
+| `00-doi-chieu-thuc-luc.md` | Mỗi lời quảng cáo truy về một bằng chứng. 4 mức A/B/C/D. **Luật: B chỉ lên A khi đã chạy thật, test xanh KHÔNG đủ** |
+| `01-mo-ta-combo-da-sua.md` | Gỡ "giỏ hàng" (0 dòng code) + "link aff đếm click" (P0-2 hỏng); siết "tìm theo từ khoá" về TikTok; bỏ Douyin |
+| `02-checklist-thiet-lap-an-toan.md` | **Owner làm cho chính mình trước** khi dựng lại Page |
+| `03-kich-ban-nhan-khach-cu.md` | ⏸ CHƯA DÙNG TỚI — soạn sẵn cho khi có khách đầu tiên |
+
+`TASK-057` — runbook 30 phút chạy thật 5 luồng mức B, có bảng ghi kết quả.
+
+### Next Action
+
+1. **Owner: dựng cấu trúc theo `02`** — BM, Page trong BM, ≥2 admin, tài khoản chạy
+   tool chỉ Biên tập viên. 15 phút, miễn phí, chặn đúng lỗi đã mất 3 Page.
+2. **Owner: chạy TASK-057** — 30 phút, nâng 5 mục B→A, biết chắc cái nào còn chạy.
+3. Dùng tool cho xưởng nội dung, đăng tay.
+4. Sau đó mới tính: phát hiện khoá tài khoản (backend, cần ADR), P0-2 affiliate,
+   thêm nguồn video.
+
+### KHÔNG còn là ưu tiên
+
+- ~~Sửa `VPS_SSH_KEY`~~ — Owner ngừng VPS, chạy local
+- ~~Thêm nguồn video~~ — chưa có Page thì thêm nguồn chỉ tăng hàng tồn
+- ~~Nhắn khách~~ — chưa có khách
+
+---
+
 ## Phiên 2026-09-05 (c) — PLAN-058: vá P0-1 concurrency (Việc 2)
 
 Owner duyệt **ADR-011** 2026-09-05, siết phạm vi còn **P0-1** (bỏ TEST C/P0-2).
