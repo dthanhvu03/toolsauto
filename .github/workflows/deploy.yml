@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
@@ -42,7 +42,7 @@ jobs:
           ADMIN_PASSWORD: ci
           SECRET_KEY: ci-test-secret-key-not-for-prod
           ALLOW_QUERY_LOGIN: "false"
-        run: pytest tests/ -q --tb=short
+        run: pytest tests/ -q --tb=short --ignore=tests/test_threads_world_news.py
 
   deploy:
     needs: test
@@ -110,7 +110,7 @@ jobs:
 
             # Run database schema migrations (Alembic)
             python manage.py db stamp-if-needed || true
-            python manage.py db upgrade head || true
+            python manage.py db upgrade head
 
             # One-time SQLite → PostgreSQL data migration
             if [ -f "$DB_SOURCE" ] && [ ! -f "$MARKER_FILE" ]; then

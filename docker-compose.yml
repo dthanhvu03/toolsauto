@@ -1,0 +1,37 @@
+# Postgres cho ToolsAuto.
+#
+# Trước đây container được tạo tay bằng `docker run` với anonymous volume và
+# RestartPolicy=no. Hậu quả: máy reboot là DB không lên lại, hệ thống chết im
+# lặng — đã xảy ra 2 lần (10 ngày phát hiện 2026-08-11, 13 ngày phát hiện
+# 2026-09-04) và lần thứ 3 ngay trong phiên 2026-09-05.
+#
+#   docker compose up -d      # dựng / khởi động
+#   docker compose ps         # xem trạng thái + health
+#   docker compose down       # dừng (KHÔNG xoá volume)
+#
+# `down -v` sẽ XOÁ dữ liệu. Backup trước bằng: python manage.py db backup
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: toolsauto_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: ${POSTGRES_DB:-toolsauto_db}
+    ports:
+      # Cổng host 5434 khớp DATABASE_URL trong .env / .env.example
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - toolsauto_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-toolsauto_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  toolsauto_pgdata:
+    name: toolsauto_pgdata

@@ -137,19 +137,85 @@ def db_revision(
         _alembic(["revision", "-m", message])
 
 
+def _parse_db_url(url: str) -> dict:
+    """Tách DATABASE_URL kiểu SQLAlchemy thành tham số kết nối cho pg_dump."""
+    from urllib.parse import unquote, urlparse
+
+    parsed = urlparse(url.replace("postgresql+psycopg2://", "postgresql://"))
+    return {
+        "user": unquote(parsed.username or "postgres"),
+        "password": unquote(parsed.password or ""),
+        "host": parsed.hostname or "localhost",
+        "port": str(parsed.port or 5432),
+        "dbname": (parsed.path or "/").lstrip("/") or "postgres",
+    }
+
+
 @db_app.command("backup")
 def db_backup() -> None:
-    """Copy DB file to data/auto_publisher.db.bak.<timestamp> (or same pattern for custom DB_PATH)."""
-    from app.config import DB_PATH
+    """Dump database ra storage/db/backups/<db>_<timestamp>.sql.
 
-    src = Path(DB_PATH)
-    if not src.is_file():
-        typer.echo(f"Database file not found: {src}", err=True)
-        raise typer.Exit(code=1)
+    Postgres: dùng pg_dump trên PATH, nếu không có thì fallback `docker exec` vào
+    container (tên lấy từ env POSTGRES_CONTAINER, mặc định toolsauto_postgres).
+    SQLite legacy: copy file như cũ.
+
+    Thất bại thì thoát khác 0. Trước đây lệnh này copy2(DB_PATH) — tức là backup
+    file SQLite legacy chứ không phải Postgres đang chạy — mà vẫn in thành công.
+    """
+    from app.config import DATABASE_URL, DB_PATH
+
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest = src.parent / f"{src.name}.bak.{ts}"
-    shutil.copy2(src, dest)
-    typer.echo(f"Backed up: {dest}")
+
+    if not DATABASE_URL.startswith("postgres"):
+        src = Path(DB_PATH)
+        if not src.is_file():
+            typer.echo(f"Database file not found: {src}", err=True)
+            raise typer.Exit(code=1)
+        dest = src.parent / f"{src.name}.bak.{ts}"
+        shutil.copy2(src, dest)
+        typer.echo(f"Backed up (sqlite): {dest}")
+        return
+
+    cfg = _parse_db_url(DATABASE_URL)
+    backup_dir = Path("storage/db/backups")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    dest = backup_dir / f"{cfg['dbname']}_{ts}.sql"
+
+    env = os.environ.copy()
+    if cfg["password"]:
+        env["PGPASSWORD"] = cfg["password"]
+
+    if shutil.which("pg_dump"):
+        cmd = ["pg_dump", "-h", cfg["host"], "-p", cfg["port"],
+               "-U", cfg["user"], "-d", cfg["dbname"], "--no-owner", "--no-acl"]
+        how = "pg_dump"
+    elif shutil.which("docker"):
+        container = os.getenv("POSTGRES_CONTAINER", "toolsauto_postgres")
+        cmd = ["docker", "exec"]
+        if cfg["password"]:
+            cmd += ["-e", f"PGPASSWORD={cfg['password']}"]
+        cmd += [container, "pg_dump", "-U", cfg["user"], "-d", cfg["dbname"],
+                "--no-owner", "--no-acl"]
+        how = f"docker exec {container}"
+    else:
+        typer.echo("Không tìm thấy pg_dump lẫn docker — không thể backup Postgres.", err=True)
+        raise typer.Exit(code=1)
+
+    with open(dest, "wb") as fh:
+        proc = subprocess.run(cmd, stdout=fh, stderr=subprocess.PIPE, env=env, check=False)
+
+    if proc.returncode != 0:
+        dest.unlink(missing_ok=True)
+        typer.echo(f"pg_dump thất bại ({how}): {proc.stderr.decode(errors='replace').strip()}", err=True)
+        raise typer.Exit(code=1)
+
+    size = dest.stat().st_size
+    if size == 0:
+        dest.unlink(missing_ok=True)
+        typer.echo(f"pg_dump trả về file rỗng ({how}) — coi như thất bại.", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo(f"Backed up ({how}): {dest} ({size:,} bytes)")
 
 
 @worker_app.command("status")
