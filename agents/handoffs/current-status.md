@@ -1,5 +1,77 @@
 # Current Status
 
+## Phiên 2026-09-05 — PLAN-057: hạ tầng tự phục hồi (Việc 1)
+
+Owner giao "nâng cấp hệ thống để chạy trơn tru" → chia 3 việc, làm theo thứ tự.
+**Việc 1 (hạ tầng) xong 3/4 mục.** Việc 2 (P0-1) chờ duyệt ADR-011.
+
+### System State (2026-09-05)
+
+- Postgres nay chạy bằng **`docker-compose.yml`**, `restart: unless-stopped`,
+  healthcheck, **named volume `toolsauto_pgdata`**. `docker inspect` xác nhận
+  `healthy | restart=unless-stopped`.
+- Container cũ **còn nguyên làm đường lùi**: `toolsauto_postgres_old_20260905`
+  (đã dừng) + anonymous volume `9a3acb1502…`. **Chưa xoá.**
+- Alembic `i7d4e5f6a7b8 (head)`. 26 bảng / 440 row. jobs=14, accounts=1.
+- Test local: **243 passed**. Test trên CI (Linux): **5 failed, 223 passed, 15 skipped**.
+- Stack vẫn TẮT. 4 luồng live PLAN-053→056 vẫn chưa verify thật.
+
+### Done This Session
+
+| Mục | Việc | Proof |
+|---|---|---|
+| **B** | Gỡ `\|\| true` khỏi `db upgrade head` | `deploy.yml:113`; migration hỏng nay làm deploy đỏ |
+| **C** | `docker-compose.yml` + `restart: unless-stopped` | Chuyển anonymous→named volume: 26 bảng/440 row, `diff` rỗng. `down`→`up -d`: healthy, jobs=14 còn nguyên |
+| **D** | `manage.py db backup` dùng `pg_dump` thật | Dump 115.081 bytes; **restore thật vào DB tạm: 26 bảng/440 row, `diff` rỗng**; thất bại nay thoát khác 0 |
+| A (một nửa) | Python 3.10→3.12 + `--ignore` file test hỏng | CI qua được **Install dependencies** — bước đã chết từ 2026-07-29 |
+
+Commit: `a9a5267` (code), `2dada07` (proof + ADR-011).
+
+### Sự cố tự chứng minh
+
+Đầu phiên Postgres **lại tắt** — lần thứ **3** (10 ngày → 13 ngày → qua đêm).
+Chính là thứ mục C sửa.
+
+### ⚠️ CHẶN — CI vẫn đỏ vì lỗi CÓ SẴN, không phải lỗi hạ tầng
+
+Run `33936616449`: 5 test **xanh trên Windows, đỏ trên Linux** — mà **VPS chạy Linux**.
+
+`process_scan.py:553` thêm ứng viên `Path(user_data_dir).resolve()`. Trên POSIX,
+`.resolve()` giải đường dẫn **tương đối theo CWD**, mà CWD là thư mục dự án ⇒ browser
+của **người khác** bị nhận nhầm là của ToolsAuto ⇒ orphan purge PLAN-048 **được phép
+kill nó**. Đúng bất biến mà chính test đó lập ra để bảo vệ.
+
+Chứng minh trong container `python:3.12-slim` (không suy đoán):
+`C:/Users/.../User Data` → `/repo/C:/Users/.../User Data` → `within(project_root)=True`.
+
+Nằm im từ PLAN-048 vì CI chết ở bước cài dependency nên **chưa từng chạy test trên
+Linux**; máy dev Windows nên `.resolve()` không relativize ⇒ test xanh, che mất lỗi.
+
+**Đã DỪNG theo quy tắc escalation** — `process_scan.py` là core logic, ngoài vai trò
+Claude Code. **Không tự sửa, không dán `--ignore` để CI xanh giả.**
+
+### Chờ Owner quyết — 3 việc
+
+1. **Lỗi `process_scan` trên Linux**: cho Claude Code vá, hay chuyển Antigravity ra
+   PLAN? Hướng vá tối thiểu: chỉ `.resolve()` khi đường dẫn đã tuyệt đối, hoặc giải
+   tương đối theo project root tường minh thay vì theo CWD.
+2. **ADR-011** (đã soạn, trạng thái ĐỀ XUẤT): xin ngoại lệ vá P0-1 concurrency —
+   `queue.py` outer predicate, `config.py` ngưỡng recovery, migration partial unique
+   index, + TEST A/B/C.
+3. **Đổi mật khẩu + đăng xuất mọi phiên FB/IG/TikTok** — nợ từ PLAN-051, cookie phiên
+   thật đã phơi public 3,5 tháng và **đến giờ vẫn chưa vô hiệu hoá**.
+
+### Next Action
+
+1. Owner quyết 3 việc trên.
+2. Sau khi vá `process_scan` → CI phải **xanh trên run thật** thì mục A mới đóng,
+   và đó cũng là lần deploy đầu tiên kể từ 2026-07-29.
+3. Lên lịch backup định kỳ (hiện mới có lệnh chạy tay đã chứng minh đúng).
+4. Xoá `toolsauto_postgres_old_20260905` + volume `9a3acb1502…` sau khi chạy ổn vài ngày.
+5. Verify live 4 luồng PLAN-053→056 (cần Owner mở trình duyệt).
+
+---
+
 ## Phiên 2026-09-04 — kiểm tra dự án + đưa diff treo lên main
 
 ### System State (2026-09-04)
