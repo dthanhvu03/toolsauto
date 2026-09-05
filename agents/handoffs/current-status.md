@@ -1,5 +1,57 @@
 # Current Status
 
+## Phiên 2026-09-05 (c) — PLAN-058: vá P0-1 concurrency (Việc 2)
+
+Owner duyệt **ADR-011** 2026-09-05, siết phạm vi còn **P0-1** (bỏ TEST C/P0-2).
+
+### Ba bất biến đã đóng, mỗi cái một bản vá
+
+| | Bản vá | Proof |
+|---|---|---|
+| **A** 1 job → 1 worker | `AND status='PENDING'` ở qual NGOÀI (`queue.py`) | code cũ: *"worker thua vẫn claim được job 250 đang RUNNING"* → sau vá: xanh |
+| **B** 1 (account,platform) → ≤1 RUNNING | migration `j8e5f6a7b8c9` partial unique index + bắt `IntegrityError` | sau vá A, chưa index: *"2 job cùng RUNNING"* — **đỏ đúng như AUDIT-001 dự đoán** → sau index: xanh |
+| **C** không cướp job đang chạy | `WORKER_CRASH_THRESHOLD_SECONDS` 120 → **1200** | `WORKER_CRASH_THRESHOLD_SECONDS=120 pytest` → 2 failed (chốt bắt được hồi quy) |
+
+Index trên DB thật:
+`CREATE UNIQUE INDEX uq_jobs_one_running_per_account_platform ON public.jobs
+(account_id, platform) WHERE status = 'RUNNING'`
+
+Suite: Windows **248 passed**; Linux container **49 passed, 2 skipped**.
+CI run `33940883613`: job `test` **success**.
+
+### Bài học: test race đầu tiên XANH GIẢ
+
+Bản đầu dùng `threading.Barrier` cho 2 session và **xanh trên code chưa vá** — cửa
+sổ race chỉ vài trăm micro-giây, `SessionLocal()` kết nối lười nên sau barrier vẫn
+lệch vài ms. Nếu tin nó thì đã tuyên bố "đã vá" trong khi chưa chứng minh gì.
+
+Đã đổi sang dựng **tất định** đúng trạng thái race tạo ra: T1 `UPDATE → RUNNING`
+chưa commit, T2 chạy `claim_next_job` rồi chặn ở khoá dòng (A) hoặc khoá index (B),
+T1 commit. Không phụ thuộc lịch OS.
+
+**Lệch có chủ ý so với §19**: TEST B đặt `schedule_ts` **lệch** thay vì bằng nhau.
+Hoà khoá sắp xếp thì claim chọn dòng nào là không xác định ⇒ test chập chờn.
+
+### ⚠️ Hạn chế — P0-1 CHƯA được bảo vệ trên CI
+
+TEST A/B mang `pytest.mark.integration`, tự skip khi không có Postgres. Runner
+GitHub Actions **không có Postgres** ⇒ trên CI chúng **luôn skip**. Bất biến chỉ được
+kiểm khi chạy tay trên máy có DB.
+
+Cách đóng: thêm `services: postgres:16` vào job `test` trong `deploy.yml`. Đó là
+`deploy.yml`, **ngoài phạm vi ADR-011** nên chưa làm — cần Owner cho phép.
+
+### Next Action
+
+1. **Owner: sửa `VPS_SSH_KEY`** — vẫn là thứ duy nhất chặn deploy (5 tuần).
+2. **Owner: cho phép thêm `services: postgres` vào CI** để TEST A/B thật sự chạy.
+3. **Owner: đổi mật khẩu + đăng xuất phiên FB/IG/TikTok** — nợ từ PLAN-051, chưa làm.
+4. P0-2 affiliate + TEST C — đã tách khỏi ADR-011, cần quyết riêng.
+5. Xoá `toolsauto_postgres_old_20260905` + volume `9a3acb1502…` sau vài ngày ổn.
+6. Verify live 4 luồng PLAN-053→056.
+
+---
+
 ## Phiên 2026-09-05 (b) — PLAN-057 xong; blocker cuối là SSH key
 
 ### Kết quả
