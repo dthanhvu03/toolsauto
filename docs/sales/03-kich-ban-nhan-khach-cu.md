@@ -1,5 +1,16 @@
 # Nhắn khách đã mua — về tính năng chưa có và về an toàn tài khoản
 
+> ## ⏸ CHƯA DÙNG TỚI — tính tới 2026-09-05 **chưa có khách nào**
+>
+> Owner xác nhận tool hiện **chỉ mình Owner dùng**. Tài liệu này soạn sẵn cho lúc
+> bắt đầu bán, không phải để gửi bây giờ.
+>
+> **Điều kiện kích hoạt:** có khách đầu tiên trả tiền. Khi đó gửi PHẦN B (an toàn
+> tài khoản) ngay từ lúc bàn giao — như vậy không bao giờ phải dùng tới PHẦN A.
+>
+> Cách tránh PHẦN A vĩnh viễn: **chỉ bán những mục ở mức A** trong
+> `00-doi-chieu-thuc-luc.md`. Không hứa mức B, C, D thì không có gì phải đính chính.
+
 > **Bản nháp, Owner chỉnh giọng cho hợp cách mình nói chuyện.**
 >
 > Hai chuyện khác hẳn nhau về mức độ, **đừng gộp vào một tin nhắn**:

@@ -1,6 +1,10 @@
 # Thiết lập an toàn trước khi chạy tool — 5 bước, 15 phút
 
-> Gửi kèm cho mọi khách hàng, **trước** khi họ chạy tool lần đầu.
+> **Owner làm trước tiên, cho chính mình.** Tài khoản Facebook của Owner bị khoá
+> vĩnh viễn 31/07/2026 và mất theo 3 Page vì đúng lỗi cấu trúc mà checklist này
+> chặn. Dựng lại thì làm đúng ngay từ bước đầu.
+>
+> Sau này có khách thì gửi kèm cho khách, trước khi họ chạy tool lần đầu.
 
 Làm xong 5 bước này, nếu tài khoản chạy tool bị Facebook khoá thì bạn **mất tài
 khoản đó thôi — Page và toàn bộ nội dung vẫn còn**, bạn vào lại bằng tài khoản khác.
