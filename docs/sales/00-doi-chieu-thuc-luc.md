@@ -22,7 +22,8 @@
 | Đăng Reels Facebook | **A** | 3 job `POST` = `DONE` trong DB (29–31/07/2026) |
 | Tự động comment dưới bài | **A** | 1 job `COMMENT` = `DONE` (30/07/2026) |
 | Đăng bài feed (chữ / chữ + ảnh) | **A** | Owner xác nhận thấy bài trên Page `kids0810` (PLAN-049). Lưu ý: gọi adapter trực tiếp, chưa qua hàng đợi |
-| Tải video khi dán link (TikTok/YT/FB/IG) | **A** | 11 `viral_materials` xử lý xong, `status=DRAFTED`, **0 lỗi** |
+| Tải video từ kênh TikTok đối thủ | **A** | 11 `viral_materials` xử lý xong, `status=DRAFTED`, 0 lỗi — **đều TikTok, cùng 1 kênh**, tạo bởi `run_tiktok_competitor_scan` quét `competitor_urls` của account |
+| Tải video khi **dán link** (TikTok/YT/FB/IG) | **D** | **Hạ từ A ngày 2026-09-07.** Không có ô/endpoint nào nhận link — chỗ duy nhất tạo material là quét kênh TikTok. Code tải (yt-dlp) có nhánh cookie cho FB/IG nhưng không có đường nào tạo material YT/FB/IG. Muốn có: một form dán link + nhận diện nền tảng (cần PLAN) |
 | Tìm video viral **TikTok** theo từ khoá | **A** | `discovery_scraper.search_hashtag()` chạy qua yt-dlp |
 | Ghép intro/outro, thumbnail, chống trùng | **A** | `reup_processor` + `intro_service`, cùng 11 material trên |
 | AI viết caption (Gemini) | **C** | **Hạ từ A ngày 2026-09-07.** 7 job `DRAFT` kia còn nguyên placeholder `[AI_GENERATE] …` — là bằng chứng *đang chờ AI*, không phải AI đã chạy. Chỉ job 7 (`DONE`, 07/2026, VPS) có caption giống AI viết. Ở máy local: `GOOGLE_API_KEY` sai loại (không phải key `AIza…`) → Gemini **401**, thiếu `faster_whisper`, 9Router tắt. Chuỗi fallback có trong code nhưng chưa có bằng chứng chạy được ở local |
