@@ -1,8 +1,8 @@
 """
 Local process supervisor for Windows/dev (PLAN-048).
 
-Keeps exactly one of: web, maintenance, fb_publisher.
-Does not auto-approve DRAFT or start AI/Threads workers.
+Keeps exactly one of: web, maintenance, fb_publisher, ai_generator.
+Does not auto-approve DRAFT or start Threads workers.
 
 Process matching goes through app.core.process_scan so that a worker started by
 PM2 (`python app/features/facebook/workers/publisher.py`) and one started here
@@ -121,6 +121,14 @@ def build_apps(cfg: StackConfig) -> list[AppSpec]:
             name="fb_publisher",
             match_spec="app.features.facebook.workers.publisher",
             argv=[_python(), "-m", "app.features.facebook.workers.publisher"],
+        ),
+        # PM2 (ecosystem.config.js) runs AI_Generator but the local stack did not:
+        # without it, jobs stayed AWAITING_STYLE forever (no AWAITING_STYLE → DRAFT
+        # transition and no 30-minute _auto_style_default fallback).
+        AppSpec(
+            name="ai_generator",
+            match_spec="app.features.viral_intake.workers.ai_generator",
+            argv=[_python(), "-m", "app.features.viral_intake.workers.ai_generator"],
         ),
     ]
     if not cfg.no_web:

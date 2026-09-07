@@ -52,7 +52,7 @@ Write-Host "Web: http://127.0.0.1:$Port" -ForegroundColor Green
 Write-Host "Login: values from .env (ADMIN_USERNAME / ADMIN_PASSWORD)" -ForegroundColor Green
 
 if ($Stack) {
-    Write-Host "Mode: STACK (web + maintenance + FB publisher)" -ForegroundColor Green
+    Write-Host "Mode: STACK (web + maintenance + FB publisher + AI generator)" -ForegroundColor Green
     & $py manage.py stack --host 127.0.0.1 --port $Port --no-reload-web
 } else {
     Write-Host "Mode: WEB only (use -Stack for supervised workers)" -ForegroundColor Yellow

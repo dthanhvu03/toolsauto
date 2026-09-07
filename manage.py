@@ -381,14 +381,14 @@ def serve(
 def stack(
     host: str = typer.Option("127.0.0.1", "--host", help="Web bind host"),
     port: int = typer.Option(0, "--port", help="Web port (0 = app.config.WEB_PORT)"),
-    no_web: bool = typer.Option(False, "--no-web", help="Only maintenance + FB publisher"),
+    no_web: bool = typer.Option(False, "--no-web", help="Only maintenance + FB publisher + AI generator"),
     reload_web: bool = typer.Option(
         False,
         "--reload-web/--no-reload-web",
         help="Pass --reload to web (creates extra process; off by default in stack)",
     ),
 ) -> None:
-    """Local supervisor: keep 1 web + 1 maintenance + 1 FB publisher (PLAN-048)."""
+    """Local supervisor: keep 1 web + 1 maintenance + 1 FB publisher + 1 AI generator (PLAN-048)."""
     import app.config as config
     from app.platform.local_supervisor import StackConfig, run_stack
 

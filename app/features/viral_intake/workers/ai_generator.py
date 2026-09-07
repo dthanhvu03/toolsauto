@@ -192,6 +192,9 @@ def handle_sigterm(signum, frame):
 def register_signals():
     signal.signal(signal.SIGINT, handle_sigterm)
     signal.signal(signal.SIGTERM, handle_sigterm)
+    # Windows: the local supervisor stops children with CTRL_BREAK_EVENT (SIGBREAK).
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, handle_sigterm)
 
 def process_draft_job(db: Session):
     """
