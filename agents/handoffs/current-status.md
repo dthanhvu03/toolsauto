@@ -92,6 +92,26 @@ Code lệch thực tế phát hiện thêm: `native_fallback.py:22-35` liệt k�
 Loại bỏ có lý do: Bitly Free (không click), ElevenLabs Free (không thương mại), F5-TTS VI
 (NC), stable-ts (archive), GitHub Models (đóng), scraping TikTok/Shopee (ToS).
 
+### Triển khai theo thứ tự khảo sát — mục 1→5 (Owner: "triển khai theo thứ tự từng mục")
+
+| # | Việc | Tôi đã làm | Còn lại Owner |
+|---|---|---|---|
+| 1 | AI caption | **ADR-014**: bỏ `gemini-2.0-*` đã shut down khỏi `native_fallback.py`/`pipeline.py`; lệnh **`manage.py ai check`** (chạy thật: 401 + cảnh báo key không phải `AIza…` — đúng kỳ vọng); `.env.example` mẫu Groq qua `OPENROUTER_*`; **cài `faster-whisper 1.2.1`** vào venv | Lấy key Gemini `AIza…` (+ Groq `gsk_…`), dán `.env`, chạy `ai check` tới khi `[OK]` |
+| 2 | Đếm click | **ADR-015** gỡ P0-2 theo phương án C+: `attach_affiliate_to_job` + comment người dùng gõ + `story_overlay_text` dùng **URL affiliate gốc**; xoá route `/r/{code}`, `track_redirect_click`, `_register_vercel_tracking` + 2 call site; UI bỏ tự điền `{tracking_url}`; **giữ cột** (`tracking_code` = Sub ID gợi ý). Trước đó link hỏng **đang được chèn thật** vào comment/Story — DB: 0 click, 0 comment nhiễm | Đặt Sub ID trong chính URL affiliate khi lưu link (Shopee `sub_id`, AccessTrade `sub1`) |
+| 3 | Chết không ai biết | `app/core/observability/heartbeat.py` — ping healthchecks.io cuối `db backup` (+`/fail` ở 4 nhánh lỗi), mỗi vòng `maintenance`, mỗi vòng `fb_publisher` (kể cả PAUSED; `/fail` khi account bị vô hiệu). Không URL → im lặng, lỗi mạng chỉ warning. 3 ô ở `/app/settings` nhóm **"Giam sat"** | Tạo 3 check trên healthchecks.io, dán URL |
+| 4 | Dashboard từ điện thoại | Runbook | Cài Tailscale, `tailscale serve --bg 8002` |
+| 5 | Graph API | **`scripts/graph_api_spike.py`** 8 subcommand (whoami/pages/exchange/post-feed/post-photo/post-reel/comment/verify-public), `--dry-run`, token lưu `storage/db/config/graph_api_tokens.json` | Chạy 6 bước theo runbook, ghi bảng kết quả; **đạt bước 5 mới báo Anti viết PLAN** |
+
+Runbook từng bước copy-paste: **`docs/ops/2026-09-07-runbook-tich-hop.md`**.
+Mục 6–10 (phụ đề đốt, nhạc nền, rclone, Postgres service, TTS) **chờ PLAN từ Anti**.
+
+Test: Windows **285 passed**; Linux **268 passed / 17 skipped**; lint-imports 2 kept.
+
+Nợ ghi nhận: `health.py total_clicks` và `daily_summary_message` "0 clicks" còn nguyên (nhiễu nhỏ);
+`models/jobs.py:61` comment `/r/{code}` cũ; `ai check` không ép timeout 20s (đi qua client thật
+để giữ ADR-006); ping `/fail` của backup không đi được khi Postgres chết (URL đọc từ DB —
+dead man's switch vẫn báo quá hạn).
+
 ### Next Action
 
 1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì
@@ -102,9 +122,9 @@ Loại bỏ có lý do: Bitly Free (không click), ElevenLabs Free (không thư�
 4. Các việc cũ vẫn nguyên: Drive (stream, không mirror), đổi mật khẩu FB/IG/TikTok,
    dựng BM theo `02`, TASK-057, dọn ổ `C:`.
 5. Anti: quyết PLAN-059 (chờ account) và TASK-059.
-6. **Owner: spike Graph API 2 giờ** theo checklist trong `docs/research/…` — đây là thứ
+6. **Owner: spike Graph API 2 giờ** theo `docs/ops/2026-09-07-runbook-tich-hop.md` mục 5 (script `scripts/graph_api_spike.py`) — đây là thứ
    duy nhất có thể đưa tự động đăng quay lại mà không lặp lại 31/07.
-7. Owner: `pip install faster-whisper` vào venv; healthchecks.io + Tailscale (1 giờ).
+7. Owner: healthchecks.io (3 check → dán `/app/settings`) + Tailscale — runbook mục 3, 4. `faster-whisper` đã cài.
 
 ---
 
