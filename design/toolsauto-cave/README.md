@@ -11,8 +11,13 @@ Nguồn trích: `app/static/cave-tokens.css`, `app/static/src/app.css`,
 ## Quy ước
 
 - **Mỗi component = một file HTML độc lập**, mở trực tiếp là render. Không tham chiếu
-  `/static/...`; CSS chung import từ `../tokens.css`; font Google qua `<link>`
+  `/static/...`; CSS chung import từ `../tokens.css` + `../components.css`; font Google qua `<link>`
   (`Figtree:wght@400;500;600;700` + `Syne:wght@600;700;800` — đúng `config.CDN_GOOGLE_FONTS`).
+- `components.css`: lớp component dùng chung (`.st-*`, `.pill-*`, `.pf-*`, `.src-*`, `.row-btn*`,
+  `.icon-btn`, `.settings-*`, `.sec`/`.scard`, `.data-table`, `.thumb`, `.toast`, `.busy-bar`,
+  `.counts`/`.cnt-*`, `.shell`/`.page-head`, `.gemini`, `.health`…). Tách ra từ `<style>` của từng
+  card để design agent nhận được đúng vốn class mà card minh hoạ. Trong card chỉ còn class demo
+  (`.section`, `.row`, `.spec`, `.cap`, `.grid2`).
 - **Dòng đầu mỗi file** là marker Claude Design:
   `<!-- @dsCard group="Foundations|Components|Patterns" name="…" subtitle="…" width="…" height="…" -->`
   `height` đặt theo chiều cao render thật (đo bằng Playwright) để thẻ không bị cắt.
@@ -65,10 +70,23 @@ Nguồn trích: `app/static/cave-tokens.css`, `app/static/src/app.css`,
 8. Hover của `.app-btn` gốc là `hover:bg-slate-50` (Tailwind, không remap) → bundle dùng
    hover viền/chữ torch như `.cave-btn`.
 
-## Kiểm tra lại
+## Đẩy lên Claude Design (/design-sync)
+
+Thư viện là HTML tĩnh nên đi đường "off-script" của skill: `.design-sync/build.mjs` sinh
+`ds-bundle/` (styles.css → tokens/{tokens,components}.css, `components/<Nhóm>/<Tên>/<Tên>.html`
++ `.prompt.md`, README = `.design-sync/conventions.md` + chỉ mục, `_ds_sync.json` anchor).
 
 ```
-PYTHONIOENCODING=utf-8 ./venv/Scripts/python.exe <scratch>/shoot.py
+node .design-sync/build.mjs                       # sinh ds-bundle/
+DS_CHROMIUM_PATH=<chrome.exe> node .ds-sync/package-validate.mjs ./ds-bundle
 ```
-(script mở từng file bằng Playwright + Chrome headless, viewport theo marker, ghi
-`_preview/<name>.png`, báo lỗi console / request ≥400 / font check.)
+
+- `.design-sync/config.json`: projectId, tên thư mục ASCII cho từng card (`componentNames`).
+- `.design-sync/prompts/<Tên>.md`: hướng dẫn dùng từng card cho design agent (commit).
+- `.design-sync/NOTES.md`: ghi chú re-sync. `.ds-sync/` và `ds-bundle/` gitignored.
+
+## Kiểm tra lại
+
+Chụp từng card bằng Playwright + Chrome headless (viewport theo marker), báo lỗi console /
+request ≥400 / font; đối chiếu pixel với lần chụp trước khi sửa CSS. Script `shoot.py` nằm ở
+scratchpad phiên (không commit) — ý tưởng: mở file, `document.fonts.ready`, `screenshot(full_page)`.

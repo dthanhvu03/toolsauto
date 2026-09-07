@@ -99,3 +99,9 @@ logs/
 
 # anh kiem tra design bundle — sinh lai bang Playwright, khong commit
 /design/toolsauto-cave/_preview/
+# design-sync: script staged + build output + verdict cache (tao lai duoc)
+/design/toolsauto-cave/.ds-sync/
+/design/toolsauto-cave/ds-bundle/
+/design/toolsauto-cave/.design-sync/.cache/
+/design/toolsauto-cave/.design-sync/learnings/
+/design/toolsauto-cave/.design-sync/node_modules/

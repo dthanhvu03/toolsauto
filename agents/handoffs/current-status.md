@@ -1,5 +1,43 @@
 # Current Status
 
+## Phiên 2026-09-07 (b) — /design-sync: chuẩn bị bundle ToolsAuto Cave, CHỜ /design-login
+
+Owner gọi `/design-sync` trong `design/toolsauto-cave`. DesignSync chưa được uỷ quyền
+(cần Owner gõ `/design-login`), nên phiên này làm trọn phần local; upload để phiên sau.
+
+### System State (design/toolsauto-cave)
+
+- Thư viện là HTML + CSS tĩnh → đi đường **off-script** của skill: bộ sinh
+  `.design-sync/build.mjs` → `ds-bundle/` (gitignored). `package-validate.mjs` (stage ở
+  `.ds-sync/`, gitignored) **✓ bundle is complete**: 12/12 card render sạch, 3 @import
+  resolve, anchor `_ds_sync.json` khớp bundle.
+- **`components.css` mới**: tách class dùng chung (`.st-*`, `.pill-*`, `.pf-*`, `.src-*`,
+  `.row-btn*`, `.icon-btn`, `.settings-*`, `.sec`/`.scard`, `.data-table`, `.toast`,
+  `.busy-bar`, `.counts`/`.cnt-*`, `.shell`/`.page-head`, `.gemini`, `.health`) khỏi `<style>`
+  từng card. Lý do: design agent chỉ nhận CSS đi qua `styles.css`; trước đó nó không thấy
+  vốn class mà card minh hoạ. Đối chiếu pixel trước/sau: 5 card 0 px, 7 card < 1 % (khác
+  biệt chủ ý khi hợp nhất: `.st` line-height 1.4, `.row-btn` 700 + min-width danger 88/job 44).
+  Đổi tên markup: `.card`→`.scard` (forms), `.reset`→`.reset-link`, `.wrap`→`.data-table`,
+  `.num/.txt/.sel-s/.ta/.key/.unit`→`.settings-*`.
+- `.design-sync/` (commit): `config.json` (shape, componentNames ASCII, readmeHeader — CHƯA có
+  `projectId`), `conventions.md` (header README cho design agent, mọi tên class/token đã grep
+  đối chiếu với CSS build), `prompts/<Tên>.md` ×12, `NOTES.md` (re-sync + rủi ro), `build.mjs`.
+- Render check cần `DS_CHROMIUM_PATH=%LOCALAPPDATA%\ms-playwright\chromium-1234\chrome-win64\chrome.exe`
+  (Python Playwright của venv đòi headless-shell 1208 không có).
+
+### Next Action (phiên sau, đúng thứ tự)
+
+1. Owner gõ `/design-login` → `DesignSync(list_projects)` để chọn tên không trùng
+   (đề xuất **"ToolsAuto Cave"**) → `create_project` → ghi `projectId` vào
+   `.design-sync/config.json` NGAY → `list_files` (rỗng → đường incremental §3 base skill).
+2. `finalize_plan` (localDir `./ds-bundle`, writes/deletes theo skill) → push: sentinel →
+   base files (`_ds_bundle.js`, `styles.css`, `README.md`, `tokens/**`) + `components/**` →
+   sentinel → `_ds_sync.json` cuối cùng → `list_files` xác nhận 31 file.
+3. `report_validate` counts {total 12, bad 0, thin 0, variantsIdentical 0, iterations 1}.
+4. Mời Owner mở project, soi DS pane; sửa card → `node .design-sync/build.mjs` → validate → re-upload.
+
+---
+
 ## Phiên 2026-09-07 — Vá 2 lỗ hổng luồng code; hạ 2 mục "A" trong bảng thực lực
 
 Owner hỏi "báo cáo dự án" → "luồng code như nào" → "triển khai vá theo thứ tự".

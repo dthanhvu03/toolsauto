@@ -1,0 +1,25 @@
+{
+  "shape": "package",
+  "offScript": true,
+  "generator": ".design-sync/build.mjs",
+  "pkg": "toolsauto-cave",
+  "globalName": "ToolsAutoCave",
+  "sourceDirs": ["foundations", "components", "patterns"],
+  "cssFiles": ["tokens.css", "components.css"],
+  "fontsUrl": "https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap",
+  "componentNames": {
+    "colors": "Colors",
+    "type": "Typography",
+    "spacing": "Spacing",
+    "buttons": "Buttons",
+    "badges": "Badges",
+    "forms": "Forms",
+    "cards": "Cards",
+    "table": "DataTable",
+    "toast": "Toast",
+    "filter-bar": "FilterBar",
+    "sidebar": "Sidebar",
+    "page-shell": "PageShell"
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

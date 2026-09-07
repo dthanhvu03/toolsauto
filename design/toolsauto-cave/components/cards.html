@@ -6,64 +6,14 @@
 <title>ToolsAuto Cave — Thẻ</title>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../components.css">
 <style>
   body { padding: var(--space-6); }
   .section { margin-bottom: var(--space-6); }
   .section-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-1); }
   .section-desc { font-size: var(--text-xs); color: var(--color-mist); margin-bottom: var(--space-3); max-width: 760px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-
-  /* Khối section settings (rounded-2xl) */
-  .sec {
-    background: var(--color-surface); border: 1px solid var(--color-border);
-    border-radius: var(--radius-2xl); overflow: hidden; box-shadow: var(--shadow-soft);
-  }
-  .sec-head {
-    padding: 16px 20px; border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface-raised); display: flex; align-items: center; justify-content: space-between;
-  }
-  .sec-head h2 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .sec-head .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--color-torch); }
-  .sec-head .count { font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 400; color: var(--color-mist); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 999px; padding: 2px 8px; }
-  .sec-body { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
-  /* Thẻ settings */
-  .scard {
-    display: flex; flex-direction: column;
-    background: var(--color-surface-raised); border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg); padding: 16px;
-    transition: border-color var(--dur-base), box-shadow var(--dur-base);
-  }
-  .scard:hover { border-color: var(--color-torch-border); }
-  .scard-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-  .scard .title { font-size: var(--text-md); font-weight: 600; color: var(--color-ink); line-height: 1.375; }
-  .scard .k { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-mist); margin-top: 2px; }
-  .scard .d { font-size: var(--text-xs); color: var(--color-mist); margin-top: 4px; line-height: 1.6; }
-  .scard .pills { display: flex; gap: 6px; flex-shrink: 0; }
-  .src {
-    display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 0.25rem;
-    border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-mist);
-    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: var(--tracking-wider);
-  }
-  .src-torch { border-color: var(--color-torch-border); background: var(--color-torch-dim); color: var(--color-torch); }
-  .scard-input { margin-top: auto; display: flex; align-items: center; gap: 8px; padding-top: 12px; }
-  .key { display: inline-flex; padding: 2px 6px; border-radius: 0.25rem; border: 1px solid var(--color-border); background: var(--color-surface); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-mist); }
-  .num { height: 36px; width: 112px; padding: 0 12px; text-align: right; font-family: var(--font-mono); font-size: var(--text-sm); border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface-sunken); color: var(--color-ink); outline: none; }
-  .unit { font-size: var(--text-2xs); color: var(--color-mist); margin-left: 6px; }
-  .scard-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-border); font-size: var(--text-2xs); color: var(--color-mist); }
-  .scard-foot code { font-family: var(--font-mono); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; padding: 1px 4px; color: var(--color-mist); }
-  .scard-foot .range { color: var(--color-ash); margin-left: 4px; font-variant-numeric: tabular-nums; }
-  .reset { background: none; border: 0; padding: 0; font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-ash); }
-  .reset:hover { color: var(--color-danger); }
-  .reset:disabled { opacity: .3; cursor: not-allowed; }
-  .settings-toggle { position: relative; display: inline-flex; height: 32px; width: 48px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-ledge); padding: 0; cursor: pointer; }
-  .settings-toggle .settings-toggle-knob { position: absolute; top: 3px; left: 0; height: 24px; width: 24px; border-radius: 999px; background: var(--color-surface); box-shadow: 0 1px 2px rgba(0,0,0,.5); transform: translateX(4px); }
-  .settings-toggle[aria-checked="true"] { background: var(--gradient-torch); border-color: transparent; }
-  .settings-toggle[aria-checked="true"] .settings-toggle-knob { transform: translateX(20px); }
-
   .banners { display: flex; flex-direction: column; gap: 10px; }
-  .info-bar { border-radius: var(--radius-xl); border: 1px solid var(--color-border); background: var(--color-surface-raised); padding: 12px 16px; font-size: var(--text-sm); color: var(--color-mist); }
-  .info-bar a { color: var(--color-torch); font-weight: 600; }
 </style>
 </head>
 <body class="theme-cave">
@@ -104,24 +54,24 @@
           <div><div class="title">Cỡ chữ phụ đề</div><div class="k">reup.subtitle_font_size</div><div class="d">Cỡ chữ tính trên khung 1080×1920 (libass tự scale theo video).</div></div>
           <div class="pills"><span class="src">default</span></div>
         </div>
-        <div class="scard-input"><span class="key">reup.subtitle_font_size</span><div style="flex:1;display:flex;justify-content:flex-end;align-items:center"><input class="num" type="number" value="64"><span class="unit">px</span></div></div>
-        <div class="scard-foot"><div>Mặc định: <code>64</code><span class="range">(24–120)</span></div><button class="reset" disabled>Reset</button></div>
+        <div class="scard-input"><span class="settings-key">reup.subtitle_font_size</span><div style="flex:1;display:flex;justify-content:flex-end;align-items:center"><input class="settings-num" type="number" value="64"><span class="settings-unit">px</span></div></div>
+        <div class="scard-foot"><div>Mặc định: <code>64</code><span class="range">(24–120)</span></div><button class="reset-link" disabled>Reset</button></div>
       </div>
       <div class="scard" style="border-color:var(--color-torch-border)">
         <div class="scard-top">
           <div><div class="title">Khoảng cách đáy phụ đề</div><div class="k">reup.subtitle_margin_v</div><div class="d">Lề dưới (MarginV) trên khung 1080×1920 để phụ đề không đè lên thanh caption TikTok/Reels.</div></div>
           <div class="pills"><span class="src src-torch">database</span><span class="src src-torch">Override</span></div>
         </div>
-        <div class="scard-input"><span class="key">reup.subtitle_margin_v</span><div style="flex:1;display:flex;justify-content:flex-end;align-items:center"><input class="num" type="number" value="300"><span class="unit">px</span></div></div>
-        <div class="scard-foot"><div>Mặc định: <code>260</code><span class="range">(40–800)</span></div><button class="reset">Reset</button></div>
+        <div class="scard-input"><span class="settings-key">reup.subtitle_margin_v</span><div style="flex:1;display:flex;justify-content:flex-end;align-items:center"><input class="settings-num" type="number" value="300"><span class="settings-unit">px</span></div></div>
+        <div class="scard-foot"><div>Mặc định: <code>260</code><span class="range">(40–800)</span></div><button class="reset-link">Reset</button></div>
       </div>
       <div class="scard">
         <div class="scard-top">
           <div><div class="title">Nhạc nền</div><div class="k">reup.audio_music_enabled</div><div class="d">Chọn ngẫu nhiên 1 file trong storage/media/music/. Mặc định tắt.</div></div>
           <div class="pills"><span class="src">default</span><span class="src src-torch">restart</span></div>
         </div>
-        <div class="scard-input" style="justify-content:space-between"><span class="key">reup.audio_music_enabled</span><button type="button" class="settings-toggle" role="switch" aria-checked="false"><span class="settings-toggle-knob"></span></button></div>
-        <div class="scard-foot"><div>Mặc định: <code>False</code></div><button class="reset" disabled>Reset</button></div>
+        <div class="scard-input" style="justify-content:space-between"><span class="settings-key">reup.audio_music_enabled</span><button type="button" class="settings-toggle" role="switch" aria-checked="false"><span class="settings-toggle-knob"></span></button></div>
+        <div class="scard-foot"><div>Mặc định: <code>False</code></div><button class="reset-link" disabled>Reset</button></div>
       </div>
       <div class="scard" style="border-color:var(--color-torch-border);background:color-mix(in srgb, var(--color-torch-dim) 40%, var(--color-surface-raised))">
         <div class="scard-top">

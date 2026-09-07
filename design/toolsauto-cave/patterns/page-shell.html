@@ -6,21 +6,9 @@
 <title>ToolsAuto Cave — Khung trang</title>
 <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../components.css">
 <style>
   body { padding: 0; }
-  .shell { display: flex; min-height: 100vh; }
-  aside#sidebar { position: sticky; top: 0; height: 100vh; flex-shrink: 0; }
-  main { flex: 1; min-width: 0; }
-  .page { padding: var(--space-8); }
-  .page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
-  .page-head .left { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .page-head .right { display: flex; align-items: center; gap: 12px; }
-  .gemini { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: var(--radius-xl); border: 1px solid var(--color-border); background: var(--color-face); font-size: var(--text-xs); color: var(--color-mist); }
-  .gemini .cave-dot { width: 6px; height: 6px; }
-  .gemini .mode { padding: 4px 10px; border-radius: 999px; background: var(--color-torch-dim); border: 1px solid var(--color-torch-border); color: var(--color-torch); font-size: 10px; font-weight: 700; letter-spacing: .06em; }
-  .health { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: var(--radius-xl); border: 1px solid var(--color-border); background: var(--color-face); font-size: var(--text-md); font-weight: 700; color: var(--color-mist); text-decoration: none; transition: border-color var(--dur-base), color var(--dur-base), transform var(--dur-base); }
-  .health:hover { border-color: var(--color-torch-border); color: var(--color-torch); transform: translateY(-2px); }
-  .health svg { width: 16px; height: 16px; color: var(--color-torch); }
   .content { min-height: 420px; }
   .placeholder { height: 420px; border: 1px dashed var(--color-edge); border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; color: var(--color-ash); font-size: var(--text-sm); background: var(--color-surface); }
 </style>
