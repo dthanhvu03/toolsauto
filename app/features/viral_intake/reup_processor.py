@@ -830,6 +830,74 @@ class ReupProcessor:
             return False, str(e)
 
     @classmethod
+    def _apply_post_layers(
+        cls, current_path: str, final_output_path: str, *,
+        page_url: Optional[str] = None, metrics: Optional[dict[str, Any]] = None,
+    ) -> str:
+        """ADR-016: lớp thêm (phụ đề, âm thanh) SAU hook/intro/outro. Tắt hết ⇒ trả current_path y nguyên.
+
+        Mỗi lớp: apply → tmp → _promote_temp (qua quality gate). Lớp lỗi thì giữ video
+        của bước trước, không làm reup thất bại.
+        """
+        from app.core import settings as runtime_settings
+
+        metrics = metrics if metrics is not None else {}
+        metrics["subtitle_enabled"] = bool(runtime_settings.get_bool("reup.subtitle_enabled", False))
+        metrics["audio_voice_enabled"] = bool(runtime_settings.get_bool("reup.audio_voice_enabled", False))
+        metrics["audio_music_enabled"] = bool(runtime_settings.get_bool("reup.audio_music_enabled", False))
+        if not (metrics["subtitle_enabled"] or metrics["audio_voice_enabled"] or metrics["audio_music_enabled"]):
+            return current_path
+
+        def _promote(tmp: str, layer: str) -> bool:
+            info = cls._get_video_info(current_path)
+            _, err = cls._promote_temp(
+                temp_path=tmp, output_path=final_output_path, input_info=info,
+                max_duration=float(info.get("duration") or 0) + 1.0,
+            )
+            if err:  # gate fail thì _promote_temp đã xoá tmp, giữ video bước trước
+                logger.warning("[ReupProcessor] %s skip, keep previous: %s", layer, err)
+            return not err
+
+        if metrics["subtitle_enabled"]:
+            from app.features.viral_intake import subtitle_layer
+            tmp = final_output_path + ".with_sub.tmp.mp4"
+            ok = subtitle_layer.apply(
+                current_path, tmp,
+                font_size=runtime_settings.get_int("reup.subtitle_font_size", 64),
+                margin_v=runtime_settings.get_int("reup.subtitle_margin_v", 260),
+            )
+            metrics["subtitle_applied"] = bool(ok and _promote(tmp, "subtitle"))
+            if metrics["subtitle_applied"]:
+                current_path = final_output_path
+            elif not ok:
+                logger.warning("[ReupProcessor] subtitle skip, keep previous: layer returned False")
+
+        if metrics["audio_voice_enabled"] or metrics["audio_music_enabled"]:
+            from app.features.viral_intake import audio_layer
+            from app.config import STORAGE_MEDIA_DIR
+            # Voice-over đọc hook text (đã resolve ở bước hook); caption AI chưa có lúc reup.
+            voice_text = (metrics.get("hook_text") or "").strip() if metrics["audio_voice_enabled"] else None
+            music_dir = str(STORAGE_MEDIA_DIR / "music") if metrics["audio_music_enabled"] else None
+            tmp = final_output_path + ".with_audio.tmp.mp4"
+            ok = audio_layer.apply(
+                current_path, tmp,
+                voice_text=voice_text or None,
+                voice=runtime_settings.get_str("reup.audio_voice_name", audio_layer.DEFAULT_VOICE),
+                voice_rate=runtime_settings.get_str("reup.audio_voice_rate", "+0%"),
+                voice_engine=runtime_settings.get_str("reup.audio_voice_engine", "auto"),
+                music_dir=music_dir,
+                music_volume=float(runtime_settings.get_str("reup.audio_music_volume", "0.12") or 0.12),
+                original_volume=float(runtime_settings.get_str("reup.audio_original_volume", "0.25") or 0.25),
+            )
+            metrics["audio_applied"] = bool(ok and _promote(tmp, "audio"))
+            if metrics["audio_applied"]:
+                current_path = final_output_path
+            elif not ok:
+                logger.warning("[ReupProcessor] audio skip, keep previous: layer returned False")
+
+        return current_path
+
+    @classmethod
     def process(
         cls,
         input_path: str,
@@ -1124,7 +1192,14 @@ class ReupProcessor:
                 outro_path=outro_path,
                 metrics=metrics,
             )
-            if metrics.get("intro_applied") or metrics.get("outro_applied") or metrics.get("hook_applied"):
+            output_path = cls._apply_post_layers(
+                output_path, output_path, page_url=page_url, metrics=metrics,
+            )
+            if (
+                metrics.get("intro_applied") or metrics.get("outro_applied")
+                or metrics.get("hook_applied") or metrics.get("subtitle_applied")
+                or metrics.get("audio_applied")
+            ):
                 # Refresh size/duration after VIP stages
                 try:
                     out_info2 = cls._get_video_info(output_path)

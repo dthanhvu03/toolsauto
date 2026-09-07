@@ -112,6 +112,26 @@ Nợ ghi nhận: `health.py total_clicks` và `daily_summary_message` "0 clicks"
 để giữ ADR-006); ping `/fail` của backup không đi được khi Postgres chết (URL đọc từ DB —
 dead man's switch vẫn báo quá hạn).
 
+### Mục 6 / 10 / 7 — ba lớp thêm cho video reup (ADR-016), mặc định TẮT
+
+| Lớp | Module | Proof trên `viral_1_tikwm_reup.mp4` (73 s, 1080×1920) |
+|---|---|---|
+| Phụ đề đốt | `subtitle_layer.py` — faster-whisper (`language=vi`, word_timestamps, VAD) → pysubs2 ASS kiểu CapCut → `ffmpeg ass=…:fontsdir=`; font **Be Vietnam Pro** (OFL) commit trong `app/static/fonts/` | model `medium`: 28 segment, whisper ~110 s + burn 10,9 s; frame giữa xem bằng mắt: chữ trắng đậm viền đen, đáy giữa, dấu đúng; libass chọn đúng `BeVietnamPro-Bold` |
+| Voice-over | `audio_layer.synthesize_voice` — edge-tts `vi-VN-HoaiMyNeural`/`NamMinhNeural`, dự phòng **piper** offline (`vi_VN-vais1000-medium` trong `storage/media/tts_models/`, gitignored) | edge 2,3 s → 4,9 s audio; piper chạy được (đọc nhanh, chưa nghe thử) |
+| Nhạc nền | `audio_layer.mix_music` — `amix normalize=0`, lặp nhạc, fade cuối; chọn ngẫu nhiên từ `storage/media/music/` | voice + nhạc giả 20 s trộn vào 73 s video mất 3,0 s (`-c:v copy`), thời lượng khớp |
+
+Điểm nối duy nhất `ReupProcessor._apply_post_layers()` sau intro/outro/hook; mỗi lớp đi
+qua `_promote_temp` (quality gate); lớp lỗi → giữ video bước trước, `success` vẫn True.
+Voice-over **đọc hook text** (caption AI chưa có lúc reup). 10 ô ở `/app/settings`
+nhóm **"Reup - lop them"**. Enum Whisper thêm `large-v3-turbo` + `erax-ai/EraX-WoW-Turbo-V1.1-CT2`.
+
+Nợ: `medium` sai vài từ ("mặt nạ xích") — đổi setting sang EraX là xong, chưa thử;
+mỗi lớp một lần re-encode; piper chưa nghe; **nhạc chưa có** (Meta Sound Collection
+cần đăng nhập FB); font trên Linux (fontconfig) chưa kiểm dù suite Linux xanh.
+Gạch: yt-dlp format không cần — 11 material đều qua TikWM `play` (không watermark).
+
+Test: Windows **311**; Linux **294 / 17 skipped**; lint 2 kept.
+
 ### Next Action
 
 1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì
@@ -124,7 +144,8 @@ dead man's switch vẫn báo quá hạn).
 5. Anti: quyết PLAN-059 (chờ account) và TASK-059.
 6. **Owner: spike Graph API 2 giờ** theo `docs/ops/2026-09-07-runbook-tich-hop.md` mục 5 (script `scripts/graph_api_spike.py`) — đây là thứ
    duy nhất có thể đưa tự động đăng quay lại mà không lặp lại 31/07.
-7. Owner: healthchecks.io (3 check → dán `/app/settings`) + Tailscale — runbook mục 3, 4. `faster-whisper` đã cài.
+7. Owner: bật thử `reup.subtitle_enabled` trên 1 video, xem có ưng kiểu chữ không; đổi Whisper sang EraX nếu sai nhiều.
+8. Owner: healthchecks.io (3 check → dán `/app/settings`) + Tailscale — runbook mục 3, 4. `faster-whisper` đã cài.
 
 ---
 
