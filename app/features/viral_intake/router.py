@@ -80,7 +80,7 @@ def _render_viral_tbody(request: Request, db: Session, scan_message: str | None 
         )
     reup_by_id = data.get("reup_by_id") or {}
     for item in data["materials"]:
-        acc_name = data["accounts"].get(item.scraped_by_account_id, "Unknown")
+        acc_name = data["accounts"].get(item.scraped_by_account_id, "—")
         parts.append(
             templates.get_template("fragments/viral_row.html").render(
                 {

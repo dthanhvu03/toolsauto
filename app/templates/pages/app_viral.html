@@ -227,7 +227,9 @@
         page: String(page),
         auto: document.getElementById('vAuto').checked ? '1' : '',
       });
-      htmx.ajax('GET', buildViralUrl(page), { target: '#viral-table', swap: 'outerHTML' });
+      // source: không để htmx lấy document.body làm phần tử phát request — class htmx-request kẹt trên body
+      // khi 2 request chồng nhau (load + polling) làm mọi .htmx-indicator trong trang hiện mãi.
+      htmx.ajax('GET', buildViralUrl(page), { source: '#viral-table', target: '#viral-table', swap: 'outerHTML' });
     }
     document.getElementById('vApply').addEventListener('click', () => refreshViral(1));
     window.refreshViral = refreshViral;

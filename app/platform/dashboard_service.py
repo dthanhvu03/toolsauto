@@ -235,7 +235,7 @@ class DashboardService:
             "items": [
                 {
                     "item": it,
-                    "account_name": accounts.get(it.scraped_by_account_id, "Unknown"),
+                    "account_name": accounts.get(it.scraped_by_account_id, "—"),
                     "has_reup": bool(reup_by_id.get(it.id)),
                     "job": jobs_by_id.get(it.id),
                     "is_mega": bool(mega_th > 0 and int(it.views or 0) >= mega_th),
