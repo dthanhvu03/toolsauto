@@ -121,10 +121,10 @@ Integrations → **Telegram** → bấm link mở bot `@HealthchecksBot` → **S
 
 ### 3.3 Dán URL vào tool
 
-1. Mở <http://127.0.0.1:8002/app/settings> → nhóm **Giam sat** (ADR-014 vừa thêm):
-   - *Ping: db backup* ← URL check `toolsauto-backup`
-   - *Ping: maintenance worker* ← URL check `toolsauto-maintenance`
-   - *Ping: FB publisher* ← URL check `toolsauto-publisher`
+1. Mở <http://127.0.0.1:8002/app/settings> → nhóm **Giám sát** (ADR-014 vừa thêm):
+   - *Ping: backup database* ← URL check `toolsauto-backup`
+   - *Ping: worker bảo trì* ← URL check `toolsauto-maintenance`
+   - *Ping: worker đăng Facebook* ← URL check `toolsauto-publisher`
 2. Lưu. Không cần restart cho worker (đọc runtime settings); backup đọc lúc chạy.
 3. Kiểm ngay:
 
