@@ -1,0 +1,92 @@
+<!-- @dsCard group="Components" name="Toast" subtitle="success · error · warning · thanh bận" width="760" height="640" -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>ToolsAuto Cave — Toast</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { padding: var(--space-6); }
+  .section { margin-bottom: var(--space-6); }
+  .section-title { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 700; margin-bottom: var(--space-1); }
+  .section-desc { font-size: var(--text-xs); color: var(--color-mist); margin-bottom: var(--space-3); max-width: 680px; }
+  .stack { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 384px; }
+  .cap { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ash); margin-top: 4px; }
+
+  /* showToast() trong layouts/app.html */
+  .toast {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px; border-radius: var(--radius-xl);
+    border: 1px solid var(--color-moss-border); background: var(--color-face);
+    box-shadow: var(--shadow-panel); overflow: hidden;
+  }
+  .toast-error, .toast-warning { border-color: var(--color-danger-border); }
+  .toast .ico { flex-shrink: 0; width: 24px; height: 24px; color: var(--color-lichen); }
+  .toast-error .ico, .toast-warning .ico { color: var(--color-danger); }
+  .toast .msg { flex: 1; font-size: var(--text-md); font-weight: 600; color: var(--color-ink); line-height: 1.4; }
+  .toast .close { background: none; border: 0; padding: 0; color: var(--color-ash); display: inline-flex; }
+  .toast .close:hover { color: var(--color-mist); }
+  .toast .close svg { width: 20px; height: 20px; }
+
+  /* Đề xuất: warning riêng màu torch (hiện tool gộp warning vào kiểu error) */
+  .toast-warn-proposed { border-color: var(--color-torch-border); }
+  .toast-warn-proposed .ico { color: var(--color-torch); }
+
+  /* Thanh bận viral (#viral-busy-bar) — bottom-center */
+  .busy-bar {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: var(--radius-lg);
+    border: 1px solid var(--color-torch-border); background: var(--color-face);
+    box-shadow: var(--shadow-panel); font-size: var(--text-md); color: var(--color-ink);
+  }
+  .busy-bar svg { width: 16px; height: 16px; color: var(--color-torch); flex-shrink: 0; }
+</style>
+</head>
+<body class="theme-cave">
+
+<div class="section">
+  <div class="section-title">Toast — góc trên phải, tối đa 384px</div>
+  <div class="section-desc">Nền face · radius 16 · shadow panel · trượt vào từ phải 300ms (ease-out). Success viền moss + tick lichen; error/warning viền danger + icon "!" danger. Tự đóng sau 3s (warning 8s).</div>
+  <div class="stack">
+    <div class="toast toast-enter">
+      <svg class="ico" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      <p class="msg">Đã lưu cấu hình thành công!</p>
+      <button class="close" aria-label="Đóng"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></button>
+    </div>
+    <div class="cap">type="success" · 3000ms</div>
+
+    <div class="toast toast-error">
+      <svg class="ico" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <p class="msg">Không thể đăng xuất an toàn</p>
+      <button class="close" aria-label="Đóng"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></button>
+    </div>
+    <div class="cap">type="error" · 3000ms</div>
+
+    <div class="toast toast-warning">
+      <svg class="ico" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <p class="msg">Đang quét nguồn… có thể mất 1–2 phút.</p>
+      <button class="close" aria-label="Đóng"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></button>
+    </div>
+    <div class="cap">type="warning" · 8000ms · HIỆN TẠI cùng kiểu error</div>
+
+    <div class="toast toast-warn-proposed">
+      <svg class="ico" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <p class="msg">Đang quét nguồn… có thể mất 1–2 phút.</p>
+      <button class="close" aria-label="Đóng"><svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></button>
+    </div>
+    <div class="cap">ĐỀ XUẤT warning viền torch (chưa có trong tool)</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Thanh bận — #viral-busy-bar</div>
+  <div class="section-desc">Cố định giữa đáy màn hình khi pipeline chạy nền. Viền torch, spinner torch, chữ 14 ink.</div>
+  <div class="busy-bar">
+    <svg class="spin" viewBox="0 0 24 24" fill="none"><circle opacity=".25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path opacity=".75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"/></svg>
+    <span>Đang xử lý nền (yt-dlp + reup)… bảng tự làm mới mỗi 10s.</span>
+  </div>
+</div>
+
+</body>
+</html>

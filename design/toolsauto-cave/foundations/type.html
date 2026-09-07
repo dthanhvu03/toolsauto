@@ -1,0 +1,103 @@
+<!-- @dsCard group="Foundations" name="Chữ" subtitle="Syne · Figtree · mono — thang cỡ" width="960" height="1110" -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>ToolsAuto Cave — Chữ</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { padding: var(--space-6); }
+  .section { margin-bottom: var(--space-8); }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: var(--weight-bold);
+    margin-bottom: var(--space-1);
+  }
+  .section-desc { font-size: var(--text-xs); color: var(--color-mist); margin-bottom: var(--space-4); }
+  .row {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: var(--space-4);
+    align-items: baseline;
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .row:last-child { border-bottom: 0; }
+  .spec {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    color: var(--color-mist);
+    line-height: 1.6;
+  }
+  .spec b { color: var(--color-ink); font-weight: 600; display: block; }
+  .families { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+  .fam {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+  }
+  .fam-sample { font-size: 28px; line-height: 1.2; color: var(--color-ink); margin-bottom: var(--space-2); }
+  .fam-name { font-size: var(--text-xs); color: var(--color-torch); font-weight: 600; }
+  .fam-var { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-mist); }
+  .fam-use { font-size: var(--text-xs); color: var(--color-mist); margin-top: var(--space-2); }
+
+  .t-h1 { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 700; letter-spacing: var(--tracking-tight); color: var(--color-ink); line-height: var(--leading-tight); }
+  .t-h2 { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; color: var(--color-ink); line-height: var(--leading-tight); }
+  .t-h3 { font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; color: var(--color-ink); }
+  .t-body { font-size: var(--text-md); color: var(--color-ink); }
+  .t-sm { font-size: var(--text-sm); color: var(--color-ink-soft); }
+  .t-caption { font-size: var(--text-xs); font-weight: 500; color: var(--color-mist); }
+  .t-label { font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wider); text-transform: uppercase; color: var(--color-ash); }
+  .t-key { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-mist); }
+  .t-code { font-family: var(--font-mono); font-size: 12px; background: var(--color-ledge); color: var(--color-ink); padding: 0 4px; border-radius: 4px; }
+  .t-mono-val { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--color-ink); }
+</style>
+</head>
+<body class="theme-cave">
+
+<div class="section">
+  <div class="section-title">Họ chữ</div>
+  <div class="section-desc">Google Fonts: <span class="t-code">Figtree:wght@400;500;600;700</span> + <span class="t-code">Syne:wght@600;700;800</span>. Mono là stack hệ thống (không tải font).</div>
+  <div class="families">
+    <div class="fam">
+      <div class="fam-sample" style="font-family:var(--font-display);font-weight:700">Nội dung viral</div>
+      <div class="fam-name">Syne</div>
+      <div class="fam-var">--font-display</div>
+      <div class="fam-use">Tiêu đề trang, h1–h4, tên app "Auto Publisher", tiêu đề section settings.</div>
+    </div>
+    <div class="fam">
+      <div class="fam-sample" style="font-family:var(--font-sans);font-weight:500">Sẵn sàng đăng tay</div>
+      <div class="fam-name">Figtree</div>
+      <div class="fam-var">--font-sans</div>
+      <div class="fam-use">Thân bài, nav, nút, badge, ô nhập, bảng.</div>
+    </div>
+    <div class="fam">
+      <div class="fam-sample" style="font-family:var(--font-mono);font-size:22px">reup.subtitle_font_size</div>
+      <div class="fam-name">ui-monospace / Cascadia Code</div>
+      <div class="fam-var">--font-mono</div>
+      <div class="fam-use">Key settings, ID, số views, giá trị số, code inline.</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Thang cỡ</div>
+  <div class="section-desc">Base 16px. Token --text-* + --leading-* + --weight-*.</div>
+
+  <div class="row"><div class="spec"><b>Tiêu đề trang · h1</b>--font-display · --text-2xl 24px<br>700 · --tracking-tight · leading 1.25</div><div class="t-h1">Cài đặt hệ thống</div></div>
+  <div class="row"><div class="spec"><b>Tiêu đề khối · h2</b>--font-display · --text-xl 20px · 700</div><div class="t-h2">Reup — lớp thêm</div></div>
+  <div class="row"><div class="spec"><b>Tiêu đề thẻ · h3</b>--font-display · --text-lg 16px · 600</div><div class="t-h3">Nguồn tự động</div></div>
+  <div class="row"><div class="spec"><b>Thân bài</b>--font-sans · --text-md 14px · 400 · leading 1.5</div><div class="t-body">Luồng VIP: quét → xử lý → job duyệt. Bộ đếm + thử lại + kiểm tra ffmpeg.</div></div>
+  <div class="row"><div class="spec"><b>Chữ phụ / nút</b>--text-sm 12px · 500 · --color-ink-soft</div><div class="t-sm">Chỉ dán video bạn được phép dùng lại.</div></div>
+  <div class="row"><div class="spec"><b>Mô tả · caption</b>--text-xs 11px · 500 · --color-mist</div><div class="t-caption">Tham số vận hành runtime — số, toggle, giới hạn; prompt/template text chỉnh trên AI Studio.</div></div>
+  <div class="row"><div class="spec"><b>Nhãn nhóm · label-cave</b>--text-2xs 10px · 700 · uppercase<br>--tracking-wider · --color-ash</div><div class="t-label">Facebook · Giám sát · Cấu hình</div></div>
+  <div class="row"><div class="spec"><b>Key mono</b>--font-mono · --text-2xs 10px · --color-mist</div><div class="t-key">reup.audio_voice_engine · viral.min_views</div></div>
+  <div class="row"><div class="spec"><b>Giá trị mono</b>--font-mono · --text-sm 12px · --color-ink · right</div><div class="t-mono-val">1,000,000 &nbsp; 64 &nbsp; vi-VN-HoaiMyNeural &nbsp; +0%</div></div>
+  <div class="row"><div class="spec"><b>Code inline</b>--font-mono · 12px · nền --color-ledge · radius 4px</div><div><span class="t-code">winget install Gyan.FFmpeg</span> &nbsp; <span class="t-code">tiktok.com/@kenh</span></div></div>
+</div>
+
+</body>
+</html>

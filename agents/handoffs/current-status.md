@@ -180,6 +180,28 @@ Tách bạch: mất tài khoản 31/07 là Account Integrity, không phải rate
 **14400** (4 giờ); đã ghi cả hai vào DB thật; spike script poll Reel 10 s → **30 s** (Page
 mới mỗi lời gọi đều đếm); runbook 5.6 + TASK-058 ghi "2 bài cách nhau ≥ 4 giờ".
 
+### Tái cấu trúc UI/UX bằng Claude Design — vòng 3 bước (đã dựng bước 1, chờ đăng nhập)
+
+Owner mở app Claude Design hỏi cách dùng. Chốt vòng: (1) đẩy theme Cave lên Claude Design
+làm *design system* "ToolsAuto Cave" bằng tool **DesignSync** → mockup đúng màu/nút/font;
+(2) Owner mockup từng màn hình theo brief; (3) Claude Code chuyển HTML xuất ra sang
+Jinja/HTMX, một màn hình một PLAN, chụp Playwright so mockup.
+
+| Đã có | Ở đâu |
+|---|---|
+| Thư viện component tự chứa: `tokens.css` + 12 card (Foundations 3 / Components 7 / Patterns 2), marker `@dsCard`, kiểm Playwright 0 lỗi | `design/toolsauto-cave/` (ảnh `_preview/` gitignored) |
+| Brief màn hình #1 "Xưởng nội dung" + 3 ảnh hiện trạng | `docs/design/brief-01-xuong-noi-dung.md`, `docs/design/2026-09-07-*.png` |
+
+**Chặn:** DesignSync cần `/design-login` một lần trong phiên tương tác — Owner chưa chạy.
+Sau đó: `list_projects` → `create_project("ToolsAuto Cave")` → `finalize_plan` (localDir
+`design/toolsauto-cave`) → `write_files` 14 file.
+
+Lỗi UI thật lộ ra khi trích theme (ghi nợ, chưa sửa): nút torch ở trang viral
+(`Quét ngay`, `Xử lý 1/3`, `Thêm`) bị `body.theme-cave .app-btn` đè specificity → hiện
+xám; `showToast` gộp warning vào nhánh error; vài pill settings còn Tailwind sáng chưa bridge.
+Đã vá trong phiên: `htmx.ajax` không `source` làm body kẹt `htmx-request` (indicator hiện
+mãi — lỗi có sẵn), "Unknown" → "—", 33 chuỗi settings có dấu.
+
 ### Next Action
 
 1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì

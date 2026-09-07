@@ -96,3 +96,6 @@ logs/
 
 # Codacy CLI generated output
 .codacy/generated/
+
+# anh kiem tra design bundle — sinh lai bang Playwright, khong commit
+/design/toolsauto-cave/_preview/

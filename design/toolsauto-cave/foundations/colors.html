@@ -1,0 +1,150 @@
+<!-- @dsCard group="Foundations" name="Bảng màu" subtitle="Nền · bề mặt · chữ · viền · trạng thái" width="960" height="1980" -->
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>ToolsAuto Cave — Bảng màu</title>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { padding: var(--space-6); }
+  .group { margin-bottom: var(--space-6); }
+  .group-title {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: var(--weight-bold);
+    color: var(--color-ink);
+    margin-bottom: var(--space-1);
+  }
+  .group-desc { font-size: var(--text-xs); color: var(--color-mist); margin-bottom: var(--space-3); }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: var(--space-3);
+  }
+  .sw {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .sw-chip {
+    height: 56px;
+    border-bottom: 1px solid var(--color-border);
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%),
+      linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 6px 6px;
+  }
+  .sw-chip > div { height: 100%; }
+  .sw-meta { padding: var(--space-2) var(--space-3); }
+  .sw-name {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-ink);
+    word-break: break-all;
+  }
+  .sw-val {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    color: var(--color-mist);
+    margin-top: 2px;
+  }
+  .sw-alias {
+    font-size: var(--text-2xs);
+    color: var(--color-ash);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body class="theme-cave">
+
+<div class="group">
+  <div class="group-title">Nền &amp; bề mặt</div>
+  <div class="group-desc">Từ tối nhất (void — nền trang) đến sáng nhất (ledge — ô mã, khay toggle). Alias: --color-bg, --color-surface, --color-surface-raised, --color-surface-sunken.</div>
+  <div class="grid">
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-void)"></div></div><div class="sw-meta"><div class="sw-name">--color-void</div><div class="sw-val">#0c0b0a</div><div class="sw-alias">--color-bg · nền trang</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-deep)"></div></div><div class="sw-meta"><div class="sw-name">--color-deep</div><div class="sw-val">#141210</div><div class="sw-alias">--color-surface-sunken · sidebar, ô nhập, thead</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-stone)"></div></div><div class="sw-meta"><div class="sw-name">--color-stone</div><div class="sw-val">#1c1916</div><div class="sw-alias">--color-surface · app-card, bảng</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-face)"></div></div><div class="sw-meta"><div class="sw-name">--color-face</div><div class="sw-val">#25211c</div><div class="sw-alias">--color-surface-raised · nút, thẻ settings, toast</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-ledge)"></div></div><div class="sw-meta"><div class="sw-name">--color-ledge</div><div class="sw-val">#2f2a24</div><div class="sw-alias">code inline, khay toggle, badge slate</div></div></div>
+  </div>
+</div>
+
+<div class="group">
+  <div class="group-title">Viền &amp; chữ</div>
+  <div class="group-desc">edge là viền chuẩn; ash chữ mờ nhất (nhãn nhóm, thead); mist chữ phụ; ink-soft chữ nút; ink chữ chính.</div>
+  <div class="grid">
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-edge)"></div></div><div class="sw-meta"><div class="sw-name">--color-edge</div><div class="sw-val">#453f36</div><div class="sw-alias">--color-border</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-ash)"></div></div><div class="sw-meta"><div class="sw-name">--color-ash</div><div class="sw-val">#6b6358</div><div class="sw-alias">--color-text-faint · --color-border-strong</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-mist)"></div></div><div class="sw-meta"><div class="sw-name">--color-mist</div><div class="sw-val">#9a9186</div><div class="sw-alias">--color-text-muted · nav thường</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-ink-soft)"></div></div><div class="sw-meta"><div class="sw-name">--color-ink-soft</div><div class="sw-val">#cfc6b8</div><div class="sw-alias">chữ trên app-btn</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-ink)"></div></div><div class="sw-meta"><div class="sw-name">--color-ink</div><div class="sw-val">#ebe4d8</div><div class="sw-alias">--color-text · chữ chính</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-ink-inverse)"></div></div><div class="sw-meta"><div class="sw-name">--color-ink-inverse</div><div class="sw-val">#1a1208</div><div class="sw-alias">chữ trên nền torch (nút primary)</div></div></div>
+  </div>
+</div>
+
+<div class="group">
+  <div class="group-title">Torch — màu chính / cảnh báo</div>
+  <div class="group-desc">Nút primary dùng gradient torch → ember. torch-dim là nền mục nav active, badge amber; torch-border viền hover.</div>
+  <div class="grid">
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-torch)"></div></div><div class="sw-meta"><div class="sw-name">--color-torch</div><div class="sw-val">#e09a3e</div><div class="sw-alias">--color-primary · --color-warning</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-ember)"></div></div><div class="sw-meta"><div class="sw-name">--color-ember</div><div class="sw-val">#c46b2b</div><div class="sw-alias">--color-primary-hover</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-torch-dim)"></div></div><div class="sw-meta"><div class="sw-name">--color-torch-dim</div><div class="sw-val">rgba(224,154,62,.14)</div><div class="sw-alias">nền nav active, badge amber</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-torch-border)"></div></div><div class="sw-meta"><div class="sw-name">--color-torch-border</div><div class="sw-val">rgba(224,154,62,.4)</div><div class="sw-alias">viền hover / focus</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--gradient-torch)"></div></div><div class="sw-meta"><div class="sw-name">--gradient-torch</div><div class="sw-val">135deg torch → ember</div><div class="sw-alias">app-btn-primary, Lưu tất cả</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-focus-ring)"></div></div><div class="sw-meta"><div class="sw-name">--color-focus-ring</div><div class="sw-val">rgba(224,154,62,.22)</div><div class="sw-alias">box-shadow 0 0 0 3px khi focus</div></div></div>
+  </div>
+</div>
+
+<div class="group">
+  <div class="group-title">Moss — thành công</div>
+  <div class="group-desc">Không xanh lá chói. Badge green / DRAFTED "Đã tạo job" / toast thành công.</div>
+  <div class="grid">
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-moss)"></div></div><div class="sw-meta"><div class="sw-name">--color-moss</div><div class="sw-val">#7d9a6a</div><div class="sw-alias">--color-success</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-lichen)"></div></div><div class="sw-meta"><div class="sw-name">--color-lichen</div><div class="sw-val">#a8c48f</div><div class="sw-alias">chữ trên moss-dim</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-moss-dim)"></div></div><div class="sw-meta"><div class="sw-name">--color-moss-dim</div><div class="sw-val">rgba(125,154,106,.14)</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-moss-border)"></div></div><div class="sw-meta"><div class="sw-name">--color-moss-border</div><div class="sw-val">rgba(125,154,106,.4)</div></div></div>
+  </div>
+</div>
+
+<div class="group">
+  <div class="group-title">Danger — đất sét (không đỏ neon)</div>
+  <div class="group-desc">Badge red / FAILED "Lỗi" / nút Xoá / Đăng xuất / toast lỗi.</div>
+  <div class="grid">
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-danger)"></div></div><div class="sw-meta"><div class="sw-name">--color-danger</div><div class="sw-val">#c47a6a</div><div class="sw-alias">chữ lỗi</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-danger-deep)"></div></div><div class="sw-meta"><div class="sw-name">--color-danger-deep</div><div class="sw-val">#a3543a</div><div class="sw-alias">nền nút danger khi hover</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-danger-dim)"></div></div><div class="sw-meta"><div class="sw-name">--color-danger-dim</div><div class="sw-val">rgba(163,84,58,.16)</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-danger-border)"></div></div><div class="sw-meta"><div class="sw-name">--color-danger-border</div><div class="sw-val">rgba(163,84,58,.45)</div></div></div>
+  </div>
+</div>
+
+<div class="group">
+  <div class="group-title">Info &amp; nền tảng</div>
+  <div class="group-desc">info dùng cho badge blue (RUNNING / AI đang viết). fb / ig là accent nền tảng đã "làm mờ vào đá".</div>
+  <div class="grid">
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-info)"></div></div><div class="sw-meta"><div class="sw-name">--color-info</div><div class="sw-val">#7a9bb8</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-info-dim)"></div></div><div class="sw-meta"><div class="sw-name">--color-info-dim</div><div class="sw-val">rgba(122,155,184,.14)</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-fb)"></div></div><div class="sw-meta"><div class="sw-name">--color-fb</div><div class="sw-val">#4a5c72</div><div class="sw-alias">Facebook</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:linear-gradient(135deg,var(--color-ig-from),var(--color-ig-to))"></div></div><div class="sw-meta"><div class="sw-name">--color-ig-from → --color-ig-to</div><div class="sw-val">#8a5a4a → #6a4558</div><div class="sw-alias">Instagram</div></div></div>
+  </div>
+</div>
+
+<div class="group">
+  <div class="group-title">Bổ sung — màu trạng thái viral (ngoài cave-tokens.css)</div>
+  <div class="group-desc">Template viral dùng thẳng class Tailwind (sky / teal / indigo / emerald / rose / pink / red). Đưa vào tokens.css dạng --color-status-* để mockup khớp tool. Cân nhắc gom về torch/moss/info khi có dịp.</div>
+  <div class="grid">
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-status-new)"></div></div><div class="sw-meta"><div class="sw-name">--color-status-new</div><div class="sw-val">#bae6fd · sky-200</div><div class="sw-alias">NEW "Mới quét"</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-status-ready)"></div></div><div class="sw-meta"><div class="sw-name">--color-status-ready</div><div class="sw-val">#99f6e4 · teal-200</div><div class="sw-alias">READY "Sẵn sàng đăng tay"</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-job)"></div></div><div class="sw-meta"><div class="sw-name">--color-job</div><div class="sw-val">#c7d2fe · indigo-200</div><div class="sw-alias">pill "Job #12 · Nháp", nút Mở job</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-reup)"></div></div><div class="sw-meta"><div class="sw-name">--color-reup</div><div class="sw-val">#34d399 · emerald-400</div><div class="sw-alias">"Mở _reup.mp4", tag REUP</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-mega)"></div></div><div class="sw-meta"><div class="sw-name">--color-mega</div><div class="sw-val">#fda4af · rose-300</div><div class="sw-alias">tag "Mega" views cao</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-boost)"></div></div><div class="sw-meta"><div class="sw-name">--color-boost</div><div class="sw-val">#fde68a · amber-200</div><div class="sw-alias">BOOST_PENDING, tag Aff</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-pf-youtube)"></div></div><div class="sw-meta"><div class="sw-name">--color-pf-youtube</div><div class="sw-val">#fecaca · red-200</div><div class="sw-alias">badge YouTube</div></div></div>
+    <div class="sw"><div class="sw-chip"><div style="background:var(--color-pf-tiktok)"></div></div><div class="sw-meta"><div class="sw-name">--color-pf-tiktok</div><div class="sw-val">#fbcfe8 · pink-200</div><div class="sw-alias">badge TikTok</div></div></div>
+  </div>
+</div>
+
+</body>
+</html>
