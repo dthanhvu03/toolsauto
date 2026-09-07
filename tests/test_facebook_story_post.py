@@ -77,9 +77,10 @@ class _Job:
         self.caption = caption
 
 
-def test_uu_tien_link_co_dem_click():
+def test_khong_dung_tracking_url_ke_ca_khi_con_gia_tri_cu():
+    """ADR-015: job cũ còn tracking_url cũng không được đốt /r/ lên Story."""
     job = _Job(tracking_url="https://t.io/r/ab12", affiliate_url="https://shp.ee/x", caption="cap")
-    assert FacebookAdapter.story_overlay_text(job) == "https://t.io/r/ab12"
+    assert FacebookAdapter.story_overlay_text(job) == "https://shp.ee/x"
 
 
 def test_khong_co_tracking_thi_dung_link_aff_goc():

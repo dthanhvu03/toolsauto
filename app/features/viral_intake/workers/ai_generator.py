@@ -400,13 +400,6 @@ def process_draft_job(db: Session):
                     pass
 
             db.commit()
-            if job.affiliate_url and job.tracking_code:
-                try:
-                    from app.core.queue.job import JobService as _JobSvc
-                    _JobSvc._register_vercel_tracking(job)
-                    db.commit()
-                except Exception:
-                    pass
             logger.info("[AI_GEN] [Job-%s] [DRAFT_READY] AI generation complete. Awaiting user approval.", job.id)
             NotifierService.notify_draft_ready(job)
             try:

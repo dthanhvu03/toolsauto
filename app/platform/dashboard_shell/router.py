@@ -377,15 +377,6 @@ def app_tiktok_links(request: Request, db: Session = Depends(get_db)):
     ctx = AccountService.build_tiktok_links_context_data(db, request.query_params)
     return templates.TemplateResponse("pages/app_tiktok_links.html", {"request": request, **ctx})
 
-@router.get("/r/{code}")
-def redirect_tracking(code: str, db: Session = Depends(get_db)):
-    """Redirect tracking link and increment click counter."""
-    affiliate_url = DashboardService.track_redirect_click(db, code)
-    if not affiliate_url:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Tracking link not found or no affiliate URL set.")
-    return RedirectResponse(affiliate_url, status_code=302)
-
 @router.get("/discovery/panel", response_class=HTMLResponse)
 def get_discovery_panel(request: Request, db: Session = Depends(get_db)):
     channels = DashboardService.get_discovery_channels(db)

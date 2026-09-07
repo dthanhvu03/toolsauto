@@ -179,9 +179,6 @@
               {% endif %}
             </div>
             {% endif %}
-            {% if job.click_count and job.click_count > 0 %}
-            <span class="text-amber-600 font-semibold">{{ job.click_count }} clicks</span>
-            {% endif %}
         {% elif job.status == 'AWAITING_STYLE' %}
             <span class="text-cyan-600/80 italic" title="Chọn style trên Telegram trước khi AI viết caption">Chưa đăng · chờ style</span>
         {% elif job.status == 'DRAFT' %}
@@ -206,7 +203,7 @@
             <span class="text-indigo-600 font-semibold text-[10px]" title="{{ job.auto_comment_text }}">Comment affiliate</span>
             {% endif %}
             {% if job.tracking_code %}
-            <span class="text-gray-400 font-mono text-[10px]" title="/r/{{ job.tracking_code }}">{{ job.tracking_code }}</span>
+            <span class="text-gray-400 font-mono text-[10px]" title="Sub ID gợi ý — đặt vào URL affiliate để sàn đếm click">{{ job.tracking_code }}</span>
             {% endif %}
         </div>
     </td>

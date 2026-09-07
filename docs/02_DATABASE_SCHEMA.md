@@ -49,10 +49,10 @@ Trung tâm lưu trữ các tác vụ đăng bài, AI sinh caption và tracking.
   - `view_24h` (INT): Số lượt view cập nhật sau 24h
   - `metrics_checked` (BOOL), `last_metrics_check_ts` (INT)
 - **Link Tracking (Affiliate)**:
-  - `tracking_code` (TEXT): Mã rút gọn (ví dụ uuid[:8])
-  - `tracking_url` (TEXT): Link trỏ qua local domain `/r/code`
-  - `affiliate_url` (TEXT): Link gốc tới Shopee/Lazada...
-  - `click_count` (INT): Đếm số lượt nhấp
+  - `tracking_code` (TEXT): uuid[:8], giữ làm **Sub ID gợi ý** cho bài (ADR-015)
+  - `tracking_url` (TEXT): **không còn được ghi** từ 2026-09-07 (ADR-015 gỡ route `/r/{code}`); cột giữ lại, luôn NULL với job mới
+  - `affiliate_url` (TEXT): Link gốc tới Shopee/Lazada... — đây là link chèn vào comment/Story
+  - `click_count` (INT): không còn được tăng (route `/r/` đã gỡ); đếm click bằng Sub ID của sàn
 - `auto_comment_text` (TEXT): Mẫu bình luận chèn link sau khi đăng.
 - Timestamps: `locked_at`, `last_heartbeat_at`, `started_at`, `finished_at`, `created_at`
 

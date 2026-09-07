@@ -1653,13 +1653,12 @@ class FacebookAdapter(AdapterInterface):
     @staticmethod
     def story_overlay_text(job: Job) -> str:
         """
-        Chữ phủ lên tin. Ưu tiên link có đếm click, rồi tới link aff gốc.
+        Chữ phủ lên tin. Ưu tiên link affiliate gốc (ADR-015: không dùng link rút gọn).
 
         Không có link nào thì dùng caption — tin không chữ vẫn đăng được nên trả
         chuỗi rỗng cũng hợp lệ.
         """
         for value in (
-            getattr(job, "tracking_url", None),
             getattr(job, "affiliate_url", None),
             getattr(job, "caption", None),
         ):

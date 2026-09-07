@@ -37,7 +37,7 @@
 | Tìm video theo từ khoá — **YouTube, Facebook** | **C** | `discovery_scraper` **chỉ có TikTok**. Hai nguồn này chỉ tải được khi dán link |
 | Quản lý nhiều tài khoản | **C** | Code có, nhưng DB **chỉ từng có 1 account facebook**. Chưa kiểm chứng nhiều account |
 | Instagram / TikTok / Threads | **C** | Có adapter với `publish()`, nhưng **0 account** nào thuộc 3 nền tảng này. Chưa chạy lần nào |
-| **Link rút gọn đếm click** | **D** | P0-2: link tương đối; route `/r/{code}` nằm sau tường đăng nhập nên khách bấm bị chặn; `tracking_url` ghi rồi mất vì không commit |
+| **Link rút gọn đếm click** | — | **Đã gỡ 2026-09-07 (ADR-015).** Đếm click bằng Sub ID Shopee / sub1 AccessTrade trong chính URL affiliate |
 | **Gắn giỏ hàng / sản phẩm** | **D** | **0 dòng code.** TASK-055 mới là khảo sát, chưa khảo sát |
 | Tìm video **Douyin** | **D** | Không hỗ trợ. Chặn theo vùng + cần chữ ký request, phải có proxy Trung Quốc |
 | Link bấm được **trong Story** | **D** | Chưa ai kiểm chứng Facebook có cho phép không |
@@ -63,6 +63,6 @@
 - **5 mục B → A**: cần Owner mở trình duyệt chạy thật một lần cho mỗi luồng
   (Story, comment kèm ảnh, video dài, bài feed qua hàng đợi, lấy post_url).
   Ước tính ~30 phút cho cả 5.
-- **Link đếm click D → A**: vá cụm P0-2 (3 lỗi ở 3 tầng) + test end-to-end với
-  trình duyệt **chưa đăng nhập**.
+- **Đếm click**: không còn link rút gọn (ADR-015). Owner đặt Sub ID Shopee / sub1
+  AccessTrade vào chính URL affiliate khi lưu link — sàn tự đếm click và đơn.
 - **Giỏ hàng D → ?**: khảo sát trước, đừng code mù (TASK-055).

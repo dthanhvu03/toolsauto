@@ -129,9 +129,6 @@ def _maybe_attach_job(db: Session, job_id: int | None, link: AffiliateLink) -> N
         template = link.comment_template or "Xem thêm tại [LINK]"
         JobService.attach_affiliate_to_job(job, affiliate_url=link.url, comment_template=template)
         db.commit()
-        if job.affiliate_url and job.tracking_code:
-            JobService._register_vercel_tracking(job)
-            db.commit()
         logger.info("[LOOKUP_QUEUE] Attached affiliate to DRAFT job=%s keyword=%s", job_id, link.keyword)
     except Exception as exc:
         logger.warning("[LOOKUP_QUEUE] attach job %s failed: %s", job_id, exc)

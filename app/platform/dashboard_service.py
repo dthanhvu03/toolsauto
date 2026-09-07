@@ -33,15 +33,6 @@ class DashboardService:
         runtime_settings.load_runtime_settings_into_process(db)
 
     @staticmethod
-    def track_redirect_click(db: Session, code: str) -> str | None:
-        job = db.query(Job).filter(Job.tracking_code == code).first()
-        if not job or not job.affiliate_url:
-            return None
-        job.click_count = (job.click_count or 0) + 1
-        db.commit()
-        return job.affiliate_url
-
-    @staticmethod
     def get_page_posting_stats(db: Session) -> Dict[str, Any]:
         try:
             cap = int(runtime_settings.get_effective(db, "publish.posts_per_page_per_day") or 0)

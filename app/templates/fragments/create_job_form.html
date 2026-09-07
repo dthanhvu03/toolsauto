@@ -170,17 +170,6 @@
             const affiliateInput = document.getElementById('bulk-affiliate-url');
             const autoCommentInput = document.getElementById('bulk-auto-comment');
 
-            // --- Auto Comment Generator ---
-            // Automatically suggest a tracking link structure when affiliate URL is entered
-            affiliateInput.addEventListener('input', (e) => {
-                const url = e.target.value.trim();
-                if (url && !autoCommentInput.value.trim()) {
-                    autoCommentInput.value = "{tracking_url}";
-                } else if (!url && autoCommentInput.value.trim() === "{tracking_url}") {
-                    autoCommentInput.value = "";
-                }
-            });
-
             // --- Load Managed Pages on Account Select ---
             accountSelect.addEventListener('change', async (e) => {
                 const accId = e.target.value;

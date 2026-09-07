@@ -484,8 +484,7 @@ class JobService:
             
         # 4. Create Job with tracking
         import uuid
-        tracking_code = str(uuid.uuid4())[:8]
-        tracking_url = f"/r/{tracking_code}"
+        tracking_code = str(uuid.uuid4())[:8]  # Sub ID gợi ý (ADR-015), không còn sinh /r/
         
         initial_status = JobStatus.DRAFT if caption and "[AI_GENERATE]" in caption else JobStatus.PENDING
         
@@ -499,7 +498,6 @@ class JobService:
             tries=0,
             dedupe_key=dedupe_key,
             tracking_code=tracking_code,
-            tracking_url=tracking_url,
             affiliate_url=affiliate_url.strip() if affiliate_url and affiliate_url.strip() else None,
             target_page=target_page.strip() if target_page and target_page.strip() else None,
             content_hash=resolved_hash,
@@ -531,10 +529,7 @@ class JobService:
             
         # Log creation
         JobService._log_event(db, new_job.id, "INFO", "Job manually created via UI")
-        
-        # 6. Register tracking code on Vercel (non-blocking)
-        JobService._register_vercel_tracking(new_job)
-        
+
         return new_job
 
     @staticmethod
@@ -568,30 +563,6 @@ class JobService:
         dedupe_key = hashlib.sha256(dedupe_raw.encode()).hexdigest()[:16]
         
         return JobService.create_job(db, account_id, saved_path, caption, schedule_ts, randomize_caption, dedupe_key, affiliate_url, target_page.strip())
-    
-    @staticmethod
-    def _register_vercel_tracking(job: Job):
-        """
-        Register tracking code on Vercel redirect service.
-        Non-blocking: failure is silently logged, local tracking still works.
-        """
-        from app.config import VERCEL_REDIRECT_URL
-        vercel_url = VERCEL_REDIRECT_URL
-        
-        if not vercel_url or not job.affiliate_url or not job.tracking_code:
-            return
-            
-        try:
-            import requests
-            resp = requests.post(
-                f"{vercel_url}/api/register",
-                json={"code": job.tracking_code, "url": job.affiliate_url},
-                timeout=5
-            )
-            if resp.ok:
-                job.tracking_url = f"{vercel_url}/r/{job.tracking_code}"
-        except Exception:
-            pass  # Non-blocking — local tracking still works
     
     @staticmethod
     def mark_done(db: Session, job: Job, details: str = None, external_post_id: str = None, post_url: str = None):
@@ -1039,11 +1010,11 @@ class JobService:
         comment_template: str,
     ) -> None:
         """
-        Parity với bulk create: tracking_code + affiliate_url + comment dùng tracking URL.
-        Gọi trước db.commit(); có thể gọi _register_vercel_tracking sau commit nếu cần.
+        Parity với bulk create: tracking_code (Sub ID gợi ý) + affiliate_url + comment
+        chèn thẳng URL affiliate gốc (ADR-015: không còn link rút gọn /r/).
+        Gọi trước db.commit().
         """
         import uuid
-        import app.config as config
 
         url = (affiliate_url or "").strip()
         if not url:
@@ -1053,12 +1024,8 @@ class JobService:
         job.tracking_code = tracking_code
         job.affiliate_url = url
 
-        vurl = (getattr(config, "VERCEL_REDIRECT_URL", None) or "").strip().rstrip("/")
-        full_turl = f"{vurl}/r/{tracking_code}" if vurl else f"/r/{tracking_code}"
-        job.tracking_url = full_turl
-
         template = comment_template or ""
-        comment = template.replace("[LINK]", full_turl).replace("{tracking_url}", full_turl)
+        comment = template.replace("[LINK]", url).replace("{tracking_url}", url)
         job.auto_comment_text = comment.strip() or None
 
     @staticmethod
@@ -1101,7 +1068,6 @@ class JobService:
                 dedupe_key=data['dedupe_key'],
                 batch_id=batch_id,
                 tracking_code=data['tracking_code'],
-                tracking_url=f"/r/{data['tracking_code']}",
                 affiliate_url=data['clean_affiliate'],
                 auto_comment_text=data['final_auto_comment'],
                 comment_image_path=data.get('comment_image_path'),
@@ -1206,10 +1172,8 @@ class JobService:
 
                 final_comment = clean_auto_comment
                 if final_comment:
-                    from app.config import VERCEL_REDIRECT_URL
-                    vurl = (VERCEL_REDIRECT_URL or "").strip().rstrip("/")
-                    full_turl = f"{vurl}/r/{tracking_code}" if vurl else f"/r/{tracking_code}"
-                    final_comment = final_comment.replace("{tracking_url}", full_turl)
+                    # ADR-015: không còn link rút gọn — chèn thẳng URL affiliate gốc
+                    final_comment = final_comment.replace("{tracking_url}", clean_affiliate or "")
 
                 files_data.append({
                     'platform': account.platform,
