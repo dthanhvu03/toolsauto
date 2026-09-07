@@ -68,6 +68,30 @@ nhờ fallback. Backend, ngoài vai — ghi `TASK-059`, KHÔNG sửa, cần acco
   hậu quả chỉ là toast "Đã nhận" rồi worker làm thay. Muốn atomic phải sửa processor.
 - Polling có thể tắt sớm giữa hai video của một lô (khoảng trống PROCESSING rất ngắn).
 
+### Khảo sát tích hợp miễn phí — `docs/research/2026-09-07-tich-hop-mien-phi.md`
+
+Owner yêu cầu "lùng trên mạng xem có gì hay ho mà free". 5 agent, 5 hướng, mọi mục
+mở trang gốc + ghi ngày kiểm. Xếp hạng theo *vá đúng chỗ đang hỏng ÷ công sức*:
+
+1. Key Gemini `AIza…` + **Groq** dự phòng qua 3 biến `.env` (không sửa code) — 15 phút
+2. **Xoá P0-2** thay vì sửa: đếm click bằng **Sub ID** Shopee Affiliate / `sub1` AccessTrade — 0 code
+3. **healthchecks.io** (20 check free, kênh Telegram/ntfy) — 1 dòng ping cuối backup + mỗi vòng worker
+4. **Tailscale serve** — dashboard trên điện thoại, không mở port
+5. **Meta Graph API** đăng Page: cá nhân có role trên app **không cần App Review/Business
+   Verification**; Reels/feed/story/comment+ảnh/lên lịch đều có endpoint. Playwright + cookie
+   là *chính xác hành vi Meta cấm* trong Account Integrity. Bẫy: app Dev mode thì bài
+   **công chúng không thấy**, phải Live mode → **spike bằng curl trước** (checklist 6 bước
+   trong doc), đạt mới viết PLAN.
+6. Phụ đề đốt `faster-whisper → pysubs2 → ffmpeg` (thư viện đã trong requirements — chỉ
+   `faster-whisper` **chưa cài** trong venv); nhạc nền **Meta Sound Collection**; rclone
+   thay Drive for Desktop; Postgres cài thẳng (Docker Desktop không sống trước logon).
+
+Code lệch thực tế phát hiện thêm: `native_fallback.py:22-35` liệt kê `gemini-2.0-flash`
+**đã bị Google shut down** — backend, cần vào PLAN.
+
+Loại bỏ có lý do: Bitly Free (không click), ElevenLabs Free (không thương mại), F5-TTS VI
+(NC), stable-ts (archive), GitHub Models (đóng), scraping TikTok/Shopee (ToS).
+
 ### Next Action
 
 1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì
@@ -78,6 +102,9 @@ nhờ fallback. Backend, ngoài vai — ghi `TASK-059`, KHÔNG sửa, cần acco
 4. Các việc cũ vẫn nguyên: Drive (stream, không mirror), đổi mật khẩu FB/IG/TikTok,
    dựng BM theo `02`, TASK-057, dọn ổ `C:`.
 5. Anti: quyết PLAN-059 (chờ account) và TASK-059.
+6. **Owner: spike Graph API 2 giờ** theo checklist trong `docs/research/…` — đây là thứ
+   duy nhất có thể đưa tự động đăng quay lại mà không lặp lại 31/07.
+7. Owner: `pip install faster-whisper` vào venv; healthchecks.io + Tailscale (1 giờ).
 
 ---
 
