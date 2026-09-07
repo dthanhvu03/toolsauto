@@ -1,5 +1,86 @@
 # Current Status
 
+## Phiên 2026-09-07 — Vá 2 lỗ hổng luồng code; hạ 2 mục "A" trong bảng thực lực
+
+Owner hỏi "báo cáo dự án" → "luồng code như nào" → "triển khai vá theo thứ tự".
+Đọc code thật thay vì kể lại handoff; tìm ra 3 việc, làm 2, việc 3 chỉ soạn PLAN.
+
+### System State (2026-09-07)
+
+- Postgres **đã bật lại** (`docker compose up -d`, healthy). Bị dừng tay 05/09 21:25,
+  `unless-stopped` giữ nguyên trạng thái dừng — chính sách chạy đúng, không phải lỗi.
+- Ổ `G:` (Drive) **vẫn chưa có** → backup ngoại vi 0 bản. Backup local: 3 file, đều 05/09.
+- Ổ `C:` còn **8,1 GB** (giảm từ 8,6).
+- DB: jobs `DRAFT`=7, `DONE`=4, `PENDING`=2, `FAILED`=1; `viral_materials` `DRAFTED`=11.
+  **0 `AWAITING_STYLE`** — lỗ hổng (1) bên dưới chưa gây hậu quả vì xưởng chưa nhận
+  material mới từ khi về local.
+- Windows **278 passed**; Linux container `python:3.12-slim` **261 passed, 17 skipped**;
+  import-linter 2 kept / 0 broken.
+
+### Done This Session
+
+| # | Việc | Proof |
+|---|---|---|
+| 1 | **ADR-013** — `ai_generator` vào stack local. `build_apps()` nay trả `['web','maintenance','fb_publisher','ai_generator']`. Thêm handler `SIGBREAK` cho worker (trước giờ chưa từng chạy dưới supervisor nên thiếu) | `tests/test_local_supervisor.py` 15 passed. Chạy thật `-m ai_generator` 10s rồi gửi `CTRL_BREAK_EVENT`: log "Received termination signal… Waiting for AI Job 9" — đường thoát êm hoạt động |
+| 2 | Nút **Xử lý / Thử lại / Xử lý mới** ở `/app/viral` chuyển sang `BackgroundTasks`. Validate (tồn tại / PROCESSING / status / ffmpeg) vẫn đồng bộ → toast lỗi ngay; tải + ffmpeg xuống nền với `SessionLocal()` riêng. Tách `ViralService.check_processable()` để hai đường dùng chung 4 chuỗi lỗi. Trang bật polling 10s **chỉ sau khi** server bắn `viralBackgroundStarted`, tự tắt khi hết PROCESSING hoặc 30 phút | `tests/test_viral_router_background.py` 18 passed (mới). Full suite 278 |
+| 3 | **PLAN-059** tách `facebook/adapter.py` — chỉ ĐỀ XUẤT, không execute | `agents/plans/active/PLAN-059-split-facebook-adapter.md` |
+| 4 | Hạ **AI viết caption A→C**, **Telegram A→C** trong `docs/sales/00` | xem phát hiện bên dưới |
+| 5 | Bổ sung handoff thiếu commit `7d27fff` của phiên trước | mục riêng bên dưới |
+
+### Phát hiện quan trọng nhất phiên: chuỗi AI caption CHƯA TỪNG chạy được ở máy này
+
+Khi chạy thử `ai_generator` 10 giây, nó nhặt job 9 ngay lập tức và toàn bộ chuỗi đổ:
+- **Gemini 401 UNAUTHENTICATED** — `.env` chỉ có `GOOGLE_API_KEY` dài 53 ký tự, đầu
+  `AQ.Ab…` — **không phải API key** (key thật dạng `AIza…`, 39 ký tự). Có vẻ là
+  access token/cookie dán nhầm. `GEMINI_API_KEY` không có.
+- 9Router tắt (`router_disabled`), thiếu `faster_whisper`, `OPENROUTER_API_KEY` không có.
+- Telegram **404** — `.env` không có `TELEGRAM_BOT_TOKEN`/`CHAT_ID`.
+
+Và bằng chứng trong DB: **cả 7 job `DRAFT` còn nguyên placeholder `[AI_GENERATE] …`**
+— chưa job nào từng được AI viết caption. Bảng thực lực ghi "AI caption — A — 7 job
+`DRAFT [AI_GENERATE]`" là lấy bằng chứng *đang chờ AI* làm bằng chứng *AI đã chạy*.
+Trong 4 job `DONE`, chỉ job 7 (07/2026, VPS) có caption giống AI viết.
+
+Job 9 bị tôi kill giữa chừng → kẹt `AI_PROCESSING`, đã trả về `DRAFT` bằng đúng câu
+`UPDATE` mà `run_loop` dùng lúc khởi động. Không tốn tiền: không có key OpenRouter.
+
+### Bổ sung phiên 2026-09-05 (e) — commit `7d27fff` chưa được ghi
+
+1. Nhãn kéo-thả hứa `.webp` mà `accept` và `IMAGE_EXTENSIONS` đều không có → sửa
+   **chữ cho khớp code**, không thêm `.webp`. Test riêng canh 5 định dạng.
+2. `import-linter` vào CI: thực tế **0/2 contract đạt** (audit ghi "2 vi phạm"). Hợp
+   thức `dispatcher → features` theo ADR-008; còn **2 nợ thật** ghi tên trong
+   `.importlinter`. CI có bước "Check module boundaries".
+3. Archive PLAN-046/057/058.
+
+### Escalation — 3 lỗi ngầm trong adapter (TASK-059)
+
+Agent đọc `adapter.py` tìm ra 3 `NameError`/`UnboundLocalError` bị `except Exception`
+nuốt: `SessionLocal` chưa import (695), `al_lower` chưa gán (2500), `search_terms`
+có thể chưa gán (463). Đường chuyển Page qua aria-label **chưa bao giờ khớp**, sống
+nhờ fallback. Backend, ngoài vai — ghi `TASK-059`, KHÔNG sửa, cần account để chứng minh.
+
+### Nợ mới ghi nhận
+
+- Toast kết quả cuối (✅ tạo job #N / ❌ lỗi) không còn về tới người dùng sau khi
+  chuyển nền — chỉ thấy qua trạng thái bảng + tooltip `last_error`. Muốn có lại cần SSE.
+- Race validate→claim giữa nút bấm và `maintenance` là **lỗi có sẵn** (không atomic);
+  hậu quả chỉ là toast "Đã nhận" rồi worker làm thay. Muốn atomic phải sửa processor.
+- Polling có thể tắt sớm giữa hai video của một lô (khoảng trống PROCESSING rất ngắn).
+
+### Next Action
+
+1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì
+   `ai_generator` chạy cũng vô ích. Xoá `GOOGLE_API_KEY` sai loại.
+2. Owner: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` nếu muốn thông báo.
+3. Owner: bật `start.ps1 -Stack` → xem `ai_generator` trong statuses → ADR-013 hết hiệu lực.
+   Sau đó ≥1 job `DRAFT` có caption thật ⇒ nâng AI caption C→A.
+4. Các việc cũ vẫn nguyên: Drive (stream, không mirror), đổi mật khẩu FB/IG/TikTok,
+   dựng BM theo `02`, TASK-057, dọn ổ `C:`.
+5. Anti: quyết PLAN-059 (chờ account) và TASK-059.
+
+---
+
 ## Phiên 2026-09-05 (e) — Sao lưu ngoại vi sang Google Drive (ADR-012)
 
 ### Đã xong, đã push — `fdb58bb`

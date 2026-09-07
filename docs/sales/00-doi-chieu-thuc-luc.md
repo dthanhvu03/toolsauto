@@ -25,10 +25,10 @@
 | Tải video khi dán link (TikTok/YT/FB/IG) | **A** | 11 `viral_materials` xử lý xong, `status=DRAFTED`, **0 lỗi** |
 | Tìm video viral **TikTok** theo từ khoá | **A** | `discovery_scraper.search_hashtag()` chạy qua yt-dlp |
 | Ghép intro/outro, thumbnail, chống trùng | **A** | `reup_processor` + `intro_service`, cùng 11 material trên |
-| AI viết caption (Gemini) | **A** | `app/core/ai/`, 7 job `DRAFT [AI_GENERATE]` trong DB |
+| AI viết caption (Gemini) | **C** | **Hạ từ A ngày 2026-09-07.** 7 job `DRAFT` kia còn nguyên placeholder `[AI_GENERATE] …` — là bằng chứng *đang chờ AI*, không phải AI đã chạy. Chỉ job 7 (`DONE`, 07/2026, VPS) có caption giống AI viết. Ở máy local: `GOOGLE_API_KEY` sai loại (không phải key `AIza…`) → Gemini **401**, thiếu `faster_whisper`, 9Router tắt. Chuỗi fallback có trong code nhưng chưa có bằng chứng chạy được ở local |
 | Hàng đợi, hẹn giờ, cooldown, giới hạn ngày | **A** | `claim_next_job` chạy thật; `daily_limit=3` trên account |
 | Bảng điều khiển web | **A** | `app/platform/dashboard_shell` |
-| Thông báo Telegram | **A** | `app/features/telegram_bot` |
+| Thông báo Telegram | **C** | Code có; nhưng `.env` local **không có** `TELEGRAM_BOT_TOKEN`/`CHAT_ID` → gửi trả 404 (kiểm 2026-09-07). Chỉ chạy được khi cấu hình lại |
 | **Bài feed qua hàng đợi** | **B** | PLAN-052, test xanh. Trước đó job FEED nằm PENDING vĩnh viễn. Chưa chạy thật |
 | **Đăng Story** | **B** | PLAN-054, 23 test. `story_composer.py`. **Chưa chạm Facebook thật** |
 | **Comment kèm ảnh** | **B** | PLAN-055, 12 test + migration. Chưa chạy thật |
@@ -54,6 +54,11 @@
 4. Sửa mô tả combo thì sửa bảng này trước.
 
 ## Việc cần làm để nâng hạng
+
+- **AI caption C → A**: Owner đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`,
+  bật stack (`ai_generator` nay đã nằm trong stack local — ADR-013), thấy ≥1 job
+  `DRAFT` có caption thật thay cho placeholder `[AI_GENERATE]`.
+- **Telegram C → A**: đặt `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, nhận được 1 tin.
 
 - **5 mục B → A**: cần Owner mở trình duyệt chạy thật một lần cho mỗi luồng
   (Story, comment kèm ảnh, video dài, bài feed qua hàng đợi, lấy post_url).

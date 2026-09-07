@@ -371,24 +371,34 @@ class ViralService:
         return ffmpeg_path.ffmpeg_available()
 
     @staticmethod
+    def check_processable(db: Session, material_id: int) -> Optional[str]:
+        """
+        Lý do KHÔNG thể xử lý material (None = được phép).
+        Tách riêng để router kiểm tra đồng bộ (toast lỗi ngay) trước khi đẩy pipeline nặng xuống nền.
+        """
+        from app.constants import ViralStatus
+
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat:
+            return f"Không tìm thấy material #{material_id}."
+        if mat.status == ViralStatus.PROCESSING:
+            return f"#{material_id} đang xử lý (PROCESSING) — đợi xong hoặc chờ recover stale."
+        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP, ViralStatus.FAILED):
+            return f"#{material_id} trạng thái={mat.status} — chỉ xử lý NEW/REUP/FAILED."
+        if not ViralService.ffmpeg_available():
+            return "Thiếu ffmpeg/ffprobe trên PATH — cài rồi thử lại (reup cần ffprobe)."
+        return None
+
+    @staticmethod
     def process_material(db: Session, material_id: int) -> Tuple[bool, str]:
         """Download + reup + queue one NEW/REUP/FAILED material (manual Smart bridge)."""
         from app.constants import ViralStatus
         from app.features.viral_intake.processor import ViralProcessorService
 
+        reason = ViralService.check_processable(db, material_id)
+        if reason:
+            return False, reason
         mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
-        if not mat:
-            return False, f"Không tìm thấy material #{material_id}."
-        if mat.status == ViralStatus.PROCESSING:
-            return False, f"#{material_id} đang xử lý (PROCESSING) — đợi xong hoặc chờ recover stale."
-        if mat.status not in (ViralStatus.NEW, ViralStatus.REUP, ViralStatus.FAILED):
-            return False, f"#{material_id} trạng thái={mat.status} — chỉ xử lý NEW/REUP/FAILED."
-
-        if not ViralService.ffmpeg_available():
-            return (
-                False,
-                "Thiếu ffmpeg/ffprobe trên PATH — cài rồi thử lại (reup cần ffprobe).",
-            )
 
         ViralProcessorService().download_and_queue(db, material_id)
         db.refresh(mat)

@@ -1,17 +1,65 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.orm import Session
+import logging
 import time
-from app.core.database.core import get_db
+from app.constants import ViralStatus
+from app.core.database.core import SessionLocal, get_db
 from app.core.database.models import ViralMaterial
 from app.utils.htmx import htmx_toast_response
 from app.main_templates import templates
 from app.features.viral_intake.service import ViralService
 
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/viral", tags=["viral"])
+
+# HX-Trigger báo cho trang biết pipeline đã được đẩy xuống nền → bật polling nhẹ tới khi hết PROCESSING.
+_BG_STARTED_TRIGGERS = {"refreshViralTable": True, "viralBackgroundStarted": True}
+
+
+def _process_material_in_background(material_id: int) -> None:
+    """
+    Chạy pipeline nặng (yt-dlp + ffmpeg) ngoài request.
+    Mở session riêng vì session của request đã đóng khi response trả về.
+    Lỗi không được nuốt im lặng: log đầy đủ stack.
+    """
+    try:
+        with SessionLocal() as db:
+            ok, msg = ViralService.process_material(db, material_id)
+            logger.info("[VIRAL][bg] material #%s ok=%s — %s", material_id, ok, msg)
+    except Exception:
+        logger.exception("[VIRAL][bg] Lỗi xử lý nền material #%s", material_id)
+
+
+def _process_new_batch_in_background(limit: int) -> None:
+    """Như trên, cho lô NEW (process_new_batch tự clamp limit)."""
+    try:
+        with SessionLocal() as db:
+            ok, fail, msg = ViralService.process_new_batch(db, limit=limit)
+            logger.info("[VIRAL][bg] batch limit=%s ok=%s fail=%s — %s", limit, ok, fail, msg)
+    except Exception:
+        logger.exception("[VIRAL][bg] Lỗi xử lý nền lô NEW (limit=%s)", limit)
+
+
+def _accept_material(
+    db: Session, background: BackgroundTasks, material_id: int
+) -> HTMLResponse:
+    """Kiểm tra đồng bộ (toast lỗi ngay nếu không hợp lệ), hợp lệ thì đẩy pipeline xuống nền."""
+    reason = ViralService.check_processable(db, material_id)
+    if reason:
+        return htmx_toast_response(
+            reason, type="error", extra_triggers={"refreshViralTable": True}
+        )
+    background.add_task(_process_material_in_background, material_id)
+    return htmx_toast_response(
+        f"Đã nhận #{material_id}, đang xử lý nền (tải + reup)… bảng tự làm mới khi xong.",
+        type="success",
+        extra_triggers=_BG_STARTED_TRIGGERS,
+    )
 
 
 def _render_viral_tbody(request: Request, db: Session, scan_message: str | None = None) -> str:
@@ -66,34 +114,45 @@ def force_scan(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/process-new", response_class=HTMLResponse)
-def process_new(limit: int = Form(3), db: Session = Depends(get_db)):
-    """Manual Smart bridge: download/reup/queue up to N NEW materials."""
-    ok, _fail, msg = ViralService.process_new_batch(db, limit=limit)
-    toast_type = "success" if ok > 0 else "error"
+def process_new(
+    background: BackgroundTasks, limit: int = Form(3), db: Session = Depends(get_db)
+):
+    """Manual Smart bridge: download/reup/queue up to N NEW materials — chạy nền, trả toast ngay."""
+    if not ViralService.ffmpeg_available():
+        return htmx_toast_response(
+            "Thiếu ffmpeg/ffprobe trên PATH — không thể reup. Cài rồi thử lại.",
+            type="error",
+        )
+    new_count = (
+        db.query(ViralMaterial).filter(ViralMaterial.status == ViralStatus.NEW).count()
+    )
+    if new_count == 0:
+        return htmx_toast_response(
+            "Không còn video mới (NEW) để xử lý.",
+            type="error",
+            extra_triggers={"refreshViralTable": True},
+        )
+    background.add_task(_process_new_batch_in_background, limit)
     return htmx_toast_response(
-        msg, type=toast_type, extra_triggers={"refreshViralTable": True}
+        f"Đã nhận, đang xử lý nền tối đa {limit} video NEW… bảng tự làm mới khi xong.",
+        type="success",
+        extra_triggers=_BG_STARTED_TRIGGERS,
     )
 
 
 @router.post("/{material_id}/process", response_class=HTMLResponse)
-def process_one(material_id: int, db: Session = Depends(get_db)):
-    ok, msg = ViralService.process_material(db, material_id)
-    return htmx_toast_response(
-        msg,
-        type="success" if ok else "error",
-        extra_triggers={"refreshViralTable": True},
-    )
+def process_one(
+    material_id: int, background: BackgroundTasks, db: Session = Depends(get_db)
+):
+    return _accept_material(db, background, material_id)
 
 
 @router.post("/{material_id}/retry", response_class=HTMLResponse)
-def retry_one(material_id: int, db: Session = Depends(get_db)):
+def retry_one(
+    material_id: int, background: BackgroundTasks, db: Session = Depends(get_db)
+):
     """Alias VIP: Thử lại FAILED (cùng pipeline process)."""
-    ok, msg = ViralService.process_material(db, material_id)
-    return htmx_toast_response(
-        msg,
-        type="success" if ok else "error",
-        extra_triggers={"refreshViralTable": True},
-    )
+    return _accept_material(db, background, material_id)
 
 
 def _render_viral_settings(viral_min_views: int, viral_max_videos: int, saved: bool = False) -> str:

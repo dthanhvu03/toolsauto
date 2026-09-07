@@ -188,9 +188,53 @@
       if (text && label) label.textContent = text;
       bar.classList.toggle('hidden', !on);
     }
-    document.body.addEventListener('refreshViralTable', () => {
-      const page = parseInt(new URL(window.location.href).searchParams.get('page') || '1', 10) || 1;
-      refreshViral(page);
+    function currentViralPage() {
+      return parseInt(new URL(window.location.href).searchParams.get('page') || '1', 10) || 1;
+    }
+    document.body.addEventListener('refreshViralTable', () => refreshViral(currentViralPage()));
+
+    // Polling nền: CHỈ bật sau khi server báo đã đẩy pipeline xuống nền (viralBackgroundStarted),
+    // tự tắt khi bảng không còn PROCESSING (đếm từ nút lọc — số toàn cục, không phụ thuộc bộ lọc)
+    // hoặc hết hạn ~30 phút (khớp STALE_PROCESSING_SEC phía server). Không có gì xử lý → không poll.
+    const VIRAL_BG_POLL_MS = 10000;
+    const VIRAL_BG_POLL_MAX_TICKS = 180;
+    let viralBgPoll = null;
+    let viralBgPollTicks = 0;
+    let viralBgPollAwaitingTable = false;
+    function viralProcessingCount() {
+      const btn = document.querySelector('#viral-table button[title="PROCESSING"]');
+      const m = (btn ? btn.textContent : '').match(/(\d+)\s*$/);
+      if (m) return parseInt(m[1], 10) || 0;
+      return document.querySelectorAll('#viral-table td span[title="PROCESSING"]').length;
+    }
+    function stopViralBgPoll() {
+      if (viralBgPoll) clearInterval(viralBgPoll);
+      viralBgPoll = null;
+      viralBgPollAwaitingTable = false;
+      setViralBusy(false);
+    }
+    function startViralBgPoll() {
+      if (viralBgPoll) return;
+      viralBgPollTicks = 0;
+      viralBgPoll = setInterval(() => {
+        viralBgPollTicks += 1;
+        if (viralBgPollTicks > VIRAL_BG_POLL_MAX_TICKS) { stopViralBgPoll(); return; }
+        viralBgPollAwaitingTable = true;
+        refreshViral(currentViralPage());
+      }, VIRAL_BG_POLL_MS);
+    }
+    document.body.addEventListener('viralBackgroundStarted', () => {
+      setViralBusy(true, 'Đang xử lý nền (yt-dlp + reup)… bảng tự làm mới mỗi 10s.');
+      startViralBgPoll();
+    });
+    document.body.addEventListener('htmx:afterSettle', (evt) => {
+      // Chỉ quyết định dừng trên lượt refresh do poll khởi xướng — lượt refresh ngay sau bấm nút
+      // có thể chạy trước khi task nền kịp đặt PROCESSING.
+      if (!viralBgPoll || !viralBgPollAwaitingTable) return;
+      const path = evt.detail?.pathInfo?.requestPath || evt.detail?.requestConfig?.path || '';
+      if (!path.startsWith('/app/viral/table')) return;
+      viralBgPollAwaitingTable = false;
+      if (viralProcessingCount() === 0) stopViralBgPoll();
     });
     document.body.addEventListener('htmx:beforeRequest', (evt) => {
       const path = evt.detail?.pathInfo?.requestPath
@@ -203,7 +247,8 @@
         ? `Đang xử lý video #${idMatch[1]}… có thể mất 1–2 phút.`
         : 'Đang chạy pipeline viral… có thể mất 1–2 phút.';
       setViralBusy(true, msg);
-      if (typeof window.showToast === 'function') {
+      // process/retry/process-new giờ trả toast ngay từ server → chỉ force-scan (vẫn đồng bộ) cần toast chờ.
+      if (path.includes('/force-scan') && typeof window.showToast === 'function') {
         window.showToast(msg, 'warning');
       }
     });
@@ -213,7 +258,8 @@
         || evt.detail?.elt?.getAttribute?.('hx-post')
         || '';
       if (!isViralBusyRequest(path)) return;
-      setViralBusy(false);
+      // Đang poll nền thì giữ busy-bar (HX-Trigger viralBackgroundStarted đã bắn trước afterRequest).
+      if (!viralBgPoll) setViralBusy(false);
     });
   </script>
 {% endblock %}
