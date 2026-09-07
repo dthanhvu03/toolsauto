@@ -462,8 +462,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             platform_fallback[acc.platform] = acc
 
     if not default_account:
-        logger.warning("[VIRAL] No active Facebook account found. Skipping viral ingestion.")
-        return
+        logger.info("[VIRAL] No active Facebook account — van tai + reup, material se ve READY (ADR-018).")
 
     # Batch REUP daily caps by target_page (2 GROUP BY thay vì 2 count/material)
     reup_cap = _get_runtime_int(
@@ -534,7 +533,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         target_account = specified_acc
 
                 resolved_target = mat.target_page
-                if not resolved_target and target_account.target_pages_list:
+                if not resolved_target and target_account and target_account.target_pages_list:
                     resolved_target = target_account.pick_next_target_page(db)
 
                 if resolved_target:
@@ -782,6 +781,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 except OSError:
                     pass
                 _mark_material_failed(db, mat, reason)
+                continue
+
+            # ADR-018: khong co account -> khong tao Job; Owner tai file _reup dang tay.
+            if target_account is None:
+                mat.status = ViralStatus.READY
+                _clear_material_error(mat)
+                db.commit()
+                logger.info("[VIRAL] Material #%s READY (no account, no job) — file: %s", mat.id, media_path)
                 continue
 
             # Tạo Job DRAFT với AI_GENERATE và cắm cờ ORIGINAL_VIRAL_TITLE để truyền context

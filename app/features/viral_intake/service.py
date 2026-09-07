@@ -14,6 +14,7 @@ import app.config as config
 from app.core.media import ffmpeg_path
 from app.core.database.models import Account, Job, ViralMaterial
 from app.core.queue.worker import WorkerService
+from app.features.viral_intake.intake import detect_platform, normalize_source_url
 from app.features.viral_intake.scan import get_default_min_views, run_tiktok_competitor_scan
 
 logger = logging.getLogger(__name__)
@@ -257,6 +258,7 @@ class ViralService:
         processing_count = int(counts.get(ViralStatus.PROCESSING, 0) or 0)
         failed_count = int(counts.get(ViralStatus.FAILED, 0) or 0)
         drafted_count = int(counts.get(ViralStatus.DRAFTED, 0) or 0)
+        ready_count = int(counts.get(ViralStatus.READY, 0) or 0)
         jobs_viral = (
             db.query(Job)
             .filter(Job.viral_material_id.isnot(None))
@@ -267,12 +269,14 @@ class ViralService:
                 "NEW": new_count,
                 "PROCESSING": processing_count,
                 "DRAFTED": drafted_count,
+                "READY": ready_count,
                 "FAILED": failed_count,
             },
             "new_count": new_count,
             "processing_count": processing_count,
             "failed_count": failed_count,
             "drafted_count": drafted_count,
+            "ready_count": ready_count,
             "jobs_viral": jobs_viral,
             "show_worker_banner": new_count > 0 and jobs_viral == 0,
             "ffmpeg_ok": ViralService.ffmpeg_available(),
@@ -371,6 +375,41 @@ class ViralService:
         return ffmpeg_path.ffmpeg_available()
 
     @staticmethod
+    def add_material_from_url(
+        db: Session, url: str, *, target_page: str | None = None
+    ) -> Tuple[bool, str, Optional[int]]:
+        """
+        Dán tay 1 link (ADR-017): nhận diện nền tảng → chuẩn hoá → từ chối trùng → tạo NEW.
+        Material dán tay có views=0, scraped_by_account_id=None; đường xử lý không lọc theo views.
+        """
+        from app.constants import ViralStatus
+
+        platform = detect_platform(url)
+        if platform is None:
+            return False, "Không nhận diện được nền tảng: chỉ TikTok/YouTube/Facebook/Instagram", None
+
+        norm_url = normalize_source_url(url)
+        # Scan cũ lưu dạng "https://www.tiktok.com/…" — so cả biến thể www. để không tạo bản trùng
+        www_variant = norm_url.replace("https://", "https://www.", 1)
+        existing = db.query(ViralMaterial).filter(ViralMaterial.url.in_([norm_url, www_variant])).first()
+        if existing:
+            return False, f"#{existing.id} đã có (trạng thái {existing.status})", existing.id
+
+        mat = ViralMaterial(
+            platform=platform,
+            url=norm_url,
+            title="",
+            views=0,
+            scraped_by_account_id=None,
+            target_page=(target_page or "").strip() or None,
+            status=ViralStatus.NEW,
+        )
+        db.add(mat)
+        db.commit()
+        db.refresh(mat)
+        return True, f"Đã thêm #{mat.id} ({platform})", mat.id
+
+    @staticmethod
     def check_processable(db: Session, material_id: int) -> Optional[str]:
         """
         Lý do KHÔNG thể xử lý material (None = được phép).
@@ -383,6 +422,8 @@ class ViralService:
             return f"Không tìm thấy material #{material_id}."
         if mat.status == ViralStatus.PROCESSING:
             return f"#{material_id} đang xử lý (PROCESSING) — đợi xong hoặc chờ recover stale."
+        if mat.status == ViralStatus.READY:
+            return f"#{material_id} đã xử lý xong (READY) — bấm Tải file để đăng tay."
         if mat.status not in (ViralStatus.NEW, ViralStatus.REUP, ViralStatus.FAILED):
             return f"#{material_id} trạng thái={mat.status} — chỉ xử lý NEW/REUP/FAILED."
         if not ViralService.ffmpeg_available():
@@ -412,6 +453,8 @@ class ViralService:
             )
             jid = f" → Job #{job.id} ({job.status})" if job else ""
             return True, f"✅ #{material_id} đã tạo job{jid} (lần thử={tries})"
+        if mat.status == ViralStatus.READY:
+            return True, f"✅ #{material_id} READY — reup xong, chưa có job; bấm Tải file để đăng tay (lần thử={tries})"
         if mat.status == ViralStatus.FAILED:
             err = (mat.last_error or "không rõ")[:100]
             return False, f"❌ #{material_id} lỗi (FAILED, lần thử={tries}): {err}"

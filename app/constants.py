@@ -21,6 +21,7 @@ class ViralStatus(StrEnum):
     REUP = "REUP"
     BOOST_PENDING = "BOOST_PENDING"  # Strategic đề xuất — chờ Approve trên Insights
     DRAFTED = "DRAFTED"
+    READY = "READY"  # tai + reup xong, chua co job — dang tay (ADR-018)
     FAILED = "FAILED"
 
 class JobType(StrEnum):

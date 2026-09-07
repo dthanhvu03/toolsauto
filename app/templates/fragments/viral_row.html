@@ -78,6 +78,9 @@
         {% if has_reup %}
         <div class="mt-1 text-[10px] text-[var(--color-mist)]" title="File _reup đã có — không cần chạy lại trừ khi muốn đổi preset">Reup xong</div>
         {% endif %}
+        {% elif item.status == 'READY' %}
+        {# ADR-018: không có account → không tạo job; Owner tải file đăng tay. #}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-teal-400/40 bg-teal-500/15 text-teal-200" title="Reup xong, chưa có job — tải file đăng tay">Sẵn sàng đăng tay</span>
         {% else %}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[var(--color-face)] text-[var(--color-ink-soft)] border border-[var(--border)]">{{
             item.status }}</span>
@@ -138,6 +141,13 @@
         <a href="/app/jobs?q={{ job.job_id }}"
             class="mb-1 inline-flex items-center justify-center min-w-[44px] min-h-[36px] text-indigo-200 hover:bg-indigo-500/15 px-2 py-1 rounded transition text-[11px] font-bold border border-indigo-400/30"
             title="Mở job trong hàng đợi">Mở job</a>
+        {% elif item.status == 'READY' %}
+        <a href="/viral/{{ item.id }}/reup-preview" download="viral_{{ item.id }}_reup.mp4"
+            class="mb-1 inline-flex items-center justify-center min-w-[72px] min-h-[36px] text-teal-200 hover:bg-teal-500/15 px-2 py-1 rounded transition text-[11px] font-bold border border-teal-400/40"
+            title="Tải file _reup.mp4 về máy để đăng tay" aria-label="Tải file reup">Tải file</a>
+        <a href="/viral/{{ item.id }}/reup-thumb" target="_blank" rel="noreferrer"
+            class="mb-1 inline-flex items-center justify-center min-w-[72px] min-h-[36px] text-[var(--color-mist)] hover:bg-[var(--color-ledge)] hover:text-[var(--color-ink)] px-2 py-1 rounded transition text-[11px] font-semibold border border-[var(--border)]"
+            title="Mở ảnh thumbnail 1 khung hình từ file reup" aria-label="Xem thumbnail">Thumbnail</a>
         {% endif %}
         {% if has_reup %}
         {# Reup đã xong — block này chỉ để chỉnh lại (tùy chọn), không phải bước bắt buộc. #}

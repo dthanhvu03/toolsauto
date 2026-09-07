@@ -43,6 +43,7 @@
             <option value="NEW">Mới (NEW)</option>
             <option value="PROCESSING">Đang xử lý</option>
             <option value="DRAFTED">Đã tạo job</option>
+            <option value="READY">Sẵn sàng đăng tay (READY)</option>
             <option value="FAILED">Lỗi (FAILED)</option>
             <option value="REUP">Reup</option>
             <option value="BOOST_PENDING">Chờ boost</option>
@@ -102,6 +103,25 @@
           <span id="viral-scan-indicator" class="htmx-indicator text-[var(--color-torch)] text-xs font-medium">Đang quét…</span>
         </div>
       </div>
+      <form class="mt-3 flex items-center gap-2 flex-wrap"
+            hx-post="/viral/add-link" hx-swap="none"
+            hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]"
+            hx-on::after-request="this.reset()">
+        <input name="url" type="url" required autocomplete="off"
+               class="app-input w-96 max-w-full"
+               placeholder="Dán link TikTok / YouTube Shorts / Facebook Reel / Instagram Reel" />
+        <label class="inline-flex items-center gap-2 text-sm text-[var(--color-ink-soft)] select-none">
+          <input name="process_now" type="checkbox" value="true" class="h-4 w-4 rounded border-[var(--border)]" />
+          Xử lý ngay
+        </label>
+        <button type="submit"
+                class="viral-busy-btn app-btn border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] hover:brightness-110"
+                title="Thêm link vào kho viral (NEW); tick 'Xử lý ngay' để tải + reup luôn">
+          <span class="btn-idle">Thêm</span>
+          <span class="btn-busy htmx-indicator">Đang thêm…</span>
+        </button>
+        <span class="basis-full text-[11px] text-[var(--color-mist)]">Chỉ dán video bạn được phép dùng lại.</span>
+      </form>
       <p class="mt-2 text-[11px] text-[var(--color-mist)]">
         Cấu hình kênh nguồn: <a class="underline text-[var(--color-torch)]" href="/app/accounts">Tài khoản → Target Pages</a>
         · Kho kênh: <a class="underline text-[var(--color-torch)]" href="/app/tiktok-links">Nguồn TikTok</a>

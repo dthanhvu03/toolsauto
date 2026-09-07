@@ -140,6 +140,34 @@ def process_new(
     )
 
 
+@router.post("/add-link", response_class=HTMLResponse)
+def add_link(
+    background: BackgroundTasks,
+    url: str = Form(...),
+    target_page: str = Form(""),
+    process_now: bool = Form(False),
+    db: Session = Depends(get_db),
+):
+    """Dán tay 1 link TikTok/YouTube/Facebook/Instagram (ADR-017) → material NEW; tuỳ chọn xử lý nền ngay."""
+    ok, msg, material_id = ViralService.add_material_from_url(db, url, target_page=target_page)
+    if not ok:
+        return htmx_toast_response(msg, type="error", extra_triggers={"refreshViralTable": True})
+    if process_now:
+        reason = ViralService.check_processable(db, material_id)
+        if reason:
+            return htmx_toast_response(
+                f"{msg} — chưa xử lý: {reason}", type="error",
+                extra_triggers={"refreshViralTable": True},
+            )
+        background.add_task(_process_material_in_background, material_id)
+        return htmx_toast_response(
+            f"{msg}, đang xử lý nền (tải + reup)… bảng tự làm mới khi xong.",
+            type="success",
+            extra_triggers=_BG_STARTED_TRIGGERS,
+        )
+    return htmx_toast_response(msg, type="success", extra_triggers={"refreshViralTable": True})
+
+
 @router.post("/{material_id}/process", response_class=HTMLResponse)
 def process_one(
     material_id: int, background: BackgroundTasks, db: Session = Depends(get_db)

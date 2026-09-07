@@ -53,6 +53,8 @@
       onclick="document.getElementById('vStatus').value='PROCESSING'; window.refreshViral(1)" title="PROCESSING">Đang xử lý {{ status_counts.PROCESSING|default(0) }}</button>
     <button type="button" class="px-2 py-1 rounded border border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)] font-semibold"
       onclick="document.getElementById('vStatus').value='DRAFTED'; window.refreshViral(1)" title="DRAFTED">Đã tạo job {{ status_counts.DRAFTED|default(0) }}</button>
+    <button type="button" class="px-2 py-1 rounded border border-teal-400/40 bg-teal-500/15 text-teal-200 font-semibold"
+      onclick="document.getElementById('vStatus').value='READY'; window.refreshViral(1)" title="READY — reup xong, chưa có job, tải file đăng tay">Sẵn sàng đăng tay {{ status_counts.READY|default(0) }}</button>
     <button type="button" class="px-2 py-1 rounded border border-[var(--color-danger-border)] bg-[var(--color-danger-dim)] text-[var(--color-danger)] font-semibold"
       onclick="document.getElementById('vStatus').value='FAILED'; window.refreshViral(1)" title="FAILED">Lỗi {{ status_counts.FAILED|default(0) }}</button>
     <button type="button" class="px-2 py-1 rounded border border-[var(--border)] text-[var(--color-mist)]"

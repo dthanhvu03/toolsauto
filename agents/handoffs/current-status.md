@@ -132,6 +132,27 @@ Gạch: yt-dlp format không cần — 11 material đều qua TikWM `play` (khô
 
 Test: Windows **311**; Linux **294 / 17 skipped**; lint 2 kept.
 
+### ADR-017 + ADR-018 — dán link đa nền tảng; xưởng chạy KHÔNG cần account
+
+**Đính chính:** đầu phiên tôi nói "xưởng nội dung ✅ chạy" — **sai**. `processor.py:463`
+return sớm khi không có account Facebook ACTIVE ⇒ từ khi account bị khoá (05/09), **không
+material nào được xử lý**. Và **không có ô dán link nào** — chỗ duy nhất tạo material là
+quét kênh TikTok; 11 material đều một kênh `@rinabeauty859`.
+
+| Việc | Proof |
+|---|---|
+| `intake.detect_platform` + `normalize_source_url` (TikTok/YouTube/FB/IG, bỏ tracking query, so trùng cả biến thể `www.`) | 12+ URL test |
+| `POST /viral/add-link` + ô dán link trên `/app/viral`, checkbox "Xử lý ngay" → nền | TestClient |
+| yt-dlp `2026.3.3` → **`2026.8.19`**; thử tải thật **4 nền tảng, không cookie, đúng cờ tool**: YouTube Shorts 1080×1920 .webm/vp9, TikTok kênh khác 720×1280 không watermark, FB Reel 720×1280, IG Reel 1080×1920 — **cả 4 tải được** | log scratch |
+| `ViralStatus.READY` — không account → vẫn tải + reup, bỏ tạo Job, `READY`; UI badge teal + nút **Tải file** (`reup-preview` + `download`) + Thumbnail; `check_processable` từ chối READY; banner đếm | `tests/test_viral_ready_without_account.py` 7 test |
+| **Proof đầu-cuối Postgres thật**: dán `facebook.com/reel/325542560591184` → #57 → tải 3,1 s → reup 5,9 s → `READY`, `viral_57_…_reup.mp4` 1080×1920 h264 16 MB, thumbnail, `GET /viral/57/reup-preview` 200 — **11,9 s tổng**. Material #57 giữ lại cho Owner | |
+
+Nợ: material dán tay (`scraped_by_account_id=None`) **sweep nền không nhặt** — chỉ xử lý
+qua nút "Xử lý ngay"/Process; READY → Job khi có account là PLAN sau; YouTube ra `.webm`
+chưa qua pipeline trong tool; `--js-runtimes node` cho YouTube (yt-dlp cảnh báo extraction
+không JS runtime sắp bỏ) cần Anti quyết vì Linux phải có node ≥22; "Tải file" dùng
+`download` attr, chưa kiểm trình duyệt thật.
+
 ### Next Action
 
 1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì
@@ -144,8 +165,9 @@ Test: Windows **311**; Linux **294 / 17 skipped**; lint 2 kept.
 5. Anti: quyết PLAN-059 (chờ account) và TASK-059.
 6. **Owner: spike Graph API 2 giờ** theo `docs/ops/2026-09-07-runbook-tich-hop.md` mục 5 (script `scripts/graph_api_spike.py`) — đây là thứ
    duy nhất có thể đưa tự động đăng quay lại mà không lặp lại 31/07.
-7. Owner: bật thử `reup.subtitle_enabled` trên 1 video, xem có ưng kiểu chữ không; đổi Whisper sang EraX nếu sai nhiều.
-8. Owner: healthchecks.io (3 check → dán `/app/settings`) + Tailscale — runbook mục 3, 4. `faster-whisper` đã cài.
+7. **Owner: dán 1 link YouTube Shorts + 1 TikTok qua ô mới, bấm "Xử lý ngay"** → nâng dòng C lên A nếu ra READY.
+8. Owner: bật thử `reup.subtitle_enabled` trên 1 video, xem có ưng kiểu chữ không; đổi Whisper sang EraX nếu sai nhiều.
+9. Owner: healthchecks.io (3 check → dán `/app/settings`) + Tailscale — runbook mục 3, 4. `faster-whisper` đã cài.
 
 ---
 
