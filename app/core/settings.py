@@ -201,6 +201,17 @@ SETTINGS: dict[str, SettingSpec] = {
         max=500,
         unit="video",
     ),
+    "viral.source_scan_interval_min": SettingSpec(
+        key="viral.source_scan_interval_min",
+        type="int",
+        default_getter=lambda: 60,
+        title="Khoảng cách quét mỗi nguồn tự động",
+        section="Quét TikTok & Viral",
+        description="Mỗi nguồn trong bảng 'Nguồn tự động' (ADR-019) chỉ được quét lại sau ít nhất số phút này (worker maintenance).",
+        min=5,
+        max=1440,
+        unit="phút",
+    ),
     "viral.diversify_enabled": SettingSpec(
         key="viral.diversify_enabled",
         env_var_name="VIRAL_DIVERSIFY_ENABLED",

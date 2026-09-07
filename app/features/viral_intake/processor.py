@@ -423,6 +423,20 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     )
                 materials.extend(new_by_acc_general.get(acc.id, [])[:limit_per_acc])
 
+        # ADR-019: NEW không thuộc account (nguồn tự động / dán tay) — gom riêng, chạy cả khi
+        # active_accounts rỗng; không account thì về READY (ADR-018).
+        orphan_new = (
+            db.query(ViralMaterial)
+            .filter(
+                ViralMaterial.status == ViralStatus.NEW,
+                ViralMaterial.scraped_by_account_id.is_(None),
+            )
+            .order_by(ViralMaterial.views.desc())
+            .limit(per_acc_fetch)
+            .all()
+        )
+        materials.extend(orphan_new)
+
         # Sort the final combined list by views so the highest views across the picked batch get processed first
         materials.sort(key=lambda m: (m.status != ViralStatus.REUP, -m.views))
 

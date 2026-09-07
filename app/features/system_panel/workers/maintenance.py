@@ -533,6 +533,13 @@ def run_loop():
                         # 5. Auto-discover TikTok competitor videos (hourly)
                         _scrape_tiktok_competitors(db)
 
+                        # 5b. Nguồn tự động (ADR-019) — độc lập account; tự giãn 1 lần/giờ mỗi nguồn
+                        try:
+                            feature_hooks.call("viral.scan_sources", db)
+                        except Exception as e:
+                            db.rollback()
+                            logger.error("[VIRAL_SOURCES] scan_sources failed: %s", e)
+
                         # 7. Competitor Discovery (nightly, 24h interval)
                         _run_competitor_discovery(db)
 

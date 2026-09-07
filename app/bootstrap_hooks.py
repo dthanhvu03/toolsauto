@@ -15,6 +15,7 @@ def register_feature_hooks() -> None:
     from app.features.viral_intake.processor import ViralProcessorService
     from app.features.viral_intake.scan import get_default_min_views, run_tiktok_competitor_scan
     from app.features.viral_intake.discovery_scraper import DiscoveryScraper
+    from app.features.viral_intake.sources import SourceService
     from app.features.telegram_bot.poller import TelegramPoller
 
     def viral_process_all(db: Session):
@@ -22,6 +23,9 @@ def register_feature_hooks() -> None:
 
     def viral_tiktok_scan(db: Session):
         return run_tiktok_competitor_scan(db)
+
+    def viral_scan_sources(db: Session) -> dict:
+        return SourceService.scan_all(db)
 
     def viral_min_views(db: Session):
         return get_default_min_views(db)
@@ -58,6 +62,7 @@ def register_feature_hooks() -> None:
 
     feature_hooks.register("viral.process_all", viral_process_all)
     feature_hooks.register("viral.tiktok_scan", viral_tiktok_scan)
+    feature_hooks.register("viral.scan_sources", viral_scan_sources)
     feature_hooks.register("viral.min_views", viral_min_views)
     feature_hooks.register("viral.force_discovery", viral_force_discovery)
     feature_hooks.register("viral.discover_keyword", viral_discover_keyword)

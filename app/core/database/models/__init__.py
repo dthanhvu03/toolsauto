@@ -23,6 +23,7 @@ from app.core.database.models.viral import (
     DiscoveredChannel,
     PageInsight,
     ViralMaterial,
+    ViralSource,
 )
 from app.core.database.models.incidents import IncidentGroup, IncidentLog
 from app.core.database.models.threads import NewsArticle, ThreadsInteraction
@@ -54,6 +55,7 @@ __all__ = [
     "JobEvent",
     # viral / discovery / affiliate / insights
     "ViralMaterial",
+    "ViralSource",
     "DiscoveredChannel",
     "CompetitorReel",
     "PageInsight",

@@ -24,7 +24,9 @@
 | Đăng bài feed (chữ / chữ + ảnh) | **A** | Owner xác nhận thấy bài trên Page `kids0810` (PLAN-049). Lưu ý: gọi adapter trực tiếp, chưa qua hàng đợi |
 | Tải video từ kênh TikTok đối thủ | **A** | 11 `viral_materials` xử lý xong, `status=DRAFTED`, 0 lỗi — **đều TikTok, cùng 1 kênh**, tạo bởi `run_tiktok_competitor_scan` quét `competitor_urls` của account |
 | Tải video khi **dán link** — Facebook Reel công khai | **A** | **2026-09-07, ADR-017/018.** Ô dán link trên `/app/viral` → material #57 (`facebook.com/reel/325542560591184`) → tải 3,1 s → reup 5,9 s → `READY`, file 1080×1920 h264, không cần account |
-| Tải video khi **dán link** — YouTube Shorts, TikTok (kênh khác), Instagram Reel | **C** | Cùng ngày: yt-dlp `2026.8.19` với **đúng cờ của tool, không cookie** tải được cả 3 (1080×1920 / 720×1280 / 1080×1920). **Chưa chạy qua pipeline reup** trong tool; Instagram thiếu `duration`/`view_count` trong metadata. 1 link/nền tảng, 1 lần, 1 IP — chứng minh "có thể", không phải "luôn luôn" |
+| Tải video khi **dán link** — YouTube Shorts, TikTok | **A** | **2026-09-07 ADR-019 proof**: 4 YouTube (av01 `.webm`) + 4 TikTok đi trọn pipeline → `READY`, 8/8 file h264 1080×1920 |
+| Tải video khi **dán link** — Instagram Reel | **C** | yt-dlp tải được thật (Dyson, 1080×1920) nhưng chưa qua pipeline; metadata thiếu `duration`/`view_count` |
+| **Quét kênh tự động — TikTok + YouTube Shorts** (bảng Nguồn, không cần account) | **A** | ADR-019: thêm `@albert_cancook` + `@mrwork93` → quét 13 s tìm 8 video ≥ ngưỡng → sweep 76 s → 8/8 `READY`, quét lại dedup 0. Facebook Page / Instagram profile **không liệt kê được** (yt-dlp Unsupported) — chỉ dán từng link |
 | **Xưởng nội dung chạy KHÔNG cần account Facebook** | **A** | ADR-018: không account → vẫn tải + reup, dừng ở `READY` + nút "Tải file" để đăng tay. Trước 07/09: return sớm, toàn bộ xưởng đứng từ khi account bị khoá |
 | Tìm video viral **TikTok** theo từ khoá | **A** | `discovery_scraper.search_hashtag()` chạy qua yt-dlp |
 | Ghép intro/outro, thumbnail, chống trùng | **A** | `reup_processor` + `intro_service`, cùng 11 material trên |

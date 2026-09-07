@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.core.database.models.base import Base, now_ts
@@ -32,6 +32,30 @@ class ViralMaterial(Base):
         import hashlib
         fhash = hashlib.md5(self.url.encode()).hexdigest()
         return f"/thumbnails/{fhash}_collage.jpg"
+
+    created_at = Column(Integer, default=now_ts)
+    updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
+
+
+class ViralSource(Base):
+    """
+    Nguồn quét tự động (ADR-019) — kênh TikTok / YouTube Shorts, ĐỘC LẬP với account.
+    ``min_views`` / ``max_videos`` null = dùng setting ``viral.min_views`` /
+    ``viral.max_videos_per_channel``. ``last_scanned_at`` là epoch giây (như ``created_at``).
+    """
+    __tablename__ = "viral_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    platform = Column(String, nullable=False)  # tiktok | youtube
+    url = Column(String, unique=True, index=True, nullable=False)  # URL kênh đã chuẩn hoá
+    handle = Column(String, nullable=True)
+    min_views = Column(Integer, nullable=True)
+    max_videos = Column(Integer, nullable=True)
+    target_page = Column(String, nullable=True)
+    enabled = Column(Boolean, default=True, nullable=False, index=True)
+    last_scanned_at = Column(Integer, nullable=True)
+    last_found = Column(Integer, default=0)
+    last_error = Column(String, nullable=True)
 
     created_at = Column(Integer, default=now_ts)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)

@@ -153,6 +153,25 @@ chưa qua pipeline trong tool; `--js-runtimes node` cho YouTube (yt-dlp cảnh b
 không JS runtime sắp bỏ) cần Anti quyết vì Linux phải có node ≥22; "Tải file" dùng
 `download` attr, chưa kiểm trình duyệt thật.
 
+### ADR-019 — bảng Nguồn tách khỏi account; quét tự động TikTok + YouTube Shorts
+
+Phát hiện: quét TikTok cũ đọc `Account.competitor_urls` của account **active** ⇒ cũng đã
+chết theo account. Kiểm yt-dlp `--flat-playlist` không cookie: TikTok ✅, YouTube `/shorts` ✅
+(có `view_count`), Facebook Page ❌ Unsupported, Instagram profile ❌ cần đăng nhập.
+
+| Việc | Proof |
+|---|---|
+| Bảng `viral_sources` (migration `k9f6a7b8c9d0`, 1 head), `SourceService` (list/add/set_enabled/delete/scan_source/scan_all), hook `viral.scan_sources` trong `maintenance`, setting `viral.source_scan_interval_min` (60) | 27 test |
+| Sweep gom thêm `NEW` có `scraped_by_account_id IS NULL` (14 dòng) — chạy cả khi 0 account → READY | test + proof |
+| UI khối "Nguồn tự động" trên `/app/viral`: thêm/bật-tắt/xoá/quét từng nguồn/quét tất cả (nền), bảng trạng thái; 6 endpoint `/viral/sources…` | 20 test |
+| **Proof Postgres thật, 0 account**: thêm `youtube.com/@albert_cancook` (≥1M view, max 5) + `tiktok.com/@mrwork93` → `scan_all` 13 s tìm 8 → sweep 76 s → **8/8 READY**, ffprobe 8 file h264 1080×1920; quét lại dedup 0. YouTube nguồn av01+opus `.webm` → reup ra mp4 OK (lần đầu) | material #58–#65 giữ lại |
+
+Bug bắt trong proof: TikTok trả `uploader_id` số → URL `@7628…/video/…` lệch dạng scan cũ;
+sửa ưu tiên `uploader` → `source.handle`, UPDATE 4 dòng, thêm test.
+
+Test: Windows xem dưới; lint 2 kept. Nợ: `competitor_urls` cũ chưa di trú sang bảng Nguồn;
+`sources.subprocess` và `processor.subprocess` cùng module nên test sweep phải seed trực tiếp.
+
 ### Next Action
 
 1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì
@@ -165,7 +184,7 @@ không JS runtime sắp bỏ) cần Anti quyết vì Linux phải có node ≥22
 5. Anti: quyết PLAN-059 (chờ account) và TASK-059.
 6. **Owner: spike Graph API 2 giờ** theo `docs/ops/2026-09-07-runbook-tich-hop.md` mục 5 (script `scripts/graph_api_spike.py`) — đây là thứ
    duy nhất có thể đưa tự động đăng quay lại mà không lặp lại 31/07.
-7. **Owner: dán 1 link YouTube Shorts + 1 TikTok qua ô mới, bấm "Xử lý ngay"** → nâng dòng C lên A nếu ra READY.
+7. **Owner: mở `/app/viral` → "Nguồn tự động" → thêm kênh của anh** (TikTok/YouTube brand hoặc seller), để `maintenance` tự quét mỗi giờ; 2 kênh proof (`@albert_cancook`, `@mrwork93`) là mẫu — xoá nếu không dùng.
 8. Owner: bật thử `reup.subtitle_enabled` trên 1 video, xem có ưng kiểu chữ không; đổi Whisper sang EraX nếu sai nhiều.
 9. Owner: healthchecks.io (3 check → dán `/app/settings`) + Tailscale — runbook mục 3, 4. `faster-whisper` đã cài.
 

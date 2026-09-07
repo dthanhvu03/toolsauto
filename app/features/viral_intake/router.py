@@ -168,6 +168,165 @@ def add_link(
     return htmx_toast_response(msg, type="success", extra_triggers={"refreshViralTable": True})
 
 
+# ── Nguồn tự động (ADR-019) ──────────────────────────────────────────────────
+# SourceService do backend làm song song theo hợp đồng ADR-019 mục 2 → import lười trong hàm
+# để router (và test UI) không chết khi sources.py chưa có.
+
+_SOURCES_TRIGGERS = {"refreshViralSources": True}
+# Quét nền: làm mới cả bảng nguồn (last_scanned_at) lẫn bảng video (material NEW mới).
+# viralSourcesScanStarted: trang tự làm mới thêm vài nhịp vì quét yt-dlp kéo dài hơn 1 request.
+_SOURCES_SCAN_TRIGGERS = {
+    "refreshViralSources": True,
+    "refreshViralTable": True,
+    "viralSourcesScanStarted": True,
+}
+
+
+def _source_service():
+    from app.features.viral_intake.sources import SourceService
+
+    return SourceService
+
+
+def _sources_error_toast(action: str, exc: Exception) -> HTMLResponse:
+    logger.exception("[VIRAL][sources] Lỗi %s", action)
+    return htmx_toast_response(
+        f"Lỗi {action}: {exc}", type="error", extra_triggers=_SOURCES_TRIGGERS
+    )
+
+
+def _ago_label(ts, now: int | None = None) -> str:
+    """Epoch (int/float) hoặc datetime → 'x phút trước'. None → 'Chưa quét'."""
+    if not ts:
+        return "Chưa quét"
+    if hasattr(ts, "timestamp"):
+        ts = ts.timestamp()
+    diff = max(0, int((now or time.time()) - ts))
+    if diff < 60:
+        return f"{diff} giây trước"
+    if diff < 3600:
+        return f"{diff // 60} phút trước"
+    if diff < 86400:
+        return f"{diff // 3600} giờ trước"
+    return f"{diff // 86400} ngày trước"
+
+
+def _scan_source_in_background(source_id: int) -> None:
+    """Quét 1 nguồn ngoài request; session riêng như _process_material_in_background."""
+    try:
+        with SessionLocal() as db:
+            svc = _source_service()
+            source = next((s for s in svc.list_sources(db) if s.id == source_id), None)
+            if source is None:
+                logger.warning("[VIRAL][sources][bg] Không tìm thấy nguồn #%s", source_id)
+                return
+            found, skipped, error = svc.scan_source(db, source)
+            logger.info(
+                "[VIRAL][sources][bg] nguồn #%s found=%s skipped=%s error=%s",
+                source_id, found, skipped, error,
+            )
+    except Exception:
+        logger.exception("[VIRAL][sources][bg] Lỗi quét nền nguồn #%s", source_id)
+
+
+def _scan_all_sources_in_background() -> None:
+    try:
+        with SessionLocal() as db:
+            res = _source_service().scan_all(db, only_due=False)
+            logger.info("[VIRAL][sources][bg] scan_all → %s", res)
+    except Exception:
+        logger.exception("[VIRAL][sources][bg] Lỗi quét nền tất cả nguồn")
+
+
+@router.get("/sources", response_class=HTMLResponse)
+def list_sources(request: Request, db: Session = Depends(get_db)):
+    try:
+        sources = _source_service().list_sources(db)
+    except Exception:
+        logger.exception("[VIRAL][sources] Lỗi liệt kê nguồn")
+        sources = []
+    html = templates.get_template("fragments/viral_sources.html").render(
+        {"request": request, "sources": sources, "ago": _ago_label}
+    )
+    return HTMLResponse(content=html)
+
+
+@router.post("/sources/add", response_class=HTMLResponse)
+def add_source(
+    url: str = Form(...),
+    min_views: Optional[int] = Form(None),
+    max_videos: Optional[int] = Form(None),
+    target_page: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Thêm kênh TikTok / YouTube làm nguồn quét tự động (ADR-019)."""
+    try:
+        ok, msg, _source_id = _source_service().add_source(
+            db,
+            url,
+            min_views=min_views,
+            max_videos=max_videos,
+            target_page=target_page.strip() or None,
+        )
+    except Exception as exc:
+        return _sources_error_toast("thêm nguồn", exc)
+    return htmx_toast_response(
+        msg, type="success" if ok else "error", extra_triggers=_SOURCES_TRIGGERS
+    )
+
+
+@router.post("/sources/scan-all", response_class=HTMLResponse)
+def scan_all_sources(background: BackgroundTasks):
+    background.add_task(_scan_all_sources_in_background)
+    return htmx_toast_response(
+        "Đang quét nền tất cả nguồn đang bật… bảng tự làm mới khi xong.",
+        type="success",
+        extra_triggers=_SOURCES_SCAN_TRIGGERS,
+    )
+
+
+@router.post("/sources/{source_id}/toggle", response_class=HTMLResponse)
+def toggle_source(source_id: int, enabled: bool = Form(False), db: Session = Depends(get_db)):
+    try:
+        ok = _source_service().set_enabled(db, source_id, enabled)
+    except Exception as exc:
+        return _sources_error_toast(f"bật/tắt nguồn #{source_id}", exc)
+    if not ok:
+        return htmx_toast_response(
+            f"Không tìm thấy nguồn #{source_id}", type="error", extra_triggers=_SOURCES_TRIGGERS
+        )
+    return htmx_toast_response(
+        f"Nguồn #{source_id} đã {'bật' if enabled else 'tắt'}.",
+        type="success",
+        extra_triggers=_SOURCES_TRIGGERS,
+    )
+
+
+@router.post("/sources/{source_id}/delete", response_class=HTMLResponse)
+def delete_source(source_id: int, db: Session = Depends(get_db)):
+    try:
+        ok = _source_service().delete_source(db, source_id)
+    except Exception as exc:
+        return _sources_error_toast(f"xoá nguồn #{source_id}", exc)
+    if not ok:
+        return htmx_toast_response(
+            f"Không tìm thấy nguồn #{source_id}", type="error", extra_triggers=_SOURCES_TRIGGERS
+        )
+    return htmx_toast_response(
+        f"Đã xoá nguồn #{source_id}.", type="success", extra_triggers=_SOURCES_TRIGGERS
+    )
+
+
+@router.post("/sources/{source_id}/scan", response_class=HTMLResponse)
+def scan_source(source_id: int, background: BackgroundTasks):
+    background.add_task(_scan_source_in_background, source_id)
+    return htmx_toast_response(
+        f"Đang quét nền nguồn #{source_id}… bảng tự làm mới khi xong.",
+        type="success",
+        extra_triggers=_SOURCES_SCAN_TRIGGERS,
+    )
+
+
 @router.post("/{material_id}/process", response_class=HTMLResponse)
 def process_one(
     material_id: int, background: BackgroundTasks, db: Session = Depends(get_db)

@@ -1,0 +1,80 @@
+{# Bảng "Nguồn tự động" (ADR-019). Context: sources (list[ViralSource]), ago (callable epoch → 'x phút trước'). #}
+<div class="border border-[var(--border)] rounded-lg overflow-x-auto bg-[var(--color-stone)]">
+  <table class="min-w-full table-fixed border-collapse">
+    <thead class="bg-[var(--color-deep)]">
+      <tr class="border-b border-[var(--border)] text-xs text-[var(--color-mist)]">
+        <th class="w-24 px-3 py-2 text-left uppercase">Nền tảng</th>
+        <th class="w-[26%] px-3 py-2 text-left uppercase">Kênh</th>
+        <th class="w-24 px-3 py-2 text-right uppercase">Min views</th>
+        <th class="w-20 px-3 py-2 text-right uppercase">Max video</th>
+        <th class="w-40 px-3 py-2 text-left uppercase">Page đích</th>
+        <th class="w-16 px-3 py-2 text-center uppercase">Bật</th>
+        <th class="w-32 px-3 py-2 text-left uppercase">Quét cuối</th>
+        <th class="w-20 px-3 py-2 text-right uppercase">Tìm thấy</th>
+        <th class="w-40 px-3 py-2 text-left uppercase">Lỗi</th>
+        <th class="w-32 px-3 py-2 text-right uppercase">Thao tác</th>
+      </tr>
+    </thead>
+    <tbody class="bg-[var(--color-stone)] text-sm text-[var(--color-ink)]">
+      {% for s in sources %}
+      {% set label = s.handle or s.url %}
+      <tr id="viral-source-{{ s.id }}" class="border-b border-[var(--border)] {% if not s.enabled %}opacity-60{% endif %}">
+        <td class="px-3 py-2">
+          {% if s.platform == 'youtube' %}
+          <span class="px-2 py-0.5 rounded border border-red-400/40 bg-red-500/15 text-red-200 text-[11px] font-semibold">YouTube</span>
+          {% elif s.platform == 'tiktok' %}
+          <span class="px-2 py-0.5 rounded border border-pink-400/40 bg-pink-500/15 text-pink-200 text-[11px] font-semibold">TikTok</span>
+          {% else %}
+          <span class="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)] text-[11px] font-semibold">{{ s.platform }}</span>
+          {% endif %}
+        </td>
+        <td class="px-3 py-2 truncate" title="{{ s.url }}">
+          <a href="{{ s.url }}" target="_blank" rel="noopener" class="text-[var(--color-torch)] hover:underline">
+            {%- if s.handle %}@{{ s.handle }}{% else %}{{ label[:48] }}{% if label|length > 48 %}…{% endif %}{% endif -%}
+          </a>
+        </td>
+        <td class="px-3 py-2 text-right font-mono text-xs">
+          {% if s.min_views is not none %}{{ '{:,}'.format(s.min_views) }}{% else %}<span class="text-[var(--color-mist)]" title="Dùng ngưỡng chung (viral.min_views)">mặc định</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 text-right font-mono text-xs">
+          {% if s.max_videos is not none %}{{ s.max_videos }}{% else %}<span class="text-[var(--color-mist)]" title="Dùng số chung (viral.max_videos_per_channel)">mặc định</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 truncate text-xs" title="{{ s.target_page or '' }}">
+          {% if s.target_page %}{{ s.target_page }}{% else %}<span class="text-[var(--color-mist)]">—</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 text-center">
+          <input type="checkbox" class="h-4 w-4 rounded border-[var(--border)]" {% if s.enabled %}checked{% endif %}
+                 hx-post="/viral/sources/{{ s.id }}/toggle" hx-trigger="change" hx-swap="none"
+                 hx-vals='js:{"enabled": this.checked}'
+                 title="{% if s.enabled %}Đang bật — bỏ tick để tắt quét tự động{% else %}Đang tắt — tick để bật{% endif %}" />
+        </td>
+        <td class="px-3 py-2 text-xs text-[var(--color-ink-soft)]">{{ ago(s.last_scanned_at) }}</td>
+        <td class="px-3 py-2 text-right font-mono text-xs">{{ s.last_found if s.last_found is not none else '—' }}</td>
+        <td class="px-3 py-2 truncate text-xs">
+          {% if s.last_error %}
+          <span class="text-[var(--color-danger)]" title="{{ s.last_error }}">{{ s.last_error[:40] }}{% if s.last_error|length > 40 %}…{% endif %}</span>
+          {% else %}<span class="text-[var(--color-mist)]">—</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 text-right whitespace-nowrap">
+          <button type="button" class="viral-busy-btn app-btn text-xs py-1 px-2 border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] hover:brightness-110"
+                  hx-post="/viral/sources/{{ s.id }}/scan" hx-swap="none"
+                  hx-indicator="this" hx-disabled-elt="this" title="Quét kênh này ngay (chạy nền)">
+            <span class="btn-idle">Quét</span>
+            <span class="btn-busy htmx-indicator">…</span>
+          </button>
+          <button type="button" class="app-btn text-xs py-1 px-2 border-[var(--color-danger-border)] bg-[var(--color-danger-dim)] text-[var(--color-danger)] hover:brightness-110 ml-1"
+                  hx-post="/viral/sources/{{ s.id }}/delete" hx-swap="none"
+                  hx-confirm="Xoá nguồn {{ label }}? Video đã quét vẫn giữ nguyên.">Xoá</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="10" class="p-4 text-center text-sm text-[var(--muted)]">
+          Chưa có nguồn nào. Dán URL kênh TikTok (<code class="px-1 rounded bg-[var(--color-ledge)] text-[12px]">tiktok.com/@kenh</code>)
+          hoặc YouTube (<code class="px-1 rounded bg-[var(--color-ledge)] text-[12px]">youtube.com/@kenh</code>) vào ô bên trên rồi bấm Thêm — hệ thống tự quét mỗi giờ.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
