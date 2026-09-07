@@ -92,6 +92,34 @@ SETTINGS: dict[str, SettingSpec] = {
             "Video nang, bat cai nay se ton bang thong tai len."
         ),
     ),
+    # ADR-014: dead man's switch — worker ping deu dan, qua han thi healthchecks.io bao.
+    "monitor.hc_url_backup": SettingSpec(
+        key="monitor.hc_url_backup",
+        env_var_name="HC_URL_BACKUP",
+        type="str",
+        default_getter=lambda: "",
+        title="Ping: db backup",
+        section="Giam sat",
+        description="URL ping healthchecks.io (hc-ping.com/<uuid>). Rong = tat.",
+    ),
+    "monitor.hc_url_maintenance": SettingSpec(
+        key="monitor.hc_url_maintenance",
+        env_var_name="HC_URL_MAINTENANCE",
+        type="str",
+        default_getter=lambda: "",
+        title="Ping: maintenance worker",
+        section="Giam sat",
+        description="URL ping healthchecks.io (hc-ping.com/<uuid>). Rong = tat.",
+    ),
+    "monitor.hc_url_publisher": SettingSpec(
+        key="monitor.hc_url_publisher",
+        env_var_name="HC_URL_PUBLISHER",
+        type="str",
+        default_getter=lambda: "",
+        title="Ping: FB publisher",
+        section="Giam sat",
+        description="URL ping healthchecks.io (hc-ping.com/<uuid>). Rong = tat.",
+    ),
     "worker.tick_seconds": SettingSpec(
         key="worker.tick_seconds",
         env_var_name="WORKER_TICK_SECONDS",
@@ -787,7 +815,7 @@ SETTINGS: dict[str, SettingSpec] = {
         title="OpenRouter model",
         section="AI Keys",
         description=(
-            "Ví dụ: openrouter/free | google/gemini-2.0-flash-exp:free | "
+            "Ví dụ: openrouter/free | google/gemma-4-31b-it:free | "
             "meta-llama/llama-3.2-11b-vision-instruct:free"
         ),
         keep_blank=True,

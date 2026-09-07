@@ -19,18 +19,20 @@ import app.config as config
 logger = logging.getLogger(__name__)
 
 # Models tried in order, newest/fastest first.
+# 2.0 da shut down (kiem 2026-09-07) — ADR-014.
 NATIVE_TEXT_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
     "gemini-2.5-pro",
     "gemini-pro-latest",
 ]
 
 # Vision-capable subset (must support multimodal input).
 NATIVE_VISION_MODELS = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
     "gemini-2.5-pro",
 ]
 

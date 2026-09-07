@@ -26,6 +26,7 @@ from app.features.facebook.adapter import PageMismatchError
 import app.config as config
 from app.core import settings as runtime_settings
 from app.core.notifier.service import NotifierService
+from app.core.observability import heartbeat
 
 from app.core.queue.publisher_runtime import (
     kill_if_stuck as _kill_if_stuck_shared,
@@ -263,6 +264,7 @@ def process_single_job(db: Session):
                         reason=publish_result.error
                     )
                     NotifierService.notify_account_invalid(job.account.name, publish_result.error)
+                    heartbeat.ping(heartbeat.KEY_PUBLISHER, fail=True, db=db)  # ADR-014
                     
         except PageMismatchError as e:
             db.rollback()
@@ -381,12 +383,15 @@ def run_loop():
                         break
 
                     if state.worker_status == "PAUSED":
+                        # Paused van la "con song" — khong ping thi healthchecks bao gia (ADR-014)
+                        heartbeat.ping(heartbeat.KEY_PUBLISHER, db=db)
                         time.sleep(config.WORKER_TICK_SECONDS)
                         continue
 
                     config.SAFE_MODE = state.safe_mode
 
                     found_job = process_single_job(db)
+                    heartbeat.ping(heartbeat.KEY_PUBLISHER, db=db)  # ADR-014: cuoi moi vong
                 except Exception:
                     db.rollback()
                     raise

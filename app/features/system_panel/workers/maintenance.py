@@ -21,6 +21,7 @@ from app.core.database.core import SessionLocal
 from app.core.queue.worker import WorkerService
 from app.core.queue.cleanup import CleanupService
 from app.core.observability.metrics_checker import MetricsChecker
+from app.core.observability import heartbeat
 from app.core.notifier.service import NotifierService, TelegramNotifier
 from app.core.observability.system_monitor import SystemMonitorService
 from app.core import feature_hooks
@@ -543,6 +544,7 @@ def run_loop():
                     _scrape_page_insights()
 
                     logger.info("Hoan tat mot vong maintenance dinh ky.")
+                    heartbeat.ping(heartbeat.KEY_MAINTENANCE, db=db)  # ADR-014
                 except Exception:
                     db.rollback()
                     raise

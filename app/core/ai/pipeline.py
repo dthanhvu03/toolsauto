@@ -108,7 +108,7 @@ class AICaptionPipeline:
         self.enabled = False
         self.base_url = default_router_url
         self.api_key = ""
-        self.default_model = "gemini-2.0-flash"
+        self.default_model = "gemini-3.5-flash"  # 2.0 da shut down (kiem 2026-09-07) — ADR-014
         
         # Tracking states
         self.last_latency_ms = 0
@@ -140,7 +140,7 @@ class AICaptionPipeline:
             default_router_url = config.ROUTER_BASE_URL
             base_url = str(data.get("base_url", default_router_url))
             api_key = str(data.get("api_key", ""))
-            default_model = str(data.get("default_model", "gemini-2.0-flash"))
+            default_model = str(data.get("default_model", "gemini-3.5-flash"))
             # Guard: iflow models need 9Router credentials; keep disabled if blank key + iflow
             if enabled and default_model.startswith("if/") and not api_key:
                 logger.warning(

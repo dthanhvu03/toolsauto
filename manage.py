@@ -43,8 +43,10 @@ worker_app = typer.Typer(help="Worker / PM2 helpers")
 viral_app = typer.Typer(help="Viral scan & processing")
 pages_app = typer.Typer(help="Facebook page tools (archived scripts)")
 insights_app = typer.Typer(help="Insights scraping (archived script)")
+ai_app = typer.Typer(help="AI provider tools")
 
 app.add_typer(db_app, name="db")
+app.add_typer(ai_app, name="ai")
 app.add_typer(worker_app, name="worker")
 app.add_typer(viral_app, name="viral")
 app.add_typer(pages_app, name="pages")
@@ -176,6 +178,7 @@ def db_backup(
     file SQLite legacy chứ không phải Postgres đang chạy — mà vẫn in thành công.
     """
     from app.config import DATABASE_URL, DB_PATH
+    from app.core.observability import heartbeat  # ADR-014: ping / hoac /fail
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -183,6 +186,7 @@ def db_backup(
         src = Path(DB_PATH)
         if not src.is_file():
             typer.echo(f"Database file not found: {src}", err=True)
+            heartbeat.ping(heartbeat.KEY_BACKUP, fail=True)
             raise typer.Exit(code=1)
         dest = src.parent / f"{src.name}.bak.{ts}"
         shutil.copy2(src, dest)
@@ -212,6 +216,7 @@ def db_backup(
         how = f"docker exec {container}"
     else:
         typer.echo("Không tìm thấy pg_dump lẫn docker — không thể backup Postgres.", err=True)
+        heartbeat.ping(heartbeat.KEY_BACKUP, fail=True)
         raise typer.Exit(code=1)
 
     with open(dest, "wb") as fh:
@@ -220,12 +225,14 @@ def db_backup(
     if proc.returncode != 0:
         dest.unlink(missing_ok=True)
         typer.echo(f"pg_dump thất bại ({how}): {proc.stderr.decode(errors='replace').strip()}", err=True)
+        heartbeat.ping(heartbeat.KEY_BACKUP, fail=True)
         raise typer.Exit(code=1)
 
     size = dest.stat().st_size
     if size == 0:
         dest.unlink(missing_ok=True)
         typer.echo(f"pg_dump trả về file rỗng ({how}) — coi như thất bại.", err=True)
+        heartbeat.ping(heartbeat.KEY_BACKUP, fail=True)
         raise typer.Exit(code=1)
 
     typer.echo(f"Backed up ({how}): {dest} ({size:,} bytes)")
@@ -250,6 +257,8 @@ def db_backup(
             except OSError as exc:
                 typer.echo(f"  [WARN] khong xoa duoc {stale.name}: {exc}", err=True)
 
+    heartbeat.ping(heartbeat.KEY_BACKUP)  # dump + offsite xong: bao "con song"
+
 
 @db_app.command("drive-check")
 def db_drive_check() -> None:
@@ -260,6 +269,58 @@ def db_drive_check() -> None:
     ok, message = offsite.check_root(root)
     typer.echo(("[OK] " if ok else "[LOI] ") + message)
     if not ok:
+        raise typer.Exit(code=1)
+
+
+@ai_app.command("check")
+def ai_check() -> None:
+    """Kiem key AI truoc khi bat stack (ADR-014): goi 1 request nho toi moi provider co key.
+
+    Di qua dung client dang chay that (native_fallback / openrouter_fallback) de
+    kiem cai se duoc dung, khong phai mot ban sao. Thoat ma 1 neu co provider FAIL
+    hoac khong co key nao. KHONG in gia tri key.
+    """
+    import app.config as config
+
+    prompt = "Tra loi dung mot tu: OK"
+    gemini_key = (getattr(config, "GEMINI_API_KEY", "") or "").strip()
+    or_key = (getattr(config, "OPENROUTER_API_KEY", "") or "").strip()
+
+    if not gemini_key and not or_key:
+        typer.echo("Chua co key AI nao. Dien vao .env mot trong hai:", err=True)
+        typer.echo("  GEMINI_API_KEY=AIza...      (aistudio.google.com/apikey)", err=True)
+        typer.echo("  OPENROUTER_API_KEY=...      (+ OPENROUTER_BASE_URL / OPENROUTER_MODEL)", err=True)
+        raise typer.Exit(code=1)
+
+    def _short(text: str, width: int = 60) -> str:
+        return " ".join((text or "").split())[:width]
+
+    failed = False
+
+    if gemini_key:
+        if not gemini_key.startswith("AIza"):
+            typer.echo("[WARN] gemini: khong phai API key Gemini — key that dang AIza... (aistudio.google.com/apikey)")
+        from app.core.ai import native_fallback
+
+        text, meta = native_fallback.call_native_gemini(prompt)
+        if meta.get("ok"):
+            typer.echo(f"[OK] gemini: {meta.get('model')} -> {_short(text)}")
+        else:
+            failed = True
+            typer.echo(f"[FAIL] gemini: {_short(str(meta.get('fail_reason')), 200)}")
+
+    if or_key:
+        from app.core.ai import openrouter_fallback
+
+        label = f"{config.OPENROUTER_BASE_URL} / {config.OPENROUTER_MODEL}"
+        text, meta = openrouter_fallback.call_openrouter(prompt)
+        if meta.get("ok"):
+            typer.echo(f"[OK] openrouter ({label}): {meta.get('model')} -> {_short(text)}")
+        else:
+            failed = True
+            typer.echo(f"[FAIL] openrouter ({label}): {_short(str(meta.get('fail_reason')), 200)}")
+
+    if failed:
         raise typer.Exit(code=1)
 
 
