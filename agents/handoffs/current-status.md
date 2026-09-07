@@ -172,6 +172,14 @@ sửa ưu tiên `uploader` → `source.handle`, UPDATE 4 dòng, thêm test.
 Test: Windows xem dưới; lint 2 kept. Nợ: `competitor_urls` cũ chưa di trú sang bảng Nguồn;
 `sources.subprocess` và `processor.subprocess` cùng module nên test sweep phải seed trực tiếp.
 
+### Rate limit hai tầng (bài Jack Nguyễn) → `docs/notes/2026-09-07-rate-limit-hai-tang.md`
+
+Đối chiếu với doc Meta: đúng (BUC theo Page = 4800 × engaged users / 24h; Platform theo via).
+Tách bạch: mất tài khoản 31/07 là Account Integrity, không phải rate limit. Áp vào tool:
+`POSTS_PER_PAGE_PER_DAY` mặc định 0 → **2**; `Account.cooldown_seconds` mặc định 1800 →
+**14400** (4 giờ); đã ghi cả hai vào DB thật; spike script poll Reel 10 s → **30 s** (Page
+mới mỗi lời gọi đều đếm); runbook 5.6 + TASK-058 ghi "2 bài cách nhau ≥ 4 giờ".
+
 ### Next Action
 
 1. **Owner: đặt `GEMINI_API_KEY` thật (dạng `AIza…`) vào `.env`** — không có thì

@@ -13,7 +13,7 @@ thì hết 2 tuần vẫn không biết ngách nào tốt hơn hay chỉ vì đ�
 |---|---|
 | Ngách | **KHÁC NHAU** — đây là biến duy nhất |
 | Số bài/ngày | Bằng nhau (đề xuất **2 bài/ngày** mỗi Page) |
-| Giờ đăng | Cùng khung giờ |
+| Giờ đăng | Cùng khung giờ, **2 bài cách nhau ≥ 4 giờ** (Page mới hạn mức thấp — `docs/notes/2026-09-07-rate-limit-hai-tang.md`) |
 | Kiểu caption | Cùng công thức |
 | Vị trí đặt link | Cùng chỗ (đề xuất: trong **comment đầu tiên**) |
 | Cách đăng | Business Suite trên laptop, hẹn giờ. **KHÔNG dùng tool tự đăng** |

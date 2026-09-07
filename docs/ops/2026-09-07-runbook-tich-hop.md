@@ -275,6 +275,11 @@ Ghi kết quả vào bảng cuối file **ngay lúc này**, kể cả không đ�
 
 ### 5.6 Mở rộng (chỉ khi 5.5 đạt, 30 phút)
 
+> ⚠️ **Page mới có hạn mức BUC gần 0** (4800 × engaged users / 24h). Mỗi lời gọi đều đếm,
+> kể cả poll trạng thái Reel (script đã hạ còn 30 s/lần). Trong lúc spike chỉ đăng **1–2
+> bài/ngày**, cách nhau ≥ 4 giờ. Thấy lỗi code 4 / 17 / 32 / 613 → dừng 24 giờ, đừng đổi via
+> hay Page để lách. Chi tiết: `docs/notes/2026-09-07-rate-limit-hai-tang.md`.
+
 Mỗi lệnh thử một khả năng tool đang cần. Chạy `--dry-run` trước nếu muốn xem request.
 
 ```powershell

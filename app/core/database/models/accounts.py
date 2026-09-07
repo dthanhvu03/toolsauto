@@ -70,7 +70,7 @@ class Account(Base):
 
     # Limits & Breakers
     daily_limit = Column(Integer, default=3)
-    cooldown_seconds = Column(Integer, default=1800)
+    cooldown_seconds = Column(Integer, default=14400)  # 4 gio: gian bai sang-trua-toi (docs/notes/2026-09-07-rate-limit-hai-tang.md)
     last_post_ts = Column(Integer, nullable=True)
     consecutive_fatal_failures = Column(Integer, default=0)
 

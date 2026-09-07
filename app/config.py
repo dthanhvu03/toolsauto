@@ -260,7 +260,7 @@ POST_DELAY_MAX_SEC = int(os.getenv("POST_DELAY_MAX_SEC", "90"))
 
 # Per-page daily throughput caps (runtime-overridable via app/settings)
 # 0 = disable cap (use account.daily_limit / no intake limit)
-POSTS_PER_PAGE_PER_DAY = int(os.getenv("POSTS_PER_PAGE_PER_DAY", "0"))
+POSTS_PER_PAGE_PER_DAY = int(os.getenv("POSTS_PER_PAGE_PER_DAY", "2"))  # Page moi: 2 bai/ngay (docs/notes/2026-09-07-rate-limit-hai-tang.md)
 REUP_VIDEOS_PER_PAGE_PER_DAY = int(os.getenv("REUP_VIDEOS_PER_PAGE_PER_DAY", "0"))
 
 # Maintenance: viral processing & alert thresholds

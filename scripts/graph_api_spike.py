@@ -59,7 +59,7 @@ GRAPH_VERSION = "v25.0"
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
 RUPLOAD_BASE = f"https://rupload.facebook.com/video-upload/{GRAPH_VERSION}"
 REELS_POLL_MAX_SEC = 5 * 60
-REELS_POLL_EVERY_SEC = 10
+REELS_POLL_EVERY_SEC = 30  # Page moi: BUC ~0, moi lan poll deu dem (docs/notes/2026-09-07-rate-limit-hai-tang.md)
 HTTP_TIMEOUT = 60
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
