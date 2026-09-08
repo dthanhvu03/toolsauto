@@ -64,6 +64,10 @@ def session_factory(tmp_path):
 def fake_service(monkeypatch):
     """SourceService giả theo đúng chữ ký hợp đồng; ``calls`` ghi lại (tên, db, *args, kwargs)."""
     calls: list[tuple] = []
+    # `SOURCES` dựng ở cấp module nên mốc `last_scanned_at` đông cứng từ lúc nạp file: chạy
+    # cả suite mất 40-60 s, vượt mốc 60 s là nhãn đổi "5 phút trước" → "6 phút trước" và test
+    # đỏ ngẫu nhiên (Linux 61 s đỏ, Windows 40 s xanh). Làm mới theo từng test cho tất định.
+    SOURCES[0].last_scanned_at = int(time.time()) - 5 * 60
     state = {"sources": list(SOURCES), "raise": None}
 
     class FakeSourceService:

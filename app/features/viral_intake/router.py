@@ -20,6 +20,12 @@ router = APIRouter(prefix="/viral", tags=["viral"])
 # HX-Trigger báo cho trang biết pipeline đã được đẩy xuống nền → bật polling nhẹ tới khi hết PROCESSING.
 _BG_STARTED_TRIGGERS = {"refreshViralTable": True, "viralBackgroundStarted": True}
 
+# Viết caption (ADR-021) KHÔNG đổi status material sang PROCESSING, nên polling của
+# ``viralBackgroundStarted`` sẽ tự tắt ngay nhịp đầu (nó dừng khi bảng hết PROCESSING).
+# Dùng lại ``viralSourcesScanStarted`` — trang làm mới thêm ở 20s/60s/120s, đúng khoảng
+# thời gian Whisper + LLM chạy xong. Xem app_viral.html.
+_CAPTION_TRIGGERS = {"refreshViralTable": True, "viralSourcesScanStarted": True}
+
 
 def _process_material_in_background(material_id: int) -> None:
     """
@@ -33,6 +39,22 @@ def _process_material_in_background(material_id: int) -> None:
             logger.info("[VIRAL][bg] material #%s ok=%s — %s", material_id, ok, msg)
     except Exception:
         logger.exception("[VIRAL][bg] Lỗi xử lý nền material #%s", material_id)
+
+
+def _generate_caption_in_background(material_id: int, style: str | None = None) -> None:
+    """
+    ADR-021 mục 4: AI viết caption (Whisper + LLM) mất hàng chục giây tới vài phút → ngoài request.
+    Session riêng như _process_material_in_background; lỗi log đủ stack, không nuốt im lặng.
+    """
+    try:
+        with SessionLocal() as db:
+            ok, msg = ViralService.generate_caption_for_material(db, material_id, style=style)
+            logger.info(
+                "[VIRAL][caption][bg] material #%s style=%s ok=%s — %s",
+                material_id, style, ok, msg,
+            )
+    except Exception:
+        logger.exception("[VIRAL][caption][bg] Lỗi viết caption nền material #%s", material_id)
 
 
 def _process_new_batch_in_background(limit: int) -> None:
@@ -364,6 +386,35 @@ def retry_one(
 ):
     """Alias VIP: Thử lại FAILED (cùng pipeline process)."""
     return _accept_material(db, background, material_id)
+
+
+@router.post("/{material_id}/caption", response_class=HTMLResponse)
+def generate_caption(
+    material_id: int, background: BackgroundTasks, style: str = Form("")
+):
+    """
+    ADR-021 mục 4: AI viết caption cho material đã có file ``_reup`` — chạy nền, trả toast ngay.
+
+    Không kiểm tra đồng bộ gì thêm: mọi lý do từ chối (chưa có file _reup, chưa có key AI)
+    đều do ``generate_caption_for_material`` quyết và ghi vào ``ai_caption_error`` để bảng
+    hiện ra, tránh đôi chỗ cùng giữ một luật.
+    """
+    try:
+        background.add_task(
+            _generate_caption_in_background, material_id, style.strip() or None
+        )
+    except Exception as exc:
+        logger.exception("[VIRAL][caption] Lỗi xếp việc viết caption material #%s", material_id)
+        return htmx_toast_response(
+            f"Lỗi xếp việc viết caption #{material_id}: {exc}",
+            type="error",
+            extra_triggers={"refreshViralTable": True},
+        )
+    return htmx_toast_response(
+        f"Đang viết caption cho #{material_id}… bảng tự làm mới khi xong.",
+        type="success",
+        extra_triggers=_CAPTION_TRIGGERS,
+    )
 
 
 def _render_viral_settings(viral_min_views: int, viral_max_videos: int, saved: bool = False) -> str:

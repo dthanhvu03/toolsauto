@@ -228,6 +228,54 @@ def test_fanout_two_pages_creates_two_jobs(session_factory, fake_pipeline):
 
 
 # ---------------------------------------------------------------------------
+# (d2) Giờ hẹn phải TĂNG DẦN và cách nhau >= 1800s — kể cả khi random trả giá trị
+# xấu nhất. Bản đầu bốc mốc nền RIÊNG cho từng Page rồi mới cộng giãn cách, nên
+# Page sau có thể hẹn TRƯỚC Page trước (thậm chí trùng đúng một giây) — test cũ
+# chỉ đỏ ngẫu nhiên ~1/10 lần chạy. Ở đây ép random về đúng ca hỏng đó.
+# ---------------------------------------------------------------------------
+def test_fanout_schedule_tang_dan_va_moc_nen_chi_boc_mot_lan(session_factory, fake_pipeline, monkeypatch):
+    """Bản đầu bốc mốc nền RIÊNG cho từng Page rồi mới cộng giãn cách, nên Page sau có
+    thể hẹn TRƯỚC Page trước, thậm chí trùng đúng một giây — test cũ chỉ đỏ ngẫu nhiên
+    ~1/10 lần chạy. Chốt bằng bất biến của bản vá: mốc nền bốc ĐÚNG MỘT LẦN cho cả
+    material, giãn cách cộng dồn ⇒ giờ hẹn luôn tăng dần, cách nhau >= 1800s."""
+    import random as _random
+
+    PAGE_C = "https://www.facebook.com/page_c"
+    calls = {"base": 0, "stagger": 0}
+    real_randint = _random.randint
+
+    def counting_randint(a, b):
+        if (a, b) == (300, 3600):
+            calls["base"] += 1
+        elif (a, b) == (1800, 5400):
+            calls["stagger"] += 1
+        return real_randint(a, b)
+
+    monkeypatch.setattr(_random, "randint", counting_randint)
+
+    _active_account(session_factory)
+    mid = _material(
+        session_factory, "https://www.facebook.com/reel/102", pages=[PAGE_A, PAGE_B, PAGE_C]
+    )
+
+    with session_factory() as db:
+        ok, msg = ViralService.process_material(db, mid)
+        assert ok, msg
+        jobs = db.query(Job).order_by(Job.id.asc()).all()
+        assert len(jobs) == 3
+
+        # Bất biến 1: mốc nền bốc một lần cho cả material (bản lỗi bốc 1 + 3 = 4 lần)
+        assert calls["base"] == 1, f"mốc nền phải bốc đúng 1 lần, thực tế {calls['base']}"
+        # Bất biến 2: giãn cách cộng dồn — mỗi Page sau Page đầu một lần
+        assert calls["stagger"] == 2, f"giãn cách phải bốc 2 lần cho 3 Page, thực tế {calls['stagger']}"
+
+        ts = [j.schedule_ts for j in jobs]
+        assert ts == sorted(ts), f"giờ hẹn phải tăng dần theo thứ tự Page, nhận: {ts}"
+        gaps = [ts[i + 1] - ts[i] for i in range(len(ts) - 1)]
+        assert all(g >= 1800 for g in gaps), f"mỗi Page phải cách nhau >= 1800s, nhận: {gaps}"
+
+
+# ---------------------------------------------------------------------------
 # (e) không có target_pages → đường cũ, đúng 1 job
 # ---------------------------------------------------------------------------
 def test_material_without_target_pages_keeps_single_job(session_factory, fake_pipeline):

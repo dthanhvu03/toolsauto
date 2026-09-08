@@ -1,5 +1,81 @@
 # Current Status
 
+## Phiên 2026-09-08 (b) — ADR-021 backend: AI viết caption cho material READY
+
+Phần backend của ADR-021 (UI do agent khác làm song song: `router.py`, `viral_row.html`,
+`tests/test_material_caption_ui.py` — phiên này KHÔNG đụng 3 file đó).
+
+### ADR-021 — AI viết caption cho video READY (không cần tài khoản, không cần job)
+
+Owner đăng tay: tải `_reup.mp4` rồi đăng. Thiếu đúng một mảnh là caption, vì AI viết caption
+gắn vào `Job`, mà job chỉ sinh khi có tài khoản. `ContentOrchestrator.generate_caption()` nhận
+**đường dẫn file** nên chạy thẳng trên material được.
+
+| Việc | Proof |
+|---|---|
+| 4 cột `ai_caption` / `ai_hashtags` / `ai_caption_at` / `ai_caption_error` + migration `m1b8c9d0e1f2` | `alembic heads` = 1 head |
+| `ai_provider_ready()` — kiểm **hình dạng key, không gọi mạng** | test chặn `socket.connect` chứng minh |
+| `generate_caption_for_material(db, id, *, style=None)` | 24 test |
+| Nút **Viết caption** / khối caption + chip hashtag + **Sao chép** + **Viết lại** / dòng lỗi + **Thử lại** | 22 test UI |
+| **Chặn sớm khi thiếu key**: máy này key sai dạng (`AQ.Ab…`) → trả lỗi trong **0,044 s**, KHÔNG chạy Whisper | proof Postgres phần 1 |
+| Đường có key (giả orchestrator) → lưu caption + hashtag, đọc lại từ DB đúng | proof phần 2, đã dọn về NULL |
+
+### Hai test flaky lộ ra khi chạy full suite — đều là LỖI THẬT, đã vá
+
+1. **Giờ hẹn fan-out không tăng dần** (`processor.py`). Mỗi Page tự bốc mốc nền riêng rồi mới
+   cộng giãn cách ⇒ Page sau có thể hẹn **trước** Page trước, thậm chí **trùng đúng một giây** —
+   hỏng đúng thứ giãn cách của ADR-020 sinh ra để tránh. Với ≥3 Page còn thêm lỗi
+   `randint(1800,5400)×idx` không đơn điệu. Vá: mốc nền bốc **một lần** cho cả material, giãn
+   cách **cộng dồn**. Test mới chốt bằng bất biến "mốc nền bốc đúng 1 lần" — đã chứng minh
+   **đỏ trên code chưa vá** (`assert 4 == 1`), xanh sau vá.
+2. **`test_viral_sources_ui`** dựng `SOURCES` ở cấp module nên `last_scanned_at` đông cứng từ
+   lúc nạp file; suite chạy quá 60 s là nhãn đổi "5 phút trước" → "6 phút trước" (Linux 61 s đỏ,
+   Windows 40 s xanh). Vá: làm mới mốc theo từng test.
+
+Suite sau vá: Windows **486 passed** (chạy 2 lượt); Linux **469 passed / 17 skipped** trong
+**64,9 s** — vượt mốc 60 s cũ mà vẫn xanh. lint-imports 2 kept.
+
+
+### Done This Session
+
+| # | Việc | Proof |
+|---|---|---|
+| 1 | 4 cột nullable trên `ViralMaterial`: `ai_caption`, `ai_hashtags` (JSON list), `ai_caption_at` (epoch), `ai_caption_error`; property `ai_hashtags_list` (JSON hỏng / không phải list ⇒ `[]`) | `tests/test_material_caption.py` (g) 5 tham số |
+| 2 | Migration `m1b8c9d0e1f2` (`down_revision=l0a7b8c9d0e1`), `downgrade()` drop đúng 4 cột | `alembic upgrade head` trên Postgres thật; `alembic heads` = **1 head** (`m1b8c9d0e1f2`) |
+| 3 | `ai_provider_ready() -> (bool, str)` trong `service.py` — chỉ soi hình dạng key/cờ, **không gọi mạng**: Gemini `AIza…` ⇒ OK; có giá trị nhưng sai dạng ⇒ nói rõ *"key thật bắt đầu bằng AIza…"*; OpenRouter key ⇒ OK; 9Router `enabled` (đọc thẳng `9router_config.json`, lặp guard `if/*` thiếu key) ⇒ OK; không gì ⇒ hướng dẫn `.env` + `manage.py ai check` | (a) 5 test + test chặn `socket.connect` |
+| 4 | `ViralService.generate_caption_for_material(db, id, *, style=None)` — thứ tự chặn rẻ→đắt: material tồn tại → có `_reup` → có key AI → mới gọi `ContentOrchestrator`. Ghi `ai_caption_error` + `ai_caption_at` ở mọi nhánh lỗi, xoá lỗi khi thành công, **không bao giờ raise** (lỗi cắt 300 ký tự + `logger.exception`) | (b)–(h), 24 test xanh |
+| 5 | Context bóc `[AI_GENERATE]` + mọi cụm `### … ###` (khớp cách `processor.py` làm sạch title) | (h) assert đúng chuỗi truyền vào orchestrator |
+
+### PROOF trên Postgres thật (material #68 READY, đã dọn về NULL)
+
+1. **Đường thật hiện tại** — key `.env` là `AQ.Ab…`: `generate_caption_for_material(db, 68)`
+   trả `False` + *"Key Gemini sai dạng — key thật bắt đầu bằng AIza…"* trong **0,044 s**
+   (Whisper một mình đã hàng chục giây ⇒ chứng minh chặn sớm thật); `ai_caption_error` +
+   `ai_caption_at=1788860451` đã ghi vào DB.
+2. **Đường có key** (giả `ai_provider_ready` + giả `generate_caption`): `True`, đọc lại DB ra
+   `ai_caption` đủ câu, `ai_hashtags='["#tuida","#picnic","#dochoihe"]'`, `ai_caption_at` →
+   2026-09-08 16:40:51, `ai_caption_error=None`.
+3. **Dọn**: UPDATE 1 dòng về NULL; toàn bảng còn **0** dòng dính 4 cột mới; `viral_materials`
+   vẫn `DRAFTED 11 / READY 10` — không đụng dữ liệu khác.
+
+Test: `tests/test_material_caption.py` **24 passed**; subset `-k "viral or material or source"`
+**199 passed**; lint-imports **2 kept**.
+
+### Nợ / điểm chưa chắc
+
+- `ai_provider_ready` chỉ đọc `app.config` (config.py đã gộp `GEMINI_API_KEY`/`GOOGLE_API_KEY`
+  lúc import, `settings._push_config_value` ghi đè thẳng vào config). Ai `export` key **sau**
+  khi process khởi động mà không qua `/app/settings` thì hàm này không thấy.
+- Key `AIza…` đúng dạng **không** đảm bảo còn hạn/còn quota — đúng chủ ý (không gọi mạng);
+  key hết hạn vẫn qua cửa này rồi mới hỏng ở tầng dưới và ghi vào `ai_caption_error`.
+- `find_reup_path` có nhánh dò cuối đi qua `SessionLocal()` **toàn cục** (Postgres thật),
+  không theo session truyền vào — test "không có file _reup" phải monkeypatch chính nó.
+- `style` mặc định `"short"` vì **chưa có** `SettingSpec` `ai.caption_style`; muốn đổi mặc
+  định phải thêm spec vào `app/core/settings.py`.
+- Chưa chạy suite Linux cho phần này (chỉ Windows subset, theo yêu cầu không chạy full).
+
+---
+
 ## Phiên 2026-09-08 — ADR-020 backend: một nguồn → nhiều Page (fan-out)
 
 Phần backend của ADR-020 (UI do agent khác làm song song: `router.py`, `viral_sources.html`,

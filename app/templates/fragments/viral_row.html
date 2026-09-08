@@ -40,6 +40,111 @@
         {% if item.process_tries and item.process_tries > 0 %}
         <div class="mt-1 text-[10px] text-[var(--color-mist)]">Lần thử {{ item.process_tries }}/3</div>
         {% endif %}
+
+        {% if has_reup %}
+        {# ADR-021 mục 5 — caption AI cho video đã có file _reup (đăng tay không cần job).
+           Dùng |default(..., true) để không vỡ khi backend chưa thêm 4 cột ai_caption*. #}
+        {% set ai_caption = item.ai_caption|default(None, true) %}
+        {% set ai_caption_error = item.ai_caption_error|default(None, true) %}
+        {% set ai_hashtags = item.ai_hashtags_list|default([], true) %}
+        <div class="mt-2 pt-2 border-t border-[var(--border)]" data-caption-block="{{ item.id }}">
+            {% if ai_caption %}
+            {% set copy_text = ai_caption ~ "\n" ~ ai_hashtags|join(" ") if ai_hashtags else ai_caption %}
+            <details class="group/cap">
+                <summary class="cursor-pointer list-none select-none"
+                         title="Bấm để mở rộng / thu gọn caption">
+                    <span class="text-[9px] font-black uppercase tracking-wide text-[var(--color-lichen)]">Caption AI</span>
+                    <span class="text-[9px] text-[var(--color-mist)] group-open/cap:rotate-180 inline-block transition-transform">▾</span>
+                    <p class="mt-1 text-[11px] leading-4 text-[var(--color-ink-soft)] whitespace-pre-line line-clamp-2 group-open/cap:line-clamp-none">{{ ai_caption }}</p>
+                </summary>
+            </details>
+            {% if ai_hashtags %}
+            <div class="mt-1 flex flex-wrap gap-1">
+                {% for tag in ai_hashtags %}
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold border border-[var(--color-moss-border)] bg-[var(--color-moss-dim)] text-[var(--color-lichen)]">{{ tag }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="mt-1.5 flex flex-wrap gap-1 items-center">
+                <button type="button"
+                    class="inline-flex items-center justify-center min-h-[28px] px-2 py-1 rounded text-[10px] font-bold text-teal-200 border border-teal-400/40 hover:bg-teal-500/15 transition"
+                    onclick='window.viralCopyCaption(this, {{ copy_text|tojson }})'
+                    title="Sao chép caption + hashtag vào clipboard"
+                    aria-label="Sao chép caption và hashtag">
+                    <span class="cap-copy-label">Sao chép</span>
+                </button>
+                <button type="button"
+                    class="inline-flex items-center justify-center min-h-[28px] px-2 py-1 rounded text-[10px] font-semibold text-[var(--color-mist)] border border-[var(--border)] hover:bg-[var(--color-ledge)] hover:text-[var(--color-ink)] transition"
+                    hx-post="/viral/{{ item.id }}/caption"
+                    hx-swap="none"
+                    hx-indicator="this"
+                    hx-disabled-elt="this"
+                    title="Cho AI viết lại caption khác cho video này"
+                    aria-label="Viết lại caption">Viết lại</button>
+            </div>
+            {% if ai_caption_error %}
+            <p class="mt-1 text-[10px] leading-4 text-[var(--color-danger)] truncate" title="{{ ai_caption_error }}">
+                Lần viết gần nhất lỗi: {{ ai_caption_error|truncate(60, true, "…", 0) }}
+            </p>
+            {% endif %}
+            <script>
+                window.viralCopyCaption = window.viralCopyCaption || function (btn, text) {
+                    var label = btn.querySelector('.cap-copy-label') || btn;
+                    var old = label.textContent;
+                    function done(ok) {
+                        label.textContent = ok ? 'Đã chép ✓' : 'Chép lỗi';
+                        setTimeout(function () { label.textContent = old; }, 2000);
+                    }
+                    function legacy() {
+                        // Trình duyệt cũ / trang không chạy trên https: navigator.clipboard không có.
+                        try {
+                            var ta = document.createElement('textarea');
+                            ta.value = text;
+                            ta.setAttribute('readonly', '');
+                            ta.style.position = 'fixed';
+                            ta.style.top = '-1000px';
+                            ta.style.opacity = '0';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            var ok = document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            done(ok);
+                        } catch (e) {
+                            done(false);
+                        }
+                    }
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(function () { done(true); }, legacy);
+                    } else {
+                        legacy();
+                    }
+                };
+            </script>
+            {% elif ai_caption_error %}
+            <div title="{{ ai_caption_error }}">
+                <span class="text-[9px] font-black uppercase tracking-wide text-[var(--color-danger)]">Caption lỗi</span>
+                <p class="mt-1 text-[11px] leading-4 text-[var(--color-danger)] truncate">{{ ai_caption_error|truncate(60, true, "…", 0) }}</p>
+            </div>
+            <button type="button"
+                class="mt-1.5 inline-flex items-center justify-center min-h-[28px] px-2 py-1 rounded text-[10px] font-bold text-[var(--color-danger)] border border-[var(--color-danger-border)] hover:bg-[var(--color-danger-dim)] transition"
+                hx-post="/viral/{{ item.id }}/caption"
+                hx-swap="none"
+                hx-indicator="this"
+                hx-disabled-elt="this"
+                title="Cho AI viết caption lại sau khi đã sửa nguyên nhân lỗi"
+                aria-label="Thử lại viết caption">Thử lại</button>
+            {% else %}
+            <button type="button"
+                class="inline-flex items-center justify-center min-h-[28px] px-2 py-1 rounded text-[10px] font-bold text-teal-200 border border-teal-400/40 hover:bg-teal-500/15 transition"
+                hx-post="/viral/{{ item.id }}/caption"
+                hx-swap="none"
+                hx-indicator="this"
+                hx-disabled-elt="this"
+                title="AI viết caption + hashtag từ chính file _reup — chạy nền, vài chục giây"
+                aria-label="Viết caption cho video này">Viết caption</button>
+            {% endif %}
+        </div>
+        {% endif %}
     </td>
     <td class="p-3 align-top font-medium text-[var(--color-ink)]">
         {{ "{:,}".format(item.views) }}

@@ -923,25 +923,38 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             created_jobs = []
             blocked_reasons: list[str] = []
 
-            for idx, page in enumerate(job_pages):
+            # Caption của từng Page dựng TRƯỚC vòng lặp: mốc giờ nền phải tính một lần cho
+            # cả material, nếu không mỗi Page tự bốc một mốc rồi cộng giãn cách thì thứ tự
+            # đảo lộn và hai Page có thể trùng đúng một giây — hỏng đúng thứ giãn cách sinh
+            # ra để tránh (ADR-020).
+            page_captions = []
+            for page in job_pages:
                 caption_for_page = caption_metadata
                 if pages and not _boost_from_title:
                     page_boost = _page_boost_context(db, target_account.id, page)
                     if page_boost:
                         caption_for_page += f" ### BOOST_CONTEXT: {page_boost} ###"
+                page_captions.append(caption_for_page)
 
-                # Accelerated Freshness Pipeline (2026 Algo Upgrade)
-                # Nếu là Auto-Boost (có BOOST_CONTEXT) -> Đăng gần như ngay lập tức để bắt sóng
-                # Chú ý: Cần cộng thêm jitter (1-5 phút) để tránh bị Meta đánh cờ 'Spam/Bot' vì đăng quá chính xác.
-                if "BOOST_CONTEXT" in caption_for_page:
-                    jitter = random.randint(60, 300)
-                    calc_schedule = int(time.time()) + jitter
-                    logger.info(f"[VIRAL] Using Accelerated Freshness scheduling for BOOST job (+{jitter}s)")
-                else:
-                    calc_schedule = int(time.time()) + random.randint(300, 3600)
+            # Accelerated Freshness Pipeline (2026 Algo Upgrade)
+            # Nếu là Auto-Boost (có BOOST_CONTEXT) -> Đăng gần như ngay lập tức để bắt sóng
+            # Chú ý: Cần cộng thêm jitter (1-5 phút) để tránh bị Meta đánh cờ 'Spam/Bot' vì đăng quá chính xác.
+            if any("BOOST_CONTEXT" in c for c in page_captions):
+                jitter = random.randint(60, 300)
+                base_schedule = int(time.time()) + jitter
+                logger.info(f"[VIRAL] Using Accelerated Freshness scheduling for BOOST job (+{jitter}s)")
+            else:
+                base_schedule = int(time.time()) + random.randint(300, 3600)
+
+            page_offset = 0
+            for idx, page in enumerate(job_pages):
+                caption_for_page = page_captions[idx]
                 if idx:
-                    # ADR-020: giãn giờ giữa các Page — cùng nội dung đăng cùng một phút dễ bị đánh spam
-                    calc_schedule += random.randint(1800, 5400) * idx
+                    # ADR-020: giãn giờ giữa các Page — cùng nội dung đăng cùng một phút dễ bị
+                    # đánh spam. Cộng DỒN chứ không nhân idx: nhân idx thì Page 2 bốc 5400 vẫn
+                    # có thể muộn hơn Page 3 bốc 1800×2, tức lại mất thứ tự.
+                    page_offset += random.randint(1800, 5400)
+                calc_schedule = base_schedule + page_offset
 
                 try:
                     assert_media_not_blocked(

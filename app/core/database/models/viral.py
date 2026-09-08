@@ -58,6 +58,26 @@ class ViralMaterial(Base):
     last_error = Column(String, nullable=True)
     process_tries = Column(Integer, default=0)  # Intake attempts (download/reup); cap retry
 
+    # ADR-021: caption AI viết thẳng cho material READY (không cần account, không cần Job).
+    ai_caption = Column(Text, nullable=True)
+    ai_hashtags = Column(Text, nullable=True)  # JSON list, ví dụ ["#viral", "#xuhuong"]
+    ai_caption_at = Column(Integer, nullable=True)  # epoch giây — lần chạy AI gần nhất (kể cả lần lỗi)
+    ai_caption_error = Column(Text, nullable=True)  # lý do lần chạy gần nhất thất bại; NULL = lần cuối OK
+
+    @property
+    def ai_hashtags_list(self) -> list[str]:
+        """ADR-021: đọc ``ai_hashtags`` → list[str]. JSON hỏng / không phải list ⇒ ``[]``."""
+        raw = self.ai_hashtags
+        if not raw:
+            return []
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return []
+        if not isinstance(data, list):
+            return []
+        return [str(h).strip() for h in data if str(h or "").strip()]
+
     @property
     def target_pages_list(self) -> list[str]:
         """ADR-020: Page đích của material — ``target_pages`` → ``[target_page]`` → ``[]``."""

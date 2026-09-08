@@ -614,3 +614,157 @@ class ViralService:
                     os.remove(work_path)
             except OSError:
                 pass
+
+    @staticmethod
+    def generate_caption_for_material(
+        db: Session,
+        material_id: int,
+        *,
+        style: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """
+        ADR-021 — AI viết caption thẳng cho một material, không mượn Job, không cần account.
+
+        Thứ tự chặn (rẻ trước, đắt sau): material tồn tại → có file ``_reup`` → có key AI →
+        mới chạy ``ContentOrchestrator`` (collage + Whisper + Gemini, hàng chục giây tới vài phút).
+
+        KHÔNG BAO GIỜ raise: mọi lỗi đều ghi vào ``ai_caption_error`` và trả ``(False, msg)``,
+        vì endpoint gọi hàm này chạy nền — raise ở đó thì lỗi chỉ nằm trong log.
+        """
+        import json
+
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat:
+            return False, f"Không tìm thấy material #{material_id}"
+
+        video_path = ViralService.find_reup_path(mat.id, mat.platform)
+        if not video_path:
+            # Chưa có file thì không có gì cho AI xem — báo luôn, không đụng AI.
+            return False, "Chưa có file _reup — xử lý lại video trước."
+
+        ok, reason = ai_provider_ready()
+        if not ok:
+            mat.ai_caption_error = reason[:300]
+            mat.ai_caption_at = int(time.time())
+            db.commit()
+            return False, reason
+
+        context = _clean_title_for_context(mat.title)
+        if not style:
+            from app.core import settings as runtime_settings
+            style = runtime_settings.get_str("ai.caption_style", default="short", db=db) or "short"
+
+        try:
+            from app.core.orchestrator import ContentOrchestrator
+
+            result = ContentOrchestrator().generate_caption(
+                video_path,
+                style=style,
+                context=context,
+            ) or {}
+            caption = str(result.get("caption", "") or "").strip()
+            if not caption:
+                msg = "AI không trả về caption (đã thử hết các lớp dự phòng)"
+                mat.ai_caption_error = msg
+                mat.ai_caption_at = int(time.time())
+                db.commit()
+                return False, msg
+
+            hashtags = result.get("hashtags") or []
+            if not isinstance(hashtags, list):
+                hashtags = []
+            mat.ai_caption = caption
+            mat.ai_hashtags = json.dumps(
+                [str(h).strip() for h in hashtags if str(h or "").strip()],
+                ensure_ascii=False,
+            )
+            mat.ai_caption_at = int(time.time())
+            mat.ai_caption_error = None
+            db.commit()
+            return True, f"Đã viết caption cho #{material_id}"
+        except Exception as e:
+            logger.exception("[VIRAL] Viết caption cho material #%s thất bại", material_id)
+            msg = f"Lỗi khi chạy AI: {e}"[:300]
+            try:
+                mat.ai_caption_error = msg
+                mat.ai_caption_at = int(time.time())
+                db.commit()
+            except Exception:
+                db.rollback()
+            return False, msg
+
+
+# ─── ADR-021: caption AI cho material READY (không cần account, không cần Job) ───
+
+# Bóc mọi cụm ``### … ###`` (ORIGINAL_VIRAL_TITLE, BOOST_CONTEXT…) — khớp cách
+# ``processor.py`` làm sạch title trước khi nhét vào caption metadata.
+_MARKER_BLOCK_RE = re.compile(r"\s*###.*?###\s*", re.DOTALL)
+_AI_GENERATE_RE = re.compile(r"\[AI_GENERATE\]", re.IGNORECASE)
+
+
+def _clean_title_for_context(title: str | None) -> str:
+    """``title`` của material → context sạch cho AI: bỏ ``[AI_GENERATE]`` và mọi ``### … ###``."""
+    text = title or ""
+    text = _AI_GENERATE_RE.sub(" ", text)
+    text = _MARKER_BLOCK_RE.sub(" ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _nine_router_enabled() -> bool:
+    """9Router có đang bật không — đọc thẳng ``9router_config.json``, KHÔNG dựng pipeline (nhanh).
+
+    Lặp lại đúng guard của ``AICaptionPipeline.reload_config``: model ``if/*`` mà không có
+    api_key thì coi như tắt.
+    """
+    import json
+
+    try:
+        path = str(config.NINE_ROUTER_CONFIG_FILE)
+        if not os.path.exists(path):
+            return False
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not bool(data.get("enabled", False)):
+            return False
+        model = str(data.get("default_model", "") or "")
+        if model.startswith("if/") and not str(data.get("api_key", "") or "").strip():
+            return False
+        return True
+    except Exception as e:
+        logger.debug("[VIRAL] đọc 9router_config lỗi: %s", e)
+        return False
+
+
+def ai_provider_ready() -> Tuple[bool, str]:
+    """
+    ADR-021 §3 — có provider AI nào dùng được không? Trả ``(ok, lý_do_nếu_không)``.
+
+    CHỈ kiểm hình dạng key / cờ khai báo, **không gọi mạng** — hàm này chạy trước khi bấm
+    "Viết caption" nên phải trả lời tức thì. Không có bước này thì mỗi lần bấm sẽ chạy
+    Whisper vài phút rồi mới rơi xuống fallback, người dùng tưởng tool treo.
+
+    Đọc từ ``app.config`` (config.py đã gộp ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` lúc
+    import, và ``settings._push_config_value`` ghi đè thẳng vào config khi Owner lưu ở
+    ``/app/settings``) — nên không cần đọc lại ``os.environ``.
+    """
+    gemini = (getattr(config, "GEMINI_API_KEY", "") or getattr(config, "GOOGLE_API_KEY", "") or "").strip()
+    openrouter = (getattr(config, "OPENROUTER_API_KEY", "") or "").strip()
+
+    if gemini.startswith("AIza"):
+        return True, ""
+    if openrouter:
+        return True, ""
+    if _nine_router_enabled():
+        return True, ""
+
+    if gemini:
+        return False, (
+            "Key Gemini sai dạng — key thật bắt đầu bằng AIza… (giá trị hiện tại bắt đầu "
+            f"bằng “{gemini[:5]}…”, giống access token chứ không phải API key). "
+            "Lấy key ở Google AI Studio, đặt GEMINI_API_KEY trong .env rồi chạy: "
+            "python manage.py ai check"
+        )
+    return False, (
+        "Chưa cấu hình key AI — đặt GEMINI_API_KEY (dạng AIza…) trong .env rồi chạy: "
+        "python manage.py ai check"
+    )
