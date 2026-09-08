@@ -6,6 +6,28 @@ Owner dùng tool qua UltraViewer, khung hẹp hơn bản dựng 1440px: trang `/
 rất xa mới thấy bảng video, và **cuộn ngang cả trang**. Phiên này chỉ sửa 4 file template
 (agent khác đang làm notifier — không đụng).
 
+### Quét kênh TikTok trên laptop lỗi — do yt-dlp cũ, không phải kênh hỏng
+
+Owner gửi ảnh: nguồn `@thacaukechuyen` báo `ERROR: [tiktok:user] … Unable to extract
+secondary user ID`, tìm thấy 0. Chạy **cùng kênh đó** trên máy dev với yt-dlp
+**`2026.08.19`** → ra 3 video bình thường. Kết luận: laptop còn bản cũ (`requirements.txt`
+đã ghim `yt-dlp==2026.8.19` từ commit `11a143b`, nhưng ghim không tự cài).
+
+**Owner làm trên laptop:** `git pull` rồi
+`venv\Scripts\python.exe -m pip install -r requirements.txt`, khởi động lại, bấm Quét lại.
+
+**Vá để lần sau tự biết:** trang **Sức khỏe hệ thống** nay có ô **yt-dlp (tải video)** —
+xanh khi khớp bản ghim, **đỏ + kèm câu lệnh cần chạy** khi cũ hơn, và đẩy `status` toàn hệ
+xuống `degraded` kèm lý do. So sánh **theo số từng phần**, không so chuỗi (`"2026.8.19"` <
+`"2026.3.3"` là sai khi so chuỗi — có test chốt riêng ca này). Đọc `requirements.txt` để lấy
+bản ghim nên không phải sửa hai chỗ khi nâng cấp.
+
+Vì sao đáng: TikTok/YouTube đổi cấu trúc liên tục, yt-dlp vá theo; bản cũ **gãy âm thầm** và
+Owner chỉ thấy dòng lỗi khó hiểu ở cột Lỗi của nguồn.
+
+Test: 5 test mới; Windows **527 passed**; Linux **510 passed / 17 skipped**; lint 2 kept.
+
+
 ### ADR-023 — ô "Chép video đã xử lý" là NHÃN NÓI DỐI, nay nối thật
 
 Owner: *"các video phải vào thiết lập drive"*. Kiểm code: `DRIVE_COPY_VIDEOS` khai báo ở

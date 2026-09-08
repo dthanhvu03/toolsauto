@@ -17,6 +17,43 @@ logger = logging.getLogger(__name__)
 _GEMINI_LOGIN_SCRIPT = Path("scripts") / "login_gemini_bypass.py"
 
 
+def _ytdlp_version_status() -> dict:
+    """
+    So phiên bản yt-dlp đang cài với bản ghim trong ``requirements.txt``.
+
+    Vì sao cần: TikTok/YouTube đổi cấu trúc liên tục, yt-dlp vá theo. Bản cũ gãy âm thầm —
+    quét kênh trả "Unable to extract secondary user ID" mà không ai biết là do phần mềm cũ
+    (đúng ca 2026-09-08 trên máy Owner). Chỉ ĐỌC, không tự cập nhật.
+    """
+    info = {"installed": None, "pinned": None, "outdated": False, "error": None}
+    try:
+        from importlib.metadata import version as _pkg_version
+
+        info["installed"] = _pkg_version("yt-dlp")
+    except Exception as exc:
+        info["error"] = f"không đọc được phiên bản đang cài: {exc}"
+        return info
+    try:
+        import re as _re
+
+        req = Path(__file__).resolve().parents[3] / "requirements.txt"
+        for line in req.read_text(encoding="utf-8", errors="replace").splitlines():
+            m = _re.match(r"^\s*yt-dlp\s*==\s*([0-9][^\s#]*)", line)
+            if m:
+                info["pinned"] = m.group(1)
+                break
+    except Exception as exc:
+        info["error"] = f"không đọc được requirements.txt: {exc}"
+        return info
+
+    def _key(v: str) -> tuple:
+        return tuple(int(x) if x.isdigit() else 0 for x in str(v).split("."))
+
+    if info["pinned"] and info["installed"]:
+        info["outdated"] = _key(info["installed"]) < _key(info["pinned"])
+    return info
+
+
 class HealthService:
     @staticmethod
     def get_gemini_health() -> dict:
@@ -200,9 +237,18 @@ class HealthService:
             status = "degraded"
             degradation_reasons.append(f"{disabled_accounts_count} accounts are disabled or invalid")
 
+        ytdlp = _ytdlp_version_status()
+        if ytdlp.get("outdated"):
+            status = "degraded"
+            degradation_reasons.append(
+                f"yt-dlp cũ ({ytdlp['installed']} < {ytdlp['pinned']}) — quét kênh/tải video có thể gãy. "
+                r"Chạy: venv\Scripts\python.exe -m pip install -r requirements.txt"
+            )
+
         return {
             "status": status,
             "reasons": degradation_reasons,
+            "ytdlp": ytdlp,
             "worker": {
                 "status": worker_status,
                 "heartbeat_age_seconds": worker_hb_age,

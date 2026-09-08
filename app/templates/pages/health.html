@@ -222,6 +222,23 @@
                     <dt class="text-xs font-medium text-gray-500">Bài đã kiểm tra</dt>
                     <dd class="mt-1 text-lg font-semibold text-gray-700">{{ health.metrics.posts_checked }}</dd>
                 </div>
+                <div>
+                    <dt class="text-xs font-medium text-gray-500">yt-dlp (tải video)</dt>
+                    {% if health.ytdlp and health.ytdlp.installed %}
+                    <dd class="mt-1 text-lg font-semibold {{ 'text-red-600' if health.ytdlp.outdated else 'text-green-600' }}"
+                        title="{% if health.ytdlp.outdated %}Cũ hơn bản ghim {{ health.ytdlp.pinned }} — quét kênh/tải video có thể gãy. Chạy: venv\Scripts\python.exe -m pip install -r requirements.txt{% else %}Khớp bản ghim trong requirements.txt{% endif %}">
+                        {{ health.ytdlp.installed }}
+                    </dd>
+                    {% if health.ytdlp.outdated %}
+                    <p class="mt-1 text-[11px] leading-snug text-red-600">
+                        Cũ hơn bản ghim <b>{{ health.ytdlp.pinned }}</b>. TikTok/YouTube đổi liên tục, bản cũ
+                        gãy âm thầm khi quét kênh. Chạy <code>pip install -r requirements.txt</code> rồi khởi động lại.
+                    </p>
+                    {% endif %}
+                    {% else %}
+                    <dd class="mt-1 text-lg font-semibold text-gray-400" title="{{ health.ytdlp.error if health.ytdlp else '' }}">—</dd>
+                    {% endif %}
+                </div>
             </div>
         </div>
 
