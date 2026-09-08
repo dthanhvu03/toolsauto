@@ -169,8 +169,8 @@
           <span class="truncate">Nội dung viral</span>
         </a>
 
-        <a href="/app/tiktok-links"
-          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/tiktok-links') %}is-active{% endif %} transition-colors">
+        <a href="/app/viral#viral-sources-panel"
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded transition-colors">
           <svg
             class="w-5 h-5 shrink-0"
             fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -178,7 +178,18 @@
               d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1">
             </path>
           </svg>
-          <span class="truncate">Nguồn TikTok</span>
+          <span class="truncate">Nguồn video</span>
+        </a>
+
+        <a href="/app/tiktok-links"
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/tiktok-links') %}is-active{% endif %} transition-colors">
+          <svg
+            class="w-5 h-5 shrink-0"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M5 8h14M5 12h14M5 16h10M19 16l2 2-2 2"></path>
+          </svg>
+          <span class="truncate">Kho kênh cũ</span>
         </a>
 
         {% set insights_nav_pf = request.query_params.get('platform') or 'facebook' %}
