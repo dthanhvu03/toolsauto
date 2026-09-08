@@ -1,5 +1,70 @@
 # Current Status
 
+## Phiên 2026-09-08 — ADR-020 backend: một nguồn → nhiều Page (fan-out)
+
+Phần backend của ADR-020 (UI do agent khác làm song song: `router.py`, `viral_sources.html`,
+`app_viral.html`, `tests/test_source_fanout_ui.py` — phiên này KHÔNG đụng 4 file đó).
+
+### Done This Session
+
+| # | Việc | Proof |
+|---|---|---|
+| 1 | `ViralSource.target_pages` + `ViralMaterial.target_pages` (Text, JSON list) + `target_pages_list` (đọc `target_pages` → `[target_page]` → `[]`) và setter chuẩn hoá (strip/bỏ rỗng/bỏ trùng/giữ thứ tự, ghi luôn `target_page` = Page đầu) | `tests/test_source_fanout.py` (a) |
+| 2 | Migration `l0a7b8c9d0e1` — 2 cột + **dựng lại 2 unique partial index** với `COALESCE(target_page,'')`, giữ nguyên mệnh đề WHERE (6 status) | `alembic upgrade head` trên Postgres thật, `alembic heads` = **1 head**; `indexdef` in ra đúng 2 index mới |
+| 3 | Guard nới **đúng một nấc**: `assert_media_not_blocked(..., sibling_material_id=)` bỏ qua job cùng material ở CẢ hai phép dò; job upload tay (`viral_material_id IS NULL`) vẫn chặn (`OR viral_material_id IS NULL`) | (f) + `test_cross_account_media_guard.py` còn xanh |
+| 4 | `add_source(..., target_pages=[...])`; `scan_source` chép danh sách sang material | (b) (c) |
+| 5 | `processor.py`: vòng lặp tạo job theo Page, giãn giờ `random(1800,5400)×idx`, BOOST_CONTEXT tính **theo từng Page** (`_page_boost_context`), 1 Page hỏng chỉ bỏ Page đó, `notify_style_selection` cho từng job. **Không có `target_pages` ⇒ đường cũ y nguyên** (round-robin/keyword, 1 job) | (d) (e) (g) |
+
+### Phần UI (agent song song) + kiểm chéo của coordinator
+
+- Ô "Page đích" thành `<textarea name="target_pages">` mỗi dòng một Page, kèm cảnh báo đỏ
+  *"Mỗi video sẽ đăng lên TẤT CẢ Page — nội dung trùng nhau, Facebook dễ đánh spam"*; cột bảng
+  hiện `—` / tên Page rút gọn / chip **"2 Page"** + dấu `!` + tooltip liệt kê URL.
+  `tests/test_source_fanout_ui.py` 15 test; test UI cũ **không phải sửa dòng nào**.
+- Coordinator chạy **proof thứ hai, độc lập** (kênh khác, đường `download_and_queue` một
+  material): cũng ra **2 job** cùng hash `7b9b570d`, khác Page, lệch **3021 s**; guard vẫn chặn
+  material khác cùng hash; DB dọn về đúng trạng thái cũ.
+- Suite: Windows **439 passed**; Linux container **422 passed / 17 skipped**; lint-imports 2 kept.
+
+### Sự cố hạ tầng trong phiên — lần thứ 4
+
+Docker Desktop **tự tắt** giữa lúc chạy proof (port 5434 refused, mất daemon). Bật lại Docker
+→ container `unless-stopped` tự lên, dữ liệu nguyên vẹn, migration đã áp trước đó không hỏng.
+Gốc đã biết từ khảo sát 07/09: Docker Desktop không chạy được trước khi đăng nhập Windows.
+Hai mức xử lý, **chờ Owner quyết**: (a) bật "Start Docker Desktop when you sign in" — 2 phút;
+(b) cài Postgres thẳng làm Windows Service `pg_ctl register -S auto` — bền hơn, cần ADR.
+
+### PROOF trên Postgres thật (account giả tạm `PROOF-ADR020-TEMP`, đã dọn sạch)
+
+Nguồn `tiktok.com/@tiktok` + 2 Page proof → `scan_source` 3,5 s → material #66 (2 Page) →
+`process_all` 14,8 s → **2 Job**:
+
+```
+(id=485, page=…/proof_page_a, schedule_ts=1788860321, hash=88ab5826, viral_material_id=66)
+(id=486, page=…/proof_page_b, schedule_ts=1788863202, hash=88ab5826, viral_material_id=66)
+lệch giờ = 2881 s   |   mat.status = DRAFTED
+```
+
+Guard còn răng: material khác cùng hash → raise; thêm job thứ 2 **cùng Page** → DB từ chối
+(`duplicate key … idx_jobs_viral_material_active`). Dọn xong: jobs vẫn `DONE 4 / DRAFT 7 /
+FAILED 1 / PENDING 2`, materials `DRAFTED 11 / READY 9`, 2 nguồn cũ, 1 account cũ — **không để rác**
+(xoá cả `viral_66_…_reup.mp4` và `thumbs/viral_66_reup.jpg`).
+
+### Sự cố trong phiên
+
+Docker Desktop tự tắt giữa phiên (port 5434 refused, `docker` CLI mất daemon) — **lần thứ 4**
+kiểu này. Bật lại Docker Desktop → container `unless-stopped` tự lên, dữ liệu nguyên vẹn.
+
+### Nợ / điểm chưa chắc
+
+- Test fan-out chạy SQLite ⇒ **không** có 2 unique partial index của Postgres; tầng chặn cứng
+  chỉ chứng minh được bằng proof trên DB thật (đã làm, xem trên).
+- `downgrade()` chỉ chạy được sau khi xoá bớt job trùng Page (đã ghi cảnh báo + câu SQL kiểm tra
+  trong migration).
+- Guard vẫn chặn 2 material KHÁC nhau cùng hash — nếu Owner quét trùng 1 video từ 2 nguồn thì
+  material thứ hai sẽ FAILED. Đúng ý ADR (chỉ nới cho fan-out), nhưng có thể lộ ra khi dùng thật.
+
+
 ## Phiên 2026-09-07 (b) — /design-sync: chuẩn bị bundle ToolsAuto Cave, CHỜ /design-login
 
 Owner gọi `/design-sync` trong `design/toolsauto-cave`. DesignSync chưa được uỷ quyền

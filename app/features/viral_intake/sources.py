@@ -160,7 +160,12 @@ class SourceService:
         min_views: int | None = None,
         max_videos: int | None = None,
         target_page: str | None = None,
+        target_pages: list[str] | None = None,
     ) -> tuple[bool, str, int | None]:
+        """
+        ADR-020: ``target_pages`` = danh sách Page đích (mỗi video nhân bản ra tất cả).
+        ``target_page`` cũ vẫn dùng được (UI cũ) — coi như danh sách 1 phần tử.
+        """
         found, reason = _classify(url)
         if not found:
             return False, reason, None
@@ -174,10 +179,11 @@ class SourceService:
             handle=handle,
             min_views=int(min_views) if min_views not in (None, "") else None,
             max_videos=int(max_videos) if max_videos not in (None, "") else None,
-            target_page=(target_page or "").strip() or None,
             enabled=True,
             last_found=0,
         )
+        # setter chuẩn hoá (strip, bỏ rỗng, bỏ trùng, giữ thứ tự) rồi ghi cả target_page đầu tiên
+        src.target_pages_list = target_pages if target_pages else [target_page or ""]
         db.add(src)
         db.commit()
         db.refresh(src)
@@ -283,17 +289,18 @@ class SourceService:
                 skipped += 1
                 continue
             title = str(data.get("title") or "")[:200]
-            db.add(
-                ViralMaterial(
-                    url=url,
-                    platform=source.platform,
-                    title=title,
-                    views=views,
-                    scraped_by_account_id=None,
-                    target_page=source.target_page,
-                    status=ViralStatus.NEW,
-                )
+            mat = ViralMaterial(
+                url=url,
+                platform=source.platform,
+                title=title,
+                views=views,
+                scraped_by_account_id=None,
+                status=ViralStatus.NEW,
             )
+            # ADR-020: chép danh sách Page của nguồn sang material; setter cũng ghi
+            # `target_page` = Page đầu tiên để mọi chỗ đọc `mat.target_page` cũ không vỡ.
+            mat.target_pages_list = source.target_pages_list
+            db.add(mat)
             seen_this_run.add(url)
             found += 1
         return found, skipped

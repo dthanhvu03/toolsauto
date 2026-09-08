@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 from typing import Iterable
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.constants import JobStatus
@@ -21,6 +22,18 @@ BLOCKING_JOB_STATUSES: tuple[str, ...] = (
 )
 
 _CHUNK = 1024 * 1024
+
+
+def _exclude_sibling(q, sibling_material_id: int | None):
+    """
+    ADR-020: bỏ qua các job cùng ``viral_material_id`` (fan-out một material ra nhiều Page).
+    Job upload tay (``viral_material_id IS NULL``) vẫn chặn — ``!=`` trong SQL loại luôn NULL.
+    """
+    if sibling_material_id is None:
+        return q
+    return q.filter(
+        or_(Job.viral_material_id.is_(None), Job.viral_material_id != sibling_material_id)
+    )
 
 
 def sha256_file(path: str | Path) -> str | None:
@@ -47,6 +60,7 @@ def find_blocking_job_by_content_hash(
     platform: str,
     content_hash: str,
     exclude_job_id: int | None = None,
+    sibling_material_id: int | None = None,
 ) -> Job | None:
     if not content_hash or not platform:
         return None
@@ -57,6 +71,7 @@ def find_blocking_job_by_content_hash(
     )
     if exclude_job_id is not None:
         q = q.filter(Job.id != exclude_job_id)
+    q = _exclude_sibling(q, sibling_material_id)
     return q.order_by(Job.id.asc()).first()
 
 
@@ -65,6 +80,7 @@ def find_blocking_job_by_viral_material(
     *,
     viral_material_id: int,
     exclude_job_id: int | None = None,
+    sibling_material_id: int | None = None,
 ) -> Job | None:
     if not viral_material_id:
         return None
@@ -74,6 +90,7 @@ def find_blocking_job_by_viral_material(
     )
     if exclude_job_id is not None:
         q = q.filter(Job.id != exclude_job_id)
+    q = _exclude_sibling(q, sibling_material_id)
     return q.order_by(Job.id.asc()).first()
 
 
@@ -84,13 +101,21 @@ def assert_media_not_blocked(
     content_hash: str | None = None,
     viral_material_id: int | None = None,
     exclude_job_id: int | None = None,
+    sibling_material_id: int | None = None,
 ) -> None:
-    """Raise ValueError if an active/DONE job already owns this media."""
+    """
+    Raise ValueError if an active/DONE job already owns this media.
+
+    ADR-020: ``sibling_material_id`` nới guard đúng một nấc — bỏ qua job của CHÍNH material đó
+    (fan-out một video ra nhiều Page). Mặc định ``None`` ⇒ hành vi PLAN-041 y nguyên; trùng
+    Page vẫn bị unique index chặn ở tầng DB.
+    """
     if viral_material_id:
         existing = find_blocking_job_by_viral_material(
             db,
             viral_material_id=viral_material_id,
             exclude_job_id=exclude_job_id,
+            sibling_material_id=sibling_material_id,
         )
         if existing:
             raise ValueError(
@@ -103,6 +128,7 @@ def assert_media_not_blocked(
             platform=platform,
             content_hash=content_hash,
             exclude_job_id=exclude_job_id,
+            sibling_material_id=sibling_material_id,
         )
         if existing:
             raise ValueError(

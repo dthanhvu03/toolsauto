@@ -147,9 +147,17 @@
               <input name="max_videos" type="number" min="1" max="500" class="app-input w-24" placeholder="mặc định" />
             </div>
             <div>
-              <label class="block text-xs text-[var(--muted)] mb-1">Page đích</label>
-              <input name="target_page" type="text" autocomplete="off" class="app-input w-48" placeholder="tuỳ chọn" />
+              <label for="src-target-pages" class="block text-xs text-[var(--muted)] mb-1">Page đích</label>
+              {# ADR-020 mục 6: nhiều Page, mỗi dòng một URL. Không dùng .app-input vì class đó ép height cố định. #}
+              <textarea id="src-target-pages" name="target_pages" rows="2" autocomplete="off"
+                        aria-describedby="src-target-pages-warn"
+                        class="w-56 resize-y rounded-md border border-[var(--border)] bg-[var(--color-deep)] px-3 py-1.5 text-sm leading-snug text-[var(--color-ink)]"
+                        placeholder="Mỗi dòng một Page — để trống nếu đăng tay"></textarea>
             </div>
+            <p id="src-target-pages-warn" class="order-last basis-full text-[11px] text-[var(--color-danger)]">
+              Mỗi video sẽ đăng lên TẤT CẢ Page ở đây — nội dung trùng nhau giữa các Page, Facebook dễ đánh spam.
+              Page mới nên để trống hoặc chỉ 1 Page.
+            </p>
             <button type="submit"
                     class="viral-busy-btn app-btn border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] hover:brightness-110"
                     title="Thêm kênh vào danh sách quét tự động">

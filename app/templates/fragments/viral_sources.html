@@ -39,8 +39,19 @@
         <td class="px-3 py-2 text-right font-mono text-xs">
           {% if s.max_videos is not none %}{{ s.max_videos }}{% else %}<span class="text-[var(--color-mist)]" title="Dùng số chung (viral.max_videos_per_channel)">mặc định</span>{% endif %}
         </td>
-        <td class="px-3 py-2 truncate text-xs" title="{{ s.target_page or '' }}">
-          {% if s.target_page %}{{ s.target_page }}{% else %}<span class="text-[var(--color-mist)]">—</span>{% endif %}
+        {# ADR-020 mục 6: đọc target_pages_list (nhiều Page); backend cũ chỉ có target_page → vẫn hiện đúng. #}
+        {% set pages = s.target_pages_list | default(none, true) or ([s.target_page] if s.target_page else []) %}
+        <td class="px-3 py-2 truncate text-xs">
+          {% if pages | length == 0 %}
+          <span class="text-[var(--color-mist)]">—</span>
+          {% elif pages | length == 1 %}
+          <span title="{{ pages[0] }}">{{ pages[0] | replace('https://www.facebook.com/', '') | replace('https://facebook.com/', '') }}</span>
+          {% else %}
+          <span class="app-badge border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)]"
+                title="{{ pages | join('\n') }}">{{ pages | length }} Page</span>
+          <span class="ml-1 font-bold text-[var(--color-danger)]"
+                title="Cùng một video đăng lên {{ pages | length }} Page — nội dung trùng nhau, Facebook dễ đánh spam.">!</span>
+          {% endif %}
         </td>
         <td class="px-3 py-2 text-center">
           <input type="checkbox" class="h-4 w-4 rounded border-[var(--border)]" {% if s.enabled %}checked{% endif %}

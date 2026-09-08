@@ -164,6 +164,30 @@ def _clear_material_error(mat) -> None:
     mat.last_error = None
 
 
+def _page_boost_context(db, account_id: int, page_url: str) -> str | None:
+    """
+    BOOST_CONTEXT của MỘT Page (niche + top posts) — ADR-020 mỗi Page một niche riêng
+    nên phải tính lại theo từng Page, không dùng chung.
+    """
+    if not account_id or not page_url:
+        return None
+    try:
+        from app.core.strategic import PageStrategicService
+
+        page_niches = PageStrategicService._lookup_page_niches(db, account_id, page_url)
+        top_posts_summary = PageStrategicService._get_top_posts_summary(db, page_url)
+        if not page_niches and not top_posts_summary:
+            return None
+        niches_str = ",".join(page_niches) if page_niches else "general"
+        boost_ctx = f"niche={niches_str}"
+        if top_posts_summary:
+            boost_ctx += f", top_posts=[{top_posts_summary}]"
+        return boost_ctx
+    except Exception as bc_err:
+        logger.warning("[VIRAL] Could not build BOOST_CONTEXT: %s", bc_err)
+        return None
+
+
 VIRAL_PROCESS_MAX_TRIES = 3
 STALE_PROCESSING_SEC = 30 * 60
 
@@ -826,120 +850,143 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###"
             if _boost_from_title:
                 caption_metadata += f" ### BOOST_CONTEXT: {_boost_from_title} ###"
-            elif resolved_target and target_account:
-                try:
-                    from app.core.strategic import PageStrategicService
-                    page_niches = PageStrategicService._lookup_page_niches(db, target_account.id, resolved_target)
-                    top_posts_summary = PageStrategicService._get_top_posts_summary(db, resolved_target)
-                    if page_niches or top_posts_summary:
-                        niches_str = ",".join(page_niches) if page_niches else "general"
-                        boost_ctx = f"niche={niches_str}"
-                        if top_posts_summary:
-                            boost_ctx += f", top_posts=[{top_posts_summary}]"
-                        caption_metadata += f" ### BOOST_CONTEXT: {boost_ctx} ###"
-                except Exception as bc_err:
-                    logger.warning("[VIRAL] Could not build BOOST_CONTEXT: %s", bc_err)
+            # BOOST_CONTEXT theo Page được tính trong vòng lặp dưới (mỗi Page một niche — ADR-020).
+            # Đường cũ (material không có Page đích) trước giờ cũng không đi nhánh này vì
+            # `mat.target_page` rỗng thì điều kiện không bao giờ đúng.
 
-            # Resolve target page: always prioritize mat.target_page to prevent mixing niches
-            if mat.target_page:
-                resolved_target = mat.target_page
-            elif target_account.target_pages_list and len(target_account.target_pages_list) > 1:
-                # Check if all pages have the identical niches. If not, do NOT round-robin generic videos!
-                pages = target_account.target_pages_list
-                niche_map = target_account.page_niches_map or {}
-                
-                can_round_robin = True
-                if niche_map and pages:
-                    first_niche = set(niche_map.get(pages[0], []))
-                    for p in pages[1:]:
-                        if set(niche_map.get(p, [])) != first_niche:
-                            can_round_robin = False
-                            break
-                            
-                if can_round_robin:
-                    # Safe to distribute jobs evenly
-                    resolved_target = target_account.pick_next_target_page(db)
-                    logger.info("[VIRAL] Safe round-robin → page '%s' for acc '%s'", resolved_target, target_account.name)
-                else:
-                    # UNSAFE! Niches differ. Use Keyword Matching.
-                    title_lower = (mat.title or "").lower()
-                    best_page = pages[0]
-                    best_score = -1
-                    
-                    if title_lower and niche_map:
-                        for p in pages:
-                            niches = niche_map.get(p, [])
-                            score = 0
-                            for n in niches:
-                                n_lower = n.lower()
-                                if n_lower in title_lower:
-                                    score += 3
-                                words = n_lower.split()
-                                for w in words:
-                                    if len(w) > 3 and w in title_lower:
-                                        score += 1
-                            if score > best_score:
-                                best_score = score
-                                best_page = p
-                    
-                    if best_score > 0:
-                        resolved_target = best_page
-                        logger.info("[VIRAL] Keyword Match (score %d) → page '%s' for acc '%s'", best_score, resolved_target, target_account.name)
+            # ADR-020: material có danh sách Page ⇒ nhân bản mỗi Page một Job (cùng media,
+            # cùng content_hash, khác target_page). Rỗng ⇒ GIỮ NGUYÊN đường cũ bên dưới.
+            pages = mat.target_pages_list
+            if pages:
+                job_pages = pages
+                # Nới guard đúng một nấc: job của CHÍNH material này không tự chặn nhau
+                sibling_id = mat.id
+            else:
+                # Resolve target page: always prioritize mat.target_page to prevent mixing niches
+                if mat.target_page:
+                    resolved_target = mat.target_page
+                elif target_account.target_pages_list and len(target_account.target_pages_list) > 1:
+                    # Check if all pages have the identical niches. If not, do NOT round-robin generic videos!
+                    acc_pages = target_account.target_pages_list
+                    niche_map = target_account.page_niches_map or {}
+
+                    can_round_robin = True
+                    if niche_map and acc_pages:
+                        first_niche = set(niche_map.get(acc_pages[0], []))
+                        for p in acc_pages[1:]:
+                            if set(niche_map.get(p, [])) != first_niche:
+                                can_round_robin = False
+                                break
+
+                    if can_round_robin:
+                        # Safe to distribute jobs evenly
+                        resolved_target = target_account.pick_next_target_page(db)
+                        logger.info("[VIRAL] Safe round-robin → page '%s' for acc '%s'", resolved_target, target_account.name)
                     else:
-                        resolved_target = pages[0]
-                        logger.info("[VIRAL] No keyword match. Locked generic video to primary page '%s' for acc '%s'", resolved_target, target_account.name)
-            elif target_account.target_pages_list:
-                resolved_target = target_account.target_pages_list[0]
-            else:
-                resolved_target = target_account.target_page
+                        # UNSAFE! Niches differ. Use Keyword Matching.
+                        title_lower = (mat.title or "").lower()
+                        best_page = acc_pages[0]
+                        best_score = -1
 
-            # Accelerated Freshness Pipeline (2026 Algo Upgrade)
-            # Nếu là Auto-Boost (có BOOST_CONTEXT) -> Đăng gần như ngay lập tức để bắt sóng
-            # Chú ý: Cần cộng thêm jitter (1-5 phút) để tránh bị Meta đánh cờ 'Spam/Bot' vì đăng quá chính xác.
-            if "BOOST_CONTEXT" in caption_metadata:
-                jitter = random.randint(60, 300)
-                calc_schedule = int(time.time()) + jitter
-                logger.info(f"[VIRAL] Using Accelerated Freshness scheduling for BOOST job (+{jitter}s)")
-            else:
-                calc_schedule = int(time.time()) + random.randint(300, 3600)
+                        if title_lower and niche_map:
+                            for p in acc_pages:
+                                niches = niche_map.get(p, [])
+                                score = 0
+                                for n in niches:
+                                    n_lower = n.lower()
+                                    if n_lower in title_lower:
+                                        score += 3
+                                    words = n_lower.split()
+                                    for w in words:
+                                        if len(w) > 3 and w in title_lower:
+                                            score += 1
+                                if score > best_score:
+                                    best_score = score
+                                    best_page = p
+
+                        if best_score > 0:
+                            resolved_target = best_page
+                            logger.info("[VIRAL] Keyword Match (score %d) → page '%s' for acc '%s'", best_score, resolved_target, target_account.name)
+                        else:
+                            resolved_target = acc_pages[0]
+                            logger.info("[VIRAL] No keyword match. Locked generic video to primary page '%s' for acc '%s'", resolved_target, target_account.name)
+                elif target_account.target_pages_list:
+                    resolved_target = target_account.target_pages_list[0]
+                else:
+                    resolved_target = target_account.target_page
+                job_pages = [resolved_target]
+                sibling_id = None
 
             from app.core.media.content_hash import assert_media_not_blocked, sha256_file
 
             media_hash = sha256_file(media_path)
-            try:
-                assert_media_not_blocked(
-                    db,
+            created_jobs = []
+            blocked_reasons: list[str] = []
+
+            for idx, page in enumerate(job_pages):
+                caption_for_page = caption_metadata
+                if pages and not _boost_from_title:
+                    page_boost = _page_boost_context(db, target_account.id, page)
+                    if page_boost:
+                        caption_for_page += f" ### BOOST_CONTEXT: {page_boost} ###"
+
+                # Accelerated Freshness Pipeline (2026 Algo Upgrade)
+                # Nếu là Auto-Boost (có BOOST_CONTEXT) -> Đăng gần như ngay lập tức để bắt sóng
+                # Chú ý: Cần cộng thêm jitter (1-5 phút) để tránh bị Meta đánh cờ 'Spam/Bot' vì đăng quá chính xác.
+                if "BOOST_CONTEXT" in caption_for_page:
+                    jitter = random.randint(60, 300)
+                    calc_schedule = int(time.time()) + jitter
+                    logger.info(f"[VIRAL] Using Accelerated Freshness scheduling for BOOST job (+{jitter}s)")
+                else:
+                    calc_schedule = int(time.time()) + random.randint(300, 3600)
+                if idx:
+                    # ADR-020: giãn giờ giữa các Page — cùng nội dung đăng cùng một phút dễ bị đánh spam
+                    calc_schedule += random.randint(1800, 5400) * idx
+
+                try:
+                    assert_media_not_blocked(
+                        db,
+                        platform="facebook",
+                        content_hash=media_hash,
+                        viral_material_id=mat.id,
+                        sibling_material_id=sibling_id,
+                    )
+                except ValueError as guard_err:
+                    reason = str(guard_err)
+                    # Chỉ bỏ Page này, các Page còn lại vẫn tạo được job
+                    logger.warning("[VIRAL] Skip material #%s page '%s': %s", mat.id, page, reason)
+                    blocked_reasons.append(reason)
+                    continue
+
+                new_job = Job(
                     platform="facebook",
+                    account_id=target_account.id,
+                    media_path=media_path,
+                    caption=caption_for_page,
+                    status=JobStatus.AWAITING_STYLE,
+                    schedule_ts=calc_schedule,
+                    target_page=page,
                     content_hash=media_hash,
                     viral_material_id=mat.id,
                 )
-            except ValueError as guard_err:
-                reason = str(guard_err)
-                logger.warning("[VIRAL] Skip material #%s: %s", mat.id, reason)
+                db.add(new_job)
+                created_jobs.append(new_job)
+
+            if not created_jobs:
+                reason = "; ".join(blocked_reasons) or "Không tạo được Job nào cho material này."
                 _mark_material_failed(db, mat, reason[:200])
                 continue
 
-            new_job = Job(
-                platform="facebook",
-                account_id=target_account.id,
-                media_path=media_path,
-                caption=caption_metadata,
-                status=JobStatus.AWAITING_STYLE,
-                schedule_ts=calc_schedule,
-                target_page=resolved_target,
-                content_hash=media_hash,
-                viral_material_id=mat.id,
-            )
-            db.add(new_job)
             mat.status = ViralStatus.DRAFTED
             _clear_material_error(mat)
             db.commit()
 
-            logger.info("[VIRAL] Created AWAITING_STYLE Job #%s from %s material #%s → acc '%s'",
-                        new_job.id, mat.platform, mat.id, target_account.name)
-            
+            logger.info("[VIRAL] Created %d AWAITING_STYLE Job(s) %s from %s material #%s → acc '%s'",
+                        len(created_jobs), [j.id for j in created_jobs], mat.platform, mat.id, target_account.name)
+
             from app.core.notifier.service import NotifierService
-            NotifierService.notify_style_selection(new_job)
+            for job in created_jobs:
+                NotifierService.notify_style_selection(job)
 
         except subprocess.TimeoutExpired:
             reason = "yt-dlp timed out while fetching media."

@@ -211,6 +211,19 @@ def _ago_label(ts, now: int | None = None) -> str:
     return f"{diff // 86400} ngày trước"
 
 
+def _parse_target_pages(raw: str) -> list[str]:
+    """
+    Textarea "Page đích" → danh sách URL: mỗi dòng một Page, bỏ khoảng trắng thừa,
+    bỏ dòng rỗng, bỏ trùng nhưng GIỮ thứ tự người dùng gõ (ADR-020 mục 6).
+    """
+    pages: list[str] = []
+    for line in (raw or "").splitlines():
+        page = line.strip()
+        if page and page not in pages:
+            pages.append(page)
+    return pages
+
+
 def _scan_source_in_background(source_id: int) -> None:
     """Quét 1 nguồn ngoài request; session riêng như _process_material_in_background."""
     try:
@@ -257,19 +270,30 @@ def add_source(
     min_views: Optional[int] = Form(None),
     max_videos: Optional[int] = Form(None),
     target_page: str = Form(""),
+    target_pages: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    """Thêm kênh TikTok / YouTube làm nguồn quét tự động (ADR-019)."""
+    """
+    Thêm kênh TikTok / YouTube làm nguồn quét tự động (ADR-019).
+
+    Ô "Page đích" nay là textarea nhiều dòng (ADR-020 mục 6). Form cũ chỉ gửi
+    ``target_page`` vẫn chạy y như trước: chỉ khi textarea có dòng thì mới truyền
+    ``target_pages`` xuống service.
+    """
+    pages = _parse_target_pages(target_pages)
+    kwargs: dict = {
+        "min_views": min_views,
+        "max_videos": max_videos,
+        "target_page": target_page.strip() or None,
+    }
+    if pages:
+        kwargs["target_pages"] = pages
     try:
-        ok, msg, _source_id = _source_service().add_source(
-            db,
-            url,
-            min_views=min_views,
-            max_videos=max_videos,
-            target_page=target_page.strip() or None,
-        )
+        ok, msg, _source_id = _source_service().add_source(db, url, **kwargs)
     except Exception as exc:
         return _sources_error_toast("thêm nguồn", exc)
+    if ok and pages:
+        msg = f"{msg} ({len(pages)} Page đích)"
     return htmx_toast_response(
         msg, type="success" if ok else "error", extra_triggers=_SOURCES_TRIGGERS
     )

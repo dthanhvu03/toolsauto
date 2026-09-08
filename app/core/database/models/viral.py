@@ -1,7 +1,39 @@
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String
+import json
+
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.core.database.models.base import Base, now_ts
+
+
+def _parse_target_pages(raw: str | None, legacy: str | None) -> list[str]:
+    """
+    ADR-020: đọc danh sách Page theo thứ tự ưu tiên ``target_pages`` → ``[target_page]`` → ``[]``.
+    Dùng chung cho ViralSource và ViralMaterial (giống ``Account.target_pages_list``).
+    """
+    if raw:
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                pages = [str(u).strip() for u in data if str(u or "").strip()]
+                if pages:
+                    return pages
+        except Exception:
+            pass
+    legacy = (legacy or "").strip()
+    return [legacy] if legacy else []
+
+
+def _dump_target_pages(pages: list[str] | None) -> tuple[str | None, str | None]:
+    """Chuẩn hoá list Page → ``(json_hoặc_None, page_đầu_hoặc_None)``: strip, bỏ rỗng, bỏ trùng, giữ thứ tự."""
+    cleaned: list[str] = []
+    for page in pages or []:
+        page = str(page or "").strip()
+        if page and page not in cleaned:
+            cleaned.append(page)
+    if not cleaned:
+        return None, None
+    return json.dumps(cleaned, ensure_ascii=False), cleaned[0]
 
 
 class ViralMaterial(Base):
@@ -18,11 +50,22 @@ class ViralMaterial(Base):
     views = Column(Integer, default=0, index=True)
     scraped_by_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
     target_page = Column(String, nullable=True)  # Used for manual /reup targeting specific pages
+    # ADR-020: JSON list URL Page — chép từ nguồn lúc quét; NULL = đường cũ (1 Page hoặc round-robin)
+    target_pages = Column(Text, nullable=True)
 
     # AI Processing status
     status = Column(String, default="NEW", index=True)  # NEW, PROCESSING, REUP, DRAFTED, FAILED, BOOST_PENDING
     last_error = Column(String, nullable=True)
     process_tries = Column(Integer, default=0)  # Intake attempts (download/reup); cap retry
+
+    @property
+    def target_pages_list(self) -> list[str]:
+        """ADR-020: Page đích của material — ``target_pages`` → ``[target_page]`` → ``[]``."""
+        return _parse_target_pages(self.target_pages, self.target_page)
+
+    @target_pages_list.setter
+    def target_pages_list(self, pages: list[str] | None):
+        self.target_pages, self.target_page = _dump_target_pages(pages)
 
     @property
     def thumbnail_url(self) -> str:
@@ -51,7 +94,9 @@ class ViralSource(Base):
     handle = Column(String, nullable=True)
     min_views = Column(Integer, nullable=True)
     max_videos = Column(Integer, nullable=True)
-    target_page = Column(String, nullable=True)
+    target_page = Column(String, nullable=True)  # legacy — 1 Page; giữ để tương thích ngược
+    # ADR-020: JSON list URL Page — mỗi video nhân bản ra TẤT CẢ Page ở đây
+    target_pages = Column(Text, nullable=True)
     enabled = Column(Boolean, default=True, nullable=False, index=True)
     last_scanned_at = Column(Integer, nullable=True)
     last_found = Column(Integer, default=0)
@@ -59,6 +104,15 @@ class ViralSource(Base):
 
     created_at = Column(Integer, default=now_ts)
     updated_at = Column(Integer, default=now_ts, onupdate=now_ts)
+
+    @property
+    def target_pages_list(self) -> list[str]:
+        """ADR-020: ``target_pages`` → ``[target_page]`` → ``[]``."""
+        return _parse_target_pages(self.target_pages, self.target_page)
+
+    @target_pages_list.setter
+    def target_pages_list(self, pages: list[str] | None):
+        self.target_pages, self.target_page = _dump_target_pages(pages)
 
 
 class DiscoveredChannel(Base):
