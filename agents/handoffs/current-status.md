@@ -1,5 +1,101 @@
 # Current Status
 
+## Phiên 2026-09-08 (c) — UX: /app/viral gọn lại cho màn hẹp (chỉ template, không đổi backend)
+
+Owner dùng tool qua UltraViewer, khung hẹp hơn bản dựng 1440px: trang `/app/viral` phải cuộn
+rất xa mới thấy bảng video, và **cuộn ngang cả trang**. Phiên này chỉ sửa 4 file template
+(agent khác đang làm notifier — không đụng).
+
+### ADR-022 — Thông báo Telegram cho luồng KHÔNG có job + gọn UI màn hẹp
+
+Owner báo: Telegram trên laptop chạy tốt nhưng hai luồng mới không báo gì; và UI khó dùng ở
+màn hẹp (Owner xem qua UltraViewer). **Lưu ý: ảnh Owner gửi là máy `LAPTOP-T2HF25CD`, không
+phải `Admin-PC` tôi đang làm** — material #940 ở đó, máy này cao nhất #69.
+
+| Việc | Proof |
+|---|---|
+| `material_ready_message` / `caption_ready_message` + `notify_material_ready` / `notify_caption_ready`, escape HTML (parse_mode thật là HTML) | 29 test; in nguyên văn 2 mẫu tin |
+| Nối vào nhánh READY (`processor.py`) và cả 3 nhánh caption (`service.py`), gồm nhánh chặn sớm thiếu key | proof: material #69 → stub nhận **video**; caption 264,7 s → stub nhận **chữ** |
+| `manage.py serve` đăng ký kênh Telegram (đọc cả `runtime_settings`) | có token → 1 kênh, gọi lại → dedup; không token → 0 kênh, không nổ |
+| **Gọn UI màn hẹp**: gốc là `<main class="flex-1">` bị `min-width:auto` kéo cả trang tràn — khoá bằng `main{min-width:0}`; khối Nguồn nhớ trạng thái (mặc định đóng khi <1280); giấu cột phụ; header xuống dòng từ `xl`; badge READY nhãn ngắn + `whitespace-nowrap` | 1024: scrollWidth **1193 → 1024**, bảng video từ y=973 → **y=634**; badge 1 dòng ở 900/1024/1280/1600 |
+
+**ĐÍNH CHÍNH ADR-022:** tiền đề "web không đăng ký notifier" của tôi **sai một nửa** —
+`app/main.py:55` đã đăng ký, và startup hook nạp `runtime_settings` rồi `replace(...)`. Đó mới
+là cơ chế thật; phần thêm vào `serve` chỉ là lớp thứ ba (và không áp dụng khi `--reload`).
+Lý do Owner không nhận thông báo chỉ là: hai luồng mới không hề gọi `notify_*`.
+
+### Phát hiện: caption lúc hay lúc dở vì `OPENROUTER_MODEL = openrouter/free`
+
+`openrouter/free` là **quay số ngẫu nhiên** trong các model free. Đo thật hôm nay: một lần
+trúng `inclusionai/ling-3.0-flash-fin:free` → trả JSON caption chuẩn; `manage.py ai check`
+lại trúng `nemotron-3.5-content-safety` (model **phân loại an toàn**) → pipeline nhận rác,
+rơi xuống "Poorman's Logic" (mẫu chung chung, không đọc video). Ghim model cụ thể cũng chưa
+cứu được: `google/gemma-4-31b-it:free` → **429**, `meta-llama/llama-4-maverick:free` → **404
+hết free**. Hướng đáng làm: **thử lại 2-3 lần khi output không hợp lệ** (mỗi lần bốc model
+khác) — cần PLAN riêng, chưa làm.
+
+Nợ UI còn lại: ở <1280 cột Trạng thái chỉ ~78px; `w-[38%]`/`w-64` trong bảng không được
+trình duyệt tôn trọng (table-fixed + border-collapse).
+
+Suite: Windows **515 passed**; Linux **498 passed / 17 skipped**; lint-imports 2 kept.
+
+
+### Nguyên nhân gốc của thanh cuộn ngang (đo bằng Chrome thật)
+
+`<main class="flex-1 lg:ml-64">` trong `layouts/app.html` là flex item nên mặc định
+`min-width: auto` ⇒ bảng rộng kéo cả trang ra **1193 px** ở khung 1024. Không được sửa
+layout dùng chung nên khoá bằng một dòng CSS **trong chính trang viral**: `main { min-width: 0 }`.
+Sau đó bảng cuộn trong đúng khung của nó, trang không còn cuộn ngang ở mọi bề ngang đã thử.
+
+### Done This Session
+
+| # | Việc | Proof |
+|---|---|---|
+| 1 | Khối "Nguồn tự động" bỏ `open` cứng → đọc/ghi `localStorage['viral.sourcesPanelOpen']`; chưa có lựa chọn thì **đóng khi `innerWidth < 1280`**, mở khi rộng. Listener gắn ở tick sau nên **mặc định không bị ghi vào localStorage** — chỉ lựa chọn của người dùng mới nhớ | Chrome thật: 1440 lần đầu `open=true, ls=null`; bấm đóng → `ls='0'`; reload vẫn đóng. 1024 lần đầu `open=false, ls=null`; bấm mở → reload vẫn mở |
+| 2 | Bảng video giấu **Lượt xem + Tài khoản** dưới `xl` (`hidden xl:table-cell` ở cả `<th>` và `<td>`) | Đếm bằng JS: 1024 → 5 `th` = 5 `td`; 1280/1440 → 7 = 7 |
+| 3 | Bảng nguồn giấu **Min views / Max video / Tìm thấy** dưới `xl` | 1024 → 7 = 7; 1280/1440 → 10 = 10. `colspan` dòng trống giữ nguyên 7 và 10 |
+| 4 | Hàng nút lọc/thao tác: `flex-nowrap + overflow-x-auto` dưới `xl`, trả lại `flex-wrap` từ `xl` — không xuống 3 dòng nữa | `scrollWidth == clientWidth` (627) ở mọi khung ⇒ thực tế vẫn đủ chỗ, cuộn chỉ là lưới an toàn |
+| 5 | Form thêm nguồn `flex-col md:flex-row`; textarea "Page đích" `w-full md:w-52`; ô dán link `flex-1 … sm:max-w-[24rem]` | ảnh 1024 panel mở: textarea không chiếm nguyên hàng, 2 nút nằm cạnh |
+
+### Số đo trước/sau (Playwright Chrome thật, `channel="chrome"`)
+
+| Khung | `scrollWidth` trước | sau | Bảng video bắt đầu ở y= trước → sau |
+|---|---|---|---|
+| 1024×768 | **1193** (cuộn ngang cả trang) | **1024** | 973 → **634** (−339 px, header bảng lọt màn hình đầu) |
+| 1280×800 | 1280 | 1280 | 845 → 845 (panel mở theo đúng ngưỡng 1280) |
+| 1440×900 | 1440 | 1440 | 845 → 845 (không đổi — đúng chủ ý) |
+
+Kiểm thêm 800 / 900 / 1152 / 1366: `scrollWidth == innerWidth`, `th` hiện == `td` hiện,
+bảng nằm gọn trong khung (`tableW <= boxW`).
+
+Test: `test_viral_sources_ui` + `test_source_fanout_ui` + `test_material_caption_ui` +
+`test_viral_router_background` = **76 passed**; subset `-k "viral or source or material"`
+= **204 passed** — **không phải sửa dòng test nào** (test cũ chỉ assert tên cột/`hx-*`,
+mà cột chỉ bị ẩn bằng CSS chứ vẫn còn trong HTML).
+
+### Nợ / điểm chưa chắc
+
+- Ở khung < 1280, badge trạng thái "Sẵn sàng đăng tay" xuống 4 dòng ngắn vì cột Trạng thái
+  bị ép còn ~78 px. Thử `whitespace-nowrap` thì bảng phình 729 px > khung 670 ⇒ cắt mất cột
+  Thao tác nên đã bỏ. Chấp nhận: chiều cao dòng vẫn do ảnh thumbnail 80 px quyết định.
+- Cột `w-[38%]`/`w-64` trong bảng video **không được trình duyệt tôn trọng** (border-collapse
+  + table-fixed, tối thiểu theo nội dung thắng). Đã thử chỉnh `w-[32%]`/`w-40` cho màn hẹp:
+  không đổi gì nên revert để diff sạch. Muốn kiểm soát bề ngang cột phải đổi cách dựng bảng.
+- `layouts/app.html` (ngoài phạm vi được giao): ở 1024, chip **"Panel hệ thống"** bị nút
+  "Sức khỏe hệ thống" đè lên. Trước đây nó nằm ngoài màn hình (phải cuộn ngang mới thấy) nên
+  không lộ. Cần một PLAN riêng cho khối badge ở page header.
+- `tests/test_threads_world_news.py` **lỗi collection có sẵn trên `main`** (`import
+  app.services.ai_runtime` — module đã bị dời từ commit `8326183`). Không liên quan phiên này,
+  phải `--ignore` khi chạy subset.
+
+### Next Action
+
+1. Owner mở `/app/viral` trên đúng khung UltraViewer, đóng khối "Nguồn tự động" một lần —
+   từ đó máy đó nhớ luôn.
+2. Anti: quyết có làm PLAN cho khối badge page header (`layouts/app.html`) không.
+
+---
+
 ## Phiên 2026-09-08 (b) — ADR-021 backend: AI viết caption cho material READY
 
 Phần backend của ADR-021 (UI do agent khác làm song song: `router.py`, `viral_row.html`,

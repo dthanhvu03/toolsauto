@@ -146,13 +146,13 @@
         </div>
         {% endif %}
     </td>
-    <td class="p-3 align-top font-medium text-[var(--color-ink)]">
+    <td class="hidden xl:table-cell p-3 align-top font-medium text-[var(--color-ink)]">
         {{ "{:,}".format(item.views) }}
         {% if is_mega|default(false) %}
         <span class="ml-1 inline-flex px-1 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide border border-rose-400/40 bg-rose-500/15 text-rose-300" title="Views ≥ ngưỡng mega — dễ cháy VN">Mega</span>
         {% endif %}
     </td>
-    <td class="p-3 align-top text-[var(--color-mist)] text-xs text-center">
+    <td class="hidden xl:table-cell p-3 align-top text-[var(--color-mist)] text-xs text-center">
         {{ account_name }}
     </td>
     <td class="p-3 align-top">
@@ -185,7 +185,7 @@
         {% endif %}
         {% elif item.status == 'READY' %}
         {# ADR-018: không có account → không tạo job; Owner tải file đăng tay. #}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-teal-400/40 bg-teal-500/15 text-teal-200" title="Reup xong, chưa có job — tải file đăng tay">Sẵn sàng đăng tay</span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-teal-400/40 bg-teal-500/15 text-teal-200" title="Reup xong, chưa có job — tải file đăng tay"><span class="2xl:hidden whitespace-nowrap">Sẵn sàng</span><span class="hidden 2xl:inline whitespace-nowrap">Sẵn sàng đăng tay</span></span>
         {% else %}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[var(--color-face)] text-[var(--color-ink-soft)] border border-[var(--border)]">{{
             item.status }}</span>

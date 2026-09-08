@@ -5,12 +5,12 @@
       <tr class="border-b border-[var(--border)] text-xs text-[var(--color-mist)]">
         <th class="w-24 px-3 py-2 text-left uppercase">Nền tảng</th>
         <th class="w-[26%] px-3 py-2 text-left uppercase">Kênh</th>
-        <th class="w-24 px-3 py-2 text-right uppercase">Min views</th>
-        <th class="w-20 px-3 py-2 text-right uppercase">Max video</th>
+        <th class="hidden xl:table-cell w-24 px-3 py-2 text-right uppercase">Min views</th>
+        <th class="hidden xl:table-cell w-20 px-3 py-2 text-right uppercase">Max video</th>
         <th class="w-40 px-3 py-2 text-left uppercase">Page đích</th>
         <th class="w-16 px-3 py-2 text-center uppercase">Bật</th>
         <th class="w-32 px-3 py-2 text-left uppercase">Quét cuối</th>
-        <th class="w-20 px-3 py-2 text-right uppercase">Tìm thấy</th>
+        <th class="hidden xl:table-cell w-20 px-3 py-2 text-right uppercase">Tìm thấy</th>
         <th class="w-40 px-3 py-2 text-left uppercase">Lỗi</th>
         <th class="w-32 px-3 py-2 text-right uppercase">Thao tác</th>
       </tr>
@@ -33,10 +33,10 @@
             {%- if s.handle %}@{{ s.handle }}{% else %}{{ label[:48] }}{% if label|length > 48 %}…{% endif %}{% endif -%}
           </a>
         </td>
-        <td class="px-3 py-2 text-right font-mono text-xs">
+        <td class="hidden xl:table-cell px-3 py-2 text-right font-mono text-xs">
           {% if s.min_views is not none %}{{ '{:,}'.format(s.min_views) }}{% else %}<span class="text-[var(--color-mist)]" title="Dùng ngưỡng chung (viral.min_views)">mặc định</span>{% endif %}
         </td>
-        <td class="px-3 py-2 text-right font-mono text-xs">
+        <td class="hidden xl:table-cell px-3 py-2 text-right font-mono text-xs">
           {% if s.max_videos is not none %}{{ s.max_videos }}{% else %}<span class="text-[var(--color-mist)]" title="Dùng số chung (viral.max_videos_per_channel)">mặc định</span>{% endif %}
         </td>
         {# ADR-020 mục 6: đọc target_pages_list (nhiều Page); backend cũ chỉ có target_page → vẫn hiện đúng. #}
@@ -60,7 +60,7 @@
                  title="{% if s.enabled %}Đang bật — bỏ tick để tắt quét tự động{% else %}Đang tắt — tick để bật{% endif %}" />
         </td>
         <td class="px-3 py-2 text-xs text-[var(--color-ink-soft)]">{{ ago(s.last_scanned_at) }}</td>
-        <td class="px-3 py-2 text-right font-mono text-xs">{{ s.last_found if s.last_found is not none else '—' }}</td>
+        <td class="hidden xl:table-cell px-3 py-2 text-right font-mono text-xs">{{ s.last_found if s.last_found is not none else '—' }}</td>
         <td class="px-3 py-2 truncate text-xs">
           {% if s.last_error %}
           <span class="text-[var(--color-danger)]" title="{{ s.last_error }}">{{ s.last_error[:40] }}{% if s.last_error|length > 40 %}…{% endif %}</span>

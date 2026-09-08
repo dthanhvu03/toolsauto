@@ -171,6 +171,36 @@ class NotifierService:
             cls._broadcast_with_buttons(msg, buttons)
 
     @classmethod
+    def notify_material_ready(cls, mat, media_path: Optional[str] = None):
+        """
+        ADR-022 — material về ``READY`` (không account ⇒ không Job): Owner tải file đăng tay.
+
+        Gửi kèm **video** nếu file còn đó và dưới ngưỡng Telegram (giống
+        ``notify_style_selection``), không thì gửi chữ. Đây là thông báo *phụ* của một việc
+        đã commit xong — mọi lỗi chỉ ghi log, KHÔNG BAO GIỜ raise ngược lên processor.
+        """
+        try:
+            msg = nf.material_ready_message(mat, media_path)
+            if (
+                media_path
+                and os.path.exists(media_path)
+                and media_thumb.telegram_video_within_size_limit(media_path)
+            ):
+                cls._broadcast_video(media_path, msg)
+            else:
+                cls._broadcast(msg)
+        except Exception as e:
+            logger.warning("NotifierService: notify_material_ready lỗi (%s) — bỏ qua.", e)
+
+    @classmethod
+    def notify_caption_ready(cls, mat):
+        """ADR-022 — AI viết caption xong (hoặc hỏng) cho material. Cùng nguyên tắc: không raise."""
+        try:
+            cls._broadcast(nf.caption_ready_message(mat))
+        except Exception as e:
+            logger.warning("NotifierService: notify_caption_ready lỗi (%s) — bỏ qua.", e)
+
+    @classmethod
     def notify_account_invalid(cls, account_name: str, reason: str = ""):
         """Thông báo khi account bị vô hiệu hóa."""
         cls._broadcast(nf.account_invalid_message(account_name, reason))

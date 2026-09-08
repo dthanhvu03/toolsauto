@@ -827,6 +827,10 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 _clear_material_error(mat)
                 db.commit()
                 logger.info("[VIRAL] Material #%s READY (no account, no job) — file: %s", mat.id, media_path)
+                # ADR-022: luồng này không sinh Job nên không thông báo nào của job chạy.
+                from app.core.notifier.service import NotifierService
+
+                NotifierService.notify_material_ready(mat, media_path)
                 continue
 
             # Tạo Job DRAFT với AI_GENERATE và cắm cờ ORIGINAL_VIRAL_TITLE để truyền context

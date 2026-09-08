@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 import app.config as config
 from app.core.media import ffmpeg_path
 from app.core.database.models import Account, Job, ViralMaterial
+from app.core.notifier.service import NotifierService
 from app.core.queue.worker import WorkerService
 from app.features.viral_intake.intake import detect_platform, normalize_source_url
 from app.features.viral_intake.scan import get_default_min_views, run_tiktok_competitor_scan
@@ -647,6 +648,7 @@ class ViralService:
             mat.ai_caption_error = reason[:300]
             mat.ai_caption_at = int(time.time())
             db.commit()
+            NotifierService.notify_caption_ready(mat)  # ADR-022
             return False, reason
 
         context = _clean_title_for_context(mat.title)
@@ -668,6 +670,7 @@ class ViralService:
                 mat.ai_caption_error = msg
                 mat.ai_caption_at = int(time.time())
                 db.commit()
+                NotifierService.notify_caption_ready(mat)  # ADR-022
                 return False, msg
 
             hashtags = result.get("hashtags") or []
@@ -681,6 +684,7 @@ class ViralService:
             mat.ai_caption_at = int(time.time())
             mat.ai_caption_error = None
             db.commit()
+            NotifierService.notify_caption_ready(mat)  # ADR-022
             return True, f"Đã viết caption cho #{material_id}"
         except Exception as e:
             logger.exception("[VIRAL] Viết caption cho material #%s thất bại", material_id)
@@ -691,6 +695,7 @@ class ViralService:
                 db.commit()
             except Exception:
                 db.rollback()
+            NotifierService.notify_caption_ready(mat)  # ADR-022
             return False, msg
 
 

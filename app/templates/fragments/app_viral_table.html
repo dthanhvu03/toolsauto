@@ -84,8 +84,10 @@
         <th class="w-16 px-4 py-2 text-left uppercase">ID</th>
         <th class="w-24 px-4 py-2 text-center uppercase">Ảnh</th>
         <th class="w-[38%] px-4 py-2 text-left uppercase">Tiêu đề / URL</th>
-        <th class="w-36 px-4 py-2 text-left uppercase">Lượt xem</th>
-        <th class="w-52 px-4 py-2 text-center uppercase">Tài khoản</th>
+        {# Màn hẹp: giấu 2 cột phụ để ID/Ảnh/Tiêu đề/Trạng thái/Thao tác vừa khung.
+           Phải giấu KÈM ô dữ liệu cùng breakpoint trong fragments/viral_row.html. #}
+        <th class="hidden xl:table-cell w-36 px-4 py-2 text-left uppercase">Lượt xem</th>
+        <th class="hidden xl:table-cell w-52 px-4 py-2 text-center uppercase">Tài khoản</th>
         <th class="w-64 px-4 py-2 text-left uppercase">Trạng thái / Job</th>
         <th class="w-28 px-4 py-2 text-right uppercase">Thao tác</th>
       </tr>

@@ -1,5 +1,7 @@
 """HTML/Telegram message bodies for NotifierService (tách khỏi facade)."""
 import html as html_mod
+import os
+import re
 from typing import Optional
 
 
@@ -119,3 +121,64 @@ def daily_summary_message(
         msg += f"\n🔗 Clicks: <b>{total_clicks:,}</b>"
 
     return msg
+
+
+# ─────────── ADR-022: hai luồng KHÔNG sinh Job (material READY, caption AI) ───────────
+#
+# Mọi tin nhắn ở đây đi qua ``TelegramClient`` với ``parse_mode="HTML"`` (mặc định của
+# ``send_message`` / ``send_video``), nên MỌI đoạn chữ do người khác viết — tiêu đề video
+# bốc từ TikTok/YouTube, caption AI sinh ra, thông báo lỗi — đều phải qua
+# ``html_mod.escape``; thiếu một chỗ là Telegram trả 400 và tin nhắn biến mất.
+
+# Bóc ``[AI_GENERATE]`` và mọi cụm ``### … ###`` (ORIGINAL_VIRAL_TITLE, BOOST_CONTEXT…).
+# Chép lại 3 dòng thay vì import ``_clean_title_for_context`` của
+# ``app.features.viral_intake.service``: contract ``core-isolated`` (import-linter) cấm
+# ``app.core`` biết tới ``app.features``.
+_MARKER_BLOCK_RE = re.compile(r"\s*###.*?###\s*", re.DOTALL)
+_AI_GENERATE_RE = re.compile(r"\[AI_GENERATE\]", re.IGNORECASE)
+
+
+def _clean_material_title(title: Optional[str]) -> str:
+    text = _AI_GENERATE_RE.sub(" ", title or "")
+    text = _MARKER_BLOCK_RE.sub(" ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def material_ready_message(mat, media_path: Optional[str] = None) -> str:
+    """ADR-018 + ADR-022: video reup xong nhưng KHÔNG có account ⇒ Owner tải về đăng tay."""
+    title = _clean_material_title(getattr(mat, "title", None)) or "(không có tiêu đề)"
+    platform = str(getattr(mat, "platform", "") or "—")
+    views = int(getattr(mat, "views", 0) or 0)
+    file_name = os.path.basename(str(media_path)) if media_path else ""
+    file_line = f"📁 <code>{html_mod.escape(file_name)}</code>\n" if file_name else ""
+
+    return (
+        f"🎬 <b>Video sẵn sàng đăng tay</b>\n"
+        f"📋 Material #{getattr(mat, 'id', '?')} | {html_mod.escape(platform)}\n"
+        f"📝 <i>{html_mod.escape(title)}</i>\n"
+        f"👁 {views:,} lượt xem\n"
+        f"{file_line}"
+        f"⬇️ Mở <b>/app/viral</b> rồi bấm <b>Tải file</b> để tải video về đăng."
+    )
+
+
+def caption_ready_message(mat) -> str:
+    """ADR-021 + ADR-022: AI viết caption xong cho material — hoặc báo vì sao không viết được."""
+    caption = (getattr(mat, "ai_caption", None) or "").strip()
+    if not caption:
+        reason = (getattr(mat, "ai_caption_error", None) or "Không rõ lý do").strip()
+        return (
+            f"⚠️ <b>Viết caption thất bại</b>\n"
+            f"📋 Material #{getattr(mat, 'id', '?')}\n"
+            f"❌ {html_mod.escape(reason[:200])}"
+        )
+
+    hashtags = " ".join(getattr(mat, "ai_hashtags_list", None) or [])
+    hashtag_line = f"\n🏷 {html_mod.escape(hashtags)}" if hashtags else ""
+
+    return (
+        f"✍️ <b>Caption đã viết xong</b>\n"
+        f"📋 Material #{getattr(mat, 'id', '?')}\n\n"
+        f"<i>{html_mod.escape(caption)}</i>{hashtag_line}\n\n"
+        f"🔖 Mở <b>/app/viral</b> rồi bấm <b>Sao chép</b> để lấy caption."
+    )

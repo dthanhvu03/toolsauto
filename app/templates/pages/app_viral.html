@@ -17,6 +17,13 @@
       visibility: visible !important;
     }
     #viral-busy-bar:not(.hidden) { display: flex; }
+    /* <main class="flex-1"> là flex item nên mặc định min-width:auto — bảng rộng đẩy
+       nguyên trang tràn ngang (khung 1024 phải cuộn ngang cả sidebar). Khoá về 0 để
+       bảng cuộn trong đúng khung của nó. Chỉ áp cho trang này. */
+    main { min-width: 0; }
+    /* Hàng nút lọc/thao tác: màn hẹp cuộn ngang trong chính hàng đó thay vì xuống 3 dòng. */
+    #viral-actions { scrollbar-width: thin; }
+    #viral-actions > * { flex: 0 0 auto; }
   </style>
 
   <div id="viral-busy-bar"
@@ -72,7 +79,8 @@
           </select>
         </div>
         </div>
-        <div class="flex items-center gap-2 flex-wrap">
+        <div id="viral-actions"
+             class="flex items-center gap-2 flex-nowrap whitespace-nowrap overflow-x-auto min-w-0 max-w-full pb-1 xl:flex-wrap xl:overflow-x-visible xl:pb-0">
           <button class="app-btn" id="vPresetNew" title="Lọc NEW">Mới</button>
           <button class="app-btn" id="vPresetFailed" title="Lọc FAILED">Lỗi</button>
           <button id="vApply" class="app-btn app-btn-primary">Áp dụng</button>
@@ -108,7 +116,7 @@
             hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]"
             hx-on::after-request="this.reset()">
         <input name="url" type="url" required autocomplete="off"
-               class="app-input w-96 max-w-full"
+               class="app-input flex-1 min-w-[12rem] sm:min-w-[18rem] w-full sm:w-auto sm:max-w-[24rem]"
                placeholder="Dán link TikTok / YouTube Shorts / Facebook Reel / Instagram Reel" />
         <label class="inline-flex items-center gap-2 text-sm text-[var(--color-ink-soft)] select-none">
           <input name="process_now" type="checkbox" value="true" class="h-4 w-4 rounded border-[var(--border)]" />
@@ -123,38 +131,40 @@
         <span class="basis-full text-[11px] text-[var(--color-mist)]">Chỉ dán video bạn được phép dùng lại.</span>
       </form>
 
-      <details id="viral-sources-panel" open class="mt-3 rounded-lg border border-[var(--border)] bg-[var(--color-face)]">
+      {# Không đặt `open` cứng: trạng thái đóng/mở đọc từ localStorage 'viral.sourcesPanelOpen'
+         (xem script cuối trang). Mặc định đóng khi màn hẹp để bảng video nằm ngay tầm mắt. #}
+      <details id="viral-sources-panel" class="mt-3 rounded-lg border border-[var(--border)] bg-[var(--color-face)]">
         <summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-[var(--color-ink)]">
           Nguồn tự động
           <span class="ml-1 text-[11px] font-normal text-[var(--color-mist)]">— kênh TikTok / YouTube Shorts, tự quét mỗi giờ (ADR-019)</span>
         </summary>
         <div class="px-3 pb-3">
-          <form class="flex items-end gap-2 flex-wrap"
+          <form class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-end"
                 hx-post="/viral/sources/add" hx-swap="none"
                 hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]"
                 hx-on::after-request="if (event.detail.successful) this.reset()">
-            <div class="grow min-w-[16rem]">
+            <div class="grow min-w-0 md:min-w-[14rem]">
               <label class="block text-xs text-[var(--muted)] mb-1">URL kênh</label>
               <input name="url" type="text" required autocomplete="off" class="app-input w-full"
                      placeholder="tiktok.com/@kenh hoặc youtube.com/@kenh" />
             </div>
             <div>
               <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
-              <input name="min_views" type="number" min="0" step="1000" class="app-input w-28" placeholder="mặc định" />
+              <input name="min_views" type="number" min="0" step="1000" class="app-input w-full md:w-28" placeholder="mặc định" />
             </div>
             <div>
               <label class="block text-xs text-[var(--muted)] mb-1">Max video/lần</label>
-              <input name="max_videos" type="number" min="1" max="500" class="app-input w-24" placeholder="mặc định" />
+              <input name="max_videos" type="number" min="1" max="500" class="app-input w-full md:w-24" placeholder="mặc định" />
             </div>
             <div>
               <label for="src-target-pages" class="block text-xs text-[var(--muted)] mb-1">Page đích</label>
               {# ADR-020 mục 6: nhiều Page, mỗi dòng một URL. Không dùng .app-input vì class đó ép height cố định. #}
               <textarea id="src-target-pages" name="target_pages" rows="2" autocomplete="off"
                         aria-describedby="src-target-pages-warn"
-                        class="w-56 resize-y rounded-md border border-[var(--border)] bg-[var(--color-deep)] px-3 py-1.5 text-sm leading-snug text-[var(--color-ink)]"
+                        class="w-full md:w-52 resize-y rounded-md border border-[var(--border)] bg-[var(--color-deep)] px-3 py-1.5 text-sm leading-snug text-[var(--color-ink)]"
                         placeholder="Mỗi dòng một Page — để trống nếu đăng tay"></textarea>
             </div>
-            <p id="src-target-pages-warn" class="order-last basis-full text-[11px] text-[var(--color-danger)]">
+            <p id="src-target-pages-warn" class="md:order-last md:basis-full text-[11px] text-[var(--color-danger)]">
               Mỗi video sẽ đăng lên TẤT CẢ Page ở đây — nội dung trùng nhau giữa các Page, Facebook dễ đánh spam.
               Page mới nên để trống hoặc chỉ 1 Page.
             </p>
@@ -199,6 +209,26 @@
   </div>
 
   <script>
+    // Khối "Nguồn tự động" nhớ trạng thái đóng/mở theo trình duyệt.
+    // Chưa có lựa chọn nào: màn hẹp (< 1280) mở trang là đóng sẵn — bảng video nằm ngay
+    // trong tầm mắt; màn rộng vẫn mở như trước. Người dùng đóng/mở một lần thì giữ mãi.
+    (function () {
+      const panel = document.getElementById('viral-sources-panel');
+      if (!panel) return;
+      const KEY = 'viral.sourcesPanelOpen';
+      let saved = null;
+      try { saved = localStorage.getItem(KEY); } catch (e) { saved = null; }
+      panel.open = (saved === null) ? (window.innerWidth >= 1280) : (saved === '1');
+      // Gắn listener ở tick sau: sự kiện `toggle` do dòng trên sinh ra đã bắn xong,
+      // nên mặc định theo bề ngang KHÔNG bị ghi vào localStorage — chỉ lựa chọn của
+      // người dùng mới được nhớ.
+      setTimeout(function () {
+        panel.addEventListener('toggle', function () {
+          try { localStorage.setItem(KEY, panel.open ? '1' : '0'); } catch (e) { /* chế độ ẩn danh */ }
+        });
+      }, 0);
+    })();
+
     let viralAutoTimer = null;
     function setViralQueryParams(next) {
       const url = new URL(window.location.href);

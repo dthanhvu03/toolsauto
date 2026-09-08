@@ -14,6 +14,7 @@ DB path: env DB_PATH or data/auto_publisher.db. Backup before first Alembic run 
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -438,6 +439,36 @@ def insights_scrape() -> None:
     _run_archived_script("scrape_insights.py", [])
 
 
+def _register_web_notifier() -> None:
+    """
+    ADR-022 — dang ky kenh Telegram cho chinh tien trinh web.
+
+    Token co the nam trong bang ``runtime_settings`` (Owner luu qua /app/settings) chu khong
+    phai ``.env``, nen phai ``apply_runtime_overrides_to_config`` TRUOC khi doc config —
+    dung bai hoc ADR-021. Khong co token thi chi ghi log roi chay tiep; moi loi o day deu
+    bi nuot vi thong bao hong KHONG duoc chan server khoi dong.
+    """
+    log = logging.getLogger("app")
+    try:
+        import app.config as _config
+        from app.core import settings as _runtime_settings
+        from app.core.database.core import SessionLocal
+        from app.core.notifier.service import NotifierService, TelegramNotifier
+
+        with SessionLocal() as _db:
+            _runtime_settings.apply_runtime_overrides_to_config(_db)
+
+        token = (getattr(_config, "TELEGRAM_BOT_TOKEN", "") or "").strip()
+        chat = (getattr(_config, "TELEGRAM_CHAT_ID", "") or "").strip()
+        if token and chat:
+            NotifierService.register(TelegramNotifier(token, chat))
+            log.info("serve: đã bật thông báo Telegram (chat %s)", chat)
+        else:
+            log.info("serve: không có TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID, bỏ qua thông báo Telegram")
+    except Exception:
+        log.warning("serve: không đăng ký được kênh Telegram — server vẫn chạy", exc_info=True)
+
+
 @app.command("serve")
 def serve(
     host: str = typer.Option("0.0.0.0", "--host"),
@@ -454,6 +485,7 @@ def serve(
     from app.utils.logger import setup_shared_logger
 
     setup_shared_logger("app")
+    _register_web_notifier()
 
     uvicorn.run("app.main:app", host=host, port=port, reload=reload)
 
