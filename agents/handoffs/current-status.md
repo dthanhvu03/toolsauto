@@ -6,6 +6,26 @@ Owner dùng tool qua UltraViewer, khung hẹp hơn bản dựng 1440px: trang `/
 rất xa mới thấy bảng video, và **cuộn ngang cả trang**. Phiên này chỉ sửa 4 file template
 (agent khác đang làm notifier — không đụng).
 
+### ADR-023 — ô "Chép video đã xử lý" là NHÃN NÓI DỐI, nay nối thật
+
+Owner: *"các video phải vào thiết lập drive"*. Kiểm code: `DRIVE_COPY_VIDEOS` khai báo ở
+`config.py` + có `SettingSpec` hiện trên `/app/settings`, `offsite.SUBDIRS` đã có sẵn
+`{"video": "videos"}` — **nhưng không dòng code nào đọc cờ đó**. Chỗ duy nhất gọi
+`copy_out` là `manage.py db backup`. ADR-012 ghi "Video đã xử lý" trong bảng *Đưa lên Drive*
+nhưng người thực thi chỉ nối phần backup. Owner bật ô lên và chờ mãi không có gì.
+
+Cùng loại lỗi với nhãn `.webp` (phiên 05/09): **UI hứa thứ backend không làm**.
+
+| Việc | Proof |
+|---|---|
+| `offsite.copy_video_if_enabled()` — kiểm cờ rồi `copy_out(src, "video")`, không bao giờ ném lỗi | 7 test mới |
+| Gọi tại **một điểm chung trước nhánh rẽ ADR-018** ⇒ cả video `READY` (đăng tay) lẫn video có job đều được chép. Có test đọc source chốt thứ tự này | |
+| Mô tả ô sửa cho khớp thực tế (nói rõ chép bản `_reup`) | |
+| **Proof thật**: bật cờ + trỏ thư mục giả → dán link → material #70 `READY` 15,5 s → `videos/viral_70_…_reup.mp4` **32,7 MB**; bản gốc còn nguyên (chép chứ không di chuyển); cài đặt đã trả về như cũ | |
+
+Suite: Windows **522 passed**; Linux **505 passed / 17 skipped**; lint-imports 2 kept.
+
+
 ### ADR-022 — Thông báo Telegram cho luồng KHÔNG có job + gọn UI màn hẹp
 
 Owner báo: Telegram trên laptop chạy tốt nhưng hai luồng mới không báo gì; và UI khó dùng ở

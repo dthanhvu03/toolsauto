@@ -821,6 +821,13 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 _mark_material_failed(db, mat, reason)
                 continue
 
+            # ADR-023: chep ban _reup sang Drive khi Owner bat "Chep video da xu ly".
+            # Dat o day de CA hai nhanh (READY dang tay va nhanh tao job) deu duoc chep.
+            # Loi Drive chi ghi log, khong duoc lam hong viec xu ly video (ADR-012).
+            from app.core.storage import offsite as _offsite
+
+            _offsite.copy_video_if_enabled(media_path)
+
             # ADR-018: khong co account -> khong tao Job; Owner tai file _reup dang tay.
             if target_account is None:
                 mat.status = ViralStatus.READY

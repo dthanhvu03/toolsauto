@@ -76,6 +76,23 @@ def check_root(root: Optional[Path] = None) -> tuple[bool, str]:
     return True, f"Thư mục dùng được: {root}"
 
 
+def copy_video_if_enabled(src: str | os.PathLike[str]) -> Optional[Path]:
+    """
+    Chép video ``_reup`` sang Drive khi Owner bật "Chép video đã xử lý" (ADR-023).
+
+    Tách riêng khỏi ``copy_out`` để cờ ``DRIVE_COPY_VIDEOS`` nằm cạnh logic Drive khác,
+    người gọi trong luồng reup chỉ còn một dòng. Cùng cam kết: KHÔNG BAO GIỜ ném lỗi —
+    Drive chưa gắn ổ hay hết dung lượng không được làm hỏng việc xử lý video.
+    """
+    try:
+        if not _settings().get_bool("DRIVE_COPY_VIDEOS"):
+            return None
+    except Exception as exc:  # pragma: no cover - doc setting hong khong duoc chan reup
+        logger.debug("[offsite] khong doc duoc DRIVE_COPY_VIDEOS: %s", exc)
+        return None
+    return copy_out(src, "video")
+
+
 def copy_out(src: str | os.PathLike[str], kind: str) -> Optional[Path]:
     """
     Chép một file sang Drive. Trả đường dẫn đích, hoặc None khi bỏ qua/thất bại.

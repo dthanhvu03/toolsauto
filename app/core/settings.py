@@ -88,7 +88,7 @@ SETTINGS: dict[str, SettingSpec] = {
         title="Chép video đã xử lý",
         section="Sao lưu Google Drive",
         description=(
-            "Chép video sau khi xử lý xong vào Drive/videos để mở được từ điện thoại. "
+            "Chép bản video _reup (đã ghép intro/outro, chống trùng) sang Drive/videos ngay sau khi xử lý xong, để mở được từ điện thoại. "
             "Video nặng, bật cái này sẽ tốn băng thông tải lên."
         ),
     ),
