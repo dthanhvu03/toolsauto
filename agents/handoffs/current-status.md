@@ -253,8 +253,9 @@ quét kênh TikTok; 11 material đều một kênh `@rinabeauty859`.
 Nợ: material dán tay (`scraped_by_account_id=None`) **sweep nền không nhặt** — chỉ xử lý
 qua nút "Xử lý ngay"/Process; READY → Job khi có account là PLAN sau; YouTube ra `.webm`
 chưa qua pipeline trong tool; `--js-runtimes node` cho YouTube (yt-dlp cảnh báo extraction
-không JS runtime sắp bỏ) cần Anti quyết vì Linux phải có node ≥22; "Tải file" dùng
-`download` attr, chưa kiểm trình duyệt thật.
+không JS runtime sắp bỏ) cần Anti quyết vì Linux phải có node ≥22; "Tải file" **đã kiểm bằng Chrome thật 08/09**:
+tải về `viral_68_reup.mp4` 20 MB, đúng tên (thuộc tính `download` ép tải dù endpoint trả
+`inline` — cùng origin nên trình duyệt tôn trọng).
 
 ### ADR-019 — bảng Nguồn tách khỏi account; quét tự động TikTok + YouTube Shorts
 
