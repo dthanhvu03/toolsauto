@@ -642,7 +642,7 @@ class ViralService:
             # Chưa có file thì không có gì cho AI xem — báo luôn, không đụng AI.
             return False, "Chưa có file _reup — xử lý lại video trước."
 
-        ok, reason = ai_provider_ready()
+        ok, reason = ai_provider_ready(db)
         if not ok:
             mat.ai_caption_error = reason[:300]
             mat.ai_caption_at = int(time.time())
@@ -735,7 +735,7 @@ def _nine_router_enabled() -> bool:
         return False
 
 
-def ai_provider_ready() -> Tuple[bool, str]:
+def ai_provider_ready(db: Optional[Session] = None) -> Tuple[bool, str]:
     """
     ADR-021 §3 — có provider AI nào dùng được không? Trả ``(ok, lý_do_nếu_không)``.
 
@@ -747,6 +747,17 @@ def ai_provider_ready() -> Tuple[bool, str]:
     import, và ``settings._push_config_value`` ghi đè thẳng vào config khi Owner lưu ở
     ``/app/settings``) — nên không cần đọc lại ``os.environ``.
     """
+    # Key có thể nằm trong runtime_settings (Owner lưu ở /app/settings) chứ không phải .env.
+    # Tiến trình web áp override lúc khởi động nên thấy, còn CLI/script thì không — trước bản
+    # vá này cùng một hàm cho hai kết quả khác nhau tuỳ tiến trình gọi (ADR-021).
+    if db is not None:
+        try:
+            from app.core import settings as _runtime_settings
+
+            _runtime_settings.apply_runtime_overrides_to_config(db)
+        except Exception:  # pragma: no cover - đọc setting hỏng không được chặn caption
+            logger.warning("[AI] Không đọc được runtime settings, chỉ dựa vào .env", exc_info=True)
+
     gemini = (getattr(config, "GEMINI_API_KEY", "") or getattr(config, "GOOGLE_API_KEY", "") or "").strip()
     openrouter = (getattr(config, "OPENROUTER_API_KEY", "") or "").strip()
 

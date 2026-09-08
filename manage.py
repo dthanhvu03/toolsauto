@@ -280,6 +280,18 @@ def ai_check() -> None:
     kiem cai se duoc dung, khong phai mot ban sao. Thoat ma 1 neu co provider FAIL
     hoac khong co key nao. KHONG in gia tri key.
     """
+    # Key AI co the nam trong runtime_settings (/app/settings) chu khong phai .env — tien
+    # trinh web ap override luc khoi dong nen thay, CLI thi khong. Ap trươc khi kiem, neu
+    # khong lenh nay bao "chua co key" trong khi web van goi AI duoc (ADR-021).
+    try:
+        from app.core.database.core import SessionLocal
+        from app.core import settings as _rs
+
+        with SessionLocal() as _db:
+            _rs.apply_runtime_overrides_to_config(_db)
+    except Exception:
+        pass
+
     import app.config as config
 
     prompt = "Tra loi dung mot tu: OK"
@@ -434,6 +446,14 @@ def serve(
 ) -> None:
     """Start uvicorn dev server (requires DB migrated)."""
     import uvicorn
+
+    # Tien trinh web chay ca cac viec nen (dan link, quet nguon, viet caption) nhung
+    # truoc day KHONG cau hinh logger nao -> moi loi trong background task bien mat
+    # khong dau vet, ca app.log lan stdout deu trong. Cac worker deu goi dong nay.
+    # Luu y: voi --reload, uvicorn tao tien trinh con nen setup o day khong ap dung.
+    from app.utils.logger import setup_shared_logger
+
+    setup_shared_logger("app")
 
     uvicorn.run("app.main:app", host=host, port=port, reload=reload)
 

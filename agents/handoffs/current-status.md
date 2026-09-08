@@ -5,6 +5,37 @@
 Phần backend của ADR-021 (UI do agent khác làm song song: `router.py`, `viral_row.html`,
 `tests/test_material_caption_ui.py` — phiên này KHÔNG đụng 3 file đó).
 
+### Phát hiện lớn: tool ĐÃ CÓ nhà cung cấp AI chạy được (OpenRouter)
+
+`manage.py ai check` sau vá: **`[OK] openrouter … nvidia/nemotron-3-super-120b-a12b:free -> OK`**.
+Key OpenRouter nằm trong bảng `runtime_settings` (Owner lưu qua `/app/settings`), **không**
+nằm trong `.env`. Suốt phiên tôi khuyên "phải có key Gemini mới viết được caption" — **sai**.
+Gemini vẫn hỏng (key dạng `AQ.Ab…` không phải `AIza…`), nhưng chuỗi fallback dùng OpenRouter
+và caption ra thật.
+
+**Bản vá:** `ai_provider_ready(db)` và `manage.py ai check` nay **áp `apply_runtime_overrides_to_config(db)`
+trước khi đọc key**. Trước đó cùng một hàm cho hai kết quả khác nhau tuỳ tiến trình gọi — web
+(có áp override lúc khởi động) thấy key, CLI/script thì không.
+
+### Tiến trình web không ghi log ứng dụng — đã vá
+
+`manage.py serve` chỉ gọi `uvicorn.run(...)`, **không** gọi `setup_shared_logger("app")` như các
+worker. Hệ quả: mọi việc nền chạy trong web (dán link, quét nguồn, viết caption) không để lại
+dấu vết nào — `app.log` trống, stdout chỉ có access log. Chính vì mù log mà tôi chẩn đoán sai
+"việc nền không chạy" trong khi thực ra nó đang chạy Whisper 120 giây; tôi chỉ chờ 16 giây.
+
+### Proof caption đầu-cuối qua web thật
+
+Bấm `POST /viral/68/caption` → log hiện đủ 3 bước (collage cache hit → Whisper `medium` 120,4 s
+→ AI 41,9 s) → **135 giây** có caption thật trong DB:
+*"Món crab cực sang lại bị comment 'looks like cat food'? Haha…"*. Đúng nội dung video.
+
+Nợ ghi nhận: caption mất ~2 phút/video vì Whisper `medium` chạy CPU. Muốn nhanh thì đổi
+`ai.whisper_model_size` sang `small`, hoặc bỏ transcript khi video ngắn — cần PLAN riêng.
+
+Suite: Windows **486 passed**; Linux **469 passed / 17 skipped**; lint-imports 2 kept.
+
+
 ### ADR-021 — AI viết caption cho video READY (không cần tài khoản, không cần job)
 
 Owner đăng tay: tải `_reup.mp4` rồi đăng. Thiếu đúng một mảnh là caption, vì AI viết caption
