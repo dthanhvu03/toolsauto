@@ -1,3 +1,7 @@
+{# ADR-024 muc 3 - hang DUPLICATE: file tai ve da bi xoa (khong reup, khong job) nen moi
+   thu dua tren file (thumbnail reup, mo _reup.mp4, Viet caption, Reup lai) deu vo nghia.
+   Khoa mot cho de khong phai ra dieu kien o 4 noi. #}
+{% set has_reup = has_reup and item.status != 'DUPLICATE' %}
 <tr id="viral-{{ item.id }}" class="border-b text-sm hover:bg-[var(--color-face)]/40">
     <td class="p-3 align-top text-[var(--color-mist)] font-mono text-xs">{{ item.id }}</td>
     <td class="p-3 align-top text-center">
@@ -183,6 +187,16 @@
         {% if has_reup %}
         <div class="mt-1 text-[10px] text-[var(--color-mist)]" title="File _reup đã có — không cần chạy lại trừ khi muốn đổi preset">Reup xong</div>
         {% endif %}
+        {% elif item.status == 'DUPLICATE' %}
+        {# ADR-024: trung noi dung KHONG phai loi - do la quyet dinh dung cua tool (khong ton
+           ffmpeg, khong tao job). Mau trung tinh, khong dung do nhu FAILED. #}
+        <div class="max-w-full" title="{{ item.last_error or 'Trùng nội dung với video đã có' }}">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)]"
+                title="{{ item.last_error or 'Trùng nội dung với video đã có' }}">Trùng</span>
+            <div class="mt-1 block max-w-[240px] truncate text-[11px] leading-4 text-[var(--color-mist)]">
+                {{ item.last_error|default('', true)|truncate(40, true, "…", 0) or 'Trùng nội dung với video đã có' }}
+            </div>
+        </div>
         {% elif item.status == 'READY' %}
         {# ADR-018: không có account → không tạo job; Owner tải file đăng tay. #}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-teal-400/40 bg-teal-500/15 text-teal-200" title="Reup xong, chưa có job — tải file đăng tay"><span class="2xl:hidden whitespace-nowrap">Sẵn sàng</span><span class="hidden 2xl:inline whitespace-nowrap">Sẵn sàng đăng tay</span></span>

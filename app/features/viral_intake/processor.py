@@ -17,6 +17,9 @@ from sqlalchemy.orm import Session
 
 import app.config as config
 from app.constants import AccountStatus, JobStatus, ViralStatus
+from app.core.media.content_hash import sha256_file
+from app.core.media.video_protector import VideoProtector
+from app.features.viral_intake.dedup import find_duplicate
 
 
 logger = logging.getLogger(__name__)
@@ -745,6 +748,33 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     _mark_material_failed(db, mat, reason)
                     continue
 
+            # === ADR-024: chan video trung noi dung TRUOC khi ton ffmpeg ===
+            mat.content_hash = sha256_file(media_path)
+            try:
+                frames = VideoProtector.extract_phash(media_path)
+                if frames:
+                    mat.phash = json.dumps(frames, ensure_ascii=False)
+            except Exception as ph_err:  # pHash hong chi mat kha nang bat ca ma hoa lai
+                logger.warning("[VIRAL] extract_phash failed #%s: %s", mat.id, ph_err)
+            dup = find_duplicate(
+                db,
+                content_hash=mat.content_hash,
+                phash_map=mat.phash_map,
+                exclude_id=mat.id,
+                max_distance=_get_runtime_int(db, "viral.phash_max_distance", 8),
+            )
+            if dup:
+                _, reason = dup
+                mat.status = ViralStatus.DUPLICATE
+                mat.last_error = reason[:255]
+                try:
+                    os.remove(media_path)
+                except OSError:
+                    pass
+                db.commit()
+                logger.info("[VIRAL] Material #%s DUPLICATE — %s (bo qua reup)", mat.id, reason)
+                continue
+
             # Chọn account sớm để resolve anti-dupe preset theo page/niche
             target_account = default_account
             if mat.scraped_by_account_id:
@@ -928,7 +958,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 job_pages = [resolved_target]
                 sibling_id = None
 
-            from app.core.media.content_hash import assert_media_not_blocked, sha256_file
+            from app.core.media.content_hash import assert_media_not_blocked  # sha256_file: import dau file
 
             media_hash = sha256_file(media_path)
             created_jobs = []

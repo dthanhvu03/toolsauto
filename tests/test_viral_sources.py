@@ -295,11 +295,16 @@ def fake_pipeline(tmp_path, monkeypatch):
             calls["preflight"] += 1
             info = {"title": "demo", "view_count": 1234, "formats": [{"vcodec": "vp9", "ext": "webm"}]}
             return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(info), stderr="")
+        if "-o" not in argv:
+            # ADR-024: pipeline con goi ffprobe/ffmpeg lay pHash - khong phai lenh tai.
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
         calls["download"] += 1
         out = argv[argv.index("-o") + 1].replace("%(id)s", "src").replace("%(ext)s", "webm")
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as fh:
-            fh.write(b"\x00" * 2048)
+            # ADR-024 so trung theo sha256: moi material phai ra noi dung KHAC nhau,
+            # neu khong material thu hai bi coi la trung (dung y ADR, hong y test nay).
+            fh.write(out.encode("utf-8").ljust(2048, b"\x00"))
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(processor.subprocess, "run", fake_run)

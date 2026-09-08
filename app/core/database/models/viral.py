@@ -58,11 +58,29 @@ class ViralMaterial(Base):
     last_error = Column(String, nullable=True)
     process_tries = Column(Integer, default=0)  # Intake attempts (download/reup); cap retry
 
+    # ADR-024: chống trùng nội dung ở tầng material — tính NGAY sau khi tải, TRƯỚC khi reup.
+    content_hash = Column(String, nullable=True, index=True)  # sha256 file nguồn vừa tải
+    phash = Column(Text, nullable=True)  # JSON {"1.23s": "hex", …} — pHash 5 khung hình
+
     # ADR-021: caption AI viết thẳng cho material READY (không cần account, không cần Job).
     ai_caption = Column(Text, nullable=True)
     ai_hashtags = Column(Text, nullable=True)  # JSON list, ví dụ ["#viral", "#xuhuong"]
     ai_caption_at = Column(Integer, nullable=True)  # epoch giây — lần chạy AI gần nhất (kể cả lần lỗi)
     ai_caption_error = Column(Text, nullable=True)  # lý do lần chạy gần nhất thất bại; NULL = lần cuối OK
+
+    @property
+    def phash_map(self) -> dict[str, str]:
+        """ADR-024: đọc ``phash`` → dict ``{"1.23s": "hex"}``. JSON hỏng / không phải dict ⇒ ``{}``."""
+        raw = self.phash
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {str(k): str(v) for k, v in data.items() if str(v or "").strip()}
 
     @property
     def ai_hashtags_list(self) -> list[str]:

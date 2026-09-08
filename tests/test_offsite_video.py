@@ -119,3 +119,49 @@ def test_processor_goi_copy_video_mot_diem_chung_cho_ca_hai_nhanh():
     goi = src.index("copy_video_if_enabled(media_path)")
     re_nhanh = src.index("if target_account is None:")
     assert goi < re_nhanh, "phải gọi trước khi rẽ nhánh READY, nếu không video đăng tay bị bỏ sót"
+
+
+def test_chep_lan_hai_cung_file_thi_bo_qua_khong_tai_len_lai(tmp_path, drive_root, monkeypatch):
+    """ADR-024 mục 1: mỗi lần "Reup lại" trước đây đều copy2 đè lại cả video ~30 MB lên
+    Drive dù nội dung y hệt. Nay cùng tên + cùng kích thước ⇒ bỏ qua."""
+    drive_root.mkdir()
+    _use_settings(
+        monkeypatch,
+        {"DRIVE_COPY_ENABLED": True, "DRIVE_COPY_VIDEOS": True, "DRIVE_ROOT_DIR": str(drive_root)},
+    )
+    src = _make_video(tmp_path)
+
+    first = offsite.copy_video_if_enabled(src)
+    assert first is not None and first.is_file()
+    mtime_sau_lan_dau = first.stat().st_mtime_ns
+
+    goi = {"n": 0}
+    import shutil as _sh
+
+    real_copy = _sh.copy2
+
+    def _dem(*a, **k):
+        goi["n"] += 1
+        return real_copy(*a, **k)
+
+    monkeypatch.setattr(_sh, "copy2", _dem)
+    second = offsite.copy_video_if_enabled(src)
+
+    assert second == first
+    assert goi["n"] == 0, "lần hai không được gọi copy2 nữa"
+    assert first.stat().st_mtime_ns == mtime_sau_lan_dau, "file đích không bị ghi đè"
+
+
+def test_kich_thuoc_khac_thi_van_chep_de(tmp_path, drive_root, monkeypatch):
+    drive_root.mkdir()
+    _use_settings(
+        monkeypatch,
+        {"DRIVE_COPY_ENABLED": True, "DRIVE_COPY_VIDEOS": True, "DRIVE_ROOT_DIR": str(drive_root)},
+    )
+    src = _make_video(tmp_path, data=b"a" * 1024)
+    offsite.copy_video_if_enabled(src)
+
+    src.write_bytes(b"b" * 4096)  # reup lại ra bản khác
+    dest = offsite.copy_video_if_enabled(src)
+
+    assert dest is not None and dest.stat().st_size == 4096

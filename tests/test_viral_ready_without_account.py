@@ -57,6 +57,10 @@ def fake_pipeline(tmp_path, monkeypatch):
             calls["preflight"] += 1
             info = {"title": "demo", "view_count": 1234, "formats": [{"vcodec": "h264", "ext": "mp4"}]}
             return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(info), stderr="")
+        if "-o" not in argv:
+            # ADR-024: pipeline nay con goi ffprobe/ffmpeg de lay pHash. Khong phai lenh tai —
+            # tra ve rong de bo dem "download" chi con dem dung yt-dlp.
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="")
         calls["download"] += 1
         template = argv[argv.index("-o") + 1]
         out = template.replace("%(id)s", "src").replace("%(ext)s", "mp4")

@@ -57,6 +57,8 @@
       onclick="document.getElementById('vStatus').value='READY'; window.refreshViral(1)" title="READY — reup xong, chưa có job, tải file đăng tay">Sẵn sàng đăng tay {{ status_counts.READY|default(0) }}</button>
     <button type="button" class="px-2 py-1 rounded border border-[var(--color-danger-border)] bg-[var(--color-danger-dim)] text-[var(--color-danger)] font-semibold"
       onclick="document.getElementById('vStatus').value='FAILED'; window.refreshViral(1)" title="FAILED">Lỗi {{ status_counts.FAILED|default(0) }}</button>
+    <button type="button" class="px-2 py-1 rounded border border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)] font-semibold"
+      onclick="document.getElementById('vStatus').value='DUPLICATE'; window.refreshViral(1)" title="DUPLICATE — trùng nội dung với video đã có, tool bỏ qua để khỏi tốn ffmpeg">Trùng {{ status_counts.DUPLICATE|default(0) }}</button>
     <button type="button" class="px-2 py-1 rounded border border-[var(--border)] text-[var(--color-mist)]"
       onclick="document.getElementById('vStatus').value=''; window.refreshViral(1)">Tất cả</button>
   </div>

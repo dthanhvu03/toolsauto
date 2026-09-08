@@ -260,6 +260,7 @@ class ViralService:
         failed_count = int(counts.get(ViralStatus.FAILED, 0) or 0)
         drafted_count = int(counts.get(ViralStatus.DRAFTED, 0) or 0)
         ready_count = int(counts.get(ViralStatus.READY, 0) or 0)
+        duplicate_count = int(counts.get(ViralStatus.DUPLICATE, 0) or 0)  # ADR-024
         jobs_viral = (
             db.query(Job)
             .filter(Job.viral_material_id.isnot(None))
@@ -272,12 +273,14 @@ class ViralService:
                 "DRAFTED": drafted_count,
                 "READY": ready_count,
                 "FAILED": failed_count,
+                "DUPLICATE": duplicate_count,
             },
             "new_count": new_count,
             "processing_count": processing_count,
             "failed_count": failed_count,
             "drafted_count": drafted_count,
             "ready_count": ready_count,
+            "duplicate_count": duplicate_count,
             "jobs_viral": jobs_viral,
             "show_worker_banner": new_count > 0 and jobs_viral == 0,
             "ffmpeg_ok": ViralService.ffmpeg_available(),

@@ -118,6 +118,11 @@ def copy_out(src: str | os.PathLike[str], kind: str) -> Optional[Path]:
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / src_path.name
+        # ADR-024: ban dich da y het thi bo qua — moi lan "Reup lai" khong phai tai len
+        # lai ca video 30 MB. Ten file da gan material_id nen cung ten + cung co la cung ban.
+        if dest.is_file() and dest.stat().st_size == src_path.stat().st_size:
+            logger.debug("[offsite] bo qua, ban dich da y het: %s", dest)
+            return dest
         # copy2 giữ mtime — cần cho việc dọn bản cũ theo thời gian về sau.
         shutil.copy2(src_path, dest)
     except OSError as exc:

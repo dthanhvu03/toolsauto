@@ -287,6 +287,22 @@ SETTINGS: dict[str, SettingSpec] = {
         description="skip = không thêm vào kho; flag = vẫn thêm và hiện badge trên UI.",
         choices=["skip", "flag"],
     ),
+    "viral.phash_max_distance": SettingSpec(
+        key="viral.phash_max_distance",
+        type="int",
+        default_getter=lambda: 8,
+        title="Ngưỡng coi là video trùng (pHash)",
+        section="Quét TikTok & Viral",
+        description=(
+            "ADR-024: video mới tải về được so dấu vân tay hình ảnh với các video đã có trong kho. "
+            "Khoảng cách càng nhỏ nghĩa là hai video càng giống nhau; từ ngưỡng này trở xuống thì "
+            "coi là trùng, bỏ qua không xử lý. Đặt 0 = chỉ chặn khi file giống hệt từng byte "
+            "(sha256); càng đặt lớn càng dễ coi là trùng (dễ chặn nhầm video khác)."
+        ),
+        min=0,
+        max=32,
+        unit="bit",
+    ),
     "publish.delay_min_sec": SettingSpec(
         key="publish.delay_min_sec",
         env_var_name="POST_DELAY_MIN_SEC",
