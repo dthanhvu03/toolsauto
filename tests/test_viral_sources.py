@@ -86,8 +86,9 @@ def test_add_source_rejects_fb_ig_video_and_duplicate(session_factory):
         assert (ok, sid) == (False, None) and "từng link video" in msg
         ok, msg, sid = SourceService.add_source(db, "https://www.instagram.com/handle/")
         assert (ok, sid) == (False, None) and "từng link video" in msg
-        ok, msg, sid = SourceService.add_source(db, "https://www.tiktok.com/@abc/video/1")
-        assert (ok, sid) == (False, None) and "link video" in msg
+        # Link video TikTok KHÔNG còn bị từ chối ở đây: từ ADR-028 nó rơi vào nhánh dò
+        # channel_id (có mạng) — mọi ca của nhánh đó nằm ở mục ADR-028 cuối file, có mock.
+        # Đừng gọi add_source với link video TikTok trong test không mock: sẽ đi ra mạng thật.
         ok, msg, sid = SourceService.add_source(db, "https://www.youtube.com/watch?v=abc")
         assert (ok, sid) == (False, None) and "link video" in msg
 
@@ -447,3 +448,117 @@ def test_update_source_unknown_id_is_false_not_raise(session_factory):
     with session_factory() as db:
         ok, msg = SourceService.update_source(db, 9999, max_videos=10)
         assert not ok and "9999" in msg
+
+
+# ---------------------------------------------------------------------------
+# ADR-028 — kênh TikTok không liệt kê được bằng @handle: dò channel_id từ link video
+# ---------------------------------------------------------------------------
+
+VIDEO_LINK = "https://www.tiktok.com/@thacaukechuyen/video/7679052117176372487"
+REAL_CID = "MS4wLjABAAAAMgUbPA6oIGGcX7yl0__2kSP_0aeeresNEOf8RsraKcdygGfYqJn5GMSrYFQZDC8Z"
+
+
+@pytest.fixture
+def fake_resolve(monkeypatch):
+    """`yt-dlp --dump-json <video>` giả — trả đúng các trường thật đã đo trên máy."""
+    state = {"rc": 0, "stdout": json.dumps({
+        "id": "7679052117176372487", "channel_id": REAL_CID,
+        "uploader": "thacaukechuyen", "channel": "Thả Câu Kể Chuyện", "view_count": 264800,
+    }), "stderr": "", "cmds": []}
+
+    def fake_run(cmd, *a, **k):
+        argv = [str(c) for c in cmd]
+        state["cmds"].append(argv)
+        if state["rc"] == "timeout":
+            raise subprocess.TimeoutExpired(argv, 60)
+        return subprocess.CompletedProcess(argv, state["rc"], stdout=state["stdout"], stderr=state["stderr"])
+
+    monkeypatch.setattr(sources.subprocess, "run", fake_run)
+    return state
+
+
+def test_add_source_tu_link_video_tiktok_thanh_nguon_tiktokuser(session_factory, fake_resolve):
+    with session_factory() as db:
+        ok, msg, sid = SourceService.add_source(db, VIDEO_LINK, min_views=1000, max_videos=50)
+        assert ok, msg
+        src = db.get(ViralSource, sid)
+        assert src.platform == "tiktok"
+        assert src.url == f"tiktokuser:{REAL_CID}"
+        assert src.handle == "thacaukechuyen"
+        assert (src.min_views, src.max_videos) == (1000, 50)
+    # đúng lệnh đọc metadata một video, không phải lệnh liệt kê kênh
+    argv = fake_resolve["cmds"][0]
+    assert "--dump-json" in argv and "--flat-playlist" not in argv and VIDEO_LINK in argv
+
+
+def test_link_kenh_handle_van_di_duong_cu_khong_goi_yt_dlp(session_factory, fake_resolve):
+    """Kênh liệt kê được thì không tốn một lượt mạng nào — đường cũ y nguyên."""
+    with session_factory() as db:
+        ok, _, sid = SourceService.add_source(db, "https://tiktok.com/@kenhchay")
+        assert ok
+        assert db.get(ViralSource, sid).url == "https://www.tiktok.com/@kenhchay"
+    assert fake_resolve["cmds"] == []
+
+
+@pytest.mark.parametrize("url", [
+    "https://www.facebook.com/page/reels/",
+    "https://www.instagram.com/handle/",
+    "https://www.youtube.com/watch?v=abc",
+])
+def test_link_video_ngoai_tiktok_van_bi_tu_choi_nhu_cu(session_factory, fake_resolve, url):
+    with session_factory() as db:
+        ok, msg, sid = SourceService.add_source(db, url)
+        assert (ok, sid) == (False, None) and msg
+    assert fake_resolve["cmds"] == []
+
+
+def test_video_khong_co_channel_id_thi_tu_choi_co_ly_do(session_factory, fake_resolve):
+    fake_resolve["stdout"] = json.dumps({"id": "1", "uploader": "ai_do"})
+    with session_factory() as db:
+        ok, msg, sid = SourceService.add_source(db, VIDEO_LINK)
+        assert (ok, sid) == (False, None)
+        assert "channel_id" in msg
+        assert db.query(ViralSource).count() == 0
+
+
+def test_yt_dlp_loi_khi_do_thi_tu_choi_khong_raise(session_factory, fake_resolve):
+    fake_resolve["rc"] = 1
+    fake_resolve["stdout"] = ""
+    fake_resolve["stderr"] = "ERROR: [tiktok] 7679052117176372487: Video not available"
+    with session_factory() as db:
+        ok, msg, sid = SourceService.add_source(db, VIDEO_LINK)
+        assert (ok, sid) == (False, None)
+        assert "Không đọc được video này" in msg and "Video not available" in msg
+
+
+def test_do_channel_id_qua_lau_thi_tu_choi_khong_treo(session_factory, fake_resolve):
+    fake_resolve["rc"] = "timeout"
+    with session_factory() as db:
+        ok, msg, sid = SourceService.add_source(db, VIDEO_LINK)
+        assert (ok, sid) == (False, None)
+        assert f"{sources.RESOLVE_TIMEOUT_SEC}s" in msg
+
+
+def test_quet_gap_loi_secondary_user_id_thi_ghi_huong_dan_tieng_viet(session_factory, monkeypatch):
+    """
+    Nguyên văn tiếng Anh bị bảng cắt còn 40 ký tự, Owner không biết phải làm gì.
+    Lưu ý: chính thông báo này cũng nổ khi channel_id sai/cụt — xem ADR-028 phần Bối cảnh.
+    """
+    stderr = (
+        "ERROR: [tiktok:user] thacaukechuyen: Unable to extract secondary user ID. "
+        'If you are able to get the channel_id from a video posted by this user, try using '
+        '"tiktokuser:channel_id" as the input URL'
+    )
+    monkeypatch.setattr(
+        sources.subprocess, "run",
+        lambda cmd, *a, **k: subprocess.CompletedProcess([str(c) for c in cmd], 1, stdout="", stderr=stderr),
+    )
+    with session_factory() as db:
+        src = ViralSource(platform="tiktok", url="https://www.tiktok.com/@thacaukechuyen", handle="thacaukechuyen")
+        db.add(src)
+        db.commit()
+        found, skipped, error = SourceService.scan_source(db, src)
+
+        assert (found, skipped) == (0, 0)
+        assert error == sources.MSG_TIKTOK_NEED_VIDEO_LINK
+        assert "link MỘT video" in db.get(ViralSource, src.id).last_error

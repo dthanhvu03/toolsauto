@@ -1,5 +1,66 @@
 # Current Status
 
+## Phiên 2026-09-09 (d) — ADR-028: kênh TikTok không liệt kê được bằng @handle
+
+Owner báo nguồn `@thacaukechuyen` quét ra lỗi, bảng cắt còn `ERROR: [tiktok:user]… Una…`.
+
+**Chẩn đoán bằng kiểm chứng, không đoán:**
+
+| Giả thuyết | Kiểm | Kết luận |
+|---|---|---|
+| yt-dlp cũ | `pip index versions yt-dlp` | Đang **2026.8.19 = mới nhất**. Không phải. |
+| TikTok chặn hết | quét `@tiktok`, `@charlidamelio` | `@tiktok` ✅, `@charlidamelio` ❌ giống hệt ⇒ **lỗi theo từng kênh** |
+
+Nguyên văn: *"Unable to extract secondary user ID… try using `tiktokuser:channel_id`"*. Cách
+gợi ý đó **chạy thật** trên đúng kênh của Owner. Nhưng `channel_id` chỉ lấy được từ một video
+của kênh, mà `add_source` đang **từ chối thẳng link video**.
+
+**Bẫy đã tự dẫm phải, ghi để không ai mất thêm một vòng:** `channel_id` dài **76 ký tự**; lần
+thử đầu vô tình cắt còn 70 và `tiktokuser:` báo **đúng cùng một lỗi**. Thông báo đó không phân
+biệt "kênh không liệt kê được" với "channel_id sai/cụt".
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| Ô "URL kênh" nhận thêm **link một video TikTok** → tự dò `channel_id` → nguồn `tiktokuser:<id>` | Chạy thật trên kênh Owner: `found=5`, views 2.000.000 → 17.600 |
+| Link video sinh ra vẫn đúng dạng cũ `@handle/video/<id>` ⇒ chống trùng vẫn khớp | proof ở trên |
+| Nguồn `@handle` cũ **không tốn lượt mạng nào** | `test_link_kenh_handle_van_di_duong_cu_khong_goi_yt_dlp` |
+| FB/IG/YouTube vẫn từ chối như cũ | 3 ca parametrize |
+| yt-dlp lỗi / quá 60s / video không có channel_id ⇒ toast đỏ tiếng Việt, không raise | 3 test |
+| Cột Lỗi hiện hướng dẫn tiếng Việt thay vì nguyên văn cụt | `test_quet_gap_loi_secondary_user_id_…` |
+| Bảng vẫn bấm sang kênh được dù `url` là `tiktokuser:` | render fragment ⇒ `https://www.tiktok.com/@thacaukechuyen` |
+| Toàn suite | **621 passed, 16 skipped, 0 failed** |
+
+**Một test cũ phải sửa:** `test_add_source_rejects_fb_ig_video_and_duplicate` khẳng định link
+video TikTok bị từ chối — nay không còn đúng, và tệ hơn là test đó bắt đầu **gọi mạng thật**,
+phá cam kết "không mạng" của file. Đã bỏ dòng đó, để lại cảnh báo tại chỗ.
+
+### System State
+
+Kênh TikTok liệt kê được bằng `@handle` ⇒ đường cũ y nguyên. Kênh không liệt kê được ⇒ Owner
+dán link một video, tool lưu nguồn dạng `tiktokuser:<channel_id>`. Không migration, không đụng
+YouTube / `scan_all` / lịch quét.
+
+### Unfinished + Blockers
+
+- **Nguồn `@thacaukechuyen` hiện tại trong DB của Owner vẫn hỏng** — ADR-028 cố ý **không** tự
+  cứu: `channel_id` chỉ lấy được từ một video của kênh, mà nguồn đó `last_found=0` nên trong
+  kho không có video nào để lần ra. Owner **xoá nguồn cũ rồi thêm lại bằng link video**.
+- Không dùng cookie/đăng nhập để cứu các kênh khác — việc khác, rủi ro khác.
+- Postgres máy dev vẫn không chạy; tool thật chạy trên `LAPTOP-T2HF25CD`.
+- Nợ cũ: `tests/test_threads_world_news.py` lỗi collection từ commit `8326183`.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại web process.**
+2. Vào `/app/viral/sources` → **Xoá** nguồn `@thacaukechuyen` đang lỗi → **Thêm** lại, dán
+   link một video của kênh đó vào ô URL kênh (Min views 1.000, Max video 50) → **Quét**.
+3. Video quét về sẽ tự có caption và bắn một tin Telegram kèm file (ADR-027).
+4. Anti: quyết PLAN cho khối badge page header (`layouts/app.html`).
+
+---
+
 ## Phiên 2026-09-09 (c) — ADR-027: video xong là bắn một tin Telegram đủ dùng
 
 Owner: *"khi đã hoàn tất 1 video đã có caption và video được xào chẻ thì bắn về tele, anh chỉ

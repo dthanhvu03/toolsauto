@@ -28,8 +28,11 @@
           <span class="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--color-face)] text-[var(--color-mist)] text-[11px] font-semibold">{{ s.platform }}</span>
           {% endif %}
         </td>
+        {# ADR-028: nguồn dò từ link video có url dạng `tiktokuser:<channel_id>` — không mở
+           được bằng trình duyệt. Dựng lại link kênh từ handle để Owner vẫn bấm sang xem được. #}
+        {% set channel_link = s.url if s.url.startswith('http') else 'https://www.tiktok.com/@' ~ (s.handle or '') %}
         <td class="px-3 py-2 truncate" title="{{ s.url }}">
-          <a href="{{ s.url }}" target="_blank" rel="noopener" class="text-[var(--color-torch)] hover:underline">
+          <a href="{{ channel_link }}" target="_blank" rel="noopener" class="text-[var(--color-torch)] hover:underline">
             {%- if s.handle %}@{{ s.handle }}{% else %}{{ label[:48] }}{% if label|length > 48 %}…{% endif %}{% endif -%}
           </a>
         </td>

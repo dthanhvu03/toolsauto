@@ -35,8 +35,19 @@ from app.features.viral_intake.tiktok_scraper import (
 logger = logging.getLogger(__name__)
 
 SCAN_TIMEOUT_SEC = 90
+# Dò channel_id chỉ đọc metadata MỘT video nên ngắn hơn hẳn một lượt quét kênh.
+RESOLVE_TIMEOUT_SEC = 60
 MAX_VIDEOS_CAP = 500
 _ERROR_MAX_LEN = 200
+
+# ADR-028: TikTok trả trang kênh thiếu dữ liệu với một số tài khoản; yt-dlp báo đúng câu này
+# và gợi ý dùng `tiktokuser:<channel_id>`. CẢNH BÁO: cùng thông báo này cũng nổ khi channel_id
+# sai hoặc bị cắt cụt — đừng đọc nó rồi kết luận vội là kênh không cứu được.
+_TIKTOK_NO_SECONDARY_ID = "unable to extract secondary user id"
+MSG_TIKTOK_NEED_VIDEO_LINK = (
+    "TikTok không cho liệt kê kênh này bằng @handle. Mở kênh, copy link MỘT video bất kỳ của "
+    "họ rồi dán vào ô URL kênh — tool tự dò ra kênh từ video đó."
+)
 
 MSG_VIDEO_LINK = "Đây là link video, không phải kênh — dùng ô dán link video ở trên."
 MSG_FB_IG = (
@@ -132,6 +143,41 @@ def _video_url(platform: str, handle: str, data: dict) -> str | None:
     return normalize_source_url(raw) if raw.startswith("http") else None
 
 
+def _resolve_tiktok_user_from_video(video_url: str) -> tuple[tuple[str, str, str] | None, str]:
+    """
+    ADR-028 — link MỘT video TikTok → nguồn kênh dạng ``tiktokuser:<channel_id>``.
+
+    Dùng khi TikTok không cho liệt kê kênh bằng ``@handle``. Đây là hàm **có mạng**, nên tách
+    hẳn khỏi ``_classify`` (vốn thuần, rẻ, có test) và không bao giờ raise: hỏng gì cũng trả
+    ``(None, thông báo tiếng Việt)`` để ``add_source`` hiện toast như mọi nhánh từ chối khác.
+    """
+    cmd = yt_dlp_cmd("--dump-json", "--no-warnings", "--playlist-items", "1", video_url)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=RESOLVE_TIMEOUT_SEC)
+    except subprocess.TimeoutExpired:
+        return None, f"Quá {RESOLVE_TIMEOUT_SEC}s chưa đọc được video — thử lại hoặc dùng link video khác."
+    except (FileNotFoundError, OSError) as exc:
+        return None, f"Không chạy được yt-dlp: {exc}"
+
+    if result.returncode != 0:
+        tail = (result.stderr or "").strip().splitlines()
+        return None, f"Không đọc được video này: {tail[-1][:_ERROR_MAX_LEN] if tail else 'yt-dlp lỗi'}"
+
+    line = next((ln for ln in (result.stdout or "").splitlines() if ln.strip().startswith("{")), "")
+    try:
+        data = json.loads(line) if line else {}
+    except json.JSONDecodeError:
+        data = {}
+
+    channel_id = str(data.get("channel_id") or "").strip()
+    handle = str(data.get("uploader") or "").strip().lstrip("@")
+    if not channel_id:
+        return None, "Video này không có channel_id — thử link video khác của cùng kênh."
+    if not handle:
+        handle = channel_id[:24]
+    return ("tiktok", f"tiktokuser:{channel_id}", handle), ""
+
+
 class SourceService:
     """Hợp đồng ADR-019 mục 2."""
 
@@ -167,6 +213,9 @@ class SourceService:
         ``target_page`` cũ vẫn dùng được (UI cũ) — coi như danh sách 1 phần tử.
         """
         found, reason = _classify(url)
+        if not found and reason == MSG_VIDEO_LINK and "tiktok.com" in (url or "").lower():
+            # ADR-028: link video TikTok không còn bị từ chối thẳng — dò ra kênh từ chính nó.
+            found, reason = _resolve_tiktok_user_from_video(url)
         if not found:
             return False, reason, None
         platform, canonical, handle = found
@@ -304,7 +353,10 @@ class SourceService:
                 if source.platform == "tiktok" and ("429" in stderr or "rate limit" in low or "too many" in low):
                     tracker[source.url] = now + RATE_LIMIT_BACKOFF_HOURS * 3600
                     _save_rate_limits(tracker)
-                error = stderr.splitlines()[-1] if stderr else f"yt-dlp exit {result.returncode}"
+                if source.platform == "tiktok" and _TIKTOK_NO_SECONDARY_ID in low:
+                    error = MSG_TIKTOK_NEED_VIDEO_LINK  # ADR-028 mục 4
+                else:
+                    error = stderr.splitlines()[-1] if stderr else f"yt-dlp exit {result.returncode}"
             if result is not None and error is None:
                 found, skipped = SourceService._ingest_lines(db, source, result.stdout or "", min_views)
 
