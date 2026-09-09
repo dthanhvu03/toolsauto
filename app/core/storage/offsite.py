@@ -76,13 +76,17 @@ def relative_to_root(dest: Optional[Path]) -> Optional[str]:
     """
     if dest is None:
         return None
-    root = get_root()
-    if root is None:
-        return None
+    # Bọc TOÀN BỘ: hàm này hay được gọi ngay trong danh sách tham số của `notify_*`, tức chạy
+    # TRƯỚC khi vào hàm đó — mọi try/except bên trong notifier không đỡ được. Một dòng chỉ để
+    # hiển thị thì không có quyền làm hỏng lượt xử lý đã commit xong.
     try:
+        root = get_root()
+        if root is None:
+            return None
         return dest.relative_to(root).as_posix()
-    except ValueError:
-        return dest.name
+    except Exception as exc:
+        logger.debug("[offsite] khong dung duoc duong dan tuong doi: %s", exc)
+        return getattr(dest, "name", None)
 
 
 def _settings():
@@ -142,19 +146,18 @@ def copy_video_if_enabled(
     người gọi trong luồng reup chỉ còn một dòng. Cùng cam kết: KHÔNG BAO GIỜ ném lỗi —
     Drive chưa gắn ổ hay hết dung lượng không được làm hỏng việc xử lý video.
     """
+    # `try` phải bọc CẢ việc dựng tên file, không riêng lượt đọc cài đặt: hàm này chạy SAU
+    # khi video đã xử lý xong, để một ngoại lệ thoát ra là hỏng cả lượt xử lý chỉ vì bản chép
+    # phụ. Đúng bẫy ADR-027 đã dính — bọc phần đắt tiền mà bỏ sót phần rẻ ngay cạnh.
     try:
         if not _settings().get_bool("DRIVE_COPY_VIDEOS"):
             return None
-    except Exception as exc:  # pragma: no cover - doc setting hong khong duoc chan reup
-        logger.debug("[offsite] khong doc duoc DRIVE_COPY_VIDEOS: %s", exc)
+        # ADR-030: tên theo tiêu đề + thư mục theo tháng. `title` phải đã sạch marker.
+        dest_name = safe_video_name(Path(src).name, material_id, title)
+    except Exception as exc:
+        logger.debug("[offsite] bo qua chep video: %s", exc)
         return None
-    # ADR-030: tên theo tiêu đề + thư mục theo tháng. `title` phải đã sạch marker.
-    return copy_out(
-        src,
-        "video",
-        dest_name=safe_video_name(Path(src).name, material_id, title),
-        month_folder=True,
-    )
+    return copy_out(src, "video", dest_name=dest_name, month_folder=True)
 
 
 def copy_out(

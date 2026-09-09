@@ -280,3 +280,96 @@ def test_backup_khong_bi_doi_cho(tmp_path, drive_root, monkeypatch):
     dest = offsite.copy_out(src, "backup")
 
     assert dest == drive_root / "backups" / "dump.sql"
+
+
+# ---------------------------------------------------------------------------
+# Review nhiều mũ (2026-09-09) — hợp đồng "không ném lỗi" và tên file từ chữ người lạ
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("title", [
+    "../../etc/passwd",
+    r"..\..\Windows\System32",
+    "..",
+    "....//....//x",
+    "/etc/passwd",
+])
+def test_tieu_de_khong_the_thoat_ra_ngoai_thu_muc_dich(title, tmp_path, drive_root, monkeypatch):
+    """
+    Tiêu đề là chữ do NGƯỜI LẠ viết (lấy từ TikTok) và nay thành tên file. Không được có
+    dấu phân cách nào lọt qua, và bản chép phải nằm đúng trong thư mục tháng.
+    """
+    drive_root.mkdir()
+    _use_settings(
+        monkeypatch,
+        {"DRIVE_COPY_ENABLED": True, "DRIVE_COPY_VIDEOS": True, "DRIVE_ROOT_DIR": str(drive_root)},
+    )
+    src = _make_video(tmp_path)
+
+    dest = offsite.copy_video_if_enabled(src, material_id=7, title=title)
+
+    assert dest is not None
+    assert dest.parent == drive_root / "videos" / time.strftime("%Y-%m")
+    assert "/" not in dest.name and "\\" not in dest.name
+    assert dest.resolve().is_relative_to(drive_root.resolve())
+
+
+class _NoStr:
+    """Object có __str__ nổ — thế thân cho mọi thứ bất thường lọt vào tiêu đề."""
+
+    def __str__(self):
+        raise RuntimeError("tiêu đề hỏng")
+
+
+def test_dung_ten_file_hong_thi_bo_qua_chu_khong_ném_loi(tmp_path, drive_root, monkeypatch):
+    """
+    Hồi quy: `safe_video_name` từng nằm NGOÀI try/except của `copy_video_if_enabled`, trong
+    khi docstring hứa "KHÔNG BAO GIỜ ném lỗi". Hàm này chạy SAU khi video đã xử lý xong —
+    một ngoại lệ thoát ra là hỏng cả lượt xử lý chỉ vì bản chép phụ.
+    """
+    drive_root.mkdir()
+    _use_settings(
+        monkeypatch,
+        {"DRIVE_COPY_ENABLED": True, "DRIVE_COPY_VIDEOS": True, "DRIVE_ROOT_DIR": str(drive_root)},
+    )
+    src = _make_video(tmp_path)
+
+    assert offsite.copy_video_if_enabled(src, material_id=1, title=_NoStr()) is None
+    assert offsite.copy_video_if_enabled(None, material_id=1, title="x") is None
+
+
+def test_duong_dan_tuong_doi_hong_thi_tra_None_chu_khong_ném_loi(monkeypatch):
+    """
+    Hàm này hay được gọi ngay trong danh sách tham số của `notify_*`, tức chạy TRƯỚC khi vào
+    hàm đó — try/except bên trong notifier không đỡ được.
+    """
+    def no(*a, **k):
+        raise RuntimeError("settings chết")
+
+    monkeypatch.setattr(offsite, "get_root", no)
+
+    assert offsite.relative_to_root(__import__("pathlib").Path("/x/y.mp4")) == "y.mp4"
+
+
+def test_sang_thang_moi_thi_chep_them_mot_ban(tmp_path, drive_root, monkeypatch):
+    """
+    Ghi lại hành vi đã biết, không phải lỗi: thư mục theo tháng lấy theo THỜI ĐIỂM CHÉP, nên
+    một video reup lại ở tháng sau sẽ có thêm một bản ở thư mục tháng mới. Cơ chế bỏ qua bản
+    y hệt của ADR-024 chỉ so trong cùng thư mục. Chấp nhận được: reup lại là việc hiếm, và
+    đổi lại thư mục không phình ra vài nghìn file.
+    """
+    drive_root.mkdir()
+    _use_settings(
+        monkeypatch,
+        {"DRIVE_COPY_ENABLED": True, "DRIVE_COPY_VIDEOS": True, "DRIVE_ROOT_DIR": str(drive_root)},
+    )
+    src = _make_video(tmp_path)
+    kw = dict(material_id=949, title="Nay tui đi câu mực")
+
+    monkeypatch.setattr(offsite.time, "strftime", lambda fmt: "2026-09")
+    thang_9 = offsite.copy_video_if_enabled(src, **kw)
+    monkeypatch.setattr(offsite.time, "strftime", lambda fmt: "2026-10")
+    thang_10 = offsite.copy_video_if_enabled(src, **kw)
+
+    assert thang_9.parent.name == "2026-09" and thang_10.parent.name == "2026-10"
+    assert thang_9.is_file() and thang_10.is_file()

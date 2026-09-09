@@ -120,3 +120,46 @@ backslash **không nằm trong lớp**. Trên Windows, một dấu `\` lọt và
 
 `processor.py` dòng ~839 vẫn còn `from … import ViralService as _VS` trong hàm, nay thừa vì
 `ViralService` đã import ở đầu file. Không dọn trong ADR này để giữ diff tối thiểu.
+
+## Review nhiều mũ sau khi làm (2026-09-09)
+
+Soi lại bản vừa commit `0f4d207`. Hai lỗi thật, cùng một họ, đã sửa; một hành vi đã ghi lại.
+
+### Đã sửa — hợp đồng "không bao giờ ném lỗi" đang nói dối
+
+1. `copy_video_if_enabled` hứa trong docstring *"KHÔNG BAO GIỜ ném lỗi"*, nhưng
+   `safe_video_name(Path(src).name, …)` nằm **ngoài** `try`. Hàm này chạy **sau khi video đã
+   xử lý xong**; một ngoại lệ thoát ra là hỏng cả lượt xử lý chỉ vì bản chép phụ. Đúng bẫy
+   ADR-027 đã dính hai tiếng trước: bọc phần đắt tiền mà bỏ sót phần rẻ ngay cạnh.
+2. `relative_to_root` được gọi **trong danh sách tham số** của `notify_material_ready`, tức
+   chạy **trước khi** vào hàm đó — mọi `try/except` bên trong notifier không đỡ được. Một dòng
+   chỉ để hiển thị mà có quyền đánh hỏng material đã commit `READY`.
+
+Cả hai nay bọc trọn; `relative_to_root` hỏng thì lùi về tên file, không ném.
+Test: `test_dung_ten_file_hong_thi_bo_qua_chu_khong_nem_loi`,
+`test_duong_dan_tuong_doi_hong_thi_tra_None_chu_khong_nem_loi`.
+
+### Đã kiểm — tên file dựng từ chữ người lạ viết
+
+Tiêu đề lấy từ TikTok nay thành tên file, nên kiểm đường dẫn vượt cấp: `../../etc/passwd`,
+`..\..\Windows\System32`, `..`, `....//....//x`, `/etc/passwd` — không ca nào thoát ra khỏi
+thư mục tháng (`/` và `\` bị thay, `..` trơ lại bị `rstrip(". ")` ăn hết rồi lùi về tên gốc).
+Trước đó **không có test nào khoá**, nên ai sửa regex sau này có thể mở lại lỗ mà không biết.
+Test: `test_tieu_de_khong_the_thoat_ra_ngoai_thu_muc_dich` (5 ca).
+
+### Ghi lại, không sửa — sang tháng thì có thêm một bản
+
+Thư mục lấy theo **thời điểm chép**, mà cơ chế bỏ qua bản y hệt của ADR-024 chỉ so **trong
+cùng thư mục**. Nên một video reup lại ở tháng sau sẽ có thêm một bản ở thư mục tháng mới.
+Chấp nhận: reup lại là việc hiếm, đổi lại thư mục không phình vài nghìn file. Đã ghi thành
+test để phiên sau không tưởng là lỗi: `test_sang_thang_moi_thi_chep_them_mot_ban`.
+Cùng lý do đó, **đổi tiêu đề material** cũng sinh thêm một bản với tên mới.
+
+### Nợ ghi lại, không dọn trong ADR này
+
+- `_clean_title_for_context` (`features/viral_intake/service.py`) và `_clean_material_title`
+  (`core/notifier/formatting.py`) **làm y hệt nhau**, hai bản regex song song. Không gộp được
+  thẳng vì `core` không được import `features`; muốn gộp thì phải đưa lên `app/core`.
+- `processor.py` còn `from … import ViralService as _VS` trong hàm, nay thừa.
+
+**Sau review: 649 passed, 16 skipped, 0 failed. `lint-imports`: 2 hợp đồng giữ, 0 vi phạm.**
