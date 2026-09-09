@@ -326,3 +326,74 @@ def test_drafts_co_nut_duyet_va_huy(bot, db_factory):
     data = [b["callback_data"] for row in markup["inline_keyboard"] for b in row]
     assert any(d.startswith("approve:") for d in data)
     assert any(d.startswith("cancel:") for d in data)
+
+
+# ── thông báo không được quảng cáo lệnh không tồn tại (ADR-033, vá 2026-09-09) ──
+
+
+SUPPORTED_COMMANDS = {
+    "status", "pause", "resume", "health", "jobs", "drafts",
+    "retry", "viral", "discovery", "help", "start",
+}
+
+
+def test_thong_bao_khong_nhac_toi_lenh_khong_ton_tai():
+    """
+    Owner nhận tin *"Đổi ngưỡng: … hoặc /viral_settings"*, gõ vào thì bot trả
+    "❓ Lệnh /viral_settings không hỗ trợ". Quảng cáo lệnh không có cũng là nhãn nói dối —
+    tệ hơn lệnh hỏng, vì nó chủ động bảo người dùng làm một việc bất khả thi.
+    """
+    import pathlib
+    import re
+
+    from app.core.notifier import formatting, service
+    from app.features.system_panel.workers import maintenance
+
+    bad: list[str] = []
+    for mod in (maintenance, formatting, service):
+        code = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+        for line in code.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue  # ghi chú được phép nhắc tên lệnh cũ để giải thích
+            for cmd in re.findall(r"[\s\"'>(]/([a-z_]{3,})", line):
+                if cmd not in SUPPORTED_COMMANDS and not cmd.startswith(("app", "code", "chat", "b")):
+                    bad.append(f"{mod.__name__}: /{cmd}")
+
+    assert not bad, f"thông báo nhắc lệnh không tồn tại: {bad}"
+
+
+def test_khong_quet_kenh_nao_thi_khong_nhan_gi(monkeypatch):
+    """
+    Owner có 0 account ⇒ đường quét cũ luôn "Quét 0 kênh đối thủ" ⇒ trước đây nhắn mỗi giờ
+    một tin vô nghĩa. Tin rác làm người ta bỏ qua cả những tin thật.
+    """
+    from app.core import feature_hooks
+    from app.core.notifier.service import NotifierService
+    from app.features.system_panel.workers import maintenance
+
+    sent: list[str] = []
+    monkeypatch.setattr(NotifierService, "_broadcast", staticmethod(lambda msg, *a, **k: sent.append(msg)))
+    monkeypatch.setattr(maintenance, "_last_tiktok_scrape_ts", 0)
+    monkeypatch.setattr(feature_hooks, "call", lambda name, db, *a: (0, 0) if name == "viral.tiktok_scan" else 16800)
+
+    maintenance._scrape_tiktok_competitors(db=None)
+
+    assert sent == [], f"không quét kênh nào mà vẫn nhắn: {sent}"
+
+
+def test_co_quet_ma_khong_ra_video_thi_van_bao_kem_cu_phap_dung(monkeypatch):
+    from app.core import feature_hooks
+    from app.core.notifier.service import NotifierService
+    from app.features.system_panel.workers import maintenance
+
+    sent: list[str] = []
+    monkeypatch.setattr(NotifierService, "_broadcast", staticmethod(lambda msg, *a, **k: sent.append(msg)))
+    monkeypatch.setattr(maintenance, "_last_tiktok_scrape_ts", 0)
+    monkeypatch.setattr(feature_hooks, "call", lambda name, db, *a: (0, 3) if name == "viral.tiktok_scan" else 16800)
+
+    maintenance._scrape_tiktok_competitors(db=None)
+
+    assert len(sent) == 1
+    assert "/viral 16800 50" in sent[0], "phải chỉ đúng cú pháp lệnh thật"
+    assert "/viral_settings" not in sent[0]

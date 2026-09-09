@@ -104,3 +104,28 @@ v /viral   → ghi cả RuntimeSetting lẫn WorkerState
 
 Cả hai chỉ lộ khi chạy **cả file**, không lộ khi chạy từng test — vì chúng là lỗi nhiễm chéo
 và lỗi khớp chuỗi, không phải lỗi logic.
+
+## Vá bổ sung (2026-09-09, sau khi Owner chạy thật)
+
+Ảnh chụp chat của Owner cho thấy bot **sống** (nhận được "🤖 Bot đã sẵn sàng" của ADR-034),
+nhưng lộ ra hai thứ nữa:
+
+**1. Thông báo quảng cáo một lệnh chưa bao giờ tồn tại.** Tin *"TikTok Auto-Discovery"* ghi
+*"Đổi ngưỡng: Dashboard → Viral hoặc `/viral_settings`"*. Owner gõ `/viral_settings` ⇒
+*"❓ Lệnh không hỗ trợ"*. Lệnh thật là `/viral <min_views> <max_videos>`.
+
+Đây **tệ hơn** lệnh hỏng: lệnh hỏng chỉ im lặng vô dụng, còn tin này **chủ động bảo người dùng
+làm một việc bất khả thi**. Đã đổi thành cú pháp thật, điền sẵn số hiện tại:
+`/viral 16800 50`.
+
+**2. Nhắn mỗi giờ dù không quét kênh nào.** Đường quét cũ đọc `competitor_urls` của account,
+mà Owner có **0 account** ⇒ luôn "Quét 0 kênh đối thủ", và vẫn nhắn. Tin rác làm người ta bỏ
+qua cả những tin thật. Nay `num_channels == 0` ⇒ **không nhắn**.
+
+| Proof | Test |
+|---|---|
+| Không thông báo nào nhắc lệnh ngoài danh sách hỗ trợ | `test_thong_bao_khong_nhac_toi_lenh_khong_ton_tai` — quét cả `maintenance`, `formatting`, `service` |
+| Quét 0 kênh ⇒ **không nhắn gì** | `test_khong_quet_kenh_nao_thi_khong_nhan_gi` |
+| Có quét mà 0 video ⇒ vẫn báo, kèm **cú pháp đúng** | `test_co_quet_ma_khong_ra_video_thi_van_bao_kem_cu_phap_dung` |
+
+**Toàn suite: 747 passed, 16 skipped, 0 failed.**

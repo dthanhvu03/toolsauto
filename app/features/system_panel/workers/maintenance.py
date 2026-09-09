@@ -247,13 +247,19 @@ def _scrape_tiktok_competitors(db):
                 f"🔍 Quét {num_channels} kênh đối thủ\n"
                 f"✅ Tìm thấy <b>{total_found}</b> video viral mới!"
             )
-        else:
+        elif num_channels > 0:
+            # Không quét kênh nào thì KHÔNG nhắn: đường này đọc `competitor_urls` của account,
+            # mà Owner đang có 0 account nên nó luôn quét 0 kênh — nhắn mỗi giờ là spam thuần,
+            # và tin rác làm người ta bỏ qua cả những tin thật.
             min_views = feature_hooks.call("viral.min_views", db)
+            # Lệnh thật là `/viral <min_views> <max_videos>`. `/viral_settings` CHƯA BAO GIỜ
+            # tồn tại — bot trả "❓ Lệnh không hỗ trợ". Quảng cáo lệnh không có cũng là một
+            # kiểu nhãn nói dối (ADR-033).
             NotifierService._broadcast(
                 f"🎵 <b>TikTok Auto-Discovery</b>\n"
                 f"🔍 Quét {num_channels} kênh đối thủ\n"
                 f"📭 0 video đạt ngưỡng <b>{min_views:,}</b> views.\n"
-                f"Đổi ngưỡng: Dashboard → Viral hoặc /viral_settings"
+                f"Đổi ngưỡng: nhắn <code>/viral {min_views} 50</code> hoặc Dashboard → Viral"
             )
     except Exception:
         pass
