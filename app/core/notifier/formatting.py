@@ -144,22 +144,57 @@ def _clean_material_title(title: Optional[str]) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def material_ready_message(mat, media_path: Optional[str] = None) -> str:
-    """ADR-018 + ADR-022: video reup xong nhưng KHÔNG có account ⇒ Owner tải về đăng tay."""
+def material_caption_block(mat) -> str:
+    """
+    ADR-027 — caption + hashtag trong **một khối ``<code>``**: trên Telegram chạm vào là
+    copy cả cụm, dán thẳng sang Facebook. Không có caption ⇒ chuỗi rỗng.
+
+    Cố ý gộp caption và hashtag vào **cùng một khối**: tách hai khối thì Owner phải chạm
+    hai lần rồi tự ghép, mất đúng cái tiện mà ADR này sinh ra để có.
+    """
+    caption = (getattr(mat, "ai_caption", None) or "").strip()
+    if not caption:
+        return ""
+    hashtags = " ".join(getattr(mat, "ai_hashtags_list", None) or [])
+    body = f"{caption}\n\n{hashtags}" if hashtags else caption
+    return (
+        f"✍️ <b>Caption</b> — chạm vào để chép:\n"
+        f"<code>{html_mod.escape(body)}</code>"
+    )
+
+
+def material_ready_message(mat, media_path: Optional[str] = None, *, with_caption: bool = True) -> str:
+    """
+    ADR-018 + ADR-022 + ADR-027: video reup xong, không có account ⇒ Owner đăng tay.
+
+    ``with_caption=False`` dùng khi tin quá dài phải tách: phần đầu đi kèm video, khối
+    caption đi ở tin thứ hai (xem ``NotifierService.notify_material_ready``).
+    """
     title = _clean_material_title(getattr(mat, "title", None)) or "(không có tiêu đề)"
     platform = str(getattr(mat, "platform", "") or "—")
     views = int(getattr(mat, "views", 0) or 0)
     file_name = os.path.basename(str(media_path)) if media_path else ""
     file_line = f"📁 <code>{html_mod.escape(file_name)}</code>\n" if file_name else ""
 
-    return (
+    head = (
         f"🎬 <b>Video sẵn sàng đăng tay</b>\n"
         f"📋 Material #{getattr(mat, 'id', '?')} | {html_mod.escape(platform)}\n"
         f"📝 <i>{html_mod.escape(title)}</i>\n"
         f"👁 {views:,} lượt xem\n"
         f"{file_line}"
-        f"⬇️ Mở <b>/app/viral</b> rồi bấm <b>Tải file</b> để tải video về đăng."
     )
+    if not with_caption:
+        return head.rstrip("\n")
+
+    block = material_caption_block(mat)
+    if block:
+        # File đã đính kèm ngay trong tin này nên không nhắc mở web nữa.
+        return f"{head}\n{block}"
+
+    reason = (getattr(mat, "ai_caption_error", None) or "").strip()
+    if reason:
+        return f"{head}⚠️ Chưa có caption: {html_mod.escape(reason[:200])}"
+    return f"{head}⬇️ Mở <b>/app/viral</b> rồi bấm <b>Tải file</b> để tải video về đăng."
 
 
 def caption_ready_message(mat) -> str:

@@ -625,9 +625,14 @@ class ViralService:
         material_id: int,
         *,
         style: Optional[str] = None,
+        notify: bool = True,
     ) -> Tuple[bool, str]:
         """
         ADR-021 — AI viết caption thẳng cho một material, không mượn Job, không cần account.
+
+        ``notify=False`` (ADR-027): processor gọi hàm này ngay sau khi video xào chẻ xong rồi
+        tự bắn **một tin gộp** có cả file lẫn caption — bắn thêm tin caption rời ở đây thì
+        Owner nhận hai tin cho cùng một video. Mọi caller cũ không truyền gì nên giữ nguyên.
 
         Thứ tự chặn (rẻ trước, đắt sau): material tồn tại → có file ``_reup`` → có key AI →
         mới chạy ``ContentOrchestrator`` (collage + Whisper + Gemini, hàng chục giây tới vài phút).
@@ -651,7 +656,8 @@ class ViralService:
             mat.ai_caption_error = reason[:300]
             mat.ai_caption_at = int(time.time())
             db.commit()
-            NotifierService.notify_caption_ready(mat)  # ADR-022
+            if notify:
+                NotifierService.notify_caption_ready(mat)  # ADR-022
             return False, reason
 
         context = _clean_title_for_context(mat.title)
@@ -673,7 +679,8 @@ class ViralService:
                 mat.ai_caption_error = msg
                 mat.ai_caption_at = int(time.time())
                 db.commit()
-                NotifierService.notify_caption_ready(mat)  # ADR-022
+                if notify:
+                    NotifierService.notify_caption_ready(mat)  # ADR-022
                 return False, msg
 
             hashtags = result.get("hashtags") or []
@@ -687,7 +694,8 @@ class ViralService:
             mat.ai_caption_at = int(time.time())
             mat.ai_caption_error = None
             db.commit()
-            NotifierService.notify_caption_ready(mat)  # ADR-022
+            if notify:
+                NotifierService.notify_caption_ready(mat)  # ADR-022
             return True, f"Đã viết caption cho #{material_id}"
         except Exception as e:
             logger.exception("[VIRAL] Viết caption cho material #%s thất bại", material_id)
@@ -698,7 +706,8 @@ class ViralService:
                 db.commit()
             except Exception:
                 db.rollback()
-            NotifierService.notify_caption_ready(mat)  # ADR-022
+            if notify:
+                NotifierService.notify_caption_ready(mat)  # ADR-022
             return False, msg
 
 

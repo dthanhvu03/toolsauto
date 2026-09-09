@@ -1,5 +1,62 @@
 # Current Status
 
+## Phiên 2026-09-09 (c) — ADR-027: video xong là bắn một tin Telegram đủ dùng
+
+Owner: *"khi đã hoàn tất 1 video đã có caption và video được xào chẻ thì bắn về tele, anh chỉ
+việc bấm nút tải và sao chép caption thôi"*.
+
+**Chặn phải hỏi trước khi làm:** caption **không hề tự chạy** — `generate_caption_for_material`
+chỉ có đúng một nơi gọi là nút trên web (ADR-021 mục 4). Nên khoảnh khắc "video xong VÀ có
+caption" không bao giờ tự tới; chỉ gộp tin thì Owner vẫn phải mở web mỗi video. Đã hỏi, Owner
+chọn **"Tự viết, rồi bắn 1 tin gộp"**.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| Tự viết caption ngay sau khi video xào chẻ xong, rồi bắn **đúng một** tin kèm file | `test_h9` — 1 lời gọi AI, 1 tin, không còn tin caption rời |
+| Caption + hashtag trong **một** khối `<code>` (Telegram: chạm là chép) | `test_h1` — đếm `<code>` = 1 |
+| Ô bật/tắt `viral.auto_caption_on_ready` (mặc định BẬT) ở `/app/settings` | `test_h10` — tắt ⇒ 0 lời gọi AI, tin về đúng dạng ADR-022 |
+| AI nổ / chưa có key ⇒ vẫn có tin video, kèm dòng nêu lý do | `test_h11`, `test_h5` |
+| Tin quá 1024 ký tự ⇒ tách 2 tin, khối caption **không bị cắt** | `test_h7` — caption 1200 ký tự còn đủ |
+| Bấm tay trên web vẫn bắn tin caption riêng (ADR-021/022 y nguyên) | `test_h12` |
+| Toàn suite | **612 passed, 16 skipped, 0 failed** |
+
+**Suite bắt được một lỗi thật của bản đầu:** chỉ bọc `try/except` quanh lời gọi AI mà không
+bọc lượt **đọc ô cài đặt** — đọc `runtime_settings` cũng đụng DB, hỏng ở đó là ngoại lệ thoát
+ra và **đánh `FAILED` một video đã xử lý xong, đã commit `READY`**. Ba test có sẵn đỏ ngay.
+Đã bọc cả lượt đọc, thêm `db.rollback()` trong `except`, và thêm `test_h13` khoá lại.
+
+### System State
+
+Luồng đăng tay giờ khép kín trong Telegram: video xào chẻ xong → AI viết caption → một tin có
+file + caption chạm-là-chép. Luồng **có account** (job + `notify_style_selection`) không đổi.
+Không migration. `processor.py` nay import `ViralService` và `settings` ở đầu file theo
+`RULES.md` (đã kiểm không sinh vòng lặp import).
+
+### Unfinished + Blockers
+
+- **Chưa gửi thử qua Telegram thật.** Máy dev không có token và không nối được DB; test dùng
+  `StubNotifier` ở tầng code. Ngưỡng 50 MB của Bot API vẫn nguyên: video nặng hơn thì chỉ
+  nhận được chữ, không có file.
+- **Ngưỡng tách tin đo trên chuỗi HTML thô** nên tách sớm hơn cần thiết một chút — cố ý
+  nghiêng về phía an toàn, thà hai tin còn hơn caption cụt đuôi.
+- Postgres máy dev vẫn không chạy (container `toolsauto_postgres` đã Exited); tool thật chạy
+  trên `LAPTOP-T2HF25CD`.
+- Nợ cũ: `tests/test_threads_world_news.py` lỗi collection từ commit `8326183`.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại web process**, để một video mới chạy tới `READY` rồi
+   xem Telegram — phải nhận **một** tin có file `_reup.mp4` và khối caption chạm-là-chép.
+2. Nếu thấy tốn AI quá thì tắt ô **"Tự viết caption khi video sẵn sàng đăng tay"** ở
+   `/app/settings`, mục "Quét TikTok & Viral".
+3. Việc treo từ phiên trước: sửa `Max video/lần` của `@thacaukechuyen` lên 50 (ADR-026 đã có
+   nút Sửa), rồi Quét.
+4. Anti: quyết PLAN cho khối badge page header (`layouts/app.html`).
+
+---
+
 ## Phiên 2026-09-09 (b) — ADR-026: sửa tại chỗ nguồn video
 
 Owner đặt `Max video/lần = 3` cho `@thacaukechuyen`, quét mãi vẫn "Tìm thấy 0" (đúng thiết

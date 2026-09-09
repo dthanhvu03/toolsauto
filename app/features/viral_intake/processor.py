@@ -19,7 +19,9 @@ import app.config as config
 from app.constants import AccountStatus, JobStatus, ViralStatus
 from app.core.media.content_hash import sha256_file
 from app.core.media.video_protector import VideoProtector
+from app.core import settings as runtime_settings
 from app.features.viral_intake.dedup import find_duplicate
+from app.features.viral_intake.service import ViralService
 
 
 logger = logging.getLogger(__name__)
@@ -864,6 +866,30 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 _clear_material_error(mat)
                 db.commit()
                 logger.info("[VIRAL] Material #%s READY (no account, no job) — file: %s", mat.id, media_path)
+
+                # ADR-027: viết caption TRƯỚC khi báo, để Owner nhận đúng MỘT tin có cả file
+                # lẫn caption và không phải mở web. Chạy thẳng (không nền): tin nhắn phải đợi
+                # caption mới gộp được, và vòng này vốn đã tải + ffmpeg hàng phút.
+                # `notify=False` để không bắn thêm tin caption rời của ADR-022.
+                # Caption hỏng KHÔNG được chặn thông báo: material đã READY và file đã có.
+                # try/except phải bọc CẢ lượt đọc ô cài đặt, không riêng lời gọi AI: đọc
+                # `runtime_settings` cũng đụng DB, hỏng ở đó mà để ngoại lệ thoát ra là
+                # đánh FAILED một video đã xử lý xong và đã commit READY.
+                try:
+                    if runtime_settings.get_bool("viral.auto_caption_on_ready", default=True, db=db):
+                        ok_cap, cap_msg = ViralService.generate_caption_for_material(
+                            db, mat.id, notify=False
+                        )
+                        logger.info("[VIRAL] Caption tự động cho #%s: %s — %s", mat.id, ok_cap, cap_msg)
+                        db.refresh(mat)
+                except Exception as cap_err:
+                    logger.warning("[VIRAL] Caption tự động cho #%s lỗi (%s) — vẫn báo video.", mat.id, cap_err)
+                    # Lỗi DB làm session hỏng; rollback để vòng lặp sau còn dùng được.
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+
                 # ADR-022: luồng này không sinh Job nên không thông báo nào của job chạy.
                 from app.core.notifier.service import NotifierService
 

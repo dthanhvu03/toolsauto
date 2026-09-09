@@ -539,3 +539,209 @@ def test_g2_khong_kenh_thi_material_van_ve_READY(session_factory, fake_pipeline,
         ok, msg = ViralService.process_material(db, mid)
         assert ok, msg
         assert db.get(ViralMaterial, mid).status == ViralStatus.READY
+
+
+# ───────── (h) ADR-027: một tin gộp — file + caption bấm-là-chép ─────────
+
+
+@pytest.fixture
+def fake_ai(monkeypatch, tmp_path):
+    """Có key AI + ContentOrchestrator giả trả caption cố định."""
+    monkeypatch.setattr(config, "NINE_ROUTER_CONFIG_FILE", tmp_path / "khong-co-9router.json")
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "AIzaSyFAKE-key-for-test-only")
+    monkeypatch.setattr(config, "GOOGLE_API_KEY", "AIzaSyFAKE-key-for-test-only")
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+
+    from app.core.orchestrator import ContentOrchestrator
+
+    state = {"calls": 0, "caption": "Xem tới cuối <mới> tin được!", "hashtags": ["#cauca", "#fish"]}
+
+    def fake(self, *a, **k):
+        state["calls"] += 1
+        return {"caption": state["caption"], "hashtags": state["hashtags"]}
+
+    monkeypatch.setattr(ContentOrchestrator, "generate_caption", fake)
+    return state
+
+
+def _new_material(session_factory, url="https://www.facebook.com/reel/27"):
+    with session_factory() as db:
+        mat = ViralMaterial(platform="facebook", url=url, title="Mèo béo", views=0, status=ViralStatus.NEW)
+        db.add(mat)
+        db.commit()
+        return mat.id
+
+
+# --- soạn tin ---
+
+
+def test_h1_khoi_code_gom_ca_caption_lan_hashtag_trong_MOT_khoi():
+    """Hai khối thì Owner phải chạm hai lần rồi tự ghép — mất đúng cái tiện của ADR-027."""
+    mat = FakeMaterial(ai_caption="Câu mở đầu", hashtags=["#a", "#b"])
+    block = nf.material_caption_block(mat)
+
+    assert block.count("<code>") == 1 and block.count("</code>") == 1
+    body = block.split("<code>")[1].split("</code>")[0]
+    assert body == "Câu mở đầu\n\n#a #b"
+
+
+def test_h2_caption_va_hashtag_do_nguoi_la_viet_van_duoc_escape():
+    block = nf.material_caption_block(FakeMaterial(ai_caption="Rẻ <vô địch> & bền", hashtags=["#a&b"]))
+
+    assert "&lt;vô địch&gt;" in block and "&amp;" in block
+    assert "<vô địch>" not in block
+
+
+def test_h3_khong_co_caption_thi_khoi_rong():
+    assert nf.material_caption_block(FakeMaterial(ai_caption=None)) == ""
+    assert nf.material_caption_block(FakeMaterial(ai_caption="   ")) == ""
+
+
+def test_h4_tin_ready_co_caption_thi_bo_cau_nhac_mo_web():
+    """File đã đính kèm ngay trong tin — nhắc mở web nữa là thừa và sai ý ADR-027."""
+    text = nf.material_ready_message(FakeMaterial(ai_caption="Có caption"), "/x/viral_1_reup.mp4")
+
+    assert "chạm vào để chép" in text
+    assert "/app/viral" not in text
+
+
+def test_h5_khong_viet_duoc_caption_thi_neu_ly_do_ngay_trong_tin():
+    text = nf.material_ready_message(
+        FakeMaterial(ai_caption=None, ai_caption_error="Chưa cấu hình key AI"), "/x/a.mp4"
+    )
+
+    assert "Chưa có caption: Chưa cấu hình key AI" in text
+
+
+def test_h6_with_caption_false_thi_chi_con_phan_dau():
+    mat = FakeMaterial(ai_caption="Có caption")
+
+    head = nf.material_ready_message(mat, "/x/a.mp4", with_caption=False)
+
+    assert "<code>a.mp4</code>" in head
+    assert "chạm vào để chép" not in head
+
+
+# --- tách tin khi quá hạn 1024 của caption tin có media ---
+
+
+def test_h7_tin_dai_thi_tach_hai_tin_va_khoi_caption_khong_bi_cat(stub, tmp_path):
+    video = tmp_path / "viral_9_reup.mp4"
+    video.write_bytes(b"\x00" * 1024)
+    caption = "x" * 1200  # chắc chắn vượt 1024
+    mat = FakeMaterial(id=9, ai_caption=caption, hashtags=["#dai"])
+
+    NotifierService.notify_material_ready(mat, str(video))
+
+    assert [c[0] for c in stub.calls] == ["video", "text"]
+    assert "chạm vào để chép" not in stub.calls[0][-1]  # video đi với phần đầu ngắn
+    block = stub.calls[1][-1]
+    assert caption in block and "#dai" in block  # nguyên vẹn, không cụt đuôi
+
+
+def test_h8_tin_ngan_thi_van_chi_mot_tin_kem_video(stub, tmp_path):
+    video = tmp_path / "viral_10_reup.mp4"
+    video.write_bytes(b"\x00" * 1024)
+    mat = FakeMaterial(id=10, ai_caption="Ngắn gọn", hashtags=["#a"])
+
+    NotifierService.notify_material_ready(mat, str(video))
+
+    assert len(stub.calls) == 1
+    kind, path, text = stub.calls[0]
+    assert kind == "video" and "chạm vào để chép" in text
+
+
+# --- đường thật: material đi tới READY ---
+
+
+def test_h9_bat_o_thi_tu_viet_caption_va_ban_DUNG_MOT_tin_gop(session_factory, fake_pipeline, fake_ai, stub):
+    mid = _new_material(session_factory)
+
+    with session_factory() as db:
+        ok, msg = ViralService.process_material(db, mid)
+        assert ok, msg
+        mat = db.get(ViralMaterial, mid)
+        assert mat.status == ViralStatus.READY
+        assert mat.ai_caption == "Xem tới cuối <mới> tin được!"
+
+    assert fake_ai["calls"] == 1
+    assert len(stub.calls) == 1, stub.calls  # KHÔNG có tin caption rời của ADR-022
+    kind, path, text = stub.calls[0]
+    assert kind == "video" and path.endswith("_reup.mp4")
+    assert "chạm vào để chép" in text
+    assert "&lt;mới&gt;" in text and "#cauca #fish" in text
+
+
+def test_h10_tat_o_thi_khong_goi_AI_va_tin_nhu_cu(session_factory, fake_pipeline, fake_ai, stub, monkeypatch):
+    from app.core import settings as runtime_settings
+
+    monkeypatch.setattr(runtime_settings, "get_bool", lambda key, default=False, db=None: False)
+    mid = _new_material(session_factory, url="https://www.facebook.com/reel/28")
+
+    with session_factory() as db:
+        ok, _ = ViralService.process_material(db, mid)
+        assert ok
+        assert db.get(ViralMaterial, mid).ai_caption is None
+
+    assert fake_ai["calls"] == 0
+    assert len(stub.calls) == 1
+    assert "/app/viral" in stub.calls[0][-1]  # quay về đúng câu chữ ADR-022
+
+
+def test_h11_AI_no_thi_van_ban_tin_video_kem_ly_do(session_factory, fake_pipeline, fake_ai, stub, monkeypatch):
+    """Caption là việc phụ: material đã READY và file đã có, thông báo không được mất."""
+    from app.core.orchestrator import ContentOrchestrator
+
+    def boom(self, *a, **k):
+        raise RuntimeError("Whisper chết")
+
+    monkeypatch.setattr(ContentOrchestrator, "generate_caption", boom)
+    mid = _new_material(session_factory, url="https://www.facebook.com/reel/29")
+
+    with session_factory() as db:
+        ok, _ = ViralService.process_material(db, mid)
+        assert ok
+        assert db.get(ViralMaterial, mid).status == ViralStatus.READY
+
+    assert len(stub.calls) == 1
+    text = stub.calls[0][-1]
+    assert "Video sẵn sàng đăng tay" in text
+    assert "Chưa có caption" in text
+
+
+def test_h12_bam_tay_tren_web_van_ban_tin_caption_rieng_nhu_cu(session_factory, reup_file, fake_ai, stub):
+    """ADR-021/022 không đổi: `notify` mặc định True nên đường bấm tay giữ nguyên."""
+    mid = _material_for_caption(session_factory)
+
+    with session_factory() as db:
+        ok, _ = ViralService.generate_caption_for_material(db, mid)
+        assert ok
+
+    assert len(stub.calls) == 1
+    assert "Caption đã viết xong" in stub.calls[0][-1]
+
+
+def test_h13_doc_o_cai_dat_hong_thi_video_van_READY_va_van_co_thong_bao(
+    session_factory, fake_pipeline, fake_ai, stub, monkeypatch
+):
+    """
+    Hồi quy: bản đầu chỉ bọc try/except quanh lời gọi AI, không bọc lượt đọc ô cài đặt.
+    Đọc `runtime_settings` cũng đụng DB — hỏng ở đó là ngoại lệ thoát ra và đánh FAILED
+    một video đã xử lý xong, đã commit READY. Suite bắt được ca này ở 3 test khác.
+    """
+    from app.core import settings as runtime_settings
+
+    def no_table(*a, **k):
+        raise RuntimeError("no such table: runtime_settings")
+
+    monkeypatch.setattr(runtime_settings, "get_bool", no_table)
+    mid = _new_material(session_factory, url="https://www.facebook.com/reel/30")
+
+    with session_factory() as db:
+        ok, msg = ViralService.process_material(db, mid)
+        assert ok, msg
+        assert db.get(ViralMaterial, mid).status == ViralStatus.READY
+
+    assert fake_ai["calls"] == 0
+    assert len(stub.calls) == 1
+    assert "Video sẵn sàng đăng tay" in stub.calls[0][-1]

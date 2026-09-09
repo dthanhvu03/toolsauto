@@ -287,6 +287,19 @@ SETTINGS: dict[str, SettingSpec] = {
         description="skip = không thêm vào kho; flag = vẫn thêm và hiện badge trên UI.",
         choices=["skip", "flag"],
     ),
+    "viral.auto_caption_on_ready": SettingSpec(
+        key="viral.auto_caption_on_ready",
+        type="bool",
+        default_getter=lambda: True,
+        title="Tự viết caption khi video sẵn sàng đăng tay",
+        section="Quét TikTok & Viral",
+        description=(
+            "ADR-027: video xào chẻ xong mà không có tài khoản (đăng tay) thì cho AI viết caption "
+            "ngay, rồi bắn MỘT tin Telegram có cả file video lẫn caption bấm-là-chép — không phải "
+            "mở web nữa. Mỗi video tốn thêm một lượt Whisper + AI (vài chục giây tới vài phút) và "
+            "tính vào key AI của bạn. Tắt ⇒ quay về báo video xong rồi tự bấm Viết caption trên web."
+        ),
+    ),
     "viral.phash_max_distance": SettingSpec(
         key="viral.phash_max_distance",
         type="int",

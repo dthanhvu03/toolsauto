@@ -170,25 +170,45 @@ class NotifierService:
         if not sent_video:
             cls._broadcast_with_buttons(msg, buttons)
 
+    # Telegram cắt caption của tin có media ở 1024 ký tự (telegram_client.send_video làm
+    # ``caption[:1024]``). Đo trên chuỗi HTML thô — dài hơn phần chữ Telegram hiển thị sau khi
+    # bóc thẻ — nên ngưỡng này nghiêng về phía an toàn: thà tách sớm một nhịp còn hơn để Owner
+    # dán ra một caption cụt đuôi, hoặc cắt giữa thẻ HTML làm Telegram trả 400 (mất cả tin).
+    TELEGRAM_MEDIA_CAPTION_LIMIT = 1024
+
     @classmethod
     def notify_material_ready(cls, mat, media_path: Optional[str] = None):
         """
-        ADR-022 — material về ``READY`` (không account ⇒ không Job): Owner tải file đăng tay.
+        ADR-022 + ADR-027 — material về ``READY`` (không account ⇒ không Job): Owner tải file
+        đăng tay ngay trong Telegram.
 
         Gửi kèm **video** nếu file còn đó và dưới ngưỡng Telegram (giống
-        ``notify_style_selection``), không thì gửi chữ. Đây là thông báo *phụ* của một việc
-        đã commit xong — mọi lỗi chỉ ghi log, KHÔNG BAO GIỜ raise ngược lên processor.
+        ``notify_style_selection``), không thì gửi chữ. Tin mang luôn khối caption bấm-là-chép
+        (ADR-027); nếu dài quá hạn caption của tin có media thì **tách hai tin** để khối
+        caption không bao giờ bị cắt.
+
+        Đây là thông báo *phụ* của một việc đã commit xong — mọi lỗi chỉ ghi log, KHÔNG BAO
+        GIỜ raise ngược lên processor.
         """
         try:
             msg = nf.material_ready_message(mat, media_path)
-            if (
+            with_video = (
                 media_path
                 and os.path.exists(media_path)
                 and media_thumb.telegram_video_within_size_limit(media_path)
-            ):
-                cls._broadcast_video(media_path, msg)
-            else:
+            )
+            if not with_video:
                 cls._broadcast(msg)
+                return
+
+            block = nf.material_caption_block(mat)
+            if block and len(msg) > cls.TELEGRAM_MEDIA_CAPTION_LIMIT:
+                cls._broadcast_video(
+                    media_path, nf.material_ready_message(mat, media_path, with_caption=False)
+                )
+                cls._broadcast(block)
+            else:
+                cls._broadcast_video(media_path, msg)
         except Exception as e:
             logger.warning("NotifierService: notify_material_ready lỗi (%s) — bỏ qua.", e)
 
