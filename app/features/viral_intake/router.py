@@ -275,6 +275,8 @@ def _scan_all_sources_in_background() -> None:
 
 @router.get("/sources", response_class=HTMLResponse)
 def list_sources(request: Request, db: Session = Depends(get_db)):
+    """Fragment htmx: bảng nguồn. Vỏ trang là `GET /app/viral/sources`
+    (`app/platform/dashboard_shell/router.py:app_viral_sources`, ADR-025)."""
     try:
         sources = _source_service().list_sources(db)
     except Exception:

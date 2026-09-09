@@ -84,6 +84,19 @@ def app_viral(request: Request, db: Session = Depends(get_db)):
     """SaaS UI (beta): Viral page wrapper."""
     return templates.TemplateResponse("pages/app_viral.html", {"request": request})
 
+@router.get("/app/viral/sources", response_class=HTMLResponse)
+def app_viral_sources(request: Request):
+    """SaaS UI: trang "Nguồn video" — kênh TikTok/YouTube tự quét (ADR-025).
+
+    Trước đây là khối <details> gấp/mở trong /app/viral; tách ra trang riêng vì mục sidebar
+    trỏ vào khối gấp thì trạng thái hiện/ẩn phụ thuộc localStorage từng máy.
+
+    Chỉ dựng vỏ trang — KHÔNG nhận `db`: dữ liệu nguồn do fragment htmx `GET /viral/sources`
+    (`app/features/viral_intake/router.py:list_sources`) nạp sau khi trang tải xong. Hai
+    đường dẫn chỉ khác nhau tiền tố `/app`; sửa nhầm file là bẫy có thật.
+    """
+    return templates.TemplateResponse("pages/app_viral_sources.html", {"request": request})
+
 @router.get("/app/accounts", response_class=HTMLResponse)
 def app_accounts(request: Request, db: Session = Depends(get_db)):
     """SaaS UI: Accounts page (Now using Split View by default)."""

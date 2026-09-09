@@ -132,71 +132,11 @@
         <span class="basis-full text-[11px] text-[var(--color-mist)]">Chỉ dán video bạn được phép dùng lại.</span>
       </form>
 
-      {# Không đặt `open` cứng: trạng thái đóng/mở đọc từ localStorage 'viral.sourcesPanelOpen'
-         (xem script cuối trang). Mặc định đóng khi màn hẹp để bảng video nằm ngay tầm mắt. #}
-      <details id="viral-sources-panel" class="mt-3 rounded-lg border border-[var(--border)] bg-[var(--color-face)]">
-        <summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-[var(--color-ink)]">
-          Nguồn tự động
-          <span class="ml-1 text-[11px] font-normal text-[var(--color-mist)]">— kênh TikTok / YouTube Shorts, tự quét mỗi giờ (ADR-019)</span>
-        </summary>
-        <div class="px-3 pb-3">
-          <form class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-end"
-                hx-post="/viral/sources/add" hx-swap="none"
-                hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]"
-                hx-on::after-request="if (event.detail.successful) this.reset()">
-            <div class="grow min-w-0 md:min-w-[14rem]">
-              <label class="block text-xs text-[var(--muted)] mb-1">URL kênh</label>
-              <input name="url" type="text" required autocomplete="off" class="app-input w-full"
-                     placeholder="tiktok.com/@kenh hoặc youtube.com/@kenh" />
-            </div>
-            <div>
-              <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
-              <input name="min_views" type="number" min="0" step="1000" class="app-input w-full md:w-28" placeholder="mặc định" />
-            </div>
-            <div>
-              <label class="block text-xs text-[var(--muted)] mb-1">Max video/lần</label>
-              <input name="max_videos" type="number" min="1" max="500" class="app-input w-full md:w-24" placeholder="mặc định" />
-            </div>
-            <div>
-              <label for="src-target-pages" class="block text-xs text-[var(--muted)] mb-1">Page đích</label>
-              {# ADR-020 mục 6: nhiều Page, mỗi dòng một URL. Không dùng .app-input vì class đó ép height cố định. #}
-              <textarea id="src-target-pages" name="target_pages" rows="2" autocomplete="off"
-                        aria-describedby="src-target-pages-warn"
-                        class="w-full md:w-52 resize-y rounded-md border border-[var(--border)] bg-[var(--color-deep)] px-3 py-1.5 text-sm leading-snug text-[var(--color-ink)]"
-                        placeholder="Mỗi dòng một Page — để trống nếu đăng tay"></textarea>
-            </div>
-            <p id="src-target-pages-warn" class="md:order-last md:basis-full text-[11px] text-[var(--color-danger)]">
-              Mỗi video sẽ đăng lên TẤT CẢ Page ở đây — nội dung trùng nhau giữa các Page, Facebook dễ đánh spam.
-              Page mới nên để trống hoặc chỉ 1 Page.
-            </p>
-            <button type="submit"
-                    class="viral-busy-btn app-btn border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] hover:brightness-110"
-                    title="Thêm kênh vào danh sách quét tự động">
-              <span class="btn-idle">Thêm</span>
-              <span class="btn-busy htmx-indicator">Đang thêm…</span>
-            </button>
-            <button type="button"
-                    class="viral-busy-btn app-btn border-indigo-400/40 bg-indigo-500/15 text-indigo-200 hover:brightness-110"
-                    hx-post="/viral/sources/scan-all" hx-swap="none"
-                    hx-indicator="this" hx-disabled-elt="this"
-                    title="Quét ngay mọi nguồn đang bật, bỏ qua lịch mỗi giờ (chạy nền)">
-              <span class="btn-idle">Quét tất cả</span>
-              <span class="btn-busy htmx-indicator">Đang quét…</span>
-            </button>
-          </form>
-          <p class="mt-2 text-[11px] text-[var(--color-mist)]">
-            Facebook/Instagram không liệt kê được kênh — dán từng link video.
-            YouTube của người khác rủi ro bản quyền cao hơn TikTok; ưu tiên kênh brand/seller.
-          </p>
-          <div id="viral-sources" class="mt-2"
-               hx-get="/viral/sources" hx-trigger="load, refreshViralSources from:body" hx-swap="innerHTML">
-            <div class="p-3 text-sm text-[var(--muted)]">Đang tải nguồn…</div>
-          </div>
-        </div>
-      </details>
-
+      {# ADR-025: khối "Nguồn tự động" đã tách sang /app/viral/sources. Link này là thứ giữ
+         cho luồng không đứt đoạn với người đang đứng ở bảng video — đừng bỏ. #}
       <p class="mt-2 text-[11px] text-[var(--color-mist)]">
-        Cấu hình kênh nguồn: <a class="underline text-[var(--color-torch)]" href="/app/accounts">Tài khoản → Target Pages</a>
+        Kênh tự quét: <a class="underline text-[var(--color-torch)]" href="/app/viral/sources">Nguồn video</a>
+        · Cấu hình kênh nguồn: <a class="underline text-[var(--color-torch)]" href="/app/accounts">Tài khoản → Target Pages</a>
         · Kho kênh: <a class="underline text-[var(--color-torch)]" href="/app/tiktok-links">Nguồn TikTok</a>
         · Job: <a class="underline text-[var(--color-torch)]" href="/app/jobs">Hàng đợi</a>
       </p>
@@ -210,26 +150,6 @@
   </div>
 
   <script>
-    // Khối "Nguồn tự động" nhớ trạng thái đóng/mở theo trình duyệt.
-    // Chưa có lựa chọn nào: màn hẹp (< 1280) mở trang là đóng sẵn — bảng video nằm ngay
-    // trong tầm mắt; màn rộng vẫn mở như trước. Người dùng đóng/mở một lần thì giữ mãi.
-    (function () {
-      const panel = document.getElementById('viral-sources-panel');
-      if (!panel) return;
-      const KEY = 'viral.sourcesPanelOpen';
-      let saved = null;
-      try { saved = localStorage.getItem(KEY); } catch (e) { saved = null; }
-      panel.open = (saved === null) ? (window.innerWidth >= 1280) : (saved === '1');
-      // Gắn listener ở tick sau: sự kiện `toggle` do dòng trên sinh ra đã bắn xong,
-      // nên mặc định theo bề ngang KHÔNG bị ghi vào localStorage — chỉ lựa chọn của
-      // người dùng mới được nhớ.
-      setTimeout(function () {
-        panel.addEventListener('toggle', function () {
-          try { localStorage.setItem(KEY, panel.open ? '1' : '0'); } catch (e) { /* chế độ ẩn danh */ }
-        });
-      }, 0);
-    })();
-
     let viralAutoTimer = null;
     function setViralQueryParams(next) {
       const url = new URL(window.location.href);

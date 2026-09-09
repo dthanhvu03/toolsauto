@@ -160,7 +160,7 @@
 
         {{ nav_section('Facebook') }}
         <a href="/app/viral"
-          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/viral') %}is-active{% endif %} transition-colors">
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/viral') and not p.startswith('/app/viral/sources') %}is-active{% endif %} transition-colors">
           <svg
             class="w-5 h-5 shrink-0"
             fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -169,8 +169,11 @@
           <span class="truncate">Nội dung viral</span>
         </a>
 
-        <a href="/app/viral#viral-sources-panel"
-          class="nav-item flex items-center gap-3 px-3 py-2 rounded transition-colors">
+        {# ADR-025: trang riêng, không còn link neo vào khối gấp trong /app/viral.
+           Điều kiện `is-active` của "Nội dung viral" ở trên phải loại trừ đường dẫn này,
+           nếu không hai mục cùng sáng. #}
+        <a href="/app/viral/sources"
+          class="nav-item flex items-center gap-3 px-3 py-2 rounded {% if p.startswith('/app/viral/sources') %}is-active{% endif %} transition-colors">
           <svg
             class="w-5 h-5 shrink-0"
             fill="none" viewBox="0 0 24 24" stroke="currentColor">
