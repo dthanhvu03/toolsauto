@@ -21,7 +21,7 @@ from app.core.media.content_hash import sha256_file
 from app.core.media.video_protector import VideoProtector
 from app.core import settings as runtime_settings
 from app.features.viral_intake.dedup import find_duplicate
-from app.features.viral_intake.service import ViralService
+from app.features.viral_intake.service import ViralService, _clean_title_for_context
 
 
 logger = logging.getLogger(__name__)
@@ -858,7 +858,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             # Loi Drive chi ghi log, khong duoc lam hong viec xu ly video (ADR-012).
             from app.core.storage import offsite as _offsite
 
-            _offsite.copy_video_if_enabled(media_path)
+            # ADR-030: đặt tên bản chép theo tiêu đề + xếp thư mục theo tháng. Tiêu đề phải
+            # bóc marker Ở ĐÂY: `offsite` nằm ở app/core nên không được biết `[AI_GENERATE]`
+            # hay `### … ###` là gì (import-linter chặn core -> features).
+            _drive_dest = _offsite.copy_video_if_enabled(
+                media_path,
+                material_id=mat.id,
+                title=_clean_title_for_context(mat.title),
+            )
 
             # ADR-018: khong co account -> khong tao Job; Owner tai file _reup dang tay.
             if target_account is None:
@@ -893,7 +900,9 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 # ADR-022: luồng này không sinh Job nên không thông báo nào của job chạy.
                 from app.core.notifier.service import NotifierService
 
-                NotifierService.notify_material_ready(mat, media_path)
+                NotifierService.notify_material_ready(
+                    mat, media_path, drive_path=_offsite.relative_to_root(_drive_dest)
+                )
                 continue
 
             # Tạo Job DRAFT với AI_GENERATE và cắm cờ ORIGINAL_VIRAL_TITLE để truyền context

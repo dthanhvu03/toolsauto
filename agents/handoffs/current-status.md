@@ -1,5 +1,63 @@
 # Current Status
 
+## Phiên 2026-09-09 (e) — ADR-030: bản chép Drive đặt tên theo tiêu đề, xếp theo tháng
+
+Owner hỏi ba việc: gửi kèm đường dẫn video vào Telegram, đặt tên file khớp tiêu đề, chia thư
+mục theo tháng.
+
+**Đã nói rõ giới hạn trước khi làm:** Drive for Desktop chỉ **gắn ổ đĩa**, tool `copy2` vào
+thư mục cục bộ nên **không biết link `drive.google.com`**. Muốn link bấm được phải gọi Drive
+API (OAuth, file ID, quyền chia sẻ) — tách hẳn, không làm trong ADR này. Thứ làm được là
+**đường dẫn tương đối** dạng chữ, đủ để mở app Drive gõ tên là ra.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| Tên bản chép: `949 - Nay tui đi câu mực nha anh em.mp4`, giữ dấu tiếng Việt | `test_chep_video_dat_ten_theo_tieu_de_va_xep_thu_muc_thang` |
+| Giữ **ID ở đầu** vì kênh nguồn có 4 clip trùng tên "Muốn giàu phải ra biển" | `test_giu_id_o_dau_vi_kenh_nguon_co_nhieu_video_trung_ten` |
+| Lọc ký tự Windows cấm, cắt tiêu đề dài, rỗng ⇒ lùi về tên gốc | 9 ca parametrize |
+| Thư mục `videos/YYYY-MM/`; `backups` giữ phẳng | 2 test |
+| **Cơ chế bỏ qua bản y hệt (ADR-024) còn nguyên** | `copy2` gọi **0** lần ở lần chép thứ hai |
+| Tên file **gốc trên máy** không đổi | khẳng định trong cùng test |
+| Tin Telegram thêm dòng `📂 Trong Drive: …`, **không** gọi là "link" | `test_i1`, `test_i2`, `test_i4`, `test_i5` |
+| `app/core` vẫn không import `app/features` | `lint-imports`: 2 hợp đồng giữ, 0 vi phạm |
+| Toàn suite | **641 passed, 16 skipped, 0 failed** |
+
+**Một lỗi thật do test bắt:** lớp ký tự viết `[\/:*?"<>|…]` — trong regex `\/` chỉ là `/`
+nên **dấu `\` không bị lọc**, ra tên `1 - \.mp4`. Trên Windows một dấu `\` lọt vào tên file
+là biến nó thành đường dẫn thư mục, hỏng lượt chép. Đã sửa.
+
+**Hai test cũ phải sửa** (hành vi đổi có chủ ý, giữ nguyên ý định): đích có thêm cấp tháng; và
+mốc `copy_video_if_enabled(media_path)` đổi thành `copy_video_if_enabled(` vì lời gọi nay
+xuống nhiều dòng.
+
+### System State
+
+Bật Drive ⇒ mỗi video `_reup` vào `videos/<tháng>/<id> - <tiêu đề>.mp4`, và tin Telegram có
+dòng vị trí. Tắt Drive ⇒ mọi thứ y như trước. Không migration, không đụng luồng có account.
+
+### Unfinished + Blockers
+
+- **Chưa chạy thật trên Drive của Owner** — máy dev chưa gắn ổ Drive, test dùng thư mục tạm.
+  Owner phải cài Google Drive for Desktop rồi bật 2 ô ở `/app/settings` mới thấy tác dụng.
+- **Không có link Drive bấm được** — cần Drive API, một ADR riêng nếu Owner thật sự cần.
+- Nợ nhỏ: `processor.py` còn `import ViralService as _VS` trong hàm, nay thừa.
+- ADR-029 (yt_dlp_path ưu tiên venv + trang Sức khỏe báo đúng binary) **vẫn chưa làm** — Owner
+  chưa duyệt. Đã vá tạm bằng cách cập nhật yt-dlp toàn cục trên Windows lên 2026.08.19.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại web.**
+2. Muốn dùng tính năng này thì cài **Google Drive for Desktop** (chọn chế độ *truyền phát*,
+   không phải *sao chép*), rồi `/app/settings` bật **"Sao lưu ngoại vi"** + **"Chép video đã
+   xử lý"** và điền đường dẫn thư mục Drive.
+3. Việc kinh doanh đang treo: đăng bài đầu tiên lên Page **"Mê Câu Cá"** (12 video đã sẵn
+   sàng), thêm ảnh bìa, và thêm 2-3 kênh nguồn vì `@thacaukechuyen` đang chiếm 100%.
+4. Anti: quyết PLAN cho khối badge page header (`layouts/app.html`).
+
+---
+
 ## Phiên 2026-09-09 (d) — ADR-028: kênh TikTok không liệt kê được bằng @handle
 
 Owner báo nguồn `@thacaukechuyen` quét ra lỗi, bảng cắt còn `ERROR: [tiktok:user]… Una…`.

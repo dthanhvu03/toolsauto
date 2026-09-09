@@ -177,7 +177,7 @@ class NotifierService:
     TELEGRAM_MEDIA_CAPTION_LIMIT = 1024
 
     @classmethod
-    def notify_material_ready(cls, mat, media_path: Optional[str] = None):
+    def notify_material_ready(cls, mat, media_path: Optional[str] = None, drive_path: Optional[str] = None):
         """
         ADR-022 + ADR-027 — material về ``READY`` (không account ⇒ không Job): Owner tải file
         đăng tay ngay trong Telegram.
@@ -191,7 +191,7 @@ class NotifierService:
         GIỜ raise ngược lên processor.
         """
         try:
-            msg = nf.material_ready_message(mat, media_path)
+            msg = nf.material_ready_message(mat, media_path, drive_path=drive_path)
             with_video = (
                 media_path
                 and os.path.exists(media_path)
@@ -204,7 +204,10 @@ class NotifierService:
             block = nf.material_caption_block(mat)
             if block and len(msg) > cls.TELEGRAM_MEDIA_CAPTION_LIMIT:
                 cls._broadcast_video(
-                    media_path, nf.material_ready_message(mat, media_path, with_caption=False)
+                    media_path,
+                    nf.material_ready_message(
+                        mat, media_path, with_caption=False, drive_path=drive_path
+                    ),
                 )
                 cls._broadcast(block)
             else:

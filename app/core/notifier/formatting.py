@@ -163,12 +163,22 @@ def material_caption_block(mat) -> str:
     )
 
 
-def material_ready_message(mat, media_path: Optional[str] = None, *, with_caption: bool = True) -> str:
+def material_ready_message(
+    mat,
+    media_path: Optional[str] = None,
+    *,
+    with_caption: bool = True,
+    drive_path: Optional[str] = None,
+) -> str:
     """
     ADR-018 + ADR-022 + ADR-027: video reup xong, không có account ⇒ Owner đăng tay.
 
     ``with_caption=False`` dùng khi tin quá dài phải tách: phần đầu đi kèm video, khối
     caption đi ở tin thứ hai (xem ``NotifierService.notify_material_ready``).
+
+    ``drive_path`` (ADR-030) là **vị trí trong Drive**, KHÔNG phải link bấm được — Drive for
+    Desktop chỉ gắn ổ đĩa nên tool không biết link ``drive.google.com``. Nhãn trong tin phải
+    nói đúng thứ nó là; hứa "link" rồi đưa ra chữ không bấm được là nhãn nói dối (ADR-023).
     """
     title = _clean_material_title(getattr(mat, "title", None)) or "(không có tiêu đề)"
     platform = str(getattr(mat, "platform", "") or "—")
@@ -176,12 +186,16 @@ def material_ready_message(mat, media_path: Optional[str] = None, *, with_captio
     file_name = os.path.basename(str(media_path)) if media_path else ""
     file_line = f"📁 <code>{html_mod.escape(file_name)}</code>\n" if file_name else ""
 
+    drive_line = (
+        f"📂 Trong Drive: <code>{html_mod.escape(str(drive_path))}</code>\n" if drive_path else ""
+    )
     head = (
         f"🎬 <b>Video sẵn sàng đăng tay</b>\n"
         f"📋 Material #{getattr(mat, 'id', '?')} | {html_mod.escape(platform)}\n"
         f"📝 <i>{html_mod.escape(title)}</i>\n"
         f"👁 {views:,} lượt xem\n"
         f"{file_line}"
+        f"{drive_line}"
     )
     if not with_caption:
         return head.rstrip("\n")

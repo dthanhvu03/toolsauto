@@ -745,3 +745,51 @@ def test_h13_doc_o_cai_dat_hong_thi_video_van_READY_va_van_co_thong_bao(
     assert fake_ai["calls"] == 0
     assert len(stub.calls) == 1
     assert "Video sẵn sàng đăng tay" in stub.calls[0][-1]
+
+
+# ───────── (i) ADR-030: dòng vị trí trong Drive ─────────
+
+DRIVE_REL = "videos/2026-09/949 - Nay tui đi câu mực nha anh em.mp4"
+
+
+def test_i1_co_drive_path_thi_tin_bao_VI_TRI_chu_khong_hua_la_link():
+    """
+    Drive for Desktop chỉ gắn ổ đĩa — tool không biết link drive.google.com. Gọi nó là
+    "link" rồi đưa ra chữ không bấm được chính là nhãn nói dối kiểu ADR-023.
+    """
+    text = nf.material_ready_message(FakeMaterial(id=949), "/x/viral_949_reup.mp4", drive_path=DRIVE_REL)
+
+    assert "Trong Drive" in text and DRIVE_REL in text
+    assert "link" not in text.lower()
+
+
+def test_i2_khong_bat_drive_thi_tin_y_nhu_cu():
+    text = nf.material_ready_message(FakeMaterial(id=949), "/x/viral_949_reup.mp4")
+
+    assert "Trong Drive" not in text
+
+
+def test_i3_duong_dan_drive_cung_duoc_escape():
+    text = nf.material_ready_message(FakeMaterial(), "/x/a.mp4", drive_path='videos/2026-09/1 - <a> & "b".mp4')
+
+    assert "&lt;a&gt;" in text and "&amp;" in text
+
+
+def test_i4_tach_tin_thi_phan_dau_di_kem_video_van_giu_dong_drive(stub, tmp_path):
+    """Video quá 50MB không gửi được file — lúc đó dòng vị trí Drive là đường duy nhất
+    để Owner lấy video, càng không được rơi mất khi tin bị tách."""
+    video = tmp_path / "viral_9_reup.mp4"
+    video.write_bytes(b"\x00" * 1024)
+    mat = FakeMaterial(id=9, ai_caption="x" * 1200, hashtags=["#dai"])
+
+    NotifierService.notify_material_ready(mat, str(video), drive_path=DRIVE_REL)
+
+    assert [c[0] for c in stub.calls] == ["video", "text"]
+    assert DRIVE_REL in stub.calls[0][-1]
+
+
+def test_i5_khong_gui_duoc_video_thi_tin_chu_van_co_dong_drive(stub):
+    NotifierService.notify_material_ready(FakeMaterial(id=9), None, drive_path=DRIVE_REL)
+
+    assert len(stub.calls) == 1 and stub.calls[0][0] == "text"
+    assert DRIVE_REL in stub.calls[0][-1]

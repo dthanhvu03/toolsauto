@@ -17,7 +17,9 @@ Ba nguyên tắc, đừng phá khi sửa về sau:
 from __future__ import annotations
 
 import os
+import re
 import shutil
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -30,6 +32,57 @@ SUBDIRS: dict[str, str] = {
     "backup": "backups",
     "video": "videos",
 }
+
+
+# Ký tự Windows từ chối trong tên file, cộng ký tự điều khiển.
+_BAD_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+# Cắt phần tiêu đề, KHÔNG tính số ID và đuôi file. Windows giới hạn cả đường dẫn ở 260 ký tự
+# và bản chép còn nằm sâu trong thư mục Drive, nên chừa rộng tay.
+_TITLE_MAX_LEN = 80
+
+
+def safe_video_name(src_name: str, material_id: Optional[int], title: Optional[str]) -> str:
+    """
+    Tên file cho bản chép trên Drive: ``949 - Nay tui đi câu mực nha anh em.mp4`` (ADR-030).
+
+    Giữ **ID ở đầu** chứ không chỉ mỗi tiêu đề: kênh nguồn có nhiều video **trùng tên nhau**
+    (4 clip cùng tên "Muốn giàu phải ra biển") — bỏ ID là chúng ghi đè lẫn nhau; và ID khớp
+    số hiển thị trên web nên đối chiếu được.
+
+    **Giữ dấu tiếng Việt**: Windows và Drive đều chịu được UTF-8, bỏ dấu là mất đúng cái dễ
+    đọc mà tên này sinh ra để có. Chỉ bỏ thứ hệ thống tệp thật sự từ chối.
+
+    ``title`` phải **đã sạch marker** (``[AI_GENERATE]``, ``### … ###``): module này nằm ở
+    ``app/core`` nên không được biết chuyện của feature — import-linter chặn cứng.
+    Không còn gì sau khi làm sạch ⇒ lùi về tên gốc, không bao giờ trả chuỗi rỗng.
+    """
+    suffix = Path(src_name).suffix or ".mp4"
+    clean = _BAD_FILENAME_CHARS.sub(" ", str(title or ""))
+    clean = re.sub(r"\s+", " ", clean).strip()
+    clean = clean[:_TITLE_MAX_LEN].strip()
+    # Windows từ chối tên kết thúc bằng dấu chấm hoặc khoảng trắng.
+    clean = clean.rstrip(". ")
+    if not clean:
+        return src_name
+    prefix = f"{material_id} - " if material_id else ""
+    return f"{prefix}{clean}{suffix}"
+
+
+def relative_to_root(dest: Optional[Path]) -> Optional[str]:
+    """Đường dẫn tương đối trong Drive (``videos/2026-09/…mp4``) để hiện cho người dùng.
+
+    KHÔNG phải link bấm được: Drive for Desktop chỉ gắn ổ đĩa, tool không biết link
+    ``drive.google.com`` của file. Muốn link thật phải gọi Drive API — ngoài phạm vi ADR-030.
+    """
+    if dest is None:
+        return None
+    root = get_root()
+    if root is None:
+        return None
+    try:
+        return dest.relative_to(root).as_posix()
+    except ValueError:
+        return dest.name
 
 
 def _settings():
@@ -76,7 +129,12 @@ def check_root(root: Optional[Path] = None) -> tuple[bool, str]:
     return True, f"Thư mục dùng được: {root}"
 
 
-def copy_video_if_enabled(src: str | os.PathLike[str]) -> Optional[Path]:
+def copy_video_if_enabled(
+    src: str | os.PathLike[str],
+    *,
+    material_id: Optional[int] = None,
+    title: Optional[str] = None,
+) -> Optional[Path]:
     """
     Chép video ``_reup`` sang Drive khi Owner bật "Chép video đã xử lý" (ADR-023).
 
@@ -90,12 +148,28 @@ def copy_video_if_enabled(src: str | os.PathLike[str]) -> Optional[Path]:
     except Exception as exc:  # pragma: no cover - doc setting hong khong duoc chan reup
         logger.debug("[offsite] khong doc duoc DRIVE_COPY_VIDEOS: %s", exc)
         return None
-    return copy_out(src, "video")
+    # ADR-030: tên theo tiêu đề + thư mục theo tháng. `title` phải đã sạch marker.
+    return copy_out(
+        src,
+        "video",
+        dest_name=safe_video_name(Path(src).name, material_id, title),
+        month_folder=True,
+    )
 
 
-def copy_out(src: str | os.PathLike[str], kind: str) -> Optional[Path]:
+def copy_out(
+    src: str | os.PathLike[str],
+    kind: str,
+    *,
+    dest_name: Optional[str] = None,
+    month_folder: bool = False,
+) -> Optional[Path]:
     """
     Chép một file sang Drive. Trả đường dẫn đích, hoặc None khi bỏ qua/thất bại.
+
+    ``dest_name`` đổi tên bản chép (bản gốc trên máy giữ nguyên); ``month_folder`` xếp thêm
+    một cấp ``YYYY-MM``. Cả hai mặc định tắt để ``kind="backup"`` giữ nguyên chỗ cũ — lệnh
+    khôi phục đang trông vào thư mục phẳng đó (ADR-030).
 
     KHÔNG BAO GIỜ ném lỗi ra ngoài: người gọi là lệnh backup và luồng đăng bài, hai
     chỗ đó không được chết chỉ vì Drive chưa gắn ổ.
@@ -115,9 +189,11 @@ def copy_out(src: str | os.PathLike[str], kind: str) -> Optional[Path]:
         return None
 
     dest_dir = root / SUBDIRS.get(kind, kind)
+    if month_folder:
+        dest_dir = dest_dir / time.strftime("%Y-%m")
     try:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        dest = dest_dir / src_path.name
+        dest = dest_dir / (dest_name or src_path.name)
         # ADR-024: ban dich da y het thi bo qua — moi lan "Reup lai" khong phai tai len
         # lai ca video 30 MB. Ten file da gan material_id nen cung ten + cung co la cung ban.
         if dest.is_file() and dest.stat().st_size == src_path.stat().st_size:
