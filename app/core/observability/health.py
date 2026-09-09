@@ -17,21 +17,92 @@ logger = logging.getLogger(__name__)
 _GEMINI_LOGIN_SCRIPT = Path("scripts") / "login_gemini_bypass.py"
 
 
+# Đo phiên bản sinh một tiến trình con. `get_system_health` được gọi bởi trang web,
+# `/health/json` và cả lệnh Telegram — nhớ tạm 5 phút là quá đủ vì phiên bản không đổi giữa
+# hai lần khởi động (ADR-029 mục 4).
+_YTDLP_PROBE_TTL_SEC = 300
+_ytdlp_probe_cache: dict = {"at": 0.0, "value": None}
+
+
+def _version_key(v: str) -> tuple:
+    """So phiên bản theo SỐ, không theo chuỗi: `"2026.8.19" < "2026.3.3"` là sai khi so chuỗi."""
+    return tuple(int(x) if x.isdigit() else 0 for x in str(v).split("."))
+
+
+def _probe_ytdlp_binary() -> dict:
+    """
+    Chạy ``--version`` trên **chính argv mà ``yt_dlp_cmd`` sẽ dùng** (ADR-029 mục 2).
+
+    Đây mới là sự thật về cái tool đang chạy. Đọc phiên bản **gói** bằng
+    ``importlib.metadata`` chỉ nói lên bản trong venv — hai thứ có thể khác nhau, và ngày
+    2026-09-09 đúng là khác nhau (binary trên PATH cũ 17 tháng).
+
+    Không bao giờ ném: trang Sức khỏe không được chết vì một lượt đo phiên bản.
+    """
+    import subprocess
+    import time as _time
+
+    now = _time.time()
+    cached = _ytdlp_probe_cache.get("value")
+    if cached is not None and now - float(_ytdlp_probe_cache.get("at") or 0) < _YTDLP_PROBE_TTL_SEC:
+        return cached
+
+    result = {"binary": None, "version": None, "error": None}
+    try:
+        from app.core.yt_dlp_path import yt_dlp_cmd
+
+        argv = yt_dlp_cmd("--version")
+        result["binary"] = argv[0] if len(argv) == 1 else " ".join(str(a) for a in argv[:-1])
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+        if proc.returncode == 0:
+            result["version"] = (proc.stdout or "").strip() or None
+        else:
+            result["error"] = ((proc.stderr or "").strip() or f"exit {proc.returncode}")[:200]
+    except Exception as exc:
+        result["error"] = f"không chạy được yt-dlp: {exc}"[:200]
+
+    _ytdlp_probe_cache["at"] = now
+    _ytdlp_probe_cache["value"] = result
+    return result
+
+
 def _ytdlp_version_status() -> dict:
     """
-    So phiên bản yt-dlp đang cài với bản ghim trong ``requirements.txt``.
+    So phiên bản yt-dlp **đang thật sự chạy** với bản ghim trong ``requirements.txt``.
 
     Vì sao cần: TikTok/YouTube đổi cấu trúc liên tục, yt-dlp vá theo. Bản cũ gãy âm thầm —
     quét kênh trả "Unable to extract secondary user ID" mà không ai biết là do phần mềm cũ
     (đúng ca 2026-09-08 trên máy Owner). Chỉ ĐỌC, không tự cập nhật.
+
+    ADR-029: ``installed`` nay là phiên bản của **binary tool gọi**, không phải của gói trong
+    venv. ``package`` giữ số của gói để đối chiếu; lệch nhau (``mismatch``) nghĩa là có một
+    bản yt-dlp lạ chen vào — chính cảnh báo này, nếu có từ trước, đã cắt ngắn buổi chẩn đoán
+    2026-09-09 còn một phút.
     """
-    info = {"installed": None, "pinned": None, "outdated": False, "error": None}
+    info = {
+        "installed": None, "pinned": None, "outdated": False, "error": None,
+        "binary": None, "package": None, "mismatch": False,
+    }
     try:
         from importlib.metadata import version as _pkg_version
 
-        info["installed"] = _pkg_version("yt-dlp")
+        info["package"] = _pkg_version("yt-dlp")
     except Exception as exc:
-        info["error"] = f"không đọc được phiên bản đang cài: {exc}"
+        info["error"] = f"không đọc được phiên bản gói: {exc}"
+
+    probe = _probe_ytdlp_binary()
+    info["binary"] = probe.get("binary")
+    info["installed"] = probe.get("version") or info["package"]
+    if probe.get("error") and not info["error"]:
+        info["error"] = probe["error"]
+    # Tính NGAY tại đây, trước lượt đọc `requirements.txt`: đường đó có `return` sớm khi đọc
+    # hỏng, mà cảnh báo "có yt-dlp lạ chen vào" lại là thứ đáng giá nhất — không được biến mất
+    # chỉ vì một thứ khác cũng hỏng.
+    if info["package"] and probe.get("version"):
+        info["mismatch"] = _version_key(probe["version"]) != _version_key(info["package"])
+
+    if not info["installed"]:
+        info["error"] = info["error"] or "không đọc được phiên bản đang chạy"
         return info
     try:
         import re as _re
@@ -46,11 +117,8 @@ def _ytdlp_version_status() -> dict:
         info["error"] = f"không đọc được requirements.txt: {exc}"
         return info
 
-    def _key(v: str) -> tuple:
-        return tuple(int(x) if x.isdigit() else 0 for x in str(v).split("."))
-
     if info["pinned"] and info["installed"]:
-        info["outdated"] = _key(info["installed"]) < _key(info["pinned"])
+        info["outdated"] = _version_key(info["installed"]) < _version_key(info["pinned"])
     return info
 
 
@@ -243,6 +311,12 @@ class HealthService:
             degradation_reasons.append(
                 f"yt-dlp cũ ({ytdlp['installed']} < {ytdlp['pinned']}) — quét kênh/tải video có thể gãy. "
                 r"Chạy: venv\Scripts\python.exe -m pip install -r requirements.txt"
+            )
+        if ytdlp.get("mismatch"):
+            status = "degraded"
+            degradation_reasons.append(
+                f"yt-dlp đang chạy ({ytdlp['installed']}) khác bản trong venv ({ytdlp['package']}) — "
+                f"tool gọi {ytdlp.get('binary')}. Có một bản yt-dlp lạ chen vào."
             )
 
         return {

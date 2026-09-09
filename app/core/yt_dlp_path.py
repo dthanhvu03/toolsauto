@@ -9,12 +9,15 @@ from pathlib import Path
 def yt_dlp_binary() -> str | list[str]:
     """Return a subprocess argv head: path string or ``[python, -m, yt_dlp]``.
 
-    Order: PATH → venv Scripts/bin next to ``sys.executable`` → ``python -m yt_dlp``.
-    """
-    found = shutil.which("yt-dlp") or shutil.which("yt-dlp.exe")
-    if found:
-        return found
+    Thứ tự (ADR-029): binary cạnh ``sys.executable`` → ``python -m yt_dlp`` → PATH → tên trần.
 
+    **PATH đứng sau cùng, không phải đầu tiên.** Ngày 2026-09-09 máy Owner có một
+    ``yt-dlp.exe`` cài toàn cục **cũ 17 tháng** nằm trên PATH, thắng bản 2026.8.19 ghim trong
+    ``requirements.txt`` — quét TikTok gãy âm thầm, mà trang Sức khỏe lại đọc phiên bản gói
+    trong venv nên vẫn báo "ổn". Hai nấc đầu đi theo đúng trình thông dịch đang chạy tool nên
+    **luôn khớp bản đã ghim**; PATH chỉ còn là phương án dự phòng — đúng ý định ban đầu của
+    hàm này ("để chạy được khi venv không nằm trên PATH").
+    """
     bin_dir = Path(sys.executable).parent
     for name in ("yt-dlp.exe", "yt-dlp", "yt_dlp.exe"):
         candidate = bin_dir / name
@@ -26,11 +29,18 @@ def yt_dlp_binary() -> str | list[str]:
     if linux_bin.is_file():
         return str(linux_bin)
 
+    # Gói cài trong chính trình thông dịch đang chạy — vẫn là bản đã ghim, vẫn hơn PATH.
     try:
         import yt_dlp  # noqa: F401
+
+        return [sys.executable, "-m", "yt_dlp"]
     except ImportError:
-        return "yt-dlp"
-    return [sys.executable, "-m", "yt_dlp"]
+        pass
+
+    found = shutil.which("yt-dlp") or shutil.which("yt-dlp.exe")
+    if found:
+        return found
+    return "yt-dlp"
 
 
 def yt_dlp_cmd(*args: str) -> list[str]:

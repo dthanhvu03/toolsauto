@@ -229,10 +229,24 @@
                         title="{% if health.ytdlp.outdated %}Cũ hơn bản ghim {{ health.ytdlp.pinned }} — quét kênh/tải video có thể gãy. Chạy: venv\Scripts\python.exe -m pip install -r requirements.txt{% else %}Khớp bản ghim trong requirements.txt{% endif %}">
                         {{ health.ytdlp.installed }}
                     </dd>
+                    {# ADR-029: hiện ĐƯỜNG DẪN binary tool thật sự gọi. Trước đây ô này đọc phiên bản
+                       gói trong venv nên báo "ổn" trong khi tool chạy một bản cũ 17 tháng trên PATH. #}
+                    {% if health.ytdlp.binary %}
+                    <p class="mt-1 text-[11px] leading-snug text-gray-500 break-all" title="Đây là binary tool thật sự gọi khi quét kênh và tải video">
+                        Đang gọi: <code>{{ health.ytdlp.binary }}</code>
+                    </p>
+                    {% endif %}
                     {% if health.ytdlp.outdated %}
                     <p class="mt-1 text-[11px] leading-snug text-red-600">
                         Cũ hơn bản ghim <b>{{ health.ytdlp.pinned }}</b>. TikTok/YouTube đổi liên tục, bản cũ
                         gãy âm thầm khi quét kênh. Chạy <code>pip install -r requirements.txt</code> rồi khởi động lại.
+                    </p>
+                    {% endif %}
+                    {% if health.ytdlp.mismatch %}
+                    <p class="mt-1 text-[11px] leading-snug text-red-600">
+                        Bản đang chạy <b>{{ health.ytdlp.installed }}</b> khác bản trong venv
+                        <b>{{ health.ytdlp.package }}</b> — có một yt-dlp lạ chen vào. Gỡ nó khỏi PATH,
+                        hoặc cập nhật chính nó.
                     </p>
                     {% endif %}
                     {% else %}

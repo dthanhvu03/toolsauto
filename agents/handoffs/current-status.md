@@ -1,5 +1,54 @@
 # Current Status
 
+## Phiên 2026-09-09 (f) — ADR-029: chạy đúng yt-dlp đã ghim, Sức khỏe báo đúng cái đang chạy
+
+Vá nốt ba thứ còn nợ sau khi Owner hỏi "em vá hết chưa" — câu trả lời lúc đó là **chưa**.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| `yt_dlp_binary()` đảo thứ tự: **venv → `python -m yt_dlp` → PATH → tên trần** | `tests/test_yt_dlp_path.py` (7 test). Máy dev nay chọn `venv\Scripts\yt-dlp.exe` |
+| Trang Sức khỏe báo phiên bản **của binary đang chạy** + đường dẫn | `test_installed_lay_tu_binary_chu_khong_phai_goi_trong_venv` |
+| Cảnh báo `mismatch` khi binary lệch gói trong venv | 2 test; đây chính là thứ đã cắt ngắn được buổi mò lỗi sáng nay |
+| Đo phiên bản: timeout 10 s, không bao giờ ném, nhớ tạm 5 phút (3 lượt gọi ⇒ 1 tiến trình con) | 2 test |
+| `generate_caption_for_material` bọc trọn: DB/đĩa hỏng ⇒ `(False, msg)` + `rollback`, session còn dùng được | `test_j1`, `test_j2` |
+| `offsite.copy_out` bắt `Exception` thay vì chỉ `OSError` | — |
+| Toàn suite | **666 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ |
+
+**Lỗi tìm ra trong chính bản vá này khi review:** `mismatch` tính **sau** lượt đọc
+`requirements.txt`, mà đường đó `return` sớm khi đọc hỏng ⇒ cảnh báo đáng giá nhất biến mất
+đúng lúc có thứ khác cũng hỏng. ADR sinh ra để chống "nhãn nói dối" mà suýt tự đẻ một cái. Đã
+đưa `_version_key` lên cấp module, tính `mismatch` ngay sau khi đo, có test khoá.
+
+**Không đụng `scan_source`** dù nó cũng hứa "không raise" và cũng hở: `scan_all` đã bọc sẵn
+`try/except` + `rollback` cho từng nguồn, có ghi chú rõ. Người viết trước đã lường đúng.
+
+### System State
+
+Tool luôn chạy bản yt-dlp đi theo trình thông dịch của chính nó (tức bản ghim trong
+`requirements.txt`); một bản lạ trên PATH không còn cướp được nữa, và nếu có thì trang Sức
+khỏe cảnh báo đỏ kèm đường dẫn. Ba hàm từng hứa "không bao giờ ném lỗi" nay đúng như lời hứa.
+
+### Unfinished + Blockers
+
+- **Chưa thử trên máy Owner.** Máy dev chỉ có một bản yt-dlp nên `mismatch` chưa bao giờ bật
+  thật; ca lệch được kiểm bằng test giả. Owner pull về, mở trang Sức khỏe là thấy dòng
+  "Đang gọi: …" — nếu nó trỏ vào `Python312\Scripts` chứ không phải `venv` thì báo em.
+- Nợ còn lại, đều nhỏ và đã ghi: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ
+  `import ViralService as _VS` thừa trong `processor.py`.
+- Cố ý không làm: link Drive bấm được (cần Drive API), tự cập nhật yt-dlp từ trang web.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại web** → mở **Sức khỏe hệ thống**, xem dòng
+   *"Đang gọi: …"* dưới ô yt-dlp. Phải là đường dẫn trong `venv` của dự án.
+2. Việc kinh doanh vẫn treo nguyên: đăng bài đầu tiên lên Page **"Mê Câu Cá"** (12 video sẵn
+   sàng), thêm ảnh bìa, thêm 2-3 kênh nguồn vì `@thacaukechuyen` đang chiếm 100%.
+3. Anti: quyết PLAN cho khối badge page header (`layouts/app.html`).
+
+---
+
 ## Phiên 2026-09-09 (e) — ADR-030: bản chép Drive đặt tên theo tiêu đề, xếp theo tháng
 
 Owner hỏi ba việc: gửi kèm đường dẫn video vào Telegram, đặt tên file khớp tiêu đề, chia thư

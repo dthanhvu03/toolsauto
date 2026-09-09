@@ -793,3 +793,45 @@ def test_i5_khong_gui_duoc_video_thi_tin_chu_van_co_dong_drive(stub):
 
     assert len(stub.calls) == 1 and stub.calls[0][0] == "text"
     assert DRIVE_REL in stub.calls[0][-1]
+
+
+# ───────── (j) ADR-029 mục 6: hợp đồng "không bao giờ raise" của caption ─────────
+
+
+def test_j1_db_hong_luc_chuan_bi_thi_tra_False_chu_khong_nem(session_factory, monkeypatch):
+    """
+    Hồi quy: `db.query`, `find_reup_path`, `ai_provider_ready` từng nằm NGOÀI mọi try, trong
+    khi docstring hứa "KHÔNG BAO GIỜ raise". Chưa nổ ra hậu quả chỉ vì cả hai người gọi đều
+    tự bọc — tức đúng nhờ may mắn của người gọi, không nhờ thiết kế.
+    """
+    monkeypatch.setattr(
+        ViralService, "find_reup_path",
+        staticmethod(lambda *a, **k: (_ for _ in ()).throw(RuntimeError("đĩa hỏng"))),
+    )
+    mid = _material_for_caption(session_factory)
+
+    with session_factory() as db:
+        ok, msg = ViralService.generate_caption_for_material(db, mid)
+
+    assert ok is False
+    assert "chuẩn bị viết caption" in msg and "đĩa hỏng" in msg
+
+
+def test_j2_session_van_dung_duoc_sau_khi_hong(session_factory, monkeypatch):
+    """Lỗi DB làm session hỏng; không rollback thì vòng lặp sau của processor hỏng theo."""
+    goi = {"rollback": 0}
+    mid = _material_for_caption(session_factory)
+
+    monkeypatch.setattr(
+        ViralService, "find_reup_path",
+        staticmethod(lambda *a, **k: (_ for _ in ()).throw(RuntimeError("nổ"))),
+    )
+
+    with session_factory() as db:
+        real_rollback = db.rollback
+        monkeypatch.setattr(db, "rollback", lambda: (goi.__setitem__("rollback", goi["rollback"] + 1), real_rollback())[1])
+        ViralService.generate_caption_for_material(db, mid)
+        # session còn dùng được: truy vấn tiếp không nổ
+        assert db.get(ViralMaterial, mid) is not None
+
+    assert goi["rollback"] == 1

@@ -204,8 +204,10 @@ def copy_out(
             return dest
         # copy2 giữ mtime — cần cho việc dọn bản cũ theo thời gian về sau.
         shutil.copy2(src_path, dest)
-    except OSError as exc:
-        # Hết dung lượng, mất mạng giữa chừng, Drive khoá file — đều rơi vào đây.
+    except Exception as exc:
+        # Hết dung lượng, mất mạng giữa chừng, Drive khoá file — đều rơi vào đây. Bắt
+        # `Exception` chứ không riêng `OSError` (ADR-029 mục 7): docstring hứa KHÔNG BAO GIỜ
+        # ném lỗi, mà tên file lạ còn có thể sinh `ValueError` chứ không chỉ lỗi hệ điều hành.
         logger.warning("[offsite] chep %s sang %s that bai: %s", src_path.name, dest_dir, exc)
         return None
 

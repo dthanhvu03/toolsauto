@@ -642,28 +642,41 @@ class ViralService:
         """
         import json
 
-        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
-        if not mat:
-            return False, f"Không tìm thấy material #{material_id}"
+        # ADR-029 mục 6: cả khối chuẩn bị này phải nằm trong `try`. `db.query`,
+        # `find_reup_path`, `ai_provider_ready` (đọc cài đặt từ DB) và `db.commit()` đều đụng
+        # DB hoặc đĩa — trước đây chúng nằm ngoài mọi `try` trong khi docstring hứa KHÔNG BAO
+        # GIỜ raise. Chưa nổ ra hậu quả chỉ vì cả hai người gọi đều tự bọc, tức "đúng nhờ may
+        # mắn của người gọi" — đúng thứ vừa phải đi vá ở ADR-030.
+        try:
+            mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+            if not mat:
+                return False, f"Không tìm thấy material #{material_id}"
 
-        video_path = ViralService.find_reup_path(mat.id, mat.platform)
-        if not video_path:
-            # Chưa có file thì không có gì cho AI xem — báo luôn, không đụng AI.
-            return False, "Chưa có file _reup — xử lý lại video trước."
+            video_path = ViralService.find_reup_path(mat.id, mat.platform)
+            if not video_path:
+                # Chưa có file thì không có gì cho AI xem — báo luôn, không đụng AI.
+                return False, "Chưa có file _reup — xử lý lại video trước."
 
-        ok, reason = ai_provider_ready(db)
-        if not ok:
-            mat.ai_caption_error = reason[:300]
-            mat.ai_caption_at = int(time.time())
-            db.commit()
-            if notify:
-                NotifierService.notify_caption_ready(mat)  # ADR-022
-            return False, reason
+            ok, reason = ai_provider_ready(db)
+            if not ok:
+                mat.ai_caption_error = reason[:300]
+                mat.ai_caption_at = int(time.time())
+                db.commit()
+                if notify:
+                    NotifierService.notify_caption_ready(mat)  # ADR-022
+                return False, reason
 
-        context = _clean_title_for_context(mat.title)
-        if not style:
-            from app.core import settings as runtime_settings
-            style = runtime_settings.get_str("ai.caption_style", default="short", db=db) or "short"
+            context = _clean_title_for_context(mat.title)
+            if not style:
+                from app.core import settings as runtime_settings
+                style = runtime_settings.get_str("ai.caption_style", default="short", db=db) or "short"
+        except Exception as exc:
+            logger.exception("[VIRAL] Chuẩn bị viết caption cho #%s thất bại", material_id)
+            try:
+                db.rollback()  # lỗi DB làm session hỏng; không rollback thì vòng sau hỏng theo
+            except Exception:
+                pass
+            return False, f"Lỗi khi chuẩn bị viết caption: {exc}"[:300]
 
         try:
             from app.core.orchestrator import ContentOrchestrator
