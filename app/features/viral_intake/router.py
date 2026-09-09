@@ -519,6 +519,42 @@ def reprocess_material(
     )
 
 
+@router.get("/{material_id}/frames", response_class=HTMLResponse)
+def source_frames_strip(request: Request, material_id: int, db: Session = Depends(get_db)):
+    """ADR-032 — dải khung hình để bấm chọn mốc cắt. Nạp theo yêu cầu, không nạp sẵn cho
+    cả trăm dòng trong bảng (12 ảnh × 100 dòng = 1200 lượt tải vô ích)."""
+    mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+    if not mat:
+        raise HTTPException(status_code=404, detail="Không tìm thấy material")
+    from app.features.viral_intake.reup_processor import ReupProcessor
+
+    html = templates.get_template("fragments/viral_frames.html").render({
+        "request": request,
+        "item": mat,
+        "frames": ViralService.list_source_frames(material_id),
+        "has_source": bool(ViralService.find_source_path(material_id, mat.platform)),
+        "max_duration": int(ReupProcessor._configured_max_duration()),
+    })
+    return HTMLResponse(content=html)
+
+
+@router.get("/{material_id}/frame/{idx}")
+def source_frame(material_id: int, idx: int, db: Session = Depends(get_db)):
+    """ADR-032 — một khung trong dải 12 khung trích từ video GỐC."""
+    if not 0 <= idx <= 99:
+        raise HTTPException(status_code=404, detail="Khung không hợp lệ")
+    path = ViralService.source_frame_path(material_id, idx)
+    if not path:
+        raise HTTPException(status_code=404, detail="Chưa có khung hình")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        filename=f"viral_{material_id}_f{idx:02d}.jpg",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @router.get("/{material_id}/reup-thumb")
 def reup_thumb(material_id: int, db: Session = Depends(get_db)):
     """Serve 1-frame jpeg from _reup (cached). Lightweight table thumbnail."""

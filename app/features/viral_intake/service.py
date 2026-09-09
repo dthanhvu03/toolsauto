@@ -28,6 +28,131 @@ class ViralService:
     VIRAL_TABLE_LIMIT = 500
 
     @staticmethod
+    def find_source_path(material_id: int, platform: str | None = None) -> Optional[str]:
+        """
+        ADR-032 — bản tải GỐC còn trên đĩa (chưa cắt), hoặc None.
+
+        Tên file gốc là ``viral_<id>_<ytid>.<ext>``; bản đã cắt là ``…_reup.mp4``. Phải loại
+        ``_reup`` ra, không thì cắt lại sẽ cắt trên chính bản đã cắt — tức mất đúng đoạn Owner
+        muốn, mà không có lỗi nào báo.
+        """
+        base = str(config.REUP_DIR)
+        plat = platform or "tiktok"
+        hits: list[str] = []
+        for pat in (
+            os.path.join(base, plat, f"viral_{material_id}_*.*"),
+            os.path.join(base, "**", f"viral_{material_id}_*.*"),
+        ):
+            hits.extend(glob(pat, recursive=True))
+        hits = [
+            h for h in hits
+            if os.path.isfile(h)
+            and os.path.getsize(h) > 0
+            and not h.endswith("_reup.mp4")
+            and os.path.splitext(h)[1].lower() in (".mp4", ".mkv", ".webm", ".mov")
+        ]
+        if not hits:
+            return None
+        hits.sort(key=os.path.getmtime, reverse=True)
+        return hits[0]
+
+    @staticmethod
+    def source_frames_dir(material_id: int) -> str:
+        return os.path.join(str(config.REUP_DIR), "frames", str(material_id))
+
+    @staticmethod
+    def list_source_frames(material_id: int) -> list[tuple[int, int]]:
+        """``[(chỉ_số, giây), …]`` từ tên file ``f<idx>_<sec>.jpg``. Không có ⇒ rỗng."""
+        out: list[tuple[int, int]] = []
+        try:
+            for path in sorted(glob(os.path.join(ViralService.source_frames_dir(material_id), "f*_*.jpg"))):
+                stem = os.path.splitext(os.path.basename(path))[0]
+                idx_raw, _, sec_raw = stem[1:].partition("_")
+                if idx_raw.isdigit() and sec_raw.isdigit() and os.path.getsize(path) > 0:
+                    out.append((int(idx_raw), int(sec_raw)))
+        except OSError:
+            return []
+        return out
+
+    @staticmethod
+    def source_frame_path(material_id: int, idx: int) -> Optional[str]:
+        hits = glob(os.path.join(ViralService.source_frames_dir(material_id), f"f{idx:02d}_*.jpg"))
+        hits = [h for h in hits if os.path.isfile(h) and os.path.getsize(h) > 0]
+        return hits[0] if hits else None
+
+    @staticmethod
+    def source_frame_seconds(duration: float, count: int = 12) -> list[int]:
+        """Mốc giây của từng khung: trải đều, bỏ 2% đầu/cuối cho khỏi dính màn đen."""
+        if duration <= 0 or count <= 0:
+            return []
+        lo, hi = duration * 0.02, duration * 0.98
+        step = (hi - lo) / count
+        return [int(lo + step * i) for i in range(count)]
+
+    @staticmethod
+    def ensure_source_frames(
+        material_id: int,
+        video_path: str,
+        count: int = 12,
+    ) -> list[tuple[int, int]]:
+        """
+        ADR-032 — trích ``count`` khung trải đều video GỐC → ``[(chỉ_số, giây), …]``.
+
+        Lưu 12 file jpg RỜI chứ không một ảnh ghép: ảnh ghép phải dựng lưới CSS chồng lên để
+        bắt chỗ bấm, dễ lệch; mỗi ảnh rời tự nó là một nút.
+
+        KHÔNG đốt số giây vào ảnh bằng ``drawtext`` — nó cần fontconfig, mà máy Owner đang báo
+        thiếu file cấu hình. Số giây để HTML hiện, luôn đúng.
+
+        Không bao giờ raise: đây là tiện ích phụ, hỏng thì trả danh sách rỗng.
+        """
+        out_dir = ViralService.source_frames_dir(material_id)
+        try:
+            if not video_path or not os.path.isfile(video_path):
+                return []
+            duration = ViralService.probe_duration(video_path)
+            seconds = ViralService.source_frame_seconds(duration, count)
+            if not seconds:
+                return []
+
+            os.makedirs(out_dir, exist_ok=True)
+            ffmpeg = ViralService.resolve_ffmpeg()
+            made: list[tuple[int, int]] = []
+            for idx, sec in enumerate(seconds):
+                # Số giây nằm ngay trong TÊN FILE: đọc lại được kể cả khi video gốc đã bị dọn,
+                # khỏi phải lưu thêm cột hay đo lại độ dài.
+                dest = os.path.join(out_dir, f"f{idx:02d}_{sec}.jpg")
+                if not (os.path.isfile(dest) and os.path.getsize(dest) > 0):
+                    subprocess.run(
+                        [ffmpeg, "-y", "-loglevel", "error", "-ss", str(sec),
+                         "-i", video_path, "-frames:v", "1", "-vf", "scale=160:-2", dest],
+                        capture_output=True, timeout=30,
+                    )
+                if os.path.isfile(dest) and os.path.getsize(dest) > 0:
+                    made.append((idx, sec))
+            return made
+        except Exception as exc:
+            logger.warning("[VIRAL] Trích khung hình #%s thất bại (%s) — bỏ qua.", material_id, exc)
+            return []
+
+    @staticmethod
+    def probe_duration(video_path: str) -> float:
+        """Độ dài video (giây); 0 nếu không đọc được. Không raise."""
+        try:
+            # KHÔNG suy ffprobe bằng `resolve_ffmpeg().replace("ffmpeg","ffprobe")`: nó thay cả
+            # TÊN THƯ MỤC (…/Programs/ffmpeg/bin/… → …/Programs/ffprobe/bin/…) nên ra đường dẫn
+            # không tồn tại, và hàm này nuốt lỗi nên hỏng âm thầm. Repo có sẵn resolver chung.
+            ffprobe = ffmpeg_path.ffprobe_bin()
+            out = subprocess.run(
+                [ffprobe, "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=nw=1:nk=1", video_path],
+                capture_output=True, text=True, timeout=30,
+            ).stdout.strip()
+            return float(out) if out else 0.0
+        except Exception:
+            return 0.0
+
+    @staticmethod
     def find_reup_path(material_id: int, platform: str | None = None) -> Optional[str]:
         """Locate anti-dupe output viral_{id}*_reup.mp4 under REUP_DIR (single-item)."""
         reup_base = str(config.REUP_DIR)

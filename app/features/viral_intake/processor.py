@@ -670,6 +670,16 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         _mark_material_failed(db, mat, reason)
                         continue
 
+            # ADR-032: file gốc còn trên đĩa ⇒ bỏ lượt tải nặng (cả trăm MB) khi Owner chỉ
+            # đổi mốc cắt. Preflight ở trên VẪN chạy (~2 giây) để làm mới views/tiêu đề —
+            # bỏ nó tiết kiệm 2 giây mà mất dữ liệu mới, không đáng.
+            if not download_success and not fallback_used_successfully:
+                _cached = ViralService.find_source_path(mat.id, mat.platform)
+                if _cached:
+                    download_success = True
+                    media_path = _cached
+                    logger.info("[VIRAL] Dùng lại file gốc có sẵn #%s: %s", mat.id, _cached)
+
             if not download_success and not fallback_used_successfully:
                 # Tải video bằng yt-dlp vào thư mục platform riêng
                 output_template = os.path.join(platform_dir, f"viral_{mat.id}_%(id)s.%(ext)s")
@@ -831,11 +841,26 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     )
                 except Exception as rec_err:
                     logger.warning("[VIRAL] record_reup_variant failed: %s", rec_err)
-                # Xóa file gốc, dùng file đã xử lý
+                # ADR-032: trích 12 khung từ bản GỐC — phải làm TRƯỚC khi có thể xoá nó.
+                # Đây là thứ cho Owner chọn mốc mà không phải xem hết video 9 phút.
                 try:
-                    os.remove(media_path)
-                except OSError:
-                    pass
+                    ViralService.ensure_source_frames(mat.id, media_path)
+                except Exception as fr_err:
+                    logger.debug("[VIRAL] trích khung #%s bỏ qua: %s", mat.id, fr_err)
+
+                # Giữ hay xoá bản gốc: giữ thì đổi mốc cắt là cắt lại NGAY, không tải lại.
+                # Đọc cài đặt hỏng ⇒ coi như 0 (xoá) để không bao giờ phình đĩa ngoài ý muốn.
+                try:
+                    _keep_days = int(runtime_settings.get_int("viral.keep_source_days", 7, db=db))
+                except Exception:
+                    _keep_days = 0
+                if _keep_days <= 0:
+                    try:
+                        os.remove(media_path)
+                    except OSError:
+                        pass
+                else:
+                    logger.info("[VIRAL] Giữ file gốc #%s thêm %d ngày: %s", mat.id, _keep_days, media_path)
                 media_path = reup_result.output_path
                 try:
                     from app.features.viral_intake.service import ViralService as _VS

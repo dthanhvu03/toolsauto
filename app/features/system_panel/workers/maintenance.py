@@ -79,6 +79,47 @@ def register_signals():
 
 _last_orphan_cleanup_ts: float = 0
 
+_last_source_cleanup_ts: float = 0
+
+
+def cleanup_old_source_files(db: Session) -> int:
+    """
+    ADR-032 — xoá bản tải GỐC quá hạn giữ (`viral.keep_source_days`).
+
+    Bản gốc giữ lại để đổi mốc cắt là cắt lại ngay, khỏi tải lại cả trăm MB. Nhưng mỗi file
+    50-150 MB nên phải có hạn. Chỉ đụng file gốc — bản ``_reup`` và thư mục ``frames`` giữ
+    nguyên: ``_reup`` là thứ Owner đăng, còn khung hình vẫn cần để chọn mốc về sau.
+
+    Không bao giờ ném: đây là việc dọn dẹp nền.
+    """
+    import glob as _glob
+    import time as _time
+
+    removed = 0
+    try:
+        keep_days = int(runtime_settings.get_int("viral.keep_source_days", 7, db=db))
+        if keep_days <= 0:
+            return 0  # 0 = xoá ngay lúc xử lý, không còn gì để dọn ở đây
+        cutoff = _time.time() - keep_days * 86400
+        base = str(config.REUP_DIR)
+        for path in _glob.glob(os.path.join(base, "*", "viral_*_*.*")):
+            if path.endswith("_reup.mp4"):
+                continue
+            if os.path.splitext(path)[1].lower() not in (".mp4", ".mkv", ".webm", ".mov"):
+                continue
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    os.remove(path)
+                    removed += 1
+            except OSError:
+                pass
+        if removed:
+            logger.info("🗑️ Đã xoá %d file video gốc quá %d ngày (ADR-032).", removed, keep_days)
+    except Exception as exc:
+        logger.warning("Dọn file gốc quá hạn lỗi (%s) — bỏ qua.", exc)
+    return removed
+
+
 def _cleanup_orphaned_virals(db: Session):
     """
     Check if any ViralMaterial with target_page is pointing to a deleted page.
@@ -496,6 +537,7 @@ def run_loop():
 
                     # 2b. Cleanup orphaned virals (hourly)
                     _cleanup_orphaned_virals(db)
+                    cleanup_old_source_files(db)
 
                     # 2c. Sweep orphaned DRAFTs → PENDING (every tick)
                     _sweep_orphaned_drafts(db)

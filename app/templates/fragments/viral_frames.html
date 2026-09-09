@@ -1,0 +1,29 @@
+{# ADR-032 — dải khung hình trích từ video GỐC: bấm một khung là đặt mốc cắt + xử lý lại.
+   Số giây do HTML hiện, KHÔNG đốt vào ảnh bằng drawtext (cần fontconfig, máy Owner đang thiếu). #}
+{% if frames %}
+<div class="flex flex-wrap gap-1 justify-end max-w-[26rem]">
+  {% for idx, sec in frames %}
+  {% set phut = '%d:%02d' % (sec // 60, sec % 60) %}
+  <button type="button"
+          class="relative shrink-0 rounded overflow-hidden border-2 {% if item.clip_start_sec == sec %}border-[var(--color-torch)]{% else %}border-transparent hover:border-[var(--color-torch-border)]{% endif %} transition"
+          hx-post="/viral/{{ item.id }}/clip-start"
+          hx-vals='{"clip_start_sec": "{{ sec }}", "process_now": "true"}'
+          hx-swap="none"
+          hx-confirm="Cắt lại video #{{ item.id }} từ phút {{ phut }}?"
+          title="Cắt từ phút {{ phut }} ({{ sec }} giây) rồi xử lý lại">
+    <img src="/viral/{{ item.id }}/frame/{{ idx }}" alt="Khung tại phút {{ phut }}"
+         loading="lazy" class="block w-[72px] h-auto" />
+    <span class="absolute bottom-0 right-0 px-1 text-[9px] font-mono bg-black/70 text-white">{{ phut }}</span>
+  </button>
+  {% endfor %}
+</div>
+<p class="mt-1 text-[9px] text-[var(--color-mist)] text-right max-w-[26rem]">
+  Bấm khung có cảnh đáng lấy — tool cắt {{ max_duration }} giây kể từ đó.
+  {% if has_source %}File gốc còn trên máy nên cắt lại rất nhanh.{% else %}File gốc đã dọn nên phải tải lại.{% endif %}
+</p>
+{% else %}
+<p class="text-[10px] text-[var(--color-mist)] text-right">
+  Chưa có khung hình. Video xử lý trước bản cập nhật này thì chưa có — bấm "Đặt mốc &amp; tải lại"
+  một lần là tool trích khung luôn.
+</p>
+{% endif %}

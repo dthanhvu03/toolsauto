@@ -287,6 +287,20 @@ SETTINGS: dict[str, SettingSpec] = {
         description="skip = không thêm vào kho; flag = vẫn thêm và hiện badge trên UI.",
         choices=["skip", "flag"],
     ),
+    "viral.keep_source_days": SettingSpec(
+        key="viral.keep_source_days",
+        type="int",
+        default_getter=lambda: 7,
+        title="Giữ file video gốc bao nhiêu ngày",
+        section="Quét TikTok & Viral",
+        description=(
+            "ADR-032: giữ bản tải gốc lại sau khi cắt, để đổi mốc bắt đầu là cắt lại NGAY, không "
+            "phải tải lại cả trăm MB. Giá phải trả là dung lượng: mỗi video gốc thường 50-150 MB. "
+            "Đặt 0 = xoá ngay sau khi cắt như trước (tiết kiệm đĩa, nhưng đổi mốc là tải lại)."
+        ),
+        min=0,
+        max=90,
+    ),
     "reup.max_duration_sec": SettingSpec(
         key="reup.max_duration_sec",
         type="int",

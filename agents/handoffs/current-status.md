@@ -1,5 +1,57 @@
 # Current Status
 
+## Phiên 2026-09-09 (h) — ADR-032: chọn mốc cắt bằng một cú bấm
+
+ADR-031 cho chọn mốc nhưng thao tác vẫn phiền: xem hết video 9 phút, gõ số giây, tải lại cả
+trăm MB. Owner hỏi *"có cách nào tiện không em"*. Bỏ cả ba chỗ phiền.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| **Dải 12 khung hình** trích từ video GỐC, bấm một khung là đặt mốc + cắt lại | ffmpeg thật: 12 jpg có nội dung; video 573s ⇒ khung số 8 rơi vào giây 332 (chỗ có cá) |
+| Số giây nhúng trong **tên file** ⇒ đọc lại được kể cả khi video gốc đã dọn, không cần cột DB | `test_doc_lai_duoc_giay_tu_ten_file…` |
+| **Giữ file gốc** `viral.keep_source_days` (mặc định 7) ⇒ cắt lại **tức thì**, không tải lại | `test_processor_dung_lai_file_goc_truoc_khi_tai` |
+| Tìm file gốc **không nhầm** với bản `_reup` đã cắt | `test_tim_file_goc_bo_qua_ban_da_cat` |
+| Dọn file gốc quá hạn, **không đụng** bản `_reup` | `test_don_file_goc_qua_han…` |
+| Đọc cài đặt hỏng ⇒ **xoá** chứ không giữ (không phình đĩa âm thầm) | `test_doc_o_cai_dat_hong_thi_XOA…` |
+| **Ô chọn mốc ra khỏi khối gấp "Reup lại?"** — thành khối riêng "✂️ Chọn đoạn cắt" | render thật |
+| Toàn suite | **701 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ |
+
+**Lỗi thật chỉ lộ khi chạy ffmpeg thật:** `probe_duration` suy ffprobe bằng
+`resolve_ffmpeg().replace("ffmpeg","ffprobe")` — thay cả **tên thư mục**, ra đường dẫn không
+tồn tại. Hàm nuốt lỗi trả 0 ⇒ **cả dải khung hình im lặng biến mất**, không lỗi không log.
+Test giả không bắt được. Repo vốn có `ffmpeg_path.ffprobe_bin()`; đã đổi + cấm kiểu `replace`.
+
+**Nguyên tắc rút ra (lần thứ hai trong ngày):** mọi thứ đụng ffmpeg **phải có ít nhất một test
+chạy ffmpeg thật**. Lần trước là `_fast_trim_fallback` thiếu `-ss` (ADR-031) — cũng chỉ lộ khi
+chạy thật.
+
+### System State
+
+`/app/viral` mỗi dòng video có khối **"✂️ Chọn đoạn cắt"**: mở ra thấy 12 khung hình có ghi
+phút, bấm một khung là tool đặt mốc và cắt lại ngay (dùng file gốc còn trên đĩa, không tải
+lại). Vẫn có ô gõ giây tay cho ai muốn chính xác hơn 1/12 video.
+
+### Unfinished + Blockers
+
+- **12 video cũ chưa có khung hình** — chúng xử lý trước bản này nên chưa trích. Bấm
+  "Cắt lại" một lần (sẽ tải lại) là tool trích khung luôn, từ đó về sau bấm khung là xong.
+- **Tốn đĩa**: mỗi video gốc 50-150 MB × số video đang chờ. Owner siết bằng ô
+  `viral.keep_source_days`, đặt 0 là về hành vi cũ.
+- Nợ cũ chưa dọn: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại web.** (Không có migration mới ở ADR-032.)
+2. Với một video: mở **"✂️ Chọn đoạn cắt"** → bấm **"Cắt lại"** một lần để tool tải lại và
+   trích khung → từ lần sau chỉ cần **bấm vào khung có cá**.
+3. Cân nhắc bật **phụ đề** (`reup.subtitle_enabled`) — đang tắt, mà đây là thứ giữ chân người
+   xem lướt không bật tiếng.
+4. Đăng bài đầu tiên lên Page **"Mê Câu Cá"**.
+
+---
+
 ## Phiên 2026-09-09 (g) — ADR-031: chọn mốc cắt, đừng đăng 90 giây móc mồi
 
 **Phát hiện lớn nhất phiên này**, tìm ra bằng đo chứ không đoán: video nguồn dài 6-11 phút,
