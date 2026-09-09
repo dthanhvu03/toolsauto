@@ -73,9 +73,54 @@
             <span class="btn-idle">Quét</span>
             <span class="btn-busy htmx-indicator">…</span>
           </button>
+          {# ADR-026: mở hàng sửa ngay dưới. Dùng onclick nội tuyến vì fragment này bị htmx
+             thay mới mỗi lần `refreshViralSources` — listener gắn rời sẽ mất theo. #}
+          <button type="button" class="app-btn text-xs py-1 px-2 border-[var(--border)] bg-[var(--color-face)] text-[var(--color-ink)] hover:brightness-110 ml-1"
+                  onclick="var r=document.getElementById('src-edit-{{ s.id }}'); r.hidden=!r.hidden;"
+                  title="Sửa Min views / Max video / Page đích của nguồn này">Sửa</button>
           <button type="button" class="app-btn text-xs py-1 px-2 border-[var(--color-danger-border)] bg-[var(--color-danger-dim)] text-[var(--color-danger)] hover:brightness-110 ml-1"
                   hx-post="/viral/sources/{{ s.id }}/delete" hx-swap="none"
                   hx-confirm="Xoá nguồn {{ label }}? Video đã quét vẫn giữ nguyên.">Xoá</button>
+        </td>
+      </tr>
+
+      {# Hàng sửa — colspan nên luôn hiện đủ ở mọi bề ngang. KHÔNG đặt ô sửa vào hai cột
+         Min views / Max video: chúng mang `hidden xl:table-cell`, màn < 1280px không thấy. #}
+      <tr id="src-edit-{{ s.id }}" hidden class="border-b border-[var(--border)] bg-[var(--color-deep)]">
+        <td colspan="10" class="px-3 py-3">
+          <form class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-end"
+                hx-post="/viral/sources/{{ s.id }}/update" hx-swap="none"
+                hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]">
+            <div>
+              <label class="block text-xs text-[var(--muted)] mb-1">Min views</label>
+              <input name="min_views" type="number" min="0" step="1000" class="app-input w-full md:w-32"
+                     placeholder="mặc định" value="{{ s.min_views if s.min_views is not none else '' }}" />
+            </div>
+            <div>
+              <label class="block text-xs text-[var(--muted)] mb-1">Max video/lần</label>
+              <input name="max_videos" type="number" min="1" max="500" class="app-input w-full md:w-28"
+                     placeholder="mặc định" value="{{ s.max_videos if s.max_videos is not none else '' }}" />
+            </div>
+            <div>
+              <label for="src-edit-pages-{{ s.id }}" class="block text-xs text-[var(--muted)] mb-1">Page đích</label>
+              <textarea id="src-edit-pages-{{ s.id }}" name="target_pages" rows="2" autocomplete="off"
+                        aria-describedby="src-edit-warn-{{ s.id }}"
+                        class="w-full md:w-64 resize-y rounded-md border border-[var(--border)] bg-[var(--color-stone)] px-3 py-1.5 text-sm leading-snug text-[var(--color-ink)]"
+                        placeholder="Mỗi dòng một Page — để trống nếu đăng tay">{{ pages | join('
+') }}</textarea>
+            </div>
+            <button type="submit"
+                    class="viral-busy-btn app-btn border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] text-[var(--color-torch)] hover:brightness-110">
+              <span class="btn-idle">Lưu</span>
+              <span class="btn-busy htmx-indicator">Đang lưu…</span>
+            </button>
+            <button type="button" class="app-btn border-[var(--border)] bg-[var(--color-face)] text-[var(--color-ink)] hover:brightness-110"
+                    onclick="document.getElementById('src-edit-{{ s.id }}').hidden = true;">Đóng</button>
+            <p id="src-edit-warn-{{ s.id }}" class="basis-full text-[11px] text-[var(--color-mist)]">
+              Ô để trống nghĩa là <b>dùng ngưỡng chung</b> ở Thiết lập, không phải giữ số cũ.
+              Nhiều Page ⇒ cùng một video đăng lên tất cả — Facebook dễ đánh spam.
+            </p>
+          </form>
         </td>
       </tr>
       {% else %}

@@ -360,3 +360,90 @@ def test_sweep_orphan_new_also_gathered_alongside_account_materials(session_fact
         assert statuses["https://www.tiktok.com/@y/video/2"] == ViralStatus.READY
         assert statuses["https://www.tiktok.com/@x/video/1"] != ViralStatus.NEW
     assert fake_pipeline["download"] == 2
+
+
+# ---------------------------------------------------------------------------
+# ADR-026 — update_source: sửa tại chỗ Min views / Max video / Page đích
+# ---------------------------------------------------------------------------
+
+
+def _seeded_source(db, **over):
+    """Nguồn đã quét vài lần — để kiểm update KHÔNG làm mất lịch sử quét."""
+    base = dict(
+        platform="tiktok", url="https://www.tiktok.com/@shop", handle="shop",
+        min_views=1000, max_videos=3, enabled=True,
+        last_scanned_at=1_700_000_000, last_found=7, last_error=None,
+    )
+    base.update(over)
+    src = ViralSource(**base)
+    src.target_pages_list = ["https://facebook.com/p1"]
+    db.add(src)
+    db.commit()
+    db.refresh(src)
+    return src
+
+
+def test_update_source_changes_numbers_and_keeps_scan_history(session_factory):
+    """Đúng ca của Owner: max 3 → 50 mà không mất 'Quét cuối' / 'Tìm thấy'."""
+    with session_factory() as db:
+        sid = _seeded_source(db).id
+        ok, msg = SourceService.update_source(db, sid, min_views=5000, max_videos=50, target_pages=["https://facebook.com/p1"])
+        assert ok, msg
+        src = db.get(ViralSource, sid)
+        assert (src.min_views, src.max_videos) == (5000, 50)
+        assert (src.last_scanned_at, src.last_found) == (1_700_000_000, 7)
+        assert (src.url, src.handle, src.platform) == ("https://www.tiktok.com/@shop", "shop", "tiktok")
+
+
+def test_update_source_empty_means_back_to_default_not_keep_old(session_factory):
+    """Ô để trống ⇒ NULL ⇒ dùng setting chung. Đây là chỗ dễ hiểu ngược nhất (ADR-026 mục 2)."""
+    with session_factory() as db:
+        sid = _seeded_source(db).id
+        ok, _ = SourceService.update_source(db, sid, min_views="", max_videos="", target_pages=[])
+        assert ok
+        src = db.get(ViralSource, sid)
+        assert src.min_views is None and src.max_videos is None
+
+
+def test_update_source_clearing_pages_also_clears_legacy_column(session_factory):
+    """Xoá hết Page phải sạch cả `target_page` cũ, không để lại nguồn sự thật thứ hai."""
+    with session_factory() as db:
+        sid = _seeded_source(db).id
+        assert db.get(ViralSource, sid).target_page == "https://facebook.com/p1"
+        ok, _ = SourceService.update_source(db, sid, target_pages=[])
+        assert ok
+        src = db.get(ViralSource, sid)
+        assert src.target_pages is None and src.target_page is None
+        assert src.target_pages_list == []
+
+
+def test_update_source_rewrites_page_list_in_order(session_factory):
+    with session_factory() as db:
+        sid = _seeded_source(db).id
+        ok, msg = SourceService.update_source(db, sid, target_pages=["https://facebook.com/b", "https://facebook.com/a"])
+        assert ok and "2 Page đích" in msg
+        assert db.get(ViralSource, sid).target_pages_list == ["https://facebook.com/b", "https://facebook.com/a"]
+
+
+@pytest.mark.parametrize("field,value,needle", [
+    ("max_videos", 0, "1–500"),
+    ("max_videos", 501, "1–500"),
+    ("max_videos", "abc", "số nguyên"),
+    ("min_views", -1, "không được âm"),
+    ("min_views", "x", "số nguyên"),
+])
+def test_update_source_rejects_bad_values_without_touching_db(session_factory, field, value, needle):
+    with session_factory() as db:
+        sid = _seeded_source(db).id
+        ok, msg = SourceService.update_source(db, sid, **{field: value})
+        assert not ok and needle in msg
+        src = db.get(ViralSource, sid)
+        # Không ghi gì: cả hai số lẫn Page đều y nguyên
+        assert (src.min_views, src.max_videos) == (1000, 3)
+        assert src.target_pages_list == ["https://facebook.com/p1"]
+
+
+def test_update_source_unknown_id_is_false_not_raise(session_factory):
+    with session_factory() as db:
+        ok, msg = SourceService.update_source(db, 9999, max_videos=10)
+        assert not ok and "9999" in msg

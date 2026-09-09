@@ -1,5 +1,64 @@
 # Current Status
 
+## Phiên 2026-09-09 (b) — ADR-026: sửa tại chỗ nguồn video
+
+Owner đặt `Max video/lần = 3` cho `@thacaukechuyen`, quét mãi vẫn "Tìm thấy 0" (đúng thiết
+kế: chỉ ngó 3 video mới nhất, cả 3 đã có trong kho), rồi phát hiện **không có đường nào sửa
+số đó**. Hợp đồng `SourceService` của ADR-019 thiếu hẳn `update` — bảng nguồn chỉ có
+Bật/Tắt, Quét, Xoá.
+
+**Phát hiện quyết định hình dạng UI:** hai cột `Min views` / `Max video` mang
+`hidden xl:table-cell` ⇒ **màn < 1280px không hiện**. Owner dùng UltraViewer ở khung hẹp hơn
+thế, nên nếu biến hai ô đó thành input tại chỗ thì Owner **vẫn không sửa được** — đúng cái
+bẫy vừa gây ra ADR-025. Vì vậy ô sửa nằm ở **hàng `<tr>` riêng dùng `colspan`**, có test
+khoá lại để phiên sau không "gọn hoá" ngược về cột.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| `SourceService.update_source()` — bổ khuyết hợp đồng ADR-019 | 8 test service trên SQLite thật |
+| Sửa max 3 → 50 **không mất** `Quét cuối` / `Tìm thấy` | `test_update_source_changes_numbers_and_keeps_scan_history` |
+| Ô trống = **về mặc định**, không phải giữ số cũ | `test_update_source_empty_means_back_to_default_not_keep_old` |
+| 0 / 501 / chữ / âm ⇒ toast đỏ tiếng Việt, **không ghi gì** | 5 ca `test_update_source_rejects_bad_values_without_touching_db` |
+| Route dùng `str` chứ không `Optional[int]` để lỗi ra toast, không 422 JSON | `test_update_bad_number_is_vietnamese_error_toast_not_422` |
+| Xoá hết Page ⇒ sạch cả `target_page` legacy | `test_update_source_clearing_pages_also_clears_legacy_column` |
+| Hàng sửa không nằm trong cột bị ẩn ở màn hẹp | `test_edit_row_is_not_inside_a_column_that_hides_on_narrow_screens` |
+| Chạy thật ca của Owner (thêm nguồn → sửa max 3→50 → đọc lại DB) | `min_views=1000 max_videos=50` |
+| Toàn suite | **599 passed, 16 skipped, 0 failed** |
+
+**Một file ngoài phạm vi dự tính**: `tests/test_source_fanout_ui.py` — helper `_row` cắt slab
+tới hàng nguồn kế tiếp nên nuốt luôn hàng sửa mới, làm assert "không in nguyên URL ra bảng"
+(ADR-020) đỏ. Quy tắc đó **không bị vi phạm** — cột Page vẫn chỉ hiện tên rút gọn, URL đầy
+đủ nằm trong textarea để sửa. Đã thu hẹp `_row` dừng ở `</tr>`; không đổi assert nào.
+
+### System State
+
+`/app/viral/sources` giờ sửa được Min views / Max video / Page đích tại chỗ, giữ nguyên
+lịch sử quét. `url` / `platform` / `handle` vẫn không sửa được (đổi kênh thì xoá rồi thêm).
+Không migration, không đụng `scan_source` / `scan_all` / lịch quét mỗi giờ.
+
+### Unfinished + Blockers
+
+- **Chưa xem trên trình duyệt thật ở máy chạy tool.** Máy dev `Admin-PC` không nối được DB
+  (xem dưới), nên phần kiểm chạy trên SQLite tạm + app thật.
+- **Postgres của ToolsAuto trên máy dev không chạy**: container `toolsauto_postgres` đã
+  `Exited` từ 2026-09-08 tối; `DATABASE_URL` trỏ `127.0.0.1:5434` không ai lắng nghe. Tool
+  thật của Owner chạy trên **máy khác** (`LAPTOP-T2HF25CD`, qua UltraViewer) nên phiên này
+  không đọc được trạng thái runtime thật của Owner.
+- Nợ cũ chưa ai dọn: `tests/test_threads_world_news.py` lỗi collection
+  (`No module named 'app.services'`) từ commit `8326183`.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại web process**, mở `/app/viral/sources` → bấm **Sửa**
+   ở hàng `@thacaukechuyen` → đặt Max video/lần = **50** → **Lưu** → bấm **Quét**. Nếu vẫn
+   "Tìm thấy 0" thì hạ **Min views** (đang 1.000) rồi quét lại.
+2. Anti: quyết có làm PLAN cho khối badge page header (`layouts/app.html`) không — treo từ
+   phiên 2026-09-08 (c).
+
+---
+
 ## Phiên 2026-09-09 (a) — ADR-025: "Nguồn video" thành trang riêng `/app/viral/sources`
 
 Owner hỏi *"sao nguồn video nó nằm trong ui ux của nội dung viral vậy, lỗi?"* khi bấm mục

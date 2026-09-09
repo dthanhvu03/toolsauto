@@ -323,6 +323,36 @@ def add_source(
     )
 
 
+@router.post("/sources/{source_id}/update", response_class=HTMLResponse)
+def update_source(
+    source_id: int,
+    min_views: str = Form(""),
+    max_videos: str = Form(""),
+    target_pages: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """
+    Sửa tại chỗ Min views / Max video / Page đích của một nguồn (ADR-026).
+
+    Ba trường nhận kiểu ``str`` chứ không phải ``Optional[int]``: số sai phải ra **toast đỏ
+    tiếng Việt** từ service (ADR-026 mục 3), chứ không phải 422 JSON của FastAPI. Ô để trống
+    ⇒ về mặc định chung, không phải giữ số cũ.
+    """
+    try:
+        ok, msg = _source_service().update_source(
+            db,
+            source_id,
+            min_views=min_views,
+            max_videos=max_videos,
+            target_pages=_parse_target_pages(target_pages),
+        )
+    except Exception as exc:
+        return _sources_error_toast("sửa nguồn", exc)
+    return htmx_toast_response(
+        msg, type="success" if ok else "error", extra_triggers=_SOURCES_TRIGGERS
+    )
+
+
 @router.post("/sources/scan-all", response_class=HTMLResponse)
 def scan_all_sources(background: BackgroundTasks):
     background.add_task(_scan_all_sources_in_background)

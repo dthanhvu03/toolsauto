@@ -199,6 +199,64 @@ class SourceService:
         return True
 
     @staticmethod
+    def update_source(
+        db: Session,
+        source_id: int,
+        *,
+        min_views=None,
+        max_videos=None,
+        target_pages: list[str] | None = None,
+    ) -> tuple[bool, str]:
+        """
+        Sửa tại chỗ Min views / Max video / Page đích của một nguồn (ADR-026).
+
+        Rỗng (``None`` hoặc ``""``) nghĩa là **về mặc định** — ghi NULL để nguồn dùng lại
+        ``viral.min_views`` / ``viral.max_videos_per_channel``; KHÔNG phải "giữ số cũ".
+        ``target_pages`` rỗng ⇒ xoá cả ``target_pages`` lẫn ``target_page`` legacy, để
+        "đã xoá hết Page" không còn sót một Page cũ ở nguồn sự thật thứ hai.
+
+        ``url`` / ``platform`` / ``handle`` không sửa được — đổi kênh thì xoá rồi thêm mới.
+        Không raise: giá trị sai ⇒ ``(False, thông báo)`` và **không ghi gì**.
+        """
+        src = db.get(ViralSource, source_id)
+        if not src:
+            return False, f"Không tìm thấy nguồn #{source_id}"
+
+        def _opt_int(raw, label: str):
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                return True, None, ""
+            try:
+                return True, int(str(raw).strip()), ""
+            except (TypeError, ValueError):
+                return False, None, f"{label} phải là số nguyên."
+
+        ok, new_min, msg = _opt_int(min_views, "Min views")
+        if not ok:
+            return False, msg
+        ok, new_max, msg = _opt_int(max_videos, "Max video/lần")
+        if not ok:
+            return False, msg
+        if new_min is not None and new_min < 0:
+            return False, "Min views không được âm."
+        if new_max is not None and not 1 <= new_max <= MAX_VIDEOS_CAP:
+            return False, f"Max video/lần phải trong khoảng 1–{MAX_VIDEOS_CAP}."
+
+        src.min_views = new_min
+        src.max_videos = new_max
+        src.target_pages_list = list(target_pages or [])
+        db.commit()
+        db.refresh(src)
+
+        pages = len(src.target_pages_list)
+        shown_min = f"{new_min:,}" if new_min is not None else "mặc định"
+        shown_max = new_max if new_max is not None else "mặc định"
+        shown_pages = f"{pages} Page đích" if pages else "không Page đích"
+        return True, (
+            f"Đã lưu nguồn @{src.handle or src.url} — min views {shown_min}, "
+            f"max video {shown_max}, {shown_pages}."
+        )
+
+    @staticmethod
     def delete_source(db: Session, source_id: int) -> bool:
         src = db.get(ViralSource, source_id)
         if not src:

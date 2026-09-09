@@ -109,6 +109,17 @@ def fake_service(monkeypatch):
             return 3, 1, None
 
         @staticmethod
+        def update_source(db, source_id, *, min_views=None, max_videos=None, target_pages=None):
+            calls.append(("update_source", db, source_id, dict(min_views=min_views, max_videos=max_videos, target_pages=target_pages)))
+            if state["raise"] == "update_source":
+                raise RuntimeError("locked")
+            if source_id not in {s.id for s in state["sources"]}:
+                return False, f"Không tìm thấy nguồn #{source_id}"
+            if str(max_videos).strip() == "501":
+                return False, "Max video/lần phải trong khoảng 1–500."
+            return True, f"Đã lưu nguồn #{source_id}"
+
+        @staticmethod
         def scan_all(db, *, only_due=True):
             calls.append(("scan_all", db, dict(only_due=only_due)))
             if state["raise"] == "scan_all":
@@ -385,3 +396,84 @@ def test_ago_label_handles_epoch_datetime_and_none():
     assert viral_router._ago_label(now - 2 * 86400, now) == "2 ngày trước"
     dt = datetime.fromtimestamp(now, tz=timezone.utc) - timedelta(minutes=12)
     assert viral_router._ago_label(dt, now) == "12 phút trước"
+
+
+# ── ADR-026: POST /viral/sources/{id}/update + nút Sửa trong fragment ────────
+
+
+def test_update_passes_parsed_values_and_refreshes_table(client, fake_service):
+    resp = client.post(
+        "/viral/sources/1/update",
+        data={"min_views": "5000", "max_videos": "50", "target_pages": " https://facebook.com/b \n\n https://facebook.com/a \n https://facebook.com/b "},
+    )
+
+    assert resp.status_code == 204
+    trig = _triggers(resp)
+    assert trig["showMessage"] == {"msg": "Đã lưu nguồn #1", "type": "success"}
+    assert trig["refreshViralSources"] is True
+    name, db, source_id, kw = fake_service.calls[0]
+    assert (name, source_id) == ("update_source", 1) and isinstance(db, Session)
+    assert kw["min_views"] == "5000" and kw["max_videos"] == "50"
+    # _parse_target_pages: bỏ dòng rỗng, bỏ trùng, GIỮ thứ tự người dùng gõ
+    assert kw["target_pages"] == ["https://facebook.com/b", "https://facebook.com/a"]
+
+
+def test_update_empty_fields_reach_service_as_empty_strings(client, fake_service):
+    """Rỗng phải xuống tới service (nó dịch thành NULL = mặc định), không bị router chặn."""
+    client.post("/viral/sources/1/update", data={"min_views": "", "max_videos": "", "target_pages": ""})
+
+    assert fake_service.calls[0][3] == {"min_views": "", "max_videos": "", "target_pages": []}
+
+
+def test_update_bad_number_is_vietnamese_error_toast_not_422(client, fake_service):
+    """Số sai phải ra toast đỏ tiếng Việt, không phải 422 JSON của FastAPI."""
+    resp = client.post("/viral/sources/1/update", data={"min_views": "", "max_videos": "501", "target_pages": ""})
+
+    assert resp.status_code == 204
+    trig = _triggers(resp)
+    assert trig["showMessage"]["type"] == "error"
+    assert "1–500" in trig["showMessage"]["msg"]
+
+
+def test_update_unknown_id_is_error_toast(client, fake_service):
+    trig = _triggers(client.post("/viral/sources/9999/update", data={"min_views": "", "max_videos": "", "target_pages": ""}))
+
+    assert trig["showMessage"]["type"] == "error"
+    assert "9999" in trig["showMessage"]["msg"]
+
+
+def test_update_service_exception_is_error_toast_not_500(client, fake_service):
+    fake_service.state["raise"] = "update_source"
+
+    resp = client.post("/viral/sources/1/update", data={"min_views": "", "max_videos": "", "target_pages": ""})
+
+    assert resp.status_code == 204
+    assert _triggers(resp)["showMessage"]["type"] == "error"
+
+
+def test_fragment_has_edit_button_and_prefilled_form(client, fake_service):
+    html = client.get("/viral/sources").text
+
+    assert 'hx-post="/viral/sources/1/update"' in html
+    assert 'id="src-edit-1"' in html and 'id="src-edit-2"' in html
+
+    def _row(sid):
+        return html.split(f'id="src-edit-{sid}"', 1)[1].split("</tr>", 1)[0]
+
+    # Nguồn #1 có số riêng ⇒ đổ sẵn; nguồn #2 để mặc định (None) ⇒ ô rỗng
+    assert 'value="50000"' in _row(1) and 'value="20"' in _row(1)
+    assert 'value=""' in _row(2)
+    # Page đích đổ sẵn vào textarea để sửa chứ không phải gõ lại từ đầu
+    assert "https://facebook.com/mypage" in _row(1)
+
+
+def test_edit_row_is_not_inside_a_column_that_hides_on_narrow_screens(client, fake_service):
+    """
+    Bẫy đã gây ra ADR-025: cột Min views / Max video mang `hidden xl:table-cell`, màn hẹp
+    không thấy. Hàng sửa phải là <tr> riêng dùng colspan, nếu không Owner vẫn không sửa được.
+    """
+    html = client.get("/viral/sources").text
+    row = html.split('id="src-edit-1"', 1)[1].split("</tr>", 1)[0]
+
+    assert "colspan" in row
+    assert "hidden xl:table-cell" not in row

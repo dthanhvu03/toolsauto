@@ -209,8 +209,15 @@ def test_add_service_exception_is_error_toast_not_500(client, fake_service):
 
 
 def _row(html: str, source_id: int) -> str:
+    """Chỉ ``<tr>`` của chính nguồn đó — dừng ở ``</tr>`` đầu tiên.
+
+    ADR-026 chèn thêm một ``<tr>`` hàng sửa ngay sau mỗi hàng nguồn, trong đó Page đích
+    được đổ **nguyên URL** vào textarea (đúng ý: để sửa tại chỗ). Cắt tới hàng nguồn kế
+    tiếp thì slab này nuốt luôn hàng sửa, và assert "không in nguyên URL ra bảng" ở dưới
+    hiểu sai thành lỗi.
+    """
     part = html.split(f'id="viral-source-{source_id}"')[1]
-    return part.split('id="viral-source-', 1)[0]
+    return part.split("</tr>", 1)[0]
 
 
 def test_fragment_page_column_renders_all_four_cases(client, fake_service):
