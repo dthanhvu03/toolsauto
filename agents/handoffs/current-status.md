@@ -24,7 +24,7 @@ riêng — đụng backend, cần ADR. **Owner chọn B**, rồi yêu cầu revi
 3. `/viral/sources` (fragment) và `/app/viral/sources` (trang) khác nhau 4 ký tự ⇒ bắt buộc
    docstring hai chiều ở cả hai hàm.
 
-**Commit**: `5a1e7dc` trên `main`, 9 file, +355/-88. Chưa push (tool chạy local).
+**Commit**: `0ea0c86` trên `main`, 9 file, +355/-88. **Đã push lên `origin/main`** (`e8b6c4b..0ea0c86`).
 
 ### Done This Session (có proof)
 
