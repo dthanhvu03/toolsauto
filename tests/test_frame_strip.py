@@ -145,12 +145,17 @@ def test_khong_suy_duong_dan_ffprobe_bang_replace():
     """
     import pathlib
 
+    from app.core.media import thumbnail
     from app.features.viral_intake import service
 
-    code = pathlib.Path(service.__file__).read_text(encoding="utf-8")
+    # ADR-035 dời việc đo sang `core.media.thumbnail.media_info`; `service` nay gọi lại nó.
+    # Ý định của test giữ nguyên: KHÔNG chỗ nào được suy đường dẫn ffprobe bằng replace.
+    for mod in (service, thumbnail):
+        code = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+        assert 'replace("ffmpeg", "ffprobe")' not in code, mod.__name__
 
-    assert 'replace("ffmpeg", "ffprobe")' not in code
-    assert "ffmpeg_path.ffprobe_bin()" in code
+    assert "ffprobe_bin()" in pathlib.Path(thumbnail.__file__).read_text(encoding="utf-8")
+    assert "media_info" in pathlib.Path(service.__file__).read_text(encoding="utf-8")
 
 
 def test_probe_duration_doc_duoc_do_dai_that(tmp_path):

@@ -91,6 +91,19 @@ class TelegramClient:
             "caption": caption[:1024],  # Telegram caption limit
             "parse_mode": parse_mode,
         }
+        # ADR-035: thiếu `duration` thì Telegram hiện `0:00` trên khung video. Đo ở tầng client
+        # nên MỌI chỗ gửi video đều được, không riêng tin "video sẵn sàng". Đo hỏng ⇒ bỏ ba
+        # tham số này, gửi như cũ.
+        try:
+            from app.core.media.thumbnail import media_info
+
+            probe = media_info(video_path)
+            if probe.get("duration"):
+                data["duration"] = int(probe["duration"])
+            if probe.get("width") and probe.get("height"):
+                data["width"], data["height"] = int(probe["width"]), int(probe["height"])
+        except Exception:
+            pass
         if reply_markup:
             data["reply_markup"] = json_mod.dumps(reply_markup)
 

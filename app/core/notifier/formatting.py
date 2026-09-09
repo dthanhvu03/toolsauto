@@ -144,6 +144,12 @@ def _clean_material_title(title: Optional[str]) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _mmss(seconds) -> str:
+    """Giây → ``m:ss``. Dùng chung cho độ dài và mốc cắt (ADR-035)."""
+    total = int(seconds or 0)
+    return f"{total // 60}:{total % 60:02d}"
+
+
 def material_caption_block(mat) -> str:
     """
     ADR-027 — caption + hashtag trong **một khối ``<code>``**: trên Telegram chạm vào là
@@ -169,6 +175,8 @@ def material_ready_message(
     *,
     with_caption: bool = True,
     drive_path: Optional[str] = None,
+    duration: Optional[float] = None,
+    source_duration: Optional[float] = None,
 ) -> str:
     """
     ADR-018 + ADR-022 + ADR-027: video reup xong, không có account ⇒ Owner đăng tay.
@@ -189,11 +197,19 @@ def material_ready_message(
     drive_line = (
         f"📂 Trong Drive: <code>{html_mod.escape(str(drive_path))}</code>\n" if drive_path else ""
     )
+    # ADR-035: Owner nhận video mà không biết dài bao nhiêu, cắt từ đâu — phải mở ra xem mới
+    # biết, đúng việc ADR-032 vừa bỏ công loại bỏ.
+    length_line = ""
+    if duration:
+        start = int(getattr(mat, "clip_start_sec", None) or 0)
+        goc = f" (gốc {_mmss(source_duration)})" if source_duration else ""
+        length_line = f"⏱ Dài {_mmss(duration)} · cắt từ {_mmss(start) if start else 'đầu'}{goc}\n"
     head = (
         f"🎬 <b>Video sẵn sàng đăng tay</b>\n"
         f"📋 Material #{getattr(mat, 'id', '?')} | {html_mod.escape(platform)}\n"
         f"📝 <i>{html_mod.escape(title)}</i>\n"
         f"👁 {views:,} lượt xem\n"
+        f"{length_line}"
         f"{file_line}"
         f"{drive_line}"
     )

@@ -1,5 +1,39 @@
 # Current Status
 
+## Phiên 2026-09-09 (k) — ADR-035: tin Telegram nói rõ dài bao nhiêu, cắt từ đâu
+
+Owner chạy thật luồng ADR-034 (dán link vào chat ⇒ nhận video + caption) và phản hồi:
+*"anh nhìn như này không biết video bao nhiêu phút hay như nào hết"*.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| Dòng `⏱ Dài 1:30 · cắt từ 5:32 (gốc 9:33)` trong tin | `test_k1` |
+| Không có mốc ⇒ "cắt từ đầu"; không biết gốc ⇒ **bỏ ngoặc**, không đoán bừa | `test_k2`, `test_k3` |
+| Đo hỏng ⇒ bỏ dòng đó, tin vẫn gửi | `test_k4`, `test_k7` |
+| `sendVideo` mang `duration`/`width`/`height` ⇒ Telegram hết hiện `0:00` trên khung video | `media_info` đo thật: `{duration 90.0, width 576, height 1024}` |
+| `media_info` đặt ở `core/media` — notifier lẫn processor đều dùng; `ViralService.probe_duration` **gọi lại nó** thay vì giữ bản riêng | `test_khong_suy_duong_dan_ffprobe_bang_replace` (đã cập nhật) |
+| Toàn suite | **758 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ |
+
+Bối cảnh kỹ thuật: `send_video` không truyền `duration` nên Telegram không biết độ dài mà
+hiển thị. Sửa ở **tầng client** nên mọi chỗ gửi video đều được, không riêng tin này.
+
+### Unfinished + Blockers
+
+- **Chưa làm nút chọn mốc cắt trong Telegram** (dải khung hình + 12 nút) — việc tiếp theo,
+  và giờ càng đáng làm vì Owner đã thấy được "cắt từ đâu, còn bao nhiêu chưa lấy".
+- Video > 50 MB vẫn không gửi kèm file được (giới hạn Bot API).
+- Nợ cũ: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại**, dán lại một link ⇒ tin mới phải có dòng `⏱`.
+2. Thấy "cắt từ đầu (gốc 9:33)" mà đoạn đầu nhạt ⇒ báo em làm nút chọn mốc trong Telegram.
+3. Đăng bài đầu tiên lên Page "Mê Câu Cá".
+
+---
+
 ## Phiên 2026-09-09 (j) — ADR-034: dán link vào chat Telegram là xong
 
 Owner: *"mọi thứ để ở tele thì tốt biết mấy"*. Không bê cả web vào chat — chat dở ở bảng biểu

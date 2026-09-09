@@ -177,7 +177,13 @@ class NotifierService:
     TELEGRAM_MEDIA_CAPTION_LIMIT = 1024
 
     @classmethod
-    def notify_material_ready(cls, mat, media_path: Optional[str] = None, drive_path: Optional[str] = None):
+    def notify_material_ready(
+        cls,
+        mat,
+        media_path: Optional[str] = None,
+        drive_path: Optional[str] = None,
+        source_duration: Optional[float] = None,
+    ):
         """
         ADR-022 + ADR-027 — material về ``READY`` (không account ⇒ không Job): Owner tải file
         đăng tay ngay trong Telegram.
@@ -191,7 +197,19 @@ class NotifierService:
         GIỜ raise ngược lên processor.
         """
         try:
-            msg = nf.material_ready_message(mat, media_path, drive_path=drive_path)
+            # ADR-035: đo Ở ĐÂY chứ không trong `formatting` — formatting là hàm thuần dựng
+            # chuỗi; nhét subprocess vào đó thì mọi test dựng tin nhắn hoá thành test ffmpeg.
+            duration = 0.0
+            if media_path:
+                try:
+                    from app.core.media.thumbnail import media_info
+
+                    duration = float(media_info(media_path).get("duration") or 0)
+                except Exception:
+                    duration = 0.0
+            extra = {"duration": duration, "source_duration": source_duration}
+
+            msg = nf.material_ready_message(mat, media_path, drive_path=drive_path, **extra)
             with_video = (
                 media_path
                 and os.path.exists(media_path)
@@ -206,7 +224,7 @@ class NotifierService:
                 cls._broadcast_video(
                     media_path,
                     nf.material_ready_message(
-                        mat, media_path, with_caption=False, drive_path=drive_path
+                        mat, media_path, with_caption=False, drive_path=drive_path, **extra
                     ),
                 )
                 cls._broadcast(block)

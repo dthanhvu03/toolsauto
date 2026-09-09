@@ -138,19 +138,11 @@ class ViralService:
     @staticmethod
     def probe_duration(video_path: str) -> float:
         """Độ dài video (giây); 0 nếu không đọc được. Không raise."""
-        try:
-            # KHÔNG suy ffprobe bằng `resolve_ffmpeg().replace("ffmpeg","ffprobe")`: nó thay cả
-            # TÊN THƯ MỤC (…/Programs/ffmpeg/bin/… → …/Programs/ffprobe/bin/…) nên ra đường dẫn
-            # không tồn tại, và hàm này nuốt lỗi nên hỏng âm thầm. Repo có sẵn resolver chung.
-            ffprobe = ffmpeg_path.ffprobe_bin()
-            out = subprocess.run(
-                [ffprobe, "-v", "error", "-show_entries", "format=duration",
-                 "-of", "default=nw=1:nk=1", video_path],
-                capture_output=True, text=True, timeout=30,
-            ).stdout.strip()
-            return float(out) if out else 0.0
-        except Exception:
-            return 0.0
+        # ADR-035: gọi lại bản ở core thay vì giữ bản riêng — repo đã có sẵn một cặp hàm
+        # trùng việc (hai bộ làm sạch tiêu đề), không đẻ thêm cặp nữa.
+        from app.core.media.thumbnail import media_info
+
+        return float(media_info(video_path).get("duration") or 0.0)
 
     @staticmethod
     def find_reup_path(material_id: int, platform: str | None = None) -> Optional[str]:

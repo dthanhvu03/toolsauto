@@ -927,8 +927,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 # ADR-022: luồng này không sinh Job nên không thông báo nào của job chạy.
                 from app.core.notifier.service import NotifierService
 
+                # ADR-035: độ dài GỐC đo từ file gốc — chỉ biết khi nó còn trên đĩa
+                # (ADR-032 giữ 7 ngày). Không biết thì truyền None, tin sẽ không đoán bừa.
+                _src = ViralService.find_source_path(mat.id, mat.platform)
                 NotifierService.notify_material_ready(
-                    mat, media_path, drive_path=_offsite.relative_to_root(_drive_dest)
+                    mat,
+                    media_path,
+                    drive_path=_offsite.relative_to_root(_drive_dest),
+                    source_duration=ViralService.probe_duration(_src) if _src else None,
                 )
                 continue
 

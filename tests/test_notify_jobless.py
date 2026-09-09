@@ -835,3 +835,79 @@ def test_j2_session_van_dung_duoc_sau_khi_hong(session_factory, monkeypatch):
         assert db.get(ViralMaterial, mid) is not None
 
     assert goi["rollback"] == 1
+
+
+# ───────── (k) ADR-035: tin phải nói video dài bao nhiêu, cắt từ đâu ─────────
+
+
+def test_k1_dong_thoi_luong_co_du_dai_moc_cat_va_do_dai_goc():
+    """Owner nhận video mà không biết dài bao nhiêu thì phải mở ra xem — đúng việc đã bỏ công
+    loại bỏ ở ADR-032."""
+    mat = FakeMaterial(id=976)
+    mat.clip_start_sec = 332
+
+    text = nf.material_ready_message(mat, "/x/a.mp4", duration=90, source_duration=573)
+
+    assert "⏱ Dài 1:30 · cắt từ 5:32 (gốc 9:33)" in text
+
+
+def test_k2_khong_co_moc_thi_ghi_tu_dau():
+    mat = FakeMaterial(id=976)
+    mat.clip_start_sec = None
+
+    text = nf.material_ready_message(mat, "/x/a.mp4", duration=90, source_duration=573)
+
+    assert "cắt từ đầu (gốc 9:33)" in text
+
+
+def test_k3_khong_biet_do_dai_goc_thi_KHONG_doan_bua():
+    """File gốc đã dọn thì bỏ hẳn phần trong ngoặc, không hiện số sai."""
+    mat = FakeMaterial(id=976)
+    mat.clip_start_sec = None
+
+    text = nf.material_ready_message(mat, "/x/a.mp4", duration=90)
+
+    assert "⏱ Dài 1:30 · cắt từ đầu" in text
+    assert "gốc" not in text
+
+
+def test_k4_khong_do_duoc_thi_bo_han_dong_do():
+    mat = FakeMaterial(id=976)
+
+    text = nf.material_ready_message(mat, "/x/a.mp4", duration=0)
+
+    assert "⏱" not in text
+
+
+@pytest.mark.parametrize("giay,mong_doi", [(0, "0:00"), (9, "0:09"), (90, "1:30"), (573, "9:33"), (3661, "61:01")])
+def test_k5_dinh_dang_phut_giay(giay, mong_doi):
+    assert nf._mmss(giay) == mong_doi
+
+
+def test_k6_notify_do_do_dai_va_truyen_vao_tin(stub, tmp_path, monkeypatch):
+    """Đo ở NotifierService, không ở formatting — formatting phải giữ thuần."""
+    video = tmp_path / "viral_9_reup.mp4"
+    video.write_bytes(b"\x00" * 1024)
+    monkeypatch.setattr(
+        "app.core.media.thumbnail.media_info",
+        lambda p: {"duration": 90.0, "width": 576, "height": 1024},
+    )
+
+    NotifierService.notify_material_ready(FakeMaterial(id=9), str(video), source_duration=573)
+
+    assert "⏱ Dài 1:30" in stub.calls[0][-1] and "(gốc 9:33)" in stub.calls[0][-1]
+
+
+def test_k7_do_do_dai_hong_thi_van_gui_tin(stub, tmp_path, monkeypatch):
+    video = tmp_path / "viral_9_reup.mp4"
+    video.write_bytes(b"\x00" * 1024)
+
+    def boom(_p):
+        raise RuntimeError("ffprobe chết")
+
+    monkeypatch.setattr("app.core.media.thumbnail.media_info", boom)
+
+    NotifierService.notify_material_ready(FakeMaterial(id=9), str(video))
+
+    assert len(stub.calls) == 1
+    assert "Video sẵn sàng đăng tay" in stub.calls[0][-1]
