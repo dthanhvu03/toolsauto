@@ -59,6 +59,11 @@ class ViralMaterial(Base):
     process_tries = Column(Integer, default=0)  # Intake attempts (download/reup); cap retry
 
     # ADR-024: chống trùng nội dung ở tầng material — tính NGAY sau khi tải, TRƯỚC khi reup.
+    # ADR-031: mốc bắt đầu cắt (giây) trong video GỐC. None/0 ⇒ cắt từ đầu như trước.
+    # Video nguồn dài 6-11 phút mà tool chỉ giữ 90 giây đầu — tức cảnh móc mồi, không phải
+    # khoảnh khắc câu được cá. Đã đo: dò tự động theo âm thanh không khả thi (biểu đồ phẳng),
+    # nên phải để người chỉ mốc.
+    clip_start_sec = Column(Integer, nullable=True)
     content_hash = Column(String, nullable=True, index=True)  # sha256 file nguồn vừa tải
     phash = Column(Text, nullable=True)  # JSON {"1.23s": "hex", …} — pHash 5 khung hình
 

@@ -295,6 +295,33 @@
                     aria-label="Reup lại (tùy chọn)">
                     Reup lại (tùy chọn)
                 </button>
+
+                {# ADR-031: tool cắt 90 giây ĐẦU của video gốc dài 6-11 phút — tức cảnh móc mồi,
+                   không phải lúc câu được cá. Ô này cho chọn mốc bắt đầu. Phải TẢI LẠI chứ
+                   không cắt lại tại chỗ: file gốc đã xoá, bản _reup chỉ còn 90 giây đó. #}
+                <div class="mt-2 pt-2 border-t border-[var(--border)] w-full flex flex-col items-end gap-1">
+                    <label for="clip-start-{{ item.id }}" class="text-[10px] text-[var(--color-mist)]">
+                        Bắt đầu từ giây
+                    </label>
+                    <input id="clip-start-{{ item.id }}" name="clip_start_sec" type="number" min="0" step="10"
+                           value="{{ item.clip_start_sec if item.clip_start_sec else '' }}"
+                           placeholder="0 = từ đầu"
+                           class="w-24 text-[10px] border border-[var(--border)] rounded px-1 py-0.5 text-right text-[var(--color-ink)] bg-[var(--color-face)]"
+                           title="Mốc trong video GỐC, tính bằng giây. Ví dụ phút 5 = 300." />
+                    <input type="hidden" name="process_now" value="true" />
+                    <button
+                        class="inline-flex items-center justify-center min-h-[32px] px-2 py-1 rounded text-[10px] font-semibold text-[var(--color-torch)] border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] hover:brightness-110 transition"
+                        hx-post="/viral/{{ item.id }}/clip-start"
+                        hx-include="#clip-start-{{ item.id }},previous input[name=process_now]"
+                        hx-swap="none"
+                        title="Đặt mốc rồi TẢI LẠI video gốc và cắt từ mốc đó — tốn thời gian và băng thông"
+                        aria-label="Đặt mốc và tải lại">
+                        Đặt mốc &amp; tải lại
+                    </button>
+                    <span class="text-[9px] text-[var(--color-mist)] text-right leading-tight max-w-[12rem]">
+                        Phải tải lại video gốc vì bản hiện tại chỉ còn 90 giây đầu.
+                    </span>
+                </div>
             </div>
         </details>
         {% endif %}

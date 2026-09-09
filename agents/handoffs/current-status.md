@@ -1,5 +1,58 @@
 # Current Status
 
+## Phiên 2026-09-09 (g) — ADR-031: chọn mốc cắt, đừng đăng 90 giây móc mồi
+
+**Phát hiện lớn nhất phiên này**, tìm ra bằng đo chứ không đoán: video nguồn dài 6-11 phút,
+tool giữ **90 giây ĐẦU**. Bóc khung hình video 573s có 2,2 triệu view: giây 45 còn **móc mồi
+tôm**, giây 320 mới có **con cá**, giây 545 trống trơn. Tức tool đang xuất bản cảnh móc mồi và
+cắt bỏ đúng đoạn tạo ra kết quả. Owner xác nhận: *"video có 1p2 mấy giây là hết rồi"*.
+
+**Đã thử và loại phương án tự dò**: đo năng lượng âm thanh từng giây cả video — phẳng 59-81%,
+cửa sổ "ồn nhất" chỉ hơn cửa sổ hiện tại **3 điểm phần trăm**. Không có tín hiệu. Nếu dựng
+heuristic theo âm thanh thì đã dựng một thứ không chạy được.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| Cột `viral_materials.clip_start_sec` + migration `p3d0e1f2a3b4` | `alembic heads` = 1 head |
+| Cắt đúng từ mốc — **chạy ffmpeg thật** trên video đồng hồ 400s | `clip_start=300` ⇒ khung giây 2 hiện **302**; bỏ trống ⇒ hiện **2** |
+| `MAX_REELS_DURATION` hardcode ⇒ ô `reup.max_duration_sec` (mặc định 90) | 3 test |
+| Đặt mốc ⇒ status về `REUP` để đường xử lý **tải lại** | `test_dat_moc_thi_ve_REUP…` |
+| Giá trị sai ⇒ từ chối, không đổi status | 2 ca |
+| UI: ô "Bắt đầu từ giây" + nút "Đặt mốc & tải lại" trên dòng material | render thật |
+| Toàn suite | **680 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ |
+
+**Lỗi thật tìm ra khi chạy thử, kiểu tệ nhất:** bản vá đầu chỉ sửa lượt mã hoá chính. Lượt đó
+thất bại ⇒ rơi xuống `_fast_trim_fallback()` — nhánh dựng lệnh ffmpeg **riêng**, chỉ có `-t`,
+**không có `-ss`**. Đặt mốc giây 300, hệ thống báo **thành công**, file vẫn là 90 giây đầu.
+Sai âm thầm. **Mock argv không bao giờ bắt được** vì mock luôn cho lượt chính thành công —
+phải chạy ffmpeg thật với video có đồng hồ mới lộ. Đã vá + khoá bằng test.
+
+### System State
+
+Bỏ trống mốc ⇒ hành vi y như trước. Đặt mốc ⇒ phải **tải lại** video gốc (file gốc đã xoá sau
+lần xử lý trước; bản `_reup` chỉ còn 90 giây đó). `find_duplicate` có `exclude_id` nên tải lại
+không tự coi là trùng.
+
+### Unfinished + Blockers
+
+- **12 video "sẵn sàng đăng" hiện đang là 90 giây móc mồi.** Owner nói sẽ xoá video trên laptop
+  rồi làm lại — đúng hướng. Đừng đăng chúng lên Page mới.
+- Chưa có **dải khung hình bấm-chọn** (bước 2, cố ý hoãn): hạ tầng hiện chỉ trích 1 khung ở
+  giây 1 (`ensure_reup_thumbnail`). Chỉ làm nếu ô nhập giây chứng minh đúng hướng.
+- Nợ cũ chưa dọn: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại web + `alembic upgrade head`** (có migration mới).
+2. Với mỗi video: mở link gốc xem lướt, thấy đoạn hay ở phút mấy thì gõ số giây vào ô
+   **"Bắt đầu từ giây"** rồi bấm **"Đặt mốc & tải lại"**. Ví dụ phút 5 = `300`.
+3. Xong mới đăng lên Page **"Mê Câu Cá"** — lứa bài đầu là lứa Facebook đánh giá Page.
+4. Anti: quyết PLAN cho khối badge page header (`layouts/app.html`).
+
+---
+
 ## Phiên 2026-09-09 (f) — ADR-029: chạy đúng yt-dlp đã ghim, Sức khỏe báo đúng cái đang chạy
 
 Vá nốt ba thứ còn nợ sau khi Owner hỏi "em vá hết chưa" — câu trả lời lúc đó là **chưa**.

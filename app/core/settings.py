@@ -287,6 +287,20 @@ SETTINGS: dict[str, SettingSpec] = {
         description="skip = không thêm vào kho; flag = vẫn thêm và hiện badge trên UI.",
         choices=["skip", "flag"],
     ),
+    "reup.max_duration_sec": SettingSpec(
+        key="reup.max_duration_sec",
+        type="int",
+        default_getter=lambda: 90,
+        title="Độ dài tối đa video sau xử lý (giây)",
+        section="Quét TikTok & Viral",
+        description=(
+            "ADR-031: video nguồn thường dài 6-11 phút, tool cắt còn số giây này. Facebook Reels "
+            "nhận tối đa 90 giây. Muốn cắt ngắn hơn cho gọn thì hạ xuống 60. Preset reels_short "
+            "vẫn ghi đè bằng 45 giây. Cắt TỪ ĐÂU thì đặt ở ô 'Bắt đầu từ giây' trên từng video."
+        ),
+        min=10,
+        max=600,
+    ),
     "viral.auto_caption_on_ready": SettingSpec(
         key="viral.auto_caption_on_ready",
         type="bool",

@@ -11,6 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.config as config
+from app.constants import ViralStatus
 from app.core.media import ffmpeg_path
 from app.core.database.models import Account, Job, ViralMaterial
 from app.core.notifier.service import NotifierService
@@ -540,6 +541,52 @@ class ViralService:
         if material:
             db.delete(material)
             db.commit()
+
+    @staticmethod
+    def set_clip_start(
+        db: Session,
+        material_id: int,
+        clip_start_sec: Optional[int],
+    ) -> Tuple[bool, str]:
+        """
+        ADR-031 — đặt mốc bắt đầu cắt, rồi đưa material về ``REUP`` để xử lý lại.
+
+        **Phải tải lại chứ không cắt lại tại chỗ**: file gốc đã bị xoá sau lần xử lý trước,
+        cái còn lại chỉ là bản ``_reup`` đã cắt còn 90 giây — không chứa đoạn Owner muốn.
+        Giữ file gốc thì tốn ~117 MB mỗi video, trái nguyên tắc dọn file tạm của RULES.
+
+        ``REUP`` là status đúng nghĩa: "manual input, luôn xử lý bất kể views".
+        Không raise: mọi lỗi trả ``(False, msg)``.
+        """
+        try:
+            mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+            if not mat:
+                return False, f"Không tìm thấy material #{material_id}"
+
+            if clip_start_sec in (None, ""):
+                new_value = None
+            else:
+                try:
+                    new_value = int(clip_start_sec)
+                except (TypeError, ValueError):
+                    return False, "Mốc bắt đầu phải là số giây."
+                if new_value < 0:
+                    return False, "Mốc bắt đầu không được âm."
+
+            mat.clip_start_sec = new_value or None
+            mat.status = ViralStatus.REUP
+            mat.last_error = None
+            db.commit()
+        except Exception as exc:
+            logger.exception("[VIRAL] Đặt mốc cắt cho #%s thất bại", material_id)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return False, f"Lỗi khi đặt mốc: {exc}"[:200]
+
+        moc = f"giây {new_value}" if new_value else "từ đầu"
+        return True, f"Đã đặt mốc {moc} cho #{material_id} — bấm Xử lý để tải lại và cắt."
 
     @staticmethod
     def reprocess_reup(

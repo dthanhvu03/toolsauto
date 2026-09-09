@@ -99,6 +99,17 @@ class ReupProcessor:
         },
     }
 
+    @classmethod
+    def _configured_max_duration(cls) -> float:
+        """Độ dài tối đa từ Thiết lập (ADR-031); hỏng thì lùi về hằng số trong code."""
+        try:
+            from app.core import settings as runtime_settings
+
+            value = float(runtime_settings.get_int("reup.max_duration_sec", cls.MAX_REELS_DURATION))
+            return value if value > 0 else float(cls.MAX_REELS_DURATION)
+        except Exception:
+            return float(cls.MAX_REELS_DURATION)
+
     @staticmethod
     def _parse_rate(raw: Any, default: float) -> float:
         """Parse ffprobe rate like '30/1' or '29.97' → float."""
@@ -912,6 +923,7 @@ class ReupProcessor:
         intro_path: Optional[str] = None,
         outro_path: Optional[str] = None,
         hook_text: Optional[str] = None,
+        clip_start: float = 0.0,
     ) -> ReupResult:
         """
         Pre-process video reup: anti-dupe + hook text + brand intro + brand outro.
@@ -929,7 +941,9 @@ class ReupProcessor:
         started_at = time.time()
         preset_key = normalize_preset(preset)
         knobs = dict(cls.PRESET_KNOBS.get(preset_key) or cls.PRESET_KNOBS["safe"])
-        max_duration = float(knobs.get("max_duration") or cls.MAX_REELS_DURATION)
+        # ADR-031: preset có `max_duration` riêng thì ưu tiên (reels_short = 45s); không thì
+        # lấy ô `reup.max_duration_sec` ở Thiết lập, cuối cùng mới tới hằng số trong code.
+        max_duration = float(knobs.get("max_duration") or cls._configured_max_duration())
         crf = int(knobs.get("crf") or 26)
         cfg = load_reup_config()
         head_trim = float(cfg.get("audio_head_trim_sec") or 0)
@@ -1018,9 +1032,14 @@ class ReupProcessor:
         else:
             cmd = ["nice", "-n", "19", _ffmpeg_bin(), "-y"]
 
-        # Phase C: micro head-trim changes audio fingerprint slightly
-        if head_trim > 0 and duration > (head_trim + 2.0):
-            cmd += ["-ss", f"{head_trim:.3f}"]
+        # Phase C: micro head-trim changes audio fingerprint slightly.
+        # ADR-031: cộng thêm `clip_start` — mốc Owner chọn. Một chỗ `-ss` duy nhất nên không
+        # tốn thêm lần re-encode nào. Mốc vượt quá độ dài video thì bỏ qua, cắt từ đầu như cũ.
+        seek = head_trim if (head_trim > 0 and duration > (head_trim + 2.0)) else 0.0
+        if clip_start > 0 and duration > (clip_start + 2.0):
+            seek += clip_start
+        if seek > 0:
+            cmd += ["-ss", f"{seek:.3f}"]
 
         cmd += ["-i", input_path]
 
@@ -1028,7 +1047,7 @@ class ReupProcessor:
             cmd += ["-i", logo_path]
 
         # Duration limit (after -ss, remaining length)
-        effective_duration = duration - head_trim if head_trim > 0 else duration
+        effective_duration = duration - seek if seek > 0 else duration
         if effective_duration > max_duration:
             cmd += ["-t", str(max_duration)]
             logger.info(
@@ -1080,9 +1099,19 @@ class ReupProcessor:
             if duration <= max_duration:
                 return ReupResult(success=False, error="Fallback not needed")
 
-            logger.info("[ReupProcessor] Emergency fast-trim > %.0fs...", max_duration)
-            trim_cmd = [
-                _ffmpeg_bin(), "-y", "-i", input_path,
+            logger.info(
+                "[ReupProcessor] Emergency fast-trim > %.0fs (clip_start=%.1f)...",
+                max_duration, clip_start,
+            )
+            # ADR-031: nhánh dự phòng PHẢI tôn trọng `clip_start`. Thiếu nó thì Owner đặt mốc,
+            # hệ thống báo thành công, mà file vẫn là 90 giây đầu — sai âm thầm, kiểu tệ nhất.
+            # `-ss` đặt trước `-i` (input seeking) để chạy nhanh và dùng được với `-c copy`;
+            # đổi lại điểm cắt nhảy về keyframe gần nhất, lệch vài phần giây — chấp nhận được.
+            trim_cmd = [_ffmpeg_bin(), "-y"]
+            if clip_start > 0 and duration > (clip_start + 2.0):
+                trim_cmd += ["-ss", f"{clip_start:.3f}"]
+            trim_cmd += [
+                "-i", input_path,
                 "-t", str(max_duration),
                 "-c", "copy",
                 temp_path,
