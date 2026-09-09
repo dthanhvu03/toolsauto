@@ -1,5 +1,44 @@
 # Current Status
 
+## Phiên 2026-09-09 (i) — ADR-033: lệnh Telegram phải làm đúng điều nó nói
+
+Owner muốn thao tác hết trong Telegram cho khỏi mở máy. Trước khi thêm nút mới, đã **gọi
+thẳng từng lệnh** — kết quả: **2 lệnh gãy, 3 lệnh nói dối**.
+
+| Trước | Sau |
+|---|---|
+| `/status` ❌ `WorkerService.get_status` không tồn tại | ✅ đọc `SystemState.worker_status` |
+| `/pause` ❌ `JobStatus.PAUSED` không tồn tại | ✅ đặt chuỗi `"PAUSED"` như web vẫn làm |
+| `/retry` in "đang thử lại" rồi **không làm gì** | ✅ gọi thật `JobService.retry_job` |
+| `/discovery` in "hoàn tất" mà **không quét** | ✅ gọi hook `viral.force_discovery`, chạy nền |
+| `/viral` chỉ ghi `WorkerState` — nguồn ADR-019 **không đọc chỗ đó** | ✅ ghi cả RuntimeSetting lẫn WorkerState |
+| không có `/help` | ✅ liệt kê đúng 9 lệnh đang chạy |
+
+Hai lệnh gãy vì code đổi mà lệnh không đổi theo; ba lệnh kia **báo thành công cho việc không
+xảy ra** — cùng họ "nhãn nói dối" ADR-023, nhưng tệ hơn vì khẳng định là xong.
+
+**Gốc rễ: không có test nào cho lệnh Telegram.** Nay có 25 test **gọi thật**, không đọc code.
+
+### System State
+
+Toàn suite **726 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ. Bot chạy
+long-polling trong tiến trình **Maintenance** — chỉ sống khi khởi động bằng `start.ps1 -Stack`.
+
+### Unfinished + Blockers
+
+- **Chưa thử trên bot thật**: máy dev không có `TELEGRAM_BOT_TOKEN`, nên mọi thứ kiểm bằng
+  client giả. Owner gõ `/help` trong Telegram là biết bộ nhận lệnh có sống không.
+- **Chưa làm nút chọn mốc cắt trong Telegram** — cố ý để sau, làm trên nền đã sạch.
+- Nợ cũ: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại bằng `start.ps1 -Stack`**, rồi gõ `/help` trong Telegram.
+   Có trả lời = bộ nhận lệnh sống ⇒ em làm tiếp nút chọn mốc cắt.
+2. Đăng bài đầu tiên lên Page "Mê Câu Cá".
+
+---
+
 ## Phiên 2026-09-09 (h) — ADR-032: chọn mốc cắt bằng một cú bấm
 
 ADR-031 cho chọn mốc nhưng thao tác vẫn phiền: xem hết video 9 phút, gõ số giây, tải lại cả
