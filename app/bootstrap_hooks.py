@@ -16,6 +16,7 @@ def register_feature_hooks() -> None:
     from app.features.viral_intake.scan import get_default_min_views, run_tiktok_competitor_scan
     from app.features.viral_intake.discovery_scraper import DiscoveryScraper
     from app.features.viral_intake.sources import SourceService
+    from app.features.viral_intake.service import ViralService
     from app.features.telegram_bot.poller import TelegramPoller
 
     def viral_process_all(db: Session):
@@ -29,6 +30,39 @@ def register_feature_hooks() -> None:
 
     def viral_min_views(db: Session):
         return get_default_min_views(db)
+
+    def viral_add_link(db: Session, url: str) -> dict:
+        """
+        ADR-034 — Owner dán link vào chat Telegram: kênh ⇒ nguồn tự quét, video ⇒ material.
+
+        Phải đi qua hook chứ không cho `telegram_bot` import thẳng `viral_intake`:
+        import-linter chặn feature này gọi feature kia (ADR-007). Đây cũng là cách
+        `/discovery` đang làm.
+        """
+        if SourceService.detect_channel(url):
+            ok, msg, source_id = SourceService.add_source(db, url)
+            return {"kind": "source", "ok": ok, "msg": msg, "id": source_id}
+        ok, msg, material_id = ViralService.add_material_from_url(db, url)
+        return {"kind": "material", "ok": ok, "msg": msg, "id": material_id}
+
+    def viral_add_source_from_material(db: Session, material_id: int) -> dict:
+        """
+        ADR-034 + ADR-028 — biến video đã dán thành nguồn kênh, dò `channel_id` từ chính nó.
+
+        Kênh TikTok không liệt kê được bằng ``@handle`` thì đây là đường DUY NHẤT để thêm nó,
+        mà lúc đó Owner đang ở trong chat chứ không ở web.
+        """
+        from app.core.database.models import ViralMaterial
+
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat or not mat.url:
+            return {"ok": False, "msg": f"Không tìm thấy material #{material_id}"}
+        ok, msg, source_id = SourceService.add_source(db, mat.url)
+        return {"ok": ok, "msg": msg, "id": source_id}
+
+    def viral_process_one(db: Session, material_id: int):
+        """ADR-034 — xử lý đúng một material (tải + cắt + caption), dùng cho link dán ở chat."""
+        return ViralService.process_material(db, material_id)
 
     def viral_force_discovery(db: Session) -> Tuple[List[DiscoveredChannel], List[str], int]:
         scraper = DiscoveryScraper()
@@ -64,6 +98,9 @@ def register_feature_hooks() -> None:
     feature_hooks.register("viral.tiktok_scan", viral_tiktok_scan)
     feature_hooks.register("viral.scan_sources", viral_scan_sources)
     feature_hooks.register("viral.min_views", viral_min_views)
+    feature_hooks.register("viral.add_link", viral_add_link)
+    feature_hooks.register("viral.add_source_from_material", viral_add_source_from_material)
+    feature_hooks.register("viral.process_one", viral_process_one)
     feature_hooks.register("viral.force_discovery", viral_force_discovery)
     feature_hooks.register("viral.discover_keyword", viral_discover_keyword)
     feature_hooks.register("telegram.make_poller", telegram_make_poller)

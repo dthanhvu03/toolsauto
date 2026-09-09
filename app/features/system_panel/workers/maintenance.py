@@ -498,6 +498,14 @@ def run_loop():
             config.TELEGRAM_CHAT_ID,
         )
         CURRENT_POLLER.start()
+
+        # ADR-034: bộ nhận lệnh CHỈ sống trong tiến trình này. Chạy `start.ps1` thường là
+        # không có bot mà không có gì báo — Owner nhắn vào chat, không ai trả lời, thế thôi.
+        # Một dòng chào lúc khởi động biến cái chết âm thầm đó thành thấy được.
+        try:
+            NotifierService.notify_bot_ready()
+        except Exception as exc:
+            logger.debug("Không gửi được lời chào bot: %s", exc)
         
     logger.info(
         "Entering Maintenance polling loop. Tick=%ss (%.1f minutes)",

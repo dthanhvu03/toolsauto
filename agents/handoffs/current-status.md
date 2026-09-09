@@ -1,5 +1,53 @@
 # Current Status
 
+## Phiên 2026-09-09 (j) — ADR-034: dán link vào chat Telegram là xong
+
+Owner: *"mọi thứ để ở tele thì tốt biết mấy"*. Không bê cả web vào chat — chat dở ở bảng biểu
+và cấu hình, giỏi ở "một việc một nút". Chỉ chuyển **luồng hằng ngày**.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| Dán **link video** vào chat ⇒ tạo material + xử lý nền, xong bắn video kèm caption | `test_link_video_tao_material_va_xu_ly_nen` |
+| Dán **link kênh** ⇒ thêm nguồn tự quét | `test_link_kenh_tao_nguon_va_khong_xu_ly_video` |
+| Nút **"➕ Thêm cả kênh này làm nguồn"** — đường duy nhất thêm kênh không liệt kê được (ADR-028) khi đang ở chat | `test_link_video_kem_nut_them_kenh` |
+| Bóc link lẫn trong chữ (bấm Chia sẻ từ app TikTok gửi kèm mô tả) + bỏ dấu câu cuối | 4 test |
+| Mọi nhánh hỏng ⇒ báo rõ, không im, không ném | 3 test |
+| **Vá lỗ có sẵn**: poller chỉ lọc `message`, không lọc `callback_query` theo chat id | 2 test |
+| Bot nhắn **"đã sẵn sàng"** mỗi lần Maintenance khởi động | `test_maintenance_chao_sau_khi_poller_chay` |
+| Toàn suite | **744 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ |
+
+Trước bản này `_handle_message` có đúng một dòng `if not text.startswith("/"): return` — **mọi
+tin không phải lệnh đều bị vứt**, kể cả link Owner gửi vào.
+
+**Ranh giới module giữ nhờ hook**: `telegram_bot` không import `viral_intake` (ADR-007 chặn
+feature gọi feature). Thêm 3 hook ở `bootstrap_hooks`: `viral.add_link`,
+`viral.add_source_from_material`, `viral.process_one`.
+
+### System State
+
+Luồng hằng ngày không cần mở máy: thấy video hay → Chia sẻ vào chat bot → bot tải, cắt, viết
+caption, gửi lại video + caption chạm-là-chép. Bảng 100 video và trang Thiết lập vẫn ở web,
+cố ý.
+
+### Unfinished + Blockers
+
+- **Chưa thử trên bot thật** — máy dev không có token. Owner khởi động lại bằng
+  `start.ps1 -Stack`, thấy tin **"🤖 Bot đã sẵn sàng"** là bộ nhận lệnh sống.
+- **Chưa làm nút chọn mốc cắt trong Telegram** (dải khung hình + 12 nút) — việc tiếp theo.
+- Video > 50 MB vẫn không gửi kèm file được (giới hạn Bot API).
+- Nợ cũ: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + `start.ps1 -Stack`** → chờ tin "🤖 Bot đã sẵn sàng" → thử dán một link
+   TikTok vào chat.
+2. Chạy được thì báo em làm nốt **nút chọn mốc cắt trong Telegram**.
+3. Đăng bài đầu tiên lên Page "Mê Câu Cá".
+
+---
+
 ## Phiên 2026-09-09 (i) — ADR-033: lệnh Telegram phải làm đúng điều nó nói
 
 Owner muốn thao tác hết trong Telegram cho khỏi mở máy. Trước khi thêm nút mới, đã **gọi

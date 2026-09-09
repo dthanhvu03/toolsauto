@@ -43,7 +43,14 @@ class TelegramPoller:
                 time.sleep(5)
 
     def _process_update(self, update: dict):
+        # ADR-034: lọc CẢ callback_query, không riêng message. Trước đây nút bấm không bị lọc
+        # theo chat — bot công khai với ai biết tên nó, mà từ nay tin nhắn link cũng làm tool
+        # tải và xử lý hộ người lạ, nên siết luôn cho đều.
         if "message" in update:
             if str(update["message"].get("chat", {}).get("id")) != self.authorized_chat_id:
+                return
+        if "callback_query" in update:
+            chat = update["callback_query"].get("message", {}).get("chat", {})
+            if str(chat.get("id")) != self.authorized_chat_id:
                 return
         self.event_router.dispatch(update)

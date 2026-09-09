@@ -1,5 +1,11 @@
 import logging
+import re
+import threading
+
 from app.constants import JobStatus
+
+# Owner bấm "Chia sẻ" từ app TikTok thì tin kèm cả chữ mô tả, không phải link trần.
+_URL_RE = re.compile(r"https?://\S+")
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +22,66 @@ class TelegramEventRouter:
 
     def _handle_message(self, message: dict):
         text = message.get("text", "")
-        if not text.startswith("/"): return
-        parts = text.split()
-        cmd = parts[0][1:].split("@")[0].lower()
-        args = parts[1:]
-        self.command_handler.handle_command(cmd, args)
+        if text.startswith("/"):
+            parts = text.split()
+            cmd = parts[0][1:].split("@")[0].lower()
+            args = parts[1:]
+            self.command_handler.handle_command(cmd, args)
+            return
+
+        # ADR-034: trước đây mọi tin không phải lệnh đều bị vứt — kể cả link Owner gửi vào.
+        found = _URL_RE.search(text or "")
+        if found:
+            self._handle_link(found.group(0).rstrip(".,;)"))
+
+    def _handle_link(self, url: str):
+        """
+        ADR-034 — link kênh ⇒ nguồn tự quét; link video ⇒ material + xử lý nền ngay.
+
+        Đi qua `feature_hooks` chứ không import thẳng `viral_intake`: import-linter chặn
+        feature gọi feature (ADR-007). Không bao giờ ném: lỗi chỉ thành tin nhắn.
+        """
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        try:
+            with SessionLocal() as db:
+                res = feature_hooks.call("viral.add_link", db, url) or {}
+        except Exception as exc:
+            logger.exception("[Telegram] add_link failed")
+            self.client.send_message(f"❌ Không thêm được link: {str(exc)[:150]}")
+            return
+
+        msg = str(res.get("msg") or "")
+        if not res.get("ok"):
+            self.client.send_message(f"⚠️ {msg}")
+            return
+
+        if res.get("kind") == "source":
+            self.client.send_message(f"✅ Đã thêm nguồn tự quét.\n{msg}")
+            return
+
+        material_id = res.get("id")
+        self.client.send_message(
+            f"✅ {msg}\n⏳ Đang tải và xử lý… sẽ gửi video kèm caption khi xong.",
+            reply_markup={"inline_keyboard": [[
+                {"text": "➕ Thêm cả kênh này làm nguồn", "callback_data": f"src:{material_id}"},
+            ]]},
+        )
+        self._process_material_async(material_id)
+
+    def _process_material_async(self, material_id: int):
+        def _run():
+            from app.core import feature_hooks
+            from app.core.database.core import SessionLocal
+            try:
+                with SessionLocal() as db:
+                    feature_hooks.call("viral.process_one", db, material_id)
+            except Exception:
+                logger.exception("[Telegram] process_one #%s failed", material_id)
+                self.client.send_message(f"❌ Xử lý video #{material_id} thất bại — xem log.")
+
+        threading.Thread(target=_run, name=f"tg-process-{material_id}", daemon=True).start()
 
     def _handle_callback_query(self, query: dict):
         callback_id = query.get("id")
@@ -39,9 +100,22 @@ class TelegramEventRouter:
                 self._handle_cancel(callback_id, int(target_id), message_id, user)
             elif action.startswith("style"):
                 self._handle_style(callback_id, data, int(target_id), message_id, user)
+            elif action == "src":
+                self._handle_add_source(callback_id, int(target_id))
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
+
+    def _handle_add_source(self, callback_id: str, material_id: int):
+        """ADR-034 + ADR-028 — biến video vừa dán thành nguồn kênh, dò channel_id từ chính nó."""
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            res = feature_hooks.call("viral.add_source_from_material", db, material_id) or {}
+        msg = str(res.get("msg") or "")
+        self.client.answer_callback_query(callback_id, ("✅ " if res.get("ok") else "⚠️ ") + msg[:180])
+        self.client.send_message(("✅ " if res.get("ok") else "⚠️ ") + msg)
 
     def _handle_approve(self, callback_id: str, job_id: int, message_id: int, user_name: str):
         from app.core.database.core import SessionLocal

@@ -224,6 +224,17 @@ class NotifierService:
             logger.warning("NotifierService: notify_caption_ready lỗi (%s) — bỏ qua.", e)
 
     @classmethod
+    def notify_bot_ready(cls):
+        """ADR-034 — báo bộ nhận lệnh Telegram đã sống, để cái chết âm thầm của nó thấy được."""
+        try:
+            cls._broadcast(
+                "🤖 <b>Bot đã sẵn sàng</b>\n"
+                "Gõ /help xem lệnh, hoặc dán thẳng link TikTok/YouTube vào đây."
+            )
+        except Exception as e:
+            logger.warning("NotifierService: notify_bot_ready lỗi (%s) — bỏ qua.", e)
+
+    @classmethod
     def notify_account_invalid(cls, account_name: str, reason: str = ""):
         """Thông báo khi account bị vô hiệu hóa."""
         cls._broadcast(nf.account_invalid_message(account_name, reason))
