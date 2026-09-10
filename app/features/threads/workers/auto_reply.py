@@ -1,7 +1,5 @@
 import time
-import logging
 import sys
-import os
 from pathlib import Path
 import asyncio
 from playwright.async_api import async_playwright

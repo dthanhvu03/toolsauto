@@ -36,6 +36,11 @@ jobs:
           pip install -r requirements.txt
           pip install pytest
 
+      - name: Lint (ruff — chỉ luật bắt lỗi thật, xem ruff.toml)
+        run: |
+          pip install ruff
+          ruff check .
+
       - name: Run unit tests
         env:
           ADMIN_USERNAME: ci

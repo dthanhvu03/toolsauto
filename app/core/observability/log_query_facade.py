@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List
 from sqlalchemy.orm import Session
 from fastapi.responses import PlainTextResponse, StreamingResponse
 

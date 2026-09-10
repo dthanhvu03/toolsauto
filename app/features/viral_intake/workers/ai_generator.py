@@ -1,5 +1,4 @@
 import time
-import logging
 import signal
 import sys
 import os
@@ -16,12 +15,10 @@ from sqlalchemy.orm import Session
 from app.core.database.core import SessionLocal
 from app.core.queue.queue import QueueService
 from app.core.queue.job import JobService
-from app.config import WORKER_TICK_SECONDS
 from app.core.queue.worker import WorkerService
 from app.core.notifier.service import NotifierService
 from app.core.ai.affiliate_text import AffiliateAIService
 from app.core.database.models import AffiliateLink
-import urllib3
 
 # Setup Logging
 from app.utils.logger import setup_shared_logger
@@ -201,7 +198,10 @@ def process_draft_job(db: Session):
     Attempts to claim and process one DRAFT job for AI Caption Generation.
     Returns True if a job was found, False otherwise.
     """
-    global CURRENT_JOB_ID, GEMINI_CONSECUTIVE_FAILURES, GEMINI_CIRCUIT_OPEN
+    # `GEMINI_CIRCUIT_RESET_TIME` TỪNG THIẾU ở đây: dòng gán bên dưới ghi vào biến CỤC BỘ nên
+    # mốc hết hạn toàn cục giữ nguyên 0 ⇒ `time.time() >= 0` luôn đúng ⇒ ngắt mạch vừa mở đã
+    # đóng lại ở vòng sau. Tin Telegram báo "tạm ngưng 30 phút" chưa bao giờ đúng.
+    global CURRENT_JOB_ID, GEMINI_CONSECUTIVE_FAILURES, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME
     global GEMINI_INFRA_BACKOFF_LEVEL, GEMINI_NEXT_ALLOWED_TS
 
     # Apply runtime overrides (DB) to this process config (Whisper/limits/toggles)
@@ -296,7 +296,7 @@ def process_draft_job(db: Session):
                 page_name=page_name, page_niches=page_niches,
                 affiliate_keywords=aff_keywords
             )
-        except OutputContractViolation as e:
+        except OutputContractViolation:
             # Strict JSON mode: do not save prose/options. Retry later with backoff (max 3).
             idx = min(GEMINI_INFRA_BACKOFF_LEVEL, len(GEMINI_INFRA_BACKOFF_SCHEDULE_SEC) - 1)
             backoff_sec = GEMINI_INFRA_BACKOFF_SCHEDULE_SEC[idx]
@@ -661,10 +661,10 @@ def _auto_style_default(db):
 
 def run_loop():
     """Main AI Generator loop."""
-    global RUNNING, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME
+    # `GEMINI_CONSECUTIVE_FAILURES` TỪNG THIẾU: dòng reset bên dưới ghi vào biến cục bộ nên
+    # bộ đếm lỗi toàn cục không bao giờ về 0.
+    global RUNNING, GEMINI_CIRCUIT_OPEN, GEMINI_CIRCUIT_RESET_TIME, GEMINI_CONSECUTIVE_FAILURES
     from app.core.notifier.service import TelegramNotifier
-    import app.config as config
-    from app.core import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
 
     logger.info("AI Worker started. Press Ctrl+C to stop.")

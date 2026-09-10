@@ -112,8 +112,8 @@ def test_duplicate_row_has_no_download_or_thumbnail_button():
 
     assert "Tải file" not in html
     assert "Thumbnail" not in html
-    assert f"/viral/68/reup-preview" not in html
-    assert f"/viral/68/reup-thumb" not in html
+    assert "/viral/68/reup-preview" not in html
+    assert "/viral/68/reup-thumb" not in html
 
 
 def test_duplicate_row_has_no_caption_button():

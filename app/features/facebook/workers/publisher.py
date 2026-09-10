@@ -1,5 +1,4 @@
 import time
-import logging
 import signal
 import sys
 import os
@@ -30,7 +29,6 @@ from app.core.observability import heartbeat
 
 from app.core.queue.publisher_runtime import (
     kill_if_stuck as _kill_if_stuck_shared,
-    clear_claim_locks,
     start_heartbeat_thread,
     claim_precheck,
     claim_next_job_respecting_daily,
@@ -92,7 +90,6 @@ def process_single_job(db: Session):
     """
     global CURRENT_JOB_ID
     
-    from app.core.database.models import Job
 
     if not claim_precheck(
         db,
@@ -332,7 +329,6 @@ def run_loop():
     global RUNNING
     from app.core.notifier.service import TelegramNotifier
     import app.config as config
-    from app.core import settings as runtime_settings
     NotifierService.register(TelegramNotifier(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID))
     
     logger.info("Publisher Worker started. Press Ctrl+C to stop.")

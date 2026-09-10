@@ -8,14 +8,13 @@ Safety rules:
   - Browser always closed via try/finally
 """
 import logging
-import re
 from datetime import datetime
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, select
+from sqlalchemy import select
 
 from app.core.database.models import Job, Account
-from app.config import TIMEZONE, CONTENT_PROFILES_DIR, FACEBOOK_HOST
+from app.config import TIMEZONE, CONTENT_PROFILES_DIR
 from app.constants import JobStatus
 
 

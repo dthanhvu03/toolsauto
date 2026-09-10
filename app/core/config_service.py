@@ -378,7 +378,7 @@ def test_workflow(workflow_id: int, payload: dict = {}, db: Session = Depends(ge
             step_result["checks"].append({
                 "check": "format",
                 "status": "pass",
-                "detail": f"Legacy static step (handled by Custom Adapter)."
+                "detail": "Legacy static step (handled by Custom Adapter)."
             })
             results.append(step_result)
             continue
@@ -760,7 +760,6 @@ def delete_cta(cta_id: int, db: Session = Depends(get_db)):
 def reorder_cta(payload: dict, db: Session = Depends(get_db)):
     """Bulk update priority after drag-and-drop."""
     items = payload.get("items", [])
-    now = int(time.time())
     for item in items:
         db.execute(text("""
             UPDATE cta_templates
@@ -915,7 +914,7 @@ def overview_warnings_api(
 ):
     """Compute aggregated warnings for Overview alert banner."""
     from app.core.workflow_registry import (
-        WorkflowRegistry, PRESET_DESCRIPTIONS, get_cache_status,
+        WorkflowRegistry, get_cache_status,
     )
     from app.core.observability.runtime_events import get_enriched_selector_health
 

@@ -8,7 +8,6 @@ venv nên vẫn báo "ổn". Thứ tự tìm binary là gốc của chuyện đ�
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import pytest
 

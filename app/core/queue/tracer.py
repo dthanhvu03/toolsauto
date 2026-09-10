@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 import app.config as config
 from app.constants import JobType
 try:

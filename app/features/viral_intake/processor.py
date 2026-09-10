@@ -4,14 +4,11 @@ Extracted from workers/maintenance.py (TASK-20260329-04).
 """
 from __future__ import annotations
 
-import glob
 import json
 import logging
 import os
-import random
 import subprocess
 import time
-from pathlib import Path
 
 from sqlalchemy.orm import Session
 

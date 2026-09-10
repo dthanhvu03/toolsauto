@@ -8,14 +8,12 @@ from urllib.parse import urlparse
 import traceback
 from typing import Any
 from app.config import BASE_DIR, SAFE_MODE, LOGS_DIR, DATA_DIR, FACEBOOK_HOST
-from playwright.sync_api import Playwright, BrowserContext, Page, Locator, TimeoutError
+from playwright.sync_api import Playwright, BrowserContext, Page, Locator
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.adapters.common.decorators import playwright_safe_action
 from app.core.database.models import Job
 from app.utils.human_behavior import human_type, human_scroll, pre_post_delay
-import json
 import unicodedata
-from collections import deque
 from app.features.facebook.selectors import SELECTORS
 from app.features.facebook.core.session import FacebookSessionManager
 from app.features.facebook.pages.reels import FacebookReelsPage
@@ -692,6 +690,8 @@ class FacebookAdapter(AdapterInterface):
             # Check for account access
             if not getattr(job, "account", None):
                 # We need the account loaded to get the real name for context switching
+                from app.core.database.core import SessionLocal
+
                 with SessionLocal() as db:
                     db.add(job)
                     job.account  # Trigger lazy load
@@ -2495,6 +2495,11 @@ class FacebookAdapter(AdapterInterface):
                 al_norm = self._normalize_fb_text(al)
                 if tn_norm not in al_norm:
                     continue
+                # `al_lower` CHƯA TỪNG tồn tại ⇒ NameError, mà vòng lặp có `except: continue`
+                # nuốt mất ⇒ mọi ứng viên bị bỏ qua và hàm luôn trả False. Dùng `al.lower()`
+                # chứ KHÔNG dùng `al_norm`: `_normalize_fb_text` bỏ dấu ("chuyển"→"chuyen"),
+                # trong khi ba chuỗi so sánh dưới đây có dấu.
+                al_lower = al.lower()
                 if (
                     "chuyển sang" not in al_lower
                     and "switch to" not in al_lower

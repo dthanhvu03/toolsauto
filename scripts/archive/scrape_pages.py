@@ -29,8 +29,6 @@ def scrape_pages_for_account(account_id: int, profile_path: str, account_name: s
     Returns list of {"name": "...", "url": "..."} dicts.
     """
     from playwright.sync_api import sync_playwright
-    import random
-    import time
 
     pages_found = []
 

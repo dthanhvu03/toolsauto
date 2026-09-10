@@ -1,4 +1,3 @@
-import re
 
 with open('app/adapters/facebook/adapter.py', 'r') as f:
     content = f.read()

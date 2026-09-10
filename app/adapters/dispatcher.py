@@ -54,7 +54,6 @@ def get_adapter(platform: str) -> AdapterInterface:
     platform = normalize_platform(platform)
     from app.adapters.generic.adapter import GenericAdapter
 
-    from app.features.facebook.adapter import FacebookAdapter
     from app.features.threads.adapter import ThreadsAdapter
     from app.features.instagram.adapter import InstagramAdapter
     from app.features.tiktok.adapter import TiktokAdapter

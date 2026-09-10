@@ -194,7 +194,8 @@ async def bulk_create_jobs(
     from app.core.account import AccountService
     accounts = AccountService.get_active_accounts(db)
     try:
-        batch_id = JobService.bulk_create_jobs_from_uploads(
+        # Gọi vì tác dụng phụ (tạo job hàng loạt); id trả về không dùng tới.
+        JobService.bulk_create_jobs_from_uploads(
             db, account_id, media_files, captions, schedule_times, randomize_caption,
             affiliate_url, auto_comment_text, target_page, comment_image_file=comment_image
         )

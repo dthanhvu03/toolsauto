@@ -63,7 +63,9 @@ def test_same_hash_blocked_across_accounts_same_platform(session_factory, tmp_pa
     digest = sha256_file(media)
     db = session_factory()
     a1 = _account(db, "acc1")
-    a2 = _account(db, "acc2")
+    # Tài khoản thứ hai phải TỒN TẠI cho tiền đề của test (cùng hash, khác account);
+    # chỉ cái tên biến là thừa.
+    _account(db, "acc2")
     db.add(
         Job(
             platform="facebook",

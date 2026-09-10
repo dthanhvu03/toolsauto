@@ -597,7 +597,7 @@ Hãy bắt đầu viết JSON ngay bây giờ:"""
             result["affiliate_keyword"] = data.get("affiliate_keyword", "")
             if hasattr(self, 'current_job') and self.current_job:
                 self.current_job.ai_reasoning = data.get("reasoning", "")
-        except Exception as e:
+        except Exception:
             result = self._parse_response(raw_json, strict_json=True)
 
         if not self._is_valid_caption_schema_json(_json.dumps(result, ensure_ascii=False)):

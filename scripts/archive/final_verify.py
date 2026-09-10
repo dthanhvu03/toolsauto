@@ -1,7 +1,7 @@
 """
 Final verification script: Go to Page and confirm the Reel is there.
 """
-import os, time, logging
+import os, logging
 from playwright.sync_api import sync_playwright
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')

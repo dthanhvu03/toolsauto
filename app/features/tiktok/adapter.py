@@ -10,11 +10,9 @@ Architecture (per user review):
 """
 import logging
 import os
-import time
 from pathlib import Path
-from typing import Any, Optional
 
-from playwright.sync_api import Playwright, BrowserContext, Page, Locator
+from playwright.sync_api import Playwright, BrowserContext, Page
 
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.adapters.common.session import PlatformSessionManager, SessionStatus

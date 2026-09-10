@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Callable
+from typing import Optional
 
 from playwright.sync_api import Page, Locator
 

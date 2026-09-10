@@ -10,7 +10,6 @@ Architecture mirrors TiktokAdapter:
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
 from urllib.parse import urlparse
 
 from playwright.sync_api import Playwright, BrowserContext, Page

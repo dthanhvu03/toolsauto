@@ -16,7 +16,7 @@ Usage by Dispatcher:
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from app.constants import JobType
 
@@ -24,11 +24,10 @@ from playwright.sync_api import Playwright, BrowserContext, Page
 
 from app.adapters.contracts import AdapterInterface, PublishResult
 from app.adapters.common.decorators import playwright_safe_action
-from app.adapters.common.session import PlatformSessionManager, SessionStatus
+from app.adapters.common.session import PlatformSessionManager
 from app.adapters.generic.action_executor import (
     ActionExecutor,
     StepConfig,
-    ValueResolver,
 )
 from app.config import SAFE_MODE
 

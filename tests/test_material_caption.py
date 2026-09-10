@@ -24,7 +24,6 @@ from sqlalchemy.orm import sessionmaker
 import app.config as config
 from app.constants import ViralStatus
 from app.core.database.models import Account, Job, RuntimeSetting, ViralMaterial, ViralSource
-from app.features.viral_intake import service as service_mod
 from app.features.viral_intake.service import ViralService, ai_provider_ready
 
 

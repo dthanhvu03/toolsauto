@@ -1,4 +1,3 @@
-import logging
 import os
 import random
 import signal
@@ -158,7 +157,8 @@ def process_single_job(db: Session) -> bool:
             )
             NotifierService.notify_job_done(job, post_url=post_url)
 
-            apply_runtime_overrides_to_config(db)
+            # Hàm nằm ở `app.core.settings`, file này đã import sẵn thành `runtime_settings`.
+            runtime_settings.apply_runtime_overrides_to_config(db)
             delay_sec = runtime_settings.get_int(
                 "publish.delay_min_sec",
                 config.POST_DELAY_MIN_SEC,

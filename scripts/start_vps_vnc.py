@@ -1,6 +1,5 @@
 import subprocess
 import os
-import sys
 import re
 import time
 
@@ -183,7 +182,7 @@ def main():
     if f":{port}" in web_port.stdout:
         print(f"[OK] websockify is listening on {port}")
     else:
-        print(f"[FAIL] websockify is NOT listening (check websockify.log)")
+        print("[FAIL] websockify is NOT listening (check websockify.log)")
 
     print(f"\nIf both are OK, open: http://<vps-ip>:{port}/vnc.html")
 

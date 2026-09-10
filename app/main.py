@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 
-import logging
 
 # Ensure models are loaded (relationships, mappers)
 from app.core.database import models  # noqa: F401
@@ -96,11 +95,9 @@ app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "app" / "static
 config.THUMB_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/thumbnails", StaticFiles(directory=str(config.THUMB_DIR)), name="thumbnails")
 
-import secrets
-import base64
-from fastapi.responses import Response, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi import Request
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from itsdangerous import URLSafeTimedSerializer
 
 @app.middleware("http")
 async def cookie_auth_middleware(request: Request, call_next):

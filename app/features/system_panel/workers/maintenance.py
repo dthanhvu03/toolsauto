@@ -1,6 +1,5 @@
 import os
 import time
-import logging
 import signal
 import subprocess
 import sys

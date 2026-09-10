@@ -30,16 +30,13 @@ Prerequisites on VPS:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import sqlalchemy as sa
 from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.orm import sessionmaker
 
 # ── Defaults from app config ───────────────────────────────────────────────────
 from app.config import DATABASE_URL as DEFAULT_PG_URL, DB_PATH as DEFAULT_SQLITE_PATH
@@ -201,7 +198,7 @@ def main():
     parser.add_argument(
         "--postgres",
         default=DEFAULT_PG_URL,
-        help=f"PostgreSQL URL (default: from DATABASE_URL env or config)",
+        help="PostgreSQL URL (default: from DATABASE_URL env or config)",
     )
     parser.add_argument(
         "--tables",

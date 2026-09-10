@@ -1,6 +1,4 @@
-import sys
 from playwright.sync_api import sync_playwright
-import time
 
 def check_page():
     with sync_playwright() as p:

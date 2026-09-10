@@ -272,5 +272,5 @@ def save_hook(
     except ValueError as e:
         return _panel_or_toast(db, account_id, request, flash=str(e), flash_type="error")
     preview = (text or "").strip()
-    msg = f"✓ Đã lưu hook text" + (f": “{preview[:40]}”" if preview else " (đã xóa)")
+    msg = "✓ Đã lưu hook text" + (f": “{preview[:40]}”" if preview else " (đã xóa)")
     return _panel_or_toast(db, account_id, request, flash=msg)

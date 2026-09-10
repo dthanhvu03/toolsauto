@@ -1,7 +1,6 @@
 import threading
 import logging
 import time
-import os
 from app.features.telegram_bot.command_handler import TelegramCommandHandler
 from app.features.telegram_bot.event_router import TelegramEventRouter
 
@@ -22,7 +21,6 @@ class TelegramPoller:
         self.event_router = TelegramEventRouter(self.client, self.command_handler)
 
     def start(self):
-        import fcntl
         self._running = True
         threading.Thread(target=self._poll_loop, daemon=True).start()
         logger.info("TelegramPoller started")

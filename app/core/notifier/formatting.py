@@ -113,7 +113,7 @@ def daily_summary_message(
     )
     if running:
         msg += f"🔄 Đang chạy: <b>{running}</b>\n"
-    msg += f"━━━━━━━━━━━━━━━━━━\n"
+    msg += "━━━━━━━━━━━━━━━━━━\n"
     msg += f"📈 Tổng: <b>{total}</b> jobs"
 
     if total_views or total_clicks:

@@ -3,7 +3,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 from app.core.database.models import Job
-from app.constants import AccountStatus, JobStatus
 from app.utils.logger import setup_shared_logger
 
 logger = setup_shared_logger(__name__)

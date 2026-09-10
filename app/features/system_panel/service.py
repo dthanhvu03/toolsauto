@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse, FileResponse
 import subprocess
 import os
 import json
-import glob
 import time
 import shutil
 import psutil
@@ -807,7 +806,7 @@ def cmd_cleanup_videos():
                     except Exception as e:
                         errors.append(str(e))
         freed_mb = freed_bytes / 1024**2
-        err_str = f"\n⚠️ Errors:\n" + "\n".join(errors[:5]) if errors else ""
+        err_str = "\n⚠️ Errors:\n" + "\n".join(errors[:5]) if errors else ""
         return _html_output(
             f"✅ Cleaned {deleted} video files from DONE jobs older than 7 days\n"
             f"💾 Freed: {freed_mb:.1f} MB{err_str}"

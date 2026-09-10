@@ -19,12 +19,11 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from playwright.sync_api import Page
 
 from app.adapters.common.locator import LocatorStrategy, LocatorCandidate
-from app.adapters.common.session import PlatformSessionManager, SessionStatus
 from app.config import LOGS_DIR
 from app.constants import WorkflowAction
 

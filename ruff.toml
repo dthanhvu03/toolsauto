@@ -1,0 +1,38 @@
+# ADR-039 — ruff: chỉ bắt LỖI THẬT, không đụng định dạng.
+#
+# Vì sao không bật luật định dạng (E1/E2/E3/W, hay `ruff format`):
+# codebase 48.813 dòng viết qua nhiều đợt, bật định dạng là một diff gần như toàn bộ repo —
+# không đổi hành vi một dòng nào, mà xoá sạch `git blame` và nhấn chìm mọi review sau này.
+# Cái giá đó không đáng. Luật ở đây chỉ gồm những thứ nếu vi phạm là CHẠY SAI:
+#
+#   F  (pyflakes) — biến/hàm không tồn tại, import chết, biến gán rồi không dùng.
+#                   Chính nhóm này bắt được ngày 2026-09-10:
+#                     · 5 `NameError` nằm im trong `except` nên chưa ai thấy
+#                     · 2 khai báo `global` thiếu tên ⇒ ngắt mạch Gemini vừa mở đã đóng,
+#                       và bộ đếm lỗi không bao giờ reset
+#   E9 (lỗi cú pháp / thụt lề) — file không chạy được.
+#
+# Muốn thêm luật thì thêm từng nhóm một, vá sạch rồi mới commit — đừng bật cả loạt rồi để
+# `noqa` rải khắp nơi, vì `noqa` rải khắp nơi chính là cách một bộ luật chết.
+
+target-version = "py312"
+line-length = 120
+
+exclude = [
+    "venv",
+    ".venv",
+    "node_modules",
+    "storage",
+    "content",
+    "design",
+    # Script đã cho vào kho lưu: không chạy nữa, và có file còn lỗi cú pháp từ lâu.
+    # Bắt lỗi ở đây chỉ tạo tiếng ồn vì không ai sửa.
+    "scripts/archive",
+]
+
+[lint]
+select = ["F", "E9"]
+
+[lint.per-file-ignores]
+# Migration của Alembic sinh theo khuôn mẫu, có import chuẩn không phải lúc nào cũng dùng.
+"alembic/versions/*.py" = ["F401"]

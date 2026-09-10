@@ -13,7 +13,6 @@ Only channels with score >= SCORE_THRESHOLD are saved.
 import json
 import logging
 import subprocess
-import time
 from urllib.parse import quote
 
 from app.config import TIKTOK_HOST

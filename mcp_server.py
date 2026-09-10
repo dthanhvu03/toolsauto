@@ -287,9 +287,9 @@ def preview_runtime_config(platform: str, job_type: str = "POST") -> str:
         lines.append(f"  timing: {wf.timing}")
         lines.append(f"  retry:  {wf.retry}")
     else:
-        lines.append(f"  preset: NONE — no workflow_definitions row active")
-        lines.append(f"  steps:  [all defaults]")
-        lines.append(f"  timing: [adapter hardcoded defaults]")
+        lines.append("  preset: NONE — no workflow_definitions row active")
+        lines.append("  steps:  [all defaults]")
+        lines.append("  timing: [adapter hardcoded defaults]")
 
     # ── Step toggles summary ──
     lines.append("")

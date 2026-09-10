@@ -4,7 +4,6 @@ import logging
 from app.config import BASE_DIR
 
 from app.features.system_panel import service as syspanel_service
-from app.core.pm2_apps import PM2_SAFE_NAMES
 
 APP_DIR = str(BASE_DIR)
 router = APIRouter(prefix="/syspanel", tags=["syspanel"])
