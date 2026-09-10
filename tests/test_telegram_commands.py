@@ -346,9 +346,9 @@ def test_help_khong_quang_cao_lenh_khong_ton_tai(bot):
     import re
 
     listed = set(re.findall(r"(?:^|\s)/([a-z]+)", client.text))
-    supported = {"status", "pause", "resume", "health", "jobs", "drafts", "retry", "discovery", "viral", "help", "start"}
 
-    assert listed <= supported, f"/help nhắc tới lệnh không có: {listed - supported}"
+    assert listed <= SUPPORTED_COMMANDS, f"/help nhắc lệnh không có: {listed - SUPPORTED_COMMANDS}"
+    assert listed, "/help phải liệt kê ít nhất một lệnh"
 
 
 # ── /drafts giữ nút Duyệt/Huỷ ───────────────────────────────────────────────
@@ -374,10 +374,17 @@ def test_drafts_co_nut_duyet_va_huy(bot, db_factory):
 # ── thông báo không được quảng cáo lệnh không tồn tại (ADR-033, vá 2026-09-09) ──
 
 
-SUPPORTED_COMMANDS = {
-    "status", "pause", "resume", "health", "jobs", "drafts",
-    "retry", "viral", "discovery", "help", "start",
-}
+def _supported_commands() -> set[str]:
+    """
+    Đọc thẳng từ bảng điều phối thay vì chép tay (ADR-037).
+
+    Bản đầu chép tay, nên thêm lệnh mới là danh sách lệch và cái canh dưới báo nhầm — chính
+    nó đỏ khi ADR-037 thêm /nguon /moi /sansang.
+    """
+    return set(TelegramCommandHandler(None).handler_map())
+
+
+SUPPORTED_COMMANDS = _supported_commands()
 
 
 def test_thong_bao_khong_nhac_toi_lenh_khong_ton_tai():

@@ -1,5 +1,53 @@
 # Current Status
 
+## Phiên 2026-09-10 (b) — ADR-037: lệnh Telegram nối vào luồng video
+
+Owner hỏi *"mấy cái command đó nó có nối với nguồn video đồ không"*. Soi thật: **không**.
+Ba trên chín lệnh (`/jobs` `/drafts` `/retry`) chỉ chạm `Job` — cần tài khoản Facebook mà Owner
+có 0 ⇒ luôn rỗng. `/discovery` quét theo tài khoản ⇒ cũng rỗng. `/viral` ghi ngưỡng **chung**,
+mà nguồn của Owner có ngưỡng **riêng** nên lệnh đó **không đổi được gì cho nguồn đang chạy**.
+Toàn bộ ADR-025→036 chỉ chạm Telegram ở hai chỗ: dán link vào, nhận video ra.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| **`/nguon`** — liệt kê nguồn, nút **Quét ngay** / **Bật-Tắt** | 4 test |
+| **`/moi`** — video `NEW`, nút **Xử lý** | 2 test |
+| **`/sansang`** — video `READY`, nút **Gửi lại** + **Chọn đoạn** | 3 test |
+| **Chọn mốc cắt trong chat**: ảnh lưới 4×3 + 12 nút ghi phút | dựng thật **800×1068, 103 KB**; 5 test |
+| Bấm mốc ⇒ đặt `clip_start` rồi cắt lại | `test_bam_moc_thi_dat_clip_va_xu_ly_lai` |
+| Quét / Xử lý **trả lời ngay rồi chạy nền** | 2 test |
+| `/jobs` `/drafts` rỗng ⇒ nói rõ "chưa nối tài khoản, xem /sansang" | sửa nội dung |
+| `/viral` nói rõ **không đụng nguồn có ngưỡng riêng** | sửa nội dung |
+| `telegram_bot` vẫn không import `viral_intake` (7 hook mới ở `bootstrap_hooks`) | `lint-imports` 2 hợp đồng giữ |
+| Toàn suite | **799 passed, 16 skipped, 0 failed** |
+
+**Cái canh của ADR-033 tự bắt lỗi của ADR-037**: `test_help_khong_quang_cao_lenh_khong_ton_tai`
+đỏ vì danh sách lệnh trong test **chép tay** nên lệch khi thêm lệnh mới. Không vá bằng cách
+thêm ba chữ, mà tách `handler_map()` ra để test đọc **bảng thật** — từ nay không thể lệch.
+
+### System State
+
+Owner điều khiển được cả luồng video trong Telegram: xem nguồn, quét, bật/tắt, xem video mới,
+xử lý, xem video chờ đăng, gửi lại file, và **chọn đoạn cắt bằng cách bấm khung hình**. Bảng
+100 video và trang Thiết lập vẫn ở web, cố ý.
+
+### Unfinished + Blockers
+
+- **Chưa thử các lệnh mới trên bot thật** — máy dev không nối được DB thật nên chỉ gửi `/help`
+  vào chat. Owner gõ `/nguon`, `/sansang` trên máy chạy tool là biết ngay.
+- Video > 50 MB vẫn không gửi kèm file được (giới hạn Bot API).
+- Nợ cũ: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại `start.ps1 -Stack`**, gõ `/nguon` và `/sansang`.
+2. Ở `/sansang` bấm **✂️ Chọn đoạn** → nhìn ảnh lưới → bấm mốc có cá → nhận video mới.
+3. Đăng bài đầu tiên lên Page "Mê Câu Cá".
+
+---
+
 ## Phiên 2026-09-10 (a) — ADR-036: chọn cả hai đầu đoạn cắt, và cho phép không cắt
 
 Owner: *"sao lại cắt em nhỉ, người xem xem không hiểu đầu đuôi như nào"*.

@@ -9,8 +9,14 @@ class TelegramCommandHandler:
     def __init__(self, client):
         self.client = client
 
-    def handle_command(self, cmd: str, args: list = None):
-        handler_map = {
+    def handler_map(self) -> dict:
+        """
+        Bảng lệnh, tách riêng để test đọc được (ADR-037).
+
+        Trước đây bảng nằm trong `handle_command` nên test phải chép tay danh sách lệnh — thêm
+        lệnh mới là danh sách lệch, và cái canh "đừng quảng cáo lệnh không tồn tại" báo nhầm.
+        """
+        return {
             "status": self._cmd_status,
             "pause": self._cmd_pause,
             "resume": self._cmd_resume,
@@ -22,8 +28,14 @@ class TelegramCommandHandler:
             "discovery": self._cmd_discovery,
             "help": self._cmd_help,
             "start": self._cmd_help,
+            # ADR-037: nối vào luồng video, không chỉ luồng job cũ
+            "nguon": self._cmd_nguon,
+            "moi": self._cmd_moi,
+            "sansang": self._cmd_sansang,
         }
-        handler = handler_map.get(cmd.lower())
+
+    def handle_command(self, cmd: str, args: list = None):
+        handler = self.handler_map().get(cmd.lower())
         if handler:
             try:
                 handler(args)
@@ -44,8 +56,82 @@ class TelegramCommandHandler:
             "/drafts — liệt kê bản nháp, kèm nút Duyệt / Huỷ\n"
             "/retry &lt;id&gt; — cho một job chạy lại\n"
             "/discovery — quét tìm kênh mới (chạy nền, hơi lâu)\n"
-            "/viral &lt;min_views&gt; &lt;max_videos&gt; — đổi ngưỡng quét"
+            "/viral &lt;min_views&gt; &lt;max_videos&gt; — đổi ngưỡng quét chung\n"
+            "\n<b>Luồng video</b>\n"
+            "/nguon — nguồn tự quét, kèm nút Quét ngay / Bật-Tắt\n"
+            "/moi — video mới chưa xử lý, kèm nút Xử lý\n"
+            "/sansang — video chờ đăng tay, kèm nút Gửi lại và Chọn đoạn\n"
+            "\nHoặc dán thẳng link TikTok/YouTube vào đây."
         )
+
+    # ── ADR-037: điều khiển luồng video ─────────────────────────────────────
+
+    @staticmethod
+    def _mmss(seconds) -> str:
+        total = int(seconds or 0)
+        return f"{total // 60}:{total % 60:02d}"
+
+    def _cmd_nguon(self, args=None):
+        """Liệt kê nguồn tự quét, mỗi nguồn kèm nút Quét ngay / Bật-Tắt."""
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            rows = feature_hooks.call("viral.sources_summary", db) or []
+        if not rows:
+            self.client.send_message(
+                "📭 Chưa có nguồn nào.\nDán thẳng link kênh (hoặc link một video) vào đây là tool tự thêm."
+            )
+            return
+
+        for s in rows:
+            trang_thai = "🟢 Bật" if s["enabled"] else "⚪ Tắt"
+            nguong = f"{s['min_views']:,}" if s.get("min_views") else "mặc định"
+            loi = f"\n❌ {str(s['last_error'])[:120]}" if s.get("last_error") else ""
+            self.client.send_message(
+                f"📺 <b>@{s['handle']}</b> · {s['platform']} · {trang_thai}\n"
+                f"👁 Ngưỡng {nguong} · tìm được lần cuối: {s.get('last_found') or 0}{loi}",
+                reply_markup={"inline_keyboard": [[
+                    {"text": "🔍 Quét ngay", "callback_data": f"scan:{s['id']}"},
+                    {"text": "⚪ Tắt" if s["enabled"] else "🟢 Bật", "callback_data": f"tgsrc:{s['id']}"},
+                ]]},
+            )
+
+    def _cmd_moi(self, args=None):
+        """Video mới quét về, chưa xử lý — kèm nút Xử lý."""
+        self._liet_ke_material("NEW", "🆕 <b>Video mới chưa xử lý</b>", "xuly", "⚙️ Xử lý",
+                               "📭 Không có video mới nào đang chờ.")
+
+    def _cmd_sansang(self, args=None):
+        """Video đã xử lý, đang chờ đăng tay — kèm nút Gửi lại."""
+        self._liet_ke_material("READY", "🎬 <b>Sẵn sàng đăng tay</b>", "gui", "📤 Gửi lại",
+                               "📭 Chưa có video nào sẵn sàng.")
+
+    def _liet_ke_material(self, status, tieu_de, action, nhan_nut, khi_rong):
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            rows = feature_hooks.call("viral.list_materials", db, status, 10) or []
+        if not rows:
+            self.client.send_message(khi_rong)
+            return
+
+        self.client.send_message(f"{tieu_de} — {len(rows)} video")
+        for m in rows:
+            doan = ""
+            if m.get("clip_start_sec") or m.get("clip_length_sec"):
+                doan = f"\n✂️ từ {self._mmss(m.get('clip_start_sec'))}" + (
+                    f", dài {m['clip_length_sec']}s" if m.get("clip_length_sec") else ""
+                )
+            nut = [{"text": nhan_nut, "callback_data": f"{action}:{m['id']}"}]
+            if status == "READY":
+                nut.append({"text": "✂️ Chọn đoạn", "callback_data": f"khung:{m['id']}"})
+            self.client.send_message(
+                f"#{m['id']} · {int(m.get('views') or 0):,} views\n"
+                f"📝 {str(m.get('title') or '(không tiêu đề)')[:80]}{doan}",
+                reply_markup={"inline_keyboard": [nut]},
+            )
 
     def _cmd_status(self, args=None):
         # ADR-033: trạng thái WORKER nằm ở `SystemState.worker_status` ("RUNNING"/"PAUSED"),
@@ -102,6 +188,11 @@ class TelegramCommandHandler:
             msg = "📋 <b>Danh sách Jobs</b>\n━━━━━━━━━━━━━━━━━━\n"
             if running: msg += f"🔄 Đang chạy: Job #{running.id}\n"
             msg += f"⏳ Pending: {pending} | 📝 Draft: {draft}"
+            # ADR-037: rỗng vì chưa nối tài khoản chứ không phải hệ thống chết — phải nói rõ,
+            # không thì "Pending: 0 | Draft: 0" trông y như hỏng.
+            if not (pending or draft or running):
+                msg += ("\n\nℹ️ Chưa nối tài khoản Facebook nên không có job nào. "
+                        "Video đi đường đăng tay — xem /sansang.")
         self.client.send_message(msg)
 
     def _cmd_drafts(self, args=None):
@@ -110,7 +201,11 @@ class TelegramCommandHandler:
         with SessionLocal() as db:
             drafts = db.query(Job).filter(Job.status == JobStatus.DRAFT).all()
             if not drafts:
-                self.client.send_message("📝 Không có bản nháp nào.")
+                self.client.send_message(
+                    "📝 Không có bản nháp nào.\n"
+                    "ℹ️ Bản nháp chỉ sinh khi có tài khoản Facebook. Chưa nối thì video đi đường "
+                    "đăng tay — xem /sansang."
+                )
                 return
             for job in drafts:
                 msg = f"📋 <b>Job #{job.id}</b>\n✍️ {job.caption[:150]}..."
@@ -180,9 +275,12 @@ class TelegramCommandHandler:
             state.viral_min_views = min_views
             state.viral_max_videos_per_channel = max_videos
             db.commit()
+        # ADR-037: nguồn nào đặt ngưỡng RIÊNG thì code lấy số riêng trước ⇒ lệnh này không đụng
+        # tới. Báo "đã cập nhật" mà không nói điều đó là nửa sự thật.
         self.client.send_message(
-            f"✅ Đã cập nhật: tối thiểu <b>{min_views:,}</b> views, tối đa <b>{max_videos}</b> video/kênh.\n"
-            "Áp cho nguồn tự quét và cả đường quét cũ theo tài khoản."
+            f"✅ Đã cập nhật ngưỡng <b>chung</b>: tối thiểu <b>{min_views:,}</b> views, "
+            f"tối đa <b>{max_videos}</b> video/kênh.\n"
+            "⚠️ Nguồn nào đã đặt ngưỡng riêng thì vẫn dùng số riêng của nó — xem /nguon."
         )
 
     def _cmd_discovery(self, args=None):
@@ -190,7 +288,13 @@ class TelegramCommandHandler:
         ADR-033 — trước đây in "Đang quét…" rồi ngay "✅ hoàn tất", hai câu liền nhau, không
         quét gì. Nay gọi hook `viral.force_discovery` thật và chạy nền vì có thể lâu.
         """
-        self.client.send_message("⏳ Đang quét Discovery… sẽ báo lại khi xong.")
+        # ADR-037: quét theo `competitor_urls` của TÀI KHOẢN. Không có tài khoản thì nó quét 0
+        # kênh và báo "xong" — nói trước để Owner khỏi tưởng hỏng.
+        self.client.send_message(
+            "⏳ Đang quét Discovery… sẽ báo lại khi xong.\n"
+            "ℹ️ Lệnh này quét theo từ khoá của <b>tài khoản Facebook</b>. Chưa nối tài khoản thì "
+            "kết quả sẽ là 0 — nguồn tự quét của bạn dùng /nguon."
+        )
 
         def _run():
             from app.core.database.core import SessionLocal

@@ -102,9 +102,117 @@ class TelegramEventRouter:
                 self._handle_style(callback_id, data, int(target_id), message_id, user)
             elif action == "src":
                 self._handle_add_source(callback_id, int(target_id))
+            # ADR-037: điều khiển luồng video
+            elif action in ("scan", "tgsrc", "xuly", "gui", "khung"):
+                self._handle_video_action(callback_id, action, int(target_id))
+            elif action == "cut":
+                self._handle_cut(callback_id, target_id)
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
+
+    # ── ADR-037 ─────────────────────────────────────────────────────────────
+
+    _HOOK_BY_ACTION = {
+        "scan": "viral.scan_source",
+        "tgsrc": "viral.toggle_source",
+        "gui": "viral.resend_material",
+    }
+
+    def _handle_video_action(self, callback_id: str, action: str, target_id: int):
+        """Quét nguồn / bật-tắt nguồn / xử lý video / gửi lại / mở dải khung hình."""
+        if action == "khung":
+            self._handle_frames(callback_id, target_id)
+            return
+        if action == "xuly":
+            # Xử lý mất hàng phút ⇒ trả lời ngay rồi chạy nền, đừng để nút quay mãi.
+            self.client.answer_callback_query(callback_id, "⏳ Đang xử lý…")
+            self.client.send_message(f"⏳ Đang xử lý video #{target_id}… sẽ gửi khi xong.")
+            self._process_material_async(target_id)
+            return
+
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        # Quét một nguồn cũng mất hàng chục giây ⇒ báo trước rồi chạy nền.
+        if action == "scan":
+            self.client.answer_callback_query(callback_id, "🔍 Đang quét…")
+
+            def _run():
+                try:
+                    with SessionLocal() as db:
+                        res = feature_hooks.call("viral.scan_source", db, target_id) or {}
+                    self.client.send_message(("✅ " if res.get("ok") else "⚠️ ") + str(res.get("msg") or ""))
+                except Exception:
+                    logger.exception("[Telegram] quét nguồn #%s hỏng", target_id)
+                    self.client.send_message(f"❌ Quét nguồn #{target_id} hỏng — xem log.")
+
+            threading.Thread(target=_run, name=f"tg-scan-{target_id}", daemon=True).start()
+            return
+
+        with SessionLocal() as db:
+            res = feature_hooks.call(self._HOOK_BY_ACTION[action], db, target_id) or {}
+        msg = str(res.get("msg") or "")
+        self.client.answer_callback_query(callback_id, ("✅ " if res.get("ok") else "⚠️ ") + msg[:180])
+        self.client.send_message(("✅ " if res.get("ok") else "⚠️ ") + msg)
+
+    def _handle_frames(self, callback_id: str, material_id: int):
+        """Gửi ảnh lưới 4×3 + 12 nút ghi phút. Telegram không cho bấm vào vùng trong ảnh."""
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            res = feature_hooks.call("viral.material_frames", db, material_id) or {}
+        frames = res.get("frames") or []
+        if not frames:
+            self.client.answer_callback_query(callback_id, "⚠️ Chưa có khung hình")
+            self.client.send_message(
+                f"⚠️ Video #{material_id} chưa có khung hình. Bấm ⚙️ Xử lý một lần là tool trích luôn."
+            )
+            return
+
+        self.client.answer_callback_query(callback_id, "✂️ Chọn khung bên dưới")
+        rows, hang = [], []
+        for _idx, sec in frames:
+            hang.append({"text": f"{sec // 60}:{sec % 60:02d}", "callback_data": f"cut:{material_id}:{sec}"})
+            if len(hang) == 4:
+                rows.append(hang); hang = []
+        if hang:
+            rows.append(hang)
+
+        markup = {"inline_keyboard": rows}
+        sheet = res.get("sheet")
+        caption = (
+            f"✂️ <b>Chọn đoạn cắt cho #{material_id}</b>\n"
+            "Bấm mốc có cảnh đáng lấy — tool cắt lại từ đó rồi gửi video mới."
+        )
+        if sheet:
+            self.client.send_photo(sheet, caption)
+        self.client.send_message(caption if not sheet else "👆 Chọn mốc:", reply_markup=markup)
+
+    def _handle_cut(self, callback_id: str, target: str):
+        """``cut:<material_id>:<giây>`` — đặt mốc rồi xử lý lại."""
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        material_id, _, sec = str(target).partition(":")
+        if not material_id.isdigit() or not sec.isdigit():
+            self.client.answer_callback_query(callback_id, "⚠️ Mốc không hợp lệ")
+            return
+        material_id, sec = int(material_id), int(sec)
+
+        with SessionLocal() as db:
+            res = feature_hooks.call("viral.set_clip", db, material_id, sec, None) or {}
+        if not res.get("ok"):
+            self.client.answer_callback_query(callback_id, "⚠️ " + str(res.get("msg"))[:180])
+            self.client.send_message("⚠️ " + str(res.get("msg")))
+            return
+
+        self.client.answer_callback_query(callback_id, f"✂️ Cắt từ {sec // 60}:{sec % 60:02d}")
+        self.client.send_message(
+            f"✂️ Đã đặt mốc {sec // 60}:{sec % 60:02d} cho #{material_id} — đang cắt lại…"
+        )
+        self._process_material_async(material_id)
 
     def _handle_add_source(self, callback_id: str, material_id: int):
         """ADR-034 + ADR-028 — biến video vừa dán thành nguồn kênh, dò channel_id từ chính nó."""

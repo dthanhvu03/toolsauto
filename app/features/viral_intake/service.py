@@ -90,6 +90,53 @@ class ViralService:
         return [int(lo + step * i) for i in range(count)]
 
     @staticmethod
+    def build_frame_sheet(material_id: int) -> Optional[str]:
+        """
+        ADR-037 — ghép 12 khung đã trích thành MỘT ảnh lưới 4×3 để gửi vào Telegram.
+
+        Ở web dùng 12 ảnh rời vì bấm thẳng vào ảnh được. Telegram **không cho bấm vào một
+        vùng trong ảnh** nên phải một ảnh + nút riêng ⇒ cần ảnh ghép. Mỗi nơi một cách, theo
+        đúng cách tương tác của nơi đó.
+
+        Chép sang tên tuần tự trước khi ghép: tên thật mang số giây (`f00_11.jpg`) nên không
+        dùng được với `-i f%02d.jpg`, mà `-pattern_type glob` thì bản ffmpeg trên Windows hay
+        thiếu. Không bao giờ ném — hỏng thì trả None, chat vẫn có nút.
+        """
+        import shutil
+        import tempfile
+
+        frames = ViralService.list_source_frames(material_id)
+        if not frames:
+            return None
+        out = os.path.join(ViralService.source_frames_dir(material_id), "sheet.jpg")
+        try:
+            src_dir = ViralService.source_frames_dir(material_id)
+            if os.path.isfile(out) and os.path.getsize(out) > 0:
+                newest = max(os.path.getmtime(os.path.join(src_dir, f"f{i:02d}_{s}.jpg")) for i, s in frames)
+                if os.path.getmtime(out) >= newest:
+                    return out
+
+            tmp = tempfile.mkdtemp()
+            try:
+                for order, (idx, sec) in enumerate(frames):
+                    shutil.copy2(os.path.join(src_dir, f"f{idx:02d}_{sec}.jpg"),
+                                 os.path.join(tmp, f"s{order:02d}.jpg"))
+                cols = 4 if len(frames) >= 4 else len(frames)
+                rows = (len(frames) + cols - 1) // cols
+                subprocess.run(
+                    [ViralService.resolve_ffmpeg(), "-y", "-loglevel", "error",
+                     "-i", os.path.join(tmp, "s%02d.jpg"),
+                     "-vf", f"scale=200:-2,tile={cols}x{rows}", "-frames:v", "1", out],
+                    capture_output=True, timeout=60,
+                )
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            return out if os.path.isfile(out) and os.path.getsize(out) > 0 else None
+        except Exception as exc:
+            logger.warning("[VIRAL] Ghép ảnh lưới #%s thất bại (%s) — bỏ qua.", material_id, exc)
+            return None
+
+    @staticmethod
     def ensure_source_frames(
         material_id: int,
         video_path: str,

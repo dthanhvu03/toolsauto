@@ -7,6 +7,7 @@ from typing import List, Tuple
 from sqlalchemy.orm import Session
 
 from app.core import feature_hooks
+from app.core.notifier.service import NotifierService
 from app.core.account import get_discovery_keywords
 from app.core.database.models import Account, DiscoveredChannel
 
@@ -60,6 +61,79 @@ def register_feature_hooks() -> None:
         ok, msg, source_id = SourceService.add_source(db, mat.url)
         return {"ok": ok, "msg": msg, "id": source_id}
 
+    def viral_sources_summary(db: Session) -> list[dict]:
+        """ADR-037 — nguồn cho `/nguon` trong Telegram. Trả dict thuần: `telegram_bot` không
+        được import model của feature khác (ADR-007)."""
+        out = []
+        for s in SourceService.list_sources(db):
+            out.append({
+                "id": s.id, "platform": s.platform, "handle": s.handle or s.url,
+                "min_views": s.min_views, "max_videos": s.max_videos,
+                "enabled": bool(s.enabled), "last_scanned_at": s.last_scanned_at,
+                "last_found": s.last_found, "last_error": s.last_error,
+            })
+        return out
+
+    def viral_scan_source(db: Session, source_id: int) -> dict:
+        src = next((s for s in SourceService.list_sources(db) if s.id == source_id), None)
+        if src is None:
+            return {"ok": False, "msg": f"Không tìm thấy nguồn #{source_id}"}
+        found, skipped, error = SourceService.scan_source(db, src)
+        if error:
+            return {"ok": False, "msg": f"Quét lỗi: {error}"}
+        return {"ok": True, "msg": f"Tìm thấy {found} video mới, bỏ qua {skipped}."}
+
+    def viral_toggle_source(db: Session, source_id: int) -> dict:
+        src = next((s for s in SourceService.list_sources(db) if s.id == source_id), None)
+        if src is None:
+            return {"ok": False, "msg": f"Không tìm thấy nguồn #{source_id}"}
+        moi = not bool(src.enabled)
+        SourceService.set_enabled(db, source_id, moi)
+        return {"ok": True, "msg": f"Nguồn #{source_id} nay {'BẬT' if moi else 'TẮT'}.", "enabled": moi}
+
+    def viral_list_materials(db: Session, status: str, limit: int = 10) -> list[dict]:
+        """ADR-037 — material theo trạng thái cho `/moi` và `/sansang`."""
+        from app.core.database.models import ViralMaterial
+
+        rows = (
+            db.query(ViralMaterial)
+            .filter(ViralMaterial.status == status)
+            .order_by(ViralMaterial.id.desc())
+            .limit(max(1, min(int(limit), 25)))
+            .all()
+        )
+        return [{
+            "id": m.id, "platform": m.platform, "title": m.title, "views": m.views,
+            "url": m.url, "clip_start_sec": m.clip_start_sec, "clip_length_sec": m.clip_length_sec,
+        } for m in rows]
+
+    def viral_set_clip(db: Session, material_id: int, start: int, length=None) -> dict:
+        ok, msg = ViralService.set_clip_start(db, material_id, start, length)
+        return {"ok": ok, "msg": msg}
+
+    def viral_material_frames(db: Session, material_id: int) -> dict:
+        """ADR-037 — ảnh lưới 4×3 + mốc giây của từng khung, để dựng nút trong chat."""
+        frames = ViralService.list_source_frames(material_id)
+        return {"frames": frames, "sheet": ViralService.build_frame_sheet(material_id) if frames else None}
+
+    def viral_resend_material(db: Session, material_id: int) -> dict:
+        """ADR-037 — bắn lại video + caption cho một material đã sẵn sàng."""
+        from app.core.database.models import ViralMaterial
+
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat:
+            return {"ok": False, "msg": f"Không tìm thấy material #{material_id}"}
+        path = ViralService.find_reup_path(mat.id, mat.platform)
+        if not path:
+            return {"ok": False, "msg": f"Material #{material_id} chưa có file đã xử lý."}
+        src = ViralService.find_source_path(mat.id, mat.platform)
+        NotifierService.notify_material_ready(
+            mat, path,
+            drive_path=None,
+            source_duration=ViralService.probe_duration(src) if src else None,
+        )
+        return {"ok": True, "msg": f"Đã gửi lại #{material_id}."}
+
     def viral_process_one(db: Session, material_id: int):
         """ADR-034 — xử lý đúng một material (tải + cắt + caption), dùng cho link dán ở chat."""
         return ViralService.process_material(db, material_id)
@@ -101,6 +175,13 @@ def register_feature_hooks() -> None:
     feature_hooks.register("viral.add_link", viral_add_link)
     feature_hooks.register("viral.add_source_from_material", viral_add_source_from_material)
     feature_hooks.register("viral.process_one", viral_process_one)
+    feature_hooks.register("viral.sources_summary", viral_sources_summary)
+    feature_hooks.register("viral.scan_source", viral_scan_source)
+    feature_hooks.register("viral.toggle_source", viral_toggle_source)
+    feature_hooks.register("viral.list_materials", viral_list_materials)
+    feature_hooks.register("viral.set_clip", viral_set_clip)
+    feature_hooks.register("viral.material_frames", viral_material_frames)
+    feature_hooks.register("viral.resend_material", viral_resend_material)
     feature_hooks.register("viral.force_discovery", viral_force_discovery)
     feature_hooks.register("viral.discover_keyword", viral_discover_keyword)
     feature_hooks.register("telegram.make_poller", telegram_make_poller)
