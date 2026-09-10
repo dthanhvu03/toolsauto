@@ -230,14 +230,27 @@ def test_nut_xu_ly_tra_loi_ngay_roi_chay_nen(router, monkeypatch):
     assert seen[0][1][1] == 976
 
 
-def test_nut_gui_lai_goi_dung_hook(router, monkeypatch):
+def test_nut_gui_lai_chay_nen_va_khong_them_tin_thua(router, monkeypatch):
+    """Gửi lại phải TẢI LÊN cả video ⇒ chạy nền. Thành công thì chính video là câu trả lời."""
     r, client = router
     seen = _hooks(monkeypatch, {"viral.resend_material": {"ok": True, "msg": "Đã gửi lại #976."}})
 
     r.dispatch({"callback_query": {"id": "c", "data": "gui:976", "message": {"message_id": 1}}})
+    _wait()
 
-    assert seen[0][0] == "viral.resend_material"
-    assert "Đã gửi lại" in client.text
+    assert "Đang gửi lại" in client.answers[0]
+    assert seen[0][0] == "viral.resend_material" and seen[0][1][1] == 976
+    assert "⚠️" not in client.text
+
+
+def test_nut_gui_lai_that_bai_thi_bao(router, monkeypatch):
+    r, client = router
+    _hooks(monkeypatch, {"viral.resend_material": {"ok": False, "msg": "Chưa có file đã xử lý."}})
+
+    r.dispatch({"callback_query": {"id": "c", "data": "gui:976", "message": {"message_id": 1}}})
+    _wait()
+
+    assert "Chưa có file" in client.text
 
 
 # ── dải khung hình + chọn mốc ───────────────────────────────────────────────

@@ -44,11 +44,15 @@ class ViralService:
             os.path.join(base, "**", f"viral_{material_id}_*.*"),
         ):
             hits.extend(glob(pat, recursive=True))
+        # Loại MỌI thứ dính "_reup" và mọi file tạm: sau một lần crash, `…_reup.tmp.mp4` hoặc
+        # `…with_intro.tmp.mp4` còn nằm đó, mtime mới nhất nên thắng ở bước sort — và bản
+        # "gốc" đem đi cắt lại hoá ra là bản ĐÃ cắt.
         hits = [
             h for h in hits
             if os.path.isfile(h)
             and os.path.getsize(h) > 0
-            and not h.endswith("_reup.mp4")
+            and "_reup" not in os.path.basename(h)
+            and ".tmp." not in os.path.basename(h)
             and os.path.splitext(h)[1].lower() in (".mp4", ".mkv", ".webm", ".mov")
         ]
         if not hits:
@@ -738,8 +742,13 @@ class ViralService:
                 if new_value < 0:
                     return False, "Mốc bắt đầu không được âm."
 
-            # ADR-036: độ dài riêng cho video này. Bỏ trống ⇒ dùng số chung ở Thiết lập.
-            if clip_length_sec in (None, ""):
+            # ADR-036/037: phân biệt "không truyền" với "truyền rỗng".
+            #   None ⇒ GIỮ NGUYÊN độ dài đang có (nút khung hình trong Telegram chỉ gửi mốc)
+            #   ""   ⇒ Owner đã xoá trắng ô trên web ⇒ về dùng số chung
+            # Gộp hai thứ này làm một thì mỗi lần bấm khung là mất độ dài đã đặt công phu.
+            if clip_length_sec is None:
+                new_length = mat.clip_length_sec
+            elif clip_length_sec == "":
                 new_length = None
             else:
                 try:

@@ -323,13 +323,18 @@ def test_dat_ca_moc_lan_do_dai(session_factory):
         assert "giây 332" in msg and "dài 50 giây" in msg
 
 
-def test_bo_trong_do_dai_thi_dung_so_chung(session_factory):
+def test_xoa_trang_o_do_dai_thi_dung_so_chung(session_factory):
+    """
+    Truyền `""` = Owner xoá trắng ô trên web ⇒ về số chung.
+    Truyền `None` = không gửi trường đó (nút khung hình Telegram) ⇒ GIỮ NGUYÊN — phân biệt
+    hai thứ này là bản vá sau review 2026-09-10, xem tests/test_review_fixes_20260910.py.
+    """
     from app.core.database.models import ViralMaterial
     from app.features.viral_intake.service import ViralService
 
     mid = _material(session_factory, clip_length_sec=50)
     with session_factory() as db:
-        ok, _ = ViralService.set_clip_start(db, mid, 100, None)
+        ok, _ = ViralService.set_clip_start(db, mid, 100, "")
 
         assert ok
         assert db.get(ViralMaterial, mid).clip_length_sec is None

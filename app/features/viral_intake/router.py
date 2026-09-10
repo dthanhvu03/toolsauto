@@ -497,8 +497,10 @@ def set_clip_start(
     Nhận ``str`` chứ không ``Optional[int]`` để số sai ra toast đỏ tiếng Việt từ service,
     không phải 422 JSON của FastAPI (cùng lý do ADR-026).
     """
+    # Truyền `clip_length_sec` NGUYÊN VẸN: "" nghĩa là Owner xoá trắng ô ⇒ về số chung.
+    # Đổi "" thành None ở đây thì service hiểu là "giữ nguyên" và ô không bao giờ xoá được.
     ok, msg = ViralService.set_clip_start(
-        db, material_id, clip_start_sec or None, clip_length_sec or None
+        db, material_id, clip_start_sec or None, clip_length_sec
     )
     if ok and process_now:
         background.add_task(_process_material_in_background, material_id)

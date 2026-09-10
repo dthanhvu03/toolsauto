@@ -36,11 +36,16 @@ def media_info(video_path: str) -> dict:
             ],
             capture_output=True, text=True, timeout=30,
         ).stdout.split()
+        # ffprobe in stream trước, format sau: [width, height, duration]. Khi container không
+        # có `duration` nó in "N/A" và danh sách chỉ còn 2 số — lấy `nums[-1]` lúc đó là gán
+        # CHIỀU CAO làm thời lượng, ra "Dài 17:04" cho một clip 90 giây.
         nums = [float(x) for x in out if x.replace(".", "", 1).isdigit()]
         if len(nums) >= 3:
             info["width"], info["height"], info["duration"] = int(nums[0]), int(nums[1]), nums[2]
-        elif nums:
-            info["duration"] = nums[-1]
+        elif len(nums) == 2:
+            info["width"], info["height"] = int(nums[0]), int(nums[1])
+        elif len(nums) == 1:
+            info["duration"] = nums[0]
     except Exception as exc:
         logger.debug("[media_info] không đọc được %s: %s", video_path, exc)
     return info

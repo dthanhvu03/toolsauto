@@ -220,14 +220,19 @@ class NotifierService:
                 return
 
             block = nf.material_caption_block(mat)
-            if block and len(msg) > cls.TELEGRAM_MEDIA_CAPTION_LIMIT:
+            if len(msg) > cls.TELEGRAM_MEDIA_CAPTION_LIMIT:
+                # Chốt này TRƯỚC ĐÂY chỉ bật khi có caption AI. Nhưng riêng tiêu đề TikTok dài
+                # cũng đủ đẩy phần đầu vượt 1024 — lúc đó `send_video` cắt `caption[:1024]` giữa
+                # thẻ <i>, Telegram trả 400 và MẤT LUÔN cả tin lẫn video. Nay đo tổng, không đo
+                # sự tồn tại của caption.
                 cls._broadcast_video(
                     media_path,
                     nf.material_ready_message(
                         mat, media_path, with_caption=False, drive_path=drive_path, **extra
                     ),
                 )
-                cls._broadcast(block)
+                if block:
+                    cls._broadcast(block)
             else:
                 cls._broadcast_video(media_path, msg)
         except Exception as e:

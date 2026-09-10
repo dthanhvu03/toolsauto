@@ -824,6 +824,15 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 # ADR-031: mốc Owner chọn trong video GỐC. 0/None ⇒ cắt từ đầu như trước.
                 clip_start=float(getattr(mat, "clip_start_sec", None) or 0),
                 clip_length=float(getattr(mat, "clip_length_sec", None) or 0),
+                # BẮT BUỘC: `process` có chốt `skip_existing` — thấy `_reup.mp4` cũ là trả lại
+                # ngay và báo THÀNH CÔNG. Xử lý lại để đổi mốc cắt thì file cũ luôn còn đó, nên
+                # thiếu `force` là tính năng chọn đoạn bị vô hiệu HOÀN TOÀN mà không ai biết.
+                # `reprocess_reup` vốn đã truyền `force=True`; đường chính thì quên.
+                force=bool(
+                    mat.status in (ViralStatus.REUP, ViralStatus.FAILED)
+                    or getattr(mat, "clip_start_sec", None)
+                    or getattr(mat, "clip_length_sec", None)
+                ),
             )
             if reup_result.success and reup_result.output_path:
                 logger.info(

@@ -1,5 +1,57 @@
 # Current Status
 
+## Phiên 2026-09-10 (c) — ADR-038: bảy lỗi do code-review bắt
+
+Owner: *"kiểm tra code đi"*. Chạy `/code-review` mức cao trên `e8b6c4b..HEAD` (17 commit,
+57 file, +6.450 dòng). **Bảy lỗi**, trong đó một cái vô hiệu hoá hẳn tính năng chính.
+
+### Lỗi #1 — mốc cắt KHÔNG hề có tác dụng ở đường chạy thật
+
+`ReupProcessor.process` có chốt `skip_existing`: thấy `_reup.mp4` cũ là trả lại và **báo thành
+công**. `reprocess_reup` truyền `force=True`, **đường chính thì quên**. Mà xử lý lại để đổi mốc
+thì file cũ luôn còn đó, nên ADR-031/036 **không làm gì cả** suốt từ hôm qua.
+
+Chứng minh bằng video đồng hồ: đặt mốc 120 ra `mode=skip_existing`, khung giây 2 hiện **2**.
+Sau khi vá hiện **122**.
+
+**Vì sao mọi lượt chạy thật trước không bắt được:** chúng đều tự gọi `process(force=True)`.
+Chạy thật vẫn sai nếu **không chạy đúng đường production đi**.
+
+### Sáu lỗi còn lại (đã vá, có test)
+
+| # | Lỗi |
+|---|---|
+| 2 | Bỏ qua kết quả `process_material` — Owner nhận lời hứa rồi **im lặng vĩnh viễn** |
+| 3 | `media_info` lấy **chiều cao** làm thời lượng khi ffprobe trả N/A, clip 90s báo "Dài 17:04" |
+| 4 | Bấm khung hình **xoá mất độ dài** đã đặt (chuỗi rỗng và None bị gộp) |
+| 5 | File tạm `…_reup.tmp.mp4` **thắng ở bước sort**, "bản gốc" hoá ra là bản đã cắt |
+| 6 | Nút Gửi lại tải video **trên luồng poller**, callback hết hạn, bot đứng im |
+| 7 | Chốt tách tin chỉ bật khi có caption; tiêu đề dài (**đo thật 1.369 ký tự**) làm Telegram trả 400, **mất cả tin lẫn video** |
+
+**Tự làm hỏng khi vá, test bắt lại:** gom `scan` và `gui` vào một nhánh rồi cho cả hai im lặng
+khi thành công — nhưng quét xong mà im thì Owner không biết có gì không. Nay `scan` báo kết
+quả, `gui` im vì chính video đã là câu trả lời.
+
+### System State
+
+16 test mới khoá cả bảy; 3 test cũ sửa theo ngữ nghĩa mới.
+**816 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ.
+
+### Unfinished + Blockers
+
+- **12 video đang có vẫn là bản cắt sai** — chúng tạo ra khi lỗi #1 còn đó. Phải cắt lại.
+- Nợ cũ: file test Threads chết 4 tháng (`ai_runtime` đã bị xoá hẳn, phải viết lại hoặc xoá);
+  gộp hai hàm làm sạch tiêu đề; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại.** Đặt lại mốc cho một video rồi kiểm — **từ giờ nó mới
+   thật sự cắt**. Trước bản vá này mọi lần đặt mốc đều vô tác dụng.
+2. Quyết số phận `tests/test_threads_world_news.py`: viết lại 8 test hay xoá file.
+3. Đăng bài đầu tiên lên Page "Mê Câu Cá".
+
+---
+
 ## Phiên 2026-09-10 (b) — ADR-037: lệnh Telegram nối vào luồng video
 
 Owner hỏi *"mấy cái command đó nó có nối với nguồn video đồ không"*. Soi thật: **không**.

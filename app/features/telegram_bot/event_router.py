@@ -76,7 +76,13 @@ class TelegramEventRouter:
             from app.core.database.core import SessionLocal
             try:
                 with SessionLocal() as db:
-                    feature_hooks.call("viral.process_one", db, material_id)
+                    res = feature_hooks.call("viral.process_one", db, material_id)
+                # `process_material` TỪ CHỐI bằng giá trị trả về chứ không bằng ngoại lệ (sai
+                # trạng thái, thiếu ffmpeg, trùng nội dung…). Bỏ qua nó thì Owner nhận lời hứa
+                # "sẽ gửi khi xong" rồi im lặng vĩnh viễn — không lỗi, không tin, không gì cả.
+                ok, msg = res if isinstance(res, tuple) else (True, "")
+                if not ok:
+                    self.client.send_message(f"⚠️ Không xử lý được #{material_id}: {msg}")
             except Exception:
                 logger.exception("[Telegram] process_one #%s failed", material_id)
                 self.client.send_message(f"❌ Xử lý video #{material_id} thất bại — xem log.")
@@ -134,24 +140,35 @@ class TelegramEventRouter:
         from app.core import feature_hooks
         from app.core.database.core import SessionLocal
 
-        # Quét một nguồn cũng mất hàng chục giây ⇒ báo trước rồi chạy nền.
-        if action == "scan":
-            self.client.answer_callback_query(callback_id, "🔍 Đang quét…")
+        hook = self._HOOK_BY_ACTION[action]
+        # Quét nguồn mất hàng chục giây; "Gửi lại" phải TẢI LÊN cả video — chạy thẳng trên
+        # luồng poller thì nút quay cho tới khi callback hết hạn và bot đứng im suốt lượt tải.
+        # Chỉ bật/tắt nguồn là rẻ, làm ngay được.
+        if action in ("scan", "gui"):
+            self.client.answer_callback_query(
+                callback_id, "🔍 Đang quét…" if action == "scan" else "📤 Đang gửi lại…"
+            )
 
             def _run():
                 try:
                     with SessionLocal() as db:
-                        res = feature_hooks.call("viral.scan_source", db, target_id) or {}
-                    self.client.send_message(("✅ " if res.get("ok") else "⚠️ ") + str(res.get("msg") or ""))
+                        res = feature_hooks.call(hook, db, target_id) or {}
+                    msg = str(res.get("msg") or "")
+                    if not res.get("ok"):
+                        self.client.send_message("⚠️ " + msg)
+                    elif action == "scan":
+                        # Quét xong mà im thì Owner không biết có tìm được gì không. Còn "Gửi
+                        # lại" thì chính video gửi tới đã là câu trả lời, thêm tin là thừa.
+                        self.client.send_message("✅ " + msg)
                 except Exception:
-                    logger.exception("[Telegram] quét nguồn #%s hỏng", target_id)
-                    self.client.send_message(f"❌ Quét nguồn #{target_id} hỏng — xem log.")
+                    logger.exception("[Telegram] %s #%s hỏng", action, target_id)
+                    self.client.send_message(f"❌ Thao tác trên #{target_id} hỏng — xem log.")
 
-            threading.Thread(target=_run, name=f"tg-scan-{target_id}", daemon=True).start()
+            threading.Thread(target=_run, name=f"tg-{action}-{target_id}", daemon=True).start()
             return
 
         with SessionLocal() as db:
-            res = feature_hooks.call(self._HOOK_BY_ACTION[action], db, target_id) or {}
+            res = feature_hooks.call(hook, db, target_id) or {}
         msg = str(res.get("msg") or "")
         self.client.answer_callback_query(callback_id, ("✅ " if res.get("ok") else "⚠️ ") + msg[:180])
         self.client.send_message(("✅ " if res.get("ok") else "⚠️ ") + msg)
