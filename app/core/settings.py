@@ -308,11 +308,13 @@ SETTINGS: dict[str, SettingSpec] = {
         title="Độ dài tối đa video sau xử lý (giây)",
         section="Quét TikTok & Viral",
         description=(
-            "ADR-031: video nguồn thường dài 6-11 phút, tool cắt còn số giây này. Facebook Reels "
-            "nhận tối đa 90 giây. Muốn cắt ngắn hơn cho gọn thì hạ xuống 60. Preset reels_short "
-            "vẫn ghi đè bằng 45 giây. Cắt TỪ ĐÂU thì đặt ở ô 'Bắt đầu từ giây' trên từng video."
+            "ADR-031/036: video nguồn thường dài 6-11 phút, tool cắt còn số giây này. "
+            "Đặt 0 = KHÔNG CẮT — Meta đã bỏ giới hạn độ dài Reels từ 6/2025, nhưng Facebook xếp "
+            "hạng theo TỶ LỆ XEM HẾT chứ không phải tổng thời gian xem, nên video dài thường bị "
+            "dìm; khoảng hiệu quả nhất là 15-60 giây. Từng video có thể đặt độ dài riêng ở khối "
+            "'Chọn đoạn cắt'. Preset reels_short vẫn ghi đè bằng 45 giây."
         ),
-        min=10,
+        min=0,
         max=600,
     ),
     "viral.auto_caption_on_ready": SettingSpec(

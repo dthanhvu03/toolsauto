@@ -823,6 +823,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 account_id=target_account.id if target_account else None,
                 # ADR-031: mốc Owner chọn trong video GỐC. 0/None ⇒ cắt từ đầu như trước.
                 clip_start=float(getattr(mat, "clip_start_sec", None) or 0),
+                clip_length=float(getattr(mat, "clip_length_sec", None) or 0),
             )
             if reup_result.success and reup_result.output_path:
                 logger.info(

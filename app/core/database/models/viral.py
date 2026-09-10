@@ -64,6 +64,9 @@ class ViralMaterial(Base):
     # khoảnh khắc câu được cá. Đã đo: dò tự động theo âm thanh không khả thi (biểu đồ phẳng),
     # nên phải để người chỉ mốc.
     clip_start_sec = Column(Integer, nullable=True)
+    # ADR-036: độ dài riêng cho video này (giây). None ⇒ dùng số chung ở Thiết lập.
+    # Có cả hai đầu mới cắt được một đoạn TRỌN VẸN — mốc bắt đầu thôi thì vẫn cụt đuôi.
+    clip_length_sec = Column(Integer, nullable=True)
     content_hash = Column(String, nullable=True, index=True)  # sha256 file nguồn vừa tải
     phash = Column(Text, nullable=True)  # JSON {"1.23s": "hex", …} — pHash 5 khung hình
 

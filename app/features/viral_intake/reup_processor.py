@@ -57,6 +57,11 @@ class ReupProcessor:
     """Pre-processing pipeline cho video reup trước khi đưa qua MediaProcessor."""
 
     MAX_REELS_DURATION = 90
+    # ADR-036: "không cắt" KHÔNG được truyền số 0 xuống. `max_duration` vừa dùng để cắt, vừa là
+    # CỔNG KIỂM CHẤT LƯỢNG (`in_duration > max_duration and out_duration > max_duration + 1`
+    # ⇒ loại bản xuất) và là điều kiện của nhánh dự phòng. Số 0 ở đó loại sạch mọi bản xuất.
+    # Đổi thành một số rất lớn tại đúng một chỗ ⇒ 8 chỗ dùng còn lại không phải sửa.
+    NO_CUT_DURATION = 10 ** 9
     MIN_OUTPUT_DURATION_SEC = 1.5
     MIN_OUTPUT_EDGE_PX = 180
     MIN_OUTPUT_BYTES = 64 * 1024
@@ -106,7 +111,8 @@ class ReupProcessor:
             from app.core import settings as runtime_settings
 
             value = float(runtime_settings.get_int("reup.max_duration_sec", cls.MAX_REELS_DURATION))
-            return value if value > 0 else float(cls.MAX_REELS_DURATION)
+            # ADR-036: 0 = KHÔNG CẮT (Meta bỏ giới hạn độ dài Reels từ 6/2025).
+            return value if value > 0 else float(cls.NO_CUT_DURATION)
         except Exception:
             return float(cls.MAX_REELS_DURATION)
 
@@ -924,6 +930,7 @@ class ReupProcessor:
         outro_path: Optional[str] = None,
         hook_text: Optional[str] = None,
         clip_start: float = 0.0,
+        clip_length: float = 0.0,
     ) -> ReupResult:
         """
         Pre-process video reup: anti-dupe + hook text + brand intro + brand outro.
@@ -941,9 +948,13 @@ class ReupProcessor:
         started_at = time.time()
         preset_key = normalize_preset(preset)
         knobs = dict(cls.PRESET_KNOBS.get(preset_key) or cls.PRESET_KNOBS["safe"])
-        # ADR-031: preset có `max_duration` riêng thì ưu tiên (reels_short = 45s); không thì
-        # lấy ô `reup.max_duration_sec` ở Thiết lập, cuối cùng mới tới hằng số trong code.
-        max_duration = float(knobs.get("max_duration") or cls._configured_max_duration())
+        # Thứ tự ưu tiên (ADR-036): độ dài RIÊNG của video này → `max_duration` của preset
+        # (reels_short = 45s) → ô `reup.max_duration_sec` → hằng số trong code.
+        # Độ dài riêng đứng đầu vì nó là lựa chọn cụ thể Owner vừa làm cho đúng video này.
+        if clip_length and clip_length > 0:
+            max_duration = float(clip_length)
+        else:
+            max_duration = float(knobs.get("max_duration") or cls._configured_max_duration())
         crf = int(knobs.get("crf") or 26)
         cfg = load_reup_config()
         head_trim = float(cfg.get("audio_head_trim_sec") or 0)
@@ -1096,12 +1107,15 @@ class ReupProcessor:
         )
 
         def _fast_trim_fallback() -> ReupResult:
-            if duration <= max_duration:
-                return ReupResult(success=False, error="Fallback not needed")
-
+            # ADR-036: bỏ chốt "duration <= max_duration ⇒ không cần dự phòng". Chốt đó đúng khi
+            # mọi video dài đều bị cắt, nhưng từ khi có chế độ KHÔNG CẮT thì `duration` không
+            # bao giờ vượt ngưỡng ⇒ lượt mã hoá chính hỏng là hỏng hẳn, material bị đánh FAILED
+            # và file tải về bị xoá. Dự phòng nay chạy được cả hai chế độ: chỉ thêm `-t` khi
+            # thật sự phải cắt, không thì chép nguyên.
+            can_cut = duration > max_duration
             logger.info(
-                "[ReupProcessor] Emergency fast-trim > %.0fs (clip_start=%.1f)...",
-                max_duration, clip_start,
+                "[ReupProcessor] Emergency fast-copy (cắt=%s, max=%.0fs, clip_start=%.1f)...",
+                can_cut, max_duration, clip_start,
             )
             # ADR-031: nhánh dự phòng PHẢI tôn trọng `clip_start`. Thiếu nó thì Owner đặt mốc,
             # hệ thống báo thành công, mà file vẫn là 90 giây đầu — sai âm thầm, kiểu tệ nhất.
@@ -1110,12 +1124,10 @@ class ReupProcessor:
             trim_cmd = [_ffmpeg_bin(), "-y"]
             if clip_start > 0 and duration > (clip_start + 2.0):
                 trim_cmd += ["-ss", f"{clip_start:.3f}"]
-            trim_cmd += [
-                "-i", input_path,
-                "-t", str(max_duration),
-                "-c", "copy",
-                temp_path,
-            ]
+            trim_cmd += ["-i", input_path]
+            if can_cut:
+                trim_cmd += ["-t", str(max_duration)]
+            trim_cmd += ["-c", "copy", temp_path]
             try:
                 subprocess.run(trim_cmd, capture_output=True, timeout=60)
                 if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
@@ -1155,14 +1167,13 @@ class ReupProcessor:
                 logger.error("[ReupProcessor] FFmpeg failed: %s", error[:200])
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
-                if duration > max_duration:
-                    return _fast_trim_fallback()
-                return ReupResult(success=False, error=error[:200])
+                _fb = _fast_trim_fallback()
+                # Giữ LỖI GỐC khi dự phòng cũng hỏng: "Both … failed" không nói được vì sao.
+                return _fb if _fb.success else ReupResult(success=False, error=error[:200])
 
             if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
-                if duration > max_duration:
-                    return _fast_trim_fallback()
-                return ReupResult(success=False, error="FFmpeg produced empty output")
+                _fb = _fast_trim_fallback()
+                return _fb if _fb.success else ReupResult(success=False, error="FFmpeg produced empty output")
 
             output_info, gate_error = cls._promote_temp(
                 temp_path=temp_path,
@@ -1253,12 +1264,10 @@ class ReupProcessor:
             logger.warning("[ReupProcessor] FFmpeg timeout (>5 min)")
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-            if duration > max_duration:
-                return _fast_trim_fallback()
-            return ReupResult(success=False, error="FFmpeg timeout (>5 min)")
+            _fb = _fast_trim_fallback()
+            return _fb if _fb.success else ReupResult(success=False, error="FFmpeg timeout (>5 min)")
         except Exception as e:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
-            if duration > max_duration:
-                return _fast_trim_fallback()
-            return ReupResult(success=False, error=str(e))
+            _fb = _fast_trim_fallback()
+            return _fb if _fb.success else ReupResult(success=False, error=str(e))

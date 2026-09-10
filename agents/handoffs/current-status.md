@@ -1,5 +1,61 @@
 # Current Status
 
+## Phiên 2026-09-10 (a) — ADR-036: chọn cả hai đầu đoạn cắt, và cho phép không cắt
+
+Owner: *"sao lại cắt em nhỉ, người xem xem không hiểu đầu đuôi như nào"*.
+
+**Kiểm lại giả định cũ**: `MAX_REELS_DURATION = 90` đặt theo giới hạn Facebook Reels, nhưng
+**6/2025 Meta đã bỏ giới hạn đó**. Câu "phải cắt vì Reels chỉ cho 90 giây" không còn đúng —
+ADR-031 giữ con số này mà không kiểm lại.
+
+**Nhưng bỏ cắt cũng không phải lời giải**: Facebook xếp hạng theo **tỷ lệ xem hết**, vlog 9,5
+phút thì tỷ lệ đó gần 0 và bị dìm. Vấn đề thật là **cắt ẩu**: bắt đầu ở chỗ vô nghĩa, kết thúc
+giữa chừng. Muốn một đoạn trọn vẹn phải chọn được **cả hai đầu**.
+
+### Done This Session (có proof)
+
+| Việc | Proof |
+|---|---|
+| Cột `clip_length_sec` + migration `q4e1f2a3b4c5` | `alembic heads` = 1 head |
+| Độ dài riêng từng video, thắng cả preset lẫn ô chung | **chạy ffmpeg thật**: từ giây 60, dài 50 ⇒ **50.0s** |
+| Ô `reup.max_duration_sec = 0` ⇒ **không cắt** | **chạy thật**: ⇒ **300.0s** = nguyên bản, `success=True` |
+| 0 **không** truyền xuống mà đổi thành `NO_CUT_DURATION` — vì `max_duration` còn là **cổng kiểm chất lượng**, số 0 ở đó loại sạch mọi bản xuất | 5 test |
+| Độ dài sai (chữ/âm/dưới 5 giây) ⇒ từ chối, không đổi status | 3 ca |
+| UI: ô "dài" ngay cạnh ô "từ giây" | render thật |
+| Toàn suite | **774 passed, 16 skipped, 0 failed**; `lint-imports` 2 hợp đồng giữ |
+
+**Lỗi thật chỉ lộ khi chạy thật — lần thứ ba trong hai ngày:** `_fast_trim_fallback` có chốt
+`duration <= max_duration ⇒ "không cần dự phòng"`. Chốt đó đúng khi mọi video dài đều bị cắt,
+nhưng ở chế độ **không cắt** thì `duration` không bao giờ vượt ngưỡng ⇒ lượt mã hoá chính hỏng
+là **hỏng hẳn**: material bị `FAILED`, file tải về bị xoá. Chính tính năng mới mở ra đường đi
+**không có lưới**. Đã sửa: dự phòng chạy cả hai chế độ, và **cả bốn** nhánh hỏng đều thử dự
+phòng thay vì hai.
+
+**Lỗi phụ tự tạo tự bắt:** `_fast_trim_fallback() or ReupResult(...)` — `ReupResult` luôn
+truthy nên nhánh sau không bao giờ chạy và **lỗi gốc bị nuốt**. Đổi sang xét `.success`.
+
+### System State
+
+Mỗi video chọn được **từ giây mấy** và **dài bao nhiêu**. Bỏ trống ⇒ y như trước (90 giây).
+Ô chung đặt 0 ⇒ không cắt. Không đổi mặc định — đổi mặc định là đổi hành vi mọi video cũ.
+
+### Unfinished + Blockers
+
+- **Chưa làm nút chọn mốc trong Telegram** (dải khung hình + nút) — việc tiếp theo.
+- Postgres máy dev vẫn tắt (`port 5434`), nên mọi kiểm chứng dùng SQLite tạm / chạy ffmpeg rời.
+- Nợ cũ: gộp hai hàm làm sạch tiêu đề trùng nhau; bỏ `import ViralService as _VS` thừa.
+
+### Next Action
+
+1. **Owner: `git pull` + `alembic upgrade head`** (có migration mới) + khởi động lại.
+2. Với một video: mở **"✂️ Chọn đoạn cắt"**, đặt **từ giây** và **dài** để được một đoạn trọn
+   vẹn (mở → cao trào → kết). Khoảng 15-60 giây thường ăn nhất trên Facebook.
+3. Muốn thử không cắt: `/app/settings` → "Độ dài tối đa video sau xử lý" = **0**. Em vẫn khuyên
+   đừng, vì tỷ lệ xem hết quyết định phân phối.
+4. Đăng bài đầu tiên lên Page "Mê Câu Cá".
+
+---
+
 ## Phiên 2026-09-09 (k) — ADR-035: tin Telegram nói rõ dài bao nhiêu, cắt từ đâu
 
 Owner chạy thật luồng ADR-034 (dán link vào chat ⇒ nhận video + caption) và phản hồi:

@@ -487,6 +487,7 @@ def set_clip_start(
     material_id: int,
     background: BackgroundTasks,
     clip_start_sec: str = Form(""),
+    clip_length_sec: str = Form(""),
     process_now: bool = Form(False),
     db: Session = Depends(get_db),
 ):
@@ -496,7 +497,9 @@ def set_clip_start(
     Nhận ``str`` chứ không ``Optional[int]`` để số sai ra toast đỏ tiếng Việt từ service,
     không phải 422 JSON của FastAPI (cùng lý do ADR-026).
     """
-    ok, msg = ViralService.set_clip_start(db, material_id, clip_start_sec or None)
+    ok, msg = ViralService.set_clip_start(
+        db, material_id, clip_start_sec or None, clip_length_sec or None
+    )
     if ok and process_now:
         background.add_task(_process_material_in_background, material_id)
         msg = f"{msg.rsplit('—', 1)[0].strip()} — đang tải lại và cắt trong nền…"

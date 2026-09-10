@@ -61,12 +61,16 @@ def test_o_cai_dat_hong_thi_lui_ve_hang_so_trong_code(monkeypatch):
     assert ReupProcessor._configured_max_duration() == float(ReupProcessor.MAX_REELS_DURATION)
 
 
-def test_gia_tri_vo_ly_thi_lui_ve_mac_dinh(monkeypatch):
+def test_so_0_nay_la_KHONG_CAT_chu_khong_phai_gia_tri_vo_ly(monkeypatch):
+    """
+    ADR-031 coi 0 là vô lý và lùi về 90. ADR-036 đổi có chủ ý: Meta bỏ giới hạn độ dài Reels
+    từ 6/2025 nên 0 là một lựa chọn hợp lệ — không cắt.
+    """
     from app.core import settings as runtime_settings
 
     monkeypatch.setattr(runtime_settings, "get_int", lambda key, default=0, db=None: 0)
 
-    assert ReupProcessor._configured_max_duration() == float(ReupProcessor.MAX_REELS_DURATION)
+    assert ReupProcessor._configured_max_duration() == float(ReupProcessor.NO_CUT_DURATION)
 
 
 # ── clip_start đi vào -ss ────────────────────────────────────────────────────
@@ -242,3 +246,149 @@ def test_ca_hai_nhanh_deu_kiem_moc_vuot_do_dai():
     code = pathlib.Path(importlib.import_module(ReupProcessor.__module__).__file__).read_text(encoding="utf-8")
 
     assert code.count("clip_start > 0 and duration > (clip_start + 2.0)") == 2
+
+
+# ---------------------------------------------------------------------------
+# ADR-036 — độ dài riêng từng video, và 0 = không cắt
+# ---------------------------------------------------------------------------
+
+
+def test_do_dai_rieng_cua_video_thang_moi_thu_khac():
+    """Owner vừa chọn cụ thể cho đúng video này ⇒ phải thắng cả preset lẫn ô chung."""
+    import importlib
+    import pathlib
+
+    mod = importlib.import_module("app.features.viral_intake.reup_processor")
+    code = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+
+    assert "if clip_length and clip_length > 0:" in code
+    assert code.index("if clip_length and clip_length > 0:") < code.index('knobs.get("max_duration")')
+
+
+def test_process_nhan_tham_so_clip_length():
+    import inspect
+
+    params = inspect.signature(ReupProcessor.process).parameters
+    assert "clip_length" in params and params["clip_length"].default == 0.0
+
+
+def test_dat_0_thi_KHONG_truyen_0_xuong_ma_doi_thanh_so_rat_lon(monkeypatch):
+    """
+    Điểm dễ hỏng nhất: `max_duration` không chỉ dùng để cắt, nó còn là CỔNG KIỂM CHẤT LƯỢNG
+    (`in_duration > max_duration and out_duration > max_duration + 1` ⇒ loại bản xuất) và là
+    điều kiện nhánh dự phòng. Truyền 0 vào đó thì mọi bản xuất đều bị loại.
+    """
+    from app.core import settings as runtime_settings
+
+    monkeypatch.setattr(runtime_settings, "get_int", lambda key, default=0, db=None: 0)
+
+    assert ReupProcessor._configured_max_duration() == float(ReupProcessor.NO_CUT_DURATION)
+    assert ReupProcessor.NO_CUT_DURATION > 10 ** 6
+
+
+def test_so_duong_van_duoc_ton_trong(monkeypatch):
+    from app.core import settings as runtime_settings
+
+    monkeypatch.setattr(runtime_settings, "get_int", lambda key, default=0, db=None: 45)
+
+    assert ReupProcessor._configured_max_duration() == 45.0
+
+
+@pytest.mark.parametrize("duration", [90.0, 573.0, 3600.0, 86400.0])
+def test_khong_cat_thi_khong_cong_nao_loai_ban_xuat(duration):
+    """
+    Mọi cổng trong `reup_processor` đều so kiểu `duration > max_duration`. Với NO_CUT_DURATION
+    thì không cái nào còn đúng — kể cả video 24 tiếng. Đó là lý do không truyền số 0 xuống.
+    """
+    cap = float(ReupProcessor.NO_CUT_DURATION)
+
+    assert not duration > cap
+    assert not (duration > cap and duration > cap + 1.0)  # đúng biểu thức của _validate_output
+
+
+# ── set_clip_start nhận thêm độ dài ─────────────────────────────────────────
+
+
+def test_dat_ca_moc_lan_do_dai(session_factory):
+    from app.core.database.models import ViralMaterial
+    from app.features.viral_intake.service import ViralService
+
+    mid = _material(session_factory)
+    with session_factory() as db:
+        ok, msg = ViralService.set_clip_start(db, mid, 332, 50)
+
+        assert ok, msg
+        mat = db.get(ViralMaterial, mid)
+        assert (mat.clip_start_sec, mat.clip_length_sec) == (332, 50)
+        assert "giây 332" in msg and "dài 50 giây" in msg
+
+
+def test_bo_trong_do_dai_thi_dung_so_chung(session_factory):
+    from app.core.database.models import ViralMaterial
+    from app.features.viral_intake.service import ViralService
+
+    mid = _material(session_factory, clip_length_sec=50)
+    with session_factory() as db:
+        ok, _ = ViralService.set_clip_start(db, mid, 100, None)
+
+        assert ok
+        assert db.get(ViralMaterial, mid).clip_length_sec is None
+
+
+@pytest.mark.parametrize("value,needle", [("abc", "số giây"), (-5, "không được âm"), (3, "dưới 5 giây")])
+def test_do_dai_sai_thi_tu_choi_khong_ghi_gi(session_factory, value, needle):
+    from app.constants import ViralStatus
+    from app.core.database.models import ViralMaterial
+    from app.features.viral_intake.service import ViralService
+
+    mid = _material(session_factory)
+    with session_factory() as db:
+        ok, msg = ViralService.set_clip_start(db, mid, 100, value)
+
+        assert not ok and needle in msg
+        mat = db.get(ViralMaterial, mid)
+        assert mat.clip_start_sec is None and mat.clip_length_sec is None
+        assert mat.status == ViralStatus.READY
+
+
+def test_processor_truyen_ca_do_dai_rieng():
+    import importlib
+    import pathlib
+
+    from app.features.viral_intake import processor
+
+    code = pathlib.Path(importlib.import_module(processor.__name__).__file__).read_text(encoding="utf-8")
+
+    assert 'clip_length=float(getattr(mat, "clip_length_sec", None) or 0)' in code
+
+
+def test_du_phong_chay_duoc_ca_khi_KHONG_cat():
+    """
+    Hồi quy tìm ra khi chạy thật (ADR-036): `_fast_trim_fallback` có chốt
+    `duration <= max_duration ⇒ "Fallback not needed"`. Chốt đó đúng khi mọi video dài đều bị
+    cắt, nhưng ở chế độ KHÔNG CẮT thì `duration` không bao giờ vượt ngưỡng ⇒ lượt mã hoá chính
+    hỏng là hỏng hẳn, material bị đánh FAILED và file tải về bị xoá.
+    """
+    import importlib
+    import pathlib
+
+    mod = importlib.import_module("app.features.viral_intake.reup_processor")
+    code = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+    block = code.split("def _fast_trim_fallback", 1)[1].split("subprocess.run(trim_cmd", 1)[0]
+
+    assert 'error="Fallback not needed"' not in block, "không được từ chối dự phòng khi không cắt"
+    assert "can_cut = duration > max_duration" in block
+    assert 'if can_cut:' in block, "chỉ thêm -t khi thật sự phải cắt"
+
+
+def test_du_phong_hong_thi_giu_LOI_GOC():
+    """`ReupResult` luôn truthy nên `fallback() or …` sẽ nuốt mất lỗi gốc — phải xét `.success`."""
+    import importlib
+    import pathlib
+
+    mod = importlib.import_module("app.features.viral_intake.reup_processor")
+    code = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+
+    assert "_fast_trim_fallback() or " not in code
+    assert code.count("_fb = _fast_trim_fallback()") == 4, "cả 4 nhánh hỏng đều phải thử dự phòng"
+    assert code.count("_fb if _fb.success else") == 4

@@ -315,26 +315,40 @@
                      class="w-full flex justify-end">
                     <span class="text-[10px] text-[var(--color-mist)]">Đang tải khung hình…</span>
                 </div>
-                <div class="flex items-center gap-1">
+                {# ADR-036: hai đầu của CÙNG một quyết định thì phải nằm cạnh nhau. Chỉ có mốc
+                   bắt đầu thì clip vẫn cụt đuôi — người xem không hiểu đầu đuôi. #}
+                <div class="flex items-center gap-1 flex-wrap justify-end">
                     <label for="clip-start-{{ item.id }}" class="text-[10px] text-[var(--color-mist)]">
-                        hoặc gõ giây
+                        từ giây
                     </label>
                     <input id="clip-start-{{ item.id }}" name="clip_start_sec" type="number" min="0" step="10"
                            value="{{ item.clip_start_sec if item.clip_start_sec else '' }}"
-                           placeholder="0 = từ đầu"
-                           class="w-20 text-[10px] border border-[var(--border)] rounded px-1 py-0.5 text-right text-[var(--color-ink)] bg-[var(--color-face)]"
+                           placeholder="0 = đầu"
+                           class="w-16 text-[10px] border border-[var(--border)] rounded px-1 py-0.5 text-right text-[var(--color-ink)] bg-[var(--color-face)]"
                            title="Mốc trong video GỐC, tính bằng giây. Phút 5 = 300." />
+                    <label for="clip-len-{{ item.id }}" class="text-[10px] text-[var(--color-mist)]">
+                        dài
+                    </label>
+                    <input id="clip-len-{{ item.id }}" name="clip_length_sec" type="number" min="0" step="5"
+                           value="{{ item.clip_length_sec if item.clip_length_sec else '' }}"
+                           placeholder="mặc định"
+                           class="w-16 text-[10px] border border-[var(--border)] rounded px-1 py-0.5 text-right text-[var(--color-ink)] bg-[var(--color-face)]"
+                           title="Độ dài riêng cho video này (giây). Bỏ trống = dùng số chung ở Thiết lập. Facebook xếp hạng theo tỷ lệ xem hết — 15-60 giây thường ăn nhất." />
                     <input type="hidden" id="clip-now-{{ item.id }}" name="process_now" value="true" />
                     <button
                         class="inline-flex items-center justify-center min-h-[32px] px-2 py-1 rounded text-[10px] font-semibold text-[var(--color-torch)] border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] hover:brightness-110 transition"
                         hx-post="/viral/{{ item.id }}/clip-start"
-                        hx-include="#clip-start-{{ item.id }},#clip-now-{{ item.id }}"
+                        hx-include="#clip-start-{{ item.id }},#clip-len-{{ item.id }},#clip-now-{{ item.id }}"
                         hx-swap="none"
-                        title="Đặt mốc rồi cắt lại"
-                        aria-label="Đặt mốc và cắt lại">
+                        title="Đặt đoạn cắt rồi xử lý lại"
+                        aria-label="Đặt đoạn cắt và cắt lại">
                         Cắt lại
                     </button>
                 </div>
+                <span class="text-[9px] text-[var(--color-mist)] text-right max-w-[16rem] leading-tight">
+                    Chọn một đoạn TRỌN VẸN (có mở, có cao trào, có kết) — clip cụt đuôi thì người
+                    xem không hiểu đầu đuôi.
+                </span>
             </div>
         </details>
         {% endif %}

@@ -664,6 +664,7 @@ class ViralService:
         db: Session,
         material_id: int,
         clip_start_sec: Optional[int],
+        clip_length_sec: Optional[int] = None,
     ) -> Tuple[bool, str]:
         """
         ADR-031 — đặt mốc bắt đầu cắt, rồi đưa material về ``REUP`` để xử lý lại.
@@ -690,6 +691,20 @@ class ViralService:
                 if new_value < 0:
                     return False, "Mốc bắt đầu không được âm."
 
+            # ADR-036: độ dài riêng cho video này. Bỏ trống ⇒ dùng số chung ở Thiết lập.
+            if clip_length_sec in (None, ""):
+                new_length = None
+            else:
+                try:
+                    new_length = int(clip_length_sec)
+                except (TypeError, ValueError):
+                    return False, "Độ dài phải là số giây."
+                if new_length < 0:
+                    return False, "Độ dài không được âm."
+                if 0 < new_length < 5:
+                    return False, "Độ dài dưới 5 giây thì gần như không xem được — đặt lớn hơn."
+
+            mat.clip_length_sec = new_length or None
             mat.clip_start_sec = new_value or None
             mat.status = ViralStatus.REUP
             mat.last_error = None
@@ -703,7 +718,8 @@ class ViralService:
             return False, f"Lỗi khi đặt mốc: {exc}"[:200]
 
         moc = f"giây {new_value}" if new_value else "từ đầu"
-        return True, f"Đã đặt mốc {moc} cho #{material_id} — bấm Xử lý để tải lại và cắt."
+        dai = f", dài {new_length} giây" if new_length else ""
+        return True, f"Đã đặt mốc {moc}{dai} cho #{material_id} — bấm Xử lý để tải lại và cắt."
 
     @staticmethod
     def reprocess_reup(
