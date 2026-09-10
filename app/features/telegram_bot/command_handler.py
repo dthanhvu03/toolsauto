@@ -135,8 +135,23 @@ class TelegramCommandHandler:
         from app.core.database.models import Job
         from app.core.queue.job import JobService
         with SessionLocal() as db:
-            if not db.query(Job).filter(Job.id == job_id).first():
+            job = db.query(Job).filter(Job.id == job_id).first()
+            if not job:
                 self.client.send_message(f"❓ Không tìm thấy Job #{job_id}.")
+                return
+            # `retry_job` chỉ nhận job FAILED và ném ValueError tiếng Anh cho mọi ca khác —
+            # kiểm TRƯỚC ở đây để Owner nhận câu tiếng Việt nói rõ vì sao, thay vì
+            # "❌ Lỗi: Job is not in FAILED state or does not exist."
+            if job.status != JobStatus.FAILED:
+                self.client.send_message(
+                    f"⚠️ Job #{job_id} đang ở trạng thái <b>{job.status}</b>. "
+                    "Chỉ job <b>FAILED</b> mới chạy lại được."
+                )
+                return
+            if not job.resolved_media_path:
+                self.client.send_message(
+                    f"⚠️ Job #{job_id} đã mất file video — không chạy lại được, phải xử lý lại từ đầu."
+                )
                 return
             JobService.retry_job(db, job_id)
         self.client.send_message(f"🔄 Đã cho Job #{job_id} chạy lại.")

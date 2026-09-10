@@ -129,3 +129,28 @@ qua cả những tin thật. Nay `num_channels == 0` ⇒ **không nhắn**.
 | Có quét mà 0 video ⇒ vẫn báo, kèm **cú pháp đúng** | `test_co_quet_ma_khong_ra_video_thi_van_bao_kem_cu_phap_dung` |
 
 **Toàn suite: 747 passed, 16 skipped, 0 failed.**
+
+## Vá lần hai (2026-09-10) — gửi lệnh thật vào chat mới lộ
+
+Owner bảo *"test các command trong tele thử đi"*. Không kích hoạt lệnh từ xa được (Telegram
+không gửi tin của chính bot lại cho bot, và **không được gọi `getUpdates`** vì poller bên máy
+Owner đang lắng nghe — gọi vào là giành mất tin của nó). Nên chạy **bộ lệnh thật với client
+thật**, dữ liệu từ SQLite tạm, kết quả hiện thẳng trong chat Owner.
+
+Lộ ra một lỗ trong chính bản vá lần đầu: **`/retry` với job có tồn tại nhưng không FAILED**.
+`JobService.retry_job` chỉ nhận job `FAILED` và ném
+`ValueError("Job is not in FAILED state or does not exist.")`; bản vá lần đầu chỉ kiểm job
+**có tồn tại**, nên Owner nhận nguyên câu tiếng Anh nội bộ đó qua bọc `❌ Lỗi:`.
+
+**Test cũ không bắt được vì nó mock `JobService.retry_job`** — mock thì không bao giờ chạm tới
+điều kiện thật. Đây là lần thứ hai trong hai ngày một lỗi chỉ lộ khi chạy hàng thật.
+
+Đã kiểm **trước** trong `_cmd_retry`, trả tiếng Việt nói rõ trạng thái hiện tại; thêm cả nhánh
+job mất file (`retry_job` cũng ném cho ca này). Test mới dùng job **thật** trong DB tạm, 4 ca
+trạng thái + 1 ca mất file.
+
+Một test cũ phải sửa theo: `test_retry_goi_that_JobService` dựng job `FAILED` **không có**
+`media_path`, nay bị chặn ở nhánh mất file. Thêm `media_path` — nó vốn định kiểm nhánh chạy
+lại được, không phải nhánh mất file.
+
+**Toàn suite: 779 passed, 16 skipped, 0 failed.**

@@ -149,7 +149,9 @@ def test_retry_goi_that_JobService(bot, db_factory, monkeypatch):
     monkeypatch.setattr(JobService, "retry_job", staticmethod(lambda db, job_id: goi["ids"].append(job_id)))
 
     with db_factory() as db:
-        job = Job(status="FAILED", caption="x")
+        # Phải có `media_path`: job mất file thì không chạy lại được, và ta đang kiểm nhánh
+        # chạy lại được chứ không phải nhánh mất file.
+        job = Job(status="FAILED", caption="x", media_path="content/reup/tiktok/x_reup.mp4")
         db.add(job)
         db.commit()
         jid = job.id
@@ -159,6 +161,47 @@ def test_retry_goi_that_JobService(bot, db_factory, monkeypatch):
 
     assert goi["ids"] == [jid], "phải gọi JobService.retry_job, không chỉ in chữ"
     assert "chạy lại" in client.text
+
+
+@pytest.mark.parametrize("status", ["DRAFT", "PENDING", "DONE", "RUNNING"])
+def test_retry_job_khong_phai_FAILED_thi_noi_ro_bang_tieng_viet(bot, db_factory, status):
+    """
+    Hồi quy tìm ra khi gửi lệnh thật vào Telegram: bản vá ADR-033 chỉ kiểm job CÓ TỒN TẠI.
+    Job tồn tại mà không ở trạng thái FAILED thì `JobService.retry_job` ném
+    `ValueError("Job is not in FAILED state or does not exist.")` — Owner nhận nguyên câu
+    tiếng Anh nội bộ đó qua bọc "❌ Lỗi:".
+
+    Test cũ mock `retry_job` nên không bao giờ chạm tới điều kiện thật.
+    """
+    from app.core.database.models import Job
+
+    with db_factory() as db:
+        job = Job(status=status, caption="x")
+        db.add(job)
+        db.commit()
+        jid = job.id
+
+    handler, client = bot
+    handler.handle_command("retry", [str(jid)])
+
+    assert "❌ Lỗi" not in client.text
+    assert status in client.text and "FAILED" in client.text
+
+
+def test_retry_job_mat_file_thi_bao_ro(bot, db_factory):
+    from app.core.database.models import Job
+
+    with db_factory() as db:
+        job = Job(status="FAILED", caption="x", media_path=None)
+        db.add(job)
+        db.commit()
+        jid = job.id
+
+    handler, client = bot
+    handler.handle_command("retry", [str(jid)])
+
+    assert "❌ Lỗi" not in client.text
+    assert "mất file" in client.text
 
 
 def test_retry_job_khong_ton_tai_thi_bao_ro(bot):
