@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
+import re
 import subprocess
 import time
 
@@ -164,6 +166,145 @@ def _mark_material_failed(db, mat, reason: str) -> None:
 
 def _clear_material_error(mat) -> None:
     mat.last_error = None
+
+
+def _finish_ready_material(db, mat, media_path: str, drive_dest) -> None:
+    """
+    ADR-018/027/035 — không có account ⇒ material dừng ở ``READY``, Owner tải file đăng tay.
+
+    Tách khỏi ``_process_viral_materials`` (ADR-040): đây là khối bị sửa 5 lần trong hai ngày
+    (caption tự động, đường dẫn Drive, dòng thời lượng) và nằm giữa một hàm 770 dòng — chỗ đó
+    không ai đọc hết được, kể cả người đang sửa nó.
+
+    KHÔNG raise: material đã ``READY`` và file đã có; mọi thứ dưới đây là việc phụ.
+    """
+    from app.core.notifier.service import NotifierService
+    from app.core.storage import offsite as _offsite
+
+    mat.status = ViralStatus.READY
+    _clear_material_error(mat)
+    db.commit()
+    logger.info("[VIRAL] Material #%s READY (no account, no job) — file: %s", mat.id, media_path)
+
+    # ADR-027: viết caption TRƯỚC khi báo, để Owner nhận đúng MỘT tin có cả file lẫn caption và
+    # không phải mở web. Chạy thẳng (không nền): tin nhắn phải đợi caption mới gộp được, và
+    # vòng này vốn đã tải + ffmpeg hàng phút. `notify=False` để không bắn thêm tin caption rời.
+    # try/except phải bọc CẢ lượt đọc ô cài đặt, không riêng lời gọi AI: đọc `runtime_settings`
+    # cũng đụng DB, hỏng ở đó mà để ngoại lệ thoát ra là đánh FAILED một video đã xử lý xong.
+    try:
+        if runtime_settings.get_bool("viral.auto_caption_on_ready", default=True, db=db):
+            ok_cap, cap_msg = ViralService.generate_caption_for_material(db, mat.id, notify=False)
+            logger.info("[VIRAL] Caption tự động cho #%s: %s — %s", mat.id, ok_cap, cap_msg)
+            db.refresh(mat)
+    except Exception as cap_err:
+        logger.warning("[VIRAL] Caption tự động cho #%s lỗi (%s) — vẫn báo video.", mat.id, cap_err)
+        # Lỗi DB làm session hỏng; rollback để vòng lặp sau còn dùng được.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+    # ADR-035: độ dài GỐC đo từ file gốc — chỉ biết khi nó còn trên đĩa (ADR-032 giữ 7 ngày).
+    # Không biết thì truyền None, tin sẽ không đoán bừa.
+    src = ViralService.find_source_path(mat.id, mat.platform)
+    NotifierService.notify_material_ready(
+        mat,
+        media_path,
+        drive_path=_offsite.relative_to_root(drive_dest),
+        source_duration=ViralService.probe_duration(src) if src else None,
+    )
+
+
+_BOOST_MARKER_RE = re.compile(r"###\s*BOOST_CONTEXT:\s*(.+?)\s*###")
+# Bản để XOÁ khác bản để ĐỌC đúng một chỗ: nó ăn luôn khoảng trắng hai bên, nếu không tiêu đề
+# còn lại hai dấu cách dính nhau ở giữa.
+_BOOST_MARKER_STRIP_RE = re.compile(r"\s*###\s*BOOST_CONTEXT:.*?###\s*")
+
+
+def _caption_metadata_for(mat) -> tuple[str, str | None]:
+    """
+    Dựng chuỗi ``[AI_GENERATE] …`` cắm vào Job DRAFT, và bóc BOOST_CONTEXT đã persist trên
+    ``mat.title`` (ADR-020 — marker do luồng Strategic ghi vào tiêu đề).
+
+    Trả về ``(caption_metadata, boost_from_title)``. ``boost_from_title`` khác ``None`` nghĩa là
+    material đã tự mang ngữ cảnh, **không** lấy thêm BOOST_CONTEXT theo từng Page nữa.
+    """
+    safe_title = (mat.title or "").replace('"', "'").strip()
+    caption_metadata = (
+        f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###"
+        if safe_title
+        else f"[AI_GENERATE] Context: Video {mat.platform} {mat.views} views."
+    )
+
+    boost_from_title = None
+    if mat.title:
+        m = _BOOST_MARKER_RE.search(mat.title)
+        if m:
+            boost_from_title = m.group(1).strip()
+            # Làm sạch title trước khi đưa vào ORIGINAL_VIRAL_TITLE
+            safe_title = _BOOST_MARKER_STRIP_RE.sub(" ", safe_title).strip()
+            if safe_title:
+                caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###"
+    if boost_from_title:
+        caption_metadata += f" ### BOOST_CONTEXT: {boost_from_title} ###"
+    return caption_metadata, boost_from_title
+
+
+def _resolve_target_page(db, mat, target_account) -> str:
+    """
+    Chọn Page đích cho material KHÔNG có sẵn danh sách Page.
+
+    Không round-robin bừa: tài khoản nhiều Page khác niche mà chia đều là đẩy video sai chỗ
+    (ADR-020). Chỉ chia đều khi mọi Page cùng một niche; khác niche thì chấm điểm từ khoá,
+    không khớp thì khoá về Page chính.
+    """
+    if mat.target_page:
+        return mat.target_page
+
+    acc_pages = target_account.target_pages_list
+    if not acc_pages:
+        return target_account.target_page
+    if len(acc_pages) == 1:
+        return acc_pages[0]
+
+    niche_map = target_account.page_niches_map or {}
+    can_round_robin = True
+    if niche_map:
+        first_niche = set(niche_map.get(acc_pages[0], []))
+        for p in acc_pages[1:]:
+            if set(niche_map.get(p, [])) != first_niche:
+                can_round_robin = False
+                break
+
+    if can_round_robin:
+        resolved = target_account.pick_next_target_page(db)
+        logger.info("[VIRAL] Safe round-robin → page '%s' for acc '%s'", resolved, target_account.name)
+        return resolved
+
+    # Niche khác nhau ⇒ chấm điểm từ khoá thay vì chia đều.
+    title_lower = (mat.title or "").lower()
+    best_page = acc_pages[0]
+    best_score = -1
+    if title_lower and niche_map:
+        for p in acc_pages:
+            score = 0
+            for n in niche_map.get(p, []):
+                n_lower = n.lower()
+                if n_lower in title_lower:
+                    score += 3
+                for w in n_lower.split():
+                    if len(w) > 3 and w in title_lower:
+                        score += 1
+            if score > best_score:
+                best_score = score
+                best_page = p
+
+    if best_score > 0:
+        logger.info("[VIRAL] Keyword Match (score %d) → page '%s' for acc '%s'", best_score, best_page, target_account.name)
+        return best_page
+
+    logger.info("[VIRAL] No keyword match. Locked generic video to primary page '%s' for acc '%s'", acc_pages[0], target_account.name)
+    return acc_pages[0]
 
 
 def _page_boost_context(db, account_id: int, page_url: str) -> str | None:
@@ -903,134 +1044,23 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
 
             # ADR-018: khong co account -> khong tao Job; Owner tai file _reup dang tay.
             if target_account is None:
-                mat.status = ViralStatus.READY
-                _clear_material_error(mat)
-                db.commit()
-                logger.info("[VIRAL] Material #%s READY (no account, no job) — file: %s", mat.id, media_path)
-
-                # ADR-027: viết caption TRƯỚC khi báo, để Owner nhận đúng MỘT tin có cả file
-                # lẫn caption và không phải mở web. Chạy thẳng (không nền): tin nhắn phải đợi
-                # caption mới gộp được, và vòng này vốn đã tải + ffmpeg hàng phút.
-                # `notify=False` để không bắn thêm tin caption rời của ADR-022.
-                # Caption hỏng KHÔNG được chặn thông báo: material đã READY và file đã có.
-                # try/except phải bọc CẢ lượt đọc ô cài đặt, không riêng lời gọi AI: đọc
-                # `runtime_settings` cũng đụng DB, hỏng ở đó mà để ngoại lệ thoát ra là
-                # đánh FAILED một video đã xử lý xong và đã commit READY.
-                try:
-                    if runtime_settings.get_bool("viral.auto_caption_on_ready", default=True, db=db):
-                        ok_cap, cap_msg = ViralService.generate_caption_for_material(
-                            db, mat.id, notify=False
-                        )
-                        logger.info("[VIRAL] Caption tự động cho #%s: %s — %s", mat.id, ok_cap, cap_msg)
-                        db.refresh(mat)
-                except Exception as cap_err:
-                    logger.warning("[VIRAL] Caption tự động cho #%s lỗi (%s) — vẫn báo video.", mat.id, cap_err)
-                    # Lỗi DB làm session hỏng; rollback để vòng lặp sau còn dùng được.
-                    try:
-                        db.rollback()
-                    except Exception:
-                        pass
-
-                # ADR-022: luồng này không sinh Job nên không thông báo nào của job chạy.
-                from app.core.notifier.service import NotifierService
-
-                # ADR-035: độ dài GỐC đo từ file gốc — chỉ biết khi nó còn trên đĩa
-                # (ADR-032 giữ 7 ngày). Không biết thì truyền None, tin sẽ không đoán bừa.
-                _src = ViralService.find_source_path(mat.id, mat.platform)
-                NotifierService.notify_material_ready(
-                    mat,
-                    media_path,
-                    drive_path=_offsite.relative_to_root(_drive_dest),
-                    source_duration=ViralService.probe_duration(_src) if _src else None,
-                )
+                # `continue` phải ở LẠI đây: hàm tách ra không điều khiển được vòng lặp này.
+                _finish_ready_material(db, mat, media_path, _drive_dest)
                 continue
 
-            # Tạo Job DRAFT với AI_GENERATE và cắm cờ ORIGINAL_VIRAL_TITLE để truyền context
-            import random
-            
-            # Xử lý dấu ngoặc kép hoặc ký tự đặc biệt trong title để an toàn
-            safe_title = (mat.title or "").replace('"', "'").strip()
-            caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###" if safe_title else f"[AI_GENERATE] Context: Video {mat.platform} {mat.views} views."
-
-            # Inject BOOST_CONTEXT: ưu tiên marker đã persist trên material.title (Strategic)
-            resolved_target = mat.target_page
-            import re as _re
-            _boost_from_title = None
-            if mat.title:
-                _m = _re.search(r"###\s*BOOST_CONTEXT:\s*(.+?)\s*###", mat.title)
-                if _m:
-                    _boost_from_title = _m.group(1).strip()
-                    # Làm sạch title trước khi đưa vào ORIGINAL_VIRAL_TITLE
-                    safe_title = _re.sub(r"\s*###\s*BOOST_CONTEXT:.*?###\s*", " ", safe_title).strip()
-                    if safe_title:
-                        caption_metadata = f"[AI_GENERATE] ### ORIGINAL_VIRAL_TITLE: {safe_title} ###"
-            if _boost_from_title:
-                caption_metadata += f" ### BOOST_CONTEXT: {_boost_from_title} ###"
-            # BOOST_CONTEXT theo Page được tính trong vòng lặp dưới (mỗi Page một niche — ADR-020).
-            # Đường cũ (material không có Page đích) trước giờ cũng không đi nhánh này vì
-            # `mat.target_page` rỗng thì điều kiện không bao giờ đúng.
+            # Tạo Job DRAFT với AI_GENERATE và cắm cờ ORIGINAL_VIRAL_TITLE để truyền context.
+            # BOOST_CONTEXT theo từng Page tính ở vòng lặp dưới (mỗi Page một niche — ADR-020).
+            caption_metadata, boost_from_title = _caption_metadata_for(mat)
 
             # ADR-020: material có danh sách Page ⇒ nhân bản mỗi Page một Job (cùng media,
-            # cùng content_hash, khác target_page). Rỗng ⇒ GIỮ NGUYÊN đường cũ bên dưới.
+            # cùng content_hash, khác target_page). Rỗng ⇒ một Job vào Page tự chọn.
             pages = mat.target_pages_list
             if pages:
                 job_pages = pages
                 # Nới guard đúng một nấc: job của CHÍNH material này không tự chặn nhau
                 sibling_id = mat.id
             else:
-                # Resolve target page: always prioritize mat.target_page to prevent mixing niches
-                if mat.target_page:
-                    resolved_target = mat.target_page
-                elif target_account.target_pages_list and len(target_account.target_pages_list) > 1:
-                    # Check if all pages have the identical niches. If not, do NOT round-robin generic videos!
-                    acc_pages = target_account.target_pages_list
-                    niche_map = target_account.page_niches_map or {}
-
-                    can_round_robin = True
-                    if niche_map and acc_pages:
-                        first_niche = set(niche_map.get(acc_pages[0], []))
-                        for p in acc_pages[1:]:
-                            if set(niche_map.get(p, [])) != first_niche:
-                                can_round_robin = False
-                                break
-
-                    if can_round_robin:
-                        # Safe to distribute jobs evenly
-                        resolved_target = target_account.pick_next_target_page(db)
-                        logger.info("[VIRAL] Safe round-robin → page '%s' for acc '%s'", resolved_target, target_account.name)
-                    else:
-                        # UNSAFE! Niches differ. Use Keyword Matching.
-                        title_lower = (mat.title or "").lower()
-                        best_page = acc_pages[0]
-                        best_score = -1
-
-                        if title_lower and niche_map:
-                            for p in acc_pages:
-                                niches = niche_map.get(p, [])
-                                score = 0
-                                for n in niches:
-                                    n_lower = n.lower()
-                                    if n_lower in title_lower:
-                                        score += 3
-                                    words = n_lower.split()
-                                    for w in words:
-                                        if len(w) > 3 and w in title_lower:
-                                            score += 1
-                                if score > best_score:
-                                    best_score = score
-                                    best_page = p
-
-                        if best_score > 0:
-                            resolved_target = best_page
-                            logger.info("[VIRAL] Keyword Match (score %d) → page '%s' for acc '%s'", best_score, resolved_target, target_account.name)
-                        else:
-                            resolved_target = acc_pages[0]
-                            logger.info("[VIRAL] No keyword match. Locked generic video to primary page '%s' for acc '%s'", resolved_target, target_account.name)
-                elif target_account.target_pages_list:
-                    resolved_target = target_account.target_pages_list[0]
-                else:
-                    resolved_target = target_account.target_page
-                job_pages = [resolved_target]
+                job_pages = [_resolve_target_page(db, mat, target_account)]
                 sibling_id = None
 
             from app.core.media.content_hash import assert_media_not_blocked  # sha256_file: import dau file
@@ -1046,7 +1076,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             page_captions = []
             for page in job_pages:
                 caption_for_page = caption_metadata
-                if pages and not _boost_from_title:
+                if pages and not boost_from_title:
                     page_boost = _page_boost_context(db, target_account.id, page)
                     if page_boost:
                         caption_for_page += f" ### BOOST_CONTEXT: {page_boost} ###"

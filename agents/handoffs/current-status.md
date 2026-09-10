@@ -1,5 +1,95 @@
 # Current Status
 
+## Phiên 2026-09-10 (e) — ADR-040: tách hàm 770 dòng, test cho hai file lớn nhất
+
+Owner: *"triển khai cho xong đi em"*. ADR-039 để lại đúng hai việc, làm nốt cả hai.
+
+### Tách `_process_viral_materials`: 770 → 660 dòng
+
+Vòng `for mat in materials:` dài 570 dòng chứa **12 lệnh `continue`** — đó là lý do không tách
+hết được: khối nào điều khiển vòng lặp thì cắt ra là đổi hành vi. Chỉ tách **ba khối có
+`continue` = 0**: `_finish_ready_material`, `_caption_metadata_for`, `_resolve_target_page`.
+
+Suýt hỏng khi tách: hai regex `BOOST_CONTEXT` **không phải một** — bản để đọc có nhóm bắt, bản
+để xoá ăn luôn khoảng trắng hai bên. Gộp làm một là tiêu đề còn hai dấu cách dính nhau.
+
+### Hai lỗi thật do việc viết test lôi ra
+
+`delete_page_config` và `update_page_config` đều dùng `set()` cho danh sách Page, mà setter
+`target_pages_list` lấy **phần tử đầu làm Page chính**.
+
+```
+4 Page: [mecauca, tet, phu, x]  →  xoá "tet"
+cũ:  ['x', 'phu', 'mecauca']    ← Page chính hoá ra "x"
+mới: ['mecauca', 'phu', 'x']
+```
+
+Nguy ở chỗ `_resolve_target_page` khoá video generic về Page đầu danh sách: **Page chính đổi =
+video sang Page khác niche, không lỗi nào báo**. Chỉ cần lưu niche của một Page phụ là đủ xáo.
+
+Test 3 Page viết lần đầu **qua được do may** — `set` chuỗi đổi thứ tự theo từng lần chạy. Phải
+chọn đúng bộ bốn URL tái hiện được rồi mới vá.
+
+### System State
+
+| | Trước | Sau |
+|---|---|---|
+| Hàm dài nhất luồng viral | 770 dòng | **660** |
+| `app/core/account.py` (936 dòng) | 0 test | **52** |
+| `app/core/config_service.py` (1041 dòng) | 0 test | **28** |
+| Toàn suite | 816 | **914 passed, 16 skipped, 0 failed** |
+
+`ruff check .` sạch · `lint-imports` 2 hợp đồng giữ.
+
+### Unfinished + Blockers
+
+- **`publish` 765 dòng** trong `facebook/adapter.py` nay là hàm dài nhất repo — đụng Playwright
+  thật, **không test nào phủ**, tách mù là liều.
+- Ghi lại chưa vá: `vt.tiktok.com/ZS8Kx` bị hiểu thành handle `@ZS8Kx` (link rút gọn — vá đúng
+  phải gọi mạng). Đã khoá bằng test ghi rõ "hành vi hiện tại — sai, đã biết".
+- Chữ trong `overview_warnings_api` **không dấu** ("Khong co preset active") — trái quy ước chữ
+  trên web phải có dấu. Test bám cấu trúc chứ không bám câu chữ nên sửa lúc nào cũng được;
+  **chờ Owner chốt** vì đây là chữ Owner nhìn thấy.
+- Nợ cũ chưa động: `tests/test_threads_world_news.py` vẫn bị `--ignore` ở CI (hỏng 4 tháng);
+  gộp hai hàm làm sạch tiêu đề; bỏ `import ViralService as _VS` thừa.
+- **12 video đang có vẫn là bản cắt sai** (sinh ra khi lỗi ADR-038 #1 còn đó) — phải cắt lại.
+
+### Next Action
+
+1. **Owner: `git pull` + khởi động lại.** Nếu tài khoản có nhiều Page: kiểm lại **Page chính**
+   có đúng không — trước bản này nó có thể đã bị đổi lặng lẽ ở lần lưu cấu hình gần nhất.
+2. Đặt lại mốc cắt cho 12 video cũ.
+3. Quyết số phận `tests/test_threads_world_news.py`: viết lại 8 test hay xoá file.
+4. Đăng bài đầu tiên lên Page "Mê Câu Cá".
+
+---
+
+## Phiên 2026-09-10 (d) — ADR-039: bật ruff, chỉ luật bắt lỗi thật
+
+Owner hỏi *"code hiện tại có scale được không, có main tain không, có clean không, có theo quy
+chuẩn nào không"* rồi giao *"triển khai vá đi em"*.
+
+Đo trước: **198 file · 48.813 dòng**, 52 hàm > 100 dòng, 70/198 file không test nào nhắc tới,
+và **không có linter / formatter / type-checker nào**. Có ADR, có `RULES.md`, có import-linter
+ở CI — luật kiến trúc có người canh, **luật viết code thì không**.
+
+Bật `ruff` chỉ với `F` + `E9` (vi phạm = chạy sai). **Cố ý không bật luật định dạng**: bật lên
+là diff gần toàn bộ 48.813 dòng, không đổi hành vi dòng nào mà xoá sạch `git blame`.
+
+### Bảy lỗi thật bắt được ngay lượt chạy đầu
+
+Năm `NameError` nằm im vì bị `except` nuốt — trong đó `facebook/adapter.py` **chưa bao giờ tải
+được account**, và hàm chuyển Page bằng aria-label **luôn trả `False`**.
+
+Hai khai báo `global` thiếu tên trong `ai_generator.py`, nặng hơn cả: `GEMINI_CIRCUIT_RESET_TIME`
+gán vào biến cục bộ ⇒ **ngắt mạch vừa mở đã đóng lại**, và bộ đếm lỗi không bao giờ reset. Tức
+tin Telegram *"tạm ngưng 30 phút"* **chưa bao giờ đúng** — worker vẫn nện Gemini sau khi cookie
+hỏng. Lại đúng họ "nhãn nói dối".
+
+Diff: 52 file, +62/−97. Proof: 816 test xanh, 26 bảng model vẫn đăng ký đủ sau khi xoá 97 import.
+
+---
+
 ## Phiên 2026-09-10 (c) — ADR-038: bảy lỗi do code-review bắt
 
 Owner: *"kiểm tra code đi"*. Chạy `/code-review` mức cao trên `e8b6c4b..HEAD` (17 commit,

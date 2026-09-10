@@ -394,13 +394,20 @@ class AccountService:
             if not acc:
                 return False
             
-            # 1. Update target_pages_list
-            target_urls = set(acc.target_pages_list or [])
+            # 1. Update target_pages_list — GIỮ THỨ TỰ.
+            # `set()` ở đây từng làm cả danh sách xáo lại mỗi lần lưu, mà setter
+            # `target_pages_list` lấy phần tử ĐẦU làm `target_page` (Page chính) ⇒ chỉ sửa
+            # niche của một Page phụ cũng đủ đổi Page chính, và video generic đi sang Page
+            # khác mà không có lỗi nào báo (ADR-040).
+            # Page đã có thì GIỮ NGUYÊN CHỖ, không gỡ ra thêm lại — làm vậy là đẩy Page chính
+            # xuống cuối mỗi lần Owner lưu chính nó.
+            target_urls = list(acc.target_pages_list or [])
             if is_active:
-                target_urls.add(url)
-            elif url in target_urls:
-                target_urls.remove(url)
-            acc.target_pages_list = list(target_urls)
+                if url not in target_urls:
+                    target_urls.append(url)
+            else:
+                target_urls = [u for u in target_urls if u != url]
+            acc.target_pages_list = target_urls
             
             # 2. Update page_niches_map
             current_niches = acc.page_niches_map or {}
@@ -452,10 +459,8 @@ class AccountService:
             if not acc:
                 return False
 
-            target_urls = set(acc.target_pages_list or [])
-            if url in target_urls:
-                target_urls.remove(url)
-            acc.target_pages_list = list(target_urls)
+            # Giữ thứ tự — xem chú thích ở `update_page_config` (ADR-040).
+            acc.target_pages_list = [u for u in (acc.target_pages_list or []) if u != url]
 
             page_niches = acc.page_niches_map or {}
             if url in page_niches:
