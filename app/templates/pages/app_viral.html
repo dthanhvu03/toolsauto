@@ -36,16 +36,19 @@
   </div>
 
   <div class="app-card p-4">
-    <div class="sticky top-[56px] lg:top-0 z-10 bg-[var(--color-stone)]/95 backdrop-blur border-b border-[var(--border)] -mx-4 px-4 py-3 rounded-t-xl">
+    {# Màn hẹp (điện thoại, 2026-09-11 ảnh Owner): thanh này KHÔNG dính đầu trang — nó cao gần
+       nửa màn hình, dính là bảng video không còn chỗ. Bộ lọc phụ (URL, nền tảng, views, mỗi
+       trang) gấp lại sau nút "Bộ lọc"; chỉ Trạng thái luôn hiện. Từ sm: mở như cũ. #}
+    <div class="lg:sticky lg:top-0 z-10 bg-[var(--color-stone)]/95 backdrop-blur border-b border-[var(--border)] -mx-4 px-4 py-3 rounded-t-xl">
       <div class="flex items-end justify-between gap-3 flex-wrap">
-        <div class="flex items-end gap-3 flex-wrap">
-        <div>
+        <div class="flex items-end gap-3 flex-wrap w-full sm:w-auto">
+        <div class="hidden sm:block">
           <label class="block text-xs text-[var(--muted)] mb-1">Tìm URL</label>
           <input id="vQ" class="app-input w-72 max-w-full" placeholder="tiktok.com / reel / …" />
         </div>
-        <div>
+        <div class="flex-1 sm:flex-none min-w-0">
           <label class="block text-xs text-[var(--muted)] mb-1">Trạng thái</label>
-          <select id="vStatus" class="app-select">
+          <select id="vStatus" class="app-select w-full sm:w-auto">
             <option value="">Tất cả</option>
             <option value="NEW">Mới (NEW)</option>
             <option value="PROCESSING">Đang xử lý</option>
@@ -58,9 +61,18 @@
             <option value="BOOST_PENDING">Chờ boost</option>
           </select>
         </div>
+        <button type="button" class="app-btn sm:hidden" onclick="document.getElementById('vMoreFilters').classList.toggle('hidden')"
+                aria-controls="vMoreFilters" title="Tìm URL · Nền tảng · Views tối thiểu · Mỗi trang">Bộ lọc ▾</button>
+        <div id="vMoreFilters" class="hidden sm:contents basis-full">
+        <div class="sm:hidden mb-2">
+          <label class="block text-xs text-[var(--muted)] mb-1">Tìm URL</label>
+          <input id="vQm" class="app-input w-full" placeholder="tiktok.com / reel / …"
+                 oninput="document.getElementById('vQ').value = this.value" />
+        </div>
+        <div class="grid grid-cols-3 gap-2 sm:contents">
         <div>
           <label class="block text-xs text-[var(--muted)] mb-1">Nền tảng</label>
-          <select id="vPlatform" class="app-select">
+          <select id="vPlatform" class="app-select w-full sm:w-auto">
             <option value="">Tất cả</option>
             <option value="tiktok">tiktok</option>
             <option value="facebook">facebook</option>
@@ -70,19 +82,21 @@
         </div>
         <div>
           <label class="block text-xs text-[var(--muted)] mb-1">Views tối thiểu</label>
-          <input id="vMin" type="number" min="0" step="500" value="0" class="app-input w-32" />
+          <input id="vMin" type="number" min="0" step="500" value="0" class="app-input w-full sm:w-32" />
         </div>
         <div>
           <label class="block text-xs text-[var(--muted)] mb-1">Mỗi trang</label>
-          <select id="vPer" class="app-select">
+          <select id="vPer" class="app-select w-full sm:w-auto">
             <option value="50">50</option>
             <option value="100" selected>100</option>
             <option value="200">200</option>
           </select>
         </div>
         </div>
+        </div>
+        </div>
         <div id="viral-actions"
-             class="flex items-center gap-2 flex-nowrap whitespace-nowrap overflow-x-auto min-w-0 max-w-full pb-1 xl:flex-wrap xl:overflow-x-visible xl:pb-0">
+             class="flex items-center gap-2 flex-wrap sm:flex-nowrap whitespace-nowrap sm:overflow-x-auto min-w-0 max-w-full w-full sm:w-auto pb-1 xl:flex-wrap xl:overflow-x-visible xl:pb-0">
           <button class="app-btn" id="vPresetNew" title="Lọc NEW">Mới</button>
           <button class="app-btn" id="vPresetFailed" title="Lọc FAILED">Lỗi</button>
           <button id="vApply" class="app-btn app-btn-primary">Áp dụng</button>
@@ -118,8 +132,8 @@
             hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]"
             hx-on::after-request="this.reset()">
         <input name="url" type="url" required autocomplete="off"
-               class="app-input flex-1 min-w-[12rem] sm:min-w-[18rem] w-full sm:w-auto sm:max-w-[24rem]"
-               placeholder="Dán link TikTok / YouTube Shorts / Facebook Reel / Instagram Reel" />
+               class="app-input basis-full sm:basis-auto sm:flex-1 sm:min-w-[18rem] sm:max-w-[24rem]"
+               placeholder="Dán link TikTok / YouTube / Facebook / Instagram" />
         <label class="inline-flex items-center gap-2 text-sm text-[var(--color-ink-soft)] select-none">
           <input name="process_now" type="checkbox" value="true" class="h-4 w-4 rounded border-[var(--border)]" />
           Xử lý ngay
@@ -140,8 +154,8 @@
             hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]"
             hx-on::after-request="this.reset()">
         <input name="url" type="url" required autocomplete="off"
-               class="app-input flex-1 min-w-[12rem] sm:min-w-[18rem] w-full sm:w-auto sm:max-w-[24rem]"
-               placeholder="Chỉ tải về máy để xem (link video bất kỳ, không xào chẻ)" />
+               class="app-input basis-full sm:basis-auto sm:flex-1 sm:min-w-[18rem] sm:max-w-[24rem]"
+               placeholder="Chỉ tải về máy để xem (link bất kỳ)" />
         <button type="submit"
                 class="viral-busy-btn app-btn border-[var(--border)] bg-[var(--color-face)] text-[var(--color-ink-soft)] hover:brightness-110"
                 title="Tải bản gốc vào storage/media/tai-ve/ (và Drive nếu bật). Không tạo video, không vào danh sách đăng.">
