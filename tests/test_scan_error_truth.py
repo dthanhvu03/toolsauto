@@ -26,8 +26,8 @@ def test_loi_that_cua_owner_thanh_cau_hanh_dong_duoc():
     msg = humanize_scan_error("tiktok", OWNER_STDERR)
 
     assert "MS4wLjAB" not in msg, "sec_uid không được chiếm chỗ trong tin"
-    assert "Sức khỏe" in msg and "yt-dlp" in msg, "phải chỉ Owner tới chỗ kiểm được"
-    assert len(msg) <= 160, "Telegram cắt ở 120-160 — dài hơn là mất phần đuôi"
+    assert "yt-dlp" in msg, "phải tự khai bản yt-dlp hoặc chỉ Owner tới chỗ kiểm được"
+    assert len(msg) <= 300, "cột last_error và tin Telegram cắt ở 300 — dài hơn là mất phần đuôi"
 
 
 @pytest.mark.parametrize("stderr,needle", [
@@ -75,7 +75,7 @@ def test_scan_source_luu_loi_da_dich_chu_khong_luu_stderr_tho(tmp_path, monkeypa
     found, skipped, error = srcmod.SourceService.scan_source(db, src)
 
     assert found == 0 and error
-    assert "MS4wLjAB" not in src.last_error and "Sức khỏe" in src.last_error
+    assert "MS4wLjAB" not in src.last_error and "yt-dlp" in src.last_error
     assert src.last_scanned_at, "phải ghi LÚC NÀO quét, kể cả khi hỏng"
     db.close()
     engine.dispose()
@@ -155,3 +155,74 @@ def test_test_khong_ghi_vao_log_production():
 
     assert log_dir and os.path.abspath(log_dir) != os.path.abspath(str(config.LOGS_DIR)), \
         "conftest phải trỏ LOG_DIR ra thư mục tạm — không thì `boom` của test lẫn vào logs/app.log"
+
+
+# ── giờ theo múi giờ Việt Nam, không theo đồng hồ tiến trình ────────────────
+
+
+def test_gio_quet_theo_mui_gio_VN_du_tien_trinh_chay_UTC(nguon, monkeypatch):
+    """
+    Ảnh Owner 13:53 ghi "Quét lúc 06:24" — laptop chạy bot theo UTC, lượt quét thật là 13:24.
+    Owner tưởng lỗi cũ từ sáng, thực ra vừa quét xong với code mới.
+    """
+    import time as _time
+
+    monkeypatch.setenv("TZ", "UTC")
+    if hasattr(_time, "tzset"):
+        _time.tzset()
+    # 2026-09-11 06:24:00 UTC == 13:24 giờ Việt Nam
+    ts = 1757571840
+
+    text = nguon(last_scanned_at=ts, last_found=1)
+
+    assert "11/09 13:24" in text, text
+
+
+# ── tin lỗi tự khai bản yt-dlp ──────────────────────────────────────────────
+
+
+def _status(**over):
+    base = {"installed": "2026.08.19", "pinned": "2026.08.19", "outdated": False, "mismatch": False, "package": "2026.08.19"}
+    base.update(over)
+    return base
+
+
+def test_yt_dlp_cu_thi_tin_loi_noi_thang_kem_lenh_cap_nhat(monkeypatch):
+    from app.core.observability import health
+
+    monkeypatch.setattr(health, "_ytdlp_version_status", lambda: _status(installed="2025.03.31", outdated=True))
+
+    msg = humanize_scan_error("tiktok", OWNER_STDERR)
+
+    assert "2025.03.31" in msg and "CŨ" in msg and "pip install" in msg
+
+
+def test_yt_dlp_dung_ban_thi_ket_luan_bi_chan_tam(monkeypatch):
+    from app.core.observability import health
+
+    monkeypatch.setattr(health, "_ytdlp_version_status", lambda: _status())
+
+    msg = humanize_scan_error("tiktok", OWNER_STDERR)
+
+    assert "đúng bản ghim" in msg and "chặn tạm" in msg
+
+
+def test_co_ban_la_chen_vao_PATH_thi_noi(monkeypatch):
+    from app.core.observability import health
+
+    monkeypatch.setattr(health, "_ytdlp_version_status", lambda: _status(installed="2024.01.01", package="2026.08.19", mismatch=True, outdated=True))
+
+    assert "CŨ" in humanize_scan_error("tiktok", OWNER_STDERR), "cũ thắng: lệnh sửa cụ thể hơn"
+
+
+def test_do_phien_ban_hong_thi_tin_loi_van_co(monkeypatch):
+    from app.core.observability import health
+
+    def boom():
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(health, "_ytdlp_version_status", boom)
+
+    msg = humanize_scan_error("tiktok", OWNER_STDERR)
+
+    assert "không phải dữ liệu" in msg and "Sức khỏe" in msg

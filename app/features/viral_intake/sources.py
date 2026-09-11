@@ -38,7 +38,7 @@ SCAN_TIMEOUT_SEC = 90
 # Dò channel_id chỉ đọc metadata MỘT video nên ngắn hơn hẳn một lượt quét kênh.
 RESOLVE_TIMEOUT_SEC = 60
 MAX_VIDEOS_CAP = 500
-_ERROR_MAX_LEN = 200
+_ERROR_MAX_LEN = 300  # đủ chỗ cho câu dịch + bản yt-dlp + lệnh sửa
 
 # ADR-028: TikTok trả trang kênh thiếu dữ liệu với một số tài khoản; yt-dlp báo đúng câu này
 # và gợi ý dùng `tiktokuser:<channel_id>`. CẢNH BÁO: cùng thông báo này cũng nổ khi channel_id
@@ -60,6 +60,29 @@ MSG_UNKNOWN = "Không nhận diện được kênh. Dán URL kênh TikTok (@hand
 # là sec_uid dài 60 ký tự — chiếm gần hết chỗ trong tin Telegram (cắt ở 120), phần có nghĩa
 # bị mất. Bỏ nó đi; Owner đã biết nguồn nào vì lỗi nằm ngay dưới tên nguồn.
 _YTDLP_ERROR_HEAD_RE = re.compile(r"^(?:ERROR:\s*)?(?:\[[^\]]+\]\s*)?(?:[A-Za-z0-9_\-.@]{6,}:\s*)?", re.IGNORECASE)
+
+
+def _ytdlp_diagnosis() -> str:
+    """
+    Một mệnh đề tự khai bản yt-dlp ĐANG CHẠY so với bản ghim — dán vào tin lỗi để Owner
+    khỏi phải đi mở trang Sức khỏe rồi quay lại. Dùng đúng phép đo của ADR-029.
+    Không bao giờ ném; đo không được thì trả chuỗi rỗng.
+    """
+    try:
+        from app.core.observability.health import _ytdlp_version_status
+
+        st = _ytdlp_version_status()
+        cur, pin = st.get("installed"), st.get("pinned")
+        if not cur:
+            return ""
+        if st.get("outdated"):
+            return (f" yt-dlp đang chạy {cur}, bản ghim {pin} ⇒ CŨ. "
+                    r"Chạy: venv\Scripts\python.exe -m pip install -r requirements.txt")
+        if st.get("mismatch"):
+            return f" yt-dlp đang chạy {cur} khác bản trong venv ({st.get('package')}) — có bản lạ chen vào PATH."
+        return f" yt-dlp {cur} đúng bản ghim ⇒ không phải do phần mềm cũ; TikTok đang chặn tạm, thử lại sau 1 giờ."
+    except Exception:
+        return ""
 
 
 def humanize_scan_error(platform: str, stderr: str) -> str:
@@ -84,10 +107,11 @@ def humanize_scan_error(platform: str, stderr: str) -> str:
         if "failed to parse json" in low:
             # Đo 2026-09-11: cùng nguồn, cùng lệnh chạy bằng yt-dlp 2026.08.19 ra 21 video 3/3 lần;
             # máy bot của Owner báo câu này ⇒ hoặc yt-dlp cũ, hoặc TikTok trả trang kiểm tra bot.
-            return ("TikTok trả về trang không phải dữ liệu — thường do yt-dlp cũ hoặc bị chặn tạm. "
-                    "Xem bản yt-dlp ở trang Sức khỏe; nếu đúng bản thì thử lại sau 1 giờ.")
+            return "TikTok trả về trang không phải dữ liệu." + (
+                _ytdlp_diagnosis() or " Thường do yt-dlp cũ hoặc bị chặn tạm — xem trang Sức khỏe."
+            )
         if "unable to extract" in low:
-            return "TikTok đổi cấu trúc trang, yt-dlp bản này không đọc được — cập nhật yt-dlp."
+            return "TikTok đổi cấu trúc trang, yt-dlp không đọc được — cập nhật yt-dlp." + _ytdlp_diagnosis()
         if "429" in low or "rate limit" in low or "too many" in low:
             return "TikTok chặn vì quét quá dày (429) — tool tự đợi, thử lại sau."
     if "404" in low or "not found" in low or "does not exist" in low:

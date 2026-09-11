@@ -1,7 +1,6 @@
 import logging
 import concurrent.futures
 import threading
-import time
 from app.constants import JobStatus
 
 logger = logging.getLogger(__name__)
@@ -75,6 +74,23 @@ class TelegramCommandHandler:
         return f"{total // 60}:{total % 60:02d}"
 
     @staticmethod
+    def _gio(ts) -> str:
+        """
+        Epoch → ``dd/mm HH:MM`` theo ``config.TIMEZONE``, KHÔNG theo đồng hồ tiến trình.
+
+        2026-09-11: laptop chạy bot theo UTC nên `/nguon` ghi "06:24" cho lượt quét lúc 13:24 —
+        Owner tưởng lỗi cũ từ sáng, thực ra vừa quét xong. Trang web đã né bẫy này bằng
+        ``ZoneInfo(TIMEZONE)``; Telegram phải đi cùng một múi giờ.
+        """
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+
+        import app.config as config
+
+        dt = datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(ZoneInfo(config.TIMEZONE))
+        return dt.strftime("%d/%m %H:%M")
+
+    @staticmethod
     def _dong_quet(s: dict) -> str:
         """
         Một dòng nói thật về lượt quét gần nhất: LÚC NÀO, và ra sao.
@@ -87,9 +103,9 @@ class TelegramCommandHandler:
         ts = s.get("last_scanned_at")
         if not ts:
             return "🕐 Chưa quét lần nào — bấm 🔍 Quét ngay."
-        luc = time.strftime("%d/%m %H:%M", time.localtime(int(ts)))
+        luc = TelegramCommandHandler._gio(ts)
         if s.get("last_error"):
-            return f"🕐 Quét lúc {luc}: ❌ hỏng — {html_mod.escape(str(s['last_error'])[:160])}"
+            return f"🕐 Quét lúc {luc}: ❌ hỏng — {html_mod.escape(str(s['last_error'])[:300])}"
         found = int(s.get("last_found") or 0)
         return f"🕐 Quét lúc {luc}: " + (f"✅ {found} video mới" if found else "⚪ không có video mới")
 
@@ -160,7 +176,7 @@ class TelegramCommandHandler:
                     hang2.append({"text": "🧩 Chia phần", "callback_data": f"chia:{m['id']}"})
             phan = ""
             if status == "POSTED" and m.get("posted_at"):
-                phan += "\n📌 đăng lúc " + time.strftime("%d/%m %H:%M", time.localtime(int(m["posted_at"])))
+                phan += "\n📌 đăng lúc " + self._gio(m["posted_at"])
             if m.get("parent_material_id") and m.get("part_index"):
                 phan += f"\n🧩 Phần {m['part_index']}/{m.get('part_total') or '?'} của #{m['parent_material_id']}"
             self.client.send_message(

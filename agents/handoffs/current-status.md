@@ -2,6 +2,14 @@
 
 ## Phiên 2026-09-11 (c) — /nguon phải nói thật: lỗi quét đọc được, biết quét lúc nào
 
+**Bổ sung (c2):** Owner chụp lại sau khi pull — "Quét lúc 06:24" trong khi ảnh chụp 13:53:
+**laptop chạy bot theo UTC**, lượt quét thật là 13:24 (code mới, vẫn hỏng). Hai vá thêm:
+- Telegram in giờ theo `config.TIMEZONE` (`ZoneInfo`), như trang web — không theo đồng hồ tiến trình.
+- Tin lỗi **tự khai bản yt-dlp đang chạy** so với bản ghim (dùng `_ytdlp_version_status` của
+  ADR-029): cũ ⇒ in lệnh `pip install -r requirements.txt`; đúng bản ⇒ kết luận TikTok chặn tạm.
+  Owner không phải đi mở trang Sức khỏe nữa. `last_error` nới 200 → 300 ký tự để chứa đủ.
+**1005 passed.** Chờ Owner pull lần nữa và bấm 🔍 Quét ngay — tin trả lời sẽ tự nói yt-dlp bản nào.
+
 Owner gửi ảnh `/nguon`: `❌ ERROR: MS4wLjABAAAAMgUb…: Failed to parse JSON (caused by JSO` và
 *"tìm được lần cuối: 0"*. Kiểm thật: chạy **đúng lệnh tool chạy** trên đúng nguồn ở máy dev,
 yt-dlp 2026.08.19 ⇒ **21 video, 3/3 lần**. Kênh không hỏng — **máy chạy bot (laptop) mới là
