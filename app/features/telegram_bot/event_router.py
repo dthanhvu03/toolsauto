@@ -113,6 +113,13 @@ class TelegramEventRouter:
                 self._handle_video_action(callback_id, action, int(target_id))
             elif action == "cut":
                 self._handle_cut(callback_id, target_id)
+            # ADR-041: chia video dài thành nhiều phần
+            elif action == "chia":
+                self._handle_split_ask(callback_id, int(target_id))
+            elif action == "chian":
+                self._handle_split_propose(callback_id, target_id)
+            elif action == "chiaok":
+                self._handle_split_apply(callback_id, int(target_id))
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
@@ -230,6 +237,94 @@ class TelegramEventRouter:
             f"✂️ Đã đặt mốc {sec // 60}:{sec % 60:02d} cho #{material_id} — đang cắt lại…"
         )
         self._process_material_async(material_id)
+
+    # ── ADR-041: chia phần ───────────────────────────────────────────────────
+
+    def _handle_split_ask(self, callback_id: str, material_id: int):
+        """``chia:<id>`` — hỏi số phần. Chưa tính gì, chưa tốn gì."""
+        self.client.answer_callback_query(callback_id, "🧩 Chia mấy phần?")
+        self.client.send_message(
+            f"🧩 <b>Chia video #{material_id}</b> thành mấy phần?\n"
+            "Tool sẽ nghe lời thoại, chọn chỗ dừng mỗi phần sao cho người xem muốn xem tiếp, "
+            "rồi đưa anh duyệt trước khi cắt.",
+            reply_markup={"inline_keyboard": [[
+                {"text": f"{n} phần", "callback_data": f"chian:{material_id}:{n}"} for n in (2, 3, 4)
+            ]]},
+        )
+
+    def _handle_split_propose(self, callback_id: str, target: str):
+        """``chian:<id>:<n>`` — tính kế hoạch ở luồng nền (Whisper ≈ 0.9× độ dài video, đo 2026-09-11)."""
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        material_id, _, n = str(target).partition(":")
+        if not material_id.isdigit() or not n.isdigit():
+            self.client.answer_callback_query(callback_id, "⚠️ Dữ liệu nút không hợp lệ")
+            return
+        material_id, n = int(material_id), int(n)
+
+        self.client.answer_callback_query(callback_id, "🎧 Đang nghe và tính…")
+        self.client.send_message(
+            f"🎧 Đang nghe lời thoại #{material_id} để tính chỗ cắt {n} phần — mất khoảng bằng độ dài video (Whisper)…"
+        )
+
+        def _run():
+            try:
+                with SessionLocal() as db:
+                    res = feature_hooks.call("viral.propose_split", db, material_id, n) or {}
+                if not res.get("ok"):
+                    self.client.send_message("⚠️ " + str(res.get("msg") or "Không tính được kế hoạch."))
+                    return
+                sheet = res.get("sheet")
+                if sheet:
+                    self.client.send_photo(sheet, f"🧩 Khung hình #{material_id} — để anh đối chiếu mốc.")
+                self.client.send_message(
+                    str(res.get("text") or res.get("msg")),
+                    reply_markup={"inline_keyboard": [
+                        [{"text": f"✅ Cắt {n} phần như trên", "callback_data": f"chiaok:{material_id}"}],
+                        [{"text": f"🔁 Chia {m} phần" , "callback_data": f"chian:{material_id}:{m}"}
+                         for m in (2, 3, 4) if m != n],
+                    ]},
+                )
+            except Exception:
+                logger.exception("[Telegram] propose_split #%s hỏng", material_id)
+                self.client.send_message(f"❌ Tính kế hoạch chia #{material_id} hỏng — xem log.")
+
+        threading.Thread(target=_run, name=f"tg-chian-{material_id}", daemon=True).start()
+
+    def _handle_split_apply(self, callback_id: str, material_id: int):
+        """``chiaok:<id>`` — tạo các phần con rồi xử lý LẦN LƯỢT ở nền (ffmpeg song song là nghẽn máy)."""
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            res = feature_hooks.call("viral.apply_split", db, material_id) or {}
+        if not res.get("ok"):
+            self.client.answer_callback_query(callback_id, "⚠️ " + str(res.get("msg"))[:180])
+            self.client.send_message("⚠️ " + str(res.get("msg")))
+            return
+
+        child_ids = [int(c) for c in (res.get("child_ids") or [])]
+        self.client.answer_callback_query(callback_id, f"✂️ Đang cắt {len(child_ids)} phần…")
+        self.client.send_message(
+            f"✂️ Đã tạo {len(child_ids)} phần từ #{material_id}: "
+            + ", ".join(f"#{c}" for c in child_ids)
+            + "\nĐang cắt lần lượt — mỗi phần xong sẽ gửi một tin riêng."
+        )
+
+        def _run():
+            for idx, cid in enumerate(child_ids, 1):
+                try:
+                    with SessionLocal() as db:
+                        r = feature_hooks.call("viral.process_one", db, cid)
+                    ok, msg = r if isinstance(r, tuple) else (True, "")
+                    if not ok:
+                        self.client.send_message(f"⚠️ Phần {idx}/{len(child_ids)} (#{cid}) không xử lý được: {msg}")
+                except Exception:
+                    logger.exception("[Telegram] process part #%s failed", cid)
+                    self.client.send_message(f"❌ Phần {idx}/{len(child_ids)} (#{cid}) hỏng — xem log.")
+
+        threading.Thread(target=_run, name=f"tg-chiaok-{material_id}", daemon=True).start()
 
     def _handle_add_source(self, callback_id: str, material_id: int):
         """ADR-034 + ADR-028 — biến video vừa dán thành nguồn kênh, dò channel_id từ chính nó."""

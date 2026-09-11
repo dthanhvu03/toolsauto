@@ -29,6 +29,7 @@ class AIPurpose:
     STRATEGIC_ADVICE = "strategic_advice"
     INCIDENT_REPORT = "incident_report"
     STUDIO_TEST = "studio_test"
+    SPLIT_PLAN = "split_plan"  # ADR-041: chọn chỗ cắt video dài
     GENERIC = "generic"
 
 

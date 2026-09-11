@@ -70,11 +70,32 @@ class ViralMaterial(Base):
     content_hash = Column(String, nullable=True, index=True)  # sha256 file nguồn vừa tải
     phash = Column(Text, nullable=True)  # JSON {"1.23s": "hex", …} — pHash 5 khung hình
 
+    # ADR-041: video dài chia thành nhiều phần. Phần con là một material BÌNH THƯỜNG có cha —
+    # đi nguyên đường xử lý cũ với clip_start/clip_length riêng; chỉ ba chỗ cần biết nó là con:
+    # không tải lại (file gốc được nối cứng lúc chia), không chống trùng với anh em, caption
+    # biết mình là phần mấy. `split_plan` (JSON kế hoạch đã đề nghị) lưu trên CHA.
+    parent_material_id = Column(Integer, ForeignKey("viral_materials.id"), nullable=True, index=True)
+    part_index = Column(Integer, nullable=True)  # 1-based
+    part_total = Column(Integer, nullable=True)
+    split_plan = Column(Text, nullable=True)
+
     # ADR-021: caption AI viết thẳng cho material READY (không cần account, không cần Job).
     ai_caption = Column(Text, nullable=True)
     ai_hashtags = Column(Text, nullable=True)  # JSON list, ví dụ ["#viral", "#xuhuong"]
     ai_caption_at = Column(Integer, nullable=True)  # epoch giây — lần chạy AI gần nhất (kể cả lần lỗi)
     ai_caption_error = Column(Text, nullable=True)  # lý do lần chạy gần nhất thất bại; NULL = lần cuối OK
+
+    @property
+    def split_plan_dict(self) -> dict:
+        """ADR-041: ``split_plan`` JSON -> dict (``n``, ``parts``, ``hooks``, ``by``, ``note``); hỏng ⇒ ``{}``."""
+        raw = self.split_plan
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) and data.get("parts") else {}
 
     @property
     def phash_map(self) -> dict[str, str]:

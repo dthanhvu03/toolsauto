@@ -903,6 +903,15 @@ class ViralService:
                 return False, reason
 
             context = _clean_title_for_context(mat.title)
+            # ADR-041: phần con phải tự biết mình là phần mấy — caption không nói "Phần 2/3" và
+            # không mời xem tiếp thì chia phần mất một nửa ý nghĩa.
+            if getattr(mat, "parent_material_id", None) and mat.part_index and mat.part_total:
+                cuoi = mat.part_index >= mat.part_total
+                context += (
+                    f" | ĐÂY LÀ PHẦN {mat.part_index}/{mat.part_total} của một video dài. Caption phải ghi rõ "
+                    f"'Phần {mat.part_index}/{mat.part_total}'"
+                    + (" và đây là phần KẾT." if cuoi else f" và mời xem Phần {mat.part_index + 1} tiếp theo.")
+                )
             if not style:
                 from app.core import settings as runtime_settings
                 style = runtime_settings.get_str("ai.caption_style", default="short", db=db) or "short"

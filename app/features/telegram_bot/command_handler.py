@@ -60,7 +60,7 @@ class TelegramCommandHandler:
             "\n<b>Luồng video</b>\n"
             "/nguon — nguồn tự quét, kèm nút Quét ngay / Bật-Tắt\n"
             "/moi — video mới chưa xử lý, kèm nút Xử lý\n"
-            "/sansang — video chờ đăng tay, kèm nút Gửi lại và Chọn đoạn\n"
+            "/sansang — video chờ đăng tay, kèm nút Gửi lại, Chọn đoạn, Chia phần\n"
             "\nHoặc dán thẳng link TikTok/YouTube vào đây."
         )
 
@@ -125,12 +125,19 @@ class TelegramCommandHandler:
                     f", dài {m['clip_length_sec']}s" if m.get("clip_length_sec") else ""
                 )
             nut = [{"text": nhan_nut, "callback_data": f"{action}:{m['id']}"}]
+            hang2 = []
             if status == "READY":
                 nut.append({"text": "✂️ Chọn đoạn", "callback_data": f"khung:{m['id']}"})
+                # ADR-041: chỉ video GỐC mới chia được; phần con không chia tiếp.
+                if not m.get("parent_material_id"):
+                    hang2.append({"text": "🧩 Chia phần", "callback_data": f"chia:{m['id']}"})
+            phan = ""
+            if m.get("parent_material_id") and m.get("part_index"):
+                phan = f"\n🧩 Phần {m['part_index']}/{m.get('part_total') or '?'} của #{m['parent_material_id']}"
             self.client.send_message(
                 f"#{m['id']} · {int(m.get('views') or 0):,} views\n"
-                f"📝 {str(m.get('title') or '(không tiêu đề)')[:80]}{doan}",
-                reply_markup={"inline_keyboard": [nut]},
+                f"📝 {str(m.get('title') or '(không tiêu đề)')[:80]}{phan}{doan}",
+                reply_markup={"inline_keyboard": [nut] + ([hang2] if hang2 else [])},
             )
 
     def _cmd_status(self, args=None):

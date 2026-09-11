@@ -1,5 +1,56 @@
 # Current Status
 
+## Phiên 2026-09-11 (a) — ADR-041: chia video dài thành nhiều phần, cắt ở chỗ "đang gay cấn"
+
+Owner: *"xây luôn tính năng, và dùng thuật toán tối ưu nhất, tính toán đoạn hay nhất, xong cắt
+ra để đăng phần tiếp theo"*. Hỏi lại một câu, Owner chốt **giữ cả video, chỉ chọn chỗ cắt**.
+
+### Cách làm
+
+Phần con = một material bình thường có cha, đi **nguyên đường xử lý cũ** với mốc riêng. Ba chỗ
+đường cũ biết "đây là con": không tải lại (file gốc nối cứng sang tên của con lúc chia), không
+chống trùng với anh em, caption biết mình là phần mấy.
+
+Chọn chỗ cắt ba tầng, tầng nào cũng **nói rõ mình là tầng nào**: (1) Whisper lời thoại kèm mốc
+→ AI chọn câu kết mỗi phần; (2) chia đều rồi kéo về cuối câu / khoảng lặng / đổi cảnh; (3) chia
+đều, ghi "CHƯA tính". Tool **đề nghị**, Owner bấm ✅ mới cắt.
+
+Luồng Telegram: `/sansang` → 🧩 Chia phần → 2/3/4 → (nền) ảnh lưới + kế hoạch → ✅ Cắt → mỗi
+phần một tin "🧩 Phần i/N của #cha". Web: cùng hai bước trên dòng video.
+
+### Đo thật (video 1:15 có nhạc nền)
+
+`silencedetect` **0 khoảng lặng** — nhạc nền lấp; Whisper **28 câu**, mất **65.7 s ≈ 0.9×
+thời lượng**. Hệ quả: cuối câu Whisper đưa thẳng vào tầng 2 (không thì video có nhạc nền không
+bao giờ có ranh giới); tin nhắn sửa "vài chục giây" → "khoảng bằng độ dài video".
+
+Guard chống trùng chứng minh được là cần: bỏ nó, phần con bị đánh `DUPLICATE (sha256 giống
+hệt)` ngay lượt đầu.
+
+### System State
+
+**961 passed, 16 skipped, 0 failed** (trước: 914). `ruff` sạch · `lint-imports` 2 hợp đồng giữ
+· `alembic heads` = `r5f2a3b4c5d6`. **Migration mới — Owner phải `alembic upgrade head`.**
+
+### Unfinished + Blockers
+
+- **Chưa có proof cắt thật N phần rồi nhận đủ N tin Telegram** — cần DB dev (port 5434) bật.
+  Test end-to-end chạy nguyên `process_material` trên SQLite với ffmpeg giả.
+- AI tầng 1 chưa chạy được ở shell kiểm thử (key trong DB) — chuỗi dự phòng đã hạ đúng tầng.
+- Video **không có lời** chỉ có tầng 2/3 — đường "Gemini xem video" để sau.
+- Nợ cũ: `publish` 765 dòng chưa test; chữ không dấu ở `overview_warnings_api`; link rút gọn
+  `vt.tiktok.com` bị hiểu thành handle; `test_threads_world_news.py` vẫn `--ignore`.
+
+### Next Action
+
+1. **Owner: `git pull` → `alembic upgrade head` → khởi động lại.** Chọn một video dài đã READY,
+   `/sansang` → 🧩 Chia phần → 3 → đợi khoảng bằng độ dài video → xem kế hoạch → ✅ Cắt.
+   Báo lại: các phần có cắt giữa câu không, caption có ghi "Phần i/N" không.
+2. Nếu tin kế hoạch ghi "chia đều, CHƯA tính" nghĩa là không nghe được lời — báo em, đó là
+   lúc cần đường Gemini xem video.
+
+---
+
 ## Phiên 2026-09-10 (e) — ADR-040: tách hàm 770 dòng, test cho hai file lớn nhất
 
 Owner: *"triển khai cho xong đi em"*. ADR-039 để lại đúng hai việc, làm nốt cả hai.

@@ -510,6 +510,79 @@ def set_clip_start(
     )
 
 
+def _propose_split_in_background(material_id: int, n: int) -> None:
+    """ADR-041 — tính kế hoạch chia (Whisper: chậm) ngoài request; xong thì báo Telegram."""
+    from app.core.notifier.service import NotifierService
+    from app.features.viral_intake.split import describe_plan, propose_split
+
+    try:
+        with SessionLocal() as db:
+            res = propose_split(db, material_id, n)
+        if res.get("ok"):
+            NotifierService._broadcast(
+                describe_plan(material_id, res["plan"]) + "\n\nDuyệt trên web: bấm ✅ Cắt."
+            )
+        else:
+            NotifierService._broadcast("⚠️ " + str(res.get("msg")))
+        logger.info("[VIRAL][bg] propose_split #%s ok=%s — %s", material_id, res.get("ok"), res.get("msg"))
+    except Exception:
+        logger.exception("[VIRAL][bg] Lỗi tính kế hoạch chia #%s", material_id)
+
+
+def _process_parts_in_background(child_ids: list[int]) -> None:
+    """ADR-041 — xử lý các phần con LẦN LƯỢT (ffmpeg song song là nghẽn máy)."""
+    for cid in child_ids:
+        _process_material_in_background(cid)
+
+
+@router.post("/{material_id}/split/propose", response_class=HTMLResponse)
+def split_propose(
+    material_id: int,
+    background: BackgroundTasks,
+    n: str = Form("3"),
+    db: Session = Depends(get_db),
+):
+    """ADR-041 — bước 1: tính kế hoạch chia N phần (nền), Owner duyệt sau."""
+    from app.features.viral_intake.split import MAX_PARTS, MIN_PARTS
+
+    if not str(n).isdigit() or not MIN_PARTS <= int(n) <= MAX_PARTS:
+        return htmx_toast_response(f"Số phần phải từ {MIN_PARTS} tới {MAX_PARTS}.", type="error")
+    mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+    if not mat:
+        return htmx_toast_response("Không tìm thấy material", type="error")
+    if not ViralService.find_source_path(material_id, mat.platform):
+        return htmx_toast_response(
+            f"#{material_id} chưa có file gốc trên máy — bấm Xử lý một lần trước.", type="error",
+        )
+    background.add_task(_propose_split_in_background, material_id, int(n))
+    return htmx_toast_response(
+        f"Đang nghe lời thoại #{material_id} để tính chỗ cắt {n} phần — mất khoảng bằng độ dài video (Whisper). "
+        "Xong sẽ báo Telegram; tải lại trang để duyệt.",
+        type="success",
+    )
+
+
+@router.post("/{material_id}/split/apply", response_class=HTMLResponse)
+def split_apply(
+    material_id: int,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """ADR-041 — bước 2: tạo các phần con theo kế hoạch đã duyệt rồi cắt lần lượt ở nền."""
+    from app.features.viral_intake.split import apply_split
+
+    res = apply_split(db, material_id)
+    if not res.get("ok"):
+        return htmx_toast_response(str(res.get("msg")), type="error")
+    child_ids = [int(c) for c in res.get("child_ids") or []]
+    background.add_task(_process_parts_in_background, child_ids)
+    return htmx_toast_response(
+        f"Đã tạo {len(child_ids)} phần từ #{material_id} — đang cắt lần lượt, mỗi phần xong sẽ báo Telegram.",
+        type="success",
+        refresh_page=True,
+    )
+
+
 @router.post("/{material_id}/reprocess", response_class=HTMLResponse)
 def reprocess_material(
     material_id: int,

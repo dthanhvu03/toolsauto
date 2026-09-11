@@ -41,6 +41,13 @@
         <a href="/viral/{{ item.id }}/reup-preview" target="_blank"
             class="mt-1 inline-flex text-[10px] font-bold text-emerald-400 hover:underline">Mở _reup.mp4</a>
         {% endif %}
+        {% if item.parent_material_id and item.part_index %}
+        {# ADR-041: phần con của video đã chia — Owner đăng theo thứ tự nên phải thấy "phần mấy" ngay. #}
+        <div class="mt-1 text-[10px] font-semibold text-[var(--color-torch)]"
+             title="Cắt từ video gốc #{{ item.parent_material_id }}">
+            🧩 Phần {{ item.part_index }}/{{ item.part_total or '?' }} của #{{ item.parent_material_id }}
+        </div>
+        {% endif %}
         {% if item.process_tries and item.process_tries > 0 %}
         <div class="mt-1 text-[10px] text-[var(--color-mist)]">Lần thử {{ item.process_tries }}/3</div>
         {% endif %}
@@ -351,6 +358,66 @@
                 </span>
             </div>
         </details>
+
+        {% if not item.parent_material_id %}
+        {# ADR-041: video dài → nhiều phần. Hai bước, Owner đứng giữa: tool TÍNH và đưa duyệt,
+           bấm Cắt mới tạo phần. Phần con không chia tiếp. #}
+        {% set plan = item.split_plan_dict %}
+        <details class="mb-2 text-right group/split">
+            <summary class="cursor-pointer list-none text-[10px] font-semibold text-[var(--color-torch)] hover:brightness-110 select-none inline-flex items-center gap-1 justify-end"
+                     title="Chia video dài thành nhiều phần để đăng lần lượt; tool nghe lời thoại để chọn chỗ dừng mỗi phần">
+                <span class="underline decoration-dotted underline-offset-2">
+                    🧩 Chia phần{% if plan %} · đã tính {{ plan.n }} phần{% endif %}
+                </span>
+                <span class="text-[9px] opacity-70 group-open/split:rotate-180 transition-transform">▾</span>
+            </summary>
+            <div class="mt-1.5 flex flex-col items-end gap-1.5">
+                {% if plan %}
+                <div class="text-[10px] text-left text-[var(--color-ink)] border border-[var(--border)] rounded px-2 py-1 max-w-[18rem]">
+                    {% for p in plan.parts %}
+                    <div>
+                        <b>Phần {{ loop.index }}/{{ plan.n }}</b>:
+                        {{ '%d:%02d' % ((p[0]|int) // 60, (p[0]|int) % 60) }} → {{ '%d:%02d' % ((p[1]|int) // 60, (p[1]|int) % 60) }}
+                        {% set hook = plan.hooks[loop.index0] if plan.hooks and loop.index0 < plan.hooks|length else '' %}
+                        {% if hook and hook not in ['—', 'kết'] %}<i class="text-[var(--color-mist)]"> — {{ hook }}</i>{% endif %}
+                    </div>
+                    {% endfor %}
+                    <div class="mt-1 text-[9px] text-[var(--color-mist)]">
+                        Cách tính: {% if plan.by == 'ai' %}AI đọc lời thoại{% elif plan.by == 'boundary' %}theo khoảng lặng / đổi cảnh{% else %}chia đều{% endif %}. {{ plan.note }}
+                    </div>
+                </div>
+                <button
+                    class="inline-flex items-center justify-center min-h-[32px] px-2 py-1 rounded text-[10px] font-semibold text-white bg-[var(--color-torch)] hover:brightness-110 transition"
+                    hx-post="/viral/{{ item.id }}/split/apply" hx-swap="none" hx-indicator="this" hx-disabled-elt="this"
+                    title="Tạo {{ plan.n }} phần theo kế hoạch trên rồi cắt lần lượt"
+                    aria-label="Cắt thành {{ plan.n }} phần">
+                    ✅ Cắt {{ plan.n }} phần như trên
+                </button>
+                {% endif %}
+                <div class="flex items-center gap-1 flex-wrap justify-end">
+                    <label for="split-n-{{ item.id }}" class="text-[10px] text-[var(--color-mist)]">{% if plan %}tính lại:{% else %}chia thành{% endif %}</label>
+                    <select id="split-n-{{ item.id }}" name="n"
+                            class="text-[10px] border border-[var(--border)] rounded px-1 py-0.5 text-[var(--color-ink)] bg-[var(--color-face)]">
+                        {% for k in [2, 3, 4, 5, 6] %}
+                        <option value="{{ k }}" {% if (plan and plan.n == k) or (not plan and k == 3) %}selected{% endif %}>{{ k }} phần</option>
+                        {% endfor %}
+                    </select>
+                    <button
+                        class="inline-flex items-center justify-center min-h-[32px] px-2 py-1 rounded text-[10px] font-semibold text-[var(--color-torch)] border border-[var(--color-torch-border)] bg-[var(--color-torch-dim)] hover:brightness-110 transition"
+                        hx-post="/viral/{{ item.id }}/split/propose" hx-include="#split-n-{{ item.id }}"
+                        hx-swap="none" hx-indicator="this" hx-disabled-elt="this"
+                        title="Nghe lời thoại rồi đề nghị chỗ cắt — chưa cắt gì"
+                        aria-label="Tính kế hoạch chia phần">
+                        🎧 Tính chỗ cắt
+                    </button>
+                </div>
+                <span class="text-[9px] text-[var(--color-mist)] text-right max-w-[16rem] leading-tight">
+                    Giữ nguyên mạch truyện; mỗi phần dừng ở câu khiến người xem muốn xem tiếp.
+                    Tính xong báo Telegram, tải lại trang để duyệt.
+                </span>
+            </div>
+        </details>
+        {% endif %}
         {% endif %}
 
         <button

@@ -105,7 +105,24 @@ def register_feature_hooks() -> None:
         return [{
             "id": m.id, "platform": m.platform, "title": m.title, "views": m.views,
             "url": m.url, "clip_start_sec": m.clip_start_sec, "clip_length_sec": m.clip_length_sec,
+            "parent_material_id": m.parent_material_id, "part_index": m.part_index, "part_total": m.part_total,
         } for m in rows]
+
+    def viral_propose_split(db: Session, material_id: int, n: int) -> dict:
+        """ADR-041 — tính kế hoạch chia N phần (chậm: Whisper) — gọi từ luồng nền."""
+        from app.features.viral_intake.split import describe_plan, propose_split
+
+        res = propose_split(db, material_id, n)
+        if res.get("ok"):
+            res["text"] = describe_plan(material_id, res["plan"])
+            res.pop("plan", None)  # dataclass không đi qua ranh giới hook
+        return res
+
+    def viral_apply_split(db: Session, material_id: int) -> dict:
+        """ADR-041 — tạo các phần con theo kế hoạch đã lưu. Trả child_ids để xử lý lần lượt."""
+        from app.features.viral_intake.split import apply_split
+
+        return apply_split(db, material_id)
 
     def viral_set_clip(db: Session, material_id: int, start: int, length=None) -> dict:
         ok, msg = ViralService.set_clip_start(db, material_id, start, length)
@@ -182,6 +199,8 @@ def register_feature_hooks() -> None:
     feature_hooks.register("viral.set_clip", viral_set_clip)
     feature_hooks.register("viral.material_frames", viral_material_frames)
     feature_hooks.register("viral.resend_material", viral_resend_material)
+    feature_hooks.register("viral.propose_split", viral_propose_split)
+    feature_hooks.register("viral.apply_split", viral_apply_split)
     feature_hooks.register("viral.force_discovery", viral_force_discovery)
     feature_hooks.register("viral.discover_keyword", viral_discover_keyword)
     feature_hooks.register("telegram.make_poller", telegram_make_poller)

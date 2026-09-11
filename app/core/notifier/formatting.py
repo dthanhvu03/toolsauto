@@ -204,8 +204,16 @@ def material_ready_message(
         start = int(getattr(mat, "clip_start_sec", None) or 0)
         goc = f" (gốc {_mmss(source_duration)})" if source_duration else ""
         length_line = f"⏱ Dài {_mmss(duration)} · cắt từ {_mmss(start) if start else 'đầu'}{goc}\n"
+    # ADR-041: phần con của video đã chia — Owner đăng theo thứ tự nên phải thấy ngay "phần mấy".
+    part_line = ""
+    if getattr(mat, "parent_material_id", None) and getattr(mat, "part_index", None):
+        part_line = (
+            f"🧩 <b>Phần {mat.part_index}/{getattr(mat, 'part_total', '?')}</b>"
+            f" của video #{mat.parent_material_id}\n"
+        )
     head = (
         f"🎬 <b>Video sẵn sàng đăng tay</b>\n"
+        f"{part_line}"
         f"📋 Material #{getattr(mat, 'id', '?')} | {html_mod.escape(platform)}\n"
         f"📝 <i>{html_mod.escape(title)}</i>\n"
         f"👁 {views:,} lượt xem\n"

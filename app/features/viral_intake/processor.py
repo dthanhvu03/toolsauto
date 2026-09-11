@@ -738,75 +738,92 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
 
             _begin_processing(db, mat)
 
-            preflight_cmd = _extend_yt_dlp_with_cookies(
-                _yt_dlp_argv(
-                    "--no-playlist",
-                    "--skip-download",
-                    "--dump-single-json",
-                    "--no-warnings",
-                    "--add-header",
-                    f"User-Agent: {YT_DLP_USER_AGENT}",
-                    mat.url,
-                ),
-                source_account,
-            )
-            logger.info("[VIRAL] Preflight metadata [%s]: %s", mat.platform, mat.url)
-            preflight = subprocess.run(preflight_cmd, capture_output=True, text=True, timeout=60)
-
             download_success = False
             media_path = None
             fallback_used_successfully = False
 
-            if preflight.returncode != 0:
-                # Nếu preflight yt-dlp thất bại hoàn toàn (vd: HTTP Error 403 của TikTok)
-                if mat.platform == "tiktok":
-                    logger.warning("[VIRAL] yt-dlp preflight failed for TikTok. Attempting TikWM fallback...")
-                    fallback_filename = f"viral_{mat.id}_tikwm.mp4"
-                    fallback_path = os.path.join(platform_dir, fallback_filename)
-                    if _download_tiktok_fallback(mat.url, fallback_path):
-                        download_success = True
-                        fallback_used_successfully = True
-                        media_path = fallback_path
-                        logger.info("[VIRAL] Downloaded (tikwm fallback after preflight fail): %s", media_path)
-                        
-                if not fallback_used_successfully:
-                    reason = _humanize_yt_dlp_error(mat.platform or "", preflight.stderr or "", source_account)
-                    logger.error("[VIRAL] %s", reason)
-                    _mark_material_failed(db, mat, reason)
-                    continue
-            else:
-                try:
-                    preflight_info = json.loads(preflight.stdout)
-                except json.JSONDecodeError as exc:
-                    reason = f"Invalid yt-dlp metadata: {exc}"
-                    logger.error("[VIRAL] %s", reason)
-                    _mark_material_failed(db, mat, reason)
-                    continue
-
-                _apply_material_metadata(mat, preflight_info)
-                if mat.platform == "instagram" and mat.views == 0:
-                    logger.warning(
-                        "[VIRAL] Instagram metadata has no usable view_count/play_count for %s",
-                        mat.url,
+            # ADR-041: phần con của một video đã chia — file gốc được NỐI CỨNG sang tên của con
+            # lúc chia, nên KHÔNG tải, KHÔNG preflight (URL của con là `<url cha>#phanN`, yt-dlp
+            # không biết), và bên dưới KHÔNG chống trùng với anh em (giống nhau là cố ý).
+            is_part = bool(getattr(mat, "parent_material_id", None))
+            if is_part:
+                media_path = ViralService.find_source_path(mat.id, mat.platform)
+                if not media_path:
+                    _mark_material_failed(
+                        db, mat,
+                        "Không còn file gốc để cắt phần này — xử lý lại video gốc rồi chia lại.",
                     )
-                
-                if not _metadata_has_video_stream(preflight_info):
-                    # preflight thành công nhưng báo là slideshow/audio-only
+                    continue
+                download_success = True
+                logger.info("[VIRAL] Phần %s/%s của #%s — dùng file gốc: %s",
+                            mat.part_index, mat.part_total, mat.parent_material_id, media_path)
+            else:
+                preflight_cmd = _extend_yt_dlp_with_cookies(
+                    _yt_dlp_argv(
+                        "--no-playlist",
+                        "--skip-download",
+                        "--dump-single-json",
+                        "--no-warnings",
+                        "--add-header",
+                        f"User-Agent: {YT_DLP_USER_AGENT}",
+                        mat.url,
+                    ),
+                    source_account,
+                )
+                logger.info("[VIRAL] Preflight metadata [%s]: %s", mat.platform, mat.url)
+                preflight = subprocess.run(preflight_cmd, capture_output=True, text=True, timeout=60)
+
+
+                if preflight.returncode != 0:
+                    # Nếu preflight yt-dlp thất bại hoàn toàn (vd: HTTP Error 403 của TikTok)
                     if mat.platform == "tiktok":
-                        logger.warning("[VIRAL] yt-dlp missed video stream for TikTok. Attempting TikWM fallback...")
+                        logger.warning("[VIRAL] yt-dlp preflight failed for TikTok. Attempting TikWM fallback...")
                         fallback_filename = f"viral_{mat.id}_tikwm.mp4"
                         fallback_path = os.path.join(platform_dir, fallback_filename)
                         if _download_tiktok_fallback(mat.url, fallback_path):
                             download_success = True
                             fallback_used_successfully = True
                             media_path = fallback_path
-                            logger.info("[VIRAL] Downloaded (tikwm fallback after missing stream): %s", media_path)
-                    
+                            logger.info("[VIRAL] Downloaded (tikwm fallback after preflight fail): %s", media_path)
+                        
                     if not fallback_used_successfully:
-                        reason = "Source has no downloadable video stream; likely TikTok slideshow or audio-only."
-                        logger.error("[VIRAL] %s url=%s", reason, mat.url)
+                        reason = _humanize_yt_dlp_error(mat.platform or "", preflight.stderr or "", source_account)
+                        logger.error("[VIRAL] %s", reason)
                         _mark_material_failed(db, mat, reason)
                         continue
+                else:
+                    try:
+                        preflight_info = json.loads(preflight.stdout)
+                    except json.JSONDecodeError as exc:
+                        reason = f"Invalid yt-dlp metadata: {exc}"
+                        logger.error("[VIRAL] %s", reason)
+                        _mark_material_failed(db, mat, reason)
+                        continue
+
+                    _apply_material_metadata(mat, preflight_info)
+                    if mat.platform == "instagram" and mat.views == 0:
+                        logger.warning(
+                            "[VIRAL] Instagram metadata has no usable view_count/play_count for %s",
+                            mat.url,
+                        )
+                
+                    if not _metadata_has_video_stream(preflight_info):
+                        # preflight thành công nhưng báo là slideshow/audio-only
+                        if mat.platform == "tiktok":
+                            logger.warning("[VIRAL] yt-dlp missed video stream for TikTok. Attempting TikWM fallback...")
+                            fallback_filename = f"viral_{mat.id}_tikwm.mp4"
+                            fallback_path = os.path.join(platform_dir, fallback_filename)
+                            if _download_tiktok_fallback(mat.url, fallback_path):
+                                download_success = True
+                                fallback_used_successfully = True
+                                media_path = fallback_path
+                                logger.info("[VIRAL] Downloaded (tikwm fallback after missing stream): %s", media_path)
+                    
+                        if not fallback_used_successfully:
+                            reason = "Source has no downloadable video stream; likely TikTok slideshow or audio-only."
+                            logger.error("[VIRAL] %s url=%s", reason, mat.url)
+                            _mark_material_failed(db, mat, reason)
+                            continue
 
             # ADR-032: file gốc còn trên đĩa ⇒ bỏ lượt tải nặng (cả trăm MB) khi Owner chỉ
             # đổi mốc cắt. Preflight ở trên VẪN chạy (~2 giây) để làm mới views/tiêu đề —
@@ -906,7 +923,9 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     mat.phash = json.dumps(frames, ensure_ascii=False)
             except Exception as ph_err:  # pHash hong chi mat kha nang bat ca ma hoa lai
                 logger.warning("[VIRAL] extract_phash failed #%s: %s", mat.id, ph_err)
-            dup = find_duplicate(
+            # ADR-041: phần con giống cha và giống anh em là CỐ Ý — không chống trùng. Vẫn ghi
+            # hash ở trên để lượt quét sau bắt được một bản copy lạ của cùng nội dung.
+            dup = None if is_part else find_duplicate(
                 db,
                 content_hash=mat.content_hash,
                 phash_map=mat.phash_map,
