@@ -158,6 +158,7 @@ def test_scan_source_tiktok_creates_new_materials_and_dedups(session_factory, fa
 
         argv = fake_yt_dlp["calls"][-1]
         assert "--flat-playlist" in argv and "--dump-json" in argv and "--no-warnings" in argv
+        assert "--impersonate" in argv and argv[argv.index("--impersonate") + 1] == "chrome"
         assert argv[argv.index("--playlist-end") + 1] == "5"
         assert argv[-1] == "https://www.tiktok.com/@mrwork93"
 

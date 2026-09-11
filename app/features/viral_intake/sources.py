@@ -3,7 +3,8 @@ Nguồn quét tự động (ADR-019) — kênh TikTok / YouTube Shorts độc l�
 
 ``SourceService`` là hợp đồng cố định giữa UI (router/template) và backend:
 ``list_sources`` / ``add_source`` / ``set_enabled`` / ``delete_source`` / ``scan_source`` /
-``scan_all``. Quét bằng ``yt-dlp --flat-playlist --dump-json`` (không cookie, không browser);
+``scan_all``. Quét bằng ``yt-dlp --flat-playlist --dump-json``; TikTok thêm
+``--impersonate chrome`` (cần ``curl_cffi``) vì TikTok trả trang rỗng nếu không giả trình duyệt.
 video đạt ``min_views`` được ghi thành ``ViralMaterial(NEW, scraped_by_account_id=None)``
 để sweep nền nhặt (ADR-018: không account → READY).
 """
@@ -25,6 +26,10 @@ from app.core import settings as runtime_settings
 from app.core.database.models import ViralMaterial, ViralSource
 from app.core.database.models.base import now_ts
 from app.core.yt_dlp_path import yt_dlp_cmd
+
+# TikTok chặn liệt kê kênh nếu không giả Chrome (đo 2026-09-11: không có flag → JSON rỗng /
+# "Unable to extract secondary user ID"; có ``--impersonate chrome`` → liệt kê bình thường).
+_TIKTOK_IMPERSONATE = ("--impersonate", "chrome")
 from app.features.viral_intake.intake import normalize_source_url
 from app.features.viral_intake.tiktok_scraper import (
     RATE_LIMIT_BACKOFF_HOURS,
@@ -218,7 +223,10 @@ def _resolve_tiktok_user_from_video(video_url: str) -> tuple[tuple[str, str, str
     hẳn khỏi ``_classify`` (vốn thuần, rẻ, có test) và không bao giờ raise: hỏng gì cũng trả
     ``(None, thông báo tiếng Việt)`` để ``add_source`` hiện toast như mọi nhánh từ chối khác.
     """
-    cmd = yt_dlp_cmd("--dump-json", "--no-warnings", "--playlist-items", "1", video_url)
+    cmd = yt_dlp_cmd(
+        "--dump-json", "--no-warnings", "--playlist-items", "1",
+        *_TIKTOK_IMPERSONATE, video_url,
+    )
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=RESOLVE_TIMEOUT_SEC)
     except subprocess.TimeoutExpired:
@@ -403,9 +411,10 @@ class SourceService:
             wait_min = int((tracker[source.url] - now) / 60)
             error = f"Đang bị rate limit, thử lại sau {wait_min} phút"
         else:
+            extra = _TIKTOK_IMPERSONATE if source.platform == "tiktok" else ()
             cmd = yt_dlp_cmd(
                 "--flat-playlist", "--dump-json", "--playlist-end", str(max_videos),
-                "--no-warnings", source.url,
+                "--no-warnings", *extra, source.url,
             )
             logger.info("[VIRAL_SOURCES] Scan %s (max=%d, min_views=%d)", source.url, max_videos, min_views)
             try:
