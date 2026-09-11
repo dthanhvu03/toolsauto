@@ -1,5 +1,21 @@
 # Current Status
 
+## Phiên 2026-09-11 (h) — test đã bắn tin GIẢ vào Telegram thật của Owner; chặn ở gốc
+
+Owner gửi ảnh: hàng loạt "Video sẵn sàng đăng tay · Material #1 · facebook · 1,234 lượt xem ·
+viral_1_src_reup.mp4 · 4 KB" kèm nút ✅ Đã đăng, lúc 16:49 và 16:58 — đúng hai lần chạy toàn bộ
+test ở máy dev. Nguyên nhân: test import `app.main` ⇒ đăng ký kênh Telegram THẬT từ `.env` ⇒
+mọi `notify_*` sau đó (file giả 4096 byte) bay thẳng vào chat Owner. Cùng họ với lỗi log sáng.
+
+Chặn hai tầng trong `tests/conftest.py`: token rỗng TRƯỚC khi `app.config` đọc `.env`
+(`load_dotenv(override=False)`), và autouse fixture xoá `NotifierService._channels` + chặn
+`httpx` trong `telegram_client`. `tests/test_conftest_walls.py` khoá cả hai tường. **1058 passed.**
+
+**Owner: các tin "Material #1 · 1,234 lượt xem" trong chat là giả — xoá đi, ĐỪNG bấm ✅ Đã đăng
+trên chúng** (nút trỏ tới material #1 trong DB laptop, có thể là video thật).
+
+---
+
 ## Phiên 2026-09-11 (g) — ADR-044: link "📱 Mở trên điện thoại" trong tin video
 
 Owner đăng từ điện thoại bằng Chia sẻ vào app. Video > 50 MB không về Telegram, tin chỉ có
