@@ -25,11 +25,7 @@ from app.constants import ViralStatus
 from app.core import settings as runtime_settings
 from app.core.database.models import ViralMaterial, ViralSource
 from app.core.database.models.base import now_ts
-from app.core.yt_dlp_path import yt_dlp_cmd
-
-# TikTok chặn liệt kê kênh nếu không giả Chrome (đo 2026-09-11: không có flag → JSON rỗng /
-# "Unable to extract secondary user ID"; có ``--impersonate chrome`` → liệt kê bình thường).
-_TIKTOK_IMPERSONATE = ("--impersonate", "chrome")
+from app.core.yt_dlp_path import impersonate_args, yt_dlp_cmd
 from app.features.viral_intake.intake import normalize_source_url
 from app.features.viral_intake.tiktok_scraper import (
     RATE_LIMIT_BACKOFF_HOURS,
@@ -112,9 +108,14 @@ def humanize_scan_error(platform: str, stderr: str) -> str:
         if "failed to parse json" in low:
             # Đo 2026-09-11: cùng nguồn, cùng lệnh chạy bằng yt-dlp 2026.08.19 ra 21 video 3/3 lần;
             # máy bot của Owner báo câu này ⇒ hoặc yt-dlp cũ, hoặc TikTok trả trang kiểm tra bot.
+            goi_y = ""
+            if not impersonate_args():
+                # Laptop Owner 2026-09-11: đúng bản yt-dlp mà vẫn hỏng — TikTok chặn IP bằng trang
+                # kiểm tra bot; giả Chrome qua được nhưng cần curl_cffi (nhánh Cursor dd66ede).
+                goi_y = r" Máy này CHƯA có curl_cffi để giả Chrome — chạy: venv\Scripts\python.exe -m pip install -r requirements.txt"
             return "TikTok trả về trang không phải dữ liệu." + (
                 _ytdlp_diagnosis() or " Thường do yt-dlp cũ hoặc bị chặn tạm — xem trang Sức khỏe."
-            )
+            ) + goi_y
         if "unable to extract" in low:
             return "TikTok đổi cấu trúc trang, yt-dlp không đọc được — cập nhật yt-dlp." + _ytdlp_diagnosis()
         if "429" in low or "rate limit" in low or "too many" in low:
@@ -225,7 +226,7 @@ def _resolve_tiktok_user_from_video(video_url: str) -> tuple[tuple[str, str, str
     """
     cmd = yt_dlp_cmd(
         "--dump-json", "--no-warnings", "--playlist-items", "1",
-        *_TIKTOK_IMPERSONATE, video_url,
+        *impersonate_args(), video_url,
     )
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=RESOLVE_TIMEOUT_SEC)
@@ -411,7 +412,9 @@ class SourceService:
             wait_min = int((tracker[source.url] - now) / 60)
             error = f"Đang bị rate limit, thử lại sau {wait_min} phút"
         else:
-            extra = _TIKTOK_IMPERSONATE if source.platform == "tiktok" else ()
+            # TikTok chặn IP lạ bằng trang kiểm tra bot — giả Chrome qua được, nhưng CHỈ khi có
+            # curl_cffi (xem `impersonate_args`); bật cứng là hỏng máy đang chạy tốt.
+            extra = impersonate_args() if source.platform == "tiktok" else ()
             cmd = yt_dlp_cmd(
                 "--flat-playlist", "--dump-json", "--playlist-end", str(max_videos),
                 "--no-warnings", *extra, source.url,

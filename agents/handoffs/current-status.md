@@ -1,5 +1,35 @@
 # Current Status
 
+## Phiên 2026-09-11 (e) — gộp nhánh Cursor `--impersonate chrome`, sửa cho không hỏng máy thiếu gói
+
+Owner gửi ảnh laptop: Cursor (WSL) tạo nhánh `cursor/fix-tiktok-scan-impersonate` (dd66ede)
+— quét TikTok thêm `--impersonate chrome`, nâng `curl_cffi` 0.14 → 0.16.3. Owner: *"kiểm tra
+để đồng bộ git main"*.
+
+Kiểm thật trước khi gộp: máy dev **chưa cài curl_cffi** ⇒ cờ đó làm yt-dlp **dừng ngay**
+(`Impersonate target "chrome" is not available`) — merge nguyên là quét chết ở mọi máy chưa
+`pip install`. Cài gói vào thì có/không cờ đều ra 3 video. Kết luận: cờ đúng cho IP bị chặn
+(laptop), nhưng phải **có điều kiện**.
+
+Đã gộp vào `main` (không xung đột) rồi sửa: `impersonate_args()` ở `app/core/yt_dlp_path.py`
+trả cờ CHỈ khi import được `curl_cffi`; `sources`, `tiktok_scraper`, `fetch` (ADR-043, TikTok)
+dùng chung. Tin lỗi "trang không phải dữ liệu" nói thêm *"máy này chưa có curl_cffi"* + lệnh cài.
+Test khoá cả hai nhánh có/không gói; YouTube không giả Chrome.
+
+Ảnh còn lộ: **`.env` với TELEGRAM_BOT_TOKEN và GOOGLE_API_KEY hiện rõ** — đã nhắc Owner xoay
+khoá. Và `where.exe yt-dlp` ở laptop trỏ tới `Python312\Scripts\yt-dlp.exe` toàn cục — tool
+không dùng nó (ADR-029 ưu tiên venv), nhưng là bằng chứng laptop có hai bản.
+
+**1032 passed.** `main` = merge + sửa; nhánh Cursor có thể xoá sau khi laptop pull.
+
+### Next Action
+
+Laptop: `git checkout main && git pull` → `venv\Scripts\python.exe -m pip install -r
+requirements.txt` (lấy curl_cffi 0.16.3) → `alembic upgrade head` → khởi động lại → `/nguon` →
+🔍 Quét ngay. Xoay Telegram bot token + Google API key vì đã lộ trong ảnh.
+
+---
+
 ## Phiên 2026-09-11 (d) — ADR-043: `/tai <link>` tải bản gốc về máy, không reup
 
 Owner: *"xem video FB thấy hay muốn tải về máy chứ không reup, video nào cũng được"*. Đội mũ

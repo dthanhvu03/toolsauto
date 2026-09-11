@@ -15,7 +15,7 @@ import subprocess
 import time
 
 from app.config import TIKTOK_HOST, TIKTOK_RATE_LIMITS_FILE
-from app.core.yt_dlp_path import yt_dlp_cmd
+from app.core.yt_dlp_path import impersonate_args, yt_dlp_cmd
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +83,7 @@ class TikTokScraper:
             "--playlist-end",
             str(max_videos),
             "--no-warnings",
-            "--impersonate",
-            "chrome",
+            *impersonate_args(),
             channel_url,
         )
 

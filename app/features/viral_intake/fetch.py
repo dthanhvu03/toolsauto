@@ -24,7 +24,7 @@ import app.config as config
 from app.constants import AccountStatus
 from app.core.database.models import Account
 from app.core.storage import offsite
-from app.core.yt_dlp_path import yt_dlp_cmd
+from app.core.yt_dlp_path import impersonate_args, yt_dlp_cmd
 from app.features.viral_intake.intake import _bare_host, _split, detect_platform
 from app.features.viral_intake.sources import _ytdlp_diagnosis
 
@@ -85,6 +85,11 @@ def _with_cookies(cmd: list[str], account: Optional[Account]) -> list[str]:
     return [*cmd, "--cookies-from-browser", f"chromium:{account.profile_path}"]
 
 
+def _platform_args(platform: str) -> tuple[str, ...]:
+    """TikTok chặn IP lạ — giả Chrome khi có curl_cffi (cùng lý do với quét kênh)."""
+    return impersonate_args() if platform == "tiktok" else ()
+
+
 def _tail(stderr: str) -> str:
     for line in reversed((stderr or "").strip().splitlines()):
         if line.strip():
@@ -115,8 +120,11 @@ def humanize_fetch_error(platform: str, stderr: str, *, had_cookies: bool) -> st
     return t[:200] if t else "yt-dlp không nói lý do"
 
 
-def _probe(url: str, account: Optional[Account]) -> tuple[Optional[dict], str]:
-    cmd = _with_cookies(yt_dlp_cmd("--no-playlist", "--skip-download", "--dump-single-json", "--no-warnings", url), account)
+def _probe(url: str, account: Optional[Account], platform: str = "khac") -> tuple[Optional[dict], str]:
+    cmd = _with_cookies(
+        yt_dlp_cmd("--no-playlist", "--skip-download", "--dump-single-json", "--no-warnings", *_platform_args(platform), url),
+        account,
+    )
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=PROBE_TIMEOUT_SEC)
     except subprocess.TimeoutExpired:
@@ -152,11 +160,11 @@ def fetch_original(db: Optional[Session], url: str) -> dict:
     # Không cookie trước: video công khai là đa số, và `--cookies-from-browser` thất bại khi
     # Chrome đang mở profile đó. Chỉ khi Facebook/Instagram từ chối mới thử lại có cookie.
     account: Optional[Account] = None
-    info, err = _probe(url, None)
+    info, err = _probe(url, None, platform)
     if info is None and platform in ("facebook", "instagram") and any(m in err.lower() for m in _LOGIN_MARKERS):
         account = _account_with_cookies(db, platform)
         if account is not None:
-            info, err = _probe(url, account)
+            info, err = _probe(url, account, platform)
     if info is None:
         return {"ok": False, "msg": humanize_fetch_error(platform, err, had_cookies=account is not None)}
 
@@ -168,7 +176,7 @@ def fetch_original(db: Optional[Session], url: str) -> dict:
 
     cmd = _with_cookies(
         yt_dlp_cmd("--no-playlist", "--no-warnings", "--max-filesize", MAX_FILESIZE,
-                   "--merge-output-format", "mp4", "-o", tmp_template, url),
+                   "--merge-output-format", "mp4", *_platform_args(platform), "-o", tmp_template, url),
         account,
     )
     logger.info("[FETCH] %s → %s", url, out_dir)

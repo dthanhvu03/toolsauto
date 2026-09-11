@@ -49,3 +49,21 @@ def yt_dlp_cmd(*args: str) -> list[str]:
     if isinstance(head, list):
         return [*head, *args]
     return [head, *args]
+
+
+def impersonate_args() -> tuple[str, ...]:
+    """
+    ``("--impersonate", "chrome")`` khi ``curl_cffi`` có mặt, không thì rỗng.
+
+    TikTok chặn IP lạ bằng trang kiểm tra bot: máy dev liệt kê kênh bình thường, laptop Owner
+    trả "Failed to parse JSON" (2026-09-11). Giả Chrome (``--impersonate``) qua được, NHƯNG
+    cờ này **bắt buộc** có ``curl_cffi`` — thiếu gói là yt-dlp dừng ngay với
+    ``Impersonate target "chrome" is not available``, tức bật cứng cờ là làm hỏng luôn máy
+    đang chạy tốt. Nên: có gói thì dùng, không có thì chạy như cũ và để tin lỗi chỉ đường.
+    """
+    try:
+        import curl_cffi  # noqa: F401
+
+        return ("--impersonate", "chrome")
+    except ImportError:
+        return ()

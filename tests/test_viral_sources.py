@@ -158,7 +158,10 @@ def test_scan_source_tiktok_creates_new_materials_and_dedups(session_factory, fa
 
         argv = fake_yt_dlp["calls"][-1]
         assert "--flat-playlist" in argv and "--dump-json" in argv and "--no-warnings" in argv
-        assert "--impersonate" in argv and argv[argv.index("--impersonate") + 1] == "chrome"
+        # Cờ giả Chrome CHỈ khi có curl_cffi (impersonate_args) — không được bật cứng, thiếu gói
+        # là yt-dlp dừng ngay. Khoá cả hai nhánh ở test_impersonate_* bên dưới.
+        from app.core.yt_dlp_path import impersonate_args
+        assert ("--impersonate" in argv) == bool(impersonate_args())
         assert argv[argv.index("--playlist-end") + 1] == "5"
         assert argv[-1] == "https://www.tiktok.com/@mrwork93"
 
@@ -565,3 +568,30 @@ def test_quet_gap_loi_secondary_user_id_thi_ghi_huong_dan_tieng_viet(session_fac
         assert (found, skipped) == (0, 0)
         assert error == sources.MSG_TIKTOK_NEED_VIDEO_LINK
         assert "link MỘT video" in db.get(ViralSource, src.id).last_error
+
+
+def test_impersonate_chi_bat_khi_co_curl_cffi(session_factory, fake_yt_dlp, monkeypatch):
+    """Có gói ⇒ giả Chrome (TikTok chặn IP lạ); không gói ⇒ chạy như cũ, KHÔNG được chết."""
+    from app.features.viral_intake import sources as srcmod
+
+    monkeypatch.setattr(srcmod, "impersonate_args", lambda: ("--impersonate", "chrome"))
+    with session_factory() as db:
+        _, _, sid = SourceService.add_source(db, "https://www.tiktok.com/@mrwork93", min_views=1)
+        SourceService.scan_source(db, db.get(ViralSource, sid))
+    argv = fake_yt_dlp["calls"][-1]
+    assert argv[argv.index("--impersonate") + 1] == "chrome"
+
+    monkeypatch.setattr(srcmod, "impersonate_args", lambda: ())
+    with session_factory() as db:
+        SourceService.scan_source(db, db.get(ViralSource, sid))
+    assert "--impersonate" not in fake_yt_dlp["calls"][-1]
+
+
+def test_youtube_khong_gia_chrome(session_factory, fake_yt_dlp, monkeypatch):
+    from app.features.viral_intake import sources as srcmod
+
+    monkeypatch.setattr(srcmod, "impersonate_args", lambda: ("--impersonate", "chrome"))
+    with session_factory() as db:
+        _, _, sid = SourceService.add_source(db, "https://www.youtube.com/@albert_cancook/shorts", min_views=1)
+        SourceService.scan_source(db, db.get(ViralSource, sid))
+    assert "--impersonate" not in fake_yt_dlp["calls"][-1]
