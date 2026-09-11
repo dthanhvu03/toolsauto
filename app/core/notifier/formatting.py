@@ -212,6 +212,10 @@ def material_ready_message(
         start = int(getattr(mat, "clip_start_sec", None) or 0)
         goc = f" (gốc {_mmss(source_duration)})" if source_duration else ""
         length_line = f"⏱ Dài {_mmss(duration)} · cắt từ {_mmss(start) if start else 'đầu'}{goc}\n"
+        # 2026-09-11 Owner hỏi "sao tự cắt vậy": tin nói cắt mà không nói VÌ SAO và chỉnh Ở ĐÂU.
+        # Cắt theo số chung (không đặt độ dài riêng) và ngắn hơn gốc rõ rệt ⇒ chỉ đường ngay.
+        if source_duration and not getattr(mat, "clip_length_sec", None) and source_duration > duration + 2:
+            length_line += "   ↳ cắt theo Thiết lập « Độ dài tối đa » — đặt 0 ở đó nếu muốn giữ nguyên video\n"
     # ADR-041: phần con của video đã chia — Owner đăng theo thứ tự nên phải thấy ngay "phần mấy".
     part_line = ""
     if getattr(mat, "parent_material_id", None) and getattr(mat, "part_index", None):

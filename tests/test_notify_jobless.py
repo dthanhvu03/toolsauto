@@ -911,3 +911,29 @@ def test_k7_do_do_dai_hong_thi_van_gui_tin(stub, tmp_path, monkeypatch):
 
     assert len(stub.calls) == 1
     assert "Video sẵn sàng đăng tay" in stub.calls[0][-1]
+
+
+# ── 2026-09-11: tin cắt thì phải nói VÌ SAO cắt và chỉnh Ở ĐÂU ─────────────
+
+
+def test_cat_theo_so_chung_thi_chi_duong_toi_thiet_lap():
+    """Owner nhận "Dài 1:30 (gốc 10:52)" rồi hỏi "sao tự cắt" — tin phải tự trả lời."""
+    msg = nf.material_ready_message(FakeMaterial(id=9), "/x/a.mp4", duration=90, source_duration=652)
+
+    assert "Độ dài tối đa" in msg and "đặt 0" in msg
+
+
+def test_dat_do_dai_rieng_thi_KHONG_chi_duong():
+    """Owner đã tự đặt 'dài' cho video này ⇒ cắt là chủ ý, nhắc Thiết lập là thừa."""
+    mat = FakeMaterial(id=9)
+    mat.clip_length_sec = 90
+
+    msg = nf.material_ready_message(mat, "/x/a.mp4", duration=90, source_duration=652)
+
+    assert "Độ dài tối đa" not in msg
+
+
+def test_khong_cat_thi_KHONG_chi_duong():
+    msg = nf.material_ready_message(FakeMaterial(id=9), "/x/a.mp4", duration=651, source_duration=652)
+
+    assert "Độ dài tối đa" not in msg
