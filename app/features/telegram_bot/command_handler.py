@@ -74,6 +74,25 @@ class TelegramCommandHandler:
         total = int(seconds or 0)
         return f"{total // 60}:{total % 60:02d}"
 
+    @staticmethod
+    def _dong_quet(s: dict) -> str:
+        """
+        Một dòng nói thật về lượt quét gần nhất: LÚC NÀO, và ra sao.
+
+        Trước đây chỉ có "tìm được lần cuối: 0" + cục lỗi — không biết lần cuối là 2 phút hay
+        2 giờ trước, và "0" không phân biệt được "không có gì mới" với "quét hỏng".
+        """
+        import html as html_mod
+
+        ts = s.get("last_scanned_at")
+        if not ts:
+            return "🕐 Chưa quét lần nào — bấm 🔍 Quét ngay."
+        luc = time.strftime("%d/%m %H:%M", time.localtime(int(ts)))
+        if s.get("last_error"):
+            return f"🕐 Quét lúc {luc}: ❌ hỏng — {html_mod.escape(str(s['last_error'])[:160])}"
+        found = int(s.get("last_found") or 0)
+        return f"🕐 Quét lúc {luc}: " + (f"✅ {found} video mới" if found else "⚪ không có video mới")
+
     def _cmd_nguon(self, args=None):
         """Liệt kê nguồn tự quét, mỗi nguồn kèm nút Quét ngay / Bật-Tắt."""
         from app.core import feature_hooks
@@ -90,10 +109,9 @@ class TelegramCommandHandler:
         for s in rows:
             trang_thai = "🟢 Bật" if s["enabled"] else "⚪ Tắt"
             nguong = f"{s['min_views']:,}" if s.get("min_views") else "mặc định"
-            loi = f"\n❌ {str(s['last_error'])[:120]}" if s.get("last_error") else ""
             self.client.send_message(
                 f"📺 <b>@{s['handle']}</b> · {s['platform']} · {trang_thai}\n"
-                f"👁 Ngưỡng {nguong} · tìm được lần cuối: {s.get('last_found') or 0}{loi}",
+                f"👁 Ngưỡng {nguong}\n{self._dong_quet(s)}",
                 reply_markup={"inline_keyboard": [[
                     {"text": "🔍 Quét ngay", "callback_data": f"scan:{s['id']}"},
                     {"text": "⚪ Tắt" if s["enabled"] else "🟢 Bật", "callback_data": f"tgsrc:{s['id']}"},

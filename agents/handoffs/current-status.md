@@ -1,5 +1,34 @@
 # Current Status
 
+## Phiên 2026-09-11 (c) — /nguon phải nói thật: lỗi quét đọc được, biết quét lúc nào
+
+Owner gửi ảnh `/nguon`: `❌ ERROR: MS4wLjABAAAAMgUb…: Failed to parse JSON (caused by JSO` và
+*"tìm được lần cuối: 0"*. Kiểm thật: chạy **đúng lệnh tool chạy** trên đúng nguồn ở máy dev,
+yt-dlp 2026.08.19 ⇒ **21 video, 3/3 lần**. Kênh không hỏng — **máy chạy bot (laptop) mới là
+chỗ cần nhìn**: yt-dlp cũ hoặc TikTok trả trang kiểm tra bot cho IP đó.
+
+Ba chỗ vá (thuộc ADR-033, không cần ADR mới):
+- `humanize_scan_error`: lỗi quét được dịch như bên tải video; bỏ sec_uid 60 ký tự chiếm chỗ;
+  "Failed to parse JSON" → chỉ Owner tới trang Sức khỏe xem bản yt-dlp.
+- `/nguon` ghi **"Quét lúc 11/09 08:12: ✅ 3 video mới / ⚪ không có video mới / ❌ hỏng — lý do"**.
+  Trước đây "0" không phân biệt được "không có gì mới" với "quét hỏng", và không biết lúc nào.
+- `tests/conftest.py` trỏ `LOG_DIR` ra thư mục tạm: test từng ghi `@a: ERROR: boom` vào
+  `logs/app.log` thật. Đo: chạy cả suite, `app.log` không đổi một byte.
+
+### System State
+
+**1000 passed, 16 skipped, 0 failed**. `ruff` sạch · `lint-imports` giữ. Không migration mới.
+
+### Next Action
+
+1. **Owner (laptop chạy bot): `git pull` → `alembic upgrade head` (ADR-041/042 còn nợ) → khởi
+   động lại.** Mở trang Sức khỏe xem dòng yt-dlp: bản nào, đường dẫn nào. Rồi `/nguon` → 🔍 Quét
+   ngay — tin trả lời giờ nói rõ lúc nào và vì sao.
+2. Nếu vẫn "trang không phải dữ liệu" với đúng bản 2026.08.19 ⇒ TikTok chặn IP laptop; giãn
+   lịch quét kênh đó.
+
+---
+
 ## Phiên 2026-09-11 (b) — ADR-042: "Đã đăng" là một trạng thái, không phải một thư mục
 
 Owner hỏi *"đã đăng rồi thì bấm trên tele để nó dời thư mục khác không"*. Lật lại: dời file mà

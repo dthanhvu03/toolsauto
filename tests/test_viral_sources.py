@@ -215,9 +215,11 @@ def test_scan_source_yt_dlp_error_sets_last_error_without_raise(session_factory,
         src = db.get(ViralSource, sid)
         found, skipped, error = SourceService.scan_source(db, src)
         assert (found, skipped) == (0, 0)
-        assert error and error.startswith("ERROR: [TikTok]")
+        # 2026-09-11: lỗi quét được DỊCH như bên tải video — "Unable to extract" thành câu
+        # chỉ Owner cập nhật yt-dlp, không còn là stderr thô.
+        assert error and "yt-dlp" in error and not error.startswith("ERROR:")
         db.refresh(src)
-        assert src.last_error.startswith("ERROR: [TikTok]") and len(src.last_error) <= 200
+        assert src.last_error == error and len(src.last_error) <= 200
         assert src.last_scanned_at and src.last_found == 0
         assert db.query(ViralMaterial).count() == 0
 

@@ -56,6 +56,49 @@ MSG_FB_IG = (
 )
 MSG_UNKNOWN = "Không nhận diện được kênh. Dán URL kênh TikTok (@handle) hoặc YouTube (@handle, /channel/…)."
 
+# Đầu dòng lỗi yt-dlp: "ERROR: <id hoặc handle>: <lý do>". Với nguồn `tiktokuser:` cái <id>
+# là sec_uid dài 60 ký tự — chiếm gần hết chỗ trong tin Telegram (cắt ở 120), phần có nghĩa
+# bị mất. Bỏ nó đi; Owner đã biết nguồn nào vì lỗi nằm ngay dưới tên nguồn.
+_YTDLP_ERROR_HEAD_RE = re.compile(r"^(?:ERROR:\s*)?(?:\[[^\]]+\]\s*)?(?:[A-Za-z0-9_\-.@]{6,}:\s*)?", re.IGNORECASE)
+
+
+def humanize_scan_error(platform: str, stderr: str) -> str:
+    """
+    Dịch dòng cuối stderr của yt-dlp thành câu Owner hành động được — như ``processor``
+    đã làm cho lượt tải (ADR-033: lệnh phải nói thật, và nói cho người đọc được).
+
+    Không nhận ra thì trả nguyên dòng đã bỏ đầu ``ERROR: <id>:`` — vẫn còn là sự thật,
+    chỉ không dịch.
+    """
+    tail = ""
+    for line in reversed((stderr or "").strip().splitlines()):
+        if line.strip():
+            tail = line.strip()
+            break
+    if not tail:
+        return "yt-dlp không nói lý do"
+    low = tail.lower()
+    if platform == "tiktok":
+        if _TIKTOK_NO_SECONDARY_ID in low:
+            return MSG_TIKTOK_NEED_VIDEO_LINK
+        if "failed to parse json" in low:
+            # Đo 2026-09-11: cùng nguồn, cùng lệnh chạy bằng yt-dlp 2026.08.19 ra 21 video 3/3 lần;
+            # máy bot của Owner báo câu này ⇒ hoặc yt-dlp cũ, hoặc TikTok trả trang kiểm tra bot.
+            return ("TikTok trả về trang không phải dữ liệu — thường do yt-dlp cũ hoặc bị chặn tạm. "
+                    "Xem bản yt-dlp ở trang Sức khỏe; nếu đúng bản thì thử lại sau 1 giờ.")
+        if "unable to extract" in low:
+            return "TikTok đổi cấu trúc trang, yt-dlp bản này không đọc được — cập nhật yt-dlp."
+        if "429" in low or "rate limit" in low or "too many" in low:
+            return "TikTok chặn vì quét quá dày (429) — tool tự đợi, thử lại sau."
+    if "404" in low or "not found" in low or "does not exist" in low:
+        return "Kênh không tồn tại hoặc đã đổi tên."
+    if "private" in low:
+        return "Kênh riêng tư — yt-dlp không xem được."
+    if "timed out" in low or "timeout" in low:
+        return "Mạng chậm, yt-dlp hết giờ chờ — thử lại."
+    return _YTDLP_ERROR_HEAD_RE.sub("", tail, count=1).strip() or tail
+
+
 _HANDLE_RE = re.compile(r"^[A-Za-z0-9._\-]+$")
 
 
@@ -353,10 +396,7 @@ class SourceService:
                 if source.platform == "tiktok" and ("429" in stderr or "rate limit" in low or "too many" in low):
                     tracker[source.url] = now + RATE_LIMIT_BACKOFF_HOURS * 3600
                     _save_rate_limits(tracker)
-                if source.platform == "tiktok" and _TIKTOK_NO_SECONDARY_ID in low:
-                    error = MSG_TIKTOK_NEED_VIDEO_LINK  # ADR-028 mục 4
-                else:
-                    error = stderr.splitlines()[-1] if stderr else f"yt-dlp exit {result.returncode}"
+                error = humanize_scan_error(source.platform, stderr) if stderr else f"yt-dlp exit {result.returncode}"
             if result is not None and error is None:
                 found, skipped = SourceService._ingest_lines(db, source, result.stdout or "", min_views)
 
