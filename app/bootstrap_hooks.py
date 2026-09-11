@@ -110,6 +110,12 @@ def register_feature_hooks() -> None:
             "posted_at": m.posted_at,
         } for m in rows]
 
+    def viral_fetch_original(db: Session, url: str) -> dict:
+        """ADR-043 — tải bản gốc về máy, không reup. Chậm (tải cả file) — gọi từ luồng nền."""
+        from app.features.viral_intake.fetch import fetch_original
+
+        return fetch_original(db, url)
+
     def viral_mark_posted(db: Session, material_id: int) -> dict:
         """ADR-042 — Owner bấm Đã đăng trên Telegram."""
         ok, msg = ViralService.mark_posted(db, material_id)
@@ -210,6 +216,7 @@ def register_feature_hooks() -> None:
     feature_hooks.register("viral.set_clip", viral_set_clip)
     feature_hooks.register("viral.material_frames", viral_material_frames)
     feature_hooks.register("viral.resend_material", viral_resend_material)
+    feature_hooks.register("viral.fetch_original", viral_fetch_original)
     feature_hooks.register("viral.mark_posted", viral_mark_posted)
     feature_hooks.register("viral.unmark_posted", viral_unmark_posted)
     feature_hooks.register("viral.propose_split", viral_propose_split)

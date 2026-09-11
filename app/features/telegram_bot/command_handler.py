@@ -33,6 +33,7 @@ class TelegramCommandHandler:
             "moi": self._cmd_moi,
             "sansang": self._cmd_sansang,
             "dadang": self._cmd_dadang,  # ADR-042
+            "tai": self._cmd_tai,  # ADR-043
         }
 
     def handle_command(self, cmd: str, args: list = None):
@@ -63,6 +64,7 @@ class TelegramCommandHandler:
             "/moi — video mới chưa xử lý, kèm nút Xử lý\n"
             "/sansang — video chờ đăng tay, kèm nút Gửi lại, Chọn đoạn, Chia phần, Đã đăng\n"
             "/dadang — 10 video đã đăng gần nhất, kèm nút Chưa đăng (bấm nhầm)\n"
+            "/tai &lt;link&gt; — chỉ tải bản gốc về máy để xem, không xào chẻ, không vào danh sách đăng\n"
             "\nHoặc dán thẳng link TikTok/YouTube vào đây."
         )
 
@@ -143,6 +145,46 @@ class TelegramCommandHandler:
         """Video đã xử lý, đang chờ đăng tay — kèm nút Gửi lại."""
         self._liet_ke_material("READY", "🎬 <b>Sẵn sàng đăng tay</b>", "gui", "📤 Gửi lại",
                                "📭 Chưa có video nào sẵn sàng.")
+
+    def _cmd_tai(self, args=None):
+        """
+        ADR-043 — `/tai <link>`: tải bản gốc về máy, KHÔNG reup, không vào /moi hay /sansang.
+
+        Tải cả file mất hàng chục giây tới vài phút ⇒ trả lời ngay rồi chạy nền. Gửi file lên
+        Telegram chỉ khi ≤ 50 MB; hơn thì gửi đường dẫn — hứa gửi rồi lỗi 413 là nhãn nói dối.
+        """
+        import threading
+
+        url = next((a for a in (args or []) if a.lower().startswith(("http://", "https://"))), None)
+        if not url:
+            self.client.send_message(
+                "⚠️ Cú pháp: /tai &lt;link video&gt;\n"
+                "Tải bản gốc về máy để xem, không xào chẻ, không vào danh sách đăng. "
+                "Link trần (không /tai) thì tool sẽ làm video như thường."
+            )
+            return
+        self.client.send_message("📥 Đang tải bản gốc… gửi lại khi xong (file ≤ 50 MB mới gửi được qua Telegram).")
+
+        def _run():
+            from app.core import feature_hooks
+            from app.core.database.core import SessionLocal
+
+            try:
+                with SessionLocal() as db:
+                    res = feature_hooks.call("viral.fetch_original", db, url) or {}
+                msg = str(res.get("msg") or "")
+                if not res.get("ok"):
+                    self.client.send_message("⚠️ " + msg)
+                    return
+                if res.get("sendable") and res.get("path") and hasattr(self.client, "send_video"):
+                    self.client.send_video(res["path"], msg)
+                else:
+                    self.client.send_message(msg + "\n(quá 50 MB — Telegram không cho gửi; lấy từ máy hoặc Drive)")
+            except Exception:
+                logger.exception("[Telegram] /tai hỏng: %s", url)
+                self.client.send_message("❌ Tải hỏng — xem log.")
+
+        threading.Thread(target=_run, name="tg-tai", daemon=True).start()
 
     def _cmd_dadang(self, args=None):
         """ADR-042 — video đã đăng gần nhất, kèm nút lùi lại khi bấm nhầm."""

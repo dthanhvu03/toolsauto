@@ -133,6 +133,24 @@
         <span class="basis-full text-[11px] text-[var(--color-mist)]">Chỉ dán video bạn được phép dùng lại.</span>
       </form>
 
+      {# ADR-043: tải bản gốc để XEM — không reup, không vào bảng dưới. Tách form riêng để
+         không ai tưởng nó là một lựa chọn của ô "Thêm". #}
+      <form class="mt-2 flex items-center gap-2 flex-wrap"
+            hx-post="/viral/fetch" hx-swap="none"
+            hx-indicator="find button[type=submit]" hx-disabled-elt="find button[type=submit]"
+            hx-on::after-request="this.reset()">
+        <input name="url" type="url" required autocomplete="off"
+               class="app-input flex-1 min-w-[12rem] sm:min-w-[18rem] w-full sm:w-auto sm:max-w-[24rem]"
+               placeholder="Chỉ tải về máy để xem (link video bất kỳ, không xào chẻ)" />
+        <button type="submit"
+                class="viral-busy-btn app-btn border-[var(--border)] bg-[var(--color-face)] text-[var(--color-ink-soft)] hover:brightness-110"
+                title="Tải bản gốc vào storage/media/tai-ve/ (và Drive nếu bật). Không tạo video, không vào danh sách đăng.">
+          <span class="btn-idle">📥 Tải về máy</span>
+          <span class="btn-busy htmx-indicator">Đang tải…</span>
+        </button>
+        <span class="basis-full text-[11px] text-[var(--color-mist)]">Lưu ở <code>storage/media/tai-ve/&lt;tháng&gt;/</code>; xong sẽ báo Telegram. Không tải playlist hay cả kênh.</span>
+      </form>
+
       {# ADR-025: khối "Nguồn tự động" đã tách sang /app/viral/sources. Link này là thứ giữ
          cho luồng không đứt đoạn với người đang đứng ở bảng video — đừng bỏ. #}
       <p class="mt-2 text-[11px] text-[var(--color-mist)]">

@@ -405,6 +405,37 @@ def scan_source(source_id: int, background: BackgroundTasks):
     )
 
 
+def _fetch_in_background(url: str) -> None:
+    """ADR-043 — tải bản gốc (không reup) ngoài request; xong thì báo Telegram."""
+    from app.core.notifier.service import NotifierService
+    from app.features.viral_intake.fetch import fetch_original
+
+    try:
+        with SessionLocal() as db:
+            res = fetch_original(db, url)
+        NotifierService._broadcast(str(res.get("msg")) if res.get("ok") else "⚠️ Tải về hỏng: " + str(res.get("msg")))
+        logger.info("[VIRAL][fetch] %s ok=%s", url, res.get("ok"))
+    except Exception:
+        logger.exception("[VIRAL][fetch] Lỗi tải về %s", url)
+
+
+@router.post("/fetch", response_class=HTMLResponse)
+def fetch_original_route(background: BackgroundTasks, url: str = Form(...)):
+    """ADR-043 — chỉ tải bản gốc về máy để xem. Không tạo material."""
+    from app.features.viral_intake.fetch import _known_host_but_not_video
+
+    url = (url or "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return htmx_toast_response("Cần một link http(s).", type="error")
+    if _known_host_but_not_video(url):
+        return htmx_toast_response("Đây là link kênh / danh sách — chỉ nhận link MỘT video.", type="error")
+    background.add_task(_fetch_in_background, url)
+    return htmx_toast_response(
+        "Đang tải bản gốc về storage/media/tai-ve/… xong sẽ báo Telegram (kèm đường dẫn).",
+        type="success",
+    )
+
+
 @router.post("/{material_id}/process", response_class=HTMLResponse)
 def process_one(
     material_id: int, background: BackgroundTasks, db: Session = Depends(get_db)

@@ -31,6 +31,8 @@ logger = setup_shared_logger(__name__)
 SUBDIRS: dict[str, str] = {
     "backup": "backups",
     "video": "videos",
+    # ADR-043: bản gốc tải về để xem, không reup — nằm cạnh videos/ nhưng tách thư mục.
+    "download": "videos/Tải về",
 }
 
 

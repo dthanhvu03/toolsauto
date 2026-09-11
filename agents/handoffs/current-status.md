@@ -1,5 +1,29 @@
 # Current Status
 
+## Phiên 2026-09-11 (d) — ADR-043: `/tai <link>` tải bản gốc về máy, không reup
+
+Owner: *"xem video FB thấy hay muốn tải về máy chứ không reup, video nào cũng được"*. Đội mũ
+trong ADR; ranh giới quan trọng nhất: **không đi qua luồng viral** (không material, không chống
+trùng, không cắt, không caption, không đụng `REUP_DIR`) — kho lưu, không phải kho sản xuất.
+
+- Telegram `/tai <link>` (web: ô "Tải về máy" trên trang Viral). Mọi link http(s); link kênh /
+  danh sách bị chặn **trước** khi gọi yt-dlp.
+- Lưu `storage/media/tai-ve/<tháng>/<tiêu đề>.mp4`; chép Drive `videos/Tải về/<tháng>/` nếu bật.
+- Cookie: lượt đầu KHÔNG (video công khai; Chrome mở profile là cookie hỏng); Facebook/Instagram
+  đòi đăng nhập ⇒ thử lại bằng tài khoản ACTIVE.
+- ≤ 50 MB gửi file qua Telegram; hơn thì báo đường dẫn. `--max-filesize 500M`.
+- Lỗi dịch như `/nguon`, kèm bản yt-dlp đang chạy.
+
+Đo thật: TikTok công khai 148,5 MB / 15,9 s. **1030 passed.** Không migration.
+
+### Next Action
+
+Owner: `git pull` (laptop còn nợ migration ADR-041/042: `alembic upgrade head`) → khởi động lại
+→ `/tai <link Facebook đang xem>`. Nếu Facebook đòi đăng nhập mà chưa có tài khoản FB ACTIVE
+trong tool, tin sẽ nói thẳng — đó là lúc cân nhắc đăng nhập một tài khoản.
+
+---
+
 ## Phiên 2026-09-11 (c) — /nguon phải nói thật: lỗi quét đọc được, biết quét lúc nào
 
 **Bổ sung (c2):** Owner chụp lại sau khi pull — "Quét lúc 06:24" trong khi ảnh chụp 13:53:

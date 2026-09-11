@@ -39,6 +39,8 @@ STORAGE_CONTENT_DIR = STORAGE_MEDIA_DIR / "content"
 STORAGE_INTROS_DIR = STORAGE_MEDIA_DIR / "intros"
 STORAGE_OUTROS_DIR = STORAGE_MEDIA_DIR / "outros"
 THREADS_MEDIA_DIR = STORAGE_MEDIA_DIR / "threads"
+# ADR-043: kho TẢI VỀ (bản gốc, không reup) — tách hẳn khỏi REUP_DIR để không lọt vào luồng viral.
+DOWNLOADS_DIR = STORAGE_MEDIA_DIR / "tai-ve"
 
 LEGACY_DATA_DIR = BASE_DIR / "data"
 LEGACY_CONTENT_DIR = BASE_DIR / "content"

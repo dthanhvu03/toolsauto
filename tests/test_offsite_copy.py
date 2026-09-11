@@ -105,6 +105,6 @@ def test_kinds_map_to_known_subdirs():
     tục còn hai thứ đó ghi liên tục — xung đột đồng bộ làm hỏng dữ liệu âm thầm, và
     profile hỏng nghĩa là mất phiên đăng nhập.
     """
-    assert set(offsite.SUBDIRS) == {"backup", "video"}
+    assert set(offsite.SUBDIRS) == {"backup", "video", "download"}  # download: ADR-043, chi file video da tai
     assert "profile" not in offsite.SUBDIRS
     assert "database" not in offsite.SUBDIRS
