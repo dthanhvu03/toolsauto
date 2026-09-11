@@ -1,5 +1,18 @@
 # Current Status
 
+## Phiên 2026-09-11 (f) — `/caidat`: đổi cài đặt luồng video ngay trong Telegram
+
+Owner: *"mấy setting này setting ở tele được không"* — sau khi video bị cắt 1:30 mà phải mở
+web mới tìm ra ô "Độ dài tối đa". `/caidat` xem 7 ô hay chỉnh (tên ngắn: `dodai`, `giugoc`,
+`caption`, `nguong`, `sovideo`, `quet`, `trung`; nhận cả key đầy đủ); `/caidat dodai 0` đổi.
+Ghi bằng chính `upsert_setting` của web (validate min/max, audit, bust cache), rồi ĐỌC LẠI giá
+trị hiệu lực để trả lời. Bool nhận bật/tắt tiếng Việt. Chỉ chat của Owner mới ra lệnh được
+(poller đã lọc chat_id). Tin video cắt theo số chung nay chỉ đường tới ô đó (commit ecbd710).
+
+**1048 passed.** Không migration.
+
+---
+
 ## Phiên 2026-09-11 (e) — gộp nhánh Cursor `--impersonate chrome`, sửa cho không hỏng máy thiếu gói
 
 Owner gửi ảnh laptop: Cursor (WSL) tạo nhánh `cursor/fix-tiktok-scan-impersonate` (dd66ede)

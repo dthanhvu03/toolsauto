@@ -34,6 +34,7 @@ class TelegramCommandHandler:
             "sansang": self._cmd_sansang,
             "dadang": self._cmd_dadang,  # ADR-042
             "tai": self._cmd_tai,  # ADR-043
+            "caidat": self._cmd_caidat,
         }
 
     def handle_command(self, cmd: str, args: list = None):
@@ -65,6 +66,7 @@ class TelegramCommandHandler:
             "/sansang — video chờ đăng tay, kèm nút Gửi lại, Chọn đoạn, Chia phần, Đã đăng\n"
             "/dadang — 10 video đã đăng gần nhất, kèm nút Chưa đăng (bấm nhầm)\n"
             "/tai &lt;link&gt; — chỉ tải bản gốc về máy để xem, không xào chẻ, không vào danh sách đăng\n"
+            "/caidat — xem / đổi cài đặt luồng video ngay tại đây (độ dài cắt, giữ file gốc, caption tự động…)\n"
             "\nHoặc dán thẳng link TikTok/YouTube vào đây."
         )
 
@@ -185,6 +187,95 @@ class TelegramCommandHandler:
                 self.client.send_message("❌ Tải hỏng — xem log.")
 
         threading.Thread(target=_run, name="tg-tai", daemon=True).start()
+
+    # Tên ngắn tiếng Việt cho các ô Owner hay chỉnh nhất. Giá trị thật, kiểu, min/max đều đọc từ
+    # bảng SETTINGS của web (`app.core.settings`) — không chép tay, thêm ô ở web là ở đây tự đúng.
+    _CAIDAT_ALIAS = {
+        "dodai": "reup.max_duration_sec",
+        "giugoc": "viral.keep_source_days",
+        "caption": "viral.auto_caption_on_ready",
+        "nguong": "viral.min_views",
+        "sovideo": "viral.max_videos_per_channel",
+        "quet": "viral.source_scan_interval_min",
+        "trung": "viral.phash_max_distance",
+    }
+
+    def _cmd_caidat(self, args=None):
+        """
+        `/caidat` — xem; `/caidat <tên> <giá trị>` — đổi. Owner hỏi "mấy setting này setting ở
+        tele được không" sau khi video bị cắt 1:30 mà phải mở web mới tìm ra ô "Độ dài tối đa".
+
+        Ghi bằng chính `upsert_setting` của web (validate min/max, ghi audit, bust cache, đẩy
+        vào config) rồi ĐỌC LẠI giá trị hiệu lực để trả lời — không trả lại thứ Owner vừa gõ.
+        """
+        import html as html_mod
+
+        from app.core import settings as rs
+        from app.core.database.core import SessionLocal
+
+        def _spec(name: str):
+            key = self._CAIDAT_ALIAS.get(name.lower(), name)
+            return key, rs.SETTINGS.get(key)
+
+        def _fmt(spec, value) -> str:
+            if spec.type == "bool":
+                return "bật" if bool(value) else "tắt"
+            unit = f" {spec.unit}" if getattr(spec, "unit", None) else ""
+            return f"{value}{unit}"
+
+        args = args or []
+        if not args:
+            with SessionLocal() as db:
+                rows = []
+                for alias, key in self._CAIDAT_ALIAS.items():
+                    spec = rs.SETTINGS.get(key)
+                    if not spec:
+                        continue
+                    val = rs.get_effective(db, key)
+                    extra = ""
+                    if key == "reup.max_duration_sec":
+                        extra = " (0 = không cắt)"
+                    rows.append(f"<code>{alias}</code> = <b>{html_mod.escape(_fmt(spec, val))}</b>{extra} — {html_mod.escape(spec.title)}")
+            self.client.send_message(
+                "⚙️ <b>Cài đặt luồng video</b>\n" + "\n".join(rows)
+                + "\n\nĐổi: <code>/caidat dodai 0</code> · <code>/caidat caption tat</code>"
+            )
+            return
+
+        key, spec = _spec(args[0])
+        if spec is None:
+            self.client.send_message(f"⚠️ Không có ô <code>{html_mod.escape(args[0])}</code>. Gõ /caidat để xem danh sách.")
+            return
+        if len(args) < 2:
+            with SessionLocal() as db:
+                val = rs.get_effective(db, key)
+            self.client.send_message(f"<code>{html_mod.escape(args[0])}</code> = <b>{html_mod.escape(_fmt(spec, val))}</b> — {html_mod.escape(spec.title)}")
+            return
+
+        raw = " ".join(args[1:]).strip()
+        if spec.type == "bool":
+            low = raw.lower()
+            if low in ("bat", "bật", "on", "1", "true", "co", "có"):
+                raw = "true"
+            elif low in ("tat", "tắt", "off", "0", "false", "khong", "không"):
+                raw = "false"
+            else:
+                self.client.send_message("⚠️ Ô này chỉ nhận bật/tắt.")
+                return
+        try:
+            with SessionLocal() as db:
+                rs.upsert_setting(db, key, raw, updated_by="telegram")
+                val = rs.get_effective(db, key)
+        except (ValueError, TypeError) as exc:
+            gioi_han = ""
+            if spec.min is not None or spec.max is not None:
+                gioi_han = f" (từ {spec.min:g} tới {spec.max:g})"
+            self.client.send_message(f"⚠️ Không nhận: {html_mod.escape(str(exc)[:120])}{gioi_han}")
+            return
+        ghi_chu = " Áp dụng cho video xử lý từ giờ; video đã có thì bấm Xử lý lại." if key == "reup.max_duration_sec" else ""
+        self.client.send_message(
+            f"✅ <code>{html_mod.escape(args[0])}</code> = <b>{html_mod.escape(_fmt(spec, val))}</b> — {html_mod.escape(spec.title)}.{ghi_chu}"
+        )
 
     def _cmd_dadang(self, args=None):
         """ADR-042 — video đã đăng gần nhất, kèm nút lùi lại khi bấm nhầm."""
