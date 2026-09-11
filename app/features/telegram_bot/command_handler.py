@@ -74,27 +74,47 @@ class TelegramCommandHandler:
         else:
             self.client.send_message(f"❓ Lệnh /{cmd} không hỗ trợ.")
 
+    # Nhóm cho /help — cùng nguồn với MENU, chỉ thêm tiêu đề nhóm. Lệnh không nằm nhóm nào
+    # sẽ tự rơi vào "Khác" (test canh: không lệnh nào bị bỏ sót).
+    HELP_GROUPS: list[tuple[str, tuple[str, ...]]] = [
+        ("Luồng video (dùng hằng ngày)", ("sansang", "moi", "nguon", "dadang", "tai", "caidat")),
+        ("Hệ thống", ("status", "health", "pause", "resume", "help")),
+        ("Luồng Job — cần tài khoản Facebook trong tool", ("jobs", "drafts", "retry", "viral", "discovery")),
+    ]
+
     def _cmd_help(self, args=None):
-        """ADR-033 — không có lệnh này thì phải mở code mới biết bot làm được gì."""
-        self.client.send_message(
-            "🤖 <b>Lệnh dùng được</b>\n━━━━━━━━━━━━━━━━━━\n"
-            "/status — worker đang chạy hay tạm dừng\n"
-            "/pause · /resume — tạm dừng / chạy tiếp worker\n"
-            "/health — sức khoẻ hệ thống\n"
-            "/jobs — đếm job đang chạy / chờ / nháp\n"
-            "/drafts — liệt kê bản nháp, kèm nút Duyệt / Huỷ\n"
-            "/retry &lt;id&gt; — cho một job chạy lại\n"
-            "/discovery — quét tìm kênh mới (chạy nền, hơi lâu)\n"
-            "/viral &lt;min_views&gt; &lt;max_videos&gt; — đổi ngưỡng quét chung\n"
-            "\n<b>Luồng video</b>\n"
-            "/nguon — nguồn tự quét, kèm nút Quét ngay / Bật-Tắt\n"
-            "/moi — video mới chưa xử lý, kèm nút Xử lý\n"
-            "/sansang — video chờ đăng tay, kèm nút Gửi lại, Chọn đoạn, Chia phần, Đã đăng\n"
-            "/dadang — 10 video đã đăng gần nhất, kèm nút Chưa đăng (bấm nhầm)\n"
-            "/tai &lt;link&gt; — chỉ tải bản gốc về máy để xem, không xào chẻ, không vào danh sách đăng\n"
-            "/caidat — xem / đổi cài đặt luồng video ngay tại đây (độ dài cắt, giữ file gốc, caption tự động…)\n"
-            "\nHoặc dán thẳng link TikTok/YouTube vào đây."
-        )
+        """
+        ADR-033 — không có lệnh này thì phải mở code mới biết bot làm được gì.
+
+        Sinh từ ``MENU`` (2026-09-11): trước đây /help và menu "/" là hai bản chép tay, lệch
+        thứ tự — /help kể luồng Job (Owner có 0 tài khoản) lên đầu, luồng video xuống dưới.
+        """
+        import html as html_mod
+
+        desc = dict(self.MENU)
+        seen: set[str] = set()
+        parts = ["🤖 <b>Lệnh dùng được</b>\n━━━━━━━━━━━━━━━━━━"]
+        groups = list(self.HELP_GROUPS)
+        da_xep = {x for _, cs in groups for x in cs}
+        con_lai = tuple(c for c, _ in self.MENU if c not in da_xep)
+        if con_lai:
+            groups.append(("Khác", con_lai))
+        for title, cmds in groups:
+            rows = []
+            for c in cmds:
+                if c not in desc or c in seen:
+                    continue
+                seen.add(c)
+                d = desc[c]
+                if "Facebook" in title:
+                    d = d.replace(" (cần tài khoản Facebook)", "")  # tiêu đề nhóm đã nói rồi
+                d = html_mod.escape(d)
+                # Mô tả đã tự ghi cú pháp ("/tai <link> — …") thì không lặp tên lệnh.
+                rows.append(d if d.startswith(f"/{c}") else f"/{c} — {d}")
+            if rows:
+                parts.append(f"\n<b>{html_mod.escape(title)}</b>\n" + "\n".join(rows))
+        parts.append("\nHoặc dán thẳng link TikTok/YouTube/Facebook vào đây — tool tự làm video.")
+        self.client.send_message("\n".join(parts))
 
     # ── ADR-037: điều khiển luồng video ─────────────────────────────────────
 

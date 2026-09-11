@@ -77,3 +77,15 @@ def test_dang_ky_menu_hong_khong_lam_chet_poller():
     p.command_handler = TelegramCommandHandler(p.client)
 
     p._register_menu()  # không ném
+
+
+def test_help_sinh_tu_MENU_khong_bo_sot_lenh_nao():
+    """/help và menu '/' từng là hai bản chép tay lệch nhau — nay cùng một nguồn."""
+    c = _Client()
+    TelegramCommandHandler(c).handle_command("help")
+    text = c.msgs[0]
+
+    for cmd, _ in TelegramCommandHandler.MENU:
+        assert f"/{cmd}" in text, f"/help thiếu /{cmd}"
+    assert text.index("/sansang") < text.index("/status") < text.index("/jobs"), "luồng video trước, Job sau"
+    assert "Luồng video" in text and "cần tài khoản Facebook" in text
