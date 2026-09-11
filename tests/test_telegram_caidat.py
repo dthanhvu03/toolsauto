@@ -122,3 +122,11 @@ def test_help_nhac_caidat(bot):
     TelegramCommandHandler(c).handle_command("help")
 
     assert "/caidat" in c.text
+
+
+def test_diachi_dat_duoc_tu_telegram(bot):
+    text = bot("diachi", "http://192.168.1.10:8002")
+
+    assert "✅" in text
+    with bot.factory() as db:
+        assert rs.get_effective(db, "PUBLIC_BASE_URL") == "http://192.168.1.10:8002"

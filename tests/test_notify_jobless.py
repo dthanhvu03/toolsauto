@@ -937,3 +937,34 @@ def test_khong_cat_thi_KHONG_chi_duong():
     msg = nf.material_ready_message(FakeMaterial(id=9), "/x/a.mp4", duration=651, source_duration=652)
 
     assert "Độ dài tối đa" not in msg
+
+
+# ── ADR-044: link "Mở trên điện thoại" ──────────────────────────────────────
+
+
+def test_co_dia_chi_thi_tin_co_link_bam_duoc():
+    msg = nf.material_ready_message(FakeMaterial(id=9), "/x/a.mp4", phone_url="http://192.168.1.10:8002/viral/9/phone")
+
+    assert 'href="http://192.168.1.10:8002/viral/9/phone"' in msg and "Mở trên điện thoại" in msg
+
+
+def test_chua_dat_dia_chi_thi_KHONG_in_link_gia():
+    msg = nf.material_ready_message(FakeMaterial(id=9), "/x/a.mp4")
+
+    assert "Mở trên điện thoại" not in msg and "href=" not in msg
+
+
+def test_notifier_dung_dia_chi_tu_cai_dat(monkeypatch):
+    from app.core import settings as rs
+
+    monkeypatch.setattr(rs, "get_str", lambda key, default="", db=None: "http://10.0.0.5:8002/" if key == "PUBLIC_BASE_URL" else default)
+
+    assert NotifierService._phone_url(FakeMaterial(id=12)) == "http://10.0.0.5:8002/viral/12/phone", "bỏ dấu / cuối, ghép đúng route"
+
+
+def test_dia_chi_rong_thi_None(monkeypatch):
+    from app.core import settings as rs
+
+    monkeypatch.setattr(rs, "get_str", lambda key, default="", db=None: "")
+
+    assert NotifierService._phone_url(FakeMaterial(id=12)) is None

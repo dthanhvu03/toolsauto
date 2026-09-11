@@ -6,7 +6,8 @@
 param(
     [int]$Port = 0,
     [switch]$SkipMigrate,
-    [switch]$Stack
+    [switch]$Stack,
+    [switch]$Lan   # ADR-044: nghe trên mang nha (0.0.0.0) de dien thoai mo duoc link "Mo tren dien thoai"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,13 +49,19 @@ if (-not $SkipMigrate) {
     & $py manage.py db upgrade
 }
 
+$BindHost = "127.0.0.1"
+if ($Lan) {
+    $BindHost = "0.0.0.0"
+    $lanIp = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+    Write-Host "Web (LAN): http://${lanIp}:$Port  <- dat vao Thiet lap 'Dia chi mo tool tu dien thoai'" -ForegroundColor Green
+}
 Write-Host "Web: http://127.0.0.1:$Port" -ForegroundColor Green
 Write-Host "Login: values from .env (ADMIN_USERNAME / ADMIN_PASSWORD)" -ForegroundColor Green
 
 if ($Stack) {
     Write-Host "Mode: STACK (web + maintenance + FB publisher + AI generator)" -ForegroundColor Green
-    & $py manage.py stack --host 127.0.0.1 --port $Port --no-reload-web
+    & $py manage.py stack --host $BindHost --port $Port --no-reload-web
 } else {
     Write-Host "Mode: WEB only (use -Stack for supervised workers)" -ForegroundColor Yellow
-    & $py manage.py serve --host 127.0.0.1 --port $Port --reload
+    & $py manage.py serve --host $BindHost --port $Port --reload
 }

@@ -185,9 +185,13 @@ def material_ready_message(
     drive_path: Optional[str] = None,
     duration: Optional[float] = None,
     source_duration: Optional[float] = None,
+    phone_url: Optional[str] = None,
 ) -> str:
     """
     ADR-018 + ADR-022 + ADR-027: video reup xong, không có account ⇒ Owner đăng tay.
+
+    ``phone_url`` (ADR-044): link tải file về điện thoại để Chia sẻ vào app — chỉ có khi Owner
+    đã đặt ô "Địa chỉ mở tool từ điện thoại"; không có thì KHÔNG in link giả.
 
     ``with_caption=False`` dùng khi tin quá dài phải tách: phần đầu đi kèm video, khối
     caption đi ở tin thứ hai (xem ``NotifierService.notify_material_ready``).
@@ -204,6 +208,10 @@ def material_ready_message(
 
     drive_line = (
         f"📂 Trong Drive: <code>{html_mod.escape(str(drive_path))}</code>\n" if drive_path else ""
+    )
+    phone_line = (
+        f'📱 <a href="{html_mod.escape(str(phone_url), quote=True)}">Mở trên điện thoại</a> — tải về Files rồi Chia sẻ vào app\n'
+        if phone_url else ""
     )
     # ADR-035: Owner nhận video mà không biết dài bao nhiêu, cắt từ đâu — phải mở ra xem mới
     # biết, đúng việc ADR-032 vừa bỏ công loại bỏ.
@@ -232,6 +240,7 @@ def material_ready_message(
         f"{length_line}"
         f"{file_line}"
         f"{drive_line}"
+        f"{phone_line}"
     )
     if not with_caption:
         return head.rstrip("\n")

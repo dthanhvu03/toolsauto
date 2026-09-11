@@ -913,6 +913,19 @@ SETTINGS: dict[str, SettingSpec] = {
         max=1440,
         unit="phút",
     ),
+    "PUBLIC_BASE_URL": SettingSpec(
+        key="PUBLIC_BASE_URL",
+        type="str",
+        default_getter=lambda: "",
+        title="Địa chỉ mở tool từ điện thoại",
+        section="Tích hợp",
+        description=(
+            "ADR-044: ví dụ http://192.168.1.10:8002 — IP của máy chạy tool trong mạng nhà (chạy "
+            "start.ps1 -Lan để web nghe trên mạng). Đặt rồi thì tin video Telegram có dòng "
+            "'Mở trên điện thoại' tải thẳng file về Files → Chia sẻ vào Facebook/TikTok/Threads. "
+            "Ra ngoài nhà cần Tailscale (dùng IP Tailscale ở đây). Bỏ trống = không in link."
+        ),
+    ),
     "TIKWM_API_BASE": SettingSpec(
         key="TIKWM_API_BASE",
         type="str",

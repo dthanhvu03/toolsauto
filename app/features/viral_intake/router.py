@@ -696,6 +696,31 @@ def reup_thumb(material_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/{material_id}/phone")
+def phone_download(material_id: int, db: Session = Depends(get_db)):
+    """
+    ADR-044 — tải file `_reup` về ĐIỆN THOẠI để Chia sẻ vào app Facebook/TikTok/Threads.
+
+    Khác `reup-preview` ở `attachment`: phát inline thì Safari mở trình phát, share sheet không
+    thấy file; attachment thì Safari lưu vào Files. Tên theo tiêu đề để trong Files nhận ra.
+    """
+    from app.core.storage.offsite import safe_video_name
+    from app.features.viral_intake.service import _clean_title_for_context
+
+    mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+    if not mat:
+        raise HTTPException(status_code=404, detail="Không tìm thấy material")
+    path = ViralService.find_reup_path(mat.id, mat.platform)
+    if not path:
+        raise HTTPException(status_code=404, detail="Chưa có file đã xử lý — bấm Xử lý trước")
+    return FileResponse(
+        path,
+        media_type="video/mp4",
+        filename=safe_video_name("reup.mp4", material_id, _clean_title_for_context(mat.title)),
+        content_disposition_type="attachment",
+    )
+
+
 @router.get("/{material_id}/reup-preview")
 def reup_preview(material_id: int, db: Session = Depends(get_db)):
     """Stream anti-dupe (_reup) video for Viral UI preview."""

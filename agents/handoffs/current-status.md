@@ -1,5 +1,24 @@
 # Current Status
 
+## Phiên 2026-09-11 (g) — ADR-044: link "📱 Mở trên điện thoại" trong tin video
+
+Owner đăng từ điện thoại bằng Chia sẻ vào app. Video > 50 MB không về Telegram, tin chỉ có
+đường dẫn Drive không bấm được. Nay: ô Thiết lập **"Địa chỉ mở tool từ điện thoại"**
+(`PUBLIC_BASE_URL`, `/caidat diachi http://…`) → tin video có dòng bấm-là-tải file về Files
+(route `/viral/{id}/phone`, attachment, tên theo tiêu đề) → Chia sẻ vào Facebook/TikTok/Threads.
+`start.ps1 -Lan` cho web nghe trên mạng nhà và in địa chỉ LAN. Chưa đặt ô ⇒ không in link giả.
+Route sau màn đăng nhập. **1055 passed.** Không migration.
+
+### Next Action (Owner, laptop)
+
+1. `git pull` → `pip install -r requirements.txt` → `alembic upgrade head` (vẫn nợ).
+2. Chạy `.\start.ps1 -Lan` (thêm `-Stack` như thường) — dòng xanh in `Web (LAN): http://192.168.x.x:8002`.
+3. Telegram: `/caidat diachi http://192.168.x.x:8002`.
+4. `/sansang` → 📤 Gửi lại #984 → tin có dòng 📱 → bấm trên điện thoại (cùng Wi‑Fi; Safari hỏi
+   đăng nhập một lần) → file vào Files → Chia sẻ → Facebook. Ngoài nhà: Tailscale, dùng IP đó.
+
+---
+
 ## Phiên 2026-09-11 (f) — `/caidat`: đổi cài đặt luồng video ngay trong Telegram
 
 Owner: *"mấy setting này setting ở tele được không"* — sau khi video bị cắt 1:30 mà phải mở

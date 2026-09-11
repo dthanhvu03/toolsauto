@@ -207,7 +207,11 @@ class NotifierService:
                     duration = float(media_info(media_path).get("duration") or 0)
                 except Exception:
                     duration = 0.0
-            extra = {"duration": duration, "source_duration": source_duration}
+            extra = {
+                "duration": duration,
+                "source_duration": source_duration,
+                "phone_url": cls._phone_url(mat),
+            }
 
             msg = nf.material_ready_message(mat, media_path, drive_path=drive_path, **extra)
             # ADR-042: Owner đăng tay xong bấm ngay trên tin — khỏi mở web, khỏi gõ lệnh.
@@ -240,6 +244,20 @@ class NotifierService:
                 cls._broadcast_video(media_path, msg, buttons)
         except Exception as e:
             logger.warning("NotifierService: notify_material_ready lỗi (%s) — bỏ qua.", e)
+
+    @staticmethod
+    def _phone_url(mat) -> Optional[str]:
+        """ADR-044 — link tải file về điện thoại; None khi Owner chưa đặt địa chỉ. Không raise."""
+        try:
+            from app.core import settings as runtime_settings
+
+            base = (runtime_settings.get_str("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+            mid = getattr(mat, "id", None)
+            if not base or not mid:
+                return None
+            return f"{base}/viral/{mid}/phone"
+        except Exception:
+            return None
 
     @classmethod
     def notify_caption_ready(cls, mat):

@@ -198,6 +198,7 @@ class TelegramCommandHandler:
         "sovideo": "viral.max_videos_per_channel",
         "quet": "viral.source_scan_interval_min",
         "trung": "viral.phash_max_distance",
+        "diachi": "PUBLIC_BASE_URL",  # ADR-044
     }
 
     def _cmd_caidat(self, args=None):
