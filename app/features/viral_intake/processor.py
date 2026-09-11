@@ -53,6 +53,17 @@ def _yt_dlp_argv(*args: str) -> list[str]:
     return yt_dlp_cmd(*args)
 
 
+def _platform_args(platform: str | None) -> tuple[str, ...]:
+    """
+    TikTok chặn IP lạ bằng trang kiểm tra bot ("Unexpected response from webpage request").
+    Giả Chrome qua được — CHỈ khi có curl_cffi (xem `impersonate_args`). 2026-09-11 chiều: quét
+    kênh đã có cờ nên ra video, nhưng đường TẢI ở đây chưa có ⇒ bấm Xử lý là FAILED.
+    """
+    from app.core.yt_dlp_path import impersonate_args
+
+    return impersonate_args() if (platform or "") == "tiktok" else ()
+
+
 def _entry_has_video_stream(entry: dict) -> bool:
     if not isinstance(entry, dict):
         return False
@@ -453,6 +464,11 @@ def _humanize_yt_dlp_error(platform: str, stderr: str, source_account) -> str:
         if "private" in lowered:
             return "Instagram reel is private; only a logged-in authorized account can access it."
 
+    if platform == "tiktok":
+        # Cùng câu dịch với /nguon: bỏ id, nói vì sao, tự khai bản yt-dlp + gợi ý curl_cffi.
+        from app.features.viral_intake.sources import humanize_scan_error
+
+        return humanize_scan_error("tiktok", stderr)
     return f"yt-dlp failed: {stderr[:180]}"
 
 def _download_tiktok_fallback(url: str, output_path: str) -> bool:
@@ -766,6 +782,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         "--no-warnings",
                         "--add-header",
                         f"User-Agent: {YT_DLP_USER_AGENT}",
+                        *_platform_args(mat.platform),
                         mat.url,
                     ),
                     source_account,
@@ -846,6 +863,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         "--write-info-json",
                         "--add-header",
                         f"User-Agent: {YT_DLP_USER_AGENT}",
+                        *_platform_args(mat.platform),
                         "-o",
                         output_template,
                         mat.url,

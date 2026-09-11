@@ -105,7 +105,7 @@ def humanize_scan_error(platform: str, stderr: str) -> str:
     if platform == "tiktok":
         if _TIKTOK_NO_SECONDARY_ID in low:
             return MSG_TIKTOK_NEED_VIDEO_LINK
-        if "failed to parse json" in low:
+        if "failed to parse json" in low or "unexpected response" in low:
             # Đo 2026-09-11: cùng nguồn, cùng lệnh chạy bằng yt-dlp 2026.08.19 ra 21 video 3/3 lần;
             # máy bot của Owner báo câu này ⇒ hoặc yt-dlp cũ, hoặc TikTok trả trang kiểm tra bot.
             goi_y = ""
@@ -113,7 +113,7 @@ def humanize_scan_error(platform: str, stderr: str) -> str:
                 # Laptop Owner 2026-09-11: đúng bản yt-dlp mà vẫn hỏng — TikTok chặn IP bằng trang
                 # kiểm tra bot; giả Chrome qua được nhưng cần curl_cffi (nhánh Cursor dd66ede).
                 goi_y = r" Máy này CHƯA có curl_cffi để giả Chrome — chạy: venv\Scripts\python.exe -m pip install -r requirements.txt"
-            return "TikTok trả về trang không phải dữ liệu." + (
+            return "TikTok trả về trang kiểm tra bot thay vì dữ liệu." + (
                 _ytdlp_diagnosis() or " Thường do yt-dlp cũ hoặc bị chặn tạm — xem trang Sức khỏe."
             ) + goi_y
         if "unable to extract" in low:

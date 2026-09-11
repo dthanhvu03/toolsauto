@@ -1,5 +1,19 @@
 # Current Status
 
+## Phiên 2026-09-11 (i) — đường TẢI TikTok cũng phải giả Chrome; hướng dẫn Tailscale
+
+Ảnh Owner 17:00: `/moi` ra #1001–#1006 với views thật ⇒ **quét kênh đã sống trên laptop** (có
+curl_cffi). Bấm Xử lý #1001 ⇒ FAILED "Unexpected response" — cờ giả Chrome mới nối vào quét
+và `/tai`, chưa nối vào `processor.py` (preflight + tải); TikWM dự phòng lần này cũng hỏng.
+Vá: `_platform_args` trong processor, dùng chung `impersonate_args`; lỗi tải TikTok dịch bằng
+`humanize_scan_error` (bỏ id, nói "trang kiểm tra bot", tự khai bản yt-dlp + gợi ý curl_cffi).
+Test đọc argv thật processor dựng. **1061 passed.**
+
+Tailscale (cho link 📱 ngoài nhà): cài trên laptop + iPhone cùng tài khoản, lấy IP 100.x.y.z
+của laptop trong app, `/caidat diachi http://100.x.y.z:8002`, web chạy `-Lan`.
+
+---
+
 ## Phiên 2026-09-11 (h) — test đã bắn tin GIẢ vào Telegram thật của Owner; chặn ở gốc
 
 Owner gửi ảnh: hàng loạt "Video sẵn sàng đăng tay · Material #1 · facebook · 1,234 lượt xem ·

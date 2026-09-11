@@ -140,9 +140,9 @@ def test_quet_ok_khong_co_gi_moi_KHONG_phai_hong(nguon):
 
 
 def test_quet_hong_thi_ghi_gio_va_ly_do(nguon):
-    text = nguon(last_scanned_at=1757560320, last_found=0, last_error="TikTok trả về trang không phải dữ liệu")
+    text = nguon(last_scanned_at=1757560320, last_found=0, last_error="TikTok trả về trang kiểm tra bot thay vì dữ liệu")
 
-    assert "❌ hỏng" in text and "không phải dữ liệu" in text and "Quét lúc" in text
+    assert "❌ hỏng" in text and "kiểm tra bot" in text and "Quét lúc" in text
 
 
 # ── test không được ghi vào log thật ────────────────────────────────────────
@@ -225,4 +225,73 @@ def test_do_phien_ban_hong_thi_tin_loi_van_co(monkeypatch):
 
     msg = humanize_scan_error("tiktok", OWNER_STDERR)
 
-    assert "không phải dữ liệu" in msg and "Sức khỏe" in msg
+    assert "kiểm tra bot" in msg and "Sức khỏe" in msg
+
+
+# ── đường TẢI (processor) cũng phải giả Chrome cho TikTok ───────────────────
+
+
+def test_duong_tai_tiktok_co_co_gia_chrome_khi_co_curl_cffi(monkeypatch):
+    """
+    16:59 11/09: quét kênh ra #1001–#1006 (đã có cờ), bấm Xử lý #1001 ⇒ FAILED "Unexpected
+    response" vì đường tải chưa có cờ. Cùng một chặn của TikTok, hai đường phải cùng cách qua.
+    """
+    from app.features.viral_intake import processor as pm
+    from app.core import yt_dlp_path
+
+    monkeypatch.setattr(yt_dlp_path, "impersonate_args", lambda: ("--impersonate", "chrome"))
+    assert pm._platform_args("tiktok") == ("--impersonate", "chrome")
+    assert pm._platform_args("youtube") == ()
+
+    monkeypatch.setattr(yt_dlp_path, "impersonate_args", lambda: ())
+    assert pm._platform_args("tiktok") == (), "không có gói thì KHÔNG bật — bật cứng là yt-dlp dừng"
+
+
+def test_loi_tai_tiktok_duoc_dich_nhu_nguon():
+    from app.features.viral_intake.processor import _humanize_yt_dlp_error
+
+    msg = _humanize_yt_dlp_error(
+        "tiktok", "ERROR: [TikTok] 7680183551786110229: Unexpected response from webpage request; please report", None,
+    )
+
+    assert "7680183551786110229" not in msg and "kiểm tra bot" in msg and "yt-dlp" in msg
+
+
+def test_processor_argv_tiktok_mang_co(monkeypatch):
+    """Đọc argv thật mà processor dựng — không đọc mã nguồn."""
+    import subprocess
+
+    from app.features.viral_intake import processor as pm
+    from app.core import yt_dlp_path
+
+    monkeypatch.setattr(yt_dlp_path, "impersonate_args", lambda: ("--impersonate", "chrome"))
+    seen = []
+
+    def run(cmd, *a, **k):
+        seen.append([str(c) for c in cmd])
+        return subprocess.CompletedProcess(cmd, 1, "", "ERROR: x")
+
+    monkeypatch.setattr(pm.subprocess, "run", run)
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.constants import ViralStatus
+    from app.core.database.models import Account, Job, ViralMaterial
+
+    engine = create_engine("sqlite://")
+    for t in (Account.__table__, ViralMaterial.__table__, Job.__table__):
+        t.create(engine)
+    db = sessionmaker(bind=engine)()
+    mat = ViralMaterial(platform="tiktok", url="https://www.tiktok.com/@a/video/1", title="x", views=1, status=ViralStatus.NEW)
+    db.add(mat)
+    db.commit()
+    monkeypatch.setattr(pm, "_get_runtime_int", lambda db, key, fallback: fallback)
+    monkeypatch.setattr(pm, "_download_tiktok_fallback", lambda url, out: False)
+    monkeypatch.setattr(pm.runtime_settings, "get_int", lambda key, default=0, db=None: default)
+    monkeypatch.setattr(pm.runtime_settings, "get_bool", lambda key, default=False, db=None: False)
+
+    pm._process_viral_materials(db, only_material_id=mat.id)
+
+    preflight = [c for c in seen if "--dump-single-json" in c]
+    assert preflight and "--impersonate" in preflight[0], preflight
+    db.close()
