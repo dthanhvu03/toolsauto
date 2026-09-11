@@ -1,6 +1,7 @@
 import logging
 import concurrent.futures
 import threading
+import time
 from app.constants import JobStatus
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class TelegramCommandHandler:
             "nguon": self._cmd_nguon,
             "moi": self._cmd_moi,
             "sansang": self._cmd_sansang,
+            "dadang": self._cmd_dadang,  # ADR-042
         }
 
     def handle_command(self, cmd: str, args: list = None):
@@ -60,7 +62,8 @@ class TelegramCommandHandler:
             "\n<b>Luồng video</b>\n"
             "/nguon — nguồn tự quét, kèm nút Quét ngay / Bật-Tắt\n"
             "/moi — video mới chưa xử lý, kèm nút Xử lý\n"
-            "/sansang — video chờ đăng tay, kèm nút Gửi lại, Chọn đoạn, Chia phần\n"
+            "/sansang — video chờ đăng tay, kèm nút Gửi lại, Chọn đoạn, Chia phần, Đã đăng\n"
+            "/dadang — 10 video đã đăng gần nhất, kèm nút Chưa đăng (bấm nhầm)\n"
             "\nHoặc dán thẳng link TikTok/YouTube vào đây."
         )
 
@@ -107,6 +110,11 @@ class TelegramCommandHandler:
         self._liet_ke_material("READY", "🎬 <b>Sẵn sàng đăng tay</b>", "gui", "📤 Gửi lại",
                                "📭 Chưa có video nào sẵn sàng.")
 
+    def _cmd_dadang(self, args=None):
+        """ADR-042 — video đã đăng gần nhất, kèm nút lùi lại khi bấm nhầm."""
+        self._liet_ke_material("POSTED", "📌 <b>Đã đăng gần đây</b>", "chuadang", "↩️ Chưa đăng",
+                               "📭 Chưa đánh dấu video nào là đã đăng. Bấm ✅ Đã đăng dưới tin video sau khi đăng.")
+
     def _liet_ke_material(self, status, tieu_de, action, nhan_nut, khi_rong):
         from app.core import feature_hooks
         from app.core.database.core import SessionLocal
@@ -128,12 +136,15 @@ class TelegramCommandHandler:
             hang2 = []
             if status == "READY":
                 nut.append({"text": "✂️ Chọn đoạn", "callback_data": f"khung:{m['id']}"})
+                hang2.append({"text": "✅ Đã đăng", "callback_data": f"dadang:{m['id']}"})  # ADR-042
                 # ADR-041: chỉ video GỐC mới chia được; phần con không chia tiếp.
                 if not m.get("parent_material_id"):
                     hang2.append({"text": "🧩 Chia phần", "callback_data": f"chia:{m['id']}"})
             phan = ""
+            if status == "POSTED" and m.get("posted_at"):
+                phan += "\n📌 đăng lúc " + time.strftime("%d/%m %H:%M", time.localtime(int(m["posted_at"])))
             if m.get("parent_material_id") and m.get("part_index"):
-                phan = f"\n🧩 Phần {m['part_index']}/{m.get('part_total') or '?'} của #{m['parent_material_id']}"
+                phan += f"\n🧩 Phần {m['part_index']}/{m.get('part_total') or '?'} của #{m['parent_material_id']}"
             self.client.send_message(
                 f"#{m['id']} · {int(m.get('views') or 0):,} views\n"
                 f"📝 {str(m.get('title') or '(không tiêu đề)')[:80]}{phan}{doan}",

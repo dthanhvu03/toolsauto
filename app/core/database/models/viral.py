@@ -78,6 +78,8 @@ class ViralMaterial(Base):
     part_index = Column(Integer, nullable=True)  # 1-based
     part_total = Column(Integer, nullable=True)
     split_plan = Column(Text, nullable=True)
+    # ADR-042: Owner bam "Da dang" sau khi dang tay. epoch giay; NULL = chua dang.
+    posted_at = Column(Integer, nullable=True)
 
     # ADR-021: caption AI viết thẳng cho material READY (không cần account, không cần Job).
     ai_caption = Column(Text, nullable=True)

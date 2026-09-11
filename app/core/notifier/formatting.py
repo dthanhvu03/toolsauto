@@ -169,6 +169,14 @@ def material_caption_block(mat) -> str:
     )
 
 
+def material_ready_buttons(mat) -> list:
+    """ADR-042: nút dưới tin video sẵn sàng. ``callback_data`` do ``telegram_bot`` xử lý."""
+    mid = getattr(mat, "id", None)
+    if not mid:
+        return []
+    return [[{"text": "✅ Đã đăng", "callback_data": f"dadang:{mid}"}]]
+
+
 def material_ready_message(
     mat,
     media_path: Optional[str] = None,

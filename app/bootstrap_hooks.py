@@ -98,7 +98,8 @@ def register_feature_hooks() -> None:
         rows = (
             db.query(ViralMaterial)
             .filter(ViralMaterial.status == status)
-            .order_by(ViralMaterial.id.desc())
+            # ADR-042: đã đăng thì xếp theo lúc đăng — cái vừa đăng nằm trên, đúng thứ Owner tìm.
+            .order_by(*((ViralMaterial.posted_at.desc().nullslast(),) if status == "POSTED" else ()), ViralMaterial.id.desc())
             .limit(max(1, min(int(limit), 25)))
             .all()
         )
@@ -106,7 +107,17 @@ def register_feature_hooks() -> None:
             "id": m.id, "platform": m.platform, "title": m.title, "views": m.views,
             "url": m.url, "clip_start_sec": m.clip_start_sec, "clip_length_sec": m.clip_length_sec,
             "parent_material_id": m.parent_material_id, "part_index": m.part_index, "part_total": m.part_total,
+            "posted_at": m.posted_at,
         } for m in rows]
+
+    def viral_mark_posted(db: Session, material_id: int) -> dict:
+        """ADR-042 — Owner bấm Đã đăng trên Telegram."""
+        ok, msg = ViralService.mark_posted(db, material_id)
+        return {"ok": ok, "msg": msg}
+
+    def viral_unmark_posted(db: Session, material_id: int) -> dict:
+        ok, msg = ViralService.unmark_posted(db, material_id)
+        return {"ok": ok, "msg": msg}
 
     def viral_propose_split(db: Session, material_id: int, n: int) -> dict:
         """ADR-041 — tính kế hoạch chia N phần (chậm: Whisper) — gọi từ luồng nền."""
@@ -199,6 +210,8 @@ def register_feature_hooks() -> None:
     feature_hooks.register("viral.set_clip", viral_set_clip)
     feature_hooks.register("viral.material_frames", viral_material_frames)
     feature_hooks.register("viral.resend_material", viral_resend_material)
+    feature_hooks.register("viral.mark_posted", viral_mark_posted)
+    feature_hooks.register("viral.unmark_posted", viral_unmark_posted)
     feature_hooks.register("viral.propose_split", viral_propose_split)
     feature_hooks.register("viral.apply_split", viral_apply_split)
     feature_hooks.register("viral.force_discovery", viral_force_discovery)

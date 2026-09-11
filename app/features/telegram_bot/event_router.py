@@ -120,6 +120,9 @@ class TelegramEventRouter:
                 self._handle_split_propose(callback_id, target_id)
             elif action == "chiaok":
                 self._handle_split_apply(callback_id, int(target_id))
+            # ADR-042: đã đăng / lùi lại
+            elif action in ("dadang", "chuadang"):
+                self._handle_posted(callback_id, action, int(target_id))
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
@@ -237,6 +240,35 @@ class TelegramEventRouter:
             f"✂️ Đã đặt mốc {sec // 60}:{sec % 60:02d} cho #{material_id} — đang cắt lại…"
         )
         self._process_material_async(material_id)
+
+    # ── ADR-042: đã đăng ────────────────────────────────────────────────────
+
+    def _handle_posted(self, callback_id: str, action: str, material_id: int):
+        """
+        ``dadang:<id>`` / ``chuadang:<id>``. Rẻ (đổi trạng thái + dời file) ⇒ chạy thẳng.
+
+        Tin trả lời mang nút NGƯỢC LẠI: bấm nhầm là chuyện thường, lùi được ngay tại chỗ thì
+        Owner mới dám bấm.
+        """
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        hook = "viral.mark_posted" if action == "dadang" else "viral.unmark_posted"
+        with SessionLocal() as db:
+            res = feature_hooks.call(hook, db, material_id) or {}
+        msg = str(res.get("msg") or "")
+        if not res.get("ok"):
+            self.client.answer_callback_query(callback_id, "⚠️ " + msg[:180])
+            self.client.send_message("⚠️ " + msg)
+            return
+
+        self.client.answer_callback_query(callback_id, msg[:180])
+        nguoc = (
+            {"text": "↩️ Chưa đăng (bấm nhầm)", "callback_data": f"chuadang:{material_id}"}
+            if action == "dadang"
+            else {"text": "✅ Đã đăng", "callback_data": f"dadang:{material_id}"}
+        )
+        self.client.send_message(msg, reply_markup={"inline_keyboard": [[nguoc]]})
 
     # ── ADR-041: chia phần ───────────────────────────────────────────────────
 

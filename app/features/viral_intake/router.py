@@ -583,6 +583,20 @@ def split_apply(
     )
 
 
+@router.post("/{material_id}/posted", response_class=HTMLResponse)
+def mark_posted(material_id: int, db: Session = Depends(get_db)):
+    """ADR-042 — Owner đăng tay xong: POSTED, dời file cục bộ + bản Drive sang 'Đã đăng'."""
+    ok, msg = ViralService.mark_posted(db, material_id)
+    return htmx_toast_response(msg, type="success" if ok else "error", refresh_page=True)
+
+
+@router.post("/{material_id}/unposted", response_class=HTMLResponse)
+def unmark_posted(material_id: int, db: Session = Depends(get_db)):
+    """ADR-042 — bấm nhầm: về READY, dời file ngược lại."""
+    ok, msg = ViralService.unmark_posted(db, material_id)
+    return htmx_toast_response(msg, type="success" if ok else "error", refresh_page=True)
+
+
 @router.post("/{material_id}/reprocess", response_class=HTMLResponse)
 def reprocess_material(
     material_id: int,

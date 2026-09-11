@@ -210,13 +210,15 @@ class NotifierService:
             extra = {"duration": duration, "source_duration": source_duration}
 
             msg = nf.material_ready_message(mat, media_path, drive_path=drive_path, **extra)
+            # ADR-042: Owner đăng tay xong bấm ngay trên tin — khỏi mở web, khỏi gõ lệnh.
+            buttons = nf.material_ready_buttons(mat)
             with_video = (
                 media_path
                 and os.path.exists(media_path)
                 and media_thumb.telegram_video_within_size_limit(media_path)
             )
             if not with_video:
-                cls._broadcast(msg)
+                cls._broadcast_with_buttons(msg, buttons)
                 return
 
             block = nf.material_caption_block(mat)
@@ -230,11 +232,12 @@ class NotifierService:
                     nf.material_ready_message(
                         mat, media_path, with_caption=False, drive_path=drive_path, **extra
                     ),
+                    buttons,
                 )
                 if block:
                     cls._broadcast(block)
             else:
-                cls._broadcast_video(media_path, msg)
+                cls._broadcast_video(media_path, msg, buttons)
         except Exception as e:
             logger.warning("NotifierService: notify_material_ready lỗi (%s) — bỏ qua.", e)
 

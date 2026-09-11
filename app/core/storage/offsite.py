@@ -213,3 +213,55 @@ def copy_out(
 
     logger.info("[offsite] da chep %s -> %s", src_path.name, dest)
     return dest
+
+
+# ── ADR-042: dời bản chép sang "Đã đăng" ─────────────────────────────────────
+
+# Tên có dấu cố ý: Owner mở Drive bằng mắt, "Đã đăng" đọc ngay; Windows và Drive đều chịu UTF-8.
+POSTED_SUBDIR = "Đã đăng"
+
+
+def find_video_copies(material_id: int) -> list[Path]:
+    """Mọi bản chép của material trên Drive — tên bắt đầu ``<id> - `` (ADR-030), ở mọi tháng,
+    kể cả trong ``Đã đăng/``. Drive tắt / chưa gắn ổ ⇒ rỗng, không ném."""
+    try:
+        root = get_root()
+        if root is None:
+            return []
+        base = root / SUBDIRS["video"]
+        if not base.is_dir():
+            return []
+        return sorted(p for p in base.rglob(f"{material_id} - *") if p.is_file())
+    except Exception as exc:
+        logger.debug("[offsite] khong liet ke duoc ban chep #%s: %s", material_id, exc)
+        return []
+
+
+def move_video_copies(material_id: int, *, posted: bool) -> list[Path]:
+    """
+    ``posted=True``: dời bản chép vào ``<tháng>/Đã đăng/`` — **cùng tháng**, không gom một thư
+    mục chung (một năm sau thư mục chung là 300 file không ai mở nổi).
+    ``posted=False``: dời ngược ra khỏi ``Đã đăng/`` (Owner bấm nhầm).
+
+    Trả danh sách đích đã dời. KHÔNG BAO GIỜ ném: Drive là bản phụ, trạng thái trong DB mới là
+    sự thật gốc — Drive hỏng thì ghi log, tin nhắn nói rõ "chưa dời được bản Drive".
+    """
+    moved: list[Path] = []
+    for src in find_video_copies(material_id):
+        try:
+            in_posted = src.parent.name == POSTED_SUBDIR
+            if posted and not in_posted:
+                dest_dir = src.parent / POSTED_SUBDIR
+            elif not posted and in_posted:
+                dest_dir = src.parent.parent
+            else:
+                continue
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / src.name
+            if dest.exists():
+                dest.unlink()
+            shutil.move(str(src), str(dest))
+            moved.append(dest)
+        except Exception as exc:
+            logger.warning("[offsite] khong doi duoc ban chep %s: %s", src, exc)
+    return moved

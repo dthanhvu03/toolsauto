@@ -33,6 +33,8 @@ DEDUP_STATUSES: tuple[str, ...] = (
     ViralStatus.READY,
     ViralStatus.DRAFTED,
     ViralStatus.REUP,
+    # ADR-042: thu DA DANG la thu KHONG duoc lot vao lai — ly do quan trong nhat de POSTED ton tai.
+    ViralStatus.POSTED,
 )
 
 #: Khoảng cách "chắc chắn không trùng" khi hai chuỗi hex không cùng độ dài (pHash 64-bit = 16 hex).

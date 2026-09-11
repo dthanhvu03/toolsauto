@@ -204,6 +204,10 @@
                 {{ item.last_error|default('', true)|truncate(40, true, "…", 0) or 'Trùng nội dung với video đã có' }}
             </div>
         </div>
+        {% elif item.status == 'POSTED' %}
+        {# ADR-042: Owner đã đăng tay — file dời vào da-dang/ và Drive/…/Đã đăng/. #}
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+              title="Đã đăng{% if item.posted_at %} lúc {{ item.posted_at | format_time }}{% endif %}">📌 Đã đăng</span>
         {% elif item.status == 'READY' %}
         {# ADR-018: không có account → không tạo job; Owner tải file đăng tay. #}
         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-teal-400/40 bg-teal-500/15 text-teal-200" title="Reup xong, chưa có job — tải file đăng tay"><span class="2xl:hidden whitespace-nowrap">Sẵn sàng</span><span class="hidden 2xl:inline whitespace-nowrap">Sẵn sàng đăng tay</span></span>
@@ -274,8 +278,25 @@
         <a href="/viral/{{ item.id }}/reup-thumb" target="_blank" rel="noreferrer"
             class="mb-1 inline-flex items-center justify-center min-w-[72px] min-h-[36px] text-[var(--color-mist)] hover:bg-[var(--color-ledge)] hover:text-[var(--color-ink)] px-2 py-1 rounded transition text-[11px] font-semibold border border-[var(--border)]"
             title="Mở ảnh thumbnail 1 khung hình từ file reup" aria-label="Xem thumbnail">Thumbnail</a>
-        {% endif %}
+        {# ADR-042: đăng tay xong bấm ở đây — ghi trạng thái trước, file dời theo. #}
+        <button
+            class="mb-1 inline-flex items-center justify-center min-w-[72px] min-h-[36px] text-emerald-200 hover:bg-emerald-500/15 px-2 py-1 rounded transition text-[11px] font-bold border border-emerald-400/40"
+            hx-post="/viral/{{ item.id }}/posted" hx-swap="none" hx-indicator="this" hx-disabled-elt="this"
+            title="Đã đăng lên Page rồi — ẩn khỏi danh sách chờ, dời file vào 'Đã đăng'"
+            aria-label="Đánh dấu đã đăng">✅ Đã đăng</button>
+        {% elif item.status == 'POSTED' %}
         {% if has_reup %}
+        <a href="/viral/{{ item.id }}/reup-preview" download="viral_{{ item.id }}_reup.mp4"
+            class="mb-1 inline-flex items-center justify-center min-w-[72px] min-h-[36px] text-[var(--color-mist)] hover:bg-[var(--color-ledge)] hover:text-[var(--color-ink)] px-2 py-1 rounded transition text-[11px] font-semibold border border-[var(--border)]"
+            title="File vẫn còn trong da-dang/ — tải lại nếu cần" aria-label="Tải file reup">Tải file</a>
+        {% endif %}
+        <button
+            class="mb-1 inline-flex items-center justify-center min-w-[72px] min-h-[36px] text-[var(--color-mist)] hover:bg-[var(--color-ledge)] hover:text-[var(--color-ink)] px-2 py-1 rounded transition text-[11px] font-semibold border border-[var(--border)]"
+            hx-post="/viral/{{ item.id }}/unposted" hx-swap="none" hx-indicator="this" hx-disabled-elt="this"
+            title="Bấm nhầm — đưa về 'sẵn sàng đăng tay', dời file ngược lại"
+            aria-label="Bỏ đánh dấu đã đăng">↩️ Chưa đăng</button>
+        {% endif %}
+        {% if has_reup and item.status != 'POSTED' %}
         {# Reup đã xong — block này chỉ để chỉnh lại (tùy chọn), không phải bước bắt buộc. #}
         <details class="mb-2 text-right group/reup">
             <summary class="cursor-pointer list-none text-[10px] text-[var(--color-mist)] hover:text-[var(--color-ink-soft)] select-none inline-flex items-center gap-1 justify-end"

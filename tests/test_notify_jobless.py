@@ -259,13 +259,13 @@ def test_c1_file_nho_thi_gui_video(stub, tmp_path):
 def test_c2_file_khong_ton_tai_thi_gui_chu(stub, tmp_path):
     NotifierService.notify_material_ready(FakeMaterial(id=9), str(tmp_path / "khong-co.mp4"))
 
-    assert [c[0] for c in stub.calls] == ["text"]
+    assert [c[0] for c in stub.calls] == ["buttons"]  # ADR-042: tin chữ cũng mang nút Đã đăng
     assert "khong-co.mp4" in stub.calls[0][1]  # vẫn nói tên file để Owner biết tải cái gì
 
 
 def test_c3_khong_truyen_media_path_thi_gui_chu(stub):
     NotifierService.notify_material_ready(FakeMaterial(id=9))
-    assert [c[0] for c in stub.calls] == ["text"]
+    assert [c[0] for c in stub.calls] == ["buttons"]  # ADR-042: tin chữ cũng mang nút Đã đăng
 
 
 def test_c4_file_qua_nguong_telegram_thi_gui_chu(stub, tmp_path, monkeypatch):
@@ -275,7 +275,7 @@ def test_c4_file_qua_nguong_telegram_thi_gui_chu(stub, tmp_path, monkeypatch):
 
     NotifierService.notify_material_ready(FakeMaterial(id=9), str(path))
 
-    assert [c[0] for c in stub.calls] == ["text"]
+    assert [c[0] for c in stub.calls] == ["buttons"]  # ADR-042: tin chữ cũng mang nút Đã đăng
 
 
 # ───────────────── (d) kênh nổ ⇒ hàm KHÔNG raise ─────────────────
@@ -791,8 +791,8 @@ def test_i4_tach_tin_thi_phan_dau_di_kem_video_van_giu_dong_drive(stub, tmp_path
 def test_i5_khong_gui_duoc_video_thi_tin_chu_van_co_dong_drive(stub):
     NotifierService.notify_material_ready(FakeMaterial(id=9), None, drive_path=DRIVE_REL)
 
-    assert len(stub.calls) == 1 and stub.calls[0][0] == "text"
-    assert DRIVE_REL in stub.calls[0][-1]
+    assert len(stub.calls) == 1 and stub.calls[0][0] == "buttons"  # ADR-042: kèm nút Đã đăng
+    assert DRIVE_REL in stub.calls[0][1]
 
 
 # ───────── (j) ADR-029 mục 6: hợp đồng "không bao giờ raise" của caption ─────────

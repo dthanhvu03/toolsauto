@@ -710,6 +710,96 @@ class ViralService:
             db.delete(material)
             db.commit()
 
+    # ── ADR-042: Đã đăng / Chưa đăng ────────────────────────────────────────
+
+    POSTED_LOCAL_SUBDIR = "da-dang"
+
+    @staticmethod
+    def _move_reup_local(material_id: int, platform: str | None, *, posted: bool) -> Optional[str]:
+        """Dời bản ``_reup`` cục bộ vào/ra ``<platform>/da-dang/``. Không có file ⇒ None, không ném."""
+        path = ViralService.find_reup_path(material_id, platform)
+        if not path or not os.path.isfile(path):
+            return None
+        cur_dir = os.path.dirname(path)
+        in_posted = os.path.basename(cur_dir) == ViralService.POSTED_LOCAL_SUBDIR
+        if posted == in_posted:
+            return path
+        dest_dir = os.path.join(cur_dir, ViralService.POSTED_LOCAL_SUBDIR) if posted else os.path.dirname(cur_dir)
+        os.makedirs(dest_dir, exist_ok=True)
+        dest = os.path.join(dest_dir, os.path.basename(path))
+        shutil.move(path, dest)
+        return dest
+
+    @staticmethod
+    def mark_posted(db: Session, material_id: int) -> Tuple[bool, str]:
+        """
+        ADR-042 — Owner đã đăng tay xong. Thứ tự: **trạng thái trước, file là hệ quả**.
+
+        Trạng thái ghi xong mới dời file; dời hỏng thì trạng thái vẫn đúng và tin nói rõ phần
+        nào chưa dời được — không được vì Drive chưa gắn ổ mà từ chối ghi nhận "đã đăng".
+        """
+        from app.core.storage import offsite as _offsite
+
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat:
+            return False, f"Không tìm thấy material #{material_id}"
+        if mat.status == ViralStatus.POSTED:
+            return False, f"#{material_id} đã được đánh dấu đăng rồi."
+        if mat.status != ViralStatus.READY:
+            return False, f"#{material_id} đang ở trạng thái {mat.status}, chưa phải video sẵn sàng đăng tay."
+
+        mat.status = ViralStatus.POSTED
+        mat.posted_at = int(time.time())
+        db.commit()
+
+        notes: list[str] = []
+        try:
+            local = ViralService._move_reup_local(material_id, mat.platform, posted=True)
+            notes.append(f"file máy: {os.path.relpath(local, str(config.REUP_DIR))}" if local else "không thấy file _reup trên máy")
+        except Exception as exc:
+            logger.warning("[VIRAL] Dời _reup #%s sang da-dang hỏng: %s", material_id, exc)
+            notes.append("CHƯA dời được file trên máy (xem log)")
+        moved = _offsite.move_video_copies(material_id, posted=True)
+        if moved:
+            notes.append("Drive: " + ", ".join(_offsite.relative_to_root(m) or m.name for m in moved))
+        elif _offsite.get_root() is not None:
+            notes.append("Drive: không thấy bản chép để dời")
+        phan = ""
+        if getattr(mat, "parent_material_id", None) and mat.part_index:
+            phan = f" (Phần {mat.part_index}/{mat.part_total})"
+        return True, f"✅ #{material_id}{phan} đã đăng — " + " · ".join(notes)
+
+    @staticmethod
+    def unmark_posted(db: Session, material_id: int) -> Tuple[bool, str]:
+        """ADR-042 — bấm nhầm: về READY, dời file ngược lại."""
+        from app.core.storage import offsite as _offsite
+
+        mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+        if not mat:
+            return False, f"Không tìm thấy material #{material_id}"
+        if mat.status != ViralStatus.POSTED:
+            return False, f"#{material_id} không ở trạng thái đã đăng ({mat.status})."
+
+        mat.status = ViralStatus.READY
+        mat.posted_at = None
+        db.commit()
+        try:
+            ViralService._move_reup_local(material_id, mat.platform, posted=False)
+        except Exception as exc:
+            logger.warning("[VIRAL] Dời _reup #%s ra khỏi da-dang hỏng: %s", material_id, exc)
+        _offsite.move_video_copies(material_id, posted=False)
+        return True, f"↩️ #{material_id} về lại 'sẵn sàng đăng tay'."
+
+    @staticmethod
+    def list_posted(db: Session, limit: int = 10) -> List[ViralMaterial]:
+        return (
+            db.query(ViralMaterial)
+            .filter(ViralMaterial.status == ViralStatus.POSTED)
+            .order_by(ViralMaterial.posted_at.desc().nullslast(), ViralMaterial.id.desc())
+            .limit(max(1, min(int(limit), 25)))
+            .all()
+        )
+
     @staticmethod
     def set_clip_start(
         db: Session,

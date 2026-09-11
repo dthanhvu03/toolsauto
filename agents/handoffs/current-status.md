@@ -1,5 +1,42 @@
 # Current Status
 
+## Phiên 2026-09-11 (b) — ADR-042: "Đã đăng" là một trạng thái, không phải một thư mục
+
+Owner hỏi *"đã đăng rồi thì bấm trên tele để nó dời thư mục khác không"*. Lật lại: dời file mà
+không ghi trạng thái thì `/sansang` vẫn hiện, DB vẫn READY — thêm một nhãn nói dối. Nên:
+**trạng thái trước, file là hệ quả**.
+
+- `ViralStatus.POSTED` + `posted_at`. Nút **✅ Đã đăng** ngay dưới tin video và trong
+  `/sansang`; nút **↩️ Chưa đăng** lùi lại; lệnh **`/dadang`** liệt kê 10 video đăng gần nhất.
+- Bấm Đã đăng: `_reup` cục bộ → `<platform>/da-dang/`; bản Drive → `videos/<tháng>/Đã đăng/`
+  (cùng tháng, không gom chung). File GỐC không đụng. Drive hỏng vẫn ghi POSTED, tin nói rõ.
+- **Chống trùng (ADR-024) nay soi cả POSTED** — lý do quan trọng nhất: thứ đã đăng không được
+  lọt vào lại. Có test chứng minh.
+- Web: badge 📌, nút Đã đăng / Chưa đăng, bộ lọc POSTED. Hàng POSTED ẩn Reup lại / Chọn đoạn /
+  Chia phần.
+
+### System State
+
+**985 passed, 16 skipped, 0 failed** (trước 961). `ruff` sạch · `lint-imports` giữ ·
+`alembic heads` = `s6a3b4c5d6e7`. **Migration mới — Owner phải `alembic upgrade head`.**
+
+### Unfinished + Blockers
+
+- Chưa gắn link bài Facebook vào material (`posted_url`) — cố ý để sau; có link mới đo được
+  lượt xem thật. Cách rẻ nhất: trả lời tin bằng link ⇒ tool tự gắn.
+- `da-dang/` chưa có cơ chế dọn — mở rộng giữ-N-ngày khi thấy số thật.
+- ADR-041 vẫn chưa có proof cắt thật N phần trên Telegram (cần DB dev bật).
+- Nợ cũ như phiên (e)/(a).
+
+### Next Action
+
+1. **Owner: `git pull` → `alembic upgrade head` → khởi động lại.** Đăng một video, bấm ✅ Đã đăng
+   dưới tin, kiểm: `/sansang` không còn nó, `/dadang` có nó, Drive có thư mục `Đã đăng/` trong
+   tháng, file máy nằm ở `da-dang/`.
+2. Bấm ↩️ Chưa đăng một lần cho biết nó lùi được.
+
+---
+
 ## Phiên 2026-09-11 (a) — ADR-041: chia video dài thành nhiều phần, cắt ở chỗ "đang gay cấn"
 
 Owner: *"xây luôn tính năng, và dùng thuật toán tối ưu nhất, tính toán đoạn hay nhất, xong cắt
