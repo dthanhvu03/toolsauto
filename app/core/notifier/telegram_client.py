@@ -170,6 +170,19 @@ class TelegramClient:
             logger.warning("getUpdates failed: %s", e)
             return []
 
+    def set_my_commands(self, commands: list[dict]) -> bool:
+        """
+        Đăng ký menu lệnh (nút "/" trong Telegram). ``commands`` = ``[{"command", "description"}]``.
+
+        Menu do BotFather cài tay sẽ lệch dần với code (2026-09-11: quảng cáo /done, /failed
+        không tồn tại; thiếu /sansang, /moi…). Gọi API này lúc khởi động thì menu luôn là
+        chính bảng lệnh trong code. Telegram: tên 1-32 ký tự thường, mô tả 3-256 ký tự.
+        """
+        import json as json_mod
+
+        result = self._request("setMyCommands", data={"commands": json_mod.dumps(commands)})
+        return result is not None
+
     def delete_webhook(self) -> bool:
         """Xóa webhook để chuyển sang polling mode. Gọi 1 lần khi khởi động."""
         result = self._request("deleteWebhook", data={"drop_pending_updates": False})

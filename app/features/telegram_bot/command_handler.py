@@ -37,6 +37,32 @@ class TelegramCommandHandler:
             "caidat": self._cmd_caidat,
         }
 
+    # Menu "/" trong Telegram — MỘT nguồn sự thật với `handler_map` (test canh hai chiều).
+    # Thứ tự = thứ Owner dùng hằng ngày trước; luồng Job (cần tài khoản Facebook) xuống cuối.
+    MENU: list[tuple[str, str]] = [
+        ("sansang", "Video chờ đăng tay: Gửi lại · Chọn đoạn · Chia phần · Đã đăng"),
+        ("moi", "Video mới quét về, kèm nút Xử lý"),
+        ("nguon", "Nguồn tự quét: Quét ngay · Bật/Tắt"),
+        ("dadang", "Video đã đăng gần nhất (lùi lại nếu bấm nhầm)"),
+        ("tai", "/tai <link> — chỉ tải bản gốc về máy, không xào chẻ"),
+        ("caidat", "Xem / đổi cài đặt luồng video ngay tại đây"),
+        ("help", "Danh sách lệnh và cách dùng"),
+        ("status", "Worker đang chạy hay tạm dừng"),
+        ("health", "Sức khoẻ hệ thống"),
+        ("pause", "Tạm dừng worker"),
+        ("resume", "Chạy tiếp worker"),
+        ("jobs", "Đếm job đang chạy / chờ / nháp (cần tài khoản Facebook)"),
+        ("drafts", "Bản nháp chờ duyệt (cần tài khoản Facebook)"),
+        ("retry", "/retry <id> — cho một job chạy lại"),
+        ("viral", "/viral <min_views> <max_videos> — đổi ngưỡng quét chung"),
+        ("discovery", "Quét tìm kênh mới (chạy nền)"),
+    ]
+
+    @classmethod
+    def menu(cls) -> list[dict]:
+        """Danh sách cho ``setMyCommands`` — dựng từ ``MENU``, không chép tay ở chỗ khác."""
+        return [{"command": c, "description": d[:256]} for c, d in cls.MENU]
+
     def handle_command(self, cmd: str, args: list = None):
         handler = self.handler_map().get(cmd.lower())
         if handler:

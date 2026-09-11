@@ -1,5 +1,15 @@
 # Current Status
 
+## Phiên 2026-09-11 (j) — menu "/" Telegram sinh từ code, không cài tay
+
+Owner: *"menu đang lỗi không được đẹp"*. Menu do BotFather cài tay từ lâu: quảng cáo /done,
+/failed (không tồn tại), thiếu /sansang /moi /nguon /dadang /tai /caidat. Nay `MENU` trong
+`command_handler` là nguồn sự thật (lệnh hằng ngày lên đầu, luồng Job xuống cuối), poller gọi
+`setMyCommands` lúc khởi động (hỏng mạng chỉ ghi log). Test canh hai chiều menu ↔ handler_map.
+Owner khởi động lại bot là menu đổi; nếu Telegram còn cache thì đóng mở lại app Telegram.
+
+---
+
 ## Phiên 2026-09-11 (i) — đường TẢI TikTok cũng phải giả Chrome; hướng dẫn Tailscale
 
 Ảnh Owner 17:00: `/moi` ra #1001–#1006 với views thật ⇒ **quét kênh đã sống trên laptop** (có

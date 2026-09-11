@@ -22,8 +22,17 @@ class TelegramPoller:
 
     def start(self):
         self._running = True
+        self._register_menu()
         threading.Thread(target=self._poll_loop, daemon=True).start()
         logger.info("TelegramPoller started")
+
+    def _register_menu(self) -> None:
+        """Menu "/" = bảng lệnh trong code. Lỗi mạng không được chặn poller — chỉ ghi log."""
+        try:
+            ok = self.client.set_my_commands(self.command_handler.menu())
+            logger.info("[Telegram] setMyCommands: %s (%d lệnh)", "ok" if ok else "THẤT BẠI", len(self.command_handler.menu()))
+        except Exception as exc:
+            logger.warning("[Telegram] Không đăng ký được menu lệnh: %s", exc)
 
     def stop(self):
         self._running = False
