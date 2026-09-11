@@ -83,6 +83,8 @@ class TikTokScraper:
             "--playlist-end",
             str(max_videos),
             "--no-warnings",
+            "--impersonate",
+            "chrome",
             channel_url,
         )
 
