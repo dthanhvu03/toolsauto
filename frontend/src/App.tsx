@@ -4,6 +4,9 @@ import { AppShell } from "@/layouts/AppShell";
 import { OverviewPage } from "@/pages/OverviewPage";
 import { SettingsRoute } from "@/pages/SettingsRoute";
 import { ClassicBridgePage } from "@/pages/ClassicBridgePage";
+import { JobsPage } from "@/pages/JobsPage";
+import { AccountsPage } from "@/pages/AccountsPage";
+import { ViralPage } from "@/pages/ViralPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,14 +26,15 @@ export default function App() {
           <Route path="/app" element={<AppShell />}>
             <Route index element={<OverviewPage />} />
             <Route path="settings" element={<SettingsRoute />} />
-            <Route path="go/jobs" element={bridge("Hàng đợi job", "/app/jobs")} />
+            {/* Native React lists — under /app/go/* so Jinja /app/jobs|accounts|viral stay intact */}
+            <Route path="go/jobs" element={<JobsPage />} />
+            <Route path="go/accounts" element={<AccountsPage />} />
+            <Route path="go/viral" element={<ViralPage />} />
             <Route
               path="go/jobs-threads"
               element={bridge("Hàng đợi Threads", "/app/jobs?platform=threads")}
             />
-            <Route path="go/accounts" element={bridge("Tài khoản", "/app/accounts")} />
             <Route path="go/affiliates" element={bridge("Kho affiliate", "/affiliates")} />
-            <Route path="go/viral" element={bridge("Nội dung viral", "/app/viral")} />
             <Route path="go/viral-sources" element={bridge("Nguồn video", "/app/viral/sources")} />
             <Route path="go/tiktok-links" element={bridge("Kho kênh cũ", "/app/tiktok-links")} />
             <Route

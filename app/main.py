@@ -17,6 +17,7 @@ logger = setup_shared_logger(__name__ if __name__ != "__main__" else "fastapi")
 from app.platform.auth import router as auth
 from app.platform.dashboard_shell import router as dashboard
 from app.platform import settings_api
+from app.platform import admin_api
 from app.platform.health import router as health
 from app.core.db_admin import router as database
 from app.core.compliance import router as compliance
@@ -72,6 +73,7 @@ def _load_runtime_settings_on_startup():
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(settings_api.router)
+app.include_router(admin_api.router)
 app.include_router(jobs.router)
 app.include_router(accounts.router)
 app.include_router(worker.router)

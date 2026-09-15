@@ -1,5 +1,27 @@
 # Current Status
 
+## Phiên 2026-09-15 — React admin roadmap (Overview / Jobs / Accounts / Viral)
+
+Cursor: tiếp roadmap SPA sau Settings.
+- Backend: `GET /api/admin/{overview,jobs,accounts,viral}` (`app/platform/admin_api/`).
+- FE native: Overview wire API; Jobs/Accounts/Viral thay ClassicBridge tại `/app/go/*`.
+- Jinja `/app/jobs|accounts|viral` giữ nguyên (link Classic trên từng page).
+- Build: `npm run build:admin` → `app/static/admin/`. Chưa commit (chờ Owner).
+
+---
+
+## Phiên 2026-09-12 — ADR-046 hướng A: video dài giữ full lần đầu
+
+Owner chọn hướng A. Video nguồn > `viral.long_video_sec` (mặc định 180) và chưa có
+`clip_length_sec` → lần Xử lý đầu **không cắt** theo «Độ dài tối đa». Tin READY thêm nút
+**🧩 Chia phần** + **✂️ Cắt ngắn** (`cat90` → gắn độ dài từ ô Thiết lập, mặc định 90 nếu ô=0,
+giữ mốc bắt đầu, `process_one`). ADR: `agents/decisions/ADR-046-long-video-defer-cut.md`.
+Đã sync sang Windows scratch. **Cần restart** `.\start.ps1 -Lan -Stack` để bot nhận callback.
+Test mới ADR-046: 7 passed. (1 fail sẵn có `test_da_dang_doi_trang_thai…` path Drive ADR-045
+≠ assertion cũ — ngoài scope.)
+
+---
+
 ## Phiên 2026-09-11 (j) — menu "/" Telegram sinh từ code, không cài tay
 
 Owner: *"menu đang lỗi không được đẹp"*. Menu do BotFather cài tay từ lâu: quảng cáo /done,

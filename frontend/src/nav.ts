@@ -38,15 +38,33 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Chung",
     items: [
       { to: "/app", label: "Tổng quan", icon: Home, end: true, reactReady: true },
-      { to: "/app/go/jobs", label: "Hàng đợi job", icon: ListTodo, classicHref: "/app/jobs" },
-      { to: "/app/go/accounts", label: "Tài khoản", icon: Users, classicHref: "/app/accounts" },
+      {
+        to: "/app/go/jobs",
+        label: "Hàng đợi job",
+        icon: ListTodo,
+        classicHref: "/app/jobs",
+        reactReady: true,
+      },
+      {
+        to: "/app/go/accounts",
+        label: "Tài khoản",
+        icon: Users,
+        classicHref: "/app/accounts",
+        reactReady: true,
+      },
       { to: "/app/go/affiliates", label: "Kho affiliate", icon: Boxes, classicHref: "/affiliates" },
     ],
   },
   {
     label: "Facebook",
     items: [
-      { to: "/app/go/viral", label: "Nội dung viral", icon: Zap, classicHref: "/app/viral" },
+      {
+        to: "/app/go/viral",
+        label: "Nội dung viral",
+        icon: Zap,
+        classicHref: "/app/viral",
+        reactReady: true,
+      },
       {
         to: "/app/go/viral-sources",
         label: "Nguồn video",
