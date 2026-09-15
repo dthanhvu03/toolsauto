@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
-import { fetchViral } from "@/api/adminApi";
+import { fetchViral } from "@/shared/api/adminApi";
 
 export function ViralPage() {
   const [status, setStatus] = useState("");

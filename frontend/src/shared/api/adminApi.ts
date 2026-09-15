@@ -1,3 +1,5 @@
+import { getJson } from "@/shared/api/http";
+
 export type OverviewResponse = {
   accounts_count: number;
   accounts_active: number;
@@ -76,12 +78,6 @@ export type ViralResponse = {
   failed_count?: number;
   ready_count?: number;
 };
-
-async function getJson<T>(url: string): Promise<T> {
-  const r = await fetch(url, { credentials: "same-origin" });
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
-  return r.json() as Promise<T>;
-}
 
 export function fetchOverview() {
   return getJson<OverviewResponse>("/api/admin/overview");

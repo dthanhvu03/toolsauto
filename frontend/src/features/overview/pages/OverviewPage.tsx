@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ExternalLink, ListTodo, Settings, Users, Zap } from "lucide-react";
-import { fetchOverview } from "@/api/adminApi";
+import { fetchOverview } from "@/shared/api/adminApi";
 
 export function OverviewPage() {
   const q = useQuery({ queryKey: ["admin-overview"], queryFn: fetchOverview });

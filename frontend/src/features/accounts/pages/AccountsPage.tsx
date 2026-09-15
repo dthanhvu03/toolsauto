@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
-import { fetchAccounts } from "@/api/adminApi";
+import { fetchAccounts } from "@/shared/api/adminApi";
 
 export function AccountsPage() {
   const [q, setQ] = useState("");

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
-import { fetchJobs } from "@/api/adminApi";
+import { fetchJobs } from "@/shared/api/adminApi";
 
 const STATUS_OPTS = [
   { value: "active", label: "Active" },

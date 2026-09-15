@@ -1,8 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
-import { NAV_GROUPS } from "@/nav";
-import { cn } from "@/lib/cn";
+import { NAV_GROUPS } from "@/app/nav";
+import { cn } from "@/shared/lib/cn";
 
 export function AppShell() {
   const [open, setOpen] = useState(false);

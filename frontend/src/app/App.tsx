@@ -1,12 +1,12 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/layouts/AppShell";
-import { OverviewPage } from "@/pages/OverviewPage";
-import { SettingsRoute } from "@/pages/SettingsRoute";
-import { ClassicBridgePage } from "@/pages/ClassicBridgePage";
-import { JobsPage } from "@/pages/JobsPage";
-import { AccountsPage } from "@/pages/AccountsPage";
-import { ViralPage } from "@/pages/ViralPage";
+import { OverviewPage } from "@/features/overview/pages/OverviewPage";
+import { SettingsRoute } from "@/features/settings/routes/SettingsRoute";
+import { ClassicBridgePage } from "@/features/classic/pages/ClassicBridgePage";
+import { JobsPage } from "@/features/jobs/pages/JobsPage";
+import { AccountsPage } from "@/features/accounts/pages/AccountsPage";
+import { ViralPage } from "@/features/viral/pages/ViralPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
