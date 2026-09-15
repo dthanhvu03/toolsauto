@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
 from sqlalchemy.orm import Session
 import time
 from app.core.database.core import get_db
@@ -8,9 +8,16 @@ from app.core.observability.log_query_facade import LogQueryFacade
 from app.platform.dashboard_service import DashboardService
 from app.utils.htmx import htmx_toast_response
 from app.main_templates import templates
+import app.config as config
 
 
 router = APIRouter()
+
+_SETTINGS_UI_INDEX = config.BASE_DIR / "app" / "static" / "settings-ui" / "index.html"
+
+
+def _settings_ui_ready() -> bool:
+    return _SETTINGS_UI_INDEX.is_file()
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -301,6 +308,29 @@ def app_control_plane(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/app/settings", response_class=HTMLResponse)
 def app_settings(request: Request, db: Session = Depends(get_db)):
+    """React Settings SPA (built into app/static/settings-ui). Fallback → classic Jinja."""
+    if _settings_ui_ready():
+        return FileResponse(
+            _SETTINGS_UI_INDEX,
+            media_type="text/html",
+            headers={"Cache-Control": "no-cache"},
+        )
+    # Build missing — serve classic so ops never get a blank page
+    ctx = DashboardService.get_settings_context(db, request.query_params)
+    return templates.TemplateResponse(
+        "pages/app_settings.html",
+        {
+            "request": request,
+            **ctx,
+            "message": ctx.get("message")
+            or "React Settings chưa build. Chạy: npm run build:settings",
+        },
+    )
+
+
+@router.get("/app/settings/classic", response_class=HTMLResponse)
+def app_settings_classic(request: Request, db: Session = Depends(get_db)):
+    """Legacy Jinja settings form (HTMX bulk-save)."""
     ctx = DashboardService.get_settings_context(db, request.query_params)
     return templates.TemplateResponse(
         "pages/app_settings.html",

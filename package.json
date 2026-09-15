@@ -8,6 +8,8 @@
     "test": "tests"
   },
   "scripts": {
+    "dev:settings": "npm run dev --prefix frontend",
+    "build:settings": "npm run build --prefix frontend",
     "build:css": "tailwindcss -i ./app/static/src/app.css -o ./app/static/app.css --minify",
     "watch:css": "tailwindcss -i ./app/static/src/app.css -o ./app/static/app.css --watch",
     "mcp:playwright": "npx -y @playwright/mcp@latest",

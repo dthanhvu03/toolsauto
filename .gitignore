@@ -72,6 +72,7 @@ content/reup/tiktok/*.part
 content/reup/tiktok/test_vid.mp4
 content/thumbnails/*_collage.jpg
 node_modules/
+frontend/dist/
 content/thumbnails/*.mp3
 
 content/reup/
