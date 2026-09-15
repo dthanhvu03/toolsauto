@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
+from pathlib import Path
 from sqlalchemy.orm import Session
 import time
 from app.core.database.core import get_db
@@ -13,11 +14,24 @@ import app.config as config
 
 router = APIRouter()
 
+_SPA_INDEX = config.BASE_DIR / "app" / "static" / "admin" / "index.html"
+# Legacy path from Settings-only deploy
 _SETTINGS_UI_INDEX = config.BASE_DIR / "app" / "static" / "settings-ui" / "index.html"
 
 
-def _settings_ui_ready() -> bool:
-    return _SETTINGS_UI_INDEX.is_file()
+def _spa_index() -> Path | None:
+    if _SPA_INDEX.is_file():
+        return _SPA_INDEX
+    if _SETTINGS_UI_INDEX.is_file():
+        return _SETTINGS_UI_INDEX
+    return None
+
+
+def _serve_spa() -> FileResponse | None:
+    idx = _spa_index()
+    if not idx:
+        return None
+    return FileResponse(idx, media_type="text/html", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -27,7 +41,10 @@ def index(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/app", response_class=HTMLResponse)
 def app_overview(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI (beta): overview page (no long tables)."""
+    """React admin SPA when built; else classic Jinja overview."""
+    spa = _serve_spa()
+    if spa is not None:
+        return spa
     overview = DashboardService.get_overview_data(db)
     return templates.TemplateResponse(
         "pages/app_overview.html",
@@ -37,6 +54,29 @@ def app_overview(request: Request, db: Session = Depends(get_db)):
             "now": int(time.time()),
         }
     )
+
+
+@router.get("/app/classic", response_class=HTMLResponse)
+def app_overview_classic(request: Request, db: Session = Depends(get_db)):
+    """Jinja overview fallback."""
+    overview = DashboardService.get_overview_data(db)
+    return templates.TemplateResponse(
+        "pages/app_overview.html",
+        {
+            "request": request,
+            **overview,
+            "now": int(time.time()),
+        }
+    )
+
+
+@router.get("/app/go/{rest:path}", response_class=HTMLResponse)
+def app_spa_go(rest: str, request: Request):
+    """React Router bridge pages — always serve SPA shell."""
+    spa = _serve_spa()
+    if spa is not None:
+        return spa
+    return RedirectResponse(url="/app/classic", status_code=302)
 
 
 @router.get("/app/dashboard", response_class=HTMLResponse)
@@ -308,14 +348,10 @@ def app_control_plane(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/app/settings", response_class=HTMLResponse)
 def app_settings(request: Request, db: Session = Depends(get_db)):
-    """React Settings SPA (built into app/static/settings-ui). Fallback → classic Jinja."""
-    if _settings_ui_ready():
-        return FileResponse(
-            _SETTINGS_UI_INDEX,
-            media_type="text/html",
-            headers={"Cache-Control": "no-cache"},
-        )
-    # Build missing — serve classic so ops never get a blank page
+    """React Settings (SPA) when built; else classic Jinja."""
+    spa = _serve_spa()
+    if spa is not None:
+        return spa
     ctx = DashboardService.get_settings_context(db, request.query_params)
     return templates.TemplateResponse(
         "pages/app_settings.html",
@@ -323,7 +359,7 @@ def app_settings(request: Request, db: Session = Depends(get_db)):
             "request": request,
             **ctx,
             "message": ctx.get("message")
-            or "React Settings chưa build. Chạy: npm run build:settings",
+            or "React admin chưa build. Chạy: npm run build:settings",
         },
     )
 

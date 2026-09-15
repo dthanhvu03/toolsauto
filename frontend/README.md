@@ -1,34 +1,36 @@
-# Settings UI (Vite + React) — deployed into FastAPI
+# ToolsAuto Admin — React SPA
 
-## Production (served by FastAPI)
+Stack: **Vite · React 18 · TypeScript · React Router · TanStack Query · Tailwind · lucide-react**
+
+## Production
 
 ```bash
-# from repo root
-npm run build:settings
-# → writes app/static/settings-ui/
+npm run build:admin
+# → app/static/admin/
 ```
 
-Then open **`/app/settings`** (logged-in). Assets load from `/static/settings-ui/`.
+Open **`/app`** (logged in). Assets: `/static/admin/`.
 
-- Classic Jinja UI remains at **`/app/settings/classic`**
-- If build folder missing, `/app/settings` falls back to classic with a notice
+| Path | Meaning |
+|------|---------|
+| `/app` | React overview |
+| `/app/settings` | React Settings (native) |
+| `/app/go/*` | React bridge → link to Jinja classic |
+| `/app/classic` | Jinja overview |
+| `/app/settings/classic` | Jinja settings |
+| `/app/jobs` etc. | Jinja pages (unchanged) |
 
-## Dev (hot reload)
+## Dev
 
 ```bash
-# terminal 1 — API
+# API
 PYTHONPATH=. venv/bin/uvicorn app.main:app --reload --port 8000
-
-# terminal 2 — Vite
+# UI
 cd frontend && npm run dev
-# http://127.0.0.1:5173  (proxies /api → :8000)
 ```
 
-Offline mock: `VITE_SETTINGS_USE_MOCK=true npm run dev`
+## Porting roadmap
 
-## API
-
-- `GET /api/settings/metadata`
-- `GET /api/settings/values`
-- `PATCH /api/settings/sections/{section}`
-- `POST /api/settings/test/{test_id}`
+1. Settings ✅  
+2. Overview (richer API)  
+3. Jobs / Accounts / Viral — replace ClassicBridge with native React pages  

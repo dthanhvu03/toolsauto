@@ -13,7 +13,7 @@ import type { RenderItem } from "../lib/fieldGroups";
 import type { SectionId, TestConnectionState } from "../types/settings.types";
 import { sectionLabelFromSchema } from "../types/settings.types";
 
-export function SettingsPage() {
+export function SettingsPage({ embedded = false }: { embedded?: boolean }) {
   const ctl = useSettingsController({ role: "admin" });
   const [activeSection, setActiveSection] = useState<SectionId | undefined>();
   const [testById, setTestById] = useState<Record<string, TestConnectionState>>({});
@@ -154,18 +154,21 @@ export function SettingsPage() {
 
   if (ctl.loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-slate-500">
+      <div
+        className={`flex items-center justify-center text-slate-500 ${embedded ? "py-24" : "min-h-screen"}`}
+      >
         Loading settings…
       </div>
     );
   }
   if (ctl.loadError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-2 text-red-600">
+      <div
+        className={`flex flex-col items-center justify-center gap-2 text-red-600 ${embedded ? "py-16" : "min-h-screen"}`}
+      >
         <p>{ctl.loadError}</p>
         <p className="max-w-md text-center text-xs text-slate-500">
-          Start FastAPI on :8000 (Vite proxies /api). Or set VITE_SETTINGS_USE_MOCK=true for
-          offline mock.
+          API /api/settings/* cần FastAPI + session đăng nhập. Dev: VITE_SETTINGS_USE_MOCK=true
         </p>
         <button
           type="button"
@@ -179,15 +182,27 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen pb-24">
-      <SettingsPageHeader envLabel="local" />
+    <div className={embedded ? "pb-24" : "min-h-screen pb-24"}>
+      {embedded ? (
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Cài đặt vận hành</h1>
+            <p className="text-sm text-slate-500">Metadata-driven · lưu theo từng section</p>
+          </div>
+          <a href="/app/settings/classic" className="text-xs font-medium text-slate-400 hover:underline">
+            Classic UI
+          </a>
+        </div>
+      ) : (
+        <SettingsPageHeader envLabel="local" />
+      )}
       {ctl.toast ? (
         <div className="fixed right-4 top-20 z-40 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm shadow-lg">
           {ctl.toast}
         </div>
       ) : null}
 
-      <div className="mx-auto flex max-w-6xl">
+      <div className={embedded ? "flex max-w-6xl" : "mx-auto flex max-w-6xl"}>
         <SettingsSectionNav
           sectionOrder={ctl.sectionOrder}
           labels={sectionLabels}
@@ -195,7 +210,7 @@ export function SettingsPage() {
           activeSection={activeSection}
           onNavigate={scrollTo}
         />
-        <main className="min-w-0 flex-1 space-y-6 px-4 py-6">
+        <main className={`min-w-0 flex-1 space-y-6 ${embedded ? "pl-0 md:pl-4" : "px-4 py-6"}`}>
           {ctl.sectionOrder.map((sectionId) => {
             const saveDisabled =
               ctl.savingBySection[sectionId] === "saving" ||

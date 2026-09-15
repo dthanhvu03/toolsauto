@@ -8,6 +8,8 @@
     "test": "tests"
   },
   "scripts": {
+    "dev:admin": "npm run dev --prefix frontend",
+    "build:admin": "npm run build --prefix frontend",
     "dev:settings": "npm run dev --prefix frontend",
     "build:settings": "npm run build --prefix frontend",
     "build:css": "tailwindcss -i ./app/static/src/app.css -o ./app/static/app.css --minify",
