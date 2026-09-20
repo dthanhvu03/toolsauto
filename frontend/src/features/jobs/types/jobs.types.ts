@@ -8,6 +8,10 @@ export type JobsResponse = {
     target_page?: string | null;
     caption?: string;
     post_url?: string | null;
+    posted?: boolean;
+    affiliate_url?: string | null;
+    has_auto_comment?: boolean;
+    comment_ok?: "ok" | "fail" | "pending" | "none" | string;
     schedule_ts?: number | null;
     error_message?: string;
   }[];

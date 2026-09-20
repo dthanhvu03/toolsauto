@@ -47,6 +47,10 @@ export type OverviewOps = {
     count: number;
     latest: CockpitJob[];
   };
+  affiliate_leak?: {
+    count: number;
+    latest: CockpitJob[];
+  };
 };
 
 export type OverviewResponse = {

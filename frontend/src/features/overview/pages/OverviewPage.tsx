@@ -41,7 +41,7 @@ export function OverviewPage() {
       >
         {d && ops ? (
           <>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <StatCard
                 label="Worker"
                 value={ops.worker.status}
@@ -71,6 +71,12 @@ export function OverviewPage() {
                 value={String(ops.failed_jobs.count)}
                 hint="3 mới nhất bên dưới"
                 tone={ops.failed_jobs.count > 0 ? "warn" : "ok"}
+              />
+              <StatCard
+                label="Cmt affiliate lỗi"
+                value={String(ops.affiliate_leak?.count ?? 0)}
+                hint="Reel đã lên nhưng comment/link chưa OK — xem Jobs filter DONE"
+                tone={(ops.affiliate_leak?.count ?? 0) > 0 ? "warn" : "ok"}
               />
             </div>
 
