@@ -1,5 +1,6 @@
 # Selectors mapping - NO XPATHS allowed, no nth-child hooks.
 # See 14_PROJECT_DISCIPLINE_RULES.md - V. Selector Discipline
+from pathlib import Path
 
 SELECTORS = {
     "login": {
@@ -22,3 +23,54 @@ SELECTORS = {
         "any_profile_btn": "div[role=\"dialog\"] div[role=\"button\"]"
     }
 }
+
+# Central checkpoint/logout markers (GEMINI_SELECTORS-style: one dict, no scatter).
+# Detect + abort only — never solve, never navigate away, never auto-login.
+CHECKPOINT = {
+    "url_markers": (
+        "checkpoint",
+        "unusual login",
+        "unusual_login",
+        "xác nhận danh tính",
+        "/login/",
+        "/checkpoint/",
+        "login_attempt",
+        "account_locked",
+    ),
+    "text_markers": (
+        "checkpoint",
+        "unusual login",
+        "xác nhận danh tính",
+        "account locked",
+        "login_attempt",
+    ),
+}
+
+
+def looks_like_checkpoint(url: str | None, text: str | None = None) -> bool:
+    """True if URL or visible text matches centralized checkpoint markers."""
+    hay_url = (url or "").lower()
+    hay_text = (text or "").lower()
+    for marker in CHECKPOINT["url_markers"]:
+        if marker.lower() in hay_url:
+            return True
+    for marker in CHECKPOINT["text_markers"]:
+        needle = marker.lower()
+        if needle in hay_text or needle in hay_url:
+            return True
+    return False
+
+
+def checkpoint_screenshot_path(account_id=None, job_id=None, suffix: str = "checkpoint") -> Path:
+    """logs/screenshots/{ts}_{account_id}[_job{id}]_checkpoint.png"""
+    from datetime import datetime
+
+    from app.config import LOGS_DIR
+
+    shot_dir = Path(LOGS_DIR) / "screenshots"
+    shot_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    acc = account_id if account_id is not None else "na"
+    job_part = f"_job{job_id}" if job_id is not None else ""
+    return shot_dir / f"{ts}_{acc}{job_part}_{suffix}.png"
+

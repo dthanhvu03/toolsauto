@@ -14,7 +14,11 @@ from app.adapters.common.decorators import playwright_safe_action
 from app.core.database.models import Job
 from app.utils.human_behavior import human_type, human_scroll, pre_post_delay
 import unicodedata
-from app.features.facebook.selectors import SELECTORS
+from app.features.facebook.selectors import (
+    SELECTORS,
+    checkpoint_screenshot_path,
+    looks_like_checkpoint,
+)
 from app.features.facebook.core.session import FacebookSessionManager
 from app.features.facebook.pages.reels import FacebookReelsPage
 from app.features.facebook.pages.feed_composer import FacebookFeedComposer
@@ -289,10 +293,14 @@ class FacebookAdapter(AdapterInterface):
         )
         if extra_details:
             details.update(extra_details)
+        error_code = None
+        if extra_details and extra_details.get("checkpoint"):
+            error_code = "CHECKPOINT"
         return PublishResult(
             ok=False,
             error=error,
             is_fatal=is_fatal,
+            error_code=error_code,
             details=details,
             artifacts=artifacts,
         )
@@ -438,11 +446,96 @@ class FacebookAdapter(AdapterInterface):
                     raise e
         return False
 
+    def _page_checkpoint_haystack(self) -> tuple[str, str]:
+        """Current URL + a short slice of visible text. Never logs cookies."""
+        url = (self.page.url or "") if self.page else ""
+        text = ""
+        if not self.page:
+            return url, text
+        try:
+            text = (self.page.inner_text("body", timeout=2000) or "")[:8000]
+        except Exception:
+            try:
+                text = self.page.title() or ""
+            except Exception:
+                text = ""
+        return url, text
+
+    def _page_is_checkpointed(self) -> bool:
+        """URL/text markers, or a visible Facebook login form."""
+        if not self.page:
+            return False
+        url, text = self._page_checkpoint_haystack()
+        if looks_like_checkpoint(url, text):
+            return True
+        try:
+            login_btn = self.page.locator('button[name="login"]').count() > 0
+            email_in = self.page.locator('input[name="email"]').count() > 0
+            if login_btn and email_in:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _capture_checkpoint_screenshot(self, job=None) -> str | None:
+        if not self.page:
+            return None
+        account_id = None
+        job_id = None
+        if job is not None:
+            job_id = getattr(job, "id", None)
+            acc = getattr(job, "account", None)
+            account_id = getattr(acc, "id", None) if acc is not None else None
+        path = checkpoint_screenshot_path(account_id=account_id, job_id=job_id)
+        try:
+            self.page.screenshot(path=str(path), full_page=False)
+            self.logger.error("FacebookAdapter: CHECKPOINT screenshot saved: %s", path)
+            return str(path)
+        except Exception as e:
+            self.logger.warning("FacebookAdapter: CHECKPOINT screenshot failed: %s", e)
+            return None
+
+    def _maybe_checkpoint_result(
+        self,
+        job,
+        flow_mode: str,
+        entrypoint_used: str | None,
+    ):
+        """Abort immediately on checkpoint. Does not navigate. Returns PublishResult or None."""
+        if not self._page_is_checkpointed():
+            return None
+        url = self.page.url if self.page else ""
+        self.logger.error(
+            "FacebookAdapter: CHECKPOINT detected — aborting immediately (no home navigation). url=%s",
+            url,
+        )
+        shot = self._capture_checkpoint_screenshot(job)
+        extra = {
+            "invalidate_account": True,
+            "checkpoint": True,
+        }
+        if shot:
+            extra["screenshot"] = shot
+        return self._failure_result(
+            job.id,
+            "checkpoint",
+            f"CHECKPOINT detected. Aborted. url={url}",
+            flow_mode,
+            entrypoint_used,
+            is_fatal=True,
+            extra_details=extra,
+        )
+
     def _ensure_authenticated_context(self) -> bool:
         """Checks for 'Continue as' barriers and bypasses them to return to a standard nav context."""
         if not self.page:
             return False
-            
+
+        # Checkpoint / unusual login: stop. Do not click through.
+        if self._page_is_checkpointed():
+            self.logger.error("FacebookAdapter: CHECKPOINT on session recovery — not clicking.")
+            return False
+
         # 1. If navigation is already present, we are likely fine
         # We check for several common nav markers to be sure
         nav_present = self.page.locator('div[role="navigation"], div[role="banner"], a[aria-label="Facebook"]').count() > 0
@@ -718,7 +811,10 @@ class FacebookAdapter(AdapterInterface):
                 if not target_page_url.startswith("http"):
                     target_page_url = "https://" + target_page_url
                 self._safe_goto(target_page_url, wait_until="domcontentloaded")
-                
+                cp = self._maybe_checkpoint_result(job, flow_mode, entrypoint_used)
+                if cp:
+                    return cp
+
                 # [n8n-lite Phase 2] Resolve real numeric ID if current URL is a slug
                 if not self._facebook_numeric_id_from_url(target_page_url):
                     self.logger.info("FacebookAdapter: Slug detected. Extracting real Page ID from metadata...")
@@ -800,7 +896,10 @@ class FacebookAdapter(AdapterInterface):
             else:
                 self.logger.info("FacebookAdapter: Navigating to %s (Personal Profile)", FACEBOOK_HOST)
                 self._safe_goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
-                
+                cp = self._maybe_checkpoint_result(job, flow_mode, entrypoint_used)
+                if cp:
+                    return cp
+
                 active_steps = getattr(job, "active_steps", None)
                 if active_steps is not None and "feed_browse" not in active_steps:
                     rt_emit("step_skipped", platform="facebook", step_name="feed_browse",
@@ -817,13 +916,17 @@ class FacebookAdapter(AdapterInterface):
                 else:
                     self.logger.warning("FacebookAdapter: No account name found in job. Cannot explicitly switch to Personal Profile.")
 
-            # 2. Login Check
+            # 2. Login / Checkpoint — abort immediately, never goto home
+            cp = self._maybe_checkpoint_result(job, flow_mode, entrypoint_used)
+            if cp:
+                return cp
+
             login_btn = self.page.locator('button[name="login"]').count() > 0
             email_in = self.page.locator('input[name="email"]').count() > 0
             nav_present = self.page.locator('div[role="navigation"]').count() > 0
 
             recovery_btn = None
-            # Session Recovery: "Continue as XYZ" screen
+            # Session Recovery: "Continue as XYZ" screen — not a checkpoint solver
             if not nav_present and not (login_btn and email_in):
                 self.logger.info("FacebookAdapter: Navigation missing, checking for 'Continue as' session recovery screen...")
                 
@@ -859,12 +962,11 @@ class FacebookAdapter(AdapterInterface):
                     self._click_locator(recovery_btn, "session recovery button", timeout=5000)
                     
                 self.page.wait_for_timeout(8000)
-                
-                # Sometimes we need to explicitly reload or wait for redirect
-                if "login" in self.page.url or "checkpoint" in self.page.url:
-                    self._safe_goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
-                    self.page.wait_for_timeout(5000)
-                    
+
+                cp = self._maybe_checkpoint_result(job, flow_mode, entrypoint_used)
+                if cp:
+                    return cp
+
                 # Re-check navigation after clicking
                 nav_present = self.page.locator('div[role="navigation"]').count() > 0
                 if nav_present:
@@ -872,7 +974,7 @@ class FacebookAdapter(AdapterInterface):
                 else:
                     self.logger.warning("FacebookAdapter: Clicked recovery but navigation still missing.")
 
-            if (login_btn and email_in) or not nav_present:
+            if not nav_present:
                 self.logger.error("FacebookAdapter: Account is logged out or requires verification.")
                 return self._failure_result(
                     job.id,
@@ -934,6 +1036,9 @@ class FacebookAdapter(AdapterInterface):
                 self._safe_goto(target_page_url, wait_until="domcontentloaded")
             else:
                 self._safe_goto(f"{FACEBOOK_HOST}/", wait_until="domcontentloaded")
+            cp = self._maybe_checkpoint_result(job, flow_mode, entrypoint_used)
+            if cp:
+                return cp
             self.page.wait_for_timeout(3000)
 
             update_active_node(job.id, "feed_browse")
@@ -1473,6 +1578,9 @@ class FacebookAdapter(AdapterInterface):
                 return self._failure_result(
                     job.id, "navigate", f"Không mở được {destination}", flow_mode, None
                 )
+            cp = self._maybe_checkpoint_result(job, flow_mode, None)
+            if cp:
+                return cp
             self.page.wait_for_timeout(3000)
 
             update_active_node(job.id, "feed_browse")
@@ -1776,6 +1884,9 @@ class FacebookAdapter(AdapterInterface):
                 return self._failure_result(
                     job.id, "navigate", f"Không mở được {destination}", flow_mode, None
                 )
+            cp = self._maybe_checkpoint_result(job, flow_mode, None)
+            if cp:
+                return cp
             self.page.wait_for_timeout(3000)
 
             update_active_node(job.id, "open_composer")

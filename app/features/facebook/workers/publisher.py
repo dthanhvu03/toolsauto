@@ -235,33 +235,71 @@ def process_single_job(db: Session):
             else:
                 logger.error("[PUBLISHER] [Job-%s] [FAILED] Publish failed: %s (Fatal: %s)", job.id, publish_result.error, publish_result.is_fatal)
                 logger.debug("[DB][status_transition] Marking job_id=%s failed/retry", job.id)
-                # A media/input rejection from the dispatcher must not count
-                # toward the account circuit breaker.
-                if publish_result.error_code == JobService.ERROR_TYPE_VALIDATION:
-                    failure_type = JobService.ERROR_TYPE_VALIDATION
-                elif publish_result.is_fatal:
-                    failure_type = "FATAL"
-                else:
-                    failure_type = "RETRYABLE"
-                JobService.mark_failed_or_retry(
-                    db=db,
-                    job=job,
-                    error_msg=publish_result.error or "Unknown failure",
-                    is_fatal=publish_result.is_fatal,
-                    error_type=failure_type
+                is_checkpoint = (
+                    publish_result.error_code == "CHECKPOINT"
+                    or bool((publish_result.details or {}).get("checkpoint"))
                 )
-                if publish_result.is_fatal or job.tries >= job.max_tries:
-                    NotifierService.notify_job_failed(job, publish_result.error)
-                
-                if publish_result.details and publish_result.details.get("invalidate_account"):
-                    logger.error("[PUBLISHER] [Job-%s] [ACCOUNT_INVALID] Disabling account '%s'.", job.id, job.account.name)
-                    AccountService.invalidate_account(
-                        db=db, 
-                        account_id=job.account.id, 
-                        reason=publish_result.error
+                if is_checkpoint:
+                    from app.core.database.models import now_ts
+                    job.status = JobStatus.CHECKPOINT
+                    job.last_error = publish_result.error or "CHECKPOINT"
+                    job.error_type = "CHECKPOINT"
+                    job.finished_at = now_ts()
+                    job.tries = job.max_tries
+                    db.commit()
+                    acc_name = job.account.name if job.account else "Unknown"
+                    if job.account:
+                        logger.error(
+                            "[PUBLISHER] [Job-%s] [CHECKPOINT] Quarantining account '%s'.",
+                            job.id, acc_name,
+                        )
+                        AccountService.invalidate_account(
+                            db=db,
+                            account_id=job.account.id,
+                            reason=publish_result.error or "CHECKPOINT",
+                        )
+                    try:
+                        NotifierService._broadcast(
+                            f"🚨 <b>CHECKPOINT</b> — Job #{job.id}\n"
+                            f"👤 Tài khoản <b>{acc_name}</b> bị khóa / unusual login\n"
+                            f"⛔ Đã abort, không tiếp tục đăng\n"
+                            f"🔒 Đã cách ly tài khoản (INVALID)"
+                        )
+                        if job.account:
+                            NotifierService.notify_account_invalid(
+                                acc_name,
+                                publish_result.error or "CHECKPOINT",
+                            )
+                    except Exception:
+                        pass
+                else:
+                    # A media/input rejection from the dispatcher must not count
+                    # toward the account circuit breaker.
+                    if publish_result.error_code == JobService.ERROR_TYPE_VALIDATION:
+                        failure_type = JobService.ERROR_TYPE_VALIDATION
+                    elif publish_result.is_fatal:
+                        failure_type = "FATAL"
+                    else:
+                        failure_type = "RETRYABLE"
+                    JobService.mark_failed_or_retry(
+                        db=db,
+                        job=job,
+                        error_msg=publish_result.error or "Unknown failure",
+                        is_fatal=publish_result.is_fatal,
+                        error_type=failure_type
                     )
-                    NotifierService.notify_account_invalid(job.account.name, publish_result.error)
-                    heartbeat.ping(heartbeat.KEY_PUBLISHER, fail=True, db=db)  # ADR-014
+                    if publish_result.is_fatal or job.tries >= job.max_tries:
+                        NotifierService.notify_job_failed(job, publish_result.error)
+                    
+                    if publish_result.details and publish_result.details.get("invalidate_account"):
+                        logger.error("[PUBLISHER] [Job-%s] [ACCOUNT_INVALID] Disabling account '%s'.", job.id, job.account.name)
+                        AccountService.invalidate_account(
+                            db=db, 
+                            account_id=job.account.id, 
+                            reason=publish_result.error
+                        )
+                        NotifierService.notify_account_invalid(job.account.name, publish_result.error)
+                        heartbeat.ping(heartbeat.KEY_PUBLISHER, fail=True, db=db)  # ADR-014
                     
         except PageMismatchError as e:
             db.rollback()
