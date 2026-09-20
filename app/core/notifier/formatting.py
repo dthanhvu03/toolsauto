@@ -9,6 +9,15 @@ def job_done_message(job, post_url: Optional[str]) -> str:
     caption_text = html_mod.escape((job.caption or "N/A").strip())
     account_name = html_mod.escape(job.account.name if job.account else "Unknown")
     link_line = f"\n🔗 <a href=\"{post_url}\">{html_mod.escape(post_url)}</a>" if post_url else ""
+    jt = str(getattr(job, "job_type", "") or "").strip().upper()
+    if jt == "COMMENT":
+        aff = html_mod.escape((getattr(job, "affiliate_url", None) or "")[:120])
+        aff_line = f"\n💸 {aff}" if aff else ""
+        return (
+            f"✅ <b>Comment affiliate OK</b>\n"
+            f"📋 Job #{job.id} | {job.platform} ({account_name})"
+            f"{link_line}{aff_line}"
+        )
 
     return (
         f"✅ <b>Đăng thành công!</b>\n"
@@ -21,6 +30,16 @@ def job_done_message(job, post_url: Optional[str]) -> str:
 def job_failed_message(job, error: str) -> str:
     account_name = html_mod.escape(job.account.name if job.account else "Unknown")
     error_preview = html_mod.escape((error or job.last_error or "Unknown")[:100])
+    jt = str(getattr(job, "job_type", "") or "").strip().upper()
+    if jt == "COMMENT":
+        parent = getattr(job, "parent_job_id", None)
+        parent_line = f" (Reel #{parent})" if parent else ""
+        return (
+            f"💸 <b>Comment affiliate lỗi</b> — video vẫn đã lên{parent_line}\n"
+            f"📋 Job #{job.id} | {job.platform} ({account_name})\n"
+            f"⚠️ {error_preview}\n"
+            f"⛔ Không retry spam. Kiểm tra Jobs: comment OK?"
+        )
 
     return (
         f"❌ <b>Đăng thất bại!</b>\n"

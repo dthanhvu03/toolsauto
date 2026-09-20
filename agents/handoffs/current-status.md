@@ -1,3 +1,13 @@
+## Phiên 2026-09-20 (h) — Affiliate comment sau Reel + hiện Jobs/cockpit
+Cursor: `cursor/feat-affiliate-on-post`. Path comment đã có; thêm posted/comment_ok/affiliate_url; COMMENT max_tries=1. pytest 24. Không push.
+
+---
+
+## Phiên 2026-09-20 (g) — P0-4 default Playwright headed
+Cursor: `cursor/fix-fb-headed-default`. Default `FACEBOOK_PLAYWRIGHT_HEADLESS=false` (headed). Env true/false vẫn override. pytest 6 passed. A=`7789db7` merge=`ba0523b`. Không push.
+
+---
+
 ## Phiên 2026-09-20 (f) — P0-3 clamp cooldown 1800 / concurrent 2
 Cursor: `cursor/fix-fb-antiban-floors`. Floor: cooldown≥1800, max_concurrent 1–2, delay_min≥30, delay_max≥min. Claim GREATEST. pytest 12 passed. A=`86e7d80` merge=`f7d935a`. Không push. P0-4 headless default — chưa làm.
 
@@ -8,7 +18,101 @@ Cursor: branch `cursor/fix-fb-checkpoint-harden`. `JobStatus.CHECKPOINT`; marker
 
 ---
 
+## Phiên 2026-09-20 (d) — Cockpit Tổng quan + hashed assets
+Cursor: hashed Vite `index-DQrcaxcu.js`. Cockpit worker/disk/gemini/checkpoint/FAILED. Commits `25afd3d` + `9d6e433` branch `cursor/feat-admin-cockpit`. URL `/app`.
+Stack http://127.0.0.1:8002 — Ctrl+Shift+R Tổng quan. Không push.
+
+---
+
 # Current Status
+
+## Phiên 2026-09-20 (c) — Restart :8002 + commit SPA
+
+Cursor: stack `http://127.0.0.1:8002` PID supervisor `529779` (uvicorn web `529780`), `/health/json` ok, login `dev/dev` cookie OK. Verify live: curl authenticated `/app`+`/app/go/jobs` 200 SPA shell; bundle có `Tạo job thủ công`; không `Admin·React`; HTML không badge REACT. Browser MCP không mở được tab — chưa hard-reload visual. Commit `fc695fb` (114 files) branch `cursor/feat-native-spa-crud`. Leftover Classic chưa làm. Không push.
+
+---
+
+## Phiên 2026-09-20 (b) — SPA native CRUD (dừng, chưa verify live)
+
+Cursor: gỡ badge REACT; Jobs/Viral/Accounts/Affiliates/Sources/Compliance/AI Studio/FB tasks/Threads/Syspanel/DB/Insights có thao tác JSON `/api/admin/*`. `pytest tests/test_admin_api_lists.py` 12 passed, `npm run build` OK. Stack :8002 **đã tắt** lúc chốt — không hard-reload Jobs. Còn Classic: cookie login, PM2/Gemini cookie, selector platform-config, heatmap/boost, allowlist/CSV, sandbox AI, kho kênh cũ. Chưa commit.
+
+---
+
+## Phiên 2026-09-20 — Khởi động stack local WSL
+
+Cursor: stack Windows :8002 đã chết. Postgres `127.0.0.1:5432/toolsauto_db` sống, alembic `s6a3b4c5d6e7` = head.
+Đã `manage.py stack --host 0.0.0.0 --port 8002 --no-reload-web`. `/health/json` → `status=ok`.
+Worker: web + maintenance + fb_publisher + ai_generator = ok. Drive G: mounted.
+9Router `localhost:20128` không chạy → AI fallback Gemini. Không có PLAN mới từ Anti.
+
+---
+
+## Phiên 2026-09-19 (h) — Roadmap native: hết sidebar
+
+Cursor: Threads / Logs / Control plane / AI Studio / Platform config / Syspanel / Database
+sang React list. API mới: `GET /api/admin/{threads,logs,ai-studio,syspanel,database}`.
+Platform config dùng `/platform-config/{platforms,workflows}` sẵn có. Control plane không API.
+CRUD / PM2 / SQL / lưu prompt vẫn Classic. Test admin lists + threads/ai-studio/logs.
+`npm run build` OK. Chưa commit.
+
+---
+
+## Phiên 2026-09-19 (g) — Roadmap native: Compliance
+
+Cursor: SPA `/app/go/compliance` gọi `/compliance/{analytics,keywords,categories,violations}`.
+Native: 4 StatCard + tab Từ khóa / Lịch sử. Tester, CRUD, allowlist, chart vẫn Classic.
+Không API admin mới. `npm run build` OK. Chưa commit.
+
+---
+
+## Phiên 2026-09-19 (f) — Roadmap native: Nhiệm vụ FB
+
+Cursor: `GET /api/admin/fb-pro-tasks` bọc `build_dashboard`. SPA `/app/go/fb-pro-tasks`:
+scope picker + tiến độ tuần + 3 thẻ nhiệm vụ + queue hints. Form lưu / reset tuần vẫn Classic.
+Test `test_admin_fb_pro_tasks_lists_scope`. `npm run build` OK. Chưa commit.
+
+---
+
+## Phiên 2026-09-19 (e) — Roadmap native: Insights
+
+Cursor: SPA `/app/go/insights` gọi `/insights/api/{growth,top-posts,secondary-metrics,page-analysis}`.
+Native: filter platform/days + StatCard + top posts + page analysis. Heatmap / AI / boost vẫn Classic.
+Không API admin mới. `npm run build` OK. Chưa commit.
+
+---
+
+## Phiên 2026-09-19 (d) — Roadmap native: Affiliates / Nguồn video / Kho kênh cũ
+
+Cursor: `GET /api/admin/affiliates|viral-sources|tiktok-links` (bọc service sẵn có).
+FE native list + Classic link; CRUD vẫn Jinja. Test `test_admin_api_lists.py` 3 passed.
+`npm run build` OK. Chưa commit.
+
+---
+
+## Phiên 2026-09-19 (c) — Mọi module admin vào `features/` + iframe Jinja
+
+Cursor: mỗi mục sidebar có thư mục `frontend/src/features/<tên>/`.
+Native: Overview / Jobs / Jobs-Threads / Accounts / Viral / Settings.
+Còn lại: iframe Jinja `?embed=1` (ẩn sidebar classic) trong AppShell.
+Layout: `app/templates/layouts/app.html`. `npm run build` OK. Chưa commit.
+
+---
+
+## Phiên 2026-09-19 — Frontend: tách internals theo feature (phase 2)
+
+Cursor: Overview / Jobs / Accounts / Viral giờ cùng pattern Settings:
+`api` · `types` · `hooks` · `components` · `pages`. Shared UI:
+`PageHeader`, `Pagination`, `Panel`, `SearchField`, `QueryBody`.
+Xóa `shared/api/adminApi.ts`. Behavior giữ nguyên. `cd frontend && npm run build` OK.
+Chưa commit (chờ Owner).
+
+---
+
+## Phiên 2026-09-15 (b) — Tái cấu trúc frontend feature-based
+
+Cursor: `frontend/src` → `app/` (routes+nav) · `layouts/` · `shared/` · `features/{overview,jobs,accounts,viral,settings,classic}`. Behavior giữ nguyên; `npm run build:admin` OK.
+
+---
 
 ## Phiên 2026-09-15 — React admin roadmap (Overview / Jobs / Accounts / Viral)
 

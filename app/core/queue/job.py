@@ -595,12 +595,15 @@ class JobService:
                 parent_job_id=job.id,
                 post_url=post_url or job.post_url,
                 auto_comment_text=job.auto_comment_text,
+                affiliate_url=job.affiliate_url,
                 comment_image_path=job.comment_image_path,
                 status=JobStatus.PENDING,
                 scheduled_at=now_ts() + delay,
                 schedule_ts=now_ts() + delay,  # Also set for compatibility
                 media_path=job.media_path,
                 caption="",
+                tries=0,
+                max_tries=1,  # comment fail = money leak, không retry-spam Reel
             )
             db.add(comment_job)
             JobService._log_event(db, job.id, "INFO", 

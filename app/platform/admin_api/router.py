@@ -29,8 +29,59 @@ def _account_row(a) -> dict[str, Any]:
     }
 
 
-def _job_row(j) -> dict[str, Any]:
+def _comment_ok_label(job, child=None) -> str:
+    """ok | fail | pending | none — Owner thấy comment affiliate đã lên Reel chưa."""
+    from app.constants import JobStatus, JobType
+
+    jt = str(getattr(job, "job_type", "") or "POST").strip().upper()
+    if jt == JobType.COMMENT:
+        st = str(job.status or "").upper()
+        if st == JobStatus.DONE:
+            return "ok"
+        if st == JobStatus.FAILED:
+            return "fail"
+        return "pending"
+
+    has_cmt = bool((getattr(job, "auto_comment_text", None) or "").strip())
+    if not has_cmt:
+        return "none"
+    if child is None:
+        return "none" if str(job.status or "").upper() != JobStatus.DONE else "fail"
+    st = str(child.status or "").upper()
+    if st == JobStatus.DONE:
+        return "ok"
+    if st == JobStatus.FAILED:
+        return "fail"
+    return "pending"
+
+
+def _comment_children_by_parent(db: Session, jobs: list) -> dict[int, Any]:
+    from app.constants import JobType
+    from app.core.database.models import Job
+
+    ids = [j.id for j in jobs if getattr(j, "id", None) is not None]
+    if not ids:
+        return {}
+    children = (
+        db.query(Job)
+        .filter(Job.parent_job_id.in_(ids), Job.job_type == JobType.COMMENT)
+        .order_by(Job.id.desc())
+        .all()
+    )
+    by_parent: dict[int, Any] = {}
+    for child in children:
+        pid = child.parent_job_id
+        if pid is not None and pid not in by_parent:
+            by_parent[pid] = child
+    return by_parent
+
+
+def _job_row(j, comment_child=None) -> dict[str, Any]:
     acc = getattr(j, "account", None)
+    aff = (getattr(j, "affiliate_url", None) or "").strip()
+    post_url = getattr(j, "post_url", None)
+    status = str(getattr(j, "status", "") or "")
+    posted = status.upper() == "DONE" and bool(post_url)
     return {
         "id": j.id,
         "status": j.status,
@@ -40,10 +91,14 @@ def _job_row(j) -> dict[str, Any]:
         "account_name": acc.name if acc else None,
         "target_page": j.target_page,
         "caption": (j.caption or "")[:160],
-        "post_url": j.post_url,
+        "post_url": post_url,
+        "posted": posted,
+        "affiliate_url": aff[:160] if aff else None,
+        "has_auto_comment": bool((getattr(j, "auto_comment_text", None) or "").strip()),
+        "comment_ok": _comment_ok_label(j, comment_child),
         "schedule_ts": j.schedule_ts,
         "finished_at": j.finished_at,
-        "error_message": (getattr(j, "error_message", None) or "")[:200],
+        "error_message": (getattr(j, "last_error", None) or getattr(j, "error_message", None) or "")[:200],
     }
 
 
@@ -160,6 +215,54 @@ def _failed_jobs_ops(db: Session) -> dict[str, Any]:
     }
 
 
+def _affiliate_leak_ops(db: Session) -> dict[str, Any]:
+    """DONE Reels/feed có affiliate nhưng comment chưa OK — rò tiền, không crash."""
+    from sqlalchemy import or_
+    from sqlalchemy.orm import selectinload
+
+    from app.constants import JobStatus, JobType
+    from app.core.database.models import Job
+
+    commentable = (JobType.POST, JobType.FEED)
+    parents = (
+        db.query(Job)
+        .options(selectinload(Job.account))
+        .filter(
+            Job.status == JobStatus.DONE,
+            Job.job_type.in_(commentable),
+            or_(
+                Job.affiliate_url.isnot(None),
+                Job.auto_comment_text.isnot(None),
+            ),
+        )
+        .order_by(Job.finished_at.desc(), Job.id.desc())
+        .limit(40)
+        .all()
+    )
+    children = _comment_children_by_parent(db, parents)
+    leaks = []
+    for j in parents:
+        aff = (j.affiliate_url or "").strip()
+        if not aff and not (j.auto_comment_text or "").strip():
+            continue
+        label = _comment_ok_label(j, children.get(j.id))
+        if label == "ok" or label == "pending":
+            continue
+        leaks.append(
+            {
+                "id": j.id,
+                "status": j.status,
+                "account_name": j.account.name if j.account else None,
+                "affiliate_url": aff[:160] if aff else None,
+                "comment_ok": label,
+                "posted": bool(j.post_url),
+                "error": (j.last_error or "")[:200],
+                "finished_at": j.finished_at,
+            }
+        )
+    return {"count": len(leaks), "latest": leaks[:3]}
+
+
 def _checkpoint_ops(db: Session) -> dict[str, Any]:
     from sqlalchemy import or_
     from sqlalchemy.orm import selectinload
@@ -244,6 +347,7 @@ def admin_overview(db: Session = Depends(get_db)):
             "gemini_circuit": _gemini_circuit_ops(),
             "checkpoint": _checkpoint_ops(db),
             "failed_jobs": _failed_jobs_ops(db),
+            "affiliate_leak": _affiliate_leak_ops(db),
         },
     }
 
@@ -260,8 +364,9 @@ def admin_jobs(
     raw = JobService.get_jobs_paged(
         db, status=status, page=page, per_page=per_page, q=q, platform=platform
     )
+    children = _comment_children_by_parent(db, raw["jobs"])
     return {
-        "jobs": [_job_row(j) for j in raw["jobs"]],
+        "jobs": [_job_row(j, comment_child=children.get(j.id)) for j in raw["jobs"]],
         "total": raw["total"],
         "total_pages": raw["total_pages"],
         "page": raw["page"],

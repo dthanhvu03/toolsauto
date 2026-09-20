@@ -14,6 +14,14 @@ function actionsFor(status: string): { key: JobAction; label: string; danger?: b
   return [];
 }
 
+function commentLabel(row: JobRow): { text: string; className: string } {
+  const v = row.comment_ok || "none";
+  if (v === "ok") return { text: "Cmt OK", className: "bg-emerald-100 text-emerald-800" };
+  if (v === "fail") return { text: "Cmt lỗi", className: "bg-amber-100 text-amber-900" };
+  if (v === "pending") return { text: "Chờ cmt", className: "bg-sky-100 text-sky-800" };
+  return { text: "Không cmt", className: "bg-slate-100 text-slate-500" };
+}
+
 export function JobsTable({
   rows,
   busyId,
@@ -25,13 +33,15 @@ export function JobsTable({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left text-sm">
+      <table className="w-full min-w-[860px] text-left text-sm">
         <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
             <th className="px-3 py-2">ID</th>
             <th className="px-3 py-2">Status</th>
+            <th className="px-3 py-2">Đăng</th>
+            <th className="px-3 py-2">Comment</th>
+            <th className="px-3 py-2">Affiliate</th>
             <th className="px-3 py-2">Account</th>
-            <th className="px-3 py-2">Target</th>
             <th className="px-3 py-2">Caption</th>
             <th className="px-3 py-2">Thao tác</th>
           </tr>
@@ -39,43 +49,68 @@ export function JobsTable({
         <tbody className="divide-y divide-slate-100">
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+              <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
                 Không có job
               </td>
             </tr>
           ) : (
-            rows.map((j) => (
-              <tr key={j.id} className="hover:bg-slate-50/80">
-                <td className="px-3 py-2 font-mono text-xs">#{j.id}</td>
-                <td className="px-3 py-2">
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold">
-                    {j.status}
-                  </span>
-                </td>
-                <td className="px-3 py-2">{j.account_name || "—"}</td>
-                <td className="max-w-[10rem] truncate px-3 py-2 text-xs text-slate-500">
-                  {j.target_page || "—"}
-                </td>
-                <td className="max-w-[16rem] truncate px-3 py-2 text-xs text-slate-600">
-                  {j.caption || j.error_message || "—"}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-1">
-                    {actionsFor(j.status).map((a) => (
-                      <button
-                        key={a.key}
-                        type="button"
-                        className={a.danger ? dangerBtnClass : ghostBtnClass}
-                        disabled={busyId === j.id}
-                        onClick={() => onAction(j.id, a.key)}
+            rows.map((j) => {
+              const cmt = commentLabel(j);
+              return (
+                <tr key={j.id} className="hover:bg-slate-50/80">
+                  <td className="px-3 py-2 font-mono text-xs">#{j.id}</td>
+                  <td className="px-3 py-2">
+                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold">
+                      {j.status}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    {j.post_url ? (
+                      <a
+                        href={j.post_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] font-semibold text-emerald-700 hover:underline"
                       >
-                        {a.label}
-                      </button>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))
+                        Đã đăng
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Chưa</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${cmt.className}`}>
+                      {cmt.text}
+                    </span>
+                  </td>
+                  <td
+                    className="max-w-[10rem] truncate px-3 py-2 text-[11px] text-slate-600"
+                    title={j.affiliate_url || ""}
+                  >
+                    {j.affiliate_url || "—"}
+                  </td>
+                  <td className="px-3 py-2">{j.account_name || "—"}</td>
+                  <td className="max-w-[14rem] truncate px-3 py-2 text-xs text-slate-600">
+                    {j.caption || j.error_message || "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {actionsFor(j.status).map((a) => (
+                        <button
+                          key={a.key}
+                          type="button"
+                          className={a.danger ? dangerBtnClass : ghostBtnClass}
+                          disabled={busyId === j.id}
+                          onClick={() => onAction(j.id, a.key)}
+                        >
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>
