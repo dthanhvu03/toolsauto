@@ -248,6 +248,55 @@ def test_admin_viral_add_link(tmp_path):
         engine.dispose()
 
 
+def test_admin_overview_cockpit(tmp_path):
+    engine, factory, c = _client(tmp_path)
+    try:
+        with factory() as db:
+            acc = Account(
+                name="FB Acc",
+                platform="facebook",
+                login_error="Checkpoint detected during idle engagement",
+            )
+            db.add(acc)
+            db.commit()
+            db.refresh(acc)
+            db.add(
+                Job(
+                    account_id=acc.id,
+                    platform="facebook",
+                    status="FAILED",
+                    caption="fail 1",
+                    last_error="publish timeout",
+                    finished_at=1700000000,
+                )
+            )
+            db.add(
+                Job(
+                    account_id=acc.id,
+                    platform="facebook",
+                    status="FAILED",
+                    caption="fail 2",
+                    last_error="Checkpoint URL unusual login",
+                    finished_at=1700000100,
+                )
+            )
+            db.commit()
+        r = c.get("/api/admin/overview")
+        assert r.status_code == 200, r.text
+        ops = r.json()["ops"]
+        assert ops["worker"]["status"] in ("RUNNING", "PAUSE", "SAFE")
+        assert "free_gb" in ops["disk"]
+        assert ops["disk"]["pause_below_gb"] == 2
+        assert "open" in ops["gemini_circuit"]
+        assert ops["failed_jobs"]["count"] == 2
+        assert len(ops["failed_jobs"]["latest"]) == 2
+        assert ops["failed_jobs"]["latest"][0]["error"]
+        assert ops["checkpoint"]["count"] >= 1
+        assert ops["checkpoint"]["accounts"] >= 1
+    finally:
+        engine.dispose()
+
+
 def test_admin_sql_select(tmp_path, monkeypatch):
     engine, factory, c = _client(tmp_path)
     try:
