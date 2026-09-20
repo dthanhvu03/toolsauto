@@ -166,7 +166,8 @@ def iter_pm2_log_directories():
 
 
 # Facebook / Playwright Settings
-FACEBOOK_PLAYWRIGHT_HEADLESS = os.getenv('FACEBOOK_PLAYWRIGHT_HEADLESS', 'true').lower() == 'true'
+# Default false = headed (mở cửa sổ) — posting integrity. Env true/false still overrides.
+FACEBOOK_PLAYWRIGHT_HEADLESS = os.getenv('FACEBOOK_PLAYWRIGHT_HEADLESS', 'false').lower() == 'true'
 PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv('PLAYWRIGHT_DEFAULT_TIMEOUT_MS', '60000'))
 
 # AI / Google AI Studio (Gemini)
