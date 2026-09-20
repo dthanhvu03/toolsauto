@@ -23,7 +23,6 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   classicHref?: string;
-  reactReady?: boolean;
   end?: boolean;
 };
 
@@ -61,22 +60,20 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Chung",
     items: [
-      { to: "/app", label: "Tổng quan", icon: Home, end: true, reactReady: true },
+      { to: "/app", label: "Tổng quan", icon: Home, end: true },
       {
         to: "/app/go/jobs",
         label: "Hàng đợi job",
         icon: ListTodo,
         classicHref: "/app/jobs",
-        reactReady: true,
       },
       {
         to: "/app/go/accounts",
         label: "Tài khoản",
         icon: Users,
         classicHref: "/app/accounts",
-        reactReady: true,
       },
-      { to: "/app/go/affiliates", label: "Kho affiliate", icon: Boxes, classicHref: "/affiliates", reactReady: true },
+      { to: "/app/go/affiliates", label: "Kho affiliate", icon: Boxes, classicHref: "/affiliates" },
     ],
   },
   {
@@ -87,62 +84,55 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Nội dung viral",
         icon: Zap,
         classicHref: "/app/viral",
-        reactReady: true,
       },
       {
         to: "/app/go/viral-sources",
         label: "Nguồn video",
         icon: Link2,
         classicHref: "/app/viral/sources",
-        reactReady: true,
       },
       {
         to: "/app/go/tiktok-links",
         label: "Kho kênh cũ",
         icon: ClipboardList,
         classicHref: "/app/tiktok-links",
-        reactReady: true,
       },
       {
         to: "/app/go/insights",
         label: "Phân tích & tăng trưởng",
         icon: BarChart3,
         classicHref: "/insights?platform=facebook",
-        reactReady: true,
       },
       {
         to: "/app/go/fb-pro-tasks",
         label: "Nhiệm vụ FB",
         icon: Workflow,
         classicHref: "/app/fb-pro-tasks/",
-        reactReady: true,
       },
       {
         to: "/app/go/compliance",
         label: "Vi phạm Facebook",
         icon: ShieldAlert,
         classicHref: "/compliance/",
-        reactReady: true,
       },
     ],
   },
   {
     label: "Threads",
     items: [
-      { to: "/app/go/threads", label: "Threads", icon: ScrollText, classicHref: "/threads", reactReady: true },
+      { to: "/app/go/threads", label: "Threads", icon: ScrollText, classicHref: "/threads" },
       {
         to: "/app/go/jobs-threads",
         label: "Hàng đợi Threads",
         icon: ListTodo,
         classicHref: "/app/jobs?platform=threads",
-        reactReady: true,
       },
     ],
   },
   {
     label: "Giám sát",
     items: [
-      { to: "/app/go/logs", label: "Nhật ký hệ thống", icon: ScrollText, classicHref: "/app/logs", reactReady: true },
+      { to: "/app/go/logs", label: "Nhật ký hệ thống", icon: ScrollText, classicHref: "/app/logs" },
     ],
   },
   {
@@ -153,25 +143,22 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Hub cấu hình",
         icon: LayoutGrid,
         classicHref: "/app/control-plane",
-        reactReady: true,
       },
-      { to: "/app/settings", label: "Cài đặt vận hành", icon: Settings, reactReady: true },
+      { to: "/app/settings", label: "Cài đặt vận hành", icon: Settings },
       {
         to: "/app/go/ai-studio",
         label: "AI Studio",
         icon: Sparkles,
         classicHref: "/app/ai-studio",
-        reactReady: true,
       },
       {
         to: "/app/go/platform-config",
         label: "Cấu hình nền tảng",
         icon: Server,
         classicHref: "/platform-config/",
-        reactReady: true,
       },
-      { to: "/app/go/syspanel", label: "Panel hệ thống", icon: Server, classicHref: "/syspanel", reactReady: true },
-      { to: "/app/go/database", label: "Database", icon: Database, classicHref: "/database", reactReady: true },
+      { to: "/app/go/syspanel", label: "Panel hệ thống", icon: Server, classicHref: "/syspanel" },
+      { to: "/app/go/database", label: "Database", icon: Database, classicHref: "/database" },
     ],
   },
 ];
