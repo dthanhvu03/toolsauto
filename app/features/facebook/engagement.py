@@ -19,6 +19,10 @@ import traceback
 
 from playwright.sync_api import Page
 from app.config import FACEBOOK_HOST
+from app.features.facebook.selectors import (
+    checkpoint_screenshot_path,
+    looks_like_checkpoint,
+)
 
 from app.utils.human_behavior import (
     casual_scroll_feed,
@@ -29,21 +33,20 @@ from app.utils.human_behavior import (
 
 logger = logging.getLogger(__name__)
 
-# URLs that indicate the account has been checkpointed / logged out
-_CHECKPOINT_INDICATORS = [
-    "/login/",
-    "/checkpoint/",
-    "login_attempt",
-    "account_locked",
-]
-
 
 def _is_checkpointed(page: Page) -> bool:
     """Return True if the current page looks like a login/checkpoint page."""
-    url = page.url.lower()
-    for indicator in _CHECKPOINT_INDICATORS:
-        if indicator in url:
-            return True
+    url = (page.url or "").lower()
+    text = ""
+    try:
+        text = (page.inner_text("body", timeout=2000) or "")[:8000]
+    except Exception:
+        try:
+            text = page.title() or ""
+        except Exception:
+            text = ""
+    if looks_like_checkpoint(url, text):
+        return True
 
     # Also check DOM for login form
     try:
@@ -55,6 +58,17 @@ def _is_checkpointed(page: Page) -> bool:
         pass
 
     return False
+
+
+def _save_checkpoint_screenshot(page: Page, account_id=None) -> str | None:
+    path = checkpoint_screenshot_path(account_id=account_id, suffix="engagement_checkpoint")
+    try:
+        page.screenshot(path=str(path), full_page=False)
+        logger.warning("[ENGAGEMENT] CHECKPOINT screenshot saved: %s", path)
+        return str(path)
+    except Exception as e:
+        logger.warning("[ENGAGEMENT] CHECKPOINT screenshot failed: %s", e)
+        return None
 
 
 class FacebookEngagementTask:
@@ -436,6 +450,7 @@ class FacebookEngagementTask:
     def _checkpoint_guard(self):
         """Raise _CheckpointDetected if the page looks like a login screen."""
         if _is_checkpointed(self.page):
+            _save_checkpoint_screenshot(self.page)
             raise _CheckpointDetected()
 
     def _maybe_expand_post(self):

@@ -164,11 +164,10 @@ def _checkpoint_ops(db: Session) -> dict[str, Any]:
     from sqlalchemy import or_
     from sqlalchemy.orm import selectinload
 
+    from app.constants import JobStatus
     from app.core.database.models import Account, EngagementSession, Job
 
-    # JobStatus.CHECKPOINT is in project rules but not in constants — detect via
-    # status string, last_error, account.login_error, engagement_sessions.
-    job_f = or_(Job.status == "CHECKPOINT", Job.last_error.ilike("%checkpoint%"))
+    job_f = or_(Job.status == JobStatus.CHECKPOINT, Job.last_error.ilike("%checkpoint%"))
     acc_f = Account.login_error.ilike("%checkpoint%")
     job_count = db.query(Job).filter(job_f).count()
     acc_count = db.query(Account).filter(acc_f).count()

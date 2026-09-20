@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.constants import JobStatus
 from app.core.database.core import get_db
 from app.core.database.models import Account, AffiliateLink, Base, Job, ViralMaterial, ViralSource
 from app.platform.admin_api.router import router
@@ -293,6 +294,34 @@ def test_admin_overview_cockpit(tmp_path):
         assert ops["failed_jobs"]["latest"][0]["error"]
         assert ops["checkpoint"]["count"] >= 1
         assert ops["checkpoint"]["accounts"] >= 1
+    finally:
+        engine.dispose()
+
+
+def test_admin_overview_counts_jobstatus_checkpoint(tmp_path):
+    engine, factory, c = _client(tmp_path)
+    try:
+        with factory() as db:
+            acc = Account(name="CP Acc", platform="facebook")
+            db.add(acc)
+            db.commit()
+            db.refresh(acc)
+            db.add(
+                Job(
+                    account_id=acc.id,
+                    platform="facebook",
+                    status=JobStatus.CHECKPOINT,
+                    caption="checkpoint job",
+                    last_error="CHECKPOINT detected. Aborted.",
+                    finished_at=1700000200,
+                )
+            )
+            db.commit()
+        r = c.get("/api/admin/overview")
+        assert r.status_code == 200, r.text
+        ops = r.json()["ops"]
+        assert ops["checkpoint"]["jobs"] >= 1
+        assert ops["checkpoint"]["count"] >= 1
     finally:
         engine.dispose()
 

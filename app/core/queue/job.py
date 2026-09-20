@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database.core import SessionLocal
 from app.core.database.models import Job, JobEvent, Account
 from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC, CONTENT_MEDIA_DIR
-from app.constants import JobStatus, JobType
+from app.constants import AccountStatus, JobStatus, JobType
 from app.utils.logger import setup_shared_logger
 
 logger = setup_shared_logger(__name__)
@@ -27,6 +27,7 @@ _STATUS_LABELS_VI = {
     JobStatus.AI_PROCESSING: "AI đang viết",
     JobStatus.DONE: "Xong",
     JobStatus.FAILED: "Lỗi",
+    JobStatus.CHECKPOINT: "Checkpoint",
     JobStatus.CANCELLED: "Đã hủy",
 }
 
@@ -681,7 +682,7 @@ class JobService:
         # Status filter
         if status == "active":
             query = query.filter(Job.status.in_([JobStatus.AWAITING_STYLE, JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING, JobStatus.AI_PROCESSING]))
-        elif status in (JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELLED):
+        elif status in (JobStatus.DRAFT, JobStatus.PENDING, JobStatus.RUNNING, JobStatus.DONE, JobStatus.FAILED, JobStatus.CHECKPOINT, JobStatus.CANCELLED):
             query = query.filter(Job.status == status)
 
         platform = (platform or "").strip().lower()
@@ -1270,6 +1271,9 @@ class JobService:
         job = db.query(Job).filter(Job.id == job_id, Job.status == JobStatus.PENDING).first()
         if not job:
             raise ValueError("Job is not in PENDING state or does not exist.")
+        acc = job.account
+        if acc and (not acc.is_active or acc.login_status == AccountStatus.INVALID):
+            raise ValueError("Account is INVALID/CHECKPOINT — cannot force-run.")
         # Force-run means "publish now": apply the publish-time rules so the
         # operator learns immediately instead of watching the job fail.
         JobService.assert_facebook_post_media(

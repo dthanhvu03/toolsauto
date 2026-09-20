@@ -1,3 +1,8 @@
+## Phiên 2026-09-20 (e) — P0 checkpoint harden (detect/stop, không bypass)
+Cursor: branch `cursor/fix-fb-checkpoint-harden`. `JobStatus.CHECKPOINT`; markers gom 1 dict `CHECKPOINT` trong `selectors.py`. Adapter abort ngay, không `_safe_goto("/")` sau checkpoint; screenshot `logs/screenshots/`; Telegram chữ CHECKPOINT; acc INVALID. pytest 66 passed (`test_fb_checkpoint_harden` 19 + admin overview + idle/publisher/media_gate). Chưa commit/push. Còn P0-3 cooldown/concurrent clamp, P0-4 headless default — không làm.
+
+---
+
 # Current Status
 
 ## Phiên 2026-09-15 — React admin roadmap (Overview / Jobs / Accounts / Viral)
