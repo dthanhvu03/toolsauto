@@ -58,7 +58,9 @@
 </head>
 
 <body class="theme-cave text-[var(--color-text)] bg-[var(--color-bg)]">
+  {% set embed = request.query_params.get('embed') == '1' %}
   <!-- Mobile topbar -->
+  {% if not embed %}
   <div class="lg:hidden sticky top-0 z-40 bg-[var(--surface)] border-b border-[var(--border)] shrink-0">
     <div class="w-full px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-1.5 sm:gap-4 min-w-0">
       <button id="menuBtn" type="button"
@@ -93,9 +95,11 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   <div class="min-h-screen lg:flex">
     <!-- Sidebar -->
+    {% if not embed %}
     <div id="sidebarOverlay" class="fixed inset-0 bg-black/30 z-40 hidden lg:hidden cursor-pointer"
       onclick="closeSidebar()"></div>
     <aside id="sidebar"
@@ -332,9 +336,10 @@
         </button>
       </nav>
     </aside>
+    {% endif %}
 
     <!-- Main -->
-    <main class="flex-1 lg:ml-64">
+    <main class="flex-1 {% if not embed %}lg:ml-64{% endif %}">
       <div class="w-full px-4 py-4 lg:px-8 lg:py-8">
         <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
           <div class="flex flex-col gap-1 min-w-0">
@@ -500,6 +505,37 @@
       document.body.addEventListener('htmx:afterSwap', tickCountdowns);
     })();
   </script>
+  {% if embed %}
+  <script>
+    (function () {
+      function withEmbed(href) {
+        try {
+          const u = new URL(href, window.location.origin);
+          if (u.origin !== window.location.origin) return href;
+          u.searchParams.set("embed", "1");
+          return u.pathname + u.search + u.hash;
+        } catch (e) {
+          return href;
+        }
+      }
+      document.addEventListener("click", function (e) {
+        const a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+        if (!a) return;
+        const href = a.getAttribute("href");
+        if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+        a.setAttribute("href", withEmbed(href));
+      }, true);
+      document.querySelectorAll("form").forEach(function (form) {
+        if (form.querySelector('input[name="embed"]')) return;
+        const i = document.createElement("input");
+        i.type = "hidden";
+        i.name = "embed";
+        i.value = "1";
+        form.appendChild(i);
+      });
+    })();
+  </script>
+  {% endif %}
   {% block script_extra %}{% endblock %}
 </body>
 

@@ -1,11 +1,13 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
-import { NAV_GROUPS } from "@/app/nav";
+import { NAV_GROUPS, NATIVE_APP_PATHS } from "@/app/nav";
 import { cn } from "@/shared/lib/cn";
 
 export function AppShell() {
   const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  const native = NATIVE_APP_PATHS.has(pathname);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -56,11 +58,6 @@ export function AppShell() {
                       >
                         <Icon className="size-5 shrink-0 opacity-80" />
                         <span className="truncate">{item.label}</span>
-                        {item.reactReady ? (
-                          <span className="ml-auto rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-700">
-                            React
-                          </span>
-                        ) : null}
                       </NavLink>
                     </li>
                   );
@@ -85,9 +82,9 @@ export function AppShell() {
           <button type="button" className="lg:hidden" onClick={() => setOpen(true)}>
             <Menu className="size-5" />
           </button>
-          <div className="text-sm font-medium text-slate-500">Admin · React</div>
+          <div className="text-sm font-medium text-slate-500">Admin</div>
         </header>
-        <main className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6">
+        <main className={cn("min-h-[calc(100vh-3.5rem)]", native ? "p-4 md:p-6" : "p-0")}>
           <Outlet />
         </main>
       </div>

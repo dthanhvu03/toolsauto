@@ -3,20 +3,28 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/layouts/AppShell";
 import { OverviewPage } from "@/features/overview/pages/OverviewPage";
 import { SettingsRoute } from "@/features/settings/routes/SettingsRoute";
-import { ClassicBridgePage } from "@/features/classic/pages/ClassicBridgePage";
 import { JobsPage } from "@/features/jobs/pages/JobsPage";
 import { AccountsPage } from "@/features/accounts/pages/AccountsPage";
 import { ViralPage } from "@/features/viral/pages/ViralPage";
+import { AffiliatesPage } from "@/features/affiliates/pages/AffiliatesPage";
+import { ViralSourcesPage } from "@/features/viral-sources/pages/ViralSourcesPage";
+import { TiktokLinksPage } from "@/features/tiktok-links/pages/TiktokLinksPage";
+import { InsightsPage } from "@/features/insights/pages/InsightsPage";
+import { FbProTasksPage } from "@/features/fb-pro-tasks/pages/FbProTasksPage";
+import { CompliancePage } from "@/features/compliance/pages/CompliancePage";
+import { ThreadsPage } from "@/features/threads/pages/ThreadsPage";
+import { LogsPage } from "@/features/logs/pages/LogsPage";
+import { ControlPlanePage } from "@/features/control-plane/pages/ControlPlanePage";
+import { AiStudioPage } from "@/features/ai-studio/pages/AiStudioPage";
+import { PlatformConfigPage } from "@/features/platform-config/pages/PlatformConfigPage";
+import { SyspanelPage } from "@/features/syspanel/pages/SyspanelPage";
+import { DatabasePage } from "@/features/database/pages/DatabasePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 30_000, refetchOnWindowFocus: false },
   },
 });
-
-function bridge(title: string, href: string) {
-  return <ClassicBridgePage title={title} classicHref={href} />;
-}
 
 export default function App() {
   return (
@@ -26,33 +34,32 @@ export default function App() {
           <Route path="/app" element={<AppShell />}>
             <Route index element={<OverviewPage />} />
             <Route path="settings" element={<SettingsRoute />} />
-            {/* Native React lists — under /app/go/* so Jinja /app/jobs|accounts|viral stay intact */}
             <Route path="go/jobs" element={<JobsPage />} />
-            <Route path="go/accounts" element={<AccountsPage />} />
-            <Route path="go/viral" element={<ViralPage />} />
             <Route
               path="go/jobs-threads"
-              element={bridge("Hàng đợi Threads", "/app/jobs?platform=threads")}
+              element={
+                <JobsPage
+                  title="Hàng đợi Threads"
+                  defaultPlatform="threads"
+                  classicHref="/app/jobs?platform=threads"
+                />
+              }
             />
-            <Route path="go/affiliates" element={bridge("Kho affiliate", "/affiliates")} />
-            <Route path="go/viral-sources" element={bridge("Nguồn video", "/app/viral/sources")} />
-            <Route path="go/tiktok-links" element={bridge("Kho kênh cũ", "/app/tiktok-links")} />
-            <Route
-              path="go/insights"
-              element={bridge("Phân tích & tăng trưởng", "/insights?platform=facebook")}
-            />
-            <Route path="go/fb-pro-tasks" element={bridge("Nhiệm vụ FB", "/app/fb-pro-tasks/")} />
-            <Route path="go/compliance" element={bridge("Vi phạm Facebook", "/compliance/")} />
-            <Route path="go/threads" element={bridge("Threads", "/threads")} />
-            <Route path="go/logs" element={bridge("Nhật ký hệ thống", "/app/logs")} />
-            <Route path="go/control-plane" element={bridge("Hub cấu hình", "/app/control-plane")} />
-            <Route path="go/ai-studio" element={bridge("AI Studio", "/app/ai-studio")} />
-            <Route
-              path="go/platform-config"
-              element={bridge("Cấu hình nền tảng", "/platform-config/")}
-            />
-            <Route path="go/syspanel" element={bridge("Panel hệ thống", "/syspanel")} />
-            <Route path="go/database" element={bridge("Database", "/database")} />
+            <Route path="go/accounts" element={<AccountsPage />} />
+            <Route path="go/viral" element={<ViralPage />} />
+            <Route path="go/affiliates" element={<AffiliatesPage />} />
+            <Route path="go/viral-sources" element={<ViralSourcesPage />} />
+            <Route path="go/tiktok-links" element={<TiktokLinksPage />} />
+            <Route path="go/insights" element={<InsightsPage />} />
+            <Route path="go/fb-pro-tasks" element={<FbProTasksPage />} />
+            <Route path="go/compliance" element={<CompliancePage />} />
+            <Route path="go/threads" element={<ThreadsPage />} />
+            <Route path="go/logs" element={<LogsPage />} />
+            <Route path="go/control-plane" element={<ControlPlanePage />} />
+            <Route path="go/ai-studio" element={<AiStudioPage />} />
+            <Route path="go/platform-config" element={<PlatformConfigPage />} />
+            <Route path="go/syspanel" element={<SyspanelPage />} />
+            <Route path="go/database" element={<DatabasePage />} />
             <Route path="*" element={<Navigate to="/app" replace />} />
           </Route>
           <Route path="/" element={<Navigate to="/app" replace />} />

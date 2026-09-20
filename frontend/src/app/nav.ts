@@ -32,7 +32,31 @@ export type NavGroup = {
   items: NavItem[];
 };
 
-/** React routes under /app — bridges use /app/go/* to avoid colliding with Jinja URLs. */
+/** Native React pages (not Jinja iframe). */
+export const NATIVE_APP_PATHS = new Set([
+  "/app",
+  "/app/",
+  "/app/settings",
+  "/app/go/jobs",
+  "/app/go/jobs-threads",
+  "/app/go/accounts",
+  "/app/go/viral",
+  "/app/go/affiliates",
+  "/app/go/viral-sources",
+  "/app/go/tiktok-links",
+  "/app/go/insights",
+  "/app/go/fb-pro-tasks",
+  "/app/go/compliance",
+  "/app/go/threads",
+  "/app/go/logs",
+  "/app/go/control-plane",
+  "/app/go/ai-studio",
+  "/app/go/platform-config",
+  "/app/go/syspanel",
+  "/app/go/database",
+]);
+
+/** React routes under /app — remaining /app/go/* embed Jinja (embed=1). */
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Chung",
@@ -52,7 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
         classicHref: "/app/accounts",
         reactReady: true,
       },
-      { to: "/app/go/affiliates", label: "Kho affiliate", icon: Boxes, classicHref: "/affiliates" },
+      { to: "/app/go/affiliates", label: "Kho affiliate", icon: Boxes, classicHref: "/affiliates", reactReady: true },
     ],
   },
   {
@@ -70,49 +94,55 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Nguồn video",
         icon: Link2,
         classicHref: "/app/viral/sources",
+        reactReady: true,
       },
       {
         to: "/app/go/tiktok-links",
         label: "Kho kênh cũ",
         icon: ClipboardList,
         classicHref: "/app/tiktok-links",
+        reactReady: true,
       },
       {
         to: "/app/go/insights",
         label: "Phân tích & tăng trưởng",
         icon: BarChart3,
         classicHref: "/insights?platform=facebook",
+        reactReady: true,
       },
       {
         to: "/app/go/fb-pro-tasks",
         label: "Nhiệm vụ FB",
         icon: Workflow,
         classicHref: "/app/fb-pro-tasks/",
+        reactReady: true,
       },
       {
         to: "/app/go/compliance",
         label: "Vi phạm Facebook",
         icon: ShieldAlert,
         classicHref: "/compliance/",
+        reactReady: true,
       },
     ],
   },
   {
     label: "Threads",
     items: [
-      { to: "/app/go/threads", label: "Threads", icon: ScrollText, classicHref: "/threads" },
+      { to: "/app/go/threads", label: "Threads", icon: ScrollText, classicHref: "/threads", reactReady: true },
       {
         to: "/app/go/jobs-threads",
         label: "Hàng đợi Threads",
         icon: ListTodo,
         classicHref: "/app/jobs?platform=threads",
+        reactReady: true,
       },
     ],
   },
   {
     label: "Giám sát",
     items: [
-      { to: "/app/go/logs", label: "Nhật ký hệ thống", icon: ScrollText, classicHref: "/app/logs" },
+      { to: "/app/go/logs", label: "Nhật ký hệ thống", icon: ScrollText, classicHref: "/app/logs", reactReady: true },
     ],
   },
   {
@@ -123,6 +153,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "Hub cấu hình",
         icon: LayoutGrid,
         classicHref: "/app/control-plane",
+        reactReady: true,
       },
       { to: "/app/settings", label: "Cài đặt vận hành", icon: Settings, reactReady: true },
       {
@@ -130,15 +161,17 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "AI Studio",
         icon: Sparkles,
         classicHref: "/app/ai-studio",
+        reactReady: true,
       },
       {
         to: "/app/go/platform-config",
         label: "Cấu hình nền tảng",
         icon: Server,
         classicHref: "/platform-config/",
+        reactReady: true,
       },
-      { to: "/app/go/syspanel", label: "Panel hệ thống", icon: Server, classicHref: "/syspanel" },
-      { to: "/app/go/database", label: "Database", icon: Database, classicHref: "/database" },
+      { to: "/app/go/syspanel", label: "Panel hệ thống", icon: Server, classicHref: "/syspanel", reactReady: true },
+      { to: "/app/go/database", label: "Database", icon: Database, classicHref: "/database", reactReady: true },
     ],
   },
 ];
