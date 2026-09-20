@@ -11,7 +11,7 @@ export function PageHeader({
 }: {
   title: string;
   subtitle?: ReactNode;
-  classicHref: string;
+  classicHref?: string;
   classicLabel?: string;
   classicHover?: string;
 }) {
@@ -23,15 +23,17 @@ export function PageHeader({
           <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
         ) : null}
       </div>
-      <a
-        href={classicHref}
-        className={cn(
-          "inline-flex items-center gap-1 text-xs font-medium text-slate-400",
-          classicHover
-        )}
-      >
-        {classicLabel} <ExternalLink className="size-3" />
-      </a>
+      {classicHref ? (
+        <a
+          href={classicHref}
+          className={cn(
+            "inline-flex items-center gap-1 text-xs font-medium text-slate-400",
+            classicHover
+          )}
+        >
+          {classicLabel} <ExternalLink className="size-3" />
+        </a>
+      ) : null}
     </div>
   );
 }

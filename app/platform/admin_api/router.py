@@ -65,6 +65,160 @@ def _viral_item_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Project rule: disk < 2GB → pause new jobs.
+DISK_PAUSE_GB = 2.0
+
+
+def _worker_ops(state) -> dict[str, Any]:
+    import time
+
+    raw = str(getattr(state, "worker_status", "") or "").upper()
+    safe = bool(getattr(state, "safe_mode", False))
+    if safe:
+        status = "SAFE"
+    elif raw in ("PAUSED", "PAUSE"):
+        status = "PAUSE"
+    elif raw:
+        status = raw
+    else:
+        status = "UNKNOWN"
+    hb = getattr(state, "heartbeat_at", None)
+    age = int(time.time() - hb) if hb else None
+    return {
+        "status": status,
+        "raw_status": raw or None,
+        "safe_mode": safe,
+        "heartbeat_at": hb,
+        "heartbeat_age_seconds": age,
+        "current_job_id": getattr(state, "current_job_id", None),
+    }
+
+
+def _disk_ops() -> dict[str, Any]:
+    from pathlib import Path
+
+    import psutil
+
+    import app.config as app_config
+
+    disk_path = str(app_config.BASE_DIR)
+    try:
+        disk = psutil.disk_usage(disk_path)
+    except OSError:
+        disk = psutil.disk_usage("/")
+        disk_path = "/"
+    free_gb = round(disk.free / 1024**3, 2)
+    return {
+        "free_gb": free_gb,
+        "used_gb": round(disk.used / 1024**3, 2),
+        "total_gb": round(disk.total / 1024**3, 2),
+        "pct": disk.percent,
+        "label": Path(disk_path).drive or disk_path,
+        "pause_below_gb": DISK_PAUSE_GB,
+        "below_pause": free_gb < DISK_PAUSE_GB,
+    }
+
+
+def _gemini_circuit_ops() -> dict[str, Any]:
+    try:
+        from app.features.viral_intake.workers import ai_generator as ai_gen
+
+        reset = getattr(ai_gen, "GEMINI_CIRCUIT_RESET_TIME", 0) or 0
+        return {
+            "open": bool(getattr(ai_gen, "GEMINI_CIRCUIT_OPEN", False)),
+            "reset_at": float(reset) if reset else None,
+        }
+    except Exception:
+        return {"open": False, "reset_at": None}
+
+
+def _failed_jobs_ops(db: Session) -> dict[str, Any]:
+    from sqlalchemy.orm import selectinload
+
+    from app.constants import JobStatus
+    from app.core.database.models import Job
+
+    q = db.query(Job).filter(Job.status == JobStatus.FAILED)
+    latest = (
+        q.options(selectinload(Job.account))
+        .order_by(Job.finished_at.desc(), Job.id.desc())
+        .limit(3)
+        .all()
+    )
+    return {
+        "count": q.count(),
+        "latest": [
+            {
+                "id": j.id,
+                "status": j.status,
+                "account_name": j.account.name if j.account else None,
+                "error": (j.last_error or "")[:200],
+                "finished_at": j.finished_at,
+            }
+            for j in latest
+        ],
+    }
+
+
+def _checkpoint_ops(db: Session) -> dict[str, Any]:
+    from sqlalchemy import or_
+    from sqlalchemy.orm import selectinload
+
+    from app.core.database.models import Account, EngagementSession, Job
+
+    # JobStatus.CHECKPOINT is in project rules but not in constants — detect via
+    # status string, last_error, account.login_error, engagement_sessions.
+    job_f = or_(Job.status == "CHECKPOINT", Job.last_error.ilike("%checkpoint%"))
+    acc_f = Account.login_error.ilike("%checkpoint%")
+    job_count = db.query(Job).filter(job_f).count()
+    acc_count = db.query(Account).filter(acc_f).count()
+    sess_count = (
+        db.query(EngagementSession).filter(EngagementSession.checkpointed.is_(True)).count()
+    )
+    latest_jobs = (
+        db.query(Job)
+        .options(selectinload(Job.account))
+        .filter(job_f)
+        .order_by(Job.finished_at.desc(), Job.id.desc())
+        .limit(3)
+        .all()
+    )
+    latest: list[dict[str, Any]] = [
+        {
+            "id": j.id,
+            "kind": "job",
+            "account_name": j.account.name if j.account else None,
+            "detail": (j.last_error or j.status or "")[:200],
+            "at": j.finished_at,
+        }
+        for j in latest_jobs
+    ]
+    if len(latest) < 3:
+        for a in (
+            db.query(Account)
+            .filter(acc_f)
+            .order_by(Account.updated_at.desc())
+            .limit(3 - len(latest))
+            .all()
+        ):
+            latest.append(
+                {
+                    "id": a.id,
+                    "kind": "account",
+                    "account_name": a.name,
+                    "detail": (a.login_error or a.login_status or "")[:200],
+                    "at": a.updated_at,
+                }
+            )
+    return {
+        "count": job_count + acc_count + sess_count,
+        "jobs": job_count,
+        "accounts": acc_count,
+        "sessions": sess_count,
+        "latest": latest[:3],
+    }
+
+
 @router.get("/overview")
 def admin_overview(db: Session = Depends(get_db)):
     data = DashboardService.get_overview_data(db)
@@ -85,6 +239,13 @@ def admin_overview(db: Session = Depends(get_db)):
         },
         "queue": queue,
         "chart": chart,
+        "ops": {
+            "worker": _worker_ops(state),
+            "disk": _disk_ops(),
+            "gemini_circuit": _gemini_circuit_ops(),
+            "checkpoint": _checkpoint_ops(db),
+            "failed_jobs": _failed_jobs_ops(db),
+        },
     }
 
 

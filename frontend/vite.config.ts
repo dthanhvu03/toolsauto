@@ -59,12 +59,5 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "../app/static/admin"),
     emptyOutDir: true,
     manifest: true,
-    rollupOptions: {
-      output: {
-        entryFileNames: "assets/index.js",
-        chunkFileNames: "assets/[name].js",
-        assetFileNames: "assets/[name][extname]",
-      },
-    },
   },
 });
