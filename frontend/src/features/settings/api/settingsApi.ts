@@ -1,3 +1,4 @@
+import { redirectToLoginIfUnauthorized } from "@/shared/api/http";
 import type {
   SectionId,
   SettingsSchemaResponse,
@@ -23,6 +24,10 @@ export async function getSettingsSchema(): Promise<SettingsSchemaResponse> {
     return { fields: mockSchema };
   }
   const r = await fetch("/api/settings/metadata", { credentials: "same-origin" });
+  if (r.status === 401) {
+    redirectToLoginIfUnauthorized(401);
+    throw new Error("schema 401");
+  }
   if (!r.ok) throw new Error(`schema ${r.status}`);
   return r.json() as Promise<SettingsSchemaResponse>;
 }
@@ -33,6 +38,10 @@ export async function getSettingsValues(): Promise<SettingsValuesResponse> {
     return structuredClone(mockValues);
   }
   const r = await fetch("/api/settings/values", { credentials: "same-origin" });
+  if (r.status === 401) {
+    redirectToLoginIfUnauthorized(401);
+    throw new Error("values 401");
+  }
   if (!r.ok) throw new Error(`values ${r.status}`);
   return r.json() as Promise<SettingsValuesResponse>;
 }

@@ -1,105 +1,77 @@
+import { PageHeader } from "@/shared/ui/PageHeader";
+import { Panel } from "@/shared/ui/Panel";
+import { QueryBody } from "@/shared/ui/QueryBody";
+import { ActionMsg } from "@/shared/ui/ActionMsg";
+import { inputClass, primaryBtnClass, selectClass } from "@/shared/ui/controls";
+import { AccountsFilters } from "../components/AccountsFilters";
+import { AccountsList } from "../components/AccountsList";
+import { useAccountsController } from "../hooks/useAccountsController";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
-import { fetchAccounts } from "@/shared/api/adminApi";
 
 export function AccountsPage() {
-  const [q, setQ] = useState("");
-  const [platform, setPlatform] = useState("");
-  const [qDraft, setQDraft] = useState("");
-
-  const query = useQuery({
-    queryKey: ["admin-accounts", q, platform],
-    queryFn: () => fetchAccounts({ q, platform }),
-  });
-
-  const rows = query.data?.accounts ?? [];
+  const ctl = useAccountsController();
+  const [name, setName] = useState("");
+  const [plat, setPlat] = useState("facebook");
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Tài khoản</h1>
-          <p className="mt-1 text-sm text-slate-500">{query.data ? `${query.data.total} accounts` : "—"}</p>
-        </div>
-        <a
-          href="/app/accounts"
-          className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:underline"
-        >
-          Classic <ExternalLink className="size-3" />
-        </a>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <select
-          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm"
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value)}
-        >
-          <option value="">All platforms</option>
+      <PageHeader
+        title="Tài khoản"
+        subtitle={ctl.query.data ? `${ctl.query.data.total} accounts` : "—"}
+        classicHref="/app/accounts"
+      />
+      <ActionMsg text={ctl.msg} />
+      <form
+        className="mt-4 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!name.trim()) return;
+          ctl.create(name.trim(), plat);
+          setName("");
+        }}
+      >
+        <input
+          className={inputClass}
+          placeholder="Tên tài khoản"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <select className={selectClass} value={plat} onChange={(e) => setPlat(e.target.value)}>
           <option value="facebook">facebook</option>
+          <option value="instagram">instagram</option>
           <option value="threads">threads</option>
           <option value="tiktok">tiktok</option>
         </select>
-        <input
-          className="h-9 min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-3 text-sm"
-          placeholder="Tìm tên…"
-          value={qDraft}
-          onChange={(e) => setQDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") setQ(qDraft.trim());
-          }}
-        />
-        <button
-          type="button"
-          className="h-9 rounded-lg bg-indigo-600 px-3 text-sm font-semibold text-white"
-          onClick={() => setQ(qDraft.trim())}
-        >
-          Tìm
+        <button type="submit" className={primaryBtnClass} disabled={ctl.creating}>
+          Thêm
         </button>
-      </div>
+        <p className="w-full text-xs text-slate-400">Cookie / đăng nhập browser vẫn ở Classic.</p>
+      </form>
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {query.isLoading ? (
-          <p className="p-6 text-sm text-slate-500">Đang tải…</p>
-        ) : query.isError ? (
-          <p className="p-6 text-sm text-red-600">Lỗi tải accounts</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {rows.length === 0 ? (
-              <li className="px-4 py-8 text-center text-sm text-slate-400">Không có tài khoản</li>
-            ) : (
-              rows.map((a) => (
-                <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                  <div>
-                    <div className="font-semibold text-slate-900">
-                      {a.name}{" "}
-                      <span className="text-xs font-normal text-slate-400">#{a.id}</span>
-                    </div>
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      {a.platform} · login {a.login_status || "—"} · limit {a.daily_limit ?? "—"}/ngày
-                    </div>
-                    {a.target_page ? (
-                      <div className="mt-0.5 max-w-md truncate text-[11px] text-slate-400">
-                        {a.target_page}
-                      </div>
-                    ) : null}
-                  </div>
-                  <span
-                    className={
-                      a.is_active
-                        ? "rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700"
-                        : "rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500"
-                    }
-                  >
-                    {a.is_active ? "ACTIVE" : "OFF"}
-                  </span>
-                </li>
-              ))
-            )}
-          </ul>
-        )}
-      </div>
+      <AccountsFilters
+        platform={ctl.platform}
+        qDraft={ctl.qDraft}
+        onPlatformChange={ctl.setPlatform}
+        onDraftChange={ctl.setQDraft}
+        onSearch={ctl.applySearch}
+      />
+
+      <Panel className="mt-4">
+        <QueryBody
+          isLoading={ctl.query.isLoading}
+          isError={ctl.query.isError}
+          loadingText="Đang tải…"
+          errorText="Lỗi tải accounts"
+        >
+          <AccountsList
+            rows={ctl.rows}
+            busyId={ctl.busyId}
+            onToggle={ctl.toggle}
+            onRename={ctl.rename}
+            onDelete={ctl.remove}
+          />
+        </QueryBody>
+      </Panel>
     </div>
   );
 }

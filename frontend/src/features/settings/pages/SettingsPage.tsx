@@ -168,15 +168,24 @@ export function SettingsPage({ embedded = false }: { embedded?: boolean }) {
       >
         <p>{ctl.loadError}</p>
         <p className="max-w-md text-center text-xs text-slate-500">
-          API /api/settings/* cần FastAPI + session đăng nhập. Dev: VITE_SETTINGS_USE_MOCK=true
+          Cần đăng nhập (cookie session). Dev trên Vite: mở /login trên cùng cổng 5173, không
+          dùng session của :8000.
         </p>
-        <button
-          type="button"
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-white"
-          onClick={ctl.reload}
-        >
-          Retry
-        </button>
+        <div className="mt-2 flex gap-2">
+          <a
+            href="/login"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"
+          >
+            Đăng nhập
+          </a>
+          <button
+            type="button"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700"
+            onClick={ctl.reload}
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }

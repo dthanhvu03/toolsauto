@@ -1,0 +1,50 @@
+export type ComplianceKeyword = {
+  id: number;
+  keyword: string;
+  category: string;
+  severity: string;
+  source?: string | null;
+  is_active: boolean;
+  created_at?: number | null;
+};
+
+export type ComplianceCategory = {
+  category: string;
+  total: number;
+  violations: number;
+  warnings: number;
+  active: number;
+  label: string;
+};
+
+export type ComplianceAnalytics = {
+  total_keywords: number;
+  total_violations: number;
+  blocked_today: number;
+  rewritten_count: number;
+};
+
+export type ViolationHit = {
+  evidence?: string;
+  severity?: string;
+  category?: string;
+};
+
+export type ComplianceViolation = {
+  id: number;
+  affiliate_id?: number | null;
+  job_id?: number | null;
+  content_type?: string | null;
+  original_content?: string | null;
+  rewritten_content?: string | null;
+  violations_found: ViolationHit[];
+  action_taken?: string | null;
+  checked_at?: number | null;
+};
+
+export type ViolationsResponse = {
+  violations: ComplianceViolation[];
+  total: number;
+  page: number;
+  total_pages: number;
+};
