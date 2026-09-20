@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
+from app.config import MIN_DELAY_BETWEEN_POSTS
 from app.core.database.models import Job
 from app.utils.logger import setup_shared_logger
 
@@ -27,7 +28,7 @@ class QueueService:
         Gates in SQL:
           - schedule_ts / scheduled_at due
           - account is_active + login_status=ACTIVE
-          - per-platform cooldown: now - MAX(DONE.finished_at) >= cooldown_seconds
+          - per-platform cooldown: now - MAX(DONE.finished_at) >= GREATEST(cooldown, MIN_DELAY_BETWEEN_POSTS)
           - no other RUNNING job for same account+platform (mutex)
           - fair-share ORDER BY oldest last post first
 
@@ -67,7 +68,7 @@ class QueueService:
                   AND ( :platform IS NULL OR j.platform = :platform )
                   AND a.is_active = true
                   AND a.login_status = 'ACTIVE'
-                  AND (lpp.last_ts IS NULL OR (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - lpp.last_ts) >= a.cooldown_seconds)
+                  AND (lpp.last_ts IS NULL OR (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - lpp.last_ts) >= GREATEST(a.cooldown_seconds, :min_cooldown))
                   -- Per-platform mutex: shared facebook+threads accounts can run one job per platform.
                   AND NOT EXISTS (
                       SELECT 1 FROM jobs j2
@@ -86,7 +87,10 @@ class QueueService:
         import time as _time
         for _attempt in range(3):
             try:
-                result = db.execute(text(sql), {"platform": platform})
+                result = db.execute(
+                    text(sql),
+                    {"platform": platform, "min_cooldown": MIN_DELAY_BETWEEN_POSTS},
+                )
                 row = result.fetchone()
                 db.commit()
 

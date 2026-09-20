@@ -354,7 +354,7 @@ SETTINGS: dict[str, SettingSpec] = {
         title="Delay đăng bài — tối thiểu",
         section="Giới hạn đăng bài",
         description="Khoảng chờ ngẫu nhiên giữa các lần đăng: giới hạn dưới (giây). Giúp giảm hành vi giống bot.",
-        min=0,
+        min=config.POST_DELAY_MIN_FLOOR,
         max=3600,
         unit="giây",
     ),
@@ -365,8 +365,8 @@ SETTINGS: dict[str, SettingSpec] = {
         default_getter=_getattr_default("POST_DELAY_MAX_SEC"),
         title="Delay đăng bài — tối đa",
         section="Giới hạn đăng bài",
-        description="Khoảng chờ ngẫu nhiên giữa các lần đăng: giới hạn trên (giây).",
-        min=0,
+        description="Khoảng chờ ngẫu nhiên giữa các lần đăng: giới hạn trên (giây). Phải ≥ delay tối thiểu.",
+        min=config.POST_DELAY_MIN_FLOOR,
         max=3600,
         unit="giây",
     ),
@@ -408,9 +408,9 @@ SETTINGS: dict[str, SettingSpec] = {
         default_getter=_getattr_default("MAX_CONCURRENT_ACCOUNTS"),
         title="Số tài khoản chạy song song",
         section="Giới hạn đăng bài",
-        description="Số browser/account có thể hoạt động đồng thời khi đăng (nên giữ thấp để an toàn IP).",
+        description="Số browser/account có thể hoạt động đồng thời khi đăng. Hard max 2 / IP (không cho lưu trên 2).",
         min=1,
-        max=10,
+        max=config.MAX_CONCURRENT_ACCOUNTS_MAX,
         unit="account",
     ),
     "ai.whisper_model_size": SettingSpec(
@@ -1328,7 +1328,29 @@ def apply_runtime_overrides_to_config(db: Session) -> dict[str, Any]:
         if sp and sp.env_only:
             continue
         _push_config_value(key, value)
+    _enforce_publish_hard_floors()
     return overrides
+
+
+def _enforce_publish_hard_floors() -> None:
+    """Defense in depth: even stale env/DB cannot undercut antiban floors."""
+    conc = max(
+        1,
+        min(
+            int(config.MAX_CONCURRENT_ACCOUNTS_MAX),
+            int(getattr(config, "MAX_CONCURRENT_ACCOUNTS", 2) or 2),
+        ),
+    )
+    config.MAX_CONCURRENT_ACCOUNTS = conc
+    os.environ["MAX_CONCURRENT_ACCOUNTS"] = str(conc)
+
+    floor = int(config.POST_DELAY_MIN_FLOOR)
+    dmin = max(floor, int(getattr(config, "POST_DELAY_MIN_SEC", floor) or floor))
+    dmax = max(dmin, int(getattr(config, "POST_DELAY_MAX_SEC", 90) or 90))
+    config.POST_DELAY_MIN_SEC = dmin
+    config.POST_DELAY_MAX_SEC = dmax
+    os.environ["POST_DELAY_MIN_SEC"] = str(dmin)
+    os.environ["POST_DELAY_MAX_SEC"] = str(dmax)
 
 
 def _push_config_value(key: str, value: Any) -> None:
@@ -1363,6 +1385,15 @@ def _push_config_value(key: str, value: Any) -> None:
 
     if ev:
         os.environ[ev] = str(value)
+    if key in (
+        "publish.max_concurrent_accounts",
+        "publish.delay_min_sec",
+        "publish.delay_max_sec",
+        "MAX_CONCURRENT_ACCOUNTS",
+        "POST_DELAY_MIN_SEC",
+        "POST_DELAY_MAX_SEC",
+    ):
+        _enforce_publish_hard_floors()
 
 
 def refresh_integration_notifiers() -> None:
@@ -1395,6 +1426,17 @@ def upsert_setting(db: Session, key: str, raw_value: str | None, updated_by: str
     if spec.env_only:
         raise ValueError("This setting is environment-only and cannot be changed from the dashboard")
     value = _validate(spec, _cast_value(spec, raw_value))
+    if key in ("publish.delay_min_sec", "publish.delay_max_sec") and value is not None:
+        other_key = "publish.delay_max_sec" if key == "publish.delay_min_sec" else "publish.delay_min_sec"
+        other = get_int(
+            other_key,
+            config.POST_DELAY_MAX_SEC if other_key.endswith("max_sec") else config.POST_DELAY_MIN_SEC,
+            db=db,
+        )
+        if key == "publish.delay_min_sec" and int(value) > int(other):
+            raise ValueError("publish.delay_min_sec must be <= publish.delay_max_sec")
+        if key == "publish.delay_max_sec" and int(value) < int(other):
+            raise ValueError("publish.delay_max_sec must be >= publish.delay_min_sec")
     stored_value = str(value) if value is not None else None
 
     row = db.query(RuntimeSetting).filter(RuntimeSetting.key == key).first()
