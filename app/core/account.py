@@ -7,7 +7,13 @@ from typing import Any, List, Optional
 
 from sqlalchemy.orm import Session
 from app.core.database.models import Account, Job
-from app.config import CONTENT_PROFILES_DIR, FACEBOOK_HOST, INSTAGRAM_HOST
+from app.config import (
+    CONTENT_PROFILES_DIR,
+    FACEBOOK_HOST,
+    INSTAGRAM_HOST,
+    MAX_ACCOUNT_COOLDOWN_SECONDS,
+    MIN_DELAY_BETWEEN_POSTS,
+)
 import logging
 from app.constants import AccountStatus, JobStatus, ViralStatus
 
@@ -102,11 +108,27 @@ class AccountService:
     def get_account_by_id(db: Session, account_id: int) -> Optional[Account]:
         return AccountService.get_account(db, account_id)
 
+    @staticmethod
+    def assert_cooldown_seconds(cooldown_seconds: int) -> int:
+        """Hard floor: Owner/UI cannot save account cooldown below MIN_DELAY_BETWEEN_POSTS."""
+        try:
+            value = int(cooldown_seconds)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"cooldown_seconds must be between {MIN_DELAY_BETWEEN_POSTS} and {MAX_ACCOUNT_COOLDOWN_SECONDS}."
+            ) from exc
+        if not (MIN_DELAY_BETWEEN_POSTS <= value <= MAX_ACCOUNT_COOLDOWN_SECONDS):
+            raise ValueError(
+                f"cooldown_seconds must be between {MIN_DELAY_BETWEEN_POSTS} and {MAX_ACCOUNT_COOLDOWN_SECONDS}."
+            )
+        return value
+
     @classmethod
     def create_account(cls, db: Session, platform: str, name: str, daily_limit: int = 3, cooldown_seconds: int = 1800) -> Account:
         """Creates a new account in state NEW."""
         cls.ensure_base_dir()
-        
+        cooldown_seconds = cls.assert_cooldown_seconds(cooldown_seconds)
+
         new_acc = Account(
             name=name,
             platform=platform,
@@ -231,8 +253,7 @@ class AccountService:
         import json as _json
         if not (0 <= daily_limit <= 200):
             raise ValueError("daily_limit must be between 0 and 200.")
-        if not (0 <= cooldown_seconds <= 86400):
-            raise ValueError("cooldown_seconds must be between 0 and 86400.")
+        cooldown_seconds = AccountService.assert_cooldown_seconds(cooldown_seconds)
 
         try:
             account = AccountService.get_account(db, account_id)

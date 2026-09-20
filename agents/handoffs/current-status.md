@@ -1,3 +1,8 @@
+## Phiên 2026-09-20 (f) — P0-3 clamp cooldown 1800 / concurrent 2
+Cursor: `cursor/fix-fb-antiban-floors`. Floor: cooldown≥1800, max_concurrent 1–2, delay_min≥30, delay_max≥min. Claim GREATEST. pytest 12 passed. A=`86e7d80` merge=`f7d935a`. Không push. P0-4 headless default — chưa làm.
+
+---
+
 ## Phiên 2026-09-20 (e) — P0 checkpoint harden (detect/stop, không bypass)
 Cursor: branch `cursor/fix-fb-checkpoint-harden`. `JobStatus.CHECKPOINT`; markers gom 1 dict `CHECKPOINT` trong `selectors.py`. Adapter abort ngay, không `_safe_goto("/")` sau checkpoint; screenshot `logs/screenshots/`; Telegram chữ CHECKPOINT; acc INVALID. pytest 66 passed (`test_fb_checkpoint_harden` 19 + admin overview + idle/publisher/media_gate). Chưa commit/push. Còn P0-3 cooldown/concurrent clamp, P0-4 headless default — không làm.
 

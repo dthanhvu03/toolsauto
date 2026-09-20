@@ -255,10 +255,16 @@ TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC = float(os.getenv("TIKWM_VIDEO_DOWNLOAD_TIMEOUT
 VIRAL_MIN_VIEWS = int(os.getenv("VIRAL_MIN_VIEWS", "10000"))  # Ngưỡng view tối thiểu
 VIRAL_MAX_VIDEOS_PER_CHANNEL = int(os.getenv("VIRAL_MAX_VIDEOS_PER_CHANNEL", "50"))  # Số video tối đa mỗi kênh (0 = lấy hết, nên ≤ 200)
 
-# Rate Limiting & Safety
-MAX_CONCURRENT_ACCOUNTS = int(os.getenv("MAX_CONCURRENT_ACCOUNTS", "2"))
-POST_DELAY_MIN_SEC = int(os.getenv("POST_DELAY_MIN_SEC", "30"))
-POST_DELAY_MAX_SEC = int(os.getenv("POST_DELAY_MAX_SEC", "90"))
+# Rate Limiting & Safety — hard floors (Owner/UI cannot undercut)
+MIN_DELAY_BETWEEN_POSTS = 1800  # account cooldown floor, seconds
+MAX_ACCOUNT_COOLDOWN_SECONDS = 86400
+MAX_CONCURRENT_ACCOUNTS_MAX = 2
+POST_DELAY_MIN_FLOOR = 30
+MAX_CONCURRENT_ACCOUNTS = max(
+    1, min(MAX_CONCURRENT_ACCOUNTS_MAX, int(os.getenv("MAX_CONCURRENT_ACCOUNTS", "2")))
+)
+POST_DELAY_MIN_SEC = max(POST_DELAY_MIN_FLOOR, int(os.getenv("POST_DELAY_MIN_SEC", "30")))
+POST_DELAY_MAX_SEC = max(POST_DELAY_MIN_SEC, int(os.getenv("POST_DELAY_MAX_SEC", "90")))
 
 # Per-page daily throughput caps (runtime-overridable via app/settings)
 # 0 = disable cap (use account.daily_limit / no intake limit)

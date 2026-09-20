@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database.core import SessionLocal
 from app.core.database.models import Job, JobEvent, Account
-from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC, CONTENT_MEDIA_DIR
+from app.config import COMMENT_JOB_DELAY_MAX_SEC, COMMENT_JOB_DELAY_MIN_SEC, CONTENT_MEDIA_DIR, MIN_DELAY_BETWEEN_POSTS
 from app.constants import AccountStatus, JobStatus, JobType
 from app.utils.logger import setup_shared_logger
 
@@ -842,6 +842,7 @@ class JobService:
             plat = (job.platform or "").strip().lower()
             last_ts = last_by_pair.get((int(job.account_id), plat), 0)
             cooldown = int(getattr(job.account, "cooldown_seconds", 0) or 0) if job.account else 0
+            cooldown = max(cooldown, MIN_DELAY_BETWEEN_POSTS)
             if last_ts > 0 and cooldown > 0:
                 setattr(job, "claim_cooldown_eta", last_ts + cooldown)
             else:
@@ -1157,7 +1158,8 @@ class JobService:
                 dt_naive = datetime.strptime(schedule_times[i], "%Y-%m-%dT%H:%M")
                 dt_aware = dt_naive.replace(tzinfo=ZoneInfo(TIMEZONE))
                 row_ts = int(dt_aware.timestamp())
-                adjusted_ts = max(row_ts, last_valid_ts + account.cooldown_seconds if last_valid_ts > 0 else row_ts)
+                cd = max(int(account.cooldown_seconds or 0), MIN_DELAY_BETWEEN_POSTS)
+                adjusted_ts = max(row_ts, last_valid_ts + cd if last_valid_ts > 0 else row_ts)
                 last_valid_ts = adjusted_ts
 
                 ext = os.path.splitext(media_file.filename)[1].lower()

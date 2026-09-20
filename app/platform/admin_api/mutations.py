@@ -235,7 +235,7 @@ class AccountCreateBody(BaseModel):
     name: str
     platform: str = "facebook"
     daily_limit: int = 3
-    cooldown_seconds: int = 1800
+    cooldown_seconds: int = Field(default=1800, ge=1800, le=86400)
 
 
 class AccountRenameBody(BaseModel):

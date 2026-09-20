@@ -13,6 +13,7 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
 
+from app.config import MAX_CONCURRENT_ACCOUNTS_MAX
 from app.core import settings as runtime_settings
 from app.core.observability.system_monitor import SystemMonitorService
 from app.core.queue.queue import QueueService
@@ -147,6 +148,7 @@ def claim_precheck(
     max_concurrent = runtime_settings.get_int(
         "publish.max_concurrent_accounts", default_max_concurrent, db=db
     )
+    max_concurrent = max(1, min(int(MAX_CONCURRENT_ACCOUNTS_MAX), int(max_concurrent or 1)))
     running = count_running_for_platform(db, platform, fuzzy=fuzzy_platform)
     if running >= max_concurrent:
         logger.info(
