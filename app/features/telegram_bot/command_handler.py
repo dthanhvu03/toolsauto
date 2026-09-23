@@ -32,6 +32,8 @@ class TelegramCommandHandler:
             "nguon": self._cmd_nguon,
             "moi": self._cmd_moi,
             "sansang": self._cmd_sansang,
+            "han": self._cmd_han,
+            "so": self._cmd_so,
             "dadang": self._cmd_dadang,  # ADR-042
             "tai": self._cmd_tai,  # ADR-043
             "caidat": self._cmd_caidat,
@@ -44,6 +46,8 @@ class TelegramCommandHandler:
         ("moi", "Video mới quét về, kèm nút Xử lý"),
         ("nguon", "Nguồn tự quét: Quét ngay · Bật/Tắt"),
         ("dadang", "Video đã đăng gần nhất (lùi lại nếu bấm nhầm)"),
+        ("han", "Còn đăng được bao nhiêu bài: tuần, hôm nay, tháng"),
+        ("so", "Chỉ số bài đã đăng: lượt hiện, cảm xúc, bình luận, chia sẻ"),
         ("tai", "/tai <link> — chỉ tải bản gốc về máy, không xào chẻ"),
         ("caidat", "Xem / đổi cài đặt luồng video ngay tại đây"),
         ("help", "Danh sách lệnh và cách dùng"),
@@ -139,6 +143,22 @@ class TelegramCommandHandler:
 
         dt = datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(ZoneInfo(config.TIMEZONE))
         return dt.strftime("%d/%m %H:%M")
+
+    @staticmethod
+    def _page_label(raw) -> str:
+        """Id kênh Buffer → tên page. URL page thì lấy đoạn cuối. Trống → chuỗi rỗng."""
+        value = str(raw or "").strip()
+        if not value:
+            return ""
+        from app.core import settings as runtime_settings
+
+        for item in runtime_settings.get_json("BUFFER_CHANNELS") or []:
+            if isinstance(item, dict) and str(item.get("id") or "").strip() == value:
+                return str(item.get("name") or value).strip()
+        if value.startswith("http"):
+            tail = value.rstrip("/").rsplit("/", 1)[-1]
+            return (tail or value)[:40]
+        return value[:40]
 
     @staticmethod
     def _dong_quet(s: dict) -> str:
@@ -348,22 +368,93 @@ class TelegramCommandHandler:
                 )
             nut = [{"text": nhan_nut, "callback_data": f"{action}:{m['id']}"}]
             hang2 = []
+            hang_dang = []
             if status == "READY":
-                nut.append({"text": "✂️ Chọn đoạn", "callback_data": f"khung:{m['id']}"})
-                hang2.append({"text": "✅ Đã đăng", "callback_data": f"dadang:{m['id']}"})  # ADR-042
-                # ADR-041: chỉ video GỐC mới chia được; phần con không chia tiếp.
+                page_id = str(m.get("target_page") or "").strip()
+                queue_data = f"bq:{m['id']}:{page_id}" if page_id else ""
+                page_name = self._page_label(page_id) if page_id else ""
+                tools = [
+                    {"text": nhan_nut, "callback_data": f"{action}:{m['id']}"},
+                    {"text": "Chọn đoạn", "callback_data": f"khung:{m['id']}"},
+                ]
                 if not m.get("parent_material_id"):
-                    hang2.append({"text": "🧩 Chia phần", "callback_data": f"chia:{m['id']}"})
+                    tools.append({"text": "Chia phần", "callback_data": f"chia:{m['id']}"})
+                if queue_data and len(queue_data.encode()) <= 64:
+                    short = (page_name or "page")[:18]
+                    hang_dang.append({"text": f"Xếp vào {short}", "callback_data": queue_data})
+                    hang2.append({"text": "Đổi page", "callback_data": f"pgask:{m['id']}"})
+                else:
+                    hang_dang.append({"text": "Chọn page", "callback_data": f"pgask:{m['id']}"})
+                hang2.append({"text": "Đã đăng", "callback_data": f"dadang:{m['id']}"})
+                nut = tools
             phan = ""
             if status == "POSTED" and m.get("posted_at"):
                 phan += "\n📌 đăng lúc " + self._gio(m["posted_at"])
             if m.get("parent_material_id") and m.get("part_index"):
                 phan += f"\n🧩 Phần {m['part_index']}/{m.get('part_total') or '?'} của #{m['parent_material_id']}"
+            views = int(m.get("views") or 0)
+            view_bit = f" · {views:,} views" if views > 0 else ""
+            title = str(m.get("title") or "").strip()
+            if not title:
+                title = str(m.get("ai_caption") or "").strip().split("\n", 1)[0]
+            import html
+
+            label = html.escape(title[:80] if title else "(không tiêu đề)")
+            page = self._page_label(m.get("target_page")) if status == "READY" else ""
+            if status == "READY" and page:
+                page_line = f"\n<b>{html.escape(page)}</b>"
+            elif status == "READY":
+                page_line = "\nChưa chọn page"
+            else:
+                page_line = ""
+            rows = []
+            if hang_dang:
+                rows.append(hang_dang)
+            if hang2:
+                rows.append(hang2)
+            rows.append(nut)
             self.client.send_message(
-                f"#{m['id']} · {int(m.get('views') or 0):,} views\n"
-                f"📝 {str(m.get('title') or '(không tiêu đề)')[:80]}{phan}{doan}",
-                reply_markup={"inline_keyboard": [nut] + ([hang2] if hang2 else [])},
+                f"<b>#{m['id']}</b>{view_bit}\n{label}{page_line}{phan}{doan}",
+                reply_markup={"inline_keyboard": rows},
             )
+
+    def _cmd_han(self, args=None):
+        """Hạn đăng Buffer và nút thao tác các bài đang xếp."""
+        import app.config as config
+        from app.core.notifier.formatting import buffer_post_keyboard
+        from app.features.buffer.client import BufferClient, BufferError
+
+        key = (getattr(config, "BUFFER_API_KEY", None) or "").strip()
+        if not key:
+            self.client.send_message("Chưa có khóa Buffer.")
+            return
+        try:
+            text, posts = BufferClient(key).quota_overview()
+        except BufferError as exc:
+            self.client.send_message(str(exc)[:300])
+            return
+        self.client.send_message(text)
+        for post in posts:
+            self.client.send_message(
+                post.get("label") or "Bài đang xếp",
+                reply_markup=buffer_post_keyboard(post.get("id") or "", retry=bool(post.get("retry"))),
+            )
+
+    def _cmd_so(self, args=None):
+        """Chỉ số bài đã đăng trong tháng, lấy từ Buffer."""
+        import app.config as config
+        from app.features.buffer.client import BufferClient, BufferError
+
+        key = (getattr(config, "BUFFER_API_KEY", None) or "").strip()
+        if not key:
+            self.client.send_message("Chưa có khóa Buffer.")
+            return
+        try:
+            text = BufferClient(key).insights_overview()
+        except BufferError as exc:
+            self.client.send_message(str(exc)[:300])
+            return
+        self.client.send_message(text[:4000])
 
     def _cmd_status(self, args=None):
         # ADR-033: trạng thái WORKER nằm ở `SystemState.worker_status` ("RUNNING"/"PAUSED"),

@@ -1,3 +1,21 @@
+## Phiên 2026-09-23 (c) — Nút Telegram xếp hàng Buffer
+
+Cursor: tin video sẵn sàng có nút 5 page. Bấm gọi `queue_reup` → job `platform=buffer` + caption AI + `viral_material_id`, mode hàng chờ. Không ghi `media_path` (tránh cleanup xóa file). Funnel `https://laptop-t2hf25cd.tail67527a.ts.net` đã tải đúng file #1063. pytest buffer + nút 34 passed. Poller Telegram bật riêng vì web-only không chạy maintenance.
+
+---
+
+## Phiên 2026-09-23 (b) — URL https cho video reup → Buffer
+
+Cursor: route công khai `/buffer-media/{id}/{chữ ký}.mp4` (không login, không hết hạn). Setting `BUFFER_MEDIA_BASE_URL` phải là https công khai. Job có `viral_material_id` thì `public_media_url` trả link đó thay vì file local. pytest `tests/test_buffer_media.py` + `tests/test_buffer_api.py` 14 passed. Chưa có base https thật nên Buffer chưa tải được video. Chưa gắn nút Telegram.
+
+---
+
+## Phiên 2026-09-23 — Buffer GraphQL
+
+Cursor: nhánh `cursor/feat-buffer-api`. Client `app/features/buffer/client.py`, adapter platform `buffer`, `manage.py buffer channels|post`. Media phải là URL https công khai. pytest `tests/test_buffer_api.py` 8 passed. Chưa commit, chưa push. Cần `BUFFER_API_KEY`.
+
+---
+
 ## Phiên 2026-09-20 (h) — Affiliate comment sau Reel + hiện Jobs/cockpit
 Cursor: `cursor/feat-affiliate-on-post`. Path comment đã có; thêm posted/comment_ok/affiliate_url; COMMENT max_tries=1. pytest 24. Không push.
 

@@ -141,7 +141,8 @@ def _apply_material_metadata(mat, info_data: dict) -> None:
         view_count = _extract_view_count(info_data)
         if view_count > 0:
             mat.views = view_count
-    if mat.title == "Manual reup via Telegram" and info_data.get("title"):
+    title_now = (mat.title or "").strip()
+    if (not title_now or title_now == "Manual reup via Telegram") and info_data.get("title"):
         mat.title = info_data.get("title")
 
 

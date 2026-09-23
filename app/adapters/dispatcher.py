@@ -57,6 +57,7 @@ def get_adapter(platform: str) -> AdapterInterface:
     from app.features.threads.adapter import ThreadsAdapter
     from app.features.instagram.adapter import InstagramAdapter
     from app.features.tiktok.adapter import TiktokAdapter
+    from app.features.buffer.adapter import BufferAdapter
 
     # Map of platforms that have dedicated (non-Generic) adapters
     _DEDICATED_ADAPTERS = {
@@ -64,6 +65,7 @@ def get_adapter(platform: str) -> AdapterInterface:
         Platform.THREADS: lambda: ThreadsAdapter(),
         Platform.INSTAGRAM: lambda: InstagramAdapter(),
         Platform.TIKTOK: lambda: TiktokAdapter(),
+        Platform.BUFFER: lambda: BufferAdapter(),
     }
 
     registry_adapter: AdapterInterface | None = None
@@ -241,8 +243,14 @@ class Dispatcher:
                 else:
                     logger.info("[Job %s] Footprint not found externally. Proceeding with publish.", job.id)
 
-            # 4. FFmpeg Pre-Processing (if enabled and file is video)
-            if FFMPEG_ENABLED and job.resolved_media_path and not job.resolved_processed_media_path:
+            # 4. FFmpeg Pre-Processing (if enabled and file is video).
+            # Buffer lấy media bằng URL công khai, không có file local để cắt.
+            if (
+                platform_key != Platform.BUFFER
+                and FFMPEG_ENABLED
+                and job.resolved_media_path
+                and not job.resolved_processed_media_path
+            ):
                 if MediaProcessor.is_video(job.resolved_media_path):
                     logger.info("[Job %s] Running FFmpeg pre-processing (profile=%s)", job.id, FFMPEG_PROFILE)
                     proc_result = MediaProcessor.process(job.resolved_media_path, profile=FFMPEG_PROFILE, job=job)

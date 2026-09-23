@@ -188,12 +188,63 @@ def material_caption_block(mat) -> str:
     )
 
 
+def _buffer_channels() -> list[dict]:
+    """Page Buffer đã lưu. Lỗi đọc cấu hình ⇒ không hiện nút, tin video vẫn gửi."""
+    try:
+        from app.core import settings as runtime_settings
+
+        data = runtime_settings.get_json("BUFFER_CHANNELS") or []
+    except Exception:
+        return []
+    rows = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        cid = str(item.get("id") or "").strip()
+        name = str(item.get("name") or cid).strip()
+        if cid and name:
+            rows.append({"id": cid, "name": name})
+    return rows
+
+
 def material_ready_buttons(mat) -> list:
-    """ADR-042: nút dưới tin video sẵn sàng. ``callback_data`` do ``telegram_bot`` xử lý."""
+    """ADR-042: nút dưới tin video sẵn sàng. ``callback_data`` do ``telegram_bot`` xử lý.
+
+    Mỗi page Buffer là một nút xếp hàng chờ. ``callback_data`` dạng ``bq:<material>:<channel>``.
+    """
     mid = getattr(mat, "id", None)
     if not mid:
         return []
-    return [[{"text": "✅ Đã đăng", "callback_data": f"dadang:{mid}"}]]
+    rows: list[list[dict]] = []
+    pair: list[dict] = []
+    for channel in _buffer_channels():
+        data = f"bq:{mid}:{channel['id']}"
+        if len(data.encode()) > 64:
+            continue
+        pair.append({"text": channel["name"][:30], "callback_data": data})
+        if len(pair) == 2:
+            rows.append(pair)
+            pair = []
+    if pair:
+        rows.append(pair)
+    rows.append([{"text": "✅ Đã đăng", "callback_data": f"dadang:{mid}"}])
+    return rows
+
+
+def buffer_post_keyboard(post_id: str, *, retry: bool = False) -> dict | None:
+    """Nút thao tác một bài đang nằm trên Buffer. ``callback_data`` tối đa 64 byte."""
+    pid = str(post_id or "").strip()
+    if not pid or len(f"bnow:{pid}".encode()) > 64:
+        return None
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "Đăng lại" if retry else "Đăng ngay", "callback_data": f"bnow:{pid}"},
+                {"text": "Chi tiết", "callback_data": f"binf:{pid}"},
+            ],
+            [{"text": "Thêm", "callback_data": f"bmore:{pid}"}],
+        ]
+    }
 
 
 def material_ready_message(

@@ -1,0 +1,181 @@
+"""Đăng bài qua Buffer API. Không mở browser.
+
+Channel id nằm ở `target_page` của job hoặc account (id kênh Buffer, không phải URL Facebook).
+Video/ảnh phải là URL https công khai — Buffer không có API upload.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timezone
+from urllib.parse import urlparse
+
+from app.adapters.contracts import AdapterInterface, PublishResult
+from app.features.buffer.client import MODES, BufferClient, BufferError
+
+logger = logging.getLogger(__name__)
+
+try:
+    from app.config import SAFE_MODE
+except ImportError:
+    SAFE_MODE = False
+
+
+def api_key() -> str:
+    import app.config as config
+
+    return (getattr(config, "BUFFER_API_KEY", None) or "").strip()
+
+
+def channel_id_for(job) -> str:
+    job_page = (getattr(job, "target_page", None) or "").strip()
+    if job_page:
+        return job_page
+    account = getattr(job, "account", None)
+    return (getattr(account, "target_page", None) or "").strip()
+
+
+def _hosted_reup(job) -> str | None:
+    mid = getattr(job, "viral_material_id", None)
+    if not mid:
+        return None
+    from app.features.buffer.media import public_reup_url
+
+    return public_reup_url(int(mid))
+
+
+def public_media_url(job) -> str | None:
+    raw = (
+        getattr(job, "resolved_processed_media_path", None)
+        or getattr(job, "processed_media_path", None)
+        or getattr(job, "resolved_media_path", None)
+        or getattr(job, "media_path", None)
+        or ""
+    )
+    url = str(raw).strip()
+    hosted = _hosted_reup(job)
+    if not url:
+        return hosted
+    parsed = urlparse(url)
+    if parsed.scheme == "https" and parsed.netloc:
+        return url
+    if hosted:
+        return hosted
+    raise BufferError(
+        "Buffer khong nhan file local. Can URL https cong khai, con song den luc dang. "
+        "Xem https://developers.buffer.com/guides/hosting-media.html"
+    )
+
+
+def schedule_mode(job) -> tuple[str, str | None]:
+    raw = getattr(job, "schedule_ts", None)
+    try:
+        ts = int(raw or 0)
+    except (TypeError, ValueError):
+        ts = 0
+    if ts <= 0:
+        return "addToQueue", None
+    now = int(datetime.now(timezone.utc).timestamp())
+    if ts <= now:
+        return "shareNow", None
+    due = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return "customScheduled", due
+
+
+class BufferAdapter(AdapterInterface):
+    PLATFORM = "buffer"
+
+    def __init__(self, client: BufferClient | None = None):
+        self._client = client
+
+    def open_session(self, profile_path: str) -> bool:
+        if self._client is not None:
+            return True
+        key = api_key()
+        if not key:
+            logger.error("[Buffer] Thieu BUFFER_API_KEY.")
+            return False
+        self._client = BufferClient(key)
+        logger.info("[Buffer] Session API san sang.")
+        return True
+
+    def close_session(self):
+        self._client = None
+
+    def publish(self, job) -> PublishResult:
+        logger.info("[Buffer][job_%s] publish", getattr(job, "id", "?"))
+        if SAFE_MODE:
+            return PublishResult(
+                ok=True,
+                external_post_id="safe_mode_dry_run",
+                details={"safe_mode": True},
+            )
+        if self._client is None and not self.open_session(""):
+            return PublishResult(
+                ok=False,
+                is_fatal=True,
+                error="Thieu BUFFER_API_KEY.",
+                error_code="VALIDATION",
+            )
+
+        channel = channel_id_for(job)
+        text = (getattr(job, "caption", None) or "").strip()
+        if not channel:
+            return PublishResult(
+                ok=False,
+                is_fatal=True,
+                error="Thieu channel id Buffer. Dien vao target_page cua job hoac account.",
+                error_code="VALIDATION",
+            )
+        if not text:
+            return PublishResult(
+                ok=False,
+                is_fatal=True,
+                error="Thieu caption.",
+                error_code="VALIDATION",
+            )
+        try:
+            media = public_media_url(job)
+            mode, due_at = schedule_mode(job)
+            post = self._client.create_post(
+                text=text,
+                channel_id=channel,
+                mode=mode,
+                media_url=media,
+                due_at=due_at,
+            )
+        except BufferError as exc:
+            logger.warning("[Buffer][job_%s] %s", getattr(job, "id", "?"), exc)
+            fatal = "file local" in str(exc) or "channel" in str(exc).lower()
+            return PublishResult(
+                ok=False,
+                is_fatal=fatal,
+                error=str(exc)[:300],
+                error_code="VALIDATION" if fatal else None,
+            )
+
+        return PublishResult(
+            ok=True,
+            external_post_id=str(post.get("id")),
+            details={"dueAt": post.get("dueAt"), "mode": mode},
+        )
+
+    def check_published_state(self, job) -> PublishResult:
+        post_id = (getattr(job, "external_post_id", None) or "").strip()
+        if not post_id or post_id == "safe_mode_dry_run":
+            return PublishResult(ok=False, error="Chua co post Buffer.")
+        if self._client is None and not self.open_session(""):
+            return PublishResult(ok=False, error="Thieu BUFFER_API_KEY.")
+        try:
+            post = self._client.get_post(post_id)
+        except BufferError as exc:
+            return PublishResult(ok=False, error=str(exc)[:300])
+        if not post:
+            return PublishResult(ok=False, error="Khong thay post tren Buffer.")
+        return PublishResult(ok=True, external_post_id=str(post.get("id")))
+
+
+def normalize_mode(mode: str) -> str:
+    value = (mode or "addToQueue").strip()
+    if value not in MODES:
+        raise BufferError(f"Mode Buffer khong hop le: {value}")
+    return value

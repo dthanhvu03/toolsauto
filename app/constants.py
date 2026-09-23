@@ -39,6 +39,7 @@ class Platform(StrEnum):
     THREADS = "threads"
     TIKTOK = "tiktok"
     INSTAGRAM = "instagram"
+    BUFFER = "buffer"
 
 class WorkflowAction(StrEnum):
     """Action types supported by GenericAdapter.ActionExecutor."""

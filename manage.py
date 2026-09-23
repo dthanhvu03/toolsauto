@@ -45,9 +45,11 @@ viral_app = typer.Typer(help="Viral scan & processing")
 pages_app = typer.Typer(help="Facebook page tools (archived scripts)")
 insights_app = typer.Typer(help="Insights scraping (archived script)")
 ai_app = typer.Typer(help="AI provider tools")
+buffer_app = typer.Typer(help="Buffer API — kênh và xếp hàng bài")
 
 app.add_typer(db_app, name="db")
 app.add_typer(ai_app, name="ai")
+app.add_typer(buffer_app, name="buffer")
 app.add_typer(worker_app, name="worker")
 app.add_typer(viral_app, name="viral")
 app.add_typer(pages_app, name="pages")
@@ -511,6 +513,75 @@ def stack(
             StackConfig(host=host, port=resolved, no_web=no_web, reload_web=reload_web)
         )
     )
+
+
+def _buffer_client():
+    import app.config as config
+    from app.features.buffer.client import BufferClient, BufferError
+
+    key = (getattr(config, "BUFFER_API_KEY", "") or "").strip()
+    if not key:
+        typer.echo("Chua co BUFFER_API_KEY. Lay key o Buffer Settings → API.", err=True)
+        raise typer.Exit(code=1)
+    return BufferClient(key), BufferError
+
+
+@buffer_app.command("channels")
+def buffer_channels() -> None:
+    """Liet ke organization va channel. Khong in API key."""
+    client, BufferError = _buffer_client()
+    try:
+        orgs = client.organizations()
+    except BufferError as exc:
+        typer.echo(f"[LOI] {exc}", err=True)
+        raise typer.Exit(code=1)
+    if not orgs:
+        typer.echo("Khong co organization.")
+        raise typer.Exit(code=1)
+    for org in orgs:
+        org_id = org.get("id") or ""
+        typer.echo(f"org {org_id}")
+        try:
+            rows = client.channels(org_id)
+        except BufferError as exc:
+            typer.echo(f"  [LOI] {exc}", err=True)
+            continue
+        for row in rows:
+            typer.echo(
+                "  {id}  {service}  {name}  paused={paused}".format(
+                    id=row.get("id") or "",
+                    service=row.get("service") or "",
+                    name=row.get("displayName") or row.get("name") or "",
+                    paused=row.get("isQueuePaused"),
+                )
+            )
+
+
+@buffer_app.command("post")
+def buffer_post(
+    channel_id: str = typer.Option(..., "--channel", help="Channel id tu lenh channels"),
+    text: str = typer.Option(..., "--text"),
+    media_url: str = typer.Option("", "--media", help="URL https cong khai (mp4/jpg)"),
+    mode: str = typer.Option("addToQueue", "--mode", help="addToQueue | shareNow | shareNext"),
+) -> None:
+    """Xep 1 bai vao Buffer. Mac dinh vao queue, khong dang ngay."""
+    from app.features.buffer.adapter import normalize_mode
+
+    client, BufferError = _buffer_client()
+    try:
+        chosen = normalize_mode(mode)
+        if chosen == "customScheduled":
+            raise BufferError("Lenh post khong nhan customScheduled. Dung schedule_ts tren job.")
+        post = client.create_post(
+            text=text,
+            channel_id=channel_id,
+            mode=chosen,
+            media_url=media_url.strip() or None,
+        )
+    except BufferError as exc:
+        typer.echo(f"[LOI] {exc}", err=True)
+        raise typer.Exit(code=1)
+    typer.echo(f"[OK] post {post.get('id')} dueAt={post.get('dueAt')}")
 
 
 if __name__ == "__main__":

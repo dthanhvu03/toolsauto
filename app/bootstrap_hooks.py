@@ -95,19 +95,30 @@ def register_feature_hooks() -> None:
         """ADR-037 — material theo trạng thái cho `/moi` và `/sansang`."""
         from app.core.database.models import ViralMaterial
 
-        rows = (
+        cap = max(1, min(int(limit), 25))
+        query = (
             db.query(ViralMaterial)
             .filter(ViralMaterial.status == status)
             # ADR-042: đã đăng thì xếp theo lúc đăng — cái vừa đăng nằm trên, đúng thứ Owner tìm.
             .order_by(*((ViralMaterial.posted_at.desc().nullslast(),) if status == "POSTED" else ()), ViralMaterial.id.desc())
-            .limit(max(1, min(int(limit), 25)))
-            .all()
         )
+        # Sẵn sàng mà không còn file reup thì không phải video để đăng. Bỏ khỏi /sansang.
+        if status == "READY":
+            rows = []
+            for mat in query.limit(200).all():
+                if ViralService.find_reup_path(mat.id, mat.platform):
+                    rows.append(mat)
+                if len(rows) >= cap:
+                    break
+        else:
+            rows = query.limit(cap).all()
         return [{
             "id": m.id, "platform": m.platform, "title": m.title, "views": m.views,
             "url": m.url, "clip_start_sec": m.clip_start_sec, "clip_length_sec": m.clip_length_sec,
             "parent_material_id": m.parent_material_id, "part_index": m.part_index, "part_total": m.part_total,
             "posted_at": m.posted_at,
+            "ai_caption": m.ai_caption,
+            "target_page": m.target_page,
         } for m in rows]
 
     def viral_fetch_original(db: Session, url: str) -> dict:

@@ -183,6 +183,40 @@ def test_hien_doan_cat_da_chon(bot, monkeypatch):
     assert "từ 5:32" in client.text and "dài 50s" in client.text
 
 
+def test_khong_tieu_de_thi_lay_caption_va_an_0_view(bot, monkeypatch):
+    handler, client = bot
+    _hooks(monkeypatch, {"viral.list_materials": [dict(
+        MAT, title="", views=0, ai_caption="Heo lùa lại mình",
+    )]})
+
+    handler.handle_command("sansang")
+
+    assert "Heo lùa lại mình" in client.text
+    assert "0 views" not in client.text
+    assert "(không tiêu đề)" not in client.text
+    assert "Chưa chọn page" in client.text
+    assert "pgask:976" in [b["callback_data"] for b in client.buttons()]
+
+
+def test_sansang_hien_ten_page_da_gan(bot, monkeypatch):
+    handler, client = bot
+    _hooks(monkeypatch, {"viral.list_materials": [dict(
+        MAT, target_page="6ab38f18ea19ca0bdec2d731",
+    )]})
+    monkeypatch.setattr(
+        "app.core.settings.get_json",
+        lambda key, default=None, db=None: [{"id": "6ab38f18ea19ca0bdec2d731", "name": "Tết Đã Về"}]
+        if key == "BUFFER_CHANNELS" else default,
+    )
+
+    handler.handle_command("sansang")
+
+    assert "Tết Đã Về" in client.text
+    assert "Chưa chọn page" not in client.text
+    assert "bq:976:6ab38f18ea19ca0bdec2d731" in [b["callback_data"] for b in client.buttons()]
+    assert any(b["text"].startswith("Xếp vào") for b in client.buttons())
+
+
 @pytest.mark.parametrize("cmd,needle", [("moi", "Không có video mới"), ("sansang", "Chưa có video nào sẵn sàng")])
 def test_rong_thi_noi_ro(bot, monkeypatch, cmd, needle):
     handler, client = bot
@@ -194,6 +228,94 @@ def test_rong_thi_noi_ro(bot, monkeypatch, cmd, needle):
 
 
 # ── nút bấm ─────────────────────────────────────────────────────────────────
+
+
+def test_lenh_so_tra_chi_so(bot, monkeypatch):
+    handler, client = bot
+    monkeypatch.setattr("app.config.BUFFER_API_KEY", "k")
+    monkeypatch.setattr(
+        "app.features.buffer.client.BufferClient.insights_overview",
+        lambda self: "Mê Câu Cá · hiện 1,726 · cảm xúc 5",
+    )
+
+    handler.handle_command("so")
+
+    assert "1,726" in client.text and "cảm xúc 5" in client.text
+
+
+def test_lenh_han_ke_bai_dang_xep(bot, monkeypatch):
+    handler, client = bot
+    monkeypatch.setattr("app.config.BUFFER_API_KEY", "k")
+    monkeypatch.setattr(
+        "app.features.buffer.client.BufferClient.quota_overview",
+        lambda self: (
+            "Mê Câu Cá: còn 2 suất trong mục tiêu tuần.",
+            [{"id": "6ab3a5d103dfec2f33d52805", "label": "08:05 24/09 · Mê Câu Cá"}],
+        ),
+    )
+
+    handler.handle_command("han")
+
+    assert "còn 2 suất" in client.text
+    data = [b["callback_data"] for b in client.buttons()]
+    assert "bnow:6ab3a5d103dfec2f33d52805" in data
+    assert "bmore:6ab3a5d103dfec2f33d52805" in data
+    assert "bdel:6ab3a5d103dfec2f33d52805" not in data
+    assert any(b["text"] == "Đăng ngay" for b in client.buttons())
+
+
+def test_bai_loi_co_nut_dang_lai(bot, monkeypatch):
+    handler, client = bot
+    monkeypatch.setattr("app.config.BUFFER_API_KEY", "k")
+    monkeypatch.setattr(
+        "app.features.buffer.client.BufferClient.quota_overview",
+        lambda self: ("hạn", [{"id": "6ab3a5d103dfec2f33d52805", "label": "Lỗi", "retry": True}]),
+    )
+
+    handler.handle_command("han")
+
+    assert any(b["text"] == "Đăng lại" for b in client.buttons())
+    assert "bnow:6ab3a5d103dfec2f33d52805" in [b["callback_data"] for b in client.buttons()]
+
+
+def test_xoa_bai_buffer_phai_xac_nhan(router, monkeypatch):
+    r, client = router
+    called = {}
+
+    def _boom(self, post_id):
+        called["id"] = post_id
+
+    monkeypatch.setattr("app.features.buffer.client.BufferClient.delete_post", _boom)
+    r.dispatch({
+        "callback_query": {
+            "id": "c",
+            "data": "bdel:6ab3a5d103dfec2f33d52805",
+            "message": {"message_id": 1},
+        }
+    })
+
+    assert called == {}
+    assert "bdyes:6ab3a5d103dfec2f33d52805" in [b["callback_data"] for b in client.buttons()]
+
+
+def test_chon_page_xong_co_nut_xep_hang(router, monkeypatch):
+    r, client = router
+
+    monkeypatch.setattr(
+        "app.features.buffer.queue_job.assign_page",
+        lambda db, material_id, channel_id: (True, "#976 thuộc Tết Đã Về."),
+    )
+
+    r.dispatch({
+        "callback_query": {
+            "id": "c",
+            "data": "pg:976:6ab38f18ea19ca0bdec2d731",
+            "message": {"message_id": 1},
+        }
+    })
+
+    assert "Tết Đã Về" in client.text
+    assert "bq:976:6ab38f18ea19ca0bdec2d731" in [b["callback_data"] for b in client.buttons()]
 
 
 def test_nut_quet_chay_nen_va_bao_ket_qua(router, monkeypatch):

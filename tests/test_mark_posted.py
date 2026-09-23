@@ -225,11 +225,12 @@ def test_list_posted_moi_nhat_len_dau(session_factory, disks):
 # ── tin video có nút ────────────────────────────────────────────────────────
 
 
-def test_tin_video_san_sang_mang_nut_da_dang():
+def test_tin_video_san_sang_mang_nut_da_dang(monkeypatch):
     from types import SimpleNamespace
 
     from app.core.notifier import formatting as nf
 
+    monkeypatch.setattr(nf, "_buffer_channels", lambda: [])
     buttons = nf.material_ready_buttons(SimpleNamespace(id=12))
 
     assert buttons == [[{"text": "✅ Đã đăng", "callback_data": "dadang:12"}]]
@@ -246,6 +247,7 @@ def test_notify_material_ready_truyen_nut_xuong_kenh(monkeypatch):
     monkeypatch.setattr(ns.os.path, "exists", lambda p: True)
     monkeypatch.setattr(ns.media_thumb, "telegram_video_within_size_limit", lambda p: True)
     monkeypatch.setattr("app.core.media.thumbnail.media_info", lambda p: {"duration": 10})
+    monkeypatch.setattr("app.core.notifier.formatting._buffer_channels", lambda: [])
     mat = SimpleNamespace(id=7, platform="tiktok", title="x", views=1, ai_caption=None, ai_hashtags_list=[],
                           ai_caption_error=None, clip_start_sec=None)
 

@@ -123,6 +123,14 @@ class TelegramEventRouter:
             # ADR-042: đã đăng / lùi lại
             elif action in ("dadang", "chuadang"):
                 self._handle_posted(callback_id, action, int(target_id))
+            elif action == "bq":
+                self._handle_buffer_queue(callback_id, target_id)
+            elif action == "pgask":
+                self._handle_page_ask(callback_id, target_id)
+            elif action == "pg":
+                self._handle_page_set(callback_id, target_id)
+            elif action in ("bnow", "binf", "btop", "bbot", "bdrf", "bdup", "bdel", "bdyes", "bmore"):
+                self._handle_buffer_post(callback_id, action, target_id)
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
@@ -368,6 +376,171 @@ class TelegramEventRouter:
         msg = str(res.get("msg") or "")
         self.client.answer_callback_query(callback_id, ("✅ " if res.get("ok") else "⚠️ ") + msg[:180])
         self.client.send_message(("✅ " if res.get("ok") else "⚠️ ") + msg)
+
+    def _handle_page_ask(self, callback_id: str, target_id: str):
+        """Hiện 5 page để gắn video, chưa xếp hàng."""
+        from app.features.buffer.queue_job import _channels
+
+        try:
+            material_id = int(target_id)
+        except ValueError:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        rows = []
+        pair = []
+        for channel in _channels():
+            data = f"pg:{material_id}:{channel['id']}"
+            if len(data.encode()) > 64:
+                continue
+            pair.append({"text": channel["name"][:30], "callback_data": data})
+            if len(pair) == 2:
+                rows.append(pair)
+                pair = []
+        if pair:
+            rows.append(pair)
+        self.client.answer_callback_query(callback_id, "Chọn page")
+        if not rows:
+            self.client.send_message("Chưa có page Buffer.")
+            return
+        self.client.send_message(
+            f"📄 Video #{material_id} đăng cho page nào?",
+            reply_markup={"inline_keyboard": rows},
+        )
+
+    def _handle_page_set(self, callback_id: str, target_id: str):
+        from app.core.database.core import SessionLocal
+        from app.features.buffer.queue_job import assign_page
+
+        try:
+            mid_s, channel_id = target_id.split(":", 1)
+            material_id = int(mid_s)
+        except ValueError:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        channel_id = channel_id.strip()
+        with SessionLocal() as db:
+            ok, msg = assign_page(db, material_id, channel_id)
+        text = ("✅ " if ok else "⚠️ ") + msg
+        markup = None
+        queue_data = f"bq:{material_id}:{channel_id}"
+        if ok and len(queue_data.encode()) <= 64:
+            markup = {"inline_keyboard": [[{"text": "Xếp vào hàng", "callback_data": queue_data}]]}
+        self.client.answer_callback_query(callback_id, text[:180])
+        self.client.send_message(text, reply_markup=markup)
+
+    def _handle_buffer_queue(self, callback_id: str, target_id: str):
+        """Nút page trên tin video: xếp reup + caption AI vào hàng chờ Buffer."""
+        from app.core.database.core import SessionLocal
+        from app.features.buffer.queue_job import queue_reup
+
+        try:
+            mid_s, channel_id = target_id.split(":", 1)
+            material_id = int(mid_s)
+        except ValueError:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        channel_id = channel_id.strip()
+        post_id = ""
+        with SessionLocal() as db:
+            ok, msg = queue_reup(db, material_id, channel_id)
+            if ok:
+                from app.constants import JobStatus
+                from app.core.database.models import Job
+
+                job = (
+                    db.query(Job)
+                    .filter(
+                        Job.platform == "buffer",
+                        Job.viral_material_id == material_id,
+                        Job.target_page == channel_id,
+                        Job.status == JobStatus.DONE,
+                    )
+                    .order_by(Job.id.desc())
+                    .first()
+                )
+                post_id = str(getattr(job, "external_post_id", None) or "")
+        from app.core.notifier.formatting import buffer_post_keyboard
+
+        markup = buffer_post_keyboard(post_id) if post_id and post_id != "safe_mode_dry_run" else None
+        self.client.answer_callback_query(callback_id, ("✅ " if ok else "⚠️ ") + msg[:180])
+        self.client.send_message(("✅ " if ok else "⚠️ ") + msg, reply_markup=markup)
+
+    def _handle_buffer_post(self, callback_id: str, action: str, post_id: str):
+        """Nút trên bài Buffer: đăng ngay, chi tiết, xếp lại, nháp, nhân bản, xóa."""
+        import app.config as config
+        from app.features.buffer.client import BufferClient, BufferError, _ict_when
+
+        pid = (post_id or "").strip()
+        if not pid:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        if action == "bmore":
+            self.client.answer_callback_query(callback_id, "Thêm")
+            self.client.send_message(
+                "Thao tác thêm",
+                reply_markup={
+                    "inline_keyboard": [
+                        [
+                            {"text": "Lên đầu", "callback_data": f"btop:{pid}"},
+                            {"text": "Xuống cuối", "callback_data": f"bbot:{pid}"},
+                        ],
+                        [
+                            {"text": "Nháp", "callback_data": f"bdrf:{pid}"},
+                            {"text": "Nhân bản", "callback_data": f"bdup:{pid}"},
+                        ],
+                        [{"text": "Xóa", "callback_data": f"bdel:{pid}"}],
+                    ]
+                },
+            )
+            return
+        if action == "bdel":
+            self.client.answer_callback_query(callback_id, "Xác nhận xóa")
+            self.client.send_message(
+                "Xóa bài này khỏi Buffer?",
+                reply_markup={"inline_keyboard": [[{"text": "🗑 Xóa hẳn", "callback_data": f"bdyes:{pid}"}]]},
+            )
+            return
+        key = (getattr(config, "BUFFER_API_KEY", None) or "").strip()
+        if not key:
+            self.client.answer_callback_query(callback_id, "Chưa có khóa Buffer")
+            return
+        client = BufferClient(key)
+        try:
+            if action == "bnow":
+                outcome = client.publish_now(pid)
+                link = str(outcome.get("externalLink") or "").strip()
+                if link or outcome.get("sentAt"):
+                    msg = "Bài này đã lên Facebook." + (f"\n{link}" if link else "")
+                else:
+                    msg = "Đã gửi đăng lại. Buffer đang đẩy bài lên Facebook."
+            elif action == "bdrf":
+                client.edit_post(pid, save_to_draft=True)
+                msg = "Đã chuyển bài sang nháp. Bài không tự đăng nữa."
+            elif action == "btop":
+                moved = client.move_post(pid, "top")
+                msg = f"Đã đưa lên đầu hàng. Slot {_ict_when(moved.get('dueAt'))}."
+            elif action == "bbot":
+                moved = client.move_post(pid, "bottom")
+                msg = f"Đã đưa xuống cuối hàng. Slot {_ict_when(moved.get('dueAt'))}."
+            elif action == "bdup":
+                created = client.duplicate_post(pid)
+                msg = f"Đã nhân bản vào hàng chờ. Slot {_ict_when(created.get('dueAt'))}."
+            elif action == "bdyes":
+                client.delete_post(pid)
+                msg = "Đã xóa bài khỏi Buffer."
+            elif action == "binf":
+                snap = client.post_snapshot(pid)
+                title = str(snap.get("text") or "").strip().split("\n", 1)[0][:120] or "(không chữ)"
+                msg = (
+                    f"Bài {snap.get('status') or '—'} · {_ict_when(snap.get('dueAt'))}\n"
+                    f"{title}"
+                )
+            else:
+                msg = "Nút không hợp lệ."
+        except BufferError as exc:
+            msg = str(exc)
+        self.client.answer_callback_query(callback_id, msg[:180])
+        self.client.send_message(msg)
 
     def _handle_approve(self, callback_id: str, job_id: int, message_id: int, user_name: str):
         from app.core.database.core import SessionLocal

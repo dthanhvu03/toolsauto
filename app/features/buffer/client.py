@@ -1,0 +1,680 @@
+"""Buffer GraphQL client — https://api.buffer.com
+
+Personal API key: Settings → API. Header `Authorization: Bearer`.
+Media is a public HTTPS URL. Buffer has no upload endpoint.
+Docs: https://developers.buffer.com/guides/getting-started.html
+"""
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+API_URL = "https://api.buffer.com"
+MODES = frozenset({"addToQueue", "shareNow", "shareNext", "customScheduled"})
+_IMAGE_EXT = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
+_VIDEO_EXT = frozenset({".mp4", ".mov", ".webm"})
+
+
+class BufferError(Exception):
+    """Lỗi Buffer. Không chứa API key."""
+
+
+def _gql_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def asset_kind(url: str) -> str:
+    """image | video. Đuôi không rõ thì coi là video (reup của tool)."""
+    path = (url or "").split("?", 1)[0].split("#", 1)[0].lower()
+    ext = ""
+    if "." in path.rsplit("/", 1)[-1]:
+        ext = "." + path.rsplit(".", 1)[-1]
+    if ext in _IMAGE_EXT:
+        return "image"
+    if ext in _VIDEO_EXT or not ext:
+        return "video"
+    return "video"
+
+
+class BufferClient:
+    def __init__(self, api_key: str, *, endpoint: str = API_URL, timeout: float = 30):
+        key = (api_key or "").strip()
+        if not key:
+            raise BufferError("Thieu BUFFER_API_KEY.")
+        self._key = key
+        self._endpoint = endpoint
+        self._timeout = timeout
+
+    def execute(self, query: str, variables: dict | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {"query": query}
+        if variables:
+            payload["variables"] = variables
+        try:
+            response = requests.post(
+                self._endpoint,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self._key}",
+                },
+                json=payload,
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            raise BufferError(f"Khong goi duoc Buffer: {exc.__class__.__name__}") from exc
+
+        if response.status_code == 401:
+            raise BufferError("Buffer tu choi key (401). Lay key o Settings → API.")
+        if response.status_code >= 400:
+            raise BufferError(f"Buffer HTTP {response.status_code}.")
+
+        try:
+            body = response.json()
+        except ValueError as exc:
+            raise BufferError("Buffer tra ve khong phai JSON.") from exc
+
+        errors = body.get("errors") or []
+        if errors:
+            message = "; ".join(
+                str(item.get("message") or "GraphQL error") for item in errors if isinstance(item, dict)
+            )
+            raise BufferError((message or "GraphQL error")[:300])
+        data = body.get("data")
+        if not isinstance(data, dict):
+            raise BufferError("Buffer khong tra data.")
+        return data
+
+    def organizations(self) -> list[dict]:
+        data = self.execute(
+            """
+            query GetOrganizations {
+              account {
+                organizations { id }
+              }
+            }
+            """
+        )
+        account = data.get("account") or {}
+        orgs = account.get("organizations") or []
+        return [item for item in orgs if isinstance(item, dict)]
+
+    def channels(self, organization_id: str) -> list[dict]:
+        org = _gql_string(organization_id)
+        data = self.execute(
+            f"""
+            query GetChannels {{
+              channels(input: {{ organizationId: {org} }}) {{
+                id
+                name
+                displayName
+                service
+                isQueuePaused
+              }}
+            }}
+            """
+        )
+        rows = data.get("channels") or []
+        return [item for item in rows if isinstance(item, dict)]
+
+    def create_post(
+        self,
+        *,
+        text: str,
+        channel_id: str,
+        mode: str = "addToQueue",
+        media_url: str | None = None,
+        due_at: str | None = None,
+    ) -> dict:
+        if mode not in MODES:
+            raise BufferError(f"Mode Buffer khong hop le: {mode}")
+        if mode == "customScheduled" and not due_at:
+            raise BufferError("customScheduled can dueAt.")
+
+        fields = [
+            f"text: {_gql_string(text)}",
+            f"channelId: {_gql_string(channel_id)}",
+            "schedulingType: automatic",
+            f"mode: {mode}",
+        ]
+        if due_at:
+            fields.append(f"dueAt: {_gql_string(due_at)}")
+        if media_url:
+            kind = asset_kind(media_url)
+            url = _gql_string(media_url)
+            fields.append(f"assets: [{{ {kind}: {{ url: {url} }} }}]")
+        # Facebook bắt buộc type. Reel trên API Buffer vẫn khóa 1 phút 30 giây,
+        # trong khi Facebook đã cho video dài hơn. Gửi type post thì video dài được nhận;
+        # video dọc Facebook vẫn có thể hiện thành Reel lúc đăng.
+        fields.append("metadata: { facebook: { type: post } }")
+
+        data = self.execute(
+            f"""
+            mutation CreatePost {{
+              createPost(input: {{ {", ".join(fields)} }}) {{
+                ... on PostActionSuccess {{
+                  post {{ id text dueAt }}
+                }}
+                ... on MutationError {{
+                  message
+                }}
+              }}
+            }}
+            """
+        )
+        node = data.get("createPost") or {}
+        post = node.get("post") if isinstance(node, dict) else None
+        if isinstance(post, dict) and post.get("id"):
+            return post
+        message = ""
+        if isinstance(node, dict):
+            message = str(node.get("message") or "")
+        raise BufferError((message or "Buffer khong tao duoc post.")[:300])
+
+    def get_post(self, post_id: str) -> dict | None:
+        pid = _gql_string(post_id)
+        data = self.execute(
+            f"""
+            query GetPost {{
+              post(input: {{ id: {pid} }}) {{
+                id
+                text
+                channelId
+              }}
+            }}
+            """
+        )
+        post = data.get("post")
+        if isinstance(post, dict) and post.get("id"):
+            return post
+        return None
+
+    def _take_action(self, query: str, name: str) -> dict:
+        data = self.execute(query)
+        node = data.get(name) or {}
+        if not isinstance(node, dict):
+            raise BufferError("Buffer khong tra ket qua.")
+        post = node.get("post")
+        if isinstance(post, dict) and post.get("id"):
+            return post
+        if name == "deletePost" and node.get("id"):
+            return node
+        message = str(node.get("message") or "")
+        raise BufferError((message or "Buffer tu choi.")[:300])
+
+    def delete_post(self, post_id: str) -> None:
+        pid = _gql_string(post_id)
+        self._take_action(
+            f"""
+            mutation DeletePost {{
+              deletePost(input: {{ id: {pid} }}) {{
+                ... on DeletePostSuccess {{ id }}
+                ... on MutationError {{ message }}
+              }}
+            }}
+            """,
+            "deletePost",
+        )
+
+    def edit_post(self, post_id: str, *, mode: str | None = None, save_to_draft: bool = False) -> dict:
+        fields = [f"id: {_gql_string(post_id)}"]
+        if mode:
+            if mode not in MODES:
+                raise BufferError(f"Mode Buffer khong hop le: {mode}")
+            fields.append(f"mode: {mode}")
+        if save_to_draft:
+            fields.append("saveToDraft: true")
+        # Đổi lịch mà không gửi lại chữ, video và type thì Buffer coi bài là rỗng.
+        if mode or save_to_draft:
+            fields.extend(self._kept_content_fields(post_id))
+        return self._take_action(
+            f"""
+            mutation EditPost {{
+              editPost(input: {{ {", ".join(fields)} }}) {{
+                ... on PostActionSuccess {{ post {{ id dueAt status }} }}
+                ... on MutationError {{ message }}
+              }}
+            }}
+            """,
+            "editPost",
+        )
+
+    def publish_now(self, post_id: str) -> dict:
+        """Đăng ngay. Nếu Buffer đã có bài gửi cùng video thì không gửi thêm."""
+        twin = self.find_sent_twin(post_id)
+        if twin:
+            self._park_if_open(post_id)
+            return twin
+        result = self.edit_post(post_id, mode="shareNow")
+        twin = self.find_sent_twin(post_id)
+        if twin and str(twin.get("id") or "") != str(post_id):
+            self._park_if_open(post_id)
+            return twin
+        return result
+
+    def find_sent_twin(self, post_id: str) -> dict | None:
+        snap = self.post_snapshot(post_id)
+        channel = str(snap.get("channelId") or "").strip()
+        if not channel:
+            return None
+        source = ""
+        assets = snap.get("assets") or []
+        if assets and isinstance(assets[0], dict):
+            source = str(assets[0].get("source") or "").strip()
+        text = " ".join(str(snap.get("text") or "").split())[:80]
+        orgs = self.organizations()
+        if not orgs or not orgs[0].get("id"):
+            return None
+        org = _gql_string(str(orgs[0]["id"]))
+        cid = _gql_string(channel)
+        data = self.execute(
+            f"""
+            query Twins {{
+              posts(first: 15, input: {{
+                organizationId: {org}
+                filter: {{ channelIds: [{cid}], status: [sent] }}
+              }}) {{
+                edges {{
+                  node {{ id text sentAt externalLink assets {{ source }} }}
+                }}
+              }}
+            }}
+            """
+        )
+        for edge in (data.get("posts") or {}).get("edges") or []:
+            node = edge.get("node") if isinstance(edge, dict) else None
+            if not isinstance(node, dict) or not node.get("id"):
+                continue
+            if str(node["id"]) == str(post_id):
+                return node
+            urls = [
+                str(item.get("source") or "").strip()
+                for item in (node.get("assets") or [])
+                if isinstance(item, dict)
+            ]
+            if source and source in urls:
+                return node
+            other = " ".join(str(node.get("text") or "").split())[:80]
+            if text and other == text:
+                return node
+        return None
+
+    def _park_if_open(self, post_id: str) -> None:
+        """Xóa bài gốc đang mở. Sửa nội dung bài shareNow khiến Buffer gửi thêm một bản."""
+        try:
+            snap = self.post_snapshot(post_id)
+        except BufferError:
+            return
+        if str(snap.get("status") or "") == "sent":
+            return
+        try:
+            self.delete_post(post_id)
+        except BufferError:
+            return
+
+    def move_post(self, post_id: str, position: str) -> dict:
+        if position not in {"top", "bottom"}:
+            raise BufferError("Vi tri hang cho khong hop le.")
+        pid = _gql_string(post_id)
+        return self._take_action(
+            f"""
+            mutation MovePost {{
+              movePostInQueue(input: {{ id: {pid}, position: {position} }}) {{
+                ... on PostActionSuccess {{ post {{ id dueAt }} }}
+                ... on MutationError {{ message }}
+              }}
+            }}
+            """,
+            "movePostInQueue",
+        )
+
+    def post_snapshot(self, post_id: str) -> dict:
+        pid = _gql_string(post_id)
+        data = self.execute(
+            f"""
+            query PostSnap {{
+              post(input: {{ id: {pid} }}) {{
+                id
+                text
+                dueAt
+                status
+                shareMode
+                channelId
+                assets {{ source }}
+                metadata {{
+                  ... on FacebookPostMetadata {{ type }}
+                }}
+              }}
+            }}
+            """
+        )
+        post = data.get("post")
+        if isinstance(post, dict) and post.get("id"):
+            return post
+        raise BufferError("Khong thay bai tren Buffer.")
+
+    def _kept_content_fields(self, post_id: str) -> list[str]:
+        snap = self.post_snapshot(post_id)
+        text = str(snap.get("text") or "")
+        assets = snap.get("assets") or []
+        source = ""
+        if assets and isinstance(assets[0], dict):
+            source = str(assets[0].get("source") or "").strip()
+        if not text.strip() and not source:
+            raise BufferError("Bai khong co chu hoac video de dang.")
+        fields = [f"text: {_gql_string(text)}"]
+        if source:
+            kind = asset_kind(source)
+            fields.append(f"assets: [{{ {kind}: {{ url: {_gql_string(source)} }} }}]")
+        meta = snap.get("metadata") if isinstance(snap.get("metadata"), dict) else {}
+        fb_type = str(meta.get("type") or "post")
+        if fb_type not in {"post", "reel", "story"}:
+            fb_type = "post"
+        fields.append(f"metadata: {{ facebook: {{ type: {fb_type} }} }}")
+        return fields
+
+    def duplicate_post(self, post_id: str) -> dict:
+        snap = self.post_snapshot(post_id)
+        text = str(snap.get("text") or "").strip()
+        channel_id = str(snap.get("channelId") or "").strip()
+        media = None
+        assets = snap.get("assets") or []
+        if assets and isinstance(assets[0], dict):
+            media = str(assets[0].get("source") or "").strip() or None
+        if not text or not channel_id:
+            raise BufferError("Khong du noi dung de nhan ban.")
+        return self.create_post(text=text, channel_id=channel_id, media_url=media)
+
+    def quota_overview(self) -> tuple[str, list[dict]]:
+        """Hạn đăng theo page. Trả (đoạn chữ, các bài đang xếp kèm nhãn)."""
+        from datetime import datetime, timedelta, timezone
+
+        ict = timezone(timedelta(hours=7))
+        now = datetime.now(ict)
+        orgs = self.organizations()
+        if not orgs or not orgs[0].get("id"):
+            raise BufferError("Khong thay to chuc Buffer.")
+        org = _gql_string(str(orgs[0]["id"]))
+        data = self.execute(
+            f"""
+            query Limits {{
+              channels(input: {{ organizationId: {org} }}) {{
+                id
+                displayName
+                name
+                postingGoal {{
+                  goal
+                  periodStart
+                  periodEnd
+                  scheduledCount
+                  sentCount
+                }}
+              }}
+            }}
+            """
+        )
+        channels = [row for row in (data.get("channels") or []) if isinstance(row, dict) and row.get("id")]
+        if not channels:
+            raise BufferError("Chua co page Buffer.")
+        ids = ", ".join(_gql_string(str(row["id"])) for row in channels)
+        daily = self.execute(
+            f"""
+            query Day {{
+              dailyPostingLimits(input: {{ channelIds: [{ids}] }}) {{
+                channelId
+                limit
+                scheduled
+                sent
+              }}
+            }}
+            """
+        )
+        day_by_id = {
+            row.get("channelId"): row
+            for row in (daily.get("dailyPostingLimits") or [])
+            if isinstance(row, dict)
+        }
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            month_end = month_start.replace(year=now.year + 1, month=1)
+        else:
+            month_end = month_start.replace(month=now.month + 1)
+        start_iso = _gql_string(month_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+        end_iso = _gql_string(month_end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+        month_by_id: dict[str, int] = {}
+        month_note = ""
+        try:
+            month = self.execute(
+                f"""
+                query Month {{
+                  posts(first: 50, input: {{
+                    organizationId: {org}
+                    filter: {{ status: [sent], startDate: {start_iso}, endDate: {end_iso} }}
+                  }}) {{
+                    edges {{ node {{ channelId }} }}
+                    pageInfo {{ hasNextPage }}
+                  }}
+                }}
+                """
+            )
+            payload = month.get("posts") or {}
+            for edge in payload.get("edges") or []:
+                node = edge.get("node") if isinstance(edge, dict) else None
+                cid = str((node or {}).get("channelId") or "")
+                if cid:
+                    month_by_id[cid] = month_by_id.get(cid, 0) + 1
+            if (payload.get("pageInfo") or {}).get("hasNextPage"):
+                month_note = " (ít nhất)"
+        except BufferError:
+            month_note = " (chưa đọc được)"
+
+        scheduled = self.execute(
+            f"""
+            query Queue {{
+              posts(first: 10, input: {{
+                organizationId: {org}
+                filter: {{ status: [scheduled, error] }}
+              }}) {{
+                edges {{ node {{ id text dueAt status channelId }} }}
+              }}
+            }}
+            """
+        )
+        from html import escape
+
+        names = {str(row["id"]): str(row.get("displayName") or row.get("name") or row["id"]) for row in channels}
+        lines = ["<b>Hạn đăng</b>", "Tuần là mục tiêu. Hôm nay mới là trần."]
+        for row in channels:
+            cid = str(row["id"])
+            name = escape(names[cid])
+            goal = row.get("postingGoal") if isinstance(row.get("postingGoal"), dict) else None
+            day = day_by_id.get(cid) or {}
+            limit = day.get("limit")
+            sent_day = int(day.get("sent") or 0)
+            queued_day = int(day.get("scheduled") or 0)
+            if limit is None:
+                day_bit = "hôm nay không thấy trần"
+            else:
+                day_bit = f"hôm nay còn {int(limit) - sent_day - queued_day}"
+            month_bit = month_by_id.get(cid, 0)
+            if goal:
+                sent = int(goal.get("sentCount") or 0)
+                queued = int(goal.get("scheduledCount") or 0)
+                target = int(goal.get("goal") or 0)
+                left = target - sent - queued
+                week = f"tuần còn {left}/{target}" if left > 0 else f"tuần đủ {target}/{target}"
+                if queued:
+                    week += f", đã xếp {queued}"
+            else:
+                week = "tuần chưa đặt mục tiêu"
+            lines.append(f"<b>{name}</b>\n{week} · {day_bit} · tháng {month_bit} bài{month_note}")
+        posts = []
+        for edge in (scheduled.get("posts") or {}).get("edges") or []:
+            node = edge.get("node") if isinstance(edge, dict) else None
+            if not isinstance(node, dict) or not node.get("id"):
+                continue
+            from html import escape
+
+            title = escape(str(node.get("text") or "").strip().split("\n", 1)[0][:60] or "(không chữ)")
+            when = _ict_when(node.get("dueAt"))
+            page = escape(names.get(str(node.get("channelId") or ""), ""))
+            failed = str(node.get("status") or "") == "error"
+            head = f"<b>Lỗi</b> · {page}" if failed else f"<b>{when}</b> · {page}"
+            posts.append({"id": str(node["id"]), "label": f"{head}\n{title}", "retry": failed})
+        return "\n".join(lines), posts
+
+    def insights_overview(self) -> str:
+        """Chỉ số tháng này. Buffer không trả view riêng cho Facebook."""
+        from datetime import datetime, timedelta, timezone
+
+        ict = timezone(timedelta(hours=7))
+        now = datetime.now(ict)
+        orgs = self.organizations()
+        if not orgs or not orgs[0].get("id"):
+            raise BufferError("Khong thay to chuc Buffer.")
+        org = _gql_string(str(orgs[0]["id"]))
+        data = self.execute(
+            f"""
+            query Names {{
+              channels(input: {{ organizationId: {org} }}) {{
+                id
+                displayName
+                name
+              }}
+            }}
+            """
+        )
+        names = {
+            str(row["id"]): str(row.get("displayName") or row.get("name") or row["id"])
+            for row in (data.get("channels") or [])
+            if isinstance(row, dict) and row.get("id")
+        }
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            month_end = month_start.replace(year=now.year + 1, month=1)
+        else:
+            month_end = month_start.replace(month=now.month + 1)
+        start_iso = _gql_string(month_start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+        end_iso = _gql_string(month_end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
+        packed = self.execute(
+            f"""
+            query Insights {{
+              posts(first: 50, input: {{
+                organizationId: {org}
+                filter: {{ status: [sent], startDate: {start_iso}, endDate: {end_iso} }}
+              }}) {{
+                edges {{
+                  node {{
+                    id
+                    text
+                    sentAt
+                    channelId
+                    metrics {{ type value }}
+                  }}
+                }}
+                pageInfo {{ hasNextPage }}
+              }}
+            }}
+            """
+        )
+        payload = packed.get("posts") or {}
+        rows = []
+        for edge in payload.get("edges") or []:
+            node = edge.get("node") if isinstance(edge, dict) else None
+            if isinstance(node, dict) and node.get("id"):
+                rows.append(node)
+        if not rows:
+            return f"Tháng {now.month} chưa có bài đã đăng để lấy chỉ số."
+        by_channel: dict[str, list[dict]] = {}
+        for row in rows:
+            by_channel.setdefault(str(row.get("channelId") or ""), []).append(row)
+        from html import escape
+
+        lines = [f"<b>Tháng {now.month}</b>", "Chưa có số view. Số dưới là lượt hiện."]
+        if (payload.get("pageInfo") or {}).get("hasNextPage"):
+            lines.append("Đang hiện 50 bài mới nhất.")
+        ranked = []
+        for cid, items in by_channel.items():
+            total = _sum_metrics(items)
+            name = escape(names.get(cid, cid or "Page"))
+            lines.append(f"<b>{name}</b> · {len(items)} bài\n{_stat_line(total)}")
+            ranked.extend(items)
+        ranked.sort(key=lambda row: _metric_map(row).get("impressions", 0), reverse=True)
+        lines.append("<b>Nổi bật</b>")
+        for row in ranked[:3]:
+            stats = _metric_map(row)
+            title = escape(str(row.get("text") or "").strip().split("\n", 1)[0][:70] or "(không chữ)")
+            page = escape(names.get(str(row.get("channelId") or ""), ""))
+            lines.append(f"{_num(stats.get('impressions'))} hiện · {_ict_when(row.get('sentAt'))} · {page}\n{title}")
+        return "\n".join(lines)
+
+
+def _metric_map(post: dict) -> dict[str, float]:
+    out = {}
+    for item in post.get("metrics") or []:
+        if isinstance(item, dict) and item.get("type"):
+            try:
+                out[str(item["type"])] = float(item.get("value") or 0)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _sum_metrics(posts: list[dict]) -> dict[str, float]:
+    total: dict[str, float] = {}
+    for post in posts:
+        for key, value in _metric_map(post).items():
+            if key == "engagementRate":
+                continue
+            total[key] = total.get(key, 0) + value
+    return total
+
+
+def _num(value) -> str:
+    return f"{int(value or 0):,}"
+
+
+def _stat_line(total: dict[str, float]) -> str:
+    parts = [f"{_num(total.get('impressions'))} hiện"]
+    for key, label in (("reactions", "cảm xúc"), ("comments", "bình luận"), ("shares", "chia sẻ"), ("clicks", "bấm")):
+        value = total.get(key) or 0
+        if value:
+            parts.append(f"{_num(value)} {label}")
+    if total.get("impressions"):
+        parts.append(_rate(total))
+    return " · ".join(parts)
+
+
+def _rate(total: dict[str, float]) -> str:
+    shown = total.get("impressions") or 0
+    if shown <= 0:
+        return "0%"
+    engaged = (
+        total.get("reactions", 0)
+        + total.get("comments", 0)
+        + total.get("shares", 0)
+        + total.get("clicks", 0)
+    )
+    return f"{engaged / shown * 100:.2f}%"
+
+
+def _ict_when(raw) -> str:
+    from datetime import datetime, timedelta, timezone
+
+    text = str(raw or "").strip()
+    if not text:
+        return "chưa có giờ"
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone(timedelta(hours=7)))
+    except ValueError:
+        return text[:16]
+    return dt.strftime("%H:%M %d/%m")
+
+
+def _ict_span(start, end) -> str:
+    left = _ict_when(start)
+    right = _ict_when(end)
+    return f"{left[-5:]}–{right[-5:]}"

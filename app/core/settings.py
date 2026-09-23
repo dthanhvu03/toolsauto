@@ -926,6 +926,29 @@ SETTINGS: dict[str, SettingSpec] = {
             "Ra ngoài nhà cần Tailscale (dùng IP Tailscale ở đây). Bỏ trống = không in link."
         ),
     ),
+    "BUFFER_CHANNELS": SettingSpec(
+        key="BUFFER_CHANNELS",
+        type="text",
+        default_getter=lambda: "",
+        title="Kênh Buffer gắn nút Telegram",
+        section="Tích hợp",
+        description=(
+            "JSON [{\"id\",\"name\"}]. Mỗi phần tử là một nút trên tin video sẵn sàng: "
+            "bấm là xếp video reup và caption AI vào hàng chờ page đó. Để trống = không hiện nút."
+        ),
+    ),
+    "BUFFER_MEDIA_BASE_URL": SettingSpec(
+        key="BUFFER_MEDIA_BASE_URL",
+        type="str",
+        default_getter=lambda: "",
+        title="Địa chỉ https để Buffer tải video",
+        section="Tích hợp",
+        description=(
+            "Ví dụ https://media.example.com — gốc https công khai trỏ tới tool này, không đăng nhập. "
+            "Buffer tải file reup lúc tới slot, nên địa chỉ phải cố định (không dùng link hết hạn). "
+            "Bỏ trống = không phát video qua Buffer. http hoặc IP mạng nhà không dùng được."
+        ),
+    ),
     "TIKWM_API_BASE": SettingSpec(
         key="TIKWM_API_BASE",
         type="str",
