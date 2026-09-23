@@ -22,6 +22,7 @@ def _account_row(a) -> dict[str, Any]:
         "platform": a.platform,
         "is_active": bool(a.is_active),
         "login_status": a.login_status,
+        "login_error": (getattr(a, "login_error", None) or "")[:300] or None,
         "daily_limit": a.daily_limit,
         "cooldown_seconds": a.cooldown_seconds,
         "target_page": a.target_page,

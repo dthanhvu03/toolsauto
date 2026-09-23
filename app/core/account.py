@@ -645,8 +645,10 @@ class AccountService:
             from app.config import BASE_DIR, LOGS_DIR
             env = os.environ.copy()
             env["PYTHONPATH"] = str(BASE_DIR)
-            # Force :99 to match the VNC bridge, even on local with WSLg
-            env["DISPLAY"] = ":99"
+            # VPS/VNC dùng :99 khi process không có DISPLAY. Local/WSLg đã có :0 — đừng ghi đè
+            # (cửa sổ login sẽ biến mất, Owner tưởng bấm Đăng nhập hỏng).
+            if not (env.get("DISPLAY") or "").strip():
+                env["DISPLAY"] = ":99"
 
             # 3. Log errors to file instead of DEVNULL for debugging
             log_file = os.path.join(LOGS_DIR, f"login_account_{account.id}.log")

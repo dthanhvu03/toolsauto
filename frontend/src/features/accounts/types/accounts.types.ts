@@ -5,6 +5,7 @@ export type AccountsResponse = {
     platform: string;
     is_active: boolean;
     login_status?: string;
+    login_error?: string | null;
     daily_limit?: number;
     target_page?: string | null;
     consecutive_failures?: number;

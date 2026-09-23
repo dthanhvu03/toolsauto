@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createAccount, deleteAccount, fetchAccounts, renameAccount, toggleAccount } from "../api/accountsApi";
+import {
+  confirmAccountLogin,
+  createAccount,
+  deleteAccount,
+  fetchAccounts,
+  renameAccount,
+  startAccountLogin,
+  toggleAccount,
+} from "../api/accountsApi";
 
 export function useAccountsController() {
   const qc = useQueryClient();
@@ -12,6 +20,10 @@ export function useAccountsController() {
   const query = useQuery({
     queryKey: ["admin-accounts", q, platform],
     queryFn: () => fetchAccounts({ q, platform }),
+    refetchInterval: (query) => {
+      const rows = query.state.data?.accounts ?? [];
+      return rows.some((a) => (a.login_status || "").toUpperCase() === "LOGGING_IN") ? 3000 : false;
+    },
   });
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin-accounts"] });
@@ -29,6 +41,20 @@ export function useAccountsController() {
     onError: onErr,
   });
   const deleteMut = useMutation({ mutationFn: deleteAccount, onSuccess: onOk, onError: onErr });
+  const startLoginMut = useMutation({ mutationFn: startAccountLogin, onSuccess: onOk, onError: onErr });
+  const confirmLoginMut = useMutation({
+    mutationFn: confirmAccountLogin,
+    onSuccess: onOk,
+    onError: onErr,
+  });
+
+  const busyId =
+    (toggleMut.variables as number | undefined) ??
+    renameMut.variables?.id ??
+    (deleteMut.variables as number | undefined) ??
+    (startLoginMut.variables as number | undefined) ??
+    (confirmLoginMut.variables as number | undefined) ??
+    null;
 
   return {
     platform,
@@ -37,10 +63,7 @@ export function useAccountsController() {
     query,
     msg,
     creating: createMut.isPending,
-    busyId: (toggleMut.variables as number | undefined) ??
-      renameMut.variables?.id ??
-      (deleteMut.variables as number | undefined) ??
-      null,
+    busyId,
     setPlatform,
     setQDraft,
     applySearch: () => setQ(qDraft.trim()),
@@ -48,5 +71,7 @@ export function useAccountsController() {
     toggle: (id: number) => toggleMut.mutate(id),
     rename: (id: number, name: string) => renameMut.mutate({ id, name }),
     remove: (id: number) => deleteMut.mutate(id),
+    startLogin: (id: number) => startLoginMut.mutate(id),
+    confirmLogin: (id: number) => confirmLoginMut.mutate(id),
   };
 }

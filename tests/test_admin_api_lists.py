@@ -210,6 +210,52 @@ def test_admin_account_create_and_toggle(tmp_path):
         engine.dispose()
 
 
+def test_admin_account_start_and_confirm_login(tmp_path, monkeypatch):
+    from app.core.account import AccountService
+
+    engine, factory, c = _client(tmp_path)
+    try:
+        r = c.post(
+            "/api/admin/accounts",
+            json={"name": "Hi Vu", "platform": "facebook"},
+        )
+        assert r.status_code == 200, r.text
+        aid = r.json()["id"]
+
+        def _start(db, account_id):
+            acc = db.get(Account, account_id)
+            acc.login_status = "LOGGING_IN"
+            acc.login_error = None
+            db.commit()
+            db.refresh(acc)
+            return acc
+
+        def _confirm(db, account_id):
+            acc = db.get(Account, account_id)
+            acc.login_status = "ACTIVE"
+            acc.login_error = None
+            db.commit()
+            db.refresh(acc)
+            return acc
+
+        monkeypatch.setattr(AccountService, "start_login", staticmethod(_start))
+        monkeypatch.setattr(AccountService, "confirm_login", staticmethod(_confirm))
+
+        s = c.post(f"/api/admin/accounts/{aid}/start-login")
+        assert s.status_code == 200, s.text
+        assert s.json()["login_status"] == "LOGGING_IN"
+
+        listed = c.get("/api/admin/accounts").json()["accounts"]
+        row = next(a for a in listed if a["id"] == aid)
+        assert row["login_status"] == "LOGGING_IN"
+
+        cf = c.post(f"/api/admin/accounts/{aid}/confirm-login")
+        assert cf.status_code == 200, cf.text
+        assert cf.json()["login_status"] == "ACTIVE"
+    finally:
+        engine.dispose()
+
+
 def test_admin_affiliate_save(tmp_path):
     engine, factory, c = _client(tmp_path)
     try:

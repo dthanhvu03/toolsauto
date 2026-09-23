@@ -27,3 +27,11 @@ export function renameAccount(id: number, name: string) {
 export function deleteAccount(id: number) {
   return sendJson<OkMessage>(`/api/admin/accounts/${id}/delete`, "POST");
 }
+
+export function startAccountLogin(id: number) {
+  return sendJson<OkMessage>(`/api/admin/accounts/${id}/start-login`, "POST");
+}
+
+export function confirmAccountLogin(id: number) {
+  return sendJson<OkMessage>(`/api/admin/accounts/${id}/confirm-login`, "POST");
+}

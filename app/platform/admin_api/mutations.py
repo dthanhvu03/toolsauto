@@ -293,6 +293,42 @@ def admin_account_delete(account_id: int, db: Session = Depends(get_db)):
     return _ok(f"Đã xoá account #{account_id}", id=account_id)
 
 
+@router.post("/accounts/{account_id}/start-login")
+def admin_account_start_login(account_id: int, db: Session = Depends(get_db)):
+    try:
+        acc = AccountService.start_login(db, account_id)
+    except ValueError as e:
+        _fail(400, str(e))
+    except Exception:
+        logger.exception("[ADMIN][accounts] start-login #%s", account_id)
+        _fail(500, "Không mở được cửa sổ đăng nhập")
+    if not acc:
+        _fail(404, f"Không thấy account #{account_id}")
+    return _ok(
+        "Đã mở Chromium — login Facebook trong cửa sổ đó, rồi bấm Xác nhận.",
+        id=acc.id,
+        login_status=acc.login_status,
+    )
+
+
+@router.post("/accounts/{account_id}/confirm-login")
+def admin_account_confirm_login(account_id: int, db: Session = Depends(get_db)):
+    try:
+        acc = AccountService.confirm_login(db, account_id)
+    except ValueError as e:
+        _fail(400, str(e))
+    except Exception:
+        logger.exception("[ADMIN][accounts] confirm-login #%s", account_id)
+        _fail(500, "Không xác nhận được session")
+    if not acc:
+        _fail(404, f"Không thấy account #{account_id}")
+    status = (acc.login_status or "").upper()
+    if status == "ACTIVE":
+        return _ok("Session ACTIVE — đúng profile tool.", id=acc.id, login_status=status)
+    err = (acc.login_error or "Chưa vào được Facebook trong cửa sổ Chromium.")[:300]
+    _fail(400, err)
+
+
 # ── Affiliates ──────────────────────────────────────────────────────────────
 
 

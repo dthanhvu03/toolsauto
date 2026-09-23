@@ -45,7 +45,9 @@ export function AccountsPage() {
         <button type="submit" className={primaryBtnClass} disabled={ctl.creating}>
           Thêm
         </button>
-        <p className="w-full text-xs text-slate-400">Cookie / đăng nhập browser vẫn ở Classic.</p>
+        <p className="w-full text-xs text-slate-400">
+          Đăng nhập Chrome = cửa sổ Chromium của tool, không phải Chrome Windows đang mở Facebook.
+        </p>
       </form>
 
       <AccountsFilters
@@ -69,6 +71,8 @@ export function AccountsPage() {
             onToggle={ctl.toggle}
             onRename={ctl.rename}
             onDelete={ctl.remove}
+            onStartLogin={ctl.startLogin}
+            onConfirmLogin={ctl.confirmLogin}
           />
         </QueryBody>
       </Panel>
