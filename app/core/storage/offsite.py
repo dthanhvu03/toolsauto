@@ -28,11 +28,12 @@ from app.utils.logger import setup_shared_logger
 logger = setup_shared_logger(__name__)
 
 # Thư mục con trong Drive theo loại nội dung. Khoá phải khớp tham số `kind`.
+# ADR-045: đánh số để Owner mở Drive thấy đúng quy trình (COO); CTO giữ tháng + Đã đăng.
 SUBDIRS: dict[str, str] = {
     "backup": "backups",
-    "video": "videos",
-    # ADR-043: bản gốc tải về để xem, không reup — nằm cạnh videos/ nhưng tách thư mục.
-    "download": "videos/Tải về",
+    "video": "videos/01_san-sang",
+    # ADR-043 + ADR-045: bản gốc tải xem, không reup — tách khỏi hàng sẵn đăng.
+    "download": "videos/03_goc-tai-ve",
 }
 
 

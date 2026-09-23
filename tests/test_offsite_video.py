@@ -54,7 +54,7 @@ def test_bat_co_thi_chep_sang_thu_muc_videos(tmp_path, drive_root, monkeypatch):
 
     assert dest is not None
     # ADR-030: thêm một cấp thư mục theo tháng. Không truyền tiêu đề ⇒ giữ tên file gốc.
-    assert dest == drive_root / "videos" / time.strftime("%Y-%m") / src.name
+    assert dest == drive_root / "videos" / "01_san-sang" / time.strftime("%Y-%m") / src.name
     assert dest.is_file() and dest.read_bytes() == src.read_bytes()
     # ADR-012 nguyên tắc 1: chép, KHÔNG di chuyển — bản gốc phải còn nguyên
     assert src.is_file()
@@ -217,7 +217,7 @@ def test_chep_video_dat_ten_theo_tieu_de_va_xep_thu_muc_thang(tmp_path, drive_ro
 
     dest = offsite.copy_video_if_enabled(src, material_id=949, title="Nay tui đi câu mực nha anh em")
 
-    assert dest == drive_root / "videos" / time.strftime("%Y-%m") / "949 - Nay tui đi câu mực nha anh em.mp4"
+    assert dest == drive_root / "videos" / "01_san-sang" / time.strftime("%Y-%m") / "949 - Nay tui đi câu mực nha anh em.mp4"
     assert dest.read_bytes() == src.read_bytes()
     assert src.is_file(), "ADR-012 nguyên tắc 1: chép chứ không di chuyển"
     # Tên file GỐC trên máy không được đổi — find_reup_path và cả luồng xử lý dựa vào nó
@@ -263,7 +263,7 @@ def test_duong_dan_tuong_doi_dung_dinh_dang_hien_cho_nguoi_dung(tmp_path, drive_
 
     rel = offsite.relative_to_root(dest)
 
-    assert rel == f"videos/{time.strftime('%Y-%m')}/949 - Nay tui đi câu mực.mp4"
+    assert rel == f"videos/01_san-sang/{time.strftime('%Y-%m')}/949 - Nay tui đi câu mực.mp4"
     assert "\\" not in rel, "dùng dấu / cho dễ đọc, kể cả trên Windows"
 
 
@@ -309,7 +309,7 @@ def test_tieu_de_khong_the_thoat_ra_ngoai_thu_muc_dich(title, tmp_path, drive_ro
     dest = offsite.copy_video_if_enabled(src, material_id=7, title=title)
 
     assert dest is not None
-    assert dest.parent == drive_root / "videos" / time.strftime("%Y-%m")
+    assert dest.parent == drive_root / "videos" / "01_san-sang" / time.strftime("%Y-%m")
     assert "/" not in dest.name and "\\" not in dest.name
     assert dest.resolve().is_relative_to(drive_root.resolve())
 
