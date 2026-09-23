@@ -49,6 +49,14 @@ def detect_platform(url: str) -> str | None:
 
     if bare == "tiktok.com" or bare.endswith(".tiktok.com"):
         return "tiktok"
+    # Douyin = TikTok Trung Quốc. Short: v.douyin.com ; video: douyin.com/video/…, iesdouyin.com
+    if (
+        bare == "douyin.com"
+        or bare.endswith(".douyin.com")
+        or bare == "iesdouyin.com"
+        or bare.endswith(".iesdouyin.com")
+    ):
+        return "douyin"
     if bare == "youtu.be":
         return "youtube" if path.strip("/") else None
     if bare == "youtube.com":

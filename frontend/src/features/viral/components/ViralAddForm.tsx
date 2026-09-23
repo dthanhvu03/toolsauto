@@ -17,7 +17,7 @@ export function ViralAddForm({
     <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4">
       <input
         className={inputClass}
-        placeholder="Dán link TikTok / YouTube / Facebook…"
+        placeholder="Dán link TikTok / Douyin / YouTube / Facebook…"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
       />

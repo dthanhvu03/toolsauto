@@ -117,6 +117,7 @@ def _viral_item_row(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": it.created_at,
         "job_id": job.get("job_id"),
         "job_status": job.get("job_status"),
+        "last_error": (getattr(it, "last_error", None) or "")[:220] or None,
     }
 
 

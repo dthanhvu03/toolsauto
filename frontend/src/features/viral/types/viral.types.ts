@@ -10,6 +10,7 @@ export type ViralResponse = {
     is_mega?: boolean;
     job_id?: number;
     job_status?: string;
+    last_error?: string | null;
   }[];
   page: number;
   per_page: number;

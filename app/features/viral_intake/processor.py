@@ -19,7 +19,9 @@ from app.constants import AccountStatus, JobStatus, ViralStatus
 from app.core.media.content_hash import sha256_file
 from app.core.media.video_protector import VideoProtector
 from app.core import settings as runtime_settings
+from app.core.yt_dlp_path import browser_cookie_args
 from app.features.viral_intake.dedup import find_duplicate
+from app.features.viral_intake.douyin_fallback import download_douyin_via_chrome
 from app.features.viral_intake.service import ViralService, _clean_title_for_context
 
 
@@ -59,9 +61,9 @@ def _platform_args(platform: str | None) -> tuple[str, ...]:
     Giả Chrome qua được — CHỈ khi có curl_cffi (xem `impersonate_args`). 2026-09-11 chiều: quét
     kênh đã có cờ nên ra video, nhưng đường TẢI ở đây chưa có ⇒ bấm Xử lý là FAILED.
     """
-    from app.core.yt_dlp_path import impersonate_args
+    from app.core.yt_dlp_path import impersonate_args, platform_needs_impersonate
 
-    return impersonate_args() if (platform or "") == "tiktok" else ()
+    return impersonate_args() if platform_needs_impersonate(platform) else ()
 
 
 def _entry_has_video_stream(entry: dict) -> bool:
@@ -150,9 +152,29 @@ def _mark_material_failed(db, mat, reason: str) -> None:
     # Prefer flag set at begin; fallback if REUP somehow still set
     if mat.status == ViralStatus.REUP:
         was_manual_reup = True
-    mat.status = ViralStatus.FAILED
-    mat.last_error = (reason or "Unknown error")[:255]
-    db.commit()
+    mid = getattr(mat, "id", None)
+    err = (reason or "Unknown error")[:255]
+    try:
+        mat.status = ViralStatus.FAILED
+        mat.last_error = err
+        db.commit()
+    except Exception:
+        logger.exception("[VIRAL] commit FAILED thất bại id=%s — rollback retry", mid)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        try:
+            from app.core.database.models import ViralMaterial
+
+            row = db.get(ViralMaterial, mid) if mid is not None else None
+            if row is not None:
+                row.status = ViralStatus.FAILED
+                row.last_error = err
+                db.commit()
+        except Exception:
+            logger.exception("[VIRAL] retry mark FAILED cũng hỏng id=%s", mid)
+            return
 
     # Nhắn Telegram ngay nếu đây là job manual reup do user gửi
     if was_manual_reup:
@@ -343,7 +365,7 @@ def _page_boost_context(db, account_id: int, page_url: str) -> str | None:
 
 
 VIRAL_PROCESS_MAX_TRIES = 3
-STALE_PROCESSING_SEC = 30 * 60
+STALE_PROCESSING_SEC = 5 * 60
 
 _NON_RETRYABLE_MARKERS = (
     "slideshow",
@@ -355,6 +377,12 @@ _NON_RETRYABLE_MARKERS = (
     "cannot read video dimensions",
     "ffprobe",
     "ffmpeg",
+    "fresh cookies",
+    "timed out",
+    "timeout",
+    "đòi cookie",
+    "cookie chrome",
+    "chrome đang mở",
 )
 
 
@@ -366,7 +394,7 @@ def _is_retryable_error(reason: str | None) -> bool:
 
 
 def _recover_stale_processing(db) -> int:
-    """PROCESSING quá lâu (crash/timeout HTTP) → trả về NEW để vòng sau lấy lại."""
+    """PROCESSING quá lâu (crash/timeout) → FAILED, không tự NEW (tránh vòng PROCESSING)."""
     from app.core.database.models import ViralMaterial
     from app.core.database.models.base import now_ts
 
@@ -380,11 +408,11 @@ def _recover_stale_processing(db) -> int:
         .all()
     )
     for mat in rows:
-        mat.status = ViralStatus.NEW
-        mat.last_error = ((mat.last_error or "") + " | stale PROCESSING recovered")[:255]
+        mat.status = ViralStatus.FAILED
+        mat.last_error = ((mat.last_error or "Xử lý kẹt PROCESSING") + " | recovered")[:255]
     if rows:
         db.commit()
-        logger.warning("[VIRAL] Recovered %d stale PROCESSING → NEW", len(rows))
+        logger.warning("[VIRAL] Recovered %d stale PROCESSING → FAILED", len(rows))
     return len(rows)
 
 
@@ -436,14 +464,17 @@ def _get_download_source_account(db, mat, accounts_by_id=None, platform_fallback
     ).first()
 
 
-def _extend_yt_dlp_with_cookies(cmd: list[str], account) -> list[str]:
-    if not account or not getattr(account, "profile_path", None):
-        return cmd
-    return [
-        *cmd,
-        "--cookies-from-browser",
-        f"chromium:{account.profile_path}",
-    ]
+def _extend_yt_dlp_with_cookies(cmd: list[str], account, platform: str | None = None) -> list[str]:
+    if account and getattr(account, "profile_path", None):
+        return [
+            *cmd,
+            "--cookies-from-browser",
+            f"chromium:{account.profile_path}",
+        ]
+    extra = list(browser_cookie_args(platform))
+    if extra:
+        return [*cmd, *extra]
+    return cmd
 
 
 def _humanize_yt_dlp_error(platform: str, stderr: str, source_account) -> str:
@@ -469,6 +500,18 @@ def _humanize_yt_dlp_error(platform: str, stderr: str, source_account) -> str:
         from app.features.viral_intake.sources import humanize_scan_error
 
         return humanize_scan_error("tiktok", stderr)
+    if platform == "douyin":
+        if "fresh cookies" in lowered:
+            return (
+                "Douyin đòi cookie Chrome. Mở douyin.com trên Chrome Windows (không cần login), "
+                "ĐÓNG hết Chrome rồi bấm Xử lý lại. Hoặc set YTDLP_CHROME_USER_DATA / YTDLP_COOKIES_FILE."
+            )
+        if "could not copy" in lowered or "failed to unlock" in lowered or "database is locked" in lowered:
+            return "Chrome đang mở — yt-dlp không đọc được cookie. Đóng hết cửa sổ Chrome Windows rồi thử lại."
+        if "timed out" in lowered or "timeout" in lowered:
+            return (
+                "yt-dlp Douyin hết giờ. Tool sẽ thử Chrome Windows; nếu vẫn fail thì bấm Xử lý lại."
+            )
     return f"yt-dlp failed: {stderr[:180]}"
 
 def _download_tiktok_fallback(url: str, output_path: str) -> bool:
@@ -509,6 +552,10 @@ def _download_tiktok_fallback(url: str, output_path: str) -> bool:
     except Exception as e:
         logger.error("[VIRAL] TikWM fallback failed: %s", e)
     return False
+
+
+def _download_douyin_fallback(url: str, output_path: str) -> bool:
+    return download_douyin_via_chrome(url, output_path)
 
 
 def _process_viral_materials(db: Session, only_material_id: int | None = None) -> None:
@@ -786,9 +833,15 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         mat.url,
                     ),
                     source_account,
+                    mat.platform,
                 )
                 logger.info("[VIRAL] Preflight metadata [%s]: %s", mat.platform, mat.url)
-                preflight = subprocess.run(preflight_cmd, capture_output=True, text=True, timeout=60)
+                try:
+                    preflight = subprocess.run(preflight_cmd, capture_output=True, text=True, timeout=60)
+                except subprocess.TimeoutExpired:
+                    preflight = subprocess.CompletedProcess(
+                        preflight_cmd, 1, "", "yt-dlp timed out while fetching media."
+                    )
 
 
                 if preflight.returncode != 0:
@@ -802,7 +855,16 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                             fallback_used_successfully = True
                             media_path = fallback_path
                             logger.info("[VIRAL] Downloaded (tikwm fallback after preflight fail): %s", media_path)
-                        
+                    if mat.platform == "douyin":
+                        logger.warning("[VIRAL] yt-dlp preflight failed for Douyin. Attempting Chrome fallback...")
+                        fallback_filename = f"viral_{mat.id}_douyin.mp4"
+                        fallback_path = os.path.join(platform_dir, fallback_filename)
+                        if _download_douyin_fallback(mat.url, fallback_path):
+                            download_success = True
+                            fallback_used_successfully = True
+                            media_path = fallback_path
+                            logger.info("[VIRAL] Downloaded (chrome fallback after preflight fail): %s", media_path)
+
                     if not fallback_used_successfully:
                         reason = _humanize_yt_dlp_error(mat.platform or "", preflight.stderr or "", source_account)
                         logger.error("[VIRAL] %s", reason)
@@ -869,6 +931,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         mat.url,
                     ),
                     source_account,
+                    mat.platform,
                 )
                 logger.info("[VIRAL] Downloading [%s]: %s", mat.platform, mat.url)
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -989,6 +1052,19 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 niches=preset_niches,
                 material_id=mat.id,
             )
+            try:
+                from app.core.media.thumbnail import media_info as _media_info
+
+                _src_dur = float(_media_info(media_path).get("duration") or 0)
+            except Exception:
+                _src_dur = 0.0
+            defer_cut = ViralService.should_defer_duration_cut(mat, _src_dur, db)
+            if defer_cut:
+                logger.info(
+                    "[VIRAL] ADR-046 defer cut #%s — nguồn %.0fs > ngưỡng, giữ full lần đầu",
+                    mat.id,
+                    _src_dur,
+                )
             reup_result = ReupProcessor.process(
                 input_path=media_path,
                 platform=mat.platform or "unknown",
@@ -999,14 +1075,17 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 # ADR-031: mốc Owner chọn trong video GỐC. 0/None ⇒ cắt từ đầu như trước.
                 clip_start=float(getattr(mat, "clip_start_sec", None) or 0),
                 clip_length=float(getattr(mat, "clip_length_sec", None) or 0),
+                ignore_configured_max=defer_cut,
                 # BẮT BUỘC: `process` có chốt `skip_existing` — thấy `_reup.mp4` cũ là trả lại
                 # ngay và báo THÀNH CÔNG. Xử lý lại để đổi mốc cắt thì file cũ luôn còn đó, nên
                 # thiếu `force` là tính năng chọn đoạn bị vô hiệu HOÀN TOÀN mà không ai biết.
                 # `reprocess_reup` vốn đã truyền `force=True`; đường chính thì quên.
+                # ADR-046: defer cũng force — tránh giữ bản _reup 90s cũ khi lần này cần full.
                 force=bool(
                     mat.status in (ViralStatus.REUP, ViralStatus.FAILED)
                     or getattr(mat, "clip_start_sec", None)
                     or getattr(mat, "clip_length_sec", None)
+                    or defer_cut
                 ),
             )
             if reup_result.success and reup_result.output_path:
@@ -1187,6 +1266,10 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
         except subprocess.TimeoutExpired:
             reason = "yt-dlp timed out while fetching media."
             logger.error("[VIRAL] %s url=%s", reason, mat.url)
+            try:
+                db.rollback()
+            except Exception:
+                pass
             _mark_material_failed(db, mat, reason)
         except Exception as e:
             reason = f"Processing error: {str(e).strip()[:200]}"

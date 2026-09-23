@@ -41,12 +41,14 @@ DETECT_TABLE = [
     ("https://www.instagram.com/reel/Cabc123/?igsh=xyz", "instagram"),
     ("https://www.instagram.com/p/Cabc123/", "instagram"),
     ("tiktok.com/@user/video/1", "tiktok"),  # thiếu scheme vẫn nhận
+    ("https://v.douyin.com/abc/", "douyin"),
+    ("https://www.douyin.com/video/7123456789012345678", "douyin"),
+    ("https://www.iesdouyin.com/share/video/7123456789012345678", "douyin"),
     # từ chối
     ("https://www.youtube.com/@somechannel", None),
     ("https://www.youtube.com/watch", None),
     ("https://www.facebook.com/somepage", None),
     ("https://www.instagram.com/someuser/", None),
-    ("https://v.douyin.com/abc/", None),
     ("https://example.com/video/1", None),
     ("not a url", None),
     ("", None),
@@ -164,6 +166,8 @@ def test_add_rejects_unknown_domain(session_factory):
         ("https://vt.tiktok.com/ZSabc123/", "tiktok", "https://vt.tiktok.com/ZSabc123"),
         ("https://www.facebook.com/reel/123/?fbclid=x", "facebook", "https://facebook.com/reel/123"),
         ("https://www.instagram.com/reel/Cabc/?igsh=x", "instagram", "https://instagram.com/reel/Cabc"),
+        ("https://v.douyin.com/iAbCdEf/", "douyin", "https://v.douyin.com/iAbCdEf"),
+        ("https://www.douyin.com/video/7123?utm_source=x", "douyin", "https://douyin.com/video/7123"),
     ],
 )
 def test_add_creates_new_material(session_factory, url, platform, stored):

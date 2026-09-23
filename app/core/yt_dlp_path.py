@@ -1,6 +1,7 @@
 """Resolve yt-dlp binary so subprocess works when venv is not on PATH (PM2 / Windows)."""
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -67,3 +68,97 @@ def impersonate_args() -> tuple[str, ...]:
         return ("--impersonate", "chrome")
     except ImportError:
         return ()
+
+
+def platform_needs_impersonate(platform: str | None) -> bool:
+    """TikTok + Douyin hay bị trang bot — cùng cờ --impersonate chrome khi có curl_cffi."""
+    return (platform or "").strip().lower() in ("tiktok", "douyin")
+
+
+_SKIP_WIN_USERS = {"Public", "Default", "Default User", "All Users", "desktop.ini"}
+
+
+def chrome_cookies_readable(profile: Path) -> bool:
+    """True khi SQLite Cookies mở được — WSL hay bị Permission denied / Default rỗng."""
+    for cookie in (profile / "Network" / "Cookies", profile / "Cookies"):
+        if not cookie.is_file():
+            continue
+        try:
+            with cookie.open("rb") as fh:
+                fh.read(16)
+            return True
+        except OSError:
+            return False
+    return False
+
+
+def _best_chrome_profile(user_data: Path) -> Path | None:
+    profiles: list[Path] = []
+    default = user_data / "Default"
+    if default.is_dir():
+        profiles.append(default)
+    extra = [p for p in user_data.glob("Profile *") if p.is_dir()]
+    extra.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
+    profiles.extend(extra)
+    for p in profiles:
+        if chrome_cookies_readable(p):
+            return p
+    if chrome_cookies_readable(user_data):
+        return user_data
+    return None
+
+
+def resolve_chrome_user_data() -> Path | None:
+    """Thư mục Chrome User Data để yt-dlp đọc cookie (WSL → Chrome Windows nếu có)."""
+    raw = (os.getenv("YTDLP_CHROME_USER_DATA") or "").strip()
+    if raw:
+        p = Path(raw)
+        return p if p.is_dir() else None
+    candidates: list[Path] = [
+        Path.home() / ".config" / "google-chrome",
+        Path.home() / ".config" / "chromium",
+    ]
+    users_root = Path("/mnt/c/Users")
+    if users_root.is_dir():
+        try:
+            for child in users_root.iterdir():
+                if child.name in _SKIP_WIN_USERS or not child.is_dir():
+                    continue
+                ud = child / "AppData" / "Local" / "Google" / "Chrome" / "User Data"
+                if ud.is_dir():
+                    candidates.append(ud)
+        except OSError:
+            pass
+    for c in candidates:
+        if c.is_dir() and _best_chrome_profile(c) is not None:
+            return c
+    return None
+
+
+def browser_cookie_args(platform: str | None) -> tuple[str, ...]:
+    """
+    Douyin bắt cookie trình duyệt kể cả chưa login (yt-dlp: Fresh cookies are needed).
+    Ưu tiên file Netscape → spec env → Chrome profile có Cookies đọc được.
+    Không log nội dung cookie. Không trỏ Default rỗng (yt-dlp treo 60s trên WSL).
+    """
+    if (platform or "").strip().lower() != "douyin":
+        return ()
+    cookie_file = (os.getenv("YTDLP_COOKIES_FILE") or "").strip()
+    if cookie_file and Path(cookie_file).is_file():
+        return ("--cookies", cookie_file)
+    spec = (os.getenv("YTDLP_COOKIES_FROM_BROWSER") or "").strip()
+    if spec:
+        return ("--cookies-from-browser", spec)
+    raw = (os.getenv("YTDLP_CHROME_USER_DATA") or "").strip()
+    if raw:
+        ud = Path(raw)
+        if ud.is_dir():
+            return ("--cookies-from-browser", f"chrome:{ud}")
+        return ()
+    ud = resolve_chrome_user_data()
+    if ud is None:
+        return ()
+    profile = _best_chrome_profile(ud)
+    if profile is None:
+        return ()
+    return ("--cookies-from-browser", f"chrome:{profile}")

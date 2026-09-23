@@ -82,6 +82,23 @@ def test_tai_ve_dung_thu_muc_dung_ten_khong_tao_material(db, disks, fake_ytdlp):
     assert not (disks / "reup").exists(), "không được đụng REUP_DIR"
 
 
+def test_douyin_yt_dlp_fail_uses_chrome_fallback(db, disks, fake_ytdlp, monkeypatch):
+    from pathlib import Path
+
+    fake_ytdlp["probe_fail"] = "Fresh cookies are needed"
+
+    def fake_chrome(url, path):
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_bytes(b"\x00" * 2048)
+        return True
+
+    monkeypatch.setattr(fmod, "download_douyin_via_chrome", fake_chrome)
+    res = fetch_original(db, "https://v.douyin.com/ijC1VAtP5IE")
+    assert res["ok"], res
+    assert Path(res["path"]).is_file()
+    assert db.query(ViralMaterial).count() == 0
+
+
 def test_lenh_yt_dlp_chi_mot_video_va_co_tran_dung_luong(db, disks, fake_ytdlp):
     fetch_original(db, VIDEO)
 
@@ -164,7 +181,7 @@ def test_chep_Drive_khi_bat(db, disks, fake_ytdlp, tmp_path, monkeypatch):
 
     res = fetch_original(db, VIDEO)
 
-    assert res["drive_path"] and res["drive_path"].startswith("videos/Tải về/")
+    assert res["drive_path"] and res["drive_path"].startswith("videos/03_goc-tai-ve/")
     assert (drive / res["drive_path"]).is_file()
 
 

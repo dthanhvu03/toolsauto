@@ -51,7 +51,14 @@ export function ViralTable({
                     <span className="ml-1 text-[10px] font-bold text-amber-600">MEGA</span>
                   ) : null}
                 </td>
-                <td className="px-3 py-2 text-xs font-semibold">{it.status}</td>
+                <td className="px-3 py-2 text-xs font-semibold">
+                  {it.status}
+                  {it.last_error ? (
+                    <div className="mt-0.5 max-w-[16rem] font-normal text-[11px] text-red-600">
+                      {it.last_error}
+                    </div>
+                  ) : null}
+                </td>
                 <td className="px-3 py-2 tabular-nums">{(it.views ?? 0).toLocaleString()}</td>
                 <td className="px-3 py-2 text-xs">{it.account_name || "—"}</td>
                 <td className="max-w-[18rem] truncate px-3 py-2 text-xs">

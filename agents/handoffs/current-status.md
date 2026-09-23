@@ -1,4 +1,12 @@
-## Phiên 2026-09-20 (h) — Affiliate comment sau Reel + hiện Jobs/cockpit
+## Phiên 2026-09-20 (i) — Douyin vẫn fail → Chrome fallback
+
+Cursor: video mới `https://v.douyin.com/ijC1VAtP5IE` fail vì yt-dlp timeout 60s (`--cookies-from-browser` trỏ Chrome **Default rỗng** trên WSL; cookie thật ở Profile 18/2 đang bị Chrome lock).
+
+Fix: bỏ auto cookie nếu không đọc được Cookies DB; Douyin fallback mở Chrome Windows headed, lấy `video.currentSrc` (CDN đã ký), tải mp4. Proof: `/tmp/dy-live-ijC1.mp4` 1 116 186 bytes, `ISO Media MP4`. pytest 36 passed. Maintenance cần respawn để nhận code.
+
+---
+
+
 Cursor: `cursor/feat-affiliate-on-post`. Path comment đã có; thêm posted/comment_ok/affiliate_url; COMMENT max_tries=1. pytest 24. Không push.
 
 ---

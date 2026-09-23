@@ -24,9 +24,15 @@ import app.config as config
 from app.constants import AccountStatus
 from app.core.database.models import Account
 from app.core.storage import offsite
-from app.core.yt_dlp_path import impersonate_args, yt_dlp_cmd
+from app.core.yt_dlp_path import (
+    browser_cookie_args,
+    impersonate_args,
+    platform_needs_impersonate,
+    yt_dlp_cmd,
+)
 from app.features.viral_intake.intake import _bare_host, _split, detect_platform
 from app.features.viral_intake.sources import _ytdlp_diagnosis
+from app.features.viral_intake.douyin_fallback import download_douyin_via_chrome
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +44,16 @@ TELEGRAM_LIMIT_MB = 50.0
 _LOGIN_MARKERS = ("login", "log in", "cookies", "private", "not available", "unavailable for certain audiences")
 
 
-_KNOWN_HOSTS = ("tiktok.com", "youtube.com", "youtu.be", "facebook.com", "fb.watch", "instagram.com")
+_KNOWN_HOSTS = (
+    "tiktok.com",
+    "douyin.com",
+    "iesdouyin.com",
+    "youtube.com",
+    "youtu.be",
+    "facebook.com",
+    "fb.watch",
+    "instagram.com",
+)
 
 
 def _known_host_but_not_video(url: str) -> bool:
@@ -61,6 +76,9 @@ def _known_host_but_not_video(url: str) -> bool:
     # chặt hơn: link video có `/video/<id>`, hoặc là link rút gọn vt./vm. (chưa biết đích).
     if host == "tiktok.com" and not raw_host.startswith(("vt.", "vm.")):
         return "/video/" not in (parts.path or "")
+    if host in ("douyin.com", "iesdouyin.com") and not raw_host.startswith(("v.",)):
+        path = parts.path or ""
+        return "/video/" not in path and "/share/video/" not in path
     return False
 
 
@@ -79,15 +97,18 @@ def _account_with_cookies(db: Session, platform: str) -> Optional[Account]:
     )
 
 
-def _with_cookies(cmd: list[str], account: Optional[Account]) -> list[str]:
-    if not account or not getattr(account, "profile_path", None):
-        return cmd
-    return [*cmd, "--cookies-from-browser", f"chromium:{account.profile_path}"]
+def _with_cookies(cmd: list[str], account: Optional[Account], platform: str = "") -> list[str]:
+    if account and getattr(account, "profile_path", None):
+        return [*cmd, "--cookies-from-browser", f"chromium:{account.profile_path}"]
+    extra = list(browser_cookie_args(platform))
+    if extra:
+        return [*cmd, *extra]
+    return cmd
 
 
 def _platform_args(platform: str) -> tuple[str, ...]:
     """TikTok chặn IP lạ — giả Chrome khi có curl_cffi (cùng lý do với quét kênh)."""
-    return impersonate_args() if platform == "tiktok" else ()
+    return impersonate_args() if platform_needs_impersonate(platform) else ()
 
 
 def _tail(stderr: str) -> str:
@@ -108,6 +129,13 @@ def humanize_fetch_error(platform: str, stderr: str, *, had_cookies: bool) -> st
             return (f"{platform.capitalize()} vẫn từ chối dù đã dùng cookie tài khoản — video riêng tư/nhóm kín, "
                     "hoặc Chrome đang mở profile đó (yt-dlp không đọc được cookie khi Chrome đang chạy).")
         return f"{platform.capitalize()} đòi đăng nhập — cần một tài khoản {platform} ACTIVE trong tool để mượn cookie."
+    if "fresh cookies" in low and platform == "douyin":
+        return (
+            "yt-dlp không đọc được Douyin. Tool sẽ thử Chrome Windows; "
+            "nếu vẫn fail thì bấm tải lại."
+        )
+    if ("could not copy" in low or "database is locked" in low or "failed to unlock" in low) and platform == "douyin":
+        return "yt-dlp không đọc cookie Chrome đang mở — tool sẽ thử Chrome Windows."
     if "404" in low or "not found" in low or "does not exist" in low or "removed" in low:
         return "Video không tồn tại hoặc đã bị gỡ."
     if "unsupported url" in low:
@@ -124,6 +152,7 @@ def _probe(url: str, account: Optional[Account], platform: str = "khac") -> tupl
     cmd = _with_cookies(
         yt_dlp_cmd("--no-playlist", "--skip-download", "--dump-single-json", "--no-warnings", *_platform_args(platform), url),
         account,
+        platform,
     )
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=PROBE_TIMEOUT_SEC)
@@ -165,31 +194,47 @@ def fetch_original(db: Optional[Session], url: str) -> dict:
         account = _account_with_cookies(db, platform)
         if account is not None:
             info, err = _probe(url, account, platform)
+
+    out_dir = downloads_dir()
+    chrome_tmp: Optional[Path] = None
+    if info is None and platform == "douyin":
+        out_dir.mkdir(parents=True, exist_ok=True)
+        vid_guess = str(int(time.time()))
+        tmp_guess = out_dir / f".{vid_guess}.mp4"
+        logger.info("[FETCH] Douyin yt-dlp failed, Chrome fallback: %s", url)
+        if download_douyin_via_chrome(url, str(tmp_guess)):
+            chrome_tmp = tmp_guess
+            info = {"id": vid_guess, "title": "douyin"}
+            err = ""
+
     if info is None:
-        return {"ok": False, "msg": humanize_fetch_error(platform, err, had_cookies=account is not None)}
+        had = account is not None or bool(browser_cookie_args(platform))
+        return {"ok": False, "msg": humanize_fetch_error(platform, err, had_cookies=had)}
 
     title = str(info.get("title") or info.get("id") or "video").strip()
     vid = str(info.get("id") or int(time.time()))
-    out_dir = downloads_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    tmp_template = str(out_dir / f".{vid}.%(ext)s")
 
-    cmd = _with_cookies(
-        yt_dlp_cmd("--no-playlist", "--no-warnings", "--max-filesize", MAX_FILESIZE,
-                   "--merge-output-format", "mp4", *_platform_args(platform), "-o", tmp_template, url),
-        account,
-    )
-    logger.info("[FETCH] %s → %s", url, out_dir)
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=DOWNLOAD_TIMEOUT_SEC)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "msg": f"Tải quá {DOWNLOAD_TIMEOUT_SEC // 60} phút chưa xong — bỏ."}
-    if r.returncode != 0:
-        return {"ok": False, "msg": humanize_fetch_error(platform, r.stderr, had_cookies=account is not None)}
-
-    tmp = next((p for p in out_dir.glob(f".{vid}.*") if p.is_file() and p.stat().st_size > 0), None)
-    if tmp is None:
-        return {"ok": False, "msg": "yt-dlp báo xong mà không thấy file — có thể vượt 500 MB nên bị bỏ."}
+    if chrome_tmp is not None:
+        tmp = chrome_tmp
+    else:
+        tmp_template = str(out_dir / f".{vid}.%(ext)s")
+        cmd = _with_cookies(
+            yt_dlp_cmd("--no-playlist", "--no-warnings", "--max-filesize", MAX_FILESIZE,
+                       "--merge-output-format", "mp4", *_platform_args(platform), "-o", tmp_template, url),
+            account,
+            platform,
+        )
+        logger.info("[FETCH] %s → %s", url, out_dir)
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=DOWNLOAD_TIMEOUT_SEC)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "msg": f"Tải quá {DOWNLOAD_TIMEOUT_SEC // 60} phút chưa xong — bỏ."}
+        if r.returncode != 0:
+            return {"ok": False, "msg": humanize_fetch_error(platform, r.stderr, had_cookies=account is not None)}
+        tmp = next((p for p in out_dir.glob(f".{vid}.*") if p.is_file() and p.stat().st_size > 0), None)
+        if tmp is None:
+            return {"ok": False, "msg": "yt-dlp báo xong mà không thấy file — có thể vượt 500 MB nên bị bỏ."}
 
     final = out_dir / offsite.safe_video_name(tmp.name.lstrip("."), None, title)
     if final.exists():
