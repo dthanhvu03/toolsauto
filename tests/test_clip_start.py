@@ -275,7 +275,7 @@ def test_process_nhan_tham_so_clip_length():
 def test_dat_0_thi_KHONG_truyen_0_xuong_ma_doi_thanh_so_rat_lon(monkeypatch):
     """
     Điểm dễ hỏng nhất: `max_duration` không chỉ dùng để cắt, nó còn là CỔNG KIỂM CHẤT LƯỢNG
-    (`in_duration > max_duration and out_duration > max_duration + 1` ⇒ loại bản xuất) và là
+    (`in_duration > max_duration and out_duration > max_duration + slack` ⇒ loại bản xuất) và là
     điều kiện nhánh dự phòng. Truyền 0 vào đó thì mọi bản xuất đều bị loại.
     """
     from app.core import settings as runtime_settings
@@ -284,6 +284,36 @@ def test_dat_0_thi_KHONG_truyen_0_xuong_ma_doi_thanh_so_rat_lon(monkeypatch):
 
     assert ReupProcessor._configured_max_duration() == float(ReupProcessor.NO_CUT_DURATION)
     assert ReupProcessor.NO_CUT_DURATION > 10 ** 6
+    assert ReupProcessor.DURATION_CAP_SLACK_SEC >= 3.0
+
+
+def test_should_defer_duration_cut_adr046(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.core import settings as runtime_settings
+    from app.features.viral_intake.service import ViralService
+
+    monkeypatch.setattr(
+        runtime_settings,
+        "get_int",
+        lambda key, default=0, db=None: 180 if key == "viral.long_video_sec" else default,
+    )
+    mat = SimpleNamespace(clip_length_sec=None, parent_material_id=None)
+    assert ViralService.should_defer_duration_cut(mat, 400) is True
+    assert ViralService.should_defer_duration_cut(mat, 100) is False
+    assert ViralService.should_defer_duration_cut(
+        SimpleNamespace(clip_length_sec=90, parent_material_id=None), 400
+    ) is False
+    assert ViralService.should_defer_duration_cut(
+        SimpleNamespace(clip_length_sec=None, parent_material_id=12), 400
+    ) is False
+
+
+def test_process_nhan_ignore_configured_max():
+    import inspect
+
+    params = inspect.signature(ReupProcessor.process).parameters
+    assert "ignore_configured_max" in params and params["ignore_configured_max"].default is False
 
 
 def test_so_duong_van_duoc_ton_trong(monkeypatch):
@@ -301,9 +331,32 @@ def test_khong_cat_thi_khong_cong_nao_loai_ban_xuat(duration):
     thì không cái nào còn đúng — kể cả video 24 tiếng. Đó là lý do không truyền số 0 xuống.
     """
     cap = float(ReupProcessor.NO_CUT_DURATION)
+    slack = float(ReupProcessor.DURATION_CAP_SLACK_SEC)
 
     assert not duration > cap
-    assert not (duration > cap and duration > cap + 1.0)  # đúng biểu thức của _validate_output
+    assert not (duration > cap and duration > cap + slack)  # đúng biểu thức của _validate_output
+
+
+def test_quality_gate_cho_phep_lech_keyframe_nho(tmp_path):
+    """Split phần 3 từng fail: 139.47s vs cap 138 với slack 1s — slack 3s phải qua."""
+    big = tmp_path / "out.mp4"
+    big.write_bytes(b"0" * (65 * 1024))
+
+    err = ReupProcessor._validate_output(
+        input_info={"duration": 544.0, "width": 576, "height": 1024},
+        output_info={"duration": 139.47, "width": 576, "height": 1024},
+        output_path=str(big),
+        max_duration=138.0,
+    )
+    assert err is None
+
+    err_big = ReupProcessor._validate_output(
+        input_info={"duration": 544.0, "width": 576, "height": 1024},
+        output_info={"duration": 145.0, "width": 576, "height": 1024},
+        output_path=str(big),
+        max_duration=138.0,
+    )
+    assert err_big and "exceeds cap" in err_big
 
 
 # ── set_clip_start nhận thêm độ dài ─────────────────────────────────────────

@@ -235,6 +235,40 @@ def test_tin_video_san_sang_mang_nut_da_dang():
     assert buttons == [[{"text": "✅ Đã đăng", "callback_data": "dadang:12"}]]
 
 
+def test_tin_video_dai_mang_nut_chia_va_cat(monkeypatch):
+    """ADR-046 — output còn dài ≈ nguồn ⇒ hỏi Chia / Cắt trước Đã đăng."""
+    from types import SimpleNamespace
+
+    from app.core import settings as runtime_settings
+    from app.core.notifier import formatting as nf
+
+    monkeypatch.setattr(runtime_settings, "get_int", lambda key, default=0, db=None: 180)
+
+    buttons = nf.material_ready_buttons(
+        SimpleNamespace(id=12, clip_length_sec=None, parent_material_id=None),
+        source_duration=600,
+        duration=598,
+    )
+    flat = [b["callback_data"] for row in buttons for b in row]
+    assert flat == ["chia:12", "cat90:12", "dadang:12"]
+
+
+def test_tin_video_da_cat_ngan_chi_nut_da_dang(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.core import settings as runtime_settings
+    from app.core.notifier import formatting as nf
+
+    monkeypatch.setattr(runtime_settings, "get_int", lambda key, default=0, db=None: 180)
+
+    buttons = nf.material_ready_buttons(
+        SimpleNamespace(id=12, clip_length_sec=90, parent_material_id=None),
+        source_duration=600,
+        duration=90,
+    )
+    assert buttons == [[{"text": "✅ Đã đăng", "callback_data": "dadang:12"}]]
+
+
 def test_notify_material_ready_truyen_nut_xuong_kenh(monkeypatch):
     from types import SimpleNamespace
 
@@ -247,7 +281,8 @@ def test_notify_material_ready_truyen_nut_xuong_kenh(monkeypatch):
     monkeypatch.setattr(ns.media_thumb, "telegram_video_within_size_limit", lambda p: True)
     monkeypatch.setattr("app.core.media.thumbnail.media_info", lambda p: {"duration": 10})
     mat = SimpleNamespace(id=7, platform="tiktok", title="x", views=1, ai_caption=None, ai_hashtags_list=[],
-                          ai_caption_error=None, clip_start_sec=None)
+                          ai_caption_error=None, clip_start_sec=None, clip_length_sec=None,
+                          parent_material_id=None)
 
     ns.NotifierService.notify_material_ready(mat, "/x/a.mp4")
 

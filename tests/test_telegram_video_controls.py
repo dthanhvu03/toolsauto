@@ -329,6 +329,49 @@ def test_dat_moc_that_bai_thi_bao_ro(router, monkeypatch):
     assert "Không tìm thấy" in client.text
 
 
+def test_cat90_giu_moc_va_xu_ly_lai(router, monkeypatch):
+    """ADR-046 — Cắt ngắn: gắn clip_length, giữ clip_start, process_one (không reprocess_reup)."""
+    import app.core.database.core as dbcore
+    from app.core import settings as runtime_settings
+    from types import SimpleNamespace
+
+    class _Q:
+        def filter(self, *a, **k):
+            return self
+
+        def first(self):
+            return SimpleNamespace(id=976, clip_start_sec=332)
+
+    class _S:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def query(self, *a, **k):
+            return _Q()
+
+    monkeypatch.setattr(dbcore, "SessionLocal", lambda: _S())
+    monkeypatch.setattr(
+        runtime_settings,
+        "get_int",
+        lambda key, default=0, db=None: 90 if key == "reup.max_duration_sec" else default,
+    )
+    r, client = router
+    seen = _hooks(monkeypatch, {
+        "viral.set_clip": {"ok": True, "msg": "ok"},
+        "viral.process_one": (True, "xong"),
+    })
+
+    r.dispatch({"callback_query": {"id": "c", "data": "cat90:976", "message": {"message_id": 1}}})
+    _wait()
+
+    assert [n for n, _ in seen] == ["viral.set_clip", "viral.process_one"]
+    assert seen[0][1][1:] == (976, 332, 90)
+    assert "90" in client.text
+
+
 # ── lệnh cũ phải nói rõ vì sao rỗng ─────────────────────────────────────────
 
 

@@ -58,10 +58,13 @@ class ReupProcessor:
 
     MAX_REELS_DURATION = 90
     # ADR-036: "không cắt" KHÔNG được truyền số 0 xuống. `max_duration` vừa dùng để cắt, vừa là
-    # CỔNG KIỂM CHẤT LƯỢNG (`in_duration > max_duration and out_duration > max_duration + 1`
+    # CỔNG KIỂM CHẤT LƯỢNG (`in_duration > max_duration and out_duration > max_duration + slack`
     # ⇒ loại bản xuất) và là điều kiện của nhánh dự phòng. Số 0 ở đó loại sạch mọi bản xuất.
     # Đổi thành một số rất lớn tại đúng một chỗ ⇒ 8 chỗ dùng còn lại không phải sửa.
     NO_CUT_DURATION = 10 ** 9
+    # Split/keyframe: `-ss` + `-c copy` / anti-dupe nhẹ ⇒ xuất dễ dài hơn clip_length ~1–2s
+    # (vd. 139.47 > 138). Slack 1s từng làm fail phần 3 (#1055).
+    DURATION_CAP_SLACK_SEC = 3.0
     MIN_OUTPUT_DURATION_SEC = 1.5
     MIN_OUTPUT_EDGE_PX = 180
     MIN_OUTPUT_BYTES = 64 * 1024
@@ -211,8 +214,12 @@ class ReupProcessor:
             return f"Output duration too short ({out_duration:.2f}s)"
 
         in_duration = float(input_info.get("duration") or 0)
-        if in_duration > max_duration and out_duration > (max_duration + 1.0):
-            return f"Output duration exceeds cap ({out_duration:.2f}s > {max_duration}s)"
+        slack = float(cls.DURATION_CAP_SLACK_SEC)
+        if in_duration > max_duration and out_duration > (max_duration + slack):
+            return (
+                f"Output duration exceeds cap "
+                f"({out_duration:.2f}s > {max_duration}s +{slack:.0f}s slack)"
+            )
 
         return None
 
@@ -931,6 +938,7 @@ class ReupProcessor:
         hook_text: Optional[str] = None,
         clip_start: float = 0.0,
         clip_length: float = 0.0,
+        ignore_configured_max: bool = False,
     ) -> ReupResult:
         """
         Pre-process video reup: anti-dupe + hook text + brand intro + brand outro.
@@ -944,6 +952,7 @@ class ReupProcessor:
             output_path: explicit output path (optional)
             page_url / niches / account_id: resolve brand intro/outro/hook
             intro_path / outro_path / hook_text: explicit overrides
+            ignore_configured_max: ADR-046 — bỏ «Độ dài tối đa» (giữ full lần đầu video dài)
         """
         started_at = time.time()
         preset_key = normalize_preset(preset)
@@ -953,6 +962,9 @@ class ReupProcessor:
         # Độ dài riêng đứng đầu vì nó là lựa chọn cụ thể Owner vừa làm cho đúng video này.
         if clip_length and clip_length > 0:
             max_duration = float(clip_length)
+        elif ignore_configured_max:
+            # ADR-046: lần đầu video dài — giữ full, Owner chọn Chia/Cắt sau.
+            max_duration = float(cls.NO_CUT_DURATION)
         else:
             max_duration = float(knobs.get("max_duration") or cls._configured_max_duration())
         crf = int(knobs.get("crf") or 26)

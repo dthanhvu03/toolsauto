@@ -148,6 +148,23 @@ class TelegramClient:
             data["reply_markup"] = json_mod.dumps({"inline_keyboard": []})
         return self._request("editMessageReplyMarkup", data=data)
 
+    def edit_message_text(
+        self,
+        message_id: int,
+        text: str,
+        parse_mode: str = "HTML",
+        disable_preview: bool = True,
+    ) -> Optional[dict]:
+        """Sửa nội dung tin text (tiến độ xử lý video). Telegram bỏ qua nếu text không đổi."""
+        data = {
+            "chat_id": self.chat_id,
+            "message_id": message_id,
+            "text": text,
+            "parse_mode": parse_mode,
+            "disable_web_page_preview": disable_preview,
+        }
+        return self._request("editMessageText", data=data)
+
     def get_updates(self, offset: int = 0, timeout: int = 30) -> list:
         """
         Long-poll Telegram for new updates.

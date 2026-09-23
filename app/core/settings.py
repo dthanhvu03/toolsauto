@@ -312,10 +312,26 @@ SETTINGS: dict[str, SettingSpec] = {
             "Đặt 0 = KHÔNG CẮT — Meta đã bỏ giới hạn độ dài Reels từ 6/2025, nhưng Facebook xếp "
             "hạng theo TỶ LỆ XEM HẾT chứ không phải tổng thời gian xem, nên video dài thường bị "
             "dìm; khoảng hiệu quả nhất là 15-60 giây. Từng video có thể đặt độ dài riêng ở khối "
-            "'Chọn đoạn cắt'. Preset reels_short vẫn ghi đè bằng 45 giây."
+            "'Chọn đoạn cắt'. Preset reels_short vẫn ghi đè bằng 45 giây. "
+            "ADR-046: video dài hơn ngưỡng «Video dài — hỏi trước khi cắt» thì LẦN ĐẦU không cắt "
+            "theo ô này — Owner chọn Chia phần hoặc Cắt trên Telegram."
         ),
         min=0,
         max=600,
+    ),
+    "viral.long_video_sec": SettingSpec(
+        key="viral.long_video_sec",
+        type="int",
+        default_getter=lambda: 180,
+        title="Video dài — hỏi trước khi cắt (giây)",
+        section="Quét TikTok & Viral",
+        description=(
+            "ADR-046: nguồn dài hơn số giây này và chưa đặt độ dài riêng thì lần Xử lý đầu "
+            "GIỮ NGUYÊN độ dài (bỏ qua «Độ dài tối đa»), rồi tin Telegram hỏi Chia phần / Cắt. "
+            "Đặt 0 = tắt (luôn cắt theo Độ dài tối đa như cũ)."
+        ),
+        min=0,
+        max=3600,
     ),
     "viral.auto_caption_on_ready": SettingSpec(
         key="viral.auto_caption_on_ready",

@@ -226,6 +226,9 @@ def _finish_ready_material(db, mat, media_path: str, drive_dest) -> None:
     # cũng đụng DB, hỏng ở đó mà để ngoại lệ thoát ra là đánh FAILED một video đã xử lý xong.
     try:
         if runtime_settings.get_bool("viral.auto_caption_on_ready", default=True, db=db):
+            from app.core.progress_report import report_stage
+
+            report_stage("caption")
             ok_cap, cap_msg = ViralService.generate_caption_for_material(db, mat.id, notify=False)
             logger.info("[VIRAL] Caption tự động cho #%s: %s — %s", mat.id, ok_cap, cap_msg)
             db.refresh(mat)
@@ -239,6 +242,9 @@ def _finish_ready_material(db, mat, media_path: str, drive_dest) -> None:
 
     # ADR-035: độ dài GỐC đo từ file gốc — chỉ biết khi nó còn trên đĩa (ADR-032 giữ 7 ngày).
     # Không biết thì truyền None, tin sẽ không đoán bừa.
+    from app.core.progress_report import report_stage
+
+    report_stage("notify")
     src = ViralService.find_source_path(mat.id, mat.platform)
     NotifierService.notify_material_ready(
         mat,
@@ -800,6 +806,9 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     ) + 1
 
             _begin_processing(db, mat)
+            from app.core.progress_report import report_stage
+
+            report_stage("start")
 
             download_success = False
             media_path = None
@@ -821,6 +830,7 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 logger.info("[VIRAL] Phần %s/%s của #%s — dùng file gốc: %s",
                             mat.part_index, mat.part_total, mat.parent_material_id, media_path)
             else:
+                report_stage("download")
                 preflight_cmd = _extend_yt_dlp_with_cookies(
                     _yt_dlp_argv(
                         "--no-playlist",
@@ -1033,10 +1043,12 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     target_account = specified_acc
 
             # === Post-processing: watermark removal + anti-duplicate ===
+            from app.core.progress_report import report_stage as _report_stage
             from app.features.viral_intake.reup_config import resolve_preset
             from app.features.viral_intake.reup_processor import ReupProcessor
             from app.features.viral_intake.reup_variants import record_reup_variant
 
+            _report_stage("reup")
             preset_page = mat.target_page
             preset_niches: list[str] = []
             if preset_page and target_account:

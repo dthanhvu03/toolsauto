@@ -188,12 +188,37 @@ def material_caption_block(mat) -> str:
     )
 
 
-def material_ready_buttons(mat) -> list:
-    """ADR-042: nút dưới tin video sẵn sàng. ``callback_data`` do ``telegram_bot`` xử lý."""
+def material_ready_buttons(
+    mat,
+    *,
+    source_duration: Optional[float] = None,
+    duration: Optional[float] = None,
+) -> list:
+    """ADR-042 + ADR-046: nút dưới tin video sẵn sàng."""
     mid = getattr(mat, "id", None)
     if not mid:
         return []
-    return [[{"text": "✅ Đã đăng", "callback_data": f"dadang:{mid}"}]]
+    rows: list = []
+    # ADR-046: còn gần độ dài gốc và dài hơn ngưỡng ⇒ hỏi Chia / Cắt trước khi đăng.
+    try:
+        src = float(source_duration or 0)
+        out = float(duration or 0)
+    except (TypeError, ValueError):
+        src = out = 0.0
+    try:
+        from app.core import settings as runtime_settings
+
+        threshold = int(runtime_settings.get_int("viral.long_video_sec", 180) or 0)
+    except Exception:
+        threshold = 180
+    still_long = src > threshold and out > max(threshold - 15, 0) and not getattr(mat, "clip_length_sec", None)
+    if still_long and not getattr(mat, "parent_material_id", None):
+        rows.append([
+            {"text": "🧩 Chia phần", "callback_data": f"chia:{mid}"},
+            {"text": "✂️ Cắt ngắn", "callback_data": f"cat90:{mid}"},
+        ])
+    rows.append([{"text": "✅ Đã đăng", "callback_data": f"dadang:{mid}"}])
+    return rows
 
 
 def material_ready_message(
@@ -243,6 +268,22 @@ def material_ready_message(
         # Cắt theo số chung (không đặt độ dài riêng) và ngắn hơn gốc rõ rệt ⇒ chỉ đường ngay.
         if source_duration and not getattr(mat, "clip_length_sec", None) and source_duration > duration + 2:
             length_line += "   ↳ cắt theo Thiết lập « Độ dài tối đa » — đặt 0 ở đó nếu muốn giữ nguyên video\n"
+        elif (
+            source_duration
+            and duration
+            and not getattr(mat, "clip_length_sec", None)
+            and abs(float(source_duration) - float(duration)) <= 5
+        ):
+            try:
+                from app.core import settings as runtime_settings
+
+                thr = int(runtime_settings.get_int("viral.long_video_sec", 180) or 0)
+            except Exception:
+                thr = 180
+            if thr > 0 and float(source_duration) > thr:
+                length_line += (
+                    "   ↳ video dài — lần đầu giữ nguyên; bấm 🧩 Chia phần hoặc ✂️ Cắt ngắn bên dưới\n"
+                )
     # ADR-041: phần con của video đã chia — Owner đăng theo thứ tự nên phải thấy ngay "phần mấy".
     part_line = ""
     if getattr(mat, "parent_material_id", None) and getattr(mat, "part_index", None):

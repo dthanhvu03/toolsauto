@@ -63,7 +63,7 @@ class TelegramEventRouter:
 
         material_id = res.get("id")
         self.client.send_message(
-            f"✅ {msg}\n⏳ Đang tải và xử lý… sẽ gửi video kèm caption khi xong.",
+            f"✅ {msg}",
             reply_markup={"inline_keyboard": [[
                 {"text": "➕ Thêm cả kênh này làm nguồn", "callback_data": f"src:{material_id}"},
             ]]},
@@ -74,17 +74,24 @@ class TelegramEventRouter:
         def _run():
             from app.core import feature_hooks
             from app.core.database.core import SessionLocal
+            from app.features.telegram_bot.process_progress import TelegramProcessProgress
+
+            progress = TelegramProcessProgress(self.client, material_id)
             try:
-                with SessionLocal() as db:
-                    res = feature_hooks.call("viral.process_one", db, material_id)
-                # `process_material` TỪ CHỐI bằng giá trị trả về chứ không bằng ngoại lệ (sai
-                # trạng thái, thiếu ffmpeg, trùng nội dung…). Bỏ qua nó thì Owner nhận lời hứa
-                # "sẽ gửi khi xong" rồi im lặng vĩnh viễn — không lỗi, không tin, không gì cả.
-                ok, msg = res if isinstance(res, tuple) else (True, "")
-                if not ok:
-                    self.client.send_message(f"⚠️ Không xử lý được #{material_id}: {msg}")
+                with progress.running():
+                    with SessionLocal() as db:
+                        res = feature_hooks.call("viral.process_one", db, material_id)
+                    # `process_material` TỪ CHỐI bằng giá trị trả về chứ không bằng ngoại lệ (sai
+                    # trạng thái, thiếu ffmpeg, trùng nội dung…). Bỏ qua nó thì Owner nhận lời hứa
+                    # "sẽ gửi khi xong" rồi im lặng vĩnh viễn — không lỗi, không tin, không gì cả.
+                    ok, msg = res if isinstance(res, tuple) else (True, "")
+                    if not ok:
+                        progress.fail(str(msg or ""))
+                        return
+                    progress.done()
             except Exception:
                 logger.exception("[Telegram] process_one #%s failed", material_id)
+                progress.fail("xem log")
                 self.client.send_message(f"❌ Xử lý video #{material_id} thất bại — xem log.")
 
         threading.Thread(target=_run, name=f"tg-process-{material_id}", daemon=True).start()
@@ -123,6 +130,8 @@ class TelegramEventRouter:
             # ADR-042: đã đăng / lùi lại
             elif action in ("dadang", "chuadang"):
                 self._handle_posted(callback_id, action, int(target_id))
+            elif action == "cat90":
+                self._handle_cut_short(callback_id, int(target_id))
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
@@ -141,9 +150,8 @@ class TelegramEventRouter:
             self._handle_frames(callback_id, target_id)
             return
         if action == "xuly":
-            # Xử lý mất hàng phút ⇒ trả lời ngay rồi chạy nền, đừng để nút quay mãi.
+            # Xử lý mất hàng phút ⇒ trả lời ngay rồi chạy nền; tin tiến độ (mốc + heartbeat).
             self.client.answer_callback_query(callback_id, "⏳ Đang xử lý…")
-            self.client.send_message(f"⏳ Đang xử lý video #{target_id}… sẽ gửi khi xong.")
             self._process_material_async(target_id)
             return
 
@@ -237,11 +245,44 @@ class TelegramEventRouter:
 
         self.client.answer_callback_query(callback_id, f"✂️ Cắt từ {sec // 60}:{sec % 60:02d}")
         self.client.send_message(
-            f"✂️ Đã đặt mốc {sec // 60}:{sec % 60:02d} cho #{material_id} — đang cắt lại…"
+            f"✂️ Đã đặt mốc {sec // 60}:{sec % 60:02d} cho #{material_id}."
         )
         self._process_material_async(material_id)
 
     # ── ADR-042: đã đăng ────────────────────────────────────────────────────
+
+    def _handle_cut_short(self, callback_id: str, material_id: int):
+        """ADR-046 — ``cat90:<id>``: gắn độ dài cắt (ô Độ dài tối đa, mặc định 90) rồi tải+cắt lại."""
+        from app.core import feature_hooks
+        from app.core import settings as runtime_settings
+        from app.core.database.core import SessionLocal
+        from app.core.database.models import ViralMaterial
+
+        try:
+            cap = int(runtime_settings.get_int("reup.max_duration_sec", 90) or 0)
+        except Exception:
+            cap = 90
+        if cap <= 0:
+            cap = 90
+
+        with SessionLocal() as db:
+            mat = db.query(ViralMaterial).filter(ViralMaterial.id == material_id).first()
+            if not mat:
+                self.client.answer_callback_query(callback_id, "⚠️ Không tìm thấy video")
+                return
+            # Giữ mốc bắt đầu nếu đã chọn; set_clip(None/"") sẽ XOÁ mốc — phải truyền lại.
+            start_arg = int(mat.clip_start_sec) if mat.clip_start_sec is not None else ""
+            res = feature_hooks.call("viral.set_clip", db, material_id, start_arg, cap) or {}
+        if not res.get("ok"):
+            self.client.answer_callback_query(callback_id, "⚠️ " + str(res.get("msg") or "")[:180])
+            self.client.send_message("⚠️ " + str(res.get("msg") or "Không đặt được độ dài cắt."))
+            return
+
+        self.client.answer_callback_query(callback_id, f"✂️ Cắt còn {cap}s…")
+        self.client.send_message(
+            f"✂️ #{material_id}: cắt còn {cap}s (theo Thiết lập « Độ dài tối đa ») — đang tải lại và cắt…"
+        )
+        self._process_material_async(material_id)
 
     def _handle_posted(self, callback_id: str, action: str, material_id: int):
         """
@@ -345,15 +386,22 @@ class TelegramEventRouter:
         )
 
         def _run():
+            from app.features.telegram_bot.process_progress import TelegramProcessProgress
+
             for idx, cid in enumerate(child_ids, 1):
+                progress = TelegramProcessProgress(self.client, cid)
                 try:
-                    with SessionLocal() as db:
-                        r = feature_hooks.call("viral.process_one", db, cid)
-                    ok, msg = r if isinstance(r, tuple) else (True, "")
-                    if not ok:
-                        self.client.send_message(f"⚠️ Phần {idx}/{len(child_ids)} (#{cid}) không xử lý được: {msg}")
+                    with progress.running():
+                        with SessionLocal() as db:
+                            r = feature_hooks.call("viral.process_one", db, cid)
+                        ok, msg = r if isinstance(r, tuple) else (True, "")
+                        if not ok:
+                            progress.fail(str(msg or f"Phần {idx}/{len(child_ids)}"))
+                            continue
+                        progress.done()
                 except Exception:
                     logger.exception("[Telegram] process part #%s failed", cid)
+                    progress.fail("xem log")
                     self.client.send_message(f"❌ Phần {idx}/{len(child_ids)} (#{cid}) hỏng — xem log.")
 
         threading.Thread(target=_run, name=f"tg-chiaok-{material_id}", daemon=True).start()

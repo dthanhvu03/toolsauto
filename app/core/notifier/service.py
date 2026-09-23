@@ -214,8 +214,12 @@ class NotifierService:
             }
 
             msg = nf.material_ready_message(mat, media_path, drive_path=drive_path, **extra)
-            # ADR-042: Owner đăng tay xong bấm ngay trên tin — khỏi mở web, khỏi gõ lệnh.
-            buttons = nf.material_ready_buttons(mat)
+            # ADR-042 + ADR-046: Owner đăng tay / chia / cắt ngay trên tin.
+            buttons = nf.material_ready_buttons(
+                mat,
+                source_duration=source_duration,
+                duration=duration,
+            )
             with_video = (
                 media_path
                 and os.path.exists(media_path)

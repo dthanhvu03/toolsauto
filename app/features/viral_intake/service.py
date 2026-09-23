@@ -559,7 +559,7 @@ class ViralService:
 
         platform = detect_platform(url)
         if platform is None:
-            return False, "Không nhận diện được nền tảng: chỉ TikTok/YouTube/Facebook/Instagram", None
+            return False, "Không nhận diện được nền tảng: chỉ TikTok/Douyin/YouTube/Facebook/Instagram", None
 
         norm_url = normalize_source_url(url)
         # Scan cũ lưu dạng "https://www.tiktok.com/…" — so cả biến thể www. để không tạo bản trùng
@@ -801,6 +801,31 @@ class ViralService:
         )
 
     @staticmethod
+    def should_defer_duration_cut(mat, source_duration: float, db: Session | None = None) -> bool:
+        """
+        ADR-046 — video dài, lần đầu chưa chọn độ dài riêng ⇒ chưa cắt theo «Độ dài tối đa».
+
+        Phần con (đã chia) và video đã có ``clip_length_sec`` thì không trì hoãn.
+        Ngưỡng 0 = tắt (hành vi cũ).
+        """
+        if getattr(mat, "parent_material_id", None):
+            return False
+        if getattr(mat, "clip_length_sec", None):
+            return False
+        try:
+            from app.core import settings as runtime_settings
+
+            threshold = int(runtime_settings.get_int("viral.long_video_sec", 180, db=db) or 0)
+        except Exception:
+            threshold = 180
+        if threshold <= 0:
+            return False
+        try:
+            return float(source_duration or 0) > float(threshold)
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
     def set_clip_start(
         db: Session,
         material_id: int,
@@ -919,6 +944,8 @@ class ViralService:
                 page_url=material.target_page,
                 niches=niches,
                 account_id=material.scraped_by_account_id,
+                clip_start=float(getattr(material, "clip_start_sec", None) or 0),
+                clip_length=float(getattr(material, "clip_length_sec", None) or 0),
             )
             if not result.success or not result.output_path:
                 return False, result.error or "Chạy lại anti-dupe thất bại."
@@ -1126,7 +1153,8 @@ def ai_provider_ready(db: Optional[Session] = None) -> Tuple[bool, str]:
     gemini = (getattr(config, "GEMINI_API_KEY", "") or getattr(config, "GOOGLE_API_KEY", "") or "").strip()
     openrouter = (getattr(config, "OPENROUTER_API_KEY", "") or "").strip()
 
-    if gemini.startswith("AIza"):
+    # Google AI Studio: key cũ AIza…; key mới (auth key) AQ.… — cả hai hợp lệ với SDK native.
+    if gemini.startswith(("AIza", "AQ.")):
         return True, ""
     if openrouter:
         return True, ""
@@ -1135,12 +1163,12 @@ def ai_provider_ready(db: Optional[Session] = None) -> Tuple[bool, str]:
 
     if gemini:
         return False, (
-            "Key Gemini sai dạng — key thật bắt đầu bằng AIza… (giá trị hiện tại bắt đầu "
-            f"bằng “{gemini[:5]}…”, giống access token chứ không phải API key). "
+            "Key Gemini sai dạng — key AI Studio bắt đầu bằng AIza… hoặc AQ.… "
+            f"(giá trị hiện tại bắt đầu bằng “{gemini[:5]}…”). "
             "Lấy key ở Google AI Studio, đặt GEMINI_API_KEY trong .env rồi chạy: "
             "python manage.py ai check"
         )
     return False, (
-        "Chưa cấu hình key AI — đặt GEMINI_API_KEY (dạng AIza…) trong .env rồi chạy: "
+        "Chưa cấu hình key AI — đặt GEMINI_API_KEY (dạng AIza… hoặc AQ.…) trong .env rồi chạy: "
         "python manage.py ai check"
     )
