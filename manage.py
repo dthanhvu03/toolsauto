@@ -301,7 +301,7 @@ def ai_check() -> None:
 
     if not gemini_key and not or_key:
         typer.echo("Chua co key AI nao. Dien vao .env mot trong hai:", err=True)
-        typer.echo("  GEMINI_API_KEY=AIza...      (aistudio.google.com/apikey)", err=True)
+        typer.echo("  GEMINI_API_KEY=AIza...|AQ....  (aistudio.google.com/apikey)", err=True)
         typer.echo("  OPENROUTER_API_KEY=...      (+ OPENROUTER_BASE_URL / OPENROUTER_MODEL)", err=True)
         raise typer.Exit(code=1)
 
@@ -311,8 +311,8 @@ def ai_check() -> None:
     failed = False
 
     if gemini_key:
-        if not gemini_key.startswith("AIza"):
-            typer.echo("[WARN] gemini: khong phai API key Gemini — key that dang AIza... (aistudio.google.com/apikey)")
+        if not gemini_key.startswith(("AIza", "AQ.")):
+            typer.echo("[WARN] gemini: khong phai API key Gemini — key that dang AIza... hoac AQ.... (aistudio.google.com/apikey)")
         from app.core.ai import native_fallback
 
         text, meta = native_fallback.call_native_gemini(prompt)

@@ -108,16 +108,24 @@ def test_a1_gemini_dung_dang_aiza_thi_ok(monkeypatch, no_router):
     assert ai_provider_ready() == (True, "")
 
 
-def test_a2_key_gemini_sai_dang_bao_ro_aiza(monkeypatch, no_router):
-    """Đúng tình trạng máy Owner: `.env` có GOOGLE_API_KEY dạng `AQ.Ab…` (access token, không phải API key)."""
-    monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.Ab8RN6JkhoAnh_khong_phai_api_key")
-    monkeypatch.setattr(config, "GOOGLE_API_KEY", "AQ.Ab8RN6JkhoAnh_khong_phai_api_key")
+def test_a2_key_gemini_aq_auth_key_moi_thi_ok(monkeypatch, no_router):
+    """AI Studio 2026 phát auth key dạng AQ.… (không còn chỉ AIza…)."""
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "AQ.Ab8RN6JkhoAnh_la_auth_key_moi")
+    monkeypatch.setattr(config, "GOOGLE_API_KEY", "AQ.Ab8RN6JkhoAnh_la_auth_key_moi")
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+
+    assert ai_provider_ready() == (True, "")
+
+
+def test_a2b_key_gemini_sai_dang_bao_ro(monkeypatch, no_router):
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "sk-not-a-gemini-key")
+    monkeypatch.setattr(config, "GOOGLE_API_KEY", "sk-not-a-gemini-key")
     monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
 
     ok, reason = ai_provider_ready()
     assert ok is False
     assert "sai dạng" in reason
-    assert "AIza" in reason
+    assert "AQ." in reason
 
 
 def test_a3_chi_co_openrouter_van_ok(monkeypatch, no_router):
