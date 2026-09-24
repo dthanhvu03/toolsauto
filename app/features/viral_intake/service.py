@@ -566,6 +566,8 @@ class ViralService:
         www_variant = norm_url.replace("https://", "https://www.", 1)
         existing = db.query(ViralMaterial).filter(ViralMaterial.url.in_([norm_url, www_variant])).first()
         if existing:
+            if existing.status == ViralStatus.FAILED:
+                return True, f"Thử lại #{existing.id} ({existing.platform})", existing.id
             return False, f"#{existing.id} đã có (trạng thái {existing.status})", existing.id
 
         mat = ViralMaterial(

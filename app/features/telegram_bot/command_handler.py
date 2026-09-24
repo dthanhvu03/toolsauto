@@ -5,6 +5,19 @@ from app.constants import JobStatus
 
 logger = logging.getLogger(__name__)
 
+def send_long_message(client, text: str) -> None:
+    chunk = ""
+    for block in str(text or "").split("\n\n"):
+        nxt = block if not chunk else f"{chunk}\n\n{block}"
+        if chunk and len(nxt) > 3500:
+            client.send_message(chunk)
+            chunk = block
+        else:
+            chunk = nxt
+    if chunk:
+        client.send_message(chunk[:4000])
+
+
 class TelegramCommandHandler:
     def __init__(self, client):
         self.client = client
@@ -44,10 +57,10 @@ class TelegramCommandHandler:
     MENU: list[tuple[str, str]] = [
         ("sansang", "Video chờ đăng tay: Gửi lại · Chọn đoạn · Chia phần · Đã đăng"),
         ("moi", "Video mới quét về, kèm nút Xử lý"),
-        ("nguon", "Nguồn tự quét: Quét ngay · Bật/Tắt"),
+        ("nguon", "Nguồn: /nguon · /nguon <id> <min> <max> · /nguon <id> xoa"),
         ("dadang", "Video đã đăng gần nhất (lùi lại nếu bấm nhầm)"),
         ("han", "Còn đăng được bao nhiêu bài: tuần, hôm nay, tháng"),
-        ("so", "Chỉ số bài đã đăng: lượt hiện, cảm xúc, bình luận, chia sẻ"),
+        ("so", "Chỉ số từng kênh. Bấm tên page để xem bài của page đó"),
         ("tai", "/tai <link> — chỉ tải bản gốc về máy, không xào chẻ"),
         ("caidat", "Xem / đổi cài đặt luồng video ngay tại đây"),
         ("help", "Danh sách lệnh và cách dùng"),
@@ -180,7 +193,11 @@ class TelegramCommandHandler:
         return f"🕐 Quét lúc {luc}: " + (f"✅ {found} video mới" if found else "⚪ không có video mới")
 
     def _cmd_nguon(self, args=None):
-        """Liệt kê nguồn tự quét, mỗi nguồn kèm nút Quét ngay / Bật-Tắt."""
+        """Liệt kê nguồn, hoặc đặt / xóa hai số riêng của một nguồn."""
+        args = [str(a) for a in (args or [])]
+        if args:
+            self._dat_nguong_nguon(args)
+            return
         from app.core import feature_hooks
         from app.core.database.core import SessionLocal
 
@@ -194,15 +211,64 @@ class TelegramCommandHandler:
 
         for s in rows:
             trang_thai = "🟢 Bật" if s["enabled"] else "⚪ Tắt"
-            nguong = f"{s['min_views']:,}" if s.get("min_views") else "mặc định"
+            if s.get("min_views") is None and s.get("max_videos") is None:
+                nguong = "mặc định"
+            else:
+                xem = f"{s['min_views']:,} lượt xem" if s.get("min_views") is not None else "mức xem chung"
+                toi_da = f"{s['max_videos']} video" if s.get("max_videos") is not None else "số video chung"
+                nguong = f"{xem}, tối đa {toi_da}"
+            cho = ""
+            if s.get("waiting_count") is not None:
+                cho = f"\n⏳ Còn chờ: <b>{int(s['waiting_count'])}</b>"
             self.client.send_message(
                 f"📺 <b>@{s['handle']}</b> · {s['platform']} · {trang_thai}\n"
-                f"👁 Ngưỡng {nguong}\n{self._dong_quet(s)}",
+                f"👁 Ngưỡng {nguong}{cho}\n{self._dong_quet(s)}\n"
+                f"Đặt riêng: /nguon {s['id']} &lt;mức xem&gt; &lt;số video&gt; · về chung: /nguon {s['id']} xoa",
                 reply_markup={"inline_keyboard": [[
                     {"text": "🔍 Quét ngay", "callback_data": f"scan:{s['id']}"},
                     {"text": "⚪ Tắt" if s["enabled"] else "🟢 Bật", "callback_data": f"tgsrc:{s['id']}"},
                 ]]},
             )
+
+    def _dat_nguong_nguon(self, args: list[str]):
+        """Cùng lệnh /nguon. Sai thì báo và không gọi hook ghi."""
+        if len(args) == 2 and args[1].lower() == "xoa":
+            try:
+                source_id = int(args[0])
+            except ValueError:
+                self.client.send_message("⚠️ Mã nguồn phải là số nguyên.")
+                return
+            self._goi_dat_nguong(source_id, None, None)
+            return
+        if len(args) != 3:
+            self.client.send_message(
+                "⚠️ Cú pháp: /nguon &lt;mã&gt; &lt;mức xem&gt; &lt;số video&gt; hoặc /nguon &lt;mã&gt; xoa"
+            )
+            return
+        try:
+            source_id = int(args[0])
+            min_views = int(args[1])
+            max_videos = int(args[2])
+        except ValueError:
+            self.client.send_message("⚠️ Mức xem và số video phải là số nguyên.")
+            return
+        if min_views < 0:
+            self.client.send_message("⚠️ Min views không được âm.")
+            return
+        if not 1 <= max_videos <= 500:
+            self.client.send_message("⚠️ Max video/lần phải trong khoảng 1–500.")
+            return
+        self._goi_dat_nguong(source_id, min_views, max_videos)
+
+    def _goi_dat_nguong(self, source_id: int, min_views, max_videos):
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        with SessionLocal() as db:
+            res = feature_hooks.call(
+                "viral.set_source_limits", db, source_id, min_views, max_videos,
+            ) or {}
+        self.client.send_message(res.get("msg") or "Không đặt được ngưỡng.")
 
     def _cmd_moi(self, args=None):
         """Video mới quét về, chưa xử lý — kèm nút Xử lý."""
@@ -450,11 +516,18 @@ class TelegramCommandHandler:
             self.client.send_message("Chưa có khóa Buffer.")
             return
         try:
-            text = BufferClient(key).insights_overview()
+            text, channels = BufferClient(key).insights_menu()
         except BufferError as exc:
             self.client.send_message(str(exc)[:300])
             return
-        self.client.send_message(text[:4000])
+        send_long_message(self.client, text)
+        rows = [
+            [{"text": name[:30], "callback_data": f"bso:{cid}"}]
+            for cid, name in channels
+            if cid and len(f"bso:{cid}".encode()) <= 64
+        ]
+        if rows:
+            self.client.send_message("Xem riêng một kênh", reply_markup={"inline_keyboard": rows})
 
     def _cmd_status(self, args=None):
         # ADR-033: trạng thái WORKER nằm ở `SystemState.worker_status` ("RUNNING"/"PAUSED"),

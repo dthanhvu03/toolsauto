@@ -49,6 +49,8 @@ class ViralMaterial(Base):
     title = Column(String, nullable=True)
     views = Column(Integer, default=0, index=True)
     scraped_by_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    # Nguồn đã đưa video này vào. Trống = video cũ hoặc dán tay, không đếm vào nguồn nào.
+    source_id = Column(Integer, ForeignKey("viral_sources.id"), nullable=True, index=True)
     target_page = Column(String, nullable=True)  # Used for manual /reup targeting specific pages
     # ADR-020: JSON list URL Page — chép từ nguồn lúc quét; NULL = đường cũ (1 Page hoặc round-robin)
     target_pages = Column(Text, nullable=True)

@@ -179,6 +179,86 @@ def test_adapter_queues_text_post(monkeypatch):
     assert kwargs["media_url"] is None
 
 
+def test_chi_tiet_phan_biet_anh_chu_va_video():
+    from app.features.buffer.client import describe_post
+
+    video = describe_post(
+        {
+            "status": "sent",
+            "sentAt": "2026-09-23T10:39:46.000Z",
+            "text": "Câu cá",
+            "assets": [{"source": "https://cdn.example/a.mp4"}],
+            "metrics": [
+                {"type": "impressions", "value": 10},
+                {"type": "reactions", "value": 1},
+                {"type": "comments", "value": 0},
+                {"type": "shares", "value": 0},
+                {"type": "clicks", "value": 2},
+            ],
+        },
+        page="Mê Câu Cá",
+    )
+    image = describe_post({"text": "ảnh", "assets": [{"source": "https://cdn.example/a.jpg"}]})
+    text = describe_post({"text": "chỉ chữ", "assets": []})
+    assert "Video" in video and "1, cảm xúc" not in video
+    assert "1 cảm xúc" in video and "2 bấm" in video
+    assert image.startswith("<b>Ảnh</b>")
+    assert "Chưa có số" in image
+    assert text.startswith("<b>Chữ</b>")
+
+
+def _ban(text, sent, channel="ch"):
+    return {
+        "text": text,
+        "sentAt": sent,
+        "channelId": channel,
+        "status": "sent",
+        "assets": [{"source": "https://cdn.example/a.mp4"}],
+        "metrics": [{"type": "impressions", "value": 1}],
+    }
+
+
+def test_nam_ban_cung_ngay_thanh_mot_nhom():
+    from app.features.buffer.client import group_sent_posts
+
+    ban = [
+        _ban("Câu cá", f"2026-09-23T10:{phut}:00.000Z")
+        for phut in ("39", "45", "51", "54", "56")
+    ]
+    groups = group_sent_posts(ban)
+    assert len(groups) == 1
+    assert groups[0]["count"] == 5
+    assert groups[0]["representative"]["sentAt"].startswith("2026-09-23T10:56")
+
+
+def test_hai_chu_va_hai_ngay_khong_gop():
+    from app.features.buffer.client import group_sent_posts
+
+    hai_chu = [
+        _ban("Câu cá", "2026-09-23T10:39:00.000Z"),
+        _ban("Nội dung khác", "2026-09-23T11:00:00.000Z"),
+    ]
+    hai_ngay = [
+        _ban("Câu cá", "2026-09-23T10:00:00.000Z"),
+        _ban("Câu cá", "2026-09-24T10:00:00.000Z"),
+    ]
+    assert len(group_sent_posts(hai_chu)) == 2
+    assert len(group_sent_posts(hai_ngay)) == 2
+
+
+def test_tom_tat_mot_noi_dung_nam_ban():
+    from app.features.buffer.client import BufferClient, content_count_line
+
+    assert content_count_line(1, 5) == "1 nội dung · 5 bản lịch sử"
+    assert "5 nội dung" not in content_count_line(1, 5)
+    client = BufferClient.__new__(BufferClient)
+    ban = [_ban("Câu cá", f"2026-09-23T10:{phut}:00.000Z") for phut in ("39", "45", "51", "54", "56")]
+    text, _channels = client._insights_text(9, {"ch": "Mê Câu Cá"}, ban, False, posts=False)
+    assert "1 nội dung" in text
+    assert "5 bản lịch sử" in text
+    assert "5 nội dung" not in text
+
+
 def test_adapter_missing_channel_is_fatal():
     adapter = BufferAdapter(MagicMock())
     job = SimpleNamespace(

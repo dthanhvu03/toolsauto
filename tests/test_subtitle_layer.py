@@ -231,6 +231,43 @@ def test_post_layers_audio_reads_hook_text_and_promotes(tmp_path, monkeypatch):
     assert not (tmp_path / "video_reup.mp4.with_audio.tmp.mp4").exists()
 
 
+def test_doan_nhac_bi_bo_va_khong_chay_phu_de(tmp_path, monkeypatch):
+    kept = subtitle_layer.keep_speech_segments(
+        [
+            {"start": 0.0, "end": 1.0, "text": "la la", "no_speech_prob": 0.6},
+            {"start": 1.0, "end": 2.0, "text": "nhạc lặp", "compression_ratio": 2.5},
+            {"start": 2.0, "end": 3.0, "text": "không có điểm"},
+        ]
+    )
+    assert [seg["text"] for seg in kept] == ["không có điểm"]
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        subtitle_layer,
+        "transcribe_words",
+        lambda *a, **k: [
+            {"start": 0.0, "end": 1.0, "text": "la la", "no_speech_prob": 0.9},
+        ],
+    )
+    monkeypatch.setattr(
+        subtitle_layer, "burn", lambda *a, **k: calls.append("burn") or True
+    )
+    out = tmp_path / "out.mp4"
+    assert subtitle_layer.apply(str(tmp_path / "in.mp4"), str(out)) is False
+    assert not out.exists()
+    assert calls == []
+
+
+def test_loi_noi_duoc_giu_khi_canh_nhac():
+    kept = subtitle_layer.keep_speech_segments(
+        [
+            {"start": 0.0, "end": 1.5, "text": "hôm nay đi câu", "no_speech_prob": 0.2},
+            {"start": 1.5, "end": 3.0, "text": "nhạc nền", "no_speech_prob": 0.9},
+        ]
+    )
+    assert [seg["text"] for seg in kept] == ["hôm nay đi câu"]
+
+
 def test_post_layers_audio_fail_keeps_previous(tmp_path, monkeypatch):
     from app.core import settings as runtime_settings
     from app.features.viral_intake import audio_layer

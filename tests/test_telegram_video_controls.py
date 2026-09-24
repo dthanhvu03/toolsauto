@@ -145,6 +145,51 @@ def test_chua_co_nguon_thi_chi_cach_them(bot, monkeypatch):
     assert "Dán thẳng link" in client.text
 
 
+def test_nguon_hien_so_video_cho(bot, monkeypatch):
+    handler, client = bot
+    _hooks(monkeypatch, {"viral.sources_summary": [dict(SOURCE, waiting_count=20)]})
+
+    handler.handle_command("nguon")
+
+    assert "thacaukechuyen" in client.text and "1,000" in client.text and "20" in client.text
+    data = [b["callback_data"] for b in client.buttons()]
+    assert "scan:3" in data and "tgsrc:3" in data
+    assert "Quét lúc" in client.text
+
+
+def test_nguon_dat_hai_so_goi_hook(bot, monkeypatch):
+    handler, client = bot
+    seen = _hooks(monkeypatch, {"viral.set_source_limits": {"ok": True, "msg": "Đã lưu ngưỡng riêng."}})
+
+    handler.handle_command("nguon", ["3", "1000", "3"])
+
+    assert seen[0][0] == "viral.set_source_limits"
+    assert seen[0][1][1:] == (3, 1000, 3)
+    assert "Đã lưu ngưỡng riêng." in client.text
+
+
+def test_nguon_xoa_so_rieng_goi_hook(bot, monkeypatch):
+    handler, client = bot
+    seen = _hooks(monkeypatch, {"viral.set_source_limits": {"ok": True, "msg": "Nguồn #3 dùng lại mức chung."}})
+
+    handler.handle_command("nguon", ["3", "xoa"])
+
+    assert seen[0][0] == "viral.set_source_limits"
+    assert seen[0][1][1:] == (3, None, None)
+
+
+def test_nguon_sai_khong_goi_hook(bot, monkeypatch):
+    handler, client = bot
+    seen = _hooks(monkeypatch, {})
+
+    handler.handle_command("nguon", ["3", "abc", "2"])
+    handler.handle_command("nguon", ["3", "10", "0"])
+
+    assert seen == []
+    assert "số nguyên" in client.text
+    assert "1–500" in client.text
+
+
 # ── /moi và /sansang ────────────────────────────────────────────────────────
 
 
@@ -234,13 +279,14 @@ def test_lenh_so_tra_chi_so(bot, monkeypatch):
     handler, client = bot
     monkeypatch.setattr("app.config.BUFFER_API_KEY", "k")
     monkeypatch.setattr(
-        "app.features.buffer.client.BufferClient.insights_overview",
-        lambda self: "Mê Câu Cá · hiện 1,726 · cảm xúc 5",
+        "app.features.buffer.client.BufferClient.insights_menu",
+        lambda self: ("Mê Câu Cá · hiện 1,726 · cảm xúc 5", [("ch1", "Mê Câu Cá")]),
     )
 
     handler.handle_command("so")
 
     assert "1,726" in client.text and "cảm xúc 5" in client.text
+    assert any(b.get("callback_data") == "bso:ch1" for b in client.buttons())
 
 
 def test_lenh_han_ke_bai_dang_xep(bot, monkeypatch):

@@ -129,6 +129,8 @@ class TelegramEventRouter:
                 self._handle_page_ask(callback_id, target_id)
             elif action == "pg":
                 self._handle_page_set(callback_id, target_id)
+            elif action == "bso":
+                self._handle_buffer_channel(callback_id, target_id)
             elif action in ("bnow", "binf", "btop", "bbot", "bdrf", "bdup", "bdel", "bdyes", "bmore"):
                 self._handle_buffer_post(callback_id, action, target_id)
         except Exception as e:
@@ -465,6 +467,23 @@ class TelegramEventRouter:
         self.client.answer_callback_query(callback_id, ("✅ " if ok else "⚠️ ") + msg[:180])
         self.client.send_message(("✅ " if ok else "⚠️ ") + msg, reply_markup=markup)
 
+    def _handle_buffer_channel(self, callback_id: str, channel_id: str):
+        import app.config as config
+        from app.features.buffer.client import BufferClient, BufferError
+        from app.features.telegram_bot.command_handler import send_long_message
+
+        key = (getattr(config, "BUFFER_API_KEY", None) or "").strip()
+        if not key:
+            self.client.answer_callback_query(callback_id, "Chưa có khóa Buffer")
+            return
+        try:
+            text = BufferClient(key).insights_channel(channel_id)
+        except BufferError as exc:
+            self.client.answer_callback_query(callback_id, str(exc)[:180])
+            return
+        self.client.answer_callback_query(callback_id, "Kênh")
+        send_long_message(self.client, text)
+
     def _handle_buffer_post(self, callback_id: str, action: str, post_id: str):
         """Nút trên bài Buffer: đăng ngay, chi tiết, xếp lại, nháp, nhân bản, xóa."""
         import app.config as config
@@ -529,12 +548,9 @@ class TelegramEventRouter:
                 client.delete_post(pid)
                 msg = "Đã xóa bài khỏi Buffer."
             elif action == "binf":
-                snap = client.post_snapshot(pid)
-                title = str(snap.get("text") or "").strip().split("\n", 1)[0][:120] or "(không chữ)"
-                msg = (
-                    f"Bài {snap.get('status') or '—'} · {_ict_when(snap.get('dueAt'))}\n"
-                    f"{title}"
-                )
+                from app.features.buffer.client import describe_post
+
+                msg = describe_post(client.post_detail(pid))
             else:
                 msg = "Nút không hợp lệ."
         except BufferError as exc:

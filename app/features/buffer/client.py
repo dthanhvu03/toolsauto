@@ -356,6 +356,29 @@ class BufferClient:
             return post
         raise BufferError("Khong thay bai tren Buffer.")
 
+    def post_detail(self, post_id: str) -> dict:
+        pid = _gql_string(post_id)
+        data = self.execute(
+            f"""
+            query PostDetail {{
+              post(input: {{ id: {pid} }}) {{
+                id
+                text
+                dueAt
+                sentAt
+                status
+                externalLink
+                assets {{ source }}
+                metrics {{ type value }}
+              }}
+            }}
+            """
+        )
+        post = data.get("post")
+        if isinstance(post, dict) and post.get("id"):
+            return post
+        raise BufferError("Khong thay bai tren Buffer.")
+
     def _kept_content_fields(self, post_id: str) -> list[str]:
         snap = self.post_snapshot(post_id)
         text = str(snap.get("text") or "")
@@ -528,6 +551,41 @@ class BufferClient:
 
     def insights_overview(self) -> str:
         """Chỉ số tháng này. Buffer không trả view riêng cho Facebook."""
+        text, _channels = self.insights_menu()
+        return text
+
+    def insights_menu(self) -> tuple[str, list[tuple[str, str]]]:
+        """Tóm tắt từng kênh và danh sách nút để xem riêng."""
+        month, names, rows, truncated = self._month_sent()
+        if not rows:
+            return f"Tháng {month} chưa có bài đã đăng để lấy chỉ số.", []
+        return self._insights_text(month, names, rows, truncated, posts=False)
+
+    def insights_channel(self, channel_id: str) -> str:
+        month, names, rows, _truncated = self._month_sent()
+        name = names.get(channel_id, "")
+        if not name:
+            raise BufferError("Khong thay kenh.")
+        items = [row for row in rows if str(row.get("channelId") or "") == channel_id]
+        from html import escape
+
+        if not items:
+            return f"<b>{escape(name)}</b>\nTháng {month} chưa có bài đã đăng."
+        groups = group_sent_posts(items)
+        copies = sum(int(group["count"]) for group in groups)
+        reps = [group["representative"] for group in groups]
+        lines = [
+            f"<b>{escape(name)}</b> · tháng {month} · {content_count_line(len(groups), copies)}",
+            _stat_line(_sum_metrics(reps)),
+        ]
+        for group in groups:
+            block = describe_post(group["representative"])
+            if int(group["count"]) > 1:
+                block = f"{int(group['count'])} bản lịch sử\n{block}"
+            lines.append(block)
+        return "\n\n".join(lines)
+
+    def _month_sent(self) -> tuple[int, dict[str, str], list[dict], bool]:
         from datetime import datetime, timedelta, timezone
 
         ict = timezone(timedelta(hours=7))
@@ -571,7 +629,10 @@ class BufferClient:
                     id
                     text
                     sentAt
+                    status
+                    externalLink
                     channelId
+                    assets {{ source }}
                     metrics {{ type value }}
                   }}
                 }}
@@ -586,30 +647,120 @@ class BufferClient:
             node = edge.get("node") if isinstance(edge, dict) else None
             if isinstance(node, dict) and node.get("id"):
                 rows.append(node)
-        if not rows:
-            return f"Tháng {now.month} chưa có bài đã đăng để lấy chỉ số."
+        truncated = bool((payload.get("pageInfo") or {}).get("hasNextPage"))
+        return now.month, names, rows, truncated
+
+    def _insights_text(
+        self,
+        month: int,
+        names: dict[str, str],
+        rows: list[dict],
+        truncated: bool,
+        *,
+        posts: bool = True,
+    ) -> tuple[str, list[tuple[str, str]]]:
         by_channel: dict[str, list[dict]] = {}
         for row in rows:
             by_channel.setdefault(str(row.get("channelId") or ""), []).append(row)
         from html import escape
 
-        lines = [f"<b>Tháng {now.month}</b>", "Chưa có số view. Số dưới là lượt hiện."]
-        if (payload.get("pageInfo") or {}).get("hasNextPage"):
+        lines = [f"<b>Tháng {month}</b>", "Chưa có số view. Số dưới là lượt hiện."]
+        if truncated:
             lines.append("Đang hiện 50 bài mới nhất.")
         ranked = []
         for cid, items in by_channel.items():
-            total = _sum_metrics(items)
+            groups = group_sent_posts(items)
+            reps = [group["representative"] for group in groups]
+            copies = sum(int(group["count"]) for group in groups)
             name = escape(names.get(cid, cid or "Page"))
-            lines.append(f"<b>{name}</b> · {len(items)} bài\n{_stat_line(total)}")
-            ranked.extend(items)
-        ranked.sort(key=lambda row: _metric_map(row).get("impressions", 0), reverse=True)
-        lines.append("<b>Nổi bật</b>")
-        for row in ranked[:3]:
-            stats = _metric_map(row)
-            title = escape(str(row.get("text") or "").strip().split("\n", 1)[0][:70] or "(không chữ)")
-            page = escape(names.get(str(row.get("channelId") or ""), ""))
-            lines.append(f"{_num(stats.get('impressions'))} hiện · {_ict_when(row.get('sentAt'))} · {page}\n{title}")
-        return "\n".join(lines)
+            lines.append(
+                f"<b>{name}</b> · {content_count_line(len(groups), copies)}\n{_stat_line(_sum_metrics(reps))}"
+            )
+            ranked.extend(reps)
+        ranked.sort(key=lambda row: str(row.get("sentAt") or ""), reverse=True)
+        channels = [(cid, names.get(cid, cid or "Page")) for cid in by_channel]
+        if posts:
+            lines.append("<b>Từng bài</b>")
+            for row in ranked:
+                page = names.get(str(row.get("channelId") or ""), "")
+                lines.append(describe_post(row, page=page))
+        return "\n\n".join(lines), channels
+
+
+def _caption_key(text: str) -> str:
+    """Cả đoạn chữ, khoảng trắng và xuống dòng gộp thành một dấu cách."""
+    return " ".join(str(text or "").split())
+
+
+def _sent_day(raw) -> str | None:
+    """Ngày giờ Việt Nam. Thiếu hoặc sai thời điểm thì không có ngày để gộp."""
+    from datetime import datetime, timedelta, timezone
+
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone(timedelta(hours=7)))
+    except ValueError:
+        return None
+    return dt.strftime("%Y-%m-%d")
+
+
+def group_sent_posts(rows: list[dict]) -> list[dict]:
+    """Gộp bản cùng kênh, cùng chữ, cùng ngày. Không xóa bản."""
+    buckets: dict[tuple[str, str, str], list[dict]] = {}
+    undated: list[dict] = []
+    for row in rows:
+        day = _sent_day(row.get("sentAt"))
+        if day is None:
+            undated.append(row)
+            continue
+        key = (str(row.get("channelId") or ""), _caption_key(row.get("text")), day)
+        buckets.setdefault(key, []).append(row)
+    groups = []
+    for members in buckets.values():
+        members.sort(key=lambda item: str(item.get("sentAt") or ""))
+        groups.append({"count": len(members), "representative": members[-1], "copies": members})
+    for row in undated:
+        groups.append({"count": 1, "representative": row, "copies": [row]})
+    groups.sort(key=lambda item: str(item["representative"].get("sentAt") or ""), reverse=True)
+    return groups
+
+
+def content_count_line(content_count: int, copy_count: int) -> str:
+    if copy_count > content_count:
+        return f"{content_count} nội dung · {copy_count} bản lịch sử"
+    return f"{content_count} nội dung"
+
+
+def describe_post(post: dict, *, page: str = "") -> str:
+    """Số của một bài. Ảnh, chữ và video dùng cùng bộ chỉ số."""
+    from html import escape
+
+    kind = _media_kind(post)
+    title = escape(str(post.get("text") or "").strip().split("\n", 1)[0][:80] or "(không chữ)")
+    where = f" · {escape(page)}" if page else ""
+    when = _ict_when(post.get("sentAt") or post.get("dueAt"))
+    stats = _metric_map(post)
+    sent = str(post.get("status") or "") == "sent" or bool(post.get("sentAt"))
+    numbers = _stat_line(stats, full=True) if sent or stats else "Chưa có số. Bài chưa lên."
+    lines = [f"<b>{escape(kind)}</b>{where} · {when}", title, numbers]
+    link = str(post.get("externalLink") or "").strip()
+    if link:
+        lines.append(escape(link))
+    return "\n".join(lines)
+
+
+def _media_kind(post: dict) -> str:
+    assets = post.get("assets") or []
+    source = ""
+    if assets and isinstance(assets[0], dict):
+        source = str(assets[0].get("source") or "").strip()
+    if not source:
+        return "Chữ"
+    if asset_kind(source) == "image":
+        return "Ảnh"
+    return "Video"
 
 
 def _metric_map(post: dict) -> dict[str, float]:
@@ -637,13 +788,13 @@ def _num(value) -> str:
     return f"{int(value or 0):,}"
 
 
-def _stat_line(total: dict[str, float]) -> str:
+def _stat_line(total: dict[str, float], *, full: bool = False) -> str:
     parts = [f"{_num(total.get('impressions'))} hiện"]
     for key, label in (("reactions", "cảm xúc"), ("comments", "bình luận"), ("shares", "chia sẻ"), ("clicks", "bấm")):
         value = total.get(key) or 0
-        if value:
+        if full or value:
             parts.append(f"{_num(value)} {label}")
-    if total.get("impressions"):
+    if full or total.get("impressions"):
         parts.append(_rate(total))
     return " · ".join(parts)
 

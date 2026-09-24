@@ -106,6 +106,40 @@ def _extract_audio(video_path: str, audio_path: str) -> bool:
     return os.path.isfile(audio_path) and os.path.getsize(audio_path) > 1024
 
 
+def keep_speech_segments(segments: list[dict]) -> list[dict]:
+    """Bỏ đoạn rõ là nhạc. Thiếu điểm thì giữ đoạn."""
+    kept: list[dict] = []
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        text = str(seg.get("text") or "").strip()
+        if not text:
+            continue
+        try:
+            start = float(seg.get("start"))
+            end = float(seg.get("end"))
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            continue
+        no_speech = seg.get("no_speech_prob")
+        if no_speech is not None:
+            try:
+                if float(no_speech) >= 0.6:
+                    continue
+            except (TypeError, ValueError):
+                pass
+        ratio = seg.get("compression_ratio")
+        if ratio is not None:
+            try:
+                if float(ratio) > 2.4:
+                    continue
+            except (TypeError, ValueError):
+                pass
+        kept.append(seg)
+    return kept
+
+
 def transcribe_words(video_path: str, model: Any = None) -> list[dict]:
     """
     Whisper → list ``{"start","end","text"}`` theo SEGMENT (không karaoke).
@@ -138,8 +172,15 @@ def transcribe_words(video_path: str, model: Any = None) -> list[dict]:
             end = float(seg.end)
             if end <= start:
                 continue
-            out.append({"start": start, "end": end, "text": text})
-        return out
+            item = {"start": start, "end": end, "text": text}
+            no_speech = getattr(seg, "no_speech_prob", None)
+            if no_speech is not None:
+                item["no_speech_prob"] = float(no_speech)
+            ratio = getattr(seg, "compression_ratio", None)
+            if ratio is not None:
+                item["compression_ratio"] = float(ratio)
+            out.append(item)
+        return keep_speech_segments(out)
     finally:
         try:
             os.remove(audio_path)
@@ -313,7 +354,7 @@ def apply(
     ass_path = os.path.splitext(output_path)[0] + ".sub.tmp.ass"
     ok = False
     try:
-        segments = transcribe_words(input_path, model=model)
+        segments = keep_speech_segments(transcribe_words(input_path, model=model))
         if not segments:
             logger.info("[subtitle_layer] no speech found, skip: %s", os.path.basename(input_path))
             return False

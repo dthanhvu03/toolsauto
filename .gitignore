@@ -20,6 +20,10 @@ data/
 .env
 *.log
 __pycache__/
+*.pyc
+.venv/
+dist/
+*.egg-info/
 .agents/
 
 # Test & Debug files (scratch at repo root / scripts only — keep tests/ tracked)

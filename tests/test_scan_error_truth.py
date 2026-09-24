@@ -295,3 +295,79 @@ def test_processor_argv_tiktok_mang_co(monkeypatch):
     preflight = [c for c in seen if "--dump-single-json" in c]
     assert preflight and "--impersonate" in preflight[0], preflight
     db.close()
+
+
+def test_tikwm_timeout_khong_thanh_slideshow(tmp_path, monkeypatch):
+    """CDN đứt giữa chừng phải là hết giờ, còn được thử lại, không phải ảnh trượt."""
+    import requests
+
+    from app.features.viral_intake import processor as pm
+
+    out = tmp_path / "viral_1_tikwm.mp4"
+    out.write_bytes(b"partial")
+
+    class ApiResp:
+        status_code = 200
+
+        def json(self):
+            return {"code": 0, "data": {"play": "https://cdn.example/v.mp4"}}
+
+    def get(url, **kwargs):
+        if "tikwm.com" in url:
+            return ApiResp()
+        raise requests.Timeout("read timed out")
+
+    monkeypatch.setattr(requests, "get", get)
+
+    reason = pm._download_tiktok_fallback("https://vt.tiktok.com/ZSbJbmqXp", str(out))
+
+    assert reason and "timed out" in reason.lower()
+    assert "slideshow" not in reason.lower()
+    assert pm._is_retryable_error(reason) is True
+    assert not out.exists()
+
+
+def test_tikwm_anh_truot_khong_thu_lai(monkeypatch):
+    import requests
+
+    from app.features.viral_intake import processor as pm
+
+    class ApiResp:
+        status_code = 200
+
+        def json(self):
+            return {"code": 0, "data": {"images": ["https://cdn.example/1.jpg"]}}
+
+    monkeypatch.setattr(requests, "get", lambda url, **kwargs: ApiResp())
+
+    reason = pm._download_tiktok_fallback("https://www.tiktok.com/@a/video/1", "/tmp/unused.mp4")
+
+    assert reason and "slideshow" in reason.lower()
+    assert pm._is_retryable_error(reason) is False
+
+
+def test_mo_link_rut_gon_tiktok(monkeypatch):
+    import requests
+
+    from app.features.viral_intake import processor as pm
+
+    class Resp:
+        url = "https://www.tiktok.com/@thacaukechuyen/video/99?_r=1"
+
+        def close(self):
+            return None
+
+    seen = []
+
+    def get(url, **kwargs):
+        seen.append(url)
+        return Resp()
+
+    monkeypatch.setattr(requests, "get", get)
+
+    got = pm._expand_tiktok_short_url("https://vt.tiktok.com/ZSbJbmqXp")
+    assert got == "https://www.tiktok.com/@thacaukechuyen/video/99"
+    assert seen == ["https://vt.tiktok.com/ZSbJbmqXp"]
+    assert pm._expand_tiktok_short_url("https://www.tiktok.com/@a/video/1") == (
+        "https://www.tiktok.com/@a/video/1"
+    )

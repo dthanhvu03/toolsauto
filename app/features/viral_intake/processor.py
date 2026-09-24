@@ -159,7 +159,9 @@ def _mark_material_failed(db, mat, reason: str) -> None:
     if was_manual_reup:
         from app.core.notifier.service import NotifierService
         error_vi = reason
-        if "no downloadable video stream" in reason.lower() or "slideshow" in reason.lower():
+        if "timed out" in reason.lower() or "timeout" in reason.lower():
+            error_vi = "Tải video từ CDN TikTok bị đứt giữa chừng. Gửi lại đúng link này để thử lần nữa."
+        elif "no downloadable video stream" in reason.lower() or "slideshow" in reason.lower():
             error_vi = "Link này là dạng Ảnh trượt (Slideshow) hoặc Audio-only, bot chỉ hỗ trợ tải Video Mp4 tiêu chuẩn."
         elif "private" in reason.lower():
             error_vi = "Video này bị riêng tư (Private) hoặc cần follow mới xem được."
@@ -472,9 +474,53 @@ def _humanize_yt_dlp_error(platform: str, stderr: str, source_account) -> str:
         return humanize_scan_error("tiktok", stderr)
     return f"yt-dlp failed: {stderr[:180]}"
 
-def _download_tiktok_fallback(url: str, output_path: str) -> bool:
-    """Fallback handler for TikTok using TikWM API when yt-dlp fails due to cookies/JS challenge."""
+def _remove_partial(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _expand_tiktok_short_url(url: str) -> str:
+    """Mở vt/vm.tiktok.com thành link /video/ trước khi yt-dlp đọc. Link khác giữ nguyên."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url or "")
+    host = (parts.hostname or "").lower()
+    if host not in ("vt.tiktok.com", "vm.tiktok.com"):
+        return url
     import requests
+
+    try:
+        resp = requests.get(
+            url,
+            allow_redirects=True,
+            timeout=10,
+            headers={"User-Agent": YT_DLP_USER_AGENT},
+            stream=True,
+        )
+        final = resp.url or url
+        resp.close()
+    except Exception as exc:
+        logger.warning("[VIRAL] Could not expand TikTok short link: %s", exc)
+        return url
+    final_parts = urlsplit(final)
+    final_host = (final_parts.hostname or "").lower()
+    if not final_host.endswith("tiktok.com") or "/video/" not in (final_parts.path or ""):
+        return url
+    return urlunsplit((
+        final_parts.scheme or "https",
+        final_parts.netloc,
+        final_parts.path,
+        "",
+        "",
+    ))
+
+
+def _download_tiktok_fallback(url: str, output_path: str) -> str | None:
+    """None khi file đã ghi xong. Chuỗi là lý do thất bại. Ảnh trượt chứa chữ slideshow."""
+    import requests
+    from requests import exceptions as req_exc
 
     from app.config import (
         TIKWM_API_BASE,
@@ -483,33 +529,65 @@ def _download_tiktok_fallback(url: str, output_path: str) -> bool:
     )
 
     try:
-        api_url = f"{TIKWM_API_BASE}/?url={url}"
-        resp = requests.get(api_url, timeout=TIKWM_API_TIMEOUT_SEC)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("code") == 0 and "data" in data:
-                video_data = data["data"]
-                
-                # Check if it's actually an image slideshow
-                if "images" in video_data and isinstance(video_data["images"], list) and len(video_data["images"]) > 0:
-                    logger.warning("[VIRAL] TikWM confirmed this is an image slideshow, not a video.")
-                    return False
-                    
-                play_url = video_data.get("play") or video_data.get("wmplay")
-                if play_url:
-                    logger.info("[VIRAL] TikWM returned a valid video URL, downloading...")
-                    video_resp = requests.get(
-                        play_url, stream=True, timeout=TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC
-                    )
-                    if video_resp.status_code == 200:
-                        with open(output_path, 'wb') as f:
-                            for chunk in video_resp.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                        return True
+        resp = requests.get(f"{TIKWM_API_BASE}/?url={url}", timeout=TIKWM_API_TIMEOUT_SEC)
+        if resp.status_code != 200:
+            return "TikWM API did not return a video URL."
+        data = resp.json()
+    except Exception as exc:
+        logger.error("[VIRAL] TikWM fallback failed: %s", exc)
+        return f"TikWM fallback failed: {exc}"
+
+    if data.get("code") != 0 or "data" not in data:
         logger.warning("[VIRAL] TikWM API did not return a valid video URL for %s", url)
-    except Exception as e:
-        logger.error("[VIRAL] TikWM fallback failed: %s", e)
-    return False
+        return "TikWM API did not return a video URL."
+
+    video_data = data["data"]
+    images = video_data.get("images")
+    if isinstance(images, list) and len(images) > 0:
+        logger.warning("[VIRAL] TikWM confirmed this is an image slideshow, not a video.")
+        return "TikWM confirmed this is an image slideshow, not a video."
+
+    play_url = video_data.get("play") or video_data.get("wmplay")
+    if not play_url:
+        logger.warning("[VIRAL] TikWM API did not return a valid video URL for %s", url)
+        return "TikWM API did not return a video URL."
+
+    base_timeout = float(TIKWM_VIDEO_DOWNLOAD_TIMEOUT_SEC)
+    timeouts = (base_timeout, max(base_timeout, 180.0))
+    last_error = "TikWM CDN read timed out while downloading the video."
+    for attempt, timeout in enumerate(timeouts, start=1):
+        try:
+            logger.info("[VIRAL] TikWM returned a valid video URL, downloading (attempt %s)...", attempt)
+            video_resp = requests.get(play_url, stream=True, timeout=timeout)
+            if video_resp.status_code != 200:
+                _remove_partial(output_path)
+                return f"TikWM CDN download failed: HTTP {video_resp.status_code}"
+            with open(output_path, "wb") as handle:
+                for chunk in video_resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        handle.write(chunk)
+            if os.path.getsize(output_path) <= 0:
+                _remove_partial(output_path)
+                return "TikWM CDN download failed: empty file"
+            return None
+        except req_exc.Timeout as exc:
+            _remove_partial(output_path)
+            last_error = "TikWM CDN read timed out while downloading the video."
+            logger.warning("[VIRAL] TikWM CDN read timed out (attempt %s): %s", attempt, exc)
+        except Exception as exc:
+            _remove_partial(output_path)
+            logger.error("[VIRAL] TikWM fallback failed: %s", exc)
+            return f"TikWM fallback failed: {exc}"
+    return last_error
+
+
+def _take_tikwm(material_id: int, platform_dir: str, url: str) -> tuple[str, str]:
+    """(đường file, "") khi tải xong. ("", lý do) khi thất bại."""
+    path = os.path.join(platform_dir, f"viral_{material_id}_tikwm.mp4")
+    reason = _download_tiktok_fallback(url, path)
+    if reason is None:
+        return path, ""
+    return "", reason or ""
 
 
 def _process_viral_materials(db: Session, only_material_id: int | None = None) -> None:
@@ -758,6 +836,8 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
             download_success = False
             media_path = None
             fallback_used_successfully = False
+            tikwm_reason = ""
+            download_url = mat.url
 
             # ADR-041: phần con của một video đã chia — file gốc được NỐI CỨNG sang tên của con
             # lúc chia, nên KHÔNG tải, KHÔNG preflight (URL của con là `<url cha>#phanN`, yt-dlp
@@ -775,6 +855,11 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 logger.info("[VIRAL] Phần %s/%s của #%s — dùng file gốc: %s",
                             mat.part_index, mat.part_total, mat.parent_material_id, media_path)
             else:
+                if mat.platform == "tiktok":
+                    expanded = _expand_tiktok_short_url(mat.url)
+                    if expanded != mat.url:
+                        logger.info("[VIRAL] Opened TikTok short link for #%s", mat.id)
+                        download_url = expanded
                 preflight_cmd = _extend_yt_dlp_with_cookies(
                     _yt_dlp_argv(
                         "--no-playlist",
@@ -784,11 +869,11 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         "--add-header",
                         f"User-Agent: {YT_DLP_USER_AGENT}",
                         *_platform_args(mat.platform),
-                        mat.url,
+                        download_url,
                     ),
                     source_account,
                 )
-                logger.info("[VIRAL] Preflight metadata [%s]: %s", mat.platform, mat.url)
+                logger.info("[VIRAL] Preflight metadata [%s]: %s", mat.platform, download_url)
                 preflight = subprocess.run(preflight_cmd, capture_output=True, text=True, timeout=60)
 
 
@@ -796,16 +881,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     # Nếu preflight yt-dlp thất bại hoàn toàn (vd: HTTP Error 403 của TikTok)
                     if mat.platform == "tiktok":
                         logger.warning("[VIRAL] yt-dlp preflight failed for TikTok. Attempting TikWM fallback...")
-                        fallback_filename = f"viral_{mat.id}_tikwm.mp4"
-                        fallback_path = os.path.join(platform_dir, fallback_filename)
-                        if _download_tiktok_fallback(mat.url, fallback_path):
+                        media_path, tikwm_reason = _take_tikwm(mat.id, platform_dir, download_url)
+                        if media_path:
                             download_success = True
                             fallback_used_successfully = True
-                            media_path = fallback_path
                             logger.info("[VIRAL] Downloaded (tikwm fallback after preflight fail): %s", media_path)
                         
                     if not fallback_used_successfully:
-                        reason = _humanize_yt_dlp_error(mat.platform or "", preflight.stderr or "", source_account)
+                        reason = tikwm_reason or _humanize_yt_dlp_error(mat.platform or "", preflight.stderr or "", source_account)
                         logger.error("[VIRAL] %s", reason)
                         _mark_material_failed(db, mat, reason)
                         continue
@@ -829,16 +912,14 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         # preflight thành công nhưng báo là slideshow/audio-only
                         if mat.platform == "tiktok":
                             logger.warning("[VIRAL] yt-dlp missed video stream for TikTok. Attempting TikWM fallback...")
-                            fallback_filename = f"viral_{mat.id}_tikwm.mp4"
-                            fallback_path = os.path.join(platform_dir, fallback_filename)
-                            if _download_tiktok_fallback(mat.url, fallback_path):
+                            media_path, tikwm_reason = _take_tikwm(mat.id, platform_dir, download_url)
+                            if media_path:
                                 download_success = True
                                 fallback_used_successfully = True
-                                media_path = fallback_path
                                 logger.info("[VIRAL] Downloaded (tikwm fallback after missing stream): %s", media_path)
                     
                         if not fallback_used_successfully:
-                            reason = "Source has no downloadable video stream; likely TikTok slideshow or audio-only."
+                            reason = tikwm_reason or "Source has no downloadable video stream; likely TikTok slideshow or audio-only."
                             logger.error("[VIRAL] %s url=%s", reason, mat.url)
                             _mark_material_failed(db, mat, reason)
                             continue
@@ -867,11 +948,11 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                         *_platform_args(mat.platform),
                         "-o",
                         output_template,
-                        mat.url,
+                        download_url,
                     ),
                     source_account,
                 )
-                logger.info("[VIRAL] Downloading [%s]: %s", mat.platform, mat.url)
+                logger.info("[VIRAL] Downloading [%s]: %s", mat.platform, download_url)
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
                 if result.returncode != 0:
@@ -921,15 +1002,13 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                 # Try TikWM fallback for TikTok if it hasn't been used yet
                 if mat.platform == "tiktok" and not fallback_used_successfully:
                     logger.warning("[VIRAL] Attempting TikWM fallback because yt-dlp downloaded a non-video file...")
-                    fallback_filename = f"viral_{mat.id}_tikwm.mp4"
-                    fallback_path = os.path.join(platform_dir, fallback_filename)
-                    if _download_tiktok_fallback(mat.url, fallback_path):
+                    media_path, tikwm_reason = _take_tikwm(mat.id, platform_dir, download_url)
+                    if media_path:
                         fallback_used_successfully = True
-                        media_path = fallback_path
                         logger.info("[VIRAL] Downloaded (tikwm fallback after non-video dl): %s", media_path)
 
                 if not fallback_used_successfully:
-                    reason = f"Downloaded media is not a video file ({ext.lower() or 'unknown'}); likely slideshow/audio-only."
+                    reason = tikwm_reason or f"Downloaded media is not a video file ({ext.lower() or 'unknown'}); likely slideshow/audio-only."
                     logger.error("[VIRAL] %s path=%s", reason, media_path)
                     _mark_material_failed(db, mat, reason)
                     continue

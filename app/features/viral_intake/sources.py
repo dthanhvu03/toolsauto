@@ -390,19 +390,84 @@ class SourceService:
         db.commit()
         return True
 
+    @staticmethod
+    def waiting_count(db: Session, source_id: int) -> int:
+        """Video trạng thái NEW gắn đúng nguồn này. Video không gắn nguồn không đếm."""
+        return (
+            db.query(ViralMaterial)
+            .filter(
+                ViralMaterial.source_id == source_id,
+                ViralMaterial.status == ViralStatus.NEW,
+            )
+            .count()
+        )
+
+    @staticmethod
+    def set_source_limits(
+        db: Session,
+        source_id: int,
+        *,
+        min_views=None,
+        max_videos=None,
+    ) -> tuple[bool, str]:
+        """
+        Chỉ sửa mức xem và số video tối đa của một nguồn.
+
+        Rỗng nghĩa là ghi NULL để lần quét dùng mức chung. Không đụng trang đích.
+        Giá trị sai thì không ghi gì.
+        """
+        src = db.get(ViralSource, source_id)
+        if not src:
+            return False, f"Không tìm thấy nguồn #{source_id}"
+
+        def _opt_int(raw, label: str):
+            if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+                return True, None, ""
+            try:
+                return True, int(str(raw).strip()), ""
+            except (TypeError, ValueError):
+                return False, None, f"{label} phải là số nguyên."
+
+        ok, new_min, msg = _opt_int(min_views, "Min views")
+        if not ok:
+            return False, msg
+        ok, new_max, msg = _opt_int(max_videos, "Max video/lần")
+        if not ok:
+            return False, msg
+        if new_min is not None and new_min < 0:
+            return False, "Min views không được âm."
+        if new_max is not None and not 1 <= new_max <= MAX_VIDEOS_CAP:
+            return False, f"Max video/lần phải trong khoảng 1–{MAX_VIDEOS_CAP}."
+
+        src.min_views = new_min
+        src.max_videos = new_max
+        db.commit()
+        db.refresh(src)
+        if new_min is None and new_max is None:
+            return True, f"Nguồn #{source_id} dùng lại mức chung."
+        xem = f"{new_min:,}" if new_min is not None else "chung"
+        toi_da = str(new_max) if new_max is not None else "chung"
+        return True, f"Nguồn #{source_id}: mức xem {xem}, tối đa {toi_da}."
+
     # ---- scan ----------------------------------------------------------
     @staticmethod
     def scan_source(db: Session, source: ViralSource) -> tuple[int, int, str | None]:
         """Quét 1 nguồn → tạo material NEW. Trả ``(found, skipped, error|None)``; không raise."""
+        if not source.enabled:
+            return 0, 0, None
         min_views = source.min_views if source.min_views is not None else _setting_int(
             db, "viral.min_views", getattr(config, "VIRAL_MIN_VIEWS", 10000)
         )
-        max_videos = source.max_videos if source.max_videos is not None else _setting_int(
+        shared_max = _setting_int(
             db, "viral.max_videos_per_channel", getattr(config, "VIRAL_MAX_VIDEOS_PER_CHANNEL", 50)
         )
-        if not max_videos or max_videos <= 0:
-            max_videos = MAX_VIDEOS_CAP
-        max_videos = min(int(max_videos), MAX_VIDEOS_CAP)
+        accept_cap = source.max_videos if source.max_videos is not None else shared_max
+        if not accept_cap or accept_cap <= 0:
+            accept_cap = MAX_VIDEOS_CAP
+        accept_cap = min(int(accept_cap), MAX_VIDEOS_CAP)
+        shared_cap = shared_max if shared_max and shared_max > 0 else accept_cap
+        shared_cap = min(int(shared_cap), MAX_VIDEOS_CAP)
+        fetch_window = min(max(accept_cap, shared_cap), MAX_VIDEOS_CAP)
 
         found = skipped = 0
         error: str | None = None
@@ -416,10 +481,13 @@ class SourceService:
             # curl_cffi (xem `impersonate_args`); bật cứng là hỏng máy đang chạy tốt.
             extra = impersonate_args() if source.platform == "tiktok" else ()
             cmd = yt_dlp_cmd(
-                "--flat-playlist", "--dump-json", "--playlist-end", str(max_videos),
+                "--flat-playlist", "--dump-json", "--playlist-end", str(fetch_window),
                 "--no-warnings", *extra, source.url,
             )
-            logger.info("[VIRAL_SOURCES] Scan %s (max=%d, min_views=%d)", source.url, max_videos, min_views)
+            logger.info(
+                "[VIRAL_SOURCES] Scan %s (max=%d, fetch=%d, min_views=%d)",
+                source.url, accept_cap, fetch_window, min_views,
+            )
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=SCAN_TIMEOUT_SEC)
             except subprocess.TimeoutExpired:
@@ -434,7 +502,9 @@ class SourceService:
                     _save_rate_limits(tracker)
                 error = humanize_scan_error(source.platform, stderr) if stderr else f"yt-dlp exit {result.returncode}"
             if result is not None and error is None:
-                found, skipped = SourceService._ingest_lines(db, source, result.stdout or "", min_views)
+                found, skipped = SourceService._ingest_lines(
+                    db, source, result.stdout or "", min_views, accept_cap,
+                )
 
         source.last_scanned_at = int(now_ts())
         source.last_found = found
@@ -447,10 +517,14 @@ class SourceService:
         return found, skipped, error
 
     @staticmethod
-    def _ingest_lines(db: Session, source: ViralSource, stdout: str, min_views: int) -> tuple[int, int]:
+    def _ingest_lines(
+        db: Session, source: ViralSource, stdout: str, min_views: int, max_accept: int,
+    ) -> tuple[int, int]:
         found = skipped = 0
         seen_this_run: set[str] = set()
         for line in stdout.splitlines():
+            if found >= max_accept:
+                break
             line = line.strip()
             if not line:
                 continue
@@ -482,6 +556,7 @@ class SourceService:
                 views=views,
                 scraped_by_account_id=None,
                 status=ViralStatus.NEW,
+                source_id=source.id,
             )
             # ADR-020: chép danh sách Page của nguồn sang material; setter cũng ghi
             # `target_page` = Page đầu tiên để mọi chỗ đọc `mat.target_page` cũ không vỡ.

@@ -162,7 +162,8 @@ def test_scan_source_tiktok_creates_new_materials_and_dedups(session_factory, fa
         # là yt-dlp dừng ngay. Khoá cả hai nhánh ở test_impersonate_* bên dưới.
         from app.core.yt_dlp_path import impersonate_args
         assert ("--impersonate" in argv) == bool(impersonate_args())
-        assert argv[argv.index("--playlist-end") + 1] == "5"
+        shared = int(getattr(config, "VIRAL_MAX_VIDEOS_PER_CHANNEL", 50) or 50)
+        assert argv[argv.index("--playlist-end") + 1] == str(min(max(5, shared), sources.MAX_VIDEOS_CAP))
         assert argv[-1] == "https://www.tiktok.com/@mrwork93"
 
         mats = db.query(ViralMaterial).order_by(ViralMaterial.views.desc()).all()
@@ -595,3 +596,137 @@ def test_youtube_khong_gia_chrome(session_factory, fake_yt_dlp, monkeypatch):
         _, _, sid = SourceService.add_source(db, "https://www.youtube.com/@albert_cancook/shorts", min_views=1)
         SourceService.scan_source(db, db.get(ViralSource, sid))
     assert "--impersonate" not in fake_yt_dlp["calls"][-1]
+
+
+def test_dem_video_cho_theo_dung_nguon(session_factory):
+    with session_factory() as db:
+        a = ViralSource(platform="tiktok", url="https://www.tiktok.com/@a", handle="a", enabled=True)
+        b = ViralSource(platform="tiktok", url="https://www.tiktok.com/@b", handle="b", enabled=True)
+        db.add_all([a, b])
+        db.commit()
+        for i in range(20):
+            db.add(ViralMaterial(
+                url=f"https://www.tiktok.com/@a/video/{i}", platform="tiktok",
+                status=ViralStatus.NEW, source_id=a.id, views=1,
+            ))
+        db.add(ViralMaterial(
+            url="https://www.tiktok.com/@x/video/1", platform="tiktok",
+            status=ViralStatus.NEW, source_id=None, views=1,
+        ))
+        db.commit()
+        assert SourceService.waiting_count(db, a.id) == 20
+        assert SourceService.waiting_count(db, b.id) == 0
+
+
+def test_nguon_tat_khong_quet_va_khong_xoa(session_factory, fake_yt_dlp):
+    from app.bootstrap_hooks import register_feature_hooks
+    from app.core import feature_hooks
+
+    with session_factory() as db:
+        _, _, sid = SourceService.add_source(db, "https://www.tiktok.com/@a", min_views=1, max_videos=5)
+        for status, i in (
+            (ViralStatus.NEW, 1),
+            (ViralStatus.PROCESSING, 2),
+            (ViralStatus.READY, 3),
+        ):
+            db.add(ViralMaterial(
+                url=f"https://www.tiktok.com/@a/video/{i}", platform="tiktok",
+                status=status, source_id=sid, views=10,
+            ))
+        db.commit()
+        assert SourceService.set_enabled(db, sid, False) is True
+        src = db.get(ViralSource, sid)
+        before = db.query(ViralMaterial).count()
+        found, skipped, error = SourceService.scan_source(db, src)
+        assert (found, error) == (0, None)
+        assert fake_yt_dlp["calls"] == []
+        assert db.query(ViralMaterial).count() == before
+        assert SourceService.waiting_count(db, sid) == 1
+
+        register_feature_hooks()
+        res = feature_hooks.call("viral.scan_source", db, sid)
+        assert res["ok"] is False and "tắt" in res["msg"]
+        assert fake_yt_dlp["calls"] == []
+
+        assert SourceService.set_enabled(db, sid, True) is True
+        found, skipped, error = SourceService.scan_source(db, db.get(ViralSource, sid))
+        assert fake_yt_dlp["calls"]
+        assert error is None
+
+
+def test_quet_dung_khi_du_so_toi_da(session_factory, fake_yt_dlp):
+    with session_factory() as db:
+        _, _, sid = SourceService.add_source(db, "https://www.tiktok.com/@a", min_views=1000, max_videos=3)
+        src = db.get(ViralSource, sid)
+        lines = [
+            json.dumps({
+                "id": str(8000 + i), "uploader": "a", "title": f"v{i}", "view_count": 5_000,
+            })
+            for i in range(10)
+        ]
+        fake_yt_dlp["stdout_for"][src.url] = "\n".join(lines) + "\n"
+        found, skipped, error = SourceService.scan_source(db, src)
+        assert error is None and found == 3
+        mats = db.query(ViralMaterial).order_by(ViralMaterial.id).all()
+        assert [m.source_id for m in mats] == [sid, sid, sid]
+        assert [m.url for m in mats] == [
+            "https://www.tiktok.com/@a/video/8000",
+            "https://www.tiktok.com/@a/video/8001",
+            "https://www.tiktok.com/@a/video/8002",
+        ]
+
+
+def test_dat_nguong_rieng_khong_dung_nguon_khac(session_factory, fake_yt_dlp, monkeypatch):
+    from app.core import settings as runtime_settings
+
+    with session_factory() as db:
+        muc_xem = runtime_settings.get_int("viral.min_views", db=db)
+        muc_video = runtime_settings.get_int("viral.max_videos_per_channel", db=db)
+        _, _, aid = SourceService.add_source(
+            db, "https://www.tiktok.com/@a", target_page="https://facebook.com/p1",
+        )
+        _, _, bid = SourceService.add_source(
+            db, "https://www.tiktok.com/@b", min_views=9, max_videos=9,
+        )
+        src_a = db.get(ViralSource, aid)
+        pages_before = list(src_a.target_pages_list)
+        ok, msg = SourceService.set_source_limits(db, aid, min_views=1000, max_videos=3)
+        assert ok, msg
+        db.refresh(src_a)
+        assert (src_a.min_views, src_a.max_videos) == (1000, 3)
+        assert src_a.target_pages_list == pages_before
+        src_b = db.get(ViralSource, bid)
+        assert (src_b.min_views, src_b.max_videos) == (9, 9)
+        assert runtime_settings.get_int("viral.min_views", db=db) == muc_xem
+        assert runtime_settings.get_int("viral.max_videos_per_channel", db=db) == muc_video
+
+        ok, msg = SourceService.set_source_limits(db, aid, min_views="", max_videos="")
+        assert ok, msg
+        db.refresh(src_a)
+        assert src_a.min_views is None and src_a.max_videos is None
+
+        ok, msg = SourceService.set_source_limits(db, bid, min_views=-1, max_videos=3)
+        assert not ok and "âm" in msg
+        ok, msg = SourceService.set_source_limits(db, bid, min_views=1, max_videos=0)
+        assert not ok
+        ok, msg = SourceService.set_source_limits(db, bid, min_views="x", max_videos=2)
+        assert not ok and "số nguyên" in msg
+        db.refresh(src_b)
+        assert (src_b.min_views, src_b.max_videos) == (9, 9)
+
+        lines = [
+            json.dumps({"id": str(9000 + i), "uploader": "a", "title": f"v{i}", "view_count": 500})
+            for i in range(5)
+        ]
+        fake_yt_dlp["stdout_for"][src_a.url] = "\n".join(lines) + "\n"
+
+        def _muc_chung(db, key, fallback):
+            if key == "viral.min_views":
+                return 100
+            if key == "viral.max_videos_per_channel":
+                return 2
+            return fallback
+
+        monkeypatch.setattr(sources, "_setting_int", _muc_chung)
+        found, skipped, error = SourceService.scan_source(db, db.get(ViralSource, aid))
+        assert error is None and found == 2

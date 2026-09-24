@@ -71,13 +71,23 @@ def register_feature_hooks() -> None:
                 "min_views": s.min_views, "max_videos": s.max_videos,
                 "enabled": bool(s.enabled), "last_scanned_at": s.last_scanned_at,
                 "last_found": s.last_found, "last_error": s.last_error,
+                "waiting_count": SourceService.waiting_count(db, s.id),
             })
         return out
+
+    def viral_set_source_limits(db: Session, source_id: int, min_views, max_videos) -> dict:
+        """Đặt hoặc xóa hai số riêng. Không nhận trang đích."""
+        ok, msg = SourceService.set_source_limits(
+            db, source_id, min_views=min_views, max_videos=max_videos,
+        )
+        return {"ok": ok, "msg": msg}
 
     def viral_scan_source(db: Session, source_id: int) -> dict:
         src = next((s for s in SourceService.list_sources(db) if s.id == source_id), None)
         if src is None:
             return {"ok": False, "msg": f"Không tìm thấy nguồn #{source_id}"}
+        if not src.enabled:
+            return {"ok": False, "msg": f"Nguồn @{src.handle or src.id} đang tắt."}
         found, skipped, error = SourceService.scan_source(db, src)
         if error:
             return {"ok": False, "msg": f"Quét lỗi: {error}"}
@@ -222,6 +232,7 @@ def register_feature_hooks() -> None:
     feature_hooks.register("viral.process_one", viral_process_one)
     feature_hooks.register("viral.sources_summary", viral_sources_summary)
     feature_hooks.register("viral.scan_source", viral_scan_source)
+    feature_hooks.register("viral.set_source_limits", viral_set_source_limits)
     feature_hooks.register("viral.toggle_source", viral_toggle_source)
     feature_hooks.register("viral.list_materials", viral_list_materials)
     feature_hooks.register("viral.set_clip", viral_set_clip)

@@ -207,6 +207,26 @@ def test_add_rejects_duplicate_after_normalization(session_factory):
         assert db.query(ViralMaterial).count() == 1
 
 
+def test_add_failed_same_link_retries(session_factory):
+    with session_factory() as db:
+        ok, _, first_id = ViralService.add_material_from_url(
+            db, "https://vt.tiktok.com/ZSbJbmqXp"
+        )
+        assert ok
+        row = db.get(ViralMaterial, first_id)
+        row.status = ViralStatus.FAILED
+        row.last_error = "Source has no downloadable video stream"
+        db.commit()
+
+        ok2, msg2, same_id = ViralService.add_material_from_url(
+            db, "https://vt.tiktok.com/ZSbJbmqXp/"
+        )
+        assert ok2 is True
+        assert same_id == first_id
+        assert "Thử lại" in msg2
+        assert db.query(ViralMaterial).count() == 1
+
+
 # ── endpoint: POST /viral/add-link ───────────────────────────────────────────
 
 
