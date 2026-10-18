@@ -36,6 +36,7 @@ scripts/debug_*.py
 scripts/test_*.py
 scripts/demo_*.sh
 scripts/archive/
+scripts/empirical/
 tests/debug_*.py
 tests/*.html
 tikwm.json

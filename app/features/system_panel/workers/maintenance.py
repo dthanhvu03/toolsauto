@@ -451,7 +451,7 @@ def _scrape_page_insights():
         logger.error("Failed to start scrape_insights.py: %s", e)
 
 
-def _run_competitor_discovery(db):
+def _run_competitor_discovery(db=None):
     """Scan TikTok hashtags to discover new competitor channels.
 
     Runs once per 24h, during nighttime hours (02:00-05:00).
@@ -480,30 +480,33 @@ def _run_competitor_discovery(db):
     from app.core.database.models import Account
     from app.core.account import get_discovery_keywords
 
-    accounts = db.query(Account).filter(Account.is_active == True).all()
+    with SessionLocal() as s:
+        accounts = s.query(Account).filter(Account.is_active == True).all()
+        account_data = [(acc.id, acc.name, get_discovery_keywords(acc)) for acc in accounts]
 
-    if not accounts:
+    if not account_data:
         logger.info("[DISCOVERY] No active accounts.")
         return
 
     total_found = 0
 
-    for acc in accounts:
-        keywords = get_discovery_keywords(acc)
+    for acc_id, acc_name, keywords in account_data:
         if not keywords:
             continue
 
         selected = random.sample(keywords, min(DISCOVERY_MAX_KEYWORDS, len(keywords)))
         logger.info("[DISCOVERY] Account '%s': scanning %d/%d keywords: %s",
-                    acc.name, len(selected), len(keywords), selected)
+                    acc_name, len(selected), len(keywords), selected)
 
         for kw in selected:
             if not RUNNING:
                 return
             try:
-                found = feature_hooks.call("viral.discover_keyword", kw, acc.id, db)
+                with SessionLocal() as kw_db:
+                    found = feature_hooks.call("viral.discover_keyword", kw, acc_id, kw_db)
+                    kw_db.commit()
                 total_found += found
-                logger.info("[DISCOVERY] Keyword '%s' for '%s': %d new channels", kw, acc.name, found)
+                logger.info("[DISCOVERY] Keyword '%s' for '%s': %d new channels", kw, acc_name, found)
             except Exception as e:
                 logger.error("[DISCOVERY] Error scanning keyword '%s': %s", kw, str(e)[:200])
 
@@ -579,10 +582,14 @@ def run_loop():
     
     while RUNNING:
         try:
-            with SessionLocal() as db:
-                state = WorkerService.get_or_create_state(db)
+            should_exit = False
+            is_paused = False
+            backlog = 0
 
+            with SessionLocal() as db:
                 try:
+                    state = WorkerService.get_or_create_state(db)
+
                     # Apply runtime overrides from DB (app/settings) so cap values take effect immediately.
                     try:
                         from app.core.settings import apply_runtime_overrides_to_config
@@ -592,98 +599,121 @@ def run_loop():
 
                     if state.pending_command in ("REQUEST_EXIT", "RESTART_REQUESTED"):
                         logger.warning(f"Received pending command: {state.pending_command}. Graceful exit requested.")
-                        break
-
-                    if state.worker_status == "PAUSED":
-                        time.sleep(config.MAINT_LOOP_SLEEP_SEC)
-                        continue
-
-                    logger.info("Running routine maintenance tasks...")
-
-                    # 1. Cleanup old media files and temp files
-                    CleanupService.run(db)
-                    SystemMonitorService().cleanup_temp_files()
-
-                    # 2. Check 24h Metrics for published posts
-                    MetricsChecker.check_pending(db)
-
-                    # 2a. Buffer đã gửi thì đánh dấu video đã đăng (cùng nút Đã đăng).
-                    try:
-                        from app.features.buffer.sync_posted import sync_sent_marks
-
-                        sync_sent_marks(db)
-                    except Exception as exc:
-                        db.rollback()
-                        logger.error("[Buffer] sync da dang failed: %s", exc)
-
-                    # 2b. Cleanup orphaned virals (hourly)
-                    _cleanup_orphaned_virals(db)
-                    cleanup_old_source_files(db)
-                    drop_ready_without_file(db)
-
-                    # 2c. Sweep orphaned DRAFTs → PENDING (every tick)
-                    _sweep_orphaned_drafts(db)
-
-                    # 2d. Sweep zombie jobs (exhausted tries) → FAILED
-                    _sweep_zombie_jobs(db)
-
-                    # 3. Recover crashed/stale jobs (Self-healing)
-                    logger.info("Checking for crashed/stale jobs to recover...")
-                    from app.core.queue.queue import QueueService
-                    recovered = QueueService.recover_crashed_jobs(db, config.WORKER_CRASH_THRESHOLD_SECONDS)
-                    if recovered > 0:
-                        logger.warning(f"Self-healing: Recovered {recovered} stale jobs.")
-
-                    # 4. Daily Summary Report
-                    _check_daily_summary(db)
-
-                    # 5. Autonomous Strategic Boosting (Auto-Push)
-                    _run_strategic_boost(db)
-
-                    # Alerts (queue pressure + resources) with cooldown
-                    SystemMonitorService().maybe_alert_queue_and_resources(db)
-
-                    backlog = _pending_backlog(db)
-                    if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:
-                        logger.info(
-                            "[MAINT] FB backlog=%d >= %d. Skipping heavy tasks (viral ingest/tiktok scan/discovery) this sweep.",
-                            backlog,
-                            MAINT_SKIP_HEAVY_WHEN_PENDING,
-                        )
+                        should_exit = True
+                    elif state.worker_status == "PAUSED":
+                        is_paused = True
                     else:
-                        # 4. Process viral materials → AWAITING_STYLE jobs (yt-dlp heavy)
-                        feature_hooks.call("viral.process_all", db)
+                        logger.info("Running routine maintenance tasks...")
 
-                        # 5. Auto-discover TikTok competitor videos (hourly)
-                        _scrape_tiktok_competitors(db)
+                        # 1. Cleanup old media files and temp files
+                        CleanupService.run(db)
+                        SystemMonitorService().cleanup_temp_files()
 
-                        # 5b. Nguồn tự động (ADR-019) — độc lập account; tự giãn 1 lần/giờ mỗi nguồn
+                        # 2. Check 24h Metrics for published posts
+                        MetricsChecker.check_pending(db)
+
+                        # 2a. Buffer đã gửi thì đánh dấu video đã đăng (cùng nút Đã đăng).
                         try:
-                            feature_hooks.call("viral.scan_sources", db)
-                        except Exception as e:
+                            from app.features.buffer.sync_posted import sync_sent_marks
+                            sync_sent_marks(db)
+                        except Exception as exc:
                             db.rollback()
-                            logger.error("[VIRAL_SOURCES] scan_sources failed: %s", e)
+                            logger.error("[Buffer] sync da dang failed: %s", exc)
 
-                        # 7. Competitor Discovery (nightly, 24h interval)
-                        _run_competitor_discovery(db)
+                        # 2b. Cleanup orphaned virals (hourly)
+                        _cleanup_orphaned_virals(db)
+                        cleanup_old_source_files(db)
+                        drop_ready_without_file(db)
 
-                    # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap.
-                    # db is passed so profiles of RUNNING jobs are never touched.
-                    _purge_zombies(db)
+                        # 2c. Sweep orphaned DRAFTs → PENDING (every tick)
+                        _sweep_orphaned_drafts(db)
 
-                    # 8. Run Page Insights Scraper (12h interval)
-                    _scrape_page_insights()
+                        # 2d. Sweep zombie jobs (exhausted tries) → FAILED
+                        _sweep_zombie_jobs(db)
 
-                    logger.info("Hoan tat mot vong maintenance dinh ky.")
-                    heartbeat.ping(heartbeat.KEY_MAINTENANCE, db=db)  # ADR-014
+                        # 3. Recover crashed/stale jobs (Self-healing)
+                        logger.info("Checking for crashed/stale jobs to recover...")
+                        from app.core.queue.queue import QueueService
+                        recovered = QueueService.recover_crashed_jobs(db, config.WORKER_CRASH_THRESHOLD_SECONDS)
+                        if recovered > 0:
+                            logger.warning(f"Self-healing: Recovered {recovered} stale jobs.")
+
+                        # 4. Daily Summary Report
+                        _check_daily_summary(db)
+
+                        # 5. Autonomous Strategic Boosting (Auto-Push)
+                        _run_strategic_boost(db)
+
+                        # Alerts (queue pressure + resources) with cooldown
+                        SystemMonitorService().maybe_alert_queue_and_resources(db)
+
+                        backlog = _pending_backlog(db)
+                    db.commit()
                 except Exception:
                     db.rollback()
                     raise
-                
+
+            if should_exit:
+                break
+            if is_paused:
+                time.sleep(config.MAINT_LOOP_SLEEP_SEC)
+                continue
+
+            # Heavy tasks executed in isolated short transactions
+            if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:
+                logger.info(
+                    "[MAINT] FB backlog=%d >= %d. Skipping heavy tasks (viral ingest/tiktok scan/discovery) this sweep.",
+                    backlog,
+                    MAINT_SKIP_HEAVY_WHEN_PENDING,
+                )
+            else:
+                # 4. Process viral materials → AWAITING_STYLE jobs (yt-dlp heavy)
+                try:
+                    with SessionLocal() as db:
+                        feature_hooks.call("viral.process_all", db)
+                        db.commit()
+                except Exception as e:
+                    logger.error("[MAINT] viral.process_all failed: %s", e)
+
+                # 5. Auto-discover TikTok competitor videos (hourly)
+                try:
+                    with SessionLocal() as db:
+                        _scrape_tiktok_competitors(db)
+                        db.commit()
+                except Exception as e:
+                    logger.error("[MAINT] _scrape_tiktok_competitors failed: %s", e)
+
+                # 5b. Nguồn tự động (ADR-019) — độc lập account; tự giãn 1 lần/giờ mỗi nguồn
+                try:
+                    with SessionLocal() as db:
+                        feature_hooks.call("viral.scan_sources", db)
+                        db.commit()
+                except Exception as e:
+                    logger.error("[VIRAL_SOURCES] scan_sources failed: %s", e)
+
+                # 7. Competitor Discovery (nightly, 24h interval)
+                _run_competitor_discovery()
+
+            # 6. Purge Zombie Chrome processes (hourly) — keep, but cheap.
+            try:
+                with SessionLocal() as db:
+                    _purge_zombies(db)
+                    db.commit()
+            except Exception as e:
+                logger.error("[MAINT] _purge_zombies failed: %s", e)
+
+            # 8. Run Page Insights Scraper (12h interval)
+            _scrape_page_insights()
+
+            logger.info("Hoan tat mot vong maintenance dinh ky.")
+            with SessionLocal() as db:
+                heartbeat.ping(heartbeat.KEY_MAINTENANCE, db=db)  # ADR-014
+                db.commit()
+
             if RUNNING:
                 # Sleep between maintenance sweeps
                 time.sleep(config.MAINT_LOOP_SLEEP_SEC)
-                
+
         except Exception:
             logger.exception("Maintenance Worker encountered a core loop error. Will retry.")
             time.sleep(config.MAINT_LOOP_SLEEP_SEC)

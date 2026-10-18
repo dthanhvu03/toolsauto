@@ -69,8 +69,8 @@ def downloads_dir() -> Path:
 
 
 def _account_with_cookies(db: Session, platform: str) -> Optional[Account]:
-    """Tài khoản ACTIVE cùng nền tảng để mượn cookie — chỉ Facebook/Instagram mới cần."""
-    if platform not in ("facebook", "instagram") or db is None:
+    """Tài khoản ACTIVE cùng nền tảng để mượn cookie — chỉ Instagram mới cần; Facebook tải ẩn danh."""
+    if platform != "instagram" or db is None:
         return None
     return (
         db.query(Account)
@@ -80,7 +80,7 @@ def _account_with_cookies(db: Session, platform: str) -> Optional[Account]:
 
 
 def _with_cookies(cmd: list[str], account: Optional[Account]) -> list[str]:
-    if not account or not getattr(account, "profile_path", None):
+    if not account or getattr(account, "platform", None) == "facebook" or not getattr(account, "profile_path", None):
         return cmd
     return [*cmd, "--cookies-from-browser", f"chromium:{account.profile_path}"]
 

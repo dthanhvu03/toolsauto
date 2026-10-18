@@ -218,11 +218,13 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
             Job.platform == "buffer",
             Job.viral_material_id == material_id,
             Job.target_page == channel_id,
-            Job.status == JobStatus.DONE,
+            Job.status.in_([JobStatus.DONE, JobStatus.RUNNING]),
         )
         .first()
     )
     if existing:
+        if existing.status == JobStatus.RUNNING:
+            return False, f"Đang xử lý xếp lịch vào {name} (job #{existing.id})."
         return True, f"Đã xếp vào {name} rồi (job #{existing.id})."
 
     job = Job(
@@ -241,6 +243,15 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
 
     result = BufferAdapter().publish(job)
     if not result.ok:
+        is_429 = "429" in (result.error or "") or "rate limit" in (result.error or "").lower()
+        if is_429:
+            job.status = JobStatus.PENDING
+            job.last_error = (result.error or "Buffer rate limit (429)")[:300]
+            job.schedule_ts = int(now_ts()) + 60
+            db.commit()
+            logger.warning("[Buffer][job_%s] Rate limit 429, scheduled backoff: %s", job.id, job.last_error)
+            return False, f"Buffer đang bị giới hạn tần suất (429). Đã hẹn thử lại sau 60s: {job.last_error}"
+
         job.status = JobStatus.FAILED
         job.last_error = (result.error or "Buffer từ chối")[:300]
         job.finished_at = now_ts()
@@ -369,6 +380,19 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
         mat.target_page = channel_id
         db.commit()
 
+    running_job = (
+        db.query(Job)
+        .filter(
+            Job.platform == "buffer",
+            Job.viral_material_id == material_id,
+            Job.target_page == channel_id,
+            Job.status == JobStatus.RUNNING,
+        )
+        .first()
+    )
+    if running_job:
+        return False, f"Đang xử lý xếp lịch vào {name} (job #{running_job.id})."
+
     existing = _done_job(db, material_id, channel_id)
     if existing:
         return _apply_reschedule(db, existing, int(when_ts), name)
@@ -407,6 +431,15 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
 
     result = BufferAdapter().publish(job)
     if not result.ok:
+        is_429 = "429" in (result.error or "") or "rate limit" in (result.error or "").lower()
+        if is_429:
+            job.status = JobStatus.PENDING
+            job.last_error = (result.error or "Buffer rate limit (429)")[:300]
+            job.schedule_ts = max(int(when_ts), int(now_ts()) + 60)
+            db.commit()
+            logger.warning("[Buffer][job_%s] Rate limit 429 on schedule: %s", job.id, job.last_error)
+            return False, f"Buffer đang bị giới hạn tần suất (429). Đã hẹn thử lại: {job.last_error}"
+
         job.status = JobStatus.FAILED
         job.last_error = (result.error or "Buffer từ chối")[:300]
         job.finished_at = now_ts()

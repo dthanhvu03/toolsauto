@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 from app.config import (
     PLAYWRIGHT_DEFAULT_TIMEOUT_MS,
@@ -138,12 +139,15 @@ class PlatformSessionManager:
             )
 
         vp = viewport or {"width": 1280, "height": 720}
-        ua = user_agent or (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
+        default_ua = (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            if sys.platform.startswith("linux")
+            else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
+        ua = user_agent or default_ua
         args = [
+            "--disable-blink-features=AutomationControlled",
+            "--disable-infobars",
             "--disable-dev-shm-usage",
             "--no-sandbox",
             "--disable-gpu",
@@ -151,6 +155,8 @@ class PlatformSessionManager:
             "--disable-background-networking",
             "--disable-default-apps",
             "--disable-sync",
+            "--disk-cache-size=104857600",
+            "--media-cache-size=52428800",
         ]
         if extra_args:
             args.extend(extra_args)
@@ -170,6 +176,10 @@ class PlatformSessionManager:
             )
             page = context.pages[0] if context.pages else context.new_page()
             page.set_default_timeout(PLAYWRIGHT_DEFAULT_TIMEOUT_MS)
+            try:
+                page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+            except Exception:
+                pass
             return pw, context, page
         except Exception as e:
             logger.error(

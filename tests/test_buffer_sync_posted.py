@@ -238,3 +238,51 @@ def test_apply_errors_marks_job_failed_and_calls_deleter():
     assert job.status == JobStatus.FAILED
     assert "Buffer" in job.last_error
 
+
+def test_sync_multi_account_posted(monkeypatch):
+    import time
+    import app.features.buffer.sync_posted as mod
+    from app.features.buffer.manager import BufferManager
+
+    db = _db()
+    mat1 = _ready(db, "https://t/multi1", "post_m1")
+    mat2 = _ready(db, "https://t/multi2", "post_m2")
+    job1 = db.query(Job).filter(Job.viral_material_id == mat1.id).first()
+    job1.target_page = "ch1"
+    job2 = db.query(Job).filter(Job.viral_material_id == mat2.id).first()
+    job2.target_page = "ch2"
+    db.commit()
+    mod._last_sync_ts = 0
+
+    class FakeClient1:
+        def __init__(self):
+            self._key = "key1"
+        def post_statuses(self, ids):
+            return {pid: "sent" for pid in ids if pid == "post_m1"}
+        def delete_post(self, pid):
+            pass
+
+    class FakeClient2:
+        def __init__(self):
+            self._key = "key2"
+        def post_statuses(self, ids):
+            return {pid: "sent" for pid in ids if pid == "post_m2"}
+        def delete_post(self, pid):
+            pass
+
+    c1 = FakeClient1()
+    c2 = FakeClient2()
+    mgr = BufferManager(clients=[c1, c2])
+    mgr._channel_to_client = {"ch1": c1, "ch2": c2}
+    mgr._channel_cache_ts = time.time() + 1000
+
+    monkeypatch.setattr("app.features.buffer.manager.get_buffer_manager", lambda: mgr)
+    monkeypatch.setattr(
+        "app.features.viral_intake.service.ViralService.mark_posted",
+        lambda session, material_id: (True, f"#{material_id}"),
+    )
+    monkeypatch.setattr("app.core.notifier.service.NotifierService._broadcast", lambda msg: None)
+
+    marked = mod.sync_sent_marks(db, force=True)
+    assert set(marked) == {mat1.id, mat2.id}
+

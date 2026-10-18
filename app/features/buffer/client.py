@@ -23,9 +23,10 @@ _VIDEO_EXT = frozenset({".mp4", ".mov", ".webm"})
 class BufferError(Exception):
     """Lỗi Buffer. Không chứa API key."""
 
-    def __init__(self, message: str, *, status_code: int | None = None):
+    def __init__(self, message: str, *, status_code: int | None = None, retry_after: int | None = None):
         super().__init__(message)
         self.status_code = status_code
+        self.retry_after = retry_after
 
 
 def _gql_string(value: str) -> str:
@@ -73,6 +74,19 @@ class BufferClient:
 
         if response.status_code == 401:
             raise BufferError("Buffer tu choi key (401). Lay key o Settings → API.", status_code=401)
+        if response.status_code == 429:
+            retry_after_header = response.headers.get("Retry-After")
+            retry_after = 60
+            if retry_after_header:
+                try:
+                    retry_after = int(retry_after_header)
+                except (ValueError, TypeError):
+                    pass
+            raise BufferError(
+                f"Buffer HTTP 429. Vui lòng thử lại sau {retry_after}s.",
+                status_code=429,
+                retry_after=retry_after,
+            )
         if response.status_code >= 400:
             raise BufferError(
                 f"Buffer HTTP {response.status_code}.",

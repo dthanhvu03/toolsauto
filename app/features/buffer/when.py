@@ -23,7 +23,7 @@ def now_ict(now: datetime | None = None) -> datetime:
     if now is None:
         return datetime.now(ICT)
     if now.tzinfo is None:
-        return now.replace(tzinfo=ICT)
+        return now.replace(tzinfo=timezone.utc).astimezone(ICT)
     return now.astimezone(ICT)
 
 

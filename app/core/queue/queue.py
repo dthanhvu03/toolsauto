@@ -39,9 +39,9 @@ class QueueService:
             UPDATE jobs
             SET 
                 status = 'RUNNING',
-                locked_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER),
-                last_heartbeat_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER),
-                started_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
+                locked_at = :now_ts,
+                last_heartbeat_at = :now_ts,
+                started_at = :now_ts
             -- `status='PENDING'` ở qual NGOÀI là bắt buộc, không thừa: khi hai worker
             -- tranh cùng một dòng, worker thua chờ khoá rồi chạy lại EvalPlanQual trên
             -- bản ghi MỚI. Nếu qual ngoài chỉ có `id = $0` thì nó vẫn đúng và worker
@@ -63,12 +63,12 @@ class QueueService:
                   -- Due-check không liệt kê cứng job_type: mọi mốc thời gian có mặt
                   -- trên job đều phải tới hạn. POST đặt schedule_ts, COMMENT đặt cả hai,
                   -- FEED/STORY chỉ đặt schedule_ts — cả ba loại đều được nhặt đúng hạn.
-                  AND COALESCE(j.schedule_ts, j.scheduled_at, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
-                  AND COALESCE(j.scheduled_at, j.schedule_ts, 0) <= CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
+                  AND COALESCE(j.schedule_ts, j.scheduled_at, 0) <= :now_ts
+                  AND COALESCE(j.scheduled_at, j.schedule_ts, 0) <= :now_ts
                   AND ( :platform IS NULL OR j.platform = :platform )
                   AND a.is_active = true
                   AND a.login_status = 'ACTIVE'
-                  AND (lpp.last_ts IS NULL OR (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - lpp.last_ts) >= GREATEST(a.cooldown_seconds, :min_cooldown))
+                  AND (lpp.last_ts IS NULL OR (:now_ts - lpp.last_ts) >= (CASE WHEN a.cooldown_seconds > :min_cooldown THEN a.cooldown_seconds ELSE :min_cooldown END))
                   -- Per-platform mutex: shared facebook+threads accounts can run one job per platform.
                   AND NOT EXISTS (
                       SELECT 1 FROM jobs j2
@@ -87,9 +87,14 @@ class QueueService:
         import time as _time
         for _attempt in range(3):
             try:
+                now_ts = int(_time.time())
                 result = db.execute(
                     text(sql),
-                    {"platform": platform, "min_cooldown": MIN_DELAY_BETWEEN_POSTS},
+                    {
+                        "platform": platform,
+                        "min_cooldown": MIN_DELAY_BETWEEN_POSTS,
+                        "now_ts": now_ts,
+                    },
                 )
                 row = result.fetchone()
                 db.commit()
@@ -128,9 +133,9 @@ class QueueService:
             UPDATE jobs
             SET 
                 status = 'AI_PROCESSING',
-                locked_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER),
-                last_heartbeat_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER),
-                started_at = CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
+                locked_at = :now_ts,
+                last_heartbeat_at = :now_ts,
+                started_at = :now_ts
             WHERE id = (
                 SELECT id
                 FROM jobs
@@ -145,7 +150,8 @@ class QueueService:
         import time as _time
         for _attempt in range(3):
             try:
-                result = db.execute(text(sql))
+                now_ts = int(_time.time())
+                result = db.execute(text(sql), {"now_ts": now_ts})
                 row = result.fetchone()
                 db.commit()
 
@@ -167,6 +173,8 @@ class QueueService:
         """
         Finds RUNNING/AI_PROCESSING jobs where heartbeat is stale and resets them.
         """
+        import time as _time
+        now_ts = int(_time.time())
         # Phase A: Read stale IDs.
         try:
             logger.debug("[recover.select_running] threshold_seconds=%s", threshold_seconds)
@@ -177,10 +185,10 @@ class QueueService:
                         """
                         SELECT id FROM jobs
                         WHERE status = 'RUNNING'
-                          AND last_heartbeat_at < (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - :threshold)
+                          AND last_heartbeat_at < (:now_ts - :threshold)
                         """
                     ),
-                    {"threshold": threshold_seconds},
+                    {"threshold": threshold_seconds, "now_ts": now_ts},
                 ).fetchall()
             ]
 
@@ -192,10 +200,10 @@ class QueueService:
                         """
                         SELECT id FROM jobs
                         WHERE status = 'AI_PROCESSING'
-                          AND last_heartbeat_at < (CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER) - :threshold)
+                          AND last_heartbeat_at < (:now_ts - :threshold)
                         """
                     ),
-                    {"threshold": threshold_seconds},
+                    {"threshold": threshold_seconds, "now_ts": now_ts},
                 ).fetchall()
             ]
         except Exception:
@@ -219,7 +227,7 @@ class QueueService:
                         END,
                         finished_at = CASE
                             WHEN (tries + 1) >= COALESCE(max_tries, 3)
-                            THEN CAST(EXTRACT(EPOCH FROM NOW()) AS INTEGER)
+                            THEN :now_ts
                             ELSE finished_at
                         END,
                         last_error = CASE
@@ -233,6 +241,7 @@ class QueueService:
                     WHERE id IN ({placeholders})
                 """
                 params = {f'id_{i}': jid for i, jid in enumerate(stale_running_ids)}
+                params['now_ts'] = now_ts
                 db.execute(text(sql_running), params)
 
             if stale_ai_ids:

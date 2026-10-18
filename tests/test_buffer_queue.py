@@ -97,3 +97,52 @@ def test_xep_hang_mot_lan(db, monkeypatch):
     assert ok2 is True
     assert "rồi" in msg2
     assert db.query(Job).count() == 1
+
+
+def test_double_tap_running_job_blocks_duplicate(db, monkeypatch):
+    calls = []
+    class Fake:
+        def publish(self, job):
+            calls.append(job.id)
+            return PublishResult(ok=True, external_post_id="buf_2")
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channels", lambda: CHANNELS)
+    monkeypatch.setattr("app.features.buffer.queue_job.BufferAdapter", Fake)
+    mat = ViralMaterial(platform="tiktok", url="https://t/double", ai_caption="Demo")
+    db.add(mat)
+    db.commit()
+
+    # Pre-insert a RUNNING job simulating concurrent click
+    running_job = Job(
+        platform="buffer",
+        caption="Demo",
+        viral_material_id=mat.id,
+        target_page=CHANNELS[0]["id"],
+        status=JobStatus.RUNNING,
+    )
+    db.add(running_job)
+    db.commit()
+
+    ok, msg = queue_reup(db, mat.id, CHANNELS[0]["id"])
+    assert ok is False
+    assert "Đang xử lý" in msg
+    assert len(calls) == 0
+
+
+def test_http_429_backoff_keeps_pending(db, monkeypatch):
+    class Fake429:
+        def publish(self, job):
+            return PublishResult(ok=False, error="Buffer HTTP 429. Rate limit exceeded.")
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channels", lambda: CHANNELS)
+    monkeypatch.setattr("app.features.buffer.queue_job.BufferAdapter", Fake429)
+    mat = ViralMaterial(platform="tiktok", url="https://t/429", ai_caption="Demo 429")
+    db.add(mat)
+    db.commit()
+
+    ok, msg = queue_reup(db, mat.id, CHANNELS[0]["id"])
+    assert ok is False
+    assert "429" in msg
+    job = db.query(Job).filter(Job.viral_material_id == mat.id).one()
+    assert job.status == JobStatus.PENDING
+    assert job.schedule_ts > 0

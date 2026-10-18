@@ -133,7 +133,7 @@ _HANDLE_RE = re.compile(r"^[A-Za-z0-9._\-]+$")
 
 
 def _bare_host(host: str) -> str:
-    for prefix in ("www.", "m.", "vm.", "vt."):
+    for prefix in ("www.", "m.", "vm.", "vt.", "web.", "mbasic.", "touch."):
         if host.startswith(prefix):
             return host[len(prefix):]
     return host
@@ -181,7 +181,10 @@ def _classify(url: str) -> tuple[tuple[str, str, str] | None, str]:
             return ("youtube", f"https://www.youtube.com/{head}/{segs[1]}/shorts", segs[1]), ""
         return None, MSG_UNKNOWN
 
-    if host in ("facebook.com", "fb.watch", "fb.com"):
+    if host == "fb.watch":
+        return None, MSG_VIDEO_LINK
+
+    if host in ("facebook.com", "fb.com"):
         if not segs:
             return None, MSG_UNKNOWN
         head = segs[0].lower()
@@ -193,8 +196,20 @@ def _classify(url: str) -> tuple[tuple[str, str, str] | None, str]:
                 canonical = f"https://www.facebook.com/profile.php?id={pid}&sk=reels_tab"
                 return ("facebook", canonical, f"fb_user_{pid}"), ""
             return None, MSG_UNKNOWN
+        if head == "p":
+            if len(segs) >= 2:
+                page_handle = segs[1]
+                if len(segs) >= 3 and segs[2].lower() in ("videos", "posts", "reel", "photos", "watch"):
+                    return None, MSG_VIDEO_LINK
+                canonical = f"https://www.facebook.com/p/{page_handle}/reels"
+                return ("facebook", canonical, f"fb_page_{page_handle}"), ""
+            return None, MSG_UNKNOWN
+        if len(segs) >= 2:
+            sub = segs[1].lower()
+            if sub in ("videos", "posts", "reel", "photos"):
+                return None, MSG_VIDEO_LINK
         handle = segs[0]
-        if handle in ("home", "messages", "notifications", "friends", "marketplace"):
+        if handle.lower() in ("home", "messages", "notifications", "friends", "marketplace", "watch", "gaming", "groups", "events"):
             return None, MSG_UNKNOWN
         canonical = f"https://www.facebook.com/{handle}/reels"
         return ("facebook", canonical, handle), ""
@@ -205,10 +220,16 @@ def _classify(url: str) -> tuple[tuple[str, str, str] | None, str]:
 
 
 def _www_variants(url: str) -> tuple[str, str]:
+    from urllib.parse import urlencode
     parts = urlsplit(url)
     host = parts.hostname or ""
     bare = host[4:] if host.startswith("www.") else host
-    tail = parts.path + (f"?{parts.query}" if parts.query else "")
+    tracking_params = {"mibextid", "ref", "fbclid", "sfnsn", "locale", "utm_source", "utm_medium", "utm_campaign", "__tn__"}
+    filtered_query = []
+    if parts.query:
+        filtered_query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in tracking_params]
+    clean_path = parts.path.rstrip("/")
+    tail = clean_path + (f"?{urlencode(filtered_query)}" if filtered_query else "")
     return f"https://{bare}{tail}", f"https://www.{bare}{tail}"
 
 
@@ -386,7 +407,8 @@ class SourceService:
 
         src.min_views = new_min
         src.max_videos = new_max
-        src.target_pages_list = list(target_pages or [])
+        if target_pages is not None:
+            src.target_pages_list = list(target_pages)
         db.commit()
         db.refresh(src)
 

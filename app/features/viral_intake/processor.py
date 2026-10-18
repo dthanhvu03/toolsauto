@@ -409,7 +409,12 @@ def _get_download_source_account(db, mat, accounts_by_id=None, platform_fallback
     """Pick an active account whose browser profile can provide source cookies."""
     from app.core.database.models import Account
 
-    if mat.platform not in {"instagram", "facebook"}:
+    # Facebook public reels and Meta CDN downloads are 100% anonymous.
+    # Never leak posting account session cookies to yt-dlp.
+    if mat.platform == "facebook":
+        return None
+
+    if mat.platform not in {"instagram"}:
         return None
 
     preferred = None
@@ -444,7 +449,7 @@ def _get_download_source_account(db, mat, accounts_by_id=None, platform_fallback
 
 
 def _extend_yt_dlp_with_cookies(cmd: list[str], account) -> list[str]:
-    if not account or not getattr(account, "profile_path", None):
+    if not account or getattr(account, "platform", None) == "facebook" or not getattr(account, "profile_path", None):
         return cmd
     return [
         *cmd,

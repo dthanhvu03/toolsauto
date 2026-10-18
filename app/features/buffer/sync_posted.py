@@ -126,15 +126,14 @@ def sync_sent_marks(db, *, now: float | None = None, force: bool = False) -> lis
     if not force and (moment - _last_sync_ts) < INTERVAL_SEC:
         return []
 
-    import app.config as config
-
-    key = (getattr(config, "BUFFER_API_KEY", None) or "").strip()
-    if not key:
+    from app.features.buffer.manager import get_buffer_manager
+    manager = get_buffer_manager()
+    if not manager.has_keys():
         return []
 
     _last_sync_ts = moment
     from app.core.notifier.service import NotifierService
-    from app.features.buffer.client import BufferClient
+    from app.features.buffer.client import BufferError
     from app.features.viral_intake.service import ViralService
 
     grouped = ready_post_ids(db)
@@ -147,9 +146,8 @@ def sync_sent_marks(db, *, now: float | None = None, force: bool = False) -> lis
             seen.add(post_id)
             flat.append(post_id)
     asked = _status_slice(flat)
-    client = BufferClient(key)
     try:
-        found = client.post_statuses(asked)
+        found = manager.post_statuses(asked, db=db)
     except BufferError as exc:
         if exc.status_code == 429:
             _last_sync_ts = moment + INTERVAL_SEC
@@ -174,7 +172,13 @@ def sync_sent_marks(db, *, now: float | None = None, force: bool = False) -> lis
         except Exception as exc:
             logger.warning("[Buffer] khong gui duoc tin da dang: %s", exc)
 
-    errors = apply_errors(db, limited, status_of, getattr(client, "delete_post", None))
+    def delete_fn(pid: str):
+        try:
+            manager.delete_post(pid, db=db)
+        except Exception as exc:
+            logger.warning("[Buffer] Loi khi xoa post %s: %s", pid, exc)
+
+    errors = apply_errors(db, limited, status_of, delete_fn)
     for _material_id, msg in errors:
         try:
             NotifierService._broadcast(msg)
