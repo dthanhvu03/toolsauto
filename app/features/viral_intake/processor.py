@@ -209,7 +209,10 @@ def _finish_ready_material(db, mat, media_path: str, drive_dest) -> None:
         if runtime_settings.get_bool("viral.auto_caption_on_ready", default=True, db=db):
             ok_cap, cap_msg = ViralService.generate_caption_for_material(db, mat.id, notify=False)
             logger.info("[VIRAL] Caption tự động cho #%s: %s — %s", mat.id, ok_cap, cap_msg)
+            report = getattr(mat, "schedule_report", "")
             db.refresh(mat)
+            if report:
+                mat.schedule_report = report
     except Exception as cap_err:
         logger.warning("[VIRAL] Caption tự động cho #%s lỗi (%s) — vẫn báo video.", mat.id, cap_err)
         # Lỗi DB làm session hỏng; rollback để vòng lặp sau còn dùng được.
@@ -358,6 +361,7 @@ _NON_RETRYABLE_MARKERS = (
     "cannot read video dimensions",
     "ffprobe",
     "ffmpeg",
+    "không còn file",
 )
 
 

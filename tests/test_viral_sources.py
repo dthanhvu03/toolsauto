@@ -59,7 +59,9 @@ def _no_sleep_no_ratelimit(monkeypatch, tmp_path):
         ("https://www.youtube.com/watch?v=xyz", None),
         ("https://youtu.be/xyz", None),
         ("https://vt.tiktok.com/ZSabc/", None),
-        ("https://www.facebook.com/somepage/reels/", None),
+        ("https://www.facebook.com/somepage/reels/", ("facebook", "https://www.facebook.com/somepage/reels", "somepage")),
+        ("https://www.facebook.com/profile.php?id=61595147031656", ("facebook", "https://www.facebook.com/profile.php?id=61595147031656&sk=reels_tab", "fb_user_61595147031656")),
+        ("https://www.facebook.com/reel/123456", None),
         ("https://www.instagram.com/handle/", None),
         ("https://example.com/x", None),
         ("", None),
@@ -72,9 +74,10 @@ def test_detect_channel_table(url, expected):
 def test_reject_reason_distinguishes_video_vs_fb_ig():
     assert SourceService.reject_reason("https://www.tiktok.com/@abc/video/123") == MSG_VIDEO_LINK
     assert SourceService.reject_reason("https://www.youtube.com/shorts/xyz") == MSG_VIDEO_LINK
-    assert SourceService.reject_reason("https://www.facebook.com/p/reels/") == MSG_FB_IG
+    assert SourceService.reject_reason("https://www.facebook.com/reel/12345") == MSG_VIDEO_LINK
     assert SourceService.reject_reason("https://www.instagram.com/x/") == MSG_FB_IG
     assert SourceService.reject_reason("https://www.tiktok.com/@ok") == ""
+    assert SourceService.reject_reason("https://www.facebook.com/somepage/reels") == ""
 
 
 # ---------------------------------------------------------------------------
@@ -82,10 +85,10 @@ def test_reject_reason_distinguishes_video_vs_fb_ig():
 # ---------------------------------------------------------------------------
 def test_add_source_rejects_fb_ig_video_and_duplicate(session_factory):
     with session_factory() as db:
-        ok, msg, sid = SourceService.add_source(db, "https://www.facebook.com/page/reels/")
-        assert (ok, sid) == (False, None) and "từng link video" in msg
         ok, msg, sid = SourceService.add_source(db, "https://www.instagram.com/handle/")
         assert (ok, sid) == (False, None) and "từng link video" in msg
+        ok, msg, sid = SourceService.add_source(db, "https://www.facebook.com/reel/123456789/")
+        assert (ok, sid) == (False, None) and "link video" in msg
         # Link video TikTok KHÔNG còn bị từ chối ở đây: từ ADR-028 nó rơi vào nhánh dò
         # channel_id (có mạng) — mọi ca của nhánh đó nằm ở mục ADR-028 cuối file, có mock.
         # Đừng gọi add_source với link video TikTok trong test không mock: sẽ đi ra mạng thật.
@@ -508,7 +511,7 @@ def test_link_kenh_handle_van_di_duong_cu_khong_goi_yt_dlp(session_factory, fake
 
 
 @pytest.mark.parametrize("url", [
-    "https://www.facebook.com/page/reels/",
+    "https://www.facebook.com/reel/123456789/",
     "https://www.instagram.com/handle/",
     "https://www.youtube.com/watch?v=abc",
 ])

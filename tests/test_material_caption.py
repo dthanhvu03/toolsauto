@@ -24,7 +24,13 @@ from sqlalchemy.orm import sessionmaker
 import app.config as config
 from app.constants import ViralStatus
 from app.core.database.models import Account, Job, RuntimeSetting, ViralMaterial, ViralSource
-from app.features.viral_intake.service import ViralService, ai_provider_ready
+from app.features.viral_intake.service import (
+    ViralService,
+    ai_provider_ready,
+    drop_foreign_channel_names,
+    page_name_for_caption,
+)
+from app.core.orchestrator import ONSCREEN_TEXT_RULE
 
 
 @pytest.fixture
@@ -415,6 +421,75 @@ def test_h4_module_khong_goi_mang_khi_kiem_key(no_key):
     finally:
         socket.socket.connect = original
     assert ok is False
+
+
+def test_prompt_khong_bat_doc_chu_ao():
+    assert "ƯU TIÊN ĐỌC" not in ONSCREEN_TEXT_RULE
+    assert "không đoán tên kênh" in ONSCREEN_TEXT_RULE
+
+
+def test_ten_page_that_cho_caption():
+    channels = [{"id": "chan-1", "name": "Uyển Nhi"}]
+    assert page_name_for_caption("chan-1", channels) == "Uyển Nhi"
+    assert page_name_for_caption("", channels) == ""
+    assert page_name_for_caption("6ab38f18ea19ca0bdec2d72f", channels) == ""
+    assert page_name_for_caption("https://facebook.com/uyen.nhi", []) == "uyen.nhi"
+
+
+def test_viet_caption_truyen_ten_page(session_factory, reup_file, monkeypatch, with_key):
+    seen: dict = {}
+
+    def fake_caption(self, video_path, style="general", context="", page_name="", **kwargs):
+        seen["page_name"] = page_name
+        return {"caption": "áo dài này nhìn là mê", "hashtags": ["#aodai"]}
+
+    _patch_orchestrator(monkeypatch, fake_caption)
+    mid = _make_material(session_factory)
+    with session_factory() as db:
+        mat = db.get(ViralMaterial, mid)
+        mat.target_page = "chan-1"
+        db.commit()
+
+    def fake_channels(key, default=None, db=None):
+        if key == "BUFFER_CHANNELS":
+            return [{"id": "chan-1", "name": "Uyển Nhi"}]
+        return default
+
+    monkeypatch.setattr("app.core.settings.get_json", fake_channels)
+    with session_factory() as db:
+        ok, _ = ViralService.generate_caption_for_material(db, mid)
+
+    assert ok is True
+    assert seen["page_name"] == "Uyển Nhi"
+
+
+def test_bo_ten_kenh_ai_bia():
+    """Ghiền Mì Gõ và Lala School không được nằm trong caption sắp đăng."""
+    caption, tags = drop_foreign_channel_names(
+        "Góc nghiêng này cuốn.\n\n#GhiềnMìGõ #OOTD #Fashion",
+        ["#GhiềnMìGõ", "#OOTD", "#Fashion"],
+        fallback="Áo xinh",
+    )
+    assert "gõ" not in caption.lower()
+    assert "migo" not in caption.lower()
+    assert tags == ["#OOTD", "#Fashion"]
+    assert caption.startswith("Góc nghiêng")
+
+    caption, tags = drop_foreign_channel_names(
+        "Ghé thăm kênh Ghiền Mì Gõ để khám phá ngay nhé!",
+        ["#GhienMiGo", "#Shorts"],
+        fallback="Rộn ráng quá #aodai",
+    )
+    assert caption == "Rộn ráng quá"
+    assert tags == ["#Shorts"]
+
+    caption, tags = drop_foreign_channel_names(
+        "Xem xong là muốn bấm subscribe lalaschool ngay!",
+        ["#lalaschool", "#ootd"],
+        fallback="Sắp vào mùa r các bác ơi #quangcao",
+    )
+    assert caption == "Sắp vào mùa r các bác ơi"
+    assert tags == ["#ootd"]
 
 
 def test_h5_file_reup_duoc_tim_dung(session_factory, reup_file):

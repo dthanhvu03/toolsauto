@@ -455,6 +455,22 @@ def _viral_source_row(src) -> dict[str, Any]:
     }
 
 
+def _buffer_page_choices() -> list[dict[str, str]]:
+    from app.features.buffer.queue_job import _channels
+    from app.features.buffer.slots import slots_label
+
+    rows = []
+    for item in _channels():
+        rows.append(
+            {
+                "id": item["id"],
+                "name": item["name"],
+                "slots": slots_label(item["name"]),
+            }
+        )
+    return rows
+
+
 def _flatten_tiktok_groups(ctx: dict[str, Any]) -> list[dict[str, Any]]:
     page_index = ctx.get("page_index") or {}
     rows: list[dict[str, Any]] = []
@@ -500,7 +516,11 @@ def admin_viral_sources(db: Session = Depends(get_db)):
         sources = SourceService.list_sources(db)
     except Exception:
         sources = []
-    return {"items": [_viral_source_row(s) for s in sources], "total": len(sources)}
+    return {
+        "items": [_viral_source_row(s) for s in sources],
+        "total": len(sources),
+        "pages": _buffer_page_choices(),
+    }
 
 
 @router.get("/tiktok-links")

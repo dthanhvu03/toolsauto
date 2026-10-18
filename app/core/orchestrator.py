@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 # ─── Configurable paths (từ app/config.py, không hard-code) ───
 THUMB_DIR = str(config.THUMB_DIR)
 
+# Lệnh cũ "ưu tiên đọc chữ trên ảnh" khiến model bịa watermark rồi ghi tên kênh lạ.
+ONSCREEN_TEXT_RULE = (
+    "Chỉ dùng chữ trên ảnh khi đọc được rõ từng từ. "
+    "Không thấy chữ rõ thì viết theo hình và transcript, "
+    "không đoán watermark, không đoán tên kênh."
+)
+
 
 class OutputContractViolation(Exception):
     """Gemini did not return a valid JSON caption schema after repair attempts."""
@@ -303,7 +310,10 @@ class ContentOrchestrator:
             
             # Thay đổi chữ BÁN HÀNG tương ứng với style
             intro_action = "viết CAPTION BÁN HÀNG" if style == "sales" else "viết CAPTION"
-            prompt_intro = f"Hãy phân tích Hình ảnh được cung cấp để {intro_action}. Chú ý đọc và hiểu các Text/Chữ có sẵn trong ảnh, tập trung vào trọng tâm sản phẩm."
+            prompt_intro = (
+                f"Hãy phân tích Hình ảnh được cung cấp để {intro_action}. "
+                f"{ONSCREEN_TEXT_RULE} Tập trung vào trọng tâm sản phẩm."
+            )
         else:
             logger.info("Bước 1/3: Đầu vào là Video, trích xuất 6 khung hình Collage...")
             target_image = self.extract_keyframes_collage(video_path)
@@ -321,14 +331,14 @@ class ContentOrchestrator:
             if target_image:
                 if transcript:
                     prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) và kết hợp với Audio Transcript đính kèm bên dưới để {intro_action}.
-CHÚ Ý QUAN TRỌNG: TRONG ẢNH CÓ THỂ CÓ CHỮ (SUBTITLE). BẠN NÊN ƯU TIÊN ĐỌC CÁC CHỮ ĐÓ.
+{ONSCREEN_TEXT_RULE}
 
 Audio Transcript (có thể bắt chữ bị sai do giọng AI), hãy tham khảo kết hợp với Hình ảnh:
 "{transcript}" """
                 else:
                     logger.info("Video không có transcript (chỉ có nhạc nền). Dùng Hình ảnh làm đầu vào chính.")
                     prompt_intro = f"""Hãy phân tích Hình ảnh (6 khung hình lưới 2x3 trích từ Video) để {intro_action}.
-CHÚ Ý QUAN TRỌNG: TRONG ẢNH CÓ THỂ CÓ CHỮ (SUBTITLE). BẠN NÊN ƯU TIÊN ĐỌC CÁC CHỮ ĐÓ.
+{ONSCREEN_TEXT_RULE}
 Video này không có giọng người nói (chỉ có nhạc nền hoặc cảnh hành động). Hãy phác thảo lại nội dung và thông điệp của video dựa trên các khung hình."""
             else:
                 if not transcript:
@@ -423,6 +433,10 @@ Audio Transcript (có thể bắt chữ bị sai do giọng AI):
         if page_name or page_niches:
             niches_str = ", ".join(page_niches) if page_niches else "chưa xác định"
             context_block += f"\n- Fanpage đăng bài: {page_name or 'Không rõ'}\n- Lĩnh vực/Niche của page: {niches_str}"
+        else:
+            context_block += (
+                "\n- Fanpage đăng bài: không ghi tên kênh, page, hay hashtag kênh vào caption."
+            )
 
         # ─── New V3 Component: Multi-Brain Intelligence Factory ───
         from app.core.ai.brain_factory import BrainFactory
@@ -486,6 +500,7 @@ Bạn là một Chuyên gia Digital Marketing & Copywriter thực chiến tại 
 
 [CHỐNG ẢO GIÁC - ANTI-HALLUCINATION RULES]
 - TUYỆT ĐỐI KHÔNG được bịa ra tên người, tên app, tên thương hiệu nào không xuất hiện trong hình ảnh/transcript.
+- KHÔNG ghi tên kênh, page, hay hashtag của kênh khác. KHÔNG viết "ghé thăm kênh", "theo dõi kênh", "subscribe". Chỉ nhắc tên fanpage khi INPUT VARIABLES ghi rõ tên đó.
 - KHÔNG được gọi tên riêng cá nhân (ví dụ: "Chào Vũ", "Bạn Lan ơi").
 - KHÔNG nhắc đến bất kỳ app, dịch vụ hoặc platform cụ thể nào (ví dụ: "Hoàn Xu", "Shopee", "Lazada") trừ khi xuất hiện RÕ RÀNG trong hình ảnh hoặc transcript.
 - Nội dung caption PHẢI PHÙ HỢP với lĩnh vực/niche của Fanpage đăng bài (xem INPUT VARIABLES bên dưới). Ví dụ: page Skincare thì viết về chăm sóc da, page Thời trang thì viết về quần áo.

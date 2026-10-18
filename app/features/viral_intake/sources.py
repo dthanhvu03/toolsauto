@@ -181,7 +181,25 @@ def _classify(url: str) -> tuple[tuple[str, str, str] | None, str]:
             return ("youtube", f"https://www.youtube.com/{head}/{segs[1]}/shorts", segs[1]), ""
         return None, MSG_UNKNOWN
 
-    if host in ("facebook.com", "fb.watch", "fb.com", "instagram.com"):
+    if host in ("facebook.com", "fb.watch", "fb.com"):
+        if not segs:
+            return None, MSG_UNKNOWN
+        head = segs[0].lower()
+        if head in ("reel", "reels", "watch", "share") or "story" in head:
+            return None, MSG_VIDEO_LINK
+        if head == "profile.php":
+            pid = query.get("id")
+            if pid:
+                canonical = f"https://www.facebook.com/profile.php?id={pid}&sk=reels_tab"
+                return ("facebook", canonical, f"fb_user_{pid}"), ""
+            return None, MSG_UNKNOWN
+        handle = segs[0]
+        if handle in ("home", "messages", "notifications", "friends", "marketplace"):
+            return None, MSG_UNKNOWN
+        canonical = f"https://www.facebook.com/{handle}/reels"
+        return ("facebook", canonical, handle), ""
+
+    if host == "instagram.com":
         return None, MSG_FB_IG
     return None, MSG_UNKNOWN
 
@@ -476,6 +494,37 @@ class SourceService:
         if tracker.get(source.url, 0) > now:
             wait_min = int((tracker[source.url] - now) / 60)
             error = f"Đang bị rate limit, thử lại sau {wait_min} phút"
+        elif source.platform == "facebook":
+            logger.info("[VIRAL_SOURCES] Scan Facebook %s (max=%d)", source.url, accept_cap)
+            try:
+                from app.features.viral_intake.facebook_scraper import scan_facebook_reels
+                reels = scan_facebook_reels(source.url, max_videos=accept_cap)
+                seen_this_run: set[str] = set()
+                for r_url in reels:
+                    if found >= accept_cap:
+                        break
+                    clean_url = (r_url or "").strip()
+                    if not clean_url:
+                        continue
+                    variants = _www_variants(clean_url)
+                    if clean_url in seen_this_run or db.query(ViralMaterial.id).filter(ViralMaterial.url.in_(variants)).first():
+                        skipped += 1
+                        continue
+                    mat = ViralMaterial(
+                        url=clean_url,
+                        platform="facebook",
+                        title=f"Facebook Reel {source.handle or ''}".strip(),
+                        views=0,
+                        scraped_by_account_id=None,
+                        status=ViralStatus.NEW,
+                        source_id=source.id,
+                    )
+                    mat.target_pages_list = source.target_pages_list
+                    db.add(mat)
+                    seen_this_run.add(clean_url)
+                    found += 1
+            except Exception as exc:
+                error = f"Lỗi quét Facebook: {exc}"
         else:
             # TikTok chặn IP lạ bằng trang kiểm tra bot — giả Chrome qua được, nhưng CHỈ khi có
             # curl_cffi (xem `impersonate_args`); bật cứng là hỏng máy đang chạy tốt.

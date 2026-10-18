@@ -81,6 +81,59 @@ _last_orphan_cleanup_ts: float = 0
 _last_source_cleanup_ts: float = 0
 
 
+def _viral_id_from_name(name: str) -> int | None:
+    import re
+
+    matched = re.search(r"viral_(\d+)_", name or "", re.IGNORECASE)
+    if not matched:
+        return None
+    return int(matched.group(1))
+
+
+def _reup_still_on_disk(material_id: int) -> bool:
+    from app.features.viral_intake.service import ViralService
+
+    return bool(ViralService.find_reup_path(material_id))
+
+
+def drop_ready_without_file(db: Session) -> int:
+    """READY không còn bản cắt lẫn bản gốc thì ra khỏi hàng đăng.
+
+    ``/sansang`` chỉ giấu những video này. Trạng thái vẫn READY nên gắn page và
+    xếp lịch vẫn coi là chưa đăng. Chỗ dọn file phải đổi trạng thái cùng lúc.
+    NEW, BOOST_PENDING, REUP chưa có file là chưa tải — không đụng.
+    """
+    try:
+        from app.core.database.models import ViralMaterial
+        from app.features.viral_intake.processor import VIRAL_PROCESS_MAX_TRIES
+        from app.features.viral_intake.service import ViralService
+
+        have_reup = ViralService._index_reup_ids_from_disk()
+        rows = (
+            db.query(ViralMaterial)
+            .filter(ViralMaterial.status == ViralStatus.READY)
+            .all()
+        )
+        dropped = 0
+        for mat in rows:
+            if mat.id in have_reup:
+                continue
+            if ViralService.find_source_path(mat.id, mat.platform):
+                continue
+            mat.status = ViralStatus.FAILED
+            mat.process_tries = VIRAL_PROCESS_MAX_TRIES
+            mat.last_error = "Không còn file video, bỏ khỏi hàng đăng."
+            dropped += 1
+        if dropped:
+            db.commit()
+            logger.info("Đã bỏ %d video READY không còn file khỏi hàng đăng.", dropped)
+        return dropped
+    except Exception as exc:
+        db.rollback()
+        logger.warning("Bỏ video READY mất file lỗi (%s) — bỏ qua.", exc)
+        return 0
+
+
 def cleanup_old_source_files(db: Session) -> int:
     """
     ADR-032 — xoá bản tải GỐC quá hạn giữ (`viral.keep_source_days`).
@@ -102,9 +155,15 @@ def cleanup_old_source_files(db: Session) -> int:
         cutoff = _time.time() - keep_days * 86400
         base = str(config.REUP_DIR)
         for path in _glob.glob(os.path.join(base, "*", "viral_*_*.*")):
-            if path.endswith("_reup.mp4"):
+            name = os.path.basename(path)
+            if "_reup" in name.lower():
                 continue
             if os.path.splitext(path)[1].lower() not in (".mp4", ".mkv", ".webm", ".mov"):
+                continue
+            # Bản gốc là bản cuối để cắt lại. Bản đã cắt đã mất thì không xóa nốt gốc.
+            material_id = _viral_id_from_name(name)
+            if material_id is not None and not _reup_still_on_disk(material_id):
+                logger.info("Giữ file gốc #%s vì không còn bản đã cắt: %s", material_id, name)
                 continue
             try:
                 if os.path.getmtime(path) < cutoff:
@@ -548,9 +607,19 @@ def run_loop():
                     # 2. Check 24h Metrics for published posts
                     MetricsChecker.check_pending(db)
 
+                    # 2a. Buffer đã gửi thì đánh dấu video đã đăng (cùng nút Đã đăng).
+                    try:
+                        from app.features.buffer.sync_posted import sync_sent_marks
+
+                        sync_sent_marks(db)
+                    except Exception as exc:
+                        db.rollback()
+                        logger.error("[Buffer] sync da dang failed: %s", exc)
+
                     # 2b. Cleanup orphaned virals (hourly)
                     _cleanup_orphaned_virals(db)
                     cleanup_old_source_files(db)
+                    drop_ready_without_file(db)
 
                     # 2c. Sweep orphaned DRAFTs → PENDING (every tick)
                     _sweep_orphaned_drafts(db)

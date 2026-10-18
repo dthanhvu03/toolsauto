@@ -35,6 +35,9 @@ test_out*.txt
 scripts/debug_*.py
 scripts/test_*.py
 scripts/demo_*.sh
+scripts/archive/
+tests/debug_*.py
+tests/*.html
 tikwm.json
 
 # Generated Data & State

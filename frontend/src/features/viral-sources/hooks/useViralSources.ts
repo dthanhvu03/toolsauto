@@ -5,6 +5,7 @@ import {
   deleteViralSource,
   fetchViralSources,
   scanViralSource,
+  setViralSourcePage,
   toggleViralSource,
 } from "../api/viralSourcesApi";
 
@@ -20,6 +21,7 @@ export function useViralSources() {
   const onErr = (e: Error) => setMsg(e.message);
 
   const addMut = useMutation({ mutationFn: addViralSource, onSuccess: onOk, onError: onErr });
+  const pageMut = useMutation({ mutationFn: setViralSourcePage, onSuccess: onOk, onError: onErr });
   const toggleMut = useMutation({ mutationFn: toggleViralSource, onSuccess: onOk, onError: onErr });
   const scanMut = useMutation({ mutationFn: scanViralSource, onSuccess: onOk, onError: onErr });
   const delMut = useMutation({ mutationFn: deleteViralSource, onSuccess: onOk, onError: onErr });
@@ -32,7 +34,9 @@ export function useViralSources() {
       (scanMut.variables as number | undefined) ??
       (delMut.variables as number | undefined) ??
       null,
+    pages: query.data?.pages ?? [],
     add: (url: string, target_page?: string) => addMut.mutate({ url, target_page }),
+    setPage: (id: number, target_page: string) => pageMut.mutate({ id, target_page }),
     toggle: (id: number) => toggleMut.mutate(id),
     scan: (id: number) => scanMut.mutate(id),
     remove: (id: number) => delMut.mutate(id),

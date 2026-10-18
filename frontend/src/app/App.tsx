@@ -19,6 +19,7 @@ import { AiStudioPage } from "@/features/ai-studio/pages/AiStudioPage";
 import { PlatformConfigPage } from "@/features/platform-config/pages/PlatformConfigPage";
 import { SyspanelPage } from "@/features/syspanel/pages/SyspanelPage";
 import { DatabasePage } from "@/features/database/pages/DatabasePage";
+import { TelegramUxPage } from "@/features/telegram/pages/TelegramUxPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="go/platform-config" element={<PlatformConfigPage />} />
             <Route path="go/syspanel" element={<SyspanelPage />} />
             <Route path="go/database" element={<DatabasePage />} />
+            <Route path="go/telegram" element={<TelegramUxPage />} />
             <Route path="*" element={<Navigate to="/app" replace />} />
           </Route>
           <Route path="/" element={<Navigate to="/app" replace />} />

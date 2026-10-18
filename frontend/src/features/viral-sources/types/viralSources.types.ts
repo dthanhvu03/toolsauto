@@ -12,7 +12,14 @@ export type ViralSourceRow = {
   last_error?: string | null;
 };
 
+export type BufferPage = {
+  id: string;
+  name: string;
+  slots: string;
+};
+
 export type ViralSourcesResponse = {
   items: ViralSourceRow[];
   total: number;
+  pages: BufferPage[];
 };

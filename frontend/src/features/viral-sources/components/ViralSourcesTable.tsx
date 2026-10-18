@@ -1,6 +1,6 @@
 import { formatAgo } from "@/shared/lib/formatAgo";
-import { dangerBtnClass, ghostBtnClass } from "@/shared/ui/controls";
-import type { ViralSourceRow } from "../types/viralSources.types";
+import { dangerBtnClass, ghostBtnClass, selectClass } from "@/shared/ui/controls";
+import type { BufferPage, ViralSourceRow } from "../types/viralSources.types";
 
 function channelHref(row: ViralSourceRow) {
   if (row.url.startsWith("http")) return row.url;
@@ -10,16 +10,20 @@ function channelHref(row: ViralSourceRow) {
 
 export function ViralSourcesTable({
   items,
+  pages,
   busyId,
   onToggle,
   onScan,
   onDelete,
+  onSetPage,
 }: {
   items: ViralSourceRow[];
+  pages: BufferPage[];
   busyId?: number | null;
   onToggle: (id: number) => void;
   onScan: (id: number) => void;
   onDelete: (id: number) => void;
+  onSetPage: (id: number, target_page: string) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -51,12 +55,21 @@ export function ViralSourcesTable({
                     {s.handle ? `@${s.handle}` : s.url}
                   </a>
                 </td>
-                <td className="max-w-[12rem] truncate px-3 py-2 text-xs text-slate-500">
-                  {s.target_pages.length === 0
-                    ? "—"
-                    : s.target_pages.length === 1
-                      ? s.target_pages[0]
-                      : `${s.target_pages.length} Page`}
+                <td className="max-w-[16rem] px-3 py-2 text-xs text-slate-500">
+                  <select
+                    className={selectClass}
+                    value={s.target_pages[0] ?? ""}
+                    disabled={busyId === s.id}
+                    onChange={(e) => onSetPage(s.id, e.target.value)}
+                  >
+                    <option value="">Chưa chọn</option>
+                    {pages.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                        {p.slots ? ` · ${p.slots}` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="px-3 py-2 text-xs">{s.enabled ? "ON" : "OFF"}</td>
                 <td className="px-3 py-2 text-xs text-slate-500">{formatAgo(s.last_scanned_at)}</td>

@@ -1,3 +1,21 @@
+## Phiên 2026-09-29 — Preset giờ hẹn theo kênh mạnh
+
+Cursor: nút Hẹn giờ Telegram đổi thành 08:00 (Uyển Nhi), 12:00 (Sống Nhẹ), 15:30 (Uyển Nhi), 20:00 (Mê Câu Cá). Giờ hôm nay đã qua thì tự lấy ngày mai. pytest `tests/test_telegram_schedule.py` 16 passed. Worker maintenance khởi động lại. Không commit.
+
+---
+
+## Phiên 2026-09-27 — Buffer 429 khi tự đánh dấu đã đăng
+
+Cursor: vòng tự đánh dấu hỏi từng bài một nên Buffer trả HTTP 429, kéo theo xếp hàng job 876 và 877 cũng bị từ chối. Giờ một vòng gộp tối đa 25 bài trong một request; gặp 429 thì dừng và đợi thêm 15 phút. pytest `tests/test_buffer_sync_posted.py` + `tests/test_buffer_api.py`: 25 passed. Worker maintenance đã khởi động lại. Không commit.
+
+---
+
+## Phiên 2026-09-24 — Hẹn giờ đăng từ Telegram
+
+Cursor: spec `004-telegram-schedule-post`. Nút Hẹn giờ và lệnh `/hen` chọn giờ Việt Nam (10 phút–30 ngày). Tạo lịch hoặc sửa đúng bài đang chờ. Hủy lịch không đụng bài đã đăng. Xếp hàng không giờ và đăng ngay giữ nguyên. pytest `tests/test_telegram_schedule.py` + `tests/test_buffer_queue.py` và hồi quy Telegram liên quan: 107 passed. Chưa bấm trên chat thật. Không commit.
+
+---
+
 ## Phiên 2026-09-23 (c) — Nút Telegram xếp hàng Buffer
 
 Cursor: tin video sẵn sàng có nút 5 page. Bấm gọi `queue_reup` → job `platform=buffer` + caption AI + `viral_material_id`, mode hàng chờ. Không ghi `media_path` (tránh cleanup xóa file). Funnel `https://laptop-t2hf25cd.tail67527a.ts.net` đã tải đúng file #1063. pytest buffer + nút 34 passed. Poller Telegram bật riêng vì web-only không chạy maintenance.

@@ -259,6 +259,55 @@ def test_dat_0_ngay_thi_khong_don_gi_o_day(reup_dir, monkeypatch):
     assert f.exists(), "0 ngày nghĩa là đã xoá ngay lúc xử lý, ở đây không còn gì để dọn"
 
 
+def test_mat_ban_da_cat_thi_khong_xoa_not_file_goc(reup_dir, monkeypatch):
+    """Bản gốc là bản cuối để cắt lại. Xóa nó khi bản đã cắt đã mất thì hết đường đăng."""
+    import time
+
+    from app.features.system_panel.workers import maintenance
+
+    _fake_keep_days(monkeypatch, 7)
+    goc = reup_dir / "tiktok" / "viral_3_cu.mp4"
+    goc.write_bytes(b"x" * 100)
+    qua_han = time.time() - 8 * 86400
+    os.utime(goc, (qua_han, qua_han))
+
+    assert maintenance.cleanup_old_source_files(db=None) == 0
+    assert goc.exists()
+
+
+def test_ready_mat_ca_hai_file_thi_ra_khoi_hang_dang(reup_dir):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.constants import ViralStatus
+    from app.core.database.models import Base, ViralMaterial
+    from app.features.system_panel.workers import maintenance
+
+    d = reup_dir / "tiktok"
+    (d / "viral_2_con_reup.mp4").write_bytes(b"y" * 100)
+    (d / "viral_4_chi_goc.mp4").write_bytes(b"z" * 100)
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    db.add_all([
+        ViralMaterial(id=1, platform="tiktok", url="https://t/mat", title="mat", status=ViralStatus.READY),
+        ViralMaterial(id=2, platform="tiktok", url="https://t/con", title="con", status=ViralStatus.READY),
+        ViralMaterial(id=3, platform="tiktok", url="https://t/moi", title="moi", status=ViralStatus.NEW),
+        ViralMaterial(id=4, platform="tiktok", url="https://t/goc", title="goc", status=ViralStatus.READY),
+    ])
+    db.commit()
+
+    assert maintenance.drop_ready_without_file(db) == 1
+    assert db.get(ViralMaterial, 1).status == ViralStatus.FAILED
+    assert "không còn file" in (db.get(ViralMaterial, 1).last_error or "").lower()
+    assert db.get(ViralMaterial, 2).status == ViralStatus.READY
+    assert db.get(ViralMaterial, 3).status == ViralStatus.NEW
+    assert db.get(ViralMaterial, 4).status == ViralStatus.READY
+    db.close()
+    engine.dispose()
+
+
 def test_don_file_hong_thi_khong_nem(monkeypatch):
     from app.features.system_panel.workers import maintenance
 

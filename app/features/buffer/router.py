@@ -4,17 +4,21 @@ Chỉ trả file khi chữ ký đúng và file `_reup.mp4` tồn tại. Không n
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import logging
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from app.features.buffer.media import sig_ok
 from app.features.viral_intake.service import ViralService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/buffer-media", tags=["buffer-media"])
 
 
 @router.api_route("/{material_id}/{sig}.mp4", methods=["GET", "HEAD"])
-def serve_reup(material_id: int, sig: str):
+def serve_reup(material_id: int, sig: str, request: Request):
+    logger.info("[Buffer-Media] %s %s client=%s", request.method, request.url.path, getattr(request.client, "host", "unknown"))
     if material_id < 1 or not sig_ok(material_id, sig):
         raise HTTPException(status_code=404, detail="Khong thay file")
     path = ViralService.find_reup_path(material_id)

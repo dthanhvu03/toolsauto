@@ -356,6 +356,30 @@ def admin_source_add(body: SourceAddBody, db: Session = Depends(get_db)):
     return _ok(msg, id=source_id)
 
 
+class SourcePageBody(BaseModel):
+    target_page: str = ""
+
+
+@router.post("/viral-sources/{source_id}/page")
+def admin_source_page(source_id: int, body: SourcePageBody, db: Session = Depends(get_db)):
+    from app.features.viral_intake.sources import SourceService
+
+    src = db.get(ViralSource, source_id)
+    if not src:
+        _fail(404, f"Không thấy nguồn #{source_id}")
+    page = (body.target_page or "").strip()
+    ok, msg = SourceService.update_source(
+        db,
+        source_id,
+        min_views=src.min_views if src.min_views is not None else "",
+        max_videos=src.max_videos if src.max_videos is not None else "",
+        target_pages=[page] if page else [],
+    )
+    if not ok:
+        _fail(400, msg)
+    return _ok(msg, id=source_id)
+
+
 @router.post("/viral-sources/{source_id}/toggle")
 def admin_source_toggle(source_id: int, db: Session = Depends(get_db)):
     from app.features.viral_intake.sources import SourceService
@@ -486,14 +510,52 @@ def admin_threads_unlink(body: ThreadsAccountBody, db: Session = Depends(get_db)
 
 @router.post("/syspanel/retry-failed")
 def admin_syspanel_retry_failed(db: Session = Depends(get_db)):
-    failed = db.query(Job).filter(Job.status == JobStatus.FAILED).all()
-    count = len(failed)
+    active_statuses = [
+        JobStatus.PENDING,
+        JobStatus.RUNNING,
+        JobStatus.DONE,
+        JobStatus.DRAFT,
+        JobStatus.AI_PROCESSING,
+        JobStatus.AWAITING_STYLE,
+    ]
+    active_pairs = db.query(Job.viral_material_id, Job.target_page).filter(
+        Job.viral_material_id.isnot(None),
+        Job.status.in_(active_statuses),
+    ).all()
+    active_keys = {(mid, (tp or "").strip()) for mid, tp in active_pairs if mid is not None}
+
+    failed = (
+        db.query(Job)
+        .filter(Job.status == JobStatus.FAILED)
+        .order_by(Job.id.desc())
+        .all()
+    )
+
+    retried_count = 0
+    seen_in_batch = set()
     for job in failed:
+        if job.viral_material_id is not None:
+            key = (job.viral_material_id, (job.target_page or "").strip())
+            if key in active_keys or key in seen_in_batch:
+                continue
+            seen_in_batch.add(key)
+
+        if job.platform == "buffer":
+            if job.viral_material_id:
+                from app.features.buffer.queue_job import auto_schedule_ready
+
+                ok, _ = auto_schedule_ready(db, job.viral_material_id)
+                if ok:
+                    retried_count += 1
+            continue
+
         job.status = JobStatus.PENDING
         job.tries = 0
         job.locked_at = None
+        retried_count += 1
+
     db.commit()
-    return _ok(f"Retried {count} FAILED → PENDING", count=count)
+    return _ok(f"Retried {retried_count} FAILED jobs", count=retried_count)
 
 
 @router.post("/syspanel/cancel-stuck")

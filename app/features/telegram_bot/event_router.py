@@ -125,6 +125,27 @@ class TelegramEventRouter:
                 self._handle_posted(callback_id, action, int(target_id))
             elif action == "bq":
                 self._handle_buffer_queue(callback_id, target_id)
+            elif action == "hen":
+                self._handle_schedule_ask(callback_id, target_id)
+            elif action == "mhuy":
+                self._handle_cancel_material(callback_id, target_id)
+            elif action == "hp":
+                self._handle_schedule_times(callback_id, target_id)
+            elif action == "ht":
+                self._handle_schedule_pick(callback_id, target_id)
+            elif action == "bhen":
+                self._handle_post_times(callback_id, target_id)
+            elif action.startswith("bw"):
+                from app.features.buffer.when import PRESETS
+
+                if action[2:] in PRESETS:
+                    self._handle_post_preset(callback_id, action, target_id)
+                else:
+                    self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            elif action == "bhuy":
+                self._handle_cancel_ask(callback_id, target_id)
+            elif action == "bhok":
+                self._handle_cancel_do(callback_id, target_id)
             elif action == "pgask":
                 self._handle_page_ask(callback_id, target_id)
             elif action == "pg":
@@ -467,17 +488,160 @@ class TelegramEventRouter:
         self.client.answer_callback_query(callback_id, ("✅ " if ok else "⚠️ ") + msg[:180])
         self.client.send_message(("✅ " if ok else "⚠️ ") + msg, reply_markup=markup)
 
+    def _handle_schedule_ask(self, callback_id: str, target_id: str):
+        from app.features.buffer.queue_job import _channels
+
+        try:
+            material_id = int(target_id)
+        except ValueError:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        rows: list[list[dict]] = []
+        pair: list[dict] = []
+        for channel in _channels():
+            data = f"hp:{material_id}:{channel['id']}"
+            if len(data.encode()) > 64:
+                continue
+            pair.append({"text": channel["name"][:30], "callback_data": data})
+            if len(pair) == 2:
+                rows.append(pair)
+                pair = []
+        if pair:
+            rows.append(pair)
+        self.client.answer_callback_query(callback_id, "Chọn kênh")
+        if not rows:
+            self.client.send_message("Chưa có page Buffer.")
+            return
+        self.client.send_message(
+            f"🕒 Video #{material_id} hẹn giờ cho kênh nào?",
+            reply_markup={"inline_keyboard": rows},
+        )
+
+    def _handle_cancel_material(self, callback_id: str, target_id: str):
+        from app.core.database.core import SessionLocal
+        from app.features.buffer.queue_job import cancel_material_schedule
+
+        try:
+            material_id = int(target_id)
+        except ValueError:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        with SessionLocal() as db:
+            ok, msg = cancel_material_schedule(db, material_id)
+        self.client.answer_callback_query(callback_id, ("✅ " if ok else "⚠️ ") + msg[:180])
+        self.client.send_message(("✅ " if ok else "⚠️ ") + msg)
+
+    def _handle_schedule_times(self, callback_id: str, target_id: str):
+        from app.features.buffer.when import PRESETS, SAMPLE
+
+        try:
+            mid_s, channel_id = target_id.split(":", 1)
+            int(mid_s)
+        except ValueError:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        channel_id = channel_id.strip()
+        rows = []
+        for code, (label, *_rest) in PRESETS.items():
+            data = f"ht:{mid_s}:{channel_id}:{code}"
+            if len(data.encode()) <= 64:
+                rows.append([{"text": label, "callback_data": data}])
+        self.client.answer_callback_query(callback_id, "Chọn giờ")
+        self.client.send_message(
+            f"Chọn giờ. Giờ khác, khi đã có mã bài: /hen mã {SAMPLE}.",
+            reply_markup={"inline_keyboard": rows} if rows else None,
+        )
+
+    def _handle_schedule_pick(self, callback_id: str, target_id: str):
+        from app.core.database.core import SessionLocal
+        from app.features.buffer.queue_job import schedule_reup
+        from app.features.buffer.when import preset_ts
+
+        try:
+            mid_s, rest = target_id.split(":", 1)
+            channel_id, code = rest.rsplit(":", 1)
+            material_id = int(mid_s)
+        except ValueError:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        ts, err = preset_ts(code)
+        if err or ts is None:
+            self.client.answer_callback_query(callback_id, (err or "Giờ không hợp lệ")[:180])
+            self.client.send_message(err or "Giờ không hợp lệ.")
+            return
+        with SessionLocal() as db:
+            ok, msg = schedule_reup(db, material_id, channel_id.strip(), ts)
+        self.client.answer_callback_query(callback_id, ("✅ " if ok else "⚠️ ") + msg[:180])
+        self.client.send_message(("✅ " if ok else "⚠️ ") + msg)
+
+    def _handle_post_times(self, callback_id: str, post_id: str):
+        from app.features.buffer.when import PRESETS, SAMPLE
+
+        pid = (post_id or "").strip()
+        rows = []
+        for code, (label, *_rest) in PRESETS.items():
+            data = f"bw{code}:{pid}"
+            if pid and len(data.encode()) <= 64:
+                rows.append([{"text": label, "callback_data": data}])
+        huy = f"bhuy:{pid}"
+        if pid and len(huy.encode()) <= 64:
+            rows.append([{"text": "Hủy lịch", "callback_data": huy}])
+        self.client.answer_callback_query(callback_id, "Chọn giờ")
+        self.client.send_message(
+            f"Đổi giờ bài này, hoặc gõ /hen {pid} {SAMPLE}.",
+            reply_markup={"inline_keyboard": rows} if rows else None,
+        )
+
+    def _handle_post_preset(self, callback_id: str, action: str, post_id: str):
+        from app.core.database.core import SessionLocal
+        from app.features.buffer.queue_job import reschedule_by_post
+        from app.features.buffer.when import PRESETS, preset_ts
+
+        code = action[2:] if action.startswith("bw") else ""
+        if code not in PRESETS:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        ts, err = preset_ts(code)
+        if err or ts is None:
+            self.client.answer_callback_query(callback_id, (err or "Giờ không hợp lệ")[:180])
+            self.client.send_message(err or "Giờ không hợp lệ.")
+            return
+        with SessionLocal() as db:
+            ok, msg = reschedule_by_post(db, post_id, ts)
+        self.client.answer_callback_query(callback_id, ("✅ " if ok else "⚠️ ") + msg[:180])
+        self.client.send_message(("✅ " if ok else "⚠️ ") + msg)
+
+    def _handle_cancel_ask(self, callback_id: str, post_id: str):
+        pid = (post_id or "").strip()
+        data = f"bhok:{pid}"
+        if not pid or len(data.encode()) > 64:
+            self.client.answer_callback_query(callback_id, "Nút không hợp lệ")
+            return
+        self.client.answer_callback_query(callback_id, "Xác nhận hủy")
+        self.client.send_message(
+            "Hủy lịch bài này? Bài sẽ không tự đăng.",
+            reply_markup={"inline_keyboard": [[{"text": "Hủy lịch", "callback_data": data}]]},
+        )
+
+    def _handle_cancel_do(self, callback_id: str, post_id: str):
+        from app.core.database.core import SessionLocal
+        from app.features.buffer.queue_job import cancel_schedule
+
+        with SessionLocal() as db:
+            ok, msg = cancel_schedule(db, post_id)
+        self.client.answer_callback_query(callback_id, ("✅ " if ok else "⚠️ ") + msg[:180])
+        self.client.send_message(("✅ " if ok else "⚠️ ") + msg)
+
     def _handle_buffer_channel(self, callback_id: str, channel_id: str):
         import app.config as config
         from app.features.buffer.client import BufferClient, BufferError
         from app.features.telegram_bot.command_handler import send_long_message
 
-        key = (getattr(config, "BUFFER_API_KEY", None) or "").strip()
-        if not key:
-            self.client.answer_callback_query(callback_id, "Chưa có khóa Buffer")
-            return
+        from app.features.buffer.manager import get_buffer_manager
+
         try:
-            text = BufferClient(key).insights_channel(channel_id)
+            client = get_buffer_manager().get_client_for_channel(channel_id)
+            text = client.insights_channel(channel_id)
         except BufferError as exc:
             self.client.answer_callback_query(callback_id, str(exc)[:180])
             return
@@ -519,11 +683,13 @@ class TelegramEventRouter:
                 reply_markup={"inline_keyboard": [[{"text": "🗑 Xóa hẳn", "callback_data": f"bdyes:{pid}"}]]},
             )
             return
-        key = (getattr(config, "BUFFER_API_KEY", None) or "").strip()
-        if not key:
+        from app.features.buffer.manager import get_buffer_manager
+
+        mgr = get_buffer_manager()
+        if not mgr.has_keys():
             self.client.answer_callback_query(callback_id, "Chưa có khóa Buffer")
             return
-        client = BufferClient(key)
+        client = mgr.get_client_for_post(pid)
         try:
             if action == "bnow":
                 outcome = client.publish_now(pid)

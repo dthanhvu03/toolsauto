@@ -926,6 +926,18 @@ SETTINGS: dict[str, SettingSpec] = {
             "Ra ngoài nhà cần Tailscale (dùng IP Tailscale ở đây). Bỏ trống = không in link."
         ),
     ),
+    "BUFFER_API_KEYS": SettingSpec(
+        key="BUFFER_API_KEYS",
+        type="text",
+        default_getter=lambda: "",
+        title="Danh sách nhiều Buffer API Key",
+        section="Tích hợp",
+        description=(
+            "Hỗ trợ kết nối nhiều tài khoản Buffer (vượt giới hạn 3 kênh của gói Free). "
+            "Nhập các API key phân cách bằng dấu phẩy, dòng mới hoặc JSON array [\"key1\", \"key2\"]. "
+            "Nếu để trống, hệ thống sẽ sử dụng BUFFER_API_KEY trong file .env."
+        ),
+    ),
     "BUFFER_CHANNELS": SettingSpec(
         key="BUFFER_CHANNELS",
         type="text",

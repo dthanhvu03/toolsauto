@@ -3,7 +3,7 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { ActionMsg } from "@/shared/ui/ActionMsg";
-import { inputClass, primaryBtnClass } from "@/shared/ui/controls";
+import { inputClass, primaryBtnClass, selectClass } from "@/shared/ui/controls";
 import { ViralSourcesTable } from "../components/ViralSourcesTable";
 import { useViralSources } from "../hooks/useViralSources";
 
@@ -31,13 +31,16 @@ export function ViralSourcesPage() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
-        <input
-          className={inputClass}
-          placeholder="Page đích (tuỳ chọn)"
-          value={page}
-          onChange={(e) => setPage(e.target.value)}
-        />
-        <button type="submit" className={primaryBtnClass} disabled={q.adding}>
+        <select className={selectClass} value={page} onChange={(e) => setPage(e.target.value)} required>
+          <option value="">Chọn page</option>
+          {q.pages.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+              {p.slots ? ` · ${p.slots}` : ""}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className={primaryBtnClass} disabled={q.adding || !page}>
           Thêm nguồn
         </button>
       </form>
@@ -51,10 +54,12 @@ export function ViralSourcesPage() {
         >
           <ViralSourcesTable
             items={q.data?.items ?? []}
+            pages={q.pages}
             busyId={q.busyId}
             onToggle={q.toggle}
             onScan={q.scan}
             onDelete={q.remove}
+            onSetPage={q.setPage}
           />
         </QueryBody>
       </Panel>

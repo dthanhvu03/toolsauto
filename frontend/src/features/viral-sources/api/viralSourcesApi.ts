@@ -9,6 +9,12 @@ export function addViralSource(body: { url: string; target_page?: string }) {
   return sendJson<OkMessage>("/api/admin/viral-sources", "POST", body);
 }
 
+export function setViralSourcePage(body: { id: number; target_page: string }) {
+  return sendJson<OkMessage>(`/api/admin/viral-sources/${body.id}/page`, "POST", {
+    target_page: body.target_page,
+  });
+}
+
 export function toggleViralSource(id: number) {
   return sendJson<OkMessage>(`/api/admin/viral-sources/${id}/toggle`, "POST");
 }

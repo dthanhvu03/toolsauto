@@ -215,6 +215,20 @@ def material_ready_buttons(mat) -> list:
     mid = getattr(mat, "id", None)
     if not mid:
         return []
+    report = (getattr(mat, "schedule_report", None) or "").strip()
+    if report.startswith("Đã hẹn") or report.startswith("Đã có lịch"):
+        rows = []
+        hen = f"hen:{mid}"
+        huy = f"mhuy:{mid}"
+        if len(hen.encode()) <= 64 and len(huy.encode()) <= 64:
+            rows.append(
+                [
+                    {"text": "Đổi giờ", "callback_data": hen},
+                    {"text": "Hủy lịch", "callback_data": huy},
+                ]
+            )
+        rows.append([{"text": "✅ Đã đăng", "callback_data": f"dadang:{mid}"}])
+        return rows
     rows: list[list[dict]] = []
     pair: list[dict] = []
     for channel in _buffer_channels():
@@ -227,6 +241,9 @@ def material_ready_buttons(mat) -> list:
             pair = []
     if pair:
         rows.append(pair)
+    hen = f"hen:{mid}"
+    if rows and len(hen.encode()) <= 64:
+        rows.append([{"text": "Hẹn giờ", "callback_data": hen}])
     rows.append([{"text": "✅ Đã đăng", "callback_data": f"dadang:{mid}"}])
     return rows
 
@@ -236,15 +253,17 @@ def buffer_post_keyboard(post_id: str, *, retry: bool = False) -> dict | None:
     pid = str(post_id or "").strip()
     if not pid or len(f"bnow:{pid}".encode()) > 64:
         return None
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "Đăng lại" if retry else "Đăng ngay", "callback_data": f"bnow:{pid}"},
-                {"text": "Chi tiết", "callback_data": f"binf:{pid}"},
-            ],
-            [{"text": "Thêm", "callback_data": f"bmore:{pid}"}],
-        ]
-    }
+    rows = [
+        [
+            {"text": "Đăng lại" if retry else "Đăng ngay", "callback_data": f"bnow:{pid}"},
+            {"text": "Chi tiết", "callback_data": f"binf:{pid}"},
+        ],
+        [{"text": "Thêm", "callback_data": f"bmore:{pid}"}],
+    ]
+    hen = f"bhen:{pid}"
+    if len(hen.encode()) <= 64:
+        rows.insert(1, [{"text": "Hẹn giờ", "callback_data": hen}])
+    return {"inline_keyboard": rows}
 
 
 def material_ready_message(
@@ -275,6 +294,10 @@ def material_ready_message(
     views = int(getattr(mat, "views", 0) or 0)
     file_name = os.path.basename(str(media_path)) if media_path else ""
     file_line = f"📁 <code>{html_mod.escape(file_name)}</code>\n" if file_name else ""
+    report = (getattr(mat, "schedule_report", None) or "").strip()
+    scheduled = report.startswith("Đã hẹn") or report.startswith("Đã có lịch")
+    report_line = f"📌 {html_mod.escape(report)}\n" if report else ""
+    headline = "Video đã xếp lịch" if scheduled else "Video sẵn sàng đăng tay"
 
     drive_line = (
         f"📂 Trong Drive: <code>{html_mod.escape(str(drive_path))}</code>\n" if drive_path else ""
@@ -302,7 +325,8 @@ def material_ready_message(
             f" của video #{mat.parent_material_id}\n"
         )
     head = (
-        f"🎬 <b>Video sẵn sàng đăng tay</b>\n"
+        f"🎬 <b>{headline}</b>\n"
+        f"{report_line}"
         f"{part_line}"
         f"📋 Material #{getattr(mat, 'id', '?')} | {html_mod.escape(platform)}\n"
         f"📝 <i>{html_mod.escape(title)}</i>\n"

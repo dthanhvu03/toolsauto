@@ -23,6 +23,10 @@ _VIDEO_EXT = frozenset({".mp4", ".mov", ".webm"})
 class BufferError(Exception):
     """Lỗi Buffer. Không chứa API key."""
 
+    def __init__(self, message: str, *, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 def _gql_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
@@ -50,7 +54,7 @@ class BufferClient:
         self._endpoint = endpoint
         self._timeout = timeout
 
-    def execute(self, query: str, variables: dict | None = None) -> dict[str, Any]:
+    def execute(self, query: str, variables: dict | None = None, *, partial: bool = False) -> dict[str, Any]:
         payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
@@ -68,9 +72,12 @@ class BufferClient:
             raise BufferError(f"Khong goi duoc Buffer: {exc.__class__.__name__}") from exc
 
         if response.status_code == 401:
-            raise BufferError("Buffer tu choi key (401). Lay key o Settings → API.")
+            raise BufferError("Buffer tu choi key (401). Lay key o Settings → API.", status_code=401)
         if response.status_code >= 400:
-            raise BufferError(f"Buffer HTTP {response.status_code}.")
+            raise BufferError(
+                f"Buffer HTTP {response.status_code}.",
+                status_code=response.status_code,
+            )
 
         try:
             body = response.json()
@@ -78,12 +85,12 @@ class BufferClient:
             raise BufferError("Buffer tra ve khong phai JSON.") from exc
 
         errors = body.get("errors") or []
-        if errors:
+        data = body.get("data")
+        if errors and not (partial and isinstance(data, dict)):
             message = "; ".join(
                 str(item.get("message") or "GraphQL error") for item in errors if isinstance(item, dict)
             )
             raise BufferError((message or "GraphQL error")[:300])
-        data = body.get("data")
         if not isinstance(data, dict):
             raise BufferError("Buffer khong tra data.")
         return data
@@ -219,16 +226,27 @@ class BufferClient:
             "deletePost",
         )
 
-    def edit_post(self, post_id: str, *, mode: str | None = None, save_to_draft: bool = False) -> dict:
+    def edit_post(
+        self,
+        post_id: str,
+        *,
+        mode: str | None = None,
+        save_to_draft: bool = False,
+        due_at: str | None = None,
+    ) -> dict:
         fields = [f"id: {_gql_string(post_id)}"]
         if mode:
             if mode not in MODES:
                 raise BufferError(f"Mode Buffer khong hop le: {mode}")
             fields.append(f"mode: {mode}")
+        if mode == "customScheduled" and not due_at:
+            raise BufferError("customScheduled can dueAt.")
+        if due_at:
+            fields.append(f"dueAt: {_gql_string(due_at)}")
         if save_to_draft:
             fields.append("saveToDraft: true")
         # Đổi lịch mà không gửi lại chữ, video và type thì Buffer coi bài là rỗng.
-        if mode or save_to_draft:
+        if mode or save_to_draft or due_at:
             fields.extend(self._kept_content_fields(post_id))
         return self._take_action(
             f"""
@@ -356,6 +374,29 @@ class BufferClient:
             return post
         raise BufferError("Khong thay bai tren Buffer.")
 
+    def post_statuses(self, post_ids: list[str]) -> dict[str, str]:
+        """Đọc status nhiều bài trong một request. Tránh gọi từng bài rồi dính 429."""
+        unique: list[str] = []
+        seen: set[str] = set()
+        for raw in post_ids:
+            pid = str(raw or "").strip()
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            unique.append(pid)
+        if not unique:
+            return {}
+        fields = [
+            f"p{index}: post(input: {{ id: {_gql_string(pid)} }}) {{ id status }}"
+            for index, pid in enumerate(unique)
+        ]
+        data = self.execute("query PostStatuses {\n" + "\n".join(fields) + "\n}", partial=True)
+        out: dict[str, str] = {}
+        for index, pid in enumerate(unique):
+            node = data.get(f"p{index}")
+            out[pid] = str(node.get("status") or "") if isinstance(node, dict) else ""
+        return out
+
     def post_detail(self, post_id: str) -> dict:
         pid = _gql_string(post_id)
         data = self.execute(
@@ -410,6 +451,75 @@ class BufferClient:
         if not text or not channel_id:
             raise BufferError("Khong du noi dung de nhan ban.")
         return self.create_post(text=text, channel_id=channel_id, media_url=media)
+
+    def schedule_block_reason(self, channel_id: str, when_ts: int) -> str | None:
+        """Hết suất thì trả câu tiếng Việt. Không chặn khi không đọc được số tuần hay số ngày."""
+        from datetime import datetime, timedelta, timezone
+
+        from app.features.buffer.when import quota_block_reason
+
+        ict = timezone(timedelta(hours=7))
+        when = datetime.fromtimestamp(int(when_ts), ict)
+        now = datetime.now(ict)
+        orgs = self.organizations()
+        if not orgs or not orgs[0].get("id"):
+            raise BufferError("Khong thay to chuc Buffer.")
+        org = _gql_string(str(orgs[0]["id"]))
+        data = self.execute(
+            f"""
+            query Limits {{
+              channels(input: {{ organizationId: {org} }}) {{
+                id
+                postingGoal {{
+                  goal
+                  scheduledCount
+                  sentCount
+                }}
+              }}
+            }}
+            """
+        )
+        week_left = None
+        for row in data.get("channels") or []:
+            if not isinstance(row, dict) or str(row.get("id") or "") != channel_id:
+                continue
+            goal = row.get("postingGoal") if isinstance(row.get("postingGoal"), dict) else None
+            if goal:
+                week_left = (
+                    int(goal.get("goal") or 0)
+                    - int(goal.get("sentCount") or 0)
+                    - int(goal.get("scheduledCount") or 0)
+                )
+            break
+        day_limit = day_sent = day_scheduled = None
+        if when.date() == now.date():
+            cid = _gql_string(channel_id)
+            daily = self.execute(
+                f"""
+                query Day {{
+                  dailyPostingLimits(input: {{ channelIds: [{cid}] }}) {{
+                    channelId
+                    limit
+                    scheduled
+                    sent
+                  }}
+                }}
+                """
+            )
+            for row in daily.get("dailyPostingLimits") or []:
+                if isinstance(row, dict) and row.get("channelId") == channel_id:
+                    day_limit = row.get("limit")
+                    day_sent = row.get("sent")
+                    day_scheduled = row.get("scheduled")
+                    break
+        return quota_block_reason(
+            when=when,
+            now=now,
+            week_left=week_left,
+            day_limit=day_limit,
+            day_sent=day_sent,
+            day_scheduled=day_scheduled,
+        )
 
     def quota_overview(self) -> tuple[str, list[dict]]:
         """Hạn đăng theo page. Trả (đoạn chữ, các bài đang xếp kèm nhãn)."""

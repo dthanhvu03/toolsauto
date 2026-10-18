@@ -16,6 +16,7 @@ import {
   Zap,
   LayoutGrid,
   Server,
+  Send,
 } from "lucide-react";
 
 export type NavItem = {
@@ -53,6 +54,7 @@ export const NATIVE_APP_PATHS = new Set([
   "/app/go/platform-config",
   "/app/go/syspanel",
   "/app/go/database",
+  "/app/go/telegram",
 ]);
 
 /** React routes under /app — remaining /app/go/* embed Jinja (embed=1). */
@@ -74,6 +76,7 @@ export const NAV_GROUPS: NavGroup[] = [
         classicHref: "/app/accounts",
       },
       { to: "/app/go/affiliates", label: "Kho affiliate", icon: Boxes, classicHref: "/affiliates" },
+      { to: "/app/go/telegram", label: "Telegram", icon: Send },
     ],
   },
   {

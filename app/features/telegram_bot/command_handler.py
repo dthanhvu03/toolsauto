@@ -46,6 +46,7 @@ class TelegramCommandHandler:
             "moi": self._cmd_moi,
             "sansang": self._cmd_sansang,
             "han": self._cmd_han,
+            "hen": self._cmd_hen,
             "so": self._cmd_so,
             "dadang": self._cmd_dadang,  # ADR-042
             "tai": self._cmd_tai,  # ADR-043
@@ -60,6 +61,7 @@ class TelegramCommandHandler:
         ("nguon", "Nguồn: /nguon · /nguon <id> <min> <max> · /nguon <id> xoa"),
         ("dadang", "Video đã đăng gần nhất (lùi lại nếu bấm nhầm)"),
         ("han", "Còn đăng được bao nhiêu bài: tuần, hôm nay, tháng"),
+        ("hen", "/hen <mã> 25/09 20:30 — hẹn hoặc đổi giờ bài đang chờ"),
         ("so", "Chỉ số từng kênh. Bấm tên page để xem bài của page đó"),
         ("tai", "/tai <link> — chỉ tải bản gốc về máy, không xào chẻ"),
         ("caidat", "Xem / đổi cài đặt luồng video ngay tại đây"),
@@ -505,6 +507,26 @@ class TelegramCommandHandler:
                 post.get("label") or "Bài đang xếp",
                 reply_markup=buffer_post_keyboard(post.get("id") or "", retry=bool(post.get("retry"))),
             )
+
+    def _cmd_hen(self, args=None):
+        """Đổi giờ bài đang chờ. Thiếu mã hoặc giờ sai thì không gọi nơi đăng."""
+        from app.features.buffer.when import SAMPLE, parse_when
+
+        parts = list(args or [])
+        if len(parts) < 3:
+            self.client.send_message(f"Giờ không đọc được. Mẫu {SAMPLE}.\n/hen <mã> 25/09 20:30")
+            return
+        post_id, when_text = parts[0], " ".join(parts[1:])
+        ts, err = parse_when(when_text)
+        if err or ts is None:
+            self.client.send_message(err or f"Giờ không đọc được. Mẫu {SAMPLE}.")
+            return
+        from app.core.database.core import SessionLocal
+        from app.features.buffer.queue_job import reschedule_by_post
+
+        with SessionLocal() as db:
+            ok, msg = reschedule_by_post(db, post_id, ts)
+        self.client.send_message(("✅ " if ok else "⚠️ ") + msg)
 
     def _cmd_so(self, args=None):
         """Chỉ số bài đã đăng trong tháng, lấy từ Buffer."""

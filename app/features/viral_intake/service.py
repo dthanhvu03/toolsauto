@@ -1022,6 +1022,10 @@ class ViralService:
                 video_path,
                 style=style,
                 context=context,
+                page_name=page_name_for_caption(
+                    getattr(mat, "target_page", None),
+                    _buffer_channels(db),
+                ),
             ) or {}
             caption = str(result.get("caption", "") or "").strip()
             if not caption:
@@ -1036,6 +1040,11 @@ class ViralService:
             hashtags = result.get("hashtags") or []
             if not isinstance(hashtags, list):
                 hashtags = []
+            caption, hashtags = drop_foreign_channel_names(
+                caption,
+                hashtags,
+                fallback=_clean_title_for_context(mat.title),
+            )
             mat.ai_caption = caption
             mat.ai_hashtags = json.dumps(
                 [str(h).strip() for h in hashtags if str(h or "").strip()],
@@ -1044,6 +1053,25 @@ class ViralService:
             mat.ai_caption_at = int(time.time())
             mat.ai_caption_error = None
             db.commit()
+            page = (getattr(mat, "target_page", None) or "").strip()
+            if page:
+                try:
+                    from app.features.buffer.queue_job import auto_schedule_ready
+
+                    ok_slot, slot_msg = auto_schedule_ready(db, mat.id)
+                    mat.schedule_report = slot_msg or ("Đã xếp lịch." if ok_slot else "Chưa tự đăng.")
+                    if not ok_slot and slot_msg and not slot_msg.startswith("Đã"):
+                        mat.schedule_report = f"Chưa tự đăng: {slot_msg}"
+                    logger.info("[VIRAL] Tự xếp lịch #%s: %s — %s", mat.id, ok_slot, slot_msg)
+                except Exception:
+                    logger.exception("[VIRAL] Tự xếp lịch #%s lỗi", mat.id)
+                    mat.schedule_report = "Chưa tự đăng: lỗi khi xếp lịch."
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
+            else:
+                mat.schedule_report = "Chưa chọn page cho nguồn này, nên chưa tự đăng."
             if notify:
                 NotifierService.notify_caption_ready(mat)  # ADR-022
             return True, f"Đã viết caption cho #{material_id}"
@@ -1067,6 +1095,86 @@ class ViralService:
 # ``processor.py`` làm sạch title trước khi nhét vào caption metadata.
 _MARKER_BLOCK_RE = re.compile(r"\s*###.*?###\s*", re.DOTALL)
 _AI_GENERATE_RE = re.compile(r"\[AI_GENERATE\]", re.IGNORECASE)
+
+
+# AI hay bịa tên kênh giải trí nổi tiếng vào caption thời trang của @nhung_1410tn.
+# Prompt đã cấm, model vẫn viết. Gỡ ở đây trước khi lưu.
+_FOREIGN_CHANNEL_PHRASE = re.compile(
+    r"ghiền\s*mì\s*gõ|ghien\s*mi\s*go|lala\s*school",
+    re.IGNORECASE,
+)
+_FOREIGN_CHANNEL_KEYS = ("ghienmigo", "lalaschool")
+_HASHTAG_TOKEN = re.compile(r"#[^\s#]+")
+_CHANNEL_CTA = re.compile(r"ghé\s+thăm\s+kênh|bấm\s+subscribe|\bsubscribe\b", re.IGNORECASE)
+
+
+def _fold_channel_key(text: str) -> str:
+    import unicodedata
+
+    norm = unicodedata.normalize("NFD", text or "")
+    norm = "".join(ch for ch in norm if unicodedata.category(ch) != "Mn")
+    norm = norm.replace("đ", "d").replace("Đ", "d")
+    return re.sub(r"[^a-z0-9]", "", norm.lower())
+
+
+def _is_foreign_channel_token(token: str) -> bool:
+    key = _fold_channel_key(token)
+    return any(brand in key for brand in _FOREIGN_CHANNEL_KEYS)
+
+
+def page_name_for_caption(target_page: str | None, channels: list | None = None) -> str:
+    """Id kênh Buffer → tên page. Không có tên thì trả chuỗi rỗng, không đưa id thô cho AI."""
+    value = str(target_page or "").strip()
+    if not value:
+        return ""
+    for item in channels or []:
+        if isinstance(item, dict) and str(item.get("id") or "").strip() == value:
+            return str(item.get("name") or "").strip()
+    if value.startswith("http"):
+        tail = value.rstrip("/").rsplit("/", 1)[-1]
+        return (tail or "")[:40]
+    return ""
+
+
+def _buffer_channels(db: Session) -> list:
+    from app.core import settings as runtime_settings
+
+    data = runtime_settings.get_json("BUFFER_CHANNELS", db=db) or []
+    return data if isinstance(data, list) else []
+
+
+def drop_foreign_channel_names(
+    caption: str,
+    hashtags: list | None = None,
+    *,
+    fallback: str = "",
+) -> tuple[str, list[str]]:
+    """Bỏ tên kênh AI tự bịa (Ghiền Mì Gõ, Lala School) khỏi caption và hashtag.
+
+    Câu chỉ còn lời mời ghé kênh / subscribe thì thay bằng tiêu đề gốc, đã bỏ hashtag.
+    """
+    kept: list[str] = []
+    for raw in hashtags or []:
+        tag = str(raw or "").strip()
+        if not tag or _is_foreign_channel_token(tag):
+            continue
+        kept.append(tag if tag.startswith("#") else f"#{tag}")
+
+    text = _HASHTAG_TOKEN.sub(
+        lambda m: "" if _is_foreign_channel_token(m.group(0)) else m.group(0),
+        caption or "",
+    )
+    text = _FOREIGN_CHANNEL_PHRASE.sub("", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    spare = _clean_title_for_context(fallback)
+    spare = _HASHTAG_TOKEN.sub("", spare)
+    spare = re.sub(r"\s+", " ", spare).strip()
+    if not text or _CHANNEL_CTA.search(text):
+        text = spare
+    return text, kept
 
 
 def _clean_title_for_context(title: str | None) -> str:

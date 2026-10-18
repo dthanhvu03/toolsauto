@@ -139,8 +139,40 @@ def test_http_401(monkeypatch):
         "app.features.buffer.client.requests.post",
         lambda *a, **k: _response({}, status=401),
     )
-    with pytest.raises(BufferError, match="401"):
+    with pytest.raises(BufferError, match="401") as caught:
         BufferClient("k").organizations()
+    assert caught.value.status_code == 401
+
+
+def test_http_429_giu_ma(monkeypatch):
+    monkeypatch.setattr(
+        "app.features.buffer.client.requests.post",
+        lambda *a, **k: _response({}, status=429),
+    )
+    with pytest.raises(BufferError, match="429") as caught:
+        BufferClient("k").organizations()
+    assert caught.value.status_code == 429
+
+
+def test_doc_trang_thai_nhieu_bai_mot_request(monkeypatch):
+    seen = {}
+
+    def fake_post(url, headers, json, timeout):
+        seen["query"] = json["query"]
+        return _response(
+            {
+                "data": {
+                    "p0": {"id": "a", "status": "sent"},
+                    "p1": None,
+                },
+                "errors": [{"message": "missing"}],
+            }
+        )
+
+    monkeypatch.setattr("app.features.buffer.client.requests.post", fake_post)
+    out = BufferClient("k").post_statuses(["a", "b", "a", ""])
+    assert out == {"a": "sent", "b": ""}
+    assert seen["query"].count("post(input:") == 2
 
 
 def test_public_media_rejects_local_file():

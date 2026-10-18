@@ -90,12 +90,13 @@ class BufferAdapter(AdapterInterface):
     def open_session(self, profile_path: str) -> bool:
         if self._client is not None:
             return True
-        key = api_key()
-        if not key:
-            logger.error("[Buffer] Thieu BUFFER_API_KEY.")
+        from app.features.buffer.manager import get_buffer_manager
+
+        mgr = get_buffer_manager()
+        if not mgr.has_keys():
+            logger.error("[Buffer] Thieu BUFFER_API_KEY hoac BUFFER_API_KEYS.")
             return False
-        self._client = BufferClient(key)
-        logger.info("[Buffer] Session API san sang.")
+        logger.info("[Buffer] Session API san sang (%d tai khoan).", len(mgr.get_clients()))
         return True
 
     def close_session(self):
@@ -113,7 +114,7 @@ class BufferAdapter(AdapterInterface):
             return PublishResult(
                 ok=False,
                 is_fatal=True,
-                error="Thieu BUFFER_API_KEY.",
+                error="Thieu BUFFER_API_KEY hoac BUFFER_API_KEYS.",
                 error_code="VALIDATION",
             )
 
@@ -134,9 +135,12 @@ class BufferAdapter(AdapterInterface):
                 error_code="VALIDATION",
             )
         try:
+            from app.features.buffer.manager import get_buffer_manager
+
+            client = self._client or get_buffer_manager().get_client_for_channel(channel)
             media = public_media_url(job)
             mode, due_at = schedule_mode(job)
-            post = self._client.create_post(
+            post = client.create_post(
                 text=text,
                 channel_id=channel,
                 mode=mode,
@@ -164,9 +168,16 @@ class BufferAdapter(AdapterInterface):
         if not post_id or post_id == "safe_mode_dry_run":
             return PublishResult(ok=False, error="Chua co post Buffer.")
         if self._client is None and not self.open_session(""):
-            return PublishResult(ok=False, error="Thieu BUFFER_API_KEY.")
+            return PublishResult(ok=False, error="Thieu BUFFER_API_KEY hoac BUFFER_API_KEYS.")
         try:
-            post = self._client.get_post(post_id)
+            from app.features.buffer.manager import get_buffer_manager
+
+            channel = channel_id_for(job)
+            mgr = get_buffer_manager()
+            client = self._client or (
+                mgr.get_client_for_channel(channel) if channel else mgr.get_client_for_post(post_id)
+            )
+            post = client.get_post(post_id)
         except BufferError as exc:
             return PublishResult(ok=False, error=str(exc)[:300])
         if not post:

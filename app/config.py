@@ -173,6 +173,7 @@ PLAYWRIGHT_DEFAULT_TIMEOUT_MS = int(os.getenv('PLAYWRIGHT_DEFAULT_TIMEOUT_MS', '
 # AI / Google AI Studio (Gemini)
 # Buffer GraphQL (https://api.buffer.com). Key: Buffer Settings → API. Không log giá trị.
 BUFFER_API_KEY = os.getenv("BUFFER_API_KEY", "")
+BUFFER_API_KEYS = os.getenv("BUFFER_API_KEYS", "")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_API_KEY = GEMINI_API_KEY  # alias

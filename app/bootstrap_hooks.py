@@ -113,7 +113,20 @@ def register_feature_hooks() -> None:
             .order_by(*((ViralMaterial.posted_at.desc().nullslast(),) if status == "POSTED" else ()), ViralMaterial.id.desc())
         )
         # Sẵn sàng mà không còn file reup thì không phải video để đăng. Bỏ khỏi /sansang.
+        # Đã xếp Buffer (hàng chờ hoặc hẹn giờ) cũng bỏ — hủy lịch thì job không còn DONE, video hiện lại.
         if status == "READY":
+            from app.constants import JobStatus
+            from app.core.database.models import Job
+
+            queued = (
+                db.query(Job.viral_material_id)
+                .filter(
+                    Job.platform == "buffer",
+                    Job.status == JobStatus.DONE,
+                    Job.viral_material_id.isnot(None),
+                )
+            )
+            query = query.filter(~ViralMaterial.id.in_(queued))
             rows = []
             for mat in query.limit(200).all():
                 if ViralService.find_reup_path(mat.id, mat.platform):
