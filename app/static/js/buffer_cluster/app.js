@@ -1,10 +1,10 @@
 /**
  * Entrypoint: Tích hợp Scene, Graph, Telemetry và Controls Manager
  */
-import { initScene } from './scene.js';
-import { ClusterGraph } from './graph.js';
-import { TelemetryService } from './telemetry.js';
-import { ClusterControlsManager } from './controls.js';
+import { initScene } from './scene.js?v=2.2';
+import { ClusterGraph } from './graph.js?v=2.2';
+import { TelemetryService } from './telemetry.js?v=2.2';
+import { ClusterControlsManager } from './controls.js?v=2.2';
 
 let autoRotate = true;
 
@@ -38,11 +38,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Nút Refresh
+  // Nút Refresh Telemetry (Cập nhật dữ liệu từ API)
   const refreshBtn = document.getElementById('btn-refresh');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
       telemetry.fetchStatus();
+    });
+  }
+
+  // Nút Tải lại toàn bộ App (Hard Reload & Xóa Cache)
+  const reloadBtn = document.getElementById('btn-hard-reload');
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', () => {
+      window.location.href = window.location.origin + window.location.pathname + '?_reload=' + Date.now();
     });
   }
 
