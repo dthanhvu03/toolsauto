@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   
   <!-- Modular Frontend CSS with cache-busting -->
-  <link rel="stylesheet" href="/static/css/buffer_cluster.css?v=2.2">
+  <link rel="stylesheet" href="/static/css/buffer_cluster.css?v=2.3">
 </head>
 <body>
 
@@ -68,15 +68,10 @@
       </div>
     </header>
 
-    <!-- Left Account Cards Selector -->
-    <div class="left-cluster-list interactive" id="account-cards-container">
-      <!-- Injected dynamically via JS Telemetry -->
-    </div>
-
     <!-- Backdrop Overlay for Mobile Bottom Sheet -->
     <div id="inspector-backdrop" class="inspector-backdrop interactive"></div>
 
-    <!-- Right Inspector Drawer (Slides in on node click) -->
+    <!-- Right Inspector Drawer (Slides in on node click / Native Bottom Sheet on Mobile) -->
     <div class="right-inspector glass-panel interactive" id="right-inspector">
       <div class="mobile-drag-handle"></div>
       <div class="inspector-title">
@@ -118,27 +113,35 @@
       </div>
     </div>
 
-    <!-- Bottom Bar Controls & Tips -->
-    <footer class="bottom-bar glass-panel interactive">
-      <div class="view-tips">
-        <div class="tip-item"><kbd>Chuột trái</kbd> Xoay góc 3D</div>
-        <div class="tip-item"><kbd>Cuộn chuột</kbd> Zoom phóng to / thu nhỏ</div>
-        <div class="tip-item"><kbd>Click Node</kbd> Xem thông số chi tiết</div>
+    <!-- Bottom Dock: Left Cards Carousel & Bottom Controls Bar -->
+    <div class="bottom-dock">
+      <!-- Left Account Cards Selector -->
+      <div class="left-cluster-list interactive" id="account-cards-container">
+        <!-- Injected dynamically via JS Telemetry -->
       </div>
 
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
-        <button class="btn-action" id="btn-toggle-rotate">
-          Dừng tự xoay
-        </button>
-        <button class="btn-action" id="btn-reset-cam">
-          Góc mặc định
-        </button>
-        <button class="btn-action" id="btn-hard-reload" title="Tải lại toàn bộ ứng dụng và xóa cache">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-          Tải lại app
-        </button>
-      </div>
-    </footer>
+      <!-- Bottom Bar Controls & Tips -->
+      <footer class="bottom-bar glass-panel interactive">
+        <div class="view-tips">
+          <div class="tip-item"><kbd>Chuột trái</kbd> Xoay góc 3D</div>
+          <div class="tip-item"><kbd>Cuộn chuột</kbd> Zoom phóng to / thu nhỏ</div>
+          <div class="tip-item"><kbd>Click Node</kbd> Xem thông số chi tiết</div>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+          <button class="btn-action" id="btn-toggle-rotate">
+            Dừng tự xoay
+          </button>
+          <button class="btn-action" id="btn-reset-cam">
+            Góc mặc định
+          </button>
+          <button class="btn-action" id="btn-hard-reload" title="Tải lại toàn bộ ứng dụng và xóa cache">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+            Tải lại app
+          </button>
+        </div>
+      </footer>
+    </div>
 
   </div>
 
@@ -147,6 +150,6 @@
   <script src="/static/vendor/three/OrbitControls.js"></script>
 
   <!-- Modular Application Entry Point with cache-busting -->
-  <script type="module" src="/static/js/buffer_cluster/app.js?v=2.2"></script>
+  <script type="module" src="/static/js/buffer_cluster/app.js?v=2.3"></script>
 </body>
 </html>

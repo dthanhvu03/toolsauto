@@ -45,11 +45,24 @@ export class ClusterControlsManager {
       });
     }
 
+    // Mobile swipe down to close Bottom Sheet
+    let sheetStartY = 0;
+    this.inspectorEl.addEventListener('touchstart', (e) => {
+      sheetStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    this.inspectorEl.addEventListener('touchend', (e) => {
+      const deltaY = e.changedTouches[0].clientY - sheetStartY;
+      if (deltaY > 50 && this.inspectorEl.scrollTop <= 5) {
+        this.closeInspector();
+      }
+    }, { passive: true });
+
     const resetCamBtn = document.getElementById('btn-reset-cam');
     if (resetCamBtn) {
       resetCamBtn.addEventListener('click', () => {
         const isMob = window.innerWidth <= 768;
-        this.smoothMoveCamera(new THREE.Vector3(0, isMob ? 180 : 140, isMob ? 360 : 280), new THREE.Vector3(0, 20, 0));
+        this.smoothMoveCamera(new THREE.Vector3(0, isMob ? 180 : 140, isMob ? 380 : 280), new THREE.Vector3(0, 20, 0));
       });
     }
 
@@ -134,13 +147,19 @@ export class ClusterControlsManager {
 
     document.querySelectorAll('.account-card').forEach(c => c.classList.remove('selected'));
     const activeCard = document.getElementById(`card-acc-${index}`);
-    if (activeCard) activeCard.classList.add('selected');
+    if (activeCard) {
+      activeCard.classList.add('selected');
+      activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
 
+    const isMobile = window.innerWidth <= 768;
     const targetPos = nodeObj.mesh.position.clone();
-    const cameraOffset = new THREE.Vector3(0, 30, 80);
+    // On mobile, keep node elevated in upper screen half so it's not hidden behind bottom sheet
+    const cameraOffset = isMobile ? new THREE.Vector3(0, 50, 110) : new THREE.Vector3(0, 30, 80);
+    const lookAtPos = isMobile ? targetPos.clone().add(new THREE.Vector3(0, -15, 0)) : targetPos;
     const newCamPos = targetPos.clone().add(cameraOffset);
 
-    this.smoothMoveCamera(newCamPos, targetPos);
+    this.smoothMoveCamera(newCamPos, lookAtPos);
   }
 
   smoothMoveCamera(toPos, lookAtPos) {

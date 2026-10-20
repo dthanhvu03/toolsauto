@@ -1,10 +1,10 @@
 /**
  * Entrypoint: Tích hợp Scene, Graph, Telemetry và Controls Manager
  */
-import { initScene } from './scene.js?v=2.2';
-import { ClusterGraph } from './graph.js?v=2.2';
-import { TelemetryService } from './telemetry.js?v=2.2';
-import { ClusterControlsManager } from './controls.js?v=2.2';
+import { initScene } from './scene.js?v=2.3';
+import { ClusterGraph } from './graph.js?v=2.3';
+import { TelemetryService } from './telemetry.js?v=2.3';
+import { ClusterControlsManager } from './controls.js?v=2.3';
 
 let autoRotate = true;
 
@@ -22,10 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const telemetry = new TelemetryService((data) => {
     graph.build(data);
 
-    // Mặc định focus vào Tài khoản #3 khi mở lần đầu
+    // Mặc định: Trên desktop focus & mở drawer; Trên mobile giữ toàn cảnh 3D thoáng đãng
+    const isMobile = window.innerWidth <= 768;
     if (data.accounts && data.accounts.length >= 3) {
-      controlsManager.focusAccountNode(3);
-      controlsManager.openInspector('account', data.accounts[2]);
+      if (!isMobile) {
+        controlsManager.focusAccountNode(3);
+        controlsManager.openInspector('account', data.accounts[2]);
+      }
     }
   });
 
@@ -38,19 +41,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Nút Refresh Telemetry (Cập nhật dữ liệu từ API)
+  // Nút Refresh
   const refreshBtn = document.getElementById('btn-refresh');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => {
       telemetry.fetchStatus();
-    });
-  }
-
-  // Nút Tải lại toàn bộ App (Hard Reload & Xóa Cache)
-  const reloadBtn = document.getElementById('btn-hard-reload');
-  if (reloadBtn) {
-    reloadBtn.addEventListener('click', () => {
-      window.location.href = window.location.origin + window.location.pathname + '?_reload=' + Date.now();
     });
   }
 
@@ -60,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     controls.update();
 
-    if (autoRotate && controls.state === -1) {
+    if (autoRotate && !controls.state == -1) {
       scene.rotation.y += 0.0012;
     }
 
