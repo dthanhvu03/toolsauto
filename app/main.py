@@ -38,6 +38,7 @@ from app.features.insights import router as insights
 from app.features.fb_pro_tasks import router as fb_pro_tasks
 from app.features.telegram_bot import router as telegram
 from app.features.buffer import router as buffer_media
+from app.features.buffer.cluster_router import router as buffer_cluster
 from app.features.viral_intake import router as viral
 from app.features.viral_intake import intro_router as viral_intros
 from app.core.notifier.service import NotifierService, TelegramNotifier
@@ -83,6 +84,7 @@ app.include_router(telegram.router)
 app.include_router(viral_intros.router)
 app.include_router(viral.router)
 app.include_router(buffer_media.router)
+app.include_router(buffer_cluster)
 app.include_router(insights.router)
 app.include_router(fb_pro_tasks.router)
 app.include_router(system_panel.router)
@@ -116,7 +118,7 @@ async def cookie_auth_middleware(request: Request, call_next):
         "/health/ui",
         "/health/gemini/cookie-sync",
     }
-    public_prefixes = ("/static", "/login", "/favicon.ico", "/buffer-media/")
+    public_prefixes = ("/static", "/login", "/favicon.ico", "/buffer-media/", "/buffer-cluster", "/api/buffer")
     if path in public_exact or any(path.startswith(p) for p in public_prefixes):
         return await call_next(request)
         

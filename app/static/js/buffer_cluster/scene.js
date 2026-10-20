@@ -10,10 +10,9 @@ export function initScene(containerId) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x07090e, 0.0018);
 
-  // Camera - adapt distance for mobile screens
-  const isMobile = window.innerWidth <= 768;
-  const camera = new THREE.PerspectiveCamera(isMobile ? 65 : 55, width / height, 0.1, 2000);
-  camera.position.set(0, isMobile ? 180 : 140, isMobile ? 360 : 280);
+  // Camera
+  const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 2000);
+  camera.position.set(0, 140, 280);
 
   // Renderer
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });

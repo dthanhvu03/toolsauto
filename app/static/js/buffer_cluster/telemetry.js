@@ -91,8 +91,34 @@ export class TelemetryService {
         <div class="channels-pill-row">${channelPills || '<span style="color: #64748b; font-size: 10px;">Chưa có kênh</span>'}</div>
       `;
 
-      card.addEventListener('click', () => {
-        window.dispatchEvent(new CustomEvent('cluster:select-account', { detail: { index: acc.index, account: acc } }));
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let touchMoved = false;
+
+      card.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchMoved = false;
+      }, { passive: true });
+
+      card.addEventListener('touchmove', (e) => {
+        const dx = Math.abs(e.touches[0].clientX - touchStartX);
+        const dy = Math.abs(e.touches[0].clientY - touchStartY);
+        if (dx > 10 || dy > 10) {
+          touchMoved = true;
+        }
+      }, { passive: true });
+
+      card.addEventListener('touchend', () => {
+        if (!touchMoved) {
+          window.dispatchEvent(new CustomEvent('cluster:select-account', { detail: { index: acc.index, account: acc } }));
+        }
+      });
+
+      card.addEventListener('click', (e) => {
+        if (e.pointerType === 'mouse' || !('ontouchstart' in window)) {
+          window.dispatchEvent(new CustomEvent('cluster:select-account', { detail: { index: acc.index, account: acc } }));
+        }
       });
 
       container.appendChild(card);

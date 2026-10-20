@@ -13,24 +13,43 @@ export class ClusterControlsManager {
     this.tooltipEl = document.getElementById('tooltip-3d');
     this.inspectorEl = document.getElementById('right-inspector');
 
+    this.pointerDownPos = { x: 0, y: 0 };
     this.initEvents();
   }
 
   initEvents() {
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
-    window.addEventListener('click', (e) => this.onMouseClick(e));
+    
+    // Prevent dragging to rotate from accidentally triggering node clicks
+    window.addEventListener('pointerdown', (e) => {
+      this.pointerDownPos = { x: e.clientX, y: e.clientY };
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      const dist = Math.hypot(e.clientX - this.pointerDownPos.x, e.clientY - this.pointerDownPos.y);
+      if (dist > 8) return; // User was dragging to rotate/pan, cancel click
+      this.onPointerClick(e);
+    });
 
     const closeBtn = document.getElementById('inspect-close');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
-        this.inspectorEl.classList.remove('visible');
+        this.closeInspector();
+      });
+    }
+
+    const backdrop = document.getElementById('inspector-backdrop');
+    if (backdrop) {
+      backdrop.addEventListener('click', () => {
+        this.closeInspector();
       });
     }
 
     const resetCamBtn = document.getElementById('btn-reset-cam');
     if (resetCamBtn) {
       resetCamBtn.addEventListener('click', () => {
-        this.smoothMoveCamera(new THREE.Vector3(0, 140, 280), new THREE.Vector3(0, 20, 0));
+        const isMob = window.innerWidth <= 768;
+        this.smoothMoveCamera(new THREE.Vector3(0, isMob ? 180 : 140, isMob ? 360 : 280), new THREE.Vector3(0, 20, 0));
       });
     }
 
@@ -40,17 +59,26 @@ export class ClusterControlsManager {
     });
   }
 
+  closeInspector() {
+    this.inspectorEl.classList.remove('visible');
+    const backdrop = document.getElementById('inspector-backdrop');
+    if (backdrop) backdrop.classList.remove('visible');
+  }
+
   onMouseMove(event) {
     this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     this.raycaster.setFromCamera(this.mouse, this.camera);
     const meshes = this.graph.getInteractiveMeshes();
-    const intersects = this.raycaster.intersectObjects(meshes);
+    const intersects = this.raycaster.intersectObjects(meshes, true);
 
     if (intersects.length > 0) {
       document.body.style.cursor = 'pointer';
-      const hit = intersects[0].object;
+      let hit = intersects[0].object;
+      while (hit && !hit.userData.type && hit.parent) {
+        hit = hit.parent;
+      }
       const u = hit.userData;
 
       this.tooltipEl.style.opacity = '1';
@@ -70,7 +98,7 @@ export class ClusterControlsManager {
     }
   }
 
-  onMouseClick(event) {
+  onPointerClick(event) {
     if (event.target.closest('.interactive')) return;
 
     this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -79,9 +107,12 @@ export class ClusterControlsManager {
       ...this.graph.channelNodes.map(c => c.mesh),
     ];
 
-    const intersects = this.raycaster.intersectObjects(meshes);
+    const intersects = this.raycaster.intersectObjects(meshes, true);
     if (intersects.length > 0) {
-      const hit = intersects[0].object;
+      let hit = intersects[0].object;
+      while (hit && !hit.userData.type && hit.parent) {
+        hit = hit.parent;
+      }
       const u = hit.userData;
 
       if (u.type === 'account') {
@@ -130,6 +161,8 @@ export class ClusterControlsManager {
 
   openInspector(type, data, parentAcc = null) {
     this.inspectorEl.classList.add('visible');
+    const backdrop = document.getElementById('inspector-backdrop');
+    if (backdrop) backdrop.classList.add('visible');
 
     const titleEl = document.getElementById('inspect-header-title');
     const emailEl = document.getElementById('inspect-email-text');
@@ -199,12 +232,36 @@ export class ClusterControlsManager {
   }
 }
 
+export function showToast(text, duration = 2200) {
+  const toast = document.getElementById('toast-msg');
+  if (!toast) return;
+  toast.textContent = text;
+  toast.classList.add('visible');
+  if (window._toastTimeout) clearTimeout(window._toastTimeout);
+  window._toastTimeout = setTimeout(() => {
+    toast.classList.remove('visible');
+  }, duration);
+}
+window.showToast = showToast;
+
 export function copyText(elementId) {
   const el = document.getElementById(elementId);
   if (!el) return;
-  const text = el.textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    alert('Đã sao chép: ' + text);
-  });
+  const text = el.textContent.trim();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('✓ Đã sao chép: ' + (text.length > 25 ? text.slice(0, 22) + '...' : text));
+    }).catch(() => {
+      showToast('Không thể sao chép');
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('✓ Đã sao chép: ' + (text.length > 25 ? text.slice(0, 22) + '...' : text));
+  }
 }
 window.copyText = copyText;

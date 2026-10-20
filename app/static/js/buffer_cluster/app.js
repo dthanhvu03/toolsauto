@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     controls.update();
 
-    if (autoRotate && !controls.state == -1) {
+    if (autoRotate && controls.state === -1) {
       scene.rotation.y += 0.0012;
     }
 
