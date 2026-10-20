@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Buffer 3D Neural Cluster // ToolsAuto Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #07090e;
+      --card-bg: rgba(14, 20, 33, 0.82);
+      --card-border: rgba(56, 189, 248, 0.22);
+      --accent-cyan: #00f0ff;
+      --accent-green: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-pink: #ec4899;
+      --accent-blue: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #webgl-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* UI Overlay Layer */
+    .hud-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px 24px;
+    }
+
+    .interactive {
+      pointer-events: auto;
+    }
+
+    /* Glass Panels */
+    .glass-panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 0 1px 1px rgba(255, 255, 255, 0.05);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .glass-panel:hover {
+      border-color: rgba(0, 240, 255, 0.4);
+      box-shadow: 0 12px 40px 0 rgba(0, 240, 255, 0.12);
+    }
+
+    /* Header Bar */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-orb {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 14px var(--accent-green);
+      animation: pulse-glow 2s infinite ease-in-out;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.7; }
+    }
+
+    .brand-name {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #ffffff 0%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-sub {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--accent-cyan);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .stats-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge-stat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 12px;
+    }
+
+    .badge-stat .val {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+    }
+
+    .btn-action {
+      background: rgba(14, 165, 233, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-action:hover {
+      background: rgba(14, 165, 233, 0.35);
+      color: #ffffff;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+      transform: translateY(-1px);
+    }
+
+    /* Left Sidebar: Account Cards */
+    .left-cluster-list {
+      position: absolute;
+      top: 90px;
+      left: 24px;
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .account-card {
+      padding: 16px;
+      cursor: pointer;
+      border-left: 4px solid var(--accent-cyan);
+    }
+
+    .account-card.active-state {
+      border-left-color: var(--accent-green);
+    }
+
+    .account-card.cooldown-state {
+      border-left-color: var(--accent-amber);
+    }
+
+    .account-card.selected {
+      background: rgba(14, 28, 48, 0.95);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 24px rgba(0, 240, 255, 0.25);
+      transform: translateX(6px);
+    }
+
+    .account-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .acc-index {
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .acc-status-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .tag-active {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .tag-cooldown {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+
+    .acc-email {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #e2e8f0;
+      margin-bottom: 6px;
+      word-break: break-all;
+    }
+
+    .acc-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .channels-pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 8px;
+    }
+
+    .chan-pill {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+    }
+
+    .chan-pill.fb { border-color: rgba(59, 130, 246, 0.4); color: #93c5fd; }
+    .chan-pill.tt { border-color: rgba(236, 72, 153, 0.4); color: #f472b6; }
+
+    /* Right Telemetry Drawer */
+    .right-inspector {
+      position: absolute;
+      top: 90px;
+      right: 24px;
+      width: 360px;
+      padding: 20px;
+      transform: translateX(400px);
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .right-inspector.visible {
+      transform: translateX(0);
+    }
+
+    .inspector-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .close-btn {
+      cursor: pointer;
+      font-size: 18px;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .close-btn:hover { color: #fff; }
+
+    .detail-row {
+      margin-bottom: 12px;
+    }
+
+    .detail-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .detail-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f1f5f9;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .copy-chip {
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .copy-chip:hover {
+      background: rgba(56, 189, 248, 0.4);
+    }
+
+    /* Bottom Control Bar */
+    .bottom-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 20px;
+    }
+
+    .view-tips {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .tip-item kbd {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #38bdf8;
+    }
+
+    /* 2D Floating Tooltip */
+    #tooltip-3d {
+      position: absolute;
+      padding: 8px 14px;
+      background: rgba(7, 10, 19, 0.9);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--accent-cyan);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 12px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, -120%);
+      transition: opacity 0.15s ease;
+      z-index: 100;
+      white-space: nowrap;
+      box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL Three.js Canvas -->
+  <div id="webgl-container"></div>
+
+  <!-- Floating 3D Tooltip -->
+  <div id="tooltip-3d"></div>
+
+  <!-- HUD Interface Layer -->
+  <div class="hud-layer">
+    
+    <!-- Top Header -->
+    <header class="header-bar glass-panel interactive">
+      <div class="brand-title">
+        <div class="status-orb" id="cluster-orb"></div>
+        <div>
+          <div class="brand-name">BUFFER 3D NEURAL CLUSTER</div>
+          <div class="brand-sub">ToolsAuto Core Multi-API Dispatcher</div>
+        </div>
+      </div>
+
+      <div class="stats-badge-group">
+        <div class="badge-stat">
+          <span style="color: var(--text-muted)">Tài khoản:</span>
+          <span class="val" id="stat-accounts" style="color: #38bdf8">3</span>
+        </div>
+        <div class="badge-stat">
+          <span style="color: var(--text-muted)">Hoạt động:</span>
+          <span class="val" id="stat-active" style="color: #34d399">2</span>
+        </div>
+        <div class="badge-stat">
+          <span style="color: var(--text-muted)">Cooldown (429):</span>
+          <span class="val" id="stat-cooldown" style="color: #fbbf24">1</span>
+        </div>
+        <div class="badge-stat">
+          <span style="color: var(--text-muted)">Tổng kênh:</span>
+          <span class="val" id="stat-channels" style="color: #f472b6">8</span>
+        </div>
+        <div class="badge-stat">
+          <span style="color: var(--text-muted)">Bài chờ:</span>
+          <span class="val" id="stat-queue" style="color: #a78bfa">7</span>
+        </div>
+
+        <button class="btn-action" id="btn-refresh" title="Làm mới trạng thái">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          Làm mới
+        </button>
+
+        <a href="/app" class="btn-action" style="background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); color: #fff;">
+          Dashboard 2D
+        </a>
+      </div>
+    </header>
+
+    <!-- Left Account Cards Selector -->
+    <div class="left-cluster-list interactive" id="account-cards-container">
+      <!-- Injected dynamically via JS -->
+    </div>
+
+    <!-- Right Inspector Drawer (Slides in on click) -->
+    <div class="right-inspector glass-panel interactive" id="right-inspector">
+      <div class="inspector-title">
+        <span id="inspect-header-title">CHI TIẾT TÀI KHOẢN</span>
+        <span class="close-btn" id="inspect-close">&times;</span>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">Email Quản Lý</div>
+        <div class="detail-val" id="inspect-email">
+          <span id="inspect-email-text">--</span>
+          <span class="copy-chip" onclick="copyText('inspect-email-text')">Copy</span>
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">API Key (Token)</div>
+        <div class="detail-val" id="inspect-key">
+          <span id="inspect-key-text">--</span>
+          <span class="copy-chip" onclick="copyText('inspect-key-text')">Copy</span>
+        </div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">Trạng Thái Kết Nối</div>
+        <div class="detail-val" id="inspect-status">--</div>
+      </div>
+
+      <div class="detail-row" id="inspect-cooldown-row" style="display: none;">
+        <div class="detail-label">Thời Gian Đếm Ngược Reset (429)</div>
+        <div class="detail-val" style="color: #fbbf24;" id="inspect-cooldown-timer">--:--:--</div>
+      </div>
+
+      <div class="detail-row">
+        <div class="detail-label">Danh Sách Kênh Kết Nối (<span id="inspect-channel-count">0</span>)</div>
+        <div id="inspect-channels-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+          <!-- Channel items -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Bar Controls & Tips -->
+    <footer class="bottom-bar glass-panel interactive">
+      <div class="view-tips">
+        <div class="tip-item"><kbd>Chuột trái</kbd> Xoay góc 3D</div>
+        <div class="tip-item"><kbd>Cuộn chuột</kbd> Zoom phóng to / thu nhỏ</div>
+        <div class="tip-item"><kbd>Click Node</kbd> Xem thông số chi tiết</div>
+      </div>
+
+      <div style="display: flex; gap: 10px;">
+        <button class="btn-action" id="btn-toggle-rotate">
+          Dừng tự xoay
+        </button>
+        <button class="btn-action" id="btn-reset-cam">
+          Góc mặc định
+        </button>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Load Local Three.js & OrbitControls -->
+  <script src="/static/js/three.min.js"></script>
+  <script src="/static/js/OrbitControls.js"></script>
+
+  <script>
+    // ── Global State & Variables ──────────────────────────────────────
+    let scene, camera, renderer, controls;
+    let clusterData = null;
+    let accountNodes = [];
+    let channelNodes = [];
+    let coreNode = null;
+    let particleSystems = [];
+    let splineCurves = [];
+    let autoRotate = true;
+    let selectedObject = null;
+    let raycaster, mouse;
+    const tooltipEl = document.getElementById('tooltip-3d');
+    const inspectorEl = document.getElementById('right-inspector');
+
+    // ── 1. Initialize Three.js Scene ──────────────────────────────────
+    function initThree() {
+      const container = document.getElementById('webgl-container');
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      // Scene
+      scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x07090e, 0.0018);
+
+      // Camera
+      camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 2000);
+      camera.position.set(0, 140, 280);
+
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.2;
+      container.appendChild(renderer.domElement);
+
+      // Controls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxDistance = 600;
+      controls.minDistance = 60;
+      controls.maxPolarAngle = Math.PI / 2 + 0.1;
+
+      // Lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+      scene.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0x00f0ff, 1.8);
+      dirLight1.position.set(100, 200, 100);
+      scene.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0xec4899, 1.2);
+      dirLight2.position.set(-100, -100, -100);
+      scene.add(dirLight2);
+
+      // Raycasting
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      // Environment helpers: Ground Grid & Starfield
+      createCyberGrid();
+      createStarfield();
+
+      // Window Resize Listener
+      window.addEventListener('resize', onWindowResize);
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('click', onMouseClick);
+    }
+
+    // ── 2. Environment Helpers ─────────────────────────────────────────
+    function createCyberGrid() {
+      const size = 600;
+      const divisions = 50;
+      const gridHelper = new THREE.GridHelper(size, divisions, 0x00f0ff, 0x112233);
+      gridHelper.position.y = -60;
+      gridHelper.material.opacity = 0.35;
+      gridHelper.material.transparent = true;
+      scene.add(gridHelper);
+    }
+
+    function createStarfield() {
+      const count = 1200;
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * 1200;
+        positions[i * 3 + 1] = (Math.random() - 0.5) * 800;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * 1200;
+
+        const isCyan = Math.random() > 0.5;
+        colors[i * 3] = isCyan ? 0.0 : 0.9;
+        colors[i * 3 + 1] = isCyan ? 0.8 : 0.3;
+        colors[i * 3 + 2] = 1.0;
+      }
+
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: 2,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.7,
+      });
+
+      const starMesh = new THREE.Points(geometry, material);
+      scene.add(starMesh);
+    }
+
+    // ── 3. Build Neural Cluster Graph ─────────────────────────────────
+    function buildClusterGraph(data) {
+      // Clear existing dynamic nodes
+      accountNodes.forEach(n => scene.remove(n.mesh));
+      channelNodes.forEach(n => scene.remove(n.mesh));
+      if (coreNode) scene.remove(coreNode);
+      splineCurves.forEach(c => scene.remove(c.lineMesh));
+      particleSystems.forEach(p => scene.remove(p.points));
+
+      accountNodes = [];
+      channelNodes = [];
+      splineCurves = [];
+      particleSystems = [];
+
+      // ── A. Central Core Node ("ToolsAuto Dispatcher Hub") ─────────────
+      const coreGeo = new THREE.SphereGeometry(16, 32, 32);
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: 0x00f0ff,
+        emissive: 0x0088cc,
+        emissiveIntensity: 0.8,
+        roughness: 0.2,
+        metalness: 0.8,
+      });
+      coreNode = new THREE.Mesh(coreGeo, coreMat);
+      coreNode.position.set(0, 20, 0);
+      coreNode.userData = { type: 'core', name: 'ToolsAuto Gateway Core' };
+      scene.add(coreNode);
+
+      // Core Spinning Rings
+      const ringGeo = new THREE.TorusGeometry(26, 0.8, 16, 100);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, wireframe: true });
+      const coreRing = new THREE.Mesh(ringGeo, ringMat);
+      coreRing.rotation.x = Math.PI / 3;
+      coreNode.add(coreRing);
+
+      const accounts = data.accounts || [];
+      const numAccounts = accounts.length;
+      const orbitRadius = 90;
+
+      accounts.forEach((acc, i) => {
+        const angle = (i / numAccounts) * Math.PI * 2;
+        const ax = Math.cos(angle) * orbitRadius;
+        const az = Math.sin(angle) * orbitRadius;
+        const ay = 15 + (i % 2 === 0 ? 10 : -10);
+
+        // Account Node Color based on Status
+        const isCooldown = acc.status === 'COOLDOWN';
+        const accColor = isCooldown ? 0xf59e0b : (acc.index === 3 ? 0x00f0ff : 0x10b981);
+        const emissiveColor = isCooldown ? 0xb45309 : 0x047857;
+
+        // Account Mesh
+        const accGeo = new THREE.DodecahedronGeometry(12, 1);
+        const accMat = new THREE.MeshStandardMaterial({
+          color: accColor,
+          emissive: emissiveColor,
+          emissiveIntensity: 0.6,
+          roughness: 0.3,
+          metalness: 0.6,
+        });
+        const accMesh = new THREE.Mesh(accGeo, accMat);
+        accMesh.position.set(ax, ay, az);
+        accMesh.userData = { type: 'account', data: acc };
+        scene.add(accMesh);
+
+        // Account Outer Energy Halo
+        const haloGeo = new THREE.RingGeometry(16, 18, 32);
+        const haloMat = new THREE.MeshBasicMaterial({
+          color: accColor,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.45,
+        });
+        const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+        haloMesh.rotation.x = Math.PI / 2;
+        accMesh.add(haloMesh);
+
+        accountNodes.push({ mesh: accMesh, data: acc });
+
+        // Energy Spline Line: Core -> Account
+        createLaserConnection(coreNode.position, accMesh.position, accColor);
+
+        // ── Channels (Satellite Nodes) for this Account ───────────────
+        const channels = acc.channels || [];
+        const numChannels = channels.length;
+        const chanOrbitRadius = 38;
+
+        channels.forEach((ch, ci) => {
+          const chanAngle = angle - 0.7 + (ci / Math.max(numChannels - 1, 1)) * 1.4;
+          const cx = ax + Math.cos(chanAngle) * chanOrbitRadius;
+          const cz = az + Math.sin(chanAngle) * chanOrbitRadius;
+          const cy = ay + (ci % 2 === 0 ? 12 : -12);
+
+          const isTikTok = (ch.service || '').toLowerCase().includes('tiktok');
+          const chanColor = isTikTok ? 0xec4899 : 0x3b82f6;
+
+          const chanGeo = new THREE.SphereGeometry(6, 24, 24);
+          const chanMat = new THREE.MeshStandardMaterial({
+            color: chanColor,
+            emissive: chanColor,
+            emissiveIntensity: 0.4,
+            roughness: 0.4,
+          });
+          const chanMesh = new THREE.Mesh(chanGeo, chanMat);
+          chanMesh.position.set(cx, cy, cz);
+          chanMesh.userData = { type: 'channel', data: ch, parentAccount: acc };
+          scene.add(chanMesh);
+
+          channelNodes.push({ mesh: chanMesh, data: ch });
+
+          // Spline: Account -> Channel
+          createLaserConnection(accMesh.position, chanMesh.position, chanColor, 0.5);
+        });
+      });
+    }
+
+    // ── 4. Connection Lines & Animated Flow Packets ────────────────────
+    function createLaserConnection(p1, p2, colorHex, particleSpeed = 1.0) {
+      // Smooth Quadratic Bezier curve with upward midpoint arc
+      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+      mid.y += 10;
+
+      const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
+      const points = curve.getPoints(30);
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+
+      const material = new THREE.LineBasicMaterial({
+        color: colorHex,
+        transparent: true,
+        opacity: 0.35,
+      });
+      const lineMesh = new THREE.Line(geometry, material);
+      scene.add(lineMesh);
+      splineCurves.push({ curve, lineMesh });
+
+      // Flowing data particle along this spline
+      const pGeo = new THREE.BufferGeometry();
+      pGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p1.x, p1.y, p1.z]), 3));
+      const pMat = new THREE.PointsMaterial({
+        color: colorHex,
+        size: 5,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const particleMesh = new THREE.Points(pGeo, pMat);
+      scene.add(particleMesh);
+
+      particleSystems.push({
+        points: particleMesh,
+        curve: curve,
+        progress: Math.random(),
+        speed: (0.003 + Math.random() * 0.002) * particleSpeed,
+      });
+    }
+
+    // ── 5. Render Left Sidebar Account Cards ──────────────────────────
+    function renderAccountCards(data) {
+      const container = document.getElementById('account-cards-container');
+      container.innerHTML = '';
+
+      (data.accounts || []).forEach(acc => {
+        const isCooldown = acc.status === 'COOLDOWN';
+        const stateClass = isCooldown ? 'cooldown-state' : 'active-state';
+
+        const card = document.createElement('div');
+        card.className = `account-card glass-panel ${stateClass}`;
+        card.id = `card-acc-${acc.index}`;
+
+        const channelPills = (acc.channels || []).map(ch => {
+          const isTT = (ch.service || '').toLowerCase().includes('tiktok');
+          const typeClass = isTT ? 'tt' : 'fb';
+          const icon = isTT ? '🎵' : '📘';
+          return `<span class="chan-pill ${typeClass}">${icon} ${ch.name} (${ch.pendingCount})</span>`;
+        }).join('');
+
+        card.innerHTML = `
+          <div class="account-card-header">
+            <div class="acc-index">
+              <span>#${acc.index}</span>
+              <span>${acc.name}</span>
+            </div>
+            <span class="acc-status-tag ${isCooldown ? 'tag-cooldown' : 'tag-active'}">
+              ${isCooldown ? 'COOLDOWN (429)' : 'ACTIVE'}
+            </span>
+          </div>
+          <div class="acc-email">${acc.email}</div>
+          <div class="acc-meta">
+            <span>Key: <code style="color: #38bdf8">${acc.maskedKey}</code></span>
+            <span>Kênh: <b>${acc.channelCount}/3</b></span>
+          </div>
+          <div class="channels-pill-row">${channelPills || '<span style="color: #64748b; font-size: 10px;">Chưa có kênh</span>'}</div>
+        `;
+
+        card.addEventListener('click', () => {
+          focusAccountNode(acc.index);
+          openInspector('account', acc);
+        });
+
+        container.appendChild(card);
+      });
+    }
+
+    // ── 6. Inspector Panel Logic ───────────────────────────────────────
+    function openInspector(type, data, parentAcc = null) {
+      inspectorEl.classList.add('visible');
+
+      const titleEl = document.getElementById('inspect-header-title');
+      const emailEl = document.getElementById('inspect-email-text');
+      const keyEl = document.getElementById('inspect-key-text');
+      const statusEl = document.getElementById('inspect-status');
+      const cooldownRow = document.getElementById('inspect-cooldown-row');
+      const cooldownTimer = document.getElementById('inspect-cooldown-timer');
+      const chanCountEl = document.getElementById('inspect-channel-count');
+      const chanListEl = document.getElementById('inspect-channels-list');
+
+      if (type === 'account') {
+        titleEl.textContent = `${data.name.toUpperCase()} TELEMETRY`;
+        emailEl.textContent = data.email || 'Chưa rõ';
+        keyEl.textContent = data.maskedKey || '--';
+
+        if (data.status === 'COOLDOWN') {
+          statusEl.innerHTML = `<span style="color: #fbbf24; font-weight: 700;">🟡 TẠM KHÓA TẦN SUẤT (HTTP 429)</span>`;
+          cooldownRow.style.display = 'block';
+          formatCountdown(cooldownTimer, data.cooldownSeconds);
+        } else {
+          statusEl.innerHTML = `<span style="color: #34d399; font-weight: 700;">🟢 HOẠT ĐỘNG TỐT (200 OK)</span>`;
+          cooldownRow.style.display = 'none';
+        }
+
+        chanCountEl.textContent = data.channels ? data.channels.length : 0;
+        chanListEl.innerHTML = (data.channels || []).map(ch => {
+          const isTT = (ch.service || '').toLowerCase().includes('tiktok');
+          const nextTime = ch.nextPostTime ? `Lịch tiếp: <b>${ch.nextPostTime}</b>` : 'Chưa có lịch tiếp';
+          return `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); padding: 8px 12px; border-radius: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 700; color: ${isTT ? '#f472b6' : '#93c5fd'}">${isTT ? '🎵' : '📘'} ${ch.name}</span>
+                <span style="font-size: 11px; background: rgba(0,240,255,0.15); color: #38bdf8; padding: 2px 6px; border-radius: 4px;">${ch.pendingCount} bài chờ</span>
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted);">${nextTime}</div>
+            </div>
+          `;
+        }).join('') || '<div style="color: #64748b; font-size: 12px;">Không có kênh nào</div>';
+
+      } else if (type === 'channel') {
+        const isTT = (data.service || '').toLowerCase().includes('tiktok');
+        titleEl.textContent = `KÊNH: ${data.name.toUpperCase()}`;
+        emailEl.textContent = parentAcc ? parentAcc.email : '--';
+        keyEl.textContent = parentAcc ? parentAcc.maskedKey : '--';
+        statusEl.innerHTML = `<span style="color: ${isTT ? '#f472b6' : '#60a5fa'}; font-weight: 700;">${isTT ? 'TIKTOK' : 'FACEBOOK PAGE'}</span>`;
+        cooldownRow.style.display = 'none';
+        chanCountEl.textContent = '1';
+        chanListEl.innerHTML = `
+          <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px;">
+            <div style="font-size: 12px; margin-bottom: 6px;">ID: <code>${data.id}</code></div>
+            <div style="font-size: 12px; margin-bottom: 6px;">Hàng chờ: <b>${data.pendingCount} bài</b></div>
+            <div style="font-size: 12px; color: #38bdf8;">${data.nextPostTime ? `Lịch tiếp theo: ${data.nextPostTime}` : 'Đang chờ nội dung mới'}</div>
+          </div>
+        `;
+      }
+    }
+
+    function formatCountdown(element, seconds) {
+      if (!seconds || seconds <= 0) {
+        element.textContent = 'Hết thời gian chờ';
+        return;
+      }
+      const hrs = Math.floor(seconds / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      element.textContent = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // ── 7. Camera Focus Transition ─────────────────────────────────────
+    function focusAccountNode(index) {
+      const nodeObj = accountNodes.find(n => n.data.index === index);
+      if (!nodeObj) return;
+
+      // Highlight Left Card
+      document.querySelectorAll('.account-card').forEach(c => c.classList.remove('selected'));
+      const activeCard = document.getElementById(`card-acc-${index}`);
+      if (activeCard) activeCard.classList.add('selected');
+
+      // Camera Fly-To
+      const targetPos = nodeObj.mesh.position.clone();
+      const cameraOffset = new THREE.Vector3(0, 30, 80);
+      const newCamPos = targetPos.clone().add(cameraOffset);
+
+      smoothMoveCamera(newCamPos, targetPos);
+    }
+
+    function smoothMoveCamera(toPos, lookAtPos) {
+      const startPos = camera.position.clone();
+      const startLookAt = controls.target.clone();
+      let t = 0;
+
+      function anim() {
+        t += 0.04;
+        camera.position.lerpVectors(startPos, toPos, easeOutCubic(t));
+        controls.target.lerpVectors(startLookAt, lookAtPos, easeOutCubic(t));
+        if (t < 1) {
+          requestAnimationFrame(anim);
+        }
+      }
+      anim();
+    }
+
+    function easeOutCubic(x) {
+      return 1 - Math.pow(1 - x, 3);
+    }
+
+    // ── 8. Raycasting & Interaction ────────────────────────────────────
+    function onMouseMove(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const interactiveMeshes = [
+        coreNode,
+        ...accountNodes.map(a => a.mesh),
+        ...channelNodes.map(c => c.mesh),
+      ].filter(Boolean);
+
+      const intersects = raycaster.intersectObjects(interactiveMeshes);
+
+      if (intersects.length > 0) {
+        document.body.style.cursor = 'pointer';
+        const hit = intersects[0].object;
+        const u = hit.userData;
+
+        tooltipEl.style.opacity = '1';
+        tooltipEl.style.left = `${event.clientX}px`;
+        tooltipEl.style.top = `${event.clientY}px`;
+
+        if (u.type === 'core') {
+          tooltipEl.innerHTML = `<b>ToolsAuto Core Dispatcher</b><br><span style="color: #38bdf8">Cổng điều phối trung tâm</span>`;
+        } else if (u.type === 'account') {
+          tooltipEl.innerHTML = `<b>${u.data.name}</b> (${u.data.status})<br><span style="color: #38bdf8">📧 ${u.data.email}</span>`;
+        } else if (u.type === 'channel') {
+          tooltipEl.innerHTML = `<b>${u.data.name}</b><br><span style="color: #f472b6">Bài chờ: ${u.data.pendingCount} bài</span>`;
+        }
+      } else {
+        document.body.style.cursor = 'default';
+        tooltipEl.style.opacity = '0';
+      }
+    }
+
+    function onMouseClick(event) {
+      if (event.target.closest('.interactive')) return;
+
+      raycaster.setFromCamera(mouse, camera);
+      const interactiveMeshes = [
+        ...accountNodes.map(a => a.mesh),
+        ...channelNodes.map(c => c.mesh),
+      ];
+
+      const intersects = raycaster.intersectObjects(interactiveMeshes);
+      if (intersects.length > 0) {
+        const hit = intersects[0].object;
+        const u = hit.userData;
+
+        if (u.type === 'account') {
+          focusAccountNode(u.data.index);
+          openInspector('account', u.data);
+        } else if (u.type === 'channel') {
+          openInspector('channel', u.data, u.parentAccount);
+          smoothMoveCamera(
+            hit.position.clone().add(new THREE.Vector3(0, 15, 40)),
+            hit.position.clone()
+          );
+        }
+      }
+    }
+
+    // ── 9. Fetch Live Cluster Telemetry ────────────────────────────────
+    async function loadClusterTelemetry() {
+      try {
+        const btn = document.getElementById('btn-refresh');
+        btn.innerHTML = 'Đang tải...';
+
+        const res = await fetch('/api/buffer/cluster-status');
+        const data = await res.json();
+        if (data.ok) {
+          clusterData = data;
+          updateHeaderStats(data.summary);
+          buildClusterGraph(data);
+          renderAccountCards(data);
+
+          // Auto-select Account #3 by default on first load
+          if (data.accounts && data.accounts.length >= 3) {
+            focusAccountNode(3);
+            openInspector('account', data.accounts[2]);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load cluster telemetry:', err);
+      } finally {
+        const btn = document.getElementById('btn-refresh');
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg> Làm mới`;
+      }
+    }
+
+    function updateHeaderStats(summary) {
+      if (!summary) return;
+      document.getElementById('stat-accounts').textContent = summary.totalAccounts || 0;
+      document.getElementById('stat-active').textContent = summary.activeAccounts || 0;
+      document.getElementById('stat-cooldown').textContent = summary.cooldownAccounts || 0;
+      document.getElementById('stat-channels').textContent = summary.totalChannels || 0;
+      document.getElementById('stat-queue').textContent = summary.totalQueuedPosts || 0;
+
+      const orb = document.getElementById('cluster-orb');
+      if (summary.activeAccounts > 0) {
+        orb.style.background = 'var(--accent-green)';
+        orb.style.boxShadow = '0 0 14px var(--accent-green)';
+      } else {
+        orb.style.background = 'var(--accent-amber)';
+        orb.style.boxShadow = '0 0 14px var(--accent-amber)';
+      }
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // ── 10. Animation Loop ─────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Core rotation
+      if (coreNode) {
+        coreNode.rotation.y += 0.006;
+      }
+
+      // Orbit controls damping
+      controls.update();
+
+      // Auto-rotate scene when idle
+      if (autoRotate && !controls.state == -1) {
+        scene.rotation.y += 0.0012;
+      }
+
+      // Update particle flows along splines
+      particleSystems.forEach(p => {
+        p.progress += p.speed;
+        if (p.progress > 1) p.progress = 0;
+        const pt = p.curve.getPoint(p.progress);
+        const pos = p.points.geometry.attributes.position;
+        pos.setXYZ(0, pt.x, pt.y, pt.z);
+        pos.needsUpdate = true;
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    // ── 11. Helper Utils & Event Handlers ──────────────────────────────
+    function copyText(elementId) {
+      const text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Đã sao chép: ' + text);
+      });
+    }
+
+    document.getElementById('inspect-close').addEventListener('click', () => {
+      inspectorEl.classList.remove('visible');
+    });
+
+    document.getElementById('btn-refresh').addEventListener('click', () => {
+      loadClusterTelemetry();
+    });
+
+    document.getElementById('btn-toggle-rotate').addEventListener('click', (e) => {
+      autoRotate = !autoRotate;
+      e.target.textContent = autoRotate ? 'Dừng tự xoay' : 'Bật tự xoay';
+    });
+
+    document.getElementById('btn-reset-cam').addEventListener('click', () => {
+      smoothMoveCamera(new THREE.Vector3(0, 140, 280), new THREE.Vector3(0, 20, 0));
+    });
+
+    // Boot
+    initThree();
+    animate();
+    loadClusterTelemetry();
+
+    // Auto-refresh telemetry every 20 seconds
+    setInterval(loadClusterTelemetry, 20000);
+  </script>
+</body>
+</html>
