@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from app.constants import JobStatus
@@ -162,3 +162,15 @@ def get_cluster_status():
 def render_buffer_cluster(request: Request):
     """Trang giao diện 3D Three.js giám sát cụm tài khoản Buffer."""
     return templates.TemplateResponse("pages/buffer_3d_cluster.html", {"request": request})
+
+
+@router.get("/manifest.json")
+def get_manifest():
+    """Manifest định danh Web App PWA."""
+    return FileResponse("app/static/manifest.json", media_type="application/manifest+json")
+
+
+@router.get("/sw.js")
+def get_service_worker():
+    """Service Worker quản lý bộ nhớ đệm và offline cache."""
+    return FileResponse("app/static/sw.js", media_type="application/javascript")

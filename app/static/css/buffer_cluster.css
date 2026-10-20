@@ -407,11 +407,6 @@ body {
   transform: translateX(-50%) translateY(0);
 }
 
-/* Bottom Dock (Desktop: transparent layout, Mobile: stacked controls) */
-.bottom-dock {
-  display: contents;
-}
-
 /* 2D Floating Tooltip */
 #tooltip-3d {
   position: absolute;
@@ -439,7 +434,7 @@ body {
   }
 
   .hud-layer {
-    padding: max(12px, env(safe-area-inset-top, 12px)) 12px max(8px, env(safe-area-inset-bottom, 8px)) 12px;
+    padding: 10px;
   }
 
   .header-bar {
@@ -462,7 +457,6 @@ body {
     padding-bottom: 2px;
     gap: 6px;
     scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
   }
   .stats-badge-group::-webkit-scrollbar { display: none; }
 
@@ -477,39 +471,28 @@ body {
     font-size: 11px;
   }
 
-  /* Bottom Dock: Natural flex-column stacking, zero overlap */
-  .bottom-dock {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-    z-index: 20;
-    pointer-events: none;
-    margin-bottom: max(0px, env(safe-area-inset-bottom, 0px));
-  }
-
   /* Left Cards become a horizontal bottom carousel above the controls bar */
   .left-cluster-list {
-    position: static;
-    width: 100%;
-    display: flex;
+    top: auto;
+    bottom: 54px;
+    left: 8px;
+    right: 8px;
+    width: auto;
     flex-direction: row;
     overflow-x: auto;
     max-height: none;
     gap: 8px;
-    padding: 2px 2px 4px 2px;
+    padding-bottom: 4px;
+    z-index: 20;
     scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    pointer-events: auto;
   }
   .left-cluster-list::-webkit-scrollbar { display: none; }
 
   .account-card {
-    min-width: 195px;
-    max-width: 215px;
-    padding: 8px 10px;
+    min-width: 220px;
+    padding: 10px 12px;
     flex-shrink: 0;
-    border-radius: 10px;
+    border-radius: 12px;
   }
 
   .account-card.selected {
@@ -538,14 +521,12 @@ body {
     left: 0;
     right: 0;
     width: 100%;
-    max-height: 70vh;
+    max-height: 65vh;
     border-radius: 20px 20px 0 0;
     transform: translateY(105%);
-    padding: 14px 16px max(24px, env(safe-area-inset-bottom, 24px)) 16px;
+    padding: 14px 16px 24px 16px;
     z-index: 50;
     box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
   }
 
   .right-inspector.visible {
@@ -555,20 +536,18 @@ body {
   .mobile-drag-handle {
     display: block;
     width: 40px;
-    height: 5px;
+    height: 4px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.3);
     margin: -4px auto 12px auto;
   }
 
   .bottom-bar {
-    width: 100%;
     padding: 6px 12px;
     border-radius: 12px;
     justify-content: center;
-    gap: 8px;
-    pointer-events: auto;
-    margin-bottom: 0;
+    gap: 10px;
+    margin-bottom: max(0px, env(safe-area-inset-bottom));
   }
 
   .view-tips {

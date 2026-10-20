@@ -45,7 +45,7 @@ export class ClusterControlsManager {
       });
     }
 
-    // Mobile swipe down to close Bottom Sheet
+    // Mobile Swipe down to close Bottom Sheet
     let sheetStartY = 0;
     this.inspectorEl.addEventListener('touchstart', (e) => {
       sheetStartY = e.touches[0].clientY;

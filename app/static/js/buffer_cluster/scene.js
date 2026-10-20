@@ -10,7 +10,7 @@ export function initScene(containerId) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x07090e, 0.0018);
 
-  // Camera: Adapt FOV & position for mobile screens
+  // Camera: Tự động căn khoảng cách và góc nhìn theo tỷ lệ màn hình
   const isMobile = width <= 768;
   const camera = new THREE.PerspectiveCamera(isMobile ? 65 : 55, width / height, 0.1, 2000);
   camera.position.set(0, isMobile ? 180 : 140, isMobile ? 380 : 280);
@@ -23,7 +23,7 @@ export function initScene(containerId) {
   renderer.toneMappingExposure = 1.2;
   container.appendChild(renderer.domElement);
 
-  // Controls (Touch-optimized for 1-finger rotate & 2-finger zoom/pan)
+  // Controls (Touch-optimized cho 1 ngón xoay & 2 ngón zoom/pan)
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
