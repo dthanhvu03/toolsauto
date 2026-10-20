@@ -1,7 +1,7 @@
 /* Buffer 3D Cluster Cyberpunk Command Center Stylesheet */
 :root {
   --bg: #07090e;
-  --card-bg: rgba(14, 20, 33, 0.82);
+  --card-bg: rgba(14, 20, 33, 0.88);
   --card-border: rgba(56, 189, 248, 0.22);
   --accent-cyan: #00f0ff;
   --accent-green: #10b981;
@@ -17,6 +17,7 @@
   margin: 0;
   padding: 0;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -26,6 +27,7 @@ body {
   overflow: hidden;
   width: 100vw;
   height: 100vh;
+  position: fixed;
 }
 
 #webgl-container {
@@ -35,6 +37,7 @@ body {
   width: 100%;
   height: 100%;
   z-index: 1;
+  touch-action: none;
 }
 
 /* UI Overlay Layer */
@@ -46,7 +49,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 20px 24px;
+  padding: 16px 20px;
 }
 
 .interactive {
@@ -74,31 +77,33 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
+  padding: 12px 18px;
+  gap: 12px;
 }
 
 .brand-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .status-orb {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--accent-green);
-  box-shadow: 0 0 14px var(--accent-green);
+  box-shadow: 0 0 12px var(--accent-green);
   animation: pulse-glow 2s infinite ease-in-out;
 }
 
 @keyframes pulse-glow {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
+  50% { transform: scale(1.25); opacity: 0.65; }
 }
 
 .brand-name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: 0.5px;
   background: linear-gradient(135deg, #ffffff 0%, #38bdf8 100%);
@@ -108,27 +113,32 @@ body {
 
 .brand-sub {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--accent-cyan);
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .stats-badge-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.stats-badge-group::-webkit-scrollbar { display: none; }
 
 .badge-stat {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 6px;
+  padding: 5px 12px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .badge-stat .val {
@@ -140,16 +150,18 @@ body {
   background: rgba(14, 165, 233, 0.15);
   border: 1px solid rgba(56, 189, 248, 0.3);
   color: #38bdf8;
-  padding: 8px 16px;
+  padding: 7px 14px;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   transition: all 0.2s ease;
   text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-action:hover {
@@ -162,16 +174,20 @@ body {
 /* Left Sidebar: Account Cards */
 .left-cluster-list {
   position: absolute;
-  top: 90px;
-  left: 24px;
-  width: 320px;
+  top: 85px;
+  left: 20px;
+  width: 310px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  scrollbar-width: none;
 }
+.left-cluster-list::-webkit-scrollbar { display: none; }
 
 .account-card {
-  padding: 16px;
+  padding: 14px;
   cursor: pointer;
   border-left: 4px solid var(--accent-cyan);
 }
@@ -188,19 +204,19 @@ body {
   background: rgba(14, 28, 48, 0.95);
   border-color: var(--accent-cyan);
   box-shadow: 0 0 24px rgba(0, 240, 255, 0.25);
-  transform: translateX(6px);
+  transform: translateX(4px);
 }
 
 .account-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .acc-index {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -208,9 +224,9 @@ body {
 
 .acc-status-tag {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: 10px;
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 8px;
   text-transform: uppercase;
   font-weight: 700;
 }
@@ -231,7 +247,7 @@ body {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   color: #e2e8f0;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   word-break: break-all;
 }
 
@@ -247,12 +263,12 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .chan-pill {
   font-size: 10px;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -265,23 +281,27 @@ body {
 /* Right Telemetry Drawer */
 .right-inspector {
   position: absolute;
-  top: 90px;
-  right: 24px;
-  width: 360px;
-  padding: 20px;
+  top: 85px;
+  right: 20px;
+  width: 350px;
+  padding: 18px;
   transform: translateX(400px);
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  scrollbar-width: none;
 }
+.right-inspector::-webkit-scrollbar { display: none; }
 
 .right-inspector.visible {
   transform: translateX(0);
 }
 
 .inspector-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   justify-content: space-between;
@@ -290,30 +310,32 @@ body {
 
 .close-btn {
   cursor: pointer;
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 1;
   color: var(--text-muted);
   transition: color 0.2s;
+  padding: 2px 6px;
 }
 .close-btn:hover { color: #fff; }
 
 .detail-row {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .detail-label {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .detail-val {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #f1f5f9;
   background: rgba(0, 0, 0, 0.25);
-  padding: 8px 12px;
+  padding: 7px 10px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   font-family: 'JetBrains Mono', monospace;
@@ -340,36 +362,37 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
+  padding: 10px 18px;
+  gap: 12px;
 }
 
 .view-tips {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .tip-item kbd {
   background: rgba(255, 255, 255, 0.1);
-  padding: 2px 6px;
+  padding: 2px 5px;
   border-radius: 4px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   color: #38bdf8;
 }
 
 /* 2D Floating Tooltip */
 #tooltip-3d {
   position: absolute;
-  padding: 8px 14px;
-  background: rgba(7, 10, 19, 0.9);
+  padding: 6px 12px;
+  background: rgba(7, 10, 19, 0.92);
   backdrop-filter: blur(12px);
   border: 1px solid var(--accent-cyan);
   border-radius: 8px;
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, -120%);
@@ -377,4 +400,97 @@ body {
   z-index: 100;
   white-space: nowrap;
   box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+}
+
+/* ─── 📱 MOBILE RESPONSIVE OPTIMIZATION (max-width: 768px) ─── */
+@media (max-width: 768px) {
+  .hud-layer {
+    padding: 10px;
+  }
+
+  .header-bar {
+    padding: 8px 12px;
+  }
+
+  .brand-name {
+    font-size: 13px;
+  }
+
+  .brand-sub {
+    font-size: 8px;
+  }
+
+  .badge-stat {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+
+  /* Left Cards become a horizontal scrollable pill bar above bottom bar */
+  .left-cluster-list {
+    top: auto;
+    bottom: 56px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    max-height: none;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+
+  .account-card {
+    min-width: 200px;
+    padding: 10px;
+    flex-shrink: 0;
+  }
+
+  .account-card.selected {
+    transform: none;
+    border-bottom: 2px solid var(--accent-cyan);
+  }
+
+  .acc-index {
+    font-size: 12px;
+  }
+
+  .acc-email {
+    font-size: 10px;
+  }
+
+  .channels-pill-row {
+    display: none; /* Hide pills in compact card on mobile */
+  }
+
+  /* Right Telemetry Drawer becomes a Bottom Sheet */
+  .right-inspector {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-height: 60vh;
+    border-radius: 20px 20px 0 0;
+    transform: translateY(105%);
+    padding: 16px;
+    z-index: 50;
+  }
+
+  .right-inspector.visible {
+    transform: translateY(0);
+  }
+
+  /* Bottom Bar */
+  .bottom-bar {
+    padding: 6px 10px;
+  }
+
+  .view-tips {
+    display: none; /* Hide keyboard tips on mobile */
+  }
+
+  .btn-action {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
 }
