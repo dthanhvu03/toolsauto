@@ -80,6 +80,9 @@ _last_orphan_cleanup_ts: float = 0
 
 _last_source_cleanup_ts: float = 0
 
+_last_storage_cleanup_ts: float = 0
+STORAGE_CLEANUP_INTERVAL_SEC: float = 6 * 3600  # 6 hours
+
 
 def _viral_id_from_name(name: str) -> int | None:
     import re
@@ -425,6 +428,10 @@ def _scrape_page_insights():
                 logger.warning("[INSIGHTS] Subprocess timed out after %ds. Killing.", INSIGHTS_TIMEOUT_SEC)
                 try:
                     _insights_process.kill()
+                    try:
+                        _insights_process.wait(timeout=5)
+                    except Exception:
+                        pass
                 except Exception:
                     pass
                 _insights_process = None
@@ -546,6 +553,36 @@ def _run_strategic_boost(db):
         logger.error(f"[STRATEGIC] Auto-boost failed: {e}")
 
 
+def _run_storage_cleanup() -> None:
+    """Periodic 6-hour storage cleanup task (Milestone 1).
+
+    Executes StorageCleanupService.run_all with comprehensive failure isolation.
+    """
+    global _last_storage_cleanup_ts
+    now = time.time()
+    if (now - _last_storage_cleanup_ts) < STORAGE_CLEANUP_INTERVAL_SEC:
+        return
+
+    _last_storage_cleanup_ts = now
+    logger.info("[MAINT] Bat dau chay don dep luu tru dinh ky (6 gio)...")
+    try:
+        from app.features.maintenance.storage_cleanup_service import StorageCleanupService
+
+        res = StorageCleanupService.run_all(dry_run=False, retention_days=7)
+        reclaimed_mb = res.reclaimed_bytes / (1024 * 1024)
+        logger.info(
+            "[MAINT] Don dep luu tru hoan tat: Giai phong %.2f MB | Videos: %d | Profiles: %d | Logs: %d",
+            reclaimed_mb,
+            res.media_files_deleted,
+            res.profiles_cleaned,
+            res.logs_cleaned,
+        )
+        if res.errors:
+            logger.warning("[MAINT] Co %d canh bao/loi khi don dep: %s", len(res.errors), res.errors[:3])
+    except Exception as exc:
+        logger.exception("[MAINT] Loi khi chay don dep luu tru dinh ky: %s", exc)
+
+
 def run_loop():
     """Main Maintenance loop."""
     global RUNNING, CURRENT_POLLER
@@ -609,9 +646,6 @@ def run_loop():
                         CleanupService.run(db)
                         SystemMonitorService().cleanup_temp_files()
 
-                        # 2. Check 24h Metrics for published posts
-                        MetricsChecker.check_pending(db)
-
                         # 2a. Buffer đã gửi thì đánh dấu video đã đăng (cùng nút Đã đăng).
                         try:
                             from app.features.buffer.sync_posted import sync_sent_marks
@@ -659,6 +693,13 @@ def run_loop():
                 time.sleep(config.MAINT_LOOP_SLEEP_SEC)
                 continue
 
+            # 2. Check 24h Metrics for published posts in isolated short transactions
+            # (Web scraping with Playwright performed WITHOUT holding open main DB transaction)
+            try:
+                MetricsChecker.check_pending()
+            except Exception as exc:
+                logger.error("[MetricsChecker] check_pending error: %s", exc)
+
             # Heavy tasks executed in isolated short transactions
             if backlog >= MAINT_SKIP_HEAVY_WHEN_PENDING:
                 logger.info(
@@ -704,6 +745,9 @@ def run_loop():
 
             # 8. Run Page Insights Scraper (12h interval)
             _scrape_page_insights()
+
+            # 9. Storage retention & cleanup (6h interval)
+            _run_storage_cleanup()
 
             logger.info("Hoan tat mot vong maintenance dinh ky.")
             with SessionLocal() as db:

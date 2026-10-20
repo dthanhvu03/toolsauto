@@ -30,6 +30,7 @@ class AIPurpose:
     INCIDENT_REPORT = "incident_report"
     STUDIO_TEST = "studio_test"
     SPLIT_PLAN = "split_plan"  # ADR-041: chọn chỗ cắt video dài
+    FIRST_COMMENT = "first_comment"
     GENERIC = "generic"
 
 
@@ -211,3 +212,24 @@ Dữ liệu top incident groups trong 24h:
 {_incident_rows_for_prompt(groups)}
 """.strip()
         return AIUseCases.generate_text(prompt, purpose=AIPurpose.INCIDENT_REPORT)
+
+    # ── Domain: First Comment ─────────────────────────────────────────────
+
+    @staticmethod
+    def generate_first_comment(
+        caption: str,
+        topic: str = "",
+    ) -> Tuple[Optional[str], dict]:
+        clean_caption = (caption or "").strip()[:2000]
+        topic_clause = f"\nChủ đề/Phong cách: {topic.strip()}" if topic and topic.strip() else ""
+        prompt = (
+            "Bạn là người sáng tạo nội dung mạng xã hội (Facebook/Instagram) thân thiện, tự nhiên như người thật.\n"
+            f"Hãy đọc nội dung bài viết dưới đây:\n\"\"\"{clean_caption}\"\"\"{topic_clause}\n\n"
+            "Nhiệm vụ: Viết đúng 1 câu bình luận đầu tiên (First Comment) bằng tiếng Việt để kích thích người xem tương tác.\n"
+            "Yêu cầu bắt buộc:\n"
+            "- Độ dài DƯỚI 150 ký tự (ngắn gọn, súc tích, tự nhiên).\n"
+            "- Nội dung: Đặt câu hỏi thảo luận, đố vui nhẹ nhàng, hoặc kêu gọi thả tim, lưu bài, follow kênh một cách duyên dáng.\n"
+            "- KHÔNG dùng hashtag, KHÔNG chèn link/URL.\n"
+            "- Chỉ trả về duy nhất nội dung câu bình luận, KHÔNG để trong dấu ngoặc kép, KHÔNG kèm lời giải thích hay tiền tố."
+        )
+        return AIUseCases.generate_text(prompt, purpose=AIPurpose.FIRST_COMMENT)

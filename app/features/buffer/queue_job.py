@@ -243,7 +243,8 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
 
     result = BufferAdapter().publish(job)
     if not result.ok:
-        is_429 = "429" in (result.error or "") or "rate limit" in (result.error or "").lower()
+        err_lower = (result.error or "").lower()
+        is_429 = "429" in (result.error or "") or "rate limit" in err_lower
         if is_429:
             job.status = JobStatus.PENDING
             job.last_error = (result.error or "Buffer rate limit (429)")[:300]
@@ -251,6 +252,15 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
             db.commit()
             logger.warning("[Buffer][job_%s] Rate limit 429, scheduled backoff: %s", job.id, job.last_error)
             return False, f"Buffer đang bị giới hạn tần suất (429). Đã hẹn thử lại sau 60s: {job.last_error}"
+
+        is_queue_full = "scheduled posts limit reached" in err_lower or "10 scheduled posts out of 10" in err_lower
+        if is_queue_full:
+            job.status = JobStatus.PENDING
+            job.last_error = "Hàng chờ Buffer đã đầy 10/10 bài (gói Free). Tự động thử lại sau 30 phút."
+            job.schedule_ts = int(now_ts()) + 1800
+            db.commit()
+            logger.info("[Buffer][job_%s] Queue limit 10/10 reached, scheduled backoff 30m: %s", job.id, job.last_error)
+            return False, "⚠️ Hàng chờ Buffer của kênh đã đầy 10/10 bài (giới hạn gói Free). Đã lưu và sẽ tự động thử lại sau 30 phút khi có bài được đăng."
 
         job.status = JobStatus.FAILED
         job.last_error = (result.error or "Buffer từ chối")[:300]

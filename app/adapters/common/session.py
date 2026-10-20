@@ -161,6 +161,8 @@ class PlatformSessionManager:
         if extra_args:
             args.extend(extra_args)
 
+        pw = None
+        context = None
         try:
             pw = sync_playwright().start()
             logger.info(
@@ -186,6 +188,16 @@ class PlatformSessionManager:
                 "%s: Failed to bootstrap playwright session: %s",
                 prefix, e,
             )
+            if context is not None:
+                try:
+                    context.close()
+                except Exception:
+                    pass
+            if pw is not None:
+                try:
+                    pw.stop()
+                except Exception:
+                    pass
             return None
 
     @staticmethod
@@ -244,3 +256,9 @@ class PlatformSessionManager:
             prefix,
         )
         return SessionStatus.EXPIRED
+
+
+SessionManager = PlatformSessionManager
+PlatformSessionManager.launch_persistent = PlatformSessionManager.launch
+
+

@@ -17,6 +17,9 @@ import time
 import logging
 import json
 import re
+import gc
+import ctypes
+from typing import Any
 from app.core.ai.use_cases import AIPurpose, AIUseCases
 from app.core.media.ffmpeg_path import ffmpeg_bin, ffprobe_bin
 import app.config as config
@@ -39,23 +42,95 @@ class OutputContractViolation(Exception):
     pass
 
 
+def release_whisper_model(target_obj: Any = None) -> None:
+    """Explicitly deallocates faster-whisper model reference, runs gc.collect(),
+    and executes malloc_trim(0) from libc.so.6 to return deallocated memory arenas
+    back to the Linux OS kernel.
+    """
+    if target_obj is not None and hasattr(target_obj, "_whisper_model"):
+        target_obj._whisper_model = None
+    if ContentOrchestrator._whisper_model is not None:
+        ContentOrchestrator._whisper_model = None
+
+    gc.collect()
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+        logger.debug("[WhisperLifecycle] malloc_trim(0) executed successfully.")
+    except Exception as e:
+        logger.debug("[WhisperLifecycle] malloc_trim(0) unavailable or skipped: %s", e)
+
+
+class WhisperContext:
+    """Context manager for on-demand WhisperModel lifecycle.
+    Ensures model deallocation, garbage collection, and libc malloc_trim(0) on exit.
+    """
+
+    def __init__(self, model_size: str | None = None, cpu_threads: int = 2):
+        if not model_size:
+            env_size = os.getenv("WHISPER_MODEL_SIZE")
+            self.model_size = env_size.strip() if env_size and env_size.strip() else "base"
+        else:
+            self.model_size = model_size
+        self.cpu_threads = cpu_threads
+        self.model = None
+
+    def __enter__(self):
+        from faster_whisper import WhisperModel
+        self.model = WhisperModel(
+            self.model_size,
+            device="cpu",
+            compute_type="int8",
+            cpu_threads=self.cpu_threads,
+        )
+        return self.model
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.model is not None:
+            del self.model
+            self.model = None
+        release_whisper_model()
+
+
 class ContentOrchestrator:
     """Điều phối pipeline: Video → Thumbnail → Gemini → Caption."""
 
-    # ─── Whisper Singleton Cache (fix D: init 1 lần, reuse mãi) ───
+    # ─── On-Demand Whisper Model Lifecycle & Memory Compaction ───
     _whisper_model = None
 
     @classmethod
-    def _get_whisper_model(cls):
-        """Lazy-load WhisperModel 1 lần duy nhất, reuse cho tất cả requests."""
+    def get_whisper_model(cls, model_size: str | None = None, cpu_threads: int = 2):
+        """On-demand WhisperModel loader. Defaults to 'base' if WHISPER_MODEL_SIZE is unset or empty."""
         if cls._whisper_model is None:
             from faster_whisper import WhisperModel
-            model_size = config.WHISPER_MODEL_SIZE
-            logger.info("Khởi tạo WhisperModel '%s' (1 lần duy nhất)...", model_size)
+            if not model_size:
+                env_size = os.getenv("WHISPER_MODEL_SIZE")
+                model_size = env_size.strip() if env_size and env_size.strip() else "base"
+            logger.info("Nạp WhisperModel '%s' on-demand (cpu_threads=%d)...", model_size, cpu_threads)
             t0 = time.time()
-            cls._whisper_model = WhisperModel(model_size, device="cpu", compute_type="int8")
+            cls._whisper_model = WhisperModel(
+                model_size,
+                device="cpu",
+                compute_type="int8",
+                cpu_threads=cpu_threads,
+            )
             logger.info("WhisperModel sẵn sàng (init %.1fs)", time.time() - t0)
         return cls._whisper_model
+
+    @classmethod
+    def _get_whisper_model(cls):
+        """Backward-compatible classmethod for existing callers."""
+        return cls.get_whisper_model()
+
+    @classmethod
+    def release_whisper_model(cls):
+        """Explicitly release cached model and trim memory back to OS."""
+        release_whisper_model(cls)
+
+    @classmethod
+    def unload_whisper_model(cls):
+        """Alias for release_whisper_model."""
+        release_whisper_model(cls)
 
     def __init__(self):
         self.gemini = None  # Lazy load in fallback
@@ -274,7 +349,8 @@ class ContentOrchestrator:
         try:
             model = self._get_whisper_model()
             t0 = time.time()
-            logger.info("Chạy Whisper '%s' bóc tách lời nói...", config.WHISPER_MODEL_SIZE)
+            model_size = os.getenv("WHISPER_MODEL_SIZE") or "base"
+            logger.info("Chạy Whisper '%s' bóc tách lời nói...", model_size)
             segments, _ = model.transcribe(audio_path, beam_size=5)
             text = " ".join([seg.text for seg in segments])
             logger.info("Whisper xong (%.1fs): %d ký tự", time.time() - t0, len(text))

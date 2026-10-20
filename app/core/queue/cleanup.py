@@ -14,9 +14,10 @@ import os
 import time
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from sqlalchemy.orm import Session
 from app.core.database.models import IncidentLog, Job, JobEvent
-from app.config import CONTENT_DIR
+from app.config import CONTENT_DIR, STORAGE_MEDIA_DIR
 from app.constants import JobStatus
 from app.core import settings as runtime_settings
 
@@ -27,8 +28,10 @@ logger = logging.getLogger(__name__)
 CLEANUP_DONE_AFTER_DAYS   = int(os.getenv("CLEANUP_DONE_AFTER_DAYS", "1"))    # Delete media after 1 day
 CLEANUP_FAILED_AFTER_DAYS = int(os.getenv("CLEANUP_FAILED_AFTER_DAYS", "1"))  # Delete media after 1 day
 CLEANUP_TMP_AFTER_HOURS   = 1                                                   # Remove stale .tmp files after 1h
+CLEANUP_STORY_TTL_HOURS   = int(os.getenv("CLEANUP_STORY_TTL_HOURS", "24"))   # Remove stale stories after 24h
 
 MEDIA_DIR = CONTENT_DIR / "media"
+STORIES_DIR = Path(STORAGE_MEDIA_DIR) / "stories"
 LOG_CLEANUP_INTERVAL_SEC = 86400
 _last_log_cleanup_ts = 0.0
 
@@ -98,6 +101,11 @@ class CleanupService:
             cls._remove_stale_tmp_files()
         except Exception as e:
             logger.warning("[Cleanup] remove_stale_tmp_files failed: %s", e)
+
+        try:
+            cls._cleanup_stale_story_files()
+        except Exception as e:
+            logger.warning("[Cleanup] cleanup_stale_story_files failed: %s", e)
 
         try:
             cls._clear_browser_caches()
@@ -254,6 +262,52 @@ class CleanupService:
 
         if removed:
             logger.info("[Cleanup] Removed %d stale .tmp file(s).", removed)
+
+    @classmethod
+    def _cleanup_stale_story_files(
+        cls,
+        ttl_hours: int = CLEANUP_STORY_TTL_HOURS,
+        stories_dir: Path | str | None = None,
+    ) -> int:
+        """
+        Scan storage/media/stories/ for files older than ttl_hours (default 24h)
+        and unlink them to prevent disk bloat (R3 Storage Cleanup).
+        """
+        if isinstance(ttl_hours, Session):
+            ttl_hours = CLEANUP_STORY_TTL_HOURS
+
+        target_dir = Path(stories_dir) if stories_dir else STORIES_DIR
+        if not target_dir.exists() or not target_dir.is_dir():
+            return 0
+
+        cutoff = time.time() - ttl_hours * 3600
+        removed = 0
+
+        try:
+            entries = list(target_dir.iterdir())
+        except Exception as e:
+            logger.warning("[Cleanup] Failed to list stories directory %s: %s", target_dir, e)
+            return 0
+
+        for fpath in entries:
+            try:
+                if fpath.is_file():
+                    mtime = fpath.stat().st_mtime
+                    if mtime < cutoff:
+                        fpath.unlink()
+                        removed += 1
+                        logger.info(
+                            "[Cleanup] Removed stale story file: %s (age=%.1fh)",
+                            fpath,
+                            (time.time() - mtime) / 3600,
+                        )
+            except Exception as e:
+                logger.warning("[Cleanup] Could not remove stale story file %s: %s", fpath, e)
+
+        if removed:
+            logger.info("[Cleanup] Removed %d stale story file(s).", removed)
+
+        return removed
 
     @classmethod
     def _clear_browser_caches(cls):

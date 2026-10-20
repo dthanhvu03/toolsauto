@@ -207,12 +207,16 @@ def _finish_ready_material(db, mat, media_path: str, drive_dest) -> None:
     # cũng đụng DB, hỏng ở đó mà để ngoại lệ thoát ra là đánh FAILED một video đã xử lý xong.
     try:
         if runtime_settings.get_bool("viral.auto_caption_on_ready", default=True, db=db):
-            ok_cap, cap_msg = ViralService.generate_caption_for_material(db, mat.id, notify=False)
-            logger.info("[VIRAL] Caption tự động cho #%s: %s — %s", mat.id, ok_cap, cap_msg)
-            report = getattr(mat, "schedule_report", "")
-            db.refresh(mat)
-            if report:
-                mat.schedule_report = report
+            try:
+                ok_cap, cap_msg = ViralService.generate_caption_for_material(db, mat.id, notify=False)
+                logger.info("[VIRAL] Caption tự động cho #%s: %s — %s", mat.id, ok_cap, cap_msg)
+                report = getattr(mat, "schedule_report", "")
+                db.refresh(mat)
+                if report:
+                    mat.schedule_report = report
+            finally:
+                from app.core.orchestrator import release_whisper_model
+                release_whisper_model()
     except Exception as cap_err:
         logger.warning("[VIRAL] Caption tự động cho #%s lỗi (%s) — vẫn báo video.", mat.id, cap_err)
         # Lỗi DB làm session hỏng; rollback để vòng lặp sau còn dùng được.

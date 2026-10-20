@@ -34,6 +34,8 @@ class TelegramCommandHandler:
             "pause": self._cmd_pause,
             "resume": self._cmd_resume,
             "health": self._cmd_health,
+            "tainguyen": self._cmd_tainguyen,
+            "donrac": self._cmd_donrac,
             "jobs": self._cmd_jobs,
             "drafts": self._cmd_drafts,
             "retry": self._cmd_retry,
@@ -68,6 +70,8 @@ class TelegramCommandHandler:
         ("help", "Danh sách lệnh và cách dùng"),
         ("status", "Worker đang chạy hay tạm dừng"),
         ("health", "Sức khoẻ hệ thống"),
+        ("tainguyen", "Kiểm tra RAM, CPU, ổ đĩa và tiến trình PM2"),
+        ("donrac", "/donrac · /donrac don — kiểm tra hoặc dọn rác ổ đĩa"),
         ("pause", "Tạm dừng worker"),
         ("resume", "Chạy tiếp worker"),
         ("jobs", "Đếm job đang chạy / chờ / nháp (cần tài khoản Facebook)"),
@@ -97,7 +101,7 @@ class TelegramCommandHandler:
     # sẽ tự rơi vào "Khác" (test canh: không lệnh nào bị bỏ sót).
     HELP_GROUPS: list[tuple[str, tuple[str, ...]]] = [
         ("Luồng video (dùng hằng ngày)", ("sansang", "moi", "nguon", "dadang", "tai", "caidat")),
-        ("Hệ thống", ("status", "health", "pause", "resume", "help")),
+        ("Hệ thống", ("status", "health", "tainguyen", "donrac", "pause", "resume", "help")),
         ("Luồng Job — cần tài khoản Facebook trong tool", ("jobs", "drafts", "retry", "viral", "discovery")),
     ]
 
@@ -595,6 +599,181 @@ class TelegramCommandHandler:
         msg += f"👷 Worker: {h.get('worker', {}).get('status', '?')}\n"
         msg += f"🔄 Running: {h.get('jobs', {}).get('running', 0)}\n"
         self.client.send_message(msg)
+
+    def _cmd_tainguyen(self, args=None):
+        """Kiểm tra RAM, CPU, ổ đĩa và tiến trình PM2 theo thời gian thực."""
+        import json
+        import os
+        import shutil
+        import subprocess
+        from pathlib import Path
+        import app.config as config
+        try:
+            import psutil
+        except ImportError:
+            psutil = None
+
+        # 1. RAM & Swap
+        if psutil:
+            vm = psutil.virtual_memory()
+            ram_total_gb = vm.total / (1024 ** 3)
+            ram_used_gb = vm.used / (1024 ** 3)
+            ram_free_gb = vm.available / (1024 ** 3)
+            ram_pct = vm.percent
+            ram_str = f"⚡ RAM: <b>{ram_used_gb:.2f} / {ram_total_gb:.2f} GB</b> ({ram_pct}%)\n   Trống: <b>{ram_free_gb:.2f} GB</b>"
+
+            sw = psutil.swap_memory()
+            sw_total_gb = sw.total / (1024 ** 3)
+            sw_used_gb = sw.used / (1024 ** 3)
+            sw_pct = sw.percent
+            swap_str = f"🔄 Swap: <b>{sw_used_gb:.2f} / {sw_total_gb:.2f} GB</b> ({sw_pct}%)"
+        else:
+            ram_str = "⚡ RAM: Không có psutil"
+            swap_str = ""
+
+        # 2. CPU & Load Average
+        load1, load5, load15 = os.getloadavg()
+        cpu_cores = os.cpu_count() or 1
+        cpu_str = f"🖥️ CPU: Load <b>{load1:.2f}</b>, <b>{load5:.2f}</b>, <b>{load15:.2f}</b> ({cpu_cores} cores)"
+
+        # 3. Zombie processes
+        zombies = 0
+        if psutil:
+            try:
+                zombies = sum(1 for p in psutil.process_iter(["status"]) if p.info.get("status") == psutil.STATUS_ZOMBIE)
+            except Exception:
+                pass
+        zombie_str = f"🧟 Zombie: <b>{zombies}</b>"
+
+        # 4. Disk breakdown
+        storage_root = Path(getattr(config, "STORAGE_DIR", Path(__file__).resolve().parents[3] / "storage"))
+        logs_root = Path(getattr(config, "LOGS_DIR", Path(__file__).resolve().parents[3] / "logs"))
+
+        total, used, free = shutil.disk_usage("/")
+        disk_total_gb = total / (1024 ** 3)
+        disk_used_gb = used / (1024 ** 3)
+        disk_free_gb = free / (1024 ** 3)
+        disk_pct = (used / total) * 100 if total else 0
+
+        def _dir_size_mb(path: Path) -> float:
+            if not path.exists():
+                return 0.0
+            tot = 0
+            try:
+                for root, _, files in os.walk(path):
+                    for f in files:
+                        try:
+                            tot += os.path.getsize(os.path.join(root, f))
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+            return tot / (1024 * 1024)
+
+        media_mb = _dir_size_mb(storage_root / "media")
+        profiles_mb = _dir_size_mb(storage_root / "profiles")
+        storage_mb = _dir_size_mb(storage_root)
+        logs_mb = _dir_size_mb(logs_root)
+
+        disk_summary = (
+            f"💽 Ổ đĩa: <b>{disk_used_gb:.1f} / {disk_total_gb:.1f} GB</b> ({disk_pct:.1f}%)\n"
+            f"   Còn trống: <b>{disk_free_gb:.1f} GB</b>\n"
+            f"   • storage/: <b>{storage_mb:.1f} MB</b> (media: <b>{media_mb:.1f} MB</b>, profiles: <b>{profiles_mb:.1f} MB</b>)\n"
+            f"   • logs/: <b>{logs_mb:.1f} MB</b>"
+        )
+
+        # 5. PM2 Processes
+        pm2_summary = []
+        try:
+            res = subprocess.run(["pm2", "jlist"], capture_output=True, text=True, timeout=5)
+            if res.returncode == 0 and res.stdout.strip():
+                raw = res.stdout.strip()
+                s_idx = raw.find("[")
+                e_idx = raw.rfind("]")
+                if s_idx != -1 and e_idx != -1:
+                    apps = json.loads(raw[s_idx : e_idx + 1])
+                    total_pm2_ram = 0
+                    for app in apps:
+                        name = app.get("name", "unknown")
+                        st = app.get("pm2_env", {}).get("status", "unknown")
+                        mem = app.get("monit", {}).get("memory", 0) or 0
+                        total_pm2_ram += mem
+                        mem_mb = mem / (1024 * 1024)
+                        icon = "🟢" if st == "online" else "🔴"
+                        pm2_summary.append(f"{icon} {name}: {mem_mb:.1f} MB ({st})")
+                    pm2_total_mb = total_pm2_ram / (1024 * 1024)
+                    pm2_header = f"🚀 PM2 Daemons ({len(apps)} apps, tổng RAM: <b>{pm2_total_mb:.1f} MB</b>):"
+                else:
+                    pm2_header = "🚀 PM2: Không đọc được danh sách tiến trình"
+            else:
+                pm2_header = "🚀 PM2: Không lấy được thông tin"
+        except Exception as e:
+            pm2_header = f"🚀 PM2: Lỗi kiểm tra ({e})"
+
+        msg_parts = [
+            "📊 <b>BÁO CÁO TÀI NGUYÊN HỆ THỐNG</b>",
+            "━━━━━━━━━━━━━━━━━━",
+            ram_str,
+            swap_str,
+            cpu_str + f" | {zombie_str}",
+            "━━━━━━━━━━━━━━━━━━",
+            disk_summary,
+            "━━━━━━━━━━━━━━━━━━",
+            pm2_header,
+        ]
+        if pm2_summary:
+            msg_parts.append("\n".join(pm2_summary))
+
+        self.client.send_message("\n".join([p for p in msg_parts if p]))
+
+    def _cmd_donrac(self, args=None):
+        """Kiểm tra và dọn rác ổ đĩa an toàn, bảo toàn session cookies."""
+        args = [str(a).strip().lower() for a in (args or [])]
+        from app.features.maintenance.storage_cleanup_service import StorageCleanupService
+
+        if args and args[0] in ("don", "xoa", "now", "chay"):
+            self.client.send_message("⏳ Đang tiến hành dọn rác toàn hệ thống…")
+
+            def _run():
+                try:
+                    res = StorageCleanupService.run_all(retention_days=7)
+                    mb = res.reclaimed_bytes / (1024 * 1024)
+                    err_msg = f"\n⚠️ Lưu ý: {len(res.errors)} lỗi nhỏ" if res.errors else ""
+                    self.client.send_message(
+                        f"✅ <b>Dọn rác hoàn tất!</b>\n━━━━━━━━━━━━━━━━━━\n"
+                        f"💾 Đã giải phóng: <b>{mb:.1f} MB</b> ({res.reclaimed_bytes:,} bytes){err_msg}\n"
+                        f"🛡️ Profile & Cookies: 100% nguyên vẹn an toàn."
+                    )
+                except Exception as exc:
+                    logger.exception("[Telegram] /donrac execution failed")
+                    self.client.send_message(f"❌ Dọn rác thất bại: {str(exc)[:150]}")
+
+            threading.Thread(target=_run, name="tg-donrac-exec", daemon=True).start()
+            return
+
+        # Audit mode (dry-run)
+        try:
+            audit = StorageCleanupService.audit()
+            reclaim_mb = audit["reclaimable_bytes"] / (1024 * 1024)
+            reclaim_bytes = audit["reclaimable_bytes"]
+            msg = (
+                f"🧹 <b>KIỂM TRA RÁC Ổ ĐĨA</b>\n━━━━━━━━━━━━━━━━━━\n"
+                f"💾 Có thể giải phóng: <b>{reclaim_mb:.1f} MB</b> ({reclaim_bytes:,} bytes)\n"
+                f"📁 Chi tiết các mục sẽ dọn:\n"
+                f"   • Media cache & temp files (&gt; 7 ngày)\n"
+                f"   • Chromium GPU / Code / ServiceWorker cache\n"
+                f"   • DOM HTML/PNG dump thất bại trong logs/fb/\n"
+                f"   • Nén gzip các bản SQL backup cũ\n\n"
+                f"🛡️ <b>Cam kết an toàn:</b> Tuyệt đối không xóa Cookies, Session đăng nhập Facebook/Threads.\n\n"
+                f"Bấm nút dưới đây hoặc gõ <code>/donrac don</code> để dọn ngay:"
+            )
+            reply_markup = {
+                "inline_keyboard": [[{"text": "🧹 Dọn rác ngay", "callback_data": "donrac:now"}]]
+            }
+            self.client.send_message(msg, reply_markup=reply_markup)
+        except Exception as e:
+            logger.exception("[Telegram] /donrac audit failed")
+            self.client.send_message(f"❌ Lỗi kiểm tra rác: {str(e)[:150]}")
 
     def _cmd_jobs(self, args=None):
         from app.core.database.core import SessionLocal

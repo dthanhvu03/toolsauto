@@ -141,6 +141,38 @@ class BufferClient:
         rows = data.get("channels") or []
         return [item for item in rows if isinstance(item, dict)]
 
+    @staticmethod
+    def infer_channel_service(channel_id: str) -> str:
+        cid = str(channel_id or "").strip()
+        if not cid:
+            return "facebook"
+        try:
+            from app.core import settings as runtime_settings
+
+            channels = runtime_settings.get_json("BUFFER_CHANNELS") or []
+            for item in channels:
+                if isinstance(item, dict) and str(item.get("id") or "").strip() == cid:
+                    svc = str(item.get("service") or "").strip().lower()
+                    if svc:
+                        return svc
+                    name = str(item.get("name") or "").lower()
+                    if "tiktok" in name:
+                        return "tiktok"
+                    if "instagram" in name:
+                        return "instagram"
+                    if "threads" in name:
+                        return "threads"
+        except Exception:
+            pass
+        cid_lower = cid.lower()
+        if "tiktok" in cid_lower:
+            return "tiktok"
+        if "instagram" in cid_lower or "ig_" in cid_lower:
+            return "instagram"
+        if "threads" in cid_lower:
+            return "threads"
+        return "facebook"
+
     def create_post(
         self,
         *,
@@ -149,6 +181,9 @@ class BufferClient:
         mode: str = "addToQueue",
         media_url: str | None = None,
         due_at: str | None = None,
+        service: str | None = None,
+        first_comment: str | None = None,
+        fb_type: str = "post",
     ) -> dict:
         if mode not in MODES:
             raise BufferError(f"Mode Buffer khong hop le: {mode}")
@@ -170,7 +205,24 @@ class BufferClient:
         # Facebook bắt buộc type. Reel trên API Buffer vẫn khóa 1 phút 30 giây,
         # trong khi Facebook đã cho video dài hơn. Gửi type post thì video dài được nhận;
         # video dọc Facebook vẫn có thể hiện thành Reel lúc đăng.
-        fields.append("metadata: { facebook: { type: post } }")
+        # TikTok và các nền tảng khác không dùng metadata facebook.
+        # Instagram dùng metadata.instagram { firstComment }.
+        # TikTok strictly omits metadata / firstComment to prevent 422 error.
+        svc = (service or "").strip().lower() or self.infer_channel_service(channel_id)
+        clean_fc = (first_comment or "").strip()
+
+        if svc == "tiktok":
+            # Strictly omit metadata / firstComment for TikTok to prevent GraphQL 422 error
+            pass
+        elif svc == "instagram":
+            if clean_fc:
+                fields.append(f"metadata: {{ instagram: {{ firstComment: {_gql_string(clean_fc)} }} }}")
+        else:  # facebook or default
+            fb_type_val = fb_type or "post"
+            fb_meta = [f"type: {fb_type_val}"]
+            if clean_fc:
+                fb_meta.append(f"firstComment: {_gql_string(clean_fc)}")
+            fields.append(f"metadata: {{ facebook: {{ {', '.join(fb_meta)} }} }}")
 
         data = self.execute(
             f"""
@@ -451,7 +503,9 @@ class BufferClient:
         fb_type = str(meta.get("type") or "post")
         if fb_type not in {"post", "reel", "story"}:
             fb_type = "post"
-        fields.append(f"metadata: {{ facebook: {{ type: {fb_type} }} }}")
+        cid = str(snap.get("channelId") or "").strip()
+        if self.infer_channel_service(cid) != "tiktok":
+            fields.append(f"metadata: {{ facebook: {{ type: {fb_type} }} }}")
         return fields
 
     def duplicate_post(self, post_id: str) -> dict:

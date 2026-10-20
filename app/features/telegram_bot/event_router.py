@@ -154,6 +154,8 @@ class TelegramEventRouter:
                 self._handle_buffer_channel(callback_id, target_id)
             elif action in ("bnow", "binf", "btop", "bbot", "bdrf", "bdup", "bdel", "bdyes", "bmore"):
                 self._handle_buffer_post(callback_id, action, target_id)
+            elif action == "donrac":
+                self._handle_donrac_callback(callback_id, target_id)
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")
@@ -778,3 +780,25 @@ class TelegramEventRouter:
                 db.commit()
         self.client.answer_callback_query(callback_id, f"✅ Style: {style}")
         self.client.edit_message_reply_markup(message_id, reply_markup=None)
+
+    def _handle_donrac_callback(self, callback_id: str, target: str):
+        self.client.answer_callback_query(callback_id, "🧹 Đang dọn rác...")
+        self.client.send_message("⏳ Đang tiến hành dọn rác toàn hệ thống…")
+
+        def _run():
+            from app.features.maintenance.storage_cleanup_service import StorageCleanupService
+
+            try:
+                res = StorageCleanupService.run_all(retention_days=7)
+                mb = res.reclaimed_bytes / (1024 * 1024)
+                err_msg = f"\n⚠️ Lưu ý: {len(res.errors)} lỗi nhỏ" if res.errors else ""
+                self.client.send_message(
+                    f"✅ <b>Dọn rác hoàn tất!</b>\n━━━━━━━━━━━━━━━━━━\n"
+                    f"💾 Đã giải phóng: <b>{mb:.1f} MB</b> ({res.reclaimed_bytes:,} bytes){err_msg}\n"
+                    f"🛡️ Profile & Cookies: 100% nguyên vẹn an toàn."
+                )
+            except Exception as exc:
+                logger.exception("[Telegram] callback donrac failed")
+                self.client.send_message(f"❌ Dọn rác thất bại: {str(exc)[:150]}")
+
+        threading.Thread(target=_run, name="tg-donrac-cb", daemon=True).start()

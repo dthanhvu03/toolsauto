@@ -649,10 +649,12 @@ def get_data_status(db: Session = Depends(get_db)):
 
 # ── /api/trigger-refresh  (manual scrape trigger) ────────────────────────
 _refresh_running: bool = False
+_active_insights_proc: Optional[subprocess.Popen] = None
+
 
 def trigger_refresh():
     """Kick off the insights scraper immediately (non-blocking subprocess)."""
-    global _refresh_running
+    global _refresh_running, _active_insights_proc
     if _refresh_running:
         return JSONResponse({"status": "already_running", "message": "Scraper đang chạy, vui lòng đợi."}, status_code=429)
 
@@ -668,18 +670,39 @@ def trigger_refresh():
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        _active_insights_proc = proc
         logger.info("Insights scraper triggered manually (pid=%s)", proc.pid)
-        # Reset flag after 30 min max (safety valve)
-        def _reset():
-            import time as _t
-            _t.sleep(1800)
-            global _refresh_running
-            _refresh_running = False
+
+        # Track child process and reap it to prevent <defunct> zombie accumulation
+        def _reap_child(child_proc: subprocess.Popen):
+            global _refresh_running, _active_insights_proc
+            try:
+                try:
+                    child_proc.wait(timeout=1800)
+                except subprocess.TimeoutExpired:
+                    logger.warning("Insights scraper process %s timed out after 1800s. Killing.", getattr(child_proc, "pid", None))
+                    try:
+                        child_proc.kill()
+                    except Exception:
+                        pass
+                    try:
+                        child_proc.wait(timeout=5)
+                    except Exception:
+                        pass
+            except Exception as reap_err:
+                logger.debug("Error while reaping insights process: %s", reap_err)
+            finally:
+                _refresh_running = False
+                if _active_insights_proc is child_proc:
+                    _active_insights_proc = None
+
         import threading
-        threading.Thread(target=_reset, daemon=True).start()
+        reaper_thread = threading.Thread(target=_reap_child, args=(proc,), daemon=True)
+        reaper_thread.start()
         return {"status": "success", "message": "Scraper đã được kích hoạt, dữ liệu sẽ cập nhật sau vài phút.", "pid": proc.pid}
     except Exception as e:
         _refresh_running = False
+        _active_insights_proc = None
         logger.error("Failed to trigger scraper: %s", e)
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 

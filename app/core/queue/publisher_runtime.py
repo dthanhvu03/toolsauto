@@ -203,8 +203,11 @@ def postpone_if_daily_limit(db: Session, job, logger: logging.Logger, prefix: st
     from zoneinfo import ZoneInfo
 
     import app.config as app_config
-    from app.constants import JobStatus
+    from app.constants import JobStatus, JobType
     from app.core.database.models import Job
+
+    if getattr(job, "job_type", None) == JobType.STORY:
+        return False
 
     page_cap = 0
     try:
@@ -259,6 +262,119 @@ def postpone_if_daily_limit(db: Session, job, logger: logging.Logger, prefix: st
     return True
 
 
+_weekly_story_postpone_lock = threading.Lock()
+
+
+def postpone_if_weekly_story_limit(
+    db: Session,
+    job,
+    now_ts: int | None = None,
+    logger: logging.Logger | None = None,
+    prefix: str = "",
+) -> bool:
+    """
+    Enforce max 10 stories/week quota per target page for JobType.STORY.
+    If the page has reached or exceeded 10 stories in the current ISO week,
+    defer job.schedule_ts to next week's Monday 11:30 ICT slot, reset status to PENDING,
+    and unset claim locks.
+    Protected by _weekly_story_postpone_lock to ensure atomic evaluation and eliminate over-postponement race conditions.
+    """
+    from datetime import datetime, timedelta
+    import time
+    from sqlalchemy import and_, or_
+
+    from app.constants import JobStatus, JobType
+    from app.core.database.models import Job
+    from app.features.story.scheduler import StoryPacingScheduler, ICT
+
+    if getattr(job, "job_type", None) != JobType.STORY:
+        return False
+
+    page = (getattr(job, "target_page", None) or "").strip()
+    if not page:
+        return False
+
+    with _weekly_story_postpone_lock:
+        try:
+            db.commit()
+        except Exception:
+            pass
+        try:
+            db.expire_all()
+        except Exception:
+            pass
+
+        log = logger or logging.getLogger(__name__)
+        ts = now_ts if now_ts is not None else int(time.time())
+        moment = datetime.fromtimestamp(ts, tz=ICT)
+        week_start_ts, week_end_ts = StoryPacingScheduler.get_week_bounds(moment)
+
+        job_schedule_ts = getattr(job, "schedule_ts", None) or ts
+        job_id = getattr(job, "id", None)
+
+        # Unified single atomic query to evaluate completed (DONE) and prior RUNNING stories.
+        # Eliminates split-query TOCTOU race conditions where a transitioning job is missed.
+        is_done = and_(
+            Job.status == JobStatus.DONE,
+            or_(
+                and_(Job.schedule_ts.isnot(None), Job.schedule_ts >= week_start_ts, Job.schedule_ts < week_end_ts),
+                and_(Job.finished_at.isnot(None), Job.finished_at >= week_start_ts, Job.finished_at < week_end_ts),
+            ),
+        )
+
+        running_filter = and_(
+            Job.status == JobStatus.RUNNING,
+            or_(
+                and_(Job.schedule_ts.isnot(None), Job.schedule_ts >= week_start_ts, Job.schedule_ts < week_end_ts),
+                and_(Job.started_at.isnot(None), Job.started_at >= week_start_ts, Job.started_at < week_end_ts),
+            ),
+        )
+        if job_id is not None:
+            running_filter = and_(running_filter, Job.id != job_id)
+            if job_schedule_ts is not None:
+                running_filter = and_(
+                    running_filter,
+                    or_(
+                        Job.schedule_ts < job_schedule_ts,
+                        and_(Job.schedule_ts == job_schedule_ts, Job.id < job_id),
+                    ),
+                )
+
+        prior_count = (
+            db.query(Job)
+            .filter(
+                Job.target_page == page,
+                Job.job_type == JobType.STORY,
+                or_(is_done, running_filter),
+            )
+            .count()
+        )
+
+        should_postpone = prior_count >= StoryPacingScheduler.WEEKLY_QUOTA
+
+        if not should_postpone:
+            return False
+
+        # Calculate next Monday 11:30 ICT slot
+        week_start_dt = datetime.fromtimestamp(week_start_ts, tz=ICT)
+        next_monday_1130 = week_start_dt + timedelta(days=7, hours=11, minutes=30)
+        next_monday_1130_ts = int(next_monday_1130.timestamp())
+
+        log.info(
+            "%s[Job-%s] [WEEKLY_STORY_LIMIT] Page '%s' reached weekly quota (prior_active=%s). Postpone to next Monday 11:30 ICT (%s).",
+            prefix,
+            getattr(job, "id", "?"),
+            page,
+            prior_count,
+            next_monday_1130_ts,
+        )
+        job.status = JobStatus.PENDING
+        job.schedule_ts = next_monday_1130_ts
+        clear_claim_locks(job)
+        db.commit()
+        return True
+
+
 def claim_next_job_respecting_daily(
     db: Session,
     *,
@@ -287,6 +403,9 @@ def claim_next_job_respecting_daily(
             if skipped_daily:
                 return None, "daily_exhausted"
             return None, "empty"
+        if postpone_if_weekly_story_limit(db, job, logger=logger, prefix=prefix):
+            skipped_daily += 1
+            continue
         if postpone_if_daily_limit(db, job, logger, prefix=prefix):
             skipped_daily += 1
             continue

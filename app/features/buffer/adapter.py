@@ -104,6 +104,10 @@ class BufferAdapter(AdapterInterface):
 
     def publish(self, job) -> PublishResult:
         logger.info("[Buffer][job_%s] publish", getattr(job, "id", "?"))
+        job_type = getattr(job, "job_type", None)
+        if str(job_type).upper() == "STORY":
+            return self.publish_story(job)
+
         if SAFE_MODE:
             return PublishResult(
                 ok=True,
@@ -135,17 +139,48 @@ class BufferAdapter(AdapterInterface):
                 error_code="VALIDATION",
             )
         try:
+            from app.features.buffer.first_comment import get_or_create_first_comment
             from app.features.buffer.manager import get_buffer_manager
 
             client = self._client or get_buffer_manager().get_client_for_channel(channel)
             media = public_media_url(job)
             mode, due_at = schedule_mode(job)
+
+            # Resolve service for channel
+            svc = getattr(job, "service", None) or getattr(job, "channel_service", None)
+            if not svc:
+                if hasattr(client, "infer_channel_service"):
+                    inferred = client.infer_channel_service(channel)
+                    if isinstance(inferred, str) and inferred.strip():
+                        svc = inferred.strip().lower()
+                    else:
+                        svc = BufferClient.infer_channel_service(channel)
+                else:
+                    svc = BufferClient.infer_channel_service(channel)
+            else:
+                svc = str(svc).strip().lower()
+
+            first_comment = None
+            if svc != "tiktok":
+                job_comment = (getattr(job, "auto_comment_text", None) or "").strip()
+                if job_comment:
+                    first_comment = job_comment
+                else:
+                    topic = str(getattr(job, "ai_style", "") or "")
+                    first_comment = get_or_create_first_comment(caption=text, topic=topic)
+                    try:
+                        job.auto_comment_text = first_comment
+                    except Exception:
+                        pass
+
             post = client.create_post(
                 text=text,
                 channel_id=channel,
                 mode=mode,
                 media_url=media,
                 due_at=due_at,
+                service=svc,
+                first_comment=first_comment,
             )
         except BufferError as exc:
             logger.warning("[Buffer][job_%s] %s", getattr(job, "id", "?"), exc)
@@ -160,7 +195,79 @@ class BufferAdapter(AdapterInterface):
         return PublishResult(
             ok=True,
             external_post_id=str(post.get("id")),
-            details={"dueAt": post.get("dueAt"), "mode": mode},
+            details={"dueAt": post.get("dueAt"), "mode": mode, "firstComment": first_comment},
+        )
+
+    def publish_story(self, job) -> PublishResult:
+        logger.info("[Buffer][job_%s] publish_story", getattr(job, "id", "?"))
+        if SAFE_MODE:
+            return PublishResult(
+                ok=True,
+                external_post_id="safe_mode_dry_run",
+                details={"safe_mode": True, "fb_type": "story"},
+            )
+        if self._client is None and not self.open_session(""):
+            return PublishResult(
+                ok=False,
+                is_fatal=True,
+                error="Thieu BUFFER_API_KEY hoac BUFFER_API_KEYS.",
+                error_code="VALIDATION",
+            )
+
+        channel = channel_id_for(job)
+        if not channel:
+            return PublishResult(
+                ok=False,
+                is_fatal=True,
+                error="Thieu channel id Buffer. Dien vao target_page cua job hoac account.",
+                error_code="VALIDATION",
+            )
+        try:
+            from app.features.buffer.manager import get_buffer_manager
+
+            client = self._client or get_buffer_manager().get_client_for_channel(channel)
+            media = public_media_url(job)
+            mode, due_at = schedule_mode(job)
+
+            # Resolve service for channel
+            svc = getattr(job, "service", None) or getattr(job, "channel_service", None)
+            if not svc:
+                if hasattr(client, "infer_channel_service"):
+                    inferred = client.infer_channel_service(channel)
+                    if isinstance(inferred, str) and inferred.strip():
+                        svc = inferred.strip().lower()
+                    else:
+                        svc = BufferClient.infer_channel_service(channel)
+                else:
+                    svc = BufferClient.infer_channel_service(channel)
+            else:
+                svc = str(svc).strip().lower()
+
+            text = (getattr(job, "caption", None) or "").strip()
+
+            post = client.create_post(
+                text=text,
+                channel_id=channel,
+                mode=mode,
+                media_url=media,
+                due_at=due_at,
+                service=svc,
+                fb_type="story",
+            )
+        except BufferError as exc:
+            logger.warning("[Buffer][job_%s] story %s", getattr(job, "id", "?"), exc)
+            fatal = "file local" in str(exc) or "channel" in str(exc).lower()
+            return PublishResult(
+                ok=False,
+                is_fatal=fatal,
+                error=str(exc)[:300],
+                error_code="VALIDATION" if fatal else None,
+            )
+
+        return PublishResult(
+            ok=True,
+            external_post_id=str(post.get("id")),
+            details={"dueAt": post.get("dueAt"), "mode": mode, "fb_type": "story"},
         )
 
     def check_published_state(self, job) -> PublishResult:

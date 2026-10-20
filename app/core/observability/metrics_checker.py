@@ -7,8 +7,10 @@ Safety rules:
   - Skip accounts with recent fatal failures (circuit breaker)
   - Browser always closed via try/finally
 """
+import dataclasses
 import logging
 from datetime import datetime
+from typing import Optional, Any
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -35,25 +37,35 @@ def today_start_ts() -> int:
     return int(midnight.timestamp())
 
 
+@dataclasses.dataclass
+class _MetricsJobTarget:
+    id: int
+    post_url: str
+    target_page: Optional[str]
+    account_id: Optional[int]
+    account_name: Optional[str]
+    profile_path: Optional[str]
+
+    @property
+    def account(self):
+        class _Acc:
+            def __init__(self, name, profile_path):
+                self.name = name
+                self.profile_path = profile_path
+        return _Acc(self.account_name, self.profile_path)
+
+
 class MetricsChecker:
     
     @staticmethod
-    def check_pending(db: Session):
-        """
-        Find 1 DONE job older than N hours that hasn't been checked recently.
-        
-        Safety constraints:
-          B1: Max 1 job per account per day (timezone-aware, NOT EXISTS)
-          B2: Skip accounts with consecutive_fatal_failures >= 2
-        """
+    def _find_candidate_job(db: Session) -> Optional[_MetricsJobTarget]:
+        """Find 1 DONE job older than N hours that hasn't been checked recently."""
         import os
         from sqlalchemy import or_
         hours = float(os.getenv("METRICS_CHECK_HOURS", "24"))
         threshold = now_ts() - int(hours * 3600)
         day_start = today_start_ts()
         
-        # Build the main query with all safety filters
-        # B1: NOT EXISTS subquery using SA 2.0 select() pattern
         checked_today_subq = (
             select(Job.id)
             .where(
@@ -71,14 +83,11 @@ class MetricsChecker:
                 Job.status == JobStatus.DONE,
                 Job.post_url != None,
                 Job.finished_at != None,
-                # Either it was never checked, OR it was checked but is older than threshold
                 or_(
                     Job.last_metrics_check_ts == None,
                     Job.last_metrics_check_ts <= threshold
                 ),
-                # B2: Skip weak accounts
                 Account.consecutive_fatal_failures < 2,
-                # B1: No other job from this account checked today
                 ~checked_today_subq
             )
             .order_by(Job.finished_at.asc())
@@ -86,27 +95,75 @@ class MetricsChecker:
         )
         
         if not job:
+            return None
+
+        return _MetricsJobTarget(
+            id=job.id,
+            post_url=job.post_url,
+            target_page=getattr(job, "target_page", None),
+            account_id=job.account_id,
+            account_name=job.account.name if job.account else None,
+            profile_path=job.account.profile_path if job.account else None,
+        )
+
+    @classmethod
+    def check_pending(cls, db: Optional[Session] = None):
+        """
+        Find 1 DONE job older than N hours that hasn't been checked recently.
+        Uses short transactions:
+          1. Quick DB read to fetch candidate job info, then releases/commits.
+          2. Playwright web scrape performed WITHOUT holding DB locks.
+          3. Quick DB write to update metrics and commit.
+        """
+        from app.core.database.core import SessionLocal
+
+        candidate: Optional[_MetricsJobTarget] = None
+
+        if db is not None:
+            candidate = cls._find_candidate_job(db)
+            # Release read transaction lock immediately before web scraping
+            db.commit()
+        else:
+            with SessionLocal() as read_db:
+                candidate = cls._find_candidate_job(read_db)
+                read_db.commit()
+        
+        if not candidate:
             return
         
         logger.info("[MetricsChecker] Checking 24h views for Job %s (account: %s): %s", 
-                     job.id, job.account.name if job.account else "?", job.post_url)
+                     candidate.id, candidate.account_name or "?", candidate.post_url)
         
-        view_count = MetricsChecker._scrape_views(job)
-        job.view_24h = view_count
-        job.metrics_checked = True
-        job.last_metrics_check_ts = now_ts()
-        db.commit()
+        # Web scraping performed WITHOUT holding any DB connection/transaction
+        view_count = cls._scrape_views(candidate)
+
+        if db is not None:
+            job = db.query(Job).filter(Job.id == candidate.id).first()
+            if job:
+                job.view_24h = view_count
+                job.metrics_checked = True
+                job.last_metrics_check_ts = now_ts()
+                db.commit()
+        else:
+            with SessionLocal() as write_db:
+                job = write_db.query(Job).filter(Job.id == candidate.id).first()
+                if job:
+                    job.view_24h = view_count
+                    job.metrics_checked = True
+                    job.last_metrics_check_ts = now_ts()
+                    write_db.commit()
         
-        logger.info("[MetricsChecker] Job %s → %s views after 24h", job.id, view_count)
+        logger.info("[MetricsChecker] Job %s → %s views after 24h", candidate.id, view_count)
     
     @staticmethod
-    def _scrape_views(job: Job) -> int:
+    def _scrape_views(job: Any) -> int:
         """
         Open post_url in a lightweight headless browser, extract view count, close immediately.
         Uses a fresh browser context (NOT the account profile) to avoid checkpoint risk.
         Browser is ALWAYS closed via try/finally — no leak possible.
         """
         views = 0
+        ctx = None
         browser = None
         try:
             from playwright.sync_api import sync_playwright
@@ -215,11 +272,13 @@ class MetricsChecker:
                 finally:
                     # Guaranteed cleanup — no browser leak
                     try:
-                        ctx.close()
+                        if ctx is not None:
+                            ctx.close()
                     except Exception:
                         pass
                     try:
-                        if browser: browser.close()
+                        if browser is not None:
+                            browser.close()
                     except Exception:
                         pass
                 

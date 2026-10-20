@@ -25,7 +25,7 @@ RSS_SOURCES = [
     {"name": "Thanh Niên", "url": "https://thanhnien.vn/rss/the-gioi.rss", "category": "World"},
     {"name": "Dân Trí", "url": "https://dantri.com.vn/rss/the-gioi.rss", "category": "World"},
     {"name": "Vietnamnet", "url": "https://vietnamnet.vn/rss/the-gioi.rss", "category": "World"},
-    {"name": "24h", "url": "https://cdn.24h.com.vn/upload/rss/thegioi.rss", "category": "World"},
+    {"name": "24h", "url": "https://cdn.24h.com.vn/upload/rss/tintuctrongngay.rss", "category": "News"},
 ]
 
 

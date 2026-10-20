@@ -79,6 +79,8 @@ class FacebookSessionManager:
         profile_path = FacebookSessionManager._resolve_portable_path(profile_path)
 
         FacebookSessionManager.log_profile_health(profile_path)
+        pw = None
+        context = None
         try:
             pw = sync_playwright().start()
             headless = FACEBOOK_PLAYWRIGHT_HEADLESS
@@ -119,4 +121,14 @@ class FacebookSessionManager:
             return pw, context, page
         except Exception as e:
             logger.error("FacebookSessionManager: Failed to bootstrap playwright session: %s", e)
+            if context is not None:
+                try:
+                    context.close()
+                except Exception:
+                    pass
+            if pw is not None:
+                try:
+                    pw.stop()
+                except Exception:
+                    pass
             return None

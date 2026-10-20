@@ -46,6 +46,7 @@ pages_app = typer.Typer(help="Facebook page tools (archived scripts)")
 insights_app = typer.Typer(help="Insights scraping (archived script)")
 ai_app = typer.Typer(help="AI provider tools")
 buffer_app = typer.Typer(help="Buffer API — kênh và xếp hàng bài")
+storage_app = typer.Typer(help="Storage retention and cleanup tools")
 
 app.add_typer(db_app, name="db")
 app.add_typer(ai_app, name="ai")
@@ -54,6 +55,7 @@ app.add_typer(worker_app, name="worker")
 app.add_typer(viral_app, name="viral")
 app.add_typer(pages_app, name="pages")
 app.add_typer(insights_app, name="insights")
+app.add_typer(storage_app, name="storage")
 
 
 def _env() -> dict:
@@ -582,6 +584,53 @@ def buffer_post(
         typer.echo(f"[LOI] {exc}", err=True)
         raise typer.Exit(code=1)
     typer.echo(f"[OK] post {post.get('id')} dueAt={post.get('dueAt')}")
+
+
+@storage_app.command("audit")
+def storage_audit() -> None:
+    """Calculates reclaimable bytes without deleting anything (dry-run)."""
+    from app.features.maintenance.storage_cleanup_service import StorageCleanupService
+
+    typer.echo("Auditing storage for reclaimable disk space (dry-run)...")
+    data = StorageCleanupService.audit()
+    reclaimed_bytes = data.get("reclaimable_bytes", 0)
+    reclaimed_mb = reclaimed_bytes / (1024 * 1024)
+    typer.echo(f"Total reclaimable: {reclaimed_mb:.2f} MB ({reclaimed_bytes:,} bytes)")
+    typer.echo(f"  Media files: {data.get('media_files_count', 0)}")
+    typer.echo(f"  Profiles: {data.get('profiles_count', 0)}")
+    typer.echo(f"  Logs & Backups: {data.get('logs_count', 0)}")
+    if data.get("errors"):
+        typer.echo(f"Warnings/Errors encountered: {len(data['errors'])}")
+        for err in data["errors"]:
+            typer.echo(f"  - {err}", err=True)
+
+
+@storage_app.command("cleanup")
+def storage_cleanup(
+    retention_days: int = typer.Option(7, "--retention-days", "-r", help="Retention period for media files in days (default: 7)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Simulate cleanup without deleting any files"),
+    purge_obsolete: bool = typer.Option(False, "--purge-obsolete", help="Permanently delete obsolete test profiles instead of quarantining"),
+) -> None:
+    """Executes storage cleanup across media, browser profile caches, and logs/backups."""
+    from app.features.maintenance.storage_cleanup_service import StorageCleanupService
+
+    mode = "DRY-RUN" if dry_run else "EXECUTE"
+    typer.echo(f"Starting storage cleanup [{mode}] (retention_days={retention_days}, purge_obsolete={purge_obsolete})...")
+    res = StorageCleanupService.run_all(
+        dry_run=dry_run,
+        retention_days=retention_days,
+        include_obsolete=purge_obsolete,
+        quarantine=not purge_obsolete,
+    )
+    reclaimed_mb = res.reclaimed_bytes / (1024 * 1024)
+    typer.echo(f"Cleanup completed. Total space reclaimed: {reclaimed_mb:.2f} MB ({res.reclaimed_bytes:,} bytes)")
+    typer.echo(f"  Media files deleted: {res.media_files_deleted}")
+    typer.echo(f"  Profiles cleaned: {res.profiles_cleaned}")
+    typer.echo(f"  Logs cleaned: {res.logs_cleaned}")
+    if res.errors:
+        typer.echo(f"Errors encountered ({len(res.errors)}):", err=True)
+        for err in res.errors:
+            typer.echo(f"  - {err}", err=True)
 
 
 if __name__ == "__main__":
