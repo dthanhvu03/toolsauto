@@ -124,7 +124,7 @@ def get_cluster_status():
                     if match:
                         remaining_cd = int(match.group(1))
                     elif remaining_cd == 0:
-                        remaining_cd = 3600  # Giả định 1h mặc định
+                        remaining_cd = 3600
 
             if status == "ACTIVE":
                 active_accounts_count += 1
