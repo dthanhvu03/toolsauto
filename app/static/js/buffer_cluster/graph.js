@@ -320,8 +320,52 @@ export class ClusterGraph {
   }
 
   /**
-   * Cập nhật màu sắc node khi account đổi trạng thái COOLDOWN <-> ACTIVE
+   * Một sự kiện đang xảy ra (RUNNING / DONE / FAIL / 429) làm sáng đúng đường
+   * lõi → tài khoản → kênh trong vài giây. Hết giờ thì trả màu cũ.
    */
+  pulseActivity(evt) {
+    if (!evt) return;
+    const status = String(evt.status || '').toUpperCase();
+    const http = Number(evt.httpStatus || 0);
+    let color = 0x22d3ee;
+    let speed = 0.018;
+    if (status === 'DONE' || http === 200) {
+      color = 0x34d399;
+      speed = 0.012;
+    } else if (http === 429) {
+      color = 0xf59e0b;
+      speed = 0.008;
+    } else if (status === 'FAILED' || http >= 400) {
+      color = 0xf87171;
+      speed = 0.01;
+    } else if (status === 'PENDING') {
+      color = 0xfbbf24;
+      speed = 0.008;
+    }
+
+    this._pulses = this._pulses || [];
+    this._pulses.push({
+      accountIndex: Number(evt.accountIndex),
+      channelId: evt.channelId != null ? String(evt.channelId) : '',
+      color,
+      speed,
+      until: performance.now() + 3200,
+    });
+  }
+
+  _activePulse(meta) {
+    const now = performance.now();
+    this._pulses = (this._pulses || []).filter((p) => p.until > now);
+    return this._pulses.find((p) => {
+      if (!meta || meta.accountIndex !== p.accountIndex) return false;
+      if (meta.type === 'core-to-account') return true;
+      if (meta.type === 'account-to-channel') {
+        return !p.channelId || String(meta.channelId) === p.channelId;
+      }
+      return false;
+    }) || null;
+  }
+
   updateAccountStatus(accountIndex, newStatus) {
     const accNode = this.accountNodes.find(n => n.data.index === accountIndex);
     if (!accNode) return;
@@ -348,17 +392,70 @@ export class ClusterGraph {
   }
 
   updateAnimations() {
+    const now = performance.now();
+    this._pulses = (this._pulses || []).filter((p) => p.until > now);
+    const hot = this._pulses.length > 0;
     if (this.coreNode) {
-      this.coreNode.rotation.y += 0.006;
+      this.coreNode.rotation.y += hot ? 0.014 : 0.006;
+      this.coreNode.material.emissiveIntensity = hot ? 1.5 : 0.8;
     }
 
     this.particleSystems.forEach(p => {
-      p.progress += p.speed;
+      const pulse = this._activePulse(p.meta);
+      p.progress += pulse ? pulse.speed : p.speed;
       if (p.progress > 1) p.progress = 0;
       const pt = p.curve.getPoint(p.progress);
       const pos = p.points.geometry.attributes.position;
       pos.setXYZ(0, pt.x, pt.y, pt.z);
       pos.needsUpdate = true;
+
+      if (pulse) {
+        if (p._baseColor == null) p._baseColor = p.points.material.color.getHex();
+        p.points.material.color.setHex(pulse.color);
+        p.points.material.opacity = 1;
+        p.points.material.size = 9;
+        p._pulsing = true;
+      } else if (p._pulsing) {
+        if (p._baseColor != null) p.points.material.color.setHex(p._baseColor);
+        p.points.material.opacity = 0.9;
+        p.points.material.size = 5;
+        p._pulsing = false;
+      }
+    });
+
+    this.splineCurves.forEach(({ lineMesh, meta }) => {
+      const pulse = this._activePulse(meta);
+      if (pulse) {
+        if (lineMesh.userData._baseColor == null) {
+          lineMesh.userData._baseColor = lineMesh.material.color.getHex();
+          lineMesh.userData._baseOpacity = lineMesh.material.opacity;
+        }
+        lineMesh.material.color.setHex(pulse.color);
+        lineMesh.material.opacity = 0.95;
+        lineMesh.userData._pulsing = true;
+      } else if (lineMesh.userData._pulsing) {
+        lineMesh.material.color.setHex(lineMesh.userData._baseColor);
+        lineMesh.material.opacity = lineMesh.userData._baseOpacity;
+        lineMesh.userData._pulsing = false;
+      }
+    });
+
+    const hotAccounts = new Set(this._pulses.map((p) => p.accountIndex));
+    this.accountNodes.forEach((n) => {
+      const on = hotAccounts.has(n.data.index);
+      if (on) {
+        if (!n._pulsing) {
+          n._savedEmissive = n.mesh.material.emissiveIntensity;
+          n._savedHalo = n.halo ? n.halo.material.opacity : null;
+          n._pulsing = true;
+        }
+        n.mesh.material.emissiveIntensity = 1.45;
+        if (n.halo) n.halo.material.opacity = 0.95;
+      } else if (n._pulsing) {
+        n.mesh.material.emissiveIntensity = n._savedEmissive ?? n.defaultEmissiveIntensity;
+        if (n.halo && n._savedHalo != null) n.halo.material.opacity = n._savedHalo;
+        n._pulsing = false;
+      }
     });
   }
 

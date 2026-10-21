@@ -22,7 +22,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   
   <!-- Modular Frontend CSS — ?v= bust cache iOS/PWA (đổi khi sửa CSS) -->
-  <link rel="stylesheet" href="/static/css/buffer_cluster.css?v=20261020f">
+  <link rel="stylesheet" href="/static/css/buffer_cluster.css?v=20261021e">
 </head>
 <body>
 
@@ -247,7 +247,7 @@
       <div class="dispatch-terminal-header">
         <div class="dispatch-terminal-title">
           <span class="dispatch-live-dot" id="dispatch-live-dot" title="Trạng thái RUNNING"></span>
-          <span>DISPATCH LOG</span>
+          <span>ĐANG LÀM</span>
           <span class="dispatch-feed-meta" id="dispatch-feed-meta">Đang kết nối…</span>
         </div>
         <div class="dispatch-terminal-actions">
@@ -255,6 +255,7 @@
           <button type="button" class="btn-action btn-terminal-sm" id="btn-toggle-terminal" aria-expanded="true">Thu gọn</button>
         </div>
       </div>
+      <div class="dispatch-now tone-wait" id="dispatch-now">Đang kết nối nhật ký…</div>
       <div class="dispatch-feed-body" id="dispatch-feed-body">
         <div class="dispatch-empty">Đang tải nhật ký điều phối…</div>
       </div>
@@ -280,6 +281,16 @@
 
   </div>
 
+  <div id="job-detail" class="job-detail" hidden>
+    <div class="job-detail-card" role="dialog" aria-modal="true" aria-labelledby="job-detail-title">
+      <div class="job-detail-head">
+        <div id="job-detail-title">Chi tiết job</div>
+        <button type="button" class="btn-action btn-terminal-sm" id="job-detail-close">Đóng</button>
+      </div>
+      <div id="job-detail-body"></div>
+    </div>
+  </div>
+
   <!-- Gắn class sớm để CSS ẩn canvas trước khi JS chạy (tránh flash màn đen iOS) -->
   <script>
     (function () {
@@ -300,6 +311,6 @@
   <script src="/static/vendor/three/OrbitControls.js"></script>
 
   <!-- Modular Application Entry Point — ?v= bust module cache -->
-  <script type="module" src="/static/js/buffer_cluster/app.js?v=20261020f"></script>
+  <script type="module" src="/static/js/buffer_cluster/app.js?v=20261021e"></script>
 </body>
 </html>

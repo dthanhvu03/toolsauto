@@ -1,13 +1,13 @@
 /* Buffer 3D Neural Cluster Service Worker */
 /* Bump CACHE_NAME mỗi lần đổi CSS/JS để iOS/PWA không giữ bản cũ (màn tối / backdrop). */
-const CACHE_NAME = 'buffer-cluster-v20261020f';
+const CACHE_NAME = 'buffer-cluster-v20261021e';
 const API_CACHE_NAME = 'buffer-cluster-api-v1';
 
 const STATIC_ASSETS = [
   '/buffer-cluster',
   '/manifest.json',
-  '/static/css/buffer_cluster.css?v=20261020f',
-  '/static/js/buffer_cluster/app.js?v=20261020f',
+  '/static/css/buffer_cluster.css?v=20261021e',
+  '/static/js/buffer_cluster/app.js?v=20261021e',
   '/static/js/buffer_cluster/scene.js',
   '/static/js/buffer_cluster/graph.js',
   '/static/js/buffer_cluster/controls.js',

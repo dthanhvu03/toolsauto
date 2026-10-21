@@ -844,6 +844,8 @@ def get_dispatch_feed(limit: int = 25):
                     "timeIct": _safe_format_ict(event_ts) or format_ict(now_ts),
                     "timestamp": event_ts,
                     "message": msg,
+                    "caption": (j.caption or "")[:400],
+                    "postUrl": j.post_url or "",
                 }
             )
 

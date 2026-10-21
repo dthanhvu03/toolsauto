@@ -3,10 +3,10 @@
  * Mobile (≤768px / touch phone): tắt WebGL — GPU yếu/iOS hay render màn đen.
  */
 import { initScene } from './scene.js';
-import { ClusterGraph } from './graph.js';
+import { ClusterGraph } from './graph.js?v=20261021c';
 import { TelemetryService } from './telemetry.js';
 import { ClusterControlsManager } from './controls.js';
-import { DispatchFeedTerminal } from './dispatch_feed.js';
+import { DispatchFeedTerminal } from './dispatch_feed.js?v=20261021c';
 
 let autoRotate = true;
 
@@ -28,6 +28,7 @@ function createNoopGraph() {
     updateAnimations() {},
     applyFilter() {},
     updateAccountStatus() {},
+    pulseActivity() {},
     getInteractiveMeshes() {
       return [];
     },
@@ -86,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     (data) => {
       // Callback: onDataLoaded
       graph.build(data);
+      window.dispatchTerminal?.replayPulses?.();
 
       const hint = document.getElementById('hud-stage-hint');
       if (hint && data.accounts && data.accounts.length) {
@@ -161,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 7. Live Dispatch Terminal — poll /api/buffer/dispatch-feed (F12)
   const dispatchTerminal = new DispatchFeedTerminal();
+  dispatchTerminal.attachGraph(graph);
   dispatchTerminal.start(8000);
   window.dispatchTerminal = dispatchTerminal;
 
