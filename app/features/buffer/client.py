@@ -3,11 +3,17 @@
 Personal API key: Settings → API. Header `Authorization: Bearer`.
 Media is a public HTTPS URL. Buffer has no upload endpoint.
 Docs: https://developers.buffer.com/guides/getting-started.html
+
+Rate-limit guard (vá cháy quota):
+- Giãn tối thiểu giữa 2 request cùng key (tránh burst TikTok 7 bài/phút).
+- Sau HTTP 429: chặn gọi tiếp đến hết cooldown (không spam Retry-After).
 """
 from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 from typing import Any
 
 import requests
@@ -18,6 +24,40 @@ API_URL = "https://api.buffer.com"
 MODES = frozenset({"addToQueue", "shareNow", "shareNext", "customScheduled"})
 _IMAGE_EXT = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
 _VIDEO_EXT = frozenset({".mp4", ".mov", ".webm"})
+
+# Khoảng cách tối thiểu giữa 2 GraphQL call cùng API key (giây)
+MIN_REQUEST_INTERVAL_SEC = 5.0
+# Cooldown sàn khi 429 (Buffer free hay reset chậm)
+MIN_429_COOLDOWN_SEC = 900  # 15 phút
+# Trần cooldown local — tránh khóa key nhiều ngày vì header lệch
+MAX_429_COOLDOWN_SEC = 7200  # 2 giờ
+# Phần bucket còn lại giữ cho createPost/editPost. Hỏi kênh, hỏi suất, hỏi status phải dừng trước.
+POST_RESERVE_RATIO = 0.70
+
+_GUARD_LOCK = threading.Lock()
+_KEY_GUARD: dict[str, dict] = {}
+
+
+def _guard_row(key: str) -> dict:
+    row = _KEY_GUARD.get(key)
+    if row is None:
+        row = {
+            "cooldown_until": 0.0,
+            "last_call_at": 0.0,
+            "limit": None,
+            "remaining": None,
+        }
+        _KEY_GUARD[key] = row
+    return row
+
+
+def any_key_ready(keys: list[str]) -> bool:
+    """False khi mọi key đã biết đều đang cooldown. Key chưa gặp thì coi là sẵn sàng."""
+    if not keys:
+        return False
+    now = time.time()
+    with _GUARD_LOCK:
+        return any(float(_guard_row(k)["cooldown_until"]) <= now for k in keys)
 
 
 class BufferError(Exception):
@@ -54,8 +94,121 @@ class BufferClient:
         self._key = key
         self._endpoint = endpoint
         self._timeout = timeout
+        self._lock = threading.Lock()
+        with _GUARD_LOCK:
+            row = _guard_row(self._key)
+            self._last_call_at = float(row["last_call_at"])
+            self._cooldown_until = float(row["cooldown_until"])
 
-    def execute(self, query: str, variables: dict | None = None, *, partial: bool = False) -> dict[str, Any]:
+    def cooldown_remaining(self) -> float:
+        """Số giây còn lại trước khi được gọi API lại (0 = sẵn sàng)."""
+        with _GUARD_LOCK:
+            until = float(_guard_row(self._key)["cooldown_until"])
+        self._cooldown_until = until
+        return max(0.0, until - time.time())
+
+    def reserve_block_reason(self) -> str | None:
+        """Hỏi status/kênh/suất phải dừng khi phần còn lại đã chạm mức giữ cho đăng bài."""
+        with _GUARD_LOCK:
+            row = _guard_row(self._key)
+            limit = row["limit"]
+            remaining = row["remaining"]
+        if limit is None or remaining is None or int(limit) <= 0:
+            return None
+        floor = int(int(limit) * POST_RESERVE_RATIO)
+        if int(remaining) <= floor:
+            return (
+                f"Giữ {int(POST_RESERVE_RATIO * 100)}% suất API cho đăng bài "
+                f"(còn {remaining}/{limit}, ngưỡng giữ {floor})."
+            )
+        return None
+
+    def allows(self, purpose: str = "background") -> bool:
+        if self.cooldown_remaining() > 0:
+            return False
+        if purpose != "publish" and self.reserve_block_reason():
+            return False
+        return True
+
+    def mark_rate_limited(self, retry_after: int | None = None) -> int:
+        """Ghi nhận 429 / tự khóa key. Trả về số giây cooldown đã áp. Khóa dùng chung mọi client cùng key."""
+        raw = int(retry_after or 0)
+        if raw < 1:
+            raw = MIN_429_COOLDOWN_SEC
+        cd = max(MIN_429_COOLDOWN_SEC, raw)
+        cd = min(cd, MAX_429_COOLDOWN_SEC)
+        until = time.time() + cd
+        with _GUARD_LOCK:
+            row = _guard_row(self._key)
+            row["cooldown_until"] = max(float(row["cooldown_until"]), until)
+            row["remaining"] = 0
+            self._cooldown_until = float(row["cooldown_until"])
+        logger.warning(
+            "[Buffer] Key vào cooldown %ss (retry_after=%s, floor=%ss, cap=%ss)",
+            cd,
+            retry_after,
+            MIN_429_COOLDOWN_SEC,
+            MAX_429_COOLDOWN_SEC,
+        )
+        return cd
+
+    def _note_budget(self, response, *, consumed: bool) -> None:
+        def _header_int(headers, name: str):
+            value = headers.get(name) if hasattr(headers, "get") else None
+            if isinstance(value, bool) or not isinstance(value, (int, str)):
+                return None
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        headers = getattr(response, "headers", None) or {}
+        limit = _header_int(headers, "x-ratelimit-limit")
+        remaining = _header_int(headers, "x-ratelimit-remaining")
+        with _GUARD_LOCK:
+            row = _guard_row(self._key)
+            if limit is not None:
+                row["limit"] = limit
+            if remaining is not None:
+                row["remaining"] = remaining
+            elif consumed and row["remaining"] is not None:
+                row["remaining"] = max(0, int(row["remaining"]) - 1)
+
+    def _wait_for_slot(self) -> None:
+        """Chặn gọi khi đang cooldown; giãn tối thiểu giữa 2 request cùng key."""
+        with _GUARD_LOCK:
+            row = _guard_row(self._key)
+            now = time.time()
+            remaining_cd = float(row["cooldown_until"]) - now
+            if remaining_cd > 0:
+                self._cooldown_until = float(row["cooldown_until"])
+                wait_s = int(remaining_cd) + 1
+                raise BufferError(
+                    f"Buffer HTTP 429. Vui lòng thử lại sau {wait_s}s.",
+                    status_code=429,
+                    retry_after=wait_s,
+                )
+            gap = MIN_REQUEST_INTERVAL_SEC - (now - float(row["last_call_at"] or 0))
+            # Giữ chỗ trước khi ngủ để client khác cùng key không chui vào.
+            row["last_call_at"] = now + max(gap, 0)
+            self._last_call_at = row["last_call_at"]
+        if gap > 0:
+            time.sleep(gap)
+
+    def execute(
+        self,
+        query: str,
+        variables: dict | None = None,
+        *,
+        partial: bool = False,
+        purpose: str = "background",
+    ) -> dict[str, Any]:
+        if purpose != "publish":
+            held = self.reserve_block_reason()
+            if held:
+                raise BufferError(held)
+        self._wait_for_slot()
+
         payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
@@ -72,20 +225,23 @@ class BufferClient:
         except requests.RequestException as exc:
             raise BufferError(f"Khong goi duoc Buffer: {exc.__class__.__name__}") from exc
 
+        self._note_budget(response, consumed=True)
+
         if response.status_code == 401:
             raise BufferError("Buffer tu choi key (401). Lay key o Settings → API.", status_code=401)
         if response.status_code == 429:
             retry_after_header = response.headers.get("Retry-After")
-            retry_after = 60
+            retry_after = MIN_429_COOLDOWN_SEC
             if retry_after_header:
                 try:
                     retry_after = int(retry_after_header)
                 except (ValueError, TypeError):
                     pass
+            cd = self.mark_rate_limited(retry_after)
             raise BufferError(
-                f"Buffer HTTP 429. Vui lòng thử lại sau {retry_after}s.",
+                f"Buffer HTTP 429. Vui lòng thử lại sau {cd}s.",
                 status_code=429,
-                retry_after=retry_after,
+                retry_after=cd,
             )
         if response.status_code >= 400:
             raise BufferError(
@@ -236,7 +392,8 @@ class BufferClient:
                 }}
               }}
             }}
-            """
+            """,
+            purpose="publish",
         )
         node = data.get("createPost") or {}
         post = node.get("post") if isinstance(node, dict) else None
@@ -265,8 +422,8 @@ class BufferClient:
             return post
         return None
 
-    def _take_action(self, query: str, name: str) -> dict:
-        data = self.execute(query)
+    def _take_action(self, query: str, name: str, *, purpose: str = "background") -> dict:
+        data = self.execute(query, purpose=purpose)
         node = data.get(name) or {}
         if not isinstance(node, dict):
             raise BufferError("Buffer khong tra ket qua.")
@@ -324,6 +481,7 @@ class BufferClient:
             }}
             """,
             "editPost",
+            purpose="publish",
         )
 
     def publish_now(self, post_id: str) -> dict:

@@ -126,14 +126,17 @@ def sync_sent_marks(db, *, now: float | None = None, force: bool = False) -> lis
     if not force and (moment - _last_sync_ts) < INTERVAL_SEC:
         return []
 
+    from app.features.buffer.client import any_key_ready
     from app.features.buffer.manager import get_buffer_manager
     manager = get_buffer_manager()
     if not manager.has_keys():
         return []
+    if not any_key_ready(manager.get_keys()):
+        logger.info("[Buffer] Bo qua hoi trang thai bai — moi key dang cooldown")
+        return []
 
     _last_sync_ts = moment
     from app.core.notifier.service import NotifierService
-    from app.features.buffer.client import BufferError
     from app.features.viral_intake.service import ViralService
 
     grouped = ready_post_ids(db)

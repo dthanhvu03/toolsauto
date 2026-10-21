@@ -10,30 +10,25 @@ export function initScene(containerId) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x07090e, 0.0018);
 
-  // Camera: Tự động căn khoảng cách và góc nhìn theo tỷ lệ màn hình
-  const isMobile = width <= 768;
-  const camera = new THREE.PerspectiveCamera(isMobile ? 65 : 55, width / height, 0.1, 2000);
-  camera.position.set(0, isMobile ? 180 : 140, isMobile ? 380 : 280);
+  // Camera
+  const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 2000);
+  camera.position.set(0, 140, 280);
 
   // Renderer
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(width, height);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
   container.appendChild(renderer.domElement);
 
-  // Controls (Touch-optimized cho 1 ngón xoay & 2 ngón zoom/pan)
+  // Controls
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
-  controls.maxDistance = 700;
+  controls.maxDistance = 600;
   controls.minDistance = 60;
   controls.maxPolarAngle = Math.PI / 2 + 0.1;
-  controls.touches = {
-    ONE: THREE.TOUCH.ROTATE,
-    TWO: THREE.TOUCH.DOLLY_PAN
-  };
 
   // Lights
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -53,13 +48,9 @@ export function initScene(containerId) {
 
   // Resize handler
   window.addEventListener('resize', () => {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    camera.aspect = w / h;
-    camera.fov = (w <= 768) ? 65 : 55;
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
   return { scene, camera, renderer, controls };

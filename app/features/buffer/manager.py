@@ -167,6 +167,13 @@ class BufferManager:
         for idx, client in enumerate(clients, 1):
             key_str = getattr(client, "_key", "")
             masked = mask_key(key_str)
+            if hasattr(client, "allows") and not client.allows("background"):
+                logger.info(
+                    "[BufferManager] Bỏ quét kênh tài khoản #%d (%s) — giữ suất API cho đăng bài hoặc đang cooldown",
+                    idx,
+                    masked,
+                )
+                continue
             try:
                 orgs = client.organizations()
                 for org in orgs:

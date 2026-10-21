@@ -635,8 +635,7 @@ class TelegramEventRouter:
         self.client.send_message(("✅ " if ok else "⚠️ ") + msg)
 
     def _handle_buffer_channel(self, callback_id: str, channel_id: str):
-        import app.config as config
-        from app.features.buffer.client import BufferClient, BufferError
+        from app.features.buffer.client import BufferError
         from app.features.telegram_bot.command_handler import send_long_message
 
         from app.features.buffer.manager import get_buffer_manager
@@ -652,8 +651,7 @@ class TelegramEventRouter:
 
     def _handle_buffer_post(self, callback_id: str, action: str, post_id: str):
         """Nút trên bài Buffer: đăng ngay, chi tiết, xếp lại, nháp, nhân bản, xóa."""
-        import app.config as config
-        from app.features.buffer.client import BufferClient, BufferError, _ict_when
+        from app.features.buffer.client import BufferError, _ict_when
 
         pid = (post_id or "").strip()
         if not pid:

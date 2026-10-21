@@ -1,6 +1,6 @@
 /**
- * Module Graph: Quản lý khởi tạo và render các Node mạng lưới (Core, Accounts, Channels)
- * cùng các chùm tia laser kết nối và hạt photon chuyển động.
+ * Module Graph: Quản lý khởi tạo và render các Node mạng lưới 3D (Core, Accounts, Channels)
+ * cùng các chùm tia laser kết nối, hạt photon chuyển động, và 3D Node Dimming (F9).
  */
 
 export class ClusterGraph {
@@ -11,14 +11,33 @@ export class ClusterGraph {
     this.channelNodes = [];
     this.splineCurves = [];
     this.particleSystems = [];
+    this.currentFilter = null;
   }
 
   clear() {
-    this.accountNodes.forEach(n => this.scene.remove(n.mesh));
-    this.channelNodes.forEach(n => this.scene.remove(n.mesh));
-    if (this.coreNode) this.scene.remove(this.coreNode);
-    this.splineCurves.forEach(c => this.scene.remove(c.lineMesh));
-    this.particleSystems.forEach(p => this.scene.remove(p.points));
+    this.accountNodes.forEach(n => {
+      this.scene.remove(n.mesh);
+      if (n.mesh.geometry) n.mesh.geometry.dispose();
+      if (n.mesh.material) n.mesh.material.dispose();
+    });
+    this.channelNodes.forEach(n => {
+      this.scene.remove(n.mesh);
+      if (n.mesh.geometry) n.mesh.geometry.dispose();
+      if (n.mesh.material) n.mesh.material.dispose();
+    });
+    if (this.coreNode) {
+      this.scene.remove(this.coreNode);
+    }
+    this.splineCurves.forEach(c => {
+      this.scene.remove(c.lineMesh);
+      if (c.lineMesh.geometry) c.lineMesh.geometry.dispose();
+      if (c.lineMesh.material) c.lineMesh.material.dispose();
+    });
+    this.particleSystems.forEach(p => {
+      this.scene.remove(p.points);
+      if (p.points.geometry) p.points.geometry.dispose();
+      if (p.points.material) p.points.material.dispose();
+    });
 
     this.accountNodes = [];
     this.channelNodes = [];
@@ -29,7 +48,7 @@ export class ClusterGraph {
   build(data) {
     this.clear();
 
-    // 1. Central Core Node
+    // 1. Central Gateway Core Node
     const coreGeo = new THREE.SphereGeometry(16, 32, 32);
     const coreMat = new THREE.MeshStandardMaterial({
       color: 0x00f0ff,
@@ -37,6 +56,8 @@ export class ClusterGraph {
       emissiveIntensity: 0.8,
       roughness: 0.2,
       metalness: 0.8,
+      transparent: true,
+      opacity: 1.0,
     });
     this.coreNode = new THREE.Mesh(coreGeo, coreMat);
     this.coreNode.position.set(0, 20, 0);
@@ -72,6 +93,8 @@ export class ClusterGraph {
         emissiveIntensity: 0.6,
         roughness: 0.3,
         metalness: 0.6,
+        transparent: true,
+        opacity: 1.0,
       });
       const accMesh = new THREE.Mesh(accGeo, accMat);
       accMesh.position.set(ax, ay, az);
@@ -90,10 +113,20 @@ export class ClusterGraph {
       haloMesh.rotation.x = Math.PI / 2;
       accMesh.add(haloMesh);
 
-      this.accountNodes.push({ mesh: accMesh, data: acc });
+      this.accountNodes.push({
+        mesh: accMesh,
+        halo: haloMesh,
+        data: acc,
+        defaultColor: accColor,
+        defaultEmissive: emissiveColor,
+        defaultEmissiveIntensity: 0.6,
+      });
 
       // Laser Spline: Core -> Account
-      this.createLaserConnection(this.coreNode.position, accMesh.position, accColor);
+      this.createLaserConnection(this.coreNode.position, accMesh.position, accColor, 1.0, {
+        type: 'core-to-account',
+        accountIndex: acc.index,
+      });
 
       // 3. Satellite Channels for this Account
       const channels = acc.channels || [];
@@ -106,8 +139,10 @@ export class ClusterGraph {
         const cz = az + Math.sin(chanAngle) * chanOrbitRadius;
         const cy = ay + (ci % 2 === 0 ? 12 : -12);
 
-        const isTikTok = (ch.service || '').toLowerCase().includes('tiktok');
-        const chanColor = isTikTok ? 0xec4899 : 0x3b82f6;
+        const service = (ch.service || '').toLowerCase();
+        const isTikTok = service.includes('tiktok');
+        const isInstagram = service.includes('instagram');
+        const chanColor = isTikTok ? 0xec4899 : (isInstagram ? 0xa855f7 : 0x3b82f6);
 
         const chanGeo = new THREE.SphereGeometry(6, 24, 24);
         const chanMat = new THREE.MeshStandardMaterial({
@@ -115,21 +150,38 @@ export class ClusterGraph {
           emissive: chanColor,
           emissiveIntensity: 0.4,
           roughness: 0.4,
+          transparent: true,
+          opacity: 1.0,
         });
         const chanMesh = new THREE.Mesh(chanGeo, chanMat);
         chanMesh.position.set(cx, cy, cz);
         chanMesh.userData = { type: 'channel', data: ch, parentAccount: acc };
         this.scene.add(chanMesh);
 
-        this.channelNodes.push({ mesh: chanMesh, data: ch });
+        this.channelNodes.push({
+          mesh: chanMesh,
+          data: ch,
+          parentAccount: acc,
+          defaultColor: chanColor,
+          defaultEmissiveIntensity: 0.4,
+        });
 
         // Spline: Account -> Channel
-        this.createLaserConnection(accMesh.position, chanMesh.position, chanColor, 0.5);
+        this.createLaserConnection(accMesh.position, chanMesh.position, chanColor, 0.5, {
+          type: 'account-to-channel',
+          accountIndex: acc.index,
+          channelId: ch.id,
+        });
       });
     });
+
+    // Re-apply filter if active
+    if (this.currentFilter) {
+      this.applyFilter(this.currentFilter);
+    }
   }
 
-  createLaserConnection(p1, p2, colorHex, particleSpeed = 1.0) {
+  createLaserConnection(p1, p2, colorHex, particleSpeed = 1.0, meta = {}) {
     const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
     mid.y += 10;
 
@@ -143,8 +195,9 @@ export class ClusterGraph {
       opacity: 0.35,
     });
     const lineMesh = new THREE.Line(geometry, material);
+    lineMesh.userData = { ...meta };
     this.scene.add(lineMesh);
-    this.splineCurves.push({ curve, lineMesh });
+    this.splineCurves.push({ curve, lineMesh, meta });
 
     // Flowing particle
     const pGeo = new THREE.BufferGeometry();
@@ -156,6 +209,7 @@ export class ClusterGraph {
       opacity: 0.9,
     });
     const particleMesh = new THREE.Points(pGeo, pMat);
+    particleMesh.userData = { ...meta };
     this.scene.add(particleMesh);
 
     this.particleSystems.push({
@@ -163,6 +217,133 @@ export class ClusterGraph {
       curve: curve,
       progress: Math.random(),
       speed: (0.003 + Math.random() * 0.002) * particleSpeed,
+      meta,
+    });
+  }
+
+  /**
+   * 3D Graph Node & Laser Dimming (F9)
+   * Làm mờ các node và laser không khớp bộ lọc về opacity: 0.15 / 0.05
+   * và làm nổi bật các node khớp (opacity: 1.0, emissiveIntensity cao).
+   */
+  applyFilter({ query = '', platform = 'all' } = {}) {
+    this.currentFilter = { query, platform };
+    const q = (query || '').trim().toLowerCase();
+    const plat = (platform || 'all').trim().toLowerCase();
+    const hasFilter = q.length > 0 || plat !== 'all';
+
+    const matchedChannelIds = new Set();
+    const matchedAccountIndices = new Set();
+
+    if (hasFilter) {
+      // 1. Quét tìm các kênh khớp
+      this.channelNodes.forEach(({ data: ch, parentAccount: acc }) => {
+        const service = (ch.service || '').toLowerCase();
+        const matchPlat = (plat === 'all') || service.includes(plat);
+        const matchQuery = !q || (
+          (ch.name || '').toLowerCase().includes(q) ||
+          (ch.id || '').toLowerCase().includes(q) ||
+          (acc && (acc.email || '').toLowerCase().includes(q)) ||
+          (acc && (acc.maskedKey || '').toLowerCase().includes(q))
+        );
+        if (matchPlat && matchQuery) {
+          matchedChannelIds.add(ch.id);
+          if (acc) matchedAccountIndices.add(acc.index);
+        }
+      });
+
+      // 2. Tài khoản khớp trực tiếp qua email khi platform là 'all'
+      if (plat === 'all') {
+        this.accountNodes.forEach(({ data: acc }) => {
+          if (!q || (acc.email || '').toLowerCase().includes(q) || (acc.name || '').toLowerCase().includes(q) || (acc.maskedKey || '').toLowerCase().includes(q)) {
+            matchedAccountIndices.add(acc.index);
+          }
+        });
+      }
+    }
+
+    // A. Dimming Channel Nodes
+    this.channelNodes.forEach(({ mesh, data: ch, defaultEmissiveIntensity }) => {
+      const isMatch = !hasFilter || matchedChannelIds.has(ch.id);
+      if (isMatch) {
+        mesh.material.opacity = 1.0;
+        mesh.material.emissiveIntensity = hasFilter ? 0.85 : defaultEmissiveIntensity;
+        mesh.scale.set(hasFilter ? 1.15 : 1.0, hasFilter ? 1.15 : 1.0, hasFilter ? 1.15 : 1.0);
+      } else {
+        mesh.material.opacity = 0.15;
+        mesh.material.emissiveIntensity = 0.05;
+        mesh.scale.set(0.7, 0.7, 0.7);
+      }
+    });
+
+    // B. Dimming Account Nodes
+    this.accountNodes.forEach(({ mesh, halo, data: acc, defaultEmissiveIntensity }) => {
+      const isMatch = !hasFilter || matchedAccountIndices.has(acc.index);
+      if (isMatch) {
+        mesh.material.opacity = 1.0;
+        mesh.material.emissiveIntensity = hasFilter ? 0.85 : defaultEmissiveIntensity;
+        if (halo) halo.material.opacity = 0.45;
+        mesh.scale.set(hasFilter ? 1.1 : 1.0, hasFilter ? 1.1 : 1.0, hasFilter ? 1.1 : 1.0);
+      } else {
+        mesh.material.opacity = 0.15;
+        mesh.material.emissiveIntensity = 0.05;
+        if (halo) halo.material.opacity = 0.05;
+        mesh.scale.set(0.75, 0.75, 0.75);
+      }
+    });
+
+    // C. Dimming Spline Laser Beams
+    this.splineCurves.forEach(({ lineMesh, meta }) => {
+      let isMatch = true;
+      if (hasFilter) {
+        if (meta.type === 'core-to-account') {
+          isMatch = matchedAccountIndices.has(meta.accountIndex);
+        } else if (meta.type === 'account-to-channel') {
+          isMatch = matchedChannelIds.has(meta.channelId);
+        }
+      }
+      lineMesh.material.opacity = isMatch ? (hasFilter ? 0.6 : 0.35) : 0.05;
+    });
+
+    // D. Dimming Photon Flow Particles
+    this.particleSystems.forEach(p => {
+      let isMatch = true;
+      if (hasFilter && p.meta) {
+        if (p.meta.type === 'core-to-account') {
+          isMatch = matchedAccountIndices.has(p.meta.accountIndex);
+        } else if (p.meta.type === 'account-to-channel') {
+          isMatch = matchedChannelIds.has(p.meta.channelId);
+        }
+      }
+      p.points.material.opacity = isMatch ? (hasFilter ? 1.0 : 0.9) : 0.1;
+    });
+  }
+
+  /**
+   * Cập nhật màu sắc node khi account đổi trạng thái COOLDOWN <-> ACTIVE
+   */
+  updateAccountStatus(accountIndex, newStatus) {
+    const accNode = this.accountNodes.find(n => n.data.index === accountIndex);
+    if (!accNode) return;
+
+    const isCooldown = newStatus === 'COOLDOWN';
+    const newColor = isCooldown ? 0xf59e0b : (accountIndex === 3 ? 0x00f0ff : 0x10b981);
+    const newEmissive = isCooldown ? 0xb45309 : (accountIndex === 3 ? 0x0088cc : 0x047857);
+
+    accNode.mesh.material.color.setHex(newColor);
+    accNode.mesh.material.emissive.setHex(newEmissive);
+    if (accNode.halo) accNode.halo.material.color.setHex(newColor);
+
+    // Cập nhật laser Core -> Account
+    this.splineCurves.forEach(({ lineMesh, meta }) => {
+      if (meta.type === 'core-to-account' && meta.accountIndex === accountIndex) {
+        lineMesh.material.color.setHex(newColor);
+      }
+    });
+    this.particleSystems.forEach(p => {
+      if (p.meta?.type === 'core-to-account' && p.meta?.accountIndex === accountIndex) {
+        p.points.material.color.setHex(newColor);
+      }
     });
   }
 

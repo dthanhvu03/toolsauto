@@ -35,3 +35,32 @@ def _khong_gui_telegram_that(monkeypatch):
 
     monkeypatch.setattr(telegram_client.httpx, "post", _chan)
     monkeypatch.setattr(telegram_client.httpx, "get", _chan)
+
+
+@pytest.fixture(autouse=True)
+def _clean_buffer_cluster_state():
+    """Autouse fixture ensuring clean in-memory buffer cluster state across all test suites."""
+    import requests
+
+    orig_post = requests.post
+    orig_get = requests.get
+    try:
+        from app.features.buffer.cluster_router import reset_cluster_cache
+        from app.features.buffer.manager import reset_buffer_manager
+        reset_cluster_cache()
+        reset_buffer_manager()
+    except (ImportError, AttributeError):
+        pass
+    try:
+        yield
+    finally:
+        requests.post = orig_post
+        requests.get = orig_get
+        try:
+            from app.features.buffer.cluster_router import reset_cluster_cache
+            from app.features.buffer.manager import reset_buffer_manager
+            reset_cluster_cache()
+            reset_buffer_manager()
+        except (ImportError, AttributeError):
+            pass
+

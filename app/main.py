@@ -117,8 +117,19 @@ async def cookie_auth_middleware(request: Request, call_next):
         "/health/json",
         "/health/ui",
         "/health/gemini/cookie-sync",
+        "/manifest.json",
+        "/sw.js",
     }
-    public_prefixes = ("/static", "/login", "/favicon.ico", "/buffer-media/", "/buffer-cluster", "/api/buffer", "/manifest.json", "/sw.js")
+    public_prefixes = (
+        "/static",
+        "/login",
+        "/favicon.ico",
+        "/buffer-media/",
+        "/buffer-cluster",
+        "/api/buffer",
+        "/manifest.json",
+        "/sw.js",
+    )
     if path in public_exact or any(path.startswith(p) for p in public_prefixes):
         return await call_next(request)
         

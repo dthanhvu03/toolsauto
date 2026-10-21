@@ -6,8 +6,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.features.buffer import client as buffer_client
 from app.features.buffer.adapter import BufferAdapter, public_media_url, schedule_mode
 from app.features.buffer.client import BufferClient, BufferError, asset_kind
+
+
+@pytest.fixture(autouse=True)
+def _clear_buffer_key_guard():
+    buffer_client._KEY_GUARD.clear()
+    yield
+    buffer_client._KEY_GUARD.clear()
 
 
 def _response(payload: dict, status: int = 200):

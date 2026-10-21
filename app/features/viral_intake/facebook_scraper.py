@@ -7,7 +7,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 from playwright.async_api import async_playwright
 
@@ -81,7 +81,7 @@ async def _async_scrape_reels(page_url: str, max_videos: int = 30) -> list[str]:
         fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         lock_acquired = True
         _clean_stale_singleton_lock(PROFILE_DIR)
-    except (BlockingIOError, OSError, PermissionError) as exc:
+    except (BlockingIOError, OSError, PermissionError):
         logger.warning(
             "Facebook scraper process lock currently held by another worker. Aborting scrape to avoid profile collision."
         )

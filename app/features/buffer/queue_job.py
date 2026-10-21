@@ -6,6 +6,7 @@ File reup không ghi vào media_path — dọn file job DONE sẽ xóa nhầm b�
 from __future__ import annotations
 
 import logging
+import re
 
 from app.constants import JobStatus
 from app.core.database.models import Job, ViralMaterial
@@ -246,12 +247,29 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
         err_lower = (result.error or "").lower()
         is_429 = "429" in (result.error or "") or "rate limit" in err_lower
         if is_429:
+            # Backoff dài: 60s trước đây khiến worker đốt lại API ngay khi vừa 429
+            backoff_s = 900
+            err_txt = result.error or ""
+            m = re.search(r"thử lại sau (\d+)s", err_txt, flags=re.IGNORECASE)
+            if m:
+                try:
+                    backoff_s = max(900, min(7200, int(m.group(1))))
+                except (TypeError, ValueError):
+                    pass
             job.status = JobStatus.PENDING
-            job.last_error = (result.error or "Buffer rate limit (429)")[:300]
-            job.schedule_ts = int(now_ts()) + 60
+            job.last_error = (err_txt or "Buffer rate limit (429)")[:300]
+            job.schedule_ts = int(now_ts()) + backoff_s
             db.commit()
-            logger.warning("[Buffer][job_%s] Rate limit 429, scheduled backoff: %s", job.id, job.last_error)
-            return False, f"Buffer đang bị giới hạn tần suất (429). Đã hẹn thử lại sau 60s: {job.last_error}"
+            logger.warning(
+                "[Buffer][job_%s] Rate limit 429, scheduled backoff %ss: %s",
+                job.id,
+                backoff_s,
+                job.last_error,
+            )
+            return False, (
+                f"Buffer đang bị giới hạn tần suất (429). "
+                f"Đã hẹn thử lại sau {backoff_s}s: {job.last_error}"
+            )
 
         is_queue_full = "scheduled posts limit reached" in err_lower or "10 scheduled posts out of 10" in err_lower
         if is_queue_full:
@@ -326,9 +344,22 @@ def _quota_block(channel_id: str, when_ts: int) -> str | None:
     if not config.BUFFER_API_KEYS and not getattr(config, "BUFFER_API_KEY", None):
         return None
     try:
-        return _buffer_client(channel_id=channel_id).schedule_block_reason(channel_id, when_ts)
+        client = _buffer_client(channel_id=channel_id)
+        # Hỏi suất tốn 2–3 request. Khi bucket đã chạm mức giữ cho đăng bài thì bỏ qua,
+        # để createPost dùng phần còn lại. 429 thật thì vẫn chặn, không tạo job lúc này.
+        if not client.allows("background"):
+            if client.cooldown_remaining() > 0:
+                wait_s = int(client.cooldown_remaining()) + 1
+                return f"Buffer HTTP 429. Vui lòng thử lại sau {wait_s}s."
+            logger.info("[Buffer] Bo qua hoi suat kenh %s — giu request cho dang bai", channel_id)
+            return None
+        return client.schedule_block_reason(channel_id, when_ts)
     except BufferError as exc:
-        return str(exc)
+        text = str(exc)
+        if "suất API cho đăng bài" in text:
+            logger.info("[Buffer] Bo qua hoi suat kenh %s — %s", channel_id, text)
+            return None
+        return text
 
 
 def _post_status(post_id: str) -> str:
@@ -443,12 +474,28 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
     if not result.ok:
         is_429 = "429" in (result.error or "") or "rate limit" in (result.error or "").lower()
         if is_429:
+            backoff_s = 900
+            err_txt = result.error or ""
+            m = re.search(r"thử lại sau (\d+)s", err_txt, flags=re.IGNORECASE)
+            if m:
+                try:
+                    backoff_s = max(900, min(7200, int(m.group(1))))
+                except (TypeError, ValueError):
+                    pass
             job.status = JobStatus.PENDING
-            job.last_error = (result.error or "Buffer rate limit (429)")[:300]
-            job.schedule_ts = max(int(when_ts), int(now_ts()) + 60)
+            job.last_error = (err_txt or "Buffer rate limit (429)")[:300]
+            job.schedule_ts = max(int(when_ts), int(now_ts()) + backoff_s)
             db.commit()
-            logger.warning("[Buffer][job_%s] Rate limit 429 on schedule: %s", job.id, job.last_error)
-            return False, f"Buffer đang bị giới hạn tần suất (429). Đã hẹn thử lại: {job.last_error}"
+            logger.warning(
+                "[Buffer][job_%s] Rate limit 429 on schedule, backoff %ss: %s",
+                job.id,
+                backoff_s,
+                job.last_error,
+            )
+            return False, (
+                f"Buffer đang bị giới hạn tần suất (429). "
+                f"Đã hẹn thử lại sau {backoff_s}s: {job.last_error}"
+            )
 
         job.status = JobStatus.FAILED
         job.last_error = (result.error or "Buffer từ chối")[:300]

@@ -173,17 +173,57 @@ class BufferAdapter(AdapterInterface):
                     except Exception:
                         pass
 
-            post = client.create_post(
-                text=text,
-                channel_id=channel,
-                mode=mode,
-                media_url=media,
-                due_at=due_at,
-                service=svc,
-                first_comment=first_comment,
-            )
+            try:
+                post = client.create_post(
+                    text=text,
+                    channel_id=channel,
+                    mode=mode,
+                    media_url=media,
+                    due_at=due_at,
+                    service=svc,
+                    first_comment=first_comment,
+                )
+            except BufferError as fc_exc:
+                # Gói Free: first comment → 422 "paid plan". Đăng lại không comment (1 call thêm, tránh fail vòng).
+                err_l = str(fc_exc).lower()
+                if first_comment and (
+                    "first comment" in err_l
+                    or "paid plan" in err_l
+                    or "upgrade" in err_l
+                ):
+                    logger.warning(
+                        "[Buffer][job_%s] Bo first_comment (plan khong ho tro): %s",
+                        getattr(job, "id", "?"),
+                        fc_exc,
+                    )
+                    first_comment = None
+                    try:
+                        job.auto_comment_text = ""
+                    except Exception:
+                        pass
+                    post = client.create_post(
+                        text=text,
+                        channel_id=channel,
+                        mode=mode,
+                        media_url=media,
+                        due_at=due_at,
+                        service=svc,
+                        first_comment=None,
+                    )
+                else:
+                    raise
         except BufferError as exc:
             logger.warning("[Buffer][job_%s] %s", getattr(job, "id", "?"), exc)
+            if getattr(exc, "status_code", None) == 429 and self._client is None:
+                try:
+                    from app.features.buffer.manager import get_buffer_manager
+
+                    ch = channel_id_for(job)
+                    c = get_buffer_manager().get_client_for_channel(ch)
+                    if c is not None and hasattr(c, "mark_rate_limited"):
+                        c.mark_rate_limited(getattr(exc, "retry_after", None))
+                except Exception:
+                    pass
             fatal = "file local" in str(exc) or "channel" in str(exc).lower()
             return PublishResult(
                 ok=False,

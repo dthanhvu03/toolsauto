@@ -1,13 +1,13 @@
 {
   "name": "Buffer 3D Neural Cluster",
   "short_name": "Buffer3D",
-  "description": "Trung tâm điều phối & giám sát 3D thời gian thực đa tài khoản Buffer ToolsAuto",
+  "description": "Buffer 3D Neural Cluster & Command Center",
   "start_url": "/buffer-cluster",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#07090e",
-  "theme_color": "#07090e",
   "orientation": "any",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
@@ -20,23 +20,11 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    }
-  ],
-  "categories": ["utilities", "business", "productivity"],
-  "shortcuts": [
-    {
-      "name": "Mở Dashboard 3D",
-      "short_name": "Cluster 3D",
-      "description": "Xem trực quan cụm 3D Three.js",
-      "url": "/buffer-cluster",
-      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
     },
     {
-      "name": "Dashboard 2D",
-      "short_name": "Dashboard 2D",
-      "description": "Chuyển tới bảng điều khiển 2D",
-      "url": "/app",
-      "icons": [{ "src": "/static/icons/icon-192.png", "sizes": "192x192" }]
+      "src": "/static/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
     }
   ]
 }

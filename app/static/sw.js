@@ -1,47 +1,48 @@
-/**
- * Service Worker: Buffer 3D Cluster PWA
- * Cung cấp khả năng nạp tức thì (Instant Load) và hoạt động ngoại tuyến một phần.
- */
-
-const CACHE_NAME = 'buffer-3d-cluster-v2.3';
+/* Buffer 3D Neural Cluster Service Worker */
+/* Bump CACHE_NAME mỗi lần đổi CSS/JS để iOS/PWA không giữ bản cũ (màn tối / backdrop). */
+const CACHE_NAME = 'buffer-cluster-v20261020f';
+const API_CACHE_NAME = 'buffer-cluster-api-v1';
 
 const STATIC_ASSETS = [
   '/buffer-cluster',
   '/manifest.json',
-  '/static/css/buffer_cluster.css?v=2.3',
-  '/static/js/buffer_cluster/app.js?v=2.3',
-  '/static/js/buffer_cluster/scene.js?v=2.3',
-  '/static/js/buffer_cluster/graph.js?v=2.3',
-  '/static/js/buffer_cluster/telemetry.js?v=2.3',
-  '/static/js/buffer_cluster/controls.js?v=2.3',
+  '/static/css/buffer_cluster.css?v=20261020f',
+  '/static/js/buffer_cluster/app.js?v=20261020f',
+  '/static/js/buffer_cluster/scene.js',
+  '/static/js/buffer_cluster/graph.js',
+  '/static/js/buffer_cluster/controls.js',
+  '/static/js/buffer_cluster/telemetry.js',
+  '/static/js/buffer_cluster/dispatch_feed.js',
   '/static/vendor/three/three.min.js',
   '/static/vendor/three/OrbitControls.js',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
   '/static/icons/apple-touch-icon.png',
   '/static/icons/favicon-32.png',
+  '/static/icons/favicon.ico'
 ];
 
-// Install: Pre-cache core shell
+// 1. Install Event: Pre-cache static shell assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn('[SW] Pre-cache partial fail:', err);
+        console.warn('[SW] Some assets failed to pre-cache during install:', err);
       });
-    })
+    }).then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
-// Activate: Xóa cache phiên bản cũ
+// 2. Activate Event: Clean up stale caches & claim clients
 self.addEventListener('activate', (event) => {
+  const currentCaches = [CACHE_NAME, API_CACHE_NAME];
   event.waitUntil(
-    caches.keys().then((keys) => {
+    caches.keys().then((cacheNames) => {
       return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
+        cacheNames.map((name) => {
+          if (!currentCaches.includes(name)) {
+            console.log('[SW] Deleting stale cache:', name);
+            return caches.delete(name);
           }
         })
       );
@@ -49,32 +50,80 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Network-First cho API, Stale-While-Revalidate cho static assets
+// 3. Fetch Event: Dual Caching Strategy
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const { request } = event;
+  const url = new URL(request.url);
 
-  // 1. Đối với API telemetry: luôn ưu tiên gọi Network để lấy số liệu thực tế
-  if (url.pathname.startsWith('/api/')) {
+  // Non-GET requests (e.g. POST ping-key) bypass cache
+  if (request.method !== 'GET') {
+    return;
+  }
+
+  // Strategy A: Telemetry & Status APIs (Network-first with cache fallback)
+  if (url.pathname.startsWith('/api/buffer/')) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(API_CACHE_NAME).then((cache) => {
+              cache.put(request, responseClone);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cachedResponse = await caches.match(request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // Offline fallback JSON
+          return new Response(
+            JSON.stringify({
+              ok: false,
+              offline: true,
+              message: 'Mất kết nối mạng. Đang ở chế độ offline.'
+            }),
+            {
+              headers: { 'Content-Type': 'application/json' },
+              status: 503
+            }
+          );
+        })
     );
     return;
   }
 
-  // 2. Đối với Static assets & HTML: Stale-While-Revalidate
+  // Strategy B: Static assets and Shell (Cache-first with network fallback)
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+    caches.match(request).then((cachedResponse) => {
+      if (cachedResponse) {
+        // Stale-while-revalidate for local application scripts and styles
+        if (url.origin === self.location.origin && !url.pathname.startsWith('/static/vendor/')) {
+          fetch(request).then((freshResponse) => {
+            if (freshResponse && freshResponse.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, freshResponse));
+            }
+          }).catch(() => {});
         }
-        return networkResponse;
-      }).catch(() => cachedResponse);
+        return cachedResponse;
+      }
 
-      return cachedResponse || fetchPromise;
+      return fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // If navigation fails, return cached /buffer-cluster HTML
+          if (request.mode === 'navigate') {
+            return caches.match('/buffer-cluster');
+          }
+        });
     })
   );
 });

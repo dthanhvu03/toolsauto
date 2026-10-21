@@ -2,48 +2,47 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Buffer 3D Neural Cluster // ToolsAuto Command Center</title>
-
-  <!-- PWA Web App Manifest & Branding -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0e17">
+  
+  <!-- PWA & Mobile Web App Meta Tags (F1, F11) -->
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#07090e">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="application-name" content="Buffer 3D">
-
-  <!-- iOS Safari Web Clip & Fullscreen Standalone App -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Buffer 3D">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-  <link rel="apple-touch-icon" sizes="192x192" href="/static/icons/icon-192.png">
-  <link rel="apple-touch-icon" sizes="512x512" href="/static/icons/icon-512.png">
-
-  <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
-  <link rel="icon" type="image/x-icon" href="/static/icons/favicon.ico">
+  <link rel="shortcut icon" href="/static/icons/favicon.ico">
 
+  <title>Buffer 3D Neural Cluster // ToolsAuto Command Center</title>
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   
-  <!-- Modular Frontend CSS with cache-busting -->
-  <link rel="stylesheet" href="/static/css/buffer_cluster.css?v=2.4">
+  <!-- Modular Frontend CSS — ?v= bust cache iOS/PWA (đổi khi sửa CSS) -->
+  <link rel="stylesheet" href="/static/css/buffer_cluster.css?v=20261020f">
 </head>
 <body>
 
-  <!-- WebGL Three.js Canvas Container -->
+  <!-- WebGL Three.js Canvas Container (ẩn trên mobile qua CSS + app.js mode-2d) -->
   <div id="webgl-container"></div>
 
   <!-- Floating 3D Tooltip Follower -->
   <div id="tooltip-3d"></div>
 
-  <!-- HUD Toast Notification -->
+  <!-- Toast Notification Container (F7, F10) -->
   <div id="toast-msg" class="hud-toast"></div>
+
+  <!-- Backdrop Overlay for Mobile Bottom Sheet (F11) -->
+  <div id="inspector-backdrop" class="inspector-backdrop"></div>
 
   <!-- HUD Interface Layer -->
   <div class="hud-layer">
-    
+
+    <!-- Chrome: header + toolbar luôn dính trên (không bị space-between đẩy xuống giữa) -->
+    <div class="hud-chrome">
     <!-- Top Header Bar -->
     <header class="header-bar glass-panel interactive">
       <div class="brand-title">
@@ -57,50 +56,137 @@
       <div class="stats-badge-group">
         <div class="badge-stat">
           <span style="color: var(--text-muted)">Tài khoản:</span>
-          <span class="val" id="stat-accounts" style="color: #38bdf8">3</span>
+          <span class="val" id="stat-accounts" style="color: #38bdf8">--</span>
         </div>
         <div class="badge-stat">
           <span style="color: var(--text-muted)">Hoạt động:</span>
-          <span class="val" id="stat-active" style="color: #34d399">2</span>
+          <span class="val" id="stat-active" style="color: #34d399">--</span>
         </div>
         <div class="badge-stat">
           <span style="color: var(--text-muted)">Cooldown (429):</span>
-          <span class="val" id="stat-cooldown" style="color: #fbbf24">1</span>
+          <span class="val" id="stat-cooldown" style="color: #fbbf24">--</span>
         </div>
         <div class="badge-stat">
           <span style="color: var(--text-muted)">Tổng kênh:</span>
-          <span class="val" id="stat-channels" style="color: #f472b6">8</span>
+          <span class="val" id="stat-channels" style="color: #f472b6">--</span>
         </div>
         <div class="badge-stat">
           <span style="color: var(--text-muted)">Bài chờ:</span>
-          <span class="val" id="stat-queue" style="color: #a78bfa">7</span>
+          <span class="val" id="stat-queue" style="color: #a78bfa">--</span>
         </div>
-
-        <button class="btn-action" id="btn-install-pwa" style="display: none; background: rgba(0, 240, 255, 0.18); border-color: rgba(0, 240, 255, 0.5); color: #00f0ff;" title="Thêm vào màn hình chính">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-          Cài App
-        </button>
 
         <button class="btn-action" id="btn-refresh" title="Làm mới trạng thái">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
           Làm mới
         </button>
 
-        <a href="/app" class="btn-action" style="background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); color: #fff;">
+        <a href="/app" class="btn-action btn-dashboard" style="background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); color: #fff;">
           Dashboard 2D
         </a>
       </div>
     </header>
 
-    <!-- Backdrop Overlay for Mobile Bottom Sheet -->
-    <div id="inspector-backdrop" class="inspector-backdrop interactive"></div>
+    <!-- Instant Search & Platform Filter Toolbar (F9) -->
+    <div class="cluster-toolbar glass-panel interactive" id="cluster-toolbar">
+      <div class="search-box-wrap">
+        <span class="search-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </span>
+        <input 
+          type="text" 
+          id="cluster-search-input" 
+          class="search-input" 
+          placeholder="Tìm theo kênh, email, Buffer ID..." 
+          autocomplete="off" 
+          spellcheck="false"
+        >
+        <button id="search-clear-btn" class="search-clear-btn" title="Xóa tìm kiếm" style="display: none;">&times;</button>
+        <kbd class="search-kbd">/</kbd>
+      </div>
 
-    <!-- Right Inspector Drawer (Slides in on node click / Native Bottom Sheet on Mobile) -->
+      <div class="filter-pills-group" id="filter-pills-group">
+        <button class="filter-pill platform-filter-pill active" data-platform="all" data-filter="all" id="pill-filter-all">
+          <span class="pill-dot"></span>
+          <span class="pill-label">Tất cả</span>
+          <span class="pill-badge" id="count-all">8</span>
+        </button>
+        <button class="filter-pill platform-filter-pill" data-platform="facebook" data-filter="facebook" id="pill-filter-fb">
+          <span class="pill-dot fb"></span>
+          <span class="pill-label">Facebook</span>
+          <span class="pill-badge" id="count-fb">4</span>
+        </button>
+        <button class="filter-pill platform-filter-pill" data-platform="tiktok" data-filter="tiktok" id="pill-filter-tt">
+          <span class="pill-dot tt"></span>
+          <span class="pill-label">TikTok</span>
+          <span class="pill-badge" id="count-tt">3</span>
+        </button>
+        <button class="filter-pill platform-filter-pill" data-platform="instagram" data-filter="instagram" id="pill-filter-ig">
+          <span class="pill-dot ig"></span>
+          <span class="pill-label">Instagram</span>
+          <span class="pill-badge" id="count-ig">1</span>
+        </button>
+      </div>
+
+      <div class="filter-feedback" id="filter-feedback">
+        <span id="filter-match-count"><span id="filtered-match-count">0</span></span> kênh khớp
+      </div>
+    </div>
+    </div><!-- /.hud-chrome -->
+
+    <!-- Body: cards trái + vùng 3D/2D + inspector -->
+    <div class="hud-body">
+    <!-- Left Account Cards Selector (F7, F8, F10) -->
+    <div class="left-cluster-list interactive" id="account-cards-container">
+      <div class="cluster-loading-card glass-panel" id="cluster-loading-placeholder">
+        Đang tải tài khoản Buffer…
+      </div>
+    </div>
+
+    <div class="hud-stage-hint" id="hud-stage-hint" aria-hidden="true">
+      <div class="stage-hint-title">Cluster 3D</div>
+      <div class="stage-hint-sub">Click card bên trái hoặc node để xem chi tiết</div>
+    </div>
+
+    <!-- Right Inspector Drawer (F7, F8, F10, F11) -->
     <div class="right-inspector glass-panel interactive" id="right-inspector">
-      <div class="mobile-drag-handle"></div>
+      <!-- Mobile Drag Handle for Swipe Gestures (F11) -->
+      <div class="mobile-drag-handle" id="inspector-drag-handle"></div>
+
       <div class="inspector-title">
         <span id="inspect-header-title">CHI TIẾT TÀI KHOẢN</span>
         <span class="close-btn" id="inspect-close">&times;</span>
+      </div>
+
+      <!-- Quick Action: Hero Ping & Telemetry Benchmark (F10) -->
+      <div class="inspect-action-bar">
+        <button class="btn-action btn-ping-hero" id="inspect-btn-ping" title="Gửi kiểm tra kết nối tới Buffer API">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span id="inspect-ping-text">Ping Connection</span>
+        </button>
+        <span class="latency-badge latency-green" id="inspect-latency-badge" title="Độ trễ phản hồi Buffer GraphQL">
+          <span class="latency-dot"></span>
+          <span id="inspect-latency-val">-- ms</span>
+        </span>
+      </div>
+
+      <!-- Quota Gauge Progress Bar (F10) -->
+      <div class="detail-row quota-panel" id="inspect-quota-panel">
+        <div class="quota-meta">
+          <span class="detail-label">Hạn Mức Buffer (Daily Quota)</span>
+          <span class="quota-counter" id="inspect-quota-counter">
+            <span id="inspect-daily-quota">-- / 250</span>
+          </span>
+        </div>
+        <div class="quota-gauge-track" id="inspect-quota-bar">
+          <div class="quota-gauge-fill" id="inspect-quota-fill" style="width: 0%;"></div>
+        </div>
+        <div class="burst-quota-label">
+          <span>Burst (15 phút): <b id="inspect-burst-val"><span id="inspect-burst-quota">-- / 100</span></b></span>
+          <span id="inspect-quota-reset-text" style="color: var(--text-muted)">Reset: 24h</span>
+        </div>
       </div>
 
       <div class="detail-row">
@@ -124,56 +210,96 @@
         <div class="detail-val" id="inspect-status">--</div>
       </div>
 
+      <!-- 429 Rate Limit Cooldown Alert Card (F10) -->
       <div class="detail-row" id="inspect-cooldown-row" style="display: none;">
-        <div class="detail-label">Thời Gian Đếm Ngược Reset (429)</div>
-        <div class="detail-val" style="color: #fbbf24;" id="inspect-cooldown-timer">--:--:--</div>
+        <div class="cooldown-alert-card">
+          <div class="cooldown-header">
+            <span class="cooldown-icon">⚠️</span>
+            <span class="cooldown-title">TẠM KHÓA TẦN SUẤT (HTTP 429)</span>
+          </div>
+          <div class="detail-label" style="margin-top: 6px;">Thời Gian Đếm Ngược Reset (ICT)</div>
+          <div class="cooldown-timer-val" id="inspect-cooldown-timer">--:--:--</div>
+          <div class="cooldown-recovery-meta">
+            Khôi phục tự động lúc: <b id="inspect-cooldown-reset-ict">--:-- --/-- ICT</b>
+          </div>
+          <div class="failover-notice">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+            Luồng đăng bài tự động chuyển tiếp qua API Key khả dụng khác.
+          </div>
+        </div>
       </div>
 
+      <!-- Satellite Channels Section (F8) -->
       <div class="detail-row">
-        <div class="detail-label">Danh Sách Kênh Kết Nối (<span id="inspect-channel-count">0</span>)</div>
-        <div id="inspect-channels-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
-          <!-- Channel items -->
+        <div class="detail-label" style="display: flex; justify-content: space-between;">
+          <span>Danh Sách Kênh Kết Nối (<span id="inspect-channel-count">0</span>)</span>
+          <span style="color: var(--accent-cyan); font-size: 10px; cursor: pointer;" onclick="document.getElementById('cluster-search-input').focus()">Tìm kênh 🔍</span>
+        </div>
+        <div id="inspect-channels-list" class="inspect-channels-container">
+          <!-- Injected dynamically via JS Telemetry -->
         </div>
       </div>
     </div>
+    </div><!-- /.hud-body -->
 
-    <!-- Bottom Dock: Left Cards Carousel & Bottom Controls Bar -->
-    <div class="bottom-dock">
-      <!-- Left Account Cards Selector -->
-      <div class="left-cluster-list interactive" id="account-cards-container">
-        <!-- Injected dynamically via JS Telemetry -->
+    <!-- F12: Live Dispatch Terminal — log điều phối Buffer realtime -->
+    <section class="dispatch-terminal glass-panel interactive" id="dispatch-terminal" aria-label="Log điều phối Buffer">
+      <div class="dispatch-terminal-header">
+        <div class="dispatch-terminal-title">
+          <span class="dispatch-live-dot" id="dispatch-live-dot" title="Trạng thái RUNNING"></span>
+          <span>DISPATCH LOG</span>
+          <span class="dispatch-feed-meta" id="dispatch-feed-meta">Đang kết nối…</span>
+        </div>
+        <div class="dispatch-terminal-actions">
+          <button type="button" class="btn-action btn-terminal-sm" id="btn-refresh-dispatch" title="Làm mới feed ngay">↻</button>
+          <button type="button" class="btn-action btn-terminal-sm" id="btn-toggle-terminal" aria-expanded="true">Thu gọn</button>
+        </div>
+      </div>
+      <div class="dispatch-feed-body" id="dispatch-feed-body">
+        <div class="dispatch-empty">Đang tải nhật ký điều phối…</div>
+      </div>
+    </section>
+
+    <!-- Bottom Bar Controls & Tips -->
+    <footer class="bottom-bar glass-panel interactive">
+      <div class="view-tips">
+        <div class="tip-item"><kbd>Chuột trái</kbd> Xoay góc 3D</div>
+        <div class="tip-item"><kbd>Cuộn chuột</kbd> Zoom phóng to / thu nhỏ</div>
+        <div class="tip-item"><kbd>Click Node</kbd> Xem thông số chi tiết</div>
       </div>
 
-      <!-- Bottom Bar Controls & Tips -->
-      <footer class="bottom-bar glass-panel interactive">
-        <div class="view-tips">
-          <div class="tip-item"><kbd>Chuột trái</kbd> Xoay góc 3D</div>
-          <div class="tip-item"><kbd>Cuộn chuột</kbd> Zoom phóng to / thu nhỏ</div>
-          <div class="tip-item"><kbd>Click Node</kbd> Xem thông số chi tiết</div>
-        </div>
-
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
-          <button class="btn-action" id="btn-toggle-rotate">
-            Dừng tự xoay
-          </button>
-          <button class="btn-action" id="btn-reset-cam">
-            Góc mặc định
-          </button>
-          <button class="btn-action" id="btn-hard-reload" title="Tải lại toàn bộ ứng dụng và xóa cache">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-            Tải lại app
-          </button>
-        </div>
-      </footer>
-    </div>
+      <div class="bottom-actions">
+        <button class="btn-action" id="btn-toggle-rotate">
+          Dừng tự xoay
+        </button>
+        <button class="btn-action" id="btn-reset-cam">
+          Góc mặc định
+        </button>
+      </div>
+    </footer>
 
   </div>
 
-  <!-- Vendor Libraries -->
+  <!-- Gắn class sớm để CSS ẩn canvas trước khi JS chạy (tránh flash màn đen iOS) -->
+  <script>
+    (function () {
+      var narrow = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+      var ua = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+      window.__BUFFER_CLUSTER_MOBILE = Boolean(narrow || (ua && window.innerWidth <= 900));
+      if (window.__BUFFER_CLUSTER_MOBILE) {
+        document.documentElement.classList.add('mode-2d');
+        document.addEventListener('DOMContentLoaded', function () {
+          document.body.classList.add('mode-2d');
+        });
+      }
+    })();
+  </script>
+
+  <!-- Vendor Libraries (desktop WebGL; mobile bỏ qua init trong app.js) -->
   <script src="/static/vendor/three/three.min.js"></script>
   <script src="/static/vendor/three/OrbitControls.js"></script>
 
-  <!-- Modular Application Entry Point with cache-busting -->
-  <script type="module" src="/static/js/buffer_cluster/app.js?v=2.4"></script>
+  <!-- Modular Application Entry Point — ?v= bust module cache -->
+  <script type="module" src="/static/js/buffer_cluster/app.js?v=20261020f"></script>
 </body>
 </html>
