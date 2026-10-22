@@ -1,0 +1,51 @@
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "list": [
+      {
+        "affiliate_id": "AFF_SCOPE_001",
+        "checkout_id": "CHK_LIVE_001",
+        "utm_content": "----",
+        "click_id": "click-live-001",
+        "click_time": 1790170260,
+        "purchase_time": 1790171017,
+        "conversion_status": 2,
+        "checkout_status": "Waiting for payment",
+        "gross_commission": 205000000,
+        "capped_commission": 205000000,
+        "estimated_total_commission": 451000000,
+        "affiliate_net_commission": "451000000",
+        "orders": [
+          {
+            "order_id": "ORD_LIVE_001",
+            "order_sn": "SN_LIVE_001",
+            "affiliate_transaction_id": "TX_LIVE_001",
+            "order_status": "COMPLETED",
+            "items": [
+              {
+                "item_id": "ITEM_LIVE_A",
+                "model_id": "MODEL_A",
+                "item_name": "Sanitized item A",
+                "qty": 1,
+                "item_price": 8200000000,
+                "item_commission": 205000000
+              },
+              {
+                "item_id": "ITEM_LIVE_B",
+                "model_id": "MODEL_B",
+                "item_name": "Sanitized item B",
+                "qty": 2,
+                "item_price": 100000000,
+                "item_commission": -50000000
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "page_num": 1,
+    "page_size": 20,
+    "total_count": 1
+  }
+}

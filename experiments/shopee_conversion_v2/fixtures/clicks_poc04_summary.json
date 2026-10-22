@@ -1,0 +1,13 @@
+{
+  "evidence": "live_verified_summary",
+  "note": "POC 04 Click Report summary. Raw response was not stored. click_id omitted.",
+  "data": {
+    "list": [
+      {"observation_key": "poc04:dash:1", "sub_id": "----"},
+      {"observation_key": "poc04:dash:2", "sub_id": "----"},
+      {"observation_key": "poc04:dash:3", "sub_id": "----"},
+      {"observation_key": "poc04:RniJOPP8", "sub_id": "RniJOPP8", "click_time": "2026-10-21T09:04:28Z"},
+      {"observation_key": "poc04:QC2a50eT", "sub_id": "QC2a50eT", "click_time": "2026-10-21T09:30:12Z"}
+    ]
+  }
+}

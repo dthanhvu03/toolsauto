@@ -1,0 +1,36 @@
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "list": [
+      {
+        "conversion_id": "CONV_DRIFT_001",
+        "checkout_id": "CHK_SAMPLE_001",
+        "order_id": "ORD_SAMPLE_001",
+        "order_sn": null,
+        "affiliate_transaction_id": null,
+        "sub_id": "G3lkg1JK",
+        "click_id": null,
+        "purchase_time": "2026-10-22T03:00:00Z",
+        "click_time": null,
+        "conversion_status": "1",
+        "checkout_status": "1",
+        "order_status": "COMPLETED",
+        "gross_commission": 15000,
+        "capped_commission": 12000,
+        "estimated_total_commission": 12000,
+        "affiliate_net_commission": 10000,
+        "item_commission": 10000,
+        "item_id": "12345678",
+        "shop_id": "87654321",
+        "item_name": "Sản phẩm test ABC",
+        "item_price": 200000,
+        "new_unknown_field": "surprise",
+        "another_unknown": 42
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "page_size": 50
+  }
+}
