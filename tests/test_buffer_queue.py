@@ -1,6 +1,7 @@
 """Nút page Buffer trên tin video + xếp hàng chờ, không đụng publisher Facebook."""
 from __future__ import annotations
 
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +12,7 @@ from app.adapters.contracts import PublishResult
 from app.constants import JobStatus
 from app.core.database.models import Base, Job, ViralMaterial
 from app.core.notifier import formatting as nf
-from app.features.buffer.queue_job import queue_reup
+from app.features.buffer.queue_job import queue_reup, schedule_reup, sweep_unscheduled_ready, taken_slots
 
 
 CHANNELS = [
@@ -129,7 +130,7 @@ def test_double_tap_running_job_blocks_duplicate(db, monkeypatch):
     assert len(calls) == 0
 
 
-def test_http_429_backoff_keeps_pending(db, monkeypatch):
+def test_http_429_fails_job_and_frees_video(db, monkeypatch):
     class Fake429:
         def publish(self, job):
             return PublishResult(ok=False, error="Buffer HTTP 429. Rate limit exceeded.")
@@ -144,5 +145,89 @@ def test_http_429_backoff_keeps_pending(db, monkeypatch):
     assert ok is False
     assert "429" in msg
     job = db.query(Job).filter(Job.viral_material_id == mat.id).one()
-    assert job.status == JobStatus.PENDING
-    assert job.schedule_ts > 0
+    assert job.status == JobStatus.FAILED
+    assert job.schedule_ts == 0
+    assert not (job.external_post_id or "").strip()
+
+
+def test_http_429_schedule_keeps_slot_and_allows_retry(db, monkeypatch):
+    when_ts = int(time.time()) + 3600
+
+    class Fake429:
+        def publish(self, job):
+            return PublishResult(ok=False, error="Buffer HTTP 429. Vui lòng thử lại sau 54000s.")
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channels", lambda: CHANNELS)
+    monkeypatch.setattr("app.features.buffer.queue_job.BufferAdapter", Fake429)
+    monkeypatch.setattr("app.features.buffer.queue_job._quota_block", lambda *a, **k: None)
+    mat = ViralMaterial(platform="tiktok", url="https://t/429s", ai_caption="Demo 429 slot")
+    db.add(mat)
+    db.commit()
+
+    ok, msg = schedule_reup(db, mat.id, CHANNELS[0]["id"], when_ts)
+    assert ok is False
+    assert "429" in msg
+    job = db.query(Job).one()
+    assert job.status == JobStatus.FAILED
+    assert job.schedule_ts == when_ts
+    assert when_ts not in taken_slots(db, CHANNELS[0]["id"])
+
+    ok2, _msg2 = schedule_reup(db, mat.id, CHANNELS[0]["id"], when_ts)
+    assert ok2 is False
+    assert db.query(Job).count() == 2
+
+
+def test_sweep_stops_whole_pass_on_429(db, monkeypatch):
+    calls = []
+
+    def fake_auto(_db, material_id):
+        calls.append(material_id)
+        return False, "Buffer HTTP 429. Vui lòng thử lại sau 54000s."
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channel_blocked_quietly", lambda _cid: None)
+    monkeypatch.setattr("app.features.buffer.queue_job.auto_schedule_ready", fake_auto)
+    for idx, channel in enumerate(CHANNELS):
+        db.add(
+            ViralMaterial(
+                platform="tiktok",
+                url=f"https://t/sweep-{idx}",
+                status="READY",
+                target_page=channel["id"],
+                ai_caption="Sẵn",
+            )
+        )
+    db.commit()
+
+    assert sweep_unscheduled_ready(db, limit=4) == 0
+    assert len(calls) == 1
+
+
+def test_sweep_skips_locked_channel_and_schedules_next(db, monkeypatch):
+    calls = []
+
+    def fake_block(channel_id):
+        if channel_id == CHANNELS[0]["id"]:
+            return "Key của kênh đang cooldown."
+        return None
+
+    def fake_auto(_db, material_id):
+        calls.append(material_id)
+        return True, "đã hẹn"
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channel_blocked_quietly", fake_block)
+    monkeypatch.setattr("app.features.buffer.queue_job.auto_schedule_ready", fake_auto)
+    for idx, channel in enumerate(CHANNELS):
+        db.add(
+            ViralMaterial(
+                platform="tiktok",
+                url=f"https://t/skip-{idx}",
+                status="READY",
+                target_page=channel["id"],
+                ai_caption="Sẵn",
+            )
+        )
+    db.commit()
+
+    assert sweep_unscheduled_ready(db, limit=4) == 1
+    mats = db.query(ViralMaterial).order_by(ViralMaterial.id).all()
+    assert calls == [mats[1].id]

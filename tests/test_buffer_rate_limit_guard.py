@@ -10,9 +10,12 @@ import pytest
 from app.features.buffer.adapter import BufferAdapter
 from app.features.buffer import client as buffer_client
 from app.features.buffer.client import (
+    MAX_429_COOLDOWN_SEC,
     MIN_429_COOLDOWN_SEC,
     BufferClient,
     BufferError,
+    any_key_can_publish,
+    soonest_cooldown_seconds,
 )
 
 
@@ -49,6 +52,33 @@ def test_execute_blocks_during_local_cooldown_without_http(monkeypatch):
     assert client.cooldown_remaining() > 0
 
 
+def test_429_retry_after_kept_up_to_18h(monkeypatch):
+    def fake_post(*args, **kwargs):
+        return _response({}, status=429, headers={"Retry-After": str(15 * 3600)})
+
+    monkeypatch.setattr("app.features.buffer.client.requests.post", fake_post)
+    monkeypatch.setattr("app.features.buffer.client.MIN_REQUEST_INTERVAL_SEC", 0)
+    client = BufferClient("k-keep")
+    with pytest.raises(BufferError) as exc:
+        client.execute("query { account { id } }")
+    assert exc.value.retry_after == 15 * 3600
+    assert client.cooldown_remaining() >= 15 * 3600 - 2
+
+
+def test_429_retry_after_caps_at_18h(monkeypatch):
+    def fake_post(*args, **kwargs):
+        return _response({}, status=429, headers={"Retry-After": str(63 * 3600)})
+
+    monkeypatch.setattr("app.features.buffer.client.requests.post", fake_post)
+    monkeypatch.setattr("app.features.buffer.client.MIN_REQUEST_INTERVAL_SEC", 0)
+    client = BufferClient("k-cap")
+    with pytest.raises(BufferError) as exc:
+        client.execute("query { account { id } }")
+    assert MAX_429_COOLDOWN_SEC == 18 * 3600
+    assert exc.value.retry_after == MAX_429_COOLDOWN_SEC
+    assert client.cooldown_remaining() <= MAX_429_COOLDOWN_SEC
+
+
 def test_429_response_sets_cooldown_floor(monkeypatch):
     def fake_post(*args, **kwargs):
         return _response({}, status=429, headers={"Retry-After": "30"})
@@ -61,6 +91,17 @@ def test_429_response_sets_cooldown_floor(monkeypatch):
     assert exc.value.status_code == 429
     assert exc.value.retry_after >= MIN_429_COOLDOWN_SEC
     assert client.cooldown_remaining() >= MIN_429_COOLDOWN_SEC - 2
+
+
+def test_publish_gate_waits_for_soonest_cooldown():
+    locked = BufferClient("k-locked")
+    open_key = BufferClient("k-open")
+    locked.mark_rate_limited(3600)
+    assert any_key_can_publish(["k-locked", "k-open"]) is True
+    assert soonest_cooldown_seconds(["k-locked", "k-open"]) == 0
+    open_key.mark_rate_limited(900)
+    assert any_key_can_publish(["k-locked", "k-open"]) is False
+    assert 900 <= soonest_cooldown_seconds(["k-locked", "k-open"]) <= 901
 
 
 def test_min_interval_between_calls(monkeypatch):

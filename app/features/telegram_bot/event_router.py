@@ -642,6 +642,9 @@ class TelegramEventRouter:
 
         try:
             client = get_buffer_manager().get_client_for_channel(channel_id)
+            if client is None:
+                self.client.answer_callback_query(callback_id, "Kênh chưa gắn với key đang mở.")
+                return
             text = client.insights_channel(channel_id)
         except BufferError as exc:
             self.client.answer_callback_query(callback_id, str(exc)[:180])

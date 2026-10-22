@@ -84,6 +84,10 @@ def test_channel_routing_between_multiple_accounts():
     # Unknown channel falls back to primary client (client_a)
     assert mgr.get_client_for_channel("unknown_chan") == client_a
 
+    client_a.cooldown_remaining.return_value = 1200
+    assert mgr.get_client_for_channel("unknown_chan") is None
+    client_a.cooldown_remaining.side_effect = TypeError("not a duration")
+
     # Test list_all_channels
     all_channels = mgr.list_all_channels()
     assert len(all_channels) == 4

@@ -6,7 +6,6 @@ File reup không ghi vào media_path — dọn file job DONE sẽ xóa nhầm b�
 from __future__ import annotations
 
 import logging
-import re
 
 from app.constants import JobStatus
 from app.core.database.models import Job, ViralMaterial
@@ -139,6 +138,42 @@ def auto_schedule_ready(db, material_id: int) -> tuple[bool, str]:
     return False, last
 
 
+def _is_local_skip(msg: str) -> bool:
+    """Cooldown nội bộ hoặc kênh chưa gắn key. Không phải 429 từ Buffer."""
+    text = msg or ""
+    return "đang cooldown" in text or "chưa gắn với key" in text
+
+
+def _channel_blocked_quietly(channel_id: str) -> str | None:
+    """Bỏ kênh khi key của nó đang khóa hoặc chưa gắn được key đang mở. Không gọi Buffer."""
+    from app.features.buffer.manager import get_buffer_manager
+
+    try:
+        client = get_buffer_manager().get_client_for_channel(channel_id)
+    except BufferError as exc:
+        return str(exc)
+    if client is None:
+        return "Kênh chưa gắn với key đang mở."
+    fn = getattr(client, "cooldown_remaining", None)
+    if callable(fn):
+        try:
+            value = fn()
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                value = 0
+            if float(value) > 0:
+                return "Key của kênh đang cooldown."
+        except (TypeError, ValueError):
+            pass
+    allows = getattr(client, "allows", None)
+    if callable(allows):
+        try:
+            if not allows("publish"):
+                return "Key của kênh đang cooldown."
+        except TypeError:
+            pass
+    return None
+
+
 def sweep_unscheduled_ready(db, limit: int = 4) -> int:
     """Tự động xếp lịch cho các video READY chưa có bài, nếu kênh còn slot trống (<10 bài)."""
     if limit <= 0:
@@ -156,6 +191,7 @@ def sweep_unscheduled_ready(db, limit: int = 4) -> int:
     )
 
     scheduled = 0
+    skipped = 0
     blocked_channels: set[str] = set()
 
     for mat in candidates:
@@ -169,15 +205,32 @@ def sweep_unscheduled_ready(db, limit: int = 4) -> int:
         if done:
             continue
 
+        reason = _channel_blocked_quietly(channel_id)
+        if reason:
+            if "429" in reason:
+                logger.info("[Buffer] Dung ca vong quet vi 429: %s", reason)
+                break
+            blocked_channels.add(channel_id)
+            skipped += 1
+            continue
+
         ok, msg = auto_schedule_ready(db, mat.id)
         if ok:
             scheduled += 1
             logger.info("[Buffer] Tu xep lich thanh cong video #%d vao %s: %s", mat.id, channel_id, msg)
-        else:
-            if _stop_scheduling(msg):
-                blocked_channels.add(channel_id)
-                logger.info("[Buffer] Tam dung quet cho kenh %s: %s", channel_id, msg)
+        elif "429" in (msg or ""):
+            logger.info("[Buffer] Dung ca vong quet vi 429: %s", msg)
+            break
+        elif _stop_scheduling(msg) or _is_local_skip(msg):
+            blocked_channels.add(channel_id)
+            skipped += 1
+            logger.info("[Buffer] Tam dung quet cho kenh %s: %s", channel_id, msg)
 
+    if skipped:
+        logger.info(
+            "[Buffer] Bo qua %s kenh — key dang cooldown hoac chua gan key dang mo",
+            skipped,
+        )
     return scheduled
 
 
@@ -247,28 +300,19 @@ def queue_reup(db, material_id: int, channel_id: str) -> tuple[bool, str]:
         err_lower = (result.error or "").lower()
         is_429 = "429" in (result.error or "") or "rate limit" in err_lower
         if is_429:
-            # Backoff dài: 60s trước đây khiến worker đốt lại API ngay khi vừa 429
-            backoff_s = 900
-            err_txt = result.error or ""
-            m = re.search(r"thử lại sau (\d+)s", err_txt, flags=re.IGNORECASE)
-            if m:
-                try:
-                    backoff_s = max(900, min(7200, int(m.group(1))))
-                except (TypeError, ValueError):
-                    pass
-            job.status = JobStatus.PENDING
-            job.last_error = (err_txt or "Buffer rate limit (429)")[:300]
-            job.schedule_ts = int(now_ts()) + backoff_s
+            # Buffer chưa nhận bài. PENDING bị unique index chặn video và không có worker xếp lại.
+            job.status = JobStatus.FAILED
+            job.last_error = (result.error or "Buffer rate limit (429)")[:300]
+            job.finished_at = now_ts()
             db.commit()
             logger.warning(
-                "[Buffer][job_%s] Rate limit 429, scheduled backoff %ss: %s",
+                "[Buffer][job_%s] Rate limit 429, job FAILED, chua nhan bai: %s",
                 job.id,
-                backoff_s,
                 job.last_error,
             )
             return False, (
                 f"Buffer đang bị giới hạn tần suất (429). "
-                f"Đã hẹn thử lại sau {backoff_s}s: {job.last_error}"
+                f"Chưa nhận bài: {job.last_error}"
             )
 
         is_queue_full = "scheduled posts limit reached" in err_lower or "10 scheduled posts out of 10" in err_lower
@@ -320,6 +364,7 @@ def _buffer_client(channel_id: str | None = None, post_id: str | None = None):
         c = mgr.get_client_for_channel(channel_id)
         if c:
             return c
+        raise BufferError("Kênh chưa gắn với key đang mở.")
     if post_id:
         c = mgr.get_client_for_post(post_id)
         if c:
@@ -350,7 +395,7 @@ def _quota_block(channel_id: str, when_ts: int) -> str | None:
         if not client.allows("background"):
             if client.cooldown_remaining() > 0:
                 wait_s = int(client.cooldown_remaining()) + 1
-                return f"Buffer HTTP 429. Vui lòng thử lại sau {wait_s}s."
+                return f"Key của kênh đang cooldown, còn {wait_s}s."
             logger.info("[Buffer] Bo qua hoi suat kenh %s — giu request cho dang bai", channel_id)
             return None
         return client.schedule_block_reason(channel_id, when_ts)
@@ -474,27 +519,20 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
     if not result.ok:
         is_429 = "429" in (result.error or "") or "rate limit" in (result.error or "").lower()
         if is_429:
-            backoff_s = 900
-            err_txt = result.error or ""
-            m = re.search(r"thử lại sau (\d+)s", err_txt, flags=re.IGNORECASE)
-            if m:
-                try:
-                    backoff_s = max(900, min(7200, int(m.group(1))))
-                except (TypeError, ValueError):
-                    pass
-            job.status = JobStatus.PENDING
-            job.last_error = (err_txt or "Buffer rate limit (429)")[:300]
-            job.schedule_ts = max(int(when_ts), int(now_ts()) + backoff_s)
+            # Giữ schedule_ts = ô giờ đã chọn. FAILED không nằm trong unique index nên video xếp lại được.
+            job.status = JobStatus.FAILED
+            job.last_error = (result.error or "Buffer rate limit (429)")[:300]
+            job.finished_at = now_ts()
             db.commit()
             logger.warning(
-                "[Buffer][job_%s] Rate limit 429 on schedule, backoff %ss: %s",
+                "[Buffer][job_%s] Rate limit 429, job FAILED, giu o gio %s: %s",
                 job.id,
-                backoff_s,
+                job.schedule_ts,
                 job.last_error,
             )
             return False, (
                 f"Buffer đang bị giới hạn tần suất (429). "
-                f"Đã hẹn thử lại sau {backoff_s}s: {job.last_error}"
+                f"Chưa nhận bài, giữ ô giờ: {job.last_error}"
             )
 
         job.status = JobStatus.FAILED

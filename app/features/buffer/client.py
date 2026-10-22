@@ -29,8 +29,8 @@ _VIDEO_EXT = frozenset({".mp4", ".mov", ".webm"})
 MIN_REQUEST_INTERVAL_SEC = 5.0
 # Cooldown sàn khi 429 (Buffer free hay reset chậm)
 MIN_429_COOLDOWN_SEC = 900  # 15 phút
-# Trần cooldown local — tránh khóa key nhiều ngày vì header lệch
-MAX_429_COOLDOWN_SEC = 7200  # 2 giờ
+# Trần cooldown local. Header 7–15 giờ phải được giữ; header lệch (đã thấy 63 giờ) không khóa key hai ngày.
+MAX_429_COOLDOWN_SEC = 18 * 60 * 60  # 18 giờ
 # Phần bucket còn lại giữ cho createPost/editPost. Hỏi kênh, hỏi suất, hỏi status phải dừng trước.
 POST_RESERVE_RATIO = 0.70
 
@@ -53,11 +53,32 @@ def _guard_row(key: str) -> dict:
 
 def any_key_ready(keys: list[str]) -> bool:
     """False khi mọi key đã biết đều đang cooldown. Key chưa gặp thì coi là sẵn sàng."""
+    return any_key_can_publish(keys)
+
+
+def any_key_can_publish(keys: list[str]) -> bool:
+    """True khi còn key hết cooldown và được phép đăng.
+
+    Key chưa gặp thì coi là gọi được. Mức giữ suất cho đăng bài không chặn đăng.
+    """
     if not keys:
         return False
     now = time.time()
     with _GUARD_LOCK:
         return any(float(_guard_row(k)["cooldown_until"]) <= now for k in keys)
+
+
+def soonest_cooldown_seconds(keys: list[str]) -> int:
+    """Số giây tới lúc có key hết cooldown. 0 nếu đã có key gọi được hoặc không có key."""
+    if not keys or any_key_can_publish(keys):
+        return 0
+    now = time.time()
+    with _GUARD_LOCK:
+        left = [float(_guard_row(k)["cooldown_until"]) - now for k in keys]
+    waiting = [item for item in left if item > 0]
+    if not waiting:
+        return 0
+    return int(min(waiting)) + 1
 
 
 class BufferError(Exception):

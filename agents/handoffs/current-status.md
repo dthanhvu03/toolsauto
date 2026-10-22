@@ -1,3 +1,27 @@
+## Phiên 2026-10-22 (b) — Dừng đăng bài
+
+Cursor: `pm2 stop` FB_Publisher_1, AI_Generator_1, Threads_AutoReply, Threads_NewsWorker, Threads_Publisher. Cùng Maintenance và Web đã tắt trước đó. Còn 9Router online. Không gọi Buffer.
+
+---
+
+## Phiên 2026-10-22 — Dừng gọi Buffer cho hết phạt
+
+Cursor: `pm2 stop Maintenance Web_Dashboard`. Hai process đã chết, không còn vòng quét gọi Buffer. Facebook, Threads, AI, 9router vẫn chạy. Không gọi Buffer. Bật lại trước khoảng 15:12 ngày 23 sẽ quên khóa trong bộ nhớ và gọi ngay.
+
+---
+
+## Phiên 2026-10-21 (b) — Vòng quét bỏ key đang khóa
+
+Cursor: cooldown nội bộ không còn tính là 429 và không dừng cả vòng. Kênh không có trong bảng thì không đổ về key chính đang cooldown. Vòng quét chỉ mở khi còn key gọi được. pytest buffer queue, rate-limit, manager, slots, api: 49 passed. Không restart maintenance — process đang giữ khóa trong bộ nhớ tới 23:27 và 13:32 ngày mai. Không gọi Buffer. Không commit.
+
+---
+
+## Phiên 2026-10-21 — Buffer 429 giữ Retry-After, dừng vòng quét, job FAILED
+
+Cursor: trần cooldown 2 giờ lên 18 giờ (`MAX_429_COOLDOWN_SEC = 64800`). Một 429 dừng cả `sweep_unscheduled_ready`. Job Buffer chưa nhận bài ghi `FAILED`, giữ `schedule_ts`. Bốn job 1081, 1090, 1093, 1096 (không mã bài) chuyển `FAILED`. pytest buffer queue + rate-limit + slots + api: 40 passed. PM2 `Maintenance` đã restart. Log 17:57 ICT: `retry_after=19805`, cap `64800` (khóa tới khoảng 23:27). Web dashboard chưa restart. Không commit.
+
+---
+
 ## Phiên 2026-09-29 — Preset giờ hẹn theo kênh mạnh
 
 Cursor: nút Hẹn giờ Telegram đổi thành 08:00 (Uyển Nhi), 12:00 (Sống Nhẹ), 15:30 (Uyển Nhi), 20:00 (Mê Câu Cá). Giờ hôm nay đã qua thì tự lấy ngày mai. pytest `tests/test_telegram_schedule.py` 16 passed. Worker maintenance khởi động lại. Không commit.

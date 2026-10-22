@@ -657,17 +657,20 @@ def run_loop():
                         # Video READY đã có caption nhưng lần hỏi suất bị 429 nên chưa thành job.
                         # Chỉ xếp 1 bài/vòng, và chỉ khi còn key chưa cooldown.
                         try:
-                            from app.features.buffer.client import any_key_ready
+                            from app.features.buffer.client import any_key_can_publish, soonest_cooldown_seconds
                             from app.features.buffer.manager import get_buffer_manager
                             from app.features.buffer.queue_job import sweep_unscheduled_ready
 
                             keys = get_buffer_manager().get_keys()
-                            if any_key_ready(keys):
+                            if any_key_can_publish(keys):
                                 scheduled = sweep_unscheduled_ready(db, limit=1)
                                 if scheduled:
                                     logger.info("[Buffer] Tu xep lich %s video READY", scheduled)
                             else:
-                                logger.info("[Buffer] Tam dung tu xep lich — key dang cooldown")
+                                logger.info(
+                                    "[Buffer] Tam dung tu xep lich — moi key dang cooldown, con %ss",
+                                    soonest_cooldown_seconds(keys),
+                                )
                         except Exception as exc:
                             db.rollback()
                             logger.error("[Buffer] sweep schedule failed: %s", exc)

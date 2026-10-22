@@ -21,6 +21,20 @@ logger = logging.getLogger(__name__)
 CHANNEL_CACHE_TTL_SEC = 300  # 5 phút làm mới danh sách kênh
 
 
+def _client_in_cooldown(client) -> bool:
+    """True khi client đang khóa 429. Client giả không có số giây thì coi là mở."""
+    fn = getattr(client, "cooldown_remaining", None)
+    if not callable(fn):
+        return False
+    try:
+        value = fn()
+    except Exception:
+        return False
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return float(value) > 0
+
+
 def mask_key(key: str) -> str:
     """Ẩn phần lớn chuỗi API key khi ghi log."""
     k = (key or "").strip()
@@ -201,6 +215,10 @@ class BufferManager:
                 )
 
         with self._lock:
+            if not new_map and self._channel_to_client:
+                self._channel_cache_ts = time.time()
+                logger.info("[BufferManager] Giữ bảng kênh cũ — lượt quét này không lấy được kênh.")
+                return dict(self._channel_to_client)
             self._channel_to_client = new_map
             self._channel_meta = new_meta
             self._channel_cache_ts = time.time()
@@ -209,35 +227,42 @@ class BufferManager:
 
     def get_channels_map(self, force_refresh: bool = False) -> dict[str, Any]:
         now = time.time()
-        if (
-            force_refresh
-            or not self._channel_to_client
-            or (now - self._channel_cache_ts) > CHANNEL_CACHE_TTL_SEC
-        ):
+        stale = (now - self._channel_cache_ts) > CHANNEL_CACHE_TTL_SEC
+        never = self._channel_cache_ts == 0.0
+        if force_refresh or stale or never:
             return self.refresh_channels_map()
         return dict(self._channel_to_client)
 
     def get_client_for_channel(self, channel_id: str) -> Any:
-        """Tìm BufferClient quản lý channel_id này. Nếu không rõ thì fallback về client chính."""
+        """Tìm BufferClient của channel. Key chính đang cooldown thì không đổ kênh lạ về đó."""
         cid = (channel_id or "").strip()
         if not cid:
-            return self.get_primary_client()
+            primary = self.get_primary_client()
+            if _client_in_cooldown(primary):
+                return None
+            return primary
 
-        # Kiểm tra cache trước
         ch_map = self.get_channels_map(force_refresh=False)
         if cid in ch_map:
             return ch_map[cid]
 
-        # Thử refresh một lần nếu chưa thấy
-        ch_map = self.refresh_channels_map()
-        if cid in ch_map:
-            return ch_map[cid]
+        if (time.time() - self._channel_cache_ts) > CHANNEL_CACHE_TTL_SEC:
+            ch_map = self.refresh_channels_map()
+            if cid in ch_map:
+                return ch_map[cid]
 
+        primary = self.get_primary_client()
+        if _client_in_cooldown(primary):
+            logger.debug(
+                "[BufferManager] Channel %s không gắn được key đang mở, bỏ qua.",
+                cid,
+            )
+            return None
         logger.info(
             "[BufferManager] Channel %s không thấy trong danh sách quét, dùng primary client.",
             cid,
         )
-        return self.get_primary_client()
+        return primary
 
     def get_client_for_post(self, post_id: str, db: Any = None) -> Any:
         """Tìm BufferClient quản lý post_id này qua target_page của Job hoặc query trực tiếp."""

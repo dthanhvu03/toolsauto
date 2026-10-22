@@ -143,6 +143,8 @@ class BufferAdapter(AdapterInterface):
             from app.features.buffer.manager import get_buffer_manager
 
             client = self._client or get_buffer_manager().get_client_for_channel(channel)
+            if client is None:
+                return PublishResult(ok=False, error="Kênh chưa gắn với key đang mở.")
             media = public_media_url(job)
             mode, due_at = schedule_mode(job)
 
@@ -266,6 +268,8 @@ class BufferAdapter(AdapterInterface):
             from app.features.buffer.manager import get_buffer_manager
 
             client = self._client or get_buffer_manager().get_client_for_channel(channel)
+            if client is None:
+                return PublishResult(ok=False, error="Kênh chưa gắn với key đang mở.")
             media = public_media_url(job)
             mode, due_at = schedule_mode(job)
 
@@ -324,6 +328,8 @@ class BufferAdapter(AdapterInterface):
             client = self._client or (
                 mgr.get_client_for_channel(channel) if channel else mgr.get_client_for_post(post_id)
             )
+            if client is None:
+                return PublishResult(ok=False, error="Kênh chưa gắn với key đang mở.")
             post = client.get_post(post_id)
         except BufferError as exc:
             return PublishResult(ok=False, error=str(exc)[:300])
