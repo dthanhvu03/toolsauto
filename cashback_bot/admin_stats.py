@@ -233,6 +233,7 @@ def _insight(conn: sqlite3.Connection, lo: str) -> Insight | None:
 
 
 def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
+    # Lọc theo giờ click / giờ đặt hàng; lần đồng bộ đầu kéo 30 ngày nên created_at không dùng được.
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "shopee_clicks" not in tables or "shopee_conversions" not in tables:
         return None
@@ -243,7 +244,7 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
             COUNT(*),
             COALESCE(SUM(sub_id IN (SELECT sub_id FROM link_requests WHERE sub_id IS NOT NULL)), 0)
         FROM shopee_clicks
-        WHERE created_at >= ?
+        WHERE COALESCE(click_time, created_at) >= ?
         """,
         (lo,),
     ).fetchone()
@@ -260,7 +261,7 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
             COALESCE(SUM(matched_link_id IS NOT NULL), 0),
             COALESCE(SUM(CASE WHEN order_status LIKE '%CANCEL%' THEN 0 ELSE net_commission_vnd END), 0)
         FROM shopee_conversions
-        WHERE created_at >= ?
+        WHERE COALESCE(purchase_time, created_at) >= ?
         """,
         (lo,),
     ).fetchone()

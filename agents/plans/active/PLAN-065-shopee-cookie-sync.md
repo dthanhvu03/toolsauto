@@ -156,3 +156,18 @@ Review code `0ad0b10` đối chiếu PLAN. pytest `tests/test_cashback_*.py`: 18
 Proof: pytest `tests/test_cashback_*.py` **196 passed** (188 + 8 test mới trong `TestShopeeReviewFixes`); ruff sạch. 9 test (8 mới + test thống kê đã sửa) chạy trên code cũ (`git stash cashback_bot/`) đều fail.
 
 Chưa sửa — cần response Shopee thật: (5) đơn vị tiền, (6) thống kê theo `click_time`/`purchase_time` (chưa biết định dạng), tham số/field của 3 endpoint. Lọc cookie `SPC_*` (10) để nguyên vì chưa biết Shopee cần cookie nào. (14) ADR-049 chưa viết.
+
+### Claude Code — chạy thật lần đầu, 2026-10-23 11:33–11:41 UTC
+
+Bot restart 11:33:42 (PID 457087). Admin dán cookie 11:34: `user/status` ok, nhưng click và đơn đều HTTP 400, bot vẫn ghi `success` 0/0.
+Đọc lỗi Shopee rồi thử tay (khoảng 8 request GET):
+- Click `/api/v1/click_report/list`: cần `page_num`, `page_size`, `click_time_s`, `click_time_e`. 30 ngày có 10 click; `sub_id` là sub_id gốc, 7/7 click gần nhất khớp đúng `link_requests.sub_id`.
+- Đơn `/api/v3/report/list`: cần `page_num`, `page_size`, `purchase_time_s`, `purchase_time_e`, `version=1`. 30 ngày có 1 đơn (`utm_content='----'`, không qua bot, hoa hồng 0).
+- `page_size=100` được nhận. Thời gian là unix giây. Tiền luôn ×100.000 (`item_price` 39.900.000.000 = 399.000 đ). Hoa hồng (`gross_commission`, `affiliate_net_commission` dạng chuỗi) và `utm_content` nằm ở cấp checkout; `orders[]` không có hoa hồng, `items[].item_commission` có.
+- `user/status` không có `username`; có `affiliate_id`.
+
+Đã sửa: tham số 2 endpoint; tiền luôn chia 100.000; lưu giờ ISO UTC, thống kê lọc theo `click_time`/`purchase_time`; Sub ID lấy phần trước `-`; checkout nhiều đơn thì hoa hồng theo `items` (không cộng trùng); endpoint bị từ chối → run `partial`, admin thấy cảnh báo; tên tài khoản `ID <affiliate_id>`.
+
+**Sự cố do Claude Code:** test cũ `test_admin_paste_cookie_workflow_with_delete_message` gọi `save_cookies()` đường dẫn mặc định. Lần chạy pytest lúc 11:40:02 ghi `{"SPC_EC": "my_secret_token"}` đè cookie thật (1915 → 33 byte) → `30001 no login`. Cookie thật không hết hạn, chỉ bị đè. Đã chặn: `save_cookies`/`load_cookies` đọc `DEFAULT_COOKIE_PATH` lúc gọi; `tests/conftest.py` bức tường 3 chuyển đường dẫn sang `tmp_path` cho mọi test. Proof: chạy pytest 11:41, mtime file thật vẫn 11:40:02.
+
+pytest `tests/test_cashback_*.py`: 199 passed; ruff sạch. Cần admin dán lại cookie sau restart.

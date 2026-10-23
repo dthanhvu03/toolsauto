@@ -78,9 +78,14 @@ def parse_cookies(raw_text: str) -> dict[str, str]:
     return cookies
 
 
-def save_cookies(cookies: dict[str, str], path: Path | str = DEFAULT_COOKIE_PATH) -> Path:
+def _cookie_path(path: Path | str | None) -> Path:
+    # Đọc DEFAULT_COOKIE_PATH lúc gọi, không lúc định nghĩa hàm, để conftest chuyển được sang thư mục tạm.
+    return Path(path) if path is not None else DEFAULT_COOKIE_PATH
+
+
+def save_cookies(cookies: dict[str, str], path: Path | str | None = None) -> Path:
     """Lưu cookie vào file an toàn với phân quyền 0o600."""
-    target = Path(path)
+    target = _cookie_path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp_target = target.with_suffix(".tmp")
     # Tạo file với 0600 ngay từ đầu, không có lúc nào file mang quyền mặc định.
@@ -99,9 +104,9 @@ def save_cookies(cookies: dict[str, str], path: Path | str = DEFAULT_COOKIE_PATH
     return target
 
 
-def load_cookies(path: Path | str = DEFAULT_COOKIE_PATH) -> dict[str, str] | None:
+def load_cookies(path: Path | str | None = None) -> dict[str, str] | None:
     """Đọc cookie đã lưu từ file. Trả về None nếu file chưa tồn tại."""
-    target = Path(path)
+    target = _cookie_path(path)
     if not target.exists() or target.stat().st_size == 0:
         return None
     try:

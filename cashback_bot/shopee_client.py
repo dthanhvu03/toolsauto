@@ -101,7 +101,9 @@ class ShopeeAffiliateClient:
             return ShopeeStatusResult(ok=True, status_code=resp.status_code, allow_to_login=True)
 
         allow = bool(data.get("allow_to_login", True))
-        username = str(data.get("username") or data.get("user_name") or "")
+        # user/status không trả username; affiliate_id là thứ admin thấy trên trang Shopee.
+        affiliate_id = data.get("affiliate_id")
+        username = str(data.get("username") or (f"ID {affiliate_id}" if affiliate_id else ""))
         return ShopeeStatusResult(
             ok=allow,
             status_code=resp.status_code,
@@ -119,11 +121,14 @@ class ShopeeAffiliateClient:
         page_no: int = 1,
         page_size: int = 100,
     ) -> dict[str, Any]:
-        """Lấy danh sách click từ /api/v1/click_report/list."""
+        """Lấy danh sách click từ /api/v1/click_report/list.
+
+        Tên tham số đã đối chiếu với response thật 2026-10-23; sai tên thì Shopee trả HTTP 400.
+        """
         params = {
-            "start_time": start_time,
-            "end_time": end_time,
-            "page_no": page_no,
+            "click_time_s": start_time,
+            "click_time_e": end_time,
+            "page_num": page_no,
             "page_size": page_size,
         }
         try:
@@ -152,12 +157,13 @@ class ShopeeAffiliateClient:
         page_no: int = 1,
         page_size: int = 100,
     ) -> dict[str, Any]:
-        """Lấy danh sách conversion từ /api/v3/report/list."""
+        """Lấy danh sách conversion từ /api/v3/report/list (lọc theo giờ đặt hàng)."""
         params = {
-            "start_time": start_time,
-            "end_time": end_time,
-            "page_no": page_no,
+            "purchase_time_s": start_time,
+            "purchase_time_e": end_time,
+            "page_num": page_no,
             "page_size": page_size,
+            "version": 1,
         }
         try:
             resp = requests.get(CONVERSION_REPORT_URL, params=params, headers=self._headers(), timeout=self._timeout)

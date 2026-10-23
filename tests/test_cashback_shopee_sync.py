@@ -177,11 +177,13 @@ class TestShopeeClient:
 
 class TestShopeeSyncAndReconciliation:
     def test_parse_shopee_money_vnd(self):
-        # Scale 100.000 (POC real data 451.000.000 = 4.510 VND)
+        # Luôn chia 100.000; response thật: item_price 39.900.000.000 = 399.000 đ
+        assert parse_shopee_money_vnd(39_900_000_000) == 399_000
         assert parse_shopee_money_vnd(451_000_000) == 4_510
         assert parse_shopee_money_vnd("451000000") == 4_510
-        # Already normal VND
-        assert parse_shopee_money_vnd(50_000) == 50_000
+        # Số nhỏ cũng chia, không đoán theo ngưỡng
+        assert parse_shopee_money_vnd(50_000_000) == 500
+        assert parse_shopee_money_vnd("0") == 0
         assert parse_shopee_money_vnd(None) is None
 
     def test_sync_matches_sub_id_and_notifies_admin(self, tmp_path):
@@ -223,15 +225,17 @@ class TestShopeeSyncAndReconciliation:
             "data": {
                 "list": [
                     {
+                        # Cấu trúc theo response thật: hoa hồng và utm_content ở cấp checkout.
                         "checkout_id": "chk_999",
+                        "purchase_time": 1792742400,
+                        "utm_content": "G3lkg1JK----",
+                        "gross_commission": 500_000_000,  # 5,000 VND
+                        "affiliate_net_commission": "450000000",  # 4,500 VND, Shopee trả chuỗi
                         "orders": [
                             {
                                 "order_id": "ord_1001",
                                 "order_sn": "261023ABC123",
-                                "sub_id": "G3lkg1JK",
                                 "order_status": "COMPLETED",
-                                "gross_commission": 500_000_000,  # 5,000 VND
-                                "affiliate_net_commission": 450_000_000,  # 4,500 VND
                             }
                         ],
                     }
@@ -433,3 +437,53 @@ class TestShopeeReviewFixes:
         assert mock_save.call_args.args[0] == {"SPC_EC": "v" * 50}
         # Đã xong thì không còn chờ cookie nữa.
         assert panel.consume_text(ADMIN_ID, "10", NOW, message_id=12) is None
+
+    def test_multi_order_checkout_does_not_double_count_commission(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        client.fetch_clicks.return_value = {"code": 0, "data": {"list": []}}
+        client.fetch_conversions.return_value = {"code": 0, "data": {"list": [{
+            "checkout_id": "chk_1",
+            "purchase_time": 1792742400,
+            "utm_content": "----",
+            "gross_commission": 300_000_000,
+            "affiliate_net_commission": "300000000",
+            "orders": [
+                {"order_id": "o1", "order_sn": "SN1", "order_status": "COMPLETED",
+                 "items": [{"item_commission": 100_000_000}]},
+                {"order_id": "o2", "order_sn": "SN2", "order_status": "COMPLETED",
+                 "items": [{"item_commission": 200_000_000}]},
+            ],
+        }]}}
+        ShopeeSyncEngine(repo).sync(client=client)
+        with repo.connect() as conn:
+            rows = conn.execute(
+                "SELECT order_sn, net_commission_vnd, purchase_time FROM shopee_conversions ORDER BY order_sn"
+            ).fetchall()
+        assert [(r["order_sn"], r["net_commission_vnd"]) for r in rows] == [("SN1", 1_000), ("SN2", 2_000)]
+        assert rows[0]["purchase_time"] == "2026-10-23T08:00:00Z"
+
+    def test_endpoint_rejected_is_reported_as_partial(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        client.fetch_clicks.side_effect = ShopeeApiError("Shopee HTTP 400", status_code=400)
+        client.fetch_conversions.return_value = {"code": 0, "data": {"list": []}}
+        result = ShopeeSyncEngine(repo).sync(client=client)
+        assert result.ok is False
+        assert "click" in result.message
+        assert repo.get_last_sync_run()["status"] == "partial"
+
+    @patch("cashback_bot.shopee_client.requests.get")
+    def test_client_sends_param_names_shopee_accepts(self, mock_get):
+        mock_get.return_value = MagicMock(status_code=200, json=lambda: {"code": 0, "data": {"list": []}})
+        client = ShopeeAffiliateClient({"SPC_EC": "x"})
+        client.fetch_clicks(1, 2, page_no=3, page_size=100)
+        assert mock_get.call_args.kwargs["params"] == {
+            "click_time_s": 1, "click_time_e": 2, "page_num": 3, "page_size": 100,
+        }
+        client.fetch_conversions(1, 2, page_no=3, page_size=100)
+        assert mock_get.call_args.kwargs["params"] == {
+            "purchase_time_s": 1, "purchase_time_e": 2, "page_num": 3, "page_size": 100, "version": 1,
+        }

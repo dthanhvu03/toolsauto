@@ -25,16 +25,16 @@ from typing import Any
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.db import TrackingRepository
 from cashback_bot.shopee_client import ShopeeAffiliateClient, ShopeeApiError
-from cashback_bot.shopee_cookie import DEFAULT_COOKIE_PATH, load_cookies
+from cashback_bot.shopee_cookie import load_cookies
 
 logger = logging.getLogger(__name__)
 
 
 def parse_shopee_money_vnd(val: Any) -> int | None:
-    """Quy đổi số tiền hoa hồng từ API Shopee.
+    """Quy đổi số tiền từ API Shopee về VND.
 
-    API nội bộ của web Shopee scale số tiền lên 100.000 lần (ví dụ 451.000.000 = 4.510 đ).
-    Nếu số đã được quy đổi nhỏ hơn 1.000.000 thì giữ nguyên giá trị VND.
+    API nội bộ của web Shopee luôn nhân số tiền lên 100.000 lần. Đối chiếu response thật
+    2026-10-23: item_price 39.900.000.000 = 399.000 đ.
     """
     if val is None or val == "":
         return None
@@ -42,13 +42,34 @@ def parse_shopee_money_vnd(val: Any) -> int | None:
         num = float(str(val).strip())
     except (ValueError, TypeError):
         return None
-
-    if num >= 1_000_000:
-        return int(num // 100_000)
-    return int(num)
+    return int(round(num / MONEY_SCALE))
 
 
-PAGE_SIZE = 200
+def _iso_time(val: Any) -> str | None:
+    """Shopee trả unix giây; lưu dạng ISO UTC để so được với các mốc thống kê."""
+    if val in (None, "", 0, "0"):
+        return None
+    try:
+        moment = datetime.fromtimestamp(int(val), timezone.utc)
+    except (ValueError, TypeError, OverflowError, OSError):
+        return str(val)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _bot_sub_id(val: Any) -> str | None:
+    """Báo cáo click trả sub_id gốc; utm_content của đơn ghép sub1..sub5 bằng '-' ('----' là rỗng).
+
+    Bot chỉ dùng sub1 (8 ký tự chữ số, không có '-'), nên lấy phần đầu.
+    """
+    if not val:
+        return None
+    first = str(val).strip().split("-", 1)[0]
+    return first or None
+
+
+MONEY_SCALE = 100_000
+# Shopee nhận page_size=100 (đã thử thật 2026-10-23).
+PAGE_SIZE = 100
 # Trần số trang mỗi loại mỗi lần đồng bộ, tránh vòng lặp vô tận nếu Shopee bỏ qua page_no.
 MAX_PAGES = 20
 
@@ -86,11 +107,11 @@ class ShopeeSyncEngine:
         self,
         repo: TrackingRepository,
         admin_notifier: AdminNotifier | None = None,
-        cookie_path: Path | str = DEFAULT_COOKIE_PATH,
+        cookie_path: Path | str | None = None,
     ):
         self.repo = repo
         self.admin_notifier = admin_notifier
-        self.cookie_path = Path(cookie_path)
+        self.cookie_path = cookie_path
 
     def sync(
         self,
@@ -136,23 +157,22 @@ class ShopeeSyncEngine:
         clicks_count = 0
         conversions_count = 0
         new_matched_orders = 0
+        failed_parts: list[str] = []
 
         try:
             # 3. Đồng bộ Click Report
             try:
                 for item in _paged(client.fetch_clicks, start_time, end_time, ("list",)):
-                    sub_id = item.get("sub_id") or item.get("utm_content")
-                    if sub_id == "----":
-                        sub_id = None
-                    click_time = item.get("click_time")
+                    sub_id = _bot_sub_id(item.get("sub_id") or item.get("utm_content"))
+                    click_time = _iso_time(item.get("click_time"))
                     raw_id = item.get("click_id") or item.get("id")
                     if not raw_id:
                         # Tự tạo id duy nhất từ sub_id và thời gian
                         raw_id = "clk_" + hashlib.sha256(f"{sub_id}:{click_time}".encode()).hexdigest()[:16]
                     if self.repo.record_shopee_click(
                         click_id=str(raw_id),
-                        sub_id=str(sub_id) if sub_id else None,
-                        click_time=str(click_time) if click_time else None,
+                        sub_id=sub_id,
+                        click_time=click_time,
                         raw_json=json.dumps(item, ensure_ascii=False),
                     ):
                         clicks_count += 1
@@ -160,17 +180,17 @@ class ShopeeSyncEngine:
                 if exc.status_code in (401, 403):
                     raise
                 logger.warning("[ShopeeSync] Đồng bộ click gặp lỗi: %s", exc)
+                failed_parts.append("click")
 
             # 4. Đồng bộ Conversion Report
             try:
                 for item in _paged(client.fetch_conversions, start_time, end_time, ("list", "nodes")):
                     orders = item.get("orders")
                     if isinstance(orders, list) and orders:
+                        orders = [order for order in orders if isinstance(order, dict)]
                         for order in orders:
-                            if not isinstance(order, dict):
-                                continue
                             conversions_count += 1
-                            if self._process_order_item(item, order):
+                            if self._process_order_item(item, order, single_order=len(orders) == 1):
                                 new_matched_orders += 1
                     else:
                         conversions_count += 1
@@ -180,14 +200,17 @@ class ShopeeSyncEngine:
                 if exc.status_code in (401, 403):
                     raise
                 logger.warning("[ShopeeSync] Đồng bộ conversion gặp lỗi: %s", exc)
+                failed_parts.append("đơn hàng")
 
-            # 5. Ghi nhận hoàn thành
+            # 5. Ghi nhận hoàn thành. Một phần lỗi thì không được báo "xong".
+            failed = ", ".join(failed_parts) or None
             self.repo.complete_shopee_sync_run(
                 run_id=run_id,
-                status="success",
+                status="partial" if failed else "success",
                 clicks=clicks_count,
                 conversions=conversions_count,
                 new_orders=new_matched_orders,
+                error=f"Lỗi phần: {failed}" if failed else None,
             )
             now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             self.repo.update_shopee_cookie_status(
@@ -200,8 +223,10 @@ class ShopeeSyncEngine:
                 f"Đồng bộ xong: {clicks_count} click mới, "
                 f"{conversions_count} đơn hàng ({new_matched_orders} đơn mới qua bot)."
             )
+            if failed:
+                msg += f" ⚠️ Shopee từ chối phần {failed}, xem log bot."
             return SyncResult(
-                ok=True,
+                ok=not failed,
                 message=msg,
                 clicks_synced=clicks_count,
                 conversions_synced=conversions_count,
@@ -236,7 +261,12 @@ class ShopeeSyncEngine:
         if self.admin_notifier:
             self.admin_notifier.notify_shopee_cookie_expired(reason)
 
-    def _process_order_item(self, top_item: dict[str, Any], order_dict: dict[str, Any]) -> bool:
+    def _process_order_item(
+        self,
+        top_item: dict[str, Any],
+        order_dict: dict[str, Any],
+        single_order: bool = True,
+    ) -> bool:
         """Xử lý từng đơn hàng, lưu DB và gửi thông báo nếu là đơn mới khớp bot.
 
         Trả về True nếu là đơn mới khớp bot.
@@ -251,28 +281,27 @@ class ShopeeSyncEngine:
             or (f"{checkout_id}:{order_id}" if checkout_id and order_id else order_sn)
         )
 
-        sub_id = (
+        sub_id_str = _bot_sub_id(
             order_dict.get("sub_id")
             or order_dict.get("utm_content")
             or top_item.get("sub_id")
             or top_item.get("utm_content")
         )
-        sub_id_str = str(sub_id).strip() if sub_id and sub_id != "----" else None
 
         order_status = str(order_dict.get("order_status") or top_item.get("order_status") or "")
         conversion_status = str(top_item.get("conversion_status") or order_dict.get("conversion_status") or "")
-        purchase_time = str(order_dict.get("purchase_time") or top_item.get("purchase_time") or "")
+        purchase_time = _iso_time(order_dict.get("purchase_time") or top_item.get("purchase_time"))
 
-        gross_comm = parse_shopee_money_vnd(
-            order_dict.get("gross_commission") or top_item.get("gross_commission")
-        )
-        net_comm = parse_shopee_money_vnd(
-            order_dict.get("affiliate_net_commission")
-            or order_dict.get("net_commission")
-            or top_item.get("affiliate_net_commission")
-            or top_item.get("net_commission")
-            or gross_comm
-        )
+        if single_order:
+            gross_comm = parse_shopee_money_vnd(top_item.get("gross_commission"))
+            net_comm = parse_shopee_money_vnd(top_item.get("affiliate_net_commission"))
+            if net_comm is None:
+                net_comm = gross_comm
+        else:
+            # Hoa hồng ở cấp checkout là tổng mọi đơn; gán cho từng đơn thì bị cộng trùng.
+            items = [item for item in order_dict.get("items") or [] if isinstance(item, dict)]
+            gross_comm = sum(parse_shopee_money_vnd(item.get("item_commission")) or 0 for item in items)
+            net_comm = gross_comm
 
         is_new, is_matched, link_id, user_id = self.repo.record_shopee_conversion(
             conversion_id=conversion_id,

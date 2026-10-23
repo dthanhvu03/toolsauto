@@ -11,6 +11,9 @@ Hai bức tường, cùng một lý do: **test không được chạm vào thế
    giả 4096 byte. Chặn ở HAI tầng: token rỗng trước khi ``app.config`` đọc ``.env``, và autouse
    fixture xoá kênh + chặn ``httpx`` trong ``telegram_client`` — phòng test nào đó tự
    ``register`` hay DB test có token.
+3. File cookie Shopee ra thư mục tạm — 2026-10-23, test dán cookie của PLAN-065 gọi
+   ``save_cookies()`` đường dẫn mặc định, ghi ``my_secret_token`` đè cookie Affiliate thật
+   của Owner, bot báo ``30001 no login``.
 """
 import os
 import tempfile
@@ -78,3 +81,9 @@ def _clean_buffer_cluster_state():
         except (ImportError, AttributeError):
             pass
 
+
+@pytest.fixture(autouse=True)
+def _khong_ghi_cookie_shopee_that(monkeypatch, tmp_path):
+    from cashback_bot import shopee_cookie
+
+    monkeypatch.setattr(shopee_cookie, "DEFAULT_COOKIE_PATH", tmp_path / "shopee_affiliate_cookies.json")
