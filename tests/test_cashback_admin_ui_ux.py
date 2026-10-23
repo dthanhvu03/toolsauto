@@ -243,3 +243,38 @@ def test_six_screens_permission_and_modes(tmp_path):
     for d in copy_datas:
         assert d in {"c:menu:home"}
     assert "V1 chỉ cho xem danh sách lệnh" in copy_reply.text
+
+
+def test_dau_phay_trong_cau_chu_khong_bi_doi_thanh_dau_cham(tmp_path):
+    """PLAN-060 P0: chỉ số tiền dùng dấu chấm ngăn nghìn, câu chữ và % thập phân giữ dấu phẩy."""
+    bot, _client = _admin_bot(tmp_path)
+    rank = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:rank", "private", NOW)
+    fee = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
+    sim = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
+    assert "Hạng Đồng, Bạc, Vàng đang là mức định hướng, chưa áp dụng" in rank.text
+    assert "Hoàn 60.000đ · Phần còn 40.000đ" in rank.text
+    assert "0,98%" in fee.text
+    assert "0.98%" not in fee.text
+    assert "-980đ" in fee.text
+    assert "hoàn 6.000đ, phần còn 4.000đ" in sim.text
+
+    bot.admin_panel.handle_callback(ADMIN_ID, "c:tier:SILVER", "private", NOW)
+    preview = bot.admin_panel.consume_text(ADMIN_ID, "66", NOW)
+    assert "Trước: hoàn 65.000đ, phần còn 35.000đ" in preview.text
+
+
+def test_tong_quan_khong_lap_dong(tmp_path):
+    bot, _client = _admin_bot(tmp_path)
+    home = bot.admin_panel.menu(ADMIN_ID, NOW)
+    assert home.text.count("Đối soát") == 1
+    assert "Tỷ lệ ước tính hiện tại" not in home.text
+    assert "Tỷ lệ đang áp dụng: 70%" in home.text
+
+
+def test_nut_het_hieu_luc_van_giu_nut_dieu_huong(tmp_path):
+    """PLAN-060 P0: callback lỗi sửa đè tin cũ, phải còn nút để thoát."""
+    bot, _client = _admin_bot(tmp_path)
+    for data in ("c:ok:999:abcd1234", "c:no:999:abcd1234", "c:xyz"):
+        reply = bot.admin_panel.handle_callback(ADMIN_ID, data, "private", NOW)
+        targets = [d for row in reply.inline_keyboard for _label, d in row]
+        assert "c:menu:home" in targets, data

@@ -11,7 +11,7 @@ import logging
 import re
 import secrets
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -29,6 +29,7 @@ from cashback_bot.admin_ui import (
     simulation_text,
 )
 from cashback_bot.messages import BotReply
+from cashback_bot.money import format_vnd
 from cashback_bot.pricing import MAX_SHARE_BPS, share_cashback
 
 logger = logging.getLogger("cashback_bot")
@@ -119,6 +120,13 @@ class AdminPanel:
     def handle_callback(self, user_id: int, data: str, chat_type: str, now: datetime) -> BotReply:
         if chat_type != "private" or not self.is_admin(user_id):
             return BotReply("Lệnh này chỉ dành cho quản trị trong cuộc trò chuyện riêng.")
+        reply = self._route_callback(user_id, data, now)
+        if reply.inline_keyboard is None:
+            # Callback sửa đè tin cũ. Thiếu nút thì admin kẹt ở màn chỉ có chữ.
+            return replace(reply, inline_keyboard=NAV_KEYBOARD)
+        return reply
+
+    def _route_callback(self, user_id: int, data: str, now: datetime) -> BotReply:
         menu = _MENU.fullmatch(data or "")
         if menu:
             return self._menu_screen(menu.group(1), user_id, now)
@@ -524,10 +532,10 @@ def _rank_preview(tier: str, before_bps: int, after_bps: int) -> str:
         f"Tỷ lệ đã lưu: {_percent(before_bps)}\n"
         f"Tỷ lệ đề xuất: {_percent(after_bps)}\n\n"
         "Mô phỏng quỹ phân chia 100.000đ. Không phải lợi nhuận.\n"
-        f"Trước: hoàn {before[0]:,}đ, phần còn {before[1]:,}đ\n"
-        f"Sau: hoàn {after[0]:,}đ, phần còn {after[1]:,}đ\n\n"
+        f"Trước: hoàn {format_vnd(before[0])}, phần còn {format_vnd(before[1])}\n"
+        f"Sau: hoàn {format_vnd(after[0])}, phần còn {format_vnd(after[1])}\n\n"
         "Xác nhận chỉ phê duyệt bản lưu, chưa kích hoạt cho khách. "
-        "Báo giá đã lưu không tự tính lại.".replace(",", ".")
+        "Báo giá đã lưu không tự tính lại."
     )
 
 

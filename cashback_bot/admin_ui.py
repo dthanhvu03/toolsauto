@@ -8,6 +8,8 @@ Tuân thủ nghiêm ngặt 3 nguyên tắc UX:
 
 from __future__ import annotations
 
+from cashback_bot.money import format_vnd
+
 Keyboard = tuple[tuple[tuple[str, str], ...], ...]
 
 MENU_KEYBOARD: Keyboard = (
@@ -61,11 +63,9 @@ def home_text(
         "<b>Trạng thái đang phục vụ</b>\n\n"
         "Chính sách báo giá: V1.1\n"
         f"Tỷ lệ đang áp dụng: {rate_percent}%\n"
-        f"Tỷ lệ ước tính hiện tại: {rate_percent}%\n"
         f"Calculator V1.2: {calculator_state}\n"
         f"Hạng thành viên: {rank}\n"
-        "Đối soát &amp; chi trả: Chưa mở\n"
-        "Đối soát và chi trả:\nChưa mở\n\n"
+        "Đối soát &amp; chi trả: Chưa mở\n\n"
         f"Bản nháp đang chờ: {pending_line}\n\n"
         "<b>Thông tin áp dụng</b>\n"
         f"Khách hiện nhận báo giá bằng {rate_percent}% hoa hồng ước tính, chưa khấu trừ thuế và phí.\n"
@@ -93,9 +93,9 @@ def policy_text(
         "• Giới hạn an toàn V1: Tối đa <b>70%</b> (không vượt trần 7.000 bps)\n"
         "• Hiệu lực: Chỉ lưu bản ghi bất biến (customer_effect=none), chưa đổi báo giá khách\n\n"
         "🔵 <b>MÔ PHỎNG PHÂN CHIA (ĐƠN 100.000đ HOA HỒNG)</b>\n"
-        f"• Khách nhận ({rate_percent}%): <b>{rate_percent * 1_000:,}đ</b>\n"
-        f"• Phần còn lại: <b>{(100 - rate_percent) * 1_000:,}đ</b>\n\n"
-        "⚠️ <i>Báo giá đã lưu không tự tính lại. Không có cam kết chi trả tự động.</i>".replace(",", ".")
+        f"• Khách nhận ({rate_percent}%): <b>{format_vnd(rate_percent * 1_000)}</b>\n"
+        f"• Phần còn lại: <b>{format_vnd((100 - rate_percent) * 1_000)}</b>\n\n"
+        "⚠️ <i>Báo giá đã lưu không tự tính lại. Không có cam kết chi trả tự động.</i>"
     )
 
 
@@ -125,12 +125,12 @@ def rank_text(
         "<i>Chọn hạng để tạo bản nháp. Trần V1 là 70%.</i>\n"
         "<i>Quy tắc bắt buộc: Đồng ≤ Bạc ≤ Vàng.</i>\n\n"
         "🔵 <b>MÔ PHỎNG VỚI HOA HỒNG 100.000đ</b>\n"
-        f"• Đồng ({bronze_percent}): Hoàn {b_cash:,}đ · Phần còn {b_rem:,}đ\n"
-        f"• Bạc ({silver_percent}): Hoàn {s_cash:,}đ · Phần còn {s_rem:,}đ\n"
-        f"• Vàng ({gold_percent}): Hoàn {g_cash:,}đ · Phần còn {g_rem:,}đ\n\n"
+        f"• Đồng ({bronze_percent}): Hoàn {format_vnd(b_cash)} · Phần còn {format_vnd(b_rem)}\n"
+        f"• Bạc ({silver_percent}): Hoàn {format_vnd(s_cash)} · Phần còn {format_vnd(s_rem)}\n"
+        f"• Vàng ({gold_percent}): Hoàn {format_vnd(g_cash)} · Phần còn {format_vnd(g_rem)}\n\n"
         "⚠️ <i>Chưa có dữ liệu đơn thật, trang Hạng thành viên hiển thị tỷ lệ và quy tắc dự kiến, "
         "nhưng không có nút kích hoạt tự động.</i>\n\n"
-        "Chọn hạng để tạo bản nháp mới:".replace(",", ".")
+        "Chọn hạng để tạo bản nháp mới:"
     )
 
 
@@ -156,11 +156,11 @@ def fee_text(
         "Không phải thuế phải nộp và không sửa chứng từ đã đối soát.\n\n"
         "🔵 <b>MÔ PHỎNG DỰ PHÒNG TRÊN 100.000đ HOA HỒNG</b>\n"
         f"• Hoa hồng ước tính: 100.000đ\n"
-        f"• Phí dự phòng ({fee_percent}): -{sim_fee:,}đ\n"
-        f"• Thuế TNCN dự phòng ({tax_percent}): -{sim_tax:,}đ\n"
-        f"• Quỹ phân chia còn lại: <b>{sim_dist:,}đ</b>\n\n"
+        f"• Phí dự phòng ({fee_percent}): -{format_vnd(sim_fee)}\n"
+        f"• Thuế TNCN dự phòng ({tax_percent}): -{format_vnd(sim_tax)}\n"
+        f"• Quỹ phân chia còn lại: <b>{format_vnd(sim_dist)}</b>\n\n"
         "⚠️ <i>Không sửa số đã thanh toán. Khách chưa đổi công thức V1.1.</i>\n\n"
-        "Chọn mục để tạo bản nháp điều chỉnh:".replace(",", ".")
+        "Chọn mục để tạo bản nháp điều chỉnh:"
     )
 
 
@@ -179,7 +179,7 @@ def simulation_text(
         "🔵 <b>BẢNG MÔ PHỎNG THEO CÁC MỨC QUỸ</b>",
     ]
     for amount in (10_000, 100_000):
-        lines.append(f"\nQuỹ {amount:,}đ".replace(",", "."))
+        lines.append(f"\nQuỹ {format_vnd(amount)}")
         for code in ("BRONZE", "SILVER", "GOLD"):
             label = {"BRONZE": "Đồng", "SILVER": "Bạc", "GOLD": "Vàng"}[code]
             bps = rates[code]
@@ -190,7 +190,7 @@ def simulation_text(
                 p_str = f"{whole}.{frac:02d}".rstrip("0").replace(".", ",") + "%"
             cashback = (amount * bps) // 10_000
             remain = amount - cashback
-            lines.append(f"{label} {p_str}: hoàn {cashback:,}đ, phần còn {remain:,}đ".replace(",", "."))
+            lines.append(f"{label} {p_str}: hoàn {format_vnd(cashback)}, phần còn {format_vnd(remain)}")
     lines.append("\n⚠️ <i>Mô phỏng chỉ dùng để tính thử phương án, không làm thay đổi số dư hay phát sinh nghĩa vụ.</i>")
     return "\n".join(lines)
 
