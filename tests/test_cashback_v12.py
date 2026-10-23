@@ -219,7 +219,8 @@ def test_policy_v12_chi_bat_khi_co_cot(tmp_path):
         111, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=NOW
     )
     assert "14.000đ" in reply.text
-    assert "Bạn có thể được hoàn thêm" in reply.text
+    assert "Hoàn dự kiến:" in reply.text
+    assert "dự phòng" not in reply.text
 
     store = repo(tmp_path)
     with store.connect() as conn:
@@ -227,7 +228,7 @@ def test_policy_v12_chi_bat_khi_co_cot(tmp_path):
     reply = CashbackService(turned_on, store, FakeClient(payload())).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=2, now=NOW
     )
-    assert "Cashback dự kiến" in reply.text
+    assert "sau dự phòng phí và thuế" in reply.text
     assert "<b>12.462đ</b>" in reply.text
     assert "chắc chắn" not in reply.text.lower()
     assert "số dư" not in reply.text.lower()

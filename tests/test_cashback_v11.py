@@ -189,7 +189,7 @@ def test_user_vuot_limit_khong_anh_huong_user_khac(tmp_path):
     assert "tạm dừng" in reply.text
     assert "5 phút" in reply.text
     guide = bot.handle_text(111, "a", "/huongdan", update_id=4, now=NOW)
-    assert "HƯỚNG DẪN SỬ DỤNG" in guide.text
+    assert "📖 <b>Cách dùng</b>" in guide.text
     other = bot.handle_text(222, "b", "https://shopee.vn/product/9/8", update_id=5, now=NOW)
     assert other.button_url
     assert client.calls == 3

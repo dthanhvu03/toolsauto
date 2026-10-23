@@ -135,8 +135,8 @@ def test_ac01_link_hop_le_va_cashback_70(tmp_path):
     assert "Áo Polo Nam" in reply.text
     assert "Giá tham khảo: 250.000đ" in reply.text
     assert "20.000đ" not in reply.text
-    assert "🎁 <b>MÓN NÀY CÓ THỂ ĐƯỢC HOÀN TIỀN</b>" in reply.text
-    assert "💰 Bạn có thể được hoàn thêm" in reply.text
+    assert "✅ <b>Đã tạo link hoàn tiền</b>" in reply.text
+    assert "💰 Hoàn dự kiến:" in reply.text
     assert "<b>14.000đ</b>" in reply.text
     assert "70%" not in reply.text
     assert "an_redir" not in reply.text
@@ -253,7 +253,7 @@ def test_cashback_bang_0_hien_thi_trung_thuc(tmp_path):
     reply = service(tmp_path, FakeClient(no_commission)).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=12, now=NOW
     )
-    assert "💰 Bạn có thể được hoàn thêm" in reply.text
+    assert "💰 Hoàn dự kiến:" in reply.text
     assert "<b>0đ</b>" in reply.text
     assert "Chưa phải tiền có thể rút." in reply.text
     assert reply.button_url is not None
@@ -355,13 +355,13 @@ def test_lenh_huongdan_khong_tao_link(tmp_path):
     bot = service(tmp_path, client)
     for update_id, text in ((60, "/huongdan"), (62, "/huongdan@zt_shopee_bot")):
         reply = bot.handle_text(111, "buyer", text, update_id=update_id, now=NOW)
-        assert "HƯỚNG DẪN SỬ DỤNG" in reply.text
+        assert "📖 <b>Cách dùng</b>" in reply.text
         assert "không thu phí sử dụng" in reply.text
         assert "không bảo đảm đơn hàng được ghi nhận" in reply.text
         assert reply.button_url is None
     help_reply = bot.handle_text(111, "buyer", "/help", update_id=65, now=NOW)
-    assert "TRUNG TÂM TRỢ GIÚP" in help_reply.text
-    assert "HƯỚNG DẪN SỬ DỤNG" not in help_reply.text
+    assert "Xem món Shopee được hoàn bao nhiêu" in help_reply.text
+    assert "📖 <b>Cách dùng</b>" not in help_reply.text
     assert help_reply.button_url is None
     assert client.calls == 0
     conn = sqlite3.connect(tmp_path / "cashback.sqlite")
@@ -372,10 +372,10 @@ def test_lenh_start_uu_tien_kich_hoat_gui_link(tmp_path):
     client = FakeClient(payload())
     bot = service(tmp_path, client)
     reply = bot.handle_text(111, "buyer", "/start", update_id=61, now=NOW)
-    assert "MÓN BẠN ĐỊNH MUA CÓ THỂ ĐƯỢC HOÀN BAO NHIÊU?" in reply.text
-    assert "Số tiền hoàn dự kiến" in reply.text
-    assert "Thử gửi link món bạn đang muốn mua nhé!" in reply.text
-    assert "giai đoạn thử nghiệm" in reply.text
+    assert "Xem món Shopee được hoàn bao nhiêu" in reply.text
+    assert "số tiền hoàn dự kiến" in reply.text
+    assert "Dán link sản phẩm Shopee vào đây" in reply.text
+    assert "đang thử nghiệm" in reply.text
     assert reply.button_url is None
     assert client.calls == 0
 
@@ -385,8 +385,7 @@ def test_lenh_cach_tinh(tmp_path):
     bot = service(tmp_path, client)
     for update_id, text in ((63, "/cachtinh"), (64, "/cachtinh@zt_shopee_bot")):
         reply = bot.handle_text(111, "buyer", text, update_id=update_id, now=NOW)
-        assert "CÁCH TÍNH HOÀN TIỀN" in reply.text
-        assert "Tỷ lệ tính số dự kiến: 70%" in reply.text
+        assert "💰 <b>Cách tính tiền hoàn</b>" in reply.text
         assert "70% hoa hồng ước tính" in reply.text
         assert "7.000đ" in reply.text
         assert "chưa bật" not in reply.text
@@ -412,7 +411,7 @@ def test_nam_lenh_tach_noi_dung(tmp_path):
         )
     }
     assert replies["help"] != replies["huongdan"]
-    assert "TRUNG TÂM TRỢ GIÚP" in replies["help"]
+    assert "Xem món Shopee được hoàn bao nhiêu" in replies["help"]
     assert "/cachtinh" in replies["help"]
     assert "không bảo đảm Shopee sẽ ghi nhận hoa hồng" in replies["dieukien"]
     assert "60%" not in replies["hang"]
@@ -452,7 +451,7 @@ def test_set_my_commands_co_lenh_thong_tin(monkeypatch):
     assert api.set_my_commands() is True
     commands = captured["json"]["commands"]
     names = [item["command"] for item in commands]
-    assert names == ["start", "huongdan", "dieukien", "cachtinh", "hang", "help"]
+    assert names == ["start", "huongdan", "dieukien", "cachtinh", "help"]
     assert all(len(item["description"]) <= 256 for item in commands)
 
 
@@ -624,7 +623,7 @@ def test_gui_tin_that_bai_khong_danh_dau_da_giao(tmp_path, caplog):
             if self.attempts == 1:
                 raise requests.ConnectionError("down")
             assert "an_redir" not in html
-            assert "MÓN NÀY CÓ THỂ ĐƯỢC HOÀN TIỀN" in html
+            assert "Đã tạo link hoàn tiền" in html
             assert reply_markup["inline_keyboard"][0][0]["url"].startswith("https://s.shopee.vn/an_redir?")
             assert chat_id == 111
 
@@ -781,3 +780,40 @@ def test_escape_html_trong_admin_notify(tmp_path):
     assert "&lt;script&gt;" in merged
     assert "<b>buyer</b>" not in merged
     assert "&lt;b&gt;buyer&lt;/b&gt;" in merged
+
+
+def test_khuon_chu_khach_plan_060(tmp_path):
+    """PLAN-060 P2: một dòng ⓘ, không chữ cashback, thẻ kết quả không nhắc hoa hồng."""
+    from cashback_bot.messages import (
+        CLOSED,
+        DIEUKIEN,
+        GENERIC_FAIL,
+        HOME,
+        HUONGDAN,
+        INVALID_LINK,
+        NOT_FOUND,
+        hang_message,
+        how_to_calc_v11,
+        how_to_calc_v12,
+        rate_limited_reply,
+        render_success,
+        render_success_v12,
+    )
+
+    cards = [
+        render_success("Áo Polo Nam", 250_000, 14_000, "https://s.shopee.vn/x").text,
+        render_success_v12("Áo Polo Nam", 250_000, 12_462, "https://s.shopee.vn/x").text,
+    ]
+    pages = [HOME, HUONGDAN, DIEUKIEN, how_to_calc_v11(70), how_to_calc_v12(70, 98, 1_000), hang_message(70)]
+    errors = [CLOSED, INVALID_LINK, STALE, NOT_FOUND, GENERIC_FAIL, rate_limited_reply(300).text]
+    for text in cards + pages + errors:
+        assert text.count("ⓘ") <= 1
+        assert "cashback" not in text.lower()
+        assert len(text) < 3500
+        assert text.count("<b>") == text.count("</b>")
+    for text in cards:
+        assert "hoa hồng" not in text
+        assert "Chưa phải tiền có thể rút." in text
+    zero = render_success("Áo Polo Nam", 250_000, 0, "https://s.shopee.vn/x").text
+    assert "Đã tạo link mua" in zero
+    assert "Đã tạo link hoàn tiền" not in zero
