@@ -5,8 +5,10 @@ Tiền ở đây là số dự kiến đã báo khách, chưa phải doanh thu: 
 
 from __future__ import annotations
 
+import csv
+import io
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -45,9 +47,28 @@ class Insight:
     top_shops: list[tuple[str, int]]
 
 
+# Trạng thái đơn Shopee (order_status), dùng chung cho thống kê và sổ hoàn tiền.
+_CANCELLED = "(order_status LIKE '%CANCEL%')"
+_COMPLETED = "(order_status LIKE '%COMPLETED%' OR order_status LIKE '%SUCCESS%')"
+_PENDING = "(order_status LIKE '%PENDING%' OR order_status LIKE '%WAIT%' OR order_status LIKE '%UNPAID%')"
+
+
+@dataclass(frozen=True)
+class ShopeeDay:
+    label: str
+    orders: int
+    cancelled: int
+    gmv_vnd: int
+    net_commission_vnd: int
+    clicks: int
+
+
 @dataclass(frozen=True)
 class ShopeeStats:
-    """Số liệu đối soát thật từ Shopee Affiliate (PLAN-065)."""
+    """Số liệu đối soát thật từ Shopee Affiliate (PLAN-065, PLAN-066).
+
+    Tiền (doanh số, hoa hồng) không tính đơn huỷ; đơn huỷ có ô riêng.
+    """
 
     total_clicks: int
     clicks_with_bot_sub_id: int
@@ -58,6 +79,13 @@ class ShopeeStats:
     orders_matched_bot: int
     real_commission_vnd: int
     conversion_rate_percent: float | None = None
+    gmv_vnd: int = 0
+    item_qty: int = 0
+    gross_commission_vnd: int = 0
+    mcn_fee_vnd: int = 0
+    cancelled_gmv_vnd: int = 0
+    lost_commission_vnd: int = 0
+    daily: list[ShopeeDay] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -164,7 +192,7 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
 
     return Stats(
         insight=_insight(conn, lo),
-        shopee=_shopee_stats(conn, lo),
+        shopee=_shopee_stats(conn, lo, period_start("7d", now)),
         period=period,
         since=since,
         users_total=_count(conn, "SELECT COUNT(*) FROM telegram_users"),
@@ -232,58 +260,151 @@ def _insight(conn: sqlite3.Connection, lo: str) -> Insight | None:
     )
 
 
-def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
+def _shopee_stats(conn: sqlite3.Connection, lo: str, trend_start: datetime | None = None) -> ShopeeStats | None:
     # Lọc theo giờ click / giờ đặt hàng; lần đồng bộ đầu kéo 30 ngày nên created_at không dùng được.
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     if "shopee_clicks" not in tables or "shopee_conversions" not in tables:
         return None
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(shopee_conversions)")}
 
+    def col(name: str) -> str:
+        # DB chưa chạy migrate PLAN-066 thì coi như 0, không vỡ màn thống kê.
+        return name if name in columns else "0"
+
+    bot_sub = "sub_id IN (SELECT sub_id FROM link_requests WHERE sub_id IS NOT NULL)"
     clicks_row = conn.execute(
-        """
-        SELECT
-            COUNT(*),
-            COALESCE(SUM(sub_id IN (SELECT sub_id FROM link_requests WHERE sub_id IS NOT NULL)), 0)
+        f"""
+        SELECT COUNT(*), COALESCE(SUM({bot_sub}), 0)
         FROM shopee_clicks
         WHERE COALESCE(click_time, created_at) >= ?
         """,
         (lo,),
     ).fetchone()
-    total_clicks = int(clicks_row[0]) if clicks_row else 0
-    bot_clicks = int(clicks_row[1]) if clicks_row else 0
+    total_clicks = int(clicks_row[0])
+    bot_clicks = int(clicks_row[1])
 
     conv_row = conn.execute(
-        """
+        f"""
         SELECT
             COUNT(*),
-            COALESCE(SUM(order_status LIKE '%PENDING%' OR order_status LIKE '%WAIT%'), 0),
-            COALESCE(SUM(order_status LIKE '%COMPLETED%' OR order_status LIKE '%SUCCESS%'), 0),
-            COALESCE(SUM(order_status LIKE '%CANCEL%'), 0),
+            COALESCE(SUM({_PENDING}), 0),
+            COALESCE(SUM({_COMPLETED}), 0),
+            COALESCE(SUM({_CANCELLED}), 0),
             COALESCE(SUM(matched_link_id IS NOT NULL), 0),
-            COALESCE(SUM(CASE WHEN order_status LIKE '%CANCEL%' THEN 0 ELSE net_commission_vnd END), 0)
+            COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE net_commission_vnd END), 0),
+            COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE {col("gmv_vnd")} END), 0),
+            COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE {col("item_qty")} END), 0),
+            COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE gross_commission_vnd END), 0),
+            COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE {col("mcn_fee_vnd")} END), 0),
+            COALESCE(SUM(CASE WHEN {_CANCELLED} THEN {col("gmv_vnd")} ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN {_CANCELLED} THEN COALESCE(net_commission_vnd, gross_commission_vnd) ELSE 0 END), 0)
         FROM shopee_conversions
         WHERE COALESCE(purchase_time, created_at) >= ?
         """,
         (lo,),
     ).fetchone()
-
-    total_orders = int(conv_row[0]) if conv_row else 0
-    pending_orders = int(conv_row[1]) if conv_row else 0
-    completed_orders = int(conv_row[2]) if conv_row else 0
-    cancelled_orders = int(conv_row[3]) if conv_row else 0
-    matched_orders = int(conv_row[4]) if conv_row else 0
-    real_comm = int(conv_row[5]) if conv_row else 0
+    values = [int(value or 0) for value in conv_row]
+    orders_total, pending, completed, cancelled, matched, net, gmv, qty, gross, fee, cancelled_gmv, lost = values
 
     # CR chỉ tính phần đi qua link bot: đơn khớp Sub ID / click mang Sub ID của bot.
-    cr = round((matched_orders / bot_clicks) * 100, 1) if bot_clicks > 0 else None
+    cr = round((matched / bot_clicks) * 100, 1) if bot_clicks > 0 else None
 
     return ShopeeStats(
         total_clicks=total_clicks,
         clicks_with_bot_sub_id=bot_clicks,
-        orders_total=total_orders,
-        orders_pending=pending_orders,
-        orders_completed=completed_orders,
-        orders_cancelled=cancelled_orders,
-        orders_matched_bot=matched_orders,
-        real_commission_vnd=real_comm,
+        orders_total=orders_total,
+        orders_pending=pending,
+        orders_completed=completed,
+        orders_cancelled=cancelled,
+        orders_matched_bot=matched,
+        real_commission_vnd=net,
         conversion_rate_percent=cr,
+        gmv_vnd=gmv,
+        item_qty=qty,
+        gross_commission_vnd=gross,
+        mcn_fee_vnd=fee,
+        cancelled_gmv_vnd=cancelled_gmv,
+        lost_commission_vnd=lost,
+        daily=_shopee_daily(conn, trend_start, col) if trend_start else [],
     )
+
+
+def _shopee_daily(conn: sqlite3.Connection, trend_start: datetime, col) -> list[ShopeeDay]:
+    """Bảng 7 ngày như trang Thống kê của Addlivetag, theo ngày giờ VN."""
+    lo = _stamp(trend_start)
+    orders = {
+        row[0]: row[1:]
+        for row in conn.execute(
+            f"""
+            SELECT date(COALESCE(purchase_time, created_at), '+7 hours'),
+                   COUNT(*), COALESCE(SUM({_CANCELLED}), 0),
+                   COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE {col("gmv_vnd")} END), 0),
+                   COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE net_commission_vnd END), 0)
+            FROM shopee_conversions WHERE COALESCE(purchase_time, created_at) >= ?
+            GROUP BY 1
+            """,
+            (lo,),
+        ).fetchall()
+    }
+    clicks = dict(
+        conn.execute(
+            """
+            SELECT date(COALESCE(click_time, created_at), '+7 hours'), COUNT(*)
+            FROM shopee_clicks WHERE COALESCE(click_time, created_at) >= ?
+            GROUP BY 1
+            """,
+            (lo,),
+        ).fetchall()
+    )
+    days = []
+    for offset in range(TREND_DAYS):
+        day = (trend_start + timedelta(days=offset)).astimezone(ICT)
+        key = day.strftime("%Y-%m-%d")
+        n, n_cancel, gmv, net = (int(v or 0) for v in orders.get(key, (0, 0, 0, 0)))
+        days.append(ShopeeDay(day.strftime("%d/%m"), n, n_cancel, gmv, net, int(clicks.get(key, 0))))
+    return days
+
+
+CSV_HEADER = (
+    "Ngày đặt (giờ VN)", "Mã đơn", "Trạng thái", "Tên món", "Số lượng", "Doanh số",
+    "HH gốc", "Phí MCN", "HH sau cùng", "Sub ID", "Telegram ID", "Username", "Hoàn thành lúc", "Tháng duyệt dự kiến",
+)
+
+
+def _vn(stamp: str | None) -> str:
+    if not stamp:
+        return ""
+    try:
+        moment = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return stamp
+    return moment.astimezone(ICT).strftime("%Y-%m-%d %H:%M")
+
+
+def conversions_csv(conn: sqlite3.Connection, since: datetime) -> tuple[bytes, int]:
+    """CSV đơn Shopee từ `since` (theo giờ đặt). BOM UTF-8 để Excel đọc đúng tiếng Việt."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(shopee_conversions)")}
+
+    def col(name: str) -> str:
+        return f"c.{name}" if name in columns else "NULL"
+
+    rows = conn.execute(
+        f"""
+        SELECT COALESCE(c.purchase_time, c.created_at), c.order_sn, c.order_status, {col("item_name")}, {col("item_qty")},
+               {col("gmv_vnd")}, c.gross_commission_vnd, {col("mcn_fee_vnd")}, c.net_commission_vnd, c.sub_id,
+               c.telegram_user_id, u.username, {col("complete_time")}, {col("validation_month")}
+        FROM shopee_conversions c LEFT JOIN telegram_users u ON u.telegram_user_id = c.telegram_user_id
+        WHERE COALESCE(c.purchase_time, c.created_at) >= ?
+        ORDER BY 1 DESC
+        """,
+        (_stamp(since),),
+    ).fetchall()
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(CSV_HEADER)
+    for row in rows:
+        values = list(row)
+        values[0] = _vn(values[0])
+        values[12] = _vn(values[12])
+        writer.writerow(["" if value is None else value for value in values])
+    return buffer.getvalue().encode("utf-8-sig"), len(rows)

@@ -68,6 +68,8 @@ def _bot_sub_id(val: Any) -> str | None:
 
 
 MONEY_SCALE = 100_000
+# Admin bấm 🔄: chỉ đặt cờ này, poller chạy đồng bộ ở vòng kế tiếp rồi nhắn kết quả (PLAN-066).
+SYNC_REQUEST_KEY = "shopee_sync_requested"
 # Shopee nhận page_size=100 (đã thử thật 2026-10-23).
 PAGE_SIZE = 100
 # Trần số trang mỗi loại mỗi lần đồng bộ, tránh vòng lặp vô tận nếu Shopee bỏ qua page_no.
@@ -91,6 +93,35 @@ def _paged(fetch, start_time: int, end_time: int, list_keys: tuple[str, ...]):
                 yield row
         if len(rows) < PAGE_SIZE:
             return
+
+
+def _int(val: Any) -> int:
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _order_details(top_item: dict[str, Any], order_dict: dict[str, Any], single_order: bool) -> dict[str, Any]:
+    """Các ô Doanh số / Số lượng / phí MCN của Addlivetag, lấy từ items của đơn (PLAN-066)."""
+    items = [item for item in order_dict.get("items") or [] if isinstance(item, dict)]
+    names = [str(item.get("item_name") or "").strip() for item in items if item.get("item_name")]
+    item_name = names[0] if names else None
+    if item_name and len(names) > 1:
+        item_name += f" (+{len(names) - 1} món)"
+    validation = top_item.get("report_payment_validation_info")
+    month = top_item.get("estimated_validation_month") or (
+        validation.get("estimate_validation_month") if isinstance(validation, dict) else None
+    )
+    return {
+        "gmv_vnd": sum(parse_shopee_money_vnd(item.get("actual_amount")) or 0 for item in items),
+        "item_qty": sum(_int(item.get("qty")) for item in items),
+        "item_name": item_name[:300] if item_name else None,
+        # Phí MCN chỉ có ở cấp checkout; checkout nhiều đơn thì không chia được, để 0.
+        "mcn_fee_vnd": (parse_shopee_money_vnd(top_item.get("mcn_management_fee_commission")) or 0) if single_order else 0,
+        "complete_time": _iso_time(order_dict.get("complete_time")),
+        "validation_month": str(month) if month else None,
+    }
 
 
 @dataclass(frozen=True)
@@ -313,6 +344,7 @@ class ShopeeSyncEngine:
             gross_commission_vnd=gross_comm,
             net_commission_vnd=net_comm,
             raw_json=json.dumps({"top": top_item, "order": order_dict}, ensure_ascii=False),
+            details=_order_details(top_item, order_dict, single_order),
         )
 
         if is_new and is_matched:

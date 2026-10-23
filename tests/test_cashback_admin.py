@@ -277,12 +277,17 @@ def test_mo_menu_khong_doi_cong_thuc_khach(tmp_path):
     assert quote_displayed_vnd(10_000, 70) == 7_000
 
 
-def test_nut_khong_co_chi_tra(tmp_path):
+def test_vi_mac_dinh_tat_khach_khong_thay_chi_tra(tmp_path):
+    # PLAN-066 đổi quyết định "không có ví" của ADR-045: admin có màn ví, nhưng ví TẮT cho tới khi admin bật.
     bot, _client = _bot(tmp_path)
     reply = bot.handle_text(ADMIN, "owner", "/admin", update_id=13, now=NOW)
     blob = " ".join(data for row in reply.inline_keyboard for _label, data in row)
-    assert "payout" not in blob
-    assert "wallet" not in blob
+    assert "c:menu:wallet" in blob
     assert "Chưa mở" in reply.text
+    assert bot.wallet.settings().enabled is False
+    home = bot.handle_text(111, "khach", "/start", update_id=14, now=NOW)
+    assert "u:p:wallet" not in " ".join(data for row in home.inline_keyboard for _label, data in row)
+    assert "chưa chi trả" in home.text
+    assert "chưa mở" in bot.handle_text(111, "khach", "/vi", update_id=15, now=NOW).text
     later = NOW + timedelta(days=1)
     assert customer_policy_due([], later) is None

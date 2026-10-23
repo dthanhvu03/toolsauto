@@ -6,6 +6,7 @@ import fcntl
 import json
 import logging
 import time
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -13,10 +14,10 @@ import requests
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import ADMIN_COMMANDS, BUY_BUTTON, DESCRIPTION, SHORT_DESCRIPTION
+from cashback_bot.messages import ADMIN_COMMANDS, BOT_COMMANDS, BUY_BUTTON, DESCRIPTION, SHORT_DESCRIPTION, WALLET_COMMAND
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.service import CashbackService
-from cashback_bot.shopee_sync import ShopeeSyncEngine
+from cashback_bot.shopee_sync import SYNC_REQUEST_KEY, ShopeeSyncEngine
 from cashback_bot.telegram_api import TelegramApi, classify_delivery_error
 
 logger = logging.getLogger("cashback_bot")
@@ -50,7 +51,7 @@ def main() -> None:
         chat_id=settings.admin_chat_id,
     )
     service = CashbackService(settings, repo, client, admin_notifier=admin_notifier)
-    _register_profile(telegram, settings.admin_user_ids)
+    _register_profile(telegram, settings.admin_user_ids, wallet_on=service.wallet.settings().enabled)
     logger.info(
         "start db=%s rate=%s max_age_h=%s allowlist=%s public=%s admin_notify=%s",
         settings.db_path,
@@ -63,16 +64,17 @@ def main() -> None:
     _loop(service, telegram, repo, admin_notifier)
 
 
-def _register_profile(telegram: TelegramApi, admin_user_ids) -> None:
+def _register_profile(telegram: TelegramApi, admin_user_ids, wallet_on: bool = False) -> None:
     """Lệnh, mô tả và lệnh /admin theo scope chat. Lỗi chỉ ghi log, không chặn bot."""
+    extra = (WALLET_COMMAND,) if wallet_on else ()
     steps = [
-        ("setMyCommands", lambda: telegram.set_my_commands()),
+        ("setMyCommands", lambda: telegram.set_my_commands(BOT_COMMANDS + extra)),
         ("setMyDescription", lambda: telegram.set_my_description(DESCRIPTION)),
         ("setMyShortDescription", lambda: telegram.set_my_short_description(SHORT_DESCRIPTION)),
     ]
     for admin_id in sorted(admin_user_ids):
         scope = {"type": "chat", "chat_id": admin_id}
-        steps.append(("setMyCommands admin", lambda scope=scope: telegram.set_my_commands(ADMIN_COMMANDS, scope)))
+        steps.append(("setMyCommands admin", lambda scope=scope: telegram.set_my_commands(ADMIN_COMMANDS + extra, scope)))
     for name, step in steps:
         try:
             logger.info("%s %s", name, "ok" if step() else "failed")
@@ -242,6 +244,8 @@ def process_updates(
                     telegram.delete_message(chat_id, reply.delete_message_id)
                 except Exception as exc:
                     logger.warning("[Cashback] delete_message failed: %s", exc)
+            if reply.document and hasattr(telegram, "send_document"):
+                telegram.send_document(chat_id, *reply.document)
             query_id = reply.callback_query_id
             if query_id and hasattr(telegram, "answer_callback"):
                 if reply.toast:
@@ -301,27 +305,43 @@ def _typing(telegram, update: dict) -> None:
         telegram.send_chat_action(chat_id, "typing")
 
 
-def _check_shopee_auto_sync(repo: TrackingRepository, admin_notifier: AdminNotifier, interval_sec: int = 14400) -> None:
-    """Tự động đồng bộ Shopee mỗi vài giờ nếu đã kết nối (PLAN-065)."""
+def _check_shopee_auto_sync(
+    repo: TrackingRepository,
+    admin_notifier: AdminNotifier,
+    interval_sec: int = 14400,
+    on_synced: Callable[[], None] | None = None,
+) -> None:
+    """Đồng bộ Shopee mỗi 4 giờ nếu đã kết nối, hoặc ngay khi admin bấm 🔄 (PLAN-065, PLAN-066)."""
     now = time.time()
-    last_check_str = repo.get_state("shopee_last_auto_sync")
-    if last_check_str:
-        try:
-            if now - float(last_check_str) < interval_sec:
-                return
-        except ValueError:
-            pass
-
-    status_dict = repo.get_shopee_cookie_status()
-    if status_dict.get("status") != "connected":
-        return
+    manual = repo.get_state(SYNC_REQUEST_KEY) == "1"
+    if not manual:
+        last_check_str = repo.get_state("shopee_last_auto_sync")
+        if last_check_str:
+            try:
+                if now - float(last_check_str) < interval_sec:
+                    return
+            except ValueError:
+                pass
+        if repo.get_shopee_cookie_status().get("status") != "connected":
+            return
+    else:
+        repo.set_state(SYNC_REQUEST_KEY, "0")
 
     repo.set_state("shopee_last_auto_sync", str(now))
     try:
-        engine = ShopeeSyncEngine(repo, admin_notifier=admin_notifier)
-        engine.sync(trigger="auto")
+        result = ShopeeSyncEngine(repo, admin_notifier=admin_notifier).sync(trigger="manual" if manual else "auto")
     except Exception as exc:
         logger.warning("[ShopeeAutoSync] Lỗi trong phiên tự đồng bộ: %s", exc)
+        if manual:
+            admin_notifier.notify_shopee_sync_result(False, f"Đồng bộ lỗi: {type(exc).__name__}. Xem log bot.")
+        return
+    if manual:
+        admin_notifier.notify_shopee_sync_result(result.ok, result.message)
+    if on_synced is not None:
+        try:
+            on_synced()
+        except Exception:
+            logger.exception("[Cashback] cập nhật sổ hoàn tiền sau đồng bộ thất bại")
 
 
 def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier) -> None:
@@ -331,7 +351,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             offset = repo.get_offset()
             updates = telegram.get_updates(offset)
             process_updates(service, telegram, repo, updates, admin_notifier)
-            _check_shopee_auto_sync(repo, admin_notifier)
+            _check_shopee_auto_sync(repo, admin_notifier, on_synced=service.refresh_wallet)
         except KeyboardInterrupt:
             logger.info("stop")
             return

@@ -402,16 +402,6 @@ class TestShopeeReviewFixes:
         assert result.clicks_synced == 200
         assert client.fetch_clicks.call_count == 2
 
-    def test_manual_sync_passes_notifier_and_survives_crash(self, tmp_path):
-        repo = _setup_repo(tmp_path)
-        notifier = MagicMock()
-        panel = AdminPanel(str(repo.path), frozenset({ADMIN_ID}), 70, admin_notifier=notifier)
-        with patch("cashback_bot.admin_policy.ShopeeSyncEngine") as engine_cls:
-            engine_cls.return_value.sync.side_effect = RuntimeError("boom")
-            reply = panel.handle_callback(ADMIN_ID, "c:shopee:sync", "private", NOW)
-        assert engine_cls.call_args.kwargs["admin_notifier"] is notifier
-        assert "Đồng bộ lỗi" in reply.text
-
     def test_cancel_button_stops_waiting_for_cookie(self, tmp_path):
         repo = _setup_repo(tmp_path)
         panel = AdminPanel(str(repo.path), frozenset({ADMIN_ID}), 70)

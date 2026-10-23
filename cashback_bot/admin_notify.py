@@ -186,6 +186,56 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_shopee_sync_result(self, ok: bool, message: str) -> None:
+        """Kết quả lần bấm 🔄 (PLAN-066): nút trả lời ngay, kết quả tới sau."""
+        if not self._active():
+            return
+        title = "✅ <b>Đồng bộ Shopee xong</b>" if ok else "⚠️ <b>Đồng bộ Shopee chưa trọn</b>"
+        self.repo.enqueue_admin_event(
+            event_key=f"shopee_sync_result:{datetime.now(timezone.utc).timestamp()}",
+            event_type="SHOPEE_SYNC",
+            chat_id=int(self.chat_id),
+            message_html=f"{title}\n\n{html.escape(message)}\n🕓 {_vn_now_text()}",
+        )
+
+    def notify_payout_request(self, payout, username: str | None) -> None:
+        """Khách bấm Rút (PLAN-066). Chuyển xong thì admin bấm ✅ trong /admin → 👛 Ví khách."""
+        if not self._active():
+            return
+        user_id = int(payout["telegram_user_id"])
+        body = (
+            f"💸 <b>Yêu cầu rút tiền</b> · {_who(user_id, username)}\n\n"
+            f"Số tiền: <b>{format_vnd(int(payout['amount_vnd']))}</b>\n"
+            f"Mã: <code>{html.escape(payout['transfer_note'] or '')}</code>\n"
+            f"🕓 {_vn_now_text()}\n\n"
+            "👉 /admin → <b>👛 Ví khách</b> để xem số tài khoản và xác nhận đã chuyển."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"payout_request:{payout['id']}",
+            event_type="PAYOUT_REQUEST",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_wallet_clawback(self, transition) -> None:
+        """Đơn đã vào ví nhưng Shopee huỷ sau đó: số dư khách bị trừ, có thể âm."""
+        if not self._active():
+            return
+        body = (
+            "⚠️ <b>Đơn đã vào ví bị huỷ</b>\n\n"
+            f"🛍️ {html.escape(buyer_name(transition.item_name))}\n"
+            f"Trừ khỏi ví: <b>{format_vnd(transition.cashback_vnd)}</b>\n"
+            f"👤 <code>{transition.telegram_user_id}</code>\n"
+            f"🕓 {_vn_now_text()}\n\n"
+            "ⓘ Nếu khách đã rút khoản này, số dư sẽ âm cho tới khi có đơn mới bù lại."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"wallet_clawback:{transition.conversion_id}",
+            event_type="WALLET_CLAWBACK",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
     def flush_pending(self, limit: int = 10) -> None:
         if not self._active():
             return

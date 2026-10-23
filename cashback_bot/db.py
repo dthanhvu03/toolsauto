@@ -1,4 +1,4 @@
-"""SQLite riêng cho tracking. Không có ví, payout hay số dư."""
+"""SQLite riêng cho tracking. Ví, payout và số dư nằm ở wallet.py (PLAN-066)."""
 
 from __future__ import annotations
 
@@ -118,11 +118,63 @@ CREATE TABLE IF NOT EXISTS shopee_sync_runs (
     completed_at TEXT
 );
 
+-- PLAN-066: sổ hoàn tiền. Mỗi đơn khớp link bot một dòng; số tiền đã chốt không tính lại.
+CREATE TABLE IF NOT EXISTS cashback_entries (
+    conversion_id TEXT PRIMARY KEY,
+    telegram_user_id INTEGER NOT NULL,
+    link_id INTEGER,
+    order_sn TEXT,
+    item_name TEXT,
+    commission_vnd INTEGER NOT NULL DEFAULT 0,
+    cashback_vnd INTEGER NOT NULL DEFAULT 0,
+    policy_label TEXT,
+    status TEXT NOT NULL,
+    purchase_time TEXT,
+    completed_at TEXT,
+    available_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cashback_payouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_user_id INTEGER NOT NULL,
+    amount_vnd INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    bank_code TEXT NOT NULL,
+    account_no TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    transfer_note TEXT,
+    created_at TEXT NOT NULL,
+    decided_at TEXT,
+    decided_by INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS bank_accounts (
+    telegram_user_id INTEGER PRIMARY KEY,
+    bank_code TEXT NOT NULL,
+    account_no TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cashback_entries_user ON cashback_entries(telegram_user_id);
+CREATE INDEX IF NOT EXISTS idx_cashback_payouts_user ON cashback_payouts(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_shopee_conversions_sub_id ON shopee_conversions(sub_id);
 CREATE INDEX IF NOT EXISTS idx_shopee_conversions_user_id ON shopee_conversions(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_shopee_clicks_sub_id ON shopee_clicks(sub_id);
 """
 
+
+# Số liệu đối soát thêm (PLAN-066), theo các ô của Addlivetag. NULL: dòng kéo trước PLAN-066.
+SHOPEE_CONVERSION_COLUMNS = (
+    ("gmv_vnd", "INTEGER"),
+    ("item_qty", "INTEGER"),
+    ("item_name", "TEXT"),
+    ("mcn_fee_vnd", "INTEGER"),
+    ("complete_time", "TEXT"),
+    ("validation_month", "TEXT"),
+)
 
 # Dữ liệu sản phẩm thêm cho thống kê (PLAN-064). Cho phép NULL: link cũ không có.
 PRODUCT_INSIGHT_COLUMNS = (
@@ -202,6 +254,8 @@ class TrackingRepository:
             _add_column(conn, "outbound_messages", "reply_markup_json", "TEXT")
             for column, ddl in PRODUCT_INSIGHT_COLUMNS:
                 _add_column(conn, "link_requests", column, ddl)
+            for column, ddl in SHOPEE_CONVERSION_COLUMNS:
+                _add_column(conn, "shopee_conversions", column, ddl)
 
     def upsert_user(self, telegram_user_id: int, username: str | None) -> bool:
         now = _utc_now()
@@ -645,11 +699,14 @@ class TrackingRepository:
         gross_commission_vnd: int | None,
         net_commission_vnd: int | None,
         raw_json: str | None = None,
+        details: dict | None = None,
     ) -> tuple[bool, bool, int | None, int | None]:
         """Lưu đơn hàng và đối soát sub_id.
 
+        details: các cột SHOPEE_CONVERSION_COLUMNS (doanh số, số lượng, tên món...).
         Trả về (is_new, is_matched, matched_link_id, telegram_user_id).
         """
+        extra = {name: (details or {}).get(name) for name, _ddl in SHOPEE_CONVERSION_COLUMNS}
         now = _utc_now()
         with self.connect() as conn:
             # Tìm link khớp sub_id
@@ -678,9 +735,10 @@ class TrackingRepository:
                 INSERT INTO shopee_conversions (
                     conversion_id, sub_id, order_sn, order_status, conversion_status,
                     purchase_time, gross_commission_vnd, net_commission_vnd,
-                    matched_link_id, telegram_user_id, raw_json, created_at, updated_at
+                    matched_link_id, telegram_user_id, raw_json, created_at, updated_at,
+                    gmv_vnd, item_qty, item_name, mcn_fee_vnd, complete_time, validation_month
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(conversion_id) DO UPDATE SET
                     sub_id = excluded.sub_id,
                     order_sn = excluded.order_sn,
@@ -692,7 +750,13 @@ class TrackingRepository:
                     matched_link_id = COALESCE(excluded.matched_link_id, shopee_conversions.matched_link_id),
                     telegram_user_id = COALESCE(excluded.telegram_user_id, shopee_conversions.telegram_user_id),
                     raw_json = excluded.raw_json,
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    gmv_vnd = excluded.gmv_vnd,
+                    item_qty = excluded.item_qty,
+                    item_name = excluded.item_name,
+                    mcn_fee_vnd = excluded.mcn_fee_vnd,
+                    complete_time = excluded.complete_time,
+                    validation_month = excluded.validation_month
                 """,
                 (
                     conversion_id,
@@ -708,6 +772,7 @@ class TrackingRepository:
                     raw_json,
                     now,
                     now,
+                    *extra.values(),
                 ),
             )
             return is_new, is_matched, matched_link_id, telegram_user_id

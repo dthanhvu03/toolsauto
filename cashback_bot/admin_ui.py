@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html
 
+from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
 
 Keyboard = tuple[tuple[tuple[str, str], ...], ...]
@@ -20,7 +21,7 @@ BACK_HOME = (("◀️ Tổng quan", HOME_TARGET),)
 
 MENU_KEYBOARD: Keyboard = (
     (("📈 Thống kê", "c:st:7d"),),
-    (("🔗 Shopee Affiliate", "c:menu:shopee"),),
+    (("🔗 Shopee Affiliate", "c:menu:shopee"), ("👛 Ví khách", "c:menu:wallet")),
     (("💰 Chính sách", "c:menu:policy"), ("🎖️ Hạng thành viên", "c:menu:rank")),
     (("🧾 Thuế & phí", "c:menu:fee"), ("🧮 Mô phỏng", "c:menu:sim")),
     (("📊 Lịch sử", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
@@ -29,7 +30,7 @@ MENU_KEYBOARD: Keyboard = (
 NAV_KEYBOARD: Keyboard = (BACK_HOME,)
 
 SHOPEE_KEYBOARD_CONNECTED: Keyboard = (
-    (("🔄 Đồng bộ ngay", "c:shopee:sync"),),
+    (("🔄 Đồng bộ ngay", "c:shopee:sync"), ("📤 CSV 30 ngày", "c:shopee:csv")),
     (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
     BACK_HOME,
 )
@@ -560,22 +561,49 @@ def stats_text(stats, *, period_label: str, since: str | None) -> str:
         f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>",
     ]
     if stats.shopee and (stats.shopee.total_clicks > 0 or stats.shopee.orders_total > 0):
-        cr = stats.shopee.conversion_rate_percent
-        cr_line = f" · CR qua bot: <b>{str(cr).replace('.', ',')}%</b>" if cr is not None else ""
-        lines += [
-            "",
-            "🛒 <b>Đối soát Shopee Affiliate</b>",
-            f"• Clicks: <b>{stats.shopee.total_clicks}</b> (Khớp bot: <b>{stats.shopee.clicks_with_bot_sub_id}</b>)",
-            f"• Đơn hàng: <b>{stats.shopee.orders_total}</b> (Khớp bot: <b>{stats.shopee.orders_matched_bot}</b>){cr_line}",
-            f"• Trạng thái: Chờ duyệt <b>{stats.shopee.orders_pending}</b> · Hoàn thành <b>{stats.shopee.orders_completed}</b> · Huỷ <b>{stats.shopee.orders_cancelled}</b>",
-            f"• Hoa hồng Shopee (không tính đơn huỷ): <b>{format_vnd(stats.shopee.real_commission_vnd)}</b>",
-        ]
+        lines += ["", *shopee_stats_lines(stats.shopee)]
     else:
         lines += [
             "",
             "ⓘ Chưa có dữ liệu đối soát đơn Shopee. Vào 🔗 Shopee Affiliate để đồng bộ.",
         ]
     return "\n".join(lines)
+
+
+def short_vnd(amount: int) -> str:
+    """Số gọn cho bảng chữ đều: 950, 12k, 1,2tr."""
+    if amount < 1_000:
+        return str(amount)
+    if amount < 1_000_000:
+        return f"{amount // 1_000}k"
+    return f"{amount / 1_000_000:.1f}tr".replace(".", ",")
+
+
+def shopee_stats_lines(shopee) -> list[str]:
+    """shopee: admin_stats.ShopeeStats. Tiền không tính đơn huỷ (PLAN-066)."""
+    cr = shopee.conversion_rate_percent
+    cr_text = f" · CR qua bot <b>{str(cr).replace('.', ',')}%</b>" if cr is not None else ""
+    lines = [
+        "🛒 <b>Đối soát Shopee</b>",
+        f"• Đơn <b>{shopee.orders_total}</b> (qua bot <b>{shopee.orders_matched_bot}</b>) · "
+        f"<b>{shopee.item_qty}</b> món · Doanh số <b>{format_vnd(shopee.gmv_vnd)}</b>",
+        f"• Chờ duyệt {shopee.orders_pending} · Hoàn thành {shopee.orders_completed} · Huỷ {shopee.orders_cancelled}",
+        f"• HH gốc {format_vnd(shopee.gross_commission_vnd)} − phí MCN {format_vnd(shopee.mcn_fee_vnd)} "
+        f"→ <b>HH sau cùng {format_vnd(shopee.real_commission_vnd)}</b>",
+        f"• Click <b>{shopee.total_clicks}</b> (qua bot <b>{shopee.clicks_with_bot_sub_id}</b>){cr_text}",
+    ]
+    if shopee.orders_cancelled:
+        lines.append(
+            f"• Huỷ: doanh số {format_vnd(shopee.cancelled_gmv_vnd)} · HH mất {format_vnd(shopee.lost_commission_vnd)}"
+        )
+    if shopee.daily:
+        rows = ["Ngày   Đơn Huỷ  D.số    HH Click"]
+        rows += [
+            f"{day.label} {day.orders:>4} {day.cancelled:>4} {short_vnd(day.gmv_vnd):>6} {short_vnd(day.net_commission_vnd):>5} {day.clicks:>5}"
+            for day in shopee.daily
+        ]
+        lines += ["", "📅 <b>7 ngày qua</b> (HH sau cùng, không tính đơn huỷ)", "<pre>" + "\n".join(rows) + "</pre>"]
+    return lines
 
 
 def shopee_text(
@@ -631,3 +659,170 @@ def shopee_prompt_cookie_text() -> str:
         "JSON dài bị Telegram tách nhiều tin thì cứ để nguyên, bot tự ghép.\n\n"
         "🛡️ <i>Bot sẽ kiểm tra phiên, lưu phân quyền riêng 0600 và xoá ngay tin nhắn chứa cookie khỏi chat.</i>"
     )
+
+
+# --- 👛 Ví khách (PLAN-066) ---------------------------------------------------
+
+WALLET_ADMIN_BACK = (("◀️ Ví khách", "c:menu:wallet"),)
+
+
+def _who_short(user_id: int, username: str | None) -> str:
+    return f"@{username}" if username else str(user_id)
+
+
+def wallet_admin_text(settings, totals, requests, notice: str = "") -> str:
+    state = "🟢 <b>ĐANG BẬT</b>" if settings.enabled else "⚪ <b>ĐANG TẮT</b> · khách chưa thấy ví"
+    lines = [
+        _title("Ví khách").rstrip("\n"),
+        "",
+    ]
+    if notice:
+        lines += [notice, ""]
+    lines += [
+        f"Trạng thái: {state}",
+        f"• Giữ tiền {settings.hold_days} ngày sau khi đơn hoàn thành · Rút tối thiểu {format_vnd(settings.min_withdraw_vnd)}",
+        "",
+        f"⏳ Chờ duyệt: <b>{format_vnd(totals.pending_vnd)}</b>",
+        f"✅ Trong ví chưa rút: <b>{format_vnd(max(0, totals.withdrawable_vnd))}</b>",
+        f"📤 Đang chờ chuyển: <b>{format_vnd(totals.requested_vnd)}</b> ({len(requests)} yêu cầu)",
+        f"💸 Đã trả: <b>{format_vnd(totals.paid_vnd)}</b>",
+    ]
+    if requests:
+        lines += ["", "Bấm từng yêu cầu bên dưới để xem số tài khoản và xác nhận đã chuyển."]
+    return "\n".join(lines)
+
+
+def wallet_admin_keyboard(settings, requests) -> Keyboard:
+    rows: list[tuple[tuple[str, str], ...]] = [
+        ((f"📤 {row['transfer_note'] or row['id']} · {format_vnd(int(row['amount_vnd']))} · "
+          f"{_who_short(int(row['telegram_user_id']), row['username'])}", f"c:wl:rq:{row['id']}"),)
+        for row in requests[:5]
+    ]
+    rows.append((("👥 Thành viên", "c:wl:members"), ("⚙️ Cài đặt", "c:wl:cfg")))
+    rows.append((("⏸️ Tắt ví", "c:wl:off"),) if settings.enabled else (("🟢 Bật ví cho khách", "c:wl:on"),))
+    rows.append(BACK_HOME)
+    return tuple(rows)
+
+
+WALLET_ENABLE_CONFIRM = (
+    "🟢 <b>Bật ví cho khách?</b>\n\n"
+    "Sau khi bật:\n"
+    "• Trang chủ có nút <b>👛 Ví của tôi</b>, lệnh /vi dùng được.\n"
+    "• Câu \"chưa theo dõi đơn và chưa chi trả\" đổi thành lời hứa chi trả.\n"
+    "• Khách nhận tin khi có đơn, đơn hoàn thành, tiền vào ví, đơn huỷ.\n"
+    "• Khách khai ngân hàng và bấm Rút; anh chuyển khoản tay rồi bấm ✅.\n\n"
+    "ⓘ Mô tả bot (màn trước khi bấm Start) và menu lệnh chỉ đổi sau lần restart kế tiếp."
+)
+WALLET_ENABLE_KEYBOARD: Keyboard = ((("✅ Bật ví", "c:wl:on:ok"),), WALLET_ADMIN_BACK)
+
+
+def wallet_settings_text(settings) -> str:
+    return (
+        _title("Ví khách", "Cài đặt")
+        + f"• Giữ tiền: <b>{settings.hold_days} ngày</b> sau khi đơn hoàn thành\n"
+        f"• Rút tối thiểu: <b>{format_vnd(settings.min_withdraw_vnd)}</b>\n\n"
+        "ⓘ Shopee còn đối soát theo tháng; trả hàng hay gian lận có thể bị trừ lại. "
+        "Giữ ngắn thì khách nhận sớm nhưng anh chịu rủi ro ứng trước. "
+        "Đổi số ngày áp dụng cho đơn chưa vào ví; đơn đã vào ví giữ nguyên."
+    )
+
+
+def wallet_settings_keyboard(settings, hold_choices, min_choices) -> Keyboard:
+    hold = tuple((("• " if d == settings.hold_days else "") + f"{d} ngày", f"c:wl:hold:{d}") for d in hold_choices)
+    low = tuple(
+        (("• " if v == settings.min_withdraw_vnd else "") + short_vnd(v), f"c:wl:min:{v}") for v in min_choices
+    )
+    return (hold, low, WALLET_ADMIN_BACK)
+
+
+def wallet_members_text(members) -> str:
+    lines = [_title("Ví khách", "Thành viên").rstrip("\n"), ""]
+    if not members:
+        return "\n".join(lines + ["Chưa có khách nào có đơn khớp link bot."])
+    for rank, member in enumerate(members, start=1):
+        balance = member["balance"]
+        lines.append(
+            f"{rank}. {html.escape(_who_short(member['telegram_user_id'], member['username']))} · "
+            f"rút được <b>{format_vnd(balance.withdrawable_vnd)}</b> · chờ {format_vnd(balance.pending_vnd)} · "
+            f"đã nhận {format_vnd(balance.paid_vnd)} · {member['orders']} đơn"
+        )
+    return "\n".join(lines)
+
+
+def wallet_members_keyboard(members) -> Keyboard:
+    buttons = [
+        (_who_short(m["telegram_user_id"], m["username"])[:30], f"c:wl:u:{m['telegram_user_id']}") for m in members
+    ]
+    rows = [tuple(buttons[i : i + 2]) for i in range(0, len(buttons), 2)]
+    return (*rows, WALLET_ADMIN_BACK)
+
+
+_ENTRY_ADMIN = {"pending": "đang xử lý", "holding": "chờ duyệt", "available": "đã vào ví", "cancelled": "huỷ"}
+
+
+def wallet_member_text(user_id: int, username: str | None, balance, entries, bank) -> str:
+    lines = [
+        _title("Ví khách", _who_short(user_id, username)).rstrip("\n"),
+        "",
+        f"✅ Rút được: <b>{format_vnd(balance.withdrawable_vnd)}</b> · ⏳ Chờ: {format_vnd(balance.pending_vnd)}",
+        f"📤 Chờ chuyển: {format_vnd(balance.requested_vnd)} · 💸 Đã nhận: {format_vnd(balance.paid_vnd)}",
+        "🏦 " + (f"{html.escape(bank.bank_name)} <code>{bank.account_no}</code> · {html.escape(bank.account_name)}" if bank else "Chưa khai"),
+        "",
+        "🧾 <b>Đơn</b>",
+    ]
+    lines += [
+        f"• {html.escape(buyer_name(e['item_name'] or '-'))} · HH {format_vnd(int(e['commission_vnd']))} → "
+        f"<b>{format_vnd(int(e['cashback_vnd']))}</b> · {_ENTRY_ADMIN.get(e['status'], e['status'])}"
+        for e in entries
+    ] or ["Chưa có đơn."]
+    return "\n".join(lines)
+
+
+def payout_text(payout, username: str | None, balance, qr_url: str, bank_name: str, notice: str = "") -> str:
+    status = {"requested": "⏳ chờ chuyển", "paid": "✅ đã chuyển", "rejected": "✖️ đã từ chối"}.get(
+        payout["status"], payout["status"]
+    )
+    lines = [_title("Ví khách", payout["transfer_note"] or f"#{payout['id']}").rstrip("\n"), ""]
+    if notice:
+        lines += [notice, ""]
+    lines += [
+        f"👤 {html.escape(_who_short(int(payout['telegram_user_id']), username))} · <code>{payout['telegram_user_id']}</code>",
+        f"Trạng thái: <b>{status}</b>",
+        "",
+        f"Số tiền: <code>{int(payout['amount_vnd'])}</code> ({format_vnd(int(payout['amount_vnd']))})",
+        f"Ngân hàng: <b>{html.escape(bank_name)}</b>",
+        f"Số TK: <code>{payout['account_no']}</code>",
+        f"Chủ TK: <code>{html.escape(payout['account_name'])}</code>",
+        f"Nội dung: <code>{html.escape(payout['transfer_note'] or '')}</code>",
+        f'📷 <a href="{html.escape(qr_url)}">Mã QR chuyển khoản</a>',
+        "",
+        "ⓘ Bấm vào số để chép. Mở mã QR bằng app ngân hàng (quét từ ảnh) để khỏi gõ tay.",
+    ]
+    if balance.withdrawable_vnd < 0:
+        lines.append(f"⚠️ Ví khách đang âm {format_vnd(-balance.withdrawable_vnd)} do có đơn bị huỷ sau khi vào ví.")
+    return "\n".join(lines)
+
+
+def payout_keyboard(payout) -> Keyboard:
+    if payout["status"] != "requested":
+        return (WALLET_ADMIN_BACK,)
+    pid = payout["id"]
+    return ((("✅ Đã chuyển", f"c:wl:paid:{pid}"), ("✖️ Từ chối", f"c:wl:rej:{pid}")), WALLET_ADMIN_BACK)
+
+
+def payout_confirm_text(payout, paid: bool) -> str:
+    amount = format_vnd(int(payout["amount_vnd"]))
+    if paid:
+        return (
+            f"✅ <b>Xác nhận đã chuyển {amount}</b>\n\n"
+            f"Nội dung <code>{html.escape(payout['transfer_note'] or '')}</code>. "
+            "Bot sẽ báo khách là đã nhận tiền. Không hoàn tác được."
+        )
+    return f"✖️ <b>Từ chối yêu cầu rút {amount}?</b>\n\nSố tiền trở lại ví khách, khách được báo."
+
+
+def payout_confirm_keyboard(payout, paid: bool) -> Keyboard:
+    pid = payout["id"]
+    action = "paid" if paid else "rej"
+    label = "✅ Đúng, đã chuyển" if paid else "✖️ Từ chối"
+    return (((label, f"c:wl:{action}:{pid}:ok"),), (("◀️ Quay lại", f"c:wl:rq:{pid}"),))

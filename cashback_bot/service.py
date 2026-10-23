@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from cashback_bot.admin_policy import AdminPanel
@@ -22,7 +22,11 @@ from cashback_bot.messages import (
     NOT_FOUND,
     STALE,
     TIP_ALERT,
+    WALLET_CLOSED,
+    WALLET_CLOSED_ALERT,
     BotReply,
+    bank_prompt_reply,
+    entry_notice,
     hang_message,
     home_reply,
     how_to_calc,
@@ -31,10 +35,15 @@ from cashback_bot.messages import (
     rate_limited_reply,
     render_success,
     render_success_v12,
+    wallet_reply,
+    withdraw_confirm_reply,
+    withdraw_done_reply,
+    withdraw_error_reply,
 )
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.shopee_url import parse_shopee_target
+from cashback_bot.wallet import BankAccount, Wallet, parse_bank_text
 
 logger = logging.getLogger("cashback_bot")
 
@@ -49,6 +58,8 @@ def _command_name(text: str) -> str | None:
     return token.split("@", 1)[0].lower()
 
 _NOT_FOUND_CODES = {"not_found"}
+# Đơn cũ hơn mức này lần đầu bot thấy thì không báo "có đơn mới" (tránh nhắn dồn đơn cũ).
+NEW_ORDER_NOTICE_WINDOW = timedelta(days=7)
 
 
 class CashbackService:
@@ -63,6 +74,7 @@ class CashbackService:
         self.repo = repo
         self.client = client
         self.admin_notifier = admin_notifier
+        self.wallet = Wallet(repo)
         policy = self._estimate_policy() if self._v12_ready() else None
         calculator = "V1.2" if policy else "V1.1, chưa bật V1.2"
         self.admin_panel = AdminPanel(
@@ -138,26 +150,135 @@ class CashbackService:
             return BotReply("")
         if not self.allowed(user_id):
             return BotReply("", toast=CLOSED_ALERT, show_alert=True)
+        if data != "u:w:bank":
+            self._set_bank_waiting(user_id, False)
         if data == "u:tip":
             return BotReply("", toast=TIP_ALERT, show_alert=True)
-        page = self._page(data.removeprefix("u:p:")) if data.startswith("u:p:") else None
+        if data.startswith("u:w:"):
+            return self._wallet_action(user_id, data.removeprefix("u:w:"))
+        page = self._page(data.removeprefix("u:p:"), user_id) if data.startswith("u:p:") else None
         if page is None:
             return BotReply("", toast="Nút này không còn hiệu lực.")
         return page
 
-    def _page(self, name: str) -> BotReply | None:
+    def _page(self, name: str, user_id: int | None = None) -> BotReply | None:
         """Trang thông tin dùng chung cho lệnh gõ tay và nút u:p:*."""
+        wallet = self.wallet.settings()
         if name == "home":
-            return home_reply(show_rank=MEMBERSHIP_CUTOVER)
+            return home_reply(show_rank=MEMBERSHIP_CUTOVER, show_wallet=wallet.enabled)
         if name == "guide":
             return page_reply(HUONGDAN)
         if name == "rules":
             return page_reply(DIEUKIEN)
         if name == "calc":
+            if wallet.enabled:
+                return page_reply(how_to_calc(self._v12_ready(), wallet.hold_days, wallet.min_withdraw_vnd))
             return page_reply(how_to_calc(self._v12_ready()))
         if name == "rank":
             return page_reply(hang_message())
+        if name == "wallet" and user_id is not None:
+            return self._wallet_page(user_id)
         return None
+
+    # --- Ví (PLAN-066) -------------------------------------------------------
+
+    def _wallet_page(self, user_id: int, notice: str = "") -> BotReply:
+        settings = self.wallet.settings()
+        if not settings.enabled:
+            return page_reply(WALLET_CLOSED)
+        return wallet_reply(
+            settings,
+            self.wallet.balance(user_id),
+            self.wallet.entries(user_id),
+            self.wallet.bank(user_id),
+            self.wallet.open_request(user_id),
+            notice=notice,
+        )
+
+    def _wallet_action(self, user_id: int, action: str) -> BotReply:
+        if not self.wallet.settings().enabled:
+            return BotReply("", toast=WALLET_CLOSED_ALERT, show_alert=True)
+        if action == "bank":
+            self._set_bank_waiting(user_id, True)
+            return bank_prompt_reply()
+        if action == "out":
+            bank = self.wallet.bank(user_id)
+            amount = self.wallet.balance(user_id).withdrawable_vnd
+            if bank is None:
+                return withdraw_error_reply("no_bank")
+            if self.wallet.open_request(user_id) is not None:
+                return withdraw_error_reply("pending_exists")
+            if amount < self.wallet.settings().min_withdraw_vnd or amount <= 0:
+                return withdraw_error_reply("below_min")
+            return withdraw_confirm_reply(amount, bank)
+        if action == "out:ok":
+            payout, code = self.wallet.request_payout(user_id, datetime.now(timezone.utc))
+            if payout is None:
+                return withdraw_error_reply(code)
+            if self.admin_notifier:
+                user = self.repo.get_user(user_id)
+                self.admin_notifier.notify_payout_request(payout, None if user is None else user["username"])
+            return withdraw_done_reply(payout)
+        return BotReply("", toast="Nút này không còn hiệu lực.")
+
+    def _bank_waiting(self, user_id: int) -> bool:
+        return self.repo.get_state(f"wallet_bank_waiting:{user_id}") == "1"
+
+    def _set_bank_waiting(self, user_id: int, waiting: bool) -> None:
+        key = f"wallet_bank_waiting:{user_id}"
+        if waiting:
+            self.repo.set_state(key, "1")
+        elif self.repo.get_state(key) == "1":
+            self.repo.set_state(key, "0")
+
+    def _consume_bank(self, user_id: int, text: str, now: datetime) -> BotReply:
+        parsed = parse_bank_text(text)
+        if not isinstance(parsed, BankAccount):
+            return bank_prompt_reply(parsed)
+        self.wallet.save_bank(user_id, parsed, now)
+        self._set_bank_waiting(user_id, False)
+        return self._wallet_page(user_id, notice=f"✅ Đã lưu tài khoản {parsed.masked}.")
+
+    def refresh_wallet(self, now: datetime | None = None) -> None:
+        """Gọi sau mỗi lần đồng bộ Shopee: cập nhật sổ, ví bật thì báo khách đơn đổi trạng thái."""
+        moment = now or datetime.now(timezone.utc)
+        transitions = self.wallet.refresh(moment, self._real_cashback)
+        settings = self.wallet.settings()
+        recent = (moment - NEW_ORDER_NOTICE_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for item in transitions:
+            if item.previous == "available" and item.status == "cancelled" and self.admin_notifier:
+                self.admin_notifier.notify_wallet_clawback(item)
+            if not settings.enabled:
+                continue
+            if item.previous is None and (item.status == "cancelled" or (item.purchase_time or "") < recent):
+                continue
+            if item.cashback_vnd <= 0 and item.status != "cancelled":
+                continue
+            self.repo.enqueue_admin_event(
+                event_key=f"wallet:{item.conversion_id}:{item.status}",
+                event_type="WALLET_ENTRY",
+                chat_id=item.telegram_user_id,
+                message_html=entry_notice(
+                    item.status, item.item_name, item.cashback_vnd, item.available_at, settings.hold_days
+                ),
+            )
+
+    def _real_cashback(self, commission_vnd: int, row) -> tuple[int, str]:
+        """Tiền hoàn cho hoa hồng thật, cùng cửa pricing.py, theo chính sách lúc tạo link (ADR-045)."""
+        if row["estimate_policy"]:
+            created = datetime.strptime(row["link_created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            reserve = self.admin_panel.active_reserve(created)
+            share = self.admin_panel.active_share(created)
+            policy = replace(
+                self._estimate_policy(),
+                cashback_share_bps=share.share_bps,
+                service_fee_bps=reserve.fee_bps,
+                tax_risk_reserve_bps=reserve.tax_reserve_bps,
+            )
+            result = estimate_cashback(commission_vnd, policy, reliable=True)
+            return result.estimated_cashback_vnd, str(row["estimate_policy"])
+        rate = row["cashback_rate_percent"] or self.settings.cashback_rate_percent
+        return quote_displayed_vnd(commission_vnd, int(rate)), f"v1.1:{rate}"
 
     def handle_text(
         self,
@@ -189,11 +310,15 @@ class CashbackService:
         if not self.allowed(telegram_user_id):
             return BotReply(CLOSED)
 
-        pages = {"/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank"}
+        pages = {"/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank", "/vi": "wallet"}
+        if command:
+            self._set_bank_waiting(telegram_user_id, False)
         if command in pages:
-            return self._page(pages[command])
+            return self._page(pages[command], telegram_user_id)
         if command:
             return self._page("home")
+        if self._bank_waiting(telegram_user_id) and self.wallet.settings().enabled:
+            return self._consume_bank(telegram_user_id, stripped, now or datetime.now(timezone.utc))
         target = parse_shopee_target(stripped)
         moment = now or datetime.now(timezone.utc)
         if not self._within_rate_limit(telegram_user_id, moment):

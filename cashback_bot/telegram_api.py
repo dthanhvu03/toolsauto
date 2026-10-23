@@ -213,3 +213,22 @@ class TelegramApi:
         except requests.RequestException as exc:
             logger.error("[Cashback] deleteMessage network error: %s", exc)
             return False
+
+    def send_document(self, chat_id: int, filename: str, data: bytes, caption: str | None = None) -> bool:
+        body: dict = {"chat_id": chat_id}
+        if caption:
+            body["caption"] = caption
+        try:
+            response = requests.post(
+                f"{self._base}/sendDocument",
+                data=body,
+                files={"document": (filename, data)},
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            logger.error("[Cashback] sendDocument network error: %s", type(exc).__name__)
+            return False
+        if response.status_code >= 400:
+            logger.warning("[Cashback] sendDocument http=%s", response.status_code)
+            return False
+        return bool(response.json().get("ok"))

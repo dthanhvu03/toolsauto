@@ -37,7 +37,7 @@ from cashback_bot.admin_reserve import (
 from cashback_bot.admin_reserve import SCHEMA_PATH as RESERVE_SCHEMA_PATH
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_reserve import SHARE_SCHEMA_PATH
-from cashback_bot.admin_stats import PERIODS, collect
+from cashback_bot.admin_stats import PERIODS, collect, conversions_csv
 from cashback_bot.admin_ui import (
     FEE_KEYBOARD,
     MENU_KEYBOARD,
@@ -76,12 +76,13 @@ from cashback_bot.admin_ui import (
     stats_keyboard,
     stats_text,
 )
+from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
-from cashback_bot.shopee_sync import ShopeeSyncEngine
+from cashback_bot.shopee_sync import SYNC_REQUEST_KEY
 
 logger = logging.getLogger("cashback_bot")
 
@@ -240,10 +241,14 @@ class AdminPanel:
             return self._reserve_start(user_id, now)
         if data == "c:sh:new":
             return self._share_start(user_id, now)
+        if data == "c:menu:wallet" or data.startswith("c:wl:"):
+            return WalletAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
         if data == "c:menu:shopee":
             return self._shopee_screen(now)
         if data == "c:shopee:sync":
             return self._shopee_sync(now)
+        if data == "c:shopee:csv":
+            return self._shopee_csv(now)
         if data == "c:shopee:auth":
             return self._shopee_auth_start(user_id, now)
         share = _SHARE.fullmatch(data or "")
@@ -381,14 +386,21 @@ class AdminPanel:
         return BotReply(text, inline_keyboard=kb)
 
     def _shopee_sync(self, now: datetime) -> BotReply:
-        # Exception thoát ra đây thì poller không tăng offset, Telegram gửi lại cùng nút và bot gọi Shopee lặp mãi.
-        try:
-            engine = ShopeeSyncEngine(TrackingRepository(self.db_path), admin_notifier=self.admin_notifier)
-            message = engine.sync(trigger="manual").message
-        except Exception:
-            logger.exception("[Cashback] đồng bộ Shopee thủ công thất bại")
-            message = "Đồng bộ lỗi, xem log bot."
-        return self._shopee_screen(now, notice=message)
+        # Không gọi Shopee trong lúc trả lời nút: đặt cờ, poller chạy ở vòng sau và nhắn kết quả.
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO bot_state (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = '1'",
+                (SYNC_REQUEST_KEY,),
+            )
+        return self._shopee_screen(now, notice="⏳ Đã bắt đầu đồng bộ. Xong bot sẽ nhắn kết quả.")
+
+    def _shopee_csv(self, now: datetime) -> BotReply:
+        since = now - timedelta(days=30)
+        with self._connect() as conn:
+            data, count = conversions_csv(conn, since)
+        name = f"shopee-don-30-ngay-{now.astimezone(ICT).strftime('%Y%m%d')}.csv"
+        reply = self._shopee_screen(now, notice=f"📤 Đã gửi file {count} dòng đơn 30 ngày.")
+        return replace(reply, document=(name, data))
 
     def _clear_shopee_waiting(self, user_id: int) -> None:
         self._cookie_parts.pop(user_id, None)
