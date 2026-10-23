@@ -2,6 +2,9 @@
 
 Maintenance và Web là hai process; restart thì RAM mất. File này để mọi process,
 mọi lần khởi động cùng thấy một mốc. File chỉ có sha256 rút gọn của key, không có key.
+
+Khóa ``first_comment:<key>`` (PLAN-070, ``adapter.py``) dùng chung file: mốc thử lại
+bình luận đầu tiên cho key gói Free. Hash khác hẳn key thô nên không lẫn với mốc 429.
 """
 from __future__ import annotations
 

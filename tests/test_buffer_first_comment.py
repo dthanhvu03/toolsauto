@@ -481,3 +481,101 @@ def test_sanitize_comment_remediation_edge_cases():
     assert sanitize_comment("```Bình luận: Xin chào!```") == "Xin chào!"
     assert sanitize_comment('```python\n"Bình luận: Xin chào!"\n```') == "Xin chào!"
 
+
+
+# ── 6. PLAN-070: key gói Free thì thôi gửi kèm bình luận ─────────────────────
+
+_PAID_PLAN = "Invalid post: First comment requires a paid plan. Please upgrade to use this feature."
+
+
+def _fb_job(job_id: int):
+    return SimpleNamespace(
+        id=job_id,
+        caption="Video mẹo vặt",
+        target_page="chan_fb_page",
+        media_path="",
+        processed_media_path=None,
+        schedule_ts=0,
+        account=None,
+        ai_style="meo_vat",
+    )
+
+
+def _free_client(key: str):
+    from app.features.buffer.client import BufferError
+
+    client = MagicMock()
+    client._key = key
+    client.infer_channel_service.return_value = "facebook"
+
+    def _create(**kwargs):
+        if kwargs.get("first_comment"):
+            raise BufferError(_PAID_PLAN, status_code=200)
+        return {"id": f"p_{client.create_post.call_count}", "dueAt": None}
+
+    client.create_post.side_effect = _create
+    return client
+
+
+def test_paid_plan_error_is_remembered_per_key(monkeypatch):
+    monkeypatch.setattr("app.features.buffer.adapter.SAFE_MODE", False)
+    ai = MagicMock(return_value=("Bình luận AI", {"ok": True}))
+    monkeypatch.setattr("app.features.buffer.first_comment.AIUseCases.generate_first_comment", ai)
+    client = _free_client("key_free_A")
+    adapter = BufferAdapter(client)
+
+    first = adapter.publish(_fb_job(1))
+    assert first.ok is True
+    assert client.create_post.call_count == 2  # lần đầu như cũ: thử kèm bình luận, gửi lại không kèm
+    assert ai.call_count == 1
+
+    second = adapter.publish(_fb_job(2))
+    assert second.ok is True
+    assert client.create_post.call_count == 3  # chỉ 1 request
+    assert client.create_post.call_args.kwargs["first_comment"] is None
+    assert second.details["firstComment"] is None
+    assert ai.call_count == 1  # không gọi AI nữa
+
+
+def test_other_key_still_tries_first_comment(monkeypatch):
+    monkeypatch.setattr("app.features.buffer.adapter.SAFE_MODE", False)
+    monkeypatch.setattr(
+        "app.features.buffer.first_comment.AIUseCases.generate_first_comment",
+        lambda caption, topic="": ("Bình luận AI", {"ok": True}),
+    )
+    BufferAdapter(_free_client("key_free_A")).publish(_fb_job(1))
+
+    paid = MagicMock()
+    paid._key = "key_paid_B"
+    paid.infer_channel_service.return_value = "facebook"
+    paid.create_post.return_value = {"id": "p_b", "dueAt": None}
+    result = BufferAdapter(paid).publish(_fb_job(2))
+
+    assert paid.create_post.call_args.kwargs["first_comment"] == "Bình luận AI"
+    assert result.details["firstComment"] == "Bình luận AI"
+
+
+def test_first_comment_retried_after_recheck_window(monkeypatch):
+    from app.features.buffer import adapter as adapter_mod
+
+    monkeypatch.setattr("app.features.buffer.adapter.SAFE_MODE", False)
+    monkeypatch.setattr(
+        "app.features.buffer.first_comment.AIUseCases.generate_first_comment",
+        lambda caption, topic="": ("Bình luận AI", {"ok": True}),
+    )
+    client = _free_client("key_free_A")
+    BufferAdapter(client).publish(_fb_job(1))
+    assert adapter_mod.first_comment_off(client) is True
+
+    real_time = adapter_mod.time.time
+    monkeypatch.setattr(adapter_mod.time, "time", lambda: real_time() + adapter_mod.FIRST_COMMENT_RECHECK_SEC + 1)
+    assert adapter_mod.first_comment_off(client) is False
+
+
+def test_client_without_string_key_keeps_old_behaviour(monkeypatch):
+    from app.features.buffer import adapter as adapter_mod
+
+    client = MagicMock()  # _key là MagicMock, không phải chuỗi
+    assert adapter_mod.first_comment_off(client) is False
+    adapter_mod._mark_first_comment_off(client)  # không ném, không ghi
+    assert adapter_mod.first_comment_off(client) is False

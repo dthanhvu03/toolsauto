@@ -6,10 +6,12 @@ Video/ảnh phải là URL https công khai — Buffer không có API upload.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from app.adapters.contracts import AdapterInterface, PublishResult
+from app.features.buffer import cooldown_store
 from app.features.buffer.client import MODES, BufferClient, BufferError
 
 logger = logging.getLogger(__name__)
@@ -18,6 +20,26 @@ try:
     from app.config import SAFE_MODE
 except ImportError:
     SAFE_MODE = False
+
+# Key gói Free bị từ chối bình luận đầu tiên: bấy lâu không thử lại (phòng Owner nâng gói).
+FIRST_COMMENT_RECHECK_SEC = 7 * 86400
+_FIRST_COMMENT_OFF = "first_comment:"
+
+
+def _client_key(client) -> str:
+    key = getattr(client, "_key", None)
+    return key if isinstance(key, str) else ""
+
+
+def first_comment_off(client) -> bool:
+    key = _client_key(client)
+    return bool(key) and cooldown_store.until(_FIRST_COMMENT_OFF + key) > time.time()
+
+
+def _mark_first_comment_off(client) -> None:
+    key = _client_key(client)
+    if key:
+        cooldown_store.save(_FIRST_COMMENT_OFF + key, time.time() + FIRST_COMMENT_RECHECK_SEC)
 
 
 def api_key() -> str:
@@ -163,7 +185,7 @@ class BufferAdapter(AdapterInterface):
                 svc = str(svc).strip().lower()
 
             first_comment = None
-            if svc != "tiktok":
+            if svc != "tiktok" and not first_comment_off(client):
                 job_comment = (getattr(job, "auto_comment_text", None) or "").strip()
                 if job_comment:
                     first_comment = job_comment
@@ -198,6 +220,7 @@ class BufferAdapter(AdapterInterface):
                         getattr(job, "id", "?"),
                         fc_exc,
                     )
+                    _mark_first_comment_off(client)
                     first_comment = None
                     try:
                         job.auto_comment_text = ""
