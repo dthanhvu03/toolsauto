@@ -30,7 +30,7 @@ RANK_KEYBOARD: Keyboard = (
 )
 
 FEE_KEYBOARD: Keyboard = (
-    (("🧾 Phí dự phòng", "c:tier:FEE"), ("🏛️ Thuế dự phòng", "c:tier:TAX")),
+    (("✏️ Đổi mức áp dụng", "c:rs:new"),),
     BACK_HOME,
 )
 
@@ -157,38 +157,43 @@ def rank_text(
 def fee_text(
     *,
     calculator_on: bool,
-    applied_fee: str,
-    applied_tax: str,
-    fee_percent: str,
-    fee_source: str,
-    tax_percent: str,
-    tax_source: str,
+    kind: str | None,
+    fee: str,
+    tax: str,
+    since: str | None,
+    upcoming: list[str],
+    rate_percent: int,
     sim_fee: int,
     sim_tax: int,
     sim_dist: int,
+    sim_customer: int,
     notice: str = "",
 ) -> str:
-    if calculator_on:
-        applied = f"• Công thức khách: <b>V1.2</b>, trừ phí {applied_fee} và thuế {applied_tax} dự phòng\n\n"
-    else:
-        applied = "• Công thức khách: <b>V1.1</b>, chưa trừ phí và thuế dự phòng khi báo giá\n\n"
-    return (
-        _title("Thuế &amp; phí dự phòng")
-        + _notice(notice)
-        + "<i>ESTIMATE RESERVE</i>\n\n"
-        "🟢 <b>ĐANG ÁP DỤNG</b>\n"
-        + applied
-        + "🟡 <b>BẢN NHÁP DỰ PHÒNG</b>\n"
-        f"• Phí dự phòng: <b>{fee_percent}</b> ({fee_source})\n"
-        f"• Thuế dự phòng: <b>{tax_percent}</b> ({tax_source})\n"
-        "Chỉ là dự phòng khi ước tính. Không phải thuế phải nộp, không sửa chứng từ đã đối soát.\n\n"
-        "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ\n"
-        f"• Phí dự phòng ({fee_percent}): -{format_vnd(sim_fee)}\n"
-        f"• Thuế dự phòng ({tax_percent}): -{format_vnd(sim_tax)}\n"
-        f"• Quỹ phân chia còn lại: <b>{format_vnd(sim_dist)}</b>\n\n"
-        "ⓘ Không sửa số đã thanh toán. Bản nháp chưa đổi công thức khách.\n\n"
-        "Chọn mục để tạo bản nháp:"
-    )
+    """Mức dự phòng khách đang nhận (ADR-047). since None: mặc định cấu hình."""
+    source = f"từ {since}" if since else "mặc định cấu hình"
+    lines = [
+        _title("Thuế &amp; phí dự phòng") + _notice(notice) + "<i>ESTIMATE RESERVE</i>",
+        "",
+        "🟢 <b>ĐANG ÁP DỤNG CHO KHÁCH</b>",
+        f"• Loại hình: <b>{kind or 'Chưa khai báo'}</b>",
+        f"• Phí dự phòng: <b>{fee}</b> · Thuế dự phòng: <b>{tax}</b>",
+        f"• Hiệu lực: {source}",
+    ]
+    if not calculator_on:
+        lines.append("⚠️ Đang chạy V1.1: báo giá chưa trừ dự phòng. Mức này có tác dụng khi bật V1.2.")
+    if upcoming:
+        lines += ["", "🗓️ <b>SẮP ÁP DỤNG</b>"] + [f"• {item}" for item in upcoming]
+    lines += [
+        "",
+        "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ",
+        f"• Phí dự phòng ({fee}): -{format_vnd(sim_fee)}",
+        f"• Thuế dự phòng ({tax}): -{format_vnd(sim_tax)}",
+        f"• Quỹ phân chia: {format_vnd(sim_dist)}",
+        f"• Khách nhận ({rate_percent}%): <b>{format_vnd(sim_customer)}</b>",
+        "",
+        "ⓘ Dự phòng khi ước tính, không phải thuế phải nộp. Link đã gửi giữ số cũ.",
+    ]
+    return "\n".join(lines)
 
 
 def simulation_text(
@@ -268,10 +273,100 @@ def rank_preview_text(
     )
 
 
-def reserve_preview_text(*, name: str, before: str, after: str) -> str:
+def _rs(draft_id: int, nonce: str, action: str) -> str:
+    return f"c:rs:{draft_id}:{nonce}:{action}"
+
+
+def reserve_kind_keyboard(draft_id: int, nonce: str) -> Keyboard:
     return (
-        _title("Thuế &amp; phí dự phòng", "Xem trước")
-        + f"{name}: {before} → <b>{after}</b>\n\n"
-        "Nhãn: ESTIMATE RESERVE. Không phải thuế hoặc phí đã đối soát.\n\n"
-        "ⓘ Không sửa số đã thanh toán. Xác nhận chưa đổi công thức khách."
+        (("👤 Cá nhân", _rs(draft_id, nonce, "k:P")),),
+        (("🧾 Cá nhân kinh doanh", _rs(draft_id, nonce, "k:I")),),
+        (("🏪 Hộ kinh doanh", _rs(draft_id, nonce, "k:H")),),
+        (("✖️ Hủy", _rs(draft_id, nonce, "no")),),
     )
+
+
+def reserve_keep_keyboard(draft_id: int, nonce: str, current: str) -> Keyboard:
+    return (
+        ((f"Giữ {current}", _rs(draft_id, nonce, "keep")),),
+        (("✖️ Hủy", _rs(draft_id, nonce, "no")),),
+    )
+
+
+def reserve_when_keyboard(draft_id: int, nonce: str) -> Keyboard:
+    return (
+        (("⚡ Ngay bây giờ", _rs(draft_id, nonce, "w:now")), ("🌙 00:00 ngày mai", _rs(draft_id, nonce, "w:tmr"))),
+        (("✖️ Hủy", _rs(draft_id, nonce, "no")),),
+    )
+
+
+def reserve_decision_keyboard(draft_id: int, nonce: str) -> Keyboard:
+    return ((("✖️ Hủy", _rs(draft_id, nonce, "no")), ("✅ Áp dụng cho khách", _rs(draft_id, nonce, "ok"))),)
+
+
+def _reserve_title(step: str) -> str:
+    return _title("Thuế &amp; phí dự phòng", step)
+
+
+def reserve_kind_text(*, current: str | None) -> str:
+    return (
+        _reserve_title("Bước 1/4")
+        + f"Loại hình đang khai báo: <b>{current or 'Chưa khai báo'}</b>\n"
+        "Chọn loại hình tài khoản Shopee Affiliate.\n\n"
+        "ⓘ Loại hình chỉ là nhãn để tra lại sau này, không tự đổi thuế suất. "
+        "Bước sau nhập mức dự phòng."
+    )
+
+
+def reserve_value_text(*, step: str, kind: str, subject: str, current: str, example: str, error: str = "") -> str:
+    return (
+        _reserve_title(step)
+        + _notice(f"⚠️ {error}" if error else "")
+        + f"Loại hình: <b>{kind}</b>\n"
+        f"{subject} đang áp dụng: <b>{current}</b>\n\n"
+        f"Gửi {subject.lower()} mới theo %, từ 0 đến 50. Ví dụ: {example}\n"
+        "Hoặc bấm Giữ để không đổi."
+    )
+
+
+def reserve_when_text(*, kind: str, fee: str, tax: str, error: str = "") -> str:
+    return (
+        _reserve_title("Bước 4/4")
+        + _notice(f"⚠️ {error}" if error else "")
+        + f"{kind} · phí {fee} · thuế {tax}\n\n"
+        "Áp dụng từ khi nào?\n"
+        "Bấm nút, hoặc gửi ngày giờ Việt Nam: <code>01/11</code> hoặc <code>01/11 08:00</code>."
+    )
+
+
+def reserve_preview_text(
+    *,
+    calculator_on: bool,
+    kind: tuple[str, str],
+    fee: tuple[str, str],
+    tax: tuple[str, str],
+    when: str,
+    sample: tuple[int, int] | None,
+    recent: tuple[int, int, int] | None,
+) -> str:
+    """Mỗi cặp là (đang áp dụng, sau khi đổi). recent: (số link, tổng trước, tổng sau)."""
+    lines = [
+        _reserve_title("Xem trước").rstrip("\n"),
+        "",
+        f"• Loại hình: {kind[0]} → <b>{kind[1]}</b>",
+        f"• Phí dự phòng: {fee[0]} → <b>{fee[1]}</b>",
+        f"• Thuế dự phòng: {tax[0]} → <b>{tax[1]}</b>",
+        f"• Hiệu lực: <b>{when}</b>",
+    ]
+    if sample is not None:
+        lines += ["", f"🔵 Hoa hồng 100.000đ: khách nhận {format_vnd(sample[0])} → <b>{format_vnd(sample[1])}</b>"]
+    if recent is not None:
+        count, before, after = recent
+        lines.append(f"🔵 {count} link gần nhất: tổng {format_vnd(before)} → <b>{format_vnd(after)}</b>")
+    if not calculator_on:
+        lines += ["", "⚠️ Đang chạy V1.1: lưu được nhưng chưa đổi số khách cho tới khi bật V1.2."]
+    lines += [
+        "",
+        "ⓘ Link đã gửi giữ số cũ. Dự phòng không phải thuế luật định.",
+    ]
+    return "\n".join(lines)

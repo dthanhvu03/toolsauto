@@ -189,10 +189,9 @@ def test_money_screens_have_clear_boundaries(tmp_path):
     assert "BẢN NHÁP" in rank_reply.text
     assert "MÔ PHỎNG" in rank_reply.text
 
-    # 2. Thuế & phí dự phòng
+    # 2. Thuế & phí dự phòng (ADR-047: áp dụng thật, không còn bản nháp)
     fee_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
-    assert "ĐANG ÁP DỤNG" in fee_reply.text
-    assert "BẢN NHÁP" in fee_reply.text
+    assert "ĐANG ÁP DỤNG CHO KHÁCH" in fee_reply.text
     assert "MÔ PHỎNG" in fee_reply.text
 
     # 3. Chính sách cashback
@@ -223,11 +222,10 @@ def test_six_screens_permission_and_modes(tmp_path):
     assert "c:tier:SILVER" in rank_datas
     assert "c:tier:GOLD" in rank_datas
 
-    # 2. Thuế & phí: có nút tạo bản nháp Phí, Thuế
+    # 2. Thuế & phí: một nút đổi mức áp dụng (wizard xem trước rồi mới áp dụng)
     fee_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
     fee_datas = [d for r in fee_reply.inline_keyboard for _l, d in r]
-    assert "c:tier:FEE" in fee_datas
-    assert "c:tier:TAX" in fee_datas
+    assert fee_datas == ["c:rs:new", "c:menu:home"]
 
     # 3. Mô phỏng: chỉ để xem & tính thử, KHÔNG có nút hành động thay đổi
     sim_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
@@ -256,7 +254,7 @@ def test_dau_phay_trong_cau_chu_khong_bi_doi_thanh_dau_cham(tmp_path):
     fee = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
     sim = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
     assert "Đồng 60%: hoàn 60.000đ · còn 40.000đ" in rank.text
-    assert "Không phải thuế phải nộp, không sửa chứng từ đã đối soát" in fee.text
+    assert "không phải thuế phải nộp. Link đã gửi giữ số cũ" in fee.text
     assert "0,98%" in fee.text
     assert "0.98%" not in fee.text
     assert "-980đ" in fee.text

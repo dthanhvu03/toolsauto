@@ -154,10 +154,11 @@ class CashbackService:
 
     def _calc_text(self) -> str:
         if self._v12_ready():
+            active = self.admin_panel.active_reserve(datetime.now(timezone.utc))
             return how_to_calc_v12(
                 self.settings.cashback_rate_percent,
-                self.settings.estimate_fee_bps,
-                self.settings.estimate_tax_reserve_bps,
+                active.fee_bps,
+                active.tax_reserve_bps,
             )
         return how_to_calc_v11(self.settings.cashback_rate_percent)
 
@@ -219,7 +220,19 @@ class CashbackService:
                 return BotReply(NOT_FOUND)
             return BotReply(STALE)
 
-        cashback, policy_id, render = self._quote_cashback(quote.commission_vnd)
+        try:
+            cashback, policy_id, render = self._quote_cashback(quote.commission_vnd, moment)
+        except sqlite3.Error:
+            logger.exception("[Cashback] đọc mức dự phòng thất bại item=%s", quote.item_id)
+            self._reject(update_id, telegram_user_id, target.original_url, "reserve_read_failed")
+            if self.admin_notifier:
+                self.admin_notifier.notify_request_failed(
+                    error_type="reserve_read_failed",
+                    update_id=update_id,
+                    telegram_user_id=telegram_user_id,
+                    status="REQUEST_FAILED",
+                )
+            return BotReply(GENERIC_FAIL)
         try:
             sub_id = self._unique_sub_id()
             affiliate_url = build_an_redir(quote.product_url, self.settings.affiliate_id, sub_id)
@@ -298,12 +311,20 @@ class CashbackService:
             rounding_unit=self.settings.estimate_rounding_unit,
         )
 
-    def _quote_cashback(self, commission_vnd: int):
+    def _quote_cashback(self, commission_vnd: int, now: datetime):
         if not self._v12_ready():
             amount = quote_displayed_vnd(commission_vnd, self.settings.cashback_rate_percent)
             return amount, None, render_success
-        result = estimate_cashback(commission_vnd, self._estimate_policy(), reliable=True)
-        return result.estimated_cashback_vnd, result.policy_id, render_success_v12
+        # Mức dự phòng admin áp dụng (ADR-047); chưa có thì là .env.
+        active = self.admin_panel.active_reserve(now)
+        policy = replace(
+            self._estimate_policy(),
+            service_fee_bps=active.fee_bps,
+            tax_risk_reserve_bps=active.tax_reserve_bps,
+        )
+        result = estimate_cashback(commission_vnd, policy, reliable=True)
+        policy_id = result.policy_id if active.policy_id is None else f"{result.policy_id}+r{active.policy_id}"
+        return result.estimated_cashback_vnd, policy_id, render_success_v12
 
     def _within_rate_limit(self, telegram_user_id: int, now: datetime) -> bool:
         return self.repo.consume_link_attempt(

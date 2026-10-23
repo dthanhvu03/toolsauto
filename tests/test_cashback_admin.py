@@ -93,7 +93,7 @@ def test_luu_dong_60_khong_kich_hoat_bao_gia_khach(tmp_path):
     effect = conn.execute("SELECT customer_effect FROM policy_versions").fetchone()[0]
     assert effect == "none"
     assert quote_displayed_vnd(10_000, 70) == 7_000
-    amount, _policy, _render = bot._quote_cashback(10_000)
+    amount, _policy, _render = bot._quote_cashback(10_000, NOW)
     assert amount == 7_000
     assert client.calls == 0
 
@@ -175,22 +175,22 @@ def test_callback_het_han_va_ngay_hieu_luc(tmp_path):
 
 
 def test_du_phong_khong_thanh_thue_phai_nop(tmp_path):
+    """ADR-047: áp dụng dự phòng ghi reserve_policies, không đụng policy_versions."""
     bot, _client = _bot(tmp_path)
     screen = bot.admin_panel.handle_callback(ADMIN, "c:menu:fee", "private", NOW)
-    bot.admin_panel.handle_callback(ADMIN, "c:tier:TAX", "private", NOW)
-    preview = bot.handle_text(ADMIN, "owner", "15", update_id=9, now=NOW)
     assert "ESTIMATE RESERVE" in screen.text
-    assert "Không phải thuế phải nộp" in screen.text
-    assert "ESTIMATE RESERVE" in preview.text
-    assert "Không sửa số đã thanh toán" in preview.text
-    bot.admin_panel.handle_callback(ADMIN, _confirm_data(preview), "private", NOW)
+    assert "không phải thuế phải nộp" in screen.text
+    step = bot.admin_panel.handle_callback(ADMIN, "c:rs:new", "private", NOW)
+    step = bot.admin_panel.handle_callback(ADMIN, step.inline_keyboard[2][0][1], "private", NOW)
+    step = bot.admin_panel.handle_callback(ADMIN, step.inline_keyboard[0][0][1], "private", NOW)
+    step = bot.handle_text(ADMIN, "owner", "15", update_id=9, now=NOW)
+    step = bot.admin_panel.handle_callback(ADMIN, step.inline_keyboard[0][0][1], "private", NOW)
+    assert "Dự phòng không phải thuế luật định" in step.text
+    bot.admin_panel.handle_callback(ADMIN, step.inline_keyboard[0][1][1], "private", NOW)
     conn = sqlite3.connect(tmp_path / "cashback.sqlite")
-    config = json.loads(conn.execute("SELECT config_json FROM policy_versions").fetchone()[0])
-    assert config["not_statutory_tax"] is True
-    assert config["bps"] == 1_500
-    assert config["customer_effect"] == "none"
-    assert quote_displayed_vnd(10_000, bot.settings.cashback_rate_percent) == 7_000
-
+    row = conn.execute("SELECT account_kind, fee_bps, tax_reserve_bps FROM reserve_policies").fetchone()
+    assert row == ("HOUSEHOLD_BUSINESS", 98, 1_500)
+    assert conn.execute("SELECT COUNT(*) FROM policy_versions").fetchone()[0] == 0
 
 def test_user_khong_doi_ty_le_va_khong_vuot_allowlist(tmp_path):
     bot, client = _bot(tmp_path)

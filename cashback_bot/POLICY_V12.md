@@ -29,6 +29,10 @@ Mã phiên bản lưu khi đã có cột `estimate_policy`: `v1.2-reserve-2026-1
 
 Dòng cũ không bị tính lại. Cột chưa có thì bot giữ công thức V1.1 dù biến môi trường đặt `v1.2`.
 
+## Đổi mức dự phòng không cần sửa `.env` (ADR-047)
+
+`/admin` → Thuế & phí → Đổi mức áp dụng: chọn loại hình, phí dự phòng, thuế dự phòng (0–50%), ngày hiệu lực, xem trước, áp dụng. Mức lưu ở bảng `reserve_policies` (chỉ thêm dòng). Mỗi báo giá đọc dòng mới nhất đã tới hiệu lực; chưa có dòng nào thì dùng `CASHBACK_ESTIMATE_FEE_BPS` và `CASHBACK_ESTIMATE_TAX_RESERVE_BPS`. Link mới ghi mã `v1.2-reserve-2026-10-23+r{id}`. Tỷ lệ chia vẫn chỉ đổi qua `CASHBACK_RATE_PERCENT`.
+
 ## Final
 
 Chỉ là phép tính offline. `payable_vnd` luôn `None`. `authorize_payable` không trả số tiền.

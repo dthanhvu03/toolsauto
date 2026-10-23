@@ -275,16 +275,13 @@ def test_admin_xac_nhan_quay_ve_man_vua_sua(tmp_path):
     bot = service(tmp_path, _fresh_client(), admin_user_ids=frozenset({ADMIN}))
     panel = bot.admin_panel
     now = datetime.now(timezone.utc)
-    panel.handle_callback(ADMIN, "c:tier:FEE", "private", now)
-    preview = panel.consume_text(ADMIN, "1,2", now)
-    assert "0,98% → <b>1,2%</b>" in preview.text
+    panel.handle_callback(ADMIN, "c:tier:SILVER", "private", now)
+    preview = panel.consume_text(ADMIN, "66,5", now)
+    assert "65% → <b>66,5%</b>" in preview.text
     done = panel.handle_callback(ADMIN, preview.inline_keyboard[0][1][1], "private", now)
     assert done.toast == "Đã lưu phiên bản v1"
-    assert "Quản trị › <b>Thuế &amp; phí dự phòng</b>" in done.text
-    assert "1,2%</b> (đã lưu v1)" in done.text
-    assert "Thuế dự phòng: <b>10%</b> (mặc định cấu hình)" in done.text
-    assert "phần vạn" not in done.text
-
+    assert "Quản trị › <b>Hạng thành viên</b>" in done.text
+    assert "🥈 Bạc: <b>66,5%</b>" in done.text
 
 def test_admin_nhap_so_sai_van_co_nut_huy(tmp_path):
     bot = service(tmp_path, _fresh_client(), admin_user_ids=frozenset({ADMIN}))
@@ -298,31 +295,46 @@ def test_admin_nhap_so_sai_van_co_nut_huy(tmp_path):
     assert order.inline_keyboard[0][0][0] == "✖️ Hủy bản nháp"
 
 
+def _to_value_step(bot, now, kind="k:P"):
+    step = bot.admin_panel.handle_callback(ADMIN, "c:rs:new", "private", now)
+    data = [d for row in step.inline_keyboard for _l, d in row if d.endswith(kind)][0]
+    return bot.admin_panel.handle_callback(ADMIN, data, "private", now)
+
+
 def test_admin_go_phan_tram_khong_go_phan_van(tmp_path):
     """User phản hồi 2026-10-23: gõ 10 là 10%, 0,98 là 0,98%."""
     cases = [
-        ("FEE", "0,98", "0,98%"),
-        ("FEE", "0.98", "0,98%"),
-        ("FEE", "1,25", "1,25%"),
-        ("TAX", "10", "10%"),
-        ("TAX", "7,5%", "7,5%"),
-        ("TAX", "0,5", "0,5%"),
-        ("SILVER", "65,5", "65,5%"),
+        ("fee", "0,98", "0,98%"),
+        ("fee", "0.98", "0,98%"),
+        ("fee", "1,25", "1,25%"),
+        ("tax", "10", "10%"),
+        ("tax", "7,5%", "7,5%"),
+        ("tax", "0,5", "0,5%"),
     ]
-    for index, (code, typed, shown) in enumerate(cases):
+    for index, (field, typed, shown) in enumerate(cases):
         bot = service(tmp_path / str(index), _fresh_client(), admin_user_ids=frozenset({ADMIN}))
         now = datetime.now(timezone.utc)
-        prompt = bot.admin_panel.handle_callback(ADMIN, f"c:tier:{code}", "private", now)
+        prompt = _to_value_step(bot, now)
         assert "phần vạn" not in prompt.text
-        preview = bot.admin_panel.consume_text(ADMIN, typed, now)
-        assert f"→ <b>{shown}</b>" in preview.text, (typed, preview.text)
-    for typed in ("101", "0,987", "abc", "1.000"):
+        if field == "fee":
+            bot.admin_panel.consume_text(ADMIN, typed, now)
+            when = bot.admin_panel.consume_text(ADMIN, "10", now)
+            assert f"phí {shown}" in when.text, (typed, when.text)
+        else:
+            tax_step = bot.admin_panel.handle_callback(ADMIN, prompt.inline_keyboard[0][0][1], "private", now)
+            assert "Thuế dự phòng đang áp dụng" in tax_step.text
+            when = bot.admin_panel.consume_text(ADMIN, typed, now)
+            assert f"thuế {shown}" in when.text, (typed, when.text)
+    bot = service(tmp_path / "rank", _fresh_client(), admin_user_ids=frozenset({ADMIN}))
+    now = datetime.now(timezone.utc)
+    bot.admin_panel.handle_callback(ADMIN, "c:tier:SILVER", "private", now)
+    assert "→ <b>65,5%</b>" in bot.admin_panel.consume_text(ADMIN, "65,5", now).text
+    for typed in ("51", "0,987", "abc", "1.000"):
         bot = service(tmp_path / f"bad{typed}", _fresh_client(), admin_user_ids=frozenset({ADMIN}))
         now = datetime.now(timezone.utc)
-        bot.admin_panel.handle_callback(ADMIN, "c:tier:TAX", "private", now)
+        _to_value_step(bot, now)
         reply = bot.admin_panel.consume_text(ADMIN, typed, now)
-        assert reply is None or "không nằm trong giới hạn" in reply.text, typed
-
+        assert "⚠️" in reply.text and "Bước 2/4" in reply.text, typed
 
 def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
     store = repo(tmp_path)
@@ -350,7 +362,9 @@ def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
     sim = bot.admin_panel.handle_callback(ADMIN, "c:menu:sim", "private", now)
     assert "Báo giá: <b>V1.2" in sim.text
     fee = bot.admin_panel.handle_callback(ADMIN, "c:menu:fee", "private", now)
-    assert "Công thức khách: <b>V1.2</b>, trừ phí 0,98% và thuế 10% dự phòng" in fee.text
+    assert "Phí dự phòng: <b>0,98%</b> · Thuế dự phòng: <b>10%</b>" in fee.text
+    assert "Khách nhận (70%): <b>62.314đ</b>" in fee.text
+    assert "Đang chạy V1.1" not in fee.text
 
 
 def test_bat_v12_thieu_cot_admin_van_bao_v11(tmp_path):

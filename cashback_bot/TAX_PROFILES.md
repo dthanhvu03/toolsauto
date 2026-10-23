@@ -67,6 +67,10 @@ Cá nhân kinh doanh sang hộ kinh doanh làm cùng một bước append. Thi�
 | 9 | Thiếu phí, thiếu chứng từ, phương thức chưa rõ | Không ra số chia, payable null |
 | 10 | Tiền Shopee chưa về hoặc nhỏ hơn phần chia | Không lập quỹ và không chi |
 
+## Đã có trên bot (ADR-047)
+
+Admin khai loại hình kèm mức phí và thuế dự phòng cho báo giá V1.2 trong `/admin` → Thuế & phí. Loại hình ở đó chỉ là nhãn; hồ sơ thuế đầy đủ cho đối soát bên dưới vẫn chưa nối.
+
 ## Giao diện đề xuất
 
 Admin, chưa xây trong lần này:
