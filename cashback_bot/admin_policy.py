@@ -42,6 +42,9 @@ from cashback_bot.admin_ui import (
     NAV_KEYBOARD,
     POLICY_KEYBOARD,
     RANK_KEYBOARD,
+    SHOPEE_KEYBOARD_CONNECTED,
+    SHOPEE_KEYBOARD_DISCONNECTED,
+    SHOPEE_PROMPT_KEYBOARD,
     collecting_keyboard,
     collecting_text,
     command_copy_text,
@@ -65,12 +68,17 @@ from cashback_bot.admin_ui import (
     share_preview_text,
     share_value_text,
     share_when_text,
+    shopee_prompt_cookie_text,
+    shopee_text,
     simulation_text,
     stats_keyboard,
     stats_text,
 )
 from cashback_bot.messages import BotReply
 from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
+from cashback_bot.shopee_client import ShopeeAffiliateClient
+from cashback_bot.shopee_cookie import parse_cookies, save_cookies
+from cashback_bot.shopee_sync import ShopeeSyncEngine
 
 logger = logging.getLogger("cashback_bot")
 
@@ -164,9 +172,21 @@ class AdminPanel:
             return BotReply("Lệnh này chỉ dành cho quản trị.")
         return self._screen("home", now)
 
-    def consume_text(self, user_id: int, text: str, now: datetime) -> BotReply | None:
+    def consume_text(self, user_id: int, text: str, now: datetime, message_id: int | None = None) -> BotReply | None:
         if not self.is_admin(user_id):
             return None
+        # Kiểm tra trạng thái chờ dán cookie Shopee
+        try:
+            with self._connect() as conn:
+                waiting = conn.execute(
+                    "SELECT value FROM bot_state WHERE key = ?",
+                    (f"shopee_auth_waiting:{user_id}",),
+                ).fetchone()
+            if waiting and waiting[0] == "1":
+                return self._consume_shopee_cookie(user_id, text, now, message_id=message_id)
+        except sqlite3.Error:
+            pass
+
         reserve = self._reserve_text(user_id, (text or "").strip(), now)
         if reserve is not None:
             return reserve
@@ -208,6 +228,12 @@ class AdminPanel:
             return self._reserve_start(user_id, now)
         if data == "c:sh:new":
             return self._share_start(user_id, now)
+        if data == "c:menu:shopee":
+            return self._shopee_screen(now)
+        if data == "c:shopee:sync":
+            return self._shopee_sync(now)
+        if data == "c:shopee:auth":
+            return self._shopee_auth_start(user_id, now)
         share = _SHARE.fullmatch(data or "")
         if share:
             return self._share_action(user_id, int(share.group(1)), share.group(2), share.group(3), now)
@@ -305,7 +331,113 @@ class AdminPanel:
             return BotReply(text, inline_keyboard=NAV_KEYBOARD)
         if name == "hist":
             return BotReply(history_text(self._history_rows()), inline_keyboard=NAV_KEYBOARD)
+        if name == "shopee":
+            return self._shopee_screen(now, notice)
         return BotReply(command_copy_text(), inline_keyboard=NAV_KEYBOARD)
+
+    def _shopee_screen(self, now: datetime, notice: str = "") -> BotReply:
+        with self._connect() as conn:
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if "shopee_cookies" not in tables:
+                return BotReply("Tính năng Shopee Affiliate chưa được khởi tạo bảng trong DB.", inline_keyboard=NAV_KEYBOARD)
+
+            c_row = conn.execute("SELECT * FROM shopee_cookies WHERE id = 1").fetchone()
+            status = str(c_row["status"]) if c_row else "disconnected"
+            account_name = str(c_row["account_name"]) if c_row and c_row["account_name"] else None
+            last_sync = str(c_row["last_sync_at"]) if c_row and c_row["last_sync_at"] else None
+            last_err = str(c_row["last_error"]) if c_row and c_row["last_error"] else None
+
+            clicks_count = int(conn.execute("SELECT COUNT(*) FROM shopee_clicks").fetchone()[0]) if "shopee_clicks" in tables else 0
+            orders_count = int(conn.execute("SELECT COUNT(*) FROM shopee_conversions").fetchone()[0]) if "shopee_conversions" in tables else 0
+            matched_count = (
+                int(conn.execute("SELECT COUNT(*) FROM shopee_conversions WHERE matched_link_id IS NOT NULL").fetchone()[0])
+                if "shopee_conversions" in tables
+                else 0
+            )
+
+        kb = SHOPEE_KEYBOARD_CONNECTED if status == "connected" else SHOPEE_KEYBOARD_DISCONNECTED
+        text = shopee_text(
+            status=status,
+            account_name=account_name,
+            last_sync=last_sync,
+            total_clicks=clicks_count,
+            total_orders=orders_count,
+            matched_orders=matched_count,
+            last_error=last_err,
+            notice=notice,
+        )
+        return BotReply(text, inline_keyboard=kb)
+
+    def _shopee_sync(self, now: datetime) -> BotReply:
+        from cashback_bot.db import TrackingRepository
+        repo = TrackingRepository(self.db_path)
+        engine = ShopeeSyncEngine(repo)
+        result = engine.sync(trigger="manual")
+        return self._shopee_screen(now, notice=result.message)
+
+    def _shopee_auth_start(self, user_id: int, now: datetime) -> BotReply:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO bot_state (key, value) VALUES (?, '1')
+                ON CONFLICT(key) DO UPDATE SET value = '1'
+                """,
+                (f"shopee_auth_waiting:{user_id}",),
+            )
+        return BotReply(shopee_prompt_cookie_text(), inline_keyboard=SHOPEE_PROMPT_KEYBOARD)
+
+    def _consume_shopee_cookie(
+        self,
+        user_id: int,
+        text: str,
+        now: datetime,
+        message_id: int | None = None,
+    ) -> BotReply:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM bot_state WHERE key = ?", (f"shopee_auth_waiting:{user_id}",))
+
+        try:
+            cookies = parse_cookies(text)
+        except ValueError as exc:
+            return BotReply(
+                f"❌ <b>Không tìm thấy cookie hợp lệ:</b> {exc}.\n\nVui lòng thử lại.",
+                inline_keyboard=SHOPEE_PROMPT_KEYBOARD,
+                delete_message_id=message_id,
+            )
+
+        client = ShopeeAffiliateClient(cookies)
+        status_res = client.check_status()
+        if not status_res.ok:
+            return BotReply(
+                f"❌ <b>Không thể kết nối Shopee:</b> {status_res.error_message}.\n\nVui lòng thử lại với cookie mới.",
+                inline_keyboard=SHOPEE_PROMPT_KEYBOARD,
+                delete_message_id=message_id,
+            )
+
+        save_cookies(cookies)
+        with self._connect() as conn:
+            now_str = _stamp(now)
+            conn.execute(
+                """
+                INSERT INTO shopee_cookies (id, status, account_name, last_error, updated_at)
+                VALUES (1, 'connected', ?, NULL, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = 'connected',
+                    account_name = excluded.account_name,
+                    last_error = NULL,
+                    updated_at = excluded.updated_at
+                """,
+                (status_res.username or "Shopee Affiliate", now_str),
+            )
+
+        return BotReply(
+            f"✅ <b>Đã kết nối Shopee Affiliate thành công!</b>\n\n"
+            f"• Tài khoản: <b>{status_res.username or 'Affiliate'}</b>\n"
+            f"• Cookie đã lưu an toàn quyền 0600 (tin nhắn đã được xoá).\n\n"
+            f"Bạn có thể bấm 🔄 Đồng bộ ngay.",
+            inline_keyboard=SHOPEE_KEYBOARD_CONNECTED,
+            delete_message_id=message_id,
+        )
 
     def _begin(self, user_id: int, code: str, now: datetime) -> BotReply:
         domain, tier, prompt = _draft_target(code)

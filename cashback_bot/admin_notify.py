@@ -131,6 +131,52 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_shopee_new_order(
+        self,
+        order_sn: str,
+        sub_id: str,
+        telegram_user_id: int | None,
+        username: str | None = None,
+        commission_vnd: int | None = None,
+        order_status: str | None = None,
+    ) -> None:
+        if not self._active():
+            return
+        comm_text = format_vnd(commission_vnd) if commission_vnd is not None else "Đang cập nhật"
+        status_text = html.escape(order_status or "PENDING")
+        who = _who(telegram_user_id or 0, username) if telegram_user_id else "Chưa xác định"
+        body = (
+            "🎉 <b>Có đơn Shopee mới qua bot!</b>\n\n"
+            f"📦 Đơn hàng: <code>{html.escape(order_sn)}</code>\n"
+            f"🏷️ Sub ID: <code>{html.escape(sub_id)}</code>\n"
+            f"👤 Người tạo link: {who}\n"
+            f"💵 Hoa hồng Shopee: <b>{comm_text}</b>\n"
+            f"📌 Trạng thái: <b>{status_text}</b>\n"
+            f"🕓 {_vn_now_text()}"
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"shopee_new_order:{order_sn}",
+            event_type="SHOPEE_ORDER",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_shopee_cookie_expired(self, reason: str = "") -> None:
+        if not self._active():
+            return
+        body = (
+            "⚠️ <b>Cookie Shopee Affiliate đã hết hạn!</b>\n\n"
+            "Shopee từ chối xác thực phiên đăng nhập hiện tại.\n"
+            f"Lý do: <i>{html.escape(reason or 'Hết hạn phiên')}</i>\n\n"
+            "👉 Vui lòng vào /admin → <b>🔗 Shopee Affiliate</b> → <b>🔑 Cập nhật Cookie</b> để dán lại cookie mới."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"shopee_cookie_expired:{datetime.now(timezone.utc).strftime('%Y-%m-%d-%H')}",
+            event_type="COOKIE_EXPIRED",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
     def flush_pending(self, limit: int = 10) -> None:
         if not self._active():
             return

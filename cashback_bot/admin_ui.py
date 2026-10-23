@@ -20,12 +20,28 @@ BACK_HOME = (("◀️ Tổng quan", HOME_TARGET),)
 
 MENU_KEYBOARD: Keyboard = (
     (("📈 Thống kê", "c:st:7d"),),
+    (("🔗 Shopee Affiliate", "c:menu:shopee"),),
     (("💰 Chính sách", "c:menu:policy"), ("🎖️ Hạng thành viên", "c:menu:rank")),
     (("🧾 Thuế & phí", "c:menu:fee"), ("🧮 Mô phỏng", "c:menu:sim")),
     (("📊 Lịch sử", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
 )
 
 NAV_KEYBOARD: Keyboard = (BACK_HOME,)
+
+SHOPEE_KEYBOARD_CONNECTED: Keyboard = (
+    (("🔄 Đồng bộ ngay", "c:shopee:sync"),),
+    (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
+    BACK_HOME,
+)
+
+SHOPEE_KEYBOARD_DISCONNECTED: Keyboard = (
+    (("🔑 Kết nối Cookie", "c:shopee:auth"),),
+    BACK_HOME,
+)
+
+SHOPEE_PROMPT_KEYBOARD: Keyboard = (
+    (("✖️ Hủy", "c:menu:shopee"),),
+)
 
 RANK_KEYBOARD: Keyboard = (
     (("🥉 Đồng", "c:tier:BRONZE"), ("🥈 Bạc", "c:tier:SILVER"), ("🥇 Vàng", "c:tier:GOLD")),
@@ -542,7 +558,69 @@ def stats_text(stats, *, period_label: str, since: str | None) -> str:
     lines += [
         "",
         f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>",
-        "",
-        "ⓘ Bot chưa theo dõi đơn nên chưa có số đơn, doanh thu thật hay tỷ lệ chuyển đổi.",
     ]
+    if stats.shopee and (stats.shopee.total_clicks > 0 or stats.shopee.orders_total > 0):
+        cr_line = f" · CR: <b>{stats.shopee.conversion_rate_percent}%</b>" if stats.shopee.conversion_rate_percent is not None else ""
+        lines += [
+            "",
+            "🛒 <b>Đối soát Shopee Affiliate</b>",
+            f"• Clicks: <b>{stats.shopee.total_clicks}</b> (Khớp bot: <b>{stats.shopee.clicks_with_bot_sub_id}</b>)",
+            f"• Đơn hàng: <b>{stats.shopee.orders_total}</b> (Khớp bot: <b>{stats.shopee.orders_matched_bot}</b>){cr_line}",
+            f"• Trạng thái: Chờ duyệt <b>{stats.shopee.orders_pending}</b> · Hoàn thành <b>{stats.shopee.orders_completed}</b> · Huỷ <b>{stats.shopee.orders_cancelled}</b>",
+            f"• Hoa hồng Shopee thật: <b>{format_vnd(stats.shopee.real_commission_vnd)}</b>",
+        ]
+    else:
+        lines += [
+            "",
+            "ⓘ Chưa có dữ liệu đối soát đơn Shopee. Vào 🔗 Shopee Affiliate để đồng bộ.",
+        ]
     return "\n".join(lines)
+
+
+def shopee_text(
+    *,
+    status: str,
+    account_name: str | None,
+    last_sync: str | None,
+    total_clicks: int,
+    total_orders: int,
+    matched_orders: int,
+    last_error: str | None = None,
+    notice: str = "",
+) -> str:
+    title = _title("Shopee Affiliate")
+    if status == "connected":
+        st_badge = "🟢 <b>ĐÃ KẾT NỐI</b>"
+        account_line = f"• Tài khoản: <b>{html.escape(account_name or 'N/A')}</b>\n"
+        sync_line = f"• Lần đồng bộ gần nhất: <b>{html.escape(last_sync or 'Chưa đồng bộ')}</b>\n"
+    elif status == "expired":
+        st_badge = "🔴 <b>COOKIE HẾT HẠN</b>"
+        account_line = f"• Tài khoản trước đó: <b>{html.escape(account_name or 'N/A')}</b>\n"
+        sync_line = f"• Lỗi: <i>{html.escape(last_error or 'Phiên Shopee hết hạn')}</i>\n"
+    else:
+        st_badge = "⚪ <b>CHƯA KẾT NỐI</b>"
+        account_line = ""
+        sync_line = ""
+
+    body = (
+        f"{title}"
+        f"{_notice(notice)}"
+        f"Trạng thái: {st_badge}\n"
+        f"{account_line}"
+        f"{sync_line}"
+        f"• Click Shopee ghi nhận: <b>{total_clicks}</b>\n"
+        f"• Đơn Shopee đối soát: <b>{total_orders}</b> (Khớp bot: <b>{matched_orders}</b>)\n\n"
+        "ⓘ Dán JSON từ extension <b>J2TEAM Cookies</b> hoặc chuỗi <code>name=value;</code>. "
+        "Bot tự xoá tin nhắn ngay sau khi lưu để bảo mật."
+    )
+    return body
+
+
+def shopee_prompt_cookie_text() -> str:
+    return (
+        "🔗 <b>Cập nhật Cookie Shopee Affiliate</b>\n\n"
+        "1. Mở trang <b>affiliate.shopee.vn</b> trên trình duyệt đã đăng nhập.\n"
+        "2. Bấm icon extension <b>J2TEAM Cookies</b> → <b>Export</b> (sao chép JSON).\n"
+        "3. Dán JSON hoặc chuỗi <code>name=value;</code> vào ô chat này.\n\n"
+        "🛡️ <i>Bot sẽ kiểm tra phiên, lưu phân quyền riêng 0600 và xoá ngay tin nhắn chứa cookie khỏi chat.</i>"
+    )

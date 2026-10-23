@@ -72,6 +72,55 @@ CREATE TABLE IF NOT EXISTS admin_notifications (
     last_attempt_at TEXT,
     sent_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS shopee_cookies (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    status TEXT NOT NULL DEFAULT 'disconnected',
+    account_name TEXT,
+    last_sync_at TEXT,
+    last_error TEXT,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS shopee_clicks (
+    click_id TEXT PRIMARY KEY,
+    sub_id TEXT,
+    click_time TEXT,
+    raw_json TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS shopee_conversions (
+    conversion_id TEXT PRIMARY KEY,
+    sub_id TEXT,
+    order_sn TEXT,
+    order_status TEXT,
+    conversion_status TEXT,
+    purchase_time TEXT,
+    gross_commission_vnd INTEGER,
+    net_commission_vnd INTEGER,
+    matched_link_id INTEGER,
+    telegram_user_id INTEGER,
+    raw_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS shopee_sync_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trigger_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    clicks_synced INTEGER NOT NULL DEFAULT 0,
+    conversions_synced INTEGER NOT NULL DEFAULT 0,
+    new_orders_count INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    started_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_shopee_conversions_sub_id ON shopee_conversions(sub_id);
+CREATE INDEX IF NOT EXISTS idx_shopee_conversions_user_id ON shopee_conversions(telegram_user_id);
+CREATE INDEX IF NOT EXISTS idx_shopee_clicks_sub_id ON shopee_clicks(sub_id);
 """
 
 
@@ -529,6 +578,179 @@ class TrackingRepository:
                 """,
                 (str(offset),),
             )
+
+    def get_shopee_cookie_status(self) -> dict:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM shopee_cookies WHERE id = 1").fetchone()
+            if row is None:
+                return {
+                    "status": "disconnected",
+                    "account_name": None,
+                    "last_sync_at": None,
+                    "last_error": None,
+                    "updated_at": None,
+                }
+            return dict(row)
+
+    def update_shopee_cookie_status(
+        self,
+        status: str,
+        account_name: str | None = None,
+        last_error: str | None = None,
+        last_sync_at: str | None = None,
+    ) -> None:
+        now = _utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO shopee_cookies (id, status, account_name, last_sync_at, last_error, updated_at)
+                VALUES (1, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    account_name = COALESCE(excluded.account_name, shopee_cookies.account_name),
+                    last_sync_at = COALESCE(excluded.last_sync_at, shopee_cookies.last_sync_at),
+                    last_error = excluded.last_error,
+                    updated_at = excluded.updated_at
+                """,
+                (status, account_name, last_sync_at, last_error, now),
+            )
+
+    def record_shopee_click(
+        self,
+        click_id: str,
+        sub_id: str | None,
+        click_time: str | None,
+        raw_json: str | None = None,
+    ) -> bool:
+        now = _utc_now()
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO shopee_clicks (click_id, sub_id, click_time, raw_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(click_id) DO NOTHING
+                """,
+                (click_id, sub_id, click_time, raw_json, now),
+            )
+            return cursor.rowcount > 0
+
+    def record_shopee_conversion(
+        self,
+        conversion_id: str,
+        sub_id: str | None,
+        order_sn: str | None,
+        order_status: str | None,
+        conversion_status: str | None,
+        purchase_time: str | None,
+        gross_commission_vnd: int | None,
+        net_commission_vnd: int | None,
+        raw_json: str | None = None,
+    ) -> tuple[bool, bool, int | None, int | None]:
+        """Lưu đơn hàng và đối soát sub_id.
+
+        Trả về (is_new, is_matched, matched_link_id, telegram_user_id).
+        """
+        now = _utc_now()
+        with self.connect() as conn:
+            # Tìm link khớp sub_id
+            matched_link_id = None
+            telegram_user_id = None
+            if sub_id:
+                link = conn.execute(
+                    "SELECT id, telegram_user_id FROM link_requests WHERE sub_id = ? ORDER BY id DESC LIMIT 1",
+                    (sub_id,),
+                ).fetchone()
+                if link is not None:
+                    matched_link_id = int(link["id"])
+                    telegram_user_id = int(link["telegram_user_id"])
+
+            is_matched = matched_link_id is not None
+
+            # Kiểm tra xem đã có đơn này chưa
+            existing = conn.execute(
+                "SELECT conversion_id FROM shopee_conversions WHERE conversion_id = ?",
+                (conversion_id,),
+            ).fetchone()
+            is_new = existing is None
+
+            conn.execute(
+                """
+                INSERT INTO shopee_conversions (
+                    conversion_id, sub_id, order_sn, order_status, conversion_status,
+                    purchase_time, gross_commission_vnd, net_commission_vnd,
+                    matched_link_id, telegram_user_id, raw_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(conversion_id) DO UPDATE SET
+                    sub_id = excluded.sub_id,
+                    order_sn = excluded.order_sn,
+                    order_status = excluded.order_status,
+                    conversion_status = excluded.conversion_status,
+                    purchase_time = excluded.purchase_time,
+                    gross_commission_vnd = excluded.gross_commission_vnd,
+                    net_commission_vnd = excluded.net_commission_vnd,
+                    matched_link_id = COALESCE(excluded.matched_link_id, shopee_conversions.matched_link_id),
+                    telegram_user_id = COALESCE(excluded.telegram_user_id, shopee_conversions.telegram_user_id),
+                    raw_json = excluded.raw_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    conversion_id,
+                    sub_id,
+                    order_sn,
+                    order_status,
+                    conversion_status,
+                    purchase_time,
+                    gross_commission_vnd,
+                    net_commission_vnd,
+                    matched_link_id,
+                    telegram_user_id,
+                    raw_json,
+                    now,
+                    now,
+                ),
+            )
+            return is_new, is_matched, matched_link_id, telegram_user_id
+
+    def record_shopee_sync_run(self, trigger_type: str = "manual") -> int:
+        now = _utc_now()
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO shopee_sync_runs (trigger_type, status, started_at)
+                VALUES (?, 'running', ?)
+                """,
+                (trigger_type, now),
+            )
+            return int(cursor.lastrowid)
+
+    def complete_shopee_sync_run(
+        self,
+        run_id: int,
+        status: str,
+        clicks: int,
+        conversions: int,
+        new_orders: int,
+        error: str | None = None,
+    ) -> None:
+        now = _utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE shopee_sync_runs
+                SET status = ?, clicks_synced = ?, conversions_synced = ?,
+                    new_orders_count = ?, error_message = ?, completed_at = ?
+                WHERE id = ?
+                """,
+                (status, clicks, conversions, new_orders, error, now, run_id),
+            )
+
+    def get_last_sync_run(self) -> dict | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM shopee_sync_runs ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            return None if row is None else dict(row)
 
 
 def _row(row: sqlite3.Row) -> LinkRow:

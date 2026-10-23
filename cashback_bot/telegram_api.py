@@ -196,3 +196,20 @@ class TelegramApi:
             )
         except requests.RequestException:
             logger.error("[Cashback] answerCallback failed")
+
+    def delete_message(self, chat_id: int, message_id: int) -> bool:
+        body: dict = {"chat_id": chat_id, "message_id": message_id}
+        try:
+            response = requests.post(
+                f"{self._base}/deleteMessage",
+                json=body,
+                timeout=self._timeout,
+            )
+            if response.status_code >= 400:
+                logger.warning("[Cashback] deleteMessage http=%s: %s", response.status_code, response.text)
+                return False
+            payload = response.json()
+            return bool(payload.get("ok"))
+        except requests.RequestException as exc:
+            logger.error("[Cashback] deleteMessage network error: %s", exc)
+            return False

@@ -152,6 +152,7 @@ class BotReply:
     inline_keyboard: Keyboard | None = None
     callback_query_id: str | None = None
     edit_message_id: int | None = None
+    delete_message_id: int | None = None
     toast: str | None = None
     show_alert: bool = False
 

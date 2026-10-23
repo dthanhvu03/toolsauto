@@ -236,6 +236,11 @@ def process_updates(
                 repo.set_offset(update_id + 1)
                 continue
             chat_id, reply = outcome
+            if reply.delete_message_id and hasattr(telegram, "delete_message"):
+                try:
+                    telegram.delete_message(chat_id, reply.delete_message_id)
+                except Exception as exc:
+                    logger.warning("[Cashback] delete_message failed: %s", exc)
             query_id = reply.callback_query_id
             if query_id and hasattr(telegram, "answer_callback"):
                 if reply.toast:
@@ -295,6 +300,30 @@ def _typing(telegram, update: dict) -> None:
         telegram.send_chat_action(chat_id, "typing")
 
 
+def _check_shopee_auto_sync(repo: TrackingRepository, admin_notifier: AdminNotifier, interval_sec: int = 14400) -> None:
+    """Tự động đồng bộ Shopee mỗi vài giờ nếu đã kết nối (PLAN-065)."""
+    now = time.time()
+    last_check_str = repo.get_state("shopee_last_auto_sync")
+    if last_check_str:
+        try:
+            if now - float(last_check_str) < interval_sec:
+                return
+        except ValueError:
+            pass
+
+    status_dict = repo.get_shopee_cookie_status()
+    if status_dict.get("status") != "connected":
+        return
+
+    repo.set_state("shopee_last_auto_sync", str(now))
+    try:
+        from cashback_bot.shopee_sync import ShopeeSyncEngine
+        engine = ShopeeSyncEngine(repo, admin_notifier=admin_notifier)
+        engine.sync(trigger="auto")
+    except Exception as exc:
+        logger.warning("[ShopeeAutoSync] Lỗi trong phiên tự đồng bộ: %s", exc)
+
+
 def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier) -> None:
     while True:
         try:
@@ -302,6 +331,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             offset = repo.get_offset()
             updates = telegram.get_updates(offset)
             process_updates(service, telegram, repo, updates, admin_notifier)
+            _check_shopee_auto_sync(repo, admin_notifier)
         except KeyboardInterrupt:
             logger.info("stop")
             return

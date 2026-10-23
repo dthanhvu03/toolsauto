@@ -97,7 +97,14 @@ class CashbackService:
         update_id = update.get("update_id")
         if not isinstance(update_id, int):
             return None
-        reply = self.handle_text(user_id, sender.get("username"), text, update_id)
+        message_id = message.get("message_id")
+        reply = self.handle_text(
+            user_id,
+            sender.get("username"),
+            text,
+            update_id,
+            message_id=message_id if isinstance(message_id, int) else None,
+        )
         return user_id, reply
 
     def _handle_callback(self, callback: dict) -> tuple[int, BotReply] | None:
@@ -158,6 +165,7 @@ class CashbackService:
         text: str,
         update_id: int | None = None,
         now: datetime | None = None,
+        message_id: int | None = None,
     ) -> BotReply:
         is_new = self.repo.upsert_user(telegram_user_id, username if isinstance(username, str) else None)
         if is_new and self.admin_notifier:
@@ -173,7 +181,7 @@ class CashbackService:
         if command == "/admin":
             return self.admin_panel.menu(telegram_user_id, moment)
         if self.admin_panel.is_admin(telegram_user_id):
-            consumed = self.admin_panel.consume_text(telegram_user_id, stripped, moment)
+            consumed = self.admin_panel.consume_text(telegram_user_id, stripped, moment, message_id=message_id)
             if consumed is not None:
                 return consumed
 

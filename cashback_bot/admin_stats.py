@@ -46,6 +46,21 @@ class Insight:
 
 
 @dataclass(frozen=True)
+class ShopeeStats:
+    """Số liệu đối soát thật từ Shopee Affiliate (PLAN-065)."""
+
+    total_clicks: int
+    clicks_with_bot_sub_id: int
+    orders_total: int
+    orders_pending: int
+    orders_completed: int
+    orders_cancelled: int
+    orders_matched_bot: int
+    real_commission_vnd: int
+    conversion_rate_percent: float | None = None
+
+
+@dataclass(frozen=True)
 class Stats:
     period: str
     since: datetime | None
@@ -63,6 +78,7 @@ class Stats:
     delivery_pending: int
     errors: int
     insight: Insight | None = None
+    shopee: ShopeeStats | None = None
 
 
 def _stamp(moment: datetime) -> str:
@@ -148,6 +164,7 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
 
     return Stats(
         insight=_insight(conn, lo),
+        shopee=_shopee_stats(conn, lo),
         period=period,
         since=since,
         users_total=_count(conn, "SELECT COUNT(*) FROM telegram_users"),
@@ -212,4 +229,59 @@ def _insight(conn: sqlite3.Connection, lo: str) -> Insight | None:
         capped=int(row[5]),
         top_categories=top("cat_name"),
         top_shops=top("shop_name"),
+    )
+
+
+def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "shopee_clicks" not in tables or "shopee_conversions" not in tables:
+        return None
+
+    clicks_row = conn.execute(
+        """
+        SELECT
+            COUNT(*),
+            COALESCE(SUM(sub_id IS NOT NULL AND sub_id != '----'), 0)
+        FROM shopee_clicks
+        WHERE created_at >= ?
+        """,
+        (lo,),
+    ).fetchone()
+    total_clicks = int(clicks_row[0]) if clicks_row else 0
+    bot_clicks = int(clicks_row[1]) if clicks_row else 0
+
+    conv_row = conn.execute(
+        """
+        SELECT
+            COUNT(*),
+            COALESCE(SUM(order_status LIKE '%PENDING%' OR order_status LIKE '%WAIT%'), 0),
+            COALESCE(SUM(order_status LIKE '%COMPLETED%' OR order_status LIKE '%SUCCESS%'), 0),
+            COALESCE(SUM(order_status LIKE '%CANCEL%'), 0),
+            COALESCE(SUM(matched_link_id IS NOT NULL), 0),
+            COALESCE(SUM(net_commission_vnd), 0)
+        FROM shopee_conversions
+        WHERE created_at >= ?
+        """,
+        (lo,),
+    ).fetchone()
+
+    total_orders = int(conv_row[0]) if conv_row else 0
+    pending_orders = int(conv_row[1]) if conv_row else 0
+    completed_orders = int(conv_row[2]) if conv_row else 0
+    cancelled_orders = int(conv_row[3]) if conv_row else 0
+    matched_orders = int(conv_row[4]) if conv_row else 0
+    real_comm = int(conv_row[5]) if conv_row else 0
+
+    cr = round((total_orders / total_clicks) * 100, 1) if total_clicks > 0 else None
+
+    return ShopeeStats(
+        total_clicks=total_clicks,
+        clicks_with_bot_sub_id=bot_clicks,
+        orders_total=total_orders,
+        orders_pending=pending_orders,
+        orders_completed=completed_orders,
+        orders_cancelled=cancelled_orders,
+        orders_matched_bot=matched_orders,
+        real_commission_vnd=real_comm,
+        conversion_rate_percent=cr,
     )
