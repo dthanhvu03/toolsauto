@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (j) — AddLiveTag: rủi ro phi thương mại + PLAN-064, chờ restart
+
+AddLiveTag tự ghi `nonCommercialOnly=True`, `apiUnofficial=True`; không có endpoint đơn/click/thống kê tài khoản. User không đăng ký được Shopee Open API → tiếp tục AddLiveTag, tìm nguồn dự phòng sau. PLAN-064: lưu ngành hàng, shop, tách hoa hồng, Xtra, chạm trần lúc tạo link (7 cột NULL được, tự thêm khi khởi động) và hiện ở 📈 Thống kê. 171 passed. Chờ user: restart; số `base_rate`/`cap` của tài khoản để kiểm tra lệch hoa hồng.
+
+---
+
 ## Phiên 2026-10-23 (i) — PLAN-063 thống kê /admin, chờ restart
 
 `/admin` → 📈 Thống kê (Hôm nay / 7 ngày / 30 ngày / Tất cả): người dùng, link, lỗi theo lý do, số dự kiến (ghi rõ chưa phải doanh thu), xu hướng 7 ngày, top người gửi và món, sức khoẻ gửi tin. Chỉ đọc. 165 passed. Gộp restart với bản sửa /cachtinh. Chưa có số đơn/doanh thu vì chưa có Conversion Sync.
