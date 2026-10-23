@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import cashback_bot.poller as poller
 from cashback_bot.admin_stats import collect
 from cashback_bot.admin_ui import stats_text
-from cashback_bot.poller import _check_shopee_auto_sync, process_updates
+from cashback_bot.poller import _check_shopee_auto_sync, _check_wallet_refresh, process_updates
 from cashback_bot.shopee_client import ShopeeStatusResult
 from cashback_bot.shopee_sync import SYNC_REQUEST_KEY, ShopeeSyncEngine, SyncResult
 from cashback_bot.wallet import BankAccount, parse_bank_text, transfer_note, vietqr_url
@@ -360,3 +360,34 @@ class TestHistory:
         with bot.repo.connect() as conn:
             dump = " ".join(str(v) for row in conn.execute("SELECT * FROM admin_change_audit") for v in row)
         assert "bi_mat_khong_duoc_lo" not in dump
+
+
+class TestAutoSyncSwitch:
+    def test_auto_sync_off_by_default_and_toggle_logged(self, tmp_path, monkeypatch):
+        bot = _bot(tmp_path)
+        bot.repo.update_shopee_cookie_status(status="connected")
+        engine = MagicMock()
+        engine.return_value.sync.return_value = SyncResult(ok=True, message="ok")
+        monkeypatch.setattr(poller, "ShopeeSyncEngine", engine)
+
+        _check_shopee_auto_sync(bot.repo, MagicMock())
+        engine.assert_not_called()  # mặc định: không tự gọi Shopee
+        screen = _callback(bot, ADMIN, "c:menu:shopee")
+        assert "Tự đồng bộ: ⏸️ <b>tắt</b>" in screen.text
+        assert "c:shopee:auto:on" in _buttons(screen)
+
+        on = _callback(bot, ADMIN, "c:shopee:auto:on")
+        assert "c:shopee:auto:off" in _buttons(on)
+        _check_shopee_auto_sync(bot.repo, MagicMock())
+        assert engine.return_value.sync.call_args.kwargs["trigger"] == "auto"
+
+        _callback(bot, ADMIN, "c:shopee:auto:off")
+        history = _callback(bot, ADMIN, "c:menu:hist").text
+        assert "tự đồng bộ 4 giờ → bật" in history and "tự đồng bộ 4 giờ → tắt" in history
+
+    def test_wallet_moves_on_time_without_calling_shopee(self, tmp_path):
+        bot = _bot(tmp_path)
+        bot.refresh_wallet = MagicMock()
+        _check_wallet_refresh(bot, bot.repo)
+        _check_wallet_refresh(bot, bot.repo)  # chưa đủ 1 giờ
+        assert bot.refresh_wallet.call_count == 1

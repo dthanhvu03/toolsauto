@@ -17,7 +17,7 @@ from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import ADMIN_COMMANDS, BOT_COMMANDS, BUY_BUTTON, DESCRIPTION, SHORT_DESCRIPTION, WALLET_COMMAND
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.service import CashbackService
-from cashback_bot.shopee_sync import SYNC_REQUEST_KEY, ShopeeSyncEngine
+from cashback_bot.shopee_sync import AUTO_SYNC_KEY, SYNC_REQUEST_KEY, ShopeeSyncEngine
 from cashback_bot.telegram_api import TelegramApi, classify_delivery_error
 
 logger = logging.getLogger("cashback_bot")
@@ -311,10 +311,12 @@ def _check_shopee_auto_sync(
     interval_sec: int = 14400,
     on_synced: Callable[[], None] | None = None,
 ) -> None:
-    """Đồng bộ Shopee mỗi 4 giờ nếu đã kết nối, hoặc ngay khi admin bấm 🔄 (PLAN-065, PLAN-066)."""
+    """Đồng bộ ngay khi admin bấm 🔄; tự đồng bộ 4 giờ chỉ khi admin bật công tắc (mặc định tắt)."""
     now = time.time()
     manual = repo.get_state(SYNC_REQUEST_KEY) == "1"
     if not manual:
+        if repo.get_state(AUTO_SYNC_KEY) != "1":
+            return
         last_check_str = repo.get_state("shopee_last_auto_sync")
         if last_check_str:
             try:
@@ -344,6 +346,22 @@ def _check_shopee_auto_sync(
             logger.exception("[Cashback] cập nhật sổ hoàn tiền sau đồng bộ thất bại")
 
 
+def _check_wallet_refresh(service: CashbackService, repo: TrackingRepository, interval_sec: int = 3600) -> None:
+    """Đơn đủ ngày giữ thì vào ví đúng hạn dù tự đồng bộ tắt. Chỉ đọc DB của bot, không gọi Shopee."""
+    now = time.time()
+    last = repo.get_state("wallet_last_refresh")
+    try:
+        if last and now - float(last) < interval_sec:
+            return
+    except ValueError:
+        pass
+    repo.set_state("wallet_last_refresh", str(now))
+    try:
+        service.refresh_wallet()
+    except Exception:
+        logger.exception("[Cashback] cập nhật sổ hoàn tiền định kỳ thất bại")
+
+
 def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier) -> None:
     while True:
         try:
@@ -352,6 +370,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             updates = telegram.get_updates(offset)
             process_updates(service, telegram, repo, updates, admin_notifier)
             _check_shopee_auto_sync(repo, admin_notifier, on_synced=service.refresh_wallet)
+            _check_wallet_refresh(service, repo)
         except KeyboardInterrupt:
             logger.info("stop")
             return

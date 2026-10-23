@@ -44,7 +44,6 @@ from cashback_bot.admin_ui import (
     NAV_KEYBOARD,
     POLICY_KEYBOARD,
     RANK_KEYBOARD,
-    SHOPEE_KEYBOARD_CONNECTED,
     SHOPEE_KEYBOARD_DISCONNECTED,
     SHOPEE_PROMPT_KEYBOARD,
     collecting_keyboard,
@@ -70,6 +69,7 @@ from cashback_bot.admin_ui import (
     share_preview_text,
     share_value_text,
     share_when_text,
+    shopee_connected_keyboard,
     shopee_prompt_cookie_text,
     shopee_text,
     simulation_text,
@@ -83,7 +83,7 @@ from cashback_bot.money import format_vnd
 from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
-from cashback_bot.shopee_sync import SYNC_REQUEST_KEY
+from cashback_bot.shopee_sync import AUTO_SYNC_KEY, SYNC_REQUEST_KEY
 
 logger = logging.getLogger("cashback_bot")
 
@@ -250,6 +250,8 @@ class AdminPanel:
             return self._shopee_sync(now)
         if data == "c:shopee:csv":
             return self._shopee_csv(now)
+        if data in {"c:shopee:auto:on", "c:shopee:auto:off"}:
+            return self._shopee_auto(user_id, data.endswith(":on"), now)
         if data == "c:shopee:auth":
             return self._shopee_auth_start(user_id, now)
         share = _SHARE.fullmatch(data or "")
@@ -373,7 +375,8 @@ class AdminPanel:
                 else 0
             )
 
-        kb = SHOPEE_KEYBOARD_CONNECTED if status == "connected" else SHOPEE_KEYBOARD_DISCONNECTED
+        auto_sync = self._auto_sync_on()
+        kb = shopee_connected_keyboard(auto_sync) if status == "connected" else SHOPEE_KEYBOARD_DISCONNECTED
         text = shopee_text(
             status=status,
             account_name=account_name,
@@ -383,8 +386,26 @@ class AdminPanel:
             matched_orders=matched_count,
             last_error=last_err,
             notice=notice,
+            auto_sync=auto_sync,
         )
         return BotReply(text, inline_keyboard=kb)
+
+    def _auto_sync_on(self) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM bot_state WHERE key = ?", (AUTO_SYNC_KEY,)).fetchone()
+        return row is not None and row[0] == "1"
+
+    def _shopee_auto(self, user_id: int, on: bool, now: datetime) -> BotReply:
+        before = self._auto_sync_on()
+        if before != on:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO bot_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (AUTO_SYNC_KEY, "1" if on else "0"),
+                )
+            self._log_setting(user_id, "shopee_auto_sync", {"on": before}, {"on": on}, now)
+        notice = "🟢 Đã bật tự đồng bộ mỗi 4 giờ." if on else "⏸️ Đã tắt tự đồng bộ. Bấm 🔄 khi cần số mới."
+        return self._shopee_screen(now, notice=notice)
 
     def _shopee_sync(self, now: datetime) -> BotReply:
         # Không gọi Shopee trong lúc trả lời nút: đặt cờ, poller chạy ở vòng sau và nhắn kết quả.
@@ -490,7 +511,7 @@ class AdminPanel:
             f"• Tài khoản: <b>{html.escape(status_res.username or 'Affiliate')}</b>\n"
             f"• Cookie đã lưu riêng (quyền 0600). Bot xoá tin nhắn chứa cookie khỏi chat.\n\n"
             f"Bạn có thể bấm 🔄 Đồng bộ ngay.",
-            inline_keyboard=SHOPEE_KEYBOARD_CONNECTED,
+            inline_keyboard=shopee_connected_keyboard(self._auto_sync_on()),
             delete_message_id=message_id,
         )
 
@@ -1228,7 +1249,7 @@ def _history_line(row: sqlite3.Row) -> str:
 def _setting_line(row: sqlite3.Row) -> str | None:
     """Dòng lịch sử cho cài đặt đổi ngay (PLAN-066). None: không phải loại này."""
     action = row["action"]
-    if action not in {"wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie"}:
+    if action not in {"wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync"}:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
     before = json.loads(row["before_json"]) if "before_json" in row.keys() and row["before_json"] else {}
@@ -1239,6 +1260,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action == "wallet_min_withdraw":
         old = format_vnd(int(before["vnd"])) if "vnd" in before else "-"
         return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
+    if action == "shopee_auto_sync":
+        return "Shopee Affiliate: tự đồng bộ 4 giờ → " + ("bật" if after.get("on") else "tắt")
     return f"Shopee Affiliate: kết nối cookie ({html.escape(str(after.get('account', '-')))})"
 
 

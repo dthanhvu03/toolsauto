@@ -70,6 +70,8 @@ def _bot_sub_id(val: Any) -> str | None:
 MONEY_SCALE = 100_000
 # Admin bấm 🔄: chỉ đặt cờ này, poller chạy đồng bộ ở vòng kế tiếp rồi nhắn kết quả (PLAN-066).
 SYNC_REQUEST_KEY = "shopee_sync_requested"
+# Tự đồng bộ 4 giờ: chỉ chạy khi admin bật ("1"). Mặc định tắt, admin tự bấm 🔄.
+AUTO_SYNC_KEY = "shopee_auto_sync"
 # Shopee nhận page_size=100 (đã thử thật 2026-10-23).
 PAGE_SIZE = 100
 # Trần số trang mỗi loại mỗi lần đồng bộ, tránh vòng lặp vô tận nếu Shopee bỏ qua page_no.

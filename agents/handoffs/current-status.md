@@ -1,3 +1,8 @@
+## Phiên 2026-10-23 (o) — Tắt tự đồng bộ Shopee mặc định, công tắc trong /admin
+
+User: không chạy đồng bộ tự động, khi cần thì bấm. Thêm công tắc ở 🔗 Shopee Affiliate (`bot_state.shopee_auto_sync`, mặc định tắt, bật/tắt ghi 📊 Lịch sử). Nút 🔄 vẫn chạy ngay. Sổ ví tự cập nhật mỗi giờ chỉ từ DB (không gọi Shopee) để đơn đủ ngày giữ vẫn vào ví đúng hạn. Claude Code không tự gọi Shopee nữa (đã ghi memory). 221 passed. Next: user restart.
+
+---
 ## Phiên 2026-10-23 (n) — 📊 Lịch sử ghi cả cài đặt ví và cookie Shopee
 
 User báo đổi giữ tiền 15 ngày mà Lịch sử không thấy. Nguyên nhân: Lịch sử đọc `admin_change_audit`, cài đặt ví và kết nối cookie (PLAN-065/066) đổi thẳng `bot_state` không ghi audit. Sửa: `AdminPanel._log_setting` ghi bật/tắt ví, giữ tiền, rút tối thiểu (bỏ qua khi bấm lại cùng mức), kết nối cookie (chỉ tên tài khoản, không ghi cookie). 219 passed; 2 test mới fail trên code cũ. Production (PID 462329, `5efe310` từ 12:06): ví ĐÃ BẬT, giữ 15 ngày — hai thay đổi này trước bản sửa nên không có trong Lịch sử, không chèn bù. Next: user restart để có bản sửa và menu /vi.

@@ -29,11 +29,14 @@ MENU_KEYBOARD: Keyboard = (
 
 NAV_KEYBOARD: Keyboard = (BACK_HOME,)
 
-SHOPEE_KEYBOARD_CONNECTED: Keyboard = (
-    (("🔄 Đồng bộ ngay", "c:shopee:sync"), ("📤 CSV 30 ngày", "c:shopee:csv")),
-    (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
-    BACK_HOME,
-)
+def shopee_connected_keyboard(auto_sync: bool) -> Keyboard:
+    toggle = ("⏸️ Tắt tự đồng bộ", "c:shopee:auto:off") if auto_sync else ("🟢 Bật tự đồng bộ 4 giờ", "c:shopee:auto:on")
+    return (
+        (("🔄 Đồng bộ ngay", "c:shopee:sync"), ("📤 CSV 30 ngày", "c:shopee:csv")),
+        (toggle,),
+        (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
+        BACK_HOME,
+    )
 
 SHOPEE_KEYBOARD_DISCONNECTED: Keyboard = (
     (("🔑 Kết nối Cookie", "c:shopee:auth"),),
@@ -616,12 +619,16 @@ def shopee_text(
     matched_orders: int,
     last_error: str | None = None,
     notice: str = "",
+    auto_sync: bool = False,
 ) -> str:
     title = _title("Shopee Affiliate")
     if status == "connected":
         st_badge = "🟢 <b>ĐÃ KẾT NỐI</b>"
         account_line = f"• Tài khoản: <b>{html.escape(account_name or 'N/A')}</b>\n"
-        sync_line = f"• Lần đồng bộ gần nhất: <b>{html.escape(last_sync or 'Chưa đồng bộ')}</b>\n"
+        sync_line = (
+            f"• Lần đồng bộ gần nhất: <b>{html.escape(last_sync or 'Chưa đồng bộ')}</b>\n"
+            f"• Tự đồng bộ: {'🟢 <b>mỗi 4 giờ</b>' if auto_sync else '⏸️ <b>tắt</b> · bấm 🔄 khi cần'}\n"
+        )
     elif status == "expired":
         st_badge = "🔴 <b>COOKIE HẾT HẠN</b>"
         account_line = f"• Tài khoản trước đó: <b>{html.escape(account_name or 'N/A')}</b>\n"
