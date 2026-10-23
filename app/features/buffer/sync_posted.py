@@ -14,7 +14,7 @@ from app.features.buffer.client import BufferError
 
 logger = logging.getLogger(__name__)
 
-INTERVAL_SEC = 15 * 60
+INTERVAL_SEC = 60 * 60  # 250 request/ngày mỗi key: hỏi trạng thái 24 lần/ngày là đủ
 _STATUS_BATCH = 25
 _last_sync_ts = 0.0
 _status_offset = 0

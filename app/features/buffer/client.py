@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from typing import Any
@@ -97,6 +98,26 @@ class BufferError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.retry_after = retry_after
+
+
+_RATELIMIT_ITEM = re.compile(r'"(\d+)-in-([^"]+)"\s*;\s*r=(\d+)(?:\s*;\s*t=(\d+))?')
+
+
+def _ratelimit_windows(headers) -> list[tuple[int, int, int, str]]:
+    """Header RateLimit → [(quota, còn lại, giây tới reset, tên cửa sổ)].
+
+    Ví dụ: "250-in-1day";r=248;t=86397. Nhiều dòng thì requests nối bằng dấu phẩy.
+    """
+    raw = None
+    if hasattr(headers, "get"):
+        raw = headers.get("RateLimit") or headers.get("ratelimit")
+    if not isinstance(raw, str):
+        return []
+    out = []
+    for quota, window, left, reset in _RATELIMIT_ITEM.findall(raw):
+        if int(quota) > 0:
+            out.append((int(quota), int(left), int(reset or 0), f"{quota}-in-{window}"))
+    return out
 
 
 def _gql_string(value: str) -> str:
@@ -194,8 +215,15 @@ class BufferClient:
                 return None
 
         headers = getattr(response, "headers", None) or {}
-        limit = _header_int(headers, "x-ratelimit-limit")
-        remaining = _header_int(headers, "x-ratelimit-remaining")
+        windows = _ratelimit_windows(headers)
+        exhausted = None
+        if windows:
+            # Cửa sổ chật nhất quyết định mức giữ. Thường là 250/ngày, không phải 3000/30 ngày.
+            limit, remaining = min(windows, key=lambda w: w[1] / w[0])[:2]
+            exhausted = next(((w[3], w[2]) for w in windows if w[1] <= 0 and w[2] > 0), None)
+        else:
+            limit = _header_int(headers, "x-ratelimit-limit")
+            remaining = _header_int(headers, "x-ratelimit-remaining")
         with _GUARD_LOCK:
             row = _guard_row(self._key)
             if limit is not None:
@@ -204,6 +232,10 @@ class BufferClient:
                 row["remaining"] = remaining
             elif consumed and row["remaining"] is not None:
                 row["remaining"] = max(0, int(row["remaining"]) - 1)
+        if exhausted and getattr(response, "status_code", 200) != 429:
+            # Hết suất một cửa sổ: nghỉ luôn, đừng để request sau dính 429 làm job FAILED.
+            logger.info("[Buffer] Hết suất cửa sổ %s, cho key nghỉ trước %ss", exhausted[0], exhausted[1])
+            self.mark_rate_limited(exhausted[1])
 
     def _wait_for_slot(self) -> None:
         """Chặn gọi khi đang cooldown; giãn tối thiểu giữa 2 request cùng key."""

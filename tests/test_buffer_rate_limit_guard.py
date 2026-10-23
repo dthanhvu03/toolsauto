@@ -214,3 +214,73 @@ def test_adapter_retries_without_first_comment_on_paid_plan(monkeypatch):
     assert result.external_post_id == "post_ok"
     assert calls["n"] == 2
     assert calls["with_fc"] == 1
+
+
+# --- PLAN-068: đọc suất 24 giờ từ header RateLimit ----------------------------------
+
+_THREE_WINDOWS = (
+    '"100-in-15min";r=98;t=897, "250-in-1day";r=60;t=20282, "3000-in-30days";r=2500;t=696980'
+)
+
+
+def test_ratelimit_header_uses_tightest_window(monkeypatch):
+    """x-ratelimit 2500/3000 là cửa sổ 30 ngày; cửa sổ ngày còn 60/250 mới là chỗ sắp cạn."""
+    monkeypatch.setattr(
+        "app.features.buffer.client.requests.post",
+        lambda *a, **k: _response(
+            {"data": {"account": {"id": "1"}}},
+            headers={"RateLimit": _THREE_WINDOWS, "x-ratelimit-limit": "3000", "x-ratelimit-remaining": "2500"},
+        ),
+    )
+    client = BufferClient("k-windows")
+    client.execute("query { account { id } }")
+    row = buffer_client._KEY_GUARD["k-windows"]
+    assert (row["limit"], row["remaining"]) == (250, 60)
+    assert "60/250" in (client.reserve_block_reason() or "")
+
+
+def test_ratelimit_header_with_spaces_lowercase_name():
+    windows = buffer_client._ratelimit_windows({"ratelimit": '"100-in-15min"; r=0; t=753'})
+    assert windows == [(100, 0, 753, "100-in-15min")]
+
+
+def test_exhausted_window_on_success_rests_key_without_429(monkeypatch):
+    calls = []
+
+    def fake_post(*a, **k):
+        calls.append(1)
+        return _response(
+            {"data": {"account": {"id": "1"}}},
+            headers={"RateLimit": '"100-in-15min";r=40;t=425, "250-in-1day";r=0;t=20282'},
+        )
+
+    monkeypatch.setattr("app.features.buffer.client.requests.post", fake_post)
+    client = BufferClient("k-empty-day")
+    client.execute("query { account { id } }")  # request này thành công
+    assert client.cooldown_remaining() >= 20282 - 2
+
+    with pytest.raises(BufferError) as exc:
+        client.execute("query { account { id } }", purpose="publish")
+    assert exc.value.status_code == 429
+    assert calls == [1]
+
+
+def test_without_ratelimit_header_falls_back_to_x_ratelimit(monkeypatch):
+    monkeypatch.setattr(
+        "app.features.buffer.client.requests.post",
+        lambda *a, **k: _response(
+            {"data": {"account": {"id": "1"}}},
+            headers={"x-ratelimit-limit": "250", "x-ratelimit-remaining": "200"},
+        ),
+    )
+    client = BufferClient("k-legacy")
+    client.execute("query { account { id } }")
+    row = buffer_client._KEY_GUARD["k-legacy"]
+    assert (row["limit"], row["remaining"]) == (250, 200)
+    assert client.cooldown_remaining() == 0
+
+
+def test_status_sync_runs_at_most_hourly():
+    from app.features.buffer import sync_posted
+
+    assert sync_posted.INTERVAL_SEC == 60 * 60
