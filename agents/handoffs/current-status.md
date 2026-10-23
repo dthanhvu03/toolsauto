@@ -1,3 +1,25 @@
+## Phiên 2026-10-23 (t) — Tắt quét nguồn, PLAN-070 bỏ bình luận đầu tiên, PLAN-071 quét theo nhu cầu
+
+Claude Code, Owner duyệt "oke thực hiện đi em":
+
+- PLAN-069 đã commit `4f92452` và push.
+- 21:37 tắt cả 6 nguồn tự động bằng `SourceService.set_enabled`. Backup ở `data/backups/viral-sources-before-pause-20261023T143732Z.json`. Muốn bật lại: `/nguon`.
+- Nguồn 3, 4, 5 trỏ mã kênh cũ (sót lúc đổi kênh ở PLAN-067) → đổi sang `6adb578c…9cde9b` / `…9cde9a`. Material 1709 cũng đổi.
+- PLAN-070: key gói Free bị từ chối bình luận đầu tiên thì 7 ngày không thử lại (khóa `first_comment:<key>` trong `buffer_cooldown.json`). Mỗi bài còn 1 request, không gọi AI.
+- PLAN-071: setting `viral.source_skip_ready_per_page` (mặc định 15, `/caidat dutru`). Nguồn tự bỏ quét khi mọi page đích đã đủ video READY.
+- **Key 1 `f8pL...Y1DI` hết suất ngày, 429 lúc khoảng 22:00, nghỉ 79296s (mở lại khoảng 20:00 24/10).**
+  - Suất: 59/250 lúc 21:05, 50/250 lúc 21:33, 0 lúc khoảng 22:00. Trong 21:33–22:00 tool chỉ đăng 2 bài (4–6 request).
+  - Chưa giải thích được phần tiêu còn lại. Máy này không có process nào khác dùng key.
+  - Cần hỏi Owner key có dán ở nơi khác không, và nên log đếm request theo key.
+- Phát hiện thêm: khi key 2, 3 khóa (chưa có bảng kênh), kênh của chúng làm `get_client_for_channel` quét lại bảng kênh key 1 mỗi 30 phút (2 request mỗi lần nếu chưa chạm mức giữ). Chưa sửa, đề xuất cho Owner.
+
+Next:
+- 24/10 khoảng 15:20 key 2, 3 mở lại; khoảng 20:00 key 1 mở lại.
+- Kiểm "Bo first_comment" chỉ còn một lần mỗi key.
+- Kiểm suất ngày sau mỗi bài.
+
+---
+
 ## Phiên 2026-10-23 (s) — PLAN-069: dọn ổ đĩa không xóa video bài đang hẹn Buffer
 
 Claude Code, Owner duyệt "Vá code + gia hạn file". Bài Sống Nhẹ 20:30 23/10 (job 1113, material 1280) hỏng: Buffer tải `/buffer-media/1280/…` nhận 404. Nguyên nhân: `StorageCleanupService.prune_media` (Maintenance chạy 6 giờ/lần và ngay khi khởi động) xóa file `reup` quá 7 ngày. Job Buffer DONE ngay khi hẹn, không có `media_path`, nên không được che. Vòng 20:10 (sau restart 20:07) xóa file 1280 và 1300 (job 1118, 14:30 24/10), đặt hai material FAILED.

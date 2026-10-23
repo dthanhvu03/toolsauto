@@ -212,6 +212,17 @@ SETTINGS: dict[str, SettingSpec] = {
         max=1440,
         unit="phút",
     ),
+    "viral.source_skip_ready_per_page": SettingSpec(
+        key="viral.source_skip_ready_per_page",
+        type="int",
+        default_getter=lambda: 15,
+        title="Ngừng quét khi page đủ video",
+        section="Quét TikTok & Viral",
+        description="Nguồn tự động bỏ quét khi mọi page đích của nó đã có ít nhất số video sẵn sàng (READY) này. Quét tay vẫn chạy. 0 = luôn quét.",
+        min=0,
+        max=1000,
+        unit="video",
+    ),
     "viral.diversify_enabled": SettingSpec(
         key="viral.diversify_enabled",
         env_var_name="VIRAL_DIVERSIFY_ENABLED",

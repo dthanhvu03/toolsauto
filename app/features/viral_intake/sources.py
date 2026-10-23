@@ -18,6 +18,7 @@ import subprocess
 import time
 from urllib.parse import parse_qsl, urlsplit
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import app.config as config
@@ -638,6 +639,16 @@ class SourceService:
         return found, skipped
 
     @staticmethod
+    def _ready_by_page(db: Session) -> dict[str, int]:
+        rows = (
+            db.query(ViralMaterial.target_page, func.count(ViralMaterial.id))
+            .filter(ViralMaterial.status == ViralStatus.READY, ViralMaterial.target_page.isnot(None))
+            .group_by(ViralMaterial.target_page)
+            .all()
+        )
+        return {page: int(n) for page, n in rows if page}
+
+    @staticmethod
     def scan_all(db: Session, *, only_due: bool = True) -> dict:
         """Quét mọi nguồn ``enabled`` (``only_due``: bỏ nguồn quét chưa quá ``viral.source_scan_interval_min``)."""
         interval_sec = max(1, _setting_int(db, "viral.source_scan_interval_min", 60)) * 60
@@ -648,10 +659,27 @@ class SourceService:
             .order_by(ViralSource.last_scanned_at.asc().nullsfirst(), ViralSource.id.asc())
             .all()
         )
+        summary = {"found": 0, "scanned": 0, "errors": 0, "skipped": 0, "paused": 0}
         if only_due:
             sources = [s for s in sources if not s.last_scanned_at or now - int(s.last_scanned_at) >= interval_sec]
+            # PLAN-071: page đủ video chờ đăng thì quét thêm chỉ để video quá hạn bị dọn.
+            enough = max(0, _setting_int(db, "viral.source_skip_ready_per_page", 15))
+            if enough and sources:
+                ready = SourceService._ready_by_page(db)
+                due = []
+                for src in sources:
+                    pages = [p for p in src.target_pages_list if p]
+                    if pages and all(ready.get(p, 0) >= enough for p in pages):
+                        summary["paused"] += 1
+                        logger.info(
+                            "[VIRAL_SOURCES] Bỏ quét %s — page đích đã đủ %d video sẵn sàng (%s)",
+                            src.handle or src.url, enough,
+                            ", ".join(f"{p[-6:]}={ready.get(p, 0)}" for p in pages),
+                        )
+                        continue
+                    due.append(src)
+                sources = due
 
-        summary = {"found": 0, "scanned": 0, "errors": 0, "skipped": 0}
         for idx, src in enumerate(sources):
             if idx:
                 time.sleep(random.uniform(2, 5))

@@ -261,7 +261,7 @@ def test_scan_all_only_due_skips_recently_scanned_and_disabled(session_factory, 
 
         # Vừa quét xong → only_due bỏ qua cả 2
         second = SourceService.scan_all(db, only_due=True)
-        assert second == {"found": 0, "scanned": 0, "errors": 0, "skipped": 0}
+        assert second == {"found": 0, "scanned": 0, "errors": 0, "skipped": 0, "paused": 0}
         assert len(fake_yt_dlp["calls"]) == 2
 
         # only_due=False → quét lại, dedup → 0 mới
@@ -276,6 +276,69 @@ def test_scan_all_only_due_skips_recently_scanned_and_disabled(session_factory, 
         fourth = SourceService.scan_all(db, only_due=True)
         assert fourth["scanned"] == 1
         assert fake_yt_dlp["calls"][-1][-1] == "https://www.tiktok.com/@mrwork93"
+
+
+def _ready(db, page: str, n: int, start: int = 1):
+    for i in range(start, start + n):
+        db.add(ViralMaterial(platform="tiktok", url=f"https://www.tiktok.com/@x/video/{page[-3:]}{i}",
+                             status=ViralStatus.READY, target_page=page))
+    db.commit()
+
+
+def _source_to(db, url: str, pages: list[str]) -> int:
+    _, _, sid = SourceService.add_source(db, url, min_views=1)
+    src = db.get(ViralSource, sid)
+    src.target_pages_list = pages
+    db.commit()
+    return sid
+
+
+def test_scan_all_pauses_source_when_every_target_page_has_enough_ready(session_factory, fake_yt_dlp, monkeypatch):
+    """PLAN-071: page đủ video chờ đăng thì nguồn bỏ quét, không ghi last_scanned_at."""
+    monkeypatch.setattr(sources, "_setting_int",
+                        lambda db, key, fallback: 3 if key == "viral.source_skip_ready_per_page" else fallback)
+    with session_factory() as db:
+        full = _source_to(db, "https://www.tiktok.com/@full", ["page_full"])
+        low = _source_to(db, "https://www.tiktok.com/@low", ["page_low"])
+        mixed = _source_to(db, "https://www.tiktok.com/@mixed", ["page_full", "page_low"])
+        nopage = _source_to(db, "https://www.tiktok.com/@nopage", [])
+        _ready(db, "page_full", 3)
+        _ready(db, "page_low", 2)
+
+        out = SourceService.scan_all(db, only_due=True)
+
+        assert out["paused"] == 1 and out["scanned"] == 3
+        scanned = {c[-1] for c in fake_yt_dlp["calls"]}
+        assert "https://www.tiktok.com/@full" not in scanned
+        assert {"https://www.tiktok.com/@low", "https://www.tiktok.com/@mixed", "https://www.tiktok.com/@nopage"} <= scanned
+        assert db.get(ViralSource, full).last_scanned_at is None
+        assert all(db.get(ViralSource, s).last_scanned_at for s in (low, mixed, nopage))
+
+
+def test_scan_all_manual_or_threshold_zero_always_scans(session_factory, fake_yt_dlp, monkeypatch):
+    with session_factory() as db:
+        _source_to(db, "https://www.tiktok.com/@full", ["page_full"])
+        _ready(db, "page_full", 5)
+
+        monkeypatch.setattr(sources, "_setting_int",
+                            lambda db, key, fallback: 3 if key == "viral.source_skip_ready_per_page" else fallback)
+        manual = SourceService.scan_all(db, only_due=False)
+        assert manual["scanned"] == 1 and manual["paused"] == 0
+
+        src = db.query(ViralSource).one()
+        src.last_scanned_at = None
+        db.commit()
+        monkeypatch.setattr(sources, "_setting_int",
+                            lambda db, key, fallback: 0 if key == "viral.source_skip_ready_per_page" else fallback)
+        off = SourceService.scan_all(db, only_due=True)
+        assert off["scanned"] == 1 and off["paused"] == 0
+
+
+def test_skip_ready_setting_registered():
+    from app.core import settings as runtime_settings
+
+    spec = runtime_settings.SETTINGS["viral.source_skip_ready_per_page"]
+    assert spec.type == "int" and spec.default_getter() == 15 and spec.min == 0
 
 
 def test_scan_all_counts_errors(session_factory, fake_yt_dlp):

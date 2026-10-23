@@ -335,6 +335,7 @@ class TelegramCommandHandler:
         "nguong": "viral.min_views",
         "sovideo": "viral.max_videos_per_channel",
         "quet": "viral.source_scan_interval_min",
+        "dutru": "viral.source_skip_ready_per_page",  # PLAN-071
         "trung": "viral.phash_max_distance",
         "diachi": "PUBLIC_BASE_URL",  # ADR-044
     }
