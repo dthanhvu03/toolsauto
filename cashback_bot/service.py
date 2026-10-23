@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cashback_bot.affiliate import build_an_redir, new_sub_id
-from cashback_bot.calculator import EstimatePolicy, estimate_cashback
 from cashback_bot.config import Settings
+from cashback_bot.pricing import EstimatePolicy, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
     CLOSED,
@@ -26,7 +26,6 @@ from cashback_bot.messages import (
     render_success,
     render_success_v12,
 )
-from cashback_bot.money import estimated_cashback as estimated_cashback_v11
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.shopee_url import parse_shopee_target
 
@@ -206,7 +205,7 @@ class CashbackService:
 
     def _quote_cashback(self, commission_vnd: int):
         if not self._v12_ready():
-            amount = estimated_cashback_v11(commission_vnd, self.settings.cashback_rate_percent)
+            amount = quote_displayed_vnd(commission_vnd, self.settings.cashback_rate_percent)
             return amount, None, render_success
         policy = EstimatePolicy(
             cashback_share_bps=self.settings.cashback_rate_percent * 100,
