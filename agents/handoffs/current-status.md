@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (f) — PLAN-062 admin áp dụng phí/thuế dự phòng, chờ restart
+
+Bot đang chạy V1.2 từ 09:26 UTC (PID 439579). PLAN-062 + ADR-047: `/admin` → Thuế & phí → Đổi mức áp dụng (loại hình, phí, thuế 0–50%, ngày hiệu lực, xem trước). Bảng mới `reserve_policies`/`reserve_drafts` tự tạo khi bot dùng lần đầu (CREATE IF NOT EXISTS, không đụng bảng cũ). Thử trên bản sao DB ok. 151 passed. Cần user restart; chưa có mức nào được áp dụng nên số khách không đổi cho tới khi admin bấm Áp dụng. Phần 2 (hồ sơ thuế cho đối soát) chưa làm.
+
+---
+
 ## Phiên 2026-10-23 (e) — Bật V1.2 cashback: chuẩn bị xong, chờ user dừng bot + migrate + start
 
 `.env` đã có `CASHBACK_ESTIMATE_POLICY=v1.2`. Backup `data/backups/cashback-20261023T092506Z.sqlite`. Migration `001` thử trên bản sao ok. Khách sẽ thấy số hoàn còn ~89% so với V1.1; link cũ giữ số cũ. Code admin/khách khớp V1.2, 141 passed. Nếu user muốn quay lại V1.1: xoá dòng `CASHBACK_ESTIMATE_POLICY` trong `.env` rồi restart (cột mới để lại không hại).
