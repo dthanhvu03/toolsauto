@@ -1,3 +1,9 @@
+## Phiên 2026-10-23 (q) — PLAN-067 chạy thật, key 1 thay key mới
+
+Claude Code: PLAN-067 (bảng kênh lưu `storage/db/config/buffer_channels.json`, `post_statuses` gom theo key, kênh lạ không đổ về key chính khi còn key chưa có bảng) đã chạy trên PM2, chưa commit. Lúc 19:29–19:49 cả 3 key cũ dính 429 cạn suất 24 giờ (key 2, 3 mở lại khoảng 15:20 ngày 24/10; key 1 cũ 15:17 ngày 24/10). Theo tài liệu Buffer: Free = 250 request/24 giờ mỗi key, 429 không kéo dài khóa. Owner tạo key mới cho tài khoản #1 (`.env` `BUFFER_API_KEY`, vị trí 1 = `f8pL...Y1DI`), Uyển Nhi + Sống Nhẹ có mã kênh mới. Owner duyệt: đổi `BUFFER_CHANNELS`, 48 material READY/NEW, job 1110/1111 → FAILED; backup `data/backups/buffer-channel-move-20261023T125358Z.json`. 19:56 job 1113 hẹn Sống Nhẹ 20:30 qua key mới. Next: xem bài 20:30 có lên; Uyển Nhi được xếp ở vòng sau; Owner quyết sửa tiếp đọc cửa sổ 24 giờ + giãn sync 60 phút; commit PLAN-067.
+
+---
+
 ## Phiên 2026-10-23 (p) — VietQR tự tạo, chọn ngân hàng bằng nút
 
 Bot tự tạo mã VietQR (EMVCo/NAPAS, CRC16) và gửi ảnh vào chat khi admin mở yêu cầu rút; bỏ `img.vietqr.io`. Khách chọn ngân hàng bằng nút (30 ngân hàng), gõ STK + tên. 59 test ngoại lệ mới, 279 passed. `qrcode==8.0` đã cài `.venv` và thêm requirements. Chưa quét bằng app ngân hàng thật. Next: user restart (PID 464286), quét thử QR theo checklist trong tin trả lời.
