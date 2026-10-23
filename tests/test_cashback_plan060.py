@@ -347,7 +347,8 @@ def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
     assert "<b>12.462đ</b>" in card.text
     assert "sau dự phòng phí và thuế" in card.text
     calc = bot.handle_text(111, "buyer", "/cachtinh", update_id=2)
-    assert "dự phòng phí 0,98%" in calc.text
+    assert "đã trừ phí và thuế" in calc.text
+    assert "%" not in calc.text
 
     home = bot.admin_panel.menu(ADMIN, now)
     assert "V1.2 · 70% phần còn lại sau dự phòng phí và thuế" in home.text
@@ -373,3 +374,16 @@ def test_bat_v12_thieu_cot_admin_van_bao_v11(tmp_path):
     assert "V1.1 · 70% hoa hồng ước tính" in home.text
     card = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=1)
     assert "<b>14.000đ</b>" in card.text
+
+
+def test_khach_khong_thay_so_noi_bo(tmp_path):
+    """User 2026-10-23: không lộ tỷ lệ chia, phí, thuế ở bất kỳ trang nào khách mở được."""
+    from cashback_bot.messages import DESCRIPTION, SHORT_DESCRIPTION
+
+    bot = service(tmp_path, _fresh_client())
+    texts = [DESCRIPTION, SHORT_DESCRIPTION]
+    for index, command in enumerate(("/start", "/help", "/huongdan", "/dieukien", "/cachtinh", "/hang", "/abc"), start=1):
+        texts.append(bot.handle_text(111, "buyer", command, update_id=index).text)
+    texts.append(bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=50).text)
+    for text in texts:
+        assert "%" not in text, text

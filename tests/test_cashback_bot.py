@@ -386,8 +386,8 @@ def test_lenh_cach_tinh(tmp_path):
     for update_id, text in ((63, "/cachtinh"), (64, "/cachtinh@zt_shopee_bot")):
         reply = bot.handle_text(111, "buyer", text, update_id=update_id, now=NOW)
         assert "💰 <b>Cách tính tiền hoàn</b>" in reply.text
-        assert "70% hoa hồng ước tính" in reply.text
-        assert "7.000đ" in reply.text
+        assert "%" not in reply.text, "không lộ tỷ lệ chia, phí, thuế cho khách"
+        assert "chưa trừ thuế và phí" in reply.text
         assert "chưa bật" not in reply.text
         assert "dự phòng" not in reply.text
         assert reply.button_url is None
@@ -418,7 +418,7 @@ def test_nam_lenh_tach_noi_dung(tmp_path):
     assert "65%" not in replies["hang"]
     assert "bạn đang ở hạng" not in replies["hang"].lower()
     assert "chưa chính thức áp dụng" in replies["hang"]
-    assert "7.000đ" in replies["cachtinh"]
+    assert "%" not in replies["cachtinh"]
     for text in replies.values():
         assert text.count("<b>") == text.count("</b>")
         assert text.count("<i>") == text.count("</i>")
@@ -793,8 +793,7 @@ def test_khuon_chu_khach_plan_060(tmp_path):
         INVALID_LINK,
         NOT_FOUND,
         hang_message,
-        how_to_calc_v11,
-        how_to_calc_v12,
+        how_to_calc,
         rate_limited_reply,
         render_success,
         render_success_v12,
@@ -804,7 +803,7 @@ def test_khuon_chu_khach_plan_060(tmp_path):
         render_success("Áo Polo Nam", 250_000, 14_000, "https://s.shopee.vn/x").text,
         render_success_v12("Áo Polo Nam", 250_000, 12_462, "https://s.shopee.vn/x").text,
     ]
-    pages = [HOME, HUONGDAN, DIEUKIEN, how_to_calc_v11(70), how_to_calc_v12(70, 98, 1_000), hang_message()]
+    pages = [HOME, HUONGDAN, DIEUKIEN, how_to_calc(False), how_to_calc(True), hang_message()]
     errors = [CLOSED, INVALID_LINK, STALE, NOT_FOUND, GENERIC_FAIL, rate_limited_reply(300).text]
     for text in cards + pages + errors:
         assert text.count("ⓘ") <= 1

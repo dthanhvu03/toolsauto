@@ -45,7 +45,7 @@ def test_doi_ty_le_ngay_link_moi_dung_ty_le_moi(tmp_path):
     assert saved[1] == (11_572, 65, "v1.2-reserve-2026-10-23+s1")
     assert "<b>12.462đ</b>" in bot.handle_text(111, "buyer", LINK, update_id=1, now=NOW).text
 
-    assert "rồi tính 65% phần còn lại" in bot.handle_text(111, "buyer", "/cachtinh", update_id=3).text
+    assert "%" not in bot.handle_text(111, "buyer", "/cachtinh", update_id=3).text
     home = bot.admin_panel.menu(ADMIN, NOW)
     assert "V1.2 · 65% phần còn lại" in home.text
     fee = bot.admin_panel.handle_callback(ADMIN, "c:menu:fee", "private", NOW)

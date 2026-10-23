@@ -69,7 +69,7 @@ def test_ap_dung_ngay_link_moi_dung_muc_moi(tmp_path):
     assert "<b>12.462đ</b>" in replay.text, "link cũ giữ số đã báo"
 
     calc = bot.handle_text(111, "buyer", "/cachtinh", update_id=3)
-    assert "dự phòng thuế 1,5%" in calc.text
+    assert "%" not in calc.text
     policy = bot.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", NOW)
     assert "Dự phòng thuế (1,5%): -1.500đ" in policy.text
     history = bot.admin_panel.handle_callback(ADMIN, "c:menu:hist", "private", NOW)

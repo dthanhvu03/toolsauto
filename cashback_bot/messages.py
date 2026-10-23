@@ -10,7 +10,7 @@ import html
 import re
 from dataclasses import dataclass
 
-from cashback_bot.money import estimated_cashback, format_vnd
+from cashback_bot.money import format_vnd
 
 Keyboard = tuple[tuple[tuple[str, str], ...], ...]
 
@@ -86,36 +86,21 @@ BOT_COMMANDS = (
 ADMIN_COMMANDS = BOT_COMMANDS + (("admin", "Quản trị"),)
 
 
-def _percent_label(bps: int) -> str:
-    whole, frac = divmod(bps, 100)
-    if frac == 0:
-        return f"{whole}%"
-    return f"{whole}.{frac:02d}".rstrip("0").replace(".", ",") + "%"
-
-
-def how_to_calc_v11(rate_percent: int) -> str:
-    example = estimated_cashback(10_000, rate_percent)
-    return (
-        "💰 <b>Cách tính tiền hoàn</b>\n\n"
-        f"Hoàn dự kiến = <b>{rate_percent}% hoa hồng ước tính</b> của sản phẩm.\n\n"
-        f"Ví dụ: hoa hồng ước tính 10.000đ → hoàn dự kiến <b>{format_vnd(example)}</b>.\n\n"
-        "• Số dự kiến chưa trừ thuế và phí.\n"
-        "• Hoa hồng thực tế có thể thay đổi hoặc bằng 0 nếu đơn không đủ điều kiện.\n"
-        "• Số dự kiến chưa phải tiền đã duyệt hay có thể rút.\n\n"
-        "ⓘ Bot chưa theo dõi đơn, chưa xác nhận tiền hoàn thực tế và chưa chi trả."
+def how_to_calc(v12: bool) -> str:
+    """Giải thích cho khách, không đưa tỷ lệ chia, phí hay thuế (đó là số nội bộ)."""
+    deduction = (
+        "• Số dự kiến đã trừ phí và thuế liên quan.\n"
+        if v12
+        else "• Số dự kiến chưa trừ thuế và phí.\n"
     )
-
-
-def how_to_calc_v12(rate_percent: int, fee_bps: int, tax_reserve_bps: int) -> str:
     return (
         "💰 <b>Cách tính tiền hoàn</b>\n\n"
-        f"Từ hoa hồng ước tính, bot trừ dự phòng phí {_percent_label(fee_bps)} "
-        f"và dự phòng thuế {_percent_label(tax_reserve_bps)}, rồi tính {rate_percent}% phần còn lại.\n\n"
-        "• Dự phòng thuế là khoản để riêng khi ước tính, không phải mức thuế luật định.\n"
-        "• Một khoản không bị trừ hai lần.\n"
-        "• Hoa hồng có thể thay đổi, nên số dự kiến có thể khác số cuối.\n"
-        "• Số cuối chỉ được xác nhận khi đối soát đủ.\n"
-        "• Bot không công bố số được rút hay ngày trả thưởng.\n\n"
+        "Khi bạn mua qua link của bot, Shopee trả cho chương trình một khoản hoa hồng. "
+        "Bot chia lại một phần khoản đó cho bạn. Số tiền hiện trên mỗi link là phần bạn dự kiến nhận.\n\n"
+        + deduction
+        + "• Hoa hồng có thể thay đổi, hoặc bằng 0 nếu đơn bị hủy, trả hàng hay không đủ điều kiện.\n"
+        "• Số cuối chỉ được xác nhận khi Shopee đối soát xong.\n"
+        "• Số dự kiến chưa phải tiền đã duyệt hay có thể rút.\n\n"
         "ⓘ Bot chưa theo dõi đơn và chưa chi trả."
     )
 

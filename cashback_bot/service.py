@@ -25,8 +25,7 @@ from cashback_bot.messages import (
     BotReply,
     hang_message,
     home_reply,
-    how_to_calc_v11,
-    how_to_calc_v12,
+    how_to_calc,
     invalid_link_reply,
     page_reply,
     rate_limited_reply,
@@ -147,21 +146,10 @@ class CashbackService:
         if name == "rules":
             return page_reply(DIEUKIEN)
         if name == "calc":
-            return page_reply(self._calc_text())
+            return page_reply(how_to_calc(self._v12_ready()))
         if name == "rank":
             return page_reply(hang_message())
         return None
-
-    def _calc_text(self) -> str:
-        if self._v12_ready():
-            now = datetime.now(timezone.utc)
-            active = self.admin_panel.active_reserve(now)
-            return how_to_calc_v12(
-                self.admin_panel.active_share(now).share_bps // 100,
-                active.fee_bps,
-                active.tax_reserve_bps,
-            )
-        return how_to_calc_v11(self.settings.cashback_rate_percent)
 
     def handle_text(
         self,
