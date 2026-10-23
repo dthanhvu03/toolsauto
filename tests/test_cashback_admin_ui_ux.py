@@ -2,7 +2,7 @@
 
 Kiểm chứng 3 nguyên tắc UX cốt lõi:
 1. Dùng editMessageText khi chuyển màn hình qua inline button (không spam tin nhắn mới),
-   giữ nút ◀️ Quay lại và 🏠 Tổng quan trên mọi trang con.
+   mọi trang con có nút ◀️ Tổng quan (PLAN-060: cấp 1 chỉ cần một nút vì Quay lại = Tổng quan).
 2. Không để nút chưa dùng được dẫn đến màn hình vô nghĩa (không có nút kích hoạt tự động).
 3. Các trang chứa tiền hiển thị ranh giới rõ ràng giữa "Đang áp dụng", "Bản nháp" và "Mô phỏng".
 """
@@ -31,7 +31,7 @@ class MockTelegramWithEdit:
         self.answered_callbacks = []
         self.edit_should_succeed = True
 
-    def send_message(self, chat_id, html, reply_markup=None):
+    def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
         self.sent_messages.append({"chat_id": chat_id, "html": html, "markup": reply_markup})
 
     def edit_message_text(self, chat_id, message_id, html, reply_markup=None):
@@ -42,7 +42,7 @@ class MockTelegramWithEdit:
         )
         return True
 
-    def answer_callback(self, callback_query_id):
+    def answer_callback(self, callback_query_id, *_args):
         self.answered_callbacks.append(callback_query_id)
 
 
@@ -83,7 +83,7 @@ def test_edit_message_text_used_on_callback_navigation(tmp_path):
     assert len(tg.edited_messages) == 1
     assert tg.edited_messages[0]["message_id"] == 5555
     assert tg.edited_messages[0]["chat_id"] == ADMIN_ID
-    assert "QUẢN LÝ HẠNG THÀNH VIÊN" in tg.edited_messages[0]["html"]
+    assert "Quản trị › <b>Hạng thành viên</b>" in tg.edited_messages[0]["html"]
 
     # KHÔNG gọi sendMessage tạo tin nhắn rác
     assert len(tg.sent_messages) == 0
@@ -116,7 +116,7 @@ def test_edit_message_text_fallback_to_send_if_edit_fails(tmp_path):
 
 
 def test_all_six_sub_screens_have_back_and_home_navigation(tmp_path):
-    """UX Điểm 1: Mọi trang con đều phải có nút ◀️ Quay lại và 🏠 Tổng quan."""
+    """UX Điểm 1: Mọi trang con đều có nút ◀️ Tổng quan về c:menu:home và breadcrumb."""
     bot, _client = _admin_bot(tmp_path)
 
     sub_screens = [
@@ -137,21 +137,25 @@ def test_all_six_sub_screens_have_back_and_home_navigation(tmp_path):
         button_labels = [label for label, _data in buttons]
         button_targets = [data for _label, data in buttons]
 
-        has_back = any("Quay lại" in label for label in button_labels)
-        has_home = any("Tổng quan" in label for label in button_labels)
-
-        assert has_back, f"Màn hình {screen_data} thiếu nút ◀️ Quay lại"
-        assert has_home, f"Màn hình {screen_data} thiếu nút 🏠 Tổng quan"
-        assert "c:menu:home" in button_targets, f"Màn hình {screen_data} thiếu đích quay về c:menu:home"
+        assert ("◀️ Tổng quan", "c:menu:home") in buttons, f"Màn hình {screen_data} thiếu nút ◀️ Tổng quan"
+        assert button_labels.count("◀️ Tổng quan") == 1, f"Màn hình {screen_data} có nút trùng việc"
+        assert reply.text.startswith("⚙️ Quản trị › "), f"Màn hình {screen_data} thiếu breadcrumb"
 
 
 def test_draft_collecting_screen_has_back_navigation(tmp_path):
-    """UX Điểm 1: Khi đang ở bước nhập số cho bản nháp, vẫn có nút Quay lại để admin hủy nếu muốn."""
+    """UX Điểm 1: Bước nhập số có nút Hủy bản nháp; hủy xong quay về màn Hạng thành viên."""
     bot, _client = _admin_bot(tmp_path)
     reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:tier:BRONZE", "private", NOW)
-    assert reply.inline_keyboard is not None
-    button_targets = [data for row in reply.inline_keyboard for _label, data in row]
-    assert "c:menu:rank" in button_targets or "c:menu:home" in button_targets
+    assert "đang lưu <b>60%</b>" in reply.text
+    assert "từ 0 đến 70" in reply.text
+    (label, cancel), = reply.inline_keyboard[0]
+    assert label == "✖️ Hủy bản nháp"
+    assert cancel.startswith("c:no:")
+    done = bot.admin_panel.handle_callback(ADMIN_ID, cancel, "private", NOW)
+    assert "Đã hủy bản nháp" in done.text
+    assert "Quản trị › <b>Hạng thành viên</b>" in done.text
+    assert done.toast == "Đã hủy bản nháp"
+    assert bot.admin_panel._pending_count(NOW) == 0
 
 
 def test_rank_screen_has_no_automatic_activation(tmp_path):
@@ -251,12 +255,12 @@ def test_dau_phay_trong_cau_chu_khong_bi_doi_thanh_dau_cham(tmp_path):
     rank = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:rank", "private", NOW)
     fee = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
     sim = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
-    assert "Hạng Đồng, Bạc, Vàng đang là mức định hướng, chưa áp dụng" in rank.text
-    assert "Hoàn 60.000đ · Phần còn 40.000đ" in rank.text
+    assert "Đồng 60%: hoàn 60.000đ · còn 40.000đ" in rank.text
+    assert "Không phải thuế phải nộp, không sửa chứng từ đã đối soát" in fee.text
     assert "0,98%" in fee.text
     assert "0.98%" not in fee.text
     assert "-980đ" in fee.text
-    assert "hoàn 6.000đ, phần còn 4.000đ" in sim.text
+    assert "Đồng 60%: hoàn 6.000đ · còn 4.000đ" in sim.text
 
     bot.admin_panel.handle_callback(ADMIN_ID, "c:tier:SILVER", "private", NOW)
     preview = bot.admin_panel.consume_text(ADMIN_ID, "66", NOW)
@@ -268,7 +272,7 @@ def test_tong_quan_khong_lap_dong(tmp_path):
     home = bot.admin_panel.menu(ADMIN_ID, NOW)
     assert home.text.count("Đối soát") == 1
     assert "Tỷ lệ ước tính hiện tại" not in home.text
-    assert "Tỷ lệ đang áp dụng: 70%" in home.text
+    assert "Chính sách báo giá: V1.1 · 70% hoa hồng ước tính" in home.text
 
 
 def test_nut_het_hieu_luc_van_giu_nut_dieu_huong(tmp_path):

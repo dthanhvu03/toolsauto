@@ -112,7 +112,7 @@ class _DummyCustomerTelegram:
     def __init__(self):
         self.sent = []
 
-    def send_message(self, chat_id, html, reply_markup=None):
+    def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
         self.sent.append((chat_id, html, reply_markup))
 
 
@@ -121,7 +121,7 @@ class _DummyAdminTelegram:
         self.should_fail = should_fail
         self.sent = []
 
-    def send_message(self, chat_id, html, reply_markup=None):
+    def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
         if self.should_fail:
             raise requests.ConnectionError("admin down")
         self.sent.append((chat_id, html, reply_markup))
@@ -412,7 +412,7 @@ def test_nam_lenh_tach_noi_dung(tmp_path):
     }
     assert replies["help"] != replies["huongdan"]
     assert "Xem món Shopee được hoàn bao nhiêu" in replies["help"]
-    assert "/cachtinh" in replies["help"]
+    assert "Dán link sản phẩm Shopee" in replies["help"]
     assert "không bảo đảm Shopee sẽ ghi nhận hoa hồng" in replies["dieukien"]
     assert "60%" not in replies["hang"]
     assert "65%" not in replies["hang"]
@@ -618,7 +618,7 @@ def test_gui_tin_that_bai_khong_danh_dau_da_giao(tmp_path, caplog):
         def __init__(self):
             self.attempts = 0
 
-        def send_message(self, chat_id, html, reply_markup=None):
+        def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
             self.attempts += 1
             if self.attempts == 1:
                 raise requests.ConnectionError("down")
@@ -744,7 +744,7 @@ def test_api_loi_notify_admin_khong_lo_secret(tmp_path):
     admin.flush_pending()
     assert admin_tg.sent, "admin should receive timeout alert"
     msg = "\n".join(item[1] for item in admin_tg.sent)
-    assert "REQUEST_FAILED" in msg
+    assert "Lỗi bot" in msg
     assert "product_data_timeout" in msg
     assert "https://s.shopee.vn/an_redir" not in msg
     assert not re.search(r"\b\d{8,12}:[A-Za-z0-9_-]{20,}\b", msg)

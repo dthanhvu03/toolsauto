@@ -56,7 +56,7 @@ class _FailUser:
         self.blocked_id = blocked_id
         self.sent = []
 
-    def send_message(self, chat_id, html, reply_markup=None):
+    def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
         if chat_id == self.blocked_id:
             raise requests.ConnectionError("blocked")
         self.sent.append(chat_id)
@@ -103,7 +103,7 @@ def test_retry_khong_tao_sub_id_moi(tmp_path):
         def __init__(self):
             self.calls = 0
 
-        def send_message(self, chat_id, html, reply_markup=None):
+        def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
             self.calls += 1
             if self.calls == 1:
                 raise requests.Timeout("slow")
@@ -128,7 +128,7 @@ def test_telegram_429_khong_chan_user_sau(tmp_path):
         def __init__(self):
             self.sent = []
 
-        def send_message(self, chat_id, html, reply_markup=None):
+        def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
             if chat_id == 111:
                 raise TelegramDeliveryError("rate_limited", retry_after=90, status_code=429)
             self.sent.append(chat_id)
@@ -154,7 +154,7 @@ def test_qua_so_lan_thi_needs_review(tmp_path):
         def __init__(self):
             self.calls = 0
 
-        def send_message(self, chat_id, html, reply_markup=None):
+        def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
             self.calls += 1
             raise requests.ConnectionError("nope")
 
@@ -206,7 +206,7 @@ def test_restart_van_gui_lai_dung_link(tmp_path):
     bot.repo = store
 
     class Down:
-        def send_message(self, chat_id, html, reply_markup=None):
+        def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
             raise requests.ConnectionError("down")
 
     process_updates(bot, Down(), store, [_update(4, 111)], _Admin(), now=NOW)
@@ -218,7 +218,7 @@ def test_restart_van_gui_lai_dung_link(tmp_path):
         def __init__(self):
             self.markup = None
 
-        def send_message(self, chat_id, html, reply_markup=None):
+        def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
             self.markup = reply_markup
 
     telegram = Up()

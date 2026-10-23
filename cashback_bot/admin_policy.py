@@ -14,29 +14,45 @@ import sqlite3
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from cashback_bot.admin_ui import (
     FEE_KEYBOARD,
     MENU_KEYBOARD,
     NAV_KEYBOARD,
     RANK_KEYBOARD,
+    collecting_keyboard,
+    collecting_text,
     command_copy_text,
     decision_keyboard,
     fee_text,
+    history_text,
     home_text,
     policy_text,
+    rank_preview_text,
     rank_text,
+    reserve_preview_text,
     simulation_text,
 )
 from cashback_bot.messages import BotReply
-from cashback_bot.money import format_vnd
 from cashback_bot.pricing import MAX_SHARE_BPS, share_cashback
 
 logger = logging.getLogger("cashback_bot")
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "004_admin_policy.sql"
 CONFIRM_TTL = timedelta(minutes=10)
+ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 TIERS = {"BRONZE": "Đồng", "SILVER": "Bạc", "GOLD": "Vàng"}
+TIER_EMOJI = {"BRONZE": "🥉", "SILVER": "🥈", "GOLD": "🥇"}
+RESERVE_NAMES = {"estimate_fee_reserve": "Phí dự phòng", "estimate_tax_reserve": "Thuế dự phòng"}
+_ACTIONS = {"draft": "Tạo bản nháp", "preview": "Xem trước", "confirm": "Xác nhận", "cancel": "Hủy"}
+_RESULTS = {
+    "collecting": "đang nhập",
+    "preview": "chờ xác nhận",
+    "confirmed": "đã lưu",
+    "cancelled": "đã hủy",
+    "expired": "hết hạn",
+}
 DIRECTIONAL_BPS = {"BRONZE": 6_000, "SILVER": 6_500, "GOLD": 7_000}
 SAMPLE_VND = (10_000, 100_000)
 _NUMBER = re.compile(r"^(\d{1,5})%?$")
@@ -87,6 +103,8 @@ class AdminPanel:
     displayed_rate_percent: int
     calculator_label: str = "V1.1, chưa bật V1.2"
     membership_on: bool = False
+    fee_default_bps: int = 98
+    tax_default_bps: int = 1_000
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -94,14 +112,7 @@ class AdminPanel:
     def menu(self, user_id: int, now: datetime) -> BotReply:
         if not self.is_admin(user_id):
             return BotReply("Lệnh này chỉ dành cho quản trị.")
-        pending = self._pending_count(now)
-        text = home_text(
-            rate_percent=self.displayed_rate_percent,
-            membership_on=self.membership_on,
-            calculator=self.calculator_label,
-            pending=pending,
-        )
-        return BotReply(text, inline_keyboard=MENU_KEYBOARD)
+        return self._screen("home", now)
 
     def consume_text(self, user_id: int, text: str, now: datetime) -> BotReply | None:
         if not self.is_admin(user_id):
@@ -129,7 +140,7 @@ class AdminPanel:
     def _route_callback(self, user_id: int, data: str, now: datetime) -> BotReply:
         menu = _MENU.fullmatch(data or "")
         if menu:
-            return self._menu_screen(menu.group(1), user_id, now)
+            return self._screen(menu.group(1), now)
         tier = _TIER.fullmatch(data or "")
         if tier:
             return self._begin(user_id, tier.group(1), now)
@@ -141,7 +152,7 @@ class AdminPanel:
             return self._cancel(user_id, draft_id, nonce, now)
         return self._confirm(user_id, draft_id, nonce, now)
 
-    def _menu_screen(self, name: str, user_id: int, now: datetime) -> BotReply:
+    def _screen(self, name: str, now: datetime, notice: str = "") -> BotReply:
         if name == "home":
             text = home_text(
                 rate_percent=self.displayed_rate_percent,
@@ -151,64 +162,54 @@ class AdminPanel:
             )
             return BotReply(text, inline_keyboard=MENU_KEYBOARD)
         if name == "policy":
+            customer, remain = share_cashback(100_000, self.displayed_rate_percent * 100)
             text = policy_text(
                 rate_percent=self.displayed_rate_percent,
                 pending=self._pending_count(now),
+                customer_vnd=customer,
+                remain_vnd=remain,
             )
             return BotReply(text, inline_keyboard=NAV_KEYBOARD)
         if name == "rank":
-            try:
-                rates = self._rates()
-            except AdminSafetyError:
-                rates = dict(DIRECTIONAL_BPS)
-            b_cash, b_rem = share_cashback(100_000, rates["BRONZE"])
-            s_cash, s_rem = share_cashback(100_000, rates["SILVER"])
-            g_cash, g_rem = share_cashback(100_000, rates["GOLD"])
-            text = rank_text(
-                bronze_percent=_percent(rates["BRONZE"]),
-                silver_percent=_percent(rates["SILVER"]),
-                gold_percent=_percent(rates["GOLD"]),
-                displayed_rate_percent=self.displayed_rate_percent,
-                b_cash=b_cash,
-                b_rem=b_rem,
-                s_cash=s_cash,
-                s_rem=s_rem,
-                g_cash=g_cash,
-                g_rem=g_rem,
-            )
+            rates = self._safe_rates()
+            tiers = [
+                (TIER_EMOJI[code], label, _percent(rates[code]), *share_cashback(100_000, rates[code]))
+                for code, label in TIERS.items()
+            ]
+            text = rank_text(tiers=tiers, displayed_rate_percent=self.displayed_rate_percent, notice=notice)
             return BotReply(text, inline_keyboard=RANK_KEYBOARD)
         if name == "fee":
-            fee_bps = 98
-            tax_bps = 1_000
+            fee_bps, fee_version = self._reserve("estimate_fee_reserve")
+            tax_bps, tax_version = self._reserve("estimate_tax_reserve")
             sim_fee = (100_000 * fee_bps) // 10_000
             sim_tax = (100_000 * tax_bps) // 10_000
-            sim_dist = 100_000 - sim_fee - sim_tax
             text = fee_text(
+                calculator_on=self.calculator_label == "V1.2",
+                applied_fee=_percent(self.fee_default_bps),
+                applied_tax=_percent(self.tax_default_bps),
                 fee_percent=_percent(fee_bps),
                 fee_bps=fee_bps,
+                fee_source=_source(fee_version),
                 tax_percent=_percent(tax_bps),
                 tax_bps=tax_bps,
+                tax_source=_source(tax_version),
                 sim_fee=sim_fee,
                 sim_tax=sim_tax,
-                sim_dist=sim_dist,
+                sim_dist=100_000 - sim_fee - sim_tax,
+                notice=notice,
             )
             return BotReply(text, inline_keyboard=FEE_KEYBOARD)
         if name == "sim":
-            try:
-                rates = self._rates()
-            except AdminSafetyError:
-                rates = dict(DIRECTIONAL_BPS)
-            text = simulation_text(
-                displayed_rate_percent=self.displayed_rate_percent,
-                rates=rates,
-            )
+            rates = self._safe_rates()
+            table = [
+                (amount, [(label, _percent(rates[code]), *share_cashback(amount, rates[code])) for code, label in TIERS.items()])
+                for amount in SAMPLE_VND
+            ]
+            text = simulation_text(displayed_rate_percent=self.displayed_rate_percent, table=table)
             return BotReply(text, inline_keyboard=NAV_KEYBOARD)
         if name == "hist":
-            return BotReply(self._history_text(), inline_keyboard=NAV_KEYBOARD)
-        return BotReply(
-            command_copy_text(),
-            inline_keyboard=NAV_KEYBOARD,
-        )
+            return BotReply(history_text(self._history_rows()), inline_keyboard=NAV_KEYBOARD)
+        return BotReply(command_copy_text(), inline_keyboard=NAV_KEYBOARD)
 
     def _begin(self, user_id: int, code: str, now: datetime) -> BotReply:
         domain, tier, prompt = _draft_target(code)
@@ -230,27 +231,45 @@ class AdminPanel:
                 self._audit(conn, user_id, "draft", draft_id, None, None, "collecting", now)
         except AdminSafetyError:
             return BotReply("Database đang chạy chưa được mở để lưu chính sách.")
-        back_target = "c:menu:rank" if code in TIERS else "c:menu:fee"
+        if code in TIERS:
+            current = _percent(self._safe_rates()[code])
+        else:
+            current = _percent(self._reserve(domain)[0])
         return BotReply(
-            f"Bản nháp #{draft_id}. {prompt}",
-            inline_keyboard=((("◀️ Quay lại", back_target), ("🏠 Tổng quan", "c:menu:home")),),
+            collecting_text(draft_id=draft_id, current=current, **prompt),
+            inline_keyboard=collecting_keyboard(draft_id, nonce),
         )
 
     def _preview_number(self, draft: sqlite3.Row, raw: int, now: datetime) -> BotReply:
         parsed = _parse_bps(draft["domain"], raw)
+        retry = collecting_keyboard(int(draft["id"]), draft["nonce"])
         if parsed is None:
-            return BotReply("Giá trị không nằm trong giới hạn. Hạng tối đa 70%. Dự phòng từ 0 đến 10000 phần vạn.")
+            return BotReply(
+                "Giá trị không nằm trong giới hạn. Hạng tối đa 70%. Dự phòng từ 0 đến 10000 phần vạn. Gửi lại số khác.",
+                inline_keyboard=retry,
+            )
         if draft["domain"] == "membership_rates":
             rates = self._rates()
             rates[draft["tier"]] = parsed
             ordered = [rates["BRONZE"], rates["SILVER"], rates["GOLD"]]
             if ordered != sorted(ordered):
-                return BotReply("Tỷ lệ phải đi theo thứ tự Đồng, Bạc, rồi Vàng.")
+                return BotReply("Tỷ lệ phải đi theo thứ tự Đồng ≤ Bạc ≤ Vàng. Gửi lại số khác.", inline_keyboard=retry)
             before = self._rates()[draft["tier"]]
-            body = _rank_preview(draft["tier"], before, parsed)
+            before_split, after_split = simulate_share(100_000, before, parsed)
+            body = rank_preview_text(
+                tier_name=TIERS[draft["tier"]],
+                before=_percent(before),
+                after=_percent(parsed),
+                before_split=before_split,
+                after_split=after_split,
+            )
         else:
-            before = _reserve_default(draft["domain"])
-            body = _reserve_preview(draft["domain"], before, parsed)
+            before = self._reserve(draft["domain"])[0]
+            body = reserve_preview_text(
+                name=RESERVE_NAMES[draft["domain"]],
+                before=_percent(before),
+                after=_percent(parsed),
+            )
         with self._connect() as conn:
             updated = conn.execute(
                 """
@@ -280,9 +299,11 @@ class AdminPanel:
                 if updated.rowcount != 1:
                     return BotReply("Không hủy được. Bản này đã xử lý hoặc không phải của bạn.")
                 self._audit(conn, user_id, "cancel", draft_id, None, None, "cancelled", now)
+                domain = conn.execute("SELECT domain FROM admin_drafts WHERE id = ?", (draft_id,)).fetchone()[0]
         except AdminSafetyError:
             return BotReply("Database đang chạy chưa được mở để lưu chính sách.")
-        return BotReply("Đã hủy bản nháp. Chính sách đã lưu không đổi.", inline_keyboard=MENU_KEYBOARD)
+        notice = f"✖️ Đã hủy bản nháp #{draft_id}. Chính sách đã lưu không đổi."
+        return replace(self._screen(_screen_of(domain), now, notice), toast="Đã hủy bản nháp")
 
     def _confirm(self, user_id: int, draft_id: int, nonce: str, now: datetime) -> BotReply:
         domain = ""
@@ -344,11 +365,11 @@ class AdminPanel:
         except sqlite3.IntegrityError:
             return BotReply("Đã có phiên bản mới hơn. Hãy tạo lại bản nháp.")
         logger.info("[Cashback] admin policy confirmed domain=%s", domain)
-        return BotReply(
-            "Đã phê duyệt và lưu phiên bản. Chưa kích hoạt, nên khách vẫn nhận báo giá hiện hành. "
-            "Báo giá đã lưu không tự tính lại. Chưa chi trả.",
-            inline_keyboard=MENU_KEYBOARD,
+        notice = (
+            f"✅ Đã lưu phiên bản v{version}. Chưa kích hoạt, khách vẫn nhận báo giá hiện hành. "
+            "Báo giá đã lưu không tự tính lại. Chưa chi trả."
         )
+        return replace(self._screen(_screen_of(domain), now, notice), toast=f"Đã lưu phiên bản v{version}")
 
     def _config_for(self, conn: sqlite3.Connection, draft: sqlite3.Row) -> dict:
         if draft["domain"] == "membership_rates":
@@ -370,45 +391,47 @@ class AdminPanel:
             "customer_effect": "none",
         }
 
-    def _simulation_text(self) -> str:
-        lines = [
-            "<b>MÔ PHỎNG</b>",
-            "Số dưới đây là thử trên quỹ giả định, không phải lợi nhuận và không phát sinh tiền phải trả.",
-            f"Khách đang thấy: {self.displayed_rate_percent}% hoa hồng ước tính.",
-        ]
-        try:
-            rates = self._rates()
-        except AdminSafetyError:
-            rates = dict(DIRECTIONAL_BPS)
-        for amount in SAMPLE_VND:
-            lines.append(f"\nQuỹ {amount:,}đ".replace(",", "."))
-            for code, label in TIERS.items():
-                cashback, remain = share_cashback(amount, rates[code])
-                lines.append(f"{label} {_percent(rates[code])}: hoàn {cashback:,}đ, phần còn {remain:,}đ".replace(",", "."))
-        return "\n".join(lines)
-
-    def _history_text(self) -> str:
+    def _history_rows(self) -> list[str] | None:
         try:
             with self._connect() as conn:
-                rows = [
-                    (row["action"], row["result"], row["created_at"])
-                    for row in conn.execute(
-                        """
-                        SELECT action, result, created_at
-                        FROM admin_change_audit
-                        ORDER BY id DESC
-                        LIMIT 8
-                        """
-                    ).fetchall()
-                ]
+                rows = conn.execute(
+                    """
+                    SELECT a.action, a.result, a.created_at, d.domain, d.tier, d.proposed_bps
+                    FROM admin_change_audit a
+                    LEFT JOIN admin_drafts d ON d.id = a.draft_id
+                    ORDER BY a.id DESC
+                    LIMIT 8
+                    """
+                ).fetchall()
         except AdminSafetyError:
-            return "Chưa đọc được lịch sử trên database đang chạy."
-        if not rows:
-            return "Chưa có thay đổi nào."
-        lines = ["<b>LỊCH SỬ CẤU HÌNH</b>"]
-        for action, result, created_at in rows:
-            lines.append(f"{created_at} · {action} · {result}")
-        return "\n".join(lines)
+            return None
+        return [_history_line(row) for row in rows]
+
+    def _safe_rates(self) -> dict[str, int]:
+        try:
+            return self._rates()
+        except AdminSafetyError:
+            return dict(DIRECTIONAL_BPS)
+
+    def _reserve(self, domain: str) -> tuple[int, int | None]:
+        """Dự phòng đã lưu gần nhất và số phiên bản. Chưa lưu thì lấy mặc định cấu hình."""
+        default = self.fee_default_bps if domain == "estimate_fee_reserve" else self.tax_default_bps
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT version, config_json FROM policy_versions
+                    WHERE domain = ? AND status = 'confirmed'
+                    ORDER BY version DESC
+                    LIMIT 1
+                    """,
+                    (domain,),
+                ).fetchone()
+        except AdminSafetyError:
+            return default, None
+        if row is None:
+            return default, None
+        return int(json.loads(row["config_json"])["bps"]), int(row["version"])
 
     def _pending_count(self, now: datetime) -> int | None:
         try:
@@ -500,12 +523,49 @@ class AdminPanel:
         )
 
 
-def _draft_target(code: str) -> tuple[str, str, str]:
+def _draft_target(code: str) -> tuple[str, str, dict]:
     if code in TIERS:
-        return "membership_rates", code, f"Nhập tỷ lệ mới cho hạng {TIERS[code]}, từ 0 đến 70."
+        return "membership_rates", code, {
+            "screen": "Hạng thành viên",
+            "subject": f"Hạng {TIERS[code]}",
+            "ask": "Gửi tỷ lệ mới, số nguyên từ 0 đến 70. Ví dụ: <code>62</code>",
+        }
     if code == "FEE":
-        return "estimate_fee_reserve", "FEE", "Nhập phí dự phòng theo phần vạn. 98 nghĩa là 0,98%. Đây không phải phí đã đối soát."
-    return "estimate_tax_reserve", "TAX", "Nhập dự phòng thuế theo phần vạn. Đây là ESTIMATE RESERVE, không phải thuế phải nộp."
+        return "estimate_fee_reserve", "FEE", {
+            "screen": "Thuế &amp; phí dự phòng",
+            "subject": "Phí dự phòng",
+            "ask": "Gửi số phần vạn từ 0 đến 10000. Ví dụ: <code>98</code> nghĩa là 0,98%.",
+            "note": "Đây không phải phí đã đối soát.",
+        }
+    return "estimate_tax_reserve", "TAX", {
+        "screen": "Thuế &amp; phí dự phòng",
+        "subject": "Thuế dự phòng",
+        "ask": "Gửi số phần vạn từ 0 đến 10000. Ví dụ: <code>1000</code> nghĩa là 10%.",
+        "note": "Đây là ESTIMATE RESERVE, không phải thuế phải nộp.",
+    }
+
+
+def _screen_of(domain: str) -> str:
+    return "rank" if domain == "membership_rates" else "fee"
+
+
+def _source(version: int | None) -> str:
+    return "mặc định cấu hình" if version is None else f"đã lưu v{version}"
+
+
+def _history_line(row: sqlite3.Row) -> str:
+    moment = datetime.strptime(row["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    when = moment.astimezone(ICT).strftime("%d/%m %H:%M")
+    domain = row["domain"]
+    if domain == "membership_rates":
+        subject = f"Hạng {TIERS.get(row['tier'], row['tier'])}"
+    else:
+        subject = RESERVE_NAMES.get(domain, domain or "-")
+    if row["action"] in {"preview", "confirm"} and row["proposed_bps"] is not None:
+        subject += f" → {_percent(int(row['proposed_bps']))}"
+    action = _ACTIONS.get(row["action"], row["action"])
+    result = _RESULTS.get(row["result"], row["result"])
+    return f"{when} · {subject} · {action}: {result}"
 
 
 def _parse_bps(domain: str, raw: int) -> int | None:
@@ -516,34 +576,3 @@ def _parse_bps(domain: str, raw: int) -> int | None:
     if 0 <= raw <= 10_000:
         return raw
     return None
-
-
-def _reserve_default(domain: str) -> int:
-    if domain == "estimate_fee_reserve":
-        return 98
-    return 1_000
-
-
-def _rank_preview(tier: str, before_bps: int, after_bps: int) -> str:
-    before, after = simulate_share(100_000, before_bps, after_bps)
-    return (
-        "<b>XEM TRƯỚC THAY ĐỔI CHÍNH SÁCH</b>\n\n"
-        f"Hạng: {TIERS[tier]}\n"
-        f"Tỷ lệ đã lưu: {_percent(before_bps)}\n"
-        f"Tỷ lệ đề xuất: {_percent(after_bps)}\n\n"
-        "Mô phỏng quỹ phân chia 100.000đ. Không phải lợi nhuận.\n"
-        f"Trước: hoàn {format_vnd(before[0])}, phần còn {format_vnd(before[1])}\n"
-        f"Sau: hoàn {format_vnd(after[0])}, phần còn {format_vnd(after[1])}\n\n"
-        "Xác nhận chỉ phê duyệt bản lưu, chưa kích hoạt cho khách. "
-        "Báo giá đã lưu không tự tính lại."
-    )
-
-
-def _reserve_preview(domain: str, before_bps: int, after_bps: int) -> str:
-    name = "Phí dự phòng" if domain == "estimate_fee_reserve" else "Thuế dự phòng"
-    return (
-        "<b>XEM TRƯỚC DỰ PHÒNG</b>\n\n"
-        f"{name}: {_percent(before_bps)} → {_percent(after_bps)}\n"
-        "Nhãn: ESTIMATE RESERVE. Không phải thuế hoặc phí đã đối soát.\n"
-        "Không sửa số đã thanh toán. Khách chưa đổi công thức V1.1."
-    )

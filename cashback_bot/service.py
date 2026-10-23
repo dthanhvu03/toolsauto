@@ -15,18 +15,20 @@ from cashback_bot.pricing import EstimatePolicy, estimate_cashback, quote_displa
 from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
     CLOSED,
+    CLOSED_ALERT,
     GENERIC_FAIL,
     DIEUKIEN,
-    HELP,
     HUONGDAN,
-    INVALID_LINK,
     NOT_FOUND,
-    START_MESSAGE,
     STALE,
+    TIP_ALERT,
     BotReply,
     hang_message,
+    home_reply,
     how_to_calc_v11,
     how_to_calc_v12,
+    invalid_link_reply,
+    page_reply,
     rate_limited_reply,
     render_success,
     render_success_v12,
@@ -69,6 +71,8 @@ class CashbackService:
             settings.cashback_rate_percent,
             calculator_label=calculator,
             membership_on=MEMBERSHIP_CUTOVER,
+            fee_default_bps=settings.estimate_fee_bps,
+            tax_default_bps=settings.estimate_tax_reserve_bps,
         )
 
     def allowed(self, telegram_user_id: int) -> bool:
@@ -104,17 +108,56 @@ class CashbackService:
         message_id = message.get("message_id")
         if not isinstance(user_id, int) or not isinstance(query_id, str):
             return None
-        reply = self.admin_panel.handle_callback(
-            user_id,
-            str(callback.get("data") or ""),
-            str(chat.get("type") or ""),
-            datetime.now(timezone.utc),
-        )
+        data = str(callback.get("data") or "")
+        if data.startswith("u:"):
+            reply = self._customer_callback(user_id, data, str(chat.get("type") or ""))
+        else:
+            reply = self.admin_panel.handle_callback(
+                user_id,
+                data,
+                str(chat.get("type") or ""),
+                datetime.now(timezone.utc),
+            )
         return user_id, replace(
             reply,
             callback_query_id=query_id,
             edit_message_id=message_id if isinstance(message_id, int) else None,
         )
+
+    def _customer_callback(self, user_id: int, data: str, chat_type: str) -> BotReply:
+        if chat_type != "private":
+            return BotReply("")
+        if not self.allowed(user_id):
+            return BotReply("", toast=CLOSED_ALERT, show_alert=True)
+        if data == "u:tip":
+            return BotReply("", toast=TIP_ALERT, show_alert=True)
+        page = self._page(data.removeprefix("u:p:")) if data.startswith("u:p:") else None
+        if page is None:
+            return BotReply("", toast="Nút này không còn hiệu lực.")
+        return page
+
+    def _page(self, name: str) -> BotReply | None:
+        """Trang thông tin dùng chung cho lệnh gõ tay và nút u:p:*."""
+        if name == "home":
+            return home_reply(show_rank=MEMBERSHIP_CUTOVER)
+        if name == "guide":
+            return page_reply(HUONGDAN)
+        if name == "rules":
+            return page_reply(DIEUKIEN)
+        if name == "calc":
+            return page_reply(self._calc_text())
+        if name == "rank":
+            return page_reply(hang_message(self.settings.cashback_rate_percent))
+        return None
+
+    def _calc_text(self) -> str:
+        if self._v12_ready():
+            return how_to_calc_v12(
+                self.settings.cashback_rate_percent,
+                self.settings.estimate_fee_bps,
+                self.settings.estimate_tax_reserve_bps,
+            )
+        return how_to_calc_v11(self.settings.cashback_rate_percent)
 
     def handle_text(
         self,
@@ -145,35 +188,18 @@ class CashbackService:
         if not self.allowed(telegram_user_id):
             return BotReply(CLOSED)
 
-        if command == "/start":
-            return BotReply(START_MESSAGE)
-        if command == "/help":
-            return BotReply(HELP)
-        if command == "/huongdan":
-            return BotReply(HUONGDAN)
-        if command == "/dieukien":
-            return BotReply(DIEUKIEN)
-        if command == "/cachtinh":
-            if self._v12_ready():
-                return BotReply(
-                    how_to_calc_v12(
-                        self.settings.cashback_rate_percent,
-                        self.settings.estimate_fee_bps,
-                        self.settings.estimate_tax_reserve_bps,
-                    )
-                )
-            return BotReply(how_to_calc_v11(self.settings.cashback_rate_percent))
-        if command == "/hang":
-            return BotReply(hang_message(self.settings.cashback_rate_percent))
+        pages = {"/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank"}
+        if command in pages:
+            return self._page(pages[command])
         if command:
-            return BotReply(HELP)
+            return self._page("home")
         target = parse_shopee_target(stripped)
         moment = now or datetime.now(timezone.utc)
         if not self._within_rate_limit(telegram_user_id, moment):
             return rate_limited_reply(self.settings.user_cooldown_sec)
         if target is None:
             self._reject(update_id, telegram_user_id, stripped[:500], "invalid_link")
-            return BotReply(INVALID_LINK)
+            return invalid_link_reply()
         try:
             payload = self.client.fetch(target)
             quote = quote_from_payload(payload, moment, self.settings.product_max_age_hours)
@@ -317,5 +343,5 @@ class CashbackService:
         if row.reject_reason in _NOT_FOUND_CODES:
             return BotReply(NOT_FOUND)
         if row.reject_reason == "invalid_link":
-            return BotReply(INVALID_LINK)
+            return invalid_link_reply()
         return BotReply(STALE)

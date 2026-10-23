@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -12,7 +13,7 @@ import requests
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import BUY_BUTTON
+from cashback_bot.messages import ADMIN_COMMANDS, BUY_BUTTON, DESCRIPTION, SHORT_DESCRIPTION
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.service import CashbackService
 from cashback_bot.telegram_api import TelegramApi, classify_delivery_error
@@ -48,10 +49,7 @@ def main() -> None:
         chat_id=settings.admin_chat_id,
     )
     service = CashbackService(settings, repo, client, admin_notifier=admin_notifier)
-    try:
-        logger.info("setMyCommands %s", "ok" if telegram.set_my_commands() else "failed")
-    except requests.RequestException as exc:
-        logger.error("setMyCommands failed: %s", type(exc).__name__)
+    _register_profile(telegram, settings.admin_user_ids)
     logger.info(
         "start db=%s rate=%s max_age_h=%s allowlist=%s public=%s admin_notify=%s",
         settings.db_path,
@@ -64,6 +62,23 @@ def main() -> None:
     _loop(service, telegram, repo, admin_notifier)
 
 
+def _register_profile(telegram: TelegramApi, admin_user_ids) -> None:
+    """Lệnh, mô tả và lệnh /admin theo scope chat. Lỗi chỉ ghi log, không chặn bot."""
+    steps = [
+        ("setMyCommands", lambda: telegram.set_my_commands()),
+        ("setMyDescription", lambda: telegram.set_my_description(DESCRIPTION)),
+        ("setMyShortDescription", lambda: telegram.set_my_short_description(SHORT_DESCRIPTION)),
+    ]
+    for admin_id in sorted(admin_user_ids):
+        scope = {"type": "chat", "chat_id": admin_id}
+        steps.append(("setMyCommands admin", lambda scope=scope: telegram.set_my_commands(ADMIN_COMMANDS, scope)))
+    for name, step in steps:
+        try:
+            logger.info("%s %s", name, "ok" if step() else "failed")
+        except requests.RequestException as exc:
+            logger.error("%s failed: %s", name, type(exc).__name__)
+
+
 def _stamp(moment: datetime) -> str:
     value = moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -73,6 +88,17 @@ def _markup(button_url: str | None) -> dict | None:
     if not button_url:
         return None
     return {"inline_keyboard": [[{"text": BUY_BUTTON, "url": button_url}]]}
+
+
+def _row_markup(row) -> dict | None:
+    """Bàn phím đã lưu lúc xếp hàng. Dòng cũ chưa có cột thì dựng lại nút Mua."""
+    raw = row["reply_markup_json"] if "reply_markup_json" in row.keys() else None
+    if raw:
+        try:
+            return json.loads(raw)
+        except ValueError:
+            logger.error("outbound id=%s reply_markup_json hỏng", row["id"])
+    return _markup(row["button_url"])
 
 
 def _next_delivery(service: CashbackService, kind: str, retry_after: int | None, attempts: int, moment: datetime):
@@ -102,7 +128,7 @@ def _send_outbound(
     update_id = int(row["telegram_update_id"])
     target_user_id = int(row["telegram_user_id"])
     target_body = str(row["body_html"])
-    target_markup = markup if markup is not None else _markup(row["button_url"])
+    target_markup = markup if markup is not None else _row_markup(row)
     edit_id = edit_message_id
     if edit_id is None and "edit_message_id" in row.keys() and row["edit_message_id"]:
         edit_id = int(row["edit_message_id"])
@@ -204,6 +230,7 @@ def process_updates(
         fresh_markup = None
         target_edit_id = None
         if existing is None:
+            _typing(telegram, update)
             outcome = service.handle_update(update)
             if outcome is None:
                 repo.set_offset(update_id + 1)
@@ -211,7 +238,13 @@ def process_updates(
             chat_id, reply = outcome
             query_id = reply.callback_query_id
             if query_id and hasattr(telegram, "answer_callback"):
-                telegram.answer_callback(query_id)
+                if reply.toast:
+                    telegram.answer_callback(query_id, reply.toast, reply.show_alert)
+                else:
+                    telegram.answer_callback(query_id)
+            if not reply.text:
+                repo.set_offset(update_id + 1)
+                continue
             fresh_markup = reply.markup()
             target_edit_id = reply.edit_message_id
             existing = repo.enqueue_outbound(
@@ -220,6 +253,7 @@ def process_updates(
                 reply.text,
                 reply.button_url,
                 edit_message_id=target_edit_id,
+                reply_markup_json=None if fresh_markup is None else json.dumps(fresh_markup, ensure_ascii=False),
             )
         status = existing["status"]
         if status in {"sent", "needs_review"}:
@@ -245,6 +279,20 @@ def process_updates(
         )
         repo.set_offset(update_id + 1)
     admin_notifier.flush_pending(limit=10)
+
+
+def _typing(telegram, update: dict) -> None:
+    """Gửi link thì Product Data mất vài giây. Báo "đang gõ" trước, lệnh thì bỏ qua."""
+    if not hasattr(telegram, "send_chat_action"):
+        return
+    message = update.get("message") or {}
+    chat = message.get("chat") or {}
+    text = (message.get("text") or "").strip()
+    if chat.get("type") != "private" or not text or text.startswith("/"):
+        return
+    chat_id = chat.get("id")
+    if isinstance(chat_id, int):
+        telegram.send_chat_action(chat_id, "typing")
 
 
 def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier) -> None:

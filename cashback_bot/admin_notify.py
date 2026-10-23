@@ -14,13 +14,22 @@ import requests
 
 from cashback_bot.db import TrackingRepository
 from cashback_bot.money import format_vnd
-from cashback_bot.telegram_api import TelegramApi
+from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
+# Sự kiện thường ngày gửi im lặng; lỗi vẫn kêu chuông.
+SILENT_EVENTS = {"NEW_USER", "LINK_SENT"}
 
 
 def _vn_now_text() -> str:
     return datetime.now(timezone.utc).astimezone(ICT).strftime("%d/%m/%Y %H:%M:%S")
+
+
+def _user_ref(telegram_user_id: int, username: str | None) -> str:
+    ref = f"<code>{telegram_user_id}</code>"
+    if username:
+        ref += f" · @{html.escape(username)}"
+    return ref
 
 
 def _short_name(name: str | None, limit: int = 80) -> str:
@@ -46,13 +55,9 @@ class AdminNotifier:
         if not self._active():
             return
         total = self.repo.count_users()
-        safe_user = html.escape(username or "-")
         body = (
-            "🆕 <b>NEW_USER</b>\n"
-            f"User ID: <code>{telegram_user_id}</code>\n"
-            f"Username: <code>{safe_user}</code>\n"
-            f"Tổng user: <b>{total}</b>\n"
-            f"Thời gian (VN): <code>{_vn_now_text()}</code>"
+            f"🆕 <b>Người dùng mới</b> · {_user_ref(telegram_user_id, username)}\n"
+            f"Tổng: <b>{total}</b> · {_vn_now_text()}"
         )
         self.repo.enqueue_admin_event(
             event_key=f"new_user:{telegram_user_id}",
@@ -68,19 +73,13 @@ class AdminNotifier:
         if row is None or row.sub_id is None or row.link_status != "created":
             return
         user = self.repo.get_user(row.telegram_user_id)
-        username = "-" if user is None else (user["username"] or "-")
+        username = None if user is None else user["username"]
         body = (
-            "✅ <b>LINK_SENT</b>\n"
-            f"User ID: <code>{row.telegram_user_id}</code>\n"
-            f"Username: <code>{html.escape(username)}</code>\n"
-            f"Sản phẩm: {html.escape(_short_name(row.product_name))}\n"
-            f"Item ID: <code>{row.item_id or '-'}</code>\n"
-            f"Giá tham khảo: <b>{format_vnd(row.price_vnd or 0)}</b>\n"
-            f"Estimated cashback: <b>{format_vnd(row.estimated_cashback or 0)}</b>\n"
-            f"Sub ID: <code>{row.sub_id}</code>\n"
-            f"Update ID: <code>{update_id}</code>\n"
-            f"Thời gian (VN): <code>{_vn_now_text()}</code>\n"
-            "Trạng thái: <b>Đã gửi link</b>"
+            f"🔗 <b>Đã gửi link</b> · {_user_ref(row.telegram_user_id, username)}\n"
+            f"{html.escape(_short_name(row.product_name))}\n"
+            f"{format_vnd(row.price_vnd or 0)} · hoàn <b>{format_vnd(row.estimated_cashback or 0)}</b>\n"
+            f"Item <code>{row.item_id or '-'}</code> · Sub <code>{row.sub_id}</code> · Update <code>{update_id}</code>\n"
+            f"{_vn_now_text()}"
         )
         self.repo.enqueue_admin_event(
             event_key=f"link_sent:{update_id}",
@@ -111,12 +110,11 @@ class AdminNotifier:
         self.repo.set_state(key, str(now))
 
         body = (
-            "⚠️ <b>REQUEST_FAILED</b>\n"
-            f"Error: <code>{html.escape(error_type)}</code>\n"
-            f"Update ID: <code>{'-' if update_id is None else update_id}</code>\n"
-            f"User ID: <code>{'-' if telegram_user_id is None else telegram_user_id}</code>\n"
-            f"Thời gian (VN): <code>{_vn_now_text()}</code>\n"
-            f"Trạng thái: <b>{html.escape(status)}</b>"
+            f"⚠️ <b>Lỗi bot</b> · <code>{html.escape(error_type)}</code>\n"
+            f"Trạng thái: <b>{html.escape(status)}</b>\n"
+            f"Update <code>{'-' if update_id is None else update_id}</code> · "
+            f"User <code>{'-' if telegram_user_id is None else telegram_user_id}</code>\n"
+            f"{_vn_now_text()}"
         )
         self.repo.enqueue_admin_event(
             event_key=f"request_failed:{error_type}:{update_id or 0}:{telegram_user_id or 0}",
@@ -131,8 +129,12 @@ class AdminNotifier:
         rows = self.repo.list_pending_admin_events(limit=limit, max_attempts=5)
         for row in rows:
             try:
-                self.telegram.send_message(int(row["chat_id"]), str(row["message_html"]))
-            except requests.RequestException as exc:
+                self.telegram.send_message(
+                    int(row["chat_id"]),
+                    str(row["message_html"]),
+                    disable_notification=row["event_type"] in SILENT_EVENTS,
+                )
+            except (requests.RequestException, TelegramDeliveryError) as exc:
                 self.repo.mark_admin_event_failed(int(row["id"]), type(exc).__name__)
                 continue
             self.repo.mark_admin_event_sent(int(row["id"]))

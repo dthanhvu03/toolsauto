@@ -31,7 +31,7 @@ def test_admin_mo_menu_user_thuong_bi_chan(tmp_path):
     bot, client = _bot(tmp_path)
     admin = bot.handle_text(ADMIN, "owner", "/admin", update_id=1, now=NOW)
     stranger = bot.handle_text(222, "buyer", "/admin", update_id=2, now=NOW)
-    assert "QUẢN TRỊ" in admin.text
+    assert "<b>Quản trị</b>" in admin.text
     assert "Chính sách báo giá: V1.1" in admin.text
     assert "Phiên bản đang phục vụ" not in admin.text
     assert "Báo giá đã lưu không tự tính lại" in admin.text
@@ -86,7 +86,7 @@ def test_luu_dong_60_khong_kich_hoat_bao_gia_khach(tmp_path):
     preview = bot.handle_text(ADMIN, "owner", "60", update_id=20, now=NOW)
     assert "60%" in preview.text
     history = bot.admin_panel.handle_callback(ADMIN, "c:menu:hist", "private", NOW)
-    assert "preview" in history.text
+    assert "Xem trước: chờ xác nhận" in history.text
     done = bot.admin_panel.handle_callback(ADMIN, _confirm_data(preview), "private", NOW)
     assert "Chưa kích hoạt" in done.text
     conn = sqlite3.connect(tmp_path / "cashback.sqlite")
@@ -227,10 +227,10 @@ def test_callback_khong_tao_link_va_offset_van_chay(tmp_path):
             self.sent = []
             self.answered = []
 
-        def send_message(self, chat_id, html, reply_markup=None):
+        def send_message(self, chat_id, html, reply_markup=None, **_kwargs):
             self.sent.append((chat_id, html, reply_markup))
 
-        def answer_callback(self, callback_query_id):
+        def answer_callback(self, callback_query_id, *_args):
             self.answered.append(callback_query_id)
 
     class Admin:
@@ -270,7 +270,7 @@ def test_callback_khong_tao_link_va_offset_van_chay(tmp_path):
 def test_mo_menu_khong_doi_cong_thuc_khach(tmp_path):
     panel = AdminPanel(str(tmp_path / "admin.sqlite"), frozenset({ADMIN}), 70)
     reply = panel.menu(ADMIN, NOW)
-    assert "QUẢN TRỊ" in reply.text
+    assert "<b>Quản trị</b>" in reply.text
     assert "70% hoa hồng ước tính" in reply.text
     assert quote_displayed_vnd(10_000, 70) == 7_000
 

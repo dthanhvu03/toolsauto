@@ -64,23 +64,45 @@ class TelegramApi:
         result = payload.get("result")
         return result if isinstance(result, list) else []
 
-    def set_my_commands(self) -> bool:
-        response = requests.post(
-            f"{self._base}/setMyCommands",
-            json={
-                "commands": [
-                    {"command": command, "description": description} for command, description in BOT_COMMANDS
-                ]
-            },
-            timeout=self._timeout,
-        )
+    def _post_ok(self, method: str, body: dict) -> bool:
+        response = requests.post(f"{self._base}/{method}", json=body, timeout=self._timeout)
         if response.status_code >= 400:
-            logger.error("[Cashback] setMyCommands http=%s", response.status_code)
+            logger.error("[Cashback] %s http=%s", method, response.status_code)
             return False
         payload = response.json()
         return bool(payload.get("ok"))
 
-    def send_message(self, chat_id: int, html: str, reply_markup: dict | None = None) -> None:
+    def set_my_commands(self, commands=BOT_COMMANDS, scope: dict | None = None) -> bool:
+        body: dict = {
+            "commands": [{"command": command, "description": description} for command, description in commands]
+        }
+        if scope:
+            body["scope"] = scope
+        return self._post_ok("setMyCommands", body)
+
+    def set_my_description(self, description: str) -> bool:
+        return self._post_ok("setMyDescription", {"description": description})
+
+    def set_my_short_description(self, short_description: str) -> bool:
+        return self._post_ok("setMyShortDescription", {"short_description": short_description})
+
+    def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
+        try:
+            requests.post(
+                f"{self._base}/sendChatAction",
+                json={"chat_id": chat_id, "action": action},
+                timeout=self._timeout,
+            )
+        except requests.RequestException:
+            logger.error("[Cashback] sendChatAction failed")
+
+    def send_message(
+        self,
+        chat_id: int,
+        html: str,
+        reply_markup: dict | None = None,
+        disable_notification: bool = False,
+    ) -> None:
         body: dict = {
             "chat_id": chat_id,
             "text": html,
@@ -89,6 +111,8 @@ class TelegramApi:
         }
         if reply_markup:
             body["reply_markup"] = reply_markup
+        if disable_notification:
+            body["disable_notification"] = True
         try:
             response = requests.post(
                 f"{self._base}/sendMessage",
@@ -159,11 +183,15 @@ class TelegramApi:
         except ValueError:
             return False
 
-    def answer_callback(self, callback_query_id: str) -> None:
+    def answer_callback(self, callback_query_id: str, text: str | None = None, show_alert: bool = False) -> None:
+        body: dict = {"callback_query_id": callback_query_id}
+        if text:
+            body["text"] = text
+            body["show_alert"] = show_alert
         try:
             requests.post(
                 f"{self._base}/answerCallbackQuery",
-                json={"callback_query_id": callback_query_id},
+                json=body,
                 timeout=self._timeout,
             )
         except requests.RequestException:

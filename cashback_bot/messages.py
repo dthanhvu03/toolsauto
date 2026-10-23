@@ -12,17 +12,45 @@ from dataclasses import dataclass
 
 from cashback_bot.money import estimated_cashback, format_vnd
 
+Keyboard = tuple[tuple[tuple[str, str], ...], ...]
+
 HOME = (
     "🎁 <b>Xem món Shopee được hoàn bao nhiêu</b>\n\n"
     "Dán link sản phẩm Shopee vào đây. "
     "Bot gửi lại link mua và số tiền hoàn dự kiến.\n\n"
-    "📖 /huongdan — Cách dùng\n"
-    "🛡️ /dieukien — Để đơn được ghi nhận\n"
-    "💰 /cachtinh — Cách tính tiền hoàn\n\n"
     "ⓘ Bot đang thử nghiệm. Số hoàn là ước tính, chưa theo dõi đơn và chưa chi trả."
 )
 START_MESSAGE = HOME
 HELP = HOME
+PAGE_KEYBOARD: Keyboard = ((("◀️ Trang chủ", "u:p:home"),),)
+TIP_KEYBOARD: Keyboard = ((("🛡️ Lưu ý trước khi mua", "u:tip"),),)
+GUIDE_KEYBOARD: Keyboard = ((("📖 Cách lấy link", "u:p:guide"),),)
+# Popup answerCallbackQuery tối đa 200 ký tự.
+TIP_ALERT = (
+    "Trước khi đặt hàng:\n"
+    "1. Món đã có trong giỏ thì xóa đi.\n"
+    "2. Mở đúng link bot vừa gửi.\n"
+    "3. Không bấm sang quảng cáo, livestream hay link khác.\n"
+    "Không bảo đảm Shopee sẽ ghi nhận."
+)
+CLOSED_ALERT = "Tài khoản này chưa được mở. Bot đang mở thử cho một số tài khoản."
+# Hiện ở màn "What can this bot do?" trước khi bấm Start. Tối đa 512 và 120 ký tự.
+DESCRIPTION = (
+    "Dán link sản phẩm Shopee, bot gửi lại link mua và số tiền hoàn dự kiến.\n\n"
+    "Bot đang thử nghiệm: số hoàn là ước tính, chưa theo dõi đơn và chưa chi trả. "
+    "Bot không thu phí sử dụng."
+)
+SHORT_DESCRIPTION = "Dán link Shopee, xem số tiền hoàn dự kiến. Bot đang thử nghiệm."
+
+
+def home_keyboard(show_rank: bool = False) -> Keyboard:
+    second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"),)
+    if show_rank:
+        second += (("🏅 Hạng thành viên", "u:p:rank"),)
+    return (
+        (("📖 Cách dùng", "u:p:guide"), ("🛡️ Để được ghi nhận", "u:p:rules")),
+        second,
+    )
 CLOSED = (
     "🔒 <b>Tài khoản này chưa được mở</b>\n"
     "Bot đang mở thử cho một số tài khoản."
@@ -54,6 +82,8 @@ BOT_COMMANDS = (
     ("cachtinh", "Cách tính tiền hoàn"),
     ("help", "Trợ giúp"),
 )
+# Chỉ đăng ký với scope chat của từng admin.
+ADMIN_COMMANDS = BOT_COMMANDS + (("admin", "Quản trị"),)
 
 
 def _percent_label(bps: int) -> str:
@@ -103,7 +133,7 @@ def hang_message(rate_percent: int) -> str:
 INVALID_LINK = (
     "⚠️ <b>Chưa nhận ra link</b>\n"
     "Mình cần link sản phẩm Shopee: shopee.vn hoặc link rút gọn s.shopee.vn.\n"
-    "Gõ /huongdan để xem cách lấy link."
+    "Bấm nút dưới hoặc gõ /huongdan để xem cách lấy link."
 )
 STALE = (
     "⏳ <b>Chưa lấy được dữ liệu sản phẩm</b>\n"
@@ -130,23 +160,23 @@ _NOTE_V12 = (
 
 @dataclass(frozen=True)
 class BotReply:
+    """text rỗng: chỉ trả lời callback (toast/popup), không gửi hay sửa tin."""
+
     text: str
     button_url: str | None = None
-    inline_keyboard: tuple[tuple[tuple[str, str], ...], ...] | None = None
+    inline_keyboard: Keyboard | None = None
     callback_query_id: str | None = None
     edit_message_id: int | None = None
+    toast: str | None = None
+    show_alert: bool = False
 
     def markup(self) -> dict | None:
-        if self.inline_keyboard:
-            return {
-                "inline_keyboard": [
-                    [{"text": label, "callback_data": data} for label, data in row]
-                    for row in self.inline_keyboard
-                ]
-            }
-        if not self.button_url:
-            return None
-        return {"inline_keyboard": [[{"text": BUY_BUTTON, "url": self.button_url}]]}
+        rows: list[list[dict]] = []
+        if self.button_url:
+            rows.append([{"text": BUY_BUTTON, "url": self.button_url}])
+        for row in self.inline_keyboard or ():
+            rows.append([{"text": label, "callback_data": data} for label, data in row])
+        return {"inline_keyboard": rows} if rows else None
 
 
 def rate_limited_reply(cooldown_sec: int) -> BotReply:
@@ -179,7 +209,19 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
         f"Giá tham khảo: {format_vnd(price_vnd)}\n\n"
         f"ⓘ {note}"
     )
-    return BotReply(text=text, button_url=affiliate_url)
+    return BotReply(text=text, button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD)
+
+
+def home_reply(show_rank: bool = False) -> BotReply:
+    return BotReply(HOME, inline_keyboard=home_keyboard(show_rank))
+
+
+def page_reply(text: str) -> BotReply:
+    return BotReply(text, inline_keyboard=PAGE_KEYBOARD)
+
+
+def invalid_link_reply() -> BotReply:
+    return BotReply(INVALID_LINK, inline_keyboard=GUIDE_KEYBOARD)
 
 
 def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str) -> BotReply:
