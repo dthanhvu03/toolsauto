@@ -178,7 +178,7 @@ def test_du_phong_khong_thanh_thue_phai_nop(tmp_path):
     bot, _client = _bot(tmp_path)
     screen = bot.admin_panel.handle_callback(ADMIN, "c:menu:fee", "private", NOW)
     bot.admin_panel.handle_callback(ADMIN, "c:tier:TAX", "private", NOW)
-    preview = bot.handle_text(ADMIN, "owner", "1500", update_id=9, now=NOW)
+    preview = bot.handle_text(ADMIN, "owner", "15", update_id=9, now=NOW)
     assert "ESTIMATE RESERVE" in screen.text
     assert "Không phải thuế phải nộp" in screen.text
     assert "ESTIMATE RESERVE" in preview.text
@@ -187,6 +187,7 @@ def test_du_phong_khong_thanh_thue_phai_nop(tmp_path):
     conn = sqlite3.connect(tmp_path / "cashback.sqlite")
     config = json.loads(conn.execute("SELECT config_json FROM policy_versions").fetchone()[0])
     assert config["not_statutory_tax"] is True
+    assert config["bps"] == 1_500
     assert config["customer_effect"] == "none"
     assert quote_displayed_vnd(10_000, bot.settings.cashback_rate_percent) == 7_000
 

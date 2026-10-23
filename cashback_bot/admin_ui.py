@@ -137,10 +137,8 @@ def fee_text(
     applied_fee: str,
     applied_tax: str,
     fee_percent: str,
-    fee_bps: int,
     fee_source: str,
     tax_percent: str,
-    tax_bps: int,
     tax_source: str,
     sim_fee: int,
     sim_tax: int,
@@ -158,8 +156,8 @@ def fee_text(
         "🟢 <b>ĐANG ÁP DỤNG</b>\n"
         + applied
         + "🟡 <b>BẢN NHÁP DỰ PHÒNG</b>\n"
-        f"• Phí dự phòng: <b>{fee_percent}</b> ({fee_bps} phần vạn, {fee_source})\n"
-        f"• Thuế dự phòng: <b>{tax_percent}</b> ({tax_bps} phần vạn, {tax_source})\n"
+        f"• Phí dự phòng: <b>{fee_percent}</b> ({fee_source})\n"
+        f"• Thuế dự phòng: <b>{tax_percent}</b> ({tax_source})\n"
         "Chỉ là dự phòng khi ước tính. Không phải thuế phải nộp, không sửa chứng từ đã đối soát.\n\n"
         "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ\n"
         f"• Phí dự phòng ({fee_percent}): -{format_vnd(sim_fee)}\n"

@@ -276,13 +276,14 @@ def test_admin_xac_nhan_quay_ve_man_vua_sua(tmp_path):
     panel = bot.admin_panel
     now = datetime.now(timezone.utc)
     panel.handle_callback(ADMIN, "c:tier:FEE", "private", now)
-    preview = panel.consume_text(ADMIN, "120", now)
+    preview = panel.consume_text(ADMIN, "1,2", now)
     assert "0,98% → <b>1,2%</b>" in preview.text
     done = panel.handle_callback(ADMIN, preview.inline_keyboard[0][1][1], "private", now)
     assert done.toast == "Đã lưu phiên bản v1"
     assert "Quản trị › <b>Thuế &amp; phí dự phòng</b>" in done.text
-    assert "1,2%</b> (120 phần vạn, đã lưu v1)" in done.text
-    assert "Thuế dự phòng: <b>10%</b> (1000 phần vạn, mặc định cấu hình)" in done.text
+    assert "1,2%</b> (đã lưu v1)" in done.text
+    assert "Thuế dự phòng: <b>10%</b> (mặc định cấu hình)" in done.text
+    assert "phần vạn" not in done.text
 
 
 def test_admin_nhap_so_sai_van_co_nut_huy(tmp_path):
@@ -295,3 +296,29 @@ def test_admin_nhap_so_sai_van_co_nut_huy(tmp_path):
     order = bot.admin_panel.consume_text(ADMIN, "50", now)
     assert "Đồng ≤ Bạc ≤ Vàng" in order.text
     assert order.inline_keyboard[0][0][0] == "✖️ Hủy bản nháp"
+
+
+def test_admin_go_phan_tram_khong_go_phan_van(tmp_path):
+    """User phản hồi 2026-10-23: gõ 10 là 10%, 0,98 là 0,98%."""
+    cases = [
+        ("FEE", "0,98", "0,98%"),
+        ("FEE", "0.98", "0,98%"),
+        ("FEE", "1,25", "1,25%"),
+        ("TAX", "10", "10%"),
+        ("TAX", "7,5%", "7,5%"),
+        ("TAX", "0,5", "0,5%"),
+        ("SILVER", "65,5", "65,5%"),
+    ]
+    for index, (code, typed, shown) in enumerate(cases):
+        bot = service(tmp_path / str(index), _fresh_client(), admin_user_ids=frozenset({ADMIN}))
+        now = datetime.now(timezone.utc)
+        prompt = bot.admin_panel.handle_callback(ADMIN, f"c:tier:{code}", "private", now)
+        assert "phần vạn" not in prompt.text
+        preview = bot.admin_panel.consume_text(ADMIN, typed, now)
+        assert f"→ <b>{shown}</b>" in preview.text, (typed, preview.text)
+    for typed in ("101", "0,987", "abc", "1.000"):
+        bot = service(tmp_path / f"bad{typed}", _fresh_client(), admin_user_ids=frozenset({ADMIN}))
+        now = datetime.now(timezone.utc)
+        bot.admin_panel.handle_callback(ADMIN, "c:tier:TAX", "private", now)
+        reply = bot.admin_panel.consume_text(ADMIN, typed, now)
+        assert reply is None or "không nằm trong giới hạn" in reply.text, typed

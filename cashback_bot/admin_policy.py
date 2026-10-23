@@ -55,7 +55,8 @@ _RESULTS = {
 }
 DIRECTIONAL_BPS = {"BRONZE": 6_000, "SILVER": 6_500, "GOLD": 7_000}
 SAMPLE_VND = (10_000, 100_000)
-_NUMBER = re.compile(r"^(\d{1,5})%?$")
+# Admin gõ phần trăm: "10", "0,98", "0.98", "62,5%". Lưu nội bộ bằng bps.
+_NUMBER = re.compile(r"^(\d{1,3})(?:[.,](\d{1,2}))?\s*%?$")
 _MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy)$")
 _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD|FEE|TAX)$")
 _DECISION = re.compile(r"^c:(ok|no):(\d+):([0-9a-f]{8})$")
@@ -126,7 +127,8 @@ class AdminPanel:
             return BotReply("Database đang chạy chưa được mở để lưu chính sách.")
         if draft is None:
             return None
-        return self._preview_number(draft, int(matched.group(1)), now)
+        bps = int(matched.group(1)) * 100 + int((matched.group(2) or "0").ljust(2, "0"))
+        return self._preview_number(draft, bps, now)
 
     def handle_callback(self, user_id: int, data: str, chat_type: str, now: datetime) -> BotReply:
         if chat_type != "private" or not self.is_admin(user_id):
@@ -188,10 +190,8 @@ class AdminPanel:
                 applied_fee=_percent(self.fee_default_bps),
                 applied_tax=_percent(self.tax_default_bps),
                 fee_percent=_percent(fee_bps),
-                fee_bps=fee_bps,
                 fee_source=_source(fee_version),
                 tax_percent=_percent(tax_bps),
-                tax_bps=tax_bps,
                 tax_source=_source(tax_version),
                 sim_fee=sim_fee,
                 sim_tax=sim_tax,
@@ -240,12 +240,12 @@ class AdminPanel:
             inline_keyboard=collecting_keyboard(draft_id, nonce),
         )
 
-    def _preview_number(self, draft: sqlite3.Row, raw: int, now: datetime) -> BotReply:
-        parsed = _parse_bps(draft["domain"], raw)
+    def _preview_number(self, draft: sqlite3.Row, bps: int, now: datetime) -> BotReply:
+        parsed = _parse_bps(draft["domain"], bps)
         retry = collecting_keyboard(int(draft["id"]), draft["nonce"])
         if parsed is None:
             return BotReply(
-                "Giá trị không nằm trong giới hạn. Hạng tối đa 70%. Dự phòng từ 0 đến 10000 phần vạn. Gửi lại số khác.",
+                "Giá trị không nằm trong giới hạn. Hạng từ 0 đến 70%. Dự phòng từ 0 đến 100%. Gửi lại số khác.",
                 inline_keyboard=retry,
             )
         if draft["domain"] == "membership_rates":
@@ -528,19 +528,19 @@ def _draft_target(code: str) -> tuple[str, str, dict]:
         return "membership_rates", code, {
             "screen": "Hạng thành viên",
             "subject": f"Hạng {TIERS[code]}",
-            "ask": "Gửi tỷ lệ mới, số nguyên từ 0 đến 70. Ví dụ: <code>62</code>",
+            "ask": "Gửi tỷ lệ mới theo %, từ 0 đến 70. Ví dụ: <code>62</code> hoặc <code>62,5</code>",
         }
     if code == "FEE":
         return "estimate_fee_reserve", "FEE", {
             "screen": "Thuế &amp; phí dự phòng",
             "subject": "Phí dự phòng",
-            "ask": "Gửi số phần vạn từ 0 đến 10000. Ví dụ: <code>98</code> nghĩa là 0,98%.",
+            "ask": "Gửi phí mới theo %, từ 0 đến 100. Ví dụ: <code>0,98</code> hoặc <code>1,2</code>",
             "note": "Đây không phải phí đã đối soát.",
         }
     return "estimate_tax_reserve", "TAX", {
         "screen": "Thuế &amp; phí dự phòng",
         "subject": "Thuế dự phòng",
-        "ask": "Gửi số phần vạn từ 0 đến 10000. Ví dụ: <code>1000</code> nghĩa là 10%.",
+        "ask": "Gửi thuế mới theo %, từ 0 đến 100. Ví dụ: <code>10</code> hoặc <code>7,5</code>",
         "note": "Đây là ESTIMATE RESERVE, không phải thuế phải nộp.",
     }
 
@@ -568,11 +568,6 @@ def _history_line(row: sqlite3.Row) -> str:
     return f"{when} · {subject} · {action}: {result}"
 
 
-def _parse_bps(domain: str, raw: int) -> int | None:
-    if domain == "membership_rates":
-        if 0 <= raw <= 70:
-            return raw * 100
-        return None
-    if 0 <= raw <= 10_000:
-        return raw
-    return None
+def _parse_bps(domain: str, bps: int) -> int | None:
+    limit = MAX_SHARE_BPS if domain == "membership_rates" else 10_000
+    return bps if 0 <= bps <= limit else None
