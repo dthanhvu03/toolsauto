@@ -70,3 +70,7 @@ User yêu cầu đổi tỷ lệ chia trong Telegram. Bot đã chạy PLAN-062 (
 - Màn Chính sách: mục bản nháp đổi tên "BẢN NHÁP HẠNG THÀNH VIÊN" để không lẫn với tỷ lệ chia đã áp dụng thật.
 - Thử trên bản sao `data/backups/cashback-20261023T101217Z.sqlite` (có mức dự phòng #1): áp dụng 65% → `share_policies` 1 dòng, mức dự phòng giữ nguyên, `live_policy` = 6500/98/1000, `integrity_check` ok; 27 link: khách tổng 470.205đ → 436.611đ.
 - Test: `tests/test_cashback_share.py` (6 test). Proof: **157 passed**.
+
+### /cachtinh không lộ số nội bộ — 2026-10-23
+
+User phản hồi trang `/cachtinh` V1.2 lộ phí 0,98%, thuế 10%, tỷ lệ 70%. Gộp `how_to_calc_v11/v12` thành `how_to_calc(v12)` không nhận tham số tỷ lệ: giải thích "bot chia lại một phần hoa hồng", "đã trừ phí và thuế liên quan", không có con số. Test `test_khach_khong_thay_so_noi_bo` quét mọi trang khách mở được (lệnh, thẻ kết quả, mô tả bot): không có `%`. Proof: **158 passed**.

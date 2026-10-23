@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (h) — /cachtinh bỏ số nội bộ, chờ restart
+
+User không muốn khách thấy phí/thuế/tỷ lệ chia. `/cachtinh` giờ chỉ giải thích, không có %. Test chặn `%` ở mọi trang khách. 158 passed. Gộp chung lần restart với ADR-048.
+
+---
+
 ## Phiên 2026-10-23 (g) — ADR-048 tỷ lệ chia trong /admin, chờ restart
 
 Bot chạy PLAN-062 từ 09:41 UTC (PID 441796); user đã áp dụng mức dự phòng #1 (Cá nhân 0,98%/10%). Mới: `/admin` → Chính sách → Đổi tỷ lệ chia (bảng `share_policies`, migration 006 tự tạo khi dùng lần đầu). Thử trên bản sao DB ok. 157 passed. Cần user restart; số khách không đổi cho tới khi admin áp dụng tỷ lệ mới.
