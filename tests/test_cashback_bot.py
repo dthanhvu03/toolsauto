@@ -412,6 +412,7 @@ def test_set_my_commands_co_lenh_thong_tin(monkeypatch):
     commands = captured["json"]["commands"]
     names = [item["command"] for item in commands]
     assert names == ["start", "huongdan", "dieukien", "cachtinh", "hang", "help"]
+    assert all(len(item["description"]) <= 256 for item in commands)
 
 
 def test_ten_dai_cat_o_dau_phay():
