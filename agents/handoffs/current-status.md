@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (e) — Bật V1.2 cashback: chuẩn bị xong, chờ user dừng bot + migrate + start
+
+`.env` đã có `CASHBACK_ESTIMATE_POLICY=v1.2`. Backup `data/backups/cashback-20261023T092506Z.sqlite`. Migration `001` thử trên bản sao ok. Khách sẽ thấy số hoàn còn ~89% so với V1.1; link cũ giữ số cũ. Code admin/khách khớp V1.2, 141 passed. Nếu user muốn quay lại V1.1: xoá dòng `CASHBACK_ESTIMATE_POLICY` trong `.env` rồi restart (cột mới để lại không hại).
+
+---
+
 ## Phiên 2026-10-23 (d) — PLAN-060 admin gõ phần trăm, chờ restart
 
 Bot chạy bản thông báo mới từ 09:17 UTC (PID 437856); user xác nhận blockquote hiển thị đúng; 11/11 tin khách lưu `reply_markup_json` và gửi được. Mới: admin gõ `10` / `0,98` thay vì phần vạn (`b554a6d`, 139 passed). Cần user restart. Còn chờ user xác nhận nút phía khách để archive PLAN-060.

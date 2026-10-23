@@ -230,3 +230,12 @@ User phản hồi ảnh thông báo "Đã gửi link" khó nhìn. Sửa `admin_n
 ### P3b — admin gõ phần trăm — 2026-10-23
 
 User phản hồi phải gõ "phần vạn" khó dùng. `admin_policy._NUMBER` nhận `10`, `0,98`, `0.98`, `7,5%`; hạng nhận số lẻ (`62,5`). Giới hạn: hạng 0–70%, dự phòng 0–100%. Bỏ chữ "phần vạn" khỏi màn Thuế & phí và lời nhắc. DB vẫn lưu bps, dữ liệu cũ không đổi. Commit `b554a6d`. Proof: **139 passed**. Cần restart bot.
+
+### Bật V1.2 — 2026-10-23 — chuẩn bị xong, chờ user restart
+
+User yêu cầu bật V1.2. Làm theo `cashback_bot/POLICY_V12.md`:
+1. Bảng chênh lệch: 27 link gần nhất V1.1 tổng 528.221đ → V1.2 470.205đ (89,0%). Mẫu: hoa hồng 20.000đ → 14.000đ thành 12.462đ.
+2. Backup `data/backups/cashback-20261023T092506Z.sqlite`.
+3. Migration `001` (thêm `link_requests.estimate_policy`) thử 2 lần trên bản sao: idempotent, `integrity_check` ok, 27 dòng cũ NULL (giữ số V1.1 đã báo). File thật: user chạy khi bot đã dừng (ADR-045 không migrate SQLite đang chạy).
+4. `.env` thêm `CASHBACK_ESTIMATE_POLICY=v1.2` (phí 98, thuế 1000 mặc định).
+- Code: admin chỉ báo "V1.2" khi `_v12_ready()` (cờ + cột); màn Chính sách/Mô phỏng/Hạng không còn ghi cứng V1.1; `/hang` trỏ sang `/cachtinh`. `service._estimate_policy()` dùng chung cho báo giá và admin. Test `test_bat_v12_moi_man_khop_cach_tinh`, `test_bat_v12_thieu_cot_admin_van_bao_v11`. Proof: **141 passed**.
