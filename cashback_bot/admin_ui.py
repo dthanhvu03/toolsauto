@@ -54,6 +54,12 @@ def _notice(text: str) -> str:
     return f"{text}\n\n" if text else ""
 
 
+def quote_label(rate_percent: int, v12: bool) -> str:
+    if v12:
+        return f"V1.2 · {rate_percent}% phần còn lại sau dự phòng phí và thuế"
+    return f"V1.1 · {rate_percent}% hoa hồng ước tính"
+
+
 def home_text(
     *,
     rate_percent: int,
@@ -62,7 +68,7 @@ def home_text(
     pending: int | None,
 ) -> str:
     v12 = calculator == "V1.2"
-    quote = f"V1.2 · {rate_percent}% sau dự phòng phí và thuế" if v12 else f"V1.1 · {rate_percent}% hoa hồng ước tính"
+    quote = quote_label(rate_percent, v12)
     pending_line = "không đọc được" if pending is None else str(pending)
     return (
         "⚙️ <b>Quản trị</b>\n\n"
@@ -83,22 +89,40 @@ def policy_text(
     pending: int | None,
     customer_vnd: int,
     remain_vnd: int,
+    reserve: tuple[str, str, int, int] | None = None,
 ) -> str:
+    """reserve (V1.2): (% phí, % thuế, tiền phí, tiền thuế) trên 100.000đ. None là V1.1."""
     pending_line = "0 bản nháp" if not pending else f"{pending} bản nháp"
+    if reserve is None:
+        applied = (
+            "• Phiên bản: <b>V1.1</b>\n"
+            f"• Tỷ lệ: <b>{rate_percent}% hoa hồng ước tính</b>\n"
+            "• Chưa trừ thuế và phí dự phòng khi báo giá\n"
+        )
+        sim = f"• Khách nhận ({rate_percent}%): <b>{format_vnd(customer_vnd)}</b>\n"
+    else:
+        fee_pct, tax_pct, fee_vnd, tax_vnd = reserve
+        applied = (
+            "• Phiên bản: <b>V1.2</b>\n"
+            f"• Tỷ lệ: <b>{rate_percent}% phần còn lại</b> sau dự phòng phí {fee_pct} và thuế {tax_pct}\n"
+        )
+        sim = (
+            f"• Dự phòng phí ({fee_pct}): -{format_vnd(fee_vnd)}\n"
+            f"• Dự phòng thuế ({tax_pct}): -{format_vnd(tax_vnd)}\n"
+            f"• Khách nhận ({rate_percent}% phần còn lại): <b>{format_vnd(customer_vnd)}</b>\n"
+        )
     return (
         _title("Chính sách")
         + "🟢 <b>ĐANG ÁP DỤNG</b>\n"
-        "• Phiên bản: <b>V1.1</b>\n"
-        f"• Tỷ lệ: <b>{rate_percent}% hoa hồng ước tính</b>\n"
-        "• Chưa trừ thuế và phí dự phòng khi báo giá\n"
-        "• Áp dụng cho mọi link tạo mới\n\n"
+        + applied
+        + "• Áp dụng cho mọi link tạo mới\n\n"
         "🟡 <b>BẢN NHÁP</b>\n"
         f"• Đang chờ: <b>{pending_line}</b>\n"
         "• Trần an toàn V1: <b>70%</b>\n"
         "• Xác nhận chỉ lưu bản ghi, chưa đổi báo giá khách\n\n"
         "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ\n"
-        f"• Khách nhận ({rate_percent}%): <b>{format_vnd(customer_vnd)}</b>\n"
-        f"• Phần còn lại: <b>{format_vnd(remain_vnd)}</b>\n\n"
+        + sim
+        + f"• Phần còn lại: <b>{format_vnd(remain_vnd)}</b>\n\n"
         "ⓘ Báo giá đã lưu không tự tính lại. Không có cam kết chi trả tự động."
     )
 
@@ -106,7 +130,6 @@ def policy_text(
 def rank_text(
     *,
     tiers: list[tuple[str, str, str, int, int]],
-    displayed_rate_percent: int,
     notice: str = "",
 ) -> str:
     """tiers: (emoji, tên hạng, %, hoàn trên 100.000đ, phần còn)."""
@@ -119,7 +142,7 @@ def rank_text(
         _title("Hạng thành viên")
         + _notice(notice)
         + "🟢 <b>ĐANG ÁP DỤNG</b>\n"
-        f"• Chưa bật. Mọi khách dùng chung {displayed_rate_percent}%\n"
+        "• Chưa bật. Mọi khách dùng chung cách tính hiện hành\n"
         "• Tiến độ lên hạng: chưa tính\n\n"
         "🟡 <b>BẢN NHÁP / ĐỊNH HƯỚNG</b> · chưa áp dụng cho khách\n"
         + rates
@@ -170,7 +193,7 @@ def fee_text(
 
 def simulation_text(
     *,
-    displayed_rate_percent: int,
+    quote: str,
     table: list[tuple[int, list[tuple[str, str, int, int]]]],
 ) -> str:
     """table: (quỹ, [(tên hạng, %, hoàn, phần còn)])."""
@@ -178,7 +201,7 @@ def simulation_text(
         _title("Mô phỏng").rstrip("\n"),
         "",
         "🟢 <b>ĐANG ÁP DỤNG CHO KHÁCH</b>",
-        f"• Báo giá cố định: <b>{displayed_rate_percent}%</b> hoa hồng ước tính",
+        f"• Báo giá: <b>{quote}</b>",
         "",
         "🔵 <b>MÔ PHỎNG THEO HẠNG</b>",
         "Thử trên quỹ giả định, không phải lợi nhuận và không phát sinh tiền phải trả.",

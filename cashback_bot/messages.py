@@ -120,11 +120,11 @@ def how_to_calc_v12(rate_percent: int, fee_bps: int, tax_reserve_bps: int) -> st
     )
 
 
-def hang_message(rate_percent: int) -> str:
+def hang_message() -> str:
     return (
         "🏅 <b>Hạng thành viên</b>\n\n"
         "Chương trình <b>Đồng · Bạc · Vàng</b> đang được phát triển, chưa chính thức áp dụng.\n\n"
-        f"Hiện mọi báo giá dùng chung tỷ lệ {rate_percent}% hoa hồng ước tính. "
+        "Hiện mọi khách dùng chung một cách tính, xem /cachtinh. "
         "Bạn chưa cần đăng ký gì.\n\n"
         "ⓘ Khi ra mắt, bot sẽ báo rõ điều kiện lên hạng, quyền lợi và thời điểm áp dụng."
     )

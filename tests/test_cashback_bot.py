@@ -804,7 +804,7 @@ def test_khuon_chu_khach_plan_060(tmp_path):
         render_success("Áo Polo Nam", 250_000, 14_000, "https://s.shopee.vn/x").text,
         render_success_v12("Áo Polo Nam", 250_000, 12_462, "https://s.shopee.vn/x").text,
     ]
-    pages = [HOME, HUONGDAN, DIEUKIEN, how_to_calc_v11(70), how_to_calc_v12(70, 98, 1_000), hang_message(70)]
+    pages = [HOME, HUONGDAN, DIEUKIEN, how_to_calc_v11(70), how_to_calc_v12(70, 98, 1_000), hang_message()]
     errors = [CLOSED, INVALID_LINK, STALE, NOT_FOUND, GENERIC_FAIL, rate_limited_reply(300).text]
     for text in cards + pages + errors:
         assert text.count("ⓘ") <= 1

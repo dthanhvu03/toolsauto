@@ -29,13 +29,14 @@ from cashback_bot.admin_ui import (
     history_text,
     home_text,
     policy_text,
+    quote_label,
     rank_preview_text,
     rank_text,
     reserve_preview_text,
     simulation_text,
 )
 from cashback_bot.messages import BotReply
-from cashback_bot.pricing import MAX_SHARE_BPS, share_cashback
+from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
 
 logger = logging.getLogger("cashback_bot")
 
@@ -106,6 +107,8 @@ class AdminPanel:
     membership_on: bool = False
     fee_default_bps: int = 98
     tax_default_bps: int = 1_000
+    # V1.2 khách đang nhận; None nghĩa là V1.1.
+    estimate_policy: EstimatePolicy | None = None
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -164,12 +167,25 @@ class AdminPanel:
             )
             return BotReply(text, inline_keyboard=MENU_KEYBOARD)
         if name == "policy":
-            customer, remain = share_cashback(100_000, self.displayed_rate_percent * 100)
+            reserve = None
+            if self.estimate_policy is None:
+                customer, remain = share_cashback(100_000, self.displayed_rate_percent * 100)
+            else:
+                result = estimate_cashback(100_000, self.estimate_policy)
+                customer = result.estimated_cashback_vnd
+                remain = result.distributable_vnd - customer
+                reserve = (
+                    _percent(self.estimate_policy.service_fee_bps),
+                    _percent(self.estimate_policy.tax_risk_reserve_bps),
+                    result.fee_reserve_vnd,
+                    result.tax_risk_reserve_vnd,
+                )
             text = policy_text(
                 rate_percent=self.displayed_rate_percent,
                 pending=self._pending_count(now),
                 customer_vnd=customer,
                 remain_vnd=remain,
+                reserve=reserve,
             )
             return BotReply(text, inline_keyboard=NAV_KEYBOARD)
         if name == "rank":
@@ -178,7 +194,7 @@ class AdminPanel:
                 (TIER_EMOJI[code], label, _percent(rates[code]), *share_cashback(100_000, rates[code]))
                 for code, label in TIERS.items()
             ]
-            text = rank_text(tiers=tiers, displayed_rate_percent=self.displayed_rate_percent, notice=notice)
+            text = rank_text(tiers=tiers, notice=notice)
             return BotReply(text, inline_keyboard=RANK_KEYBOARD)
         if name == "fee":
             fee_bps, fee_version = self._reserve("estimate_fee_reserve")
@@ -205,7 +221,10 @@ class AdminPanel:
                 (amount, [(label, _percent(rates[code]), *share_cashback(amount, rates[code])) for code, label in TIERS.items()])
                 for amount in SAMPLE_VND
             ]
-            text = simulation_text(displayed_rate_percent=self.displayed_rate_percent, table=table)
+            text = simulation_text(
+                quote=quote_label(self.displayed_rate_percent, self.estimate_policy is not None),
+                table=table,
+            )
             return BotReply(text, inline_keyboard=NAV_KEYBOARD)
         if name == "hist":
             return BotReply(history_text(self._history_rows()), inline_keyboard=NAV_KEYBOARD)

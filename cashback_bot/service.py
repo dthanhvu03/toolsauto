@@ -64,7 +64,8 @@ class CashbackService:
         self.repo = repo
         self.client = client
         self.admin_notifier = admin_notifier
-        calculator = "V1.2" if settings.estimate_policy == "v1.2" else "V1.1, chưa bật V1.2"
+        policy = self._estimate_policy() if self._v12_ready() else None
+        calculator = "V1.2" if policy else "V1.1, chưa bật V1.2"
         self.admin_panel = AdminPanel(
             settings.db_path,
             settings.admin_user_ids,
@@ -73,6 +74,7 @@ class CashbackService:
             membership_on=MEMBERSHIP_CUTOVER,
             fee_default_bps=settings.estimate_fee_bps,
             tax_default_bps=settings.estimate_tax_reserve_bps,
+            estimate_policy=policy,
         )
 
     def allowed(self, telegram_user_id: int) -> bool:
@@ -147,7 +149,7 @@ class CashbackService:
         if name == "calc":
             return page_reply(self._calc_text())
         if name == "rank":
-            return page_reply(hang_message(self.settings.cashback_rate_percent))
+            return page_reply(hang_message())
         return None
 
     def _calc_text(self) -> str:
@@ -287,18 +289,20 @@ class CashbackService:
             return False
         return True
 
-    def _quote_cashback(self, commission_vnd: int):
-        if not self._v12_ready():
-            amount = quote_displayed_vnd(commission_vnd, self.settings.cashback_rate_percent)
-            return amount, None, render_success
-        policy = EstimatePolicy(
+    def _estimate_policy(self) -> EstimatePolicy:
+        return EstimatePolicy(
             cashback_share_bps=self.settings.cashback_rate_percent * 100,
             service_fee_bps=self.settings.estimate_fee_bps,
             tax_risk_reserve_bps=self.settings.estimate_tax_reserve_bps,
             other_cost_reserve_vnd=self.settings.estimate_other_reserve_vnd,
             rounding_unit=self.settings.estimate_rounding_unit,
         )
-        result = estimate_cashback(commission_vnd, policy, reliable=True)
+
+    def _quote_cashback(self, commission_vnd: int):
+        if not self._v12_ready():
+            amount = quote_displayed_vnd(commission_vnd, self.settings.cashback_rate_percent)
+            return amount, None, render_success
+        result = estimate_cashback(commission_vnd, self._estimate_policy(), reliable=True)
         return result.estimated_cashback_vnd, result.policy_id, render_success_v12
 
     def _within_rate_limit(self, telegram_user_id: int, now: datetime) -> bool:

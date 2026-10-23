@@ -322,3 +322,40 @@ def test_admin_go_phan_tram_khong_go_phan_van(tmp_path):
         bot.admin_panel.handle_callback(ADMIN, "c:tier:TAX", "private", now)
         reply = bot.admin_panel.consume_text(ADMIN, typed, now)
         assert reply is None or "không nằm trong giới hạn" in reply.text, typed
+
+
+def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
+    store = repo(tmp_path)
+    with store.connect() as conn:
+        conn.execute("ALTER TABLE link_requests ADD COLUMN estimate_policy TEXT")
+    bot = service(tmp_path, _fresh_client(), estimate_policy="v1.2", admin_user_ids=frozenset({ADMIN}))
+    now = datetime.now(timezone.utc)
+
+    card = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=1)
+    assert "<b>12.462đ</b>" in card.text
+    assert "sau dự phòng phí và thuế" in card.text
+    calc = bot.handle_text(111, "buyer", "/cachtinh", update_id=2)
+    assert "dự phòng phí 0,98%" in calc.text
+
+    home = bot.admin_panel.menu(ADMIN, now)
+    assert "V1.2 · 70% phần còn lại sau dự phòng phí và thuế" in home.text
+    assert "Calculator V1.2: Đã bật" in home.text
+    policy = bot.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", now)
+    assert "Phiên bản: <b>V1.2</b>" in policy.text
+    assert "Dự phòng phí (0,98%): -980đ" in policy.text
+    assert "Dự phòng thuế (10%): -10.000đ" in policy.text
+    assert "Khách nhận (70% phần còn lại): <b>62.314đ</b>" in policy.text
+    assert "Phần còn lại: <b>26.706đ</b>" in policy.text
+    assert "V1.1" not in policy.text
+    sim = bot.admin_panel.handle_callback(ADMIN, "c:menu:sim", "private", now)
+    assert "Báo giá: <b>V1.2" in sim.text
+    fee = bot.admin_panel.handle_callback(ADMIN, "c:menu:fee", "private", now)
+    assert "Công thức khách: <b>V1.2</b>, trừ phí 0,98% và thuế 10% dự phòng" in fee.text
+
+
+def test_bat_v12_thieu_cot_admin_van_bao_v11(tmp_path):
+    bot = service(tmp_path, _fresh_client(), estimate_policy="v1.2", admin_user_ids=frozenset({ADMIN}))
+    home = bot.admin_panel.menu(ADMIN, datetime.now(timezone.utc))
+    assert "V1.1 · 70% hoa hồng ước tính" in home.text
+    card = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=1)
+    assert "<b>14.000đ</b>" in card.text
