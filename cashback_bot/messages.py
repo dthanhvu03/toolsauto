@@ -34,21 +34,82 @@ GUIDE = (
     "Hiện bot chưa hỗ trợ theo dõi đơn,\n"
     "quản lý số dư hoặc rút tiền."
 )
-HOW_TO_CALC = (
-    "<b>Cách tính hoàn tiền</b>\n\n"
-    "Bot đang tính: hoàn = 70% hoa hồng ước tính.\n"
-    "Ví dụ hoa hồng 10.000đ thì hoàn dự kiến 7.000đ.\n\n"
-    "Đây là số ước tính, chưa phải số tiền đã xác nhận."
+DIEUKIEN = (
+    "<b>Điều kiện nhận thưởng</b>\n\n"
+    "1. Gửi link Shopee. Bot tạo link mua kèm mã theo dõi.\n"
+    "2. Chỉ bấm link thì chưa được hoàn tiền.\n"
+    "3. Shopee phải ghi nhận đơn và hoa hồng hợp lệ.\n"
+    "4. Đơn hủy, trả hàng, gian lận hoặc hoa hồng 0đ thì không được hoàn.\n"
+    "5. Tài khoản Telegram được bot cấp link là tài khoản được xét thưởng.\n"
+    "6. Chuyển tiếp link không đổi người được xét. Shopee đối soát theo mã trên link.\n"
+    "7. Tranh chấp xét theo mã link, lịch sử cấp link và chứng từ. Ảnh chụp đơn không đủ để chuyển thưởng.\n"
+    "8. Số tiền trên bot hiện chỉ là ước tính.\n"
+    "9. Bot đang thử nghiệm. Chưa theo dõi đơn, chưa có số dư và chưa chi trả tự động.\n\n"
+    "Bạn không cần gửi mật khẩu hay thông tin đăng nhập Shopee.\n"
+    "Bot không kết luận khoản hoàn của bạn được miễn thuế."
 )
-HOW_TO_CALC_V12 = (
-    "<b>Cách tính hoàn tiền</b>\n\n"
-    "Cashback dự kiến trừ trước một khoản dự phòng phí và một khoản dự phòng rủi ro thuế, "
-    "rồi mới nhân tỷ lệ chia.\n"
-    "10% trong cấu hình thử là dự phòng, không phải mức thuế luật định cho mọi đơn.\n\n"
-    "Số tiền được ước tính sau các khoản dự phòng phí và thuế. "
-    "Hoàn tiền thực tế phụ thuộc vào hoa hồng Shopee xác nhận, các khoản khấu trừ và điều kiện chương trình. "
-    "Hiện hệ thống chưa theo dõi hoặc chi trả đơn hàng."
+HANG_NOTE = (
+    "Chương trình hạng Đồng, Bạc và Vàng đang được phát triển, chưa có hiệu lực. "
+    "Chưa có đơn đã xác nhận nên không có tiến độ lên hạng."
 )
+BOT_COMMANDS = (
+    ("start", "Bắt đầu"),
+    ("huongdan", "Hướng dẫn sử dụng"),
+    ("dieukien", "Điều kiện nhận thưởng"),
+    ("cachtinh", "Cách tính cashback"),
+    ("hang", "Hạng thành viên"),
+    ("help", "Trợ giúp"),
+)
+
+
+def _percent_label(bps: int) -> str:
+    whole, frac = divmod(bps, 100)
+    if frac == 0:
+        return f"{whole}%"
+    return f"{whole}.{frac:02d}".rstrip("0").replace(".", ",") + "%"
+
+
+def how_to_calc_v11(rate_percent: int) -> str:
+    example = (10_000 * rate_percent) // 100
+    return (
+        "<b>Cách tính hoàn tiền</b>\n\n"
+        "<b>Đang áp dụng</b>\n"
+        f"Bot đang tính: hoàn = {rate_percent}% hoa hồng ước tính.\n"
+        f"Ví dụ hoa hồng 10.000đ thì hoàn dự kiến {format_vnd(example)}.\n"
+        "Đây là số dự kiến từ hoa hồng ước tính. Công thức đang chạy chưa trừ thuế hay phí.\n"
+        "Hạng Đồng, Bạc, Vàng chưa áp dụng vào cách tính này.\n\n"
+        "<b>Công thức đề xuất, chưa bật</b>\n"
+        "Khi được duyệt, hoàn = tỷ lệ chia × phần hoa hồng còn lại sau thuế, phí, điều chỉnh và dự phòng hợp lệ.\n"
+        "Một khoản không bị trừ hai lần.\n"
+        "Số dự kiến có thể khác số cuối. Hoa hồng có thể thay đổi.\n"
+        "Số cuối chỉ chốt khi đối soát đủ.\n"
+        "Bot không công bố số được rút hay ngày trả thưởng.\n"
+        "Hiện chưa theo dõi đơn và chưa chi trả."
+    )
+
+
+def how_to_calc_v12(rate_percent: int, fee_bps: int, tax_reserve_bps: int) -> str:
+    return (
+        "<b>Cách tính hoàn tiền</b>\n\n"
+        "<b>Đang áp dụng cho ước tính</b>\n"
+        f"Bot trừ dự phòng phí {_percent_label(fee_bps)} và dự phòng thuế {_percent_label(tax_reserve_bps)} "
+        f"trên hoa hồng ước tính, rồi nhân {rate_percent}%.\n"
+        "Dự phòng thuế trong cấu hình không phải mức thuế luật định.\n"
+        "Một khoản không bị trừ hai lần.\n\n"
+        "Số dự kiến có thể khác số cuối. Hoa hồng có thể thay đổi.\n"
+        "Số cuối chỉ được xác nhận khi đối soát đủ.\n"
+        "Bot không công bố số được rút hay ngày trả thưởng.\n"
+        "Hiện chưa theo dõi đơn và chưa chi trả."
+    )
+
+
+def hang_message(rate_percent: int) -> str:
+    return (
+        "🏅 <b>HẠNG THÀNH VIÊN</b>\n\n"
+        f"{HANG_NOTE}\n\n"
+        f"Hiện tỷ lệ cashback dự kiến của chương trình là {rate_percent}% hoa hồng ước tính, theo công thức đang áp dụng. "
+        "Mức này chưa phải hạng Vàng trên quỹ sau phí và thuế."
+    )
 INVALID_LINK = (
     "Mình cần link sản phẩm Shopee. "
     "Gửi link shopee.vn hoặc link rút gọn s.shopee.vn.\n\n"

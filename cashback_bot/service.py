@@ -14,14 +14,16 @@ from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
     CLOSED,
     GENERIC_FAIL,
+    DIEUKIEN,
     GUIDE,
-    HOW_TO_CALC,
-    HOW_TO_CALC_V12,
     INVALID_LINK,
     NOT_FOUND,
     START_MESSAGE,
     STALE,
     BotReply,
+    hang_message,
+    how_to_calc_v11,
+    how_to_calc_v12,
     rate_limited_reply,
     render_success,
     render_success_v12,
@@ -103,10 +105,20 @@ class CashbackService:
             return BotReply(START_MESSAGE)
         if command in {"/help", "/huongdan"}:
             return BotReply(GUIDE)
+        if command == "/dieukien":
+            return BotReply(DIEUKIEN)
         if command == "/cachtinh":
             if self._v12_ready():
-                return BotReply(HOW_TO_CALC_V12)
-            return BotReply(HOW_TO_CALC)
+                return BotReply(
+                    how_to_calc_v12(
+                        self.settings.cashback_rate_percent,
+                        self.settings.estimate_fee_bps,
+                        self.settings.estimate_tax_reserve_bps,
+                    )
+                )
+            return BotReply(how_to_calc_v11(self.settings.cashback_rate_percent))
+        if command == "/hang":
+            return BotReply(hang_message(self.settings.cashback_rate_percent))
         if command:
             return BotReply(GUIDE)
         target = parse_shopee_target(stripped)

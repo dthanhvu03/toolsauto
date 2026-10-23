@@ -6,6 +6,8 @@ import logging
 
 import requests
 
+from cashback_bot.messages import BOT_COMMANDS
+
 logger = logging.getLogger("cashback_bot")
 
 
@@ -67,8 +69,7 @@ class TelegramApi:
             f"{self._base}/setMyCommands",
             json={
                 "commands": [
-                    {"command": "start", "description": "Bắt đầu"},
-                    {"command": "huongdan", "description": "Cách nhận hoàn tiền"},
+                    {"command": command, "description": description} for command, description in BOT_COMMANDS
                 ]
             },
             timeout=self._timeout,

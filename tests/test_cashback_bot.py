@@ -388,7 +388,7 @@ def test_lenh_cach_tinh(tmp_path):
     assert client.calls == 0
 
 
-def test_set_my_commands_khong_hien_cachtinh(monkeypatch):
+def test_set_my_commands_co_lenh_thong_tin(monkeypatch):
     from cashback_bot.telegram_api import TelegramApi
 
     captured = {}
@@ -410,8 +410,8 @@ def test_set_my_commands_khong_hien_cachtinh(monkeypatch):
     api = TelegramApi("123:abc")
     assert api.set_my_commands() is True
     commands = captured["json"]["commands"]
-    names = {item["command"] for item in commands}
-    assert names == {"start", "huongdan"}
+    names = [item["command"] for item in commands]
+    assert names == ["start", "huongdan", "dieukien", "cachtinh", "hang", "help"]
 
 
 def test_ten_dai_cat_o_dau_phay():
