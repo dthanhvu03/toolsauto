@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from cashback_bot.db import LinkRow, TrackingRepository
+from cashback_bot.db import TrackingRepository
 from cashback_bot.money import format_vnd
 from cashback_bot.telegram_api import TelegramApi
 
