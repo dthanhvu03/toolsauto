@@ -1,3 +1,8 @@
+## Phiên 2026-10-23 (n) — 📊 Lịch sử ghi cả cài đặt ví và cookie Shopee
+
+User báo đổi giữ tiền 15 ngày mà Lịch sử không thấy. Nguyên nhân: Lịch sử đọc `admin_change_audit`, cài đặt ví và kết nối cookie (PLAN-065/066) đổi thẳng `bot_state` không ghi audit. Sửa: `AdminPanel._log_setting` ghi bật/tắt ví, giữ tiền, rút tối thiểu (bỏ qua khi bấm lại cùng mức), kết nối cookie (chỉ tên tài khoản, không ghi cookie). 219 passed; 2 test mới fail trên code cũ. Production (PID 462329, `5efe310` từ 12:06): ví ĐÃ BẬT, giữ 15 ngày — hai thay đổi này trước bản sửa nên không có trong Lịch sử, không chèn bù. Next: user restart để có bản sửa và menu /vi.
+
+---
 ## Phiên 2026-10-23 (m) — PLAN-066 ví hoàn tiền trên Telegram (Claude Code, user giao trực tiếp)
 
 Production: bot chạy `000240b` từ 11:43 (PID 458675), cookie dán lại 11:45, đồng bộ thật ok: tài khoản `ID 17315920094`, 10 click (7 qua bot), 1 đơn không qua bot. PLAN-066 + ADR-049 code xong (chưa chạy trên bot): đối soát đủ ô như Addlivetag (doanh số, số lượng, HH gốc → phí MCN → HH sau cùng, huỷ, bảng 7 ngày, CSV), 🔄 chạy nền; sổ `cashback_entries` pending→holding→available, ví khách (/vi, 👛), khai ngân hàng, rút tiền, admin 👛 Ví khách xem STK + VietQR, ✅ đã chuyển / ✖️ từ chối có xác nhận. **Ví mặc định TẮT**: khách không thấy gì khác cho tới khi admin bật. Mặc định giữ 30 ngày sau khi đơn hoàn thành, rút tối thiểu 10.000 đ (đổi trong /admin). 217 passed, ruff sạch; bản sao DB thật khớp số click Addlivetag. Next: user restart bot (có bảng/cột mới, đã backup); thử /admin → 👛 Ví khách, 📈 Thống kê, 🔗 → 📤 CSV; khi sẵn sàng chi trả thì bấm 🟢 Bật ví rồi restart lần nữa để menu có /vi.

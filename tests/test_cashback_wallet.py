@@ -326,3 +326,37 @@ class TestSwitch:
         reply = _callback(bot, USER, "c:wl:on:ok")
         assert "chỉ dành cho quản trị" in reply.text
         assert bot.wallet.settings().enabled is False
+
+
+class TestHistory:
+    def _history(self, bot) -> str:
+        return _callback(bot, ADMIN, "c:menu:hist").text
+
+    def test_wallet_settings_show_in_history(self, tmp_path):
+        bot = _bot(tmp_path)
+        _callback(bot, ADMIN, "c:wl:hold:15")
+        _callback(bot, ADMIN, "c:wl:hold:15")  # bấm lại cùng mức: không ghi thêm dòng
+        _callback(bot, ADMIN, "c:wl:min:20000")
+        _callback(bot, ADMIN, "c:wl:on:ok")
+        _callback(bot, ADMIN, "c:wl:off")
+        text = self._history(bot)
+        assert "Ví khách: giữ tiền 30 → 15 ngày sau khi đơn hoàn thành" in text
+        assert text.count("giữ tiền") == 1
+        assert "Ví khách: rút tối thiểu 10.000đ → 20.000đ" in text
+        assert "Ví khách → bật" in text and "Ví khách → tắt" in text
+        # Mới nhất lên đầu, giống các dòng cũ
+        assert text.index("Ví khách → tắt") < text.index("Ví khách → bật")
+
+    def test_shopee_cookie_connect_in_history_without_cookie(self, tmp_path, monkeypatch):
+        bot = _bot(tmp_path)
+        monkeypatch.setattr(
+            "cashback_bot.shopee_client.ShopeeAffiliateClient.check_status",
+            lambda self: ShopeeStatusResult(ok=True, status_code=200, username="ID 17315920094"),
+        )
+        _callback(bot, ADMIN, "c:shopee:auth")
+        bot.handle_text(ADMIN, "owner", "SPC_EC=bi_mat_khong_duoc_lo", update_id=70, now=NOW)
+        text = self._history(bot)
+        assert "Shopee Affiliate: kết nối cookie (ID 17315920094)" in text
+        with bot.repo.connect() as conn:
+            dump = " ".join(str(v) for row in conn.execute("SELECT * FROM admin_change_audit") for v in row)
+        assert "bi_mat_khong_duoc_lo" not in dump

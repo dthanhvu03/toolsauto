@@ -79,6 +79,7 @@ from cashback_bot.admin_ui import (
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
+from cashback_bot.money import format_vnd
 from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
@@ -242,7 +243,7 @@ class AdminPanel:
         if data == "c:sh:new":
             return self._share_start(user_id, now)
         if data == "c:menu:wallet" or data.startswith("c:wl:"):
-            return WalletAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
+            return WalletAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data == "c:menu:shopee":
             return self._shopee_screen(now)
         if data == "c:shopee:sync":
@@ -467,6 +468,8 @@ class AdminPanel:
             )
 
         save_cookies(cookies)
+        # Chỉ ghi tên tài khoản, không bao giờ ghi cookie vào lịch sử.
+        self._log_setting(user_id, "shopee_cookie", None, {"account": status_res.username or "Shopee Affiliate"}, now)
         with self._connect() as conn:
             now_str = _stamp(now)
             conn.execute(
@@ -820,7 +823,7 @@ class AdminPanel:
             with self._connect() as conn:
                 rows = conn.execute(
                     """
-                    SELECT a.action, a.result, a.created_at, a.after_json, d.domain, d.tier, d.proposed_bps
+                    SELECT a.action, a.result, a.created_at, a.before_json, a.after_json, d.domain, d.tier, d.proposed_bps
                     FROM admin_change_audit a
                     LEFT JOIN admin_drafts d ON d.id = a.draft_id
                     ORDER BY a.id DESC
@@ -1118,6 +1121,20 @@ class AdminPanel:
         conn.executescript(SHARE_SCHEMA_PATH.read_text(encoding="utf-8"))
         return conn
 
+    def _log_setting(self, user_id: int, action: str, before: dict | None, after: dict | None, now: datetime) -> None:
+        """Cài đặt đổi ngay, không qua bản nháp (ví, cookie Shopee). Vẫn phải hiện ở 📊 Lịch sử."""
+        with self._connect() as conn:
+            self._audit(
+                conn,
+                user_id,
+                action,
+                None,
+                None if before is None else json.dumps(before, ensure_ascii=False),
+                None if after is None else json.dumps(after, ensure_ascii=False),
+                "applied",
+                now,
+            )
+
     def _audit(
         self,
         conn: sqlite3.Connection,
@@ -1193,6 +1210,9 @@ def _history_line(row: sqlite3.Row) -> str:
         data = json.loads(row["after_json"])
         subject = f"Tỷ lệ chia → {_percent(data['share_bps'])}, từ {vn_time(data['effective_at'])}"
         return f"{when} · {subject} · {_ACTIONS['share_apply']}: {_RESULTS['applied']}"
+    setting = _setting_line(row)
+    if setting is not None:
+        return f"{when} · {setting}"
     domain = row["domain"]
     if domain == "membership_rates":
         subject = f"Hạng {TIERS.get(row['tier'], row['tier'])}"
@@ -1203,6 +1223,23 @@ def _history_line(row: sqlite3.Row) -> str:
     action = _ACTIONS.get(row["action"], row["action"])
     result = _RESULTS.get(row["result"], row["result"])
     return f"{when} · {subject} · {action}: {result}"
+
+
+def _setting_line(row: sqlite3.Row) -> str | None:
+    """Dòng lịch sử cho cài đặt đổi ngay (PLAN-066). None: không phải loại này."""
+    action = row["action"]
+    if action not in {"wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie"}:
+        return None
+    after = json.loads(row["after_json"]) if row["after_json"] else {}
+    before = json.loads(row["before_json"]) if "before_json" in row.keys() and row["before_json"] else {}
+    if action == "wallet_enabled":
+        return "Ví khách → " + ("bật" if after.get("on") else "tắt")
+    if action == "wallet_hold_days":
+        return f"Ví khách: giữ tiền {before.get('days', '-')} → {after.get('days')} ngày sau khi đơn hoàn thành"
+    if action == "wallet_min_withdraw":
+        old = format_vnd(int(before["vnd"])) if "vnd" in before else "-"
+        return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
+    return f"Shopee Affiliate: kết nối cookie ({html.escape(str(after.get('account', '-')))})"
 
 
 def _parse_bps(domain: str, bps: int) -> int | None:

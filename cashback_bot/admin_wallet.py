@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import datetime
 
 from cashback_bot.admin_ui import (
@@ -30,11 +31,19 @@ _MEMBER = re.compile(r"^c:wl:u:(\d+)$")
 _HOLD = re.compile(r"^c:wl:hold:(\d+)$")
 _MIN = re.compile(r"^c:wl:min:(\d+)$")
 
+# (admin, action, trước, sau, lúc): ghi vào admin_change_audit để màn 📊 Lịch sử thấy.
+AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
+
 
 class WalletAdmin:
-    def __init__(self, repo: TrackingRepository):
+    def __init__(self, repo: TrackingRepository, audit: AuditFn | None = None):
         self.repo = repo
         self.wallet = Wallet(repo)
+        self.audit = audit
+
+    def _log(self, admin_id: int, action: str, before: dict | None, after: dict | None, now: datetime) -> None:
+        if self.audit is not None and before != after:
+            self.audit(admin_id, action, before, after, now)
 
     def route(self, admin_id: int, data: str, now: datetime) -> BotReply:
         if data == "c:menu:wallet":
@@ -42,20 +51,27 @@ class WalletAdmin:
         if data == "c:wl:on":
             return BotReply(WALLET_ENABLE_CONFIRM, inline_keyboard=WALLET_ENABLE_KEYBOARD)
         if data == "c:wl:on:ok":
+            self._log(admin_id, "wallet_enabled", {"on": self.wallet.settings().enabled}, {"on": True}, now)
             self.wallet.set_enabled(True)
             return self.screen("🟢 Đã bật ví. Khách thấy nút 👛 Ví của tôi từ tin kế tiếp.")
         if data == "c:wl:off":
+            self._log(admin_id, "wallet_enabled", {"on": self.wallet.settings().enabled}, {"on": False}, now)
             self.wallet.set_enabled(False)
             return self.screen("⏸️ Đã tắt ví. Yêu cầu rút đang chờ vẫn xử lý được ở đây.")
         if data == "c:wl:cfg":
             return self._settings()
         hold = _HOLD.fullmatch(data)
         if hold and int(hold.group(1)) in HOLD_DAY_CHOICES:
-            self.wallet.set_hold_days(int(hold.group(1)))
+            days = int(hold.group(1))
+            self._log(admin_id, "wallet_hold_days", {"days": self.wallet.settings().hold_days}, {"days": days}, now)
+            self.wallet.set_hold_days(days)
             return self._settings()
         low = _MIN.fullmatch(data)
         if low and int(low.group(1)) in MIN_WITHDRAW_CHOICES:
-            self.wallet.set_min_withdraw(int(low.group(1)))
+            amount = int(low.group(1))
+            before = {"vnd": self.wallet.settings().min_withdraw_vnd}
+            self._log(admin_id, "wallet_min_withdraw", before, {"vnd": amount}, now)
+            self.wallet.set_min_withdraw(amount)
             return self._settings()
         if data == "c:wl:members":
             members = self.wallet.members()

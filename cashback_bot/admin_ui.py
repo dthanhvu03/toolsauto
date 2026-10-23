@@ -264,7 +264,7 @@ def history_text(rows: list[str] | None) -> str:
     if rows is None:
         return head + "Chưa đọc được lịch sử trên database đang chạy."
     if not rows:
-        return head + "Chưa có thay đổi nào. Tạo bản nháp ở màn Hạng thành viên hoặc Thuế &amp; phí."
+        return head + "Chưa có thay đổi nào. Đổi cấu hình ở Hạng thành viên, Thuế &amp; phí, Chính sách hoặc Ví khách."
     return head + "\n".join(rows) + "\n\nⓘ 8 thao tác gần nhất, giờ Việt Nam."
 
 
