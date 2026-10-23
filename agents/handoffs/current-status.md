@@ -1,3 +1,18 @@
+## Phiên 2026-10-23 (u) — PLAN-072: log từng request Buffer, bỏ quét lại kênh vô ích
+
+Claude Code, Owner duyệt "oke em làm đi em".
+
+- Mỗi request Buffer (qua `execute` và ping trên dashboard) ghi một dòng INFO `[Buffer][req] <key che> #<thứ tự trong ngày> <thao tác> purpose=<…> HTTP <mã> | <cửa sổ còn lại>`.
+- Còn key chưa có bảng kênh (key 2, 3 đang khóa) thì kênh lạ không làm key 1 quét lại organizations/channels nữa.
+- Test: 695 Buffer passed, 12 test đọc DB thật fail như cũ.
+- Restart xong, cả 3 key cooldown nên chưa có dòng `[req]` thật.
+
+Next:
+- Từ khoảng 15:20 24/10 (key 2, 3) và 20:00 24/10 (key 1), đếm `[Buffer][req]` theo key và đối chiếu với `250-in-1day r=` để tìm chỗ tiêu suất.
+- Nếu `r` tụt nhanh hơn số dòng `[req]` thì có nơi khác đang dùng key.
+
+---
+
 ## Phiên 2026-10-23 (t) — Tắt quét nguồn, PLAN-070 bỏ bình luận đầu tiên, PLAN-071 quét theo nhu cầu
 
 Claude Code, Owner duyệt "oke thực hiện đi em":

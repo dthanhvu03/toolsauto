@@ -120,6 +120,36 @@ def _ratelimit_windows(headers) -> list[tuple[int, int, int, str]]:
     return out
 
 
+_OP_NAME = re.compile(r"\b(?:query|mutation)\s+(\w+)|\{\s*(\w+)")
+
+
+def _mask(key: str) -> str:
+    k = (key or "").strip()
+    return f"{k[:4]}...{k[-4:]}" if len(k) > 8 else f"...{k[-4:]}"
+
+
+def log_request(key: str, op: str, purpose: str, response) -> None:
+    """Một dòng mỗi request đã gửi (PLAN-072) — grep ``[Buffer][req]`` để biết suất đi đâu."""
+    day = time.strftime("%Y-%m-%d")
+    with _GUARD_LOCK:
+        row = _guard_row(key)
+        if row.get("sent_day") != day:
+            row["sent_day"], row["sent"] = day, 0
+        row["sent"] += 1
+        n = row["sent"]
+    windows = _ratelimit_windows(getattr(response, "headers", None) or {})
+    left = " ".join(f"{name} r={r}" for _q, r, _t, name in windows) or "-"
+    logger.info(
+        "[Buffer][req] %s #%d %s purpose=%s HTTP %s | %s",
+        _mask(key), n, op, purpose, getattr(response, "status_code", "?"), left,
+    )
+
+
+def _op_name(query: str) -> str:
+    m = _OP_NAME.search(query or "")
+    return (m.group(1) or m.group(2)) if m else "?"
+
+
 def _gql_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
@@ -288,6 +318,7 @@ class BufferClient:
         except requests.RequestException as exc:
             raise BufferError(f"Khong goi duoc Buffer: {exc.__class__.__name__}") from exc
 
+        log_request(self._key, _op_name(query), purpose, response)
         self._note_budget(response, consumed=True)
 
         if response.status_code == 401:

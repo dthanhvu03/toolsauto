@@ -284,3 +284,47 @@ def test_status_sync_runs_at_most_hourly():
     from app.features.buffer import sync_posted
 
     assert sync_posted.INTERVAL_SEC == 60 * 60
+
+
+def test_every_sent_request_logs_one_req_line_without_raw_key(monkeypatch, caplog):
+    """PLAN-072: mỗi request một dòng [Buffer][req], có cửa sổ còn lại, không có key thô."""
+    import logging
+
+    from app.features.buffer import client as client_mod
+
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.headers = {"RateLimit": '"100-in-15min";r=98;t=897, "250-in-1day";r=142;t=86397'}
+    resp.json.return_value = {"data": {"account": {"id": "1"}}}
+    monkeypatch.setattr(client_mod.requests, "post", lambda *a, **k: resp)
+    key = "secretkey_ABCDEFGH_1234"
+    c = client_mod.BufferClient(key)
+
+    with caplog.at_level(logging.INFO, logger="app.features.buffer.client"):
+        c.execute("query GetOrganizations { account { id } }")
+        c.execute("{ account { id } }", purpose="publish")
+
+    lines = [r.getMessage() for r in caplog.records if "[Buffer][req]" in r.getMessage()]
+    assert len(lines) == 2
+    assert "#1 GetOrganizations purpose=background HTTP 200" in lines[0]
+    assert "250-in-1day r=142" in lines[0]
+    assert "#2 account purpose=publish" in lines[1]
+    assert all(key not in line and "secr...1234" in line for line in lines)
+
+
+def test_held_request_is_not_logged_as_sent(monkeypatch, caplog):
+    import logging
+
+    from app.features.buffer import client as client_mod
+
+    sent = []
+    monkeypatch.setattr(client_mod.requests, "post", lambda *a, **k: sent.append(1))
+    c = client_mod.BufferClient("key_held_12345678")
+    with client_mod._GUARD_LOCK:
+        row = client_mod._guard_row("key_held_12345678")
+        row["limit"], row["remaining"] = 250, 10
+    with caplog.at_level(logging.INFO, logger="app.features.buffer.client"):
+        with pytest.raises(client_mod.BufferError):
+            c.execute("query X { account { id } }")
+    assert not sent
+    assert not [r for r in caplog.records if "[Buffer][req]" in r.getMessage()]

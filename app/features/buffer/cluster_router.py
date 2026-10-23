@@ -19,7 +19,7 @@ from app.constants import JobStatus
 from app.core import settings as runtime_settings
 from app.core.database.core import SessionLocal
 from app.core.database.models import Job
-from app.features.buffer.client import BufferClient
+from app.features.buffer.client import BufferClient, log_request
 from app.features.buffer.manager import get_buffer_manager, mask_key
 from app.features.buffer.when import format_ict
 
@@ -608,6 +608,7 @@ def _handle_ping_key(
 
     status_code = resp.status_code
     headers = resp.headers
+    log_request(raw_key, "Ping", "ping", resp)
 
     # Phân tích Rate Limit Headers
     daily_limit = 250

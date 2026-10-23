@@ -300,3 +300,19 @@ def test_unknown_channel_not_sent_to_primary_while_a_key_has_no_table():
     assert mgr.get_client_for_channel("chan_b") is None
     assert mgr.get_client_for_channel("chan_x") is None
     a.post_statuses.assert_not_called()
+
+
+def test_unknown_channel_does_not_rescan_open_key_while_other_key_has_no_table(monkeypatch):
+    """PLAN-072: kênh của key 2, 3 (đang khóa) làm key 1 quét lại organizations/channels mỗi 30 phút."""
+    a = _fake_client("key_a", ["chan_a"])
+    b = _fake_client("key_b", ["chan_b"], held=True, cooldown=3600)
+    mgr = BufferManager(clients=[a, b])
+    mgr.get_channels_map()
+    assert a.organizations.call_count == 1
+
+    clock = [manager_mod.time.time() + manager_mod.CHANNEL_UNKNOWN_RESCAN_SEC + 5]
+    monkeypatch.setattr(manager_mod.time, "time", lambda: clock[0])
+    mgr._channel_cache_ts = clock[0]
+    assert mgr.get_client_for_channel("chan_b") is None
+    assert a.organizations.call_count == 1
+    b.organizations.assert_not_called()

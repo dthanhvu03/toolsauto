@@ -308,7 +308,9 @@ class BufferManager:
             return ch_map[cid]
 
         # Kênh lạ: quét lại key có bảng cũ hơn 30 phút, tối đa một lần mỗi 30 phút.
-        if (time.time() - self._unknown_rescan_ts) > CHANNEL_UNKNOWN_RESCAN_SEC:
+        # Còn key chưa có bảng (đang khóa) thì kênh lạ gần như chắc của key đó — quét lại key
+        # khác chỉ đốt suất (PLAN-072). Key đó mở lại sẽ được quét ở lượt làm mới thường.
+        if not self._keys_without_table and (time.time() - self._unknown_rescan_ts) > CHANNEL_UNKNOWN_RESCAN_SEC:
             self._unknown_rescan_ts = time.time()
             ch_map = self.refresh_channels_map(max_age=CHANNEL_UNKNOWN_RESCAN_SEC)
             if cid in ch_map:
