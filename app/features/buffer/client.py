@@ -37,6 +37,8 @@ MIN_429_COOLDOWN_SEC = 900  # 15 phút
 MAX_429_COOLDOWN_SEC = 72 * 60 * 60  # 72 giờ
 # Phần bucket còn lại giữ cho createPost/editPost. Hỏi kênh, hỏi suất, hỏi status phải dừng trước.
 POST_RESERVE_RATIO = 0.70
+# Không bị mức giữ chặn. channel_bootstrap: quét kênh lần đầu của key chưa có bảng (2 request).
+_RESERVE_EXEMPT = frozenset({"publish", "channel_bootstrap"})
 
 _GUARD_LOCK = threading.Lock()
 _KEY_GUARD: dict[str, dict] = {}
@@ -232,7 +234,7 @@ class BufferClient:
         partial: bool = False,
         purpose: str = "background",
     ) -> dict[str, Any]:
-        if purpose != "publish":
+        if purpose not in _RESERVE_EXEMPT:
             held = self.reserve_block_reason()
             if held:
                 raise BufferError(held)
@@ -294,7 +296,7 @@ class BufferClient:
             raise BufferError("Buffer khong tra data.")
         return data
 
-    def organizations(self) -> list[dict]:
+    def organizations(self, *, purpose: str = "background") -> list[dict]:
         data = self.execute(
             """
             query GetOrganizations {
@@ -302,13 +304,14 @@ class BufferClient:
                 organizations { id }
               }
             }
-            """
+            """,
+            purpose=purpose,
         )
         account = data.get("account") or {}
         orgs = account.get("organizations") or []
         return [item for item in orgs if isinstance(item, dict)]
 
-    def channels(self, organization_id: str) -> list[dict]:
+    def channels(self, organization_id: str, *, purpose: str = "background") -> list[dict]:
         org = _gql_string(organization_id)
         data = self.execute(
             f"""
@@ -321,7 +324,8 @@ class BufferClient:
                 isQueuePaused
               }}
             }}
-            """
+            """,
+            purpose=purpose,
         )
         rows = data.get("channels") or []
         return [item for item in rows if isinstance(item, dict)]

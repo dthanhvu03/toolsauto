@@ -45,8 +45,10 @@ def _buffer_cooldown_file_tam(monkeypatch, tmp_path):
     """Mốc 429 ghi vào file tạm; không để test khóa key thật trong storage/db/config."""
     from app.features.buffer import client as buffer_client
     from app.features.buffer import cooldown_store
+    from app.features.buffer import manager as buffer_manager
 
     monkeypatch.setattr(cooldown_store, "PATH", tmp_path / "buffer_cooldown.json")
+    monkeypatch.setattr(buffer_manager, "CHANNELS_FILE", tmp_path / "buffer_channels.json")
     # Guard sạch thì request mock đi qua thật; bỏ giãn 5 giây. Test cần giãn tự đặt lại.
     monkeypatch.setattr(buffer_client, "MIN_REQUEST_INTERVAL_SEC", 0)
     buffer_client._KEY_GUARD.clear()

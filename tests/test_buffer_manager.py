@@ -169,3 +169,134 @@ def test_buffer_adapter_routes_with_manager(monkeypatch):
     assert res.ok is True
     assert res.external_post_id == "new_post_999"
     client_target.create_post.assert_called_once()
+
+
+# --- PLAN-067: bảng kênh lưu file, post_statuses gom theo key ---------------------------
+
+from app.features.buffer import manager as manager_mod  # noqa: E402
+
+
+def _fake_client(key: str, channels: list[str], *, held: bool = False, cooldown: float = 0):
+    c = MagicMock()
+    c._key = key
+    c.allows.return_value = not held
+    c.cooldown_remaining.return_value = cooldown
+    c.organizations.return_value = [{"id": f"org_{key}"}]
+    c.channels.return_value = [{"id": cid, "name": cid} for cid in channels]
+    c.post_statuses.side_effect = lambda ids: {pid: "sent" for pid in ids}
+    return c
+
+
+class _Factory:
+    """get_clients() thật tạo client mới mỗi lần — giả lập đúng kiểu đó."""
+
+    def __init__(self, specs):
+        self.specs = specs
+        self.made: list[MagicMock] = []
+
+    def __call__(self):
+        out = [_fake_client(*s[:2], **(s[2] if len(s) > 2 else {})) for s in self.specs]
+        self.made.extend(out)
+        return out
+
+
+def test_post_statuses_one_request_per_key_even_with_fresh_client_objects(monkeypatch):
+    factory = _Factory([("key_a", ["chan_a"]), ("key_b", ["chan_b"])])
+    mgr = BufferManager()
+    monkeypatch.setattr(mgr, "get_clients", factory)
+    monkeypatch.setattr(
+        mgr,
+        "get_client_for_post",
+        lambda pid, db=None: factory()[0 if pid.startswith("a") else 1],
+    )
+
+    ids = [f"a{i}" for i in range(12)] + ["b1", "b2"]
+    out = mgr.post_statuses(ids)
+
+    assert set(out) == set(ids)
+    calls = [c for c in factory.made if c.post_statuses.called]
+    assert len(calls) == 2
+    assert sorted(len(c.post_statuses.call_args.args[0]) for c in calls) == [2, 12]
+
+
+def test_post_statuses_skips_posts_without_open_key(monkeypatch):
+    mgr = BufferManager(clients=[_fake_client("key_a", []), _fake_client("key_b", [])])
+    monkeypatch.setattr(mgr, "get_client_for_post", lambda pid, db=None: None)
+    assert mgr.post_statuses(["x", "y"]) == {}
+
+
+def test_held_key_without_saved_table_bootstraps_once_then_reads_file():
+    a = _fake_client("key_a", ["chan_a"])
+    b = _fake_client("key_b", ["chan_b"], held=True)
+    mgr = BufferManager(clients=[a, b])
+
+    assert mgr.get_client_for_channel("chan_b") is b
+    b.organizations.assert_called_once_with(purpose="channel_bootstrap")
+    b.channels.assert_called_once_with("org_key_b", purpose="channel_bootstrap")
+    a.organizations.assert_called_once_with()
+
+    # Restart: manager + client mới, file còn → không gọi Buffer.
+    a2 = _fake_client("key_a", ["chan_a"])
+    b2 = _fake_client("key_b", ["chan_b"], held=True)
+    mgr2 = BufferManager(clients=[a2, b2])
+    assert mgr2.get_client_for_channel("chan_b") is b2
+    assert mgr2.get_client_for_channel("chan_a") is a2
+    a2.organizations.assert_not_called()
+    b2.organizations.assert_not_called()
+
+
+def test_saved_file_has_no_raw_key():
+    c = _fake_client("secret-key-xyz", ["chan_a"])
+    c.organizations.return_value = [{"id": "org_1"}]
+    mgr = BufferManager(clients=[c])
+    mgr.get_channels_map()
+    text = manager_mod.CHANNELS_FILE.read_text(encoding="utf-8")
+    assert "secret-key-xyz" not in text
+    assert "chan_a" in text
+
+
+def test_cooldown_key_uses_stale_table_without_calling(monkeypatch):
+    BufferManager(clients=[_fake_client("key_a", ["chan_a"]), _fake_client("key_b", ["chan_b"])]).get_channels_map()
+    data = manager_mod._read_channels_file()
+    for entry in data.values():
+        entry["ts"] = 0  # cũ hơn 6 giờ
+    manager_mod._write_channels_file(data)
+
+    a = _fake_client("key_a", ["chan_a"])
+    b = _fake_client("key_b", ["chan_b"], held=True, cooldown=3600)
+    mgr = BufferManager(clients=[a, b])
+    assert mgr.get_client_for_channel("chan_b") is b
+    b.organizations.assert_not_called()
+    a.organizations.assert_called_once_with()  # key mở, bảng cũ → quét lại bình thường
+
+
+def test_cooldown_key_without_table_is_not_scanned():
+    b = _fake_client("key_b", ["chan_b"], held=True, cooldown=3600)
+    mgr = BufferManager(clients=[_fake_client("key_a", ["chan_a"]), b])
+    mgr.get_channels_map()
+    b.organizations.assert_not_called()
+
+
+def test_unknown_channel_rescan_at_most_every_30_min(monkeypatch):
+    a = _fake_client("key_a", ["chan_a"])
+    mgr = BufferManager(clients=[a])
+    mgr.get_channels_map()
+    assert a.organizations.call_count == 1
+
+    clock = [manager_mod.time.time() + manager_mod.CHANNEL_UNKNOWN_RESCAN_SEC + 5]
+    monkeypatch.setattr(manager_mod.time, "time", lambda: clock[0])
+    mgr._channel_cache_ts = clock[0]  # bảng RAM còn mới, chỉ đường kênh lạ chạy
+    mgr.get_client_for_channel("chan_new")
+    mgr.get_client_for_channel("chan_new_2")
+    assert a.organizations.call_count == 2
+
+
+def test_unknown_channel_not_sent_to_primary_while_a_key_has_no_table():
+    """19:38 23/10: key 2, 3 khóa chưa có bảng → kênh của chúng từng đổ về key 1, đốt suất key 1."""
+    a = _fake_client("key_a", ["chan_a"])
+    b = _fake_client("key_b", ["chan_b"], held=True, cooldown=3600)
+    mgr = BufferManager(clients=[a, b])
+    assert mgr.get_client_for_channel("chan_a") is a
+    assert mgr.get_client_for_channel("chan_b") is None
+    assert mgr.get_client_for_channel("chan_x") is None
+    a.post_statuses.assert_not_called()

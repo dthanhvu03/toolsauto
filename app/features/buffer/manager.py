@@ -14,11 +14,48 @@ import time
 from typing import Any
 
 import app.features.buffer.client as buffer_client_mod
+from app.config import RUNTIME_CONFIG_DIR
+from app.features.buffer import cooldown_store
 from app.features.buffer.client import BufferError
 
 logger = logging.getLogger(__name__)
 
-CHANNEL_CACHE_TTL_SEC = 300  # 5 phút làm mới danh sách kênh
+CHANNEL_CACHE_TTL_SEC = 300  # 5 phút làm mới bảng kênh trong RAM (từ file, không gọi mạng)
+# Kênh của một key hầu như không đổi. Quét lại sau 6 giờ; gặp kênh lạ thì sớm nhất 30 phút.
+CHANNEL_SCAN_TTL_SEC = 6 * 60 * 60
+CHANNEL_UNKNOWN_RESCAN_SEC = 30 * 60
+# Bảng kênh từng key (khóa = sha256 rút gọn, không ghi key). Restart không phải quét lại.
+CHANNELS_FILE = RUNTIME_CONFIG_DIR / "buffer_channels.json"
+
+
+def _read_channels_file() -> dict:
+    try:
+        data = json.loads(CHANNELS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_channels_file(data: dict) -> None:
+    try:
+        CHANNELS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CHANNELS_FILE.with_name(f"{CHANNELS_FILE.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, CHANNELS_FILE)
+    except OSError as exc:
+        logger.warning("[BufferManager] Không ghi được bảng kênh %s: %s", CHANNELS_FILE, exc)
+
+
+def _stored_channels(stored: dict, kid: str) -> tuple[list | None, float]:
+    """(danh sách kênh đã lưu, tuổi giây). Chưa có thì (None, inf)."""
+    entry = stored.get(kid) if kid else None
+    if not isinstance(entry, dict) or not isinstance(entry.get("channels"), list):
+        return None, float("inf")
+    try:
+        age = time.time() - float(entry.get("ts") or 0)
+    except (TypeError, ValueError):
+        age = float("inf")
+    return entry["channels"], age
 
 
 def _client_in_cooldown(client) -> bool:
@@ -139,6 +176,10 @@ class BufferManager:
         self._channel_to_client: dict[str, Any] = {}
         self._channel_cache_ts: float = 0.0
         self._channel_meta: dict[str, dict] = {}
+        self._unknown_rescan_ts: float = 0.0
+        # Số thứ tự key chưa có bảng kênh (khóa/lỗi). Còn key như vậy thì kênh lạ không đổ về key chính.
+        self._keys_without_table: list[int] = []
+        self._skipped_unknown: set[str] = set()
 
     def get_keys(self) -> list[str]:
         if self._explicit_keys is not None:
@@ -169,50 +210,69 @@ class BufferManager:
                 return c
         return buffer_client_mod.BufferClient(clean)
 
-    def refresh_channels_map(self) -> dict[str, Any]:
-        """Quét tất cả tổ chức & kênh thuộc từng client và cập nhật bảng ánh xạ."""
+    def refresh_channels_map(self, max_age: float = CHANNEL_SCAN_TTL_SEC) -> dict[str, Any]:
+        """Dựng bảng kênh → client. Bảng đã lưu chưa quá max_age thì không gọi Buffer."""
         clients = self.get_clients()
         if not clients:
             return {}
 
         new_map: dict[str, Any] = {}
         new_meta: dict[str, dict] = {}
+        stored = _read_channels_file()
+        changed = False
+        without_table: list[int] = []
 
         for idx, client in enumerate(clients, 1):
             key_str = getattr(client, "_key", "")
             masked = mask_key(key_str)
-            if hasattr(client, "allows") and not client.allows("background"):
-                logger.info(
-                    "[BufferManager] Bỏ quét kênh tài khoản #%d (%s) — giữ suất API cho đăng bài hoặc đang cooldown",
-                    idx,
-                    masked,
-                )
-                continue
-            try:
-                orgs = client.organizations()
-                for org in orgs:
-                    org_id = org.get("id")
-                    if not org_id:
-                        continue
-                    channels = client.channels(org_id)
-                    for ch in channels:
-                        cid = str(ch.get("id") or "").strip()
-                        if not cid:
-                            continue
-                        new_map[cid] = client
-                        new_meta[cid] = {
-                            **ch,
-                            "accountIndex": idx,
-                            "apiKeyMasked": masked,
-                            "organizationId": org_id,
-                        }
-            except Exception as exc:
-                logger.warning(
-                    "[BufferManager] Không lấy được kênh cho tài khoản #%d (%s): %s",
-                    idx,
-                    masked,
-                    exc,
-                )
+            kid = cooldown_store.key_id(key_str) if isinstance(key_str, str) and key_str else ""
+            cached, age = _stored_channels(stored, kid)
+            rows = cached
+            if cached is None or age >= max_age:
+                held = hasattr(client, "allows") and not client.allows("background")
+                if held and (cached is not None or _client_in_cooldown(client)):
+                    logger.info(
+                        "[BufferManager] Bỏ quét kênh tài khoản #%d (%s) — giữ suất API cho đăng bài hoặc đang cooldown%s",
+                        idx,
+                        masked,
+                        ", dùng bảng kênh đã lưu" if cached is not None else "",
+                    )
+                else:
+                    # Chưa có bảng mà chạm mức giữ suất: quét một lần, kẻo kênh của key này đổ nhầm về key chính.
+                    scan_kw = {"purpose": "channel_bootstrap"} if held else {}
+                    try:
+                        rows = []
+                        for org in client.organizations(**scan_kw):
+                            org_id = org.get("id")
+                            if not org_id:
+                                continue
+                            for ch in client.channels(org_id, **scan_kw):
+                                if isinstance(ch, dict):
+                                    rows.append({**ch, "organizationId": org_id})
+                        if kid:
+                            stored[kid] = {"ts": time.time(), "channels": rows}
+                            changed = True
+                    except Exception as exc:
+                        rows = cached
+                        logger.warning(
+                            "[BufferManager] Không lấy được kênh cho tài khoản #%d (%s): %s",
+                            idx,
+                            masked,
+                            exc,
+                        )
+            if rows is None:
+                without_table.append(idx)
+            for ch in rows or []:
+                if not isinstance(ch, dict):
+                    continue
+                cid = str(ch.get("id") or "").strip()
+                if not cid:
+                    continue
+                new_map[cid] = client
+                new_meta[cid] = {**ch, "accountIndex": idx, "apiKeyMasked": masked}
+
+        if changed:
+            _write_channels_file(stored)
 
         with self._lock:
             if not new_map and self._channel_to_client:
@@ -222,6 +282,7 @@ class BufferManager:
             self._channel_to_client = new_map
             self._channel_meta = new_meta
             self._channel_cache_ts = time.time()
+            self._keys_without_table = without_table
 
         return new_map
 
@@ -246,10 +307,23 @@ class BufferManager:
         if cid in ch_map:
             return ch_map[cid]
 
-        if (time.time() - self._channel_cache_ts) > CHANNEL_CACHE_TTL_SEC:
-            ch_map = self.refresh_channels_map()
+        # Kênh lạ: quét lại key có bảng cũ hơn 30 phút, tối đa một lần mỗi 30 phút.
+        if (time.time() - self._unknown_rescan_ts) > CHANNEL_UNKNOWN_RESCAN_SEC:
+            self._unknown_rescan_ts = time.time()
+            ch_map = self.refresh_channels_map(max_age=CHANNEL_UNKNOWN_RESCAN_SEC)
             if cid in ch_map:
                 return ch_map[cid]
+
+        if self._keys_without_table:
+            # Kênh lạ có thể thuộc key chưa có bảng. Đổ về key chính là tốn suất key chính vô ích.
+            if cid not in self._skipped_unknown:
+                self._skipped_unknown.add(cid)
+                logger.info(
+                    "[BufferManager] Channel %s chưa biết thuộc key nào (tài khoản #%s chưa có bảng kênh), bỏ qua.",
+                    cid,
+                    ",".join(str(i) for i in self._keys_without_table),
+                )
+            return None
 
         primary = self.get_primary_client()
         if _client_in_cooldown(primary):
@@ -381,14 +455,19 @@ class BufferManager:
         if len(clients) == 1:
             return clients[0].post_statuses(post_ids)
 
-        # Gom post_ids theo client
-        client_to_posts: dict[Any, list[str]] = {}
+        # Gom theo key, không theo object: get_clients() tạo client mới mỗi lần → mỗi bài một request.
+        groups: dict[Any, tuple[Any, list[str]]] = {}
         for pid in post_ids:
             c = self.get_client_for_post(pid, db=db)
-            client_to_posts.setdefault(c, []).append(pid)
+            if c is None:
+                continue
+            gkey = getattr(c, "_key", None)
+            if not isinstance(gkey, str) or not gkey:
+                gkey = id(c)
+            groups.setdefault(gkey, (c, []))[1].append(pid)
 
         merged: dict[str, str] = {}
-        for client, subset in client_to_posts.items():
+        for client, subset in groups.values():
             try:
                 res = client.post_statuses(subset)
                 merged.update(res)
