@@ -106,11 +106,16 @@ class LinkRow:
     cashback_rate_percent: int | None
     link_status: str
     reject_reason: str | None
+    estimate_policy: str | None = None
 
 
 class TrackingRepository:
     def __init__(self, path: str):
         self.path = path
+
+    def column_names(self, table: str) -> set[str]:
+        with self.connect() as conn:
+            return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
 
     def connect(self) -> sqlite3.Connection:
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
@@ -212,6 +217,8 @@ class TrackingRepository:
             "delivery_status",
             "created_at",
         ]
+        if fields.get("estimate_policy") and "estimate_policy" in self.column_names("link_requests"):
+            columns.append("estimate_policy")
         payload = {key: fields.get(key) for key in columns}
         payload["created_at"] = payload["created_at"] or _utc_now()
         placeholders = ", ".join("?" for _ in columns)
@@ -517,4 +524,5 @@ def _row(row: sqlite3.Row) -> LinkRow:
         cashback_rate_percent=row["cashback_rate_percent"],
         link_status=row["link_status"],
         reject_reason=row["reject_reason"],
+        estimate_policy=row["estimate_policy"] if "estimate_policy" in row.keys() else None,
     )

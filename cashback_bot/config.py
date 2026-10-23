@@ -43,6 +43,11 @@ class Settings:
     delivery_backoff_sec: int = 30
     backup_dir: str = "./data/backups"
     backup_keep: int = 14
+    estimate_policy: str = "v1.1"
+    estimate_fee_bps: int = 98
+    estimate_tax_reserve_bps: int = 1_000
+    estimate_other_reserve_vnd: int = 0
+    estimate_rounding_unit: int = 1
 
 
 def _flag(raw: str | None) -> bool:
@@ -109,6 +114,9 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
             raise ConfigError(["CASHBACK_ADMIN_CHAT_ID"]) from exc
     if admin_enabled and admin_chat_id is None:
         raise ConfigError(["CASHBACK_ADMIN_CHAT_ID"])
+    estimate_policy = (env.get("CASHBACK_ESTIMATE_POLICY") or "v1.1").strip()
+    if estimate_policy not in {"v1.1", "v1.2"}:
+        raise ConfigError(["CASHBACK_ESTIMATE_POLICY"])
     return Settings(
         bot_token=env["CASHBACK_BOT_TOKEN"].strip(),
         affiliate_id=affiliate_id,
@@ -127,6 +135,11 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         delivery_backoff_sec=delivery_backoff_sec,
         backup_dir=backup_dir,
         backup_keep=backup_keep,
+        estimate_policy=estimate_policy,
+        estimate_fee_bps=_bounded_int(env, "CASHBACK_ESTIMATE_FEE_BPS", 98, 0, 10_000),
+        estimate_tax_reserve_bps=_bounded_int(env, "CASHBACK_ESTIMATE_TAX_RESERVE_BPS", 1_000, 0, 10_000),
+        estimate_other_reserve_vnd=_bounded_int(env, "CASHBACK_ESTIMATE_OTHER_RESERVE_VND", 0, 0, 100_000_000),
+        estimate_rounding_unit=_bounded_int(env, "CASHBACK_ESTIMATE_ROUNDING_UNIT", 1, 1, 1_000),
     )
 
 

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from cashback_bot.affiliate import build_an_redir, new_sub_id
+from cashback_bot.calculator import EstimatePolicy, estimate_cashback
 from cashback_bot.config import Settings
 from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
@@ -15,6 +16,7 @@ from cashback_bot.messages import (
     GENERIC_FAIL,
     GUIDE,
     HOW_TO_CALC,
+    HOW_TO_CALC_V12,
     INVALID_LINK,
     NOT_FOUND,
     START_MESSAGE,
@@ -22,8 +24,9 @@ from cashback_bot.messages import (
     BotReply,
     rate_limited_reply,
     render_success,
+    render_success_v12,
 )
-from cashback_bot.money import estimated_cashback
+from cashback_bot.money import estimated_cashback as estimated_cashback_v11
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.shopee_url import parse_shopee_target
 
@@ -102,6 +105,8 @@ class CashbackService:
         if command in {"/help", "/huongdan"}:
             return BotReply(GUIDE)
         if command == "/cachtinh":
+            if self._v12_ready():
+                return BotReply(HOW_TO_CALC_V12)
             return BotReply(HOW_TO_CALC)
         if command:
             return BotReply(GUIDE)
@@ -129,7 +134,7 @@ class CashbackService:
                 return BotReply(NOT_FOUND)
             return BotReply(STALE)
 
-        cashback = estimated_cashback(quote.commission_vnd, self.settings.cashback_rate_percent)
+        cashback, policy_id, render = self._quote_cashback(quote.commission_vnd)
         try:
             sub_id = self._unique_sub_id()
             affiliate_url = build_an_redir(quote.product_url, self.settings.affiliate_id, sub_id)
@@ -160,6 +165,7 @@ class CashbackService:
                     "estimated_commission": quote.commission_vnd,
                     "estimated_cashback": cashback,
                     "cashback_rate_percent": self.settings.cashback_rate_percent,
+                    "estimate_policy": policy_id,
                     "api_status": quote.api_status,
                     "data_source": quote.data_source,
                     "product_last_update": quote.last_update.strftime("%Y-%m-%d %H:%M:%S"),
@@ -188,7 +194,29 @@ class CashbackService:
                 )
             return BotReply(GENERIC_FAIL)
 
-        return render_success(quote.name, quote.price_vnd, cashback, affiliate_url)
+        return render(quote.name, quote.price_vnd, cashback, affiliate_url)
+
+    def _v12_ready(self) -> bool:
+        if self.settings.estimate_policy != "v1.2":
+            return False
+        if "estimate_policy" not in self.repo.column_names("link_requests"):
+            logger.warning("[Cashback] policy v1.2 chưa có cột estimate_policy, giữ công thức V1.1")
+            return False
+        return True
+
+    def _quote_cashback(self, commission_vnd: int):
+        if not self._v12_ready():
+            amount = estimated_cashback_v11(commission_vnd, self.settings.cashback_rate_percent)
+            return amount, None, render_success
+        policy = EstimatePolicy(
+            cashback_share_bps=self.settings.cashback_rate_percent * 100,
+            service_fee_bps=self.settings.estimate_fee_bps,
+            tax_risk_reserve_bps=self.settings.estimate_tax_reserve_bps,
+            other_cost_reserve_vnd=self.settings.estimate_other_reserve_vnd,
+            rounding_unit=self.settings.estimate_rounding_unit,
+        )
+        result = estimate_cashback(commission_vnd, policy, reliable=True)
+        return result.estimated_cashback_vnd, result.policy_id, render_success_v12
 
     def _within_rate_limit(self, telegram_user_id: int, now: datetime) -> bool:
         return self.repo.consume_link_attempt(
@@ -222,7 +250,8 @@ class CashbackService:
 
     def _render_existing(self, row: LinkRow) -> BotReply:
         if row.link_status == "created" and row.affiliate_url and row.product_name is not None:
-            return render_success(
+            render = render_success_v12 if row.estimate_policy else render_success
+            return render(
                 row.product_name,
                 row.price_vnd or 0,
                 row.estimated_cashback or 0,

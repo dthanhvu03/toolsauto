@@ -40,6 +40,15 @@ HOW_TO_CALC = (
     "Ví dụ hoa hồng 10.000đ thì hoàn dự kiến 7.000đ.\n\n"
     "Đây là số ước tính, chưa phải số tiền đã xác nhận."
 )
+HOW_TO_CALC_V12 = (
+    "<b>Cách tính hoàn tiền</b>\n\n"
+    "Cashback dự kiến trừ trước một khoản dự phòng phí và một khoản dự phòng rủi ro thuế, "
+    "rồi mới nhân tỷ lệ chia.\n"
+    "10% trong cấu hình thử là dự phòng, không phải mức thuế luật định cho mọi đơn.\n\n"
+    "Số tiền được ước tính sau các khoản dự phòng phí và thuế. "
+    "Hoàn tiền thực tế phụ thuộc vào hoa hồng Shopee xác nhận, các khoản khấu trừ và điều kiện chương trình. "
+    "Hiện hệ thống chưa theo dõi hoặc chi trả đơn hàng."
+)
 INVALID_LINK = (
     "Mình cần link sản phẩm Shopee. "
     "Gửi link shopee.vn hoặc link rút gọn s.shopee.vn.\n\n"
@@ -97,5 +106,20 @@ def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: 
         f"Giá tham khảo: {format_vnd(price_vnd)}\n\n"
         "ℹ️ Tiền hoàn chỉ là ước tính, phụ thuộc vào việc Shopee xác nhận đơn hợp lệ.\n"
         "Chưa phải tiền có thể rút."
+    )
+    return BotReply(text=text, button_url=affiliate_url)
+
+
+def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str) -> BotReply:
+    safe_name = html.escape(buyer_name(name))
+    text = (
+        "🎁 <b>MÓN NÀY CÓ THỂ ĐƯỢC HOÀN TIỀN</b>\n\n"
+        "Cashback dự kiến: "
+        f"<b>{format_vnd(cashback_vnd)}</b>\n\n"
+        f"{safe_name}\n"
+        f"Giá tham khảo: {format_vnd(price_vnd)}\n\n"
+        "Số tiền được ước tính sau các khoản dự phòng phí và thuế. "
+        "Hoàn tiền thực tế phụ thuộc vào hoa hồng Shopee xác nhận, các khoản khấu trừ và điều kiện chương trình. "
+        "Hiện hệ thống chưa theo dõi hoặc chi trả đơn hàng."
     )
     return BotReply(text=text, button_url=affiliate_url)
