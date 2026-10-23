@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.admin_stats import collect
@@ -17,6 +18,7 @@ from cashback_bot.db import TrackingRepository
 from cashback_bot.shopee_client import (
     ShopeeAffiliateClient,
     ShopeeApiError,
+    ShopeeStatusResult,
 )
 from cashback_bot.shopee_cookie import (
     cookies_to_header,
@@ -36,6 +38,30 @@ def _setup_repo(tmp_path: Path) -> TrackingRepository:
     repo = TrackingRepository(str(db_file))
     repo.migrate()
     return repo
+
+
+def _insert_link(repo: TrackingRepository, sub_id: str, update_id: int = 1) -> None:
+    with repo.connect() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO telegram_users (telegram_user_id, username, created_at, last_seen_at) "
+            "VALUES (?, 'khach_hang', '2026-10-23T08:00:00Z', '2026-10-23T08:00:00Z')",
+            (USER_ID,),
+        )
+        conn.execute(
+            """
+            INSERT INTO link_requests (
+                telegram_update_id, telegram_user_id, original_url, sub_id, affiliate_url,
+                item_id, product_name, price_vnd, estimated_commission,
+                estimated_cashback, cashback_rate_percent, link_status, created_at
+            ) VALUES (?, ?, 'https://shopee.vn/product/111', ?, 'https://shope.ee/xxx', 111, 'Sản phẩm thử',
+                      100000, 10000, 7000, 70, 'created', '2026-10-23T08:00:00Z')
+            """,
+            (update_id, USER_ID, sub_id),
+        )
+
+
+def _status(ok: bool, auth_failed: bool = False, error: str = "") -> ShopeeStatusResult:
+    return ShopeeStatusResult(ok=ok, status_code=200, username="shop_owner", error_message=error, auth_failed=auth_failed)
 
 
 class TestShopeeCookie:
@@ -293,9 +319,11 @@ class TestShopeeAdminUIAndCookieWorkflow:
 
     def test_stats_screen_includes_shopee_reconciliation(self, tmp_path):
         repo = _setup_repo(tmp_path)
-        # Thêm 5 click và 2 đơn
+        _insert_link(repo, "G3lkg1JK")
         repo.record_shopee_click("c1", "G3lkg1JK", "2026-10-23T08:00:00Z")
         repo.record_shopee_click("c2", "----", "2026-10-23T08:01:00Z")
+        # Sub ID không do bot tạo thì không tính là click qua bot.
+        repo.record_shopee_click("c3", "khac_bot", "2026-10-23T08:02:00Z")
         repo.record_shopee_conversion(
             conversion_id="ord_1",
             sub_id="G3lkg1JK",
@@ -311,8 +339,97 @@ class TestShopeeAdminUIAndCookieWorkflow:
             stats = collect(conn, "today", NOW)
 
         assert stats.shopee is not None
-        assert stats.shopee.total_clicks == 2
+        assert stats.shopee.total_clicks == 3
         assert stats.shopee.clicks_with_bot_sub_id == 1
         assert stats.shopee.orders_total == 1
         assert stats.shopee.orders_completed == 1
         assert stats.shopee.real_commission_vnd == 9000
+
+
+class TestShopeeReviewFixes:
+    """Hồi quy các lỗi tìm thấy khi review PLAN-065."""
+
+    def test_unexpected_payload_returns_result_instead_of_raising(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        # Phần tử lạ trong list không làm sync nổ; client ném lỗi bất ngờ thì trả SyncResult.
+        client.fetch_clicks.return_value = {"code": 0, "data": {"list": ["la", 1]}}
+        client.fetch_conversions.side_effect = RuntimeError("boom")
+        result = ShopeeSyncEngine(repo).sync(client=client)
+        assert result.ok is False
+        assert repo.get_last_sync_run()["status"] == "failed"
+
+    def test_transient_error_keeps_connected_and_does_not_notify(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        repo.update_shopee_cookie_status(status="connected", account_name="shop_owner")
+        notifier = MagicMock()
+        client = MagicMock()
+        client.check_status.return_value = _status(False, error="Lỗi kết nối: ConnectionError")
+        result = ShopeeSyncEngine(repo, admin_notifier=notifier).sync(client=client)
+        assert result.ok is False
+        assert repo.get_shopee_cookie_status()["status"] == "connected"
+        notifier.notify_shopee_cookie_expired.assert_not_called()
+
+    def test_auth_failure_marks_expired_and_notifies(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        notifier = MagicMock()
+        client = MagicMock()
+        client.check_status.return_value = _status(False, auth_failed=True, error="HTTP 401")
+        ShopeeSyncEngine(repo, admin_notifier=notifier).sync(client=client)
+        assert repo.get_shopee_cookie_status()["status"] == "expired"
+        notifier.notify_shopee_cookie_expired.assert_called_once()
+
+    @patch("cashback_bot.shopee_client.requests.get")
+    def test_network_error_is_not_auth_failure(self, mock_get):
+        mock_get.side_effect = requests.ConnectionError()
+        result = ShopeeAffiliateClient({"SPC_EC": "x"}).check_status()
+        assert result.ok is False
+        assert result.auth_failed is False
+
+    def test_pagination_stops_when_page_repeats(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        full_page = {"code": 0, "data": {"list": [{"click_id": f"c{i}", "sub_id": None} for i in range(200)]}}
+        client.fetch_clicks.return_value = full_page  # Shopee bỏ qua page_no, trả mãi một trang
+        client.fetch_conversions.return_value = {"code": 0, "data": {"list": []}}
+        result = ShopeeSyncEngine(repo).sync(client=client)
+        assert result.clicks_synced == 200
+        assert client.fetch_clicks.call_count == 2
+
+    def test_manual_sync_passes_notifier_and_survives_crash(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        notifier = MagicMock()
+        panel = AdminPanel(str(repo.path), frozenset({ADMIN_ID}), 70, admin_notifier=notifier)
+        with patch("cashback_bot.admin_policy.ShopeeSyncEngine") as engine_cls:
+            engine_cls.return_value.sync.side_effect = RuntimeError("boom")
+            reply = panel.handle_callback(ADMIN_ID, "c:shopee:sync", "private", NOW)
+        assert engine_cls.call_args.kwargs["admin_notifier"] is notifier
+        assert "Đồng bộ lỗi" in reply.text
+
+    def test_cancel_button_stops_waiting_for_cookie(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        panel = AdminPanel(str(repo.path), frozenset({ADMIN_ID}), 70)
+        panel.handle_callback(ADMIN_ID, "c:shopee:auth", "private", NOW)
+        panel.handle_callback(ADMIN_ID, "c:menu:shopee", "private", NOW)  # ✖️ Hủy
+        reply = panel.consume_text(ADMIN_ID, "SPC_EC=abc", NOW, message_id=5)
+        assert reply is None or reply.delete_message_id is None
+
+    @patch("cashback_bot.admin_policy.save_cookies")
+    @patch("cashback_bot.shopee_client.ShopeeAffiliateClient.check_status")
+    def test_split_json_cookie_is_joined_and_every_part_deleted(self, mock_check, mock_save, tmp_path):
+        repo = _setup_repo(tmp_path)
+        mock_check.return_value = _status(True)
+        panel = AdminPanel(str(repo.path), frozenset({ADMIN_ID}), 70)
+        panel.handle_callback(ADMIN_ID, "c:shopee:auth", "private", NOW)
+        raw = json.dumps({"url": "https://affiliate.shopee.vn", "cookies": [{"name": "SPC_EC", "value": "v" * 50}]})
+        first = panel.consume_text(ADMIN_ID, raw[:30], NOW, message_id=10)
+        second = panel.consume_text(ADMIN_ID, raw[30:], NOW, message_id=11)
+        assert first.delete_message_id == 10
+        assert "phần còn lại" in first.text
+        assert second.delete_message_id == 11
+        assert "thành công" in second.text
+        assert mock_save.call_args.args[0] == {"SPC_EC": "v" * 50}
+        # Đã xong thì không còn chờ cookie nữa.
+        assert panel.consume_text(ADMIN_ID, "10", NOW, message_id=12) is None

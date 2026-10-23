@@ -48,6 +48,30 @@ def parse_shopee_money_vnd(val: Any) -> int | None:
     return int(num)
 
 
+PAGE_SIZE = 200
+# Trần số trang mỗi loại mỗi lần đồng bộ, tránh vòng lặp vô tận nếu Shopee bỏ qua page_no.
+MAX_PAGES = 20
+
+
+def _paged(fetch, start_time: int, end_time: int, list_keys: tuple[str, ...]):
+    """Duyệt từng trang tới khi trang trả về ít hơn PAGE_SIZE dòng. Bỏ qua dòng không phải dict."""
+    previous_first = None
+    for page_no in range(1, MAX_PAGES + 1):
+        payload = fetch(start_time=start_time, end_time=end_time, page_no=page_no, page_size=PAGE_SIZE)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        rows: Any = None
+        if isinstance(data, dict):
+            rows = next((data[key] for key in list_keys if data.get(key)), None)
+        if not isinstance(rows, list) or not rows or rows[0] == previous_first:
+            return
+        previous_first = rows[0]
+        for row in rows:
+            if isinstance(row, dict):
+                yield row
+        if len(rows) < PAGE_SIZE:
+            return
+
+
 @dataclass(frozen=True)
 class SyncResult:
     ok: bool
@@ -88,16 +112,15 @@ class ShopeeSyncEngine:
         # 2. Kiểm tra phiên đăng nhập
         status_res = client.check_status()
         if not status_res.ok:
-            self.repo.update_shopee_cookie_status(
-                status="expired",
-                last_error=status_res.error_message,
-            )
-            if self.admin_notifier:
-                self.admin_notifier.notify_shopee_cookie_expired(status_res.error_message)
-            return SyncResult(
-                ok=False,
-                message=f"Cookie Shopee hết hạn hoặc không hợp lệ: {status_res.error_message}",
-            )
+            if status_res.auth_failed:
+                self._mark_expired(status_res.error_message)
+                return SyncResult(
+                    ok=False,
+                    message=f"Cookie Shopee hết hạn hoặc không hợp lệ: {status_res.error_message}",
+                )
+            # Lỗi tạm (mạng, 5xx, 429): giữ trạng thái kết nối để lần tự đồng bộ sau thử lại.
+            self.repo.update_shopee_cookie_status(status="connected", last_error=status_res.error_message)
+            return SyncResult(ok=False, message=f"Chưa gọi được Shopee, sẽ thử lại sau: {status_res.error_message}")
 
         self.repo.update_shopee_cookie_status(
             status="connected",
@@ -117,11 +140,7 @@ class ShopeeSyncEngine:
         try:
             # 3. Đồng bộ Click Report
             try:
-                click_payload = client.fetch_clicks(start_time=start_time, end_time=end_time, page_no=1, page_size=200)
-                click_list = (click_payload.get("data") or {}).get("list") or []
-                for item in click_list:
-                    if not isinstance(item, dict):
-                        continue
+                for item in _paged(client.fetch_clicks, start_time, end_time, ("list",)):
                     sub_id = item.get("sub_id") or item.get("utm_content")
                     if sub_id == "----":
                         sub_id = None
@@ -138,34 +157,28 @@ class ShopeeSyncEngine:
                     ):
                         clicks_count += 1
             except ShopeeApiError as exc:
+                if exc.status_code in (401, 403):
+                    raise
                 logger.warning("[ShopeeSync] Đồng bộ click gặp lỗi: %s", exc)
 
             # 4. Đồng bộ Conversion Report
             try:
-                conv_payload = client.fetch_conversions(start_time=start_time, end_time=end_time, page_no=1, page_size=200)
-                conv_data = conv_payload.get("data") or {}
-                conv_list = conv_data.get("list") or conv_data.get("nodes") or []
-
-                for item in conv_list:
-                    if not isinstance(item, dict):
-                        continue
-
+                for item in _paged(client.fetch_conversions, start_time, end_time, ("list", "nodes")):
                     orders = item.get("orders")
                     if isinstance(orders, list) and orders:
                         for order in orders:
                             if not isinstance(order, dict):
                                 continue
-                            n_matched = self._process_order_item(item, order)
                             conversions_count += 1
-                            if n_matched:
+                            if self._process_order_item(item, order):
                                 new_matched_orders += 1
                     else:
-                        n_matched = self._process_order_item(item, item)
                         conversions_count += 1
-                        if n_matched:
+                        if self._process_order_item(item, item):
                             new_matched_orders += 1
-
             except ShopeeApiError as exc:
+                if exc.status_code in (401, 403):
+                    raise
                 logger.warning("[ShopeeSync] Đồng bộ conversion gặp lỗi: %s", exc)
 
             # 5. Ghi nhận hoàn thành
@@ -184,8 +197,8 @@ class ShopeeSyncEngine:
             )
 
             msg = (
-                f"Đồng bộ thành công! Kéo được {clicks_count} click mới, "
-                f"{conversions_count} đơn hàng ({new_matched_orders} đơn mới khớp bot)."
+                f"Đồng bộ xong: {clicks_count} click mới, "
+                f"{conversions_count} đơn hàng ({new_matched_orders} đơn mới qua bot)."
             )
             return SyncResult(
                 ok=True,
@@ -196,7 +209,11 @@ class ShopeeSyncEngine:
             )
 
         except Exception as exc:
-            logger.exception("[ShopeeSync] Lỗi không mong muốn trong quá trình đồng bộ")
+            auth = isinstance(exc, ShopeeApiError) and exc.status_code in (401, 403)
+            if auth:
+                self._mark_expired(str(exc))
+            else:
+                logger.exception("[ShopeeSync] Lỗi không mong muốn trong quá trình đồng bộ")
             self.repo.complete_shopee_sync_run(
                 run_id=run_id,
                 status="failed",
@@ -205,13 +222,19 @@ class ShopeeSyncEngine:
                 new_orders=new_matched_orders,
                 error=str(exc)[:200],
             )
+            message = "Cookie Shopee hết hạn giữa chừng." if auth else f"Lỗi đồng bộ: {type(exc).__name__}"
             return SyncResult(
                 ok=False,
-                message=f"Lỗi đồng bộ: {type(exc).__name__} - {exc}",
+                message=message,
                 clicks_synced=clicks_count,
                 conversions_synced=conversions_count,
-                new_orders_count=new_matched_orders,
+                new_matched_orders=new_matched_orders,
             )
+
+    def _mark_expired(self, reason: str) -> None:
+        self.repo.update_shopee_cookie_status(status="expired", last_error=reason)
+        if self.admin_notifier:
+            self.admin_notifier.notify_shopee_cookie_expired(reason)
 
     def _process_order_item(self, top_item: dict[str, Any], order_dict: dict[str, Any]) -> bool:
         """Xử lý từng đơn hàng, lưu DB và gửi thông báo nếu là đơn mới khớp bot.

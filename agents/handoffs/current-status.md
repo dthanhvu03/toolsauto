@@ -1,3 +1,8 @@
+## Phiên 2026-10-23 (k) — PLAN-065: review + sửa lỗi Shopee Cookie Sync (Claude Code, user giao trực tiếp)
+
+Review `0ad0b10` của Antigravity, rồi sửa theo yêu cầu user (chưa commit, 9 file `cashback_bot/` + test). Đã sửa: TypeError trong nhánh lỗi sync (từng làm callback lặp gọi Shopee mỗi 5 giây); đồng bộ tay giờ báo đơn mới; lỗi mạng không còn bị ghi là cookie hết hạn; nút Hủy thoát chế độ chờ cookie; JSON cookie bị Telegram tách được ghép lại và phần nào cũng bị xoá; phân trang có trần; thống kê "khớp bot" đối chiếu Sub ID thật; giờ VN, chữ tiếng Việt. pytest `tests/test_cashback_*.py`: 196 passed, ruff sạch; 9 test chạy trên code cũ đều fail. Chưa sửa (cần response Shopee thật): đơn vị tiền, mốc thời gian thống kê, tham số endpoint. Chưa gọi Shopee thật lần nào. Next: user commit; restart bot; vào /admin → 🔗 Shopee Affiliate dán cookie; bấm 🔄 một lần rồi gửi Claude Code/Anti một dòng `raw_json` (che cookie) trong `shopee_conversions` để chốt đơn vị tiền và định dạng thời gian.
+
+---
 ## Phiên 2026-10-23 — cashback_bot: trạng thái bàn giao (Claude Code)
 
 Đã chạy trên production: PLAN-060 (UI/UX Telegram), V1.2, PLAN-062 + ADR-047 (admin áp dụng phí/thuế dự phòng), ADR-048 (tỷ lệ chia trong /admin), /cachtinh không lộ số nội bộ, PLAN-063 (📈 Thống kê). Code PLAN-064 (lưu ngành hàng, shop, tách hoa hồng) đã merge `main`, cần user restart bot. pytest `tests/test_cashback_*.py`: 171 passed.

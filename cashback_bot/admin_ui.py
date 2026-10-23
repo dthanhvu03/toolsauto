@@ -560,14 +560,15 @@ def stats_text(stats, *, period_label: str, since: str | None) -> str:
         f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>",
     ]
     if stats.shopee and (stats.shopee.total_clicks > 0 or stats.shopee.orders_total > 0):
-        cr_line = f" · CR: <b>{stats.shopee.conversion_rate_percent}%</b>" if stats.shopee.conversion_rate_percent is not None else ""
+        cr = stats.shopee.conversion_rate_percent
+        cr_line = f" · CR qua bot: <b>{str(cr).replace('.', ',')}%</b>" if cr is not None else ""
         lines += [
             "",
             "🛒 <b>Đối soát Shopee Affiliate</b>",
             f"• Clicks: <b>{stats.shopee.total_clicks}</b> (Khớp bot: <b>{stats.shopee.clicks_with_bot_sub_id}</b>)",
             f"• Đơn hàng: <b>{stats.shopee.orders_total}</b> (Khớp bot: <b>{stats.shopee.orders_matched_bot}</b>){cr_line}",
             f"• Trạng thái: Chờ duyệt <b>{stats.shopee.orders_pending}</b> · Hoàn thành <b>{stats.shopee.orders_completed}</b> · Huỷ <b>{stats.shopee.orders_cancelled}</b>",
-            f"• Hoa hồng Shopee thật: <b>{format_vnd(stats.shopee.real_commission_vnd)}</b>",
+            f"• Hoa hồng Shopee (không tính đơn huỷ): <b>{format_vnd(stats.shopee.real_commission_vnd)}</b>",
         ]
     else:
         lines += [
@@ -601,6 +602,12 @@ def shopee_text(
         st_badge = "⚪ <b>CHƯA KẾT NỐI</b>"
         account_line = ""
         sync_line = ""
+    hint = (
+        ""
+        if status == "connected"
+        else "\n\nⓘ Dán JSON từ extension <b>J2TEAM Cookies</b> hoặc chuỗi <code>name=value;</code>. "
+        "Bot tự xoá tin nhắn chứa cookie khỏi chat."
+    )
 
     body = (
         f"{title}"
@@ -609,9 +616,8 @@ def shopee_text(
         f"{account_line}"
         f"{sync_line}"
         f"• Click Shopee ghi nhận: <b>{total_clicks}</b>\n"
-        f"• Đơn Shopee đối soát: <b>{total_orders}</b> (Khớp bot: <b>{matched_orders}</b>)\n\n"
-        "ⓘ Dán JSON từ extension <b>J2TEAM Cookies</b> hoặc chuỗi <code>name=value;</code>. "
-        "Bot tự xoá tin nhắn ngay sau khi lưu để bảo mật."
+        f"• Đơn Shopee đối soát: <b>{total_orders}</b> (Khớp bot: <b>{matched_orders}</b>)"
+        f"{hint}"
     )
     return body
 
@@ -621,6 +627,7 @@ def shopee_prompt_cookie_text() -> str:
         "🔗 <b>Cập nhật Cookie Shopee Affiliate</b>\n\n"
         "1. Mở trang <b>affiliate.shopee.vn</b> trên trình duyệt đã đăng nhập.\n"
         "2. Bấm icon extension <b>J2TEAM Cookies</b> → <b>Export</b> (sao chép JSON).\n"
-        "3. Dán JSON hoặc chuỗi <code>name=value;</code> vào ô chat này.\n\n"
+        "3. Dán JSON hoặc chuỗi <code>name=value;</code> vào ô chat này. "
+        "JSON dài bị Telegram tách nhiều tin thì cứ để nguyên, bot tự ghép.\n\n"
         "🛡️ <i>Bot sẽ kiểm tra phiên, lưu phân quyền riêng 0600 và xoá ngay tin nhắn chứa cookie khỏi chat.</i>"
     )

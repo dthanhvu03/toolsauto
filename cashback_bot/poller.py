@@ -16,6 +16,7 @@ from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import ADMIN_COMMANDS, BUY_BUTTON, DESCRIPTION, SHORT_DESCRIPTION
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.service import CashbackService
+from cashback_bot.shopee_sync import ShopeeSyncEngine
 from cashback_bot.telegram_api import TelegramApi, classify_delivery_error
 
 logger = logging.getLogger("cashback_bot")
@@ -317,7 +318,6 @@ def _check_shopee_auto_sync(repo: TrackingRepository, admin_notifier: AdminNotif
 
     repo.set_state("shopee_last_auto_sync", str(now))
     try:
-        from cashback_bot.shopee_sync import ShopeeSyncEngine
         engine = ShopeeSyncEngine(repo, admin_notifier=admin_notifier)
         engine.sync(trigger="auto")
     except Exception as exc:

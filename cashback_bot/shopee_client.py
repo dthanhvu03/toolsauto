@@ -46,6 +46,8 @@ class ShopeeStatusResult:
     username: str = ""
     error_message: str = ""
     raw_data: dict[str, Any] | None = None
+    # True khi Shopee từ chối phiên (cookie hết hạn). Lỗi mạng, HTTP 5xx, 429 là lỗi tạm, để False.
+    auth_failed: bool = False
 
 
 class ShopeeAffiliateClient:
@@ -71,6 +73,7 @@ class ShopeeAffiliateClient:
                 ok=False,
                 status_code=resp.status_code,
                 error_message=f"Cookie hết hạn hoặc không có quyền (HTTP {resp.status_code})",
+                auth_failed=True,
             )
 
         if resp.status_code >= 400:
@@ -91,7 +94,7 @@ class ShopeeAffiliateClient:
         code = payload.get("code")
         if code != 0:
             msg = payload.get("message") or f"Lỗi code={code}"
-            return ShopeeStatusResult(ok=False, status_code=resp.status_code, error_message=str(msg))
+            return ShopeeStatusResult(ok=False, status_code=resp.status_code, error_message=str(msg), auth_failed=True)
 
         data = payload.get("data")
         if not isinstance(data, dict):
@@ -106,6 +109,7 @@ class ShopeeAffiliateClient:
             username=username,
             error_message="" if allow else "Tài khoản bị tạm khóa hoặc không được phép đăng nhập",
             raw_data=data,
+            auth_failed=not allow,
         )
 
     def fetch_clicks(

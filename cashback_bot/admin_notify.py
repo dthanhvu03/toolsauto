@@ -38,6 +38,15 @@ def _details(*lines: str) -> str:
     return "<blockquote expandable>" + "\n".join(lines) + "</blockquote>"
 
 
+# Trạng thái đơn Shopee hay gặp; giá trị lạ thì hiện nguyên văn.
+_SHOPEE_STATUS = {
+    "PENDING": "Chờ duyệt",
+    "COMPLETED": "Hoàn thành",
+    "CANCELLED": "Đã huỷ",
+    "CANCELED": "Đã huỷ",
+}
+
+
 @dataclass
 class AdminNotifier:
     repo: TrackingRepository
@@ -143,7 +152,7 @@ class AdminNotifier:
         if not self._active():
             return
         comm_text = format_vnd(commission_vnd) if commission_vnd is not None else "Đang cập nhật"
-        status_text = html.escape(order_status or "PENDING")
+        status_text = html.escape(_SHOPEE_STATUS.get((order_status or "").upper(), order_status or "Chờ duyệt"))
         who = _who(telegram_user_id or 0, username) if telegram_user_id else "Chưa xác định"
         body = (
             "🎉 <b>Có đơn Shopee mới qua bot!</b>\n\n"

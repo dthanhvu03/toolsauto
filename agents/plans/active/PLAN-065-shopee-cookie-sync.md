@@ -106,3 +106,53 @@
 - Cập nhật `cashback_bot/admin_stats.py`: Bổ sung số liệu click thật, đơn thật, tỷ lệ chuyển đổi và hoa hồng thật vào màn Thống kê.
 - Test `tests/test_cashback_shopee_sync.py` (17 tests).
 - Toàn bộ test suite: **188 passed** in 18.21s. Ruff check sạch 0 errors.
+
+---
+
+## 🔍 Review — Claude Code, 2026-10-23
+
+Review code `0ad0b10` đối chiếu PLAN. pytest `tests/test_cashback_*.py`: 188 passed. Chưa có proof nào gọi Shopee thật (endpoint, tham số `page_no`/`start_time`, tên field, đơn vị tiền đều chưa kiểm). Mục "Admin kết nối Shopee và kiểm tra được `user/status`" đã tick nhưng chưa có log chạy thật.
+
+**Phải sửa trước khi restart bot**
+1. `shopee_sync.py` nhánh `except Exception` tạo `SyncResult(new_orders_count=...)`, nhưng field tên là `new_matched_orders` → `TypeError`. Đã tái hiện: `data` của click trả về list → `AttributeError` → `TypeError`. Khi bấm 🔄 Đồng bộ ngay, exception thoát ra `_loop`, offset không tăng → Telegram trả lại cùng callback mỗi 5 giây → bot gọi Shopee liên tục và báo `poll_loop_failed` liên tục.
+2. `_shopee_sync` trong `admin_policy.py` tạo `ShopeeSyncEngine(repo)` không có `admin_notifier`. Đơn mới tìm thấy khi bấm tay được lưu là "đã thấy" nhưng không báo admin; lần sync sau không còn là đơn mới → mất thông báo vĩnh viễn.
+3. Lỗi mạng hoặc `code != 0` ở `check_status` đều bị ghi `expired` và báo "Cookie hết hạn". `_check_shopee_auto_sync` chỉ chạy khi `connected` → một lần mạng chập là tự đồng bộ dừng hẳn cho tới khi admin dán lại cookie. Chỉ nên ghi `expired` khi HTTP 401/403 hoặc code hết phiên.
+4. Nút ✖️ Hủy (`c:menu:shopee`) và mở wizard khác không xoá `shopee_auth_waiting:{user_id}`. Tin nhắn tiếp theo của admin (ví dụ gõ `10` trong wizard phí, hoặc dán link test) bị coi là cookie và bị xoá.
+
+**Số liệu sai/không đáng tin**
+5. `parse_shopee_money_vnd` đoán đơn vị theo ngưỡng 1.000.000: hoa hồng 1.250.000 đ (nếu API trả VND) thành 12 đ; giá trị đã scale dưới 1.000.000 (dưới 10 đ) thì giữ nguyên. Cần lấy mẫu response thật và chọn một đơn vị cố định.
+6. Thống kê lọc theo `created_at` (lúc bot kéo về), không theo `click_time`/`purchase_time`. Lần sync đầu kéo 30 ngày → tất cả rơi vào "Hôm nay".
+7. Chỉ lấy trang 1, `page_size=200`; quá 200 click/đơn trong 30 ngày thì mất phần còn lại.
+8. "Khớp bot" của click đếm mọi click có `sub_id`, không đối chiếu với `link_requests.sub_id`. CR = tổng đơn / tổng click, không phải của bot. "Hoa hồng thật" cộng cả đơn huỷ. Chưa có phần "so với hoa hồng ước tính đã báo khách" mà mục 6 PLAN ghi.
+
+**Bảo mật cookie**
+9. Export J2TEAM (đủ field domain/expiry/…) dễ vượt 4.096 ký tự; Telegram tách thành nhiều tin. Tin 1 bị xoá, các tin sau rơi vào luồng thường và **không bị xoá**. Nên nhận file `.json` (document) hoặc chỉ hướng dẫn dán chuỗi header ngắn.
+10. Gửi toàn bộ cookie, chưa lọc `SPC_*` như PLAN mục 1. File tạm `.tmp` tạo với umask mặc định rồi mới chmod. `DEFAULT_COOKIE_PATH` là đường dẫn tương đối, phụ thuộc thư mục chạy bot.
+
+**UX (phần Claude Code làm được sau khi backend sửa)**
+11. "Lần đồng bộ gần nhất" hiện chuỗi UTC ISO; nên đổi sang giờ VN `dd/mm HH:MM` như `_history_line`. Thông báo đơn mới hiện trạng thái tiếng Anh thô (`PENDING`).
+12. Câu "tin nhắn đã được xoá" hiện trước khi xoá thật. Gợi ý "Dán JSON…" vẫn hiện trên màn đã kết nối. Bấm đồng bộ tay có thể chờ tới 60 giây (3 request × timeout 20s) mà không có phản hồi.
+
+**Quy trình**
+13. Import trong hàm (`poller._check_shopee_auto_sync`, `admin_policy._shopee_sync`), trái RULES.
+14. Thêm nguồn dữ liệu mới và cách lưu cookie là quyết định kiến trúc → nên có ADR-049 như ADR-045…048.
+
+Đề xuất: Anti/Codex sửa 1–4 và 9, lấy một response thật của 3 endpoint (che cookie) để chốt 5–8, rồi mới restart. Claude Code nhận 11–12 sau đó.
+
+### Claude Code sửa theo review — 2026-10-23 (user giao trực tiếp)
+
+Đã sửa (chưa commit):
+- (1) `SyncResult` đúng tên field; `_paged` bỏ dòng không phải dict; `_shopee_sync` bắt mọi exception → không còn callback lặp gọi Shopee.
+- (2) `AdminPanel.admin_notifier` (service truyền vào) → đồng bộ tay cũng báo đơn mới.
+- (3) `ShopeeStatusResult.auth_failed`: chỉ 401/403, `code != 0`, `allow_to_login=false` mới ghi `expired` + báo. Lỗi mạng/5xx giữ `connected`, ghi `last_error`, lần tự đồng bộ sau thử lại. 401/403 giữa chừng (click/đơn) cũng ghi `expired`.
+- (4) Bấm bất kỳ nút nào khác `c:shopee:auth` hoặc gõ `/admin` là thôi chờ cookie.
+- (7) Phân trang `page_no` 1..20, dừng khi trang ít hơn 200 dòng hoặc trang lặp lại trang trước.
+- (8) Click "khớp bot" đối chiếu `link_requests.sub_id`; hoa hồng bỏ đơn huỷ; CR = đơn khớp bot / click của bot.
+- (9) JSON bị Telegram tách: các phần gom trong RAM (2 phút, tối đa 64.000 ký tự, không ghi DB), **mỗi phần đều bị xoá**. Báo lỗi xong có nút 🔑 dán lại.
+- (10) File cookie tạo bằng `os.open(..., 0o600)`; đường dẫn neo theo thư mục project.
+- (11)(12) Giờ đồng bộ hiện giờ VN; trạng thái đơn tiếng Việt; gợi ý dán cookie chỉ hiện khi chưa kết nối; câu "đã xoá" sửa lại cho đúng.
+- (13) Bỏ import trong hàm.
+
+Proof: pytest `tests/test_cashback_*.py` **196 passed** (188 + 8 test mới trong `TestShopeeReviewFixes`); ruff sạch. 9 test (8 mới + test thống kê đã sửa) chạy trên code cũ (`git stash cashback_bot/`) đều fail.
+
+Chưa sửa — cần response Shopee thật: (5) đơn vị tiền, (6) thống kê theo `click_time`/`purchase_time` (chưa biết định dạng), tham số/field của 3 endpoint. Lọc cookie `SPC_*` (10) để nguyên vì chưa biết Shopee cần cookie nào. (14) ADR-049 chưa viết.

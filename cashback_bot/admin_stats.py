@@ -241,7 +241,7 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
         """
         SELECT
             COUNT(*),
-            COALESCE(SUM(sub_id IS NOT NULL AND sub_id != '----'), 0)
+            COALESCE(SUM(sub_id IN (SELECT sub_id FROM link_requests WHERE sub_id IS NOT NULL)), 0)
         FROM shopee_clicks
         WHERE created_at >= ?
         """,
@@ -258,7 +258,7 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
             COALESCE(SUM(order_status LIKE '%COMPLETED%' OR order_status LIKE '%SUCCESS%'), 0),
             COALESCE(SUM(order_status LIKE '%CANCEL%'), 0),
             COALESCE(SUM(matched_link_id IS NOT NULL), 0),
-            COALESCE(SUM(net_commission_vnd), 0)
+            COALESCE(SUM(CASE WHEN order_status LIKE '%CANCEL%' THEN 0 ELSE net_commission_vnd END), 0)
         FROM shopee_conversions
         WHERE created_at >= ?
         """,
@@ -272,7 +272,8 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str) -> ShopeeStats | None:
     matched_orders = int(conv_row[4]) if conv_row else 0
     real_comm = int(conv_row[5]) if conv_row else 0
 
-    cr = round((total_orders / total_clicks) * 100, 1) if total_clicks > 0 else None
+    # CR chỉ tính phần đi qua link bot: đơn khớp Sub ID / click mang Sub ID của bot.
+    cr = round((matched_orders / bot_clicks) * 100, 1) if bot_clicks > 0 else None
 
     return ShopeeStats(
         total_clicks=total_clicks,

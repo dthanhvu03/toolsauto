@@ -18,7 +18,12 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_COOKIE_PATH = Path("storage/db/config/shopee_affiliate_cookies.json")
+# Neo theo thư mục project, không phụ thuộc thư mục đang chạy bot.
+DEFAULT_COOKIE_PATH = Path(__file__).resolve().parents[1] / "storage" / "db" / "config" / "shopee_affiliate_cookies.json"
+
+
+class IncompleteCookieError(ValueError):
+    """Text giống JSON nhưng chưa đóng: Telegram đã tách tin dài thành nhiều phần."""
 
 
 def parse_cookies(raw_text: str) -> dict[str, str]:
@@ -29,8 +34,8 @@ def parse_cookies(raw_text: str) -> dict[str, str]:
 
     cookies: dict[str, str] = {}
 
-    # Thử parse JSON
-    if (text.startswith("[") and text.endswith("]")) or (text.startswith("{") and text.endswith("}")):
+    # Chuỗi header không bao giờ mở bằng [ hay {, nên JSON hỏng ở đây là JSON bị cắt dở.
+    if text.startswith(("[", "{")):
         try:
             parsed = json.loads(text)
             if isinstance(parsed, list):
@@ -52,8 +57,8 @@ def parse_cookies(raw_text: str) -> dict[str, str]:
                     for k, v in parsed.items():
                         if isinstance(k, str) and v is not None and not isinstance(v, (list, dict)):
                             cookies[k.strip()] = str(v).strip()
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as exc:
+            raise IncompleteCookieError("JSON cookie chưa đủ, đang chờ phần tiếp theo") from exc
 
     # Nếu không phải JSON hoặc chưa trích xuất được cookie nào, parse dạng name=value;
     if not cookies:
@@ -78,7 +83,9 @@ def save_cookies(cookies: dict[str, str], path: Path | str = DEFAULT_COOKIE_PATH
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     temp_target = target.with_suffix(".tmp")
-    with open(temp_target, "w", encoding="utf-8") as f:
+    # Tạo file với 0600 ngay từ đầu, không có lúc nào file mang quyền mặc định.
+    fd = os.open(temp_target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(cookies, f, indent=2, ensure_ascii=False)
     try:
         os.chmod(temp_target, 0o600)

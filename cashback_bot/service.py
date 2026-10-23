@@ -74,6 +74,7 @@ class CashbackService:
             fee_default_bps=settings.estimate_fee_bps,
             tax_default_bps=settings.estimate_tax_reserve_bps,
             estimate_policy=policy,
+            admin_notifier=admin_notifier,
         )
 
     def allowed(self, telegram_user_id: int) -> bool:

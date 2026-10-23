@@ -6,12 +6,13 @@ Không đổi báo giá khách, không chi trả, không ghi database production
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
 import secrets
 import sqlite3
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -34,6 +35,7 @@ from cashback_bot.admin_reserve import (
     vn_time,
 )
 from cashback_bot.admin_reserve import SCHEMA_PATH as RESERVE_SCHEMA_PATH
+from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_reserve import SHARE_SCHEMA_PATH
 from cashback_bot.admin_stats import PERIODS, collect
 from cashback_bot.admin_ui import (
@@ -74,10 +76,11 @@ from cashback_bot.admin_ui import (
     stats_keyboard,
     stats_text,
 )
+from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
 from cashback_bot.shopee_client import ShopeeAffiliateClient
-from cashback_bot.shopee_cookie import parse_cookies, save_cookies
+from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
 from cashback_bot.shopee_sync import ShopeeSyncEngine
 
 logger = logging.getLogger("cashback_bot")
@@ -115,6 +118,9 @@ _SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
 _STATS = re.compile(r"^c:st:(today|7d|30d|all)$")
 _SHARE_NUMBER = re.compile(r"^(\d{1,3})\s*%?$")
 _DECISION = re.compile(r"^c:(ok|no):(\d+):([0-9a-f]{8})$")
+# Telegram tách tin dài hơn 4.096 ký tự. Gom các phần JSON cookie trong RAM, không ghi DB.
+COOKIE_PART_TTL = timedelta(minutes=2)
+MAX_COOKIE_CHARS = 64_000
 
 
 class AdminSafetyError(RuntimeError):
@@ -163,6 +169,8 @@ class AdminPanel:
     tax_default_bps: int = 1_000
     # V1.2 khách đang nhận; None nghĩa là V1.1.
     estimate_policy: EstimatePolicy | None = None
+    admin_notifier: AdminNotifier | None = None
+    _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -170,6 +178,7 @@ class AdminPanel:
     def menu(self, user_id: int, now: datetime) -> BotReply:
         if not self.is_admin(user_id):
             return BotReply("Lệnh này chỉ dành cho quản trị.")
+        self._clear_shopee_waiting(user_id)
         return self._screen("home", now)
 
     def consume_text(self, user_id: int, text: str, now: datetime, message_id: int | None = None) -> BotReply | None:
@@ -208,6 +217,9 @@ class AdminPanel:
     def handle_callback(self, user_id: int, data: str, chat_type: str, now: datetime) -> BotReply:
         if chat_type != "private" or not self.is_admin(user_id):
             return BotReply("Lệnh này chỉ dành cho quản trị trong cuộc trò chuyện riêng.")
+        if data != "c:shopee:auth":
+            # Bấm bất kỳ nút nào khác (kể cả ✖️ Hủy) là thôi chờ cookie.
+            self._clear_shopee_waiting(user_id)
         reply = self._route_callback(user_id, data, now)
         if reply.inline_keyboard is None:
             # Callback sửa đè tin cũ. Thiếu nút thì admin kẹt ở màn chỉ có chữ.
@@ -344,7 +356,7 @@ class AdminPanel:
             c_row = conn.execute("SELECT * FROM shopee_cookies WHERE id = 1").fetchone()
             status = str(c_row["status"]) if c_row else "disconnected"
             account_name = str(c_row["account_name"]) if c_row and c_row["account_name"] else None
-            last_sync = str(c_row["last_sync_at"]) if c_row and c_row["last_sync_at"] else None
+            last_sync = vn_time(str(c_row["last_sync_at"])) if c_row and c_row["last_sync_at"] else None
             last_err = str(c_row["last_error"]) if c_row and c_row["last_error"] else None
 
             clicks_count = int(conn.execute("SELECT COUNT(*) FROM shopee_clicks").fetchone()[0]) if "shopee_clicks" in tables else 0
@@ -369,11 +381,22 @@ class AdminPanel:
         return BotReply(text, inline_keyboard=kb)
 
     def _shopee_sync(self, now: datetime) -> BotReply:
-        from cashback_bot.db import TrackingRepository
-        repo = TrackingRepository(self.db_path)
-        engine = ShopeeSyncEngine(repo)
-        result = engine.sync(trigger="manual")
-        return self._shopee_screen(now, notice=result.message)
+        # Exception thoát ra đây thì poller không tăng offset, Telegram gửi lại cùng nút và bot gọi Shopee lặp mãi.
+        try:
+            engine = ShopeeSyncEngine(TrackingRepository(self.db_path), admin_notifier=self.admin_notifier)
+            message = engine.sync(trigger="manual").message
+        except Exception:
+            logger.exception("[Cashback] đồng bộ Shopee thủ công thất bại")
+            message = "Đồng bộ lỗi, xem log bot."
+        return self._shopee_screen(now, notice=message)
+
+    def _clear_shopee_waiting(self, user_id: int) -> None:
+        self._cookie_parts.pop(user_id, None)
+        try:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM bot_state WHERE key = ?", (f"shopee_auth_waiting:{user_id}",))
+        except sqlite3.Error:
+            pass
 
     def _shopee_auth_start(self, user_id: int, now: datetime) -> BotReply:
         with self._connect() as conn:
@@ -393,24 +416,41 @@ class AdminPanel:
         now: datetime,
         message_id: int | None = None,
     ) -> BotReply:
-        with self._connect() as conn:
-            conn.execute("DELETE FROM bot_state WHERE key = ?", (f"shopee_auth_waiting:{user_id}",))
-
+        pending = self._cookie_parts.pop(user_id, None)
+        if pending and now - pending[1] <= COOKIE_PART_TTL:
+            text = pending[0] + text
         try:
             cookies = parse_cookies(text)
-        except ValueError as exc:
+        except IncompleteCookieError:
+            if len(text) > MAX_COOKIE_CHARS:
+                self._clear_shopee_waiting(user_id)
+                return BotReply(
+                    "❌ <b>Cookie quá dài.</b> Hãy dán chuỗi <code>name=value;</code> thay vì JSON.",
+                    inline_keyboard=SHOPEE_PROMPT_KEYBOARD,
+                    delete_message_id=message_id,
+                )
+            # Vẫn chờ: phần tiếp theo cũng đi vào đây và cũng bị xoá khỏi chat.
+            self._cookie_parts[user_id] = (text, now)
             return BotReply(
-                f"❌ <b>Không tìm thấy cookie hợp lệ:</b> {exc}.\n\nVui lòng thử lại.",
+                "📥 Đã nhận một phần cookie, đang chờ phần còn lại…",
                 inline_keyboard=SHOPEE_PROMPT_KEYBOARD,
                 delete_message_id=message_id,
             )
+        except ValueError as exc:
+            self._clear_shopee_waiting(user_id)
+            return BotReply(
+                f"❌ <b>Không tìm thấy cookie hợp lệ:</b> {html.escape(str(exc))}.\n\nBấm 🔑 để dán lại.",
+                inline_keyboard=SHOPEE_KEYBOARD_DISCONNECTED,
+                delete_message_id=message_id,
+            )
 
+        self._clear_shopee_waiting(user_id)
         client = ShopeeAffiliateClient(cookies)
         status_res = client.check_status()
         if not status_res.ok:
             return BotReply(
-                f"❌ <b>Không thể kết nối Shopee:</b> {status_res.error_message}.\n\nVui lòng thử lại với cookie mới.",
-                inline_keyboard=SHOPEE_PROMPT_KEYBOARD,
+                f"❌ <b>Không thể kết nối Shopee:</b> {html.escape(status_res.error_message)}.\n\nBấm 🔑 để dán cookie mới.",
+                inline_keyboard=SHOPEE_KEYBOARD_DISCONNECTED,
                 delete_message_id=message_id,
             )
 
@@ -432,8 +472,8 @@ class AdminPanel:
 
         return BotReply(
             f"✅ <b>Đã kết nối Shopee Affiliate thành công!</b>\n\n"
-            f"• Tài khoản: <b>{status_res.username or 'Affiliate'}</b>\n"
-            f"• Cookie đã lưu an toàn quyền 0600 (tin nhắn đã được xoá).\n\n"
+            f"• Tài khoản: <b>{html.escape(status_res.username or 'Affiliate')}</b>\n"
+            f"• Cookie đã lưu riêng (quyền 0600). Bot xoá tin nhắn chứa cookie khỏi chat.\n\n"
             f"Bạn có thể bấm 🔄 Đồng bộ ngay.",
             inline_keyboard=SHOPEE_KEYBOARD_CONNECTED,
             delete_message_id=message_id,
