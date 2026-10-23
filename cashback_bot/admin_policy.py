@@ -21,19 +21,25 @@ from cashback_bot.admin_reserve import (
     KIND_CODES,
     MAX_RESERVE_BPS,
     OPEN_STEPS,
+    SHARE_OPEN_STEPS,
     AppliedReserve,
+    AppliedShare,
     active_reserve,
+    active_share,
     next_midnight,
     parse_when,
     recent_commissions,
     upcoming_reserves,
+    upcoming_shares,
     vn_time,
 )
 from cashback_bot.admin_reserve import SCHEMA_PATH as RESERVE_SCHEMA_PATH
+from cashback_bot.admin_reserve import SHARE_SCHEMA_PATH
 from cashback_bot.admin_ui import (
     FEE_KEYBOARD,
     MENU_KEYBOARD,
     NAV_KEYBOARD,
+    POLICY_KEYBOARD,
     RANK_KEYBOARD,
     collecting_keyboard,
     collecting_text,
@@ -54,6 +60,10 @@ from cashback_bot.admin_ui import (
     reserve_value_text,
     reserve_when_keyboard,
     reserve_when_text,
+    share_cancel_keyboard,
+    share_preview_text,
+    share_value_text,
+    share_when_text,
     simulation_text,
 )
 from cashback_bot.messages import BotReply
@@ -73,6 +83,7 @@ _ACTIONS = {
     "confirm": "Xác nhận",
     "cancel": "Hủy",
     "reserve_apply": "Áp dụng cho khách",
+    "share_apply": "Áp dụng cho khách",
 }
 _RESULTS = {
     "collecting": "đang nhập",
@@ -89,6 +100,8 @@ _NUMBER = re.compile(r"^(\d{1,3})(?:[.,](\d{1,2}))?\s*%?$")
 _MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy)$")
 _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD)$")
 _RESERVE = re.compile(r"^c:rs:(\d+):([0-9a-f]{8}):(k:[PIH]|keep|w:now|w:tmr|ok|no)$")
+_SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
+_SHARE_NUMBER = re.compile(r"^(\d{1,3})\s*%?$")
 _DECISION = re.compile(r"^c:(ok|no):(\d+):([0-9a-f]{8})$")
 
 
@@ -153,6 +166,9 @@ class AdminPanel:
         reserve = self._reserve_text(user_id, (text or "").strip(), now)
         if reserve is not None:
             return reserve
+        share = self._share_text(user_id, (text or "").strip(), now)
+        if share is not None:
+            return share
         matched = _NUMBER.fullmatch((text or "").strip())
         if matched is None:
             return None
@@ -183,6 +199,11 @@ class AdminPanel:
             return self._begin(user_id, tier.group(1), now)
         if data == "c:rs:new":
             return self._reserve_start(user_id, now)
+        if data == "c:sh:new":
+            return self._share_start(user_id, now)
+        share = _SHARE.fullmatch(data or "")
+        if share:
+            return self._share_action(user_id, int(share.group(1)), share.group(2), share.group(3), now)
         reserve = _RESERVE.fullmatch(data or "")
         if reserve:
             return self._reserve_action(user_id, int(reserve.group(1)), reserve.group(2), reserve.group(3), now)
@@ -197,7 +218,7 @@ class AdminPanel:
     def _screen(self, name: str, now: datetime, notice: str = "") -> BotReply:
         if name == "home":
             text = home_text(
-                rate_percent=self.displayed_rate_percent,
+                rate_percent=self._rate_percent(now),
                 membership_on=self.membership_on,
                 calculator=self.calculator_label,
                 pending=self._pending_count(now),
@@ -206,6 +227,9 @@ class AdminPanel:
         if name == "policy":
             reserve = None
             live = self.live_policy(now)
+            with self._connect() as conn:
+                share = active_share(conn, now, self.displayed_rate_percent * 100)
+                upcoming = upcoming_shares(conn, now)
             if live is None:
                 customer, remain = share_cashback(100_000, self.displayed_rate_percent * 100)
             else:
@@ -218,14 +242,21 @@ class AdminPanel:
                     result.fee_reserve_vnd,
                     result.tax_risk_reserve_vnd,
                 )
+            warning = ""
+            if live is None and (share.policy_id is not None or upcoming):
+                warning = "Đang chạy V1.1: tỷ lệ admin đặt có tác dụng khi bật V1.2."
             text = policy_text(
-                rate_percent=self.displayed_rate_percent,
+                rate_percent=self._rate_percent(now),
                 pending=self._pending_count(now),
                 customer_vnd=customer,
                 remain_vnd=remain,
                 reserve=reserve,
+                since=vn_time(share.effective_at) if share.effective_at and live is not None else None,
+                upcoming=[f"{_percent(item.share_bps)} từ {vn_time(item.effective_at or '')}" for item in upcoming],
+                warning=warning,
+                notice=notice,
             )
-            return BotReply(text, inline_keyboard=NAV_KEYBOARD)
+            return BotReply(text, inline_keyboard=POLICY_KEYBOARD)
         if name == "rank":
             rates = self._safe_rates()
             tiers = [
@@ -238,7 +269,7 @@ class AdminPanel:
             with self._connect() as conn:
                 active = active_reserve(conn, now, self.fee_default_bps, self.tax_default_bps)
                 upcoming = upcoming_reserves(conn, now)
-            result = estimate_cashback(100_000, self._policy_with(active))
+            result = estimate_cashback(100_000, self._policy_with(active, self._share_bps(now)))
             text = fee_text(
                 calculator_on=self.estimate_policy is not None,
                 kind=_kind_label(active),
@@ -246,7 +277,7 @@ class AdminPanel:
                 tax=_percent(active.tax_reserve_bps),
                 since=vn_time(active.effective_at) if active.effective_at else None,
                 upcoming=[_upcoming_line(item) for item in upcoming],
-                rate_percent=self.displayed_rate_percent,
+                rate_percent=self._rate_percent(now),
                 sim_fee=result.fee_reserve_vnd,
                 sim_tax=result.tax_risk_reserve_vnd,
                 sim_dist=result.distributable_vnd,
@@ -261,7 +292,7 @@ class AdminPanel:
                 for amount in SAMPLE_VND
             ]
             text = simulation_text(
-                quote=quote_label(self.displayed_rate_percent, self.estimate_policy is not None),
+                quote=quote_label(self._rate_percent(now), self.estimate_policy is not None),
                 table=table,
             )
             return BotReply(text, inline_keyboard=NAV_KEYBOARD)
@@ -438,6 +469,150 @@ class AdminPanel:
             "customer_effect": "none",
         }
 
+    def _share_start(self, user_id: int, now: datetime) -> BotReply:
+        with self._connect() as conn:
+            _cancel_open_wizards(conn, user_id)
+            cursor = conn.execute(
+                """
+                INSERT INTO share_drafts (admin_user_id, step, nonce, expires_at, created_at)
+                VALUES (?, 'share', ?, ?, ?)
+                """,
+                (user_id, secrets.token_hex(4), _stamp(now + CONFIRM_TTL), _stamp(now)),
+            )
+            draft = conn.execute("SELECT * FROM share_drafts WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        return self._share_prompt(draft, now)
+
+    def _share_action(self, user_id: int, draft_id: int, nonce: str, action: str, now: datetime) -> BotReply:
+        applied_id: int | None = None
+        with self._connect() as conn:
+            draft = conn.execute("SELECT * FROM share_drafts WHERE id = ?", (draft_id,)).fetchone()
+            if draft is None or int(draft["admin_user_id"]) != user_id or draft["nonce"] != nonce:
+                return BotReply("Nút này không hợp lệ.")
+            if draft["step"] not in SHARE_OPEN_STEPS:
+                return BotReply("Bản này đã được xử lý. Bấm Đổi tỷ lệ chia để làm lại.")
+            if draft["expires_at"] <= _stamp(now):
+                conn.execute("UPDATE share_drafts SET step = 'expired' WHERE id = ?", (draft_id,))
+                return BotReply("Bản nháp đã hết hạn sau 10 phút. Tỷ lệ đang áp dụng không đổi.")
+            step = draft["step"]
+            changes: dict | None = None
+            if action == "no":
+                changes = {"step": "cancelled"}
+            elif action == "w:now" and step == "when":
+                changes = {"step": "preview", "effective_at": None}
+            elif action == "w:tmr" and step == "when":
+                changes = {"step": "preview", "effective_at": _stamp(next_midnight(now))}
+            elif action == "ok" and step == "preview":
+                active = active_share(conn, now, self.displayed_rate_percent * 100)
+                effective = draft["effective_at"] or _stamp(now)
+                cursor = conn.execute(
+                    """
+                    INSERT INTO share_policies (share_bps, effective_at, draft_id, created_by, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (draft["share_bps"], effective, draft_id, user_id, _stamp(now)),
+                )
+                applied_id = int(cursor.lastrowid)
+                after = {"id": applied_id, "share_bps": int(draft["share_bps"]), "effective_at": effective}
+                before = {"id": active.policy_id, "share_bps": active.share_bps}
+                self._audit(
+                    conn, user_id, "share_apply", None,
+                    json.dumps(before, sort_keys=True), json.dumps(after, sort_keys=True), "applied", now,
+                )
+                changes = {"step": "applied"}
+            if changes is not None:
+                changes.setdefault("expires_at", _stamp(now + CONFIRM_TTL))
+                _update_draft(conn, draft_id, changes, table="share_drafts")
+            draft = conn.execute("SELECT * FROM share_drafts WHERE id = ?", (draft_id,)).fetchone()
+        if draft["step"] == "cancelled":
+            return replace(self._screen("policy", now, "✖️ Đã hủy. Tỷ lệ đang áp dụng không đổi."), toast="Đã hủy")
+        if applied_id is not None:
+            when = vn_time(draft["effective_at"]) if draft["effective_at"] else "ngay bây giờ"
+            notice = (
+                f"✅ Đã áp dụng tỷ lệ chia {_percent(int(draft['share_bps']))} (#{applied_id}) cho link mới, "
+                f"hiệu lực {when}. Link đã gửi giữ số cũ."
+            )
+            return replace(self._screen("policy", now, notice), toast=f"Đã áp dụng tỷ lệ #{applied_id}")
+        return self._share_prompt(draft, now)
+
+    def _share_text(self, user_id: int, text: str, now: datetime) -> BotReply | None:
+        if not text or "shopee" in text.lower() or text.lower().startswith("http") or text.startswith("/"):
+            return None
+        with self._connect() as conn:
+            draft = conn.execute(
+                """
+                SELECT * FROM share_drafts
+                WHERE admin_user_id = ? AND step IN ('share', 'when') AND expires_at > ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (user_id, _stamp(now)),
+            ).fetchone()
+            if draft is None:
+                return None
+            error = ""
+            changes: dict | None = None
+            if draft["step"] == "share":
+                matched = _SHARE_NUMBER.fullmatch(text)
+                if matched is None:
+                    error = "Gửi một số nguyên, ví dụ 65."
+                elif int(matched.group(1)) * 100 > MAX_SHARE_BPS:
+                    error = "Tỷ lệ chia tối đa 70%."
+                else:
+                    changes = {"step": "when", "share_bps": int(matched.group(1)) * 100}
+            else:
+                moment, error = parse_when(text, now)
+                if moment is None and not error:
+                    error = "Chưa đọc được ngày. Gửi dạng 01/11 hoặc 01/11 08:00."
+                if moment is not None:
+                    changes = {"step": "preview", "effective_at": _stamp(moment)}
+            if changes is not None:
+                changes["expires_at"] = _stamp(now + CONFIRM_TTL)
+                _update_draft(conn, int(draft["id"]), changes, table="share_drafts")
+            draft = conn.execute("SELECT * FROM share_drafts WHERE id = ?", (draft["id"],)).fetchone()
+        return self._share_prompt(draft, now, error or "")
+
+    def _share_prompt(self, draft: sqlite3.Row, now: datetime, error: str = "") -> BotReply:
+        draft_id, nonce, step = int(draft["id"]), draft["nonce"], draft["step"]
+        active = self.active_share(now)
+        if step == "share":
+            return BotReply(
+                share_value_text(current=_percent(active.share_bps), error=error),
+                inline_keyboard=share_cancel_keyboard(draft_id, nonce),
+            )
+        if step == "when":
+            return BotReply(
+                share_when_text(share=_percent(int(draft["share_bps"])), error=error),
+                inline_keyboard=reserve_when_keyboard(draft_id, nonce, "sh"),
+            )
+        new_bps = int(draft["share_bps"])
+        sample = recent = None
+        if self.estimate_policy is not None:
+            reserve = self.active_reserve(now)
+            before, after = self._policy_with(reserve, active.share_bps), self._policy_with(reserve, new_bps)
+            old, new = estimate_cashback(100_000, before), estimate_cashback(100_000, after)
+            sample = (
+                old.estimated_cashback_vnd,
+                new.estimated_cashback_vnd,
+                old.distributable_vnd - old.estimated_cashback_vnd,
+                new.distributable_vnd - new.estimated_cashback_vnd,
+            )
+            with self._connect() as conn:
+                commissions = recent_commissions(conn)
+            if commissions:
+                recent = (
+                    len(commissions),
+                    sum(estimate_cashback(c, before).estimated_cashback_vnd for c in commissions),
+                    sum(estimate_cashback(c, after).estimated_cashback_vnd for c in commissions),
+                )
+        text = share_preview_text(
+            calculator_on=self.estimate_policy is not None,
+            share=(_percent(active.share_bps), _percent(new_bps)),
+            when=vn_time(draft["effective_at"]) if draft["effective_at"] else "ngay khi bấm Áp dụng",
+            sample=sample,
+            recent=recent,
+        )
+        return BotReply(text, inline_keyboard=reserve_decision_keyboard(draft_id, nonce, "sh"))
+
     def _history_rows(self) -> list[str] | None:
         try:
             with self._connect() as conn:
@@ -465,22 +640,37 @@ class AdminPanel:
         with self._connect() as conn:
             return active_reserve(conn, now, self.fee_default_bps, self.tax_default_bps)
 
+    def active_share(self, now: datetime) -> AppliedShare:
+        """Tỷ lệ chia khách đang nhận (ADR-048). Chưa áp dụng lần nào thì là CASHBACK_RATE_PERCENT."""
+        with self._connect() as conn:
+            return active_share(conn, now, self.displayed_rate_percent * 100)
+
     def live_policy(self, now: datetime) -> EstimatePolicy | None:
-        """Công thức V1.2 đang báo giá, đã gồm mức dự phòng admin áp dụng. None khi chạy V1.1."""
+        """Công thức V1.2 đang báo giá, đã gồm mức admin áp dụng. None khi chạy V1.1."""
         if self.estimate_policy is None:
             return None
-        return self._policy_with(self.active_reserve(now))
+        return self._policy_with(self.active_reserve(now), self.active_share(now).share_bps)
 
-    def _policy_with(self, reserve: AppliedReserve) -> EstimatePolicy:
+    def _share_bps(self, now: datetime) -> int:
+        if self.estimate_policy is None:
+            return self.displayed_rate_percent * 100
+        return self.active_share(now).share_bps
+
+    def _rate_percent(self, now: datetime) -> int:
+        return self._share_bps(now) // 100
+
+    def _policy_with(self, reserve: AppliedReserve, share_bps: int | None = None) -> EstimatePolicy:
         base = self.estimate_policy or EstimatePolicy(cashback_share_bps=self.displayed_rate_percent * 100)
-        return replace(base, service_fee_bps=reserve.fee_bps, tax_risk_reserve_bps=reserve.tax_reserve_bps)
+        return replace(
+            base,
+            service_fee_bps=reserve.fee_bps,
+            tax_risk_reserve_bps=reserve.tax_reserve_bps,
+            cashback_share_bps=base.cashback_share_bps if share_bps is None else share_bps,
+        )
 
     def _reserve_start(self, user_id: int, now: datetime) -> BotReply:
         with self._connect() as conn:
-            conn.execute(
-                f"UPDATE reserve_drafts SET step = 'cancelled' WHERE admin_user_id = ? AND step IN {OPEN_STEPS}",
-                (user_id,),
-            )
+            _cancel_open_wizards(conn, user_id)
             cursor = conn.execute(
                 """
                 INSERT INTO reserve_drafts (admin_user_id, step, nonce, expires_at, created_at)
@@ -631,7 +821,8 @@ class AdminPanel:
         new = AppliedReserve(int(draft["fee_bps"]), int(draft["tax_reserve_bps"]))
         sample = recent = None
         if self.estimate_policy is not None:
-            before, after = self._policy_with(active), self._policy_with(new)
+            share_bps = self.active_share(now).share_bps
+            before, after = self._policy_with(active, share_bps), self._policy_with(new, share_bps)
             sample = (
                 estimate_cashback(100_000, before).estimated_cashback_vnd,
                 estimate_cashback(100_000, after).estimated_cashback_vnd,
@@ -722,6 +913,7 @@ class AdminPanel:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         conn.executescript(RESERVE_SCHEMA_PATH.read_text(encoding="utf-8"))
+        conn.executescript(SHARE_SCHEMA_PATH.read_text(encoding="utf-8"))
         return conn
 
     def _audit(
@@ -768,9 +960,21 @@ def _upcoming_line(reserve: AppliedReserve) -> str:
     )
 
 
-def _update_draft(conn: sqlite3.Connection, draft_id: int, changes: dict) -> None:
+def _update_draft(conn: sqlite3.Connection, draft_id: int, changes: dict, table: str = "reserve_drafts") -> None:
     columns = ", ".join(f"{name} = ?" for name in changes)
-    conn.execute(f"UPDATE reserve_drafts SET {columns} WHERE id = ?", (*changes.values(), draft_id))
+    conn.execute(f"UPDATE {table} SET {columns} WHERE id = ?", (*changes.values(), draft_id))
+
+
+def _cancel_open_wizards(conn: sqlite3.Connection, user_id: int) -> None:
+    """Mỗi admin chỉ một wizard nhập số tại một lúc; mở cái mới thì hủy cái đang dở."""
+    conn.execute(
+        f"UPDATE reserve_drafts SET step = 'cancelled' WHERE admin_user_id = ? AND step IN {OPEN_STEPS}",
+        (user_id,),
+    )
+    conn.execute(
+        f"UPDATE share_drafts SET step = 'cancelled' WHERE admin_user_id = ? AND step IN {SHARE_OPEN_STEPS}",
+        (user_id,),
+    )
 
 
 def _history_line(row: sqlite3.Row) -> str:
@@ -783,6 +987,10 @@ def _history_line(row: sqlite3.Row) -> str:
             f"thuế {_percent(data['tax_reserve_bps'])}, từ {vn_time(data['effective_at'])}"
         )
         return f"{when} · {subject} · {_ACTIONS['reserve_apply']}: {_RESULTS['applied']}"
+    if row["action"] == "share_apply" and row["after_json"]:
+        data = json.loads(row["after_json"])
+        subject = f"Tỷ lệ chia → {_percent(data['share_bps'])}, từ {vn_time(data['effective_at'])}"
+        return f"{when} · {subject} · {_ACTIONS['share_apply']}: {_RESULTS['applied']}"
     domain = row["domain"]
     if domain == "membership_rates":
         subject = f"Hạng {TIERS.get(row['tier'], row['tier'])}"

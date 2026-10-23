@@ -1,6 +1,6 @@
-"""Phí và thuế dự phòng admin áp dụng cho báo giá V1.2 (ADR-047).
+"""Mức admin áp dụng cho báo giá V1.2: phí, thuế dự phòng (ADR-047) và tỷ lệ chia (ADR-048).
 
-reserve_policies chỉ thêm dòng. Dòng mới nhất đã tới effective_at là mức khách đang nhận.
+reserve_policies và share_policies chỉ thêm dòng. Mỗi bảng lấy dòng mới nhất đã tới effective_at.
 Chưa có dòng nào thì dùng mặc định cấu hình (.env). Loại hình chỉ là nhãn, không chọn thuế suất.
 """
 
@@ -14,6 +14,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "005_reserve_policies.sql"
+SHARE_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "006_share_policies.sql"
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 MAX_RESERVE_BPS = 5_000
 MAX_AHEAD = timedelta(days=365)
@@ -24,6 +25,7 @@ ACCOUNT_KINDS = {
 }
 KIND_CODES = {"P": "PERSONAL", "I": "INDIVIDUAL_BUSINESS", "H": "HOUSEHOLD_BUSINESS"}
 OPEN_STEPS = ("kind", "fee", "tax", "when", "preview")
+SHARE_OPEN_STEPS = ("share", "when", "preview")
 _WHEN = re.compile(r"^(\d{1,2})/(\d{1,2})(?:/(\d{4}))?(?:\s+(\d{1,2})[:h](\d{2}))?$")
 
 
@@ -77,6 +79,38 @@ def upcoming_reserves(conn: sqlite3.Connection, now: datetime) -> list[AppliedRe
         (stamp(now),),
     ).fetchall()
     return [_from_row(row) for row in rows]
+
+
+@dataclass(frozen=True)
+class AppliedShare:
+    """Tỷ lệ chia khách đang nhận (ADR-048). policy_id None: mặc định cấu hình."""
+
+    share_bps: int
+    policy_id: int | None = None
+    effective_at: str | None = None
+
+
+def active_share(conn: sqlite3.Connection, now: datetime, default_bps: int) -> AppliedShare:
+    row = conn.execute(
+        """
+        SELECT * FROM share_policies
+        WHERE effective_at <= ?
+        ORDER BY effective_at DESC, id DESC
+        LIMIT 1
+        """,
+        (stamp(now),),
+    ).fetchone()
+    if row is None:
+        return AppliedShare(default_bps)
+    return AppliedShare(int(row["share_bps"]), int(row["id"]), str(row["effective_at"]))
+
+
+def upcoming_shares(conn: sqlite3.Connection, now: datetime) -> list[AppliedShare]:
+    rows = conn.execute(
+        "SELECT * FROM share_policies WHERE effective_at > ? ORDER BY effective_at, id",
+        (stamp(now),),
+    ).fetchall()
+    return [AppliedShare(int(row["share_bps"]), int(row["id"]), str(row["effective_at"])) for row in rows]
 
 
 def parse_when(text: str, now: datetime) -> tuple[datetime | None, str | None]:

@@ -29,6 +29,11 @@ RANK_KEYBOARD: Keyboard = (
     BACK_HOME,
 )
 
+POLICY_KEYBOARD: Keyboard = (
+    (("✏️ Đổi tỷ lệ chia", "c:sh:new"),),
+    BACK_HOME,
+)
+
 FEE_KEYBOARD: Keyboard = (
     (("✏️ Đổi mức áp dụng", "c:rs:new"),),
     BACK_HOME,
@@ -90,9 +95,21 @@ def policy_text(
     customer_vnd: int,
     remain_vnd: int,
     reserve: tuple[str, str, int, int] | None = None,
+    since: str | None = None,
+    upcoming: list[str] | None = None,
+    warning: str = "",
+    notice: str = "",
 ) -> str:
-    """reserve (V1.2): (% phí, % thuế, tiền phí, tiền thuế) trên 100.000đ. None là V1.1."""
+    """reserve (V1.2): (% phí, % thuế, tiền phí, tiền thuế) trên 100.000đ. None là V1.1.
+
+    since: mốc tỷ lệ chia admin áp dụng (ADR-048); None là mặc định cấu hình.
+    """
     pending_line = "0 bản nháp" if not pending else f"{pending} bản nháp"
+    effect = f"• Hiệu lực tỷ lệ: {f'từ {since}' if since else 'mặc định cấu hình'}\n"
+    if warning:
+        effect += f"⚠️ {warning}\n"
+    if upcoming:
+        effect += "🗓️ Sắp áp dụng: " + "; ".join(upcoming) + "\n"
     if reserve is None:
         applied = (
             "• Phiên bản: <b>V1.1</b>\n"
@@ -113,13 +130,15 @@ def policy_text(
         )
     return (
         _title("Chính sách")
+        + _notice(notice)
         + "🟢 <b>ĐANG ÁP DỤNG</b>\n"
         + applied
+        + effect
         + "• Áp dụng cho mọi link tạo mới\n\n"
-        "🟡 <b>BẢN NHÁP</b>\n"
+        "🟡 <b>BẢN NHÁP HẠNG THÀNH VIÊN</b>\n"
         f"• Đang chờ: <b>{pending_line}</b>\n"
-        "• Trần an toàn V1: <b>70%</b>\n"
-        "• Xác nhận chỉ lưu bản ghi, chưa đổi báo giá khách\n\n"
+        "• Xác nhận hạng chỉ lưu bản ghi, chưa đổi báo giá khách\n"
+        "• Trần tỷ lệ chia và hạng V1: <b>70%</b>\n\n"
         "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ\n"
         + sim
         + f"• Phần còn lại: <b>{format_vnd(remain_vnd)}</b>\n\n"
@@ -273,8 +292,8 @@ def rank_preview_text(
     )
 
 
-def _rs(draft_id: int, nonce: str, action: str) -> str:
-    return f"c:rs:{draft_id}:{nonce}:{action}"
+def _rs(draft_id: int, nonce: str, action: str, prefix: str = "rs") -> str:
+    return f"c:{prefix}:{draft_id}:{nonce}:{action}"
 
 
 def reserve_kind_keyboard(draft_id: int, nonce: str) -> Keyboard:
@@ -293,15 +312,83 @@ def reserve_keep_keyboard(draft_id: int, nonce: str, current: str) -> Keyboard:
     )
 
 
-def reserve_when_keyboard(draft_id: int, nonce: str) -> Keyboard:
+def reserve_when_keyboard(draft_id: int, nonce: str, prefix: str = "rs") -> Keyboard:
     return (
-        (("⚡ Ngay bây giờ", _rs(draft_id, nonce, "w:now")), ("🌙 00:00 ngày mai", _rs(draft_id, nonce, "w:tmr"))),
-        (("✖️ Hủy", _rs(draft_id, nonce, "no")),),
+        (
+            ("⚡ Ngay bây giờ", _rs(draft_id, nonce, "w:now", prefix)),
+            ("🌙 00:00 ngày mai", _rs(draft_id, nonce, "w:tmr", prefix)),
+        ),
+        (("✖️ Hủy", _rs(draft_id, nonce, "no", prefix)),),
     )
 
 
-def reserve_decision_keyboard(draft_id: int, nonce: str) -> Keyboard:
-    return ((("✖️ Hủy", _rs(draft_id, nonce, "no")), ("✅ Áp dụng cho khách", _rs(draft_id, nonce, "ok"))),)
+def reserve_decision_keyboard(draft_id: int, nonce: str, prefix: str = "rs") -> Keyboard:
+    return (
+        (
+            ("✖️ Hủy", _rs(draft_id, nonce, "no", prefix)),
+            ("✅ Áp dụng cho khách", _rs(draft_id, nonce, "ok", prefix)),
+        ),
+    )
+
+
+def share_cancel_keyboard(draft_id: int, nonce: str) -> Keyboard:
+    return ((("✖️ Hủy", _rs(draft_id, nonce, "no", "sh")),),)
+
+
+def _share_title(step: str) -> str:
+    return _title("Chính sách", "Tỷ lệ chia", step)
+
+
+def share_value_text(*, current: str, error: str = "") -> str:
+    return (
+        _share_title("Bước 1/2")
+        + _notice(f"⚠️ {error}" if error else "")
+        + f"Tỷ lệ chia đang áp dụng: <b>{current}</b> phần còn lại sau phí và thuế dự phòng.\n\n"
+        "Gửi tỷ lệ mới, số nguyên từ 0 đến 70. Ví dụ: <code>65</code>\n"
+        "Tỷ lệ thấp hơn: khách nhận ít hơn, phần giữ lại nhiều hơn."
+    )
+
+
+def share_when_text(*, share: str, error: str = "") -> str:
+    return (
+        _share_title("Bước 2/2")
+        + _notice(f"⚠️ {error}" if error else "")
+        + f"Tỷ lệ chia mới: <b>{share}</b>\n\n"
+        "Áp dụng từ khi nào?\n"
+        "Bấm nút, hoặc gửi ngày giờ Việt Nam: <code>01/11</code> hoặc <code>01/11 08:00</code>."
+    )
+
+
+def share_preview_text(
+    *,
+    calculator_on: bool,
+    share: tuple[str, str],
+    when: str,
+    sample: tuple[int, int, int, int] | None,
+    recent: tuple[int, int, int] | None,
+) -> str:
+    """sample: (khách trước, khách sau, giữ lại trước, giữ lại sau) trên 100.000đ hoa hồng."""
+    lines = [
+        _share_title("Xem trước").rstrip("\n"),
+        "",
+        f"• Tỷ lệ chia: {share[0]} → <b>{share[1]}</b>",
+        f"• Hiệu lực: <b>{when}</b>",
+    ]
+    if sample is not None:
+        before, after, kept_before, kept_after = sample
+        lines += [
+            "",
+            "🔵 Hoa hồng 100.000đ, sau phí và thuế dự phòng:",
+            f"• Khách nhận: {format_vnd(before)} → <b>{format_vnd(after)}</b>",
+            f"• Phần giữ lại: {format_vnd(kept_before)} → <b>{format_vnd(kept_after)}</b>",
+        ]
+    if recent is not None:
+        count, total_before, total_after = recent
+        lines.append(f"🔵 {count} link gần nhất: khách tổng {format_vnd(total_before)} → <b>{format_vnd(total_after)}</b>")
+    if not calculator_on:
+        lines += ["", "⚠️ Đang chạy V1.1: lưu được nhưng chưa đổi số khách cho tới khi bật V1.2."]
+    lines += ["", "ⓘ Link đã gửi giữ số cũ. Tỷ lệ chia thấp quá làm số hoàn kém hấp dẫn."]
+    return "\n".join(lines)
 
 
 def _reserve_title(step: str) -> str:

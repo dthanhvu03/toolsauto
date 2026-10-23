@@ -93,7 +93,8 @@ def test_luu_dong_60_khong_kich_hoat_bao_gia_khach(tmp_path):
     effect = conn.execute("SELECT customer_effect FROM policy_versions").fetchone()[0]
     assert effect == "none"
     assert quote_displayed_vnd(10_000, 70) == 7_000
-    amount, _policy, _render = bot._quote_cashback(10_000, NOW)
+    amount, _policy, _render, rate = bot._quote_cashback(10_000, NOW)
+    assert rate == 70
     assert amount == 7_000
     assert client.calls == 0
 

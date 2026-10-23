@@ -31,7 +31,11 @@ Dòng cũ không bị tính lại. Cột chưa có thì bot giữ công thức V
 
 ## Đổi mức dự phòng không cần sửa `.env` (ADR-047)
 
-`/admin` → Thuế & phí → Đổi mức áp dụng: chọn loại hình, phí dự phòng, thuế dự phòng (0–50%), ngày hiệu lực, xem trước, áp dụng. Mức lưu ở bảng `reserve_policies` (chỉ thêm dòng). Mỗi báo giá đọc dòng mới nhất đã tới hiệu lực; chưa có dòng nào thì dùng `CASHBACK_ESTIMATE_FEE_BPS` và `CASHBACK_ESTIMATE_TAX_RESERVE_BPS`. Link mới ghi mã `v1.2-reserve-2026-10-23+r{id}`. Tỷ lệ chia vẫn chỉ đổi qua `CASHBACK_RATE_PERCENT`.
+`/admin` → Thuế & phí → Đổi mức áp dụng: chọn loại hình, phí dự phòng, thuế dự phòng (0–50%), ngày hiệu lực, xem trước, áp dụng. Mức lưu ở bảng `reserve_policies` (chỉ thêm dòng). Mỗi báo giá đọc dòng mới nhất đã tới hiệu lực; chưa có dòng nào thì dùng `CASHBACK_ESTIMATE_FEE_BPS` và `CASHBACK_ESTIMATE_TAX_RESERVE_BPS`. Link mới ghi mã `v1.2-reserve-2026-10-23+r{id}`.
+
+## Đổi tỷ lệ chia không cần sửa `.env` (ADR-048)
+
+`/admin` → Chính sách → Đổi tỷ lệ chia: số nguyên 0–70%, ngày hiệu lực, xem trước, áp dụng. Lưu ở bảng `share_policies` (chỉ thêm dòng), tách khỏi `reserve_policies` nên lịch đổi tỷ lệ và lịch đổi dự phòng không đè nhau. Chưa có dòng nào thì dùng `CASHBACK_RATE_PERCENT`. Link mới ghi `cashback_rate_percent` là tỷ lệ đã dùng và thêm `+s{id}` vào mã chính sách.
 
 ## Final
 
