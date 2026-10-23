@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (c) — PLAN-060 thông báo admin dễ đọc, chờ restart
+
+Bot đã chạy bản P0–P4 từ 08:29 UTC (PID 428535, migration `reply_markup_json` ok trên DB thật). `getMyCommands`: khách 5 lệnh, `/admin` chỉ trong scope chat admin. User phản hồi thông báo "Đã gửi link" khó nhìn → làm lại bố cục, mã kỹ thuật vào `<blockquote expandable>`. 138 passed. Cần user restart lần nữa.
+
+---
+
 ## Phiên 2026-10-23 (b) — PLAN-060 P0–P4 xong, chờ restart
 
 Claude Code làm hết P1–P4 (user trực tiếp giao cả P1 backend). Khách: trang chủ có nút, đổi trang bằng edit, thẻ kết quả có nút Lưu ý → popup, "đang gõ", gửi lại giữ đủ nút (cột mới `outbound_messages.reply_markup_json`, migration tự chạy lúc khởi động, đã thử trên bản sao backup: ok). Admin: breadcrumb, nút Hủy khi nhập số, quay về màn vừa sửa, Thuế & phí đọc số thật, lịch sử tiếng Việt. Thông báo admin im lặng trừ lỗi; sửa lỗi `flush_pending` không bắt `TelegramDeliveryError`. pytest `tests/test_cashback_*.py`: 137 passed. Next: user restart bot (auto mode chặn Claude `kill`), bấm thử 6 màn ở mục 6 PLAN-060, rồi archive plan.

@@ -222,3 +222,7 @@ User giao Claude Code làm luôn P1 thay Codex.
 - **Lệch so với plan:** nút admin hết hạn / đã xử lý vẫn sửa tin thành câu giải thích + `◀️ Tổng quan` (P0) thay vì popup, vì trạng thái bản nháp đã đổi thật.
 - **Migration thử trên bản sao** `data/backups/cashback-20261023T081443Z.sqlite`: thêm cột, chạy 2 lần không lỗi, 65 dòng outbound giữ nguyên, `integrity_check` ok.
 - **Test:** cập nhật assert thiết kế ở `test_cashback_admin.py`, `test_cashback_admin_ui_ux.py`, `test_cashback_bot.py`; fake Telegram nhận thêm tham số. Thêm `tests/test_cashback_plan060.py` (14 test). Proof: `.venv/bin/python -m pytest tests/test_cashback_*.py -q` → **137 passed**.
+
+### P4b — thông báo admin dễ đọc hơn — 2026-10-23
+
+User phản hồi ảnh thông báo "Đã gửi link" khó nhìn. Sửa `admin_notify.py`: tiêu đề chỉ hiện @username (không có thì ID); tên món cắt bằng `buyer_name` như thẻ khách; mỗi ý một dòng có icon (🛍️ 💰 🕓); User/Item/Sub/Update gom vào `<blockquote expandable>` cuối tin. Áp cùng kiểu cho "Người dùng mới" và "Lỗi bot". Giờ dạng `16:14 · 23/10`. Test `test_thong_bao_link_gon_ma_ky_thuat_thu_gon`. Proof: **138 passed**. Cần restart bot.
