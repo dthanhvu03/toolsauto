@@ -7,6 +7,7 @@ Docs: https://developers.buffer.com/guides/getting-started.html
 Rate-limit guard (vá cháy quota):
 - Giãn tối thiểu giữa 2 request cùng key (tránh burst TikTok 7 bài/phút).
 - Sau HTTP 429: chặn gọi tiếp đến hết cooldown (không spam Retry-After).
+- Mốc cooldown ghi ra file (cooldown_store) để process khác và lần restart sau cùng thấy.
 """
 from __future__ import annotations
 
@@ -17,6 +18,8 @@ import time
 from typing import Any
 
 import requests
+
+from app.features.buffer import cooldown_store
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +32,9 @@ _VIDEO_EXT = frozenset({".mp4", ".mov", ".webm"})
 MIN_REQUEST_INTERVAL_SEC = 5.0
 # Cooldown sàn khi 429 (Buffer free hay reset chậm)
 MIN_429_COOLDOWN_SEC = 900  # 15 phút
-# Trần cooldown local. Header 7–15 giờ phải được giữ; header lệch (đã thấy 63 giờ) không khóa key hai ngày.
-MAX_429_COOLDOWN_SEC = 18 * 60 * 60  # 18 giờ
+# Trần cooldown local. Buffer đã trả 22 giờ và 40 giờ thật; gọi sớm hơn là bị khóa tiếp.
+# Header dài hơn trần thì hết trần gọi một request, 429 lại thì ghi mốc mới.
+MAX_429_COOLDOWN_SEC = 72 * 60 * 60  # 72 giờ
 # Phần bucket còn lại giữ cho createPost/editPost. Hỏi kênh, hỏi suất, hỏi status phải dừng trước.
 POST_RESERVE_RATIO = 0.70
 
@@ -48,6 +52,9 @@ def _guard_row(key: str) -> dict:
             "remaining": None,
         }
         _KEY_GUARD[key] = row
+    stored = cooldown_store.until(key)
+    if stored > float(row["cooldown_until"]):
+        row["cooldown_until"] = stored
     return row
 
 
@@ -164,6 +171,7 @@ class BufferClient:
             row["cooldown_until"] = max(float(row["cooldown_until"]), until)
             row["remaining"] = 0
             self._cooldown_until = float(row["cooldown_until"])
+        cooldown_store.save(self._key, self._cooldown_until, retry_after)
         logger.warning(
             "[Buffer] Key vào cooldown %ss (retry_after=%s, floor=%ss, cap=%ss)",
             cd,

@@ -19,6 +19,7 @@ from app.constants import JobStatus
 from app.core import settings as runtime_settings
 from app.core.database.core import SessionLocal
 from app.core.database.models import Job
+from app.features.buffer.client import BufferClient
 from app.features.buffer.manager import get_buffer_manager, mask_key
 from app.features.buffer.when import format_ict
 
@@ -539,6 +540,26 @@ def _handle_ping_key(
     masked = mask_key(raw_key)
     email = _resolve_account_email(None, raw_key, idx=target_idx)
 
+    # Ping dùng chung guard với worker: key đang nghỉ 429 thì không gửi request.
+    guard = BufferClient(raw_key)
+    wait_s = int(guard.cooldown_remaining())
+    if wait_s > 0:
+        return {
+            "ok": False,
+            "accountIndex": target_idx,
+            "email": email,
+            "maskedKey": masked,
+            "status": "COOLDOWN",
+            "httpStatus": 429,
+            "latencyMs": None,
+            "quota": None,
+            "errorMessage": (
+                f"Key đang nghỉ 429, còn {wait_s}s "
+                f"({_safe_format_ict(now_ts + wait_s) or '--'} ICT). Không gửi ping."
+            ),
+            "timestamp": now_ts,
+        }
+
     # High-resolution timing
     t0 = time.perf_counter()
     resp = None
@@ -674,9 +695,7 @@ def _handle_ping_key(
         }
 
     elif status_code == 429:
-        cd_sec = retry_after if retry_after > 0 else 3600
-        if cd_sec > MAX_COOLDOWN_SEC:
-            cd_sec = MAX_COOLDOWN_SEC
+        cd_sec = guard.mark_rate_limited(retry_after if retry_after > 0 else 3600)
         cooldown_until = now_ts + cd_sec
         quota_info = {
             "dailyLimit": daily_limit,

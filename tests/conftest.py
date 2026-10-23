@@ -38,6 +38,20 @@ def _khong_gui_telegram_that(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _buffer_cooldown_file_tam(monkeypatch, tmp_path):
+    """Mốc 429 ghi vào file tạm; không để test khóa key thật trong storage/db/config."""
+    from app.features.buffer import client as buffer_client
+    from app.features.buffer import cooldown_store
+
+    monkeypatch.setattr(cooldown_store, "PATH", tmp_path / "buffer_cooldown.json")
+    # Guard sạch thì request mock đi qua thật; bỏ giãn 5 giây. Test cần giãn tự đặt lại.
+    monkeypatch.setattr(buffer_client, "MIN_REQUEST_INTERVAL_SEC", 0)
+    buffer_client._KEY_GUARD.clear()
+    yield
+    buffer_client._KEY_GUARD.clear()
+
+
+@pytest.fixture(autouse=True)
 def _clean_buffer_cluster_state():
     """Autouse fixture ensuring clean in-memory buffer cluster state across all test suites."""
     import requests
