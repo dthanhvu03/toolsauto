@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (i) — PLAN-063 thống kê /admin, chờ restart
+
+`/admin` → 📈 Thống kê (Hôm nay / 7 ngày / 30 ngày / Tất cả): người dùng, link, lỗi theo lý do, số dự kiến (ghi rõ chưa phải doanh thu), xu hướng 7 ngày, top người gửi và món, sức khoẻ gửi tin. Chỉ đọc. 165 passed. Gộp restart với bản sửa /cachtinh. Chưa có số đơn/doanh thu vì chưa có Conversion Sync.
+
+---
+
 ## Phiên 2026-10-23 (h) — /cachtinh bỏ số nội bộ, chờ restart
 
 User không muốn khách thấy phí/thuế/tỷ lệ chia. `/cachtinh` giờ chỉ giải thích, không có %. Test chặn `%` ở mọi trang khách. 158 passed. Gộp chung lần restart với ADR-048.
