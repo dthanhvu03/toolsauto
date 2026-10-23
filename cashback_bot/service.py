@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.pricing import EstimatePolicy, estimate_cashback, quote_displayed_vnd
@@ -30,6 +32,7 @@ from cashback_bot.messages import (
     render_success_v12,
 )
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
+from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.shopee_url import parse_shopee_target
 
 logger = logging.getLogger("cashback_bot")
@@ -59,6 +62,14 @@ class CashbackService:
         self.repo = repo
         self.client = client
         self.admin_notifier = admin_notifier
+        calculator = "V1.2" if settings.estimate_policy == "v1.2" else "V1.1, chưa bật V1.2"
+        self.admin_panel = AdminPanel(
+            settings.db_path,
+            settings.admin_user_ids,
+            settings.cashback_rate_percent,
+            calculator_label=calculator,
+            membership_on=MEMBERSHIP_CUTOVER,
+        )
 
     def allowed(self, telegram_user_id: int) -> bool:
         if telegram_user_id in self.settings.allowed_telegram_ids:
@@ -66,6 +77,9 @@ class CashbackService:
         return self.settings.customer_access_enabled
 
     def handle_update(self, update: dict) -> tuple[int, BotReply] | None:
+        callback = update.get("callback_query")
+        if isinstance(callback, dict):
+            return self._handle_callback(callback)
         message = update.get("message") or {}
         chat = message.get("chat") or {}
         sender = message.get("from") or {}
@@ -80,6 +94,22 @@ class CashbackService:
             return None
         reply = self.handle_text(user_id, sender.get("username"), text, update_id)
         return user_id, reply
+
+    def _handle_callback(self, callback: dict) -> tuple[int, BotReply] | None:
+        sender = callback.get("from") or {}
+        message = callback.get("message") or {}
+        chat = message.get("chat") or {}
+        user_id = sender.get("id")
+        query_id = callback.get("id")
+        if not isinstance(user_id, int) or not isinstance(query_id, str):
+            return None
+        reply = self.admin_panel.handle_callback(
+            user_id,
+            str(callback.get("data") or ""),
+            str(chat.get("type") or ""),
+            datetime.now(timezone.utc),
+        )
+        return user_id, replace(reply, callback_query_id=query_id)
 
     def handle_text(
         self,
@@ -97,11 +127,19 @@ class CashbackService:
             if previous is not None:
                 return self._render_existing(previous)
 
+        stripped = (text or "").strip()
+        command = _command_name(stripped)
+        moment = now or datetime.now(timezone.utc)
+        if command == "/admin":
+            return self.admin_panel.menu(telegram_user_id, moment)
+        if self.admin_panel.is_admin(telegram_user_id):
+            consumed = self.admin_panel.consume_text(telegram_user_id, stripped, moment)
+            if consumed is not None:
+                return consumed
+
         if not self.allowed(telegram_user_id):
             return BotReply(CLOSED)
 
-        stripped = (text or "").strip()
-        command = _command_name(stripped)
         if command == "/start":
             return BotReply(START_MESSAGE)
         if command == "/help":

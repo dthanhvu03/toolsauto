@@ -140,8 +140,17 @@ BUY_BUTTON = "🛒 Mua trên Shopee"
 class BotReply:
     text: str
     button_url: str | None = None
+    inline_keyboard: tuple[tuple[tuple[str, str], ...], ...] | None = None
+    callback_query_id: str | None = None
 
     def markup(self) -> dict | None:
+        if self.inline_keyboard:
+            return {
+                "inline_keyboard": [
+                    [{"text": label, "callback_data": data} for label, data in row]
+                    for row in self.inline_keyboard
+                ]
+            }
         if not self.button_url:
             return None
         return {"inline_keyboard": [[{"text": BUY_BUTTON, "url": self.button_url}]]}

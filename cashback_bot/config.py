@@ -48,6 +48,7 @@ class Settings:
     estimate_tax_reserve_bps: int = 1_000
     estimate_other_reserve_vnd: int = 0
     estimate_rounding_unit: int = 1
+    admin_user_ids: frozenset[int] = frozenset()
 
 
 def _flag(raw: str | None) -> bool:
@@ -140,6 +141,7 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         estimate_tax_reserve_bps=_bounded_int(env, "CASHBACK_ESTIMATE_TAX_RESERVE_BPS", 1_000, 0, 10_000),
         estimate_other_reserve_vnd=_bounded_int(env, "CASHBACK_ESTIMATE_OTHER_RESERVE_VND", 0, 0, 100_000_000),
         estimate_rounding_unit=_bounded_int(env, "CASHBACK_ESTIMATE_ROUNDING_UNIT", 1, 1, 1_000),
+        admin_user_ids=_allowed_ids(env.get("CASHBACK_ADMIN_USER_IDS")),
     )
 
 

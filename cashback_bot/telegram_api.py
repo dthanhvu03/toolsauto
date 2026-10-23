@@ -54,7 +54,7 @@ class TelegramApi:
     def get_updates(self, offset: int) -> list[dict]:
         response = requests.get(
             f"{self._base}/getUpdates",
-            params={"offset": offset, "timeout": 30, "allowed_updates": '["message"]'},
+            params={"offset": offset, "timeout": 30, "allowed_updates": '["message","callback_query"]'},
             timeout=self._timeout,
         )
         response.raise_for_status()
@@ -114,3 +114,13 @@ class TelegramApi:
             raise TelegramDeliveryError("transient") from exc
         if not payload.get("ok"):
             raise TelegramDeliveryError("permanent", status_code=response.status_code)
+
+    def answer_callback(self, callback_query_id: str) -> None:
+        try:
+            requests.post(
+                f"{self._base}/answerCallbackQuery",
+                json={"callback_query_id": callback_query_id},
+                timeout=self._timeout,
+            )
+        except requests.RequestException:
+            logger.error("[Cashback] answerCallback failed")

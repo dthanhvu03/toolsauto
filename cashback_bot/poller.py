@@ -88,11 +88,15 @@ def _next_delivery(service: CashbackService, kind: str, retry_after: int | None,
     return status, nxt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _send_outbound(service, telegram, repo, admin_notifier, row, moment: datetime) -> None:
+def _send_outbound(service, telegram, repo, admin_notifier, row, moment: datetime, markup=None) -> None:
     attempts = repo.mark_outbound_sending(int(row["id"]))
     update_id = int(row["telegram_update_id"])
     try:
-        telegram.send_message(int(row["telegram_user_id"]), str(row["body_html"]), _markup(row["button_url"]))
+        telegram.send_message(
+            int(row["telegram_user_id"]),
+            str(row["body_html"]),
+            markup if markup is not None else _markup(row["button_url"]),
+        )
     except Exception as exc:
         kind, retry_after = classify_delivery_error(exc)
         status, nxt = _next_delivery(service, kind, retry_after, attempts, moment)
@@ -172,12 +176,17 @@ def process_updates(
         if not isinstance(update_id, int):
             continue
         existing = repo.get_outbound(update_id)
+        fresh_markup = None
         if existing is None:
             outcome = service.handle_update(update)
             if outcome is None:
                 repo.set_offset(update_id + 1)
                 continue
             chat_id, reply = outcome
+            query_id = reply.callback_query_id
+            if query_id and hasattr(telegram, "answer_callback"):
+                telegram.answer_callback(query_id)
+            fresh_markup = reply.markup()
             existing = repo.enqueue_outbound(update_id, chat_id, reply.text, reply.button_url)
         status = existing["status"]
         if status in {"sent", "needs_review"}:
@@ -189,7 +198,7 @@ def process_updates(
         if existing["next_retry_at"] and existing["next_retry_at"] > now_text:
             repo.set_offset(update_id + 1)
             continue
-        _send_outbound(service, telegram, repo, admin_notifier, existing, moment)
+        _send_outbound(service, telegram, repo, admin_notifier, existing, moment, markup=fresh_markup)
         repo.set_offset(update_id + 1)
     admin_notifier.flush_pending(limit=10)
 
