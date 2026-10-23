@@ -1,5 +1,7 @@
 # Chính sách tính cashback V1.2
 
+Hồ sơ cá nhân, cá nhân kinh doanh và hộ kinh doanh nằm ở `cashback_bot/TAX_PROFILES.md`. Cùng một công thức. Nhãn tài khoản không chọn thuế suất.
+
 Chưa phát hành cho khách. `CASHBACK_ESTIMATE_POLICY` mặc định `v1.1`. Bot đang chạy không được restart trong lần soạn chính sách này.
 
 ## Estimated

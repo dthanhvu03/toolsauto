@@ -278,6 +278,55 @@ def _signed(value: int, name: str) -> int:
     return value
 
 
+def settle_commission(
+    gross_vnd: int,
+    actual_fee_vnd: int | None,
+    tax_withheld_vnd: int | None,
+    unpaid_tax_reserve_vnd: int | None,
+    other_cost_vnd: int,
+    *,
+    fee_already_in_gross: bool,
+    withheld_already_in_gross: bool,
+    reserve_already_in_gross: bool,
+    share_bps: int = 7_000,
+) -> tuple[int | None, int | None, tuple[str, ...]]:
+    """Một công thức cho mọi loại hình. Trả (distributable, cashback, lý do thiếu).
+
+    Thuế đã khấu trừ và dự phòng là hai khoản. Khoản đã nằm trong gross thì không trừ lại.
+    """
+    share_bps = _bps(share_bps, "share")
+    missing: list[str] = []
+    if actual_fee_vnd is None and not fee_already_in_gross:
+        missing.append("missing_fee")
+    if tax_withheld_vnd is None and not withheld_already_in_gross:
+        missing.append("missing_withheld_tax")
+    if unpaid_tax_reserve_vnd is None and not reserve_already_in_gross:
+        missing.append("missing_tax_reserve")
+    if missing:
+        return None, None, tuple(missing)
+    gross = _vnd(gross_vnd, "gross")
+    fee = 0 if fee_already_in_gross else _vnd(actual_fee_vnd, "fee")
+    withheld = 0 if withheld_already_in_gross else _vnd(tax_withheld_vnd, "withheld")
+    reserve = 0 if reserve_already_in_gross else _vnd(unpaid_tax_reserve_vnd, "reserve")
+    other = _vnd(other_cost_vnd, "other")
+    distributable = gross - fee - withheld - reserve - other
+    if distributable < 0:
+        distributable = 0
+    return distributable, bps_floor(distributable, share_bps), ()
+
+
+def unaccounted_withheld(original_vnd: int, adjustment_vnd: int, already_in_gross_vnd: int) -> int:
+    """Điều chỉnh sau khấu trừ. Chỉ phần chưa nằm trong gross được trừ tiếp."""
+    original = _vnd(original_vnd, "original")
+    already = _vnd(already_in_gross_vnd, "already")
+    if isinstance(adjustment_vnd, bool) or not isinstance(adjustment_vnd, int):
+        raise CalculationError("adjustment")
+    updated = original + adjustment_vnd
+    if updated < 0 or already > updated:
+        raise ReconciliationRequired("withheld_adjustment")
+    return updated - already
+
+
 class DryRunLedger:
     """Sổ thử. Không ghi production và không phát hành payable."""
 
