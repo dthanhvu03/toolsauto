@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (g) — ADR-048 tỷ lệ chia trong /admin, chờ restart
+
+Bot chạy PLAN-062 từ 09:41 UTC (PID 441796); user đã áp dụng mức dự phòng #1 (Cá nhân 0,98%/10%). Mới: `/admin` → Chính sách → Đổi tỷ lệ chia (bảng `share_policies`, migration 006 tự tạo khi dùng lần đầu). Thử trên bản sao DB ok. 157 passed. Cần user restart; số khách không đổi cho tới khi admin áp dụng tỷ lệ mới.
+
+---
+
 ## Phiên 2026-10-23 (f) — PLAN-062 admin áp dụng phí/thuế dự phòng, chờ restart
 
 Bot đang chạy V1.2 từ 09:26 UTC (PID 439579). PLAN-062 + ADR-047: `/admin` → Thuế & phí → Đổi mức áp dụng (loại hình, phí, thuế 0–50%, ngày hiệu lực, xem trước). Bảng mới `reserve_policies`/`reserve_drafts` tự tạo khi bot dùng lần đầu (CREATE IF NOT EXISTS, không đụng bảng cũ). Thử trên bản sao DB ok. 151 passed. Cần user restart; chưa có mức nào được áp dụng nên số khách không đổi cho tới khi admin bấm Áp dụng. Phần 2 (hồ sơ thuế cho đối soát) chưa làm.

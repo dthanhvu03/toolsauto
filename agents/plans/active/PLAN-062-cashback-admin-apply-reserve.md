@@ -60,3 +60,13 @@ Bản nháp FEE/TAX kiểu cũ (`customer_effect=none`) bỏ khỏi giao diện;
 - Docs: `POLICY_V12.md` mục đổi mức dự phòng, `TAX_PROFILES.md` mục đã có trên bot.
 - Thử trên bản sao `data/backups/cashback-20261023T092624Z.sqlite`: đi hết wizard, áp dụng Hộ kinh doanh thuế 1,5% → `reserve_policies` 1 dòng, `active_reserve` đúng, `integrity_check` ok; xem trước 27 link: 470.205đ → 515.089đ.
 - Test: `tests/test_cashback_reserve.py` (10 test) + cập nhật test cũ. Proof: `.venv/bin/python -m pytest tests/test_cashback_*.py -q` → **151 passed**.
+
+### Mở rộng: tỷ lệ chia trong /admin (ADR-048) — 2026-10-23
+
+User yêu cầu đổi tỷ lệ chia trong Telegram. Bot đã chạy PLAN-062 (bảng 005 có trên DB thật, mức dự phòng #1: Cá nhân 0,98%/10% từ 16:55) nên chỉ thêm, không sửa bảng cũ.
+- `migrations/006_share_policies.sql`: `share_policies` (CHECK 0–7000, bội số 100) và `share_drafts`.
+- `/admin` → Chính sách → ✏️ Đổi tỷ lệ chia: số nguyên %, ngày hiệu lực, xem trước (khách nhận / phần giữ lại trên 100.000đ, tổng link gần nhất), áp dụng. Mở wizard này hủy wizard dự phòng đang dở và ngược lại.
+- Báo giá V1.2, `/cachtinh`, Tổng quan, Chính sách, Thuế & phí đọc tỷ lệ đang áp dụng. Link ghi `cashback_rate_percent` thật và `+s{id}`.
+- Màn Chính sách: mục bản nháp đổi tên "BẢN NHÁP HẠNG THÀNH VIÊN" để không lẫn với tỷ lệ chia đã áp dụng thật.
+- Thử trên bản sao `data/backups/cashback-20261023T101217Z.sqlite` (có mức dự phòng #1): áp dụng 65% → `share_policies` 1 dòng, mức dự phòng giữ nguyên, `live_policy` = 6500/98/1000, `integrity_check` ok; 27 link: khách tổng 470.205đ → 436.611đ.
+- Test: `tests/test_cashback_share.py` (6 test). Proof: **157 passed**.
