@@ -231,6 +231,28 @@ def test_thong_bao_admin_im_lang_tru_loi(tmp_path):
     assert "Người dùng mới" in tg.sent[0]["html"]
     assert "@buyer" in tg.sent[0]["html"]
     assert "Lỗi bot" in tg.sent[1]["html"]
+    for message in tg.sent:
+        html = message["html"]
+        assert html.count("<blockquote expandable>") == 1
+        assert html.endswith("</blockquote>")
+        assert "User <code>111</code>" in html
+
+
+def test_thong_bao_link_gon_ma_ky_thuat_thu_gon(tmp_path):
+    store = repo(tmp_path)
+    tg = Telegram()
+    notifier = AdminNotifier(store, tg, enabled=True, chat_id=999)
+    bot = service(tmp_path, _fresh_client())
+    bot.client.payload["productInfo"]["productName"] = "Quần Ống Rộng Nữ Túi Xéo Mộc Studio, Thiết Kế Suông Dài"
+    customer = Telegram()
+    process_updates(bot, customer, store, [_message(95, "https://shopee.vn/product/9/8")], notifier)
+    html = [m["html"] for m in tg.sent if "Đã gửi link" in m["html"]][0]
+    head, details = html.split("<blockquote expandable>")
+    assert "🛍️ Quần Ống Rộng Nữ Túi Xéo Mộc Studio\n" in head
+    assert "Thiết Kế" not in head
+    assert "💰 Giá 250.000đ · Hoàn <b>14.000đ</b>" in head
+    assert "Sub <code>" not in head and "Item <code>" not in head
+    assert "Item <code>8</code>" in details
 
 
 def test_thong_bao_admin_loi_gui_khong_vang_vong_poll(tmp_path):
