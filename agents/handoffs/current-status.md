@@ -1,3 +1,9 @@
+## Phiên 2026-10-23 (r) — PLAN-067 đã push, PLAN-068 suất 24 giờ
+
+Claude Code: PLAN-067 commit `3d3d383` + `7890c0c`, push `main`. PLAN-068: `client._note_budget` đọc header `RateLimit` (3 cửa sổ 15 phút / 1 ngày / 30 ngày), mức giữ 70% theo cửa sổ chật nhất; response 200 mà một cửa sổ `r=0` thì key nghỉ `t` giây luôn. `sync_posted.INTERVAL_SEC` 15 → 60 phút. PM2 đã restart 20:07, không 429. Key mới: 6 bài hẹn (Uyển Nhi 2, Sống Nhẹ 4). 12 test cluster/concurrency fail vì đọc `BUFFER_CHANNELS` thật trong DB (fail giống hệt trên code cũ). Next: theo dõi bài 20:30 Sống Nhẹ lên; key 2, 3 mở lại khoảng 15:20 ngày 24/10; cân nhắc bỏ thử first_comment (mỗi bài tốn thêm 1 request bị từ chối trên gói Free); sửa test đọc DB thật.
+
+---
+
 ## Phiên 2026-10-23 (q) — PLAN-067 chạy thật, key 1 thay key mới
 
 Claude Code: PLAN-067 (bảng kênh lưu `storage/db/config/buffer_channels.json`, `post_statuses` gom theo key, kênh lạ không đổ về key chính khi còn key chưa có bảng) đã chạy trên PM2, chưa commit. Lúc 19:29–19:49 cả 3 key cũ dính 429 cạn suất 24 giờ (key 2, 3 mở lại khoảng 15:20 ngày 24/10; key 1 cũ 15:17 ngày 24/10). Theo tài liệu Buffer: Free = 250 request/24 giờ mỗi key, 429 không kéo dài khóa. Owner tạo key mới cho tài khoản #1 (`.env` `BUFFER_API_KEY`, vị trí 1 = `f8pL...Y1DI`), Uyển Nhi + Sống Nhẹ có mã kênh mới. Owner duyệt: đổi `BUFFER_CHANNELS`, 48 material READY/NEW, job 1110/1111 → FAILED; backup `data/backups/buffer-channel-move-20261023T125358Z.json`. 19:56 job 1113 hẹn Sống Nhẹ 20:30 qua key mới. Next: xem bài 20:30 có lên; Uyển Nhi được xếp ở vòng sau; Owner quyết sửa tiếp đọc cửa sổ 24 giờ + giãn sync 60 phút; commit PLAN-067.
