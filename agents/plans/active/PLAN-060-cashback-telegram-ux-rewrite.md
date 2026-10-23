@@ -210,5 +210,5 @@ User duyệt 2026-10-23, câu 1–3 lấy theo đề xuất:
 - `admin_ui.py`: màn "Nội dung lệnh" khớp danh sách lệnh mới.
 - Giữ nguyên các câu an toàn test đang ép: "không thu phí sử dụng", "không bảo đảm đơn hàng được ghi nhận", "không bảo đảm Shopee sẽ ghi nhận hoa hồng", "Chưa phải tiền có thể rút.", "Shopee xác nhận đơn hợp lệ", "chưa chính thức áp dụng".
 - Ngoại lệ từ vựng: "hoa hồng" vẫn xuất hiện ở `/dieukien` (câu an toàn) và `/hang` (tỷ lệ), không chỉ `/cachtinh`.
-- **Cần chủ bot duyệt riêng** (ADR-045: cắt V1.2 chỉ sau khi duyệt câu hiển thị): chữ mới của `how_to_calc_v12` và dòng `ⓘ` thẻ V1.2. Bot đang chạy V1.1 nên chưa ảnh hưởng khách.
+- ✅ **Chủ bot đã duyệt chữ hiển thị mới, gồm cả V1.2 (2026-10-23)** (ADR-045: cắt V1.2 chỉ sau khi duyệt câu hiển thị): `how_to_calc_v12` và dòng `ⓘ` thẻ V1.2. Duyệt chữ **không** bật V1.2; vẫn cần backup, migration `001` trên bản sao, `CASHBACK_ESTIMATE_POLICY=v1.2`, restart (xem `POLICY_V12.md`).
 - Test: cập nhật assert tiêu đề ở `test_cashback_bot.py`, `test_cashback_v11.py`, `test_cashback_v12.py`; thêm `test_khuon_chu_khach_plan_060` (≤1 dòng ⓘ, không chữ "cashback", thẻ không nhắc "hoa hồng", <3500 ký tự, thẻ 0đ). Proof: `.venv/bin/python -m pytest tests/test_cashback_*.py -q` → **123 passed**.
