@@ -1,3 +1,18 @@
+## Phiên 2026-10-23 (s) — PLAN-069: dọn ổ đĩa không xóa video bài đang hẹn Buffer
+
+Claude Code, Owner duyệt "Vá code + gia hạn file". Bài Sống Nhẹ 20:30 23/10 (job 1113, material 1280) hỏng: Buffer tải `/buffer-media/1280/…` nhận 404. Nguyên nhân: `StorageCleanupService.prune_media` (Maintenance chạy 6 giờ/lần và ngay khi khởi động) xóa file `reup` quá 7 ngày. Job Buffer DONE ngay khi hẹn, không có `media_path`, nên không được che. Vòng 20:10 (sau restart 20:07) xóa file 1280 và 1300 (job 1118, 14:30 24/10), đặt hai material FAILED.
+
+- 21:28 ICT: `touch -m` 10 file reup của bài đang hẹn (1326, 1330, 1332–1334, 1380–1383, 1388), gia hạn 7 ngày.
+- Code: `_get_buffer_scheduled_material_ids()` (job `buffer` có `external_post_id`, không FAILED/CANCELLED, `schedule_ts` trong 2 ngày qua trở đi). `prune_media` bỏ qua `viral_<id>_…` thuộc tập đó. 4 test mới; 145 passed (storage_cleanup, adversarial, hardware).
+- 21:33 restart Maintenance + Web_Dashboard: vòng dọn đầu không đụng bài đang hẹn, 18 bài từ 24/10 còn đủ file (trừ 1118).
+- **Chưa commit.** Deploy `git reset --hard` sẽ mất bản vá. Commit + push khi Owner đồng ý.
+- Job 1118 (14:30 24/10) sẽ fail trên Buffer vì file mất. Không khôi phục được.
+- Suất ngày key mới `f8pL...Y1DI`: 59/250 lúc 21:05, 50/250 lúc 21:33. Mức giữ chặn hỏi trạng thái bài ⇒ job đã đăng chưa được đánh dấu tới khi cửa sổ ngày hồi trên 175. Mỗi bài hiện tốn 2–3 request (first_comment bị từ chối + gửi lại).
+
+Next: commit/push PLAN-069; theo dõi vòng dọn 03:33 và 09:33 24/10; key 2, 3 mở lại khoảng 15:20 24/10.
+
+---
+
 ## Phiên 2026-10-23 (r) — PLAN-067 đã push, PLAN-068 suất 24 giờ
 
 Claude Code: PLAN-067 commit `3d3d383` + `7890c0c`, push `main`. PLAN-068: `client._note_budget` đọc header `RateLimit` (3 cửa sổ 15 phút / 1 ngày / 30 ngày), mức giữ 70% theo cửa sổ chật nhất; response 200 mà một cửa sổ `r=0` thì key nghỉ `t` giây luôn. `sync_posted.INTERVAL_SEC` 15 → 60 phút. PM2 đã restart 20:07, không 429. Key mới: 6 bài hẹn (Uyển Nhi 2, Sống Nhẹ 4). 12 test cluster/concurrency fail vì đọc `BUFFER_CHANNELS` thật trong DB (fail giống hệt trên code cũ). Next: theo dõi bài 20:30 Sống Nhẹ lên; key 2, 3 mở lại khoảng 15:20 ngày 24/10; cân nhắc bỏ thử first_comment (mỗi bài tốn thêm 1 request bị từ chối trên gói Free); sửa test đọc DB thật.

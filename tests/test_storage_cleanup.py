@@ -263,6 +263,51 @@ class TestStorageCleanupMediaPruning:
             svc.prune_media(retention_days=7, dry_run=False)
             assert stale_reup.exists()
 
+    def test_prune_media_keeps_video_of_buffer_scheduled_post(self, cleanup_env):
+        """PLAN-069: bài đã hẹn trên Buffer không có media_path — che theo material id."""
+        svc: StorageCleanupService = cleanup_env["service"]
+        stale_raw = cleanup_env["files"]["stale_raw"]
+        stale_reup = cleanup_env["files"]["stale_reup"]
+
+        with patch.object(svc, "_get_active_job_media_paths", return_value=set()), \
+             patch.object(svc, "_get_buffer_scheduled_material_ids", return_value={301}), \
+             patch.object(svc, "_update_material_failed_if_stale") as mock_update:
+            svc.prune_media(retention_days=7, dry_run=False)
+
+        assert stale_reup.exists()
+        assert stale_raw.exists()
+        mock_update.assert_not_called()
+
+    def test_prune_media_buffer_ids_do_not_shield_other_materials(self, cleanup_env):
+        svc: StorageCleanupService = cleanup_env["service"]
+        stale_reup = cleanup_env["files"]["stale_reup"]
+
+        with patch.object(svc, "_get_active_job_media_paths", return_value=set()), \
+             patch.object(svc, "_get_buffer_scheduled_material_ids", return_value={30, 3010}), \
+             patch.object(svc, "_update_material_failed_if_stale"):
+            svc.prune_media(retention_days=7, dry_run=False)
+
+        assert not stale_reup.exists()
+
+    def test_buffer_scheduled_material_ids_db_error_returns_empty(self, cleanup_env):
+        svc: StorageCleanupService = cleanup_env["service"]
+
+        with patch("app.core.database.core.SessionLocal", side_effect=RuntimeError("db down")):
+            assert svc._get_buffer_scheduled_material_ids() == set()
+
+    def test_buffer_scheduled_material_ids_query(self, cleanup_env):
+        svc: StorageCleanupService = cleanup_env["service"]
+        query = MagicMock()
+        query.filter.return_value = query
+        query.all.return_value = [(1326,), (1334,)]
+        db = MagicMock()
+        db.query.return_value = query
+
+        with patch("app.core.database.core.SessionLocal") as mock_session:
+            mock_session.return_value.__enter__.return_value = db
+            assert svc._get_buffer_scheduled_material_ids() == {1326, 1334}
+        assert query.filter.call_count == 4
+
     def test_prune_media_updates_db_material_status(self, cleanup_env):
         svc: StorageCleanupService = cleanup_env["service"]
         stale_reup = cleanup_env["files"]["stale_reup"]
