@@ -353,13 +353,16 @@ def test_ten_san_pham_bi_escape(tmp_path):
 def test_lenh_huongdan_khong_tao_link(tmp_path):
     client = FakeClient(payload())
     bot = service(tmp_path, client)
-    for update_id, text in ((60, "/huongdan"), (62, "/huongdan@zt_shopee_bot"), (65, "/help")):
+    for update_id, text in ((60, "/huongdan"), (62, "/huongdan@zt_shopee_bot")):
         reply = bot.handle_text(111, "buyer", text, update_id=update_id, now=NOW)
-        assert "CÁCH SỬ DỤNG" in reply.text
-        assert "Copy link sản phẩm" in reply.text
-        assert "không mất phí sử dụng bot" in reply.text
-        assert "quản lý số dư hoặc rút tiền" in reply.text
+        assert "HƯỚNG DẪN SỬ DỤNG" in reply.text
+        assert "không thu phí sử dụng" in reply.text
+        assert "không bảo đảm đơn hàng được ghi nhận" in reply.text
         assert reply.button_url is None
+    help_reply = bot.handle_text(111, "buyer", "/help", update_id=65, now=NOW)
+    assert "TRUNG TÂM TRỢ GIÚP" in help_reply.text
+    assert "HƯỚNG DẪN SỬ DỤNG" not in help_reply.text
+    assert help_reply.button_url is None
     assert client.calls == 0
     conn = sqlite3.connect(tmp_path / "cashback.sqlite")
     assert conn.execute("SELECT COUNT(*) FROM link_requests").fetchone()[0] == 0
@@ -382,9 +385,47 @@ def test_lenh_cach_tinh(tmp_path):
     bot = service(tmp_path, client)
     for update_id, text in ((63, "/cachtinh"), (64, "/cachtinh@zt_shopee_bot")):
         reply = bot.handle_text(111, "buyer", text, update_id=update_id, now=NOW)
-        assert "Cách tính hoàn tiền" in reply.text
+        assert "CÁCH TÍNH HOÀN TIỀN" in reply.text
+        assert "Tỷ lệ tính số dự kiến: 70%" in reply.text
         assert "70% hoa hồng ước tính" in reply.text
+        assert "7.000đ" in reply.text
+        assert "chưa bật" not in reply.text
+        assert "dự phòng" not in reply.text
         assert reply.button_url is None
+    assert client.calls == 0
+
+
+def test_nam_lenh_tach_noi_dung(tmp_path):
+    client = FakeClient(payload())
+    bot = service(tmp_path, client)
+    replies = {
+        name: bot.handle_text(111, "buyer", command, update_id=index, now=NOW).text
+        for index, (name, command) in enumerate(
+            (
+                ("huongdan", "/huongdan"),
+                ("dieukien", "/dieukien"),
+                ("cachtinh", "/cachtinh"),
+                ("hang", "/hang"),
+                ("help", "/help"),
+            ),
+            start=70,
+        )
+    }
+    assert replies["help"] != replies["huongdan"]
+    assert "TRUNG TÂM TRỢ GIÚP" in replies["help"]
+    assert "/cachtinh" in replies["help"]
+    assert "không bảo đảm Shopee sẽ ghi nhận hoa hồng" in replies["dieukien"]
+    assert "60%" not in replies["hang"]
+    assert "65%" not in replies["hang"]
+    assert "bạn đang ở hạng" not in replies["hang"].lower()
+    assert "chưa chính thức áp dụng" in replies["hang"]
+    assert "7.000đ" in replies["cachtinh"]
+    for text in replies.values():
+        assert text.count("<b>") == text.count("</b>")
+        assert text.count("<i>") == text.count("</i>")
+        assert "chắc chắn được hoàn" not in text
+        assert "số dư khả dụng" not in text
+        assert "đã duyệt thưởng" not in text
     assert client.calls == 0
 
 

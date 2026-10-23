@@ -6,7 +6,7 @@ import html
 import re
 from dataclasses import dataclass
 
-from cashback_bot.money import format_vnd
+from cashback_bot.money import estimated_cashback, format_vnd
 
 CLOSED = "Bot đang mở thử cho một số tài khoản. Tài khoản này chưa được mở."
 START_MESSAGE = (
@@ -21,44 +21,51 @@ START_MESSAGE = (
     "👇 Thử gửi link món bạn đang muốn mua nhé!\n\n"
     "🧪 Bot đang trong giai đoạn thử nghiệm. Tiền hoàn chỉ là ước tính; hiện chưa hỗ trợ theo dõi đơn hoặc chi trả tiền hoàn."
 )
-GUIDE = (
-    "🎁 <b>CÁCH SỬ DỤNG</b>\n\n"
-    "1️⃣ Copy link sản phẩm Shopee.\n"
-    "2️⃣ Gửi link vào cuộc trò chuyện này.\n"
-    "3️⃣ Xem khoản hoàn dự kiến.\n"
-    "4️⃣ Bấm \"🛒 Mua trên Shopee\" để đặt hàng.\n\n"
-    "💡 Bạn mua hàng trên Shopee như bình thường,\n"
-    "không mất phí sử dụng bot.\n\n"
-    "ℹ️ Khoản hoàn phụ thuộc vào việc Shopee\n"
-    "ghi nhận và xác nhận đơn hợp lệ.\n\n"
-    "Hiện bot chưa hỗ trợ theo dõi đơn,\n"
-    "quản lý số dư hoặc rút tiền."
+HUONGDAN = (
+    "🎁 <b>HƯỚNG DẪN SỬ DỤNG</b>\n\n"
+    "<b>1️⃣</b> Sao chép link sản phẩm bạn muốn mua trên Shopee.\n\n"
+    "<b>2️⃣</b> Gửi link đó vào cuộc trò chuyện với bot.\n\n"
+    "<b>3️⃣</b> Bot sẽ tạo link mua hàng và hiển thị số tiền hoàn dự kiến (nếu có dữ liệu).\n\n"
+    "<b>4️⃣</b> Nhấn <b>🛒 Mua trên Shopee</b> để mở sản phẩm và đặt hàng.\n\n"
+    "💡 <b>Lưu ý:</b> Bot không thu phí sử dụng. Việc mua hàng và thanh toán được thực hiện trực tiếp trên Shopee.\n\n"
+    "⚠️ Tiền hoàn hiển thị chỉ là ước tính, không bảo đảm đơn hàng được ghi nhận hay được hoàn tiền. "
+    "Hiện bot đang thử nghiệm, chưa hỗ trợ tra cứu đơn và chi trả."
 )
 DIEUKIEN = (
     "🛡️ <b>LƯU Ý QUAN TRỌNG</b>\n"
-    "<i>Để đơn hàng được ghi nhận chính xác</i>\n\n"
-    "<b>1.</b> Xóa sản phẩm định mua khỏi giỏ hàng nếu đã thêm trước đó, "
-    "sau đó mở link do bot cung cấp để mua.\n\n"
-    "<b>2.</b> Sau khi mở link, không xem livestream, video hoặc nhấp vào các link quảng cáo khác "
-    "trước khi hoàn tất thanh toán.\n\n"
-    "<b>3.</b> Nên tạo link mới cho mỗi lần thanh toán để dễ ghi nhận và đối soát đơn hàng.\n\n"
-    "<b>4.</b> Việc ghi nhận đơn hàng và hoa hồng do <b>Shopee quyết định</b>. "
-    "Bot không thể can thiệp hoặc bảo đảm mọi đơn đều được hoàn tiền.\n\n"
-    "<b>5.</b> Hãy thao tác mua hàng tự nhiên, tránh nhấp link hoặc đặt hàng liên tục bất thường "
-    "khiến đơn có nguy cơ bị đánh giá không hợp lệ.\n\n"
-    "💡 <b>Mẹo:</b> Chọn sản phẩm trước → Gửi link cho bot → Mở link bot cung cấp → Hoàn tất mua hàng."
+    "<i>Để tăng khả năng đơn hàng được ghi nhận</i>\n\n"
+    "<b>1.</b> Nếu sản phẩm đã có sẵn trong giỏ hàng, bạn nên xóa sản phẩm đó "
+    "và mở lại link do bot cung cấp trước khi mua.\n\n"
+    "<b>2.</b> Sau khi mở link từ bot, hạn chế nhấp sang link quảng cáo, livestream "
+    "hoặc link giới thiệu khác trước khi đặt hàng.\n\n"
+    "<b>3.</b> Mỗi lần mua hàng, bạn nên lấy và mở link mới từ bot "
+    "để thuận tiện cho việc ghi nhận và đối soát.\n\n"
+    "<b>4.</b> Hãy mua hàng tự nhiên. Tránh nhấp link hoặc thực hiện giao dịch lặp lại bất thường.\n\n"
+    "<b>5.</b> Đơn hàng và hoa hồng phải được Shopee ghi nhận hợp lệ. "
+    "Đơn bị hủy, trả hàng hoặc không phát sinh hoa hồng sẽ không đủ điều kiện xét thưởng.\n\n"
+    "💡 <b>Mẹo:</b> Chọn sản phẩm → Gửi link cho bot → Mở link được tạo → Đặt hàng trên Shopee.\n\n"
+    "ℹ️ Các bước trên chỉ giúp hạn chế rủi ro mất ghi nhận, "
+    "<b>không bảo đảm Shopee sẽ ghi nhận hoa hồng</b>."
 )
-HANG_NOTE = (
-    "Chương trình hạng Đồng, Bạc và Vàng đang được phát triển, chưa có hiệu lực. "
-    "Chưa có đơn đã xác nhận nên không có tiến độ lên hạng."
+HELP = (
+    "🤖 <b>TRUNG TÂM TRỢ GIÚP</b>\n\n"
+    "Bạn có thể gửi trực tiếp link sản phẩm Shopee vào đây để tạo link mua hàng "
+    "và xem khoản hoàn dự kiến.\n\n"
+    "<b>Các lệnh có thể sử dụng:</b>\n\n"
+    "🎁 /huongdan — Cách sử dụng bot\n\n"
+    "🛡️ /dieukien — Lưu ý để đơn được ghi nhận\n\n"
+    "💰 /cachtinh — Cách tính tiền hoàn dự kiến\n\n"
+    "🏅 /hang — Thông tin hạng thành viên\n\n"
+    "🏠 /start — Bắt đầu sử dụng\n\n"
+    "ℹ️ Bot đang trong giai đoạn thử nghiệm, chưa hỗ trợ theo dõi đơn, quản lý số dư hoặc rút tiền."
 )
 BOT_COMMANDS = (
     ("start", "Bắt đầu"),
     ("huongdan", "Hướng dẫn sử dụng"),
-    ("dieukien", "Điều kiện nhận thưởng"),
-    ("cachtinh", "Cách tính cashback"),
+    ("dieukien", "Lưu ý khi mua hàng"),
+    ("cachtinh", "Cách tính hoàn tiền"),
     ("hang", "Hạng thành viên"),
-    ("help", "Trợ giúp"),
+    ("help", "Danh sách lệnh"),
 )
 
 
@@ -70,21 +77,19 @@ def _percent_label(bps: int) -> str:
 
 
 def how_to_calc_v11(rate_percent: int) -> str:
-    example = (10_000 * rate_percent) // 100
+    example = estimated_cashback(10_000, rate_percent)
     return (
-        "<b>Cách tính hoàn tiền</b>\n\n"
-        "<b>Đang áp dụng</b>\n"
-        f"Bot đang tính: hoàn = {rate_percent}% hoa hồng ước tính.\n"
-        f"Ví dụ hoa hồng 10.000đ thì hoàn dự kiến {format_vnd(example)}.\n"
-        "Đây là số dự kiến từ hoa hồng ước tính. Công thức đang chạy chưa trừ thuế hay phí.\n"
-        "Hạng Đồng, Bạc, Vàng chưa áp dụng vào cách tính này.\n\n"
-        "<b>Công thức đề xuất, chưa bật</b>\n"
-        "Khi được duyệt, hoàn = tỷ lệ chia × phần hoa hồng còn lại sau thuế, phí, điều chỉnh và dự phòng hợp lệ.\n"
-        "Một khoản không bị trừ hai lần.\n"
-        "Số dự kiến có thể khác số cuối. Hoa hồng có thể thay đổi.\n"
-        "Số cuối chỉ chốt khi đối soát đủ.\n"
-        "Bot không công bố số được rút hay ngày trả thưởng.\n"
-        "Hiện chưa theo dõi đơn và chưa chi trả."
+        "💰 <b>CÁCH TÍNH HOÀN TIỀN</b>\n\n"
+        f"<b>Tỷ lệ tính số dự kiến: {rate_percent}%</b>\n\n"
+        f"Số tiền hoàn dự kiến được tính bằng <b>{rate_percent}% hoa hồng ước tính</b> từ sản phẩm.\n\n"
+        "📌 <b>Ví dụ:</b>\n\n"
+        "• Hoa hồng ước tính: 10.000đ\n"
+        f"• Tiền hoàn dự kiến: <b>{format_vnd(example)}</b>\n\n"
+        "<b>Lưu ý:</b>\n\n"
+        "• Đây chỉ là số tiền tham khảo, chưa trừ thuế và phí.\n"
+        "• Hoa hồng thực tế có thể thay đổi hoặc bằng 0 nếu đơn không đủ điều kiện.\n"
+        "• Số dự kiến không phải tiền đã được duyệt hoặc số dư có thể rút.\n\n"
+        "⏳ Hiện bot chưa hỗ trợ theo dõi đơn hàng, xác nhận tiền hoàn thực tế hoặc chi trả."
     )
 
 
@@ -106,9 +111,15 @@ def how_to_calc_v12(rate_percent: int, fee_bps: int, tax_reserve_bps: int) -> st
 def hang_message(rate_percent: int) -> str:
     return (
         "🏅 <b>HẠNG THÀNH VIÊN</b>\n\n"
-        f"{HANG_NOTE}\n\n"
-        f"Hiện tỷ lệ cashback dự kiến của chương trình là {rate_percent}% hoa hồng ước tính, theo công thức đang áp dụng. "
-        "Mức này chưa phải hạng Vàng trên quỹ sau phí và thuế."
+        "Chương trình thành viên <b>Đồng · Bạc · Vàng</b> đang được phát triển "
+        "và chưa chính thức áp dụng.\n\n"
+        "Hiện tại:\n\n"
+        "• Chưa có xếp hạng thành viên.\n"
+        "• Chưa tính tiến độ lên hạng.\n"
+        f"• Các báo giá hiện tại đang sử dụng tỷ lệ {rate_percent}% hoa hồng ước tính.\n\n"
+        "✨ Khi chương trình ra mắt, bot sẽ thông báo rõ điều kiện lên hạng, "
+        "quyền lợi và thời điểm áp dụng.\n\n"
+        "💡 Bạn chưa cần thực hiện thao tác nào để đăng ký hạng thành viên."
     )
 INVALID_LINK = (
     "Mình cần link sản phẩm Shopee. "

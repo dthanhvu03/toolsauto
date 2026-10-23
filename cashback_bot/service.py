@@ -15,7 +15,8 @@ from cashback_bot.messages import (
     CLOSED,
     GENERIC_FAIL,
     DIEUKIEN,
-    GUIDE,
+    HELP,
+    HUONGDAN,
     INVALID_LINK,
     NOT_FOUND,
     START_MESSAGE,
@@ -103,8 +104,10 @@ class CashbackService:
         command = _command_name(stripped)
         if command == "/start":
             return BotReply(START_MESSAGE)
-        if command in {"/help", "/huongdan"}:
-            return BotReply(GUIDE)
+        if command == "/help":
+            return BotReply(HELP)
+        if command == "/huongdan":
+            return BotReply(HUONGDAN)
         if command == "/dieukien":
             return BotReply(DIEUKIEN)
         if command == "/cachtinh":
@@ -120,7 +123,7 @@ class CashbackService:
         if command == "/hang":
             return BotReply(hang_message(self.settings.cashback_rate_percent))
         if command:
-            return BotReply(GUIDE)
+            return BotReply(HELP)
         target = parse_shopee_target(stripped)
         moment = now or datetime.now(timezone.utc)
         if not self._within_rate_limit(telegram_user_id, moment):
