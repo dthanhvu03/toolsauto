@@ -1,3 +1,12 @@
+## Phiên 2026-10-23 — cashback_bot: trạng thái bàn giao (Claude Code)
+
+Đã chạy trên production: PLAN-060 (UI/UX Telegram), V1.2, PLAN-062 + ADR-047 (admin áp dụng phí/thuế dự phòng), ADR-048 (tỷ lệ chia trong /admin), /cachtinh không lộ số nội bộ, PLAN-063 (📈 Thống kê). Code PLAN-064 (lưu ngành hàng, shop, tách hoa hồng) đã merge `main`, cần user restart bot. pytest `tests/test_cashback_*.py`: 171 passed.
+
+Đã xác nhận: phí Shopee thật 0,98%; tới kỳ 08/2026 chưa có khấu trừ thuế; click qua link bot mang đúng Sub ID.
+
+Còn mở: user xác nhận nút phía khách để archive PLAN-060; số `base_rate`/`cap` tài khoản để kiểm tra lệch hoa hồng; phần đồng bộ số liệu đơn/hoa hồng thật từ Shopee — user giao cho Antigravity, Claude Code không làm. Phương án Claude Code làm được: nhập file báo cáo Shopee xuất ra qua /admin.
+
+---
 ## Phiên 2026-10-23 (d) — PLAN-061 code xong: cooldown Buffer ghi ra file
 
 Claude Code (Owner giao trực tiếp): mốc 429 ghi ra `storage/db/config/buffer_cooldown.json` (`app/features/buffer/cooldown_store.py`, chỉ sha256 rút gọn của key). Guard trong `client.py` đọc file mỗi lần xem cooldown, nên Maintenance, Web và lần restart sau đều thấy cùng mốc. Trần 18 giờ → 72 giờ. `ping-key` đang khóa thì không gửi request; nhận 429 thì ghi vào guard chung. pytest Buffer: toàn bộ test mới + hồi quy pass; 7 test fail có sẵn trên code gốc (đã so bằng `git stash`). Thử 2 process riêng: B không gửi request khi A đã ghi khóa. Proof chi tiết trong PLAN-061. Chưa commit. PM2 vẫn tắt, chưa chạy thật với Buffer. Next: user bật Web_Dashboard rồi Maintenance sau 18:00 ICT 23/10, theo dõi `grep -E "Key vào cooldown|HTTP 429"` 24 giờ; nếu không có 429 lặp lại thì archive PLAN-061.
