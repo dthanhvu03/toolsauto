@@ -88,15 +88,40 @@ def _next_delivery(service: CashbackService, kind: str, retry_after: int | None,
     return status, nxt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _send_outbound(service, telegram, repo, admin_notifier, row, moment: datetime, markup=None) -> None:
+def _send_outbound(
+    service,
+    telegram,
+    repo,
+    admin_notifier,
+    row,
+    moment: datetime,
+    markup=None,
+    edit_message_id: int | None = None,
+) -> None:
     attempts = repo.mark_outbound_sending(int(row["id"]))
     update_id = int(row["telegram_update_id"])
+    target_user_id = int(row["telegram_user_id"])
+    target_body = str(row["body_html"])
+    target_markup = markup if markup is not None else _markup(row["button_url"])
+    edit_id = edit_message_id
+    if edit_id is None and "edit_message_id" in row.keys() and row["edit_message_id"]:
+        edit_id = int(row["edit_message_id"])
+
     try:
-        telegram.send_message(
-            int(row["telegram_user_id"]),
-            str(row["body_html"]),
-            markup if markup is not None else _markup(row["button_url"]),
-        )
+        sent_via_edit = False
+        if edit_id and hasattr(telegram, "edit_message_text"):
+            sent_via_edit = telegram.edit_message_text(
+                target_user_id,
+                edit_id,
+                target_body,
+                target_markup,
+            )
+        if not sent_via_edit:
+            telegram.send_message(
+                target_user_id,
+                target_body,
+                target_markup,
+            )
     except Exception as exc:
         kind, retry_after = classify_delivery_error(exc)
         status, nxt = _next_delivery(service, kind, retry_after, attempts, moment)
@@ -177,6 +202,7 @@ def process_updates(
             continue
         existing = repo.get_outbound(update_id)
         fresh_markup = None
+        target_edit_id = None
         if existing is None:
             outcome = service.handle_update(update)
             if outcome is None:
@@ -187,7 +213,14 @@ def process_updates(
             if query_id and hasattr(telegram, "answer_callback"):
                 telegram.answer_callback(query_id)
             fresh_markup = reply.markup()
-            existing = repo.enqueue_outbound(update_id, chat_id, reply.text, reply.button_url)
+            target_edit_id = reply.edit_message_id
+            existing = repo.enqueue_outbound(
+                update_id,
+                chat_id,
+                reply.text,
+                reply.button_url,
+                edit_message_id=target_edit_id,
+            )
         status = existing["status"]
         if status in {"sent", "needs_review"}:
             repo.set_offset(update_id + 1)
@@ -198,7 +231,18 @@ def process_updates(
         if existing["next_retry_at"] and existing["next_retry_at"] > now_text:
             repo.set_offset(update_id + 1)
             continue
-        _send_outbound(service, telegram, repo, admin_notifier, existing, moment, markup=fresh_markup)
+        if target_edit_id is None and "edit_message_id" in existing.keys() and existing["edit_message_id"]:
+            target_edit_id = int(existing["edit_message_id"])
+        _send_outbound(
+            service,
+            telegram,
+            repo,
+            admin_notifier,
+            existing,
+            moment,
+            markup=fresh_markup,
+            edit_message_id=target_edit_id,
+        )
         repo.set_offset(update_id + 1)
     admin_notifier.flush_pending(limit=10)
 

@@ -142,6 +142,7 @@ class BotReply:
     button_url: str | None = None
     inline_keyboard: tuple[tuple[tuple[str, str], ...], ...] | None = None
     callback_query_id: str | None = None
+    edit_message_id: int | None = None
 
     def markup(self) -> dict | None:
         if self.inline_keyboard:

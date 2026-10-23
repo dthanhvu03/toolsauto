@@ -101,6 +101,7 @@ class CashbackService:
         chat = message.get("chat") or {}
         user_id = sender.get("id")
         query_id = callback.get("id")
+        message_id = message.get("message_id")
         if not isinstance(user_id, int) or not isinstance(query_id, str):
             return None
         reply = self.admin_panel.handle_callback(
@@ -109,7 +110,11 @@ class CashbackService:
             str(chat.get("type") or ""),
             datetime.now(timezone.utc),
         )
-        return user_id, replace(reply, callback_query_id=query_id)
+        return user_id, replace(
+            reply,
+            callback_query_id=query_id,
+            edit_message_id=message_id if isinstance(message_id, int) else None,
+        )
 
     def handle_text(
         self,

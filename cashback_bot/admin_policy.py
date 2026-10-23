@@ -18,9 +18,15 @@ from pathlib import Path
 from cashback_bot.admin_ui import (
     FEE_KEYBOARD,
     MENU_KEYBOARD,
+    NAV_KEYBOARD,
     RANK_KEYBOARD,
+    command_copy_text,
     decision_keyboard,
+    fee_text,
     home_text,
+    policy_text,
+    rank_text,
+    simulation_text,
 )
 from cashback_bot.messages import BotReply
 from cashback_bot.pricing import MAX_SHARE_BPS, share_cashback
@@ -128,7 +134,7 @@ class AdminPanel:
         return self._confirm(user_id, draft_id, nonce, now)
 
     def _menu_screen(self, name: str, user_id: int, now: datetime) -> BotReply:
-        if name in {"home", "policy"}:
+        if name == "home":
             text = home_text(
                 rate_percent=self.displayed_rate_percent,
                 membership_on=self.membership_on,
@@ -136,26 +142,64 @@ class AdminPanel:
                 pending=self._pending_count(now),
             )
             return BotReply(text, inline_keyboard=MENU_KEYBOARD)
+        if name == "policy":
+            text = policy_text(
+                rate_percent=self.displayed_rate_percent,
+                pending=self._pending_count(now),
+            )
+            return BotReply(text, inline_keyboard=NAV_KEYBOARD)
         if name == "rank":
-            return BotReply(
-                "Hạng Đồng, Bạc, Vàng đang là mức định hướng, chưa áp dụng cho khách.\n"
-                "Chọn hạng để tạo bản nháp. Trần V1 là 70%.",
-                inline_keyboard=RANK_KEYBOARD,
+            try:
+                rates = self._rates()
+            except AdminSafetyError:
+                rates = dict(DIRECTIONAL_BPS)
+            b_cash, b_rem = share_cashback(100_000, rates["BRONZE"])
+            s_cash, s_rem = share_cashback(100_000, rates["SILVER"])
+            g_cash, g_rem = share_cashback(100_000, rates["GOLD"])
+            text = rank_text(
+                bronze_percent=_percent(rates["BRONZE"]),
+                silver_percent=_percent(rates["SILVER"]),
+                gold_percent=_percent(rates["GOLD"]),
+                displayed_rate_percent=self.displayed_rate_percent,
+                b_cash=b_cash,
+                b_rem=b_rem,
+                s_cash=s_cash,
+                s_rem=s_rem,
+                g_cash=g_cash,
+                g_rem=g_rem,
             )
+            return BotReply(text, inline_keyboard=RANK_KEYBOARD)
         if name == "fee":
-            return BotReply(
-                "<b>ESTIMATE RESERVE</b>\n"
-                "Phí và thuế ở đây chỉ là dự phòng khi ước tính.\n"
-                "Không phải thuế phải nộp và không sửa chứng từ đã đối soát.",
-                inline_keyboard=FEE_KEYBOARD,
+            fee_bps = 98
+            tax_bps = 1_000
+            sim_fee = (100_000 * fee_bps) // 10_000
+            sim_tax = (100_000 * tax_bps) // 10_000
+            sim_dist = 100_000 - sim_fee - sim_tax
+            text = fee_text(
+                fee_percent=_percent(fee_bps),
+                fee_bps=fee_bps,
+                tax_percent=_percent(tax_bps),
+                tax_bps=tax_bps,
+                sim_fee=sim_fee,
+                sim_tax=sim_tax,
+                sim_dist=sim_dist,
             )
+            return BotReply(text, inline_keyboard=FEE_KEYBOARD)
         if name == "sim":
-            return BotReply(self._simulation_text(), inline_keyboard=MENU_KEYBOARD)
+            try:
+                rates = self._rates()
+            except AdminSafetyError:
+                rates = dict(DIRECTIONAL_BPS)
+            text = simulation_text(
+                displayed_rate_percent=self.displayed_rate_percent,
+                rates=rates,
+            )
+            return BotReply(text, inline_keyboard=NAV_KEYBOARD)
         if name == "hist":
-            return BotReply(self._history_text(), inline_keyboard=MENU_KEYBOARD)
+            return BotReply(self._history_text(), inline_keyboard=NAV_KEYBOARD)
         return BotReply(
-            "V1 chỉ cho xem danh sách lệnh. Chưa sửa câu chữ /huongdan hay /dieukien tại đây.",
-            inline_keyboard=MENU_KEYBOARD,
+            command_copy_text(),
+            inline_keyboard=NAV_KEYBOARD,
         )
 
     def _begin(self, user_id: int, code: str, now: datetime) -> BotReply:
@@ -178,7 +222,11 @@ class AdminPanel:
                 self._audit(conn, user_id, "draft", draft_id, None, None, "collecting", now)
         except AdminSafetyError:
             return BotReply("Database đang chạy chưa được mở để lưu chính sách.")
-        return BotReply(f"Bản nháp #{draft_id}. {prompt}")
+        back_target = "c:menu:rank" if code in TIERS else "c:menu:fee"
+        return BotReply(
+            f"Bản nháp #{draft_id}. {prompt}",
+            inline_keyboard=((("◀️ Quay lại", back_target), ("🏠 Tổng quan", "c:menu:home")),),
+        )
 
     def _preview_number(self, draft: sqlite3.Row, raw: int, now: datetime) -> BotReply:
         parsed = _parse_bps(draft["domain"], raw)

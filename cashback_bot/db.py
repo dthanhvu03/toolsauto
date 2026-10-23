@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS outbound_messages (
     telegram_user_id INTEGER NOT NULL,
     body_html TEXT NOT NULL,
     button_url TEXT,
+    edit_message_id INTEGER,
     status TEXT NOT NULL DEFAULT 'pending',
     attempt_count INTEGER NOT NULL DEFAULT 0,
     next_retry_at TEXT,
@@ -136,6 +137,7 @@ class TrackingRepository:
             _add_column(conn, "telegram_users", "rate_window_start", "TEXT")
             _add_column(conn, "telegram_users", "rate_count", "INTEGER NOT NULL DEFAULT 0")
             _add_column(conn, "telegram_users", "cooldown_until", "TEXT")
+            _add_column(conn, "outbound_messages", "edit_message_id", "INTEGER")
 
     def upsert_user(self, telegram_user_id: int, username: str | None) -> bool:
         now = _utc_now()
@@ -340,16 +342,17 @@ class TrackingRepository:
         telegram_user_id: int,
         body_html: str,
         button_url: str | None,
+        edit_message_id: int | None = None,
     ) -> sqlite3.Row:
         with self.connect() as conn:
             conn.execute(
                 """
                 INSERT INTO outbound_messages (
-                    telegram_update_id, telegram_user_id, body_html, button_url, status, created_at
-                ) VALUES (?, ?, ?, ?, 'pending', ?)
+                    telegram_update_id, telegram_user_id, body_html, button_url, edit_message_id, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'pending', ?)
                 ON CONFLICT(telegram_update_id) DO NOTHING
                 """,
-                (update_id, telegram_user_id, body_html, button_url, _utc_now()),
+                (update_id, telegram_user_id, body_html, button_url, edit_message_id, _utc_now()),
             )
             return conn.execute(
                 "SELECT * FROM outbound_messages WHERE telegram_update_id = ?",

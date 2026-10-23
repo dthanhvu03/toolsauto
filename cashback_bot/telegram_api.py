@@ -115,6 +115,50 @@ class TelegramApi:
         if not payload.get("ok"):
             raise TelegramDeliveryError("permanent", status_code=response.status_code)
 
+    def edit_message_text(
+        self,
+        chat_id: int,
+        message_id: int,
+        html: str,
+        reply_markup: dict | None = None,
+    ) -> bool:
+        body: dict = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": html,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if reply_markup:
+            body["reply_markup"] = reply_markup
+        try:
+            response = requests.post(
+                f"{self._base}/editMessageText",
+                json=body,
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            logger.error("[Cashback] editMessageText network error: %s", exc)
+            return False
+        if response.status_code == 400:
+            try:
+                payload = response.json()
+                desc = str(payload.get("description", ""))
+                if "message is not modified" in desc.lower():
+                    return True
+            except Exception:
+                pass
+            logger.warning("[Cashback] editMessageText http=400: %s", response.text)
+            return False
+        if response.status_code >= 400:
+            logger.error("[Cashback] editMessageText http=%s: %s", response.status_code, response.text)
+            return False
+        try:
+            payload = response.json()
+            return bool(payload.get("ok"))
+        except ValueError:
+            return False
+
     def answer_callback(self, callback_query_id: str) -> None:
         try:
             requests.post(
