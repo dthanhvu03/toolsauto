@@ -1,3 +1,9 @@
+## Phiên 2026-10-23 — PLAN-060 UI/UX Telegram cashback_bot: duyệt + P0 xong
+
+Claude Code: user duyệt `agents/plans/active/PLAN-060-cashback-telegram-ux-rewrite.md` (giữ "bạn/mình", ẩn `/hang`, không reply keyboard). P0 xong: admin không còn biến dấu phẩy thành dấu chấm (`0,98%`, "Đồng, Bạc, Vàng"); Tổng quan hết lặp dòng; nút hết hạn giữ nút điều hướng. Sửa `cashback_bot/admin_ui.py`, `cashback_bot/admin_policy.py`, thêm 3 test (đỏ trên code cũ). pytest `tests/test_cashback_*.py`: 122 passed. Chưa commit. Chưa restart bot — user chưa chốt giờ restart. Next: Anti tạo TASK P1 cho Codex (lưu `reply_markup` trong `outbound_messages`, routing callback `u:`/`c:`, `answer_callback` toast/alert, `sendChatAction`, description, scope `/admin`); song song Claude Code soạn chữ P2 trong `messages.py`.
+
+---
+
 ## Phiên 2026-10-22 (b) — Dừng đăng bài
 
 Cursor: `pm2 stop` FB_Publisher_1, AI_Generator_1, Threads_AutoReply, Threads_NewsWorker, Threads_Publisher. Cùng Maintenance và Web đã tắt trước đó. Còn 9Router online. Không gọi Buffer.
