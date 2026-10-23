@@ -39,16 +39,20 @@ def home_text(
     calculator: str,
     pending: int | None,
 ) -> str:
-    rank = "đã bật" if membership_on else "chưa áp dụng"
+    rank = "Đã bật" if membership_on else "Chưa bật"
+    calculator_state = "Đã bật" if calculator == "V1.2" else "Chưa bật"
     pending_line = "không đọc được" if pending is None else str(pending)
     return (
         "<b>CASHBACK BOT — QUẢN TRỊ</b>\n\n"
-        "Phiên bản đang phục vụ: V1.1\n"
-        f"Cách tính đang hoạt động: {rate_percent}% hoa hồng ước tính\n"
+        "<b>TRẠNG THÁI HỆ THỐNG</b>\n\n"
+        "Chính sách báo giá: V1.1\n"
+        f"Tỷ lệ đang áp dụng: {rate_percent}%\n"
+        f"Calculator V1.2: {calculator_state}\n"
         f"Hạng thành viên: {rank}\n"
-        f"Calculator: {calculator}\n"
-        "Đối soát và chi trả: chưa mở\n"
+        "Đối soát &amp; chi trả: Chưa mở\n"
         f"Bản nháp đang chờ: {pending_line}\n\n"
-        "Sửa cấu hình chỉ tạo phiên bản mới sau khi xem trước và xác nhận. "
-        "Link cũ không đổi. Khách vẫn thấy công thức V1.1 cho tới khi có quyết định bật riêng."
+        "<b>Thông tin áp dụng</b>\n"
+        f"Khách hiện nhận báo giá bằng {rate_percent}% hoa hồng ước tính, chưa khấu trừ thuế và phí.\n"
+        "Thay đổi cấu hình không ảnh hưởng đến khách cho đến khi chính sách mới được kích hoạt. "
+        "Báo giá đã lưu không tự tính lại."
     )

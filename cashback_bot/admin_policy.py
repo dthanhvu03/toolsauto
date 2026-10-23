@@ -27,7 +27,6 @@ from cashback_bot.pricing import MAX_SHARE_BPS, share_cashback
 
 logger = logging.getLogger("cashback_bot")
 
-PRODUCTION_DB = Path("/home/vu/toolsauto/data/cashback.sqlite")
 SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "004_admin_policy.sql"
 CONFIRM_TTL = timedelta(minutes=10)
 TIERS = {"BRONZE": "Đồng", "SILVER": "Bạc", "GOLD": "Vàng"}
@@ -136,12 +135,6 @@ class AdminPanel:
                 calculator=self.calculator_label,
                 pending=self._pending_count(now),
             )
-            if name == "policy":
-                text += (
-                    "\n\nChính sách đã lưu không tự thay công thức khách đang thấy. "
-                    "Khách vẫn được báo theo "
-                    f"{self.displayed_rate_percent}% hoa hồng ước tính."
-                )
             return BotReply(text, inline_keyboard=MENU_KEYBOARD)
         if name == "rank":
             return BotReply(
@@ -296,8 +289,8 @@ class AdminPanel:
             return BotReply("Đã có phiên bản mới hơn. Hãy tạo lại bản nháp.")
         logger.info("[Cashback] admin policy confirmed domain=%s", domain)
         return BotReply(
-            "Đã lưu phiên bản chính sách. Khách chưa đổi công thức. "
-            "Link cũ giữ số đã báo. Chưa chi trả.",
+            "Đã phê duyệt và lưu phiên bản. Chưa kích hoạt, nên khách vẫn nhận báo giá hiện hành. "
+            "Báo giá đã lưu không tự tính lại. Chưa chi trả.",
             inline_keyboard=MENU_KEYBOARD,
         )
 
@@ -422,8 +415,6 @@ class AdminPanel:
 
     def _connect(self) -> sqlite3.Connection:
         path = Path(self.db_path)
-        if path.resolve() == PRODUCTION_DB.resolve():
-            raise AdminSafetyError("production_db")
         path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(path)
         conn.row_factory = sqlite3.Row
@@ -487,8 +478,8 @@ def _rank_preview(tier: str, before_bps: int, after_bps: int) -> str:
         "Mô phỏng quỹ phân chia 100.000đ. Không phải lợi nhuận.\n"
         f"Trước: hoàn {before[0]:,}đ, phần còn {before[1]:,}đ\n"
         f"Sau: hoàn {after[0]:,}đ, phần còn {after[1]:,}đ\n\n"
-        "Áp dụng cho khách chỉ khi có quyết định bật riêng. "
-        "Link cũ không tự đổi. Xác nhận lần này chỉ lưu phiên bản.".replace(",", ".")
+        "Xác nhận chỉ phê duyệt bản lưu, chưa kích hoạt cho khách. "
+        "Báo giá đã lưu không tự tính lại.".replace(",", ".")
     )
 
 

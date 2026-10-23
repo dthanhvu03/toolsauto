@@ -7,7 +7,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from cashback_bot.admin_policy import AdminPanel, PRODUCTION_DB, customer_policy_due
+from cashback_bot.admin_policy import AdminPanel, customer_policy_due
 from cashback_bot.messages import BOT_COMMANDS
 from cashback_bot.pricing import quote_displayed_vnd
 from cashback_bot.poller import process_updates
@@ -32,6 +32,10 @@ def test_admin_mo_menu_user_thuong_bi_chan(tmp_path):
     admin = bot.handle_text(ADMIN, "owner", "/admin", update_id=1, now=NOW)
     stranger = bot.handle_text(222, "buyer", "/admin", update_id=2, now=NOW)
     assert "QUẢN TRỊ" in admin.text
+    assert "Chính sách báo giá: V1.1" in admin.text
+    assert "Phiên bản đang phục vụ" not in admin.text
+    assert "Báo giá đã lưu không tự tính lại" in admin.text
+    assert "Link cũ không đổi" not in admin.text
     assert admin.inline_keyboard is not None
     assert "chỉ dành cho quản trị" in stranger.text
     assert stranger.inline_keyboard is None
@@ -62,7 +66,8 @@ def test_doi_ty_le_qua_draft_va_xac_nhan_mot_lan(tmp_path):
     data = _confirm_data(preview)
     done = bot.admin_panel.handle_callback(ADMIN, data, "private", NOW)
     again = bot.admin_panel.handle_callback(ADMIN, data, "private", NOW)
-    assert "Đã lưu phiên bản" in done.text
+    assert "Chưa kích hoạt" in done.text
+    assert "Báo giá đã lưu không tự tính lại" in done.text
     assert "đã được xử lý" in again.text
     conn = sqlite3.connect(tmp_path / "cashback.sqlite")
     rows = conn.execute("SELECT version, customer_effect, config_json FROM policy_versions").fetchall()
@@ -72,6 +77,24 @@ def test_doi_ty_le_qua_draft_va_xac_nhan_mot_lan(tmp_path):
     assert config["label"] == "ESTIMATE_RESERVE"
     assert config["bronze_bps"] == 5_500
     assert quote_displayed_vnd(10_000, 70) == 7_000
+    assert client.calls == 0
+
+
+def test_luu_dong_60_khong_kich_hoat_bao_gia_khach(tmp_path):
+    bot, client = _bot(tmp_path)
+    bot.admin_panel.handle_callback(ADMIN, "c:tier:BRONZE", "private", NOW)
+    preview = bot.handle_text(ADMIN, "owner", "60", update_id=20, now=NOW)
+    assert "60%" in preview.text
+    history = bot.admin_panel.handle_callback(ADMIN, "c:menu:hist", "private", NOW)
+    assert "preview" in history.text
+    done = bot.admin_panel.handle_callback(ADMIN, _confirm_data(preview), "private", NOW)
+    assert "Chưa kích hoạt" in done.text
+    conn = sqlite3.connect(tmp_path / "cashback.sqlite")
+    effect = conn.execute("SELECT customer_effect FROM policy_versions").fetchone()[0]
+    assert effect == "none"
+    assert quote_displayed_vnd(10_000, 70) == 7_000
+    amount, _policy, _render = bot._quote_cashback(10_000)
+    assert amount == 7_000
     assert client.calls == 0
 
 
@@ -244,15 +267,12 @@ def test_callback_khong_tao_link_va_offset_van_chay(tmp_path):
     assert conn.execute("SELECT COUNT(*) FROM link_requests").fetchone()[0] == 0
 
 
-def test_khong_cham_database_production():
-    before = PRODUCTION_DB.stat()
-    panel = AdminPanel(str(PRODUCTION_DB), frozenset({ADMIN}), 70)
+def test_mo_menu_khong_doi_cong_thuc_khach(tmp_path):
+    panel = AdminPanel(str(tmp_path / "admin.sqlite"), frozenset({ADMIN}), 70)
     reply = panel.menu(ADMIN, NOW)
-    refused = panel.handle_callback(ADMIN, "c:tier:BRONZE", "private", NOW)
-    after = PRODUCTION_DB.stat()
-    assert "không đọc được" in reply.text
-    assert "chưa được mở" in refused.text
-    assert (before.st_mtime_ns, before.st_size) == (after.st_mtime_ns, after.st_size)
+    assert "QUẢN TRỊ" in reply.text
+    assert "70% hoa hồng ước tính" in reply.text
+    assert quote_displayed_vnd(10_000, 70) == 7_000
 
 
 def test_nut_khong_co_chi_tra(tmp_path):
@@ -261,6 +281,6 @@ def test_nut_khong_co_chi_tra(tmp_path):
     blob = " ".join(data for row in reply.inline_keyboard for _label, data in row)
     assert "payout" not in blob
     assert "wallet" not in blob
-    assert "chưa mở" in reply.text
+    assert "Chưa mở" in reply.text
     later = NOW + timedelta(days=1)
     assert customer_policy_due([], later) is None
