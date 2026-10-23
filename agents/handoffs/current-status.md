@@ -10,6 +10,12 @@ Claude Code: chỉ đọc code + log PM2, không gọi Buffer, không bật proc
 
 ---
 
+## Phiên 2026-10-23 (d) — PLAN-060 admin gõ phần trăm, chờ restart
+
+Bot chạy bản thông báo mới từ 09:17 UTC (PID 437856); user xác nhận blockquote hiển thị đúng; 11/11 tin khách lưu `reply_markup_json` và gửi được. Mới: admin gõ `10` / `0,98` thay vì phần vạn (`b554a6d`, 139 passed). Cần user restart. Còn chờ user xác nhận nút phía khách để archive PLAN-060.
+
+---
+
 ## Phiên 2026-10-23 (c) — PLAN-060 thông báo admin dễ đọc, chờ restart
 
 Bot đã chạy bản P0–P4 từ 08:29 UTC (PID 428535, migration `reply_markup_json` ok trên DB thật). `getMyCommands`: khách 5 lệnh, `/admin` chỉ trong scope chat admin. User phản hồi thông báo "Đã gửi link" khó nhìn → làm lại bố cục, mã kỹ thuật vào `<blockquote expandable>`. 138 passed. Cần user restart lần nữa.

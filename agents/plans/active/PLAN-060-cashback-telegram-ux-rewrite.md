@@ -226,3 +226,7 @@ User giao Claude Code làm luôn P1 thay Codex.
 ### P4b — thông báo admin dễ đọc hơn — 2026-10-23
 
 User phản hồi ảnh thông báo "Đã gửi link" khó nhìn. Sửa `admin_notify.py`: tiêu đề chỉ hiện @username (không có thì ID); tên món cắt bằng `buyer_name` như thẻ khách; mỗi ý một dòng có icon (🛍️ 💰 🕓); User/Item/Sub/Update gom vào `<blockquote expandable>` cuối tin. Áp cùng kiểu cho "Người dùng mới" và "Lỗi bot". Giờ dạng `16:14 · 23/10`. Test `test_thong_bao_link_gon_ma_ky_thuat_thu_gon`. Proof: **138 passed**. Cần restart bot.
+
+### P3b — admin gõ phần trăm — 2026-10-23
+
+User phản hồi phải gõ "phần vạn" khó dùng. `admin_policy._NUMBER` nhận `10`, `0,98`, `0.98`, `7,5%`; hạng nhận số lẻ (`62,5`). Giới hạn: hạng 0–70%, dự phòng 0–100%. Bỏ chữ "phần vạn" khỏi màn Thuế & phí và lời nhắc. DB vẫn lưu bps, dữ liệu cũ không đổi. Commit `b554a6d`. Proof: **139 passed**. Cần restart bot.
