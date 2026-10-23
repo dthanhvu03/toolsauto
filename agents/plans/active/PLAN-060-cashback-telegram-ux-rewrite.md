@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Trạng thái | **APPROVED (user, 2026-10-23)** — P0 xong, P2 phần chữ xong; P1 chờ Anti giao Codex |
+| Trạng thái | **APPROVED (user, 2026-10-23)** — P0–P4 xong; P5 còn bấm thử trên chat thật sau restart |
 | Người soạn | Claude Code (2026-10-23) |
-| Executor | Claude Code (copy, keyboard, màn hình) + Codex (hạ tầng gửi tin, routing callback, migration) |
+| Executor | Claude Code toàn bộ P0–P5 (user trực tiếp giao cả P1 ngày 2026-10-23, thay Codex) |
 | Phạm vi | `cashback_bot/` + `tests/test_cashback_*.py` |
 | Ngoài phạm vi | Công thức tính tiền, policy V1.2, đối soát, chi trả, tracking đơn |
 
@@ -167,20 +167,18 @@ P0: 2 file code + 1–2 file test. P1 vượt 3 file nhưng là feature hạ t�
 
 ## 6. Tiêu chí xong (Acceptance)
 
-- [ ] Không còn chuỗi `.replace(",", ".")` áp lên cả đoạn văn; `0,98%` hiển thị đúng; test bắt được.
-- [ ] Tổng quan admin không có dòng lặp.
-- [ ] Mọi màn admin và khách có ít nhất 1 nút đi tiếp; bấm nút hết hạn không làm mất keyboard.
-- [ ] Gửi lại (retry) một tin có inline keyboard vẫn còn đủ nút (test poller).
-- [ ] `/start` có nút; chuyển trang bằng edit, không sinh tin mới (test `edit_message_id`).
-- [ ] Thẻ kết quả V1.1 và V1.2 dùng chung một template; khách không thấy chữ "cashback"/"hoa hồng" ngoài trang Cách tính.
-- [ ] Mỗi tin khách có ≤1 dòng cảnh báo `ⓘ`.
-- [ ] Popup "Lưu ý" ≤200 ký tự.
-- [ ] Mọi màn <3500 ký tự.
-- [ ] `setMyCommands` khách ≤5 lệnh; `/admin` chỉ hiện với admin.
-- [ ] pytest `tests/test_cashback_*.py` xanh (hiện 119 test).
-- [ ] Ảnh chụp chat thật: trang chủ, thẻ kết quả, popup, 1 lỗi, admin Tổng quan, 1 lượt sửa hạng.
-
----
+- [x] Không còn chuỗi `.replace(",", ".")` áp lên cả đoạn văn; `0,98%` hiển thị đúng; test bắt được.
+- [x] Tổng quan admin không có dòng lặp.
+- [x] Mọi màn admin và khách có ít nhất 1 nút đi tiếp; bấm nút hết hạn không làm mất keyboard.
+- [x] Gửi lại (retry) một tin có inline keyboard vẫn còn đủ nút (test poller).
+- [x] `/start` có nút; chuyển trang bằng edit, không sinh tin mới (test `edit_message_id`).
+- [x] Thẻ kết quả V1.1 và V1.2 dùng chung một template; khách không thấy chữ "cashback"/"hoa hồng" ngoài trang Cách tính (ngoại lệ `/dieukien`, `/hang`, xem P2).
+- [x] Mỗi tin khách có ≤1 dòng cảnh báo `ⓘ`.
+- [x] Popup "Lưu ý" ≤200 ký tự.
+- [x] Mọi màn <3500 ký tự.
+- [x] `setMyCommands` khách ≤5 lệnh; `/admin` chỉ hiện với admin.
+- [x] pytest `tests/test_cashback_*.py` xanh (137 test).
+- [ ] Ảnh chụp chat thật: trang chủ, thẻ kết quả, popup, 1 lỗi, admin Tổng quan, 1 lượt sửa hạng. **Chờ user restart bot rồi bấm thử.**
 
 ## 7. Câu hỏi cần user/Anti chốt
 
@@ -212,3 +210,15 @@ User duyệt 2026-10-23, câu 1–3 lấy theo đề xuất:
 - Ngoại lệ từ vựng: "hoa hồng" vẫn xuất hiện ở `/dieukien` (câu an toàn) và `/hang` (tỷ lệ), không chỉ `/cachtinh`.
 - ✅ **Chủ bot đã duyệt chữ hiển thị mới, gồm cả V1.2 (2026-10-23)** (ADR-045: cắt V1.2 chỉ sau khi duyệt câu hiển thị): `how_to_calc_v12` và dòng `ⓘ` thẻ V1.2. Duyệt chữ **không** bật V1.2; vẫn cần backup, migration `001` trên bản sao, `CASHBACK_ESTIMATE_POLICY=v1.2`, restart (xem `POLICY_V12.md`).
 - Test: cập nhật assert tiêu đề ở `test_cashback_bot.py`, `test_cashback_v11.py`, `test_cashback_v12.py`; thêm `test_khuon_chu_khach_plan_060` (≤1 dòng ⓘ, không chữ "cashback", thẻ không nhắc "hoa hồng", <3500 ký tự, thẻ 0đ). Proof: `.venv/bin/python -m pytest tests/test_cashback_*.py -q` → **123 passed**.
+
+### P1 + P2 gắn nút + P3 + P4 — Claude Code — 2026-10-23 — DONE (chưa restart bot)
+
+User giao Claude Code làm luôn P1 thay Codex.
+
+- **P1 hạ tầng:** `db.py` thêm cột `outbound_messages.reply_markup_json` (qua `_add_column`, NULL được); `enqueue_outbound` lưu bàn phím đầy đủ; `poller._row_markup` dùng bàn phím đã lưu khi gửi lại, dòng cũ vẫn dựng nút Mua. `telegram_api.py`: `answer_callback(text, show_alert)`, `send_chat_action`, `set_my_description`, `set_my_short_description`, `set_my_commands(commands, scope)`, `send_message(disable_notification)`. `poller._register_profile` đăng ký lệnh khách, mô tả, và `/admin` theo scope chat từng admin. `poller._typing` gửi "đang gõ" khi nhận tin không phải lệnh. Reply có `text` rỗng chỉ trả lời callback, không ghi hàng đợi. `service.py` tách callback `u:` (khách) và `c:` (admin).
+- **P2 gắn nút:** trang chủ 3 nút (Hạng chỉ hiện khi `MEMBERSHIP_CUTOVER`); trang con có `◀️ Trang chủ`, đổi trang bằng edit; thẻ kết quả thêm nút `🛡️ Lưu ý trước khi mua` → popup; link sai có nút `📖 Cách lấy link`; khách chưa mở bấm nút → popup.
+- **P3 admin:** viết lại `admin_ui.py`: breadcrumb, menu 3×2, màn cấp 1 một nút `◀️ Tổng quan`, bước nhập số hiện giá trị đang lưu + nút `✖️ Hủy bản nháp`, xem trước `✖️ Hủy` / `✅ Xác nhận lưu`. Xác nhận/hủy → toast + quay về màn vừa sửa kèm dòng thông báo. Màn Thuế & phí đọc bản đã lưu hoặc mặc định từ settings (bỏ hardcode 98/1000). Lịch sử giờ VN, tiếng Việt. Xoá `_simulation_text` chết. Nhập số sai vẫn có nút Hủy.
+- **P4 thông báo admin:** tiêu đề tiếng Việt; `NEW_USER`/`LINK_SENT` gửi im lặng; **sửa lỗi** `flush_pending` không bắt `TelegramDeliveryError` (trước đây làm văng vòng poll).
+- **Lệch so với plan:** nút admin hết hạn / đã xử lý vẫn sửa tin thành câu giải thích + `◀️ Tổng quan` (P0) thay vì popup, vì trạng thái bản nháp đã đổi thật.
+- **Migration thử trên bản sao** `data/backups/cashback-20261023T081443Z.sqlite`: thêm cột, chạy 2 lần không lỗi, 65 dòng outbound giữ nguyên, `integrity_check` ok.
+- **Test:** cập nhật assert thiết kế ở `test_cashback_admin.py`, `test_cashback_admin_ui_ux.py`, `test_cashback_bot.py`; fake Telegram nhận thêm tham số. Thêm `tests/test_cashback_plan060.py` (14 test). Proof: `.venv/bin/python -m pytest tests/test_cashback_*.py -q` → **137 passed**.
