@@ -9,6 +9,8 @@ Nguyên tắc UX (PLAN-060):
 
 from __future__ import annotations
 
+import html
+
 from cashback_bot.money import format_vnd
 
 Keyboard = tuple[tuple[tuple[str, str], ...], ...]
@@ -17,6 +19,7 @@ HOME_TARGET = "c:menu:home"
 BACK_HOME = (("◀️ Tổng quan", HOME_TARGET),)
 
 MENU_KEYBOARD: Keyboard = (
+    (("📈 Thống kê", "c:st:7d"),),
     (("💰 Chính sách", "c:menu:policy"), ("🎖️ Hạng thành viên", "c:menu:rank")),
     (("🧾 Thuế & phí", "c:menu:fee"), ("🧮 Mô phỏng", "c:menu:sim")),
     (("📊 Lịch sử", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
@@ -455,5 +458,61 @@ def reserve_preview_text(
     lines += [
         "",
         "ⓘ Link đã gửi giữ số cũ. Dự phòng không phải thuế luật định.",
+    ]
+    return "\n".join(lines)
+
+
+STATS_PERIODS = (("today", "Hôm nay"), ("7d", "7 ngày"), ("30d", "30 ngày"), ("all", "Tất cả"))
+
+
+def stats_keyboard(current: str) -> Keyboard:
+    row = tuple((f"• {label}" if key == current else label, f"c:st:{key}") for key, label in STATS_PERIODS)
+    return (row, BACK_HOME)
+
+
+def _bar(value: int, peak: int, width: int = 10) -> str:
+    if value <= 0 or peak <= 0:
+        return "▏"
+    return "█" * max(1, round(value * width / peak))
+
+
+def stats_text(stats, *, period_label: str, since: str | None) -> str:
+    """stats: admin_stats.Stats."""
+    created_rate = f" ({stats.links_created * 100 // stats.links_total}%)" if stats.links_total else ""
+    errors = " · ".join(f"{label} {count}" for label, count in stats.rejected) or "không có"
+    lines = [
+        _title(f"Thống kê · {period_label}").rstrip("\n"),
+        f"<i>Từ {since}</i>" if since else "<i>Toàn bộ dữ liệu</i>",
+        "",
+        "👥 <b>Người dùng</b>",
+        f"• Tổng: <b>{stats.users_total}</b> · Mới: <b>{stats.users_new}</b> · Có gửi link: <b>{stats.users_active}</b>",
+        "",
+        "🔗 <b>Link</b>",
+        f"• Gửi: <b>{stats.links_total}</b> · Tạo được: <b>{stats.links_created}</b>{created_rate}",
+        f"• Lỗi: {errors}",
+        "",
+        "💰 <b>Số dự kiến</b> · chưa phải doanh thu",
+        f"• Hoa hồng ước tính: <b>{format_vnd(stats.commission_vnd)}</b>",
+        f"• Đã báo khách: <b>{format_vnd(stats.cashback_vnd)}</b>",
+        f"• Chênh lệch trước phí, thuế: <b>{format_vnd(stats.commission_vnd - stats.cashback_vnd)}</b>",
+        "",
+        "📅 <b>Link tạo được, 7 ngày gần nhất</b>",
+    ]
+    peak = max((count for _day, count in stats.trend), default=0)
+    lines.append("<pre>" + "\n".join(f"{day} {_bar(count, peak)} {count}" for day, count in stats.trend) + "</pre>")
+    if stats.top_users:
+        lines += ["", "🏆 <b>Gửi nhiều nhất</b>"]
+        for rank, (user_id, username, count) in enumerate(stats.top_users, start=1):
+            who = f"@{html.escape(username)}" if username else f"<code>{user_id}</code>"
+            lines.append(f"{rank}. {who} · {count} link")
+    if stats.top_products:
+        lines += ["", "🛍️ <b>Món được hỏi nhiều</b>"]
+        for rank, (name, count) in enumerate(stats.top_products, start=1):
+            lines.append(f"{rank}. {html.escape(name)} · {count} lần")
+    lines += [
+        "",
+        f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>",
+        "",
+        "ⓘ Bot chưa theo dõi đơn nên chưa có số đơn, doanh thu thật hay tỷ lệ chuyển đổi.",
     ]
     return "\n".join(lines)

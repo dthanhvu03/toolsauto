@@ -35,6 +35,7 @@ from cashback_bot.admin_reserve import (
 )
 from cashback_bot.admin_reserve import SCHEMA_PATH as RESERVE_SCHEMA_PATH
 from cashback_bot.admin_reserve import SHARE_SCHEMA_PATH
+from cashback_bot.admin_stats import PERIODS, collect
 from cashback_bot.admin_ui import (
     FEE_KEYBOARD,
     MENU_KEYBOARD,
@@ -65,6 +66,8 @@ from cashback_bot.admin_ui import (
     share_value_text,
     share_when_text,
     simulation_text,
+    stats_keyboard,
+    stats_text,
 )
 from cashback_bot.messages import BotReply
 from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
@@ -101,6 +104,7 @@ _MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy)$")
 _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD)$")
 _RESERVE = re.compile(r"^c:rs:(\d+):([0-9a-f]{8}):(k:[PIH]|keep|w:now|w:tmr|ok|no)$")
 _SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
+_STATS = re.compile(r"^c:st:(today|7d|30d|all)$")
 _SHARE_NUMBER = re.compile(r"^(\d{1,3})\s*%?$")
 _DECISION = re.compile(r"^c:(ok|no):(\d+):([0-9a-f]{8})$")
 
@@ -197,6 +201,9 @@ class AdminPanel:
         tier = _TIER.fullmatch(data or "")
         if tier:
             return self._begin(user_id, tier.group(1), now)
+        stats = _STATS.fullmatch(data or "")
+        if stats:
+            return self._stats(stats.group(1), now)
         if data == "c:rs:new":
             return self._reserve_start(user_id, now)
         if data == "c:sh:new":
@@ -612,6 +619,17 @@ class AdminPanel:
             recent=recent,
         )
         return BotReply(text, inline_keyboard=reserve_decision_keyboard(draft_id, nonce, "sh"))
+
+    def _stats(self, period: str, now: datetime) -> BotReply:
+        try:
+            with self._connect() as conn:
+                stats = collect(conn, period, now)
+        except sqlite3.OperationalError:
+            logger.exception("[Cashback] thống kê lỗi")
+            return BotReply("Chưa đọc được dữ liệu thống kê trên database này.", inline_keyboard=stats_keyboard(period))
+        since = stats.since.astimezone(ICT).strftime("00:00 %d/%m/%Y") if stats.since else None
+        text = stats_text(stats, period_label=PERIODS[period][0], since=since)
+        return BotReply(text, inline_keyboard=stats_keyboard(period))
 
     def _history_rows(self) -> list[str] | None:
         try:
