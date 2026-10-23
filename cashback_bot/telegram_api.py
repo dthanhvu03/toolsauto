@@ -232,3 +232,22 @@ class TelegramApi:
             logger.warning("[Cashback] sendDocument http=%s", response.status_code)
             return False
         return bool(response.json().get("ok"))
+
+    def send_photo(self, chat_id: int, filename: str, data: bytes, caption: str | None = None) -> bool:
+        body: dict = {"chat_id": chat_id}
+        if caption:
+            body["caption"] = caption
+        try:
+            response = requests.post(
+                f"{self._base}/sendPhoto",
+                data=body,
+                files={"photo": (filename, data, "image/png")},
+                timeout=self._timeout,
+            )
+        except requests.RequestException as exc:
+            logger.error("[Cashback] sendPhoto network error: %s", type(exc).__name__)
+            return False
+        if response.status_code >= 400:
+            logger.warning("[Cashback] sendPhoto http=%s", response.status_code)
+            return False
+        return bool(response.json().get("ok"))

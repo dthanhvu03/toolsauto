@@ -24,7 +24,9 @@ from cashback_bot.admin_ui import (
 )
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply, payout_notice
-from cashback_bot.wallet import BANKS, HOLD_DAY_CHOICES, MIN_WITHDRAW_CHOICES, Wallet, vietqr_url
+from cashback_bot.money import format_vnd
+from cashback_bot.vietqr import VietQRError, build_payload, qr_png
+from cashback_bot.wallet import BANKS, HOLD_DAY_CHOICES, MIN_WITHDRAW_CHOICES, Wallet
 
 _PAYOUT = re.compile(r"^c:wl:(rq|paid|rej):(\d+)(:ok)?$")
 _MEMBER = re.compile(r"^c:wl:u:(\d+)$")
@@ -134,15 +136,29 @@ class WalletAdmin:
 
     def _payout_detail(self, row, notice: str = "") -> BotReply:
         user = self.repo.get_user(int(row["telegram_user_id"]))
-        qr = vietqr_url(
-            row["bank_code"], row["account_no"], row["account_name"], int(row["amount_vnd"]), row["transfer_note"] or ""
-        )
+        photo, qr_problem = (None, None) if row["status"] != "requested" else self._qr(row)
         text = payout_text(
             row,
             None if user is None else user["username"],
             self.wallet.balance(int(row["telegram_user_id"])),
-            qr,
             BANKS.get(row["bank_code"], ("", row["bank_code"]))[1],
             notice,
+            qr_sent=photo is not None,
+            qr_problem=qr_problem,
         )
-        return BotReply(text, inline_keyboard=payout_keyboard(row))
+        return BotReply(text, inline_keyboard=payout_keyboard(row), photo=photo)
+
+    def _qr(self, row) -> tuple[tuple[str, bytes, str] | None, str | None]:
+        """Ảnh QR tự tạo (không gửi thông tin khách ra ngoài). Lỗi thì trả lý do để admin chuyển tay."""
+        bank = BANKS.get(row["bank_code"])
+        if bank is None:
+            return None, f"Ngân hàng {row['bank_code']} không còn trong danh sách hỗ trợ."
+        try:
+            payload = build_payload(bank[0], row["account_no"], int(row["amount_vnd"]), row["transfer_note"] or "")
+        except VietQRError as exc:
+            return None, f"Không tạo được mã QR: {exc}."
+        image = qr_png(payload)
+        if image is None:
+            return None, "Máy chủ chưa vẽ được ảnh QR."
+        caption = f"{row['transfer_note']} · {format_vnd(int(row['amount_vnd']))} · {bank[1]} ••••{row['account_no'][-4:]}"
+        return (f"qr-{row['transfer_note'] or row['id']}.png".replace(" ", "-"), image, caption), None

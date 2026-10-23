@@ -246,6 +246,12 @@ def process_updates(
                     logger.warning("[Cashback] delete_message failed: %s", exc)
             if reply.document and hasattr(telegram, "send_document"):
                 telegram.send_document(chat_id, *reply.document)
+            if reply.photo and hasattr(telegram, "send_photo"):
+                try:
+                    telegram.send_photo(chat_id, *reply.photo)
+                except Exception:
+                    # Ảnh QR chỉ để tiện; lỗi gửi ảnh không được chặn tin chính (số TK dạng chữ).
+                    logger.exception("[Cashback] gửi ảnh QR thất bại")
             query_id = reply.callback_query_id
             if query_id and hasattr(telegram, "answer_callback"):
                 if reply.toast:

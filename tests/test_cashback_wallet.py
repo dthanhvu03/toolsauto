@@ -13,7 +13,7 @@ from cashback_bot.admin_ui import stats_text
 from cashback_bot.poller import _check_shopee_auto_sync, _check_wallet_refresh, process_updates
 from cashback_bot.shopee_client import ShopeeStatusResult
 from cashback_bot.shopee_sync import SYNC_REQUEST_KEY, ShopeeSyncEngine, SyncResult
-from cashback_bot.wallet import BankAccount, parse_bank_text, transfer_note, vietqr_url
+from cashback_bot.wallet import BankAccount, parse_bank_text
 from tests.test_cashback_bot import NOW, FakeClient, payload, service
 
 USER = 111
@@ -230,24 +230,18 @@ class TestPayout:
         assert parse_bank_text("MB 12ab 3 Nguyen") == "account"
         assert parse_bank_text("MB 0123456") == "format"
 
-    def test_vietqr_url(self):
-        url = vietqr_url("MB", "0123456789", "NGUYEN VAN A", 14_000, transfer_note(12))
-        assert url == (
-            "https://img.vietqr.io/image/970422-0123456789-compact2.png"
-            "?amount=14000&addInfo=Hoan%20tien%20000012&accountName=NGUYEN%20VAN%20A"
-        )
-
     def test_full_withdraw_flow(self, tmp_path):
         bot = self._ready(tmp_path)
         page = _callback(bot, USER, "u:p:wallet")
         assert "Có thể rút: <b>14.000đ</b>" in page.text
         assert "u:w:out" not in _buttons(page)  # chưa khai ngân hàng
 
-        _callback(bot, USER, "u:w:bank")
-        bad = bot.handle_text(USER, "buyer", "MB abc", update_id=2, now=NOW)
-        assert "Thiếu thông tin" in bad.text or "Số tài khoản" in bad.text
-        saved = bot.handle_text(USER, "buyer", "MB 0123456789 Nguyen Van A", update_id=3, now=NOW)
-        assert "Đã lưu tài khoản MB Bank ••••6789" in saved.text
+        assert "u:w:bk:MB" in _buttons(_callback(bot, USER, "u:w:bank"))
+        _callback(bot, USER, "u:w:bk:MB")
+        bad = bot.handle_text(USER, "buyer", "Nguyen Van A", update_id=2, now=NOW)
+        assert "Số tài khoản chỉ gồm" in bad.text
+        saved = bot.handle_text(USER, "buyer", "0123 456 789 Nguyễn Văn A", update_id=3, now=NOW)
+        assert "Đã lưu tài khoản MB Bank ••••6789 · NGUYEN VAN A" in saved.text
         assert "u:w:out" in _buttons(saved)
 
         confirm = _callback(bot, USER, "u:w:out")
@@ -260,7 +254,9 @@ class TestPayout:
         assert bot.wallet.balance(USER).withdrawable_vnd == 0
 
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
-        assert "<code>0123456789</code>" in detail.text and "img.vietqr.io" in detail.text
+        assert "<code>0123456789</code>" in detail.text and "vietqr.io" not in detail.text
+        assert detail.photo is not None and detail.photo[1][:8] == b"\x89PNG\r\n\x1a\n"
+        assert "Ảnh mã QR gửi ngay dưới tin này" in detail.text
         ask = _callback(bot, ADMIN, "c:wl:paid:1")
         assert "c:wl:paid:1:ok" in _buttons(ask)
         assert bot.wallet.payout(1)["status"] == "requested"  # chưa bấm xác nhận thì chưa ghi
@@ -287,9 +283,9 @@ class TestPayout:
 
     def test_command_cancels_bank_waiting(self, tmp_path):
         bot = self._ready(tmp_path)
-        _callback(bot, USER, "u:w:bank")
+        _callback(bot, USER, "u:w:bk:MB")
         bot.handle_text(USER, "buyer", "/start", update_id=4, now=NOW)
-        reply = bot.handle_text(USER, "buyer", "MB 0123456789 Nguyen Van A", update_id=5, now=NOW)
+        reply = bot.handle_text(USER, "buyer", "0123456789 Nguyen Van A", update_id=5, now=NOW)
         assert "Đã lưu tài khoản" not in reply.text
 
 

@@ -25,6 +25,7 @@ from cashback_bot.messages import (
     WALLET_CLOSED,
     WALLET_CLOSED_ALERT,
     BotReply,
+    bank_pick_reply,
     bank_prompt_reply,
     entry_notice,
     hang_message,
@@ -43,7 +44,7 @@ from cashback_bot.messages import (
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.shopee_url import parse_shopee_target
-from cashback_bot.wallet import BankAccount, Wallet, parse_bank_text
+from cashback_bot.wallet import BANKS, BankAccount, Wallet, parse_bank_text
 
 logger = logging.getLogger("cashback_bot")
 
@@ -150,8 +151,8 @@ class CashbackService:
             return BotReply("")
         if not self.allowed(user_id):
             return BotReply("", toast=CLOSED_ALERT, show_alert=True)
-        if data != "u:w:bank":
-            self._set_bank_waiting(user_id, False)
+        if not data.startswith("u:w:bk:"):
+            self._set_bank_waiting(user_id, None)
         if data == "u:tip":
             return BotReply("", toast=TIP_ALERT, show_alert=True)
         if data.startswith("u:w:"):
@@ -199,8 +200,13 @@ class CashbackService:
         if not self.wallet.settings().enabled:
             return BotReply("", toast=WALLET_CLOSED_ALERT, show_alert=True)
         if action == "bank":
-            self._set_bank_waiting(user_id, True)
-            return bank_prompt_reply()
+            return bank_pick_reply(BANKS)
+        if action.startswith("bk:"):
+            code = action.removeprefix("bk:")
+            if code not in BANKS:
+                return bank_pick_reply(BANKS, notice="Ngân hàng này chưa hỗ trợ.")
+            self._set_bank_waiting(user_id, code)
+            return bank_prompt_reply(BANKS[code][1])
         if action == "out":
             bank = self.wallet.bank(user_id)
             amount = self.wallet.balance(user_id).withdrawable_vnd
@@ -221,23 +227,25 @@ class CashbackService:
             return withdraw_done_reply(payout)
         return BotReply("", toast="Nút này không còn hiệu lực.")
 
-    def _bank_waiting(self, user_id: int) -> bool:
-        return self.repo.get_state(f"wallet_bank_waiting:{user_id}") == "1"
+    def _bank_waiting(self, user_id: int) -> str | None:
+        """Mã ngân hàng khách đã bấm chọn và bot đang chờ số tài khoản; None: không chờ."""
+        value = self.repo.get_state(f"wallet_bank_waiting:{user_id}")
+        return value if value in BANKS else None
 
-    def _set_bank_waiting(self, user_id: int, waiting: bool) -> None:
+    def _set_bank_waiting(self, user_id: int, bank_code: str | None) -> None:
         key = f"wallet_bank_waiting:{user_id}"
-        if waiting:
-            self.repo.set_state(key, "1")
-        elif self.repo.get_state(key) == "1":
+        if bank_code is not None:
+            self.repo.set_state(key, bank_code)
+        elif self.repo.get_state(key) not in (None, "0"):
             self.repo.set_state(key, "0")
 
-    def _consume_bank(self, user_id: int, text: str, now: datetime) -> BotReply:
-        parsed = parse_bank_text(text)
+    def _consume_bank(self, user_id: int, bank_code: str, text: str, now: datetime) -> BotReply:
+        parsed = parse_bank_text(text, bank_code)
         if not isinstance(parsed, BankAccount):
-            return bank_prompt_reply(parsed)
+            return bank_prompt_reply(BANKS[bank_code][1], parsed)
         self.wallet.save_bank(user_id, parsed, now)
-        self._set_bank_waiting(user_id, False)
-        return self._wallet_page(user_id, notice=f"✅ Đã lưu tài khoản {parsed.masked}.")
+        self._set_bank_waiting(user_id, None)
+        return self._wallet_page(user_id, notice=f"✅ Đã lưu tài khoản {parsed.masked} · {parsed.account_name}.")
 
     def refresh_wallet(self, now: datetime | None = None) -> None:
         """Gọi sau mỗi lần đồng bộ Shopee: cập nhật sổ, ví bật thì báo khách đơn đổi trạng thái."""
@@ -312,13 +320,17 @@ class CashbackService:
 
         pages = {"/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank", "/vi": "wallet"}
         if command:
-            self._set_bank_waiting(telegram_user_id, False)
+            self._set_bank_waiting(telegram_user_id, None)
         if command in pages:
             return self._page(pages[command], telegram_user_id)
         if command:
             return self._page("home")
-        if self._bank_waiting(telegram_user_id) and self.wallet.settings().enabled:
-            return self._consume_bank(telegram_user_id, stripped, now or datetime.now(timezone.utc))
+        waiting_bank = self._bank_waiting(telegram_user_id)
+        if waiting_bank and parse_shopee_target(stripped) is not None:
+            # Đang khai ngân hàng mà dán link Shopee: khách muốn mua, bỏ chờ và tạo link như thường.
+            self._set_bank_waiting(telegram_user_id, None)
+        elif waiting_bank and self.wallet.settings().enabled:
+            return self._consume_bank(telegram_user_id, waiting_bank, stripped, now or datetime.now(timezone.utc))
         target = parse_shopee_target(stripped)
         moment = now or datetime.now(timezone.utc)
         if not self._within_rate_limit(telegram_user_id, moment):

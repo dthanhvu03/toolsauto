@@ -19,7 +19,6 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
 
 from cashback_bot.db import TrackingRepository
 
@@ -54,6 +53,16 @@ BANKS: dict[str, tuple[str, str]] = {
     "LPB": ("970449", "LPBank"),
     "NAB": ("970428", "Nam A Bank"),
     "BAB": ("970409", "Bac A Bank"),
+    "KLB": ("970452", "KienlongBank"),
+    "PVCB": ("970412", "PVcomBank"),
+    "ABB": ("970425", "ABBANK"),
+    "VAB": ("970427", "VietABank"),
+    "NCB": ("970419", "NCB"),
+    "BVB": ("970454", "BVBank"),
+    "SHBVN": ("970424", "Shinhan Bank"),
+    "CAKE": ("546034", "Cake by VPBank"),
+    "UBANK": ("546035", "Ubank by VPBank"),
+    "TIMO": ("963388", "Timo"),
 }
 BANK_ALIASES = {
     "VIETCOMBANK": "VCB",
@@ -70,6 +79,13 @@ BANK_ALIASES = {
     "LPBANK": "LPB",
     "NAMABANK": "NAB",
     "BACABANK": "BAB",
+    "KIENLONGBANK": "KLB",
+    "PVCOMBANK": "PVCB",
+    "ABBANK": "ABB",
+    "VIETABANK": "VAB",
+    "BVBANK": "BVB",
+    "SHINHAN": "SHBVN",
+    "MBV": "MB",
 }
 _ACCOUNT_NO = re.compile(r"^\d{6,19}$")
 _ACCOUNT_NAME = re.compile(r"^[A-Z ]{3,50}$")
@@ -154,34 +170,43 @@ def _plain_upper(text: str) -> str:
     return " ".join(stripped.upper().split())
 
 
-def parse_bank_text(text: str) -> BankAccount | str:
-    """'MB 0123456789 Nguyễn Văn A' → BankAccount. Sai thì trả mã lỗi."""
-    parts = re.sub(r"[|,;\n]+", " ", text or "").split()
-    if len(parts) < 3:
-        return "format"
-    code = parts[0].upper()
+def bank_code_of(token: str) -> str | None:
+    code = (token or "").strip().upper()
     code = BANK_ALIASES.get(code, code)
-    if code not in BANKS:
+    return code if code in BANKS else None
+
+
+def parse_bank_text(text: str, bank_code: str | None = None) -> BankAccount | str:
+    """'MB 0123456789 Nguyễn Văn A' → BankAccount. Sai thì trả mã lỗi.
+
+    bank_code: khách đã bấm chọn ngân hàng, chỉ cần gõ 'số tài khoản + tên'. Gõ cả mã ở đầu vẫn nhận.
+    Số tài khoản gõ tách nhóm ('0123 456 789', '0123.456.789') được ghép lại.
+    """
+    parts = re.sub(r"[|,;\n]+", " ", text or "").split()
+    if parts and bank_code_of(parts[0]) and not parts[0].isdigit():
+        bank_code, parts = bank_code_of(parts[0]), parts[1:]
+    elif bank_code is None:
+        return "bank" if parts else "format"
+    if bank_code not in BANKS:
         return "bank"
-    account_no = parts[1].replace(".", "").replace("-", "")
+    digits: list[str] = []
+    while parts and re.fullmatch(r"[\d.\-]+", parts[0]):
+        digits.append(parts.pop(0))
+    if not digits:
+        return "account" if parts else "format"
+    account_no = "".join(digits).replace(".", "").replace("-", "")
     if not _ACCOUNT_NO.fullmatch(account_no):
         return "account"
-    name = _plain_upper(" ".join(parts[2:]))
+    if not parts:
+        return "format"
+    name = _plain_upper(" ".join(parts))
     if not _ACCOUNT_NAME.fullmatch(name):
         return "name"
-    return BankAccount(code, account_no, name)
+    return BankAccount(bank_code, account_no, name)
 
 
 def transfer_note(payout_id: int) -> str:
     return f"Hoan tien {payout_id:06d}"
-
-
-def vietqr_url(bank_code: str, account_no: str, account_name: str, amount_vnd: int, note: str) -> str:
-    bin_code = BANKS[bank_code][0]
-    return (
-        f"https://img.vietqr.io/image/{bin_code}-{account_no}-compact2.png"
-        f"?amount={amount_vnd}&addInfo={quote(note)}&accountName={quote(account_name)}"
-    )
 
 
 class Wallet:

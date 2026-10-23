@@ -176,6 +176,8 @@ class BotReply:
     show_alert: bool = False
     # (tên file, nội dung): gửi kèm một file, ví dụ CSV đơn hàng cho admin.
     document: tuple[str, bytes] | None = None
+    # (tên file, ảnh PNG, chú thích): gửi kèm một ảnh, ví dụ mã QR chuyển khoản.
+    photo: tuple[str, bytes, str] | None = None
 
     def markup(self) -> dict | None:
         rows: list[list[dict]] = []
@@ -251,18 +253,16 @@ ENTRY_LABELS = {
     "available": "Đã vào ví",
     "cancelled": "Không được hoàn",
 }
-BANK_PROMPT = (
+BANK_PICK = (
     "🏦 <b>Tài khoản nhận tiền</b>\n\n"
-    "Gửi một tin theo mẫu:\n"
-    "<code>MB 0123456789 Nguyen Van A</code>\n\n"
-    "Mã ngân hàng: VCB, TCB, MB, ACB, VPB, BIDV, CTG, TPB, STB, VIB, HDB, MSB, OCB, SHB, AGR, SEAB, EIB, LPB, NAB, BAB.\n\n"
-    "ⓘ Tên phải đúng tên chủ tài khoản để chuyển khoản không bị trả lại."
+    "Bấm chọn ngân hàng của bạn.\n\n"
+    "ⓘ Không thấy ngân hàng của bạn thì chưa hỗ trợ; bạn dùng một tài khoản ngân hàng khác nhé."
 )
 BANK_ERRORS = {
-    "format": "Thiếu thông tin. Gửi đủ: mã ngân hàng, số tài khoản, tên chủ tài khoản.",
-    "bank": "Chưa nhận ra mã ngân hàng. Dùng một mã trong danh sách bên trên.",
-    "account": "Số tài khoản chỉ gồm 6–19 chữ số.",
-    "name": "Tên chủ tài khoản chỉ gồm chữ cái và khoảng trắng.",
+    "format": "Thiếu thông tin. Gửi số tài khoản rồi tới tên chủ tài khoản.",
+    "bank": "Bạn bấm chọn ngân hàng trước, rồi gửi số tài khoản và tên.",
+    "account": "Số tài khoản chỉ gồm 6–19 chữ số, đặt trước tên.",
+    "name": "Tên chủ tài khoản chỉ gồm chữ cái và khoảng trắng, không có số.",
 }
 WITHDRAW_ERRORS = {
     "disabled": WALLET_CLOSED,
@@ -317,9 +317,24 @@ def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "
     return BotReply("\n".join(lines), inline_keyboard=tuple(rows))
 
 
-def bank_prompt_reply(error: str | None = None) -> BotReply:
-    text = BANK_PROMPT if error is None else f"⚠️ {BANK_ERRORS.get(error, BANK_ERRORS['format'])}\n\n{BANK_PROMPT}"
-    return BotReply(text, inline_keyboard=((("✖️ Hủy", "u:p:wallet"),),))
+def bank_pick_reply(banks: dict[str, tuple[str, str]], notice: str = "") -> BotReply:
+    """banks: wallet.BANKS. Ba ngân hàng một hàng."""
+    buttons = [(name, f"u:w:bk:{code}") for code, (_bin, name) in banks.items()]
+    rows = [tuple(buttons[i : i + 3]) for i in range(0, len(buttons), 3)]
+    text = f"⚠️ {notice}\n\n{BANK_PICK}" if notice else BANK_PICK
+    return BotReply(text, inline_keyboard=(*rows, (("✖️ Hủy", "u:p:wallet"),)))
+
+
+def bank_prompt_reply(bank_name: str, error: str | None = None) -> BotReply:
+    text = (
+        f"🏦 <b>{html.escape(bank_name)}</b>\n\n"
+        "Gửi số tài khoản rồi tới tên chủ tài khoản, ví dụ:\n"
+        "<code>0123456789 Nguyen Van A</code>\n\n"
+        "ⓘ Tên phải đúng tên chủ tài khoản, nếu không ngân hàng sẽ trả tiền về."
+    )
+    if error is not None:
+        text = f"⚠️ {BANK_ERRORS.get(error, BANK_ERRORS['format'])}\n\n{text}"
+    return BotReply(text, inline_keyboard=((("🔁 Chọn ngân hàng khác", "u:w:bank"),), (("✖️ Hủy", "u:p:wallet"),)))
 
 
 def withdraw_confirm_reply(amount_vnd: int, bank) -> BotReply:

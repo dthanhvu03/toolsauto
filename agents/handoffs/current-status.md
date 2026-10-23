@@ -1,3 +1,14 @@
+## Phiên 2026-10-23 (p) — VietQR tự tạo, chọn ngân hàng bằng nút
+
+Bot tự tạo mã VietQR (EMVCo/NAPAS, CRC16) và gửi ảnh vào chat khi admin mở yêu cầu rút; bỏ `img.vietqr.io`. Khách chọn ngân hàng bằng nút (30 ngân hàng), gõ STK + tên. 59 test ngoại lệ mới, 279 passed. `qrcode==8.0` đã cài `.venv` và thêm requirements. Chưa quét bằng app ngân hàng thật. Next: user restart (PID 464286), quét thử QR theo checklist trong tin trả lời.
+
+---
+## Phiên 2026-10-23 (p) — Bật lại Buffer: chạy được, chưa 429
+
+Claude Code bật theo lời user: `pm2 start Web_Dashboard` (:8000, funnel `/health/json` 200) rồi `pm2 start Maintenance` khoảng 19:17 ICT, chạy code `main` có PLAN-061. Vòng đầu: không 429, chưa có file `buffer_cooldown.json`; job 1110 qua key 1 → "Đã hẹn Sống Nhẹ Tuổi 40 lúc 20:30 23/10" (key 1 hết khóa); 4 video tự đánh dấu đã đăng; 9 bài lỗi trên Buffer (job 1041, 1101–1108) bị tự xóa để nhả slot. Phát hiện chưa sửa: key 2 còn 1617/3000 < ngưỡng giữ 2100 nên không quét kênh key 2 → kênh của key 2 đổ về key 1; `manager.post_statuses` gom nhóm theo object client mà `get_clients()` tạo mới mỗi lần → mỗi bài 1 request, 7 bài "Account is not allowed" + 5 "Post not found" mỗi 15 phút, đều tốn suất key 1. Next: user quyết có sửa không (PLAN mới, số kế tiếp sau PLAN-065); trong lúc chờ, theo dõi `grep -E "Key vào cooldown|HTTP 429"`.
+
+---
+
 ## Phiên 2026-10-23 (o) — Tắt tự đồng bộ Shopee mặc định, công tắc trong /admin
 
 User: không chạy đồng bộ tự động, khi cần thì bấm. Thêm công tắc ở 🔗 Shopee Affiliate (`bot_state.shopee_auto_sync`, mặc định tắt, bật/tắt ghi 📊 Lịch sử). Nút 🔄 vẫn chạy ngay. Sổ ví tự cập nhật mỗi giờ chỉ từ DB (không gọi Shopee) để đơn đủ ngày giữ vẫn vào ví đúng hạn. Claude Code không tự gọi Shopee nữa (đã ghi memory). 221 passed. Next: user restart.

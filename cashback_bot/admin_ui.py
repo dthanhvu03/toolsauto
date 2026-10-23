@@ -785,7 +785,16 @@ def wallet_member_text(user_id: int, username: str | None, balance, entries, ban
     return "\n".join(lines)
 
 
-def payout_text(payout, username: str | None, balance, qr_url: str, bank_name: str, notice: str = "") -> str:
+def payout_text(
+    payout,
+    username: str | None,
+    balance,
+    bank_name: str,
+    notice: str = "",
+    *,
+    qr_sent: bool = False,
+    qr_problem: str | None = None,
+) -> str:
     status = {"requested": "⏳ chờ chuyển", "paid": "✅ đã chuyển", "rejected": "✖️ đã từ chối"}.get(
         payout["status"], payout["status"]
     )
@@ -798,13 +807,17 @@ def payout_text(payout, username: str | None, balance, qr_url: str, bank_name: s
         "",
         f"Số tiền: <code>{int(payout['amount_vnd'])}</code> ({format_vnd(int(payout['amount_vnd']))})",
         f"Ngân hàng: <b>{html.escape(bank_name)}</b>",
-        f"Số TK: <code>{payout['account_no']}</code>",
+        f"Số TK: <code>{html.escape(payout['account_no'])}</code>",
         f"Chủ TK: <code>{html.escape(payout['account_name'])}</code>",
         f"Nội dung: <code>{html.escape(payout['transfer_note'] or '')}</code>",
-        f'📷 <a href="{html.escape(qr_url)}">Mã QR chuyển khoản</a>',
-        "",
-        "ⓘ Bấm vào số để chép. Mở mã QR bằng app ngân hàng (quét từ ảnh) để khỏi gõ tay.",
     ]
+    if payout["status"] == "requested":
+        lines.append("")
+        if qr_sent:
+            lines.append("📷 Ảnh mã QR gửi ngay dưới tin này: app ngân hàng → Quét QR → chọn ảnh.")
+        if qr_problem:
+            lines.append(f"⚠️ {html.escape(qr_problem)} Chuyển tay theo các số ở trên.")
+        lines.append("ⓘ Trước khi chuyển, kiểm tra tên người nhận app ngân hàng hiện ra trùng với Chủ TK.")
     if balance.withdrawable_vnd < 0:
         lines.append(f"⚠️ Ví khách đang âm {format_vnd(-balance.withdrawable_vnd)} do có đơn bị huỷ sau khi vào ví.")
     return "\n".join(lines)
