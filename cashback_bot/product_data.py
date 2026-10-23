@@ -32,6 +32,14 @@ class ProductQuote:
     data_source: str
     api_status: str
     product_url: str
+    # Thông tin thêm cho thống kê (PLAN-064). Thiếu thì None, không chặn báo giá.
+    category: str | None = None
+    shop_name: str | None = None
+    seller_commission_vnd: int | None = None
+    shopee_commission_vnd: int | None = None
+    commission_rate_bps: int | None = None
+    is_xtra: bool | None = None
+    is_capped: bool | None = None
 
 
 def _whole_vnd(value: object) -> int | None:
@@ -57,6 +65,29 @@ def _parse_last_update(raw: object) -> datetime | None:
             continue
         return parsed.replace(tzinfo=timezone.utc)
     return None
+
+
+def _text(value: object, limit: int = 120) -> str | None:
+    if not isinstance(value, str) or not value.strip() or value.strip() == "None":
+        return None
+    return value.strip()[:limit]
+
+
+def _flag(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip() in {"True", "False"}:
+        return value.strip() == "True"
+    return None
+
+
+def _rate_bps(value: object) -> int | None:
+    """"12" hay "12.5" (phần trăm) thành bps. Sai định dạng thì None."""
+    try:
+        bps = round(float(str(value).strip()) * 100)
+    except ValueError:
+        return None
+    return bps if 0 <= bps <= 10_000 else None
 
 
 def quote_from_payload(payload: dict, now: datetime, max_age_hours: int) -> ProductQuote:
@@ -117,6 +148,13 @@ def quote_from_payload(payload: dict, now: datetime, max_age_hours: int) -> Prod
         data_source=source,
         api_status="success",
         product_url=product_url,
+        category=_text(info.get("catName")),
+        shop_name=_text(info.get("shopName")),
+        seller_commission_vnd=_whole_vnd(info.get("sellerComFinal")),
+        shopee_commission_vnd=_whole_vnd(info.get("shopeeComFinal")),
+        commission_rate_bps=_rate_bps(info.get("totalRatePercent")),
+        is_xtra=_flag(info.get("isXtra")),
+        is_capped=_flag(info.get("isCapped")),
     )
 
 

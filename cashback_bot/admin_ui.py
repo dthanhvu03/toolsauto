@@ -476,6 +476,33 @@ def _bar(value: int, peak: int, width: int = 10) -> str:
     return "█" * max(1, round(value * width / peak))
 
 
+def _pct(bps: int) -> str:
+    whole, frac = divmod(bps, 100)
+    return f"{whole}%" if frac == 0 else f"{whole},{frac:02d}".rstrip("0") + "%"
+
+
+def _insight_lines(insight, created: int) -> list[str]:
+    """insight: admin_stats.Insight hoặc None (DB chưa có cột)."""
+    if insight is None:
+        return []
+    head = f"🏷️ <b>Hoa hồng theo nguồn</b> · {insight.detailed}/{created} link có dữ liệu"
+    if insight.detailed == 0:
+        return ["", head, "• Link tạo từ bản này trở đi mới có ngành hàng, shop và tách hoa hồng."]
+    lines = [
+        "",
+        head,
+        f"• Người bán: <b>{format_vnd(insight.seller_commission_vnd)}</b> · "
+        f"Shopee/Xtra: <b>{format_vnd(insight.shopee_commission_vnd)}</b>",
+    ]
+    rate = _pct(insight.avg_rate_bps) if insight.avg_rate_bps is not None else "-"
+    lines.append(f"• Tỷ lệ trung bình: <b>{rate}</b> · Xtra: {insight.xtra} link · Chạm trần: {insight.capped} link")
+    if insight.top_categories:
+        lines.append("• Ngành hỏi nhiều: " + ", ".join(f"{html.escape(n)} ({c})" for n, c in insight.top_categories))
+    if insight.top_shops:
+        lines.append("• Shop hỏi nhiều: " + ", ".join(f"{html.escape(n)} ({c})" for n, c in insight.top_shops))
+    return lines
+
+
 def stats_text(stats, *, period_label: str, since: str | None) -> str:
     """stats: admin_stats.Stats."""
     created_rate = f" ({stats.links_created * 100 // stats.links_total}%)" if stats.links_total else ""
@@ -495,6 +522,9 @@ def stats_text(stats, *, period_label: str, since: str | None) -> str:
         f"• Hoa hồng ước tính: <b>{format_vnd(stats.commission_vnd)}</b>",
         f"• Đã báo khách: <b>{format_vnd(stats.cashback_vnd)}</b>",
         f"• Chênh lệch trước phí, thuế: <b>{format_vnd(stats.commission_vnd - stats.cashback_vnd)}</b>",
+    ]
+    lines += _insight_lines(stats.insight, stats.links_created)
+    lines += [
         "",
         "📅 <b>Link tạo được, 7 ngày gần nhất</b>",
     ]

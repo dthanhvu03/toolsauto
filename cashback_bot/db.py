@@ -75,6 +75,18 @@ CREATE TABLE IF NOT EXISTS admin_notifications (
 """
 
 
+# Dữ liệu sản phẩm thêm cho thống kê (PLAN-064). Cho phép NULL: link cũ không có.
+PRODUCT_INSIGHT_COLUMNS = (
+    ("cat_name", "TEXT"),
+    ("shop_name", "TEXT"),
+    ("seller_commission_vnd", "INTEGER"),
+    ("shopee_commission_vnd", "INTEGER"),
+    ("commission_rate_bps", "INTEGER"),
+    ("is_xtra", "INTEGER"),
+    ("is_capped", "INTEGER"),
+)
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -139,6 +151,8 @@ class TrackingRepository:
             _add_column(conn, "telegram_users", "cooldown_until", "TEXT")
             _add_column(conn, "outbound_messages", "edit_message_id", "INTEGER")
             _add_column(conn, "outbound_messages", "reply_markup_json", "TEXT")
+            for column, ddl in PRODUCT_INSIGHT_COLUMNS:
+                _add_column(conn, "link_requests", column, ddl)
 
     def upsert_user(self, telegram_user_id: int, username: str | None) -> bool:
         now = _utc_now()
@@ -220,8 +234,10 @@ class TrackingRepository:
             "delivery_status",
             "created_at",
         ]
-        if fields.get("estimate_policy") and "estimate_policy" in self.column_names("link_requests"):
+        existing = self.column_names("link_requests")
+        if fields.get("estimate_policy") and "estimate_policy" in existing:
             columns.append("estimate_policy")
+        columns += [name for name, _ddl in PRODUCT_INSIGHT_COLUMNS if name in existing and name in fields]
         payload = {key: fields.get(key) for key in columns}
         payload["created_at"] = payload["created_at"] or _utc_now()
         placeholders = ", ".join("?" for _ in columns)

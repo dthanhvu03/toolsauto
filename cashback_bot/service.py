@@ -256,6 +256,13 @@ class CashbackService:
                     "api_status": quote.api_status,
                     "data_source": quote.data_source,
                     "product_last_update": quote.last_update.strftime("%Y-%m-%d %H:%M:%S"),
+                    "cat_name": quote.category,
+                    "shop_name": quote.shop_name,
+                    "seller_commission_vnd": quote.seller_commission_vnd,
+                    "shopee_commission_vnd": quote.shopee_commission_vnd,
+                    "commission_rate_bps": quote.commission_rate_bps,
+                    "is_xtra": quote.is_xtra,
+                    "is_capped": quote.is_capped,
                     "link_status": "created",
                     "reject_reason": None,
                 }

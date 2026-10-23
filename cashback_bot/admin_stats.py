@@ -32,6 +32,20 @@ TOP = 5
 
 
 @dataclass(frozen=True)
+class Insight:
+    """Dữ liệu AddLiveTag lưu lúc tạo link (PLAN-064). Chỉ link từ bản đó trở đi có."""
+
+    detailed: int
+    seller_commission_vnd: int
+    shopee_commission_vnd: int
+    avg_rate_bps: int | None
+    xtra: int
+    capped: int
+    top_categories: list[tuple[str, int]]
+    top_shops: list[tuple[str, int]]
+
+
+@dataclass(frozen=True)
 class Stats:
     period: str
     since: datetime | None
@@ -48,6 +62,7 @@ class Stats:
     top_products: list[tuple[str, int]]
     delivery_pending: int
     errors: int
+    insight: Insight | None = None
 
 
 def _stamp(moment: datetime) -> str:
@@ -132,6 +147,7 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
     ]
 
     return Stats(
+        insight=_insight(conn, lo),
         period=period,
         since=since,
         users_total=_count(conn, "SELECT COUNT(*) FROM telegram_users"),
@@ -157,4 +173,43 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
             f"SELECT COUNT(*) FROM admin_notifications WHERE event_type = 'REQUEST_FAILED' AND {in_period}",
             (lo,),
         ),
+    )
+
+
+def _insight(conn: sqlite3.Connection, lo: str) -> Insight | None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(link_requests)")}
+    if "cat_name" not in columns:
+        return None
+    where = "link_status = 'created' AND created_at >= ? AND (cat_name IS NOT NULL OR commission_rate_bps IS NOT NULL)"
+    row = conn.execute(
+        f"""
+        SELECT COUNT(*), COALESCE(SUM(seller_commission_vnd), 0), COALESCE(SUM(shopee_commission_vnd), 0),
+               AVG(commission_rate_bps), COALESCE(SUM(is_xtra = 1), 0), COALESCE(SUM(is_capped = 1), 0)
+        FROM link_requests WHERE {where}
+        """,
+        (lo,),
+    ).fetchone()
+
+    def top(column: str) -> list[tuple[str, int]]:
+        return [
+            (str(name), int(count))
+            for name, count in conn.execute(
+                f"""
+                SELECT {column}, COUNT(*) AS n FROM link_requests
+                WHERE link_status = 'created' AND created_at >= ? AND {column} IS NOT NULL
+                GROUP BY 1 ORDER BY n DESC, 1 LIMIT 3
+                """,
+                (lo,),
+            ).fetchall()
+        ]
+
+    return Insight(
+        detailed=int(row[0]),
+        seller_commission_vnd=int(row[1]),
+        shopee_commission_vnd=int(row[2]),
+        avg_rate_bps=None if row[3] is None else round(row[3]),
+        xtra=int(row[4]),
+        capped=int(row[5]),
+        top_categories=top("cat_name"),
+        top_shops=top("shop_name"),
     )
