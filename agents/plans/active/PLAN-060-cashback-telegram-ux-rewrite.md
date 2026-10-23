@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **APPROVED (user, 2026-10-23)** — P0 xong; P1 chờ Anti giao Codex |
+| Trạng thái | **APPROVED (user, 2026-10-23)** — P0 xong, P2 phần chữ xong; P1 chờ Anti giao Codex |
 | Người soạn | Claude Code (2026-10-23) |
 | Executor | Claude Code (copy, keyboard, màn hình) + Codex (hạ tầng gửi tin, routing callback, migration) |
 | Phạm vi | `cashback_bot/` + `tests/test_cashback_*.py` |
@@ -203,3 +203,12 @@ User duyệt 2026-10-23, câu 1–3 lấy theo đề xuất:
 - Proof: trên code cũ 3 test mới **3 failed**; trên code mới `.venv/bin/python -m pytest tests/test_cashback_*.py -q` → **122 passed** (nền 119 + 3).
 - Để lại cho P3: `AdminPanel._simulation_text` (không có chỗ gọi) còn `.replace(",", ".")` cũ, xoá khi dọn admin.
 - Bot đang chạy vẫn dùng code cũ tới khi restart.
+
+### P2 (phần chữ, chưa gắn nút) — Claude Code — 2026-10-23 — DONE (chưa restart bot)
+
+- `messages.py`: viết lại theo khuôn mục 3–4. `/start`, `/help`, lệnh lạ dùng chung `HOME` (tạm liệt kê 3 lệnh, sẽ thay bằng nút sau P1). Thẻ kết quả V1.1/V1.2 chung `_render_card`, chỉ khác dòng `ⓘ`; hoàn 0đ đổi tiêu đề thành "Đã tạo link mua". Lỗi chung khuôn tiêu đề + nguyên nhân + việc cần làm. `BOT_COMMANDS` bỏ `hang` (còn 5); gõ `/hang` vẫn trả lời.
+- `admin_ui.py`: màn "Nội dung lệnh" khớp danh sách lệnh mới.
+- Giữ nguyên các câu an toàn test đang ép: "không thu phí sử dụng", "không bảo đảm đơn hàng được ghi nhận", "không bảo đảm Shopee sẽ ghi nhận hoa hồng", "Chưa phải tiền có thể rút.", "Shopee xác nhận đơn hợp lệ", "chưa chính thức áp dụng".
+- Ngoại lệ từ vựng: "hoa hồng" vẫn xuất hiện ở `/dieukien` (câu an toàn) và `/hang` (tỷ lệ), không chỉ `/cachtinh`.
+- **Cần chủ bot duyệt riêng** (ADR-045: cắt V1.2 chỉ sau khi duyệt câu hiển thị): chữ mới của `how_to_calc_v12` và dòng `ⓘ` thẻ V1.2. Bot đang chạy V1.1 nên chưa ảnh hưởng khách.
+- Test: cập nhật assert tiêu đề ở `test_cashback_bot.py`, `test_cashback_v11.py`, `test_cashback_v12.py`; thêm `test_khuon_chu_khach_plan_060` (≤1 dòng ⓘ, không chữ "cashback", thẻ không nhắc "hoa hồng", <3500 ký tự, thẻ 0đ). Proof: `.venv/bin/python -m pytest tests/test_cashback_*.py -q` → **123 passed**.
