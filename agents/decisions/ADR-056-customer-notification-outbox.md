@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | Accepted (PLAN-079), chưa triển khai production |
+| Trạng thái | Accepted (PLAN-079). Gate A triển khai 2026-10-24 (`0deb060`). Sửa đổi Gate B review bên dưới: chưa triển khai |
 | Ngày | 2026-10-24 |
 | Liên quan | ADR-051 (trạng thái hoa hồng), ADR-053 (snapshot), ADR-054 (hỗ trợ), ADR-055 (chi trả) |
 
@@ -45,3 +45,19 @@
 - Gate A không gửi thêm tin nào cho khách (cờ tắt).
 - Tin hỗ trợ giờ không còn phụ thuộc cờ thông báo admin.
 - Muốn có tin gần thời gian thực cần tự đồng bộ Shopee định kỳ: tách thành PLAN riêng.
+
+## Sửa đổi 2026-10-24 — Gate B pre-activation review
+
+Chi tiết: `reports/CASHBACK_PLAN079_GATE_B_REVIEW.md`.
+
+1. **Mốc kích hoạt là lúc bắt đầu chế độ đang chạy**, thay cho mục 6 ở trên ("lần đầu bật cờ"):
+   - ba chế độ `off` / `test` / `on`, lưu ở `bot_state.customer_notify_state`;
+   - `order_notify.sync_activation` chạy lúc khởi động: đổi chế độ sang `test` hoặc `on` thì đặt mốc mới, restart cùng chế độ giữ mốc; DB của Gate A có mốc mà chưa có chế độ được coi là đang `on`;
+   - lịch sử đổi chế độ chỉ thêm, ở `bot_state.customer_notify_history`;
+   - tin đơn ghi trước mốc hiện tại không gửi (`before_activation`), nên bật → tắt → bật không gửi dồn tin của lần bật trước;
+   - đơn không có thời điểm mua không báo "đơn mới" (`no_purchase_time`).
+2. **Chế độ tài khoản test:** `CUSTOMER_NOTIFICATIONS_TEST_IDS` (cùng `CUSTOMER_NOTIFICATIONS_ENABLED=1`) chỉ gửi tin đơn cho các ID đó, khách khác `suppressed: not_test_account`. Màn 🔔 có 🧪 tin thử, chỉ tới các ID này, đi qua đúng bộ gửi.
+3. **Bộ gửi:**
+   - thông báo admin tắt thì không lấy tin admin, để tin khách không bị kẹt sau các tin admin đang chờ;
+   - gặp 429 thì dừng vòng gửi, vì giới hạn áp cho cả bot.
+4. **Rollback không đánh dấu `sent` giả:** quay về code trước PLAN-079 phải dùng nhánh `rollback/plan079-compat`, là code `c4b9b1a` cộng bộ lọc. Bộ lọc chỉ lấy `pending` / `retry`, bỏ tin đơn hàng, giữ tuỳ chọn và đánh dấu chặn bot, không sửa dòng nào. Code `c4b9b1a` nguyên bản thì gửi lại mọi dòng `status != 'sent'`.

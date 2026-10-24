@@ -231,6 +231,7 @@ class AdminPanel:
     rounding_unit: int = 1
     # PLAN-079: cờ CUSTOMER_NOTIFICATIONS_ENABLED, để màn 🔔 nói đúng trạng thái.
     customer_notifications_enabled: bool = False
+    customer_notification_test_ids: frozenset[int] = frozenset()
     _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang được hỏi hoa hồng giả định cho 🧮 Mô phỏng: user_id → hạn chờ.
     _sim_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
@@ -344,7 +345,8 @@ class AdminPanel:
             return TermsAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:nt:"):
             return CustomerNotifyAdmin(
-                TrackingRepository(self.db_path), self.customer_notifications_enabled, audit=self._log_setting
+                TrackingRepository(self.db_path), self.customer_notifications_enabled, audit=self._log_setting,
+                test_ids=self.customer_notification_test_ids,
             ).route(user_id, data, now)
         if data.startswith("c:rd:"):
             return ReadinessAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)

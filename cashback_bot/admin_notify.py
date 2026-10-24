@@ -187,6 +187,7 @@ class AdminNotifier:
     fail_cooldown_sec: int = 60
     # PLAN-079: cờ CUSTOMER_NOTIFICATIONS_ENABLED cho thông báo đơn hàng chủ động.
     customer_notifications_enabled: bool = False
+    customer_notification_test_ids: frozenset[int] = frozenset()
 
     def _active(self) -> bool:
         return self.enabled and self.chat_id is not None
@@ -471,5 +472,8 @@ class AdminNotifier:
     def flush_pending(self, limit: int = 10) -> None:
         """Gửi hàng đợi chung qua Dispatcher (PLAN-079): tin admin khi bật thông báo admin, tin khách theo cờ và
         tuỳ chọn của khách."""
-        Dispatcher(self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled).flush(limit)
+        Dispatcher(
+            self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled,
+            self.customer_notification_test_ids,
+        ).flush(limit)
 

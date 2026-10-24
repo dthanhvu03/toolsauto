@@ -1,18 +1,23 @@
 """Màn /admin → 🔔 Thông báo khách (PLAN-079). Theo dõi hàng đợi tin gửi khách.
 
 Xem số tin theo trạng thái và loại, lý do lỗi / bỏ qua, khách chặn bot, khách tắt thông báo, xem mẫu tin.
-Thao tác ghi duy nhất: gửi lại một tin cụ thể đang 'failed' hoặc 'unknown' (đúng sự kiện đó, không tạo sự kiện mới,
-vẫn áp tuỳ chọn của khách lúc gửi). Không có nút gửi hàng loạt, sửa đơn, gán APPROVED / SETTLED hay tạo khoản chi.
+Thao tác ghi: gửi lại một tin cụ thể đang 'failed' hoặc 'unknown' (đúng sự kiện đó, không tạo sự kiện mới, vẫn áp
+tuỳ chọn của khách lúc gửi); và 🧪 tin thử Gate B, chỉ tới tài khoản trong CUSTOMER_NOTIFICATIONS_TEST_IDS, đi qua
+đúng bộ gửi và các điều kiện của tin đơn thật. Không có nút gửi hàng loạt, sửa đơn, gán APPROVED / SETTLED hay tạo
+khoản chi.
 """
 
 from __future__ import annotations
 
 import html
+import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
-from cashback_bot.db import TrackingRepository
+from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import BotReply, order_new_notice, order_update_notice
+from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
+from cashback_bot.order_notify import BASELINE_KEY, HISTORY_KEY
 
 HOME = "c:nt:home"
 BACK_MENU = (("◀️ Tổng quan", "c:menu:home"),)
@@ -25,10 +30,17 @@ CATEGORY_LABELS = {"order_new": "đơn mới", "order_update": "cập nhật đ�
 REASON_LABELS = {
     "feature_off": "cờ thông báo đơn đang tắt", "historical": "đơn trước mốc kích hoạt", "pref_off": "khách tắt loại tin",
     "blocked": "khách đã chặn bot", "not_started": "khách chưa bắt đầu bot", "stale": "tin quá cũ",
-    "interrupted_while_sending": "bot dừng giữa lúc gửi",
+    "interrupted_while_sending": "bot dừng giữa lúc gửi", "not_test_account": "không phải tài khoản test",
+    "before_activation": "ghi trước lần bật gần nhất", "no_purchase_time": "Shopee không trả thời điểm mua",
 }
+MODE_LABELS = {"off": "TẮT", "test": "THỬ VỚI TÀI KHOẢN TEST", "on": "BẬT cho mọi khách"}
 _LIST = re.compile(r"^c:nt:l:(failed|unknown|suppressed|pending)$")
 _RETRY = re.compile(r"^c:nt:r:(\d{1,9})(:ok)?$")
+_SMOKE = re.compile(r"^c:nt:s:(n|r):(\d{1,15})$")
+SMOKE_BODY = "🧪 <b>Tin thử của chủ bot</b>: không phải đơn thật, không có tiền.\n\n"
+SMOKE_MARKUP = json.dumps({"inline_keyboard": [[
+    {"text": "📦 Đơn hàng của tôi", "callback_data": "u:o:l:1"}, {"text": "📩 Hỗ trợ", "callback_data": "u:p:support"},
+]]})
 
 
 def _reason(error: str | None) -> str:
@@ -38,10 +50,11 @@ def _reason(error: str | None) -> str:
 
 
 class CustomerNotifyAdmin:
-    def __init__(self, repo: TrackingRepository, customer_enabled: bool, audit=None):
+    def __init__(self, repo: TrackingRepository, customer_enabled: bool, audit=None, test_ids: frozenset[int] = frozenset()):
         self.repo = repo
         self.customer_enabled = customer_enabled
         self.audit = audit
+        self.cfg = NotifyConfig(customer_enabled, test_ids)
 
     def route(self, admin_id: int, data: str, now: datetime) -> BotReply:
         if data == HOME:
@@ -52,6 +65,10 @@ class CustomerNotifyAdmin:
             return self._list(matched.group(1))
         if (matched := _RETRY.fullmatch(data)) is not None:
             return self._retry(admin_id, int(matched.group(1)), bool(matched.group(2)), now)
+        if data == "c:nt:s":
+            return self._smoke_page()
+        if (matched := _SMOKE.fullmatch(data)) is not None:
+            return self._smoke(admin_id, matched.group(1) == "r", int(matched.group(2)), now)
         return BotReply("Nút này không còn hiệu lực.", inline_keyboard=(BACK_HOME,))
 
     def _home(self, notice: str = "") -> BotReply:
@@ -70,16 +87,25 @@ class CustomerNotifyAdmin:
             last = conn.execute(
                 "SELECT MAX(sent_at) FROM admin_notifications WHERE audience = 'customer' AND status = 'sent'"
             ).fetchone()[0]
-            baseline = conn.execute("SELECT value FROM bot_state WHERE key = 'customer_notify_baseline_at'").fetchone()
+            baseline = conn.execute("SELECT value FROM bot_state WHERE key = ?", (BASELINE_KEY,)).fetchone()
+            history = conn.execute("SELECT value FROM bot_state WHERE key = ?", (HISTORY_KEY,)).fetchone()
+        mode = "off" if not self.cfg.enabled else "test" if self.cfg.test_ids else "on"
         lines = ["⚙️ Quản trị › <b>Thông báo khách</b>", ""]
         if notice:
             lines += [notice, ""]
-        lines += [
-            f"Thông báo đơn hàng tự động: <b>{'BẬT' if self.customer_enabled else 'TẮT'}</b>"
-            + ("" if self.customer_enabled else " (cờ CUSTOMER_NOTIFICATIONS_ENABLED, chờ chủ bot duyệt)"),
-            f"Mốc kích hoạt: {baseline[0] if baseline else 'chưa có'} (đơn mua trước mốc không báo «đơn mới»)",
-            "",
-        ]
+        lines.append(
+            f"Thông báo đơn hàng tự động: <b>{MODE_LABELS[mode]}</b>"
+            + (" (cờ CUSTOMER_NOTIFICATIONS_ENABLED, chờ chủ bot duyệt)" if mode == "off" else "")
+            + (f" · {len(self.cfg.test_ids)} tài khoản" if mode == "test" else "")
+        )
+        if mode != "off":
+            lines.append(f"Mốc kích hoạt: {baseline[0] if baseline else 'chưa có'} (đơn mua trước mốc không báo «đơn mới»)")
+        changes = json.loads(history[0]) if history else []
+        if changes:
+            lines.append("Đổi chế độ gần đây: " + " · ".join(
+                f"{c['at'][5:16].replace('T', ' ')} {MODE_LABELS.get(c.get('mode'), c.get('mode'))}" for c in changes[-3:]
+            ))
+        lines.append("")
         lines += [f"{label}: <b>{int(counts.get(status, 0))}</b>" for status, label in STATUS_LABELS.items()]
         if categories:
             lines.append("Đã gửi theo loại: " + " · ".join(f"{CATEGORY_LABELS.get(c, c)} {n}" for c, n in categories))
@@ -93,8 +119,10 @@ class CustomerNotifyAdmin:
             (("❌ Gửi lỗi", "c:nt:l:failed"), ("❔ Không rõ", "c:nt:l:unknown")),
             (("⏭ Bỏ qua", "c:nt:l:suppressed"), ("⏳ Chờ gửi", "c:nt:l:pending")),
             (("👁 Xem mẫu tin", "c:nt:pv"),),
-            BACK_MENU,
         ]
+        if self.cfg.test_ids:
+            rows.append((("🧪 Tin thử tới tài khoản test", "c:nt:s"),))
+        rows.append(BACK_MENU)
         return BotReply("\n".join(lines), inline_keyboard=tuple(rows))
 
     def _list(self, status: str) -> BotReply:
@@ -144,6 +172,62 @@ class CustomerNotifyAdmin:
         if self.audit:
             self.audit(admin_id, "customer_notify_retry", None, {"id": event_id}, now)
         return self._home(f"🔁 Đã xếp gửi lại tin #{event_id}.")
+
+    def _smoke_page(self, notice: str = "") -> BotReply:
+        if not self.cfg.test_ids:
+            return self._home("⚠️ Chưa có CUSTOMER_NOTIFICATIONS_TEST_IDS nên không có tin thử.")
+        lines = ["⚙️ Quản trị › Thông báo khách › <b>Tin thử</b>", ""]
+        if notice:
+            lines += [notice, ""]
+        lines += [
+            "Tin thử là một tin «đơn mới» mẫu, chỉ gửi tới tài khoản test, đi qua đúng bộ gửi của tin thật: cờ, tuỳ chọn",
+            "/thongbao của tài khoản đó, chặn bot, thử lại.",
+            "• 🧪 Sự kiện mới: tạo một sự kiện thử mới.",
+            "• ♻️ Xử lý lại: ghi lại đúng sự kiện thử gần nhất, để kiểm tra chống trùng (không được thành tin thứ hai).",
+        ]
+        rows = [
+            ((f"🧪 Sự kiện mới · {uid}", f"c:nt:s:n:{uid}"), (f"♻️ Xử lý lại · {uid}", f"c:nt:s:r:{uid}"))
+            for uid in sorted(self.cfg.test_ids)
+        ]
+        return BotReply("\n".join(lines), inline_keyboard=(*rows, BACK_HOME))
+
+    def _smoke(self, admin_id: int, repeat: bool, chat_id: int, now: datetime) -> BotReply:
+        if chat_id not in self.cfg.test_ids:
+            return self._home("⚠️ Chỉ gửi tin thử tới tài khoản trong CUSTOMER_NOTIFICATIONS_TEST_IDS.")
+        stamp = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self.repo.connect() as conn:
+            count = int(conn.execute(
+                "SELECT COUNT(*) FROM admin_notifications WHERE event_key LIKE ?", (f"smoke:{chat_id}:%",)
+            ).fetchone()[0])
+            if repeat and count == 0:
+                return self._smoke_page("⚠️ Tài khoản này chưa có sự kiện thử để xử lý lại.")
+            key = f"smoke:{chat_id}:{count if repeat else count + 1}"
+            row = {"category": "order_new", "chat_id": chat_id, "created_at": stamp}
+            reason = customer_block_reason(conn, row, self.cfg, now)
+            enqueue_event(
+                conn, event_key=key, event_type="ORDER_SMOKE", chat_id=chat_id,
+                message_html=SMOKE_BODY + order_new_notice("••••TEST", 1_000, "PENDING", "PENDING"),
+                audience="customer", category="order_new", reply_markup_json=SMOKE_MARKUP, source_ref="smoke",
+                suppressed_reason=reason, now=stamp,
+            )
+            saved = conn.execute("SELECT id, status, last_error, created_at FROM admin_notifications WHERE event_key = ?",
+                                 (key,)).fetchone()
+            total = int(conn.execute(
+                "SELECT COUNT(*) FROM admin_notifications WHERE event_key LIKE ?", (f"smoke:{chat_id}:%",)
+            ).fetchone()[0])
+        if self.audit:
+            self.audit(admin_id, "customer_notify_smoke", None, {"chat_id": chat_id, "key": key, "repeat": repeat}, now)
+        state = STATUS_LABELS.get(saved["status"], saved["status"])
+        if repeat:
+            notice = (
+                f"♻️ Sự kiện <code>{key}</code> đã có (#{saved['id']}, {state}). Không tạo tin thứ hai: "
+                f"tài khoản này vẫn có {total} sự kiện thử."
+            )
+        else:
+            notice = f"🧪 Đã xếp tin thử #{saved['id']} cho <code>{chat_id}</code>: {state}"
+            if saved["status"] == "suppressed":
+                notice += f" ({_reason(saved['last_error'])})"
+        return self._smoke_page(notice)
 
     def _preview(self) -> BotReply:
         samples = [

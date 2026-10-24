@@ -68,6 +68,7 @@ def main() -> None:
         enabled=settings.admin_notifications_enabled,
         chat_id=settings.admin_chat_id,
         customer_notifications_enabled=settings.customer_notifications_enabled,
+        customer_notification_test_ids=settings.customer_notification_test_ids,
     )
     stuck = repo.recover_sending()
     if stuck:

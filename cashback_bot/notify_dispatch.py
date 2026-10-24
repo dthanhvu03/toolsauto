@@ -5,7 +5,10 @@
 - 4xx (khách chặn bot, chat không tồn tại): 'failed', đánh dấu khách đã chặn; khách nhắn lại thì bỏ đánh dấu.
 - Hết giờ / mất kết nối khi gửi tin khách: 'unknown', KHÔNG tự gửi lại (Telegram có thể đã nhận). Admin xem
   và gửi lại tay. Tin admin thì thử lại (trùng tin admin chấp nhận được).
-- Tin khách kiểm tra lại lúc gửi: cờ toàn cục (thông báo đơn), tuỳ chọn của khách, khách đã chặn bot, tin quá cũ.
+- Tin khách kiểm tra lại lúc gửi: cờ toàn cục (thông báo đơn), tài khoản test (Gate B), tin trước lần bật gần nhất,
+  tuỳ chọn của khách, khách đã chặn bot, tin quá cũ.
+- 429 là giới hạn của cả bot: dừng vòng gửi, các tin còn lại đợi vòng sau.
+- Thông báo admin tắt thì không lấy tin admin, để tin khách phía sau không bị kẹt.
 Không đảm bảo đúng-một-lần với Telegram; chọn tối-đa-một-lần cho tin khách khi không rõ kết quả.
 """
 
@@ -13,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -30,6 +33,22 @@ SILENT_EVENTS = {"NEW_USER", "LINK_SENT"}
 # Loại tin khách → cột tuỳ chọn. Tin đơn hàng còn cần cờ CUSTOMER_NOTIFICATIONS_ENABLED.
 PREF_COLUMNS = {"order_new": "orders", "order_update": "updates", "support": "support", "wallet": "wallet"}
 ORDER_CATEGORIES = ("order_new", "order_update")
+# Mốc lần bật thông báo đơn gần nhất (bot_state). order_notify.sync_activation đặt lúc khởi động.
+BASELINE_KEY = "customer_notify_baseline_at"
+
+
+@dataclass(frozen=True)
+class NotifyConfig:
+    """Cờ CUSTOMER_NOTIFICATIONS_ENABLED và danh sách tài khoản test (CUSTOMER_NOTIFICATIONS_TEST_IDS).
+
+    Có danh sách test thì tin đơn chỉ gửi cho các tài khoản đó; khách khác ghi «bỏ qua» như khi cờ tắt.
+    """
+
+    enabled: bool
+    test_ids: frozenset[int] = frozenset()
+
+    def live_for(self, user_id: int) -> bool:
+        return self.enabled and (not self.test_ids or int(user_id) in self.test_ids)
 
 
 def _stamp(moment: datetime) -> str:
@@ -43,12 +62,18 @@ def _parse(stamp: str | None) -> datetime | None:
         return None
 
 
-def customer_block_reason(conn, row, customer_enabled: bool, now: datetime) -> str | None:
+def customer_block_reason(conn, row, cfg: NotifyConfig, now: datetime) -> str | None:
     """Lý do không gửi một tin khách, hoặc None. Dùng cả lúc ghi sự kiện và lúc gửi."""
     category = row["category"]
     if category in ORDER_CATEGORIES:
-        if not customer_enabled:
+        if not cfg.enabled:
             return "feature_off"
+        if not cfg.live_for(row["chat_id"]):
+            return "not_test_account"
+        baseline = conn.execute("SELECT value FROM bot_state WHERE key = ?", (BASELINE_KEY,)).fetchone()
+        if baseline is None or (row["created_at"] or "") < baseline[0]:
+            # Tin ghi trước lần bật gần nhất (bật → tắt → bật): không gửi dồn.
+            return "before_activation"
         created = _parse(row["created_at"])
         if created is not None and now - created > ORDER_STALE:
             return "stale"
@@ -76,38 +101,40 @@ class DispatchResult:
     failed: int = 0
     suppressed: int = 0
     unknown: int = 0
-    skipped: list[int] = field(default_factory=list)
 
 
 class Dispatcher:
     def __init__(self, repo: TrackingRepository, telegram, admin_enabled: bool, admin_chat_id: int | None,
-                 customer_enabled: bool):
+                 customer_enabled: bool, test_ids: frozenset[int] = frozenset()):
         self.repo = repo
         self.telegram = telegram
         self.admin_active = admin_enabled and admin_chat_id is not None
-        self.customer_enabled = customer_enabled
+        self.cfg = NotifyConfig(customer_enabled, test_ids)
 
     def flush(self, limit: int = 10, now: datetime | None = None) -> DispatchResult:
         moment = now or datetime.now(timezone.utc)
         result = DispatchResult()
-        for row in self.repo.list_pending_admin_events(limit=limit, max_attempts=MAX_ATTEMPTS, now=_stamp(moment)):
-            customer = (row["audience"] if "audience" in row.keys() else "admin") == "customer"
-            if not customer and not self.admin_active:
-                result.skipped.append(int(row["id"]))
-                continue
+        audiences = ("admin", "customer") if self.admin_active else ("customer",)
+        rows = self.repo.list_pending_admin_events(
+            limit=limit, max_attempts=MAX_ATTEMPTS, now=_stamp(moment), audiences=audiences
+        )
+        for row in rows:
+            customer = row["audience"] == "customer"
             if customer:
                 with self.repo.connect() as conn:
-                    reason = customer_block_reason(conn, row, self.customer_enabled, moment)
+                    reason = customer_block_reason(conn, row, self.cfg, moment)
                 if reason:
                     self.repo.suppress_admin_event(int(row["id"]), reason)
                     result.suppressed += 1
                     continue
             if not self.repo.claim_admin_event(int(row["id"])):
                 continue
-            self._send(row, customer, moment, result)
+            if self._send(row, customer, moment, result) == "rate_limited":
+                break
         return result
 
-    def _send(self, row, customer: bool, moment: datetime, result: DispatchResult) -> None:
+    def _send(self, row, customer: bool, moment: datetime, result: DispatchResult) -> str | None:
+        """Gửi một tin; trả loại lỗi (để vòng gửi dừng khi bị 429) hoặc None."""
         event_id = int(row["id"])
         markup = None
         if "reply_markup_json" in row.keys() and row["reply_markup_json"]:
@@ -120,12 +147,13 @@ class Dispatcher:
             message_id = self.telegram.send_message(int(row["chat_id"]), str(row["message_html"]), **kwargs)
         except TelegramDeliveryError as exc:
             self._failed(row, customer, exc.kind, exc.retry_after, exc.status_code, attempts, moment, result)
-            return
+            return exc.kind
         except requests.RequestException as exc:
             self._failed(row, customer, "ambiguous", None, None, attempts, moment, result, redact(type(exc).__name__))
-            return
+            return "ambiguous"
         self.repo.finish_admin_event(event_id, "sent", message_id=message_id if isinstance(message_id, int) else None)
         result.sent += 1
+        return None
 
     def _failed(self, row, customer: bool, kind: str, retry_after: int | None, status_code: int | None,
                 attempts: int, moment: datetime, result: DispatchResult, detail: str | None = None) -> None:

@@ -53,20 +53,22 @@ class Settings:
     terms_required: bool = False
     # PLAN-079: thông báo đơn hàng chủ động cho khách. Mặc định tắt; chỉ bật khi chủ bot duyệt (Gate B).
     customer_notifications_enabled: bool = False
+    # Gate B thử nghiệm: có danh sách thì tin đơn chỉ gửi cho các tài khoản này (CUSTOMER_NOTIFICATIONS_TEST_IDS).
+    customer_notification_test_ids: frozenset[int] = frozenset()
 
 
 def _flag(raw: str | None) -> bool:
     return (raw or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _allowed_ids(raw: str | None) -> frozenset[int]:
+def _allowed_ids(raw: str | None, key: str = "CASHBACK_ALLOWED_TELEGRAM_IDS") -> frozenset[int]:
     found: set[int] = set()
     for part in (raw or "").replace(";", ",").split(","):
         piece = part.strip()
         if not piece:
             continue
         if not piece.isdigit():
-            raise ConfigError(["CASHBACK_ALLOWED_TELEGRAM_IDS"])
+            raise ConfigError([key])
         found.add(int(piece))
     return frozenset(found)
 
@@ -148,6 +150,9 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         admin_user_ids=_allowed_ids(env.get("CASHBACK_ADMIN_USER_IDS")),
         terms_required=_flag(env.get("CASHBACK_TERMS_REQUIRED")),
         customer_notifications_enabled=_flag(env.get("CUSTOMER_NOTIFICATIONS_ENABLED")),
+        customer_notification_test_ids=_allowed_ids(
+            env.get("CUSTOMER_NOTIFICATIONS_TEST_IDS"), "CUSTOMER_NOTIFICATIONS_TEST_IDS"
+        ),
     )
 
 

@@ -5,7 +5,7 @@ Chạy trong transaction ghi đơn (hook của TrackingRepository.record_convers
 
 Quy tắc:
 - Đơn khớp link lần đầu → một tin «đã ghi nhận giao dịch» (khoá conversion:<id>:first_matched). Đơn mua trước mốc
-  kích hoạt thông báo thì không báo «đơn mới» (vẫn xem được ở /donhang).
+  kích hoạt thông báo thì không báo «đơn mới» (vẫn xem được ở /donhang). Mốc = lần bật cờ gần nhất (sync_activation).
 - Lần đồng bộ sau có thay đổi có ý nghĩa → gom thành một tin (khoá conversion:<id>:changes:<id thay đổi lớn nhất>).
   Thay đổi hoa hồng nhỏ hơn ngưỡng không báo. Đồng bộ lại y hệt không có thay đổi nên không có tin.
 - Có xung đột gán người nhận (Sub ID trỏ link khác) → không báo.
@@ -16,26 +16,59 @@ Quy tắc:
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from cashback_bot import policy_snapshot
 from cashback_bot.commission_validation import APPROVED, FRAUD, REJECTED
-from cashback_bot.db import enqueue_event
+from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import order_new_notice, order_update_notice
-from cashback_bot.notify_dispatch import customer_block_reason
+from cashback_bot.notify_dispatch import BASELINE_KEY, NotifyConfig, customer_block_reason
 from cashback_bot.pricing import cashback_for
 
-BASELINE_KEY = "customer_notify_baseline_at"
+logger = logging.getLogger("cashback_bot")
+
+STATE_KEY = "customer_notify_state"
+HISTORY_KEY = "customer_notify_history"
 MIN_CHANGE_VND = 500
 MIN_CHANGE_RATIO = 0.10
 MEANINGFUL_STATUS = {"PAID", "COMPLETED", "CANCELLED", "CANCELED"}
 
+__all__ = ["BASELINE_KEY", "NotifyConfig", "make_hook", "sync_activation"]
 
-@dataclass(frozen=True)
-class NotifyConfig:
-    enabled: bool
+
+def sync_activation(repo: TrackingRepository, cfg: NotifyConfig, now: datetime) -> str | None:
+    """Lúc khởi động: ghi chế độ thông báo đơn (off / test / on), đặt mốc kích hoạt khi đổi chế độ. Trả mốc hiện tại.
+
+    Mốc là lúc bắt đầu chế độ đang chạy, lưu trong bot_state (không ở RAM). Restart cùng chế độ giữ nguyên mốc.
+    Tắt rồi bật lại, hoặc chuyển từ thử với tài khoản test sang bật cho mọi khách, đặt mốc mới: đơn mua và tin ghi
+    trước mốc không được gửi dồn. Lịch sử đổi chế độ chỉ thêm (HISTORY_KEY).
+    """
+    stamp = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    mode = "off" if not cfg.enabled else "test" if cfg.test_ids else "on"
+    with repo.connect() as conn:
+        found = dict(conn.execute(
+            "SELECT key, value FROM bot_state WHERE key IN (?, ?, ?)", (BASELINE_KEY, STATE_KEY, HISTORY_KEY)
+        ).fetchall())
+        baseline = found.get(BASELINE_KEY)
+        # Bản Gate A chỉ ghi mốc khi bật, chưa ghi chế độ: có mốc nghĩa là đang bật.
+        previous = found.get(STATE_KEY) or ("on" if baseline else "off")
+        writes = {}
+        if mode != "off" and (mode != previous or baseline is None):
+            baseline = writes[BASELINE_KEY] = stamp
+        if mode != found.get(STATE_KEY):
+            history = json.loads(found.get(HISTORY_KEY) or "[]")
+            history.append({"at": stamp, "mode": mode, "baseline": None if mode == "off" else baseline})
+            writes[STATE_KEY] = mode
+            writes[HISTORY_KEY] = json.dumps(history, separators=(",", ":"))
+            logger.info("[Cashback] thông báo đơn: %s → %s, mốc %s", previous, mode, baseline)
+        for key, value in writes.items():
+            conn.execute(
+                "INSERT INTO bot_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+    return None if mode == "off" else baseline
 
 
 def short_order(order_sn: str | None, conversion_id: str) -> str:
@@ -83,7 +116,7 @@ def _attribution_conflict(conn: sqlite3.Connection, conversion_id: str, recorded
 
 def _queue(conn, cfg: NotifyConfig, *, key: str, category: str, user: int, html: str, conversion_id: str, now: str) -> None:
     row = {"category": category, "chat_id": user, "created_at": now}
-    reason = customer_block_reason(conn, row, cfg.enabled, _parse_now(now))
+    reason = customer_block_reason(conn, row, cfg, _parse_now(now))
     enqueue_event(
         conn, event_key=key, event_type="ORDER_" + category.upper(), chat_id=user, message_html=html,
         audience="customer", category=category, reply_markup_json=keyboard(conversion_id),
@@ -111,13 +144,20 @@ def make_hook(cfg: NotifyConfig):
             html = order_new_notice(order, cashback_of(conn, link_id, net), status, values.get("validation_status"))
             key = f"conversion:{conversion_id}:first_matched"
             purchase = values.get("purchase_time") or ""
-            if baseline is None or purchase < baseline[0]:
+            if baseline is None:
+                hold = "feature_off"
+            elif not purchase:
+                hold = "no_purchase_time"  # không biết mua trước hay sau mốc: không báo «đơn mới»
+            elif purchase < baseline[0]:
+                hold = "historical"
+            else:
+                hold = None
+            if hold:
                 # Đơn trước mốc kích hoạt (hoặc chưa kích hoạt): ghi để theo dõi, không gửi.
                 enqueue_event(
                     conn, event_key=key, event_type="ORDER_ORDER_NEW", chat_id=int(user), message_html=html,
                     audience="customer", category="order_new", reply_markup_json=keyboard(conversion_id),
-                    source_ref=f"conversion:{conversion_id}",
-                    suppressed_reason="historical" if baseline is not None else "feature_off", now=now,
+                    source_ref=f"conversion:{conversion_id}", suppressed_reason=hold, now=now,
                 )
                 return
             _queue(conn, cfg, key=key, category="order_new", user=int(user), html=html, conversion_id=conversion_id, now=now)

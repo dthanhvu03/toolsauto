@@ -1,3 +1,22 @@
+## Phiên 2026-10-24 (at) — PLAN-079 Gate B pre-activation review (CONDITIONAL GO, chưa triển khai)
+
+Claude Code, chủ bot giao audit Gate B. Báo cáo `reports/CASHBACK_PLAN079_GATE_B_REVIEW.md`; ADR-056 có mục sửa đổi.
+
+- **System State:** production không đổi. `main@e36281c` (code `0deb060`), PID 636239, thông báo đơn tắt. Không merge, không restart, không đổi `.env`, không gửi Telegram thật. DB production chỉ đọc (`gate_b_check`: OK; 2 khoản pending 12.157đ / 960đ; ví 0, available 0, payout 0; trigger 6/6).
+- **Done (nhánh `cursor/cashback-plan079-gate-b`, worktree `/home/vu/toolsauto-cashback-notifications`, 606 passed, ruff sạch):**
+  - mốc kích hoạt theo chế độ `off` / `test` / `on` (bật → tắt → bật không gửi dồn), lịch sử chỉ thêm;
+  - tin khách không kẹt sau tin admin; 429 dừng vòng gửi; lý do `no_purchase_time`;
+  - tin đơn huỷ ngay lần đầu không hiện số hoàn;
+  - chế độ `CUSTOMER_NOTIFICATIONS_TEST_IDS`, 🧪 tin thử ở màn 🔔, `python -m cashback_bot.gate_b_check` (chỉ đọc).
+- **Rollback:** nhánh `rollback/plan079-compat` (worktree `/home/vu/toolsauto-cashback-rollback`, `f3ab6ec`, 558 passed): code `c4b9b1a` + bộ lọc, không cần `UPDATE … SET status='sent'`. Diễn tập trên bản sao: `c4b9b1a` nguyên bản gửi lại 6 dòng lạ, bản tương thích gửi 0 dòng lạ.
+- **Unfinished / Blockers:** chờ chủ bot duyệt ngưỡng OR 500đ / 10% và 3 điểm nghiệp vụ ở mục 3 của báo cáo.
+- **Next:**
+  1. Chủ bot duyệt triển khai nhánh sửa (cờ vẫn tắt).
+  2. Chạy kịch bản thử 8 bước với 2 tài khoản test (mục 5).
+  3. Bật cho mọi khách theo mục 10.
+
+---
+
 ## Phiên 2026-10-24 (as) — Đã triển khai PLAN-079 Gate A (đơn hàng của tôi, thông báo đơn TẮT)
 
 Claude Code, chủ bot duyệt. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN079.md`.

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from cashback_bot import customer_orders, support, terms
 from cashback_bot.db import TrackingRepository
+from cashback_bot.notify_dispatch import NotifyConfig
 from cashback_bot.messages import (
     DIEUKIEN,
     SUPPORT_ASK,
@@ -53,11 +54,11 @@ _NOTIFY = re.compile(r"^u:n:t:(orders|updates|support|wallet)$")
 
 class CustomerDesk:
     def __init__(self, repo: TrackingRepository, admin_notifier: "AdminNotifier | None" = None, terms_required: bool = False,
-                 orders_live: bool = False):
+                 orders_live: "NotifyConfig | bool" = False):
         self.repo = repo
         self.admin_notifier = admin_notifier
-        # PLAN-079: CUSTOMER_NOTIFICATIONS_ENABLED, chỉ để nói thật với khách ở /thongbao.
-        self.orders_live = orders_live
+        # PLAN-079: CUSTOMER_NOTIFICATIONS_ENABLED (+ tài khoản test), chỉ để nói thật với khách ở /thongbao.
+        self.orders_live = orders_live if isinstance(orders_live, NotifyConfig) else NotifyConfig(bool(orders_live))
         # Cổng bắt buộc đồng ý trước khi tạo link mới. Mặc định tắt; chỉ có tác dụng khi đã có bản công bố.
         self.terms_required = terms_required
 
@@ -107,7 +108,7 @@ class CustomerDesk:
     def notify_page(self, user_id: int) -> BotReply:
         with self.repo.connect() as conn:
             current = customer_orders.prefs(conn, user_id)
-        return notify_settings_reply(current, self.orders_live)
+        return notify_settings_reply(current, self.orders_live.live_for(user_id))
 
     # --- Hỗ trợ -------------------------------------------------------------------------------
 
@@ -163,7 +164,7 @@ class CustomerDesk:
         if (matched := _NOTIFY.fullmatch(data)) is not None:
             with self.repo.connect() as conn:
                 current = customer_orders.toggle(conn, user_id, matched.group(1), now.strftime("%Y-%m-%dT%H:%M:%SZ"))
-            return notify_settings_reply(current, self.orders_live, "Đã lưu lựa chọn của bạn.")
+            return notify_settings_reply(current, self.orders_live.live_for(user_id), "Đã lưu lựa chọn của bạn.")
         if (matched := _CATEGORY.fullmatch(data)) is not None:
             category = matched.group(1)
             if category not in support.CATEGORIES:

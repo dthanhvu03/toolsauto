@@ -625,14 +625,21 @@ def _cashback_line(amount: int | None) -> str:
 
 
 def order_new_notice(order: str, cashback: int | None, order_status: str | None, validation: str | None) -> str:
+    # Đơn đã huỷ / không đủ điều kiện ngay lần đầu thấy: không hiện số hoàn (khớp /donhang).
+    ineligible = validation in ("REJECTED", "FRAUD") or (order_status or "").upper() in ("CANCELLED", "CANCELED")
+    amount = "Hoàn tạm tính: không được tính cho giao dịch này" if ineligible else _cashback_line(cashback)
+    footer = (
+        "ⓘ Nếu bạn cần kiểm tra thêm, hãy dùng /hotro." if ineligible
+        else "ⓘ Đây là số tạm tính, có thể thay đổi. Chưa phải tiền có thể rút."
+    )
     return (
         "📦 <b>Đã ghi nhận giao dịch</b>\n\n"
         "Shopee vừa ghi nhận một giao dịch qua link bạn đã tạo.\n\n"
         f"Mã đơn: {order}\n"
         f"Tình trạng đơn: {order_status_label(order_status)}\n"
-        f"{_cashback_line(cashback)}\n"
+        f"{amount}\n"
         f"{commission_label(validation, order_status)}.\n\n"
-        "ⓘ Đây là số tạm tính, có thể thay đổi. Chưa phải tiền có thể rút."
+        f"{footer}"
     )
 
 

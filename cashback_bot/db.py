@@ -1198,18 +1198,20 @@ class TrackingRepository:
                 audience="customer" if category else "admin", category=category,
             )
 
-    def list_pending_admin_events(self, limit: int = 10, max_attempts: int = 5, now: str | None = None) -> list[sqlite3.Row]:
+    def list_pending_admin_events(self, limit: int = 10, max_attempts: int = 5, now: str | None = None,
+                                  audiences: tuple[str, ...] = ("admin", "customer")) -> list[sqlite3.Row]:
         """Tin tới lượt gửi: pending, hoặc retry đã tới giờ. Không lấy sending / unknown / failed / suppressed."""
+        marks = ", ".join("?" for _ in audiences)
         with self.connect() as conn:
             return conn.execute(
-                """
+                f"""
                 SELECT * FROM admin_notifications
-                WHERE status IN ('pending', 'retry') AND attempt_count < ?
+                WHERE status IN ('pending', 'retry') AND attempt_count < ? AND audience IN ({marks})
                   AND (next_retry_at IS NULL OR next_retry_at <= ?)
                 ORDER BY id ASC
                 LIMIT ?
                 """,
-                (max_attempts, now or _utc_now(), limit),
+                (max_attempts, *audiences, now or _utc_now(), limit),
             ).fetchall()
 
     def claim_admin_event(self, event_id: int) -> bool:

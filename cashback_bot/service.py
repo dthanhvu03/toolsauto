@@ -88,14 +88,13 @@ class CashbackService:
         self.client = client
         self.admin_notifier = admin_notifier
         self.wallet = Wallet(repo)
-        self.desk = CustomerDesk(
-            repo, admin_notifier, terms_required=settings.terms_required,
-            orders_live=settings.customer_notifications_enabled,
+        notify_cfg = order_notify.NotifyConfig(
+            settings.customer_notifications_enabled, settings.customer_notification_test_ids
         )
-        # PLAN-079: sự kiện thông báo đơn sinh trong transaction ghi đơn. Mốc kích hoạt đặt lần đầu bật cờ.
-        if settings.customer_notifications_enabled and repo.get_state(order_notify.BASELINE_KEY) is None:
-            repo.set_state(order_notify.BASELINE_KEY, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
-        repo.conversion_hooks[:] = [order_notify.make_hook(order_notify.NotifyConfig(settings.customer_notifications_enabled))]
+        self.desk = CustomerDesk(repo, admin_notifier, terms_required=settings.terms_required, orders_live=notify_cfg)
+        # PLAN-079: sự kiện thông báo đơn sinh trong transaction ghi đơn. Mốc kích hoạt = lúc bắt đầu chế độ hiện tại.
+        order_notify.sync_activation(repo, notify_cfg, datetime.now(timezone.utc))
+        repo.conversion_hooks[:] = [order_notify.make_hook(notify_cfg)]
         policy = self._estimate_policy() if self._v12_ready() else None
         calculator = "V1.2" if policy else "V1.1, chưa bật V1.2"
         self.admin_panel = AdminPanel(
@@ -111,6 +110,7 @@ class CashbackService:
             other_reserve_vnd=settings.estimate_other_reserve_vnd,
             rounding_unit=settings.estimate_rounding_unit,
             customer_notifications_enabled=settings.customer_notifications_enabled,
+            customer_notification_test_ids=settings.customer_notification_test_ids,
         )
         self._snapshots_on = False
         self._backfill_snapshots()
