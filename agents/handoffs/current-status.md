@@ -1,3 +1,20 @@
+## Phiên 2026-10-24 (av) — Màn «Đơn hàng của tôi» dễ đọc hơn (đã triển khai)
+
+Claude Code, chủ bot duyệt mẫu ("oke anh duyệt").
+
+- **System State:**
+  - `main@e3f31e7`, PID 646983, khởi động 09:37:48 UTC;
+  - thông báo đơn vẫn `on`, mốc 09:21:19Z không đổi;
+  - log 0 lỗi, 0 token; `gate_b_check` OK: 12.157đ / 960đ, ví khoá, trigger 6/6.
+- **Done:**
+  - `/donhang` hiện tên sản phẩm của link, ngày mua, nhãn ngắn; chỉ hiện số khác 0; đánh số qua các trang;
+  - chi tiết đơn có tiến trình từng bước, chỉ đánh ✅ khi Shopee đã có dữ liệu;
+  - bỏ chữ «V1.1»; trang trống có nút 📖 Cách lấy link;
+  - backup `cashback-20261024T093324Z.sqlite`; 607 passed; dựng thử trên bản sao (đã xoá) đúng với 2 khách và trang trống.
+- **Next:** như mục (au): theo dõi 🔔 sau mỗi lần 🔄; PLAN tự đồng bộ Shopee nếu cần.
+
+---
+
 ## Phiên 2026-10-24 (au) — Đã triển khai PLAN-079 Gate A.1 + Gate B (thông báo đơn BẬT cho mọi khách)
 
 Claude Code + chủ bot ("oke thực hiện 3 mục cho anh đi em"). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN079_GATE_B.md`.
