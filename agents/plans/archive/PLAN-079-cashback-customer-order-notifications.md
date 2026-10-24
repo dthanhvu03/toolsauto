@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **CODE READY (Gate A), CHỜ RELEASE REVIEW.** Gate B (bật thông báo đơn) NOT AUTHORIZED |
+| Trạng thái | **Gate A DONE, ĐÃ TRIỂN KHAI 2026-10-24 (`0deb060`, PID 636239).** Gate B (bật thông báo đơn) NOT AUTHORIZED. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN079.md` |
 | Executor | Claude Code (chủ bot giao trực tiếp ngày 2026-10-24) |
 | Đầu vào | `main@1b0d145` (production `c4b9b1a`), ADR-051/053/054/055 |
 | Nhánh | `cursor/cashback-plan079-notifications`, worktree `/home/vu/toolsauto-cashback-notifications` |

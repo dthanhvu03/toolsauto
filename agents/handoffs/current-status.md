@@ -1,3 +1,17 @@
+## Phiên 2026-10-24 (as) — Đã triển khai PLAN-079 Gate A (đơn hàng của tôi, thông báo đơn TẮT)
+
+Claude Code, chủ bot duyệt. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN079.md`.
+
+- Backup trước triển khai: `data/backups/cashback-20261024T080656Z.sqlite` (verify ok).
+- `main` fast-forward `1b0d145` → `0deb060`, 588 passed, đã push. Chủ bot restart 08:10:45 UTC, PID 636239.
+- Sau triển khai: log 0 lỗi, 0 token; cột hàng đợi mới, bảng tuỳ chọn, cột chặn bot có; hàng đợi 42 dòng cũ (admin, sent), 0 tin mới; cờ `CUSTOMER_NOTIFICATIONS_ENABLED` tắt, mốc kích hoạt chưa đặt; 2 khoản pending giữ 12.157đ / 960đ; ví khoá, 6 trigger. Trên bản sao: menu có `/donhang`, `/thongbao`; `/donhang` của 2 khách đúng số. PLAN-079 đã chuyển sang `agents/plans/archive/`.
+
+Next:
+- Gate B: chủ bot duyệt câu chữ và ngưỡng, thử tài khoản test, bật `CUSTOMER_NOTIFICATIONS_ENABLED=1`.
+- PLAN riêng cho tự đồng bộ Shopee nếu muốn tin gần thời gian thực. Gate B của ví (PLAN-078) vẫn chờ chứng từ và quyết định.
+
+---
+
 ## Phiên 2026-10-24 (ar) — PLAN-079 Customer Order Tracking & Notifications (CODE READY, CHƯA triển khai)
 
 Claude Code, chủ bot giao PLAN-079. Worktree `/home/vu/toolsauto-cashback-notifications`, nhánh `cursor/cashback-plan079-notifications`. Báo cáo `reports/CASHBACK_PLAN079_CUSTOMER_NOTIFICATIONS.md`, ADR-056.

@@ -7,7 +7,7 @@
 | Nhánh | `cursor/cashback-plan079-notifications`, tách từ `main@1b0d145` (production `c4b9b1a`) |
 | Worktree | `/home/vu/toolsauto-cashback-notifications` |
 | ADR | ADR-056 (mới) |
-| Trạng thái | **CODE READY (Gate A).** Chưa merge, chưa triển khai. Gate B (bật thông báo đơn) **NOT AUTHORIZED** |
+| Trạng thái | **Gate A đã triển khai 2026-10-24** tại `0deb060`, PID 636239 (chủ bot duyệt). Gate B (bật thông báo đơn) **NOT AUTHORIZED**. Chi tiết: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN079.md` |
 
 ---
 
@@ -311,7 +311,7 @@ Chưa có khoản nào đủ điều kiện rút.
 | Migration | **GO** |
 | Financial Safety | **GO** |
 | Regression | **GO** (588/588) |
-| Gate A — Production Code Deployment | **NOT AUTHORIZED UNTIL REVIEW** |
+| Gate A — Production Code Deployment | **GO, đã triển khai** (chủ bot duyệt 2026-10-24) |
 | Gate B — Customer Notification Activation | **NOT AUTHORIZED** |
 | Wallet / Payout | **NOT AUTHORIZED** |
 
