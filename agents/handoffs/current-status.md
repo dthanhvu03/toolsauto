@@ -1,3 +1,21 @@
+## Phiên 2026-10-24 (bh) — PLAN-083 hoàn thiện bot Zalo: lên main (chờ restart)
+
+Chủ bot: "chỉnh cho chỉnh chu hoàn thiện, rà lại rồi làm 1 plan". Báo cáo `reports/CASHBACK_PLAN083_ZALO_POLISH.md`, PLAN `agents/plans/active/PLAN-083-cashback-zalo-polish.md`.
+
+- **Backup:** `cashback-20261024T155318Z.sqlite`.
+- **Code:** `main@21e1532`, 697 passed, ruff sạch.
+  - Câu chữ Zalo (lệnh gõ tắt, Cách dùng riêng, link mua tin riêng, bỏ mũi tên);
+  - admin thấy `Zalo #N` / `Tin Zalo #N`;
+  - báo lỗi xử lý; báo bot Zalo dừng > 10 phút (bot Telegram canh); cảnh báo khách thứ 40 / 50;
+  - nguồn đồng ý điều khoản `zalo_choice`; toast lên đầu tin.
+- **Diễn tập** 20 bước trên bản sao (đã xoá): đạt.
+- **System State:** chạy bản cũ (Telegram PID 686054, Zalo PID 686122 bản `6fa5a38`).
+- **Next:**
+  - chủ bot restart Telegram rồi Zalo; nhắn thử `hd`, link, `don`;
+  - phần B chờ quyết: điều khoản V2 ghi "Telegram hoặc Zalo", rút gọn link, thử tin chủ động ~26/10, ảnh / mô tả bot, gói Pro.
+
+---
+
 ## Phiên 2026-10-24 (bg) — PLAN-082 kênh Zalo ĐANG CHẠY
 
 Báo cáo `reports/CASHBACK_PLAN082_ZALO.md` (mục "Đã triển khai").
