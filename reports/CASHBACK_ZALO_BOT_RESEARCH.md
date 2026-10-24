@@ -110,6 +110,32 @@ lõi dùng chung ──────┤
 
 Theo `CLAUDE.md`, adapter và migration là việc backend. Sau khi anh duyệt, Anti viết PLAN, Codex làm phần backend, Claude Code làm nội dung tin nhắn và UX bên Zalo.
 
+## 7. Thử thật với token (2026-10-24, chủ bot duyệt)
+
+Bot "Bot Săn Hoàn Tiền": `getMe` OK, `account_type=BASIC`, `can_join_groups=true`, chưa đặt webhook. Đã thử: 3 lần nhận tin (`getUpdates`), 1 tin thử định dạng gửi riêng cho chủ bot. Không ghi DB, không chạy bot thường trực.
+
+**Nhận tin:**
+- **Zalo không giữ tin gửi lúc không có ai đang nhận** (`getUpdates` trả 408 cho các tin gửi trước đó). Bot Zalo phải chạy liên tục; restart sẽ làm mất tin gửi trong lúc đó.
+- **ID người dùng** là chuỗi hex 20 ký tự (không phải số), có `display_name`. `chat.id` = `from.id` khi chat riêng.
+- **Link Shopee:**
+
+  | Cách khách gửi | Bot nhận |
+  |---|---|
+  | Dán link (Zalo tự tạo thẻ xem trước) | ❌ `message.unsupported.received`, không có `text` |
+  | Chữ đứng trước link (`mua https://…`) | ❌ vẫn thành thẻ xem trước |
+  | Bấm ✕ tắt thẻ rồi gửi | ✅ `https://s.shopee.vn/…` |
+  | Bỏ `https://` (`s.shopee.vn/…`) | ✅ `s.shopee.vn/…` |
+
+  `parse_shopee_target` hiện tại nhận cả hai dạng ✅. **Bắt buộc:** khi nhận `unsupported`, bot trả lời ngay hướng dẫn "bấm ✕ trên thẻ xem trước, hoặc xoá https://". `hd` nên có ảnh minh hoạ.
+
+**Gửi tin** (`parse_mode=html`, ảnh chủ bot chụp):
+- `<b>` và `<u>` hiện đúng.
+- URL trần thành link xanh bấm được; tin của bot **không** bị biến thành thẻ xem trước.
+- `<a href>` **mất link**, chỉ còn chữ → link mua phải để URL trần (đúng như mục 2).
+- Không có nút bấm → dùng dòng "👉 Gõ: don · vi · hd".
+
+**Chưa thử:** bot tự nhắn trước cho khách sau 1–2 ngày không tương tác (cần cho thông báo đơn), giới hạn tốc độ gửi.
+
 ## Nguồn
 
 - Zalo Bot Platform: [trang chủ và bảng giá](https://bot.zaloplatforms.com/en/), [tài liệu](https://bot.zaloplatforms.com/docs/), [tạo bot](https://bot.zaloplatforms.com/docs/create-bot/), [sendMessage](https://bot.zaloplatforms.com/docs/apis/sendMessage/), [điều khoản](https://bot.zaloplatforms.com/docs/terms/)

@@ -1,3 +1,18 @@
+## Phiên 2026-10-24 (be) — Nghiên cứu bot Zalo + thử thật với token (chỉ thử, chưa code)
+
+Chủ bot muốn chạy bot song song trên Zalo. Báo cáo `reports/CASHBACK_ZALO_BOT_RESEARCH.md`.
+
+- **System State:** production không đổi (`main`, PID 675442). Chủ bot đã thêm `ZALO_BOT_TOKEN` vào `.env` (bot "Bot Săn Hoàn Tiền", gói BASIC: 50 người / bot, 3.000 tin / tháng). Chưa có tiến trình Zalo nào chạy.
+- **Done:**
+  - so sánh Zalo Bot Platform / OA / zca-js → chọn Bot Platform;
+  - thử thật: `getMe` OK; Zalo không giữ tin khi không ai nhận; link dán thẳng thành thẻ xem trước → bot nhận `unsupported` không có link; bấm ✕ hoặc bỏ `https://` thì nhận được;
+  - gửi 1 tin thử cho chủ bot: `<b>`, `<u>`, URL trần OK; `<a href>` mất link; không có nút.
+- **Đề xuất thiết kế** (trao đổi trong phiên, chưa ghi vào báo cáo): ID nội bộ âm cho khách Zalo qua bảng `channel_identities`; tiến trình riêng `cashback_bot.zalo_bot`; `zalo_render.py` chuyển `BotReply`; lệnh gõ `don` / `vi` / `hd`; hàng đợi thông báo bỏ qua ID âm; bật WAL. Ví / rút tiền Zalo làm cùng đợt mở ví.
+- **Unfinished:** chưa thử bot tự nhắn trước sau 1–2 ngày; chủ bot chưa chốt tỷ lệ hoàn bên Zalo; chưa có PLAN.
+- **Next:** chủ bot duyệt hướng → Anti viết PLAN (Codex làm backend, Claude Code làm render + câu chữ Zalo).
+
+---
+
 ## Phiên 2026-10-24 (bd) — PLAN-081 B + A và sửa link ShopeeFood đã triển khai
 
 Chủ bot restart ("reset r em"). Báo cáo `reports/CASHBACK_DEPLOY_2026-10-24_PLAN081.md`.
