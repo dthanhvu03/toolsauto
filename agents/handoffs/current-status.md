@@ -1,3 +1,20 @@
+## Phiên 2026-10-24 (bb) — PLAN-081 Gate B Phương án B: theo dõi đơn quá 30 ngày (CODE READY, chưa triển khai)
+
+Claude Code, chủ bot duyệt Gate A ("anh duyệt"). Báo cáo `reports/CASHBACK_PLAN081_GATE_B.md`; ADR-058 Accepted cho Phương án B.
+
+- **System State:** production không đổi (`main@4a52f82`, PID 656347, tự đồng bộ 240 phút).
+- **Done** (nhánh `cursor/cashback-plan081-reconciliation`, 666 passed):
+  - `last_seen_*`; bảng theo dõi + sự kiện chỉ thêm;
+  - nhãn 20 / 30 / 45 ngày và vắng 2 lượt;
+  - đánh giá sau mỗi lượt và mỗi giờ; tin admin chống trùng; màn 🧾 Đơn cần đối soát;
+  - diễn tập trên bản sao đạt.
+- **Unfinished:** chờ duyệt triển khai; Phương án A (thử nguồn > 30 ngày) chờ xác nhận riêng.
+- **Next:**
+  1. Chủ bot duyệt → backup, merge, test, push → restart → kiểm tra màn 🧾 và `gate_b_check`.
+  2. Hạn: trước 2026-11-12.
+
+---
+
 ## Phiên 2026-10-24 (ba) — PLAN-081 Gate A: audit đơn Shopee quá 30 ngày (chỉ đọc)
 
 Claude Code. Báo cáo `reports/CASHBACK_PLAN081_GATE_A_AUDIT.md`, ADR-058 (DRAFT), PLAN `agents/plans/active/PLAN-081-cashback-reconciliation-beyond-30-days.md`.

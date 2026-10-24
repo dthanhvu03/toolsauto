@@ -583,6 +583,37 @@ CREATE TABLE IF NOT EXISTS shopee_sync_incidents (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_incident_open ON shopee_sync_incidents((1)) WHERE resolved_at IS NULL;
 
+-- PLAN-081 (ADR-058): theo dõi đơn qua bot đang chờ xác minh khi ra khỏi khung đồng bộ 30 ngày.
+-- Lớp riêng: KHÔNG thay validation_status / settlement_status / sổ ví; ví và payout không đọc bảng này.
+CREATE TABLE IF NOT EXISTS conversion_reconciliation (
+    conversion_id TEXT PRIMARY KEY REFERENCES shopee_conversions(conversion_id),
+    tracking_status TEXT NOT NULL CHECK (tracking_status IN (
+        'OBSERVED_RECENTLY', 'APPROACHING_WINDOW', 'OUTSIDE_WINDOW_UNVERIFIED', 'RECONCILIATION_REQUIRED', 'RECONCILED'
+    )),
+    reason TEXT,
+    next_action TEXT,
+    missed_runs INTEGER NOT NULL DEFAULT 0,
+    last_run_id INTEGER,
+    status_since TEXT NOT NULL,
+    evaluated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS conversion_reconciliation_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversion_id TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    reason TEXT,
+    run_id INTEGER,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS conversion_reconciliation_events_no_update
+BEFORE UPDATE ON conversion_reconciliation_events
+BEGIN SELECT RAISE(ABORT, 'conversion_reconciliation_events is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS conversion_reconciliation_events_no_delete
+BEFORE DELETE ON conversion_reconciliation_events
+BEGIN SELECT RAISE(ABORT, 'conversion_reconciliation_events is append-only'); END;
+
 CREATE TABLE IF NOT EXISTS customer_notification_prefs (
     telegram_user_id INTEGER PRIMARY KEY,
     orders INTEGER NOT NULL DEFAULT 1,
@@ -795,6 +826,8 @@ CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_polic
 
 
 # Cột thêm cho hàng đợi gửi (PLAN-079). status: pending, sending, sent, retry, failed, suppressed, unknown.
+# PLAN-081: nguồn của last_seen_at khi ghi từ lượt đồng bộ (report/list, khung 30 ngày theo giờ mua).
+SEEN_SOURCE = "report_list_30d"
 SYNC_RUN_COLUMNS = (
     ("lease_owner", "TEXT"),
     ("error_category", "TEXT"),
@@ -938,6 +971,15 @@ class TrackingRepository:
             # PLAN-080: số liệu từng lượt đồng bộ.
             for column, ddl in SYNC_RUN_COLUMNS:
                 _add_column(conn, "shopee_sync_runs", column, ddl)
+            # PLAN-081: lần cuối đơn có trong response của một lượt đồng bộ. Dòng cũ lấy từ updated_at (trước PLAN-081
+            # updated_at chỉ được ghi khi lượt đồng bộ thấy đơn), có đánh dấu nguồn để không lẫn với giá trị thật.
+            _add_column(conn, "shopee_conversions", "last_seen_at", "TEXT")
+            _add_column(conn, "shopee_conversions", "last_seen_run_id", "INTEGER")
+            _add_column(conn, "shopee_conversions", "last_seen_source", "TEXT")
+            conn.execute(
+                "UPDATE shopee_conversions SET last_seen_at = updated_at, last_seen_source = 'backfill_updated_at' "
+                "WHERE last_seen_at IS NULL AND last_seen_source IS NULL AND updated_at IS NOT NULL"
+            )
             # Mỗi khách tối đa một yêu cầu còn giữ tiền: chặn rút trùng ở tầng DB.
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_payout_one_open ON cashback_payouts(telegram_user_id) "
@@ -1653,6 +1695,9 @@ class TrackingRepository:
                 "validation_source": SOURCE_REPORT,
                 "validation_confidence": CONFIDENCE_INFERRED,
                 "evidence_ref": f"sync_run:{sync_run_id}" if sync_run_id else (None if prev is None else prev["evidence_ref"]),
+                # PLAN-081: chỉ đường đồng bộ (có mã lượt) mới là «thấy trong nguồn».
+                **({"last_seen_at": now, "last_seen_run_id": sync_run_id, "last_seen_source": SEEN_SOURCE}
+                   if sync_run_id else {}),
                 "review_status": review,
             }
             if prev is None:

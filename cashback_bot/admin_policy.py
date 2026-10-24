@@ -89,6 +89,7 @@ from cashback_bot.admin_ui import (
 )
 from cashback_bot.config import AutoSyncConfig
 from cashback_bot.admin_customer_notify import CustomerNotifyAdmin
+from cashback_bot.admin_reconciliation import ReconciliationAdmin
 from cashback_bot.admin_sync import AutoSyncAdmin, status_label
 from cashback_bot.admin_readiness import ReadinessAdmin
 from cashback_bot.admin_settlement import SettlementAdmin
@@ -354,6 +355,8 @@ class AdminPanel:
             ).route(user_id, data, now)
         if data.startswith("c:rd:"):
             return ReadinessAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
+        if data.startswith("c:rc:"):
+            return ReconciliationAdmin(TrackingRepository(self.db_path)).route(data)
         if data.startswith("c:sy:"):
             return AutoSyncAdmin(TrackingRepository(self.db_path), self.auto_sync).route(data, now)
         if data == "c:menu:shopee":

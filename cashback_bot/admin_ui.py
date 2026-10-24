@@ -36,7 +36,7 @@ def shopee_connected_keyboard() -> Keyboard:
     return (
         (("🔄 Đồng bộ ngay", "c:shopee:sync"), ("📤 CSV 30 ngày", "c:shopee:csv")),
         (("🧾 Duyệt hoa hồng", "c:cv:home"), ("🧾 Đối soát thanh toán", "c:sm:home")),
-        (("⏱ Tự động đồng bộ", "c:sy:home"),),
+        (("⏱ Tự động đồng bộ", "c:sy:home"), ("🧾 Đơn cần đối soát", "c:rc:home")),
         (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
         BACK_HOME,
     )

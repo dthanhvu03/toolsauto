@@ -24,6 +24,7 @@ from cashback_bot.messages import ADMIN_COMMANDS, BOT_COMMANDS, BUY_BUTTON, DESC
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import RedactingFormatter, error_brief
 from cashback_bot.service import CashbackService
+from cashback_bot import reconciliation
 from cashback_bot.sync_scheduler import SyncCoordinator, SyncWorker
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError, classify_delivery_error
 
@@ -453,6 +454,22 @@ def _check_wallet_refresh(service: CashbackService, repo: TrackingRepository, in
         logger.exception("[Cashback] cập nhật sổ hoàn tiền định kỳ thất bại")
 
 
+def _check_reconciliation(repo: TrackingRepository, admin_notifier: AdminNotifier, interval_sec: int = 3600) -> None:
+    """PLAN-081: mỗi giờ cập nhật nhãn theo dõi theo tuổi đơn, kể cả khi không có lượt đồng bộ. Không gọi Shopee."""
+    now = time.time()
+    last = repo.get_state("recon_last_eval")
+    try:
+        if last and now - float(last) < interval_sec:
+            return
+    except ValueError:
+        pass
+    repo.set_state("recon_last_eval", str(now))
+    try:
+        reconciliation.evaluate(repo, datetime.now(timezone.utc), admin_notifier=admin_notifier)
+    except Exception:
+        logger.exception("[Cashback] cập nhật theo dõi đối soát định kỳ thất bại")
+
+
 BACKUP_INTERVAL_SEC = 86_400
 BACKUP_RETRY_SEC = 3_600
 
@@ -496,6 +513,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             process_updates(service, telegram, repo, updates, admin_notifier)
             drain_sync_results(coordinator, service, admin_notifier)
             _check_wallet_refresh(service, repo)
+            _check_reconciliation(repo, admin_notifier)
             _check_backup(service, repo, admin_notifier)
         except KeyboardInterrupt:
             logger.info("stop")

@@ -27,6 +27,7 @@ import uuid
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
+from cashback_bot import reconciliation
 from cashback_bot.config import AutoSyncConfig
 from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.shopee_client import NEEDS_AUTH_CATEGORIES, PARSE_ERROR, RATE_LIMITED
@@ -313,6 +314,14 @@ class SyncCoordinator:
             logger.warning("[ShopeeAutoSync] lượt %s mất khoá, không ghi kết quả", run_id)
             return result
         self._incident(run_id, result)
+        try:
+            # PLAN-081: nhãn theo dõi đơn đang chờ; chỉ đọc DB, lỗi ở đây không làm hỏng lượt đồng bộ.
+            reconciliation.evaluate(
+                self.repo, self.clock(), run_id=run_id, window_start=(result.stats or {}).get("window_start"),
+                run_success=result.status == "success", admin_notifier=self.admin_notifier,
+            )
+        except Exception:
+            logger.exception("[ShopeeAutoSync] cập nhật theo dõi đối soát sau lượt %s lỗi", run_id)
         self.completed.put((trigger, result))
         return result
 
