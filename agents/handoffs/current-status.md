@@ -1,3 +1,18 @@
+## Phiên 2026-10-24 (ao) — PLAN-078 Wallet & Payout Readiness (CODE READY, CHƯA triển khai)
+
+Claude Code, chủ bot giao PLAN-078. Worktree `/home/vu/toolsauto-cashback-payout`, nhánh `cursor/cashback-plan078-payout`. Báo cáo `reports/CASHBACK_PLAN078_WALLET_PAYOUT.md`, ADR-055.
+
+- Audit: ví PLAN-066 tính số dư gộp, yêu cầu rút đi thẳng requested → paid không cần chứng từ, tài khoản bị ghi đè không có lịch sử. Lỗ tìm thấy: `payout_headroom` của quỹ cũ chỉ trừ yêu cầu ở trạng thái 'requested' và 'paid'.
+- Đã làm (mở rộng, không dựng ví mới): máy trạng thái 11 bước (`payout_events` chỉ thêm, phiên bản, khoá chống gửi lặp); `payout_allocations` truy từng đồng về đơn; unique index một yêu cầu mở mỗi khách; trigger `financial_lock_payout_progress` và `payout_paid_needs_evidence`; khoản vào ví cần SETTLED và không điều chỉnh OPEN; quỹ có chứng từ từ kỳ MATCHED (trừ toàn bộ phí và thuế kỳ); `payout_readiness` (6 quyết định, hạn mức ACTIVE, kỳ MATCHED, backup ≤ 48 giờ, điều khoản chi trả, tài khoản đã xác minh); lịch sử và xác minh tài khoản (4 số cuối + sha); hạn mức mặc định không có; màn chi trả theo bước, ẩn bước chi tiền khi khoá; ví đóng hiện câu mới.
+- Proof: **554 passed** (+33 mới, 17 test cũ viết lại theo máy trạng thái; có test hai thread rút cùng lúc). Diễn tập trên bản sao DB production đạt: thêm 6 bảng, 3 cột, 2 index, ghi 1 dòng lịch sử tài khoản; 2 khoản pending giữ số; khoá còn; integrity ok.
+- KHÔNG merge, KHÔNG restart. Gate B (mở ví, chi tiền) NOT AUTHORIZED.
+
+Next:
+- Chủ bot duyệt Gate A (phát hành code ở trạng thái khoá).
+- Gate B cần: kỳ Shopee MATCHED thật và bằng chứng APPROVED; quyết định thuế, thu hồi, điều khoản chi trả, hạn mức, cách xác minh tài khoản, quy trình chuyển khoản; một bước phát hành riêng để ghi quyết định.
+
+---
+
 ## Phiên 2026-10-24 (an) — Chủ bot công bố điều khoản V1
 
 - Chủ bot tạo bản nháp V1 lúc 06:09:28 UTC và công bố lúc 06:16:03 UTC (audit `terms_draft`, `terms_publish`; hash `63c0d16dab0c`). `customer_terms_versions` #1 PUBLISHED; 0 chấp thuận; cờ `CASHBACK_TERMS_REQUIRED` vẫn tắt; không gửi tin cho khách. Log 0 lỗi, 0 update lỗi.

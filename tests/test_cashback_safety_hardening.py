@@ -43,6 +43,7 @@ from tests.test_cashback_wallet import (
     _financially_ready,
     _link,
     _order,
+    _verify_bank,
 )
 
 TOKEN = "123456789:AAH" + "x" * 32
@@ -402,7 +403,10 @@ class TestFinancialLock:
         bot = _bot(tmp_path)
         settings = bot.wallet.settings()
         assert settings.enabled is False
-        assert settings.locked_reasons == (REASON_SETTLEMENT, REASON_TAX)
+        # Hai lý do cũ đứng đầu; PLAN-078 cộng thêm các điều kiện hệ thống mới, không thay chúng.
+        assert settings.locked_reasons[:2] == (REASON_SETTLEMENT, REASON_TAX)
+        assert any("Chính sách thuế khi chi cho người nhận" in r for r in settings.locked_reasons)
+        assert any("kỳ Shopee đối soát khớp" in r for r in settings.locked_reasons)
 
     def test_admin_cannot_enable_wallet_even_with_old_callback(self, tmp_path):
         bot = _bot(tmp_path)
@@ -490,24 +494,33 @@ class TestFinancialLock:
         bot = self._ready_with_request(tmp_path)
         payout, code = bot.wallet.request_payout(USER, NOW)
         assert code == "ok"
+        pid = int(payout["id"])
+        _verify_bank(bot)
+        _row, step = bot.wallet.advance(pid, "under_review", ADMIN, 1, NOW)
+        assert step == "ok"
         with bot.repo.connect() as conn:
             conn.execute("DELETE FROM payout_tax_policies")  # mất điều kiện thuế sau khi khách đã yêu cầu
-        with pytest.raises(PayoutBlocked):
-            bot.wallet.decide_payout(int(payout["id"]), True, ADMIN, NOW)
-        reply = _callback(bot, ADMIN, f"c:wl:paid:{payout['id']}:ok")
-        assert "Chưa xác nhận được" in reply.text and reply.photo is None
-        assert bot.wallet.payout(int(payout["id"]))["status"] == "requested"
-        rejected = bot.wallet.decide_payout(int(payout["id"]), False, ADMIN, NOW)
-        assert rejected["status"] == "rejected"
+        _row, step = bot.wallet.advance(pid, "approved_for_payment", ADMIN, 2, NOW)
+        assert step == "locked"
+        reply = _callback(bot, ADMIN, f"c:wl:rq:{pid}")
+        assert "c:wl:mv:1:2:ap" not in str(reply.inline_keyboard) and reply.photo is None
+        assert bot.wallet.payout(pid)["status"] == "under_review"
+        rejected, step = bot.wallet.advance(pid, "rejected", ADMIN, 2, NOW, note="Chưa đủ điều kiện thuế")
+        assert (step, rejected["status"]) == ("ok", "rejected")
 
     def test_paid_blocked_when_total_exceeds_settlement(self, tmp_path):
         bot = self._ready_with_request(tmp_path, settled=14_000)
         payout, code = bot.wallet.request_payout(USER, NOW)
         assert code == "ok"
+        pid = int(payout["id"])
+        _verify_bank(bot)
+        for version, target in enumerate(("under_review", "approved_for_payment", "processing", "sent_unconfirmed"), 1):
+            assert bot.wallet.advance(pid, target, ADMIN, version, NOW)[1] == "ok"
         with bot.repo.connect() as conn:
             conn.execute("UPDATE shopee_settlements SET amount_vnd = 1000")  # số Shopee trả được sửa lại thấp hơn
-        with pytest.raises(PayoutBlocked):
-            bot.wallet.decide_payout(int(payout["id"]), True, ADMIN, NOW)
+        _row, step = bot.wallet.advance(pid, "paid_confirmed", ADMIN, 5, NOW, evidence="FT26102411111")
+        assert step == "fund"
+        assert bot.wallet.payout(pid)["status"] == "sent_unconfirmed"
 
     def test_raw_sql_bypass_blocked_by_triggers(self, tmp_path):
         bot = _bot(tmp_path)

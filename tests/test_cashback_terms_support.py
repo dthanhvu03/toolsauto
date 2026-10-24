@@ -428,7 +428,8 @@ def test_29_30_san_sang_chi_tra_chi_doc_va_van_khoa(tmp_path):
     bot = _bot(tmp_path)
     home = bot.admin_panel.handle_callback(ADMIN, "c:rd:home", "private", NOW)
     assert "Ví và chi trả: <b>KHOÁ</b>" in home.text
-    assert "Thuế người nhận: <b>PENDING_REVIEW</b>" in home.text
+    assert "❌ Chính sách thuế khi chi cho người nhận" in home.text
+    assert "Quỹ có chứng từ: <b>Chưa xác minh</b>" in home.text
     assert _buttons(home) == ["c:rd:tax", "c:rd:claw", "c:menu:home"]
     tax = bot.admin_panel.handle_callback(ADMIN, "c:rd:tax", "private", NOW)
     assert "chỉ để <b>ước tính</b> số hoàn, không phải thuế của ai" in tax.text

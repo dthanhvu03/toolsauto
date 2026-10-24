@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -420,6 +421,116 @@ BEGIN SELECT RAISE(ABORT, 'support_ticket_events is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS support_tickets_no_delete BEFORE DELETE ON support_tickets
 BEGIN SELECT RAISE(ABORT, 'support tickets are kept for audit'); END;
 
+-- PLAN-078: vòng đời yêu cầu rút (ADR-055). cashback_payouts giữ làm bảng yêu cầu; thêm phân bổ, sự kiện,
+-- lịch sử và xác minh tài khoản, quyết định chính sách, hạn mức. Mọi bảng mới chỉ thêm.
+-- Mỗi đồng của một yêu cầu rút trỏ về một khoản sổ ví (conversion). Tổng phân bổ = số tiền yêu cầu.
+CREATE TABLE IF NOT EXISTS payout_allocations (
+    id INTEGER PRIMARY KEY,
+    payout_id INTEGER NOT NULL REFERENCES cashback_payouts(id),
+    conversion_id TEXT NOT NULL,
+    amount_vnd INTEGER NOT NULL CHECK (amount_vnd > 0),
+    created_at TEXT NOT NULL,
+    UNIQUE (payout_id, conversion_id)
+);
+CREATE INDEX IF NOT EXISTS idx_payout_allocations_conv ON payout_allocations(conversion_id);
+CREATE TRIGGER IF NOT EXISTS payout_allocations_no_update BEFORE UPDATE ON payout_allocations
+BEGIN SELECT RAISE(ABORT, 'payout_allocations is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS payout_allocations_no_delete BEFORE DELETE ON payout_allocations
+BEGIN SELECT RAISE(ABORT, 'payout_allocations is append-only'); END;
+
+-- Mọi thay đổi trạng thái yêu cầu rút, kèm người làm, lý do, chứng từ. Chỉ thêm. idempotency_key chặn ghi lặp.
+CREATE TABLE IF NOT EXISTS payout_events (
+    id INTEGER PRIMARY KEY,
+    payout_id INTEGER NOT NULL REFERENCES cashback_payouts(id),
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    note TEXT,
+    evidence_ref TEXT,
+    version INTEGER NOT NULL,
+    idempotency_key TEXT UNIQUE,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_payout_events_payout ON payout_events(payout_id);
+CREATE TRIGGER IF NOT EXISTS payout_events_no_update BEFORE UPDATE ON payout_events
+BEGIN SELECT RAISE(ABORT, 'payout_events is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS payout_events_no_delete BEFORE DELETE ON payout_events
+BEGIN SELECT RAISE(ABORT, 'payout_events is append-only'); END;
+
+-- Lịch sử tài khoản nhận tiền. Không lưu số đầy đủ: 4 số cuối + sha256 để nhận ra trùng / đổi.
+CREATE TABLE IF NOT EXISTS bank_account_history (
+    id INTEGER PRIMARY KEY,
+    telegram_user_id INTEGER NOT NULL,
+    bank_code TEXT NOT NULL,
+    account_last4 TEXT NOT NULL,
+    account_sha TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (action IN ('add', 'change')),
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bank_history_sha ON bank_account_history(account_sha);
+CREATE TRIGGER IF NOT EXISTS bank_account_history_no_update BEFORE UPDATE ON bank_account_history
+BEGIN SELECT RAISE(ABORT, 'bank_account_history is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS bank_account_history_no_delete BEFORE DELETE ON bank_account_history
+BEGIN SELECT RAISE(ABORT, 'bank_account_history is append-only'); END;
+
+-- Xác minh thủ công có bằng chứng, gắn với đúng tài khoản (sha). Đổi tài khoản thì về UNVERIFIED.
+-- Tạo được mã QR không phải là xác minh.
+CREATE TABLE IF NOT EXISTS bank_account_verifications (
+    id INTEGER PRIMARY KEY,
+    telegram_user_id INTEGER NOT NULL,
+    account_sha TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('VERIFIED', 'REJECTED')),
+    method TEXT NOT NULL,
+    evidence_ref TEXT NOT NULL CHECK (length(evidence_ref) >= 4),
+    decided_by INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS bank_account_verifications_no_update BEFORE UPDATE ON bank_account_verifications
+BEGIN SELECT RAISE(ABORT, 'bank_account_verifications is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS bank_account_verifications_no_delete BEFORE DELETE ON bank_account_verifications
+BEGIN SELECT RAISE(ABORT, 'bank_account_verifications is append-only'); END;
+
+-- Quyết định chính sách cần trước khi chi (thuế, thu hồi, điều khoản chi trả, xác minh tài khoản, hạn mức,
+-- quy trình chuyển khoản). Dòng mới nhất mỗi chủ đề có hiệu lực. Bot không có nút duyệt; APPROVED cần người
+-- duyệt và tham chiếu. Không phải điều kiện mở khoá cũ: khoá shopee_settlements / payout_tax_policies vẫn đứng.
+CREATE TABLE IF NOT EXISTS payout_policy_decisions (
+    id INTEGER PRIMARY KEY,
+    topic TEXT NOT NULL CHECK (topic IN
+        ('tax', 'clawback', 'payout_terms', 'bank_verification', 'payment_limits', 'manual_payment')),
+    status TEXT NOT NULL CHECK (status IN ('PENDING_REVIEW', 'APPROVED', 'REJECTED', 'REVOKED')),
+    summary TEXT NOT NULL,
+    reference TEXT,
+    decided_by TEXT,
+    decided_at TEXT,
+    created_at TEXT NOT NULL,
+    CHECK (status != 'APPROVED' OR (reference IS NOT NULL AND decided_by IS NOT NULL AND decided_at IS NOT NULL))
+);
+CREATE TRIGGER IF NOT EXISTS payout_policy_decisions_no_update BEFORE UPDATE ON payout_policy_decisions
+BEGIN SELECT RAISE(ABORT, 'payout_policy_decisions is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS payout_policy_decisions_no_delete BEFORE DELETE ON payout_policy_decisions
+BEGIN SELECT RAISE(ABORT, 'payout_policy_decisions is append-only'); END;
+
+-- Hạn mức rút. Dòng mới nhất có hiệu lực; chỉ ACTIVE có người duyệt mới được dùng. Mặc định không có dòng nào.
+CREATE TABLE IF NOT EXISTS payout_limit_policies (
+    id INTEGER PRIMARY KEY,
+    min_vnd INTEGER NOT NULL CHECK (min_vnd > 0),
+    max_per_request_vnd INTEGER NOT NULL CHECK (max_per_request_vnd >= min_vnd),
+    daily_total_vnd INTEGER NOT NULL CHECK (daily_total_vnd >= max_per_request_vnd),
+    monthly_total_vnd INTEGER NOT NULL CHECK (monthly_total_vnd >= daily_total_vnd),
+    max_open_per_user INTEGER NOT NULL DEFAULT 1 CHECK (max_open_per_user = 1),
+    status TEXT NOT NULL CHECK (status IN ('DRAFT', 'PENDING_APPROVAL', 'ACTIVE', 'INACTIVE')),
+    created_by TEXT NOT NULL,
+    approved_by TEXT,
+    approved_at TEXT,
+    created_at TEXT NOT NULL,
+    CHECK (status != 'ACTIVE' OR (approved_by IS NOT NULL AND approved_at IS NOT NULL))
+);
+CREATE TRIGGER IF NOT EXISTS payout_limit_policies_no_update BEFORE UPDATE ON payout_limit_policies
+BEGIN SELECT RAISE(ABORT, 'payout_limit_policies is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS payout_limit_policies_no_delete BEFORE DELETE ON payout_limit_policies
+BEGIN SELECT RAISE(ABORT, 'payout_limit_policies is append-only'); END;
+
 -- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
 -- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
 CREATE TABLE IF NOT EXISTS failed_updates (
@@ -460,6 +571,20 @@ WHEN NEW.status = 'paid' AND (
     NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
     OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
 BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
+
+-- PLAN-078: các trạng thái đưa tiền ra (duyệt chi, đang chuyển, đã gửi, đã trả) cũng bị khoá như 'paid'.
+CREATE TRIGGER IF NOT EXISTS financial_lock_payout_progress BEFORE UPDATE OF status ON cashback_payouts
+WHEN NEW.status IN ('approved_for_payment', 'processing', 'sent_unconfirmed', 'paid_confirmed') AND (
+    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
+    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
+
+-- Đã trả chỉ ghi được từ «đã gửi, chờ xác nhận» và khi đã có sự kiện kèm chứng từ ngân hàng.
+CREATE TRIGGER IF NOT EXISTS payout_paid_needs_evidence BEFORE UPDATE OF status ON cashback_payouts
+WHEN NEW.status = 'paid_confirmed' AND (OLD.status != 'sent_unconfirmed' OR NOT EXISTS (
+    SELECT 1 FROM payout_events WHERE payout_id = NEW.id AND to_status = 'paid_confirmed'
+    AND evidence_ref IS NOT NULL AND length(evidence_ref) >= 4))
+BEGIN SELECT RAISE(ABORT, 'payout: paid needs bank evidence after sent'); END;
 
 CREATE INDEX IF NOT EXISTS idx_cashback_entries_user ON cashback_entries(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_cashback_payouts_user ON cashback_payouts(telegram_user_id);
@@ -608,6 +733,26 @@ def insert_snapshot(conn: sqlite3.Connection, link_id: int, snapshot: dict) -> N
 CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_policy_cancellations.sql"
 
 
+def _backfill_bank_history(conn: sqlite3.Connection) -> None:
+    """Tài khoản khai trước PLAN-078 chưa có lịch sử: ghi một dòng 'add' (4 số cuối + sha), một lần."""
+    rows = conn.execute(
+        """
+        SELECT b.* FROM bank_accounts b
+        WHERE NOT EXISTS (SELECT 1 FROM bank_account_history h WHERE h.telegram_user_id = b.telegram_user_id)
+        """
+    ).fetchall()
+    for row in rows:
+        sha = hashlib.sha256(f"{row['bank_code']}:{row['account_no']}".encode()).hexdigest()
+        conn.execute(
+            """
+            INSERT INTO bank_account_history (telegram_user_id, bank_code, account_last4, account_sha, account_name,
+                action, created_at)
+            VALUES (?, ?, ?, ?, ?, 'add', ?)
+            """,
+            (row["telegram_user_id"], row["bank_code"], str(row["account_no"])[-4:], sha, row["account_name"], row["updated_at"]),
+        )
+
+
 class TrackingRepository:
     def __init__(self, path: str):
         self.path = path
@@ -648,6 +793,21 @@ class TrackingRepository:
             # Phần admin chịu trên từng đơn: phí và dự phòng thuế (admin còn = HH − hoàn − phí − thuế).
             _add_column(conn, "cashback_entries", "fee_vnd", "INTEGER NOT NULL DEFAULT 0")
             _add_column(conn, "cashback_entries", "tax_vnd", "INTEGER NOT NULL DEFAULT 0")
+            # PLAN-078: số phiên bản (chống callback cũ), khoá chống gửi lặp, dấu tài khoản đã chụp.
+            _add_column(conn, "cashback_payouts", "version", "INTEGER NOT NULL DEFAULT 1")
+            _add_column(conn, "cashback_payouts", "idempotency_key", "TEXT")
+            _add_column(conn, "cashback_payouts", "account_sha", "TEXT")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_payout_idempotency ON cashback_payouts(idempotency_key) "
+                "WHERE idempotency_key IS NOT NULL"
+            )
+            _backfill_bank_history(conn)
+            # Mỗi khách tối đa một yêu cầu còn giữ tiền: chặn rút trùng ở tầng DB.
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_payout_one_open ON cashback_payouts(telegram_user_id) "
+                "WHERE status IN ('requested', 'under_review', 'approved_for_payment', 'processing', "
+                "'sent_unconfirmed', 'needs_review')"
+            )
 
     def upsert_user(self, telegram_user_id: int, username: str | None) -> bool:
         now = _utc_now()

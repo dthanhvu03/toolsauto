@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from cashback_bot import payout_readiness, payouts
 from cashback_bot.commission_validation import FRAUD, REJECTED, assess_raw
 from cashback_bot.db import TrackingRepository
 from cashback_bot.payout_gate import FinancialGate, PayoutBlocked
@@ -118,10 +119,13 @@ class WalletSettings:
 
 @dataclass(frozen=True)
 class Balance:
+    """pending_vnd gồm cả held_vnd (đơn đã hoàn thành nhưng chưa đủ điều kiện vào ví)."""
+
     pending_vnd: int
     earned_vnd: int
     requested_vnd: int
     paid_vnd: int
+    held_vnd: int = 0
 
     @property
     def withdrawable_vnd(self) -> int:
@@ -221,8 +225,7 @@ def parse_bank_text(text: str, bank_code: str | None = None) -> BankAccount | st
     return BankAccount(bank_code, account_no, name)
 
 
-def transfer_note(payout_id: int) -> str:
-    return f"Hoan tien {payout_id:06d}"
+transfer_note = payouts.transfer_note
 
 
 class Wallet:
@@ -280,13 +283,14 @@ class Wallet:
             conversion_columns = {row[1] for row in conn.execute("PRAGMA table_info(shopee_conversions)")}
             validation = "c.validation_month" if "validation_month" in conversion_columns else "NULL"
             checked = "c.validation_status" if "validation_status" in conversion_columns else "NULL"
+            settled = "c.settlement_status" if "settlement_status" in conversion_columns else "NULL"
             rows = conn.execute(
                 f"""
                 SELECT c.conversion_id, c.telegram_user_id, c.matched_link_id, c.order_sn, c.order_status,
                        c.net_commission_vnd, c.gross_commission_vnd, c.purchase_time, c.complete_time, c.item_name,
                        l.product_name, {policy} AS estimate_policy, l.cashback_rate_percent, l.estimated_cashback,
                        l.created_at AS link_created_at, c.raw_json, {validation} AS validation_month,
-                       {checked} AS validation_status
+                       {checked} AS validation_status, {settled} AS settlement_status
                 FROM shopee_conversions c JOIN link_requests l ON l.id = c.matched_link_id
                 WHERE c.telegram_user_id IS NOT NULL
                 """
@@ -324,7 +328,8 @@ class Wallet:
                     eligible_at = _stamp(done + hold)
                     payable = eligible_at <= now_text and self.gate.entry_payable(
                         conn, row["validation_month"], row["raw_json"], row["validation_status"],
-                        link_id=row["matched_link_id"],
+                        link_id=row["matched_link_id"], settlement_status=row["settlement_status"],
+                        conversion_id=row["conversion_id"],
                     )
                     status = "available" if payable else "holding"
                     available_at = eligible_at if payable else None
@@ -373,6 +378,8 @@ class Wallet:
                             estimated_vnd=row["estimated_cashback"],
                         )
                     )
+            # PLAN-078: khoản đang giữ cho yêu cầu rút mà không còn đủ điều kiện → yêu cầu sang cần kiểm tra.
+            payouts.flag_cancelled_reservations(conn, now)
         return transitions
 
     def balance(self, user_id: int) -> Balance:
@@ -398,8 +405,13 @@ class Wallet:
             return None
         return BankAccount(row["bank_code"], row["account_no"], row["account_name"])
 
-    def save_bank(self, user_id: int, account: BankAccount, now: datetime) -> None:
+    def save_bank(self, user_id: int, account: BankAccount, now: datetime) -> list[int]:
+        """Lưu tài khoản và lịch sử (PLAN-078). Yêu cầu rút còn mở giữ tài khoản đã chụp; tài khoản khác thì
+        yêu cầu sang cần kiểm tra. Trả id các yêu cầu bị chuyển. Tài khoản mới luôn UNVERIFIED."""
         with self.repo.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            old = conn.execute("SELECT * FROM bank_accounts WHERE telegram_user_id = ?", (user_id,)).fetchone()
+            previous = None if old is None else payouts.account_sha(old["bank_code"], old["account_no"])
             conn.execute(
                 """
                 INSERT INTO bank_accounts (telegram_user_id, bank_code, account_no, account_name, updated_at)
@@ -412,20 +424,35 @@ class Wallet:
                 """,
                 (user_id, account.bank_code, account.account_no, account.account_name, _stamp(now)),
             )
+            return payouts.record_bank_change(
+                conn, user_id, account.bank_code, account.account_no, account.account_name, previous, now
+            )
+
+    def bank_status(self, user_id: int) -> str:
+        account = self.bank(user_id)
+        if account is None:
+            return "NONE"
+        with self.repo.connect() as conn:
+            return payouts.bank_status(conn, user_id, payouts.account_sha(account.bank_code, account.account_no))
 
     # --- Rút tiền ------------------------------------------------------------
 
     def open_request(self, user_id: int) -> sqlite3.Row | None:
+        marks = ", ".join("?" for _ in payouts.OPEN)
         with self.repo.connect() as conn:
             return conn.execute(
-                "SELECT * FROM cashback_payouts WHERE telegram_user_id = ? AND status = 'requested'",
-                (user_id,),
+                f"SELECT * FROM cashback_payouts WHERE telegram_user_id = ? AND status IN ({marks})",
+                (user_id, *payouts.OPEN),
             ).fetchone()
 
-    def request_payout(self, user_id: int, now: datetime) -> tuple[sqlite3.Row | None, str]:
-        """Rút toàn bộ số đang rút được. Trả (yêu cầu, 'ok') hoặc (None, mã lỗi).
+    def request_payout(
+        self, user_id: int, now: datetime, amount: int | None = None, idempotency_key: str | None = None
+    ) -> tuple[sqlite3.Row | None, str]:
+        """Tạo yêu cầu rút (mặc định toàn bộ số rút được). Trả (yêu cầu, 'ok' | 'duplicate') hoặc (None, mã lỗi).
 
-        Mã lỗi khoá tài chính: locked (thiếu bằng chứng Shopee trả / thuế), fund (vượt tiền Shopee đã trả).
+        Mọi điều kiện kiểm lại ở đây, trong một transaction: khoá tài chính (locked), ví bật (disabled), tài
+        khoản (no_bank), điều khoản chi trả (terms), yêu cầu đang mở (pending_exists), số rút được, hạn mức,
+        quỹ có chứng từ và quỹ cũ (fund).
         """
         settings = self.settings()
         if settings.locked_reasons:
@@ -436,61 +463,55 @@ class Wallet:
         if account is None:
             return None, "no_bank"
         with self.repo.connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            if conn.execute(
-                "SELECT 1 FROM cashback_payouts WHERE telegram_user_id = ? AND status = 'requested'", (user_id,)
-            ).fetchone():
-                return None, "pending_exists"
-            amount = _balance(conn, user_id).withdrawable_vnd
-            if amount < settings.min_withdraw_vnd or amount <= 0:
-                return None, "below_min"
-            blocked = self.gate.check_withdrawal(conn, amount)
-            if blocked:
-                return None, blocked
-            cursor = conn.execute(
-                """
-                INSERT INTO cashback_payouts (
-                    telegram_user_id, amount_vnd, status, bank_code, account_no, account_name, created_at
-                ) VALUES (?, ?, 'requested', ?, ?, ?, ?)
-                """,
-                (user_id, amount, account.bank_code, account.account_no, account.account_name, _stamp(now)),
+            if not all(item.ok for item in payout_readiness.user_conditions(conn, user_id)):
+                return None, "terms"
+            limits = payouts.active_limits(conn)
+            min_vnd = max(settings.min_withdraw_vnd, 0 if limits is None else limits.min_vnd)
+            return payouts.create_request(
+                conn, user_id, account, amount, min_vnd, now, idempotency_key, fund_check=self.gate.check_withdrawal
             )
-            payout_id = int(cursor.lastrowid)
-            conn.execute(
-                "UPDATE cashback_payouts SET transfer_note = ? WHERE id = ?", (transfer_note(payout_id), payout_id)
-            )
-            row = conn.execute("SELECT * FROM cashback_payouts WHERE id = ?", (payout_id,)).fetchone()
-        return row, "ok"
 
     def payout(self, payout_id: int) -> sqlite3.Row | None:
         with self.repo.connect() as conn:
             return conn.execute("SELECT * FROM cashback_payouts WHERE id = ?", (payout_id,)).fetchone()
 
-    def decide_payout(self, payout_id: int, paid: bool, admin_id: int, now: datetime) -> sqlite3.Row | None:
-        """Chỉ đổi yêu cầu còn 'requested'. Bấm hai lần thì lần sau trả None.
+    def advance(
+        self,
+        payout_id: int,
+        target: str,
+        admin_id: int,
+        expected_version: int,
+        now: datetime,
+        note: str | None = None,
+        evidence: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> tuple[sqlite3.Row | None, str]:
+        """Một bước duyệt / chuyển / xác nhận (PLAN-078). Không có đường requested → paid_confirmed.
 
-        Xác nhận đã chuyển (paid) phải qua khoá tài chính, không đạt thì ném PayoutBlocked. Từ chối luôn được:
-        tiền trở lại ví, không phát sinh chi.
+        Bước đưa tiền ra kiểm lại: khoá tài chính (cũ + PLAN-078), điều khoản chi trả của khách, tài khoản đã
+        xác minh, quỹ có chứng từ, hạn mức; bước đã trả kiểm thêm quỹ cũ (shopee_settlements).
         """
+
+        def money_out(conn: sqlite3.Connection, row: sqlite3.Row) -> str | None:
+            readiness = self.gate.readiness(conn)
+            if not readiness.ok:
+                return "locked"
+            if not all(item.ok for item in payout_readiness.user_conditions(conn, int(row["telegram_user_id"]))):
+                return "terms"
+            for item in payout_readiness.payout_conditions(conn, row, now):
+                if not item.ok:
+                    return item.code
+            if target == payouts.PAID:
+                try:
+                    self.gate.check_payout(conn, int(row["amount_vnd"]))
+                except PayoutBlocked:
+                    return "fund"
+            return None
+
         with self.repo.connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            if paid:
-                current = conn.execute(
-                    "SELECT amount_vnd FROM cashback_payouts WHERE id = ? AND status = 'requested'", (payout_id,)
-                ).fetchone()
-                if current is None:
-                    return None
-                self.gate.check_payout(conn, int(current["amount_vnd"]))
-            cursor = conn.execute(
-                """
-                UPDATE cashback_payouts SET status = ?, decided_at = ?, decided_by = ?
-                WHERE id = ? AND status = 'requested'
-                """,
-                ("paid" if paid else "rejected", _stamp(now), admin_id, payout_id),
+            return payouts.transition(
+                conn, payout_id, target, admin_id, expected_version, now, note, evidence, idempotency_key, money_out
             )
-            if cursor.rowcount == 0:
-                return None
-            return conn.execute("SELECT * FROM cashback_payouts WHERE id = ?", (payout_id,)).fetchone()
 
     # --- Màn admin -----------------------------------------------------------
 
@@ -500,7 +521,9 @@ class Wallet:
                 """
                 SELECT p.*, u.username FROM cashback_payouts p
                 LEFT JOIN telegram_users u ON u.telegram_user_id = p.telegram_user_id
-                WHERE p.status = 'requested' ORDER BY p.id LIMIT ?
+                WHERE p.status IN ('requested', 'under_review', 'approved_for_payment', 'processing',
+                                   'sent_unconfirmed', 'needs_review')
+                ORDER BY p.id LIMIT ?
                 """,
                 (limit,),
             ).fetchall()
@@ -547,12 +570,10 @@ def _balance(conn: sqlite3.Connection, user_id: int | None) -> Balance:
         """,
         args,
     ).fetchone()
-    payout = conn.execute(
-        f"""
-        SELECT COALESCE(SUM(CASE WHEN status = 'requested' THEN amount_vnd END), 0),
-               COALESCE(SUM(CASE WHEN status = 'paid' THEN amount_vnd END), 0)
-        FROM cashback_payouts {where}
-        """,
+    held = conn.execute(
+        f"SELECT COALESCE(SUM(CASE WHEN status = 'holding' THEN cashback_vnd END), 0) FROM cashback_entries {where}",
         args,
     ).fetchone()
-    return Balance(int(entry[0]), int(entry[1]), int(payout[0]), int(payout[1]))
+    # Đang giữ cho yêu cầu rút: mọi trạng thái còn mở (PLAN-078); đã trả: paid_confirmed và 'paid' cũ.
+    reserved, paid = payouts.payout_totals(conn, user_id)
+    return Balance(int(entry[0]), int(entry[1]), reserved, paid, int(held[0]))

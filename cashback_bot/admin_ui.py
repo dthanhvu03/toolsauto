@@ -835,7 +835,8 @@ def _who_short(user_id: int, username: str | None) -> str:
     return f"@{username}" if username else str(user_id)
 
 
-def wallet_admin_text(settings, totals, requests, notice: str = "") -> str:
+def wallet_admin_text(settings, totals, requests, notice: str = "", fund=None, groups=None, problems=None) -> str:
+    """fund: payouts.FundPosition; groups: {nhãn: số yêu cầu}; problems: vi phạm bất biến (PLAN-078)."""
     state = "🟢 <b>ĐANG BẬT</b>" if settings.enabled else "⚪ <b>ĐANG TẮT</b> · khách chưa thấy ví"
     lines = [
         _title("Ví khách").rstrip("\n"),
@@ -847,21 +848,33 @@ def wallet_admin_text(settings, totals, requests, notice: str = "") -> str:
     if settings.locked_reasons:
         lines += [
             "",
-            "🔒 <b>KHOÁ TÀI CHÍNH</b> · không bật ví, không tạo yêu cầu rút, không xác nhận chuyển khoản",
-            *(f"• {html.escape(reason)}" for reason in settings.locked_reasons),
+            "🔒 <b>KHOÁ TÀI CHÍNH</b> · không bật ví, không tạo yêu cầu rút, không duyệt chi hay xác nhận chuyển khoản",
+            *(f"• {html.escape(reason)}" for reason in settings.locked_reasons if not reason.startswith("Chưa đạt:")),
+            *([f"• Còn {sum(r.startswith('Chưa đạt:') for r in settings.locked_reasons)} điều kiện chi trả PLAN-078 "
+               "chưa đạt (xem ⚖️ Sẵn sàng chi trả)"] if any(r.startswith("Chưa đạt:") for r in settings.locked_reasons) else []),
             "ⓘ Bot vẫn tạo link, đồng bộ đơn và ghi tiền chờ duyệt bình thường.",
         ]
     lines += [
-        f"• Giữ tiền {settings.hold_days} ngày sau khi đơn hoàn thành, và chỉ vào ví khi Shopee đã duyệt và đã trả · "
-        f"Rút tối thiểu {format_vnd(settings.min_withdraw_vnd)}",
+        f"• Giữ tiền {settings.hold_days} ngày sau khi đơn hoàn thành, và chỉ vào ví khi Shopee đã duyệt, kỳ đã đối soát "
+        f"khớp · Rút tối thiểu {format_vnd(settings.min_withdraw_vnd)}",
         "",
-        f"⏳ Chờ duyệt: <b>{format_vnd(totals.pending_vnd)}</b>",
+        f"⏳ Chờ duyệt: <b>{format_vnd(totals.pending_vnd)}</b>"
+        + (f" (trong đó đang giữ {format_vnd(totals.held_vnd)})" if getattr(totals, "held_vnd", 0) else ""),
         f"✅ Trong ví chưa rút: <b>{format_vnd(max(0, totals.withdrawable_vnd))}</b>",
-        f"📤 Đang chờ chuyển: <b>{format_vnd(totals.requested_vnd)}</b> ({len(requests)} yêu cầu)",
-        f"💸 Đã trả: <b>{format_vnd(totals.paid_vnd)}</b>",
+        f"📤 Đang giữ cho yêu cầu rút: <b>{format_vnd(totals.requested_vnd)}</b> ({len(requests)} yêu cầu)",
+        f"💸 Đã trả (có chứng từ): <b>{format_vnd(totals.paid_vnd)}</b>",
     ]
+    if fund is not None:
+        lines.append(
+            f"🏦 Quỹ có chứng từ còn: <b>{format_vnd(fund.headroom_vnd)}</b>" if fund.verified
+            else "🏦 Quỹ có chứng từ: <b>Chưa xác minh</b> (chưa có kỳ Shopee đối soát khớp)"
+        )
+    if groups:
+        lines += ["", "📋 " + " · ".join(f"{label} {count}" for label, count in groups.items())]
+    if problems:
+        lines += ["", "⚠️ <b>Cảnh báo sổ</b>"] + [f"• {html.escape(p)}" for p in problems[:5]]
     if requests:
-        lines += ["", "Bấm từng yêu cầu bên dưới để xem số tài khoản và xác nhận đã chuyển."]
+        lines += ["", "Bấm từng yêu cầu bên dưới để xem nguồn tiền, điều kiện và bước tiếp theo."]
     return "\n".join(lines)
 
 
@@ -957,64 +970,123 @@ def wallet_member_text(user_id: int, username: str | None, balance, entries, ban
     return "\n".join(lines)
 
 
-def payout_text(
-    payout,
-    username: str | None,
-    balance,
-    bank_name: str,
-    notice: str = "",
-    *,
-    qr_sent: bool = False,
-    qr_problem: str | None = None,
-) -> str:
-    status = {"requested": "⏳ chờ chuyển", "paid": "✅ đã chuyển", "rejected": "✖️ đã từ chối"}.get(
-        payout["status"], payout["status"]
-    )
+PAYOUT_STATUS = {
+    "requested": "🆕 Mới gửi",
+    "under_review": "🔎 Đang kiểm tra",
+    "approved_for_payment": "🟢 Đã duyệt, chờ chuyển",
+    "processing": "🏦 Đang chuyển",
+    "sent_unconfirmed": "⏳ Đã gửi, chờ xác nhận ngân hàng",
+    "paid_confirmed": "✅ Đã trả (có chứng từ)",
+    "paid": "✅ Đã trả (bản cũ)",
+    "rejected": "✖️ Từ chối",
+    "cancelled": "↩️ Đã huỷ",
+    "failed": "❌ Chuyển thất bại",
+    "needs_review": "⚠️ Cần xử lý",
+    "returned": "↩️ Ngân hàng hoàn lại",
+}
+# Mã ngắn trong callback c:wl:mv:<id>:<version>:<mã>.
+STEP_CODES = {
+    "rv": "under_review", "ap": "approved_for_payment", "pr": "processing", "se": "sent_unconfirmed",
+    "pd": "paid_confirmed", "rj": "rejected", "ca": "cancelled", "fl": "failed", "nr": "needs_review",
+    "rt": "returned",
+}
+STEP_LABELS = {
+    "under_review": "🔎 Bắt đầu kiểm tra",
+    "approved_for_payment": "🟢 Duyệt chi",
+    "processing": "🏦 Bắt đầu chuyển khoản",
+    "sent_unconfirmed": "📤 Đã gửi lệnh, chờ biên nhận",
+    "paid_confirmed": "✅ Xác nhận đã trả (nhập chứng từ)",
+    "rejected": "✖️ Từ chối",
+    "cancelled": "↩️ Huỷ",
+    "failed": "❌ Chuyển thất bại (nhập chứng từ)",
+    "needs_review": "⚠️ Cần xử lý",
+    "returned": "↩️ Ngân hàng hoàn lại (nhập chứng từ)",
+}
+STEP_HELP = {
+    "under_review": "Chỉ ghi là đang kiểm tra, chưa giữ thêm hay chi tiền.",
+    "approved_for_payment": "Kiểm lại khoá tài chính, điều khoản, tài khoản đã xác minh, quỹ và hạn mức. Chưa chuyển tiền.",
+    "processing": "Bot hiện số tài khoản đầy đủ và mã QR để chuyển tay. Bấm khi bắt đầu thao tác trên app ngân hàng.",
+    "sent_unconfirmed": "Bấm ngay sau khi gửi lệnh trên app ngân hàng, kể cả khi app treo. Từ đây không huỷ hay từ chối được nữa.",
+    "paid_confirmed": "Chỉ bấm khi đã có biên nhận / sao kê: nhập mã giao dịch ngân hàng. Bot báo khách đã chuyển.",
+    "rejected": "Tiền trở lại ví khách, khách được báo lý do.",
+    "cancelled": "Huỷ trước khi chuyển, tiền trở lại ví khách.",
+    "failed": "Chỉ khi ngân hàng xác nhận lệnh không thực hiện: nhập lý do kèm mã/tham chiếu. Tiền trở lại ví khách.",
+    "needs_review": "Tạm dừng để kiểm tra (sai tài khoản, chưa rõ kết quả, khách đổi tài khoản…). Không giải phóng tiền.",
+    "returned": "Ngân hàng hoàn khoản đã trả: nhập chứng từ. Lịch sử «đã trả» giữ nguyên, tiền trở lại ví khách.",
+}
+_BANK_STATE = {"VERIFIED": "✅ đã xác minh", "REJECTED": "❌ xác minh không đạt"}
+
+
+def payout_text(payout, username, bank_name: str, *, allocations, conditions, events, bank_state: str,
+                shared_users: int, fund, notice: str = "", show_account: bool = False, qr_problem: str | None = None,
+                qr_sent: bool = False) -> str:
+    """Chi tiết một yêu cầu rút. Số tài khoản đầy đủ chỉ hiện ở bước Đang chuyển (show_account)."""
+    amount = int(payout["amount_vnd"])
+    account = payout["account_no"] if show_account else f"••••{payout['account_no'][-4:]}"
     lines = [_title("Ví khách", payout["transfer_note"] or f"#{payout['id']}").rstrip("\n"), ""]
     if notice:
         lines += [notice, ""]
     lines += [
         f"👤 {html.escape(_who_short(int(payout['telegram_user_id']), username))} · <code>{payout['telegram_user_id']}</code>",
-        f"Trạng thái: <b>{status}</b>",
+        f"Trạng thái: <b>{PAYOUT_STATUS.get(payout['status'], payout['status'])}</b> · phiên bản {payout['version'] or 1}",
+        f"Số tiền: <code>{amount}</code> ({format_vnd(amount)})",
+        f"Người nhận (chụp lúc gửi yêu cầu): {html.escape(bank_name)} <code>{html.escape(account)}</code> · "
+        f"{html.escape(payout['account_name'])}",
+        f"Tài khoản: <b>{_BANK_STATE.get(bank_state, '⚪ chưa xác minh')}</b>"
+        + (f" · ⚠️ dùng chung với {shared_users - 1} khách khác" if shared_users > 1 else ""),
+        f"Nội dung chuyển: <code>{html.escape(payout['transfer_note'] or '')}</code>",
         "",
-        f"Số tiền: <code>{int(payout['amount_vnd'])}</code> ({format_vnd(int(payout['amount_vnd']))})",
-        f"Ngân hàng: <b>{html.escape(bank_name)}</b>",
-        f"Số TK: <code>{html.escape(payout['account_no'])}</code>",
-        f"Chủ TK: <code>{html.escape(payout['account_name'])}</code>",
-        f"Nội dung: <code>{html.escape(payout['transfer_note'] or '')}</code>",
+        "🧾 <b>Nguồn từng đồng</b>",
     ]
-    if payout["status"] == "requested":
-        lines.append("")
+    lines += [
+        f"• {format_vnd(int(a['amount_vnd']))} ← đơn …{html.escape((a['order_sn'] or a['conversion_id'])[-6:])} · "
+        f"link <code>{html.escape(a['sub_id'] or '-')}</code> · {html.escape(a['policy_label'] or 'chưa có snapshot')} · "
+        f"duyệt {a['validation_status'] or '-'} · đối soát {a['settlement_status'] or '-'} (kỳ {a['batches'] or '-'})"
+        for a in allocations
+    ] or ["• Yêu cầu cũ, không có phân bổ theo đơn."]
+    lines += ["", "🔐 <b>Điều kiện</b>"] + [f"{'✅' if c.ok else '❌'} {html.escape(c.label)}" for c in conditions]
+    if fund.verified:
+        lines.append(f"Quỹ có chứng từ còn: {format_vnd(fund.headroom_vnd)}")
+    else:
+        lines.append("Quỹ có chứng từ: <b>Chưa xác minh</b> (chưa có kỳ đối soát khớp)")
+    if show_account:
+        lines += ["", "🏦 <b>Chuyển tay</b>: đúng số tiền, đúng nội dung. Kiểm tên người nhận app hiện ra trùng Chủ TK."]
         if qr_sent:
-            lines.append("📷 Ảnh mã QR gửi ngay dưới tin này: app ngân hàng → Quét QR → chọn ảnh.")
+            lines.append("📷 Ảnh mã QR gửi ngay dưới tin này. Mã QR không chứng minh đã chuyển tiền.")
         if qr_problem:
-            lines.append(f"⚠️ {html.escape(qr_problem)} Chuyển tay theo các số ở trên.")
-        lines.append("ⓘ Trước khi chuyển, kiểm tra tên người nhận app ngân hàng hiện ra trùng với Chủ TK.")
-    if balance.withdrawable_vnd < 0:
-        lines.append(f"⚠️ Ví khách đang âm {format_vnd(-balance.withdrawable_vnd)} do có đơn bị huỷ sau khi vào ví.")
-    return "\n".join(lines)
+            lines.append(f"⚠️ {html.escape(qr_problem)}")
+    lines += ["", "🕘 <b>Lịch sử</b>"] + [
+        f"• {e['created_at'][5:16].replace('T', ' ')} {html.escape(e['actor'])}: {e['from_status'] or '—'} → {e['to_status']}"
+        + (f" · {html.escape(e['note'][:80])}" if e["note"] else "")
+        + (f" · chứng từ {html.escape(e['evidence_ref'][:40])}" if e["evidence_ref"] else "")
+        for e in events[-8:]
+    ]
+    return "\n".join(lines)[:4000]
 
 
-def payout_keyboard(payout) -> Keyboard:
-    if payout["status"] != "requested":
-        return (WALLET_ADMIN_BACK,)
-    pid = payout["id"]
-    return ((("✅ Đã chuyển", f"c:wl:paid:{pid}"), ("✖️ Từ chối", f"c:wl:rej:{pid}")), WALLET_ADMIN_BACK)
+def payout_keyboard(payout, targets: list[str], locked: bool) -> Keyboard:
+    """Nút theo máy trạng thái. Bước đưa tiền ra bị ẩn khi còn khoá tài chính."""
+    pid, version = payout["id"], payout["version"] or 1
+    codes = {target: code for code, target in STEP_CODES.items()}
+    money = {"approved_for_payment", "processing", "sent_unconfirmed", "paid_confirmed"}
+    rows = [
+        ((STEP_LABELS[target], f"c:wl:mv:{pid}:{version}:{codes[target]}"),)
+        for target in targets
+        if not (locked and target in money)
+    ]
+    if locked and any(target in money for target in targets):
+        rows.append((("🔒 Bước chi tiền đang khoá", f"c:wl:rq:{pid}"),))
+    rows.append((("✅ Xác minh tài khoản người nhận", f"c:wl:vb:{pid}"),))
+    rows.append(WALLET_ADMIN_BACK)
+    return tuple(rows)
 
 
-def payout_confirm_text(payout, paid: bool) -> str:
+def payout_step_text(payout, target: str, needs_text: str | None) -> str:
     amount = format_vnd(int(payout["amount_vnd"]))
-    if paid:
-        return (
-            f"✅ <b>Xác nhận đã chuyển {amount}</b>\n\n"
-            f"Nội dung <code>{html.escape(payout['transfer_note'] or '')}</code>. "
-            "Bot sẽ báo khách là đã nhận tiền. Không hoàn tác được."
-        )
-    return f"✖️ <b>Từ chối yêu cầu rút {amount}?</b>\n\nSố tiền trở lại ví khách, khách được báo."
-
-
-def payout_confirm_keyboard(payout, paid: bool) -> Keyboard:
-    pid = payout["id"]
-    action = "paid" if paid else "rej"
-    label = "✅ Đúng, đã chuyển" if paid else "✖️ Từ chối"
-    return (((label, f"c:wl:{action}:{pid}:ok"),), (("◀️ Quay lại", f"c:wl:rq:{pid}"),))
+    text = (
+        f"{STEP_LABELS[target]} · <b>{html.escape(payout['transfer_note'] or '')}</b> ({amount})\n\n"
+        f"{STEP_HELP[target]}\n"
+    )
+    if needs_text:
+        text += f"\n✍️ Sau khi bấm xác nhận, gõ {needs_text} trong một tin. Chờ 10 phút."
+    return text

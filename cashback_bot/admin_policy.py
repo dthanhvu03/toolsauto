@@ -233,6 +233,8 @@ class AdminPanel:
     _sim_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang gõ lý do / câu trả lời cho ticket hỗ trợ (PLAN-077).
     _support_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
+    # Admin đang gõ lý do / chứng từ cho một bước của yêu cầu rút (PLAN-078).
+    _wallet_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -263,6 +265,9 @@ class AdminPanel:
         ticket = self._support().consume_text(user_id, text, now)
         if ticket is not None:
             return ticket
+        payout = self._wallet_admin().consume_text(user_id, text, now)
+        if payout is not None:
+            return payout
 
         reserve = self._reserve_text(user_id, (text or "").strip(), now)
         if reserve is not None:
@@ -292,6 +297,8 @@ class AdminPanel:
             self._sim_waiting.pop(user_id, None)
         if not data.startswith("c:hp:"):
             self._support_waiting.pop(user_id, None)
+        if not (data.startswith("c:wl:mv:") or data.startswith("c:wl:vb:")):
+            self._wallet_waiting.pop(user_id, None)
         reply = self._route_callback(user_id, data, now)
         if reply.inline_keyboard is None:
             # Callback sửa đè tin cũ. Thiếu nút thì admin kẹt ở màn chỉ có chữ.
@@ -323,7 +330,7 @@ class AdminPanel:
         if data == "c:sh:new":
             return self._share_start(user_id, now)
         if data == "c:menu:wallet" or data.startswith("c:wl:"):
-            return WalletAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
+            return self._wallet_admin().route(user_id, data, now)
         if data.startswith("c:cv:"):
             return ValidationAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:sm:"):
@@ -1022,6 +1029,9 @@ class AdminPanel:
         )
         return BotReply(text, inline_keyboard=simulation_keyboard(SIM_AMOUNTS, amount))
 
+    def _wallet_admin(self) -> WalletAdmin:
+        return WalletAdmin(TrackingRepository(self.db_path), audit=self._log_setting, waiting=self._wallet_waiting)
+
     def _support(self) -> SupportAdmin:
         return SupportAdmin(TrackingRepository(self.db_path), self._support_waiting)
 
@@ -1492,7 +1502,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     action = row["action"]
     if action not in {
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync",
-        "commission_review_ack", "terms_draft", "terms_publish",
+        "commission_review_ack", "terms_draft", "terms_publish", "bank_verified",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1504,6 +1514,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action == "wallet_min_withdraw":
         old = format_vnd(int(before["vnd"])) if "vnd" in before else "-"
         return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
+    if action == "bank_verified":
+        return f"Ví khách: xác minh tài khoản ••••{html.escape(str(after.get('last4', '-')))} (yêu cầu #{after.get('payout', '-')})"
     if action in {"terms_draft", "terms_publish"}:
         verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
         return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from cashback_bot import policy_snapshot, support, terms
+from cashback_bot import payout_readiness, payouts, policy_snapshot, support, terms
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.payout_gate import FinancialGate
@@ -71,6 +71,9 @@ class ReadinessAdmin:
             coverage = policy_snapshot.coverage(conn)
             live = terms.current(conn, now)
             counts = support.counts(conn)
+            conditions = payout_readiness.system_conditions(conn)
+            fund = payouts.fund_position(conn)
+            problems = payouts.invariants(conn)
         unresolved = coverage[policy_snapshot.UNRESOLVED] + coverage["missing"]
         open_tickets = sum(count for status, count in counts.items() if status not in support.FINAL)
         lines = [
@@ -78,7 +81,8 @@ class ReadinessAdmin:
             "",
             f"🔒 Ví và chi trả: <b>{'KHOÁ' if not readiness.ok else 'đủ điều kiện hệ thống'}</b>",
         ]
-        lines += [f"• {reason}" for reason in readiness.reasons]
+        # Điều kiện PLAN-078 hiện ở ma trận bên dưới; ở đây chỉ hai lý do khoá gốc.
+        lines += [f"• {reason}" for reason in readiness.reasons if not reason.startswith("Chưa đạt:")]
         lines += [
             "",
             f"🧾 Link chứng minh được chính sách: <b>{coverage[policy_snapshot.CAPTURED] + coverage[policy_snapshot.BACKFILLED]}</b>"
@@ -86,11 +90,15 @@ class ReadinessAdmin:
             f"📋 Điều khoản: <b>{'chưa công bố' if live is None else live.version}</b>",
             f"📩 Yêu cầu hỗ trợ đang mở: <b>{open_tickets}</b>",
             "",
-            "⚖️ Thuế người nhận: <b>PENDING_REVIEW</b>",
-            "↩️ Hoa hồng bị thu hồi sau khi chi: <b>PENDING_REVIEW</b>",
             "⏱ Thời hạn xử lý hỗ trợ (SLA): <b>chưa duyệt</b>",
             "",
-            "ⓘ Màn này chỉ để xem. Không có nút duyệt hay mở ví.",
+            "🧩 <b>Điều kiện chi trả (PLAN-078)</b>",
+            *[f"{'✅' if item.ok else '❌'} {item.label}" for item in conditions],
+            (f"🏦 Quỹ có chứng từ: còn <b>{fund.headroom_vnd:,}đ</b>".replace(",", ".") if fund.verified
+             else "🏦 Quỹ có chứng từ: <b>Chưa xác minh</b>"),
+            f"🧮 Kiểm tra sổ: <b>{'ổn' if not problems else f'{len(problems)} cảnh báo'}</b>",
+            "",
+            "ⓘ Màn này chỉ để xem. Không có nút duyệt hay mở ví. Đạt hết vẫn cần khoá cũ mở và chủ bot duyệt riêng.",
         ]
         keyboard = (
             (("⚖️ Thuế", "c:rd:tax"), ("↩️ Thu hồi hoa hồng", "c:rd:claw")),

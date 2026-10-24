@@ -174,7 +174,7 @@ class CashbackService:
         if data.startswith("u:"):
             chat_id = chat.get("id")
             reply = self._customer_callback(
-                user_id, data, str(chat.get("type") or ""), chat_id if isinstance(chat_id, int) else None
+                user_id, data, str(chat.get("type") or ""), chat_id if isinstance(chat_id, int) else None, query_id
             )
         else:
             reply = self.admin_panel.handle_callback(
@@ -189,7 +189,9 @@ class CashbackService:
             edit_message_id=message_id if isinstance(message_id, int) else None,
         )
 
-    def _customer_callback(self, user_id: int, data: str, chat_type: str, chat_id: int | None = None) -> BotReply:
+    def _customer_callback(
+        self, user_id: int, data: str, chat_type: str, chat_id: int | None = None, query_id: str | None = None
+    ) -> BotReply:
         if chat_type != "private":
             return BotReply("")
         if not self.allowed(user_id):
@@ -203,7 +205,7 @@ class CashbackService:
         if data == "u:tip":
             return BotReply("", toast=TIP_ALERT, show_alert=True)
         if data.startswith("u:w:"):
-            return self._wallet_action(user_id, data.removeprefix("u:w:"))
+            return self._wallet_action(user_id, data.removeprefix("u:w:"), query_id)
         page = self._page(data.removeprefix("u:p:"), user_id) if data.startswith("u:p:") else None
         if page is None:
             return BotReply("", toast="Nút này không còn hiệu lực.")
@@ -245,7 +247,7 @@ class CashbackService:
             notice=notice,
         )
 
-    def _wallet_action(self, user_id: int, action: str) -> BotReply:
+    def _wallet_action(self, user_id: int, action: str, query_id: str | None = None) -> BotReply:
         if not self.wallet.settings().enabled:
             return BotReply("", toast=WALLET_CLOSED_ALERT, show_alert=True)
         if action == "bank":
@@ -267,9 +269,13 @@ class CashbackService:
                 return withdraw_error_reply("below_min")
             return withdraw_confirm_reply(amount, bank)
         if action == "out:ok":
-            payout, code = self.wallet.request_payout(user_id, datetime.now(timezone.utc))
+            # Telegram gửi lại cùng callback: cùng khoá, không tạo yêu cầu thứ hai (PLAN-078).
+            key = None if query_id is None else f"cb:{user_id}:{query_id}"
+            payout, code = self.wallet.request_payout(user_id, datetime.now(timezone.utc), idempotency_key=key)
             if payout is None:
                 return withdraw_error_reply(code)
+            if code == "duplicate":
+                return withdraw_done_reply(payout)
             if self.admin_notifier:
                 user = self.repo.get_user(user_id)
                 self.admin_notifier.notify_payout_request(payout, None if user is None else user["username"])

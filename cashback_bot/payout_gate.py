@@ -19,6 +19,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 
+from cashback_bot import payout_readiness, payouts
 from cashback_bot.commission_validation import APPROVED
 from cashback_bot.db import TrackingRepository
 
@@ -102,6 +103,8 @@ class FinancialGate:
             reasons.append(REASON_SETTLEMENT)
         if not _has_rows(conn, TAX_POLICY_TABLE, tables):
             reasons.append(REASON_TAX)
+        # PLAN-078: cộng thêm điều kiện hệ thống mới (quyết định chính sách, hạn mức, kỳ đối soát khớp, backup).
+        reasons.extend(payout_readiness.system_reasons(conn))
         return Readiness(not reasons, tuple(reasons))
 
     def entry_payable(
@@ -111,6 +114,8 @@ class FinancialGate:
         raw_json: str | None,
         validation_status: str | None = None,
         link_id: int | None = None,
+        settlement_status: str | None = None,
+        conversion_id: str | None = None,
     ) -> bool:
         """Khoản này đã được Shopee duyệt và trả chưa. Thiếu bất kỳ bằng chứng nào thì False.
 
@@ -120,6 +125,14 @@ class FinancialGate:
         if validation_status != APPROVED:
             return False
         if not proven_policy(conn, link_id):
+            return False
+        # PLAN-078: đơn phải nằm trong một kỳ đối soát khớp (tiền phân bổ tới đúng đơn) và không có điều chỉnh
+        # chưa xử lý. Thiếu thì khoản ở «holding», không vào ví.
+        if settlement_status != "SETTLED":
+            return False
+        if conversion_id is not None and conn.execute(
+            "SELECT 1 FROM settlement_adjustments WHERE conversion_id = ? AND status = 'OPEN'", (conversion_id,)
+        ).fetchone():
             return False
         if not self.readiness(conn).ok or not validation_month or is_fraud(raw_json):
             return False
@@ -133,12 +146,9 @@ class FinancialGate:
         if SETTLEMENT_TABLE not in _tables(conn):
             return 0
         settled = int(conn.execute(f"SELECT COALESCE(SUM(amount_vnd), 0) FROM {SETTLEMENT_TABLE}").fetchone()[0])
-        spent = int(
-            conn.execute(
-                "SELECT COALESCE(SUM(amount_vnd), 0) FROM cashback_payouts WHERE status IN ('paid', 'requested')"
-            ).fetchone()[0]
-        )
-        return settled - spent
+        # PLAN-078: mọi trạng thái còn giữ tiền và đã trả, không chỉ 'requested' / 'paid' cũ.
+        reserved, paid = payouts.payout_totals(conn)
+        return settled - reserved - paid
 
     def check_withdrawal(self, conn: sqlite3.Connection, amount_vnd: int) -> str | None:
         """None nếu được tạo yêu cầu rút. Ngược lại là mã lỗi: locked / fund."""

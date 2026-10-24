@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import cashback_bot.poller as poller
+from cashback_bot import payouts
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_stats import collect
 from cashback_bot.admin_ui import stats_detail_text, stats_text
@@ -39,8 +42,12 @@ def _link(bot) -> str:
 DRAFT_EVIDENCE = Path(__file__).resolve().parents[1] / "cashback_bot" / "migrations" / "007_settlement_evidence.DRAFT.sql"
 
 
-def _financially_ready(bot, period: str = "2026-10", amount: int = 10_000_000) -> None:
-    """CHỈ DB TEST: dựng bằng chứng kỳ Shopee đã trả + thuế người nhận đã duyệt để thử luồng rút tiền."""
+def _financially_ready(bot, period: str = "2026-10", amount: int = 10_000_000, users=(USER,)) -> None:
+    """CHỈ DB TEST: dựng bằng chứng kỳ Shopee đã trả + thuế người nhận đã duyệt để thử luồng rút tiền.
+
+    PLAN-078: thêm quyết định chính sách đã duyệt, hạn mức ACTIVE, một kỳ đối soát MATCHED có quỹ `amount`,
+    backup mới, điều khoản chi trả đã công bố và `users` đã đồng ý. Không có công tắc bỏ qua trong code.
+    """
     with bot.repo.connect() as conn:
         conn.executescript(DRAFT_EVIDENCE.read_text(encoding="utf-8"))
         conn.execute(
@@ -52,6 +59,77 @@ def _financially_ready(bot, period: str = "2026-10", amount: int = 10_000_000) -
             "INSERT INTO payout_tax_policies (policy_ref, approved_by, approved_at) "
             "VALUES ('TEST-ADR', 1, '2026-11-15T00:00:00Z')"
         )
+        _payout_policies_ready(conn, period, amount, users)
+
+
+def _payout_policies_ready(conn, period: str = "2026-10", fund: int = 10_000_000, users=(USER,)) -> None:
+    """CHỈ DB TEST (PLAN-078): mọi điều kiện hệ thống mới của cổng chi trả."""
+    for topic in payouts.POLICY_TOPICS:
+        conn.execute(
+            "INSERT INTO payout_policy_decisions (topic, status, summary, reference, decided_by, decided_at, created_at) "
+            "VALUES (?, 'APPROVED', 'test', ?, 'test', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')",
+            (topic, "TEST-PAYOUT-TERMS" if topic == "payout_terms" else f"TEST-{topic}"),
+        )
+    conn.execute(
+        "INSERT INTO payout_limit_policies (min_vnd, max_per_request_vnd, daily_total_vnd, monthly_total_vnd, status, "
+        "created_by, approved_by, approved_at, created_at) "
+        "VALUES (1, 100000000, 100000000, 1000000000, 'ACTIVE', 'test', 'test', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')"
+    )
+    batch = conn.execute(
+        "INSERT INTO settlement_batches (period, status, fee_vnd, fee_vat_vnd, fee_includes_vat, tax_withheld_vnd, "
+        "created_by, created_at, updated_at) VALUES (?, 'MATCHED', 0, 0, 1, 0, 'test', 'x', 'x')",
+        (period,),
+    ).lastrowid
+    evidence = conn.execute(
+        "INSERT INTO settlement_evidence (batch_id, kind, source, document_ref, content_sha256, stored_name, size_bytes, "
+        "parser, recorded_by, recorded_at) VALUES (?, 'shopee_payment_report', 'test', ?, ?, 'x', 1, 'test', 'test', 'x')",
+        (batch, f"TEST-{batch}", hashlib.sha256(f"test-{batch}".encode()).hexdigest()),
+    ).lastrowid
+    conn.execute(
+        "INSERT INTO settlement_items (batch_id, evidence_id, order_ref, is_bot, settled_vnd, match_status, created_at) "
+        "VALUES (?, ?, 'TEST-FUND', 1, ?, 'MATCHED', 'x')",
+        (batch, evidence, fund),
+    )
+    conn.execute(
+        "INSERT INTO bot_state (key, value) VALUES ('backup_last_ok', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (str(time.time()),),
+    )
+    terms_id = conn.execute(
+        "INSERT INTO customer_terms_versions (version, title, content, content_hash, status, effective_from, created_by, "
+        "created_at, approved_by, published_at) VALUES ('TEST-PAYOUT-TERMS', 't', '[]', 'h', 'PUBLISHED', "
+        "'2026-01-01T00:00:00Z', 'test', 'x', 'test', 'x')"
+    ).lastrowid
+    for user in users:
+        conn.execute(
+            "INSERT INTO customer_terms_acceptances (telegram_user_id, terms_version_id, terms_hash, acceptance_source, "
+            "accepted_at, recorded_at) VALUES (?, ?, 'h', 'test', 'x', 'x')",
+            (user, terms_id),
+        )
+
+
+def _verify_bank(bot, user: int = USER) -> None:
+    """CHỈ DB TEST: admin xác minh tài khoản hiện tại của khách bằng bằng chứng thủ công."""
+    account = bot.wallet.bank(user)
+    with bot.repo.connect() as conn:
+        payouts.verify_bank(conn, user, payouts.account_sha(account.bank_code, account.account_no), ADMIN, "manual",
+                            "chuyển thử 1.000đ khớp tên", NOW)
+
+
+def _pay(bot, payout_id: int, evidence: str = "FT26102412345", admin: int = ADMIN):
+    """CHỈ DB TEST: đi đủ các bước tới đã trả. Trả mã của bước cuối."""
+    code = "ok"
+    for target, note, proof in (
+        (payouts.UNDER_REVIEW, None, None),
+        (payouts.APPROVED, None, None),
+        (payouts.PROCESSING, None, None),
+        (payouts.SENT, None, None),
+        (payouts.PAID, None, evidence),
+    ):
+        row = bot.wallet.payout(payout_id)
+        _row, code = bot.wallet.advance(payout_id, target, admin, int(row["version"]), NOW, note=note, evidence=proof)
+        if code != "ok":
+            return code
+    return code
 
 
 def _order(
@@ -86,8 +164,13 @@ def _order(
     )
     if approved:
         # CHỈ DB TEST: chưa có nguồn Shopee nào gán APPROVED (PLAN-074); dựng để thử cơ chế rút tiền.
+        # PLAN-078: khoản vào ví còn cần đơn nằm trong kỳ đối soát khớp (SETTLED).
         with bot.repo.connect() as conn:
-            conn.execute("UPDATE shopee_conversions SET validation_status = 'APPROVED' WHERE conversion_id = ?", (cid,))
+            conn.execute(
+                "UPDATE shopee_conversions SET validation_status = 'APPROVED', settlement_status = 'SETTLED' "
+                "WHERE conversion_id = ?",
+                (cid,),
+            )
 
 
 def _customer_events(bot) -> list[str]:
@@ -102,10 +185,17 @@ def _buttons(reply) -> list[str]:
     return [data for row in reply.inline_keyboard or () for _label, data in row]
 
 
-def _callback(bot, user_id: int, data: str) -> object:
+_CALLBACK_IDS = iter(range(1, 1_000_000))
+
+
+def _callback(bot, user_id: int, data: str, query_id: str | None = None) -> object:
+    """Mỗi lần bấm một mã callback mới như Telegram thật; truyền query_id để thử Telegram gửi lại cùng lần bấm."""
     update = {
         "update_id": 99,
-        "callback_query": {"id": "q", "from": {"id": user_id}, "data": data, "message": {"message_id": 5, "chat": {"type": "private"}}},
+        "callback_query": {
+            "id": query_id or f"q{next(_CALLBACK_IDS)}", "from": {"id": user_id}, "data": data,
+            "message": {"message_id": 5, "chat": {"type": "private"}},
+        },
     }
     return bot.handle_update(update)[1]
 
@@ -335,34 +425,51 @@ class TestPayout:
 
         confirm = _callback(bot, USER, "u:w:out")
         assert "Xác nhận rút tiền" in confirm.text
-        done = _callback(bot, USER, "u:w:out:ok")
+        done = _callback(bot, USER, "u:w:out:ok", query_id="tap-1")
         assert "Hoan tien 000001" in done.text
         bot.admin_notifier.notify_payout_request.assert_called_once()
+        retry = _callback(bot, USER, "u:w:out:ok", query_id="tap-1")  # Telegram gửi lại cùng lần bấm
+        assert "Hoan tien 000001" in retry.text
         again = _callback(bot, USER, "u:w:out:ok")
         assert "đang có một yêu cầu rút" in again.text
         assert bot.wallet.balance(USER).withdrawable_vnd == 0
+        assert bot.wallet.balance(USER).requested_vnd == 14_000
 
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
-        assert "<code>0123456789</code>" in detail.text and "vietqr.io" not in detail.text
-        assert detail.photo is not None and detail.photo[1][:8] == b"\x89PNG\r\n\x1a\n"
-        assert "Ảnh mã QR gửi ngay dưới tin này" in detail.text
-        ask = _callback(bot, ADMIN, "c:wl:paid:1")
-        assert "c:wl:paid:1:ok" in _buttons(ask)
+        assert "••••6789" in detail.text and "0123456789" not in detail.text and detail.photo is None
+        assert "chưa xác minh" in detail.text
+        assert _buttons(detail)[0] == "c:wl:mv:1:1:rv"
+        ask = _callback(bot, ADMIN, "c:wl:mv:1:1:rv")
+        assert "c:wl:mv:1:1:rv:ok" in _buttons(ask)
         assert bot.wallet.payout(1)["status"] == "requested"  # chưa bấm xác nhận thì chưa ghi
-        _callback(bot, ADMIN, "c:wl:paid:1:ok")
-        assert bot.wallet.payout(1)["status"] == "paid"
+        _callback(bot, ADMIN, "c:wl:mv:1:1:rv:ok")
+        blocked = _callback(bot, ADMIN, "c:wl:mv:1:2:ap:ok")
+        assert "Tài khoản người nhận chưa xác minh" in blocked.text
+        _callback(bot, ADMIN, "c:wl:vb:1")
+        bot.handle_text(ADMIN, "admin", "chuyển thử 1.000đ, app hiện NGUYEN VAN A", update_id=10, now=NOW)
+        _callback(bot, ADMIN, "c:wl:mv:1:2:ap:ok")
+        moving = _callback(bot, ADMIN, "c:wl:mv:1:3:pr:ok")
+        assert "<code>0123456789</code>" in moving.text and "vietqr.io" not in moving.text
+        assert moving.photo is not None and moving.photo[1][:8] == b"\x89PNG\r\n\x1a\n"
+        _callback(bot, ADMIN, "c:wl:mv:1:4:se:ok")
+        assert _customer_events(bot) == [] or "Đã chuyển tiền hoàn" not in _customer_events(bot)[-1]
+        _callback(bot, ADMIN, "c:wl:mv:1:5:pd:ok")
+        bot.handle_text(ADMIN, "admin", "FT26102400001", update_id=11, now=NOW)
+        assert bot.wallet.payout(1)["status"] == "paid_confirmed"
         assert bot.wallet.balance(USER).paid_vnd == 14_000
         assert "Đã chuyển tiền hoàn" in _customer_events(bot)[-1]
-        twice = _callback(bot, ADMIN, "c:wl:paid:1:ok")
-        assert "đã được xử lý" in twice.text
+        twice = _callback(bot, ADMIN, "c:wl:mv:1:5:pd:ok")
+        assert "Nút đã cũ" in twice.text
 
     def test_reject_returns_money_to_wallet(self, tmp_path):
         bot = self._ready(tmp_path)
         bot.wallet.save_bank(USER, BankAccount("MB", "0123456789", "NGUYEN VAN A"), NOW)
         _callback(bot, USER, "u:w:out:ok")
-        _callback(bot, ADMIN, "c:wl:rej:1:ok")
+        _callback(bot, ADMIN, "c:wl:mv:1:1:rj:ok")
+        assert bot.wallet.payout(1)["status"] == "requested", "từ chối phải có lý do"
+        bot.handle_text(ADMIN, "admin", "Tên chủ tài khoản không khớp", update_id=12, now=NOW)
         assert bot.wallet.balance(USER).withdrawable_vnd == 14_000
-        assert "chưa được duyệt" in _customer_events(bot)[-1]
+        assert "chưa được duyệt" in _customer_events(bot)[-1] and "Tên chủ tài khoản không khớp" in _customer_events(bot)[-1]
 
     def test_below_minimum_cannot_withdraw(self, tmp_path):
         bot = self._ready(tmp_path, amount=10_000)  # 7.000đ < 10.000đ

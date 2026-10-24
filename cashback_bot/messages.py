@@ -259,7 +259,10 @@ def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_u
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
-WALLET_CLOSED = "👛 <b>Ví hoàn tiền chưa mở</b>\nBot sẽ báo khi bắt đầu theo dõi đơn và chi trả."
+WALLET_CLOSED = (
+    "👛 <b>Ví hoàn tiền chưa mở</b>\n"
+    "Các khoản được ghi nhận đang chờ Shopee xác minh và đối soát; chưa thể yêu cầu rút."
+)
 WALLET_CLOSED_ALERT = "Ví hoàn tiền chưa mở."
 WALLET_BACK: Keyboard = ((("◀️ Ví của tôi", "u:p:wallet"),),)
 ENTRY_LABELS = {
@@ -287,6 +290,21 @@ WITHDRAW_ERRORS = {
     # Khoá tài chính (hardening V1): chưa có bằng chứng Shopee đã trả hoặc vượt số Shopee đã trả.
     "locked": "⏳ <b>Chưa mở rút tiền</b>\nBot chỉ chi khi Shopee đã duyệt và thanh toán hoa hồng. Tiền hoàn của bạn vẫn được ghi lại.",
     "fund": "⏳ <b>Chưa rút được lúc này</b>\nKỳ thanh toán Shopee chưa về đủ. Bot sẽ báo khi rút được.",
+    # PLAN-078
+    "terms": "📋 <b>Cần đồng ý điều khoản chi trả</b>\nMở /dieukien, đọc và bấm đồng ý bản hiện hành rồi rút lại.",
+    "insufficient": "⏳ <b>Số tiền vượt số đang rút được</b>\nMở lại ví để xem số rút được.",
+    "limits_missing": "⏳ <b>Chưa mở rút tiền</b>\nHạn mức rút chưa được duyệt.",
+    "over_request_limit": "⏳ <b>Vượt hạn mức một lần rút</b>\nThử rút số nhỏ hơn hoặc nhắn /hotro.",
+    "over_daily_limit": "⏳ <b>Hôm nay đã hết hạn mức chi của bot</b>\nBạn thử lại vào ngày mai nhé.",
+    "over_monthly_limit": "⏳ <b>Tháng này đã hết hạn mức chi của bot</b>\nBot sẽ báo khi rút được.",
+}
+PAYOUT_CUSTOMER_STATUS = {
+    "requested": "đã gửi, chờ kiểm tra",
+    "under_review": "đang kiểm tra",
+    "approved_for_payment": "đã duyệt, chờ chuyển",
+    "processing": "đang chuyển",
+    "sent_unconfirmed": "đã chuyển, chờ ngân hàng xác nhận",
+    "needs_review": "cần kiểm tra thêm",
 }
 
 
@@ -315,11 +333,13 @@ def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "
         lines += [notice, ""]
     lines += [
         f"✅ Có thể rút: <b>{format_vnd(withdrawable)}</b>",
-        f"⏳ Chờ duyệt: <b>{format_vnd(balance.pending_vnd)}</b>",
+        f"⏳ Đang chờ Shopee xác minh: <b>{format_vnd(balance.pending_vnd - balance.held_vnd)}</b>",
+        f"🔒 Đang giữ, chờ đủ điều kiện: <b>{format_vnd(balance.held_vnd)}</b>",
         f"💸 Đã nhận: <b>{format_vnd(balance.paid_vnd)}</b>",
     ]
     if open_request is not None:
-        lines.append(f"📤 Đang chờ chuyển: <b>{format_vnd(int(open_request['amount_vnd']))}</b>")
+        label = PAYOUT_CUSTOMER_STATUS.get(open_request["status"], open_request["status"])
+        lines.append(f"📤 Đang xử lý rút: <b>{format_vnd(int(open_request['amount_vnd']))}</b> · {label}")
     lines += ["", "🧾 <b>Đơn gần đây</b>"]
     lines += [_entry_line(entry) for entry in entries] or ["Chưa có đơn nào qua link của bạn."]
     lines += ["", f"🏦 Nhận tiền: {html.escape(bank.masked)}" if bank else "🏦 Chưa khai tài khoản nhận tiền."]
@@ -361,7 +381,8 @@ def withdraw_confirm_reply(amount_vnd: int, bank) -> BotReply:
         f"Số tiền: <b>{format_vnd(amount_vnd)}</b>\n"
         f"Về: {html.escape(bank.masked)}\n"
         f"Chủ tài khoản: {html.escape(bank.account_name)}\n\n"
-        "ⓘ Admin chuyển khoản tay, bot báo khi chuyển xong."
+        "ⓘ Admin kiểm tra và chuyển khoản tay, bot báo khi ngân hàng xác nhận. Tài khoản cần được xác minh "
+        "trước khi chuyển."
     )
     return BotReply(text, inline_keyboard=((("✅ Xác nhận rút", "u:w:out:ok"),), (("◀️ Ví của tôi", "u:p:wallet"),)))
 

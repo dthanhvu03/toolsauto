@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from cashback_bot.admin_ui import (
     WALLET_ADMIN_BACK,
     WALLET_ENABLE_CONFIRM,
     WALLET_ENABLE_KEYBOARD,
-    payout_confirm_keyboard,
-    payout_confirm_text,
+    PAYOUT_STATUS,
+    STEP_CODES,
     payout_keyboard,
+    payout_step_text,
     payout_text,
     wallet_admin_keyboard,
     wallet_admin_text,
@@ -22,6 +23,7 @@ from cashback_bot.admin_ui import (
     wallet_settings_keyboard,
     wallet_settings_text,
 )
+from cashback_bot import payout_readiness, payouts
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply, payout_notice
 from cashback_bot.money import format_vnd
@@ -29,7 +31,33 @@ from cashback_bot.payout_gate import PayoutBlocked
 from cashback_bot.vietqr import VietQRError, build_payload, qr_png
 from cashback_bot.wallet import BANKS, HOLD_DAY_CHOICES, KEY_ENABLED, MIN_WITHDRAW_CHOICES, Wallet
 
-_PAYOUT = re.compile(r"^c:wl:(rq|paid|rej):(\d+)(:ok)?$")
+_PAYOUT = re.compile(r"^c:wl:rq:(\d{1,9})$")
+_STEP = re.compile(r"^c:wl:mv:(\d{1,9}):(\d{1,6}):(rv|ap|pr|se|pd|rj|ca|fl|nr|rt)(:ok)?$")
+_VERIFY = re.compile(r"^c:wl:vb:(\d{1,9})$")
+WAIT_TTL = timedelta(minutes=10)
+# Bước cần admin gõ thêm: (mô tả ô nhập, cần lý do, cần chứng từ).
+_TEXT_STEPS = {
+    "rejected": "lý do từ chối (khách sẽ thấy)",
+    "cancelled": "lý do huỷ (khách sẽ thấy)",
+    "needs_review": "lý do cần xử lý",
+    "failed": "lý do kèm mã/tham chiếu ngân hàng xác nhận lệnh không thực hiện",
+    "paid_confirmed": "mã giao dịch ngân hàng trên biên nhận / sao kê",
+    "returned": "lý do kèm chứng từ ngân hàng hoàn tiền",
+}
+_ERRORS = {
+    "stale": "Nút đã cũ (yêu cầu vừa đổi trạng thái). Mở lại chi tiết.",
+    "transition": "Không chuyển được từ trạng thái hiện tại.",
+    "reason": "Cần lý do.",
+    "evidence": "Cần chứng từ (mã giao dịch / tham chiếu ngân hàng, ít nhất 4 ký tự).",
+    "money_may_have_left": "Đã từng gửi lệnh chuyển: không từ chối / huỷ được. Dùng «Chuyển thất bại» kèm chứng từ, "
+                           "hoặc xác nhận đã trả.",
+    "locked": "Còn khoá tài chính.",
+    "terms": "Khách chưa đồng ý điều khoản chi trả.",
+    "bank_verified": "Tài khoản người nhận chưa xác minh.",
+    "fund": "Quỹ có chứng từ không đủ.",
+    "limits": "Vượt hạn mức hoặc hạn mức chưa duyệt.",
+    "not_found": "Không tìm thấy yêu cầu này.",
+}
 _MEMBER = re.compile(r"^c:wl:u:(\d+)$")
 _HOLD = re.compile(r"^c:wl:hold:(\d+)$")
 _MIN = re.compile(r"^c:wl:min:(\d+)$")
@@ -39,10 +67,12 @@ AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
 
 
 class WalletAdmin:
-    def __init__(self, repo: TrackingRepository, audit: AuditFn | None = None):
+    def __init__(self, repo: TrackingRepository, audit: AuditFn | None = None, waiting: dict | None = None):
         self.repo = repo
         self.wallet = Wallet(repo)
         self.audit = audit
+        # admin_id → (việc, payout_id, version, đích, hạn). Chờ admin gõ lý do / chứng từ, trong RAM.
+        self.waiting = {} if waiting is None else waiting
 
     def _log(self, admin_id: int, action: str, before: dict | None, after: dict | None, now: datetime) -> None:
         if self.audit is not None and before != after:
@@ -89,16 +119,28 @@ class WalletAdmin:
         member = _MEMBER.fullmatch(data)
         if member:
             return self._member(int(member.group(1)))
-        payout = _PAYOUT.fullmatch(data)
-        if payout:
-            return self._payout(admin_id, payout.group(1), int(payout.group(2)), bool(payout.group(3)), now)
+        if (payout := _PAYOUT.fullmatch(data)) is not None:
+            row = self.wallet.payout(int(payout.group(1)))
+            return self.screen("Không tìm thấy yêu cầu này.") if row is None else self._payout_detail(row)
+        if (step := _STEP.fullmatch(data)) is not None:
+            return self._step(admin_id, int(step.group(1)), int(step.group(2)), STEP_CODES[step.group(3)],
+                              bool(step.group(4)), now)
+        if (verify := _VERIFY.fullmatch(data)) is not None:
+            return self._ask_verify(admin_id, int(verify.group(1)), now)
         return BotReply("Nút này không còn hiệu lực.", inline_keyboard=(WALLET_ADMIN_BACK,))
 
     def screen(self, notice: str = "") -> BotReply:
         settings = self.wallet.settings()
         requests = self.wallet.open_requests()
+        with self.repo.connect() as conn:
+            fund = payouts.fund_position(conn)
+            problems = payouts.invariants(conn)
+            groups = {
+                PAYOUT_STATUS.get(status, status): int(count)
+                for status, count in conn.execute("SELECT status, COUNT(*) FROM cashback_payouts GROUP BY status")
+            }
         return BotReply(
-            wallet_admin_text(settings, self.wallet.totals(), requests, notice),
+            wallet_admin_text(settings, self.wallet.totals(), requests, notice, fund=fund, groups=groups, problems=problems),
             inline_keyboard=wallet_admin_keyboard(settings, requests),
         )
 
@@ -120,51 +162,129 @@ class WalletAdmin:
         )
         return BotReply(text, inline_keyboard=((("◀️ Thành viên", "c:wl:members"),), WALLET_ADMIN_BACK))
 
-    def _payout(self, admin_id: int, action: str, payout_id: int, confirmed: bool, now: datetime) -> BotReply:
+    # --- Yêu cầu rút (PLAN-078) -------------------------------------------------------------
+
+    def _step(self, admin_id: int, payout_id: int, version: int, target: str, confirmed: bool, now: datetime) -> BotReply:
+        """Bước 1: hỏi lại. Bước 2 (:ok): bước cần lý do / chứng từ thì chờ admin gõ; còn lại ghi ngay."""
         row = self.wallet.payout(payout_id)
         if row is None:
             return self.screen("Không tìm thấy yêu cầu này.")
-        if action == "rq":
-            return self._payout_detail(row)
-        paid = action == "paid"
-        if row["status"] != "requested":
-            return self._payout_detail(row, "Yêu cầu này đã được xử lý trước đó.")
+        if int(row["version"] or 1) != version:
+            return self._payout_detail(row, f"⚠️ {_ERRORS['stale']}")
+        if target not in payouts.TRANSITIONS.get(row["status"], {}):
+            return self._payout_detail(row, f"⚠️ {_ERRORS['transition']}")
+        needs = _TEXT_STEPS.get(target)
         if not confirmed:
-            return BotReply(payout_confirm_text(row, paid), inline_keyboard=payout_confirm_keyboard(row, paid))
-        try:
-            decided = self.wallet.decide_payout(payout_id, paid, admin_id, now)
-        except PayoutBlocked as exc:
-            return self._payout_detail(row, f"🔒 Chưa xác nhận được: {exc.reason}")
-        if decided is None:
-            return self._payout_detail(row, "Yêu cầu này đã được xử lý trước đó.")
-        self.repo.enqueue_admin_event(
-            event_key=f"payout_{'paid' if paid else 'rejected'}:{payout_id}",
-            event_type="PAYOUT_DECIDED",
-            chat_id=int(decided["telegram_user_id"]),
-            message_html=payout_notice(decided, paid),
+            code = next(k for k, v in STEP_CODES.items() if v == target)
+            keyboard = (
+                (("✅ Xác nhận", f"c:wl:mv:{payout_id}:{version}:{code}:ok"),),
+                (("◀️ Quay lại", f"c:wl:rq:{payout_id}"),),
+            )
+            return BotReply(payout_step_text(row, target, needs), inline_keyboard=keyboard)
+        if needs:
+            self.waiting[admin_id] = ("step", payout_id, version, target, now + WAIT_TTL)
+            return BotReply(f"✍️ Gõ {needs}.", inline_keyboard=((("✖️ Hủy", f"c:wl:rq:{payout_id}"),),))
+        return self._apply(admin_id, payout_id, version, target, None, now)
+
+    def _apply(self, admin_id: int, payout_id: int, version: int, target: str, text: str | None, now: datetime) -> BotReply:
+        rule = payouts.TRANSITIONS.get((self.wallet.payout(payout_id) or {"status": ""})["status"], {}).get(target)
+        note = text if rule is None or rule.needs_reason else None
+        evidence = text if rule is not None and rule.needs_evidence else None
+        row, code = self.wallet.advance(
+            payout_id, target, admin_id, version, now, note=note, evidence=evidence,
+            idempotency_key=f"admin:{admin_id}:{payout_id}:{version}:{target}",
         )
-        return self.screen("✅ Đã ghi nhận chuyển khoản, bot báo khách." if paid else "✖️ Đã từ chối, tiền trở lại ví khách.")
+        if row is None:
+            return self.screen(_ERRORS.get(code, code))
+        if code not in ("ok", "duplicate"):
+            return self._payout_detail(row, f"⚠️ {_ERRORS.get(code, code)}")
+        if code == "ok":
+            self._notify_customer(row, target, text)
+        return self._payout_detail(row, f"✅ Đã chuyển sang: {PAYOUT_STATUS.get(target, target)}.")
+
+    def _notify_customer(self, row, target: str, text: str | None) -> None:
+        """Chỉ báo khách khi có kết luận: đã trả (có chứng từ), tiền trở lại ví, hoặc cần kiểm tra tài khoản."""
+        if target == payouts.PAID:
+            body = payout_notice(row, True)
+        elif target in (payouts.REJECTED, payouts.CANCELLED, payouts.FAILED, payouts.RETURNED):
+            body = payout_notice(row, False) + (f"\n\nLý do: {text}" if text else "")
+        elif target == payouts.NEEDS_REVIEW:
+            body = (
+                "⚠️ <b>Yêu cầu rút cần kiểm tra thêm</b>\n\n"
+                f"Mã: <code>{row['transfer_note']}</code>. Tiền vẫn được giữ cho yêu cầu này. "
+                "Bot sẽ báo khi có kết quả; bạn có thể gửi thông tin qua /hotro."
+            )
+        else:
+            return
+        self.repo.enqueue_admin_event(
+            event_key=f"payout:{row['id']}:{row['version']}:{target}",
+            event_type="PAYOUT_DECIDED",
+            chat_id=int(row["telegram_user_id"]),
+            message_html=body,
+        )
+
+    def _ask_verify(self, admin_id: int, payout_id: int, now: datetime) -> BotReply:
+        row = self.wallet.payout(payout_id)
+        if row is None:
+            return self.screen("Không tìm thấy yêu cầu này.")
+        self.waiting[admin_id] = ("verify", payout_id, int(row["version"] or 1), "", now + WAIT_TTL)
+        return BotReply(
+            "✅ <b>Xác minh tài khoản người nhận</b>\n\n"
+            f"Tài khoản ••••{row['account_no'][-4:]} · {row['account_name']}.\n"
+            "Gõ bằng chứng xác minh (ví dụ: «chuyển thử 1.000đ, app hiện đúng tên, mã GD …» hoặc «khách xác nhận "
+            "qua /hotro #…»). Tạo được mã QR <b>không</b> phải là xác minh.",
+            inline_keyboard=((("✖️ Hủy", f"c:wl:rq:{payout_id}"),),),
+        )
+
+    def consume_text(self, admin_id: int, text: str, now: datetime) -> BotReply | None:
+        job = self.waiting.get(admin_id)
+        if job is None:
+            return None
+        kind, payout_id, version, target, deadline = job
+        stripped = (text or "").strip()
+        self.waiting.pop(admin_id, None)
+        if deadline <= now or not stripped or stripped.startswith("/"):
+            return None
+        if kind == "verify":
+            row = self.wallet.payout(payout_id)
+            if row is None:
+                return self.screen("Không tìm thấy yêu cầu này.")
+            try:
+                with self.repo.connect() as conn:
+                    payouts.verify_bank(conn, int(row["telegram_user_id"]), row["account_sha"] or "", admin_id,
+                                        "manual", stripped, now)
+            except payouts.PayoutError:
+                return self._payout_detail(row, f"⚠️ {_ERRORS['evidence']}")
+            self._log(admin_id, "bank_verified", None, {"payout": payout_id, "last4": row["account_no"][-4:]}, now)
+            return self._payout_detail(row, "✅ Đã ghi xác minh tài khoản (gắn với đúng số tài khoản này).")
+        return self._apply(admin_id, payout_id, version, target, stripped, now)
 
     def _payout_detail(self, row, notice: str = "") -> BotReply:
         user = self.repo.get_user(int(row["telegram_user_id"]))
-        locked = self.wallet.settings().locked_reasons
-        if row["status"] != "requested":
-            photo, qr_problem = None, None
-        elif locked:
-            # Không đưa mã chuyển khoản khi còn khoá: tránh chuyển tay khoản Shopee chưa trả.
-            photo, qr_problem = None, "Không tạo mã QR khi còn khoá tài chính."
-        else:
+        locked = bool(self.wallet.settings().locked_reasons)
+        now = datetime.now(timezone.utc)
+        with self.repo.connect() as conn:
+            conditions = (
+                [payout_readiness.Condition("system", "Khoá tài chính đã mở", not locked, "system")]
+                + payout_readiness.user_conditions(conn, int(row["telegram_user_id"]))
+                + payout_readiness.payout_conditions(conn, row, now)
+            )
+            parts = payouts.allocations(conn, int(row["id"]))
+            history = payouts.events(conn, int(row["id"]))
+            state = payouts.bank_status(conn, int(row["telegram_user_id"]), row["account_sha"])
+            shared = payouts.shared_account_users(conn, row["account_sha"]) if row["account_sha"] else 0
+            fund = payouts.fund_position(conn)
+        show_account = row["status"] == payouts.PROCESSING and not locked
+        photo = qr_problem = None
+        if show_account:
             photo, qr_problem = self._qr(row)
         text = payout_text(
-            row,
-            None if user is None else user["username"],
-            self.wallet.balance(int(row["telegram_user_id"])),
-            BANKS.get(row["bank_code"], ("", row["bank_code"]))[1],
-            notice,
-            qr_sent=photo is not None,
-            qr_problem=qr_problem,
+            row, None if user is None else user["username"], BANKS.get(row["bank_code"], ("", row["bank_code"]))[1],
+            allocations=parts, conditions=conditions, events=history, bank_state=state, shared_users=shared,
+            fund=fund, notice=notice, show_account=show_account, qr_problem=qr_problem, qr_sent=photo is not None,
         )
-        return BotReply(text, inline_keyboard=payout_keyboard(row), photo=photo)
+        targets = list(payouts.TRANSITIONS.get(row["status"], {}))
+        return BotReply(text, inline_keyboard=payout_keyboard(row, targets, locked), photo=photo)
 
     def _qr(self, row) -> tuple[tuple[str, bytes, str] | None, str | None]:
         """Ảnh QR tự tạo (không gửi thông tin khách ra ngoài). Lỗi thì trả lý do để admin chuyển tay."""

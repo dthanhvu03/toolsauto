@@ -22,6 +22,7 @@ from tests.test_cashback_wallet import (
     _financially_ready,
     _link,
     _order,
+    _verify_bank,
 )
 
 PNG = b"\x89PNG\r\n\x1a\n"
@@ -45,6 +46,34 @@ def _requested(tmp_path, **kwargs):
     bot = _ready(tmp_path, **kwargs)
     assert "Đã gửi yêu cầu rút" in _callback(bot, USER, "u:w:out:ok").text
     return bot
+
+
+_CODES = {"under_review": "rv", "approved_for_payment": "ap", "processing": "pr", "sent_unconfirmed": "se",
+          "paid_confirmed": "pd", "rejected": "rj", "failed": "fl", "needs_review": "nr"}
+
+
+def _step(bot, pid: int, target: str, text: str | None = None):
+    """Admin bấm một bước (hỏi lại → xác nhận), gõ lý do / chứng từ nếu bước cần (PLAN-078)."""
+    version = int(bot.wallet.payout(pid)["version"])
+    _callback(bot, ADMIN, f"c:wl:mv:{pid}:{version}:{_CODES[target]}")
+    reply = _callback(bot, ADMIN, f"c:wl:mv:{pid}:{version}:{_CODES[target]}:ok")
+    if text is not None:
+        reply = bot.handle_text(ADMIN, "admin", text, update_id=900 + version, now=NOW)
+    return reply
+
+
+def _processing(tmp_path, **kwargs):
+    bot = _requested(tmp_path, **kwargs)
+    _verify_bank(bot)
+    for target in ("under_review", "approved_for_payment", "processing"):
+        _step(bot, 1, target)
+    assert bot.wallet.payout(1)["status"] == "processing"
+    return bot
+
+
+def _paid(bot, pid: int = 1):
+    _step(bot, pid, "sent_unconfirmed")
+    return _step(bot, pid, "paid_confirmed", "FT26102499999")
 
 
 # --- Chuỗi VietQR ------------------------------------------------------------
@@ -184,8 +213,9 @@ class TestBankInput:
         bot.wallet.save_bank(USER, BankAccount("VCB", "9999999999", "NGUYEN VAN A"), NOW)
         payout = bot.wallet.payout(1)
         assert (payout["bank_code"], payout["account_no"]) == ("MB", "0123456789")
-        caption = _callback(bot, ADMIN, "c:wl:rq:1").photo[2]
-        assert "MB Bank ••••6789" in caption and "9999" not in caption
+        assert payout["status"] == "needs_review", "không âm thầm đổi đích chuyển"
+        detail = _callback(bot, ADMIN, "c:wl:rq:1")
+        assert "••••6789" in detail.text and "9999" not in detail.text and detail.photo is None
 
 
 # --- Duyệt rút và ảnh QR -------------------------------------------------------
@@ -194,21 +224,26 @@ class TestBankInput:
 class TestPayoutQR:
     def test_requested_payout_sends_qr_photo(self, tmp_path):
         bot = _requested(tmp_path)
+        early = _callback(bot, ADMIN, "c:wl:rq:1")
+        assert early.photo is None and "0123456789" not in early.text, "chưa tới bước chuyển: không QR, số che"
+        bot = _processing(tmp_path / "p")
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
         name, image, caption = detail.photo
         assert name == "qr-Hoan-tien-000001.png" and image[:8] == PNG
         assert caption == "Hoan tien 000001 · 14.000đ · MB Bank ••••6789"
-        assert "kiểm tra tên người nhận" in detail.text
+        assert "Kiểm tên người nhận" in detail.text and "Mã QR không chứng minh đã chuyển tiền" in detail.text
+        assert "<code>0123456789</code>" in detail.text
 
     def test_paid_payout_shows_no_qr(self, tmp_path):
-        bot = _requested(tmp_path)
-        _callback(bot, ADMIN, "c:wl:paid:1:ok")
+        bot = _processing(tmp_path)
+        _paid(bot)
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
         assert detail.photo is None
-        assert "Ảnh mã QR" not in detail.text and "✅ đã chuyển" in detail.text
+        assert "Ảnh mã QR" not in detail.text and "✅ Đã trả (có chứng từ)" in detail.text
+        assert "FT26102499999" in detail.text
 
     def test_unsupported_bank_on_old_payout_falls_back_to_text(self, tmp_path):
-        bot = _requested(tmp_path)
+        bot = _processing(tmp_path)
         with bot.repo.connect() as conn:
             conn.execute("UPDATE cashback_payouts SET bank_code = 'OLD' WHERE id = 1")
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
@@ -216,20 +251,20 @@ class TestPayoutQR:
         assert "không còn trong danh sách hỗ trợ" in detail.text and "<code>0123456789</code>" in detail.text
 
     def test_corrupt_account_falls_back_to_text(self, tmp_path):
-        bot = _requested(tmp_path)
+        bot = _processing(tmp_path)
         with bot.repo.connect() as conn:
             conn.execute("UPDATE cashback_payouts SET account_no = '01 23' WHERE id = 1")
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
         assert detail.photo is None and "Không tạo được mã QR" in detail.text
 
     def test_qr_library_missing_falls_back_to_text(self, tmp_path, monkeypatch):
-        bot = _requested(tmp_path)
+        bot = _processing(tmp_path)
         monkeypatch.setattr(vietqr, "qrcode", None)
         detail = _callback(bot, ADMIN, "c:wl:rq:1")
         assert detail.photo is None and "chưa vẽ được ảnh QR" in detail.text
 
     def test_photo_send_failure_does_not_block_text(self, tmp_path):
-        bot = _requested(tmp_path)
+        bot = _processing(tmp_path)
         telegram = MagicMock()
         telegram.send_photo.side_effect = RuntimeError("telegram down")
         update = {"update_id": 77, "callback_query": {
@@ -242,10 +277,14 @@ class TestPayoutQR:
 
     def test_reject_then_paid_is_refused(self, tmp_path):
         bot = _requested(tmp_path)
-        _callback(bot, ADMIN, "c:wl:rej:1:ok")
-        assert "đã được xử lý" in _callback(bot, ADMIN, "c:wl:paid:1").text
-        assert "đã được xử lý" in _callback(bot, ADMIN, "c:wl:paid:1:ok").text
+        _step(bot, 1, "rejected", "Sai tên chủ tài khoản")
         assert bot.wallet.payout(1)["status"] == "rejected"
+        version = int(bot.wallet.payout(1)["version"])
+        for code in ("pd", "ap", "pr"):
+            assert "Không chuyển được" in _callback(bot, ADMIN, f"c:wl:mv:1:{version}:{code}:ok").text
+        assert "Nút đã cũ" in _callback(bot, ADMIN, "c:wl:mv:1:1:rv:ok").text
+        assert bot.wallet.payout(1)["status"] == "rejected"
+        assert "Lý do: Sai tên chủ tài khoản" in _customer_events(bot)[-1]
 
     def test_unknown_or_malformed_payout_buttons(self, tmp_path):
         bot = _requested(tmp_path)
@@ -273,17 +312,21 @@ class TestPayoutQR:
         assert bot.wallet.payout(1) is None
 
     def test_notes_are_unique_per_request(self, tmp_path):
-        bot = _requested(tmp_path)
-        _callback(bot, ADMIN, "c:wl:paid:1:ok")
+        bot = _processing(tmp_path)
+        _paid(bot)
         sub = _link(bot)
         _order(bot, sub, status="COMPLETED", commission=30_000, complete="2026-10-21T10:00:00Z", cid="o2", approved=True)
         bot.refresh_wallet(datetime(2026, 10, 21, 12, tzinfo=timezone.utc))
         _callback(bot, USER, "u:w:out:ok")
         assert bot.wallet.payout(2)["transfer_note"] == "Hoan tien 000002"
+        for target in ("under_review", "approved_for_payment", "processing"):
+            _step(bot, 2, target)
         assert "Hoan tien 000002" in _callback(bot, ADMIN, "c:wl:rq:2").photo[2]
 
     def test_customer_told_once_when_paid(self, tmp_path):
-        bot = _requested(tmp_path)
-        _callback(bot, ADMIN, "c:wl:paid:1:ok")
-        _callback(bot, ADMIN, "c:wl:paid:1:ok")
+        bot = _processing(tmp_path)
+        _paid(bot)
+        _callback(bot, ADMIN, "c:wl:mv:1:5:pd:ok")  # bấm lại nút cũ
+        _callback(bot, ADMIN, "c:wl:mv:1:6:pd:ok")
+        assert bot.wallet.payout(1)["status"] == "paid_confirmed"
         assert sum("Đã chuyển tiền hoàn" in e for e in _customer_events(bot)) == 1
