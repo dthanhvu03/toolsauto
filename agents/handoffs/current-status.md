@@ -1,3 +1,25 @@
+## Phiên 2026-10-24 (bd) — PLAN-081 B + A và sửa link ShopeeFood đã triển khai
+
+Chủ bot restart ("reset r em"). Báo cáo `reports/CASHBACK_DEPLOY_2026-10-24_PLAN081.md`.
+
+- **System State:**
+  - production `main@8de3bd3`, PID 675442;
+  - tự đồng bộ 240 phút, lượt kế 14:39:33Z;
+  - Phương án A tắt (`reconcile_lookup=False`);
+  - 2 khoản pending 12.157đ / 960đ; ví khoá; `gate_b_check` OK.
+- **Done:**
+  - log khởi động sạch;
+  - bảng theo dõi + 2 trigger sự kiện đã có;
+  - đánh giá đầu đưa 2 đơn qua bot (…0309, …0025) vào `OBSERVED_RECENTLY`, 2 sự kiện, 0 tin admin, 0 tin khách.
+- **Unfinished:**
+  - chủ bot thử lại link `spf.shopee.vn`;
+  - sau lượt 14:39Z, kiểm tra màn 🧾 hết "(suy ra)".
+- **Next:**
+  - 2026-11-12: kiểm tra 2 đơn chuyển 🟡 và tin tổng hợp admin;
+  - trước 2026-11-22: chủ bot quyết định bật `SHOPEE_RECONCILE_LOOKUP_ENABLED=1`.
+
+---
+
 ## Phiên 2026-10-24 (bc) — PLAN-081: Phương án B lên main; thử nguồn thành công; Phương án A lên main (cờ tắt)
 
 Chủ bot: "triển khai pa B đi em, có em cho phép thực thi phương án A luôn".
