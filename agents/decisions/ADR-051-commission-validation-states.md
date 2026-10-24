@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | Accepted (PLAN-074), chưa triển khai |
+| Trạng thái | Accepted, triển khai 2026-10-24 (`cef3467`) |
 | Ngày | 2026-10-24 |
 | Liên quan | ADR-049 (sổ ví), ADR-050 (khoá tài chính) |
 

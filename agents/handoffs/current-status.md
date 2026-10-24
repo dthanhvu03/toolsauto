@@ -1,3 +1,19 @@
+## Phiên 2026-10-24 (af) — Đã triển khai PLAN-074 Shopee Validation & Commission
+
+Claude Code, chủ bot duyệt "duyệt 074". Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN074.md`.
+
+- Backup trước triển khai: `data/backups/cashback-20261024T032835Z.sqlite` (verify ok, 31 link).
+- `main` fast-forward `539e3d9` → `cef3467`, 368 passed, đã push. Chủ bot restart 03:30:51 UTC, PID 601747.
+- Migration: đủ 13 cột, có bảng `shopee_conversion_changes`. Backfill: 2 đơn bot PENDING, đơn 23/09 FRAUD, 0 APPROVED, settlement NOT_VERIFIED.
+- Khoá tài chính còn nguyên (4 trigger, ví 0, 0 payout). Màn 🧾 dựng trên bản sao: 2 chờ xác minh, 0 đã duyệt. Log: 0 lỗi, 0 token.
+- PLAN-074 đã chuyển sang `agents/plans/archive/`.
+
+Next:
+- Để mở APPROVED: sau khi Shopee duyệt kỳ tháng 10, chủ bot bấm 🔄 (hoặc xuất CSV Xác thực/Thanh toán).
+- PLAN-075: chủ bot chọn nguồn bằng chứng Shopee đã trả (trang Thanh toán hay sao kê).
+
+---
+
 ## Phiên 2026-10-24 (ae) — PLAN-074 Shopee Validation & Commission (nhánh, chưa triển khai)
 
 Claude Code, chủ bot giao PLAN-074. Worktree `/home/vu/toolsauto-cashback-validation`, nhánh `cursor/cashback-plan074-validation`. Production không đổi (main@539e3d9, PID 597550).

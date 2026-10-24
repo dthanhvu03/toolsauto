@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **DONE trên nhánh `cursor/cashback-plan074-validation`. Chưa triển khai (NOT AUTHORIZED)** |
+| Trạng thái | **DONE, ĐÃ TRIỂN KHAI 2026-10-24 (`cef3467`, PID 601747). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN074.md`** |
 | Executor | Claude Code (chủ bot giao trực tiếp, 2026-10-24; ngoại lệ backend như ADR-010) |
 | Đầu vào | PLAN-073 đã triển khai (`a9bb42a`), `reports/CASHBACK_FULL_AUDIT.md` |
 | Phạm vi | `commission_validation.py` (mới), `admin_validation.py` (mới), `db.py`, `shopee_sync.py`, `admin_notify.py`, `wallet.py`, `payout_gate.py`, `admin_policy.py`, `admin_ui.py`, tests, ADR-051 |
