@@ -42,3 +42,7 @@
 - Admin mở yêu cầu rút → bot gửi ảnh QR (chỉ khi còn `requested`); không tạo được (ngân hàng bỏ khỏi danh sách, STK hỏng, thiếu thư viện) → hiện lý do, chuyển tay theo số dạng chữ. Gửi ảnh lỗi không chặn tin chữ.
 - Khách bấm chọn ngân hàng (30 ngân hàng, thêm Cake, Ubank, Timo, KienlongBank, PVcomBank, ABBANK, VietABank, NCB, BVBank, Shinhan), gõ `STK + tên`; STK tách nhóm được ghép; sai thì vẫn chờ để gõ lại; dán link Shopee khi đang chờ → thoát chờ, tạo link.
 - Proof: CRC `123456789` = `29B1` (giá trị chuẩn). `tests/test_cashback_vietqr.py` 59 ca ngoại lệ; tổng `tests/test_cashback_*.py` **279 passed**, ruff sạch. **Chưa quét bằng app ngân hàng thật** — cần user thử.
+### Hoa hồng thật khác ước tính — 2026-10-24
+
+- 2 đơn thật qua bot: DOPI ước tính 30.510 đ, thật 17.368 đ = (5% + 2,5%) × 231.570 thực trả. Cọ mắt ước tính 1.663 đ, thật 1.372 đ. Lệch vì giá thực trả và tỷ lệ Shopee thật, không phải lỗi đồng bộ.
+- Sửa: HH gốc = `estimated_total_commission` (trước đây chỉ là phần Shopee). Checkout nhiều đơn có cộng `capped_brand_commission` của shop. Test dùng số thật; 281 passed.

@@ -1,3 +1,22 @@
+## Phiên 2026-10-24 (v) — Cashback: hoa hồng thật khác ước tính, sửa HH gốc
+
+Claude Code, user báo "đã có chuyển đổi nhưng hoa hồng lại khác".
+
+- User bấm 🔄 lúc 08:44. Về 2 đơn qua bot, cả hai đang chờ duyệt.
+  - DOPI kem nền: ước tính 30.510 đ (9% × giá niêm yết 339.000). Thật 17.368 đ = (5% shop + 2,5% Shopee) × 231.570 thực trả.
+  - Cọ mắt: ước tính 1.663 đ, thật 1.372 đ (2,5% × 54.900 thực trả).
+  - Lệch do giá thực trả thấp hơn giá niêm yết, và phần Shopee chỉ 2,5% chứ không phải 4% như API sản phẩm báo. Đây không phải lỗi đồng bộ.
+- Sửa `shopee_sync`:
+  - "HH gốc" lấy `estimated_total_commission` (Shopee + shop), không lấy `gross_commission` (chỉ phần Shopee). Trước đây admin thấy HH gốc 5.789 < HH sau cùng 17.368.
+  - Checkout nhiều đơn có cộng thêm `capped_brand_commission`. Trước đây thiếu phần shop, nên tiền hoàn của khách bị tính thiếu.
+- Test: 281 passed, ruff sạch. Các dòng đã lưu sẽ được sửa ở lần 🔄 kế tiếp (upsert).
+
+Next:
+- User restart bot và bấm 🔄 lại.
+- Cân nhắc nói rõ với khách: số hoàn khi tạo link là ước tính theo giá niêm yết. Khách 8628718420 được báo 21.357 đ, thực tế 12.157 đ.
+
+---
+
 ## Phiên 2026-10-23 (u) — PLAN-072: log từng request Buffer, bỏ quét lại kênh vô ích
 
 Claude Code, Owner duyệt "oke em làm đi em".

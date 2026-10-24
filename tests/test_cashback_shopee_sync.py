@@ -454,6 +454,52 @@ class TestShopeeReviewFixes:
         assert [(r["order_sn"], r["net_commission_vnd"]) for r in rows] == [("SN1", 1_000), ("SN2", 2_000)]
         assert rows[0]["purchase_time"] == "2026-10-23T08:00:00Z"
 
+    def test_gross_commission_includes_shop_part(self, tmp_path):
+        # Số thật đơn 261023CC4UWJ0N (2026-10-24): Shopee 2,5% = 5.789, shop 5% = 11.578.
+        repo = _setup_repo(tmp_path)
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        client.fetch_clicks.return_value = {"code": 0, "data": {"list": []}}
+        client.fetch_conversions.return_value = {"code": 0, "data": {"list": [{
+            "checkout_id": "chk_1",
+            "purchase_time": 1792726165,
+            "utm_content": "----",
+            "gross_commission": 578_925_000,
+            "total_brand_commission": 1_157_850_000,
+            "estimated_total_commission": 1_736_775_000,
+            "affiliate_net_commission": "1736775000",
+            "mcn_management_fee_commission": "0",
+            "orders": [{"order_id": "o1", "order_sn": "SN1", "order_status": "UNPAID", "items": [
+                {"actual_amount": 23_157_000_000, "qty": 1,
+                 "item_commission": 578_925_000, "capped_brand_commission": 1_157_850_000},
+            ]}],
+        }]}}
+        ShopeeSyncEngine(repo).sync(client=client)
+        with repo.connect() as conn:
+            row = conn.execute("SELECT gross_commission_vnd, net_commission_vnd, gmv_vnd FROM shopee_conversions").fetchone()
+        assert (row["gross_commission_vnd"], row["net_commission_vnd"], row["gmv_vnd"]) == (17_368, 17_368, 231_570)
+
+    def test_multi_order_checkout_counts_shop_commission(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        client.fetch_clicks.return_value = {"code": 0, "data": {"list": []}}
+        client.fetch_conversions.return_value = {"code": 0, "data": {"list": [{
+            "checkout_id": "chk_1",
+            "purchase_time": 1792742400,
+            "utm_content": "----",
+            "orders": [
+                {"order_id": "o1", "order_sn": "SN1", "order_status": "COMPLETED",
+                 "items": [{"item_commission": 578_925_000, "capped_brand_commission": 1_157_850_000}]},
+                {"order_id": "o2", "order_sn": "SN2", "order_status": "COMPLETED",
+                 "items": [{"item_commission": 137_250_000, "capped_brand_commission": 0}]},
+            ],
+        }]}}
+        ShopeeSyncEngine(repo).sync(client=client)
+        with repo.connect() as conn:
+            rows = conn.execute("SELECT order_sn, net_commission_vnd FROM shopee_conversions ORDER BY order_sn").fetchall()
+        assert [(r["order_sn"], r["net_commission_vnd"]) for r in rows] == [("SN1", 17_368), ("SN2", 1_372)]
+
     def test_endpoint_rejected_is_reported_as_partial(self, tmp_path):
         repo = _setup_repo(tmp_path)
         client = MagicMock()

@@ -326,14 +326,20 @@ class ShopeeSyncEngine:
         purchase_time = _iso_time(order_dict.get("purchase_time") or top_item.get("purchase_time"))
 
         if single_order:
-            gross_comm = parse_shopee_money_vnd(top_item.get("gross_commission"))
+            # gross_commission chỉ là phần Shopee trả; HH gốc = Shopee + shop (trước phí MCN).
+            gross_comm = parse_shopee_money_vnd(top_item.get("estimated_total_commission"))
+            if gross_comm is None:
+                gross_comm = parse_shopee_money_vnd(top_item.get("gross_commission"))
             net_comm = parse_shopee_money_vnd(top_item.get("affiliate_net_commission"))
             if net_comm is None:
                 net_comm = gross_comm
         else:
             # Hoa hồng ở cấp checkout là tổng mọi đơn; gán cho từng đơn thì bị cộng trùng.
+            # Mỗi món: item_commission (phần Shopee) + capped_brand_commission (phần shop).
             items = [item for item in order_dict.get("items") or [] if isinstance(item, dict)]
-            gross_comm = sum(parse_shopee_money_vnd(item.get("item_commission")) or 0 for item in items)
+            gross_comm = parse_shopee_money_vnd(
+                sum(_int(item.get("item_commission")) + _int(item.get("capped_brand_commission")) for item in items)
+            )
             net_comm = gross_comm
 
         is_new, is_matched, link_id, user_id = self.repo.record_shopee_conversion(
