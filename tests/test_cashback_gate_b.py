@@ -305,3 +305,21 @@ def test_d_kiem_tra_chi_doc_bat_tin_lot_ra_ngoai_tai_khoan_test(tmp_path):
     lines = gate_b_check.run(db, frozenset({OTHER}), None)
     assert "FAIL tin đơn tới khách ngoài danh sách test" in lines
     assert gate_b_check.main(["--db", str(db), "--test-ids", str(OTHER)]) == 1
+
+
+def test_lich_su_cau_hinh_ghi_tin_thu_va_tin_gioi_thieu_bang_chu(tmp_path):
+    bot = _start(tmp_path, enabled=True, test_ids=IDS)
+    _link(bot)
+    _smoke(bot, f"c:nt:s:n:{USER}")
+    _smoke(bot, f"c:nt:s:r:{USER}")
+    with bot.repo.connect() as conn:
+        conn.execute(
+            "INSERT INTO admin_change_audit (admin_user_id, action, after_json, result, created_at) "
+            "VALUES (?, 'customer_notify_intro', ?, 'applied', '2026-10-24T09:42:09Z')",
+            (ADMIN, json.dumps({"chat_id": 5589380966, "key": "orders_intro:5589380966"})),
+        )
+    text = _smoke(bot, "c:menu:hist").text
+    assert "customer_notify_" not in text, "không còn mã kỹ thuật thô"
+    assert f"Thông báo khách: tin thử mới tới tài khoản test …{str(USER)[-3:]}" in text
+    assert "xử lý lại sự kiện thử (chống trùng)" in text
+    assert "tin giới thiệu thông báo đơn tới khách …966" in text and "5589380966" not in text

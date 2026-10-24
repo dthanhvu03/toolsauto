@@ -1517,7 +1517,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action not in {
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
-        "shopee_auto_sync_pause",
+        "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1531,6 +1531,13 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
     if action == "customer_notify_retry":
         return f"Thông báo khách: gửi lại tin #{after.get('id', '-')}"
+    if action in {"customer_notify_smoke", "customer_notify_intro"}:
+        # ID Telegram chỉ hiện 3 số cuối, như các màn khác.
+        who = "…" + html.escape(str(after.get("chat_id", "-"))[-3:])
+        if action == "customer_notify_intro":
+            return f"Thông báo khách: tin giới thiệu thông báo đơn tới khách {who}"
+        kind = "xử lý lại sự kiện thử (chống trùng)" if after.get("repeat") else "tin thử mới"
+        return f"Thông báo khách: {kind} tới tài khoản test {who}"
     if action == "bank_verified":
         return f"Ví khách: xác minh tài khoản ••••{html.escape(str(after.get('last4', '-')))} (yêu cầu #{after.get('payout', '-')})"
     if action in {"terms_draft", "terms_publish"}:
