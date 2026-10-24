@@ -588,3 +588,12 @@ def test_tai_khoan_khai_truoc_plan078_duoc_ghi_lich_su_mot_lan(tmp_path):
     rows = _rows(bot, "SELECT bank_code, account_last4, action, created_at FROM bank_account_history")
     assert rows == [("VCB", "3344", "add", "2026-10-23T12:31:43Z")]
     assert "0011223344" not in repr(_rows(bot, "SELECT * FROM bank_account_history"))
+
+
+def test_hai_dieu_kien_han_muc_co_nhan_khac_nhau(tmp_path):
+    bot = _bot(tmp_path)
+    with bot.repo.connect() as conn:
+        labels = {c.code: c.label for c in payout_readiness.system_conditions(conn)}
+    assert labels["decision_payment_limits"] == "Quyết định chính sách hạn mức rút"
+    assert labels["limits_active"] == "Bảng số hạn mức đã duyệt, đang dùng"
+    assert len(set(labels.values())) == len(labels), "không có hai điều kiện trùng chữ"

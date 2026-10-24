@@ -23,7 +23,7 @@ TOPIC_LABELS = {
     "clawback": "Chính sách khi Shopee thu hồi hoa hồng đã chi",
     "payout_terms": "Điều khoản chi trả đã công bố",
     "bank_verification": "Cách xác minh tài khoản nhận tiền",
-    "payment_limits": "Hạn mức rút",
+    "payment_limits": "Quyết định chính sách hạn mức rút",
     "manual_payment": "Quy trình chuyển khoản thủ công và chứng từ",
 }
 
@@ -47,7 +47,7 @@ def system_conditions(conn: sqlite3.Connection, now: float | None = None) -> lis
     for topic, label in TOPIC_LABELS.items():
         row = payouts.decision(conn, topic)
         result.append(Condition(f"decision_{topic}", label, row is not None and row["status"] == "APPROVED", "system"))
-    result.append(Condition("limits_active", "Hạn mức rút đang hiệu lực (có người duyệt)",
+    result.append(Condition("limits_active", "Bảng số hạn mức đã duyệt, đang dùng",
                             payouts.active_limits(conn) is not None, "system"))
     result.append(Condition("settlement_matched", "Ít nhất một kỳ Shopee đối soát khớp (quỹ có chứng từ)",
                             payouts.fund_position(conn).verified, "system"))
