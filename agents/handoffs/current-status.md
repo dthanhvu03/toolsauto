@@ -1,3 +1,16 @@
+## Phiên 2026-10-24 (am) — Đã triển khai PLAN-077 Terms, Support & Payout Readiness
+
+Claude Code, chủ bot duyệt phát hành. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN077.md`.
+
+- Backup trước triển khai: `data/backups/cashback-20261024T060320Z.sqlite` (verify ok).
+- `main` fast-forward `cca8f8c` → `5a14fc1`, 521 passed, đã push. Chủ bot restart 06:05:53 UTC, PID 620902.
+- Sau triển khai: log 0 lỗi, 0 token; 5 bảng mới trống, trigger đóng băng / chỉ-thêm đủ; 33 link chứng minh được chính sách; 2 khoản pending giữ 12.157đ / 960đ; ví 0, 0 available, 0 payout; không gửi tin cho khách. Khách thấy 📩 Hỗ trợ và `/hotro`; `/dieukien` vẫn là trang cũ (V1 chưa công bố); `terms_required` tắt. PLAN-077 đã chuyển sang `agents/plans/archive/`.
+
+Next:
+- Chủ bot: duyệt và tự công bố điều khoản V1; quyết định cờ bắt buộc, SLA, thời gian lưu và xoay vòng log; hỏi kế toán 14 câu thuế; chính sách thu hồi; chứng từ Shopee thật.
+
+---
+
 ## Phiên 2026-10-24 (al) — PLAN-077 Terms, Support & Payout Readiness (code + test xong, CHƯA triển khai)
 
 Claude Code, chủ bot giao PLAN-077. Worktree `/home/vu/toolsauto-cashback-terms`, nhánh `cursor/cashback-plan077-terms`. Báo cáo `reports/CASHBACK_PLAN077_TERMS_POLICY.md`, ADR-054.

@@ -7,7 +7,7 @@
 | Nhánh | `cursor/cashback-plan077-terms`, tách từ `main@cca8f8c` |
 | Worktree | `/home/vu/toolsauto-cashback-terms` |
 | ADR | ADR-054 (mới) |
-| Trạng thái | **Code và test xong. Chưa merge, chưa triển khai.** Chờ release review |
+| Trạng thái | **Đã triển khai 2026-10-24** tại `5a14fc1`, PID 620902 (chủ bot duyệt). Điều khoản V1 vẫn DRAFT. Chi tiết: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN077.md` |
 
 ---
 
@@ -420,7 +420,7 @@ Các điểm liên quan tới bot:
 | Unresolved Snapshot Safety | **GO** |
 | Financial Lock | **GO** |
 | Regression | **GO** (521/521) |
-| Production Deployment | **NOT AUTHORIZED UNTIL REVIEW** |
+| Production Deployment | **GO, đã triển khai** (chủ bot duyệt 2026-10-24) |
 | Wallet Activation | **NOT AUTHORIZED** |
 | Payout | **NOT AUTHORIZED** |
 

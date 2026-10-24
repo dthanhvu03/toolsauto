@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **CODE + TEST XONG, CHỜ RELEASE REVIEW.** Production Deployment: NOT AUTHORIZED UNTIL REVIEW |
+| Trạng thái | **DONE, ĐÃ TRIỂN KHAI 2026-10-24 (`5a14fc1`, PID 620902). Điều khoản V1 vẫn DRAFT. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN077.md`** |
 | Executor | Claude Code (chủ bot giao trực tiếp ngày 2026-10-24) |
 | Đầu vào | `main@cca8f8c` (code production `13eb3f5`), ADR-050, ADR-053 |
 | Nhánh | `cursor/cashback-plan077-terms`, worktree `/home/vu/toolsauto-cashback-terms` |
