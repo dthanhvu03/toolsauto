@@ -1,3 +1,13 @@
+## Phiên 2026-10-24 (aw) — Gửi tin giới thiệu thông báo đơn cho 2 khách có đơn
+
+Chủ bot duyệt nội dung ("gửi").
+
+- Hai tin `orders_intro:<user>` (loại `order_update`, `source_ref='orders_intro'`) xếp vào hàng đợi chung; mỗi tin có khoá chống trùng, có audit `customer_notify_intro`.
+- Bot đã gửi: khách …966 lúc 09:42:09Z, khách …420 lúc 09:42:10Z, cả hai `sent`, có mã tin Telegram.
+- Sau khi gửi: `gate_b_check` OK, 12.157đ / 960đ giữ nguyên, ví khoá, log 0 lỗi.
+
+---
+
 ## Phiên 2026-10-24 (av) — Màn «Đơn hàng của tôi» dễ đọc hơn (đã triển khai)
 
 Claude Code, chủ bot duyệt mẫu ("oke anh duyệt").
