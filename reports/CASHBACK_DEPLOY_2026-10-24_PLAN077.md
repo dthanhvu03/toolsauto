@@ -41,7 +41,7 @@ DB đọc ở chế độ chỉ đọc. Các màn dựng trên bản sao DB (060
 
 | Kiểm tra | Kết quả |
 |---|---|
-| Bot chạy bản mới | ✅ PID 612405 → **620902**, cwd `/home/vu/toolsauto` |
+| Bot chạy bản mới | ✅ PID 615042 → **620902**, cwd `/home/vu/toolsauto` |
 | Khởi động sạch | ✅ `setMyCommands` (có `/hotro`), `setMyDescription`, `start db=…`; **0 ERROR**; 0 chuỗi dạng token |
 | Bảng mới | ✅ `customer_terms_versions`, `customer_terms_acceptances`, `link_terms_context`, `support_tickets`, `support_ticket_events`: đều **0 dòng** |
 | Trigger | ✅ 4 `financial_lock_*` còn nguyên; thêm `terms_*` (đóng băng bản công bố, trạng thái chỉ tiến), `terms_acceptances_*`, `link_terms_context_*`, `support_*` (chỉ thêm, không xoá) |
