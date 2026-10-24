@@ -1,3 +1,14 @@
+## Phiên 2026-10-24 (ak) — Tin báo admin khi gửi link có bảng chia tiền
+
+Claude Code, chủ bot yêu cầu. `main` `13eb3f5`, backup trước `data/backups/cashback-20261024T051459Z.sqlite`. Chủ bot restart 05:17:26 UTC, PID 615042.
+
+- Tin "🔗 Đã gửi link" thêm bảng: HH ước tính (shop / Shopee Xtra), dự phòng phí, dự phòng thuế, quỹ chia (V1.2), khách nhận, Admin còn. Tính bằng `cashback_for` trên snapshot của link; không khớp số đã báo thì không hiện bảng. 493 passed. Báo cáo: mục 22 của `reports/CASHBACK_PLAN076_PRICING.md`.
+- Kiểm tra sau restart: log 0 lỗi, 0 token. Link mới #34 (`6zD5kifo`) có snapshot `captured`, báo 15.842đ (HH 25.425 × V1.2); tin admin đã gửi kèm bảng đúng số. Snapshot 31 backfilled + 2 captured, 0 lệch, 0 thiếu. 2 khoản pending giữ 12.157đ / 960đ; ví 0, 0 available, 0 payout; 4 trigger khoá + trigger chỉ-thêm của bảng chính sách đã có.
+
+Next: như mục (aj): chứng từ Shopee thật, thuế người nhận, chính sách thu hồi.
+
+---
+
 ## Phiên 2026-10-24 (aj) — Đã triển khai PLAN-076 Pricing & Policy Consistency
 
 Claude Code, chủ bot duyệt phát hành kèm mục 2 («Admin còn») và mục 3 (nhập số tự do ở Mô phỏng, huỷ lịch hẹn). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN076.md`.
