@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **Gate A ĐÃ TRIỂN KHAI 2026-10-24** (`5232840`, PID 652982, cờ tắt). Gate B (bật tự đồng bộ): NOT AUTHORIZED. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md` |
+| Trạng thái | **Gate A ĐÃ TRIỂN KHAI 2026-10-24** (`5232840`, PID 652982, cờ tắt). **Gate B ĐÃ BẬT 2026-10-24 10:34Z** (chủ bot, chu kỳ 240 phút, PID 654209; lượt tự động #11 thành công). Đang theo dõi 24–48 giờ. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md` |
 | Executor | Claude Code (chủ bot giao trực tiếp ngày 2026-10-24, nội dung PLAN dán trong phiên) |
 | Đầu vào | `main@4712c9a`, ADR-056 |
 | Nhánh | `cursor/cashback-plan080-auto-sync`, worktree `/home/vu/toolsauto-cashback-notifications` |

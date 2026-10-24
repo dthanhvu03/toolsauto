@@ -38,3 +38,20 @@
 **Tắt:**
 - tạm dừng nóng: /admin → 🔗 → ⏱ → ⏸️ Tạm dừng;
 - tắt hẳn: xoá dòng `SHOPEE_AUTO_SYNC_ENABLED`, rồi restart.
+
+---
+
+## Gate B — Bật tự đồng bộ (2026-10-24)
+
+Chủ bot tự thêm cấu hình vào `.env` và restart.
+
+| Bước | Giờ (UTC) | Nội dung | Kết quả |
+|---|---|---|---|
+| Thử lần 1 | 10:31 | `.env` gõ thiếu chữ (`SHOPEE_AUTO_SYNC_ENABL`) | Bot bỏ qua biến lạ; tự đồng bộ vẫn tắt |
+| Restart lỗi | 10:33:28 | Lệnh khởi động chạy khi bot cũ chưa dừng | Khoá một tiến trình chặn lại: «another cashback bot process is already running»; bot cũ chạy tiếp |
+| Restart đúng | 10:34:28 | `.env`: `SHOPEE_AUTO_SYNC_ENABLED=1`, `SHOPEE_AUTO_SYNC_INTERVAL_MINUTES=240` (chủ bot chọn 4 giờ). PID 654209 | Log: `cấu hình: bật=True chu kỳ=240 phút`; lượt đầu hẹn 10:39:32Z; 0 lỗi |
+| Lượt tự động đầu | 10:39:32 | Lượt #11 `auto` | `success`, 1 giây, 2 trang, 0 trang lỗi, 2 đơn: 0 mới · 0 đổi · 2 không đổi, **0 tin khách**, 0 sự cố, khoá đã nhả. Không nhắn admin (đúng thiết kế). Lượt kế: 14:39:33Z (21:39 giờ VN) |
+
+Sau lượt đầu, `gate_b_check` OK: 12.157đ / 960đ, ví 0 / available 0 / payout 0, trigger 6/6. Log 0 lỗi, 0 token / cookie.
+
+**Theo dõi tiếp (24–48 giờ):** tỷ lệ lượt thành công, thời lượng, số tin khách, lỗi phiên, `database is locked`, poll Telegram. Sau đó quyết định giữ 240 phút hay hạ xuống 120.

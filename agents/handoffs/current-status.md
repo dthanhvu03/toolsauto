@@ -1,3 +1,22 @@
+## Phiên 2026-10-24 (az) — PLAN-080 Gate B: tự đồng bộ Shopee ĐÃ BẬT (mỗi 240 phút)
+
+Chủ bot thêm `SHOPEE_AUTO_SYNC_ENABLED=1`, `SHOPEE_AUTO_SYNC_INTERVAL_MINUTES=240` và restart. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md` (mục Gate B).
+
+- **System State:**
+  - `main@879b24c` (code `5232840`), PID 654209, khởi động 10:34:28 UTC;
+  - tự đồng bộ bật, chu kỳ 240 phút, lượt kế 14:39:33Z; thông báo đơn bật;
+  - ví khoá, 2 khoản pending 12.157đ / 960đ.
+- **Done:** lượt tự động #11 (10:39:32Z): success, 2 trang, 0 mới / 0 đổi, 0 tin khách, 0 sự cố; `gate_b_check` OK; log sạch.
+- **Ghi nhận:**
+  - lần sửa `.env` đầu gõ sai tên biến (bot bỏ qua);
+  - một lần khởi động khi bot cũ chưa dừng bị khoá tiến trình chặn đúng thiết kế.
+- **Next:**
+  - theo dõi 24–48 giờ (màn ⏱, `gate_b_check`, log `database is locked`) rồi chốt chu kỳ;
+  - quyết định khung quét > 30 ngày;
+  - Gate B ví (PLAN-078) vẫn chờ.
+
+---
+
 ## Phiên 2026-10-24 (ay) — Đã triển khai PLAN-080 Gate A (tự đồng bộ Shopee: code lên, cờ TẮT)
 
 Claude Code, chủ bot duyệt ("oke anh duyệt nhé"). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md`.
