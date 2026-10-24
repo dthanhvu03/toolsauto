@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **DONE trên nhánh `cursor/cashback-plan075-settlement`** |
+| Trạng thái | **DONE, ĐÃ TRIỂN KHAI 2026-10-24 (`6dc2dd1`, PID 604968). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN075.md`** |
 | Executor | Claude Code (chủ bot giao trực tiếp, cho phép triển khai phần an toàn; chủ bot restart) |
 | Đầu vào | PLAN-074 (`cef3467`), ADR-050, ADR-051 |
 | Phạm vi | `settlement.py`, `settlement_import.py`, `admin_settlement.py` (mới); `db.py` (5 bảng), `shopee_sync.py` (quét điều chỉnh), `admin_policy.py`, `admin_ui.py`; tests; ADR-052 |

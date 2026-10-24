@@ -29,7 +29,7 @@
 | Phần | Trạng thái |
 |---|---|
 | **Đã code và test** | schema 5 bảng, engine đối soát, phân bổ quỹ, điều chỉnh, công cụ nhập, màn admin |
-| **Đã triển khai production** | xem mục 14 |
+| **Đã triển khai production** | toàn bộ phần đã code, tại `6dc2dd1` (mục 14) |
 | **Chưa xác minh được** | định dạng thật của báo cáo Shopee và sao kê; quy tắc thuế người nhận |
 | **Đang bị chặn bởi nguồn chứng cứ** | APPROVED (cần báo cáo xác thực thật); parser file Shopee |
 
@@ -255,7 +255,7 @@ Tự chạy trong `repo.migrate()`: `CREATE TABLE/INDEX/TRIGGER IF NOT EXISTS` c
 
 ## 14. Triển khai production
 
-Xem `reports/CASHBACK_DEPLOY_2026-10-24_PLAN075.md` (ghi sau khi chủ bot restart).
+**Đã triển khai 24/10/2026** tại `6dc2dd1`, PID 604968. Mọi kiểm tra sau triển khai đều đạt: 5 bảng mới, khoá còn nguyên, ví tắt, 0 khoản `available` hay payout, 0 lỗi trong log. Chi tiết: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN075.md`.
 
 Trình tự:
 1. Backup bằng Backup API, verify.

@@ -1,3 +1,18 @@
+## Phiên 2026-10-24 (ah) — Đã triển khai PLAN-075 Settlement & Fund Reconciliation
+
+Claude Code. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN075.md`.
+
+- Backup trước triển khai: `data/backups/cashback-20261024T035456Z.sqlite` (verify ok, 32 link).
+- `main` fast-forward `5bf2796` → `6dc2dd1`, 412 passed, đã push. Chủ bot restart 03:57:20 UTC, PID 604968.
+- Migration: 5 bảng `settlement_*` (trống) và 3 trigger chỉ-thêm. Khoá tài chính còn nguyên: 4 trigger, không có bảng mở khoá, ví 0, 0 available, 0 payout. Dữ liệu cũ không đổi. Log: 0 lỗi, 0 token.
+- Màn 🧾 Đối soát thanh toán hiện "Chưa xác minh" (chưa có chứng từ thật). PLAN-075 đã chuyển sang `agents/plans/archive/`.
+
+Next:
+- Chủ bot gửi mẫu báo cáo Thanh toán + sao kê + báo cáo Xác thực của một kỳ có tiền, rồi làm PLAN-076/077 (parser + APPROVED có chứng từ).
+- Quyết định thuế người nhận và chính sách thu hồi. PLAN-078: nối đối soát vào khoá, mở ví có điều kiện.
+
+---
+
 ## Phiên 2026-10-24 (ag) — PLAN-075 Settlement & Fund Reconciliation (code + test xong)
 
 Claude Code, chủ bot giao PLAN-075 (cho phép triển khai phần an toàn; chủ bot restart). Worktree `/home/vu/toolsauto-cashback-settlement`, nhánh `cursor/cashback-plan075-settlement`.
