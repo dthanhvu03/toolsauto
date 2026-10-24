@@ -753,6 +753,20 @@ def _backfill_bank_history(conn: sqlite3.Connection) -> None:
         )
 
 
+# Rollback PLAN-079: loại tin gửi khách có sẵn trước PLAN-079 (giống CUSTOMER_EVENT_TYPES của bản PLAN-079).
+ROLLBACK_CUSTOMER_EVENT_TYPES = {"WALLET_ENTRY": "wallet", "PAYOUT_DECIDED": "wallet", "SUPPORT_CUSTOMER": "support"}
+
+
+def _has_outbox_v2(conn: sqlite3.Connection) -> bool:
+    """DB đã chạy migration PLAN-079 (cột audience / category, bảng tuỳ chọn, cột khách chặn bot)."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(admin_notifications)")}
+    users = {row[1] for row in conn.execute("PRAGMA table_info(telegram_users)")}
+    prefs = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'customer_notification_prefs'"
+    ).fetchone()
+    return {"audience", "category"} <= columns and "notify_blocked_at" in users and prefs is not None
+
+
 class TrackingRepository:
     def __init__(self, path: str):
         self.path = path
@@ -1128,10 +1142,38 @@ class TrackingRepository:
                 """,
                 (event_key, event_type, chat_id, message_html, _utc_now()),
             )
+            category = ROLLBACK_CUSTOMER_EVENT_TYPES.get(event_type)
+            if category and _has_outbox_v2(conn):
+                # Rollback PLAN-079: gắn đúng đối tượng để bản PLAN-079 (khi nâng cấp lại) nhận ra tin gửi khách.
+                conn.execute(
+                    "UPDATE admin_notifications SET audience = 'customer', category = ? WHERE event_key = ?",
+                    (category, event_key),
+                )
             return True
 
     def list_pending_admin_events(self, limit: int = 10, max_attempts: int = 5) -> list[sqlite3.Row]:
         with self.connect() as conn:
+            if _has_outbox_v2(conn):
+                # Rollback PLAN-079 (ADR-056): DB đã có trạng thái của bộ gửi mới. Chỉ lấy tin code này hiểu
+                # ('pending', 'retry'); không phát lại 'sending' / 'unknown' / 'failed' / 'suppressed', không gửi tin
+                # đơn hàng của PLAN-079, giữ lựa chọn của khách và đánh dấu khách chặn bot. Không sửa dòng nào.
+                return conn.execute(
+                    """
+                    SELECT * FROM admin_notifications n
+                    WHERE n.status IN ('pending', 'retry') AND n.attempt_count < ?
+                      AND COALESCE(n.category, '') NOT IN ('order_new', 'order_update')
+                      AND NOT (n.audience = 'customer' AND EXISTS (
+                          SELECT 1 FROM telegram_users u
+                          WHERE u.telegram_user_id = n.chat_id AND u.notify_blocked_at IS NOT NULL))
+                      AND NOT (n.audience = 'customer' AND EXISTS (
+                          SELECT 1 FROM customer_notification_prefs p
+                          WHERE p.telegram_user_id = n.chat_id
+                            AND ((n.category = 'support' AND p.support = 0) OR (n.category = 'wallet' AND p.wallet = 0))))
+                    ORDER BY n.id ASC
+                    LIMIT ?
+                    """,
+                    (max_attempts, limit),
+                ).fetchall()
             return conn.execute(
                 """
                 SELECT * FROM admin_notifications
