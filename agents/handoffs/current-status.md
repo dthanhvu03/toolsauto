@@ -1,3 +1,20 @@
+## Phiên 2026-10-24 (bi) — PLAN-083 phần B: mẫu điều khoản V2 (Telegram hoặc Zalo); rút gọn link không làm
+
+Chủ bot: "anh quyết theo đề xuất của em nhé triển khai luôn".
+
+- **Backup:** `cashback-20261024T160753Z.sqlite`.
+- **Code:** `main@e34fb0f`, 698 passed.
+  - `terms_content.py` lên V2: chỉ đổi 2 câu "tài khoản Telegram hoặc Zalo". Mẫu cũ trùng hash V1 đang công bố.
+- **B2 rút gọn link:** không làm. AddLiveTag short link là Shopee Open API, cần App ID; qua cookie thì rủi ro phiên đồng bộ đơn.
+- **System State:** vẫn chạy bản cũ (Telegram PID 686054, Zalo PID 687608).
+- **Next:**
+  1. chủ bot restart Telegram rồi Zalo (gồm PLAN-083 + mẫu V2);
+  2. /admin → 📋 Điều khoản → tạo nháp V2 từ mẫu → công bố;
+  3. nhắn thử Zalo `hd`, link, `don`;
+  4. khoảng 2026-10-26 thử tin chủ động Zalo.
+
+---
+
 ## Phiên 2026-10-24 (bh) — PLAN-083 hoàn thiện bot Zalo: lên main (chờ restart)
 
 Chủ bot: "chỉnh cho chỉnh chu hoàn thiện, rà lại rồi làm 1 plan". Báo cáo `reports/CASHBACK_PLAN083_ZALO_POLISH.md`, PLAN `agents/plans/active/PLAN-083-cashback-zalo-polish.md`.
