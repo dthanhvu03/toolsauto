@@ -33,6 +33,7 @@ def shopee_connected_keyboard(auto_sync: bool) -> Keyboard:
     toggle = ("⏸️ Tắt tự đồng bộ", "c:shopee:auto:off") if auto_sync else ("🟢 Bật tự đồng bộ 4 giờ", "c:shopee:auto:on")
     return (
         (("🔄 Đồng bộ ngay", "c:shopee:sync"), ("📤 CSV 30 ngày", "c:shopee:csv")),
+        (("🧾 Duyệt hoa hồng", "c:cv:home"),),
         (toggle,),
         (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
         BACK_HOME,

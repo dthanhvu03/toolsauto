@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from cashback_bot.commission_validation import FRAUD, REJECTED, assess_raw
 from cashback_bot.db import TrackingRepository
 from cashback_bot.payout_gate import FinancialGate, PayoutBlocked
 
@@ -278,12 +279,14 @@ class Wallet:
             policy = "l.estimate_policy" if "estimate_policy" in link_columns else "NULL"
             conversion_columns = {row[1] for row in conn.execute("PRAGMA table_info(shopee_conversions)")}
             validation = "c.validation_month" if "validation_month" in conversion_columns else "NULL"
+            checked = "c.validation_status" if "validation_status" in conversion_columns else "NULL"
             rows = conn.execute(
                 f"""
                 SELECT c.conversion_id, c.telegram_user_id, c.matched_link_id, c.order_sn, c.order_status,
                        c.net_commission_vnd, c.gross_commission_vnd, c.purchase_time, c.complete_time, c.item_name,
                        l.product_name, {policy} AS estimate_policy, l.cashback_rate_percent, l.estimated_cashback,
-                       l.created_at AS link_created_at, c.raw_json, {validation} AS validation_month
+                       l.created_at AS link_created_at, c.raw_json, {validation} AS validation_month,
+                       {checked} AS validation_status
                 FROM shopee_conversions c JOIN link_requests l ON l.id = c.matched_link_id
                 WHERE c.telegram_user_id IS NOT NULL
                 """
@@ -291,6 +294,11 @@ class Wallet:
             for row in rows:
                 prev = existing.get(row["conversion_id"])
                 state = order_state(row["order_status"])
+                flagged = bool(row["raw_json"]) and assess_raw(row["raw_json"], None).fraud_flag == 1
+                if row["validation_status"] in (FRAUD, REJECTED) or flagged:
+                    # Shopee gắn gian lận / từ chối hoa hồng (PLAN-074): không phát sinh nghĩa vụ chi.
+                    # Lịch sử nằm ở shopee_conversion_changes; đơn đã vào ví thì đi nhánh trừ lại như huỷ.
+                    state = "cancelled"
                 if prev is not None and prev["status"] == "available" and state != "cancelled":
                     continue
                 commission = row["net_commission_vnd"]
@@ -315,7 +323,7 @@ class Wallet:
                     done = _parse(completed_at) or now
                     eligible_at = _stamp(done + hold)
                     payable = eligible_at <= now_text and self.gate.entry_payable(
-                        conn, row["validation_month"], row["raw_json"]
+                        conn, row["validation_month"], row["raw_json"], row["validation_status"]
                     )
                     status = "available" if payable else "holding"
                     available_at = eligible_at if payable else None

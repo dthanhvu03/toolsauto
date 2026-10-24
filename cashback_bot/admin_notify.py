@@ -55,6 +55,35 @@ _SHOPEE_STATUS = {
 
 SYNC_ORDER_LINES = 10
 
+_CHANGE_LABELS = {
+    "net_commission_vnd": "hoa hồng",
+    "order_status": "trạng thái đơn",
+    "validation_status": "duyệt hoa hồng",
+    "fraud_flag": "cờ gian lận",
+    "attribution": "Sub ID trỏ link khác (giữ người cũ)",
+}
+
+
+def short_order(order_sn: str | None) -> str:
+    """Mã đơn rút gọn cho tin và màn admin: 261023…0N."""
+    text = str(order_sn or "-")
+    return text if len(text) <= 10 else f"{text[:6]}…{text[-2:]}"
+
+
+def change_value(field: str, value: str | None) -> str:
+    if value is None:
+        return "-"
+    if field == "net_commission_vnd":
+        try:
+            return format_vnd(int(value))
+        except ValueError:
+            return html.escape(value)
+    if field == "fraud_flag":
+        return "có" if value == "1" else "không"
+    if field == "attribution":
+        return f"link #{html.escape(value)}"
+    return html.escape(value)
+
 
 def _num(amount: int | None) -> str:
     return "-" if amount is None else f"{amount:,}".replace(",", ".")
@@ -196,6 +225,27 @@ class AdminNotifier:
             event_type="REQUEST_FAILED",
             chat_id=int(self.chat_id),
             message_html=body,
+        )
+
+    def notify_commission_changes(self, run_id: int, changes: Sequence) -> None:
+        """Một tin cho mỗi lần đồng bộ có thay đổi đáng kể (PLAN-074): hoa hồng giảm/về 0, gian lận, huỷ,
+        trạng thái lùi, Sub ID trỏ link khác. Chỉ báo, không tự sửa tiền hay quyền rút."""
+        if not self._active() or not changes:
+            return
+        lines = ["🔔 <b>Hoa hồng Shopee thay đổi</b>", ""]
+        for order_sn, change in list(changes)[:10]:
+            label = _CHANGE_LABELS.get(change.field, change.field)
+            old = change_value(change.field, change.old)
+            new = change_value(change.field, change.new)
+            lines.append(f"• <code>{html.escape(short_order(order_sn))}</code> {label}: {old} → <b>{new}</b>")
+        if len(changes) > 10:
+            lines.append(f"… và {len(changes) - 10} thay đổi khác.")
+        lines += ["", "👉 /admin → 🔗 Shopee Affiliate → 🧾 Duyệt hoa hồng.", f"🕓 {_vn_now_text()}"]
+        self.repo.enqueue_admin_event(
+            event_key=f"commission_changes:{run_id}",
+            event_type="COMMISSION_CHANGED",
+            chat_id=int(self.chat_id),
+            message_html="\n".join(lines),
         )
 
     def notify_shopee_new_order(

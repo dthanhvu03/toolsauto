@@ -18,6 +18,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 
+from cashback_bot.commission_validation import APPROVED
 from cashback_bot.db import TrackingRepository
 
 SETTLEMENT_TABLE = "shopee_settlements"
@@ -90,8 +91,20 @@ class FinancialGate:
             reasons.append(REASON_TAX)
         return Readiness(not reasons, tuple(reasons))
 
-    def entry_payable(self, conn: sqlite3.Connection, validation_month: str | None, raw_json: str | None) -> bool:
-        """Khoản này đã được Shopee duyệt và trả chưa. Thiếu bất kỳ bằng chứng nào thì False."""
+    def entry_payable(
+        self,
+        conn: sqlite3.Connection,
+        validation_month: str | None,
+        raw_json: str | None,
+        validation_status: str | None = None,
+    ) -> bool:
+        """Khoản này đã được Shopee duyệt và trả chưa. Thiếu bất kỳ bằng chứng nào thì False.
+
+        PLAN-074: phải có validation_status = APPROVED (hiện chưa nguồn nào gán được). APPROVED vẫn chưa đủ:
+        còn cần kỳ Shopee đã trả (settlement, PLAN-075).
+        """
+        if validation_status != APPROVED:
+            return False
         if not self.readiness(conn).ok or not validation_month or is_fraud(raw_json):
             return False
         row = conn.execute(

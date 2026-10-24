@@ -77,6 +77,7 @@ from cashback_bot.admin_ui import (
     stats_keyboard,
     stats_text,
 )
+from cashback_bot.admin_validation import ValidationAdmin
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
@@ -245,6 +246,8 @@ class AdminPanel:
             return self._share_start(user_id, now)
         if data == "c:menu:wallet" or data.startswith("c:wl:"):
             return WalletAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
+        if data.startswith("c:cv:"):
+            return ValidationAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data == "c:menu:shopee":
             return self._shopee_screen(now)
         if data == "c:shopee:sync":
@@ -1251,7 +1254,10 @@ def _history_line(row: sqlite3.Row) -> str:
 def _setting_line(row: sqlite3.Row) -> str | None:
     """Dòng lịch sử cho cài đặt đổi ngay (PLAN-066). None: không phải loại này."""
     action = row["action"]
-    if action not in {"wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync"}:
+    if action not in {
+        "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync",
+        "commission_review_ack",
+    }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
     before = json.loads(row["before_json"]) if "before_json" in row.keys() and row["before_json"] else {}
@@ -1262,6 +1268,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action == "wallet_min_withdraw":
         old = format_vnd(int(before["vnd"])) if "vnd" in before else "-"
         return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
+    if action == "commission_review_ack":
+        return f"Duyệt hoa hồng: đã kiểm tra cảnh báo đơn …{html.escape(str(after.get('conversion', '-'))[-4:])}"
     if action == "shopee_auto_sync":
         return "Shopee Affiliate: tự đồng bộ 4 giờ → " + ("bật" if after.get("on") else "tắt")
     return f"Shopee Affiliate: kết nối cookie ({html.escape(str(after.get('account', '-')))})"

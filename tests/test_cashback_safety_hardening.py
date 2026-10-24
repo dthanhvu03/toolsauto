@@ -439,9 +439,10 @@ class TestFinancialLock:
         bot = _bot(tmp_path)
         _financially_ready(bot)
         bot.wallet.set_hold_days(0)
-        _completed_order(bot, fraud=True)
+        _completed_order(bot, fraud=True, approved=True)  # kể cả có ai đó gán APPROVED
         bot.refresh_wallet(NOW)
-        assert bot.wallet.entries(USER)[0]["status"] == "holding"
+        # PLAN-074: gian lận → sổ ghi 'cancelled' (không phát sinh nghĩa vụ chi), không bao giờ 'available'.
+        assert bot.wallet.entries(USER)[0]["status"] == "cancelled"
         assert is_fraud(None) is True and is_fraud("{bad json") is True
 
     def test_missing_validation_month_or_unsettled_period_not_available(self, tmp_path):
@@ -475,7 +476,7 @@ class TestFinancialLock:
         _financially_ready(bot, amount=settled)
         bot.wallet.set_enabled(True)
         bot.wallet.set_hold_days(0)
-        _completed_order(bot)
+        _completed_order(bot, approved=True)
         bot.refresh_wallet(NOW)
         bot.wallet.save_bank(USER, BankAccount("MB", "0123456789", "NGUYEN VAN A"), NOW)
         return bot

@@ -34,7 +34,7 @@ def _ready(tmp_path, commission=20_000, bank=True):
     bot.wallet.set_enabled(True)
     bot.wallet.set_hold_days(0)
     sub = _link(bot)
-    _order(bot, sub, status="COMPLETED", commission=commission, complete="2026-10-21T10:00:00Z")
+    _order(bot, sub, status="COMPLETED", commission=commission, complete="2026-10-21T10:00:00Z", approved=True)
     bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
     if bank:
         bot.wallet.save_bank(USER, BankAccount("MB", "0123456789", "NGUYEN VAN A"), NOW)
@@ -276,7 +276,7 @@ class TestPayoutQR:
         bot = _requested(tmp_path)
         _callback(bot, ADMIN, "c:wl:paid:1:ok")
         sub = _link(bot)
-        _order(bot, sub, status="COMPLETED", commission=30_000, complete="2026-10-21T10:00:00Z", cid="o2")
+        _order(bot, sub, status="COMPLETED", commission=30_000, complete="2026-10-21T10:00:00Z", cid="o2", approved=True)
         bot.refresh_wallet(datetime(2026, 10, 21, 12, tzinfo=timezone.utc))
         _callback(bot, USER, "u:w:out:ok")
         assert bot.wallet.payout(2)["transfer_note"] == "Hoan tien 000002"

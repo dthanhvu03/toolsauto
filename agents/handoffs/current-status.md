@@ -1,3 +1,23 @@
+## Phiên 2026-10-24 (ae) — PLAN-074 Shopee Validation & Commission (nhánh, chưa triển khai)
+
+Claude Code, chủ bot giao PLAN-074. Worktree `/home/vu/toolsauto-cashback-validation`, nhánh `cursor/cashback-plan074-validation`. Production không đổi (main@539e3d9, PID 597550).
+
+- Khảo sát field từ 3 response đã lưu (không gọi Shopee):
+  - **không có field chứng minh "đã duyệt"**: APPROVED BLOCKED;
+  - gian lận có bằng chứng (`is_fraud=1` + `fraud_reason`, 1 mẫu).
+- Thêm `validation_status` / `settlement_status` (NOT_VERIFIED), 13 cột, bảng `shopee_conversion_changes`, backfill từ raw.
+- `record_conversion_snapshot`: 1 transaction/đơn; không để thiếu field ghi đè; giữ Sub ID đầu; dữ liệu cũ đến muộn → NEEDS_REVIEW; 1 cảnh báo admin/lần đồng bộ.
+- Màn /admin → 🔗 → 🧾 Duyệt hoa hồng (chỉ xem; "đã kiểm tra" có audit).
+- Khoá tài chính giữ nguyên + điều kiện APPROVED; FRAUD/REJECTED → sổ `cancelled`.
+- Test: 368 passed. Diễn tập migrate trên bản sao DB thật: 2 đơn bot PENDING, đơn 23/09 FRAUD.
+
+Next:
+- Chủ bot duyệt triển khai (mục 14 của `reports/CASHBACK_PLAN074_VALIDATION.md`).
+- Để mở APPROVED: sau khi Shopee duyệt kỳ tháng 10, chủ bot bấm 🔄 một lần, hoặc xuất CSV Xác thực/Thanh toán.
+- PLAN-075: settlement và đối chiếu quỹ.
+
+---
+
 ## Phiên 2026-10-24 (ad) — Đã triển khai PLAN-073 Safety Hardening V1
 
 Claude Code, chủ bot duyệt "oke em triển khai tiếp đi". Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_SAFETY_V1.md`.

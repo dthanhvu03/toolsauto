@@ -7,6 +7,20 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from cashback_bot.commission_validation import (
+    CONFIDENCE_INFERRED,
+    FRAUD,
+    NEEDS_REVIEW,
+    REJECTED,
+    SETTLEMENT_NOT_VERIFIED,
+    SOURCE_REPORT,
+    UNKNOWN,
+    Assessment,
+    assess_raw,
+    is_regression,
+    is_significant_drop,
+)
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS telegram_users (
     telegram_user_id INTEGER PRIMARY KEY,
@@ -160,6 +174,21 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
     updated_at TEXT NOT NULL
 );
 
+-- Lịch sử thay đổi của từng đơn Shopee (PLAN-074). Chỉ thêm dòng, không sửa, không xoá.
+CREATE TABLE IF NOT EXISTS shopee_conversion_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversion_id TEXT NOT NULL,
+    field TEXT NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    significant INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL,
+    sync_run_id INTEGER,
+    detected_at TEXT NOT NULL,
+    UNIQUE (conversion_id, field, sync_run_id)
+);
+CREATE INDEX IF NOT EXISTS idx_conversion_changes_conv ON shopee_conversion_changes(conversion_id);
+
 -- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
 -- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
 CREATE TABLE IF NOT EXISTS failed_updates (
@@ -231,6 +260,46 @@ PRODUCT_INSIGHT_COLUMNS = (
 )
 
 
+# Trạng thái duyệt hoa hồng (PLAN-074). Ba trạng thái tách cột: order_status / validation_status / settlement_status.
+VALIDATION_COLUMNS = (
+    ("first_commission_vnd", "INTEGER"),
+    ("validation_status", "TEXT NOT NULL DEFAULT 'UNKNOWN'"),
+    ("validation_reason", "TEXT"),
+    ("fraud_flag", "INTEGER"),
+    ("affiliate_item_status", "TEXT"),
+    ("checkout_status", "TEXT"),
+    ("settlement_status", f"TEXT NOT NULL DEFAULT '{SETTLEMENT_NOT_VERIFIED}'"),
+    ("validation_source", "TEXT"),
+    ("validation_confidence", "TEXT"),
+    ("evidence_ref", "TEXT"),
+    ("review_status", "TEXT NOT NULL DEFAULT 'none'"),
+    ("reviewed_by", "INTEGER"),
+    ("reviewed_at", "TEXT"),
+)
+
+
+@dataclass(frozen=True)
+class ConversionChange:
+    field: str
+    old: str | None
+    new: str | None
+    significant: bool
+
+
+@dataclass(frozen=True)
+class ConversionResult:
+    is_new: bool
+    is_matched: bool
+    matched_link_id: int | None
+    telegram_user_id: int | None
+    changes: tuple[ConversionChange, ...]
+    validation_status: str
+
+
+def _text(value) -> str | None:
+    return None if value is None else str(value)
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -240,6 +309,35 @@ def _stamp(moment: datetime | None = None) -> str:
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _backfill_validation(conn: sqlite3.Connection) -> None:
+    """Dòng có từ trước PLAN-074: chép hoa hồng hiện tại làm mốc đầu, đánh giá lại từ raw_json đã lưu.
+
+    Không ghi lịch sử (đây là mốc, không phải thay đổi), không bao giờ ra APPROVED hay SETTLED.
+    Chạy lại nhiều lần không đổi gì: chỉ đụng dòng còn UNKNOWN chưa có nguồn.
+    """
+    rows = conn.execute(
+        "SELECT conversion_id, raw_json, net_commission_vnd, gross_commission_vnd FROM shopee_conversions "
+        "WHERE validation_source IS NULL"
+    ).fetchall()
+    for row in rows:
+        commission = row["net_commission_vnd"] if row["net_commission_vnd"] is not None else row["gross_commission_vnd"]
+        found = assess_raw(row["raw_json"], commission)
+        conn.execute(
+            """
+            UPDATE shopee_conversions SET
+                first_commission_vnd = COALESCE(first_commission_vnd, net_commission_vnd),
+                validation_status = ?, validation_reason = ?, fraud_flag = ?, affiliate_item_status = ?,
+                checkout_status = ?, validation_source = ?, validation_confidence = ?,
+                review_status = CASE WHEN ? = 'NEEDS_REVIEW' THEN 'needs_review' ELSE review_status END
+            WHERE conversion_id = ?
+            """,
+            (
+                found.status, found.reason, found.fraud_flag, found.item_statuses, found.checkout_status,
+                SOURCE_REPORT, CONFIDENCE_INFERRED, found.status, row["conversion_id"],
+            ),
+        )
 
 
 def _add_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
@@ -299,6 +397,9 @@ class TrackingRepository:
                 _add_column(conn, "link_requests", column, ddl)
             for column, ddl in SHOPEE_CONVERSION_COLUMNS:
                 _add_column(conn, "shopee_conversions", column, ddl)
+            for column, ddl in VALIDATION_COLUMNS:
+                _add_column(conn, "shopee_conversions", column, ddl)
+            _backfill_validation(conn)
             # Phần admin chịu trên từng đơn: phí và dự phòng thuế (admin còn = HH − hoàn − phí − thuế).
             _add_column(conn, "cashback_entries", "fee_vnd", "INTEGER NOT NULL DEFAULT 0")
             _add_column(conn, "cashback_entries", "tax_vnd", "INTEGER NOT NULL DEFAULT 0")
@@ -810,81 +911,182 @@ class TrackingRepository:
         raw_json: str | None = None,
         details: dict | None = None,
     ) -> tuple[bool, bool, int | None, int | None]:
-        """Lưu đơn hàng và đối soát sub_id.
+        """Lưu đơn hàng và đối soát sub_id. Trả về (is_new, is_matched, matched_link_id, telegram_user_id).
 
-        details: các cột SHOPEE_CONVERSION_COLUMNS (doanh số, số lượng, tên món...).
-        Trả về (is_new, is_matched, matched_link_id, telegram_user_id).
+        Bản rút gọn của record_conversion_snapshot (giữ cho code và test cũ). Có raw_json thì đánh giá
+        trạng thái hoa hồng từ đó.
+        """
+        assessment = assess_raw(raw_json, net_commission_vnd if net_commission_vnd is not None else gross_commission_vnd) if raw_json else None
+        result = self.record_conversion_snapshot(
+            conversion_id=conversion_id,
+            sub_id=sub_id,
+            order_sn=order_sn,
+            order_status=order_status,
+            conversion_status=conversion_status,
+            purchase_time=purchase_time,
+            gross_commission_vnd=gross_commission_vnd,
+            net_commission_vnd=net_commission_vnd,
+            raw_json=raw_json,
+            details=details,
+            assessment=assessment,
+        )
+        return result.is_new, result.is_matched, result.matched_link_id, result.telegram_user_id
+
+    def record_conversion_snapshot(
+        self,
+        conversion_id: str,
+        sub_id: str | None,
+        order_sn: str | None,
+        order_status: str | None,
+        conversion_status: str | None,
+        purchase_time: str | None,
+        gross_commission_vnd: int | None,
+        net_commission_vnd: int | None,
+        raw_json: str | None = None,
+        details: dict | None = None,
+        assessment: Assessment | None = None,
+        sync_run_id: int | None = None,
+    ) -> ConversionResult:
+        """Ghi một lần Shopee báo về đơn (PLAN-074), trong một transaction.
+
+        - Người thụ hưởng giữ theo lần gắn đầu tiên; Sub ID lần sau trỏ link khác → ghi lịch sử, cần kiểm tra.
+        - Giá trị thiếu (None) không ghi đè giá trị đã có; hoa hồng không bị đưa về 0 vì response thiếu field.
+        - Chỉ ghi lịch sử khi giá trị thật sự đổi; đồng bộ lại y hệt không tạo dòng.
+        - Không bao giờ gán APPROVED hay SETTLED ở đây.
         """
         extra = {name: (details or {}).get(name) for name, _ddl in SHOPEE_CONVERSION_COLUMNS}
         now = _utc_now()
         with self.connect() as conn:
-            # Tìm link khớp sub_id
-            matched_link_id = None
-            telegram_user_id = None
+            conn.execute("BEGIN IMMEDIATE")
+            prev = conn.execute("SELECT * FROM shopee_conversions WHERE conversion_id = ?", (conversion_id,)).fetchone()
+            found_link, found_user = None, None
             if sub_id:
                 link = conn.execute(
                     "SELECT id, telegram_user_id FROM link_requests WHERE sub_id = ? ORDER BY id DESC LIMIT 1",
                     (sub_id,),
                 ).fetchone()
                 if link is not None:
-                    matched_link_id = int(link["id"])
-                    telegram_user_id = int(link["telegram_user_id"])
+                    found_link, found_user = int(link["id"]), int(link["telegram_user_id"])
 
-            is_matched = matched_link_id is not None
+            def keep(column: str, new):
+                return new if new is not None else (None if prev is None else prev[column])
 
-            # Kiểm tra xem đã có đơn này chưa
-            existing = conn.execute(
-                "SELECT conversion_id FROM shopee_conversions WHERE conversion_id = ?",
-                (conversion_id,),
-            ).fetchone()
-            is_new = existing is None
+            changes: list[ConversionChange] = []
+            review = "none" if prev is None else (prev["review_status"] or "none")
+            matched_link_id, telegram_user_id = found_link, found_user
+            if prev is not None and prev["matched_link_id"] is not None:
+                matched_link_id, telegram_user_id = prev["matched_link_id"], prev["telegram_user_id"]
+                if found_link is not None and found_link != prev["matched_link_id"]:
+                    changes.append(ConversionChange("attribution", str(prev["matched_link_id"]), str(found_link), True))
 
-            conn.execute(
-                """
-                INSERT INTO shopee_conversions (
-                    conversion_id, sub_id, order_sn, order_status, conversion_status,
-                    purchase_time, gross_commission_vnd, net_commission_vnd,
-                    matched_link_id, telegram_user_id, raw_json, created_at, updated_at,
-                    gmv_vnd, item_qty, item_name, mcn_fee_vnd, complete_time, validation_month
+            net = keep("net_commission_vnd", net_commission_vnd)
+            gross = keep("gross_commission_vnd", gross_commission_vnd)
+            status = keep("order_status", order_status or None)
+            if assessment is not None and assessment.complete:
+                validation, reason = assessment.status, assessment.reason
+                fraud_flag, item_statuses = assessment.fraud_flag, assessment.item_statuses
+                checkout = assessment.checkout_status
+                if prev is not None and is_regression(prev["validation_status"], validation):
+                    validation, reason = NEEDS_REVIEW, "status_regression"
+            elif prev is not None:
+                validation, reason = prev["validation_status"], prev["validation_reason"]
+                fraud_flag, item_statuses, checkout = prev["fraud_flag"], prev["affiliate_item_status"], prev["checkout_status"]
+            else:
+                validation = UNKNOWN if assessment is None else assessment.status
+                reason = None if assessment is None else assessment.reason
+                fraud_flag = None if assessment is None else assessment.fraud_flag
+                item_statuses = None if assessment is None else assessment.item_statuses
+                checkout = None if assessment is None else assessment.checkout_status
+
+            if prev is not None:
+                old_net = prev["net_commission_vnd"]
+                if net_commission_vnd is not None and net_commission_vnd != old_net:
+                    changes.append(
+                        ConversionChange("net_commission_vnd", _text(old_net), _text(net), is_significant_drop(old_net, net))
+                    )
+                if order_status and order_status != prev["order_status"]:
+                    changes.append(
+                        ConversionChange("order_status", prev["order_status"], order_status, "CANCEL" in order_status.upper())
+                    )
+                if validation != prev["validation_status"]:
+                    significant = validation in (FRAUD, REJECTED, NEEDS_REVIEW)
+                    changes.append(ConversionChange("validation_status", prev["validation_status"], validation, significant))
+                if fraud_flag is not None and fraud_flag != prev["fraud_flag"] and prev["fraud_flag"] is not None:
+                    changes.append(ConversionChange("fraud_flag", _text(prev["fraud_flag"]), _text(fraud_flag), fraud_flag == 1))
+            if any(change.significant for change in changes) or (validation == NEEDS_REVIEW and (prev is None or prev["validation_status"] != NEEDS_REVIEW)):
+                review = "needs_review"
+
+            values = {
+                "sub_id": keep("sub_id", sub_id),
+                "order_sn": keep("order_sn", order_sn),
+                "order_status": status,
+                "conversion_status": keep("conversion_status", conversion_status),
+                "purchase_time": keep("purchase_time", purchase_time),
+                "gross_commission_vnd": gross,
+                "net_commission_vnd": net,
+                "matched_link_id": matched_link_id,
+                "telegram_user_id": telegram_user_id,
+                "raw_json": keep("raw_json", raw_json),
+                "updated_at": now,
+                **{name: keep(name, value) for name, value in extra.items()},
+                "first_commission_vnd": net if prev is None or prev["first_commission_vnd"] is None else prev["first_commission_vnd"],
+                "validation_status": validation,
+                "validation_reason": reason,
+                "fraud_flag": fraud_flag,
+                "affiliate_item_status": item_statuses,
+                "checkout_status": checkout,
+                "validation_source": SOURCE_REPORT,
+                "validation_confidence": CONFIDENCE_INFERRED,
+                "evidence_ref": f"sync_run:{sync_run_id}" if sync_run_id else (None if prev is None else prev["evidence_ref"]),
+                "review_status": review,
+            }
+            if prev is None:
+                columns = ["conversion_id", "created_at", *values]
+                conn.execute(
+                    f"INSERT INTO shopee_conversions ({', '.join(columns)}) VALUES ({', '.join('?' * len(columns))})",
+                    (conversion_id, now, *values.values()),
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(conversion_id) DO UPDATE SET
-                    sub_id = excluded.sub_id,
-                    order_sn = excluded.order_sn,
-                    order_status = excluded.order_status,
-                    conversion_status = excluded.conversion_status,
-                    purchase_time = excluded.purchase_time,
-                    gross_commission_vnd = excluded.gross_commission_vnd,
-                    net_commission_vnd = excluded.net_commission_vnd,
-                    matched_link_id = COALESCE(excluded.matched_link_id, shopee_conversions.matched_link_id),
-                    telegram_user_id = COALESCE(excluded.telegram_user_id, shopee_conversions.telegram_user_id),
-                    raw_json = excluded.raw_json,
-                    updated_at = excluded.updated_at,
-                    gmv_vnd = excluded.gmv_vnd,
-                    item_qty = excluded.item_qty,
-                    item_name = excluded.item_name,
-                    mcn_fee_vnd = excluded.mcn_fee_vnd,
-                    complete_time = excluded.complete_time,
-                    validation_month = excluded.validation_month
+            else:
+                conn.execute(
+                    f"UPDATE shopee_conversions SET {', '.join(f'{name} = ?' for name in values)} WHERE conversion_id = ?",
+                    (*values.values(), conversion_id),
+                )
+            for change in changes:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO shopee_conversion_changes
+                    (conversion_id, field, old_value, new_value, significant, source, sync_run_id, detected_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (conversion_id, change.field, change.old, change.new, int(change.significant), SOURCE_REPORT, sync_run_id, now),
+                )
+        return ConversionResult(
+            is_new=prev is None,
+            is_matched=matched_link_id is not None,
+            matched_link_id=matched_link_id,
+            telegram_user_id=telegram_user_id,
+            changes=tuple(changes),
+            validation_status=validation,
+        )
+
+    def conversion_changes(self, conversion_id: str | None = None, limit: int = 10) -> list[sqlite3.Row]:
+        where, args = ("WHERE conversion_id = ?", (conversion_id,)) if conversion_id else ("", ())
+        with self.connect() as conn:
+            return conn.execute(
+                f"SELECT * FROM shopee_conversion_changes {where} ORDER BY id DESC LIMIT ?", (*args, limit)
+            ).fetchall()
+
+    def mark_conversion_reviewed(self, conversion_id: str, admin_id: int, now: str | None = None) -> bool:
+        """Admin đã xem cảnh báo. Không đổi hoa hồng, trạng thái duyệt hay quyền rút."""
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE shopee_conversions SET review_status = 'reviewed', reviewed_by = ?, reviewed_at = ?
+                WHERE conversion_id = ? AND review_status = 'needs_review'
                 """,
-                (
-                    conversion_id,
-                    sub_id,
-                    order_sn,
-                    order_status,
-                    conversion_status,
-                    purchase_time,
-                    gross_commission_vnd,
-                    net_commission_vnd,
-                    matched_link_id,
-                    telegram_user_id,
-                    raw_json,
-                    now,
-                    now,
-                    *extra.values(),
-                ),
+                (admin_id, now or _utc_now(), conversion_id),
             )
-            return is_new, is_matched, matched_link_id, telegram_user_id
+            return cursor.rowcount == 1
 
     def record_shopee_sync_run(self, trigger_type: str = "manual") -> int:
         now = _utc_now()

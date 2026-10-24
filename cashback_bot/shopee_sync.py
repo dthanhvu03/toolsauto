@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from cashback_bot.admin_notify import AdminNotifier
+from cashback_bot.commission_validation import assess
 from cashback_bot.db import TrackingRepository
 from cashback_bot.shopee_client import ShopeeAffiliateClient, ShopeeApiError
 from cashback_bot.shopee_cookie import load_cookies
@@ -148,6 +149,7 @@ class SyncResult:
     conversions_synced: int = 0
     new_matched_orders: int = 0
     bot_orders: tuple[BotOrder, ...] = ()
+    changes: int = 0  # số thay đổi đã ghi lịch sử trong lần này (PLAN-074)
 
 
 class ShopeeSyncEngine:
@@ -160,6 +162,8 @@ class ShopeeSyncEngine:
         self.repo = repo
         self.admin_notifier = admin_notifier
         self.cookie_path = cookie_path
+        self._run_id: int | None = None
+        self._changes: list = []  # (order_sn, ConversionChange) của lần đồng bộ đang chạy
 
     def sync(
         self,
@@ -198,6 +202,8 @@ class ShopeeSyncEngine:
         )
 
         run_id = self.repo.record_shopee_sync_run(trigger_type=trigger)
+        self._run_id = run_id
+        self._changes = []
         now_dt = datetime.now(timezone.utc)
         end_time = int(now_dt.timestamp())
         start_time = end_time - (days_back * 86400)
@@ -273,8 +279,13 @@ class ShopeeSyncEngine:
                 f"qua bot {len(bot_orders)} ({new_matched_orders} mới, "
                 f"{len(bot_orders) - new_matched_orders} cập nhật)."
             )
+            if self._changes:
+                msg += f" {len(self._changes)} thay đổi hoa hồng/trạng thái đã ghi lịch sử."
             if failed:
-                msg += f" ⚠️ Shopee từ chối phần {failed}, xem log bot."
+                msg += f" ⚠️ Shopee từ chối phần {failed}, xem log bot. Đơn chưa đọc được giữ nguyên số cũ."
+            significant = [(sn, change) for sn, change in self._changes if change.significant]
+            if significant and self.admin_notifier:
+                self.admin_notifier.notify_commission_changes(run_id, significant)
             return SyncResult(
                 ok=not failed,
                 message=msg,
@@ -282,6 +293,7 @@ class ShopeeSyncEngine:
                 conversions_synced=conversions_count,
                 new_matched_orders=new_matched_orders,
                 bot_orders=tuple(bot_orders),
+                changes=len(self._changes),
             )
 
         except Exception as exc:
@@ -298,6 +310,10 @@ class ShopeeSyncEngine:
                 new_orders=new_matched_orders,
                 error=redact(exc)[:200],
             )
+            significant = [(sn, change) for sn, change in self._changes if change.significant]
+            if significant and self.admin_notifier:
+                # Phần đã đọc được trước khi lỗi vẫn đã ghi lịch sử: báo admin như lần thành công.
+                self.admin_notifier.notify_commission_changes(run_id, significant)
             message = "Cookie Shopee hết hạn giữa chừng." if auth else f"Lỗi đồng bộ: {type(exc).__name__}"
             return SyncResult(
                 ok=False,
@@ -362,7 +378,7 @@ class ShopeeSyncEngine:
             net_comm = gross_comm
 
         details = _order_details(top_item, order_dict, single_order)
-        is_new, is_matched, link_id, user_id = self.repo.record_shopee_conversion(
+        result = self.repo.record_conversion_snapshot(
             conversion_id=conversion_id,
             sub_id=sub_id_str,
             order_sn=order_sn,
@@ -373,7 +389,12 @@ class ShopeeSyncEngine:
             net_commission_vnd=net_comm,
             raw_json=json.dumps({"top": top_item, "order": order_dict}, ensure_ascii=False),
             details=details,
+            assessment=assess(top_item, order_dict, net_comm),
+            sync_run_id=self._run_id,
         )
+        is_new, is_matched, user_id = result.is_new, result.is_matched, result.telegram_user_id
+        if result.changes:
+            self._changes.extend((order_sn, change) for change in result.changes)
         if is_matched and bot_orders is not None:
             bot_orders.append(BotOrder(
                 order_sn=order_sn,

@@ -63,6 +63,7 @@ def _order(
     cid="o1",
     validation: str | None = "2026-10",
     fraud: bool = False,
+    approved: bool = False,
 ):
     item = {"is_fraud": 1 if fraud else 0, "fraud_reason": "Rejected due to fraudulent activity" if fraud else ""}
     bot.repo.record_shopee_conversion(
@@ -83,6 +84,10 @@ def _order(
             "validation_month": validation,
         },
     )
+    if approved:
+        # CHỈ DB TEST: chưa có nguồn Shopee nào gán APPROVED (PLAN-074); dựng để thử cơ chế rút tiền.
+        with bot.repo.connect() as conn:
+            conn.execute("UPDATE shopee_conversions SET validation_status = 'APPROVED' WHERE conversion_id = ?", (cid,))
 
 
 def _customer_events(bot) -> list[str]:
@@ -197,7 +202,7 @@ class TestLedger:
         bot.refresh_wallet(datetime(2026, 10, 21, 10, tzinfo=timezone.utc))
         assert bot.wallet.balance(USER).pending_vnd == 7_000  # V1.1: 10.000 × 70%
 
-        _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z")
+        _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z", approved=True)
         bot.refresh_wallet(datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
         entry = bot.wallet.entries(USER)[0]
         assert entry["status"] == "holding"
@@ -220,9 +225,9 @@ class TestLedger:
         _financially_ready(bot)
         bot.wallet.set_hold_days(0)
         sub = _link(bot)
-        _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z")
+        _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z", approved=True)
         bot.refresh_wallet(datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
-        _order(bot, sub, status="COMPLETED", commission=50_000, complete="2026-10-22T00:00:00Z")
+        _order(bot, sub, status="COMPLETED", commission=50_000, complete="2026-10-22T00:00:00Z", approved=True)
         bot.refresh_wallet(datetime(2026, 10, 23, tzinfo=timezone.utc))
         assert bot.wallet.balance(USER).withdrawable_vnd == 7_000  # không tính lại sau khi đã vào ví
 
@@ -303,7 +308,7 @@ class TestPayout:
         bot.wallet.set_enabled(True)
         bot.wallet.set_hold_days(0)
         sub = _link(bot)
-        _order(bot, sub, status="COMPLETED", commission=amount, complete="2026-10-21T10:00:00Z")
+        _order(bot, sub, status="COMPLETED", commission=amount, complete="2026-10-21T10:00:00Z", approved=True)
         bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
         return bot
 
