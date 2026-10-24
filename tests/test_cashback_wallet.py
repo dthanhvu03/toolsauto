@@ -18,9 +18,11 @@ from cashback_bot.admin_stats import collect
 from cashback_bot.admin_ui import stats_detail_text, stats_text
 from cashback_bot.messages import entry_notice
 from cashback_bot.money import format_vnd
-from cashback_bot.poller import _check_shopee_auto_sync, _check_wallet_refresh, process_updates
+from cashback_bot.config import AutoSyncConfig
+from cashback_bot.poller import _check_wallet_refresh, drain_sync_results, process_updates
 from cashback_bot.shopee_client import ShopeeStatusResult
 from cashback_bot.shopee_sync import SYNC_REQUEST_KEY, BotOrder, ShopeeSyncEngine, SyncResult
+from cashback_bot.sync_scheduler import SyncCoordinator
 from cashback_bot.wallet import BankAccount, parse_bank_text
 from tests.test_cashback_bot import NOW, FakeClient, payload, service
 
@@ -247,21 +249,24 @@ class TestReconciliation:
         reply = _callback(bot, ADMIN, "c:shopee:sync")
         assert "Đã bắt đầu đồng bộ" in reply.text
         assert bot.repo.get_state(SYNC_REQUEST_KEY) == "1"
-        # Vừa tự đồng bộ xong nhưng admin bấm: vẫn chạy ngay, báo kết quả, cập nhật sổ.
-        bot.repo.set_state("shopee_last_auto_sync", str(datetime.now(timezone.utc).timestamp()))
-        notifier, synced = MagicMock(), MagicMock()
+        # PLAN-080: luồng nền chạy lượt thủ công có khoá; luồng chính cập nhật sổ, báo kết quả, gửi ngay.
+        notifier = MagicMock()
         engine = MagicMock()
         engine.return_value.sync.return_value = SyncResult(ok=True, message="Đồng bộ xong: 1 click")
-        monkeypatch.setattr(poller, "ShopeeSyncEngine", engine)
-        _check_shopee_auto_sync(bot.repo, notifier, on_synced=synced)
+        coordinator = SyncCoordinator(bot.repo, notifier, engine_factory=engine)
+        assert coordinator.next_job() == "manual"
+        coordinator.run("manual")
         engine.return_value.sync.side_effect = RuntimeError("boom")
         bot.repo.set_state(SYNC_REQUEST_KEY, "1")
-        _check_shopee_auto_sync(bot.repo, notifier, on_synced=synced)
+        coordinator.run(coordinator.next_job())
+        bot.refresh_wallet = MagicMock()
+        drain_sync_results(coordinator, bot, notifier)
         assert engine.call_args.kwargs["admin_notifier"] is notifier
+        assert engine.return_value.sync.call_args.kwargs["trigger"] == "manual"
         assert notifier.notify_shopee_sync_result.call_args_list[0].args == (True, "Đồng bộ xong: 1 click", ())
         assert notifier.flush_pending.called  # tin kết quả gửi ngay, không đợi long-poll
         assert notifier.notify_shopee_sync_result.call_args_list[1].args[0] is False
-        assert synced.call_count == 1
+        assert bot.refresh_wallet.call_count == 1, "một lần cho cả hai lượt đã xong"
         assert bot.repo.get_state(SYNC_REQUEST_KEY) == "0"
 
     def test_csv_export_sent_as_document(self, tmp_path):
@@ -564,22 +569,27 @@ class TestAutoSyncSwitch:
         bot.repo.update_shopee_cookie_status(status="connected")
         engine = MagicMock()
         engine.return_value.sync.return_value = SyncResult(ok=True, message="ok")
-        monkeypatch.setattr(poller, "ShopeeSyncEngine", engine)
+        coordinator = SyncCoordinator(bot.repo, MagicMock(), engine_factory=engine)
+        coordinator.start()
 
-        _check_shopee_auto_sync(bot.repo, MagicMock())
+        assert coordinator.next_job() is None
         engine.assert_not_called()  # mặc định: không tự gọi Shopee
         screen = _callback(bot, ADMIN, "c:menu:shopee")
         assert "Tự đồng bộ: ⏸️ <b>tắt</b>" in screen.text
-        assert "c:shopee:auto:on" in _buttons(screen)
+        assert "c:sy:home" in _buttons(screen) and "c:shopee:auto:on" not in _buttons(screen)
 
-        on = _callback(bot, ADMIN, "c:shopee:auto:on")
-        assert "c:shopee:auto:off" in _buttons(on)
-        _check_shopee_auto_sync(bot.repo, MagicMock())
-        assert engine.return_value.sync.call_args.kwargs["trigger"] == "auto"
+        # PLAN-080: nút Telegram không bật được khi cờ .env tắt (không có đường vượt cờ).
+        refused = _callback(bot, ADMIN, "c:shopee:auto:on")
+        assert "SHOPEE_AUTO_SYNC_ENABLED" in refused.text
+        assert coordinator.next_job() is None
+        engine.assert_not_called()
 
-        _callback(bot, ADMIN, "c:shopee:auto:off")
-        history = _callback(bot, ADMIN, "c:menu:hist").text
-        assert "tự đồng bộ 4 giờ → bật" in history and "tự đồng bộ 4 giờ → tắt" in history
+        on = _bot(tmp_path, auto_sync=AutoSyncConfig(enabled=True))
+        paused = _callback(on, ADMIN, "c:shopee:auto:off")
+        assert "Đã tạm dừng" in paused.text and "c:shopee:auto:on" in _buttons(paused)
+        _callback(on, ADMIN, "c:shopee:auto:on")
+        history = _callback(on, ADMIN, "c:menu:hist").text
+        assert "tự đồng bộ → tạm dừng" in history and "tự đồng bộ → tiếp tục" in history
 
     def test_wallet_moves_on_time_without_calling_shopee(self, tmp_path):
         bot = _bot(tmp_path)

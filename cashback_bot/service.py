@@ -111,6 +111,7 @@ class CashbackService:
             rounding_unit=settings.estimate_rounding_unit,
             customer_notifications_enabled=settings.customer_notifications_enabled,
             customer_notification_test_ids=settings.customer_notification_test_ids,
+            auto_sync=settings.auto_sync,
         )
         self._snapshots_on = False
         self._backfill_snapshots()

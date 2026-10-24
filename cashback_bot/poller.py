@@ -5,6 +5,7 @@ from __future__ import annotations
 import fcntl
 import json
 import logging
+import queue
 import sqlite3
 import time
 from collections.abc import Callable
@@ -23,7 +24,7 @@ from cashback_bot.messages import ADMIN_COMMANDS, BOT_COMMANDS, BUY_BUTTON, DESC
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import RedactingFormatter, error_brief
 from cashback_bot.service import CashbackService
-from cashback_bot.shopee_sync import AUTO_SYNC_KEY, SYNC_REQUEST_KEY, ShopeeSyncEngine
+from cashback_bot.sync_scheduler import SyncCoordinator, SyncWorker
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError, classify_delivery_error
 
 logger = logging.getLogger("cashback_bot")
@@ -84,7 +85,16 @@ def main() -> None:
         settings.customer_access_enabled,
         settings.admin_notifications_enabled and settings.admin_chat_id is not None,
     )
-    _loop(service, telegram, repo, admin_notifier)
+    # PLAN-080: đồng bộ Shopee (tay và tự động) chạy ở một luồng nền duy nhất, khoá một lượt trong DB.
+    coordinator = SyncCoordinator(repo, admin_notifier, settings.auto_sync)
+    coordinator.start()
+    SyncWorker(coordinator).start()
+    logger.info(
+        "shopee auto sync enabled=%s interval_min=%s",
+        settings.auto_sync.enabled,
+        settings.auto_sync.interval_minutes,
+    )
+    _loop(service, telegram, repo, admin_notifier, coordinator)
 
 
 def _register_profile(telegram: TelegramApi, admin_user_ids, wallet_on: bool = False) -> None:
@@ -403,47 +413,28 @@ def _typing(telegram, update: dict) -> None:
         telegram.send_chat_action(chat_id, "typing")
 
 
-def _check_shopee_auto_sync(
-    repo: TrackingRepository,
-    admin_notifier: AdminNotifier,
-    interval_sec: int = 14400,
-    on_synced: Callable[[], None] | None = None,
-) -> None:
-    """Đồng bộ ngay khi admin bấm 🔄; tự đồng bộ 4 giờ chỉ khi admin bật công tắc (mặc định tắt)."""
-    now = time.time()
-    manual = repo.get_state(SYNC_REQUEST_KEY) == "1"
-    if not manual:
-        if repo.get_state(AUTO_SYNC_KEY) != "1":
-            return
-        last_check_str = repo.get_state("shopee_last_auto_sync")
-        if last_check_str:
-            try:
-                if now - float(last_check_str) < interval_sec:
-                    return
-            except ValueError:
-                pass
-        if repo.get_shopee_cookie_status().get("status") != "connected":
-            return
-    else:
-        repo.set_state(SYNC_REQUEST_KEY, "0")
+def drain_sync_results(coordinator: SyncCoordinator, service: CashbackService, admin_notifier: AdminNotifier) -> None:
+    """Luồng chính làm tiếp sau lượt đồng bộ của luồng nền (PLAN-080).
 
-    repo.set_state("shopee_last_auto_sync", str(now))
-    try:
-        result = ShopeeSyncEngine(repo, admin_notifier=admin_notifier).sync(trigger="manual" if manual else "auto")
-    except Exception as exc:
-        logger.warning("[ShopeeAutoSync] Lỗi trong phiên tự đồng bộ: %s", error_brief(exc))
-        if manual:
-            admin_notifier.notify_shopee_sync_result(False, f"Đồng bộ lỗi: {type(exc).__name__}. Xem log bot.")
-        return
-    # Cập nhật sổ trước để tin kết quả có phần chia tiền (khách / phí, thuế / admin còn).
-    if on_synced is not None:
+    Cập nhật sổ trước để tin kết quả có phần chia tiền; lượt thủ công thì nhắn kết quả cho admin. Lượt tự động
+    không nhắn tóm tắt (đơn mới / hoa hồng đổi đã có tin riêng; lỗi báo theo sự cố). Rồi gửi hàng đợi ngay.
+    """
+    results = []
+    while True:
         try:
-            on_synced()
-        except Exception:
-            logger.exception("[Cashback] cập nhật sổ hoàn tiền sau đồng bộ thất bại")
-    if manual:
-        admin_notifier.notify_shopee_sync_result(result.ok, result.message, result.bot_orders)
-        admin_notifier.flush_pending(limit=5)  # gửi ngay, không đợi vòng long-poll kế tiếp
+            results.append(coordinator.completed.get_nowait())
+        except queue.Empty:
+            break
+    if not results:
+        return
+    try:
+        service.refresh_wallet()
+    except Exception:
+        logger.exception("[Cashback] cập nhật sổ hoàn tiền sau đồng bộ thất bại")
+    for trigger, result in results:
+        if trigger == "manual":
+            admin_notifier.notify_shopee_sync_result(result.ok, result.message, result.bot_orders)
+    admin_notifier.flush_pending(limit=10)
 
 
 def _check_wallet_refresh(service: CashbackService, repo: TrackingRepository, interval_sec: int = 3600) -> None:
@@ -495,14 +486,15 @@ def _check_backup(
     repo.set_state("backup_last_ok", str(moment))
 
 
-def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier) -> None:
+def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier,
+          coordinator: SyncCoordinator) -> None:
     while True:
         try:
             flush_outbound(service, telegram, repo, admin_notifier, limit=3)
             offset = repo.get_offset()
             updates = telegram.get_updates(offset)
             process_updates(service, telegram, repo, updates, admin_notifier)
-            _check_shopee_auto_sync(repo, admin_notifier, on_synced=service.refresh_wallet)
+            drain_sync_results(coordinator, service, admin_notifier)
             _check_wallet_refresh(service, repo)
             _check_backup(service, repo, admin_notifier)
         except KeyboardInterrupt:

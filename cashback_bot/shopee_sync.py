@@ -17,7 +17,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from dataclasses import dataclass
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,7 +27,15 @@ from typing import Any
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.commission_validation import assess
 from cashback_bot.db import TrackingRepository
-from cashback_bot.shopee_client import ShopeeAffiliateClient, ShopeeApiError
+from cashback_bot.shopee_client import (
+    AUTH_EXPIRED,
+    NEEDS_AUTH_CATEGORIES,
+    PARSE_ERROR,
+    RATE_LIMITED,
+    TRANSIENT_CATEGORIES,
+    ShopeeAffiliateClient,
+    ShopeeApiError,
+)
 from cashback_bot.shopee_cookie import load_cookies
 from cashback_bot.redact import error_brief, redact
 from cashback_bot.settlement import SettlementEngine
@@ -73,24 +83,67 @@ def _bot_sub_id(val: Any) -> str | None:
 MONEY_SCALE = 100_000
 # Admin bấm 🔄: chỉ đặt cờ này, poller chạy đồng bộ ở vòng kế tiếp rồi nhắn kết quả (PLAN-066).
 SYNC_REQUEST_KEY = "shopee_sync_requested"
-# Tự đồng bộ 4 giờ: chỉ chạy khi admin bật ("1"). Mặc định tắt, admin tự bấm 🔄.
-AUTO_SYNC_KEY = "shopee_auto_sync"
 # Shopee nhận page_size=100 (đã thử thật 2026-10-23).
 PAGE_SIZE = 100
 # Trần số trang mỗi loại mỗi lần đồng bộ, tránh vòng lặp vô tận nếu Shopee bỏ qua page_no.
 MAX_PAGES = 20
 
 
-def _paged(fetch, start_time: int, end_time: int, list_keys: tuple[str, ...]):
-    """Duyệt từng trang tới khi trang trả về ít hơn PAGE_SIZE dòng. Bỏ qua dòng không phải dict."""
+# Lỗi tạm ở một trang: thử lại tối đa 2 lần trong lượt (2 giây, 5 giây), rồi bỏ phần đó (lượt thành PARTIAL).
+PAGE_RETRY_DELAYS = (2, 5)
+TRUNCATED = "TRUNCATED"
+PAGINATION_ANOMALY = "PAGINATION_ANOMALY"
+
+
+@dataclass
+class PageStats:
+    pages: int = 0
+    failed: int = 0
+    # Lý do đọc chưa hết (trang lỗi, cấu trúc lạ, quá MAX_PAGES, Shopee lặp trang). Rỗng = đọc trọn.
+    problems: list[str] = field(default_factory=list)
+
+
+class LeaseLost(Exception):
+    """Lượt đồng bộ mất quyền giữ khoá (quá hạn / lượt khác thu hồi): dừng ghi ngay."""
+
+
+def _paged(fetch, start_time: int, end_time: int, list_keys: tuple[str, ...], stats: PageStats | None = None,
+           heartbeat: Callable[[], bool] | None = None, sleep: Callable[[float], None] = time.sleep):
+    """Duyệt từng trang tới khi trang trả về ít hơn PAGE_SIZE dòng. Bỏ qua dòng không phải dict.
+
+    Không kết luận «hết đơn» khi dữ liệu bất thường: thiếu `data`, không có khoá danh sách, Shopee lặp lại trang,
+    hay chạm MAX_PAGES khi trang vẫn đầy đều ghi vào stats.problems (lượt thành PARTIAL). Lỗi tạm thử lại có giới hạn;
+    lỗi phiên, 429 và lỗi khác ném ra cho lượt xử lý.
+    """
+    stats = stats if stats is not None else PageStats()
     previous_first = None
     for page_no in range(1, MAX_PAGES + 1):
-        payload = fetch(start_time=start_time, end_time=end_time, page_no=page_no, page_size=PAGE_SIZE)
+        if heartbeat is not None and not heartbeat():
+            raise LeaseLost()
+        for attempt in range(len(PAGE_RETRY_DELAYS) + 1):
+            try:
+                payload = fetch(start_time=start_time, end_time=end_time, page_no=page_no, page_size=PAGE_SIZE)
+                break
+            except ShopeeApiError as exc:
+                if getattr(exc, "category", None) not in TRANSIENT_CATEGORIES or attempt == len(PAGE_RETRY_DELAYS):
+                    stats.failed += 1
+                    raise
+                sleep(PAGE_RETRY_DELAYS[attempt])
+        stats.pages += 1
         data = payload.get("data") if isinstance(payload, dict) else None
-        rows: Any = None
-        if isinstance(data, dict):
-            rows = next((data[key] for key in list_keys if data.get(key)), None)
-        if not isinstance(rows, list) or not rows or rows[0] == previous_first:
+        if not isinstance(data, dict):
+            stats.problems.append(f"{PARSE_ERROR}:page{page_no}")
+            return
+        rows: Any = next((data[key] for key in list_keys if data.get(key)), None)
+        if rows is not None and not isinstance(rows, list):
+            stats.problems.append(f"{PARSE_ERROR}:page{page_no}")
+            return
+        if not rows:
+            if not any(key in data for key in list_keys):
+                stats.problems.append(f"{PARSE_ERROR}:page{page_no}")
+            return
+        if rows[0] == previous_first:
+            stats.problems.append(f"{PAGINATION_ANOMALY}:page{page_no}")
             return
         previous_first = rows[0]
         for row in rows:
@@ -98,6 +151,7 @@ def _paged(fetch, start_time: int, end_time: int, list_keys: tuple[str, ...]):
                 yield row
         if len(rows) < PAGE_SIZE:
             return
+    stats.problems.append(f"{TRUNCATED}:{MAX_PAGES}")
 
 
 def _int(val: Any) -> int:
@@ -151,6 +205,12 @@ class SyncResult:
     new_matched_orders: int = 0
     bot_orders: tuple[BotOrder, ...] = ()
     changes: int = 0  # số thay đổi đã ghi lịch sử trong lần này (PLAN-074)
+    # PLAN-080: kết quả lượt (success / partial / failed), loại lỗi, số liệu để ghi shopee_sync_runs.
+    status: str = "success"
+    category: str | None = None
+    retry_after: int | None = None
+    run_id: int | None = None
+    stats: dict = field(default_factory=dict)
 
 
 class ShopeeSyncEngine:
@@ -171,8 +231,19 @@ class ShopeeSyncEngine:
         trigger: str = "manual",
         days_back: int = 30,
         client: ShopeeAffiliateClient | None = None,
+        run_id: int | None = None,
+        heartbeat: Callable[[], bool] | None = None,
+        alert_auth: bool = True,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> SyncResult:
-        """Thực hiện đồng bộ toàn diện Clicks và Conversions."""
+        """Thực hiện đồng bộ toàn diện Clicks và Conversions.
+
+        run_id có sẵn (PLAN-080, lượt do sync_scheduler mở và giữ khoá): engine không tự đóng lượt, trả SyncResult có
+        status / category / stats để bên giữ khoá ghi. Không có run_id: tự mở và đóng lượt như trước.
+        heartbeat trả False (mất khoá) thì dừng trước trang kế tiếp. alert_auth=False: không tự báo admin cookie hết
+        hạn (bộ lập lịch báo theo sự cố, một lần).
+        """
+        owned = run_id is None
         # 1. Nạp cookie
         if client is None:
             cookies = load_cookies(self.cookie_path)
@@ -180,21 +251,29 @@ class ShopeeSyncEngine:
                 return SyncResult(
                     ok=False,
                     message="Chưa có Cookie Shopee Affiliate. Hãy vào /admin → 🔗 Shopee Affiliate để kết nối.",
+                    status="failed", category=AUTH_EXPIRED, run_id=run_id,
                 )
             client = ShopeeAffiliateClient(cookies)
 
         # 2. Kiểm tra phiên đăng nhập
         status_res = client.check_status()
         if not status_res.ok:
+            category = getattr(status_res, "category", None)
             if status_res.auth_failed:
-                self._mark_expired(status_res.error_message)
+                if category in (None, AUTH_EXPIRED):
+                    self._mark_expired(status_res.error_message, alert=alert_auth)
+                else:
+                    self.repo.update_shopee_cookie_status(status="connected", last_error=status_res.error_message)
                 return SyncResult(
                     ok=False,
                     message=f"Cookie Shopee hết hạn hoặc không hợp lệ: {status_res.error_message}",
+                    status="failed", category=category or AUTH_EXPIRED, run_id=run_id,
                 )
             # Lỗi tạm (mạng, 5xx, 429): giữ trạng thái kết nối để lần tự đồng bộ sau thử lại.
             self.repo.update_shopee_cookie_status(status="connected", last_error=status_res.error_message)
-            return SyncResult(ok=False, message=f"Chưa gọi được Shopee, sẽ thử lại sau: {status_res.error_message}")
+            return SyncResult(ok=False, message=f"Chưa gọi được Shopee, sẽ thử lại sau: {status_res.error_message}",
+                              status="failed", category=category, retry_after=getattr(status_res, "retry_after", None),
+                              run_id=run_id)
 
         self.repo.update_shopee_cookie_status(
             status="connected",
@@ -202,23 +281,46 @@ class ShopeeSyncEngine:
             last_error=None,
         )
 
-        run_id = self.repo.record_shopee_sync_run(trigger_type=trigger)
+        if owned:
+            run_id = self.repo.record_shopee_sync_run(trigger_type=trigger)
         self._run_id = run_id
         self._changes = []
+        self._counts = {"new": 0, "changed": 0, "unchanged": 0, "invalid": 0}
+        notify_mark = self.repo.notification_mark()
         now_dt = datetime.now(timezone.utc)
         end_time = int(now_dt.timestamp())
         start_time = end_time - (days_back * 86400)
+        window = {
+            "window_start": datetime.fromtimestamp(start_time, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "window_end": now_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
 
         clicks_count = 0
         conversions_count = 0
         new_matched_orders = 0
         bot_orders: list[BotOrder] = []
         failed_parts: list[str] = []
+        click_pages, order_pages = PageStats(), PageStats()
+
+        def stats() -> dict:
+            queued, skipped = self.repo.order_events_after(notify_mark)
+            return {
+                **window,
+                "pages_fetched": click_pages.pages + order_pages.pages,
+                "pages_failed": click_pages.failed + order_pages.failed,
+                "conversions_new": self._counts["new"],
+                "conversions_changed": self._counts["changed"],
+                "conversions_unchanged": self._counts["unchanged"],
+                "invalid_records": self._counts["invalid"],
+                "notifications_queued": queued,
+                "notifications_suppressed": skipped,
+                "problems": click_pages.problems + order_pages.problems,
+            }
 
         try:
             # 3. Đồng bộ Click Report
             try:
-                for item in _paged(client.fetch_clicks, start_time, end_time, ("list",)):
+                for item in _paged(client.fetch_clicks, start_time, end_time, ("list",), click_pages, heartbeat, sleep):
                     sub_id = _bot_sub_id(item.get("sub_id") or item.get("utm_content"))
                     click_time = _iso_time(item.get("click_time"))
                     raw_id = item.get("click_id") or item.get("id")
@@ -233,14 +335,17 @@ class ShopeeSyncEngine:
                     ):
                         clicks_count += 1
             except ShopeeApiError as exc:
-                if exc.status_code in (401, 403):
+                if exc.status_code in (401, 403) or getattr(exc, "category", None) in NEEDS_AUTH_CATEGORIES | {RATE_LIMITED}:
                     raise
                 logger.warning("[ShopeeSync] Đồng bộ click gặp lỗi: %s", error_brief(exc))
+                failed_parts.append("click")
+            if click_pages.problems and "click" not in failed_parts:
                 failed_parts.append("click")
 
             # 4. Đồng bộ Conversion Report
             try:
-                for item in _paged(client.fetch_conversions, start_time, end_time, ("list", "nodes")):
+                for item in _paged(client.fetch_conversions, start_time, end_time, ("list", "nodes"), order_pages,
+                                   heartbeat, sleep):
                     orders = item.get("orders")
                     if isinstance(orders, list) and orders:
                         orders = [order for order in orders if isinstance(order, dict)]
@@ -253,21 +358,31 @@ class ShopeeSyncEngine:
                         if self._process_order_item(item, item, bot_orders=bot_orders):
                             new_matched_orders += 1
             except ShopeeApiError as exc:
-                if exc.status_code in (401, 403):
+                if exc.status_code in (401, 403) or getattr(exc, "category", None) in NEEDS_AUTH_CATEGORIES | {RATE_LIMITED}:
                     raise
                 logger.warning("[ShopeeSync] Đồng bộ conversion gặp lỗi: %s", error_brief(exc))
+                failed_parts.append("đơn hàng")
+            if order_pages.problems and "đơn hàng" not in failed_parts:
                 failed_parts.append("đơn hàng")
 
             # 5. Ghi nhận hoàn thành. Một phần lỗi thì không được báo "xong".
             failed = ", ".join(failed_parts) or None
-            self.repo.complete_shopee_sync_run(
-                run_id=run_id,
-                status="partial" if failed else "success",
-                clicks=clicks_count,
-                conversions=conversions_count,
-                new_orders=new_matched_orders,
-                error=f"Lỗi phần: {failed}" if failed else None,
-            )
+            run_stats = stats()
+            category = None
+            if failed:
+                problems = run_stats["problems"]
+                category = PARSE_ERROR if any(p.startswith(PARSE_ERROR) for p in problems) else "PARTIAL_SYNC"
+            if owned:
+                self.repo.complete_shopee_sync_run(
+                    run_id=run_id,
+                    status="partial" if failed else "success",
+                    clicks=clicks_count,
+                    conversions=conversions_count,
+                    new_orders=new_matched_orders,
+                    error=f"Lỗi phần: {failed}" if failed else None,
+                    category=category,
+                    stats=run_stats,
+                )
             now_iso = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             self.repo.update_shopee_cookie_status(
                 status="connected",
@@ -284,7 +399,7 @@ class ShopeeSyncEngine:
                 msg += f" {len(self._changes)} thay đổi hoa hồng/trạng thái đã ghi lịch sử."
             if failed:
                 msg += f" ⚠️ Shopee từ chối phần {failed}, xem log bot. Đơn chưa đọc được giữ nguyên số cũ."
-            queued, skipped = self.repo.customer_events_since(now_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            queued, skipped = run_stats["notifications_queued"], run_stats["notifications_suppressed"]
             if queued or skipped:
                 msg += f" Thông báo khách: {queued} chờ gửi, {skipped} bỏ qua (xem /admin → 🔔)."
             significant = [(sn, change) for sn, change in self._changes if change.significant]
@@ -304,22 +419,47 @@ class ShopeeSyncEngine:
                 new_matched_orders=new_matched_orders,
                 bot_orders=tuple(bot_orders),
                 changes=len(self._changes),
+                status="partial" if failed else "success",
+                category=category,
+                run_id=run_id,
+                stats=run_stats,
             )
 
         except Exception as exc:
-            auth = isinstance(exc, ShopeeApiError) and exc.status_code in (401, 403)
+            category = getattr(exc, "category", None) if isinstance(exc, ShopeeApiError) else None
+            if isinstance(exc, ShopeeApiError) and category is None and exc.status_code in (401, 403):
+                category = AUTH_EXPIRED
+            lost = isinstance(exc, LeaseLost)
+            auth = category == AUTH_EXPIRED
             if auth:
-                self._mark_expired(redact(exc)[:200])
-            else:
+                self._mark_expired(redact(exc)[:200], alert=alert_auth)
+            elif category in NEEDS_AUTH_CATEGORIES:
+                self.repo.update_shopee_cookie_status(status="connected", last_error=redact(exc)[:200])
+            elif lost:
+                logger.warning("[ShopeeSync] lượt %s mất khoá, dừng ghi", run_id)
+            elif category is None:
                 logger.exception("[ShopeeSync] Lỗi không mong muốn trong quá trình đồng bộ")
-            self.repo.complete_shopee_sync_run(
-                run_id=run_id,
-                status="failed",
-                clicks=clicks_count,
-                conversions=conversions_count,
-                new_orders=new_matched_orders,
-                error=redact(exc)[:200],
-            )
+            else:
+                logger.warning("[ShopeeSync] Lượt dừng: %s", error_brief(exc))
+            run_stats = stats()
+            # Đã ghi được một phần trước khi dừng: PARTIAL, không xoá phần đã ghi.
+            wrote = conversions_count > 0 or clicks_count > 0
+            status = "partial" if wrote and not lost else "failed"
+            if lost:
+                category = "LEASE_LOST"
+            elif category is None:
+                category = "DATABASE_ERROR" if exc.__class__.__module__.startswith("sqlite3") else "UNKNOWN_ERROR"
+            if owned:
+                self.repo.complete_shopee_sync_run(
+                    run_id=run_id,
+                    status=status,
+                    clicks=clicks_count,
+                    conversions=conversions_count,
+                    new_orders=new_matched_orders,
+                    error=redact(exc)[:200],
+                    category=category,
+                    stats=run_stats,
+                )
             significant = [(sn, change) for sn, change in self._changes if change.significant]
             if significant and self.admin_notifier:
                 # Phần đã đọc được trước khi lỗi vẫn đã ghi lịch sử: báo admin như lần thành công.
@@ -331,11 +471,16 @@ class ShopeeSyncEngine:
                 clicks_synced=clicks_count,
                 conversions_synced=conversions_count,
                 new_matched_orders=new_matched_orders,
+                status=status,
+                category=category,
+                retry_after=getattr(exc, "retry_after", None),
+                run_id=run_id,
+                stats=run_stats,
             )
 
-    def _mark_expired(self, reason: str) -> None:
+    def _mark_expired(self, reason: str, alert: bool = True) -> None:
         self.repo.update_shopee_cookie_status(status="expired", last_error=reason)
-        if self.admin_notifier:
+        if alert and self.admin_notifier:
             self.admin_notifier.notify_shopee_cookie_expired(reason)
 
     def _process_order_item(
@@ -358,6 +503,11 @@ class ShopeeSyncEngine:
             or order_dict.get("order_id")
             or (f"{checkout_id}:{order_id}" if checkout_id and order_id else order_sn)
         )
+
+        if not conversion_id.strip():
+            # Không có mã đơn nào dùng được: không ghi (tránh gộp nhiều đơn vào khoá rỗng).
+            self._counts["invalid"] = self._counts.get("invalid", 0) + 1
+            return False
 
         sub_id_str = _bot_sub_id(
             order_dict.get("sub_id")
@@ -403,6 +553,9 @@ class ShopeeSyncEngine:
             sync_run_id=self._run_id,
         )
         is_new, is_matched, user_id = result.is_new, result.is_matched, result.telegram_user_id
+        counts = getattr(self, "_counts", None)
+        if counts is not None:
+            counts["new" if is_new else "changed" if result.changes else "unchanged"] += 1
         if result.changes:
             self._changes.extend((order_sn, change) for change in result.changes)
         if is_matched and bot_orders is not None:

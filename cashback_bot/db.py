@@ -536,6 +536,53 @@ BEGIN SELECT RAISE(ABORT, 'payout_limit_policies is append-only'); END;
 
 -- Tuỳ chọn thông báo của từng khách (PLAN-079). Chưa có dòng = mặc định bật; cờ toàn cục vẫn quyết định
 -- thông báo đơn hàng có được gửi hay không.
+-- PLAN-080: lịch tự đồng bộ Shopee và khoá một lượt chạy (single flight). Một dòng id = 1.
+-- Lease: lượt nào giữ lease_owner mới được gọi Shopee và ghi kết quả; hết lease_expires_at thì lượt khác thu hồi.
+CREATE TABLE IF NOT EXISTS shopee_sync_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    enabled INTEGER NOT NULL DEFAULT 0,
+    interval_minutes INTEGER,
+    paused INTEGER NOT NULL DEFAULT 0,
+    paused_at TEXT,
+    paused_by INTEGER,
+    next_due_at TEXT,
+    last_scheduled_at TEXT,
+    last_started_at TEXT,
+    last_finished_at TEXT,
+    last_success_at TEXT,
+    last_result TEXT,
+    last_run_id INTEGER,
+    last_error_category TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    needs_auth_since TEXT,
+    last_success_window_start TEXT,
+    last_success_window_end TEXT,
+    lease_owner TEXT,
+    lease_run_id INTEGER,
+    lease_trigger TEXT,
+    lease_started_at TEXT,
+    lease_expires_at TEXT,
+    heartbeat_at TEXT,
+    updated_at TEXT NOT NULL
+);
+
+-- PLAN-080: sự cố đồng bộ (cookie, lỗi liên tiếp, định dạng Shopee đổi). Một sự cố mở một lần, báo admin một lần,
+-- nhắc lại tối đa mỗi 24 giờ, báo khi phục hồi.
+CREATE TABLE IF NOT EXISTS shopee_sync_incidents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL,
+    opened_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    resolved_at TEXT,
+    failures INTEGER NOT NULL DEFAULT 1,
+    last_alert_at TEXT,
+    alerts INTEGER NOT NULL DEFAULT 0,
+    first_run_id INTEGER,
+    last_run_id INTEGER,
+    summary TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_sync_incident_open ON shopee_sync_incidents((1)) WHERE resolved_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS customer_notification_prefs (
     telegram_user_id INTEGER PRIMARY KEY,
     orders INTEGER NOT NULL DEFAULT 1,
@@ -748,6 +795,20 @@ CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_polic
 
 
 # Cột thêm cho hàng đợi gửi (PLAN-079). status: pending, sending, sent, retry, failed, suppressed, unknown.
+SYNC_RUN_COLUMNS = (
+    ("lease_owner", "TEXT"),
+    ("error_category", "TEXT"),
+    ("pages_fetched", "INTEGER NOT NULL DEFAULT 0"),
+    ("pages_failed", "INTEGER NOT NULL DEFAULT 0"),
+    ("conversions_new", "INTEGER NOT NULL DEFAULT 0"),
+    ("conversions_changed", "INTEGER NOT NULL DEFAULT 0"),
+    ("conversions_unchanged", "INTEGER NOT NULL DEFAULT 0"),
+    ("invalid_records", "INTEGER NOT NULL DEFAULT 0"),
+    ("notifications_queued", "INTEGER NOT NULL DEFAULT 0"),
+    ("notifications_suppressed", "INTEGER NOT NULL DEFAULT 0"),
+    ("window_start", "TEXT"),
+    ("window_end", "TEXT"),
+)
 NOTIFICATION_COLUMNS = (
     ("audience", "TEXT NOT NULL DEFAULT 'admin'"),
     ("category", "TEXT"),
@@ -827,7 +888,8 @@ class TrackingRepository:
 
     def connect(self) -> sqlite3.Connection:
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self.path)
+        # PLAN-080: đồng bộ chạy ở luồng nền; chờ khoá ghi lâu hơn mặc định 5 giây thay vì báo lỗi ngay.
+        conn = sqlite3.connect(self.path, timeout=15)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
@@ -873,6 +935,9 @@ class TrackingRepository:
                 "CREATE INDEX IF NOT EXISTS idx_admin_notifications_due ON admin_notifications(status, next_retry_at)"
             )
             _add_column(conn, "telegram_users", "notify_blocked_at", "TEXT")
+            # PLAN-080: số liệu từng lượt đồng bộ.
+            for column, ddl in SYNC_RUN_COLUMNS:
+                _add_column(conn, "shopee_sync_runs", column, ddl)
             # Mỗi khách tối đa một yêu cầu còn giữ tiền: chặn rút trùng ở tầng DB.
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_payout_one_open ON cashback_payouts(telegram_user_id) "
@@ -1246,16 +1311,22 @@ class TrackingRepository:
                 (reason[:120], event_id),
             )
 
-    def customer_events_since(self, since: str) -> tuple[int, int]:
-        """(chờ gửi, bỏ qua) của tin khách ghi từ mốc since. Dùng cho tin kết quả đồng bộ."""
+    def notification_mark(self) -> int:
+        """Mã dòng lớn nhất của hàng đợi: mốc để đếm tin một lượt đồng bộ sinh ra (PLAN-080)."""
+        with self.connect() as conn:
+            return int(conn.execute("SELECT COALESCE(MAX(id), 0) FROM admin_notifications").fetchone()[0])
+
+    def order_events_after(self, mark: int) -> tuple[int, int]:
+        """(chờ gửi, bỏ qua) của tin đơn hàng ghi sau mốc mark: đúng phần của lượt đồng bộ, không lẫn lượt trước."""
         with self.connect() as conn:
             row = conn.execute(
                 """
                 SELECT COALESCE(SUM(status IN ('pending', 'retry', 'sending', 'sent')), 0),
                        COALESCE(SUM(status = 'suppressed'), 0)
-                FROM admin_notifications WHERE audience = 'customer' AND created_at >= ?
+                FROM admin_notifications
+                WHERE audience = 'customer' AND id > ? AND source_ref LIKE 'conversion:%'
                 """,
-                (since,),
+                (mark,),
             ).fetchone()
         return int(row[0]), int(row[1])
 
@@ -1664,18 +1735,32 @@ class TrackingRepository:
         conversions: int,
         new_orders: int,
         error: str | None = None,
+        category: str | None = None,
+        stats: dict | None = None,
+        conn: sqlite3.Connection | None = None,
     ) -> None:
+        """Đóng một lượt. PLAN-080: thêm loại lỗi và số liệu (trang, đơn mới / đổi / không đổi, tin khách).
+
+        conn: transaction của bên giữ khoá (sync_scheduler), để kiểm tra khoá và đóng lượt trong cùng transaction.
+        """
         now = _utc_now()
-        with self.connect() as conn:
-            conn.execute(
-                """
-                UPDATE shopee_sync_runs
-                SET status = ?, clicks_synced = ?, conversions_synced = ?,
-                    new_orders_count = ?, error_message = ?, completed_at = ?
-                WHERE id = ?
-                """,
-                (status, clicks, conversions, new_orders, error, now, run_id),
-            )
+        stats = stats or {}
+        values = [stats.get(column) if column not in ("pages_fetched", "pages_failed") else int(stats.get(column) or 0)
+                  for column, _ddl in SYNC_RUN_COLUMNS if column != "lease_owner" and column != "error_category"]
+        names = [column for column, _ddl in SYNC_RUN_COLUMNS if column not in ("lease_owner", "error_category")]
+        sets = ", ".join(f"{name} = COALESCE(?, {name})" for name in names)
+        params = (status, clicks, conversions, new_orders, error, now, category, *values, run_id)
+        sql = f"""
+            UPDATE shopee_sync_runs
+            SET status = ?, clicks_synced = ?, conversions_synced = ?,
+                new_orders_count = ?, error_message = ?, completed_at = ?, error_category = ?, {sets}
+            WHERE id = ?
+        """
+        if conn is not None:
+            conn.execute(sql, params)
+            return
+        with self.connect() as own:
+            own.execute(sql, params)
 
     def get_last_sync_run(self) -> dict | None:
         with self.connect() as conn:

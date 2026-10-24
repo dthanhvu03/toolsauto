@@ -87,7 +87,9 @@ from cashback_bot.admin_ui import (
     stats_keyboard,
     stats_text,
 )
+from cashback_bot.config import AutoSyncConfig
 from cashback_bot.admin_customer_notify import CustomerNotifyAdmin
+from cashback_bot.admin_sync import AutoSyncAdmin, status_label
 from cashback_bot.admin_readiness import ReadinessAdmin
 from cashback_bot.admin_settlement import SettlementAdmin
 from cashback_bot.admin_support import SupportAdmin
@@ -101,7 +103,7 @@ from cashback_bot import policy_snapshot
 from cashback_bot.pricing import MAX_SHARE_BPS, CashbackQuote, EstimatePolicy, PolicyResolution, cashback_for
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
-from cashback_bot.shopee_sync import AUTO_SYNC_KEY, SYNC_REQUEST_KEY
+from cashback_bot.sync_scheduler import SyncCoordinator, request_manual
 
 logger = logging.getLogger("cashback_bot")
 
@@ -232,6 +234,8 @@ class AdminPanel:
     # PLAN-079: cờ CUSTOMER_NOTIFICATIONS_ENABLED, để màn 🔔 nói đúng trạng thái.
     customer_notifications_enabled: bool = False
     customer_notification_test_ids: frozenset[int] = frozenset()
+    # PLAN-080: cấu hình tự đồng bộ (.env), để màn ⏱ nói đúng và chỉ cho tạm dừng khi cờ đã bật.
+    auto_sync: AutoSyncConfig = AutoSyncConfig()
     _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang được hỏi hoa hồng giả định cho 🧮 Mô phỏng: user_id → hạn chờ.
     _sim_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
@@ -350,6 +354,8 @@ class AdminPanel:
             ).route(user_id, data, now)
         if data.startswith("c:rd:"):
             return ReadinessAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
+        if data.startswith("c:sy:"):
+            return AutoSyncAdmin(TrackingRepository(self.db_path), self.auto_sync).route(data, now)
         if data == "c:menu:shopee":
             return self._shopee_screen(now)
         if data == "c:shopee:sync":
@@ -482,8 +488,8 @@ class AdminPanel:
                 else 0
             )
 
-        auto_sync = self._auto_sync_on()
-        kb = shopee_connected_keyboard(auto_sync) if status == "connected" else SHOPEE_KEYBOARD_DISCONNECTED
+        auto_sync = status_label(TrackingRepository(self.db_path), self.auto_sync, now)
+        kb = shopee_connected_keyboard() if status == "connected" else SHOPEE_KEYBOARD_DISCONNECTED
         text = shopee_text(
             status=status,
             account_name=account_name,
@@ -497,30 +503,29 @@ class AdminPanel:
         )
         return BotReply(text, inline_keyboard=kb)
 
-    def _auto_sync_on(self) -> bool:
-        with self._connect() as conn:
-            row = conn.execute("SELECT value FROM bot_state WHERE key = ?", (AUTO_SYNC_KEY,)).fetchone()
-        return row is not None and row[0] == "1"
-
-    def _shopee_auto(self, user_id: int, on: bool, now: datetime) -> BotReply:
-        before = self._auto_sync_on()
-        if before != on:
-            with self._connect() as conn:
-                conn.execute(
-                    "INSERT INTO bot_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (AUTO_SYNC_KEY, "1" if on else "0"),
-                )
-            self._log_setting(user_id, "shopee_auto_sync", {"on": before}, {"on": on}, now)
-        notice = "🟢 Đã bật tự đồng bộ mỗi 4 giờ." if on else "⏸️ Đã tắt tự đồng bộ. Bấm 🔄 khi cần số mới."
-        return self._shopee_screen(now, notice=notice)
+    def _shopee_auto(self, user_id: int, resume: bool, now: datetime) -> BotReply:
+        """Tạm dừng / tiếp tục tự đồng bộ. Không bật được khi cờ .env tắt (không có đường vượt cờ qua Telegram)."""
+        repo = TrackingRepository(self.db_path)
+        if not self.auto_sync.enabled:
+            return AutoSyncAdmin(repo, self.auto_sync).home(
+                now, "ⓘ Tự đồng bộ đang tắt trong cấu hình. Chủ bot bật bằng SHOPEE_AUTO_SYNC_ENABLED trong .env."
+            )
+        changed = SyncCoordinator(repo, cfg=self.auto_sync, clock=lambda: now).set_paused(user_id, not resume)
+        if changed:
+            self._log_setting(user_id, "shopee_auto_sync_pause", {"paused": resume}, {"paused": not resume}, now)
+        notice = "▶️ Đã tiếp tục tự đồng bộ (lượt tới sau 5 phút)." if resume else "⏸️ Đã tạm dừng tự đồng bộ. 🔄 thủ công vẫn dùng được."
+        return AutoSyncAdmin(repo, self.auto_sync).home(now, notice)
 
     def _shopee_sync(self, now: datetime) -> BotReply:
-        # Không gọi Shopee trong lúc trả lời nút: đặt cờ, poller chạy ở vòng sau và nhắn kết quả.
-        with self._connect() as conn:
-            conn.execute(
-                "INSERT INTO bot_state (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = '1'",
-                (SYNC_REQUEST_KEY,),
-            )
+        # Không gọi Shopee trong lúc trả lời nút: xếp lượt, luồng nền chạy rồi nhắn kết quả (PLAN-080).
+        current = request_manual(TrackingRepository(self.db_path), now)
+        if current is not None:
+            run_id, trigger = current
+            label = "tự động" if trigger == "auto" else "thủ công"
+            return self._shopee_screen(now, notice=(
+                f"🔄 Shopee đang được đồng bộ {label}. Mã lượt: #{run_id}. "
+                "Bạn có thể xem tiến độ tại màn ⏱ Tự động đồng bộ."
+            ))
         return self._shopee_screen(now, notice="⏳ Đã bắt đầu đồng bộ. Xong bot sẽ nhắn kết quả.")
 
     def _shopee_csv(self, now: datetime) -> BotReply:
@@ -618,7 +623,7 @@ class AdminPanel:
             f"• Tài khoản: <b>{html.escape(status_res.username or 'Affiliate')}</b>\n"
             f"• Cookie đã lưu riêng (quyền 0600). Bot xoá tin nhắn chứa cookie khỏi chat.\n\n"
             f"Bạn có thể bấm 🔄 Đồng bộ ngay.",
-            inline_keyboard=shopee_connected_keyboard(self._auto_sync_on()),
+            inline_keyboard=shopee_connected_keyboard(),
             delete_message_id=message_id,
         )
 
@@ -1512,6 +1517,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action not in {
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
+        "shopee_auto_sync_pause",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1534,6 +1540,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         return f"Duyệt hoa hồng: đã kiểm tra cảnh báo đơn …{html.escape(str(after.get('conversion', '-'))[-4:])}"
     if action == "shopee_auto_sync":
         return "Shopee Affiliate: tự đồng bộ 4 giờ → " + ("bật" if after.get("on") else "tắt")
+    if action == "shopee_auto_sync_pause":
+        return "Shopee Affiliate: tự đồng bộ → " + ("tạm dừng" if after.get("paused") else "tiếp tục")
     return f"Shopee Affiliate: kết nối cookie ({html.escape(str(after.get('account', '-')))})"
 
 

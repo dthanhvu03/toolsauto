@@ -1,3 +1,28 @@
+## Phiên 2026-10-24 (ax) — PLAN-080 Automatic Shopee Sync (CODE READY, CHƯA triển khai)
+
+Claude Code, chủ bot giao PLAN-080. Báo cáo `reports/CASHBACK_PLAN080_AUTO_SYNC.md`, ADR-057, PLAN `agents/plans/active/PLAN-080-cashback-auto-shopee-sync.md`.
+
+- **System State:** production không đổi.
+  - `main@4712c9a` + `e3f31e7` (giao diện `/donhang`), PID 646983;
+  - thông báo đơn bật; tự đồng bộ tắt (không có `SHOPEE_AUTO_SYNC_*`, không có `bot_state.shopee_auto_sync`);
+  - 2 khoản pending 12.157đ / 960đ; ví khoá.
+- **Done** (nhánh `cursor/cashback-plan080-auto-sync`, 648 passed, ruff sạch):
+  - đồng bộ chạy ở luồng nền, khoá một lượt trong DB (lease, heartbeat, thu hồi);
+  - lịch bền UTC, giãn cách khi lỗi, chạy bù một lượt;
+  - 9 loại lỗi; NEEDS_AUTH; trang bất thường → PARTIAL;
+  - sự cố báo admin một lần, nhắc lại sau 24 giờ, báo khi phục hồi;
+  - màn ⏱ Tự động đồng bộ; nút Telegram chỉ còn tạm dừng / tiếp tục khi cờ bật.
+- **Diễn tập:** trên bản sao DB production đạt (mục 16 báo cáo). Code cũ chạy được trên schema mới.
+- **Unfinished / Blockers:**
+  - chờ chủ bot duyệt Gate A (deploy, cờ tắt);
+  - Gate B cần duyệt riêng;
+  - quyết định khung quét > 30 ngày cho đơn còn chờ xác minh.
+- **Next:**
+  1. Chủ bot duyệt Gate A → backup, merge, test, push → chủ bot restart → kiểm tra theo mục 19 báo cáo.
+  2. Gate B: bấm 🔄 kiểm tra nguồn → thêm `SHOPEE_AUTO_SYNC_ENABLED=1` → restart → theo dõi 24–48 giờ.
+
+---
+
 ## Phiên 2026-10-24 (aw) — Gửi tin giới thiệu thông báo đơn cho 2 khách có đơn
 
 Chủ bot duyệt nội dung ("gửi").

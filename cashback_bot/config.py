@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -21,6 +22,23 @@ class ConfigError(Exception):
     def __init__(self, missing: list[str]):
         self.missing = missing
         super().__init__("Thiếu cấu hình: " + ", ".join(missing))
+
+
+# PLAN-080: chu kỳ tự đồng bộ trong khoảng này; dưới 60 phút không cho (tránh gọi Shopee liên tục).
+MIN_INTERVAL_MINUTES = 60
+MAX_INTERVAL_MINUTES = 1440
+
+
+@dataclass(frozen=True)
+class AutoSyncConfig:
+    enabled: bool = False
+    interval_minutes: int = 120
+    max_runtime_seconds: int = 600
+    failure_threshold: int = 3
+
+    @property
+    def interval(self) -> timedelta:
+        return timedelta(minutes=self.interval_minutes)
 
 
 @dataclass(frozen=True)
@@ -55,6 +73,8 @@ class Settings:
     customer_notifications_enabled: bool = False
     # Gate B thử nghiệm: có danh sách thì tin đơn chỉ gửi cho các tài khoản này (CUSTOMER_NOTIFICATIONS_TEST_IDS).
     customer_notification_test_ids: frozenset[int] = frozenset()
+    # PLAN-080: tự đồng bộ Shopee. Mặc định TẮT; chỉ chủ bot bật trong .env (Gate B).
+    auto_sync: AutoSyncConfig = AutoSyncConfig()
 
 
 def _flag(raw: str | None) -> bool:
@@ -152,6 +172,13 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         customer_notifications_enabled=_flag(env.get("CUSTOMER_NOTIFICATIONS_ENABLED")),
         customer_notification_test_ids=_allowed_ids(
             env.get("CUSTOMER_NOTIFICATIONS_TEST_IDS"), "CUSTOMER_NOTIFICATIONS_TEST_IDS"
+        ),
+        auto_sync=AutoSyncConfig(
+            enabled=_flag(env.get("SHOPEE_AUTO_SYNC_ENABLED")),
+            interval_minutes=_bounded_int(env, "SHOPEE_AUTO_SYNC_INTERVAL_MINUTES", 120, MIN_INTERVAL_MINUTES,
+                                          MAX_INTERVAL_MINUTES),
+            max_runtime_seconds=_bounded_int(env, "SHOPEE_AUTO_SYNC_MAX_RUNTIME_SECONDS", 600, 120, 3600),
+            failure_threshold=_bounded_int(env, "SHOPEE_AUTO_SYNC_FAILURE_THRESHOLD", 3, 1, 20),
         ),
     )
 
