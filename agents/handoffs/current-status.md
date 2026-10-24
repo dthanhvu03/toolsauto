@@ -1,3 +1,23 @@
+## Phiên 2026-10-24 (bf) — PLAN-082 kênh Zalo: code + test + diễn tập, đã lên main (chờ chủ bot khởi động)
+
+Chủ bot: "triển khai em viết em làm toàn như các báo cáo vừa làm hôm nay". Báo cáo `reports/CASHBACK_PLAN082_ZALO.md`, PLAN `agents/plans/active/PLAN-082-cashback-zalo-channel.md`.
+
+- **Backup:** `cashback-20261024T152104Z.sqlite` (45 bảng, 38 link).
+- **Code:** `main@6fa5a38`, 689 passed, ruff sạch.
+  - Tiến trình riêng `cashback_bot.zalo_bot`, ID nội bộ âm (`channel_identities`), hộp thư `zalo_inbox`.
+  - Nút Telegram → gõ số; URL trần; style UTF-16.
+  - `Dispatcher(channel=)`: bot Telegram không lấy tin của khách Zalo.
+- **Diễn tập** trên bản sao DB (đã xoá): 6 tin Zalo `replied`; +1 link (ID −1); ví / đơn / lệnh chi +0; hàng tin Telegram không đổi; `gate_b_check` OK.
+- **System State:** production vẫn chạy PID 675442 bản cũ; chưa có tiến trình Zalo.
+- **Next:**
+  1. chủ bot restart bot Telegram **trước**;
+  2. khởi động `cashback_bot.zalo_bot` (log `logs/cashback_zalo.log`);
+  3. chủ bot nhắn `menu`, link (bấm ✕), `don`;
+  4. kiểm tra log + `gate_b_check`;
+  5. sau 1–2 ngày thử bot tự nhắn trước.
+
+---
+
 ## Phiên 2026-10-24 (be) — Nghiên cứu bot Zalo + thử thật với token (chỉ thử, chưa code)
 
 Chủ bot muốn chạy bot song song trên Zalo. Báo cáo `reports/CASHBACK_ZALO_BOT_RESEARCH.md`.
