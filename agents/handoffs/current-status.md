@@ -1,3 +1,18 @@
+## Phiên 2026-10-24 (aj) — Đã triển khai PLAN-076 Pricing & Policy Consistency
+
+Claude Code, chủ bot duyệt phát hành kèm mục 2 («Admin còn») và mục 3 (nhập số tự do ở Mô phỏng, huỷ lịch hẹn). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN076.md`.
+
+- Bổ sung trước khi phát hành (`810acc5`): «Admin còn» = HH − khách − dự phòng phí − dự phòng thuế trên mọi màn; ✏️ Nhập số khác ở Mô phỏng (RAM, 10 phút, không ghi DB); huỷ chính sách đã hẹn giờ chỉ trước mốc (`policy_cancellations` chỉ thêm, CHECK `cancelled_at < effective_at`, audit). 490 passed.
+- Backup trước triển khai: `data/backups/cashback-20261024T045217Z.sqlite` (verify ok, 32 link).
+- `main` fast-forward `a9ff267` → `810acc5`, 490 passed, đã push. Chủ bot restart 04:56:23 UTC, PID 612405.
+- Sau triển khai: `backfilled=31 unresolved=0`, 0 lệch quote ↔ snapshot; 2 khoản pending giữ 12.157đ / 960đ; conversion không đổi; khoá tài chính còn nguyên (ví 0, 0 available, 0 payout); log 0 lỗi, 0 token. Trigger chỉ-thêm của `share_policies`/`reserve_policies` tạo ở lần mở kết nối admin đầu tiên (đã xác nhận trên bản sao). PLAN-076 đã chuyển sang `agents/plans/archive/`.
+
+Next:
+- Chủ bot gửi mẫu chứng từ thật (Thanh toán, sao kê, Xác thực) cho parser + APPROVED có chứng từ.
+- Quyết định thuế người nhận, chính sách thu hồi; sau đó nối đối soát vào khoá, mở ví có điều kiện.
+
+---
+
 ## Phiên 2026-10-24 (ai) — PLAN-076 Pricing & Policy Consistency (code + test xong, CHƯA triển khai)
 
 Claude Code, chủ bot giao PLAN-076. Worktree `/home/vu/toolsauto-cashback-pricing`, nhánh `cursor/cashback-plan076-pricing`. Báo cáo: `reports/CASHBACK_PLAN076_PRICING.md`, ADR-053.

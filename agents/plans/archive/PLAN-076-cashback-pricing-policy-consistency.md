@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **CHỦ BOT DUYỆT PHÁT HÀNH 2026-10-24**, kèm «Admin còn», nhập số tự do ở Mô phỏng, huỷ lịch hẹn (đã làm) |
+| Trạng thái | **DONE, ĐÃ TRIỂN KHAI 2026-10-24 (`810acc5`, PID 612405). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN076.md`** |
 | Executor | Claude Code (chủ bot giao trực tiếp ngày 2026-10-24) |
 | Đầu vào | PLAN-073/074/075, `main@a9ff267` (code production `6dc2dd1`), ADR-045/047/048 |
 | Nhánh | `cursor/cashback-plan076-pricing`, worktree `/home/vu/toolsauto-cashback-pricing` |

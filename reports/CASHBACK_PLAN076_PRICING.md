@@ -7,7 +7,7 @@
 | Nhánh | `cursor/cashback-plan076-pricing`, tách từ `main@a9ff267` (code production `6dc2dd1`) |
 | Worktree | `/home/vu/toolsauto-cashback-pricing` |
 | ADR | ADR-053 (mới) |
-| Trạng thái | **Chủ bot duyệt phát hành 2026-10-24**, kèm yêu cầu làm mục 20.2 («Admin còn») và 20.3 (nhập số tự do, huỷ lịch hẹn). Hai mục đã làm (mục 21). Chi tiết triển khai: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN076.md` |
+| Trạng thái | **Chủ bot duyệt phát hành 2026-10-24**, kèm yêu cầu làm mục 20.2 («Admin còn») và 20.3 (nhập số tự do, huỷ lịch hẹn). Hai mục đã làm (mục 21). **Đã triển khai 2026-10-24** tại `810acc5`, PID 612405. Chi tiết: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN076.md` |
 
 ---
 
@@ -386,7 +386,7 @@ Quỹ 100.000đ                                                 V1.2    V1.1
 | Migration | **GO** | idempotent, chỉ thêm; diễn tập trên bản sao thật, hash bảng cũ không đổi |
 | Regression | **GO** | 456/456 |
 | Financial Lock | **GO** | không đổi; đã kiểm tra trong test và trên bản sao |
-| Production Deployment | **NOT AUTHORIZED** | chờ chủ bot duyệt phát hành riêng |
+| Production Deployment | **GO, đã triển khai** | chủ bot duyệt 2026-10-24; kiểm tra sau triển khai đạt |
 | Wallet Activation | **NOT AUTHORIZED** | |
 | Payout | **NOT AUTHORIZED** | |
 
