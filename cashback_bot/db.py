@@ -322,6 +322,104 @@ BEGIN SELECT RAISE(ABORT, 'link_policy_snapshots is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS link_policy_snapshots_no_delete BEFORE DELETE ON link_policy_snapshots
 BEGIN SELECT RAISE(ABORT, 'link_policy_snapshots is append-only'); END;
 
+-- Điều khoản khách theo phiên bản (PLAN-077, ADR-054). Nội dung chỉ sửa được khi còn DRAFT.
+-- Trạng thái chỉ đi DRAFT → PUBLISHED → SUPERSEDED. Bản đã công bố không xoá được.
+CREATE TABLE IF NOT EXISTS customer_terms_versions (
+    id INTEGER PRIMARY KEY,
+    version TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('DRAFT', 'PUBLISHED', 'SUPERSEDED')),
+    effective_from TEXT,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    approved_by TEXT,
+    published_at TEXT,
+    CHECK (status = 'DRAFT' OR (effective_from IS NOT NULL AND approved_by IS NOT NULL AND published_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_one_published ON customer_terms_versions(status) WHERE status = 'PUBLISHED';
+CREATE TRIGGER IF NOT EXISTS terms_content_frozen BEFORE UPDATE OF version, title, content, content_hash ON customer_terms_versions
+WHEN OLD.status != 'DRAFT'
+BEGIN SELECT RAISE(ABORT, 'published terms are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS terms_status_forward BEFORE UPDATE OF status ON customer_terms_versions
+WHEN NOT ((OLD.status = 'DRAFT' AND NEW.status IN ('DRAFT', 'PUBLISHED'))
+       OR (OLD.status = 'PUBLISHED' AND NEW.status IN ('PUBLISHED', 'SUPERSEDED'))
+       OR (OLD.status = 'SUPERSEDED' AND NEW.status = 'SUPERSEDED'))
+BEGIN SELECT RAISE(ABORT, 'terms status only moves forward'); END;
+CREATE TRIGGER IF NOT EXISTS terms_publish_frozen BEFORE UPDATE OF effective_from, approved_by, published_at ON customer_terms_versions
+WHEN OLD.status != 'DRAFT'
+BEGIN SELECT RAISE(ABORT, 'published terms are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS terms_no_delete BEFORE DELETE ON customer_terms_versions
+WHEN OLD.status != 'DRAFT'
+BEGIN SELECT RAISE(ABORT, 'published terms are immutable'); END;
+
+-- Chấp thuận điều khoản: chỉ ghi khi khách bấm đồng ý. Một khách một dòng mỗi phiên bản. Chỉ thêm.
+CREATE TABLE IF NOT EXISTS customer_terms_acceptances (
+    id INTEGER PRIMARY KEY,
+    telegram_user_id INTEGER NOT NULL,
+    terms_version_id INTEGER NOT NULL REFERENCES customer_terms_versions(id),
+    terms_hash TEXT NOT NULL,
+    acceptance_source TEXT NOT NULL,
+    accepted_at TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    UNIQUE (telegram_user_id, terms_version_id)
+);
+CREATE TRIGGER IF NOT EXISTS terms_acceptances_no_update BEFORE UPDATE ON customer_terms_acceptances
+BEGIN SELECT RAISE(ABORT, 'customer_terms_acceptances is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS terms_acceptances_no_delete BEFORE DELETE ON customer_terms_acceptances
+BEGIN SELECT RAISE(ABORT, 'customer_terms_acceptances is append-only'); END;
+
+-- Điều khoản đang công bố lúc tạo link, tách khỏi snapshot tiền (link_policy_snapshots). Link trước PLAN-077
+-- không có dòng: LEGACY / NOT_RECORDED. terms_version_id NULL: lúc tạo link chưa có điều khoản công bố.
+CREATE TABLE IF NOT EXISTS link_terms_context (
+    link_id INTEGER PRIMARY KEY REFERENCES link_requests(id),
+    terms_version_id INTEGER REFERENCES customer_terms_versions(id),
+    acceptance_id INTEGER REFERENCES customer_terms_acceptances(id),
+    recorded_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS link_terms_context_no_update BEFORE UPDATE ON link_terms_context
+BEGIN SELECT RAISE(ABORT, 'link_terms_context is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS link_terms_context_no_delete BEFORE DELETE ON link_terms_context
+BEGIN SELECT RAISE(ABORT, 'link_terms_context is append-only'); END;
+
+-- Yêu cầu hỗ trợ / khiếu nại (PLAN-077). Ticket không chạm tiền: không có cột hay đường nào đổi hoa hồng,
+-- trạng thái duyệt, sổ ví hay payout. source_update_id chặn tạo trùng khi Telegram gửi lại cùng update.
+CREATE TABLE IF NOT EXISTS support_tickets (
+    id INTEGER PRIMARY KEY,
+    telegram_user_id INTEGER NOT NULL,
+    category TEXT NOT NULL,
+    link_id INTEGER REFERENCES link_requests(id),
+    conversion_id TEXT,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN (
+        'OPEN', 'IN_REVIEW', 'WAITING_CUSTOMER', 'WAITING_SHOPEE', 'RESOLVED', 'REJECTED', 'CLOSED')),
+    assigned_to INTEGER,
+    resolution TEXT,
+    source_update_id INTEGER UNIQUE,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets(telegram_user_id);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
+CREATE TABLE IF NOT EXISTS support_ticket_events (
+    id INTEGER PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES support_tickets(id),
+    actor TEXT NOT NULL,
+    action TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT,
+    note TEXT,
+    source_update_id INTEGER UNIQUE,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS support_ticket_events_no_update BEFORE UPDATE ON support_ticket_events
+BEGIN SELECT RAISE(ABORT, 'support_ticket_events is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS support_ticket_events_no_delete BEFORE DELETE ON support_ticket_events
+BEGIN SELECT RAISE(ABORT, 'support_ticket_events is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS support_tickets_no_delete BEFORE DELETE ON support_tickets
+BEGIN SELECT RAISE(ABORT, 'support tickets are kept for audit'); END;
+
 -- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
 -- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
 CREATE TABLE IF NOT EXISTS failed_updates (
@@ -597,11 +695,12 @@ class TrackingRepository:
             ).fetchone()
         return found is not None
 
-    def insert_created(self, fields: dict, snapshot: dict | None = None) -> int:
-        """snapshot: dòng link_policy_snapshots (không có link_id). Ghi cùng transaction với link."""
+    def insert_created(self, fields: dict, snapshot: dict | None = None, terms: dict | None = None) -> int:
+        """snapshot: dòng link_policy_snapshots; terms: dòng link_terms_context (cả hai chưa có link_id).
+        Ghi cùng transaction với link."""
         fields = dict(fields)
         fields["delivery_status"] = "pending"
-        return self._insert(fields, snapshot)
+        return self._insert(fields, snapshot, terms)
 
     def insert_rejected(self, fields: dict) -> int:
         fields = dict(fields)
@@ -610,7 +709,7 @@ class TrackingRepository:
         fields.setdefault("affiliate_url", None)
         return self._insert(fields)
 
-    def _insert(self, fields: dict, snapshot: dict | None = None) -> int:
+    def _insert(self, fields: dict, snapshot: dict | None = None, terms: dict | None = None) -> int:
         columns = [
             "telegram_update_id",
             "telegram_user_id",
@@ -647,6 +746,12 @@ class TrackingRepository:
             link_id = int(cursor.lastrowid)
             if snapshot is not None:
                 insert_snapshot(conn, link_id, snapshot)
+            if terms is not None:
+                row = {"link_id": link_id, **terms}
+                conn.execute(
+                    f"INSERT INTO link_terms_context ({', '.join(row)}) VALUES ({', '.join('?' for _ in row)})",
+                    list(row.values()),
+                )
             return link_id
 
     def get_offset(self) -> int:

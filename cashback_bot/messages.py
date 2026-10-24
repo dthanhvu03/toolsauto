@@ -53,7 +53,7 @@ SHORT_DESCRIPTION = "Dán link Shopee, xem số tiền hoàn dự kiến. Bot đ
 
 
 def home_keyboard(show_rank: bool = False, show_wallet: bool = False) -> Keyboard:
-    second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"),)
+    second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"), ("📩 Hỗ trợ", "u:p:support"))
     if show_rank:
         second += (("🏅 Hạng thành viên", "u:p:rank"),)
     rows: Keyboard = (
@@ -92,6 +92,7 @@ BOT_COMMANDS = (
     ("huongdan", "Cách dùng"),
     ("dieukien", "Để đơn được ghi nhận"),
     ("cachtinh", "Cách tính tiền hoàn"),
+    ("hotro", "Hỗ trợ & khiếu nại"),
     ("help", "Trợ giúp"),
 )
 # Chỉ đăng ký với scope chat của từng admin.
@@ -435,3 +436,123 @@ def payout_notice(payout, paid: bool) -> str:
         f"Số tiền {amount} đã trở lại ví. Bạn kiểm tra lại tài khoản nhận tiền rồi rút lại, "
         "hoặc nhắn admin để biết lý do."
     )
+
+
+# --- Điều khoản theo phiên bản (PLAN-077) ---------------------------------------------------------
+
+def _vn_stamp(stamp: str | None) -> str:
+    if not stamp:
+        return "-"
+    moment = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    return moment.astimezone(ICT).strftime("%d/%m/%Y")
+
+
+def terms_home_reply(version, accepted_at: str | None) -> BotReply:
+    """/dieukien khi có bản điều khoản đang công bố. Xem không phải đồng ý: nút đồng ý tách riêng."""
+    lines = [
+        f"📋 <b>{html.escape(version.title)}</b>",
+        f"Phiên bản <b>{html.escape(version.version)}</b> · hiệu lực từ {_vn_stamp(version.effective_from)}",
+        "",
+        "Bấm từng mục để đọc. " + (
+            f"✅ Bạn đã đồng ý phiên bản này ngày {_vn_stamp(accepted_at)}."
+            if accepted_at
+            else "Bạn chưa xác nhận phiên bản này. Đọc xong, nếu đồng ý thì bấm nút cuối."
+        ),
+        "",
+        "ⓘ Ví hoàn tiền và chi trả chưa mở. Số hoàn trên link là dự kiến.",
+    ]
+    rows: list[tuple[tuple[str, str], ...]] = [((label, f"u:t:s:{key}"),) for key, label, _body in version.sections]
+    if not accepted_at:
+        rows.append((("✅ Tôi đã đọc và đồng ý", f"u:t:ok:{version.id}"),))
+    rows.append((("📩 Hỗ trợ", "u:p:support"), ("◀️ Trang chủ", "u:p:home")))
+    return BotReply("\n".join(lines), inline_keyboard=tuple(rows))
+
+
+def terms_section_reply(version, key: str) -> BotReply | None:
+    found = version.section(key)
+    if found is None:
+        return None
+    _key, label, body = found
+    text = f"<b>{html.escape(label)}</b> · phiên bản {html.escape(version.version)}\n\n{body}"
+    return BotReply(text, inline_keyboard=((("◀️ Điều khoản", "u:p:rules"),),))
+
+
+TERMS_REQUIRED = (
+    "📋 <b>Cần xác nhận điều khoản</b>\n"
+    "Trước khi tạo link mới, bạn đọc điều khoản hiện hành và bấm đồng ý.\n"
+    "Đơn và yêu cầu hỗ trợ cũ của bạn vẫn xem được bình thường."
+)
+
+
+# --- Hỗ trợ và khiếu nại (PLAN-077) ---------------------------------------------------------------
+
+SUPPORT_HOME = (
+    "📩 <b>Hỗ trợ và khiếu nại</b>\n\n"
+    "Chọn vấn đề, rồi mô tả ngắn gọn. Nếu có, ghi kèm mã đơn Shopee hoặc mã theo dõi của link "
+    "(8 ký tự, ví dụ trong tin bot gửi).\n\n"
+    "ⓘ Bot không bao giờ hỏi mật khẩu, OTP, cookie Shopee hay thông tin thẻ. Đừng gửi những thông tin này."
+)
+SUPPORT_ASK = (
+    "✍️ <b>{category}</b>\n\n"
+    "Gửi một tin mô tả vấn đề (tối đa 1.000 ký tự): bạn mua gì, khoảng ngày nào, mã đơn nếu có.\n"
+    "Bot chờ trong 15 phút."
+)
+SUPPORT_REPLY_ASK = "✍️ <b>Bổ sung cho yêu cầu #{ticket}</b>\nGửi một tin (tối đa 1.000 ký tự). Bot chờ trong 15 phút."
+SUPPORT_EMPTY = "Chưa đọc được nội dung. Gửi lại một tin bằng chữ nhé."
+SUPPORT_CLOSED = "Yêu cầu này đã kết thúc. Nếu cần, bạn mở yêu cầu mới trong /hotro."
+
+
+def support_home_reply(categories: dict[str, str], has_tickets: bool, notice: str = "") -> BotReply:
+    rows = [((label, f"u:h:c:{code}"),) for code, label in categories.items()]
+    if has_tickets:
+        rows.append((("🗂 Yêu cầu của tôi", "u:h:mine"),))
+    rows.append((("◀️ Trang chủ", "u:p:home"),))
+    text = (f"{notice}\n\n" if notice else "") + SUPPORT_HOME
+    return BotReply(text, inline_keyboard=tuple(rows))
+
+
+def support_prompt_reply(text: str) -> BotReply:
+    return BotReply(text, inline_keyboard=((("✖️ Hủy", "u:p:support"),),))
+
+
+def support_created_reply(ticket, status_label: str, is_new: bool) -> BotReply:
+    head = "✅ <b>Đã nhận yêu cầu</b>" if is_new else "ℹ️ <b>Yêu cầu này đã được ghi trước đó</b>"
+    text = (
+        f"{head} #{ticket.id}\n"
+        f"Trạng thái: {status_label}\n\n"
+        "Người vận hành sẽ kiểm tra và trả lời qua bot. Việc phụ thuộc Shopee có thể mất thời gian; "
+        "bot chưa cam kết thời hạn cụ thể."
+    )
+    return BotReply(text, inline_keyboard=((("🗂 Yêu cầu của tôi", "u:h:mine"), ("◀️ Trang chủ", "u:p:home")),))
+
+
+def support_list_reply(tickets, categories: dict[str, str], statuses: dict[str, str]) -> BotReply:
+    if not tickets:
+        return BotReply("🗂 Bạn chưa có yêu cầu nào.", inline_keyboard=((("◀️ Hỗ trợ", "u:p:support"),),))
+    lines = ["🗂 <b>Yêu cầu của tôi</b> (5 gần nhất)", ""]
+    rows = []
+    for ticket in tickets:
+        lines.append(f"#{ticket.id} · {categories.get(ticket.category, ticket.category)} · {statuses.get(ticket.status, ticket.status)}")
+        rows.append(((f"#{ticket.id} · {statuses.get(ticket.status, ticket.status)}", f"u:h:t:{ticket.id}"),))
+    rows.append((("◀️ Hỗ trợ", "u:p:support"),))
+    return BotReply("\n".join(lines), inline_keyboard=tuple(rows))
+
+
+def support_ticket_reply(ticket, categories, statuses, replies: list[tuple[str, str]], can_reply: bool) -> BotReply:
+    """replies: (người nói, nội dung) đã làm sạch; chỉ gồm trao đổi với chính khách này."""
+    lines = [
+        f"🎫 <b>Yêu cầu #{ticket.id}</b>",
+        f"{categories.get(ticket.category, ticket.category)} · {statuses.get(ticket.status, ticket.status)}",
+        f"Gửi ngày {_vn_stamp(ticket.created_at)}",
+        "",
+        f"<i>{html.escape(ticket.message[:400])}</i>",
+    ]
+    if ticket.resolution:
+        lines += ["", f"Kết luận: {html.escape(ticket.resolution)}"]
+    for who, text in replies[-4:]:
+        lines += ["", f"<b>{who}:</b> {html.escape(text[:400])}"]
+    rows = []
+    if can_reply:
+        rows.append((("✍️ Bổ sung thông tin", f"u:h:r:{ticket.id}"),))
+    rows.append((("🗂 Yêu cầu của tôi", "u:h:mine"), ("◀️ Trang chủ", "u:p:home")))
+    return BotReply("\n".join(lines), inline_keyboard=tuple(rows))

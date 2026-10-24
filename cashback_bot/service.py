@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, new_sub_id
 from cashback_bot.config import Settings
+from cashback_bot.customer_desk import CustomerDesk
 from cashback_bot import policy_snapshot
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import LinkRow, TrackingRepository
@@ -18,7 +19,6 @@ from cashback_bot.messages import (
     CLOSED,
     CLOSED_ALERT,
     GENERIC_FAIL,
-    DIEUKIEN,
     HUONGDAN,
     NOT_FOUND,
     STALE,
@@ -88,6 +88,7 @@ class CashbackService:
         self.client = client
         self.admin_notifier = admin_notifier
         self.wallet = Wallet(repo)
+        self.desk = CustomerDesk(repo, admin_notifier, terms_required=settings.terms_required)
         policy = self._estimate_policy() if self._v12_ready() else None
         calculator = "V1.2" if policy else "V1.1, chưa bật V1.2"
         self.admin_panel = AdminPanel(
@@ -171,7 +172,10 @@ class CashbackService:
             return None
         data = str(callback.get("data") or "")
         if data.startswith("u:"):
-            reply = self._customer_callback(user_id, data, str(chat.get("type") or ""))
+            chat_id = chat.get("id")
+            reply = self._customer_callback(
+                user_id, data, str(chat.get("type") or ""), chat_id if isinstance(chat_id, int) else None
+            )
         else:
             reply = self.admin_panel.handle_callback(
                 user_id,
@@ -185,13 +189,17 @@ class CashbackService:
             edit_message_id=message_id if isinstance(message_id, int) else None,
         )
 
-    def _customer_callback(self, user_id: int, data: str, chat_type: str) -> BotReply:
+    def _customer_callback(self, user_id: int, data: str, chat_type: str, chat_id: int | None = None) -> BotReply:
         if chat_type != "private":
             return BotReply("")
         if not self.allowed(user_id):
             return BotReply("", toast=CLOSED_ALERT, show_alert=True)
         if not data.startswith("u:w:bk:"):
             self._set_bank_waiting(user_id, None)
+        desk = self.desk.callback(user_id, chat_id, data, datetime.now(timezone.utc))
+        if desk is not None:
+            return desk
+        self.desk.clear(user_id)
         if data == "u:tip":
             return BotReply("", toast=TIP_ALERT, show_alert=True)
         if data.startswith("u:w:"):
@@ -209,7 +217,9 @@ class CashbackService:
         if name == "guide":
             return page_reply(HUONGDAN)
         if name == "rules":
-            return page_reply(DIEUKIEN)
+            return self.desk.rules_page(user_id, datetime.now(timezone.utc))
+        if name == "support" and user_id is not None:
+            return self.desk.support_page(user_id)
         if name == "calc":
             if wallet.enabled:
                 return page_reply(how_to_calc(self._v12_ready(), wallet.hold_days, wallet.min_withdraw_vnd))
@@ -389,13 +399,25 @@ class CashbackService:
         if not self.allowed(telegram_user_id):
             return BotReply(CLOSED)
 
-        pages = {"/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank", "/vi": "wallet"}
+        pages = {
+            "/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank", "/vi": "wallet",
+            "/hotro": "support",
+        }
         if command:
             self._set_bank_waiting(telegram_user_id, None)
+            self.desk.clear(telegram_user_id)
         if command in pages:
             return self._page(pages[command], telegram_user_id)
         if command:
             return self._page("home")
+        only_link = parse_shopee_target(stripped) is not None and len(stripped.split()) == 1
+        if not only_link:
+            # Đang chờ nội dung yêu cầu hỗ trợ: mọi tin (kể cả kèm link) là nội dung ticket.
+            desk = self.desk.consume_text(telegram_user_id, username, stripped, now or datetime.now(timezone.utc), update_id)
+            if desk is not None:
+                return desk
+        else:
+            self.desk.clear(telegram_user_id)
         waiting_bank = self._bank_waiting(telegram_user_id)
         if waiting_bank and parse_shopee_target(stripped) is not None:
             # Đang khai ngân hàng mà dán link Shopee: khách muốn mua, bỏ chờ và tạo link như thường.
@@ -407,8 +429,12 @@ class CashbackService:
         if not self._within_rate_limit(telegram_user_id, moment):
             return rate_limited_reply(self.settings.user_cooldown_sec)
         if target is None:
-            self._reject(update_id, telegram_user_id, stripped[:500], "invalid_link")
+            # Tin không phải link sản phẩm: không lưu nội dung (PLAN-077, dữ liệu tối thiểu), chỉ lưu độ dài.
+            self._reject(update_id, telegram_user_id, f"[không phải link · {len(stripped)} ký tự]", "invalid_link")
             return invalid_link_reply()
+        gate = self.desk.terms_gate(telegram_user_id, moment)
+        if gate is not None:
+            return gate
         try:
             payload = self.client.fetch(target)
             quote = quote_from_payload(payload, moment, self.settings.product_max_age_hours)
@@ -488,6 +514,7 @@ class CashbackService:
                     "reject_reason": None,
                 },
                 snapshot=self._snapshot_record(resolution, priced),
+                terms=self.desk.link_terms(telegram_user_id, moment) if self._snapshots_on else None,
             )
         except sqlite3.IntegrityError:
             logger.error("[Cashback] db integrity item=%s", quote.item_id)

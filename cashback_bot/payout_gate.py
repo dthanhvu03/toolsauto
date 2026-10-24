@@ -6,7 +6,8 @@ Không phát sinh nghĩa vụ chi trả khi chưa có bằng chứng Shopee đã
   thuế người nhận đã duyệt, mỗi bảng ít nhất một dòng. Hai bảng này chưa có trên production
   (DDL nháp ở `migrations/007_settlement_evidence.DRAFT.sql`), nên mặc định luôn KHOÁ.
 - `entry_payable`: điều kiện từng khoản. Không gian lận, có tháng duyệt, tháng đó đã nằm trong
-  một kỳ Shopee đã trả.
+  một kỳ Shopee đã trả, và link có snapshot chính sách chứng minh được (PLAN-077: link `unresolved`
+  hoặc chưa có snapshot không bao giờ payable).
 - `payout_headroom`: tổng đã chi + đang yêu cầu không vượt tổng tiền Shopee đã trả.
 
 Không có công tắc nào để admin bỏ qua. Trigger SQLite trong `db.SCHEMA` chặn thêm ở tầng DB.
@@ -26,6 +27,7 @@ TAX_POLICY_TABLE = "payout_tax_policies"
 
 REASON_SETTLEMENT = "Chưa có bằng chứng kỳ Shopee đã thanh toán hoa hồng (đối soát tiền về)."
 REASON_TAX = "Chưa chốt chính sách thuế cho người nhận tiền hoàn."
+PROVEN_SNAPSHOTS = ("captured", "backfilled")
 
 
 class PayoutBlocked(RuntimeError):
@@ -50,6 +52,17 @@ def _has_rows(conn: sqlite3.Connection, table: str, tables: set[str]) -> bool:
     if table not in tables:
         return False
     return conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None
+
+
+def proven_policy(conn: sqlite3.Connection, link_id: int | None) -> bool:
+    """Link có snapshot chính sách đã ghi và dựng được (captured / backfilled). Thiếu hoặc unresolved: False.
+
+    Không chứng minh được chính sách gốc thì không xác nhận được số tiền, nên không cho vào ví.
+    """
+    if link_id is None or "link_policy_snapshots" not in _tables(conn):
+        return False
+    row = conn.execute("SELECT provenance FROM link_policy_snapshots WHERE link_id = ?", (link_id,)).fetchone()
+    return row is not None and row[0] in PROVEN_SNAPSHOTS
 
 
 def is_fraud(raw_json: str | None) -> bool:
@@ -97,6 +110,7 @@ class FinancialGate:
         validation_month: str | None,
         raw_json: str | None,
         validation_status: str | None = None,
+        link_id: int | None = None,
     ) -> bool:
         """Khoản này đã được Shopee duyệt và trả chưa. Thiếu bất kỳ bằng chứng nào thì False.
 
@@ -104,6 +118,8 @@ class FinancialGate:
         còn cần kỳ Shopee đã trả (settlement, PLAN-075).
         """
         if validation_status != APPROVED:
+            return False
+        if not proven_policy(conn, link_id):
             return False
         if not self.readiness(conn).ok or not validation_month or is_fraud(raw_json):
             return False

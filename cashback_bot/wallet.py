@@ -323,7 +323,8 @@ class Wallet:
                     done = _parse(completed_at) or now
                     eligible_at = _stamp(done + hold)
                     payable = eligible_at <= now_text and self.gate.entry_payable(
-                        conn, row["validation_month"], row["raw_json"], row["validation_status"]
+                        conn, row["validation_month"], row["raw_json"], row["validation_status"],
+                        link_id=row["matched_link_id"],
                     )
                     status = "available" if payable else "holding"
                     available_at = eligible_at if payable else None

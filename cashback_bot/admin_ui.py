@@ -25,6 +25,8 @@ MENU_KEYBOARD: Keyboard = (
     (("💰 Chính sách", "c:menu:policy"), ("🎖️ Hạng thành viên", "c:menu:rank")),
     (("🧾 Thuế & phí", "c:menu:fee"), ("🧮 Mô phỏng", "c:menu:sim")),
     (("📊 Lịch sử", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
+    (("📩 Hỗ trợ", "c:hp:home"), ("📋 Điều khoản", "c:tm:home")),
+    (("⚖️ Sẵn sàng chi trả", "c:rd:home"),),
 )
 
 NAV_KEYBOARD: Keyboard = (BACK_HOME,)
@@ -942,7 +944,8 @@ def wallet_member_text(user_id: int, username: str | None, balance, entries, ban
         "",
         f"✅ Rút được: <b>{format_vnd(balance.withdrawable_vnd)}</b> · ⏳ Chờ: {format_vnd(balance.pending_vnd)}",
         f"📤 Chờ chuyển: {format_vnd(balance.requested_vnd)} · 💸 Đã nhận: {format_vnd(balance.paid_vnd)}",
-        "🏦 " + (f"{html.escape(bank.bank_name)} <code>{bank.account_no}</code> · {html.escape(bank.account_name)}" if bank else "Chưa khai"),
+        # Che số tài khoản ở màn xem khách (PLAN-077). Số đầy đủ chỉ hiện ở màn yêu cầu rút, nơi cần để chuyển khoản.
+        "🏦 " + (f"{html.escape(bank.masked)} · {html.escape(bank.account_name)}" if bank else "Chưa khai"),
         "",
         "🧾 <b>Đơn</b>",
     ]

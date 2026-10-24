@@ -20,6 +20,7 @@ from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
 from cashback_bot.pricing import V12, cashback_for
+from cashback_bot.support import CATEGORIES
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -204,6 +205,44 @@ class AdminNotifier:
         self.repo.enqueue_admin_event(
             event_key=f"new_user:{telegram_user_id}",
             event_type="NEW_USER",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_support_ticket(self, ticket, username: str | None) -> None:
+        """Yêu cầu hỗ trợ mới (PLAN-077). Nội dung đã làm sạch ở support.clean_text."""
+        if not self._active():
+            return
+        body = (
+            f"📩 <b>Yêu cầu hỗ trợ #{ticket.id}</b> · {_who(ticket.telegram_user_id, username)}\n\n"
+            f"{CATEGORIES.get(ticket.category, ticket.category)}\n"
+            f"<i>{html.escape(ticket.message[:300])}</i>\n"
+            f"🕓 {_vn_now_text()}\n"
+            "Mở: /admin → 📩 Hỗ trợ\n"
+            + _details(
+                f"User <code>{ticket.telegram_user_id}</code>",
+                f"Link <code>{ticket.link_id or '-'}</code>",
+                f"Đơn <code>{html.escape(short_order(ticket.conversion_id)) if ticket.conversion_id else '-'}</code>",
+            )
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"support_ticket:{ticket.id}",
+            event_type="SUPPORT_TICKET",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_support_reply(self, ticket, username: str | None) -> None:
+        if not self._active():
+            return
+        body = (
+            f"💬 <b>Khách bổ sung yêu cầu #{ticket.id}</b> · {_who(ticket.telegram_user_id, username)}\n"
+            f"🕓 {_vn_now_text()}\n"
+            "Mở: /admin → 📩 Hỗ trợ"
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"support_reply:{ticket.id}:{ticket.updated_at}",
+            event_type="SUPPORT_REPLY",
             chat_id=int(self.chat_id),
             message_html=body,
         )

@@ -87,7 +87,10 @@ from cashback_bot.admin_ui import (
     stats_keyboard,
     stats_text,
 )
+from cashback_bot.admin_readiness import ReadinessAdmin
 from cashback_bot.admin_settlement import SettlementAdmin
+from cashback_bot.admin_support import SupportAdmin
+from cashback_bot.admin_terms import TermsAdmin
 from cashback_bot.admin_validation import ValidationAdmin
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.db import TrackingRepository
@@ -228,6 +231,8 @@ class AdminPanel:
     _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang được hỏi hoa hồng giả định cho 🧮 Mô phỏng: user_id → hạn chờ.
     _sim_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
+    # Admin đang gõ lý do / câu trả lời cho ticket hỗ trợ (PLAN-077).
+    _support_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -255,6 +260,9 @@ class AdminPanel:
         sim = self._sim_text(user_id, text, now)
         if sim is not None:
             return sim
+        ticket = self._support().consume_text(user_id, text, now)
+        if ticket is not None:
+            return ticket
 
         reserve = self._reserve_text(user_id, (text or "").strip(), now)
         if reserve is not None:
@@ -282,6 +290,8 @@ class AdminPanel:
             self._clear_shopee_waiting(user_id)
         if data != "c:sim:input":
             self._sim_waiting.pop(user_id, None)
+        if not data.startswith("c:hp:"):
+            self._support_waiting.pop(user_id, None)
         reply = self._route_callback(user_id, data, now)
         if reply.inline_keyboard is None:
             # Callback sửa đè tin cũ. Thiếu nút thì admin kẹt ở màn chỉ có chữ.
@@ -318,6 +328,12 @@ class AdminPanel:
             return ValidationAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:sm:"):
             return SettlementAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
+        if data.startswith("c:hp:"):
+            return self._support().route(user_id, data, now)
+        if data.startswith("c:tm:"):
+            return TermsAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
+        if data.startswith("c:rd:"):
+            return ReadinessAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
         if data == "c:menu:shopee":
             return self._shopee_screen(now)
         if data == "c:shopee:sync":
@@ -1006,6 +1022,9 @@ class AdminPanel:
         )
         return BotReply(text, inline_keyboard=simulation_keyboard(SIM_AMOUNTS, amount))
 
+    def _support(self) -> SupportAdmin:
+        return SupportAdmin(TrackingRepository(self.db_path), self._support_waiting)
+
     def _sim_text(self, user_id: int, text: str, now: datetime) -> BotReply | None:
         """Admin gõ hoa hồng giả định sau khi bấm ✏️ Nhập số khác. None: không chờ, để luồng khác xử lý."""
         deadline = self._sim_waiting.get(user_id)
@@ -1473,7 +1492,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     action = row["action"]
     if action not in {
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync",
-        "commission_review_ack",
+        "commission_review_ack", "terms_draft", "terms_publish",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1485,6 +1504,9 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action == "wallet_min_withdraw":
         old = format_vnd(int(before["vnd"])) if "vnd" in before else "-"
         return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
+    if action in {"terms_draft", "terms_publish"}:
+        verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
+        return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"
     if action == "commission_review_ack":
         return f"Duyệt hoa hồng: đã kiểm tra cảnh báo đơn …{html.escape(str(after.get('conversion', '-'))[-4:])}"
     if action == "shopee_auto_sync":

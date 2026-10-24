@@ -1,3 +1,18 @@
+## Phiên 2026-10-24 (al) — PLAN-077 Terms, Support & Payout Readiness (code + test xong, CHƯA triển khai)
+
+Claude Code, chủ bot giao PLAN-077. Worktree `/home/vu/toolsauto-cashback-terms`, nhánh `cursor/cashback-plan077-terms`. Báo cáo `reports/CASHBACK_PLAN077_TERMS_POLICY.md`, ADR-054.
+
+- Audit quyền lợi: đơn gắn theo Sub ID cho người tạo link (chia link không chuyển quyền), giữ lần gắn đầu; APPROVED, thanh toán và rút tiền chưa hoạt động. Phát hiện: tin không phải link bị lưu nguyên văn (≤500 ký tự); màn admin xem khách hiện đủ số tài khoản; cổng ví chưa chặn link `unresolved`.
+- Đã làm: điều khoản theo phiên bản (`customer_terms_versions`, trigger đóng băng; `customer_terms_acceptances` chỉ thêm; `link_terms_context`); dự thảo V1 (DRAFT); `/dieukien` hiện bản công bố, chưa công bố thì giữ trang cũ; cờ `CASHBACK_TERMS_REQUIRED` mặc định tắt; `/hotro` và ticket (7 trạng thái, lịch sử chỉ thêm, chặn trùng, che token/số thẻ); màn admin 📩 Hỗ trợ, 📋 Điều khoản, ⚖️ Sẵn sàng chi trả (chỉ đọc); `payout_gate.proven_policy` chặn link `unresolved`; tin không phải link chỉ lưu độ dài; che số tài khoản ở màn admin xem khách; DDL nháp sổ quyết định thuế (không chạy).
+- Tra cứu pháp luật (subagent): Luật TNCN 109/2025, NĐ 252/253/141/2026, CV 7403/CT-TMĐT, Luật BVDLCN 91/2025 + NĐ 356/2025; phần lớn mới xác nhận qua nguồn thứ cấp, nên ghi PENDING_REVIEW kèm 14 câu hỏi cho kế toán. Theo nguồn thứ cấp, Shopee khấu trừ 5% GTGT + 5% TNCN affiliate từ 01/10/2026.
+- Proof: **521 passed**. Diễn tập trên bản sao DB production đạt. KHÔNG merge, KHÔNG restart.
+
+Next:
+- Chủ bot release review; đọc và duyệt nội dung điều khoản V1 rồi tự công bố trong /admin.
+- Quyết định: bật bắt buộc đồng ý, SLA, thời gian lưu dữ liệu và xoay vòng log, thuế (hỏi kế toán), chính sách thu hồi, xem lại dự phòng 10%.
+
+---
+
 ## Phiên 2026-10-24 (ak) — Tin báo admin khi gửi link có bảng chia tiền
 
 Claude Code, chủ bot yêu cầu. `main` `13eb3f5`, backup trước `data/backups/cashback-20261024T051459Z.sqlite`. Chủ bot restart 05:17:26 UTC, PID 615042.
