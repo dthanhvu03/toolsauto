@@ -1,3 +1,12 @@
+## Phiên 2026-10-24 (an) — Chủ bot công bố điều khoản V1
+
+- Chủ bot tạo bản nháp V1 lúc 06:09:28 UTC và công bố lúc 06:16:03 UTC (audit `terms_draft`, `terms_publish`; hash `63c0d16dab0c`). `customer_terms_versions` #1 PUBLISHED; 0 chấp thuận; cờ `CASHBACK_TERMS_REQUIRED` vẫn tắt; không gửi tin cho khách. Log 0 lỗi, 0 update lỗi.
+- Chủ bot thấy `/dieukien` lúc 13:06 VN ra trang chủ: không phải lỗi. Bot sửa đè tin cũ khi bấm nút (giữ giờ gửi ban đầu, Telegram không hiện «đã sửa» với tin bot có nút). Đã dựng lại trên bản sao: `/dieukien` trả đúng trang (trước công bố: trang cũ; sau: V1).
+
+Next: như mục (am).
+
+---
+
 ## Phiên 2026-10-24 (am) — Đã triển khai PLAN-077 Terms, Support & Payout Readiness
 
 Claude Code, chủ bot duyệt phát hành. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN077.md`.
