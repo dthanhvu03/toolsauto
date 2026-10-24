@@ -1,3 +1,23 @@
+## Phiên 2026-10-24 (ag) — PLAN-075 Settlement & Fund Reconciliation (code + test xong)
+
+Claude Code, chủ bot giao PLAN-075 (cho phép triển khai phần an toàn; chủ bot restart). Worktree `/home/vu/toolsauto-cashback-settlement`, nhánh `cursor/cashback-plan075-settlement`.
+
+- Không có mẫu báo cáo Xác thực/Thanh toán Shopee hay sao kê trên máy: Evidence Discovery CONDITIONAL, APPROVED BLOCKED.
+- 5 bảng `settlement_*` (tên khác bảng mở khoá của payout_gate, ADR-052) và trigger chỉ-thêm cho audit/chứng cứ.
+- `settlement.py`:
+  - nhập định dạng chuẩn `cashback_settlement_v1` (chống trùng sha256/mã, thay chứng từ có lịch sử, lưu 0600);
+  - đối soát 3 nguồn (báo cáo ↔ số học ↔ ngân hàng);
+  - phân bổ bot / ngoài bot / không rõ / chưa phân bổ;
+  - điều chỉnh sau kỳ: 1 sự kiện = 1 dòng.
+- Công cụ nhập trên máy chủ `python -m cashback_bot.settlement_import`. Màn /admin → 🔗 → 🧾 Đối soát thanh toán ("Chưa xác minh" khi thiếu chứng từ).
+- Test: 412 passed. Diễn tập migrate trên bản sao DB thật: chỉ thêm 5 bảng, dữ liệu cũ không đổi, ví khoá.
+
+Next:
+- Triển khai: backup → merge ff → chủ bot restart → kiểm tra.
+- Chủ bot gửi mẫu báo cáo Thanh toán + sao kê + báo cáo Xác thực của một kỳ có tiền để làm parser (PLAN-076/077).
+
+---
+
 ## Phiên 2026-10-24 (af) — Đã triển khai PLAN-074 Shopee Validation & Commission
 
 Claude Code, chủ bot duyệt "duyệt 074". Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN074.md`.

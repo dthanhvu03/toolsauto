@@ -77,6 +77,7 @@ from cashback_bot.admin_ui import (
     stats_keyboard,
     stats_text,
 )
+from cashback_bot.admin_settlement import SettlementAdmin
 from cashback_bot.admin_validation import ValidationAdmin
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.db import TrackingRepository
@@ -248,6 +249,8 @@ class AdminPanel:
             return WalletAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:cv:"):
             return ValidationAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
+        if data.startswith("c:sm:"):
+            return SettlementAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
         if data == "c:menu:shopee":
             return self._shopee_screen(now)
         if data == "c:shopee:sync":

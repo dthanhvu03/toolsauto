@@ -189,6 +189,105 @@ CREATE TABLE IF NOT EXISTS shopee_conversion_changes (
 );
 CREATE INDEX IF NOT EXISTS idx_conversion_changes_conv ON shopee_conversion_changes(conversion_id);
 
+-- Đối soát thanh toán Shopee (PLAN-075, ADR-052). Tên bảng cố ý KHÁC `shopee_settlements` /
+-- `payout_tax_policies` (điều kiện mở khoá của payout_gate, PLAN-078): nhập chứng từ hay đối soát
+-- MATCHED không thể mở ví. Tiền là VND nguyên; NULL nghĩa là "chưa xác minh", không phải 0.
+CREATE TABLE IF NOT EXISTS settlement_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period TEXT NOT NULL CHECK (length(period) = 7),
+    shopee_payment_ref TEXT,
+    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN
+        ('DRAFT', 'EVIDENCE_PENDING', 'PARTIALLY_MATCHED', 'MATCHED', 'DISPUTED', 'REVERSED')),
+    reported_commission_vnd INTEGER,
+    adjustments_vnd INTEGER,
+    fee_vnd INTEGER,
+    fee_vat_vnd INTEGER,
+    fee_includes_vat INTEGER,
+    tax_withheld_vnd INTEGER,
+    shopee_payout_vnd INTEGER,
+    bank_received_vnd INTEGER,
+    statement_evidence_id INTEGER,
+    bank_evidence_id INTEGER,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_settlement_batch_ref
+    ON settlement_batches(period, shopee_payment_ref) WHERE shopee_payment_ref IS NOT NULL;
+
+-- Chứng cứ: chỉ thêm. Thay chứng từ = dòng mới + superseded_by, không sửa đè.
+CREATE TABLE IF NOT EXISTS settlement_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL REFERENCES settlement_batches(id),
+    kind TEXT NOT NULL CHECK (kind IN ('shopee_validation_report', 'shopee_payment_report', 'bank_statement')),
+    source TEXT NOT NULL,
+    document_ref TEXT NOT NULL CHECK (length(document_ref) > 0),
+    content_sha256 TEXT NOT NULL CHECK (length(content_sha256) = 64),
+    stored_name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    parser TEXT NOT NULL,
+    verification TEXT NOT NULL DEFAULT 'RECEIVED' CHECK (verification IN ('RECEIVED', 'VERIFIED', 'REJECTED', 'SUPERSEDED')),
+    viewed_by INTEGER,
+    viewed_at TEXT,
+    superseded_by INTEGER,
+    recorded_by TEXT NOT NULL,
+    recorded_at TEXT NOT NULL,
+    UNIQUE (content_sha256),
+    UNIQUE (kind, document_ref)
+);
+
+-- Khoản theo từng đơn trong một kỳ. conversion_id NULL: Shopee có trả nhưng bot không xác định được đơn.
+CREATE TABLE IF NOT EXISTS settlement_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER NOT NULL REFERENCES settlement_batches(id),
+    evidence_id INTEGER NOT NULL REFERENCES settlement_evidence(id),
+    order_ref TEXT NOT NULL,
+    conversion_id TEXT,
+    is_bot INTEGER NOT NULL DEFAULT 0,
+    telegram_user_id INTEGER,
+    approved_vnd INTEGER,
+    settled_vnd INTEGER,
+    adjustment_vnd INTEGER,
+    match_status TEXT NOT NULL CHECK (match_status IN
+        ('MATCHED', 'NOT_BOT', 'UNKNOWN_ORDER', 'AMOUNT_MISMATCH', 'DUPLICATE', 'NEEDS_REVIEW')),
+    created_at TEXT NOT NULL,
+    UNIQUE (batch_id, evidence_id, order_ref)
+);
+CREATE INDEX IF NOT EXISTS idx_settlement_items_conv ON settlement_items(conversion_id);
+
+-- Điều chỉnh hoa hồng sau khi đã vào một kỳ (giảm, thu hồi, gian lận về sau). Một sự kiện một dòng.
+CREATE TABLE IF NOT EXISTS settlement_adjustments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversion_id TEXT NOT NULL,
+    original_batch_id INTEGER,
+    old_vnd INTEGER NOT NULL,
+    new_vnd INTEGER NOT NULL,
+    delta_vnd INTEGER NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('conversion_change', 'settlement_item')),
+    source_ref TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'RESOLVED', 'DISPUTED')),
+    detected_at TEXT NOT NULL,
+    resolved_by TEXT,
+    resolved_at TEXT,
+    UNIQUE (source, source_ref)
+);
+
+-- Nhật ký đối soát: chỉ thêm. Trigger chặn sửa và xoá.
+CREATE TABLE IF NOT EXISTS settlement_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id INTEGER,
+    action TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    detail_json TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS settlement_audit_no_update BEFORE UPDATE ON settlement_audit
+BEGIN SELECT RAISE(ABORT, 'settlement_audit is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS settlement_audit_no_delete BEFORE DELETE ON settlement_audit
+BEGIN SELECT RAISE(ABORT, 'settlement_audit is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS settlement_evidence_no_delete BEFORE DELETE ON settlement_evidence
+BEGIN SELECT RAISE(ABORT, 'settlement_evidence is append-only'); END;
+
 -- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
 -- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
 CREATE TABLE IF NOT EXISTS failed_updates (

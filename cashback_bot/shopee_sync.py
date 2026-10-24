@@ -28,6 +28,7 @@ from cashback_bot.db import TrackingRepository
 from cashback_bot.shopee_client import ShopeeAffiliateClient, ShopeeApiError
 from cashback_bot.shopee_cookie import load_cookies
 from cashback_bot.redact import error_brief, redact
+from cashback_bot.settlement import SettlementEngine
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +287,12 @@ class ShopeeSyncEngine:
             significant = [(sn, change) for sn, change in self._changes if change.significant]
             if significant and self.admin_notifier:
                 self.admin_notifier.notify_commission_changes(run_id, significant)
+            if self._changes:
+                # Đơn đã vào kỳ đối soát khớp mà Shopee giảm/thu hồi: ghi điều chỉnh OPEN (PLAN-075), không thu tiền.
+                try:
+                    SettlementEngine(self.repo).scan_adjustments(actor=f"sync_run:{run_id}")
+                except Exception:
+                    logger.exception("[ShopeeSync] quét điều chỉnh đối soát lỗi")
             return SyncResult(
                 ok=not failed,
                 message=msg,
