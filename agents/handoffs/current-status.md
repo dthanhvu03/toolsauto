@@ -1,3 +1,20 @@
+## Phiên 2026-10-24 (w) — Cashback: tin 🔄 liệt kê hoa hồng từng đơn, gửi ngay
+
+Claude Code, user đồng ý ("oke em anh đồng ý") sau khi báo "anh bấm rồi mà nó không thông báo gì hết".
+
+- Nguyên nhân: tin có gửi (08:49:09) nhưng chậm khoảng 30 giây vì đợi vòng long-poll. Tin chỉ ghi "0 đơn mới qua bot" nên nhìn như không có gì. Ví đang tắt (user tắt 19:34 ngày 23/10) nên khách không được báo.
+- Sửa:
+  - `SyncResult.bot_orders` (`BotOrder`): tin 🔄 liệt kê từng đơn qua bot dạng `tên · trả … · HH … · trạng thái`. Đơn mới (🆕) lên đầu, tối đa 10 dòng, đếm "mới / cập nhật".
+  - Thêm nhãn UNPAID = Chờ thanh toán, PAID = Chờ duyệt.
+  - Poller `flush_pending` ngay sau khi bấm 🔄.
+- Test: 284 passed, ruff sạch. Đã dựng thử từ 2 đơn thật: DOPI 17.368đ, Cọ 1.372đ.
+
+Next:
+- User restart bot, bấm 🔄, xem tin.
+- Chờ user quyết câu chữ "ước tính theo giá niêm yết" ở tin trả link.
+
+---
+
 ## Phiên 2026-10-24 (v) — Cashback: hoa hồng thật khác ước tính, sửa HH gốc
 
 Claude Code, user báo "đã có chuyển đổi nhưng hoa hồng lại khác".

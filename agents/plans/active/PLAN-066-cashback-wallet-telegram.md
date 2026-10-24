@@ -46,3 +46,4 @@
 
 - 2 đơn thật qua bot: DOPI ước tính 30.510 đ, thật 17.368 đ = (5% + 2,5%) × 231.570 thực trả. Cọ mắt ước tính 1.663 đ, thật 1.372 đ. Lệch vì giá thực trả và tỷ lệ Shopee thật, không phải lỗi đồng bộ.
 - Sửa: HH gốc = `estimated_total_commission` (trước đây chỉ là phần Shopee). Checkout nhiều đơn có cộng `capped_brand_commission` của shop. Test dùng số thật; 281 passed.
+- Tin 🔄 liệt kê từng đơn qua bot (tên, tiền thực trả, HH, trạng thái), gửi ngay sau khi đồng bộ, không đợi long-poll. 284 passed.

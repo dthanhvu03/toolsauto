@@ -119,7 +119,8 @@ class TestReconciliation:
         bot.repo.set_state(SYNC_REQUEST_KEY, "1")
         _check_shopee_auto_sync(bot.repo, notifier, on_synced=synced)
         assert engine.call_args.kwargs["admin_notifier"] is notifier
-        assert notifier.notify_shopee_sync_result.call_args_list[0].args == (True, "Đồng bộ xong: 1 click")
+        assert notifier.notify_shopee_sync_result.call_args_list[0].args == (True, "Đồng bộ xong: 1 click", ())
+        assert notifier.flush_pending.called  # tin kết quả gửi ngay, không đợi long-poll
         assert notifier.notify_shopee_sync_result.call_args_list[1].args[0] is False
         assert synced.call_count == 1
         assert bot.repo.get_state(SYNC_REQUEST_KEY) == "0"

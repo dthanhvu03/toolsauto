@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.admin_stats import collect
 from cashback_bot.db import TrackingRepository
@@ -26,7 +27,7 @@ from cashback_bot.shopee_cookie import (
     parse_cookies,
     save_cookies,
 )
-from cashback_bot.shopee_sync import ShopeeSyncEngine, parse_shopee_money_vnd
+from cashback_bot.shopee_sync import BotOrder, ShopeeSyncEngine, parse_shopee_money_vnd
 
 ADMIN_ID = 9999
 USER_ID = 1234
@@ -499,6 +500,58 @@ class TestShopeeReviewFixes:
         with repo.connect() as conn:
             rows = conn.execute("SELECT order_sn, net_commission_vnd FROM shopee_conversions ORDER BY order_sn").fetchall()
         assert [(r["order_sn"], r["net_commission_vnd"]) for r in rows] == [("SN1", 17_368), ("SN2", 1_372)]
+
+    def test_sync_result_lists_bot_orders_new_then_updated(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        _insert_link(repo, "u3e52GNL")
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        client.fetch_clicks.return_value = {"code": 0, "data": {"list": []}}
+        client.fetch_conversions.return_value = {"code": 0, "data": {"list": [
+            {"checkout_id": "chk_1", "purchase_time": 1792726165, "utm_content": "u3e52GNL----",
+             "estimated_total_commission": 1_736_775_000, "affiliate_net_commission": "1736775000",
+             "orders": [{"order_id": "o1", "order_sn": "SN1", "order_status": "UNPAID",
+                         "items": [{"item_name": "DOPI Kem Nền", "actual_amount": 23_157_000_000, "qty": 1}]}]},
+            {"checkout_id": "chk_2", "purchase_time": 1792726165, "utm_content": "----",
+             "affiliate_net_commission": "100000000",
+             "orders": [{"order_id": "o2", "order_sn": "SN2", "order_status": "PAID", "items": []}]},
+        ]}}
+        first = ShopeeSyncEngine(repo).sync(client=client)
+        assert first.bot_orders == (BotOrder("SN1", "DOPI Kem Nền", 231_570, 17_368, "UNPAID", True),)
+        assert "qua bot 1 (1 mới, 0 cập nhật)" in first.message
+        second = ShopeeSyncEngine(repo).sync(client=client)
+        assert [o.is_new for o in second.bot_orders] == [False]
+        assert "qua bot 1 (0 mới, 1 cập nhật)" in second.message
+
+    def test_sync_message_shows_commission_per_order(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        notifier = AdminNotifier(repo, MagicMock(), enabled=True, chat_id=ADMIN_ID)
+        orders = [
+            BotOrder("SN_OLD", "Bộ 5 Cọ Trang Điểm", 54_900, 1_372, "PAID", False),
+            BotOrder("SN_NEW", "Kem <b>nền</b> " + "x" * 60, 231_570, 17_368, "UNPAID", True),
+            BotOrder("SN_DONE", None, None, 5_000, "COMPLETED", False),
+            BotOrder("SN_CXL", "Áo", 99_000, 0, "CANCELLED", False),
+        ]
+        notifier.notify_shopee_sync_result(True, "Đồng bộ xong", orders)
+        with repo.connect() as conn:
+            html_text = conn.execute("SELECT message_html FROM admin_notifications").fetchone()[0]
+        lines = html_text.split("\n")
+        # Đơn mới lên đầu; tên dài bị cắt, ký tự HTML được escape.
+        assert lines[3].startswith("• 🆕 Kem &lt;b&gt;nền&lt;/b&gt; ")
+        assert lines[3].endswith("… · trả 231.570đ · HH <b>17.368đ</b> · ⏳ Chờ thanh toán")
+        assert lines[4] == "• Bộ 5 Cọ Trang Điểm · trả 54.900đ · HH <b>1.372đ</b> · ⏳ Chờ duyệt"
+        assert lines[5] == "• SN_DONE · HH <b>5.000đ</b> · ✅ Hoàn thành"
+        assert lines[6] == "• Áo · trả 99.000đ · HH <b>0đ</b> · ❌ Đã huỷ"
+
+    def test_sync_message_caps_order_list(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        notifier = AdminNotifier(repo, MagicMock(), enabled=True, chat_id=ADMIN_ID)
+        orders = [BotOrder(f"SN{i}", f"Món {i}", 10_000, 700, "PAID", False) for i in range(13)]
+        notifier.notify_shopee_sync_result(True, "Đồng bộ xong", orders)
+        with repo.connect() as conn:
+            html_text = conn.execute("SELECT message_html FROM admin_notifications").fetchone()[0]
+        assert html_text.count("\n• ") == 10
+        assert "… và 3 đơn khác" in html_text
 
     def test_endpoint_rejected_is_reported_as_partial(self, tmp_path):
         repo = _setup_repo(tmp_path)

@@ -6,6 +6,7 @@ Queue in SQLite first, then deliver best-effort to avoid breaking customer flow.
 from __future__ import annotations
 
 import html
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -40,11 +41,31 @@ def _details(*lines: str) -> str:
 
 # Trạng thái đơn Shopee hay gặp; giá trị lạ thì hiện nguyên văn.
 _SHOPEE_STATUS = {
+    "UNPAID": "Chờ thanh toán",
+    "PAID": "Chờ duyệt",
     "PENDING": "Chờ duyệt",
     "COMPLETED": "Hoàn thành",
     "CANCELLED": "Đã huỷ",
     "CANCELED": "Đã huỷ",
 }
+
+
+SYNC_ORDER_LINES = 10
+
+
+def _bot_order_line(order) -> str:
+    """• 🆕 DOPI Kem Nền… · trả 231.570đ · HH <b>17.368đ</b> · ⏳ Chờ duyệt"""
+    status = (order.order_status or "").upper()
+    icon = "✅" if status == "COMPLETED" else "❌" if status in ("CANCELLED", "CANCELED") else "⏳"
+    name = (order.item_name or order.order_sn).strip()
+    name = name if len(name) <= 40 else name[:39].rstrip() + "…"
+    parts = [("🆕 " if order.is_new else "") + html.escape(name)]
+    if order.gmv_vnd:
+        parts.append(f"trả {format_vnd(order.gmv_vnd)}")
+    if order.commission_vnd is not None:
+        parts.append(f"HH <b>{format_vnd(order.commission_vnd)}</b>")
+    parts.append(f"{icon} {html.escape(_SHOPEE_STATUS.get(status, order.order_status or 'Chờ duyệt'))}")
+    return "• " + " · ".join(parts)
 
 
 @dataclass
@@ -186,16 +207,23 @@ class AdminNotifier:
             message_html=body,
         )
 
-    def notify_shopee_sync_result(self, ok: bool, message: str) -> None:
-        """Kết quả lần bấm 🔄 (PLAN-066): nút trả lời ngay, kết quả tới sau."""
+    def notify_shopee_sync_result(self, ok: bool, message: str, bot_orders: Sequence = ()) -> None:
+        """Kết quả lần bấm 🔄 (PLAN-066): nút trả lời ngay, kết quả tới sau, kèm HH từng đơn qua bot."""
         if not self._active():
             return
         title = "✅ <b>Đồng bộ Shopee xong</b>" if ok else "⚠️ <b>Đồng bộ Shopee chưa trọn</b>"
+        lines = [title, "", html.escape(message)]
+        ordered = sorted(bot_orders, key=lambda order: not order.is_new)
+        for order in ordered[:SYNC_ORDER_LINES]:
+            lines.append(_bot_order_line(order))
+        if len(ordered) > SYNC_ORDER_LINES:
+            lines.append(f"… và {len(ordered) - SYNC_ORDER_LINES} đơn khác (xem 📊 Thống kê).")
+        lines.append(f"🕓 {_vn_now_text()}")
         self.repo.enqueue_admin_event(
             event_key=f"shopee_sync_result:{datetime.now(timezone.utc).timestamp()}",
             event_type="SHOPEE_SYNC",
             chat_id=int(self.chat_id),
-            message_html=f"{title}\n\n{html.escape(message)}\n🕓 {_vn_now_text()}",
+            message_html="\n".join(lines),
         )
 
     def notify_payout_request(self, payout, username: str | None) -> None:

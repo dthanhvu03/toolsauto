@@ -127,12 +127,25 @@ def _order_details(top_item: dict[str, Any], order_dict: dict[str, Any], single_
 
 
 @dataclass(frozen=True)
+class BotOrder:
+    """Một đơn qua link bot trong lần đồng bộ, để tin báo 🔄 liệt kê hoa hồng từng đơn."""
+
+    order_sn: str
+    item_name: str | None
+    gmv_vnd: int | None
+    commission_vnd: int | None
+    order_status: str
+    is_new: bool
+
+
+@dataclass(frozen=True)
 class SyncResult:
     ok: bool
     message: str
     clicks_synced: int = 0
     conversions_synced: int = 0
     new_matched_orders: int = 0
+    bot_orders: tuple[BotOrder, ...] = ()
 
 
 class ShopeeSyncEngine:
@@ -190,6 +203,7 @@ class ShopeeSyncEngine:
         clicks_count = 0
         conversions_count = 0
         new_matched_orders = 0
+        bot_orders: list[BotOrder] = []
         failed_parts: list[str] = []
 
         try:
@@ -223,11 +237,11 @@ class ShopeeSyncEngine:
                         orders = [order for order in orders if isinstance(order, dict)]
                         for order in orders:
                             conversions_count += 1
-                            if self._process_order_item(item, order, single_order=len(orders) == 1):
+                            if self._process_order_item(item, order, single_order=len(orders) == 1, bot_orders=bot_orders):
                                 new_matched_orders += 1
                     else:
                         conversions_count += 1
-                        if self._process_order_item(item, item):
+                        if self._process_order_item(item, item, bot_orders=bot_orders):
                             new_matched_orders += 1
             except ShopeeApiError as exc:
                 if exc.status_code in (401, 403):
@@ -253,8 +267,9 @@ class ShopeeSyncEngine:
             )
 
             msg = (
-                f"Đồng bộ xong: {clicks_count} click mới, "
-                f"{conversions_count} đơn hàng ({new_matched_orders} đơn mới qua bot)."
+                f"Đồng bộ xong: {clicks_count} click mới · {conversions_count} đơn hàng, "
+                f"qua bot {len(bot_orders)} ({new_matched_orders} mới, "
+                f"{len(bot_orders) - new_matched_orders} cập nhật)."
             )
             if failed:
                 msg += f" ⚠️ Shopee từ chối phần {failed}, xem log bot."
@@ -264,6 +279,7 @@ class ShopeeSyncEngine:
                 clicks_synced=clicks_count,
                 conversions_synced=conversions_count,
                 new_matched_orders=new_matched_orders,
+                bot_orders=tuple(bot_orders),
             )
 
         except Exception as exc:
@@ -299,6 +315,7 @@ class ShopeeSyncEngine:
         top_item: dict[str, Any],
         order_dict: dict[str, Any],
         single_order: bool = True,
+        bot_orders: list[BotOrder] | None = None,
     ) -> bool:
         """Xử lý từng đơn hàng, lưu DB và gửi thông báo nếu là đơn mới khớp bot.
 
@@ -342,6 +359,7 @@ class ShopeeSyncEngine:
             )
             net_comm = gross_comm
 
+        details = _order_details(top_item, order_dict, single_order)
         is_new, is_matched, link_id, user_id = self.repo.record_shopee_conversion(
             conversion_id=conversion_id,
             sub_id=sub_id_str,
@@ -352,8 +370,17 @@ class ShopeeSyncEngine:
             gross_commission_vnd=gross_comm,
             net_commission_vnd=net_comm,
             raw_json=json.dumps({"top": top_item, "order": order_dict}, ensure_ascii=False),
-            details=_order_details(top_item, order_dict, single_order),
+            details=details,
         )
+        if is_matched and bot_orders is not None:
+            bot_orders.append(BotOrder(
+                order_sn=order_sn,
+                item_name=details["item_name"],
+                gmv_vnd=details["gmv_vnd"],
+                commission_vnd=net_comm,
+                order_status=order_status,
+                is_new=is_new,
+            ))
 
         if is_new and is_matched:
             logger.info("[ShopeeSync] Phát hiện đơn Shopee mới qua link bot! OrderSN=%s SubID=%s", order_sn, sub_id_str)

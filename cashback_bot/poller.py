@@ -344,7 +344,8 @@ def _check_shopee_auto_sync(
             admin_notifier.notify_shopee_sync_result(False, f"Đồng bộ lỗi: {type(exc).__name__}. Xem log bot.")
         return
     if manual:
-        admin_notifier.notify_shopee_sync_result(result.ok, result.message)
+        admin_notifier.notify_shopee_sync_result(result.ok, result.message, result.bot_orders)
+        admin_notifier.flush_pending(limit=5)  # gửi ngay, không đợi vòng long-poll kế tiếp
     if on_synced is not None:
         try:
             on_synced()
