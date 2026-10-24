@@ -9,7 +9,7 @@ Chủ bot: "chỉnh cho chỉnh chu hoàn thiện, rà lại rồi làm 1 plan".
   - báo lỗi xử lý; báo bot Zalo dừng > 10 phút (bot Telegram canh); cảnh báo khách thứ 40 / 50;
   - nguồn đồng ý điều khoản `zalo_choice`; toast lên đầu tin.
 - **Diễn tập** 20 bước trên bản sao (đã xoá): đạt.
-- **System State:** chạy bản cũ (Telegram PID 686054, Zalo PID 686122 bản `6fa5a38`).
+- **System State:** chạy bản cũ (Telegram PID 686054, Zalo PID 687608 bản `f184972`).
 - **Next:**
   - chủ bot restart Telegram rồi Zalo; nhắn thử `hd`, link, `don`;
   - phần B chờ quyết: điều khoản V2 ghi "Telegram hoặc Zalo", rút gọn link, thử tin chủ động ~26/10, ảnh / mô tả bot, gói Pro.
