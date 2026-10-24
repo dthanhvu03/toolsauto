@@ -191,13 +191,18 @@ def test_17_20_donhang_tong_quan_va_chi_tiet(tmp_path):
     _order(bot, sub, commission=1_372, cid="o2")
     bot.refresh_wallet(datetime(2026, 10, 22, tzinfo=timezone.utc))
     page = bot.handle_text(USER, "b", "/donhang", update_id=801, now=QUOTE_NOW)
-    assert "Shopee đã ghi nhận: <b>2</b> đơn" in page.text
-    assert "⏳ Chờ xác minh: 2 · ✅ Đã được duyệt: 0 · ❌ Không đủ điều kiện: 0" in page.text
-    assert "Hoàn tạm tính (đơn còn chờ): <b>13.117đ</b>" in page.text
-    assert "Chưa có khoản nào đủ điều kiện rút." in page.text
+    assert "Shopee đã ghi nhận <b>2</b> đơn qua link của bạn" in page.text
+    assert "⏳ 2 chờ xác minh" in page.text and "đã duyệt" not in page.text, "chỉ hiện số khác 0"
+    assert "💰 Hoàn tạm tính: <b>13.117đ</b>" in page.text
+    assert "Chưa có khoản nào rút được: ví hoàn tiền chưa mở." in page.text
+    assert "<b>1. Áo Polo Nam</b>" in page.text and "🛒 Mua 21/10/2026 · Đang xử lý" in page.text
+    assert [label for row in page.inline_keyboard for label, _d in row][:2] == ["1. Áo Polo Nam · 960đ", "2. Áo Polo Nam · 12.157đ"]
     detail = _callback(bot, USER, "u:o:d:o1")
-    assert "Hoàn tạm tính: <b>12.157đ</b>" in detail.text and "cách tính V1.1" in detail.text
-    assert "Chưa có xác nhận Shopee thanh toán hoa hồng" in detail.text and "ví hoàn tiền chưa mở" in detail.text
+    assert "📦 <b>Áo Polo Nam</b>" in detail.text and "mua 21/10/2026" in detail.text
+    assert "💰 Hoàn tạm tính: <b>12.157đ</b>" in detail.text and "V1.1" not in detail.text
+    assert "✅ Shopee ghi nhận đơn qua link của bạn" in detail.text and "⏳ Đơn đang được xử lý" in detail.text
+    assert "⏳ Chờ Shopee duyệt hoa hồng" in detail.text and "✅ Shopee đã duyệt" not in detail.text
+    assert "⏳ Chờ Shopee thanh toán hoa hồng cho chương trình" in detail.text and "ví hoàn tiền chưa mở" in detail.text
     assert "raw" not in detail.text.lower() and "SN-o1" not in detail.text
     assert "u:h:c:amount" in [d for row in detail.inline_keyboard for _l, d in row]
 
@@ -206,6 +211,22 @@ def test_18_chua_co_don(tmp_path):
     bot = _ready(tmp_path)
     page = bot.handle_text(USER, "b", "/donhang", update_id=802, now=QUOTE_NOW)
     assert "chưa ghi nhận giao dịch nào khớp với các link bạn đã tạo" in page.text and "/hotro" in page.text
+    assert "u:p:guide" in str(page.inline_keyboard)
+
+
+def test_chi_tiet_don_huy_va_da_thanh_toan(tmp_path):
+    bot = _ready(tmp_path)
+    sub = _link(bot)
+    _order(bot, sub, status="COMPLETED", commission=10_000, cid="ok")
+    _order(bot, sub, status="CANCELLED", commission=10_000, cid="huy")
+    done = _callback(bot, USER, "u:o:d:ok").text
+    assert "✅ Người mua đã thanh toán đơn" in done and "✅ Đơn hàng đã hoàn thành" in done
+    assert "⏳ Chờ Shopee duyệt hoa hồng" in done, "hoàn thành chưa phải đã duyệt"
+    cancelled = _callback(bot, USER, "u:o:d:huy").text
+    assert "❌ Đơn đã huỷ" in cancelled and "không được tính" in cancelled and "Hoàn tạm tính" not in cancelled
+    assert "⏳" not in cancelled, "đơn huỷ không hiện các bước chờ"
+    page = bot.handle_text(USER, "b", "/donhang", update_id=805, now=QUOTE_NOW).text
+    assert "❌ Không đủ điều kiện hoa hồng" in page and "❌ 1 không đủ điều kiện" in page
 
 
 def test_19_phan_trang(tmp_path):
@@ -216,6 +237,7 @@ def test_19_phan_trang(tmp_path):
     first = _callback(bot, USER, "u:o:l:1")
     assert "Trang 1/3" in first.text and "u:o:l:2" in str(first.inline_keyboard)
     last = _callback(bot, USER, "u:o:l:3")
+    assert "<b>11. Áo Polo Nam</b>" in last.text and "<b>12. Áo Polo Nam</b>" in last.text, "đánh số liên tục qua các trang"
     assert "Trang 3/3" in last.text and sum(d.startswith("u:o:d:") for row in last.inline_keyboard for _l, d in row) == 2
     assert "Trang 3/3" in _callback(bot, USER, "u:o:l:99").text
 

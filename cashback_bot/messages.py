@@ -606,8 +606,19 @@ NOT_WITHDRAWABLE = "Chưa phải tiền có thể rút: ví hoàn tiền chưa m
 ORDERS_EMPTY = (
     "📦 <b>Đơn hàng của tôi</b>\n\n"
     "Hiện Shopee chưa ghi nhận giao dịch nào khớp với các link bạn đã tạo.\n\n"
-    "Dữ liệu đơn có thể cập nhật muộn. Nếu cần kiểm tra, hãy gửi yêu cầu tại /hotro."
+    "• Gửi link sản phẩm Shopee vào đây để nhận link hoàn tiền, rồi mua qua link đó.\n"
+    "• Đơn mới có thể mất vài giờ hoặc lâu hơn mới hiện ở đây.\n\n"
+    "Đã mua qua link mà chưa thấy đơn? Gửi yêu cầu tại /hotro."
 )
+# Danh sách /donhang: nhãn ngắn cho một dòng trên điện thoại.
+ORDER_STATUS_SHORT = {
+    "UNPAID": "Chưa thanh toán",
+    "PENDING": "Đang xử lý",
+    "PAID": "Đã thanh toán",
+    "COMPLETED": "Đã hoàn thành",
+    "CANCELLED": "Đã huỷ",
+    "CANCELED": "Đã huỷ",
+}
 
 
 def order_status_label(status: str | None) -> str:
@@ -676,26 +687,61 @@ def order_update_notice(order: str, *, statuses: list[str], ineligible: bool, ap
 ORDERS_KEYBOARD_BACK = (("◀️ Trang chủ", "u:p:home"),)
 
 
-def orders_summary_reply(stats: dict, rows, page: int, pages: int) -> BotReply:
-    """stats: tổng, chờ, duyệt, không đủ điều kiện, hoàn tạm tính. rows: đơn của trang (mới trước)."""
+def _order_title(row: dict, limit: int = 52) -> str:
+    """Tên sản phẩm của link khách đã gửi (rút gọn); không có thì mã đơn."""
+    name = buyer_name(row.get("product") or "")
+    if not name:
+        return f"Đơn {row['order']}"
+    return name if len(name) <= limit else name[: limit - 1].rstrip(" ,.-") + "…"
+
+
+def _ineligible(row: dict) -> bool:
+    return (row["order_status"] or "").upper() in ("CANCELLED", "CANCELED") or row["validation_status"] in ("REJECTED", "FRAUD")
+
+
+def _order_list_entry(number: int, row: dict) -> list[str]:
+    status = ORDER_STATUS_SHORT.get((row["order_status"] or "").upper(), "Chưa rõ tình trạng")
+    if _ineligible(row):
+        money = "❌ Không đủ điều kiện hoa hồng"
+    else:
+        amount = "chưa xác định" if row["cashback"] is None else f"<b>{format_vnd(row['cashback'])}</b>"
+        stage = "✅ Shopee đã duyệt" if row["validation_status"] == "APPROVED" else "⏳ chờ Shopee xác minh"
+        money = f"💰 Hoàn tạm tính {amount} · {stage}"
+    return [
+        f"<b>{number}. {html.escape(_order_title(row))}</b>",
+        f"🛒 Mua {row['date']} · {status}",
+        money,
+    ]
+
+
+def orders_summary_reply(stats: dict, rows, page: int, pages: int, start: int = 1) -> BotReply:
+    """stats: tổng, chờ, duyệt, không đủ điều kiện, hoàn tạm tính. rows: đơn của trang (mới trước); start: số thứ tự đầu."""
+    counts = [
+        f"{label} {stats[key]} {text}"
+        for key, label, text in (("waiting", "⏳", "chờ xác minh"), ("approved", "✅", "đã duyệt"), ("ineligible", "❌", "không đủ điều kiện"))
+        if stats[key]
+    ]
     lines = [
         "📦 <b>Đơn hàng của tôi</b>",
         "",
-        f"Shopee đã ghi nhận: <b>{stats['total']}</b> đơn",
-        f"⏳ Chờ xác minh: {stats['waiting']} · ✅ Đã được duyệt: {stats['approved']} · ❌ Không đủ điều kiện: {stats['ineligible']}",
-        f"Hoàn tạm tính (đơn còn chờ): <b>{format_vnd(stats['estimated'])}</b>" if stats["estimated"] else "Hoàn tạm tính: chưa có",
-        "Chưa có khoản nào đủ điều kiện rút." if not stats.get("available") else "",
-        "",
+        f"Shopee đã ghi nhận <b>{stats['total']}</b> đơn qua link của bạn",
+        f"💰 Hoàn tạm tính: <b>{format_vnd(stats['estimated'])}</b>" if stats["estimated"] else "💰 Hoàn tạm tính: chưa có",
+        " · ".join(counts),
     ]
-    for row in rows:
-        lines.append(
-            f"• {row['order']} · {row['date']} · {order_status_label(row['order_status'])} · "
-            f"{commission_label(row['validation_status'], row['order_status'])}"
-            + (f" · {format_vnd(row['cashback'])}" if row["cashback"] is not None else "")
-        )
+    for offset, row in enumerate(rows):
+        lines += ["", *_order_list_entry(start + offset, row)]
     if pages > 1:
         lines += ["", f"Trang {page}/{pages}"]
-    keyboard: list[tuple[tuple[str, str], ...]] = [((f"🔎 {row['order']}", f"u:o:d:{row['conversion_id']}"),) for row in rows]
+    lines += [
+        "",
+        "ⓘ Số tạm tính, có thể thay đổi. "
+        + ("Chưa có khoản nào rút được: ví hoàn tiền chưa mở." if not stats.get("available") else "")
+        + "\nBấm vào đơn để xem tiến trình.",
+    ]
+    keyboard: list[tuple[tuple[str, str], ...]] = []
+    for offset, row in enumerate(rows):
+        amount = "" if row["cashback"] is None or _ineligible(row) else f" · {format_vnd(row['cashback'])}"
+        keyboard.append(((f"{start + offset}. {_order_title(row, 26)}{amount}", f"u:o:d:{row['conversion_id']}"),))
     nav = []
     if page > 1:
         nav.append(("◀️ Mới hơn", f"u:o:l:{page - 1}"))
@@ -707,19 +753,53 @@ def orders_summary_reply(stats: dict, rows, page: int, pages: int) -> BotReply:
     return BotReply("\n".join(line for line in lines if line is not None), inline_keyboard=tuple(keyboard))
 
 
+def _order_steps(row: dict) -> list[str]:
+    """Tiến trình của một đơn: chỉ đánh ✅ khi dữ liệu Shopee đã có, không suy đoán bước sau."""
+    status = (row["order_status"] or "").upper()
+    steps = ["✅ Shopee ghi nhận đơn qua link của bạn"]
+    if _ineligible(row):
+        steps.append("❌ Đơn đã huỷ" if status in ("CANCELLED", "CANCELED") else "❌ Không đủ điều kiện hoa hồng")
+        return steps
+    paid = status in ("PAID", "COMPLETED")
+    steps.append(
+        "✅ Người mua đã thanh toán đơn" if paid
+        else "⏳ Đơn đang được xử lý" if status == "PENDING"
+        else "⏳ Chờ người mua thanh toán" if status == "UNPAID"
+        else "⏳ Chưa rõ tình trạng đơn"
+    )
+    steps.append("✅ Đơn hàng đã hoàn thành" if status == "COMPLETED" else "⏳ Chờ đơn hàng hoàn thành")
+    validation = row["validation_status"]
+    steps.append(
+        "✅ Shopee đã duyệt hoa hồng" if validation == "APPROVED"
+        else "⏳ Hoa hồng đang được kiểm tra thêm" if validation == "NEEDS_REVIEW"
+        else "⏳ Chờ Shopee duyệt hoa hồng"
+    )
+    steps.append(
+        "✅ " + SETTLED_LABEL if row["settlement_status"] == "SETTLED" else "⏳ Chờ Shopee thanh toán hoa hồng cho chương trình"
+    )
+    steps.append("✅ Tiền hoàn đã vào ví" if row.get("entry_status") == "available" else "🔒 Tiền hoàn vào ví: ví hoàn tiền chưa mở")
+    return steps
+
+
 def order_detail_reply(row: dict) -> BotReply:
     """row đã chỉ gồm dữ liệu của chính khách. Không có raw Shopee, không có thông tin người mua."""
+    if _ineligible(row):
+        money = "💰 Hoàn: không được tính cho đơn này"
+        note = "Nếu bạn thấy chưa đúng, bấm 📩 Yêu cầu kiểm tra."
+    else:
+        money = "💰 " + _cashback_line(row["cashback"])
+        note = "Số tạm tính có thể đổi nếu Shopee điều chỉnh hoa hồng, hoặc đơn bị huỷ, trả hàng."
     lines = [
-        f"📦 <b>Đơn {row['order']}</b>",
+        f"📦 <b>{html.escape(_order_title(row, 80))}</b>",
+        f"Mã đơn {row['order']} · mua {row['date']}",
         "",
-        f"Bot ghi nhận: {row['date']}",
-        f"Link của bạn: <code>{html.escape(row['sub_id'] or '-')}</code> · cách tính {html.escape(row['policy'])}",
-        f"Tình trạng đơn: {order_status_label(row['order_status'])}",
-        f"{commission_label(row['validation_status'], row['order_status'])}",
-        SETTLED_LABEL if row["settlement_status"] == "SETTLED" else NOT_SETTLED_LABEL,
-        _cashback_line(row["cashback"]),
+        money,
         "",
-        "ⓘ " + NOT_WITHDRAWABLE + " Số tạm tính có thể đổi khi Shopee điều chỉnh hoa hồng hoặc đơn bị huỷ, trả hàng.",
+        "<b>Tiến trình</b>",
+        *_order_steps(row),
+        "",
+        "ⓘ " + note,
+        f"Mã link: <code>{html.escape(row['sub_id'] or '-')}</code>",
     ]
     keyboard = (
         (("📩 Yêu cầu kiểm tra", "u:h:c:amount"),),

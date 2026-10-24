@@ -33,7 +33,8 @@ def _cancelled(row) -> bool:
 
 _SELECT = """
     SELECT c.conversion_id, c.order_sn, c.order_status, c.validation_status, c.settlement_status, c.created_at,
-           c.net_commission_vnd, c.matched_link_id, l.sub_id, e.cashback_vnd AS entry_cashback, e.status AS entry_status
+           c.purchase_time, c.net_commission_vnd, c.matched_link_id, l.sub_id, l.product_name,
+           e.cashback_vnd AS entry_cashback, e.status AS entry_status
     FROM shopee_conversions c
     LEFT JOIN link_requests l ON l.id = c.matched_link_id
     LEFT JOIN cashback_entries e ON e.conversion_id = c.conversion_id
@@ -52,7 +53,10 @@ def _view(conn: sqlite3.Connection, row) -> dict:
     return {
         "conversion_id": str(row["conversion_id"]),
         "order": short_order(row["order_sn"], str(row["conversion_id"])),
-        "date": _date(row["created_at"]),
+        # Ngày mua theo Shopee; thiếu thì ngày bot ghi nhận.
+        "date": _date(row["purchase_time"] or row["created_at"]),
+        # Tên sản phẩm của link khách tự gửi (link_requests), không phải dữ liệu người mua.
+        "product": row["product_name"],
         "order_status": row["order_status"],
         "validation_status": row["validation_status"],
         "settlement_status": row["settlement_status"],

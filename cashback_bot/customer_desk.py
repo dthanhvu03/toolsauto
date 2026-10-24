@@ -94,9 +94,11 @@ class CustomerDesk:
         with self.repo.connect() as conn:
             stats = customer_orders.summary(conn, user_id)
             if not stats["total"]:
-                return BotReply(ORDERS_EMPTY, inline_keyboard=((("📩 Hỗ trợ", "u:p:support"), ("◀️ Trang chủ", "u:p:home")),))
+                return BotReply(ORDERS_EMPTY, inline_keyboard=(
+                    (("📖 Cách lấy link", "u:p:guide"),), (("📩 Hỗ trợ", "u:p:support"), ("◀️ Trang chủ", "u:p:home")),
+                ))
             rows, current, pages = customer_orders.page(conn, user_id, number)
-        return orders_summary_reply(stats, rows, current, pages)
+        return orders_summary_reply(stats, rows, current, pages, start=(current - 1) * customer_orders.PAGE_SIZE + 1)
 
     def order_detail(self, user_id: int, conversion_id: str) -> BotReply:
         with self.repo.connect() as conn:
