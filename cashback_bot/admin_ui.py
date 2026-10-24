@@ -485,9 +485,12 @@ def reserve_preview_text(
 STATS_PERIODS = (("today", "Hôm nay"), ("7d", "7 ngày"), ("30d", "30 ngày"), ("all", "Tất cả"))
 
 
-def stats_keyboard(current: str) -> Keyboard:
-    row = tuple((f"• {label}" if key == current else label, f"c:st:{key}") for key, label in STATS_PERIODS)
-    return (row, BACK_HOME)
+def stats_keyboard(current: str, detail: bool = False) -> Keyboard:
+    """Tổng quan ↔ 🔎 Chi tiết; đổi kỳ thì ở nguyên màn đang xem."""
+    suffix = ":more" if detail else ""
+    row = tuple((f"• {label}" if key == current else label, f"c:st:{key}{suffix}") for key, label in STATS_PERIODS)
+    switch = ("◀️ Về thống kê", f"c:st:{current}") if detail else ("🔎 Chi tiết", f"c:st:{current}:more")
+    return (row, (switch,), BACK_HOME)
 
 
 def _bar(value: int, peak: int, width: int = 10) -> str:
@@ -523,33 +526,127 @@ def _insight_lines(insight, created: int) -> list[str]:
     return lines
 
 
+def _aligned(rows: list[tuple[str, int, str]]) -> str:
+    """Bảng chữ đều: nhãn | số canh phải | ghi chú."""
+    label_w = max(len(label) for label, _value, _note in rows)
+    nums = [f"{value:,}".replace(",", ".") for _label, value, _note in rows]
+    num_w = max(len(num) for num in nums)
+    lines = [
+        f"{label.ljust(label_w)} {num.rjust(num_w)}" + (f"  {note}" if note else "")
+        for (label, _value, note), num in zip(rows, nums)
+    ]
+    return "<pre>" + html.escape("\n".join(lines)) + "</pre>"
+
+
+def _money_lines(shopee) -> list[str]:
+    """Tiền thật từ Shopee, không tính đơn huỷ. Khách, phí, dự phòng thuế lấy từ sổ đơn qua bot."""
+    if shopee is None or (shopee.total_clicks == 0 and shopee.orders_total == 0):
+        return ["💰 <b>Tiền thật</b>", "ⓘ Chưa có dữ liệu đối soát. Vào 🔗 Shopee Affiliate → 🔄 để đồng bộ."]
+    costs = shopee.bot_fee_vnd + shopee.bot_tax_vnd
+    keep = shopee.real_commission_vnd - shopee.bot_cashback_vnd - costs
+    lines = [
+        "💰 <b>Tiền thật</b> · Shopee",
+        f"Đơn <b>{shopee.orders_total}</b>: chờ {shopee.orders_pending} · xong {shopee.orders_completed} "
+        f"· huỷ {shopee.orders_cancelled}",
+        _aligned([
+            ("Doanh số", shopee.gmv_vnd, ""),
+            ("HH", shopee.real_commission_vnd, "sau phí MCN"),
+            ("− Khách", shopee.bot_cashback_vnd, ""),
+            ("− Phí+T", costs, "phí + dự phòng thuế"),
+            ("= Admin", keep, ""),
+        ]),
+    ]
+    outside = shopee.real_commission_vnd - shopee.bot_commission_vnd
+    if outside > 0:
+        lines.append(f"<i>HH có {format_vnd(outside)} từ đơn ngoài bot (không hoàn khách).</i>")
+    return lines
+
+
+def _funnel_lines(stats) -> list[str]:
+    errors = sum(count for _label, count in stats.rejected)
+    rows = [
+        ("Người dùng", stats.users_total, f"mới {stats.users_new} · gửi link {stats.users_active}"),
+        ("Link", stats.links_created, f"gửi {stats.links_total} · lỗi {errors}"),
+    ]
+    shopee = stats.shopee
+    if shopee is not None and (shopee.total_clicks or shopee.orders_total):
+        cr = shopee.conversion_rate_percent
+        cr_text = f" · CR {str(cr).replace('.', ',')}%" if cr is not None else ""
+        rows += [
+            ("Click", shopee.total_clicks, f"qua bot {shopee.clicks_with_bot_sub_id}"),
+            ("Đơn", shopee.orders_total, f"qua bot {shopee.orders_matched_bot}{cr_text}"),
+        ]
+    return ["🔗 <b>Phễu</b>", _aligned(rows)]
+
+
+def _week_lines(stats) -> list[str]:
+    """Một bảng 7 ngày: link tạo được, click, đơn, HH. Bỏ ngày không có gì."""
+    days = {day.label: day for day in (stats.shopee.daily if stats.shopee else [])}
+    rows = []
+    for label, links in stats.trend:
+        day = days.get(label)
+        clicks, orders, commission = (day.clicks, day.orders, day.net_commission_vnd) if day else (0, 0, 0)
+        if links or clicks or orders or commission:
+            rows.append(f"{label} {links:>4} {clicks:>5} {orders:>3} {short_vnd(commission):>5}")
+    if not rows:
+        return ["📅 <b>7 ngày gần nhất</b>", "Chưa có hoạt động."]
+    table = ["Ngày  Link Click Đơn    HH", *rows]
+    return ["📅 <b>7 ngày gần nhất</b> · bỏ ngày trống", "<pre>" + "\n".join(table) + "</pre>"]
+
+
 def stats_text(stats, *, period_label: str, since: str | None) -> str:
-    """stats: admin_stats.Stats."""
-    created_rate = f" ({stats.links_created * 100 // stats.links_total}%)" if stats.links_total else ""
-    errors = " · ".join(f"{label} {count}" for label, count in stats.rejected) or "không có"
+    """Tổng quan (stats: admin_stats.Stats). Số dự kiến, top, ngành hàng ở stats_detail_text."""
     lines = [
         _title(f"Thống kê · {period_label}").rstrip("\n"),
         f"<i>Từ {since}</i>" if since else "<i>Toàn bộ dữ liệu</i>",
         "",
-        "👥 <b>Người dùng</b>",
-        f"• Tổng: <b>{stats.users_total}</b> · Mới: <b>{stats.users_new}</b> · Có gửi link: <b>{stats.users_active}</b>",
+        *_money_lines(stats.shopee),
+        "",
+        *_funnel_lines(stats),
+        "",
+        *_week_lines(stats),
+    ]
+    if stats.delivery_pending or stats.errors:
+        lines += ["", f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>"]
+    return "\n".join(lines)
+
+
+def stats_detail_text(stats, *, period_label: str, since: str | None) -> str:
+    created_rate = f" ({stats.links_created * 100 // stats.links_total}%)" if stats.links_total else ""
+    errors = " · ".join(f"{label} {count}" for label, count in stats.rejected) or "không có"
+    lines = [
+        _title(f"Thống kê · {period_label} › Chi tiết").rstrip("\n"),
+        f"<i>Từ {since}</i>" if since else "<i>Toàn bộ dữ liệu</i>",
         "",
         "🔗 <b>Link</b>",
         f"• Gửi: <b>{stats.links_total}</b> · Tạo được: <b>{stats.links_created}</b>{created_rate}",
         f"• Lỗi: {errors}",
         "",
-        "💰 <b>Số dự kiến</b> · chưa phải doanh thu",
+        "🔮 <b>Số dự kiến</b> · lúc tạo link, chưa phải doanh thu",
         f"• Hoa hồng ước tính: <b>{format_vnd(stats.commission_vnd)}</b>",
         f"• Đã báo khách: <b>{format_vnd(stats.cashback_vnd)}</b>",
         f"• Chênh lệch trước phí, thuế: <b>{format_vnd(stats.commission_vnd - stats.cashback_vnd)}</b>",
     ]
+    shopee = stats.shopee
+    if shopee is not None and (shopee.total_clicks or shopee.orders_total):
+        lines += [
+            "",
+            "🛒 <b>Đối soát Shopee</b>",
+            f"• <b>{shopee.item_qty}</b> món · Doanh số <b>{format_vnd(shopee.gmv_vnd)}</b>",
+            f"• HH gốc {format_vnd(shopee.gross_commission_vnd)} − phí MCN {format_vnd(shopee.mcn_fee_vnd)} "
+            f"→ <b>HH sau cùng {format_vnd(shopee.real_commission_vnd)}</b>",
+        ]
+        if shopee.bot_commission_vnd:
+            lines.append(
+                f"• Qua bot: HH {format_vnd(shopee.bot_commission_vnd)} − khách {format_vnd(shopee.bot_cashback_vnd)} "
+                f"− phí {format_vnd(shopee.bot_fee_vnd)} − dự phòng thuế {format_vnd(shopee.bot_tax_vnd)} "
+                f"→ <b>Admin còn {format_vnd(shopee.admin_keep_vnd)}</b>"
+            )
+        if shopee.orders_cancelled:
+            lines.append(
+                f"• Huỷ: doanh số {format_vnd(shopee.cancelled_gmv_vnd)} · HH mất {format_vnd(shopee.lost_commission_vnd)}"
+            )
     lines += _insight_lines(stats.insight, stats.links_created)
-    lines += [
-        "",
-        "📅 <b>Link tạo được, 7 ngày gần nhất</b>",
-    ]
-    peak = max((count for _day, count in stats.trend), default=0)
-    lines.append("<pre>" + "\n".join(f"{day} {_bar(count, peak)} {count}" for day, count in stats.trend) + "</pre>")
     if stats.top_users:
         lines += ["", "🏆 <b>Gửi nhiều nhất</b>"]
         for rank, (user_id, username, count) in enumerate(stats.top_users, start=1):
@@ -559,17 +656,6 @@ def stats_text(stats, *, period_label: str, since: str | None) -> str:
         lines += ["", "🛍️ <b>Món được hỏi nhiều</b>"]
         for rank, (name, count) in enumerate(stats.top_products, start=1):
             lines.append(f"{rank}. {html.escape(name)} · {count} lần")
-    lines += [
-        "",
-        f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>",
-    ]
-    if stats.shopee and (stats.shopee.total_clicks > 0 or stats.shopee.orders_total > 0):
-        lines += ["", *shopee_stats_lines(stats.shopee)]
-    else:
-        lines += [
-            "",
-            "ⓘ Chưa có dữ liệu đối soát đơn Shopee. Vào 🔗 Shopee Affiliate để đồng bộ.",
-        ]
     return "\n".join(lines)
 
 
@@ -580,39 +666,6 @@ def short_vnd(amount: int) -> str:
     if amount < 1_000_000:
         return f"{amount // 1_000}k"
     return f"{amount / 1_000_000:.1f}tr".replace(".", ",")
-
-
-def shopee_stats_lines(shopee) -> list[str]:
-    """shopee: admin_stats.ShopeeStats. Tiền không tính đơn huỷ (PLAN-066)."""
-    cr = shopee.conversion_rate_percent
-    cr_text = f" · CR qua bot <b>{str(cr).replace('.', ',')}%</b>" if cr is not None else ""
-    lines = [
-        "🛒 <b>Đối soát Shopee</b>",
-        f"• Đơn <b>{shopee.orders_total}</b> (qua bot <b>{shopee.orders_matched_bot}</b>) · "
-        f"<b>{shopee.item_qty}</b> món · Doanh số <b>{format_vnd(shopee.gmv_vnd)}</b>",
-        f"• Chờ duyệt {shopee.orders_pending} · Hoàn thành {shopee.orders_completed} · Huỷ {shopee.orders_cancelled}",
-        f"• HH gốc {format_vnd(shopee.gross_commission_vnd)} − phí MCN {format_vnd(shopee.mcn_fee_vnd)} "
-        f"→ <b>HH sau cùng {format_vnd(shopee.real_commission_vnd)}</b>",
-        f"• Click <b>{shopee.total_clicks}</b> (qua bot <b>{shopee.clicks_with_bot_sub_id}</b>){cr_text}",
-    ]
-    if shopee.bot_commission_vnd:
-        lines.append(
-            f"💼 Qua bot: HH {format_vnd(shopee.bot_commission_vnd)} − khách {format_vnd(shopee.bot_cashback_vnd)} "
-            f"− phí {format_vnd(shopee.bot_fee_vnd)} − dự phòng thuế {format_vnd(shopee.bot_tax_vnd)} "
-            f"→ <b>Admin còn {format_vnd(shopee.admin_keep_vnd)}</b>"
-        )
-    if shopee.orders_cancelled:
-        lines.append(
-            f"• Huỷ: doanh số {format_vnd(shopee.cancelled_gmv_vnd)} · HH mất {format_vnd(shopee.lost_commission_vnd)}"
-        )
-    if shopee.daily:
-        rows = ["Ngày   Đơn Huỷ  D.số    HH Click"]
-        rows += [
-            f"{day.label} {day.orders:>4} {day.cancelled:>4} {short_vnd(day.gmv_vnd):>6} {short_vnd(day.net_commission_vnd):>5} {day.clicks:>5}"
-            for day in shopee.daily
-        ]
-        lines += ["", "📅 <b>7 ngày qua</b> (HH sau cùng, không tính đơn huỷ)", "<pre>" + "\n".join(rows) + "</pre>"]
-    return lines
 
 
 def shopee_text(

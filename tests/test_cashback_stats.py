@@ -96,18 +96,29 @@ def test_man_thong_ke_trong_admin(tmp_path):
     reply = bot.admin_panel.handle_callback(ADMIN, "c:st:today", "private", NOW)
     assert reply.text.startswith("⚙️ Quản trị › <b>Thống kê · Hôm nay</b>")
     assert "<i>Từ 00:00 23/10/2026</i>" in reply.text
-    assert "Gửi: <b>6</b> · Tạo được: <b>3</b> (50%)" in reply.text
-    assert "Lỗi: Dữ liệu sản phẩm chưa sẵn 2 · Link sai 1" in reply.text
-    assert "Chênh lệch trước phí, thuế: <b>16.538đ</b>" in reply.text
-    assert "1. @an · 2 link" in reply.text
-    assert "2. <code>2</code> · 1 link" in reply.text
-    assert "23/10 ██████████ 3" in reply.text
-    assert "chưa phải doanh thu" in reply.text
+    # Tổng quan: tiền thật, phễu, bảng 7 ngày (bỏ ngày trống); không có top, số dự kiến.
+    assert "Link       3  gửi 6 · lỗi 3" in reply.text
+    assert "23/10    3     0   0     0" in reply.text
+    assert "Gửi nhiều nhất" not in reply.text and "chưa phải doanh thu" not in reply.text
     assert reply.inline_keyboard[0][0] == ("• Hôm nay", "c:st:today")
+    assert reply.inline_keyboard[1] == (("🔎 Chi tiết", "c:st:today:more"),)
     assert reply.inline_keyboard[-1] == (("◀️ Tổng quan", "c:menu:home"),)
-    assert len(reply.text) < 3500
+    assert reply.text.count("\n") < 30
 
-    everything = bot.admin_panel.handle_callback(ADMIN, "c:st:all", "private", NOW)
+    detail = bot.admin_panel.handle_callback(ADMIN, "c:st:today:more", "private", NOW)
+    assert "Thống kê · Hôm nay › Chi tiết" in detail.text
+    assert "Gửi: <b>6</b> · Tạo được: <b>3</b> (50%)" in detail.text
+    assert "Lỗi: Dữ liệu sản phẩm chưa sẵn 2 · Link sai 1" in detail.text
+    assert "Chênh lệch trước phí, thuế: <b>16.538đ</b>" in detail.text
+    assert "1. @an · 2 link" in detail.text
+    assert "2. <code>2</code> · 1 link" in detail.text
+    assert "chưa phải doanh thu" in detail.text
+    # Đổi kỳ ở màn chi tiết thì vẫn ở chi tiết.
+    assert detail.inline_keyboard[0][1] == ("7 ngày", "c:st:7d:more")
+    assert detail.inline_keyboard[1] == (("◀️ Về thống kê", "c:st:today"),)
+    assert len(detail.text) < 3500
+
+    everything = bot.admin_panel.handle_callback(ADMIN, "c:st:all:more", "private", NOW)
     assert "<i>Toàn bộ dữ liệu</i>" in everything.text
     assert "&lt;b&gt;x&lt;/b&gt;" in everything.text, "username phải được escape"
 
@@ -118,10 +129,12 @@ def test_chua_co_du_lieu(tmp_path):
     repo(tmp_path)
     panel = AdminPanel(str(tmp_path / "cashback.sqlite"), frozenset({ADMIN}), 70)
     reply = panel.handle_callback(ADMIN, "c:st:7d", "private", NOW)
-    assert "Tổng: <b>0</b>" in reply.text
-    assert "Lỗi: không có" in reply.text
-    assert "Gửi nhiều nhất" not in reply.text
-    assert "16/10" not in reply.text and "17/10 ▏ 0" in reply.text
+    assert "Người dùng 0  mới 0 · gửi link 0" in reply.text
+    assert "Chưa có hoạt động." in reply.text
+    assert "Chưa có dữ liệu đối soát" in reply.text
+    detail = panel.handle_callback(ADMIN, "c:st:7d:more", "private", NOW)
+    assert "Lỗi: không có" in detail.text
+    assert "Gửi nhiều nhất" not in detail.text
 
 
 def test_database_thieu_bang_khong_vo(tmp_path):

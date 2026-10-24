@@ -73,6 +73,7 @@ from cashback_bot.admin_ui import (
     shopee_prompt_cookie_text,
     shopee_text,
     simulation_text,
+    stats_detail_text,
     stats_keyboard,
     stats_text,
 )
@@ -117,7 +118,7 @@ _MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy)$")
 _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD)$")
 _RESERVE = re.compile(r"^c:rs:(\d+):([0-9a-f]{8}):(k:[PIH]|keep|w:now|w:tmr|ok|no)$")
 _SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
-_STATS = re.compile(r"^c:st:(today|7d|30d|all)$")
+_STATS = re.compile(r"^c:st:(today|7d|30d|all)(:more)?$")
 _SHARE_NUMBER = re.compile(r"^(\d{1,3})\s*%?$")
 _DECISION = re.compile(r"^c:(ok|no):(\d+):([0-9a-f]{8})$")
 # Telegram tách tin dài hơn 4.096 ký tự. Gom các phần JSON cookie trong RAM, không ghi DB.
@@ -237,7 +238,7 @@ class AdminPanel:
             return self._begin(user_id, tier.group(1), now)
         stats = _STATS.fullmatch(data or "")
         if stats:
-            return self._stats(stats.group(1), now)
+            return self._stats(stats.group(1), now, detail=bool(stats.group(2)))
         if data == "c:rs:new":
             return self._reserve_start(user_id, now)
         if data == "c:sh:new":
@@ -828,7 +829,7 @@ class AdminPanel:
         )
         return BotReply(text, inline_keyboard=reserve_decision_keyboard(draft_id, nonce, "sh"))
 
-    def _stats(self, period: str, now: datetime) -> BotReply:
+    def _stats(self, period: str, now: datetime, detail: bool = False) -> BotReply:
         try:
             with self._connect() as conn:
                 stats = collect(conn, period, now)
@@ -836,8 +837,9 @@ class AdminPanel:
             logger.exception("[Cashback] thống kê lỗi")
             return BotReply("Chưa đọc được dữ liệu thống kê trên database này.", inline_keyboard=stats_keyboard(period))
         since = stats.since.astimezone(ICT).strftime("00:00 %d/%m/%Y") if stats.since else None
-        text = stats_text(stats, period_label=PERIODS[period][0], since=since)
-        return BotReply(text, inline_keyboard=stats_keyboard(period))
+        render = stats_detail_text if detail else stats_text
+        text = render(stats, period_label=PERIODS[period][0], since=since)
+        return BotReply(text, inline_keyboard=stats_keyboard(period, detail))
 
     def _history_rows(self) -> list[str] | None:
         try:

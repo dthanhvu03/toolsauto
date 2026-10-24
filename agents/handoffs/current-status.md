@@ -1,3 +1,23 @@
+## Phiên 2026-10-24 (z) — Cashback: gọn màn 📊 Thống kê admin
+
+Claude Code, user báo "phần thống kê trong admin bị rối quá".
+
+- Trước: một màn 60 dòng. Tiền thật Shopee nằm cuối, số dự kiến lẫn với số thật, có 2 bảng 7 ngày, top khách và top món chen giữa.
+- Sau: 2 màn.
+  - **Tổng quan** (`c:st:<kỳ>`, khoảng 24 dòng):
+    - 💰 Tiền thật: bảng Doanh số / HH / − Khách / − Phí+T / = Admin, kèm số đơn chờ, xong, huỷ.
+    - 🔗 Phễu: Người dùng → Link → Click → Đơn, kèm CR.
+    - 📅 Một bảng 7 ngày gộp Link, Click, Đơn, HH; bỏ ngày trống.
+    - 🩺 chỉ hiện khi có lỗi.
+  - **🔎 Chi tiết** (`c:st:<kỳ>:more`): Link và lỗi, số dự kiến, đối soát Shopee (HH gốc, MCN, qua bot, huỷ), ngành hàng/shop, top khách, top món. Đổi kỳ ở đây thì vẫn ở màn chi tiết.
+- Bỏ `shopee_stats_lines`, thay bằng `_money_lines`, `_funnel_lines`, `_week_lines` và `stats_detail_text`.
+- Test: 287 passed, ruff sạch. Đã dựng thử từ DB thật (chỉ đọc).
+
+Next:
+- User restart bot và xem 📊 trên điện thoại.
+
+---
+
 ## Phiên 2026-10-24 (y) — Cashback: tin 🔄 hiển thị dạng bảng
 
 Claude Code, user yêu cầu "hiển thị dạng table cho dễ quan sát".

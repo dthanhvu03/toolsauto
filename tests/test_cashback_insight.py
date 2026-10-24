@@ -97,7 +97,7 @@ def test_thong_ke_hoa_hong_theo_nguon(tmp_path):
     from cashback_bot.admin_policy import AdminPanel
 
     panel = AdminPanel(str(tmp_path / "cashback.sqlite"), frozenset({7}), 70)
-    text = panel.handle_callback(7, "c:st:today", "private", NOW).text
+    text = panel.handle_callback(7, "c:st:today:more", "private", NOW).text
     assert "Hoa hồng theo nguồn</b> · 3/4 link có dữ liệu" in text
     assert "Người bán: <b>18.000đ</b> · Shopee/Xtra: <b>31.000đ</b>" in text
     assert "Tỷ lệ trung bình: <b>10%</b> · Xtra: 2 link · Chạm trần: 1 link" in text
@@ -110,7 +110,7 @@ def test_chua_co_link_co_du_lieu(tmp_path):
     from cashback_bot.admin_policy import AdminPanel
 
     panel = AdminPanel(str(tmp_path / "cashback.sqlite"), frozenset({7}), 70)
-    text = panel.handle_callback(7, "c:st:7d", "private", NOW).text
+    text = panel.handle_callback(7, "c:st:7d:more", "private", NOW).text
     assert "0/0 link có dữ liệu" in text
     assert "Link tạo từ bản này trở đi" in text
 

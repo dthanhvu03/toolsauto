@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import cashback_bot.poller as poller
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_stats import collect
-from cashback_bot.admin_ui import shopee_stats_lines, stats_text
+from cashback_bot.admin_ui import stats_detail_text, stats_text
 from cashback_bot.money import format_vnd
 from cashback_bot.poller import _check_shopee_auto_sync, _check_wallet_refresh, process_updates
 from cashback_bot.shopee_client import ShopeeStatusResult
@@ -91,9 +91,11 @@ class TestReconciliation:
             assert row["validation_month"] == "2026-11"
             stats = collect(conn, "7d", datetime(2026, 10, 24, 12, tzinfo=timezone.utc))
         text = stats_text(stats, period_label="7 ngày", since=None)
-        assert "Doanh số <b>399.000đ</b>" in text
-        assert "HH gốc 20.000đ − phí MCN 2.000đ" in text
-        assert "<pre>" in text and "7 ngày qua" in text
+        assert "Doanh số 399.000" in text
+        assert "7 ngày gần nhất" in text
+        detail = stats_detail_text(stats, period_label="7 ngày", since=None)
+        assert "Doanh số <b>399.000đ</b>" in detail
+        assert "HH gốc 20.000đ − phí MCN 2.000đ" in detail
 
     def test_cancelled_orders_counted_separately(self, tmp_path):
         bot = _bot(tmp_path)
@@ -227,11 +229,15 @@ class TestLedger:
         _order(bot, sub, status="CANCELLED", commission=5_000, cid="c2")
         bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
         with bot.repo.connect() as conn:
-            shopee = collect(conn, "all", datetime(2026, 10, 21, 12, tzinfo=timezone.utc)).shopee
+            stats = collect(conn, "all", datetime(2026, 10, 21, 12, tzinfo=timezone.utc))
+        shopee = stats.shopee
         # Đơn huỷ không tính.
         assert (shopee.bot_commission_vnd, shopee.bot_cashback_vnd) == (17_368, 12_157)
         assert shopee.admin_keep_vnd == 17_368 - 12_157 - shopee.bot_fee_vnd - shopee.bot_tax_vnd
-        assert "Admin còn" in "\n".join(shopee_stats_lines(shopee))
+        keep = format_vnd(shopee.admin_keep_vnd).removesuffix("đ")
+        overview = stats_text(stats, period_label="Tất cả", since=None)
+        assert f"= Admin    {keep}" in overview or f"= Admin {keep}" in overview.replace("  ", " ")
+        assert "Admin còn" in stats_detail_text(stats, period_label="Tất cả", since=None)
         with bot.repo.connect() as conn:
             conversion_id = conn.execute("SELECT conversion_id FROM cashback_entries WHERE status != 'cancelled'").fetchone()[0]
         order = BotOrder("SN", "DOPI", 231_570, 17_368, "UNPAID", False, conversion_id)
