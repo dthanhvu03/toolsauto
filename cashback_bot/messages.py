@@ -57,7 +57,6 @@ def home_keyboard(show_rank: bool = False, show_wallet: bool = False) -> Keyboar
     if show_rank:
         second += (("🏅 Hạng thành viên", "u:p:rank"),)
     rows: Keyboard = (
-        (("📦 Đơn hàng của tôi", "u:p:orders"),),
         (("📖 Cách dùng", "u:p:guide"), ("🛡️ Để được ghi nhận", "u:p:rules")),
         second,
     )
@@ -93,9 +92,7 @@ BOT_COMMANDS = (
     ("huongdan", "Cách dùng"),
     ("dieukien", "Để đơn được ghi nhận"),
     ("cachtinh", "Cách tính tiền hoàn"),
-    ("donhang", "Đơn hàng của tôi"),
     ("hotro", "Hỗ trợ & khiếu nại"),
-    ("thongbao", "Cài đặt thông báo"),
     ("help", "Trợ giúp"),
 )
 # Chỉ đăng ký với scope chat của từng admin.
@@ -580,165 +577,3 @@ def support_ticket_reply(ticket, categories, statuses, replies: list[tuple[str, 
         rows.append((("✍️ Bổ sung thông tin", f"u:h:r:{ticket.id}"),))
     rows.append((("🗂 Yêu cầu của tôi", "u:h:mine"), ("◀️ Trang chủ", "u:p:home")))
     return BotReply("\n".join(lines), inline_keyboard=tuple(rows))
-
-
-# --- Đơn hàng và thông báo đơn (PLAN-079) ------------------------------------------------------
-# Tách bạch: người mua thanh toán đơn ≠ Shopee duyệt hoa hồng ≠ Shopee thanh toán hoa hồng ≠ bot chuyển tiền hoàn.
-
-ORDER_STATUS_LABELS = {
-    "UNPAID": "Người mua chưa thanh toán đơn",
-    "PENDING": "Đơn đang được xử lý",
-    "PAID": "Người mua đã thanh toán đơn",
-    "COMPLETED": "Đơn hàng đã hoàn thành",
-    "CANCELLED": "Đơn đã huỷ",
-    "CANCELED": "Đơn đã huỷ",
-}
-COMMISSION_LABELS = {
-    "APPROVED": "Hoa hồng đã được Shopee duyệt",
-    "REJECTED": "Không đủ điều kiện hoa hồng",
-    "FRAUD": "Không đủ điều kiện hoa hồng",
-    "NEEDS_REVIEW": "Đang được kiểm tra thêm",
-}
-COMMISSION_WAITING = "Hoa hồng đang chờ Shopee xác minh"
-SETTLED_LABEL = "Shopee đã thanh toán hoa hồng cho chương trình"
-NOT_SETTLED_LABEL = "Chưa có xác nhận Shopee thanh toán hoa hồng"
-NOT_WITHDRAWABLE = "Chưa phải tiền có thể rút: ví hoàn tiền chưa mở."
-ORDERS_EMPTY = (
-    "📦 <b>Đơn hàng của tôi</b>\n\n"
-    "Hiện Shopee chưa ghi nhận giao dịch nào khớp với các link bạn đã tạo.\n\n"
-    "Dữ liệu đơn có thể cập nhật muộn. Nếu cần kiểm tra, hãy gửi yêu cầu tại /hotro."
-)
-
-
-def order_status_label(status: str | None) -> str:
-    return ORDER_STATUS_LABELS.get((status or "").upper(), "Chưa rõ tình trạng đơn")
-
-
-def commission_label(validation: str | None, order_status: str | None = None) -> str:
-    if (order_status or "").upper() in ("CANCELLED", "CANCELED"):
-        return "Không đủ điều kiện hoa hồng"
-    return COMMISSION_LABELS.get(validation or "", COMMISSION_WAITING)
-
-
-def _cashback_line(amount: int | None) -> str:
-    return f"Hoàn tạm tính: <b>{format_vnd(amount)}</b>" if amount is not None else "Hoàn tạm tính: chưa xác định được"
-
-
-def order_new_notice(order: str, cashback: int | None, order_status: str | None, validation: str | None) -> str:
-    return (
-        "📦 <b>Đã ghi nhận giao dịch</b>\n\n"
-        "Shopee vừa ghi nhận một giao dịch qua link bạn đã tạo.\n\n"
-        f"Mã đơn: {order}\n"
-        f"Tình trạng đơn: {order_status_label(order_status)}\n"
-        f"{_cashback_line(cashback)}\n"
-        f"{commission_label(validation, order_status)}.\n\n"
-        "ⓘ Đây là số tạm tính, có thể thay đổi. Chưa phải tiền có thể rút."
-    )
-
-
-def order_update_notice(order: str, *, statuses: list[str], ineligible: bool, approved: bool,
-                        old_cashback: int | None, new_cashback: int | None) -> str:
-    """Một tin cho mọi thay đổi có ý nghĩa của một đơn trong một lần đồng bộ, tiêu đề theo việc quan trọng nhất."""
-    cancelled = any(s in ("CANCELLED", "CANCELED") for s in statuses)
-    if ineligible:
-        title = "⚠️ <b>Giao dịch không đủ điều kiện</b>"
-        body = "Shopee đã ghi nhận trạng thái không đủ điều kiện hoa hồng. Hoàn của đơn này hiện không được tính để chi trả."
-    elif cancelled:
-        title = "⚠️ <b>Đơn đã huỷ</b>"
-        body = "Shopee ghi nhận đơn đã huỷ, nên hoàn của đơn này không được tính."
-    elif approved:
-        title = "✅ <b>Hoa hồng đã được Shopee duyệt</b>"
-        body = "Shopee chưa thanh toán hoa hồng này cho chương trình; bot sẽ báo tiếp."
-    elif new_cashback is not None:
-        title = "💰 <b>Hoàn dự kiến được cập nhật</b>"
-        body = "Shopee đã điều chỉnh hoa hồng ghi nhận. Khoản hoàn vẫn đang chờ xác minh."
-    else:
-        title = "📦 <b>Cập nhật đơn hàng</b>"
-        body = COMMISSION_WAITING + "."
-    lines = [title, "", f"Mã đơn: {order}"]
-    lines += [f"• {order_status_label(s)}" for s in statuses]
-    if new_cashback is not None and old_cashback is not None:
-        lines.append(f"• Hoàn tạm tính: {format_vnd(old_cashback)} → <b>{format_vnd(new_cashback)}</b>")
-    lines += ["", body]
-    if ineligible or cancelled:
-        lines.append("Nếu bạn cần kiểm tra thêm, hãy dùng /hotro.")
-    lines += ["", "ⓘ " + NOT_WITHDRAWABLE]
-    return "\n".join(lines)
-
-
-ORDERS_KEYBOARD_BACK = (("◀️ Trang chủ", "u:p:home"),)
-
-
-def orders_summary_reply(stats: dict, rows, page: int, pages: int) -> BotReply:
-    """stats: tổng, chờ, duyệt, không đủ điều kiện, hoàn tạm tính. rows: đơn của trang (mới trước)."""
-    lines = [
-        "📦 <b>Đơn hàng của tôi</b>",
-        "",
-        f"Shopee đã ghi nhận: <b>{stats['total']}</b> đơn",
-        f"⏳ Chờ xác minh: {stats['waiting']} · ✅ Đã được duyệt: {stats['approved']} · ❌ Không đủ điều kiện: {stats['ineligible']}",
-        f"Hoàn tạm tính (đơn còn chờ): <b>{format_vnd(stats['estimated'])}</b>" if stats["estimated"] else "Hoàn tạm tính: chưa có",
-        "Chưa có khoản nào đủ điều kiện rút." if not stats.get("available") else "",
-        "",
-    ]
-    for row in rows:
-        lines.append(
-            f"• {row['order']} · {row['date']} · {order_status_label(row['order_status'])} · "
-            f"{commission_label(row['validation_status'], row['order_status'])}"
-            + (f" · {format_vnd(row['cashback'])}" if row["cashback"] is not None else "")
-        )
-    if pages > 1:
-        lines += ["", f"Trang {page}/{pages}"]
-    keyboard: list[tuple[tuple[str, str], ...]] = [((f"🔎 {row['order']}", f"u:o:d:{row['conversion_id']}"),) for row in rows]
-    nav = []
-    if page > 1:
-        nav.append(("◀️ Mới hơn", f"u:o:l:{page - 1}"))
-    if page < pages:
-        nav.append(("Cũ hơn ▶️", f"u:o:l:{page + 1}"))
-    if nav:
-        keyboard.append(tuple(nav))
-    keyboard.append((("🔔 Thông báo", "u:p:notify"), ("◀️ Trang chủ", "u:p:home")))
-    return BotReply("\n".join(line for line in lines if line is not None), inline_keyboard=tuple(keyboard))
-
-
-def order_detail_reply(row: dict) -> BotReply:
-    """row đã chỉ gồm dữ liệu của chính khách. Không có raw Shopee, không có thông tin người mua."""
-    lines = [
-        f"📦 <b>Đơn {row['order']}</b>",
-        "",
-        f"Bot ghi nhận: {row['date']}",
-        f"Link của bạn: <code>{html.escape(row['sub_id'] or '-')}</code> · cách tính {html.escape(row['policy'])}",
-        f"Tình trạng đơn: {order_status_label(row['order_status'])}",
-        f"{commission_label(row['validation_status'], row['order_status'])}",
-        SETTLED_LABEL if row["settlement_status"] == "SETTLED" else NOT_SETTLED_LABEL,
-        _cashback_line(row["cashback"]),
-        "",
-        "ⓘ " + NOT_WITHDRAWABLE + " Số tạm tính có thể đổi khi Shopee điều chỉnh hoa hồng hoặc đơn bị huỷ, trả hàng.",
-    ]
-    keyboard = (
-        (("📩 Yêu cầu kiểm tra", "u:h:c:amount"),),
-        (("◀️ Đơn hàng của tôi", "u:o:l:1"), ("◀️ Trang chủ", "u:p:home")),
-    )
-    return BotReply("\n".join(lines), inline_keyboard=keyboard)
-
-
-NOTIFY_OPTIONS = (
-    ("orders", "📦 Đơn mới được ghi nhận"),
-    ("updates", "🔄 Trạng thái đơn / hoa hồng thay đổi"),
-    ("support", "📩 Trả lời yêu cầu hỗ trợ"),
-    ("wallet", "👛 Ví và chi trả (khi ví mở)"),
-)
-
-
-def notify_settings_reply(prefs: dict, orders_live: bool, notice: str = "") -> BotReply:
-    lines = ["🔔 <b>Cài đặt thông báo</b>", ""]
-    if notice:
-        lines += [notice, ""]
-    lines += [f"{'✅' if prefs[key] else '⬜'} {label}" for key, label in NOTIFY_OPTIONS]
-    lines += [
-        "",
-        "Bấm để bật / tắt. Chỉ áp dụng cho tài khoản của bạn.",
-        "" if orders_live else "ⓘ Bot chưa bật gửi thông báo đơn hàng tự động. Bạn vẫn xem đơn ở /donhang.",
-    ]
-    keyboard = tuple(((f"{'✅' if prefs[key] else '⬜'} {label}", f"u:n:t:{key}"),) for key, label in NOTIFY_OPTIONS)
-    keyboard += ((("📦 Đơn hàng của tôi", "u:o:l:1"), ("◀️ Trang chủ", "u:p:home")),)
-    return BotReply("\n".join(lines).rstrip(), inline_keyboard=keyboard)

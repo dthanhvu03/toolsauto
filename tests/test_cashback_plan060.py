@@ -95,7 +95,7 @@ def test_start_co_nut_va_trang_con_doi_bang_edit(tmp_path):
     tg = Telegram()
     process_updates(bot, tg, bot.repo, [_message(1, "/start")], Admin())
     home = tg.sent[0]
-    assert _callbacks(home["markup"]) == ["u:p:orders", "u:p:guide", "u:p:rules", "u:p:calc", "u:p:support"]
+    assert _callbacks(home["markup"]) == ["u:p:guide", "u:p:rules", "u:p:calc", "u:p:support"]
     assert "u:p:rank" not in _callbacks(home["markup"])
 
     process_updates(bot, tg, bot.repo, [_callback(2, "u:p:calc")], Admin())
@@ -209,7 +209,7 @@ def test_dang_ky_ho_so_bot():
             return True
 
     _register_profile(Api(), frozenset({9, 7}))
-    assert calls[0] == ("commands", ["start", "huongdan", "dieukien", "cachtinh", "donhang", "hotro", "thongbao", "help"], None)
+    assert calls[0] == ("commands", ["start", "huongdan", "dieukien", "cachtinh", "hotro", "help"], None)
     assert ("description", DESCRIPTION) in calls
     assert ("short", SHORT_DESCRIPTION) in calls
     admin_calls = [c for c in calls if c[0] == "commands" and c[2]]
@@ -268,7 +268,7 @@ def test_thong_bao_admin_loi_gui_khong_vang_vong_poll(tmp_path):
     row = sqlite3.connect(tmp_path / "cashback.sqlite").execute(
         "SELECT status, attempt_count FROM admin_notifications"
     ).fetchone()
-    assert row == ("failed", 1), "PLAN-079: 4xx là lỗi vĩnh viễn, không thử lại mãi; vòng poll vẫn chạy"
+    assert row == ("pending", 1)
 
 
 def test_admin_xac_nhan_quay_ve_man_vua_sua(tmp_path):

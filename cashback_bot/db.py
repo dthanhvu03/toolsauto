@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -22,8 +21,6 @@ from cashback_bot.commission_validation import (
     is_regression,
     is_significant_drop,
 )
-
-logger = logging.getLogger("cashback_bot")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS telegram_users (
@@ -534,17 +531,6 @@ BEGIN SELECT RAISE(ABORT, 'payout_limit_policies is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS payout_limit_policies_no_delete BEFORE DELETE ON payout_limit_policies
 BEGIN SELECT RAISE(ABORT, 'payout_limit_policies is append-only'); END;
 
--- Tuỳ chọn thông báo của từng khách (PLAN-079). Chưa có dòng = mặc định bật; cờ toàn cục vẫn quyết định
--- thông báo đơn hàng có được gửi hay không.
-CREATE TABLE IF NOT EXISTS customer_notification_prefs (
-    telegram_user_id INTEGER PRIMARY KEY,
-    orders INTEGER NOT NULL DEFAULT 1,
-    updates INTEGER NOT NULL DEFAULT 1,
-    support INTEGER NOT NULL DEFAULT 1,
-    wallet INTEGER NOT NULL DEFAULT 1,
-    updated_at TEXT NOT NULL
-);
-
 -- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
 -- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
 CREATE TABLE IF NOT EXISTS failed_updates (
@@ -747,53 +733,6 @@ def insert_snapshot(conn: sqlite3.Connection, link_id: int, snapshot: dict) -> N
 CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_policy_cancellations.sql"
 
 
-# Cột thêm cho hàng đợi gửi (PLAN-079). status: pending, sending, sent, retry, failed, suppressed, unknown.
-NOTIFICATION_COLUMNS = (
-    ("audience", "TEXT NOT NULL DEFAULT 'admin'"),
-    ("category", "TEXT"),
-    ("next_retry_at", "TEXT"),
-    ("telegram_message_id", "INTEGER"),
-    ("reply_markup_json", "TEXT"),
-    ("source_ref", "TEXT"),
-)
-# Tin gửi khách đã có trước PLAN-079 (đi chung bảng): đối tượng và loại để áp tuỳ chọn của khách.
-CUSTOMER_EVENT_TYPES = {"WALLET_ENTRY": "wallet", "PAYOUT_DECIDED": "wallet", "SUPPORT_CUSTOMER": "support"}
-
-
-def enqueue_event(
-    conn: sqlite3.Connection,
-    *,
-    event_key: str,
-    event_type: str,
-    chat_id: int,
-    message_html: str,
-    audience: str = "admin",
-    category: str | None = None,
-    reply_markup_json: str | None = None,
-    source_ref: str | None = None,
-    suppressed_reason: str | None = None,
-    now: str | None = None,
-) -> bool:
-    """Ghi một tin vào hàng đợi trong transaction của người gọi. Trùng event_key thì bỏ qua (False).
-
-    suppressed_reason: ghi để theo dõi nhưng không bao giờ gửi (cờ tắt, khách tắt, đơn lịch sử…).
-    """
-    cursor = conn.execute(
-        """
-        INSERT OR IGNORE INTO admin_notifications
-            (event_key, event_type, chat_id, message_html, status, attempt_count, last_error, created_at,
-             audience, category, reply_markup_json, source_ref)
-        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            event_key, event_type, chat_id, message_html,
-            "suppressed" if suppressed_reason else "pending", suppressed_reason, now or _utc_now(),
-            audience, category, reply_markup_json, source_ref,
-        ),
-    )
-    return cursor.rowcount == 1
-
-
 def _backfill_bank_history(conn: sqlite3.Connection) -> None:
     """Tài khoản khai trước PLAN-078 chưa có lịch sử: ghi một dòng 'add' (4 số cuối + sha), một lần."""
     rows = conn.execute(
@@ -817,9 +756,6 @@ def _backfill_bank_history(conn: sqlite3.Connection) -> None:
 class TrackingRepository:
     def __init__(self, path: str):
         self.path = path
-        # PLAN-079: hàm gọi trong transaction ghi đơn (sau khi ghi lịch sử thay đổi), để sinh sự kiện thông báo
-        # cùng transaction. Lỗi trong hook không làm hỏng việc ghi đơn (SAVEPOINT).
-        self.conversion_hooks: list = []
 
     def column_names(self, table: str) -> set[str]:
         with self.connect() as conn:
@@ -866,13 +802,6 @@ class TrackingRepository:
                 "WHERE idempotency_key IS NOT NULL"
             )
             _backfill_bank_history(conn)
-            # PLAN-079: admin_notifications là hàng đợi gửi chung cho admin và khách (ADR-056).
-            for column, ddl in NOTIFICATION_COLUMNS:
-                _add_column(conn, "admin_notifications", column, ddl)
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_admin_notifications_due ON admin_notifications(status, next_retry_at)"
-            )
-            _add_column(conn, "telegram_users", "notify_blocked_at", "TEXT")
             # Mỗi khách tối đa một yêu cầu còn giữ tiền: chặn rút trùng ở tầng DB.
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_payout_one_open ON cashback_payouts(telegram_user_id) "
@@ -897,12 +826,6 @@ class TrackingRepository:
                 """,
                 (telegram_user_id, username, now, now),
             )
-            # Khách nhắn lại bot: không còn bị coi là đã chặn bot (PLAN-079).
-            if "notify_blocked_at" in {row[1] for row in conn.execute("PRAGMA table_info(telegram_users)")}:
-                conn.execute(
-                    "UPDATE telegram_users SET notify_blocked_at = NULL WHERE telegram_user_id = ? AND notify_blocked_at IS NOT NULL",
-                    (telegram_user_id,),
-                )
         return not existed
 
     def get_user(self, telegram_user_id: int) -> sqlite3.Row | None:
@@ -1190,83 +1113,34 @@ class TrackingRepository:
             )
 
     def enqueue_admin_event(self, event_key: str, event_type: str, chat_id: int, message_html: str) -> bool:
-        """Tin vào hàng đợi chung. Loại tin gửi khách có sẵn (ví, chi trả, hỗ trợ) được gắn audience=customer."""
-        category = CUSTOMER_EVENT_TYPES.get(event_type)
         with self.connect() as conn:
-            return enqueue_event(
-                conn, event_key=event_key, event_type=event_type, chat_id=chat_id, message_html=message_html,
-                audience="customer" if category else "admin", category=category,
+            row = conn.execute(
+                "SELECT 1 FROM admin_notifications WHERE event_key = ?",
+                (event_key,),
+            ).fetchone()
+            if row is not None:
+                return False
+            conn.execute(
+                """
+                INSERT INTO admin_notifications
+                (event_key, event_type, chat_id, message_html, status, attempt_count, created_at)
+                VALUES (?, ?, ?, ?, 'pending', 0, ?)
+                """,
+                (event_key, event_type, chat_id, message_html, _utc_now()),
             )
+            return True
 
-    def list_pending_admin_events(self, limit: int = 10, max_attempts: int = 5, now: str | None = None) -> list[sqlite3.Row]:
-        """Tin tới lượt gửi: pending, hoặc retry đã tới giờ. Không lấy sending / unknown / failed / suppressed."""
+    def list_pending_admin_events(self, limit: int = 10, max_attempts: int = 5) -> list[sqlite3.Row]:
         with self.connect() as conn:
             return conn.execute(
                 """
                 SELECT * FROM admin_notifications
-                WHERE status IN ('pending', 'retry') AND attempt_count < ?
-                  AND (next_retry_at IS NULL OR next_retry_at <= ?)
+                WHERE status != 'sent' AND attempt_count < ?
                 ORDER BY id ASC
                 LIMIT ?
                 """,
-                (max_attempts, now or _utc_now(), limit),
+                (max_attempts, limit),
             ).fetchall()
-
-    def claim_admin_event(self, event_id: int) -> bool:
-        """Đánh dấu đang gửi trước khi gọi Telegram. Restart giữa chừng thì dòng ở 'sending' → recover_sending."""
-        with self.connect() as conn:
-            cursor = conn.execute(
-                """
-                UPDATE admin_notifications SET status = 'sending', attempt_count = attempt_count + 1, last_attempt_at = ?
-                WHERE id = ? AND status IN ('pending', 'retry')
-                """,
-                (_utc_now(), event_id),
-            )
-            return cursor.rowcount == 1
-
-    def finish_admin_event(self, event_id: int, status: str, error: str | None = None,
-                           next_retry_at: str | None = None, message_id: int | None = None) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                """
-                UPDATE admin_notifications
-                SET status = ?, last_error = ?, next_retry_at = ?, telegram_message_id = COALESCE(?, telegram_message_id),
-                    sent_at = CASE WHEN ? = 'sent' THEN ? ELSE sent_at END
-                WHERE id = ?
-                """,
-                (status, None if error is None else error[:120], next_retry_at, message_id, status, _utc_now(), event_id),
-            )
-
-    def suppress_admin_event(self, event_id: int, reason: str) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                "UPDATE admin_notifications SET status = 'suppressed', last_error = ? WHERE id = ? AND status IN ('pending', 'retry')",
-                (reason[:120], event_id),
-            )
-
-    def customer_events_since(self, since: str) -> tuple[int, int]:
-        """(chờ gửi, bỏ qua) của tin khách ghi từ mốc since. Dùng cho tin kết quả đồng bộ."""
-        with self.connect() as conn:
-            row = conn.execute(
-                """
-                SELECT COALESCE(SUM(status IN ('pending', 'retry', 'sending', 'sent')), 0),
-                       COALESCE(SUM(status = 'suppressed'), 0)
-                FROM admin_notifications WHERE audience = 'customer' AND created_at >= ?
-                """,
-                (since,),
-            ).fetchone()
-        return int(row[0]), int(row[1])
-
-    def recover_sending(self) -> int:
-        """Lúc khởi động: tin kẹt ở 'sending' (bot dừng giữa lúc gửi) thành 'unknown'.
-
-        Không tự gửi lại: Telegram có thể đã nhận tin. Admin xem và chủ động gửi lại ở 🔔 Thông báo khách.
-        """
-        with self.connect() as conn:
-            return conn.execute(
-                "UPDATE admin_notifications SET status = 'unknown', last_error = 'interrupted_while_sending' "
-                "WHERE status = 'sending'"
-            ).rowcount
 
     def mark_admin_event_sent(self, event_id: int) -> None:
         with self.connect() as conn:
@@ -1593,9 +1467,8 @@ class TrackingRepository:
                     f"UPDATE shopee_conversions SET {', '.join(f'{name} = ?' for name in values)} WHERE conversion_id = ?",
                     (*values.values(), conversion_id),
                 )
-            recorded: list[tuple[ConversionChange, int]] = []
             for change in changes:
-                cursor = conn.execute(
+                conn.execute(
                     """
                     INSERT OR IGNORE INTO shopee_conversion_changes
                     (conversion_id, field, old_value, new_value, significant, source, sync_run_id, detected_at)
@@ -1603,17 +1476,6 @@ class TrackingRepository:
                     """,
                     (conversion_id, change.field, change.old, change.new, int(change.significant), SOURCE_REPORT, sync_run_id, now),
                 )
-                if cursor.rowcount == 1:
-                    recorded.append((change, int(cursor.lastrowid)))
-            for hook in self.conversion_hooks:
-                conn.execute("SAVEPOINT conversion_hook")
-                try:
-                    hook(conn, conversion_id, prev, values, recorded, now)
-                    conn.execute("RELEASE conversion_hook")
-                except Exception:
-                    conn.execute("ROLLBACK TO conversion_hook")
-                    conn.execute("RELEASE conversion_hook")
-                    logger.exception("[Cashback] sinh sự kiện thông báo đơn lỗi conversion=%s", conversion_id[-6:])
         return ConversionResult(
             is_new=prev is None,
             is_matched=matched_link_id is not None,
