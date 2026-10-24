@@ -1,3 +1,24 @@
+## Phiên 2026-10-24 (aa) — Cashback: sửa câu chữ số tiền hoàn cho khách
+
+Claude Code, user yêu cầu "chỉnh sửa lại câu từ cho người dùng về số tiền được hoàn về".
+
+- Lý do: link DOPI báo khách hoàn 21.357đ theo giá tham khảo 339.000. Khách trả 231.570 nên thực tế chỉ 12.157đ.
+- Thẻ link:
+  - Đổi thành "Hoàn dự kiến: khoảng X".
+  - Ghi chú nói rõ số này tính theo giá tham khảo. Shopee tính trên số tiền thực trả: dùng voucher, xu hoặc mua lúc giảm giá thì tiền hoàn giảm theo.
+  - Giữ câu "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
+- /cachtinh: thêm một gạch đầu dòng về giá tham khảo và tiền thực trả. Vẫn không hiện ký tự %.
+- Tin "Có đơn mới" (khi ví bật):
+  - "Hoàn tạm tính".
+  - Nếu thấp hơn số đã báo lúc tạo link thì giải thích: "Lúc tạo link bot báo khoảng X… nên còn Y".
+  - `Transition.estimated_vnd` lấy từ `link_requests.estimated_cashback`.
+- Test: 291 passed (thêm 4), ruff sạch.
+
+Next:
+- User restart bot, gửi thử một link và đọc thẻ.
+
+---
+
 ## Phiên 2026-10-24 (z) — Cashback: gọn màn 📊 Thống kê admin
 
 Claude Code, user báo "phần thống kê trong admin bị rối quá".

@@ -11,6 +11,7 @@ import cashback_bot.poller as poller
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_stats import collect
 from cashback_bot.admin_ui import stats_detail_text, stats_text
+from cashback_bot.messages import entry_notice
 from cashback_bot.money import format_vnd
 from cashback_bot.poller import _check_shopee_auto_sync, _check_wallet_refresh, process_updates
 from cashback_bot.shopee_client import ShopeeStatusResult
@@ -428,3 +429,36 @@ class TestAutoSyncSwitch:
         _check_wallet_refresh(bot, bot.repo)
         _check_wallet_refresh(bot, bot.repo)  # chưa đủ 1 giờ
         assert bot.refresh_wallet.call_count == 1
+
+
+class TestPaidBasisWording:
+    """Khách được báo số trên link tính theo giá tham khảo, số thật theo tiền thực trả (2026-10-24)."""
+
+    def test_link_card_explains_paid_basis(self, tmp_path):
+        reply = _bot(tmp_path).handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=901, now=NOW)
+        assert "💰 Hoàn dự kiến: khoảng <b>" in reply.text
+        assert "Shopee tính trên số tiền bạn thực trả" in reply.text
+        assert "voucher, xu" in reply.text
+        assert "%" not in reply.text
+
+    def test_cachtinh_explains_paid_basis(self, tmp_path):
+        reply = _bot(tmp_path).handle_text(USER, "buyer", "/cachtinh", update_id=902, now=NOW)
+        assert "Số trên link tính theo giá tham khảo" in reply.text
+        assert "%" not in reply.text
+
+    def test_order_notice_says_why_lower_than_link(self):
+        text = entry_notice("pending", "DOPI Kem Nền", 12_157, None, 15, estimated_vnd=21_357)
+        assert "Hoàn tạm tính: <b>12.157đ</b>" in text
+        assert "Lúc tạo link bot báo khoảng 21.357đ theo giá tham khảo" in text
+        same = entry_notice("pending", "DOPI Kem Nền", 21_357, None, 15, estimated_vnd=21_357)
+        assert "Lúc tạo link" not in same
+        assert "Lúc tạo link" not in entry_notice("pending", "Áo", 5_000, None, 15)
+
+    def test_refresh_passes_link_estimate_to_customer(self, tmp_path):
+        bot = _bot(tmp_path)
+        bot.wallet.set_enabled(True)
+        sub = _link(bot)
+        _order(bot, sub, commission=1_000)
+        bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
+        events = _customer_events(bot)
+        assert len(events) == 1 and "Lúc tạo link bot báo khoảng" in events[0]

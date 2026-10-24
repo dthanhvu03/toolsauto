@@ -112,7 +112,9 @@ def how_to_calc(v12: bool, wallet_hold_days: int | None = None, wallet_min_vnd: 
         "Khi bạn mua qua link của bot, Shopee trả cho chương trình một khoản hoa hồng. "
         "Bot chia lại một phần khoản đó cho bạn. Số tiền hiện trên mỗi link là phần bạn dự kiến nhận.\n\n"
         + deduction
-        + "• Hoa hồng có thể thay đổi, hoặc bằng 0 nếu đơn bị hủy, trả hàng hay không đủ điều kiện.\n"
+        + "• Số trên link tính theo giá tham khảo. Shopee tính trên số tiền bạn thực trả "
+        "(sau voucher, xu, giảm giá), nên số thật thường thấp hơn.\n"
+        "• Hoa hồng có thể thay đổi, hoặc bằng 0 nếu đơn bị hủy, trả hàng hay không đủ điều kiện.\n"
         "• Số cuối chỉ được xác nhận khi Shopee đối soát xong.\n"
         "• Số dự kiến chưa phải tiền đã duyệt hay có thể rút.\n\n"
         + (
@@ -155,9 +157,16 @@ GENERIC_FAIL = (
     "Bạn thử lại sau ít phút nhé."
 )
 BUY_BUTTON = "🛒 Mua trên Shopee"
-_NOTE_V11 = "Số ước tính, chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
+# Shopee tính hoa hồng trên số tiền khách thực trả, bot chỉ biết giá tham khảo (đơn thật 24/10: báo 21.357đ, thật 12.157đ).
+_PAID_BASIS = (
+    "Shopee tính trên số tiền bạn thực trả, nên dùng voucher, xu hoặc mua lúc giảm giá thì tiền hoàn giảm theo."
+)
+_NOTE_V11 = (
+    f"Số hoàn tính theo giá tham khảo. {_PAID_BASIS}\n"
+    "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
+)
 _NOTE_V12 = (
-    "Số ước tính sau dự phòng phí và thuế, có thể khác số cuối. "
+    f"Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. {_PAID_BASIS}\n"
     "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
 )
 
@@ -213,7 +222,7 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
     title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
     text = (
         f"{title}\n\n"
-        f"💰 Hoàn dự kiến: <b>{format_vnd(cashback_vnd)}</b>\n\n"
+        f"💰 Hoàn dự kiến: khoảng <b>{format_vnd(cashback_vnd)}</b>\n\n"
         f"🛍️ {safe_name}\n"
         f"Giá tham khảo: {format_vnd(price_vnd)}\n\n"
         f"ⓘ {note}"
@@ -362,14 +371,28 @@ def withdraw_error_reply(code: str) -> BotReply:
     return BotReply(WITHDRAW_ERRORS.get(code, WITHDRAW_ERRORS["below_min"]), inline_keyboard=WALLET_BACK)
 
 
-def entry_notice(status: str, item_name: str, cashback_vnd: int, available_at: str | None, hold_days: int) -> str:
-    """Tin báo khách khi đơn đổi trạng thái."""
+def entry_notice(
+    status: str,
+    item_name: str,
+    cashback_vnd: int,
+    available_at: str | None,
+    hold_days: int,
+    estimated_vnd: int | None = None,
+) -> str:
+    """Tin báo khách khi đơn đổi trạng thái. estimated_vnd: số đã báo lúc tạo link."""
     item = html.escape(buyer_name(item_name or "-"))
     if status == "pending":
+        lower = ""
+        if estimated_vnd and cashback_vnd < estimated_vnd:
+            lower = (
+                f"Lúc tạo link bot báo khoảng {format_vnd(estimated_vnd)} theo giá tham khảo. "
+                f"Shopee tính lại trên số tiền bạn thực trả (sau voucher, xu, giảm giá) nên còn {format_vnd(cashback_vnd)}.\n\n"
+            )
         return (
             "🛒 <b>Có đơn mới qua link của bạn</b>\n\n"
-            f"🛍️ {item}\n💰 Hoàn dự kiến: <b>{format_vnd(cashback_vnd)}</b>\n\n"
-            "ⓘ Shopee đang xử lý đơn. Bot báo tiếp khi đơn hoàn thành."
+            f"🛍️ {item}\n💰 Hoàn tạm tính: <b>{format_vnd(cashback_vnd)}</b>\n\n"
+            + lower
+            + "ⓘ Shopee đang xử lý đơn. Số hoàn chốt khi đơn hoàn thành, bot sẽ báo tiếp."
         )
     if status == "holding":
         return (

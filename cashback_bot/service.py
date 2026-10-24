@@ -267,7 +267,8 @@ class CashbackService:
                 event_type="WALLET_ENTRY",
                 chat_id=item.telegram_user_id,
                 message_html=entry_notice(
-                    item.status, item.item_name, item.cashback_vnd, item.available_at, settings.hold_days
+                    item.status, item.item_name, item.cashback_vnd, item.available_at, settings.hold_days,
+                    item.estimated_vnd,
                 ),
             )
 

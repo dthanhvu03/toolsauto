@@ -133,6 +133,7 @@ class Transition:
     cashback_vnd: int
     available_at: str | None
     purchase_time: str | None
+    estimated_vnd: int | None = None  # số hoàn đã báo khách lúc tạo link
 
 
 @dataclass(frozen=True)
@@ -267,7 +268,7 @@ class Wallet:
                 f"""
                 SELECT c.conversion_id, c.telegram_user_id, c.matched_link_id, c.order_sn, c.order_status,
                        c.net_commission_vnd, c.gross_commission_vnd, c.purchase_time, c.complete_time, c.item_name,
-                       l.product_name, {policy} AS estimate_policy, l.cashback_rate_percent,
+                       l.product_name, {policy} AS estimate_policy, l.cashback_rate_percent, l.estimated_cashback,
                        l.created_at AS link_created_at
                 FROM shopee_conversions c JOIN link_requests l ON l.id = c.matched_link_id
                 WHERE c.telegram_user_id IS NOT NULL
@@ -340,6 +341,7 @@ class Wallet:
                             cashback_vnd=int(cashback),
                             available_at=available_at,
                             purchase_time=row["purchase_time"],
+                            estimated_vnd=row["estimated_cashback"],
                         )
                     )
         return transitions
