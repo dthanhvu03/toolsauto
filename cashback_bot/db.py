@@ -506,6 +506,10 @@ def insert_snapshot(conn: sqlite3.Connection, link_id: int, snapshot: dict) -> N
     )
 
 
+# Bảng huỷ lịch chính sách (PLAN-076). Admin cũng chạy file này khi mở kết nối, như 004–006.
+CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_policy_cancellations.sql"
+
+
 class TrackingRepository:
     def __init__(self, path: str):
         self.path = path
@@ -524,6 +528,7 @@ class TrackingRepository:
     def migrate(self) -> None:
         with self.connect() as conn:
             conn.executescript(SCHEMA)
+            conn.executescript(CANCEL_SCHEMA_PATH.read_text(encoding="utf-8"))
             columns = {row[1] for row in conn.execute("PRAGMA table_info(link_requests)")}
             if "delivery_status" not in columns:
                 conn.execute("ALTER TABLE link_requests ADD COLUMN delivery_status TEXT")

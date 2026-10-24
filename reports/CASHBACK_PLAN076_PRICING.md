@@ -7,7 +7,7 @@
 | Nhánh | `cursor/cashback-plan076-pricing`, tách từ `main@a9ff267` (code production `6dc2dd1`) |
 | Worktree | `/home/vu/toolsauto-cashback-pricing` |
 | ADR | ADR-053 (mới) |
-| Trạng thái | **Code và test xong. Chưa merge, chưa triển khai.** Chờ chủ bot duyệt phát hành |
+| Trạng thái | **Chủ bot duyệt phát hành 2026-10-24**, kèm yêu cầu làm mục 20.2 («Admin còn») và 20.3 (nhập số tự do, huỷ lịch hẹn). Hai mục đã làm (mục 21). Chi tiết triển khai: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN076.md` |
 
 ---
 
@@ -25,7 +25,7 @@
   - có cột so sánh V1.1/V1.2, lịch đã hẹn giờ, và hạng thành viên ở dạng bản nháp;
   - chỉ đọc.
 - **Khoá tài chính, ví, payout, duyệt hoa hồng, đối soát:** không đổi gì.
-- **456 test pass** (412 cũ + 44 mới).
+- **490 test pass** (412 cũ + 78 mới), gồm cả phần bổ sung ở mục 21.
 
 ---
 
@@ -392,16 +392,67 @@ Quỹ 100.000đ                                                 V1.2    V1.1
 
 ---
 
-## 20. Quyết định còn chờ chủ bot
+## 20. Quyết định của chủ bot
 
-1. **Duyệt phát hành PLAN-076** theo mục 16.
-2. **Đồng ý nghĩa mới của «còn lại»** = HH − khách − dự phòng phí − dự phòng thuế ở màn Hạng và Chính sách. Nếu muốn giữ «còn = HH − khách» như trước, em đổi lại chữ, không đổi công thức.
-3. Có cần **nhập số tự do** ở Mô phỏng và **nút huỷ chính sách đã hẹn giờ** không. Để V1 sau nếu cần.
+1. **Phát hành PLAN-076**: đã duyệt ngày 2026-10-24.
+2. **«Còn lại»**: duyệt làm cho đúng nghiệp vụ. Đã làm thành «Admin còn», xem mục 21.1.
+3. **Nhập số tự do ở Mô phỏng và huỷ chính sách đã hẹn giờ**: duyệt làm. Xem mục 21.2 và 21.3.
 4. Việc từ trước, vẫn chờ:
    - mẫu chứng từ thật (báo cáo Thanh toán, sao kê, báo cáo Xác thực) cho parser và APPROVED có chứng từ;
    - thuế người nhận;
    - chính sách thu hồi;
    - nơi lưu backup ngoài máy.
+
+---
+
+## 21. Bổ sung sau khi chủ bot duyệt (mục 20.2, 20.3)
+
+### 21.1 «Admin còn»: một định nghĩa
+- Trên mọi màn tiền (Chính sách, Hạng, xem trước đổi hạng, xem trước đổi tỷ lệ, Mô phỏng), «còn lại», «còn», «phần giữ lại» đổi thành **«Admin còn»** (ở màn Chính sách và bước xem trước đổi tỷ lệ là «Admin còn (sau dự phòng)»).
+- Định nghĩa: **hoa hồng − khách nhận − dự phòng phí − dự phòng thuế** (− dự phòng khác nếu có). Cùng nghĩa với «Admin còn» ở 📈 Thống kê.
+- Mỗi màn ghi cùng một câu: «Là số ước tính, chưa trừ phí và thuế thực tế theo chứng từ.»
+- Công thức không đổi. «70% phần còn lại sau dự phòng» trong mô tả V1.2 giữ nguyên: đó là cơ sở chia (quỹ chia), không phải phần của admin.
+
+### 21.2 Mô phỏng: nhập hoa hồng tự do
+- Nút **✏️ Nhập số khác** (`c:sim:input`). Admin gõ `150000`, `150.000`, `150k`, `1,5tr`, `1.25 triệu`…
+  - Số nguyên VND, đọc không qua float; dấu `.` / `,` theo nhóm 3 là ngăn nghìn.
+  - Chỉ nhận từ 1đ tới 100.000.000đ (một đơn).
+- **Trạng thái chờ nhập nằm trong RAM**, hết hạn sau 10 phút, **không ghi DB**: test so số dòng 14 bảng trước và sau.
+- Thôi chờ khi: bấm nút khác, gõ lệnh `/…`, dán link Shopee (link được tạo như thường), hoặc đã tính xong. Số sai thì hỏi lại, kèm ví dụ.
+- Kết quả dùng đúng `_simulation`: cùng bảng V1.1/V1.2, lịch hẹn, hạng.
+
+### 21.3 Huỷ chính sách đã hẹn giờ
+- **Nghiệp vụ:** chỉ huỷ được khi **chưa tới mốc hiệu lực**, tức là chính sách chưa từng áp cho link nào. Đã tới mốc thì không huỷ; muốn đổi thì áp dụng mức mới (không hồi tố).
+- **Dữ liệu:**
+  - không xoá dòng `share_policies` / `reserve_policies` (vẫn chỉ thêm);
+  - ghi một dòng vào bảng mới `policy_cancellations` (`migrations/008_policy_cancellations.sql`), cũng chỉ thêm;
+  - `UNIQUE(policy_kind, policy_id)`;
+  - **CHECK `cancelled_at < effective_at`**: DB tự chặn huỷ hồi tố;
+  - ghi trong `BEGIN IMMEDIATE`, kèm audit `share_cancel` / `reserve_cancel`.
+- **Tác động:**
+  - `active_share`, `active_reserve`, `upcoming_*` bỏ qua chính sách đã huỷ, nên báo giá, mô phỏng và Lịch sử đều thấy;
+  - backfill không nhận nhãn trỏ tới chính sách đã huỷ (thành `unresolved`);
+  - snapshot và khoản ví đã có không đổi.
+- **Giao diện:**
+  - màn 💰 Chính sách và 🧾 Thuế & phí có nút **🗑 Huỷ lịch #id** cho từng lịch sắp tới;
+  - bấm nút → màn hỏi lại → **✅ Huỷ lịch này** / **◀️ Giữ lịch**;
+  - xong thì báo: từ mốc đó link mới vẫn theo chính sách nào;
+  - 📊 Lịch sử ghi «✖️ ĐÃ HUỶ TRƯỚC MỐC» và dòng audit.
+- **An toàn:**
+  - chỉ admin trong chat riêng;
+  - callback sai định dạng bị từ chối; id không có → "Không thấy lịch hẹn";
+  - huỷ lại → "Đã huỷ trước đó";
+  - quá mốc → "Đã có hiệu lực, không huỷ được".
+
+### 21.4 Bằng chứng
+- Test: **490 passed** (456 + 34 test bổ sung), ruff sạch.
+- Diễn tập lại trên bản sao DB production (0600, đã xoá):
+  - chỉ thêm `link_policy_snapshots` và `policy_cancellations`;
+  - bảng cũ không đổi, trừ `updated_at` của sổ ví;
+  - 31/31 backfilled, 0 lệch;
+  - 2 khoản pending giữ 12.157đ / 960đ;
+  - đủ trigger chỉ-thêm; khoá tài chính còn nguyên; integrity ok.
+- Mô phỏng nhập `17.368` ra cột V1.1 khách 12.157đ, phí 171, thuế 1.737, đúng đơn thật.
 
 ---
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **CODE + TEST XONG, CHỜ CHỦ BOT DUYỆT PHÁT HÀNH.** Production Deployment: NOT AUTHORIZED |
+| Trạng thái | **CHỦ BOT DUYỆT PHÁT HÀNH 2026-10-24**, kèm «Admin còn», nhập số tự do ở Mô phỏng, huỷ lịch hẹn (đã làm) |
 | Executor | Claude Code (chủ bot giao trực tiếp ngày 2026-10-24) |
 | Đầu vào | PLAN-073/074/075, `main@a9ff267` (code production `6dc2dd1`), ADR-045/047/048 |
 | Nhánh | `cursor/cashback-plan076-pricing`, worktree `/home/vu/toolsauto-cashback-pricing` |
@@ -29,3 +29,7 @@ Không sửa production, không restart, không đổi `.env`, không gọi Shop
   - chỉ thêm bảng `link_policy_snapshots`;
   - khoá tài chính còn nguyên; `integrity_check` = ok.
 - Báo cáo: `reports/CASHBACK_PLAN076_PRICING.md`.
+
+## Bổ sung sau khi duyệt — 2026-10-24
+- «Admin còn» một định nghĩa trên mọi màn; nhập hoa hồng tự do ở Mô phỏng (RAM, 10 phút, không ghi DB); huỷ chính sách đã hẹn giờ chỉ trước mốc (`policy_cancellations` chỉ thêm, CHECK chặn hồi tố).
+- **490 passed**. Diễn tập lại trên bản sao DB production đạt (mục 21 báo cáo).

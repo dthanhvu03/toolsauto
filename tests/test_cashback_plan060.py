@@ -359,7 +359,7 @@ def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
     assert "Dự phòng phí (0,98%): -980đ" in policy.text
     assert "Dự phòng thuế (10%): -10.000đ" in policy.text
     assert "Khách nhận (70% phần còn lại): <b>62.314đ</b>" in policy.text
-    assert "Phần còn lại: <b>26.706đ</b>" in policy.text
+    assert "Admin còn (sau dự phòng): <b>26.706đ</b>" in policy.text
     assert "V1.1" not in policy.text
     sim = bot.admin_panel.handle_callback(ADMIN, "c:menu:sim", "private", now)
     assert "Báo giá: <b>V1.2" in sim.text

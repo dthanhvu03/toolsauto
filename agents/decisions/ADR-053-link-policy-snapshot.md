@@ -36,6 +36,12 @@
    - `reserve_policies` và `share_policies` có trigger chặn sửa và xoá.
    - Hai chính sách cùng mốc: dòng `id` lớn hơn thắng, và id đó được ghi vào snapshot.
 
+7. **Huỷ lịch hẹn (bổ sung):**
+   - chỉ trước mốc hiệu lực;
+   - không xoá dòng chính sách, mà ghi `policy_cancellations` (chỉ thêm, `UNIQUE`, CHECK `cancelled_at < effective_at`);
+   - các truy vấn chọn chính sách bỏ qua dòng đã huỷ.
+8. **«Admin còn»** = HH − khách − dự phòng phí − dự phòng thuế − dự phòng khác: một định nghĩa (`CashbackQuote.remainder_vnd`) cho mọi màn, cùng nghĩa với Thống kê.
+
 ## Hệ quả
 - Đổi tỷ lệ, phí, thuế, `.env` hay bật V1.2 đều chỉ tác động link tạo sau mốc. Link cũ và khoản pending giữ chính sách gốc.
 - Màn Mô phỏng ra cùng số với báo giá khách. Mô phỏng chỉ đọc.

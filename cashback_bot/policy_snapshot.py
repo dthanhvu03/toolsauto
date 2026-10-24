@@ -13,6 +13,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from cashback_bot.admin_reserve import POLICY_TABLES, active_reserve, cancelled_ids
 from cashback_bot.calculator import POLICY_ID, CalculationError
 from cashback_bot.db import insert_snapshot
 from cashback_bot.pricing import ROUNDING_RULE, V11, V12, CashbackQuote, PolicyResolution, cashback_for
@@ -100,25 +101,24 @@ def load(conn: sqlite3.Connection, link_id: int) -> LinkPolicy | None:
     return None if row is None else _from_record(dict(row))
 
 
-def _policy_row(conn: sqlite3.Connection, table: str, policy_id: int) -> sqlite3.Row | None:
+def _policy_row(conn: sqlite3.Connection, kind: str, policy_id: int) -> sqlite3.Row | None:
+    """Dòng chính sách theo id; None nếu không có hoặc đã bị huỷ trước mốc (chưa từng áp cho link nào)."""
     try:
-        return conn.execute(f"SELECT * FROM {table} WHERE id = ?", (policy_id,)).fetchone()
+        if policy_id in cancelled_ids(conn, kind):
+            return None
+        return conn.execute(f"SELECT * FROM {POLICY_TABLES[kind]} WHERE id = ?", (policy_id,)).fetchone()
     except sqlite3.OperationalError:
         return None
 
 
 def _reserve_at(conn: sqlite3.Connection, created_at: str, defaults: PolicyDefaults) -> tuple[int, int, int | None]:
-    """Mức dự phòng có hiệu lực lúc link tạo. Chỉ dùng cho phần admin chịu của link V1.1."""
+    """Mức dự phòng có hiệu lực lúc link tạo (cùng hàm báo giá dùng). Chỉ cho phần admin chịu của link V1.1."""
+    moment = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     try:
-        row = conn.execute(
-            "SELECT * FROM reserve_policies WHERE effective_at <= ? ORDER BY effective_at DESC, id DESC LIMIT 1",
-            (created_at,),
-        ).fetchone()
+        applied = active_reserve(conn, moment, defaults.fee_bps, defaults.tax_reserve_bps)
     except sqlite3.OperationalError:
-        row = None
-    if row is None:
         return defaults.fee_bps, defaults.tax_reserve_bps, None
-    return int(row["fee_bps"]), int(row["tax_reserve_bps"]), int(row["id"])
+    return applied.fee_bps, applied.tax_reserve_bps, applied.policy_id
 
 
 def reconstruct(conn: sqlite3.Connection, link: sqlite3.Row, defaults: PolicyDefaults) -> tuple[dict, str]:
@@ -150,14 +150,14 @@ def reconstruct(conn: sqlite3.Connection, link: sqlite3.Row, defaults: PolicyDef
                 return _unresolved(label, link, "nhãn chính sách không nhận ra"), "unknown_label"
             reserve_id, share_id = matched.groups()
             if reserve_id is not None:
-                reserve = _policy_row(conn, "reserve_policies", int(reserve_id))
+                reserve = _policy_row(conn, "reserve", int(reserve_id))
                 if reserve is None or str(reserve["effective_at"]) > created_at:
                     return _unresolved(label, link, f"không thấy mức dự phòng r{reserve_id} hợp lệ"), "reserve_missing"
                 fee, tax = int(reserve["fee_bps"]), int(reserve["tax_reserve_bps"])
             else:
                 fee, tax = defaults.fee_bps, defaults.tax_reserve_bps
             if share_id is not None:
-                share = _policy_row(conn, "share_policies", int(share_id))
+                share = _policy_row(conn, "share", int(share_id))
                 if share is None or str(share["effective_at"]) > created_at:
                     return _unresolved(label, link, f"không thấy tỷ lệ chia s{share_id} hợp lệ"), "share_missing"
                 share_bps = int(share["share_bps"])

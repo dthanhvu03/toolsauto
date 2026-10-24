@@ -25,8 +25,11 @@ from cashback_bot.admin_reserve import (
     SHARE_OPEN_STEPS,
     AppliedReserve,
     AppliedShare,
+    POLICY_TABLES,
     active_reserve,
     active_share,
+    cancel_scheduled,
+    cancelled_ids,
     effective_from,
     next_midnight,
     parse_when,
@@ -38,7 +41,7 @@ from cashback_bot.admin_reserve import (
 )
 from cashback_bot.admin_reserve import SCHEMA_PATH as RESERVE_SCHEMA_PATH
 from cashback_bot.admin_notify import AdminNotifier
-from cashback_bot.admin_reserve import SHARE_SCHEMA_PATH
+from cashback_bot.admin_reserve import CANCEL_SCHEMA_PATH, SHARE_SCHEMA_PATH
 from cashback_bot.admin_stats import PERIODS, collect, conversions_csv
 from cashback_bot.admin_ui import (
     FEE_KEYBOARD,
@@ -74,8 +77,12 @@ from cashback_bot.admin_ui import (
     shopee_connected_keyboard,
     shopee_prompt_cookie_text,
     shopee_text,
+    SIM_PROMPT_KEYBOARD,
+    policy_cancel_text,
     simulation_keyboard,
+    simulation_prompt_text,
     simulation_text,
+    with_rows,
     stats_detail_text,
     stats_keyboard,
     stats_text,
@@ -107,6 +114,8 @@ _ACTIONS = {
     "cancel": "Hủy",
     "reserve_apply": "Áp dụng cho khách",
     "share_apply": "Áp dụng cho khách",
+    "reserve_cancel": "Huỷ lịch hẹn",
+    "share_cancel": "Huỷ lịch hẹn",
 }
 _RESULTS = {
     "collecting": "đang nhập",
@@ -120,6 +129,12 @@ DIRECTIONAL_BPS = {"BRONZE": 6_000, "SILVER": 6_500, "GOLD": 7_000}
 SAMPLE_VND = 100_000
 # Hoa hồng giả định admin chọn ở 🧮 Mô phỏng. Chỉ các mốc này, không nhận số tự do qua callback.
 SIM_AMOUNTS = (10_000, 50_000, 100_000, 500_000)
+# Nhập số tự do: một hoa hồng một đơn, từ 1đ tới 100 triệu. Chờ nhập giữ trong RAM, không ghi DB.
+SIM_MAX_VND = 100_000_000
+SIM_WAIT_TTL = timedelta(minutes=10)
+_SIM_PLAIN = re.compile(r"^(\d{1,3}(?:[.,]\d{3})+|\d{1,9})\s*(?:đ|vnd|vnđ)?$")
+_SIM_UNIT = re.compile(r"^(\d{1,6})(?:[.,](\d{1,3}))?\s*(k|nghìn|ngàn|tr|triệu)$")
+_SIM_UNITS = {"k": 1_000, "nghìn": 1_000, "ngàn": 1_000, "tr": 1_000_000, "triệu": 1_000_000}
 # Admin gõ phần trăm: "10", "0,98", "0.98", "62,5%". Lưu nội bộ bằng bps.
 _NUMBER = re.compile(r"^(\d{1,3})(?:[.,](\d{1,2}))?\s*%?$")
 _MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy)$")
@@ -127,7 +142,9 @@ _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD)$")
 _RESERVE = re.compile(r"^c:rs:(\d+):([0-9a-f]{8}):(k:[PIH]|keep|w:now|w:tmr|ok|no)$")
 _SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
 _STATS = re.compile(r"^c:st:(today|7d|30d|all)(:more)?$")
-_SIM = re.compile(r"^c:sim:(10000|50000|100000|500000)$")
+_SIM = re.compile(r"^c:sim:(10000|50000|100000|500000|input)$")
+_POLICY_CANCEL = re.compile(r"^c:pc:(s|r):(\d{1,9})(:ok)?$")
+_CANCEL_KINDS = {"s": "share", "r": "reserve"}
 _SHARE_NUMBER = re.compile(r"^(\d{1,3})\s*%?$")
 _DECISION = re.compile(r"^c:(ok|no):(\d+):([0-9a-f]{8})$")
 # Telegram tách tin dài hơn 4.096 ký tự. Gom các phần JSON cookie trong RAM, không ghi DB.
@@ -166,6 +183,24 @@ def customer_policy_due(rows: list[dict], now: datetime) -> dict | None:
     return chosen
 
 
+def parse_sim_amount(text: str) -> int | None:
+    """Hoa hồng giả định admin gõ: 150000, 150.000, 150k, 1,5tr. Số nguyên VND, không dùng float."""
+    value = " ".join((text or "").lower().split())
+    plain = _SIM_PLAIN.fullmatch(value)
+    amount: int | None = None
+    if plain:
+        amount = int(re.sub(r"[.,]", "", plain.group(1)))
+    unit = _SIM_UNIT.fullmatch(value) if amount is None else None
+    if unit:
+        whole, frac, name = unit.groups()
+        scale = _SIM_UNITS[name]
+        frac = frac or ""
+        amount = int(whole) * scale + (int(frac) * scale) // (10 ** len(frac)) if frac else int(whole) * scale
+    if amount is None or not 1 <= amount <= SIM_MAX_VND:
+        return None
+    return amount
+
+
 def simulate_share(
     amount_vnd: int, policy: PolicyResolution, before_bps: int, after_bps: int
 ) -> tuple[tuple[int, int], tuple[int, int]]:
@@ -191,6 +226,8 @@ class AdminPanel:
     other_reserve_vnd: int = 0
     rounding_unit: int = 1
     _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
+    # Admin đang được hỏi hoa hồng giả định cho 🧮 Mô phỏng: user_id → hạn chờ.
+    _sim_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -215,6 +252,9 @@ class AdminPanel:
                 return self._consume_shopee_cookie(user_id, text, now, message_id=message_id)
         except sqlite3.Error:
             pass
+        sim = self._sim_text(user_id, text, now)
+        if sim is not None:
+            return sim
 
         reserve = self._reserve_text(user_id, (text or "").strip(), now)
         if reserve is not None:
@@ -240,6 +280,8 @@ class AdminPanel:
         if data != "c:shopee:auth":
             # Bấm bất kỳ nút nào khác (kể cả ✖️ Hủy) là thôi chờ cookie.
             self._clear_shopee_waiting(user_id)
+        if data != "c:sim:input":
+            self._sim_waiting.pop(user_id, None)
         reply = self._route_callback(user_id, data, now)
         if reply.inline_keyboard is None:
             # Callback sửa đè tin cũ. Thiếu nút thì admin kẹt ở màn chỉ có chữ.
@@ -254,8 +296,15 @@ class AdminPanel:
         if tier:
             return self._begin(user_id, tier.group(1), now)
         sim = _SIM.fullmatch(data or "")
+        if sim and sim.group(1) == "input":
+            self._sim_waiting[user_id] = now + SIM_WAIT_TTL
+            return BotReply(simulation_prompt_text(), inline_keyboard=SIM_PROMPT_KEYBOARD)
         if sim:
             return self._simulation(now, int(sim.group(1)))
+        cancel = _POLICY_CANCEL.fullmatch(data or "")
+        if cancel:
+            kind = _CANCEL_KINDS[cancel.group(1)]
+            return self._policy_cancel(user_id, kind, int(cancel.group(2)), bool(cancel.group(3)), now)
         stats = _STATS.fullmatch(data or "")
         if stats:
             return self._stats(stats.group(1), now, detail=bool(stats.group(2)))
@@ -329,7 +378,12 @@ class AdminPanel:
                 warning=warning,
                 notice=notice,
             )
-            return BotReply(text, inline_keyboard=POLICY_KEYBOARD)
+            buttons = [
+                (f"🗑 Huỷ lịch #{item.policy_id}: {_percent(item.share_bps)} từ {vn_time(item.effective_at or '')}",
+                 f"c:pc:s:{item.policy_id}")
+                for item in upcoming
+            ]
+            return BotReply(text, inline_keyboard=with_rows(POLICY_KEYBOARD, buttons))
         if name == "rank":
             rates = self._safe_rates()
             live = self.resolve_policy(now)
@@ -359,7 +413,12 @@ class AdminPanel:
                 sim_customer=result.cashback_vnd,
                 notice=notice,
             )
-            return BotReply(text, inline_keyboard=FEE_KEYBOARD)
+            buttons = [
+                (f"🗑 Huỷ lịch #{item.policy_id}: phí {_percent(item.fee_bps)}, thuế {_percent(item.tax_reserve_bps)}",
+                 f"c:pc:r:{item.policy_id}")
+                for item in upcoming
+            ]
+            return BotReply(text, inline_keyboard=with_rows(FEE_KEYBOARD, buttons))
         if name == "sim":
             return self._simulation(now, SAMPLE_VND)
         if name == "hist":
@@ -947,6 +1006,67 @@ class AdminPanel:
         )
         return BotReply(text, inline_keyboard=simulation_keyboard(SIM_AMOUNTS, amount))
 
+    def _sim_text(self, user_id: int, text: str, now: datetime) -> BotReply | None:
+        """Admin gõ hoa hồng giả định sau khi bấm ✏️ Nhập số khác. None: không chờ, để luồng khác xử lý."""
+        deadline = self._sim_waiting.get(user_id)
+        if deadline is None:
+            return None
+        stripped = (text or "").strip()
+        lowered = stripped.lower()
+        if deadline <= now or not stripped or stripped.startswith("/") or "shopee" in lowered or lowered.startswith("http"):
+            self._sim_waiting.pop(user_id, None)
+            return None
+        amount = parse_sim_amount(stripped)
+        if amount is None:
+            error = f"Chưa đọc được số. Gửi số tiền từ 1đ tới {format_vnd(SIM_MAX_VND)}, ví dụ 150000, 150.000 hoặc 150k."
+            return BotReply(simulation_prompt_text(error=error), inline_keyboard=SIM_PROMPT_KEYBOARD)
+        self._sim_waiting.pop(user_id, None)
+        return self._simulation(now, amount)
+
+    def _policy_cancel(self, user_id: int, kind: str, policy_id: int, confirm: bool, now: datetime) -> BotReply:
+        """Huỷ chính sách đã hẹn giờ, chỉ trước mốc hiệu lực. Bước 1 hỏi lại, bước 2 ghi dòng huỷ + audit."""
+        back = "policy" if kind == "share" else "fee"
+        code = "s" if kind == "share" else "r"
+        with self._connect() as conn:
+            if confirm:
+                conn.execute("BEGIN IMMEDIATE")
+                row, result = cancel_scheduled(conn, kind, policy_id, user_id, now)
+                if result == "ok":
+                    before = {key: row[key] for key in row.keys() if key in {"id", "share_bps", "fee_bps", "tax_reserve_bps", "account_kind", "effective_at"}}
+                    self._audit(conn, user_id, f"{kind}_cancel", None, json.dumps(before, sort_keys=True), None, "cancelled", now)
+            else:
+                row = conn.execute(f"SELECT * FROM {POLICY_TABLES[kind]} WHERE id = ?", (policy_id,)).fetchone()
+                result = "preview"
+                if row is not None and policy_id in cancelled_ids(conn, kind):
+                    result = "cancelled_before"
+                elif row is not None and str(row["effective_at"]) <= _stamp(now):
+                    result = "already_effective"
+        if row is None or result == "not_found":
+            return replace(self._screen(back, now, "Không thấy lịch hẹn này."), toast="Không thấy lịch hẹn")
+        subject = _policy_subject(kind, row)
+        if result == "cancelled_before":
+            return replace(self._screen(back, now, f"Lịch #{policy_id} đã được huỷ trước đó."), toast="Đã huỷ trước đó")
+        if result == "already_effective":
+            notice = (
+                f"⚠️ #{policy_id} ({subject}) đã tới giờ hiệu lực, không huỷ được vì có thể đã áp cho link. "
+                "Muốn đổi thì áp dụng mức mới."
+            )
+            return replace(self._screen(back, now, notice), toast="Đã có hiệu lực, không huỷ được")
+        if result == "preview":
+            text = policy_cancel_text(policy_id=policy_id, subject=subject, when=vn_time(str(row["effective_at"])))
+            keyboard = (
+                (("✅ Huỷ lịch này", f"c:pc:{code}:{policy_id}:ok"),),
+                (("◀️ Giữ lịch", f"c:menu:{back}"),),
+            )
+            return BotReply(text, inline_keyboard=keyboard)
+        after = self.resolve_policy(datetime.strptime(str(row["effective_at"]), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc))
+        notice = (
+            f"✖️ Đã huỷ lịch #{policy_id} ({subject}). Từ {vn_time(str(row['effective_at']))} link mới vẫn theo "
+            f"chia {_percent(after.share_bps)}, phí {_percent(after.fee_bps)}, thuế {_percent(after.tax_reserve_bps)}. "
+            "Link đã tạo không đổi."
+        )
+        return replace(self._screen(back, now, notice), toast=f"Đã huỷ lịch #{policy_id}")
+
     def _policy_versions(self, now: datetime) -> list[str] | None:
         """Phiên bản tỷ lệ chia và dự phòng đã áp dụng, kèm trạng thái; và độ phủ snapshot link."""
         try:
@@ -956,11 +1076,14 @@ class AdminPanel:
                 reserves = conn.execute("SELECT * FROM reserve_policies ORDER BY effective_at DESC, id DESC LIMIT 5").fetchall()
                 tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
                 coverage = policy_snapshot.coverage(conn) if "link_policy_snapshots" in tables else None
+                cancelled = {"share": cancelled_ids(conn, "share"), "reserve": cancelled_ids(conn, "reserve")}
         except (AdminSafetyError, sqlite3.Error):
             return None
         stamp_now = _stamp(now)
 
-        def state(row: sqlite3.Row, active_id: int | None) -> str:
+        def state(row: sqlite3.Row, active_id: int | None, kind: str) -> str:
+            if int(row["id"]) in cancelled[kind]:
+                return "✖️ ĐÃ HUỶ TRƯỚC MỐC"
             if str(row["effective_at"]) > stamp_now:
                 return "🗓️ ĐÃ HẸN GIỜ"
             return "🟢 ĐANG ÁP DỤNG" if int(row["id"]) == active_id else "⚪ ĐÃ THAY"
@@ -968,13 +1091,13 @@ class AdminPanel:
         share_active = live.share_policy_id if live.pricing_version == "v1.2" else None
         lines = [f"<b>Tỷ lệ chia</b> (V1.2){'' if live.pricing_version == 'v1.2' else ' · đang chạy V1.1, chưa dùng'}"]
         lines += [
-            f"• #{row['id']} {_percent(int(row['share_bps']))} từ {vn_time(str(row['effective_at']))} · {state(row, share_active)}"
+            f"• #{row['id']} {_percent(int(row['share_bps']))} từ {vn_time(str(row['effective_at']))} · {state(row, share_active, 'share')}"
             for row in shares
         ] or [f"• Mặc định cấu hình {self.displayed_rate_percent}% · 🟢 ĐANG ÁP DỤNG"]
         lines.append("<b>Dự phòng phí và thuế</b>")
         lines += [
             f"• #{row['id']} phí {_percent(int(row['fee_bps']))}, thuế {_percent(int(row['tax_reserve_bps']))} "
-            f"từ {vn_time(str(row['effective_at']))} · {state(row, live.reserve_policy_id)}"
+            f"từ {vn_time(str(row['effective_at']))} · {state(row, live.reserve_policy_id, 'reserve')}"
             for row in reserves
         ] or [f"• Mặc định cấu hình phí {_percent(self.fee_default_bps)}, thuế {_percent(self.tax_default_bps)} · 🟢 ĐANG ÁP DỤNG"]
         if coverage is not None:
@@ -1223,6 +1346,7 @@ class AdminPanel:
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         conn.executescript(RESERVE_SCHEMA_PATH.read_text(encoding="utf-8"))
         conn.executescript(SHARE_SCHEMA_PATH.read_text(encoding="utf-8"))
+        conn.executescript(CANCEL_SCHEMA_PATH.read_text(encoding="utf-8"))
         return conn
 
     def _log_setting(self, user_id: int, action: str, before: dict | None, after: dict | None, now: datetime) -> None:
@@ -1266,6 +1390,12 @@ def _draft_target(code: str) -> tuple[str, str, dict]:
         "subject": f"Hạng {TIERS[code]}",
         "ask": "Gửi tỷ lệ mới theo %, từ 0 đến 70. Ví dụ: <code>62</code> hoặc <code>62,5</code>",
     }
+
+
+def _policy_subject(kind: str, row) -> str:
+    if kind == "share":
+        return f"tỷ lệ chia {_percent(int(row['share_bps']))}"
+    return f"dự phòng phí {_percent(int(row['fee_bps']))}, thuế {_percent(int(row['tax_reserve_bps']))}"
 
 
 def _split(quote: CashbackQuote) -> tuple[int, int]:
@@ -1318,6 +1448,11 @@ def _history_line(row: sqlite3.Row) -> str:
         data = json.loads(row["after_json"])
         subject = f"Tỷ lệ chia → {_percent(data['share_bps'])}, từ {vn_time(data['effective_at'])}"
         return f"{when} · {subject} · {_ACTIONS['share_apply']}: {_RESULTS['applied']}"
+    if row["action"] in {"share_cancel", "reserve_cancel"} and row["before_json"]:
+        data = json.loads(row["before_json"])
+        kind = "share" if row["action"] == "share_cancel" else "reserve"
+        subject = f"#{data.get('id')} {_policy_subject(kind, data)}, mốc {vn_time(data['effective_at'])}"
+        return f"{when} · {subject} · {_ACTIONS[row['action']]}: {_RESULTS['cancelled']}"
     setting = _setting_line(row)
     if setting is not None:
         return f"{when} · {setting}"

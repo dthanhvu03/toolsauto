@@ -74,6 +74,13 @@ def decision_keyboard(draft_id: int, nonce: str) -> Keyboard:
     )
 
 
+# Một định nghĩa cho mọi màn, cùng nghĩa «Admin còn» ở 📈 Thống kê (PLAN-076).
+ADMIN_KEEP_NOTE = (
+    "«Admin còn» = hoa hồng − khách nhận − dự phòng phí − dự phòng thuế. "
+    "Là số ước tính, chưa trừ phí và thuế thực tế theo chứng từ."
+)
+
+
 def _title(*path: str) -> str:
     trail = " › ".join(("⚙️ Quản trị",) + path[:-1])
     return f"{trail} › <b>{path[-1]}</b>\n\n"
@@ -170,8 +177,8 @@ def policy_text(
         "• Trần tỷ lệ chia và hạng V1: <b>70%</b>\n\n"
         "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ\n"
         + sim
-        + f"• Phần còn lại: <b>{format_vnd(remain_vnd)}</b>\n\n"
-        "ⓘ Báo giá đã lưu không tự tính lại. Không có cam kết chi trả tự động."
+        + f"• Admin còn (sau dự phòng): <b>{format_vnd(remain_vnd)}</b>\n\n"
+        f"ⓘ {ADMIN_KEEP_NOTE} Báo giá đã lưu không tự tính lại. Không có cam kết chi trả tự động."
     )
 
 
@@ -180,10 +187,10 @@ def rank_text(
     tiers: list[tuple[str, str, str, int, int]],
     notice: str = "",
 ) -> str:
-    """tiers: (emoji, tên hạng, %, hoàn trên 100.000đ, phần còn)."""
+    """tiers: (emoji, tên hạng, %, hoàn trên 100.000đ, admin còn sau dự phòng)."""
     rates = "".join(f"• {emoji} {name}: <b>{percent}</b>\n" for emoji, name, percent, _c, _r in tiers)
     sims = "".join(
-        f"• {name} {percent}: hoàn {format_vnd(cash)} · còn {format_vnd(rem)}\n"
+        f"• {name} {percent}: hoàn {format_vnd(cash)} · admin còn {format_vnd(rem)}\n"
         for _e, name, percent, cash, rem in tiers
     )
     return (
@@ -197,8 +204,7 @@ def rank_text(
         + "Quy tắc: Đồng ≤ Bạc ≤ Vàng. Trần V1 là 70%.\n\n"
         "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ, công thức đang báo giá\n"
         + sims
-        + "\nⓘ «còn» là phần dư sau dự phòng trong mô hình, chưa gồm mọi chi phí thực tế. "
-        "Chưa có dữ liệu đơn thật nên không có nút kích hoạt tự động.\n\n"
+        + f"\nⓘ {ADMIN_KEEP_NOTE} Chưa có dữ liệu đơn thật nên không có nút kích hoạt tự động.\n\n"
         "Chọn hạng để tạo bản nháp:"
     )
 
@@ -247,7 +253,38 @@ def fee_text(
 
 def simulation_keyboard(amounts: tuple[int, ...], current: int) -> Keyboard:
     row = tuple((f"{'• ' if amount == current else ''}{short_vnd(amount)}", f"c:sim:{amount}") for amount in amounts)
-    return (row, BACK_HOME)
+    return (row, (("✏️ Nhập số khác", "c:sim:input"),), BACK_HOME)
+
+
+SIM_PROMPT_KEYBOARD: Keyboard = ((("✖️ Hủy", "c:menu:sim"),),)
+
+
+def simulation_prompt_text(error: str = "") -> str:
+    return (
+        _title("Mô phỏng", "Nhập hoa hồng")
+        + (f"⚠️ {error}\n\n" if error else "")
+        + "Gửi hoa hồng giả định của một đơn, ví dụ <code>150000</code>, <code>150.000</code>, "
+        "<code>150k</code> hoặc <code>1,5tr</code>.\n\n"
+        "ⓘ Chỉ để tính thử, không lưu số này. Chờ nhập trong 10 phút."
+    )
+
+
+def with_rows(base: Keyboard, buttons: list[tuple[str, str]]) -> Keyboard:
+    """Chèn mỗi nút một hàng, ngay trên hàng ◀️ cuối của bàn phím có sẵn."""
+    if not buttons:
+        return base
+    return base[:-1] + tuple(((label, data),) for label, data in buttons) + base[-1:]
+
+
+def policy_cancel_text(*, policy_id: int, subject: str, when: str) -> str:
+    return (
+        _title("Huỷ lịch hẹn")
+        + f"Lịch #{policy_id}: <b>{subject}</b>, hiệu lực <b>{when}</b>.\n\n"
+        "• Lịch chưa tới giờ nên chưa áp cho link nào.\n"
+        "• Huỷ thì từ mốc đó link mới vẫn theo chính sách đang có hiệu lực lúc ấy.\n"
+        "• Link đã tạo và khoản ví không đổi. Dòng chính sách vẫn được giữ trong lịch sử, ghi «đã huỷ».\n\n"
+        "ⓘ Lịch đã tới giờ thì không huỷ được. Muốn đổi thì áp dụng mức mới."
+    )
 
 
 def simulation_text(
@@ -259,7 +296,7 @@ def simulation_text(
     scheduled: list[str],
     ranks: list[tuple[str, str, int, int]],
 ) -> str:
-    """columns: ((nhãn, CashbackQuote) đang báo giá, (nhãn, CashbackQuote) so sánh). ranks: (hạng, %, hoàn, còn)."""
+    """columns: ((nhãn, CashbackQuote) đang báo giá, (nhãn, CashbackQuote) so sánh). ranks: (hạng, %, hoàn, admin còn)."""
     share, fee, tax = settings
     (live_name, live), (other_name, other) = columns
 
@@ -278,7 +315,7 @@ def simulation_text(
     rows += [
         ("Quỹ chia", cell(live.distributable_vnd), cell(other.distributable_vnd)),
         ("Khách nhận", cell(live.cashback_vnd), cell(other.cashback_vnd)),
-        ("Còn lại", cell(live.remainder_vnd), cell(other.remainder_vnd)),
+        ("Admin còn", cell(live.remainder_vnd), cell(other.remainder_vnd)),
     ]
     first = max(len(name) for name, _a, _b in rows)
     widths = [max(len(live_name), *(len(a) for _n, a, _b in rows)), max(len(other_name), *(len(b) for _n, _a, b in rows))]
@@ -301,13 +338,12 @@ def simulation_text(
     if scheduled:
         lines += ["", "🗓️ <b>ĐÃ HẸN GIỜ</b> · cho link tạo sau mốc"] + [f"• {item}" for item in scheduled]
     lines += ["", "🟡 <b>HẠNG THÀNH VIÊN</b> · bản nháp, chưa bật"]
-    lines += [f"• {name} {percent}: hoàn {format_vnd(cash)} · còn {format_vnd(rem)}" for name, percent, cash, rem in ranks]
+    lines += [f"• {name} {percent}: hoàn {format_vnd(cash)} · admin còn {format_vnd(rem)}" for name, percent, cash, rem in ranks]
     lines += [
         "",
         "ⓘ Phép tính trên hoa hồng giả định, không phải lợi nhuận và không phát sinh tiền phải trả. "
         "Hoa hồng thật, phí và thuế cuối cùng cần chứng từ. "
-        "«Còn lại» là phần dư sau dự phòng trong mô hình chia, chưa gồm mọi chi phí và nghĩa vụ thực tế. "
-        "Mô phỏng không đổi số dư, không lưu gì.",
+        f"{ADMIN_KEEP_NOTE} Mô phỏng không đổi số dư, không lưu gì.",
     ]
     return "\n".join(lines)
 
@@ -367,8 +403,8 @@ def rank_preview_text(
         _title("Hạng thành viên", "Xem trước")
         + f"Hạng {tier_name}: {before} → <b>{after}</b>\n\n"
         "🔵 Mô phỏng hoa hồng 100.000đ theo công thức đang báo giá. Không phải lợi nhuận.\n"
-        f"• Trước: hoàn {format_vnd(before_split[0])}, phần còn {format_vnd(before_split[1])}\n"
-        f"• Sau: hoàn {format_vnd(after_split[0])}, phần còn {format_vnd(after_split[1])}\n\n"
+        f"• Trước: hoàn {format_vnd(before_split[0])}, admin còn {format_vnd(before_split[1])}\n"
+        f"• Sau: hoàn {format_vnd(after_split[0])}, admin còn {format_vnd(after_split[1])}\n\n"
         "ⓘ Xác nhận chỉ lưu phiên bản, chưa kích hoạt cho khách. Báo giá đã lưu không tự tính lại."
     )
 
@@ -448,7 +484,7 @@ def share_preview_text(
     sample: tuple[int, int, int, int] | None,
     recent: tuple[int, int, int] | None,
 ) -> str:
-    """sample: (khách trước, khách sau, giữ lại trước, giữ lại sau) trên 100.000đ hoa hồng."""
+    """sample: (khách trước, khách sau, admin còn trước, admin còn sau) trên 100.000đ hoa hồng."""
     lines = [
         _share_title("Xem trước").rstrip("\n"),
         "",
@@ -461,7 +497,7 @@ def share_preview_text(
             "",
             "🔵 Hoa hồng 100.000đ, sau phí và thuế dự phòng:",
             f"• Khách nhận: {format_vnd(before)} → <b>{format_vnd(after)}</b>",
-            f"• Phần giữ lại: {format_vnd(kept_before)} → <b>{format_vnd(kept_after)}</b>",
+            f"• Admin còn (sau dự phòng): {format_vnd(kept_before)} → <b>{format_vnd(kept_after)}</b>",
         ]
     if recent is not None:
         count, total_before, total_after = recent

@@ -30,7 +30,7 @@ def test_doi_ty_le_ngay_link_moi_dung_ty_le_moi(tmp_path):
     preview = _share(bot, NOW)
     assert "Tỷ lệ chia: 70% → <b>65%</b>" in preview.text
     assert "Khách nhận: 62.314đ → <b>57.863đ</b>" in preview.text
-    assert "Phần giữ lại: 26.706đ → <b>31.157đ</b>" in preview.text
+    assert "Admin còn (sau dự phòng): 26.706đ → <b>31.157đ</b>" in preview.text
     assert "1 link gần nhất: khách tổng 12.462đ → <b>11.572đ</b>" in preview.text
 
     done = bot.admin_panel.handle_callback(ADMIN, _data(preview, ":ok"), "private", NOW)

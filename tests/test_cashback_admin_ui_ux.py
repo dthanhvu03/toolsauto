@@ -254,17 +254,17 @@ def test_dau_phay_trong_cau_chu_khong_bi_doi_thanh_dau_cham(tmp_path):
     rank = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:rank", "private", NOW)
     fee = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
     sim = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
-    # PLAN-076: «còn» là phần dư sau dự phòng phí 980đ và thuế 10.000đ (V1.1 admin chịu).
-    assert "Đồng 60%: hoàn 60.000đ · còn 29.020đ" in rank.text
+    # PLAN-076: «admin còn» là phần dư sau dự phòng phí 980đ và thuế 10.000đ (V1.1 admin chịu).
+    assert "Đồng 60%: hoàn 60.000đ · admin còn 29.020đ" in rank.text
     assert "không phải thuế phải nộp. Link đã gửi giữ số cũ" in fee.text
     assert "0,98%" in fee.text
     assert "0.98%" not in fee.text
     assert "-980đ" in fee.text
-    assert "Đồng 60%: hoàn 60.000đ · còn 29.020đ" in sim.text
+    assert "Đồng 60%: hoàn 60.000đ · admin còn 29.020đ" in sim.text
 
     bot.admin_panel.handle_callback(ADMIN_ID, "c:tier:SILVER", "private", NOW)
     preview = bot.admin_panel.consume_text(ADMIN_ID, "66", NOW)
-    assert "Trước: hoàn 65.000đ, phần còn 24.020đ" in preview.text
+    assert "Trước: hoàn 65.000đ, admin còn 24.020đ" in preview.text
 
 
 def test_tong_quan_khong_lap_dong(tmp_path):

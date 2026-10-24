@@ -17,6 +17,8 @@ from cashback_bot.pricing import V11, V12, PolicyResolution
 
 SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "005_reserve_policies.sql"
 SHARE_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "006_share_policies.sql"
+CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_policy_cancellations.sql"
+POLICY_TABLES = {"share": "share_policies", "reserve": "reserve_policies"}
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 MAX_RESERVE_BPS = 5_000
 MAX_AHEAD = timedelta(days=365)
@@ -64,7 +66,7 @@ def active_reserve(conn: sqlite3.Connection, now: datetime, fee_default: int, ta
     row = conn.execute(
         """
         SELECT * FROM reserve_policies
-        WHERE effective_at <= ?
+        WHERE effective_at <= ? AND id NOT IN (SELECT policy_id FROM policy_cancellations WHERE policy_kind = 'reserve')
         ORDER BY effective_at DESC, id DESC
         LIMIT 1
         """,
@@ -77,7 +79,9 @@ def active_reserve(conn: sqlite3.Connection, now: datetime, fee_default: int, ta
 
 def upcoming_reserves(conn: sqlite3.Connection, now: datetime) -> list[AppliedReserve]:
     rows = conn.execute(
-        "SELECT * FROM reserve_policies WHERE effective_at > ? ORDER BY effective_at, id",
+        "SELECT * FROM reserve_policies WHERE effective_at > ? "
+        "AND id NOT IN (SELECT policy_id FROM policy_cancellations WHERE policy_kind = 'reserve') "
+        "ORDER BY effective_at, id",
         (stamp(now),),
     ).fetchall()
     return [_from_row(row) for row in rows]
@@ -96,7 +100,7 @@ def active_share(conn: sqlite3.Connection, now: datetime, default_bps: int) -> A
     row = conn.execute(
         """
         SELECT * FROM share_policies
-        WHERE effective_at <= ?
+        WHERE effective_at <= ? AND id NOT IN (SELECT policy_id FROM policy_cancellations WHERE policy_kind = 'share')
         ORDER BY effective_at DESC, id DESC
         LIMIT 1
         """,
@@ -109,7 +113,9 @@ def active_share(conn: sqlite3.Connection, now: datetime, default_bps: int) -> A
 
 def upcoming_shares(conn: sqlite3.Connection, now: datetime) -> list[AppliedShare]:
     rows = conn.execute(
-        "SELECT * FROM share_policies WHERE effective_at > ? ORDER BY effective_at, id",
+        "SELECT * FROM share_policies WHERE effective_at > ? "
+        "AND id NOT IN (SELECT policy_id FROM policy_cancellations WHERE policy_kind = 'share') "
+        "ORDER BY effective_at, id",
         (stamp(now),),
     ).fetchall()
     return [AppliedShare(int(row["share_bps"]), int(row["id"]), str(row["effective_at"])) for row in rows]
@@ -150,6 +156,40 @@ def resolve_policy(
         reserve_policy_id=reserve.policy_id,
         resolved_at=stamp(now),
     )
+
+
+def cancel_scheduled(
+    conn: sqlite3.Connection, kind: str, policy_id: int, user_id: int, now: datetime
+) -> tuple[sqlite3.Row | None, str]:
+    """Huỷ một chính sách chưa tới mốc hiệu lực. Trả (dòng chính sách, mã kết quả).
+
+    ok | not_found | cancelled_before | already_effective. Chính sách đã tới mốc thì có thể đã áp cho
+    link nào đó, nên không huỷ được: muốn đổi thì áp dụng chính sách mới (không hồi tố).
+    """
+    table = POLICY_TABLES[kind]
+    row = conn.execute(f"SELECT * FROM {table} WHERE id = ?", (policy_id,)).fetchone()
+    if row is None:
+        return None, "not_found"
+    done = conn.execute(
+        "SELECT 1 FROM policy_cancellations WHERE policy_kind = ? AND policy_id = ?", (kind, policy_id)
+    ).fetchone()
+    if done is not None:
+        return row, "cancelled_before"
+    if str(row["effective_at"]) <= stamp(now):
+        return row, "already_effective"
+    conn.execute(
+        """
+        INSERT INTO policy_cancellations (policy_kind, policy_id, effective_at, cancelled_by, cancelled_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (kind, policy_id, row["effective_at"], user_id, stamp(now)),
+    )
+    return row, "ok"
+
+
+def cancelled_ids(conn: sqlite3.Connection, kind: str) -> set[int]:
+    rows = conn.execute("SELECT policy_id FROM policy_cancellations WHERE policy_kind = ?", (kind,)).fetchall()
+    return {int(row[0]) for row in rows}
 
 
 def effective_from(requested: str | None, now: datetime) -> str:

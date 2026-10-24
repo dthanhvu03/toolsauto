@@ -499,7 +499,7 @@ def test_30_so_sanh_v11_v12_cung_dau_vao(tmp_path):
     assert "V1.2 V1.1" in flat
     assert "Khách nhận 62.314 70.000" in flat
     assert "Quỹ chia 89.020 —" in flat
-    assert "Còn lại 26.706 19.020" in flat
+    assert "Admin còn 26.706 19.020" in flat
     assert "Khách nhận V1.2 so với V1.1: -7.686đ" in sim.text
     assert "không bật công thức nào" in sim.text
     v11 = _bot(tmp_path / "v11", v12=False)
@@ -561,11 +561,11 @@ def test_34_callback_mo_phong_trai_quyen_bi_tu_choi(tmp_path):
 def test_man_hang_va_xem_truoc_dung_engine(tmp_path):
     bot = _bot(tmp_path)
     rank = bot.admin_panel.handle_callback(ADMIN, "c:menu:rank", "private", NOW)
-    assert "Đồng 60%: hoàn 53.412đ · còn 35.608đ" in rank.text
-    assert "Vàng 70%: hoàn 62.314đ · còn 26.706đ" in rank.text
+    assert "Đồng 60%: hoàn 53.412đ · admin còn 35.608đ" in rank.text
+    assert "Vàng 70%: hoàn 62.314đ · admin còn 26.706đ" in rank.text
     bot.admin_panel.handle_callback(ADMIN, "c:tier:SILVER", "private", NOW)
     preview = bot.admin_panel.consume_text(ADMIN, "66", NOW)
-    assert "Trước: hoàn 57.863đ, phần còn 31.157đ" in preview.text
+    assert "Trước: hoàn 57.863đ, admin còn 31.157đ" in preview.text
 
 
 # --- E. Customer messaging --------------------------------------------------
@@ -667,3 +667,175 @@ def test_link_cu_chua_co_snapshot_duoc_dung_lai_khi_tinh_vi(tmp_path):
     assert _snapshots(tmp_path) == []
     _restart(tmp_path)
     assert [row["provenance"] for row in _snapshots(tmp_path)] == ["backfilled", "backfilled"]
+
+
+# --- PLAN-076 bổ sung (chủ bot duyệt 2026-10-24): «Admin còn», nhập số tự do, huỷ lịch hẹn ----------
+
+
+def test_admin_con_mot_dinh_nghia_moi_man(tmp_path):
+    bot = _bot(tmp_path)
+    expected = cashback_for(100_000, bot.admin_panel.resolve_policy(NOW)).remainder_vnd
+    assert expected == 100_000 - 62_314 - 980 - 10_000
+    policy = bot.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", NOW)
+    rank = bot.admin_panel.handle_callback(ADMIN, "c:menu:rank", "private", NOW)
+    sim = bot.admin_panel.handle_callback(ADMIN, "c:menu:sim", "private", NOW)
+    assert "Admin còn (sau dự phòng): <b>26.706đ</b>" in policy.text
+    assert "Vàng 70%: hoàn 62.314đ · admin còn 26.706đ" in rank.text
+    assert "Admin còn 26.706 19.020" in " ".join(sim.text.split())
+    for text in (policy.text, rank.text, sim.text):
+        assert "«Admin còn» = hoa hồng − khách nhận − dự phòng phí − dự phòng thuế" in text
+        assert "Phần còn lại:" not in text and "· còn " not in text
+    v11 = _bot(tmp_path / "v11", v12=False)
+    policy11 = v11.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", NOW)
+    assert "Admin còn (sau dự phòng): <b>19.020đ</b>" in policy11.text
+    assert "Dự phòng phí (0,98%, admin chịu): -980đ" in policy11.text
+
+
+@pytest.mark.parametrize(
+    ("text", "amount"),
+    [
+        ("150000", 150_000), ("150.000", 150_000), ("150,000", 150_000), ("1.372", 1_372), ("150k", 150_000),
+        ("150 k", 150_000), ("1,5tr", 1_500_000), ("1.25 triệu", 1_250_000), ("2tr", 2_000_000), ("7", 7),
+        ("150000đ", 150_000), ("100000000", 100_000_000), ("12,5k", 12_500), ("0,5k", 500),
+    ],
+)
+def test_doc_so_hoa_hong_gia_dinh(text, amount):
+    assert admin_policy.parse_sim_amount(text) == amount
+
+
+@pytest.mark.parametrize("text", ["", "0", "-5", "abc", "1.5", "100000001", "1e6", "150kk", "1,2,3", "1.0000", "150000.5"])
+def test_tu_choi_so_hoa_hong_sai(text):
+    assert admin_policy.parse_sim_amount(text) is None
+
+
+def test_mo_phong_nhap_so_tu_do(tmp_path):
+    bot = _bot(tmp_path)
+    bot.admin_panel.menu(ADMIN, NOW)
+    before = _counts(tmp_path)
+    prompt = bot.admin_panel.handle_callback(ADMIN, "c:sim:input", "private", NOW)
+    assert "Gửi hoa hồng giả định" in prompt.text
+    assert [d for row in prompt.inline_keyboard for _l, d in row] == ["c:menu:sim"]
+    wrong = bot.handle_text(ADMIN, "owner", "abc", update_id=10, now=NOW)
+    assert "Chưa đọc được số" in wrong.text
+    sim = bot.handle_text(ADMIN, "owner", "150k", update_id=11, now=NOW)
+    flat = " ".join(sim.text.split())
+    assert "hoa hồng giả định 150.000đ" in sim.text
+    quote = cashback_for(150_000, bot.admin_panel.resolve_policy(NOW))
+    assert f"Khách nhận {_cell(quote.cashback_vnd)}" in flat
+    assert all(not label.startswith("• ") for row in sim.inline_keyboard for label, _d in row), "150k không phải mốc có sẵn"
+    assert bot.admin_panel.consume_text(ADMIN, "65", NOW) is None, "đã thôi chờ sau khi tính"
+    assert _counts(tmp_path) == before, "nhập số mô phỏng không ghi DB"
+
+
+def test_mo_phong_cho_nhap_het_han_hoac_bam_nut_khac(tmp_path):
+    bot = _bot(tmp_path, allowed_telegram_ids=frozenset({BUYER, ADMIN}))
+    panel = bot.admin_panel
+    panel.handle_callback(ADMIN, "c:sim:input", "private", NOW)
+    assert panel.consume_text(ADMIN, "150000", NOW + timedelta(minutes=11)) is None
+    panel.handle_callback(ADMIN, "c:sim:input", "private", NOW)
+    panel.handle_callback(ADMIN, "c:menu:home", "private", NOW)
+    assert panel.consume_text(ADMIN, "150000", NOW) is None
+    panel.handle_callback(ADMIN, "c:sim:input", "private", NOW)
+    card = bot.handle_text(ADMIN, "owner", LINK, update_id=12, now=NOW)
+    assert "Đã tạo link" in card.text, "dán link Shopee lúc đang chờ: tạo link như thường"
+    assert panel.consume_text(ADMIN, "150000", NOW) is None
+    assert panel.consume_text(BUYER, "150000", NOW) is None
+
+
+def _schedule_share(bot, typed="65"):
+    preview = _share(bot, NOW, typed=typed, when="w:tmr")
+    bot.admin_panel.handle_callback(ADMIN, _data(preview, ":ok"), "private", NOW)
+
+
+def test_huy_lich_ty_le_truoc_moc(tmp_path):
+    bot = _bot(tmp_path)
+    bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    snapshots = [tuple(row) for row in _snapshots(tmp_path)]
+    _schedule_share(bot)
+    policy = bot.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", NOW)
+    buttons = [d for row in policy.inline_keyboard for _l, d in row]
+    assert buttons == ["c:sh:new", "c:pc:s:1", "c:menu:home"]
+    confirm = bot.admin_panel.handle_callback(ADMIN, "c:pc:s:1", "private", NOW)
+    assert "Lịch #1: <b>tỷ lệ chia 65%</b>, hiệu lực <b>00:00 24/10/2026</b>" in confirm.text
+    assert _rows(tmp_path, "SELECT COUNT(*) FROM policy_cancellations") == [(0,)], "bước hỏi lại chưa ghi"
+    done = bot.admin_panel.handle_callback(ADMIN, "c:pc:s:1:ok", "private", NOW)
+    assert done.toast == "Đã huỷ lịch #1"
+    assert "link mới vẫn theo chia 70%" in done.text
+    assert "c:pc:s:1" not in [d for row in done.inline_keyboard for _l, d in row]
+    assert _rows(tmp_path, "SELECT policy_kind, policy_id, cancelled_by FROM policy_cancellations") == [("share", 1, ADMIN)]
+    assert _rows(tmp_path, "SELECT share_bps FROM share_policies") == [(6_500,)], "dòng chính sách giữ nguyên"
+    tomorrow = NOW + timedelta(days=1)
+    assert bot.admin_panel.resolve_policy(tomorrow).share_bps == 7_000
+    later = _restart(tmp_path, product_max_age_hours=48)
+    assert "<b>12.462đ</b>" in later.handle_text(BUYER, "buyer", LINK, update_id=2, now=tomorrow).text
+    assert [tuple(row) for row in _snapshots(tmp_path)][:1] == snapshots
+    hist = bot.admin_panel.handle_callback(ADMIN, "c:menu:hist", "private", NOW)
+    assert "#1 65% từ 00:00 24/10/2026 · ✖️ ĐÃ HUỶ TRƯỚC MỐC" in hist.text
+    assert "#1 tỷ lệ chia 65%, mốc 00:00 24/10/2026 · Huỷ lịch hẹn: đã hủy" in hist.text
+    sim = bot.admin_panel.handle_callback(ADMIN, "c:menu:sim", "private", NOW)
+    assert "ĐÃ HẸN GIỜ" not in sim.text
+
+
+def test_huy_lich_du_phong_va_huy_lai(tmp_path):
+    bot = _bot(tmp_path)
+    preview = _wizard(bot, NOW, tax="2", when="w:tmr")
+    bot.admin_panel.handle_callback(ADMIN, _data(preview, ":ok"), "private", NOW)
+    fee = bot.admin_panel.handle_callback(ADMIN, "c:menu:fee", "private", NOW)
+    assert [d for row in fee.inline_keyboard for _l, d in row] == ["c:rs:new", "c:pc:r:1", "c:menu:home"]
+    bot.admin_panel.handle_callback(ADMIN, "c:pc:r:1:ok", "private", NOW)
+    assert bot.admin_panel.resolve_policy(NOW + timedelta(days=1)).tax_reserve_bps == 1_000
+    again = bot.admin_panel.handle_callback(ADMIN, "c:pc:r:1:ok", "private", NOW)
+    assert again.toast == "Đã huỷ trước đó"
+    assert _rows(tmp_path, "SELECT COUNT(*) FROM policy_cancellations") == [(1,)]
+    assert _rows(tmp_path, "SELECT COUNT(*) FROM admin_change_audit WHERE action = 'reserve_cancel'") == [(1,)]
+
+
+def test_khong_huy_duoc_lich_da_toi_gio(tmp_path):
+    bot = _bot(tmp_path)
+    _schedule_share(bot)
+    after = NOW + timedelta(days=1)
+    for data in ("c:pc:s:1", "c:pc:s:1:ok"):
+        reply = bot.admin_panel.handle_callback(ADMIN, data, "private", after)
+        assert reply.toast == "Đã có hiệu lực, không huỷ được"
+    assert _rows(tmp_path, "SELECT COUNT(*) FROM policy_cancellations") == [(0,)]
+    assert bot.admin_panel.resolve_policy(after).share_bps == 6_500
+    conn = sqlite3.connect(tmp_path / "cashback.sqlite")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO policy_cancellations (policy_kind, policy_id, effective_at, cancelled_by, cancelled_at) "
+            "VALUES ('share', 1, '2026-10-23T17:00:00Z', 1, '2026-10-23T17:00:00Z')"
+        )
+
+
+def test_huy_lich_quyen_va_callback_sai(tmp_path):
+    bot = _bot(tmp_path)
+    _schedule_share(bot)
+    for user, chat in ((BUYER, "private"), (ADMIN, "group")):
+        assert "chỉ dành cho quản trị" in bot.admin_panel.handle_callback(user, "c:pc:s:1:ok", chat, NOW).text
+    assert bot.admin_panel.handle_callback(ADMIN, "c:pc:s:99:ok", "private", NOW).toast == "Không thấy lịch hẹn"
+    for data in ("c:pc:x:1", "c:pc:s:1:yes", "c:pc:s:"):
+        assert bot.admin_panel.handle_callback(ADMIN, data, "private", NOW).text == "Nút này không còn hiệu lực."
+    assert _rows(tmp_path, "SELECT COUNT(*) FROM policy_cancellations") == [(0,)]
+
+
+def test_bang_huy_lich_chi_them(tmp_path):
+    bot = _bot(tmp_path)
+    _schedule_share(bot)
+    bot.admin_panel.handle_callback(ADMIN, "c:pc:s:1:ok", "private", NOW)
+    conn = sqlite3.connect(tmp_path / "cashback.sqlite")
+    for sql in ("UPDATE policy_cancellations SET policy_id = 2", "DELETE FROM policy_cancellations"):
+        with pytest.raises(sqlite3.DatabaseError, match="append-only"):
+            conn.execute(sql)
+
+
+def test_backfill_khong_dung_chinh_sach_da_huy(tmp_path):
+    bot = _bot(tmp_path)
+    _schedule_share(bot)
+    bot.admin_panel.handle_callback(ADMIN, "c:pc:s:1:ok", "private", NOW)
+    link_id = _legacy_link(
+        tmp_path, label="v1.2-reserve-2026-10-23+s1", rate=65, commission=20_000, cashback=11_572,
+        created_at="2026-10-24T01:00:00Z",
+    )
+    _restart(tmp_path)
+    snap = [row for row in _snapshots(tmp_path) if row["link_id"] == link_id][0]
+    assert snap["provenance"] == "unresolved"
