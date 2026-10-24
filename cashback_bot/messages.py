@@ -20,7 +20,7 @@ HOME = (
     "🎁 <b>Xem món Shopee được hoàn bao nhiêu</b>\n\n"
     "Dán link sản phẩm Shopee vào đây. "
     "Bot gửi lại link mua và số tiền hoàn dự kiến.\n\n"
-    "ⓘ Bot đang thử nghiệm. Số hoàn là ước tính, chưa theo dõi đơn và chưa chi trả."
+    "ⓘ Bot đang thử nghiệm. Số hoàn là ước tính. Ví hoàn tiền chưa mở, bot chưa chi trả."
 )
 # Khi admin bật ví (PLAN-066) thì bot đã theo dõi đơn và chi trả; câu ⓘ phải đổi theo.
 HOME_WALLET = (
@@ -46,7 +46,7 @@ CLOSED_ALERT = "Tài khoản này chưa được mở. Bot đang mở thử cho 
 # Hiện ở màn "What can this bot do?" trước khi bấm Start. Tối đa 512 và 120 ký tự.
 DESCRIPTION = (
     "Dán link sản phẩm Shopee, bot gửi lại link mua và số tiền hoàn dự kiến.\n\n"
-    "Bot đang thử nghiệm: số hoàn là ước tính, chưa theo dõi đơn và chưa chi trả. "
+    "Bot đang thử nghiệm: số hoàn là ước tính, ví hoàn tiền chưa mở và bot chưa chi trả. "
     "Bot không thu phí sử dụng."
 )
 SHORT_DESCRIPTION = "Dán link Shopee, xem số tiền hoàn dự kiến. Bot đang thử nghiệm."
@@ -101,9 +101,13 @@ WALLET_COMMAND = ("vi", "Ví hoàn tiền")
 
 
 def how_to_calc(v12: bool, wallet_hold_days: int | None = None, wallet_min_vnd: int | None = None) -> str:
-    """Giải thích cho khách, không đưa tỷ lệ chia, phí hay thuế (đó là số nội bộ)."""
+    """Giải thích cho khách, không đưa tỷ lệ chia, phí hay thuế (đó là số nội bộ).
+
+    v12: cách tính đang báo giá cho link mới. Link cũ giữ cách tính lúc tạo (PLAN-076).
+    """
     deduction = (
-        "• Số dự kiến đã trừ phí và thuế liên quan.\n"
+        "• Số dự kiến đã trừ trước dự phòng phí và thuế. Đây là mức bot tự đặt để ước tính, "
+        "không phải số thuế bạn phải nộp.\n"
         if v12
         else "• Số dự kiến chưa trừ thuế và phí.\n"
     )
@@ -116,9 +120,10 @@ def how_to_calc(v12: bool, wallet_hold_days: int | None = None, wallet_min_vnd: 
         "(sau voucher, xu, giảm giá), nên số thật thường thấp hơn.\n"
         "• Hoa hồng có thể thay đổi, hoặc bằng 0 nếu đơn bị hủy, trả hàng hay không đủ điều kiện.\n"
         "• Số cuối chỉ được xác nhận khi Shopee đối soát xong.\n"
-        "• Số dự kiến chưa phải tiền đã duyệt hay có thể rút.\n\n"
+        "• Số dự kiến chưa phải tiền đã duyệt hay có thể rút.\n"
+        "• Mỗi link giữ cách tính lúc bot tạo link. Bot đổi cách tính thì chỉ áp dụng cho link tạo sau đó.\n\n"
         + (
-            "ⓘ Bot chưa theo dõi đơn và chưa chi trả."
+            "ⓘ Ví hoàn tiền chưa mở, bot chưa chi trả."
             if wallet_hold_days is None
             else f"ⓘ Tiền hoàn vào ví {wallet_hold_days} ngày sau khi đơn hoàn thành. "
             f"Rút từ {format_vnd(wallet_min_vnd or 0)}, chuyển khoản về tài khoản bạn khai."

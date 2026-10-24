@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, new_sub_id
 from cashback_bot.config import Settings
-from cashback_bot.pricing import EstimatePolicy, estimate_cashback, quote_displayed_vnd
+from cashback_bot import policy_snapshot
+from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
     CLOSED,
@@ -52,6 +53,17 @@ if TYPE_CHECKING:
     from cashback_bot.admin_notify import AdminNotifier
 
 
+def _has_table(conn: sqlite3.Connection, name: str) -> bool:
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() is not None
+
+
+def _row_get(row, key: str):
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return None
+
+
 def _command_name(text: str) -> str | None:
     token = text.split(maxsplit=1)[0] if text else ""
     if not token.startswith("/"):
@@ -88,7 +100,34 @@ class CashbackService:
             tax_default_bps=settings.estimate_tax_reserve_bps,
             estimate_policy=policy,
             admin_notifier=admin_notifier,
+            other_reserve_vnd=settings.estimate_other_reserve_vnd,
+            rounding_unit=settings.estimate_rounding_unit,
         )
+        self._snapshots_on = False
+        self._backfill_snapshots()
+
+    def _policy_defaults(self) -> policy_snapshot.PolicyDefaults:
+        return policy_snapshot.PolicyDefaults(
+            share_bps=self.settings.cashback_rate_percent * 100,
+            fee_bps=self.settings.estimate_fee_bps,
+            tax_reserve_bps=self.settings.estimate_tax_reserve_bps,
+            other_reserve_vnd=self.settings.estimate_other_reserve_vnd,
+            rounding_unit=self.settings.estimate_rounding_unit,
+        )
+
+    def _backfill_snapshots(self) -> None:
+        """Link cũ chưa có snapshot (PLAN-076): ghi một lần lúc khởi động. Lỗi thì lần tính ví dựng tạm, không ghi."""
+        try:
+            with self.repo.connect() as conn:
+                self._snapshots_on = _has_table(conn, "link_policy_snapshots")
+                if not self._snapshots_on:
+                    return
+                counts = policy_snapshot.backfill(conn, self._policy_defaults())
+        except sqlite3.Error:
+            logger.exception("[Cashback] dựng snapshot chính sách link cũ thất bại")
+            return
+        if any(counts.values()):
+            logger.info("[Cashback] snapshot chính sách link cũ backfilled=%s unresolved=%s", *counts.values())
 
     def allowed(self, telegram_user_id: int) -> bool:
         if telegram_user_id in self.settings.allowed_telegram_ids:
@@ -273,11 +312,28 @@ class CashbackService:
             )
 
     def _real_cashback(self, commission_vnd: int, row) -> Split:
-        """Tiền hoàn cho hoa hồng thật, cùng cửa pricing.py, theo chính sách lúc tạo link (ADR-045).
+        """Tiền hoàn cho hoa hồng thật, theo snapshot chính sách của link (PLAN-076, ADR-053).
 
-        Phí và dự phòng thuế theo mức /admin áp dụng lúc tạo link. V1.1 hoàn trên HH gốc nên
-        hai khoản này admin chịu hết; V1.2 trừ trước khi chia.
+        Không đọc lại chính sách theo giờ hay theo .env hiện tại. Link không dựng lại được snapshot
+        (unresolved) giữ cách tính trước PLAN-076 và hiện ở màn Lịch sử để admin xem.
         """
+        link_id = _row_get(row, "matched_link_id")
+        found = None
+        if link_id is not None and self._snapshots_on:
+            with self.repo.connect() as conn:
+                found = policy_snapshot.for_link(conn, int(link_id), self._policy_defaults())
+        if found is None or found.policy is None:
+            return self._legacy_cashback(commission_vnd, row)
+        quote = cashback_for(commission_vnd, found.policy)
+        return Split(
+            quote.cashback_vnd,
+            found.label,
+            quote.fee_reserve_vnd,
+            quote.tax_reserve_vnd + quote.other_reserve_vnd,
+        )
+
+    def _legacy_cashback(self, commission_vnd: int, row) -> Split:
+        """Cách tính trước PLAN-076, chỉ cho link không có snapshot dùng được."""
         created = datetime.strptime(row["link_created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         reserve = self.admin_panel.active_reserve(created)
         policy = replace(
@@ -371,7 +427,7 @@ class CashbackService:
             return BotReply(STALE)
 
         try:
-            cashback, policy_id, render, rate_percent = self._quote_cashback(quote.commission_vnd, moment)
+            resolution = self._resolve_policy(moment)
         except sqlite3.Error:
             logger.exception("[Cashback] đọc mức dự phòng thất bại item=%s", quote.item_id)
             self._reject(update_id, telegram_user_id, target.original_url, "reserve_read_failed")
@@ -383,6 +439,10 @@ class CashbackService:
                     status="REQUEST_FAILED",
                 )
             return BotReply(GENERIC_FAIL)
+        priced = cashback_for(quote.commission_vnd, resolution)
+        cashback = priced.cashback_vnd
+        v12 = resolution.pricing_version == "v1.2"
+        render = render_success_v12 if v12 else render_success
         try:
             sub_id = self._unique_sub_id()
             affiliate_url = build_an_redir(quote.product_url, self.settings.affiliate_id, sub_id)
@@ -412,8 +472,8 @@ class CashbackService:
                     "price_vnd": quote.price_vnd,
                     "estimated_commission": quote.commission_vnd,
                     "estimated_cashback": cashback,
-                    "cashback_rate_percent": rate_percent,
-                    "estimate_policy": policy_id,
+                    "cashback_rate_percent": resolution.rate_percent,
+                    "estimate_policy": resolution.label if v12 else None,
                     "api_status": quote.api_status,
                     "data_source": quote.data_source,
                     "product_last_update": quote.last_update.strftime("%Y-%m-%d %H:%M:%S"),
@@ -426,7 +486,8 @@ class CashbackService:
                     "is_capped": quote.is_capped,
                     "link_status": "created",
                     "reject_reason": None,
-                }
+                },
+                snapshot=self._snapshot_record(resolution, priced),
             )
         except sqlite3.IntegrityError:
             logger.error("[Cashback] db integrity item=%s", quote.item_id)
@@ -468,27 +529,12 @@ class CashbackService:
             rounding_unit=self.settings.estimate_rounding_unit,
         )
 
-    def _quote_cashback(self, commission_vnd: int, now: datetime):
-        """Trả (tiền hoàn, mã chính sách, hàm hiển thị, tỷ lệ chia %)."""
-        rate = self.settings.cashback_rate_percent
-        if not self._v12_ready():
-            return quote_displayed_vnd(commission_vnd, rate), None, render_success, rate
-        # Mức admin áp dụng (ADR-047, ADR-048); chưa có thì là .env.
-        reserve = self.admin_panel.active_reserve(now)
-        share = self.admin_panel.active_share(now)
-        policy = replace(
-            self._estimate_policy(),
-            cashback_share_bps=share.share_bps,
-            service_fee_bps=reserve.fee_bps,
-            tax_risk_reserve_bps=reserve.tax_reserve_bps,
-        )
-        result = estimate_cashback(commission_vnd, policy, reliable=True)
-        policy_id = result.policy_id
-        if reserve.policy_id is not None:
-            policy_id += f"+r{reserve.policy_id}"
-        if share.policy_id is not None:
-            policy_id += f"+s{share.policy_id}"
-        return result.estimated_cashback_vnd, policy_id, render_success_v12, share.share_bps // 100
+    def _resolve_policy(self, now: datetime) -> PolicyResolution:
+        """Một lần chọn chính sách cho link báo giá lúc `now`. Báo giá và snapshot dùng chung kết quả."""
+        return self.admin_panel.resolve_policy(now, v12=self._v12_ready())
+
+    def _snapshot_record(self, resolution: PolicyResolution, priced) -> dict | None:
+        return policy_snapshot.record(resolution, priced) if self._snapshots_on else None
 
     def _within_rate_limit(self, telegram_user_id: int, now: datetime) -> bool:
         return self.repo.consume_link_attempt(

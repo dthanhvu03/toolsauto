@@ -347,7 +347,8 @@ def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
     assert "<b>12.462đ</b>" in card.text
     assert "sau dự phòng phí và thuế" in card.text
     calc = bot.handle_text(111, "buyer", "/cachtinh", update_id=2)
-    assert "đã trừ phí và thuế" in calc.text
+    assert "đã trừ trước dự phòng phí và thuế" in calc.text
+    assert "không phải số thuế bạn phải nộp" in calc.text
     assert "%" not in calc.text
 
     home = bot.admin_panel.menu(ADMIN, now)

@@ -288,6 +288,40 @@ BEGIN SELECT RAISE(ABORT, 'settlement_audit is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS settlement_evidence_no_delete BEFORE DELETE ON settlement_evidence
 BEGIN SELECT RAISE(ABORT, 'settlement_evidence is append-only'); END;
 
+-- Chính sách chốt cho từng link lúc báo giá (PLAN-076, ADR-053). Một link một dòng, chỉ thêm.
+-- captured: ghi cùng lúc tạo link. backfilled: dựng lại từ link cũ và đã tính ra đúng số đã báo.
+-- unresolved: link cũ không dựng lại được; cột chính sách để trống, không gán chính sách mới.
+CREATE TABLE IF NOT EXISTS link_policy_snapshots (
+    link_id INTEGER PRIMARY KEY REFERENCES link_requests(id),
+    schema_version INTEGER NOT NULL,
+    provenance TEXT NOT NULL CHECK (provenance IN ('captured', 'backfilled', 'unresolved')),
+    policy_label TEXT NOT NULL,
+    pricing_version TEXT CHECK (pricing_version IN ('v1.1', 'v1.2')),
+    formula TEXT,
+    rounding TEXT,
+    share_bps INTEGER,
+    share_policy_id INTEGER,
+    reserve_policy_id INTEGER,
+    fee_bps INTEGER,
+    tax_reserve_bps INTEGER,
+    other_reserve_vnd INTEGER,
+    rounding_unit INTEGER,
+    resolved_at TEXT,
+    quote_commission_vnd INTEGER,
+    quote_cashback_vnd INTEGER,
+    quote_source TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL,
+    CHECK (provenance = 'unresolved' OR (
+        pricing_version IS NOT NULL AND formula IS NOT NULL AND rounding IS NOT NULL
+        AND share_bps IS NOT NULL AND fee_bps IS NOT NULL AND tax_reserve_bps IS NOT NULL
+        AND other_reserve_vnd IS NOT NULL AND rounding_unit IS NOT NULL AND resolved_at IS NOT NULL))
+);
+CREATE TRIGGER IF NOT EXISTS link_policy_snapshots_no_update BEFORE UPDATE ON link_policy_snapshots
+BEGIN SELECT RAISE(ABORT, 'link_policy_snapshots is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS link_policy_snapshots_no_delete BEFORE DELETE ON link_policy_snapshots
+BEGIN SELECT RAISE(ABORT, 'link_policy_snapshots is append-only'); END;
+
 -- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
 -- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
 CREATE TABLE IF NOT EXISTS failed_updates (
@@ -463,6 +497,15 @@ class LinkRow:
     estimate_policy: str | None = None
 
 
+def insert_snapshot(conn: sqlite3.Connection, link_id: int, snapshot: dict) -> None:
+    row = {"link_id": link_id, **snapshot}
+    names = ", ".join(row)
+    conn.execute(
+        f"INSERT INTO link_policy_snapshots ({names}) VALUES ({', '.join('?' for _ in row)})",
+        list(row.values()),
+    )
+
+
 class TrackingRepository:
     def __init__(self, path: str):
         self.path = path
@@ -549,10 +592,11 @@ class TrackingRepository:
             ).fetchone()
         return found is not None
 
-    def insert_created(self, fields: dict) -> int:
+    def insert_created(self, fields: dict, snapshot: dict | None = None) -> int:
+        """snapshot: dòng link_policy_snapshots (không có link_id). Ghi cùng transaction với link."""
         fields = dict(fields)
         fields["delivery_status"] = "pending"
-        return self._insert(fields)
+        return self._insert(fields, snapshot)
 
     def insert_rejected(self, fields: dict) -> int:
         fields = dict(fields)
@@ -561,7 +605,7 @@ class TrackingRepository:
         fields.setdefault("affiliate_url", None)
         return self._insert(fields)
 
-    def _insert(self, fields: dict) -> int:
+    def _insert(self, fields: dict, snapshot: dict | None = None) -> int:
         columns = [
             "telegram_update_id",
             "telegram_user_id",
@@ -595,7 +639,10 @@ class TrackingRepository:
                 f"INSERT INTO link_requests ({', '.join(columns)}) VALUES ({placeholders})",
                 [payload[key] for key in columns],
             )
-            return int(cursor.lastrowid)
+            link_id = int(cursor.lastrowid)
+            if snapshot is not None:
+                insert_snapshot(conn, link_id, snapshot)
+            return link_id
 
     def get_offset(self) -> int:
         with self.connect() as conn:

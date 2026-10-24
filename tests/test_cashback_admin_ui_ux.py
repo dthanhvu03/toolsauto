@@ -204,7 +204,7 @@ def test_money_screens_have_clear_boundaries(tmp_path):
     sim_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
     assert "ĐANG ÁP DỤNG" in sim_reply.text
     assert "MÔ PHỎNG" in sim_reply.text
-    assert "quỹ giả định, không phải lợi nhuận" in sim_reply.text
+    assert "hoa hồng giả định, không phải lợi nhuận" in sim_reply.text
 
 
 def test_six_screens_permission_and_modes(tmp_path):
@@ -231,7 +231,8 @@ def test_six_screens_permission_and_modes(tmp_path):
     sim_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
     sim_datas = [d for r in sim_reply.inline_keyboard for _l, d in r]
     for d in sim_datas:
-        assert d in {"c:menu:home"}  # Chỉ có nút điều hướng
+        # Chỉ có nút điều hướng và chọn hoa hồng giả định (PLAN-076), không nút ghi.
+        assert d == "c:menu:home" or d.startswith("c:sim:")
 
     # 4. Lịch sử: chế độ xem (read-only)
     hist_reply = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:hist", "private", NOW)
@@ -253,16 +254,17 @@ def test_dau_phay_trong_cau_chu_khong_bi_doi_thanh_dau_cham(tmp_path):
     rank = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:rank", "private", NOW)
     fee = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:fee", "private", NOW)
     sim = bot.admin_panel.handle_callback(ADMIN_ID, "c:menu:sim", "private", NOW)
-    assert "Đồng 60%: hoàn 60.000đ · còn 40.000đ" in rank.text
+    # PLAN-076: «còn» là phần dư sau dự phòng phí 980đ và thuế 10.000đ (V1.1 admin chịu).
+    assert "Đồng 60%: hoàn 60.000đ · còn 29.020đ" in rank.text
     assert "không phải thuế phải nộp. Link đã gửi giữ số cũ" in fee.text
     assert "0,98%" in fee.text
     assert "0.98%" not in fee.text
     assert "-980đ" in fee.text
-    assert "Đồng 60%: hoàn 6.000đ · còn 4.000đ" in sim.text
+    assert "Đồng 60%: hoàn 60.000đ · còn 29.020đ" in sim.text
 
     bot.admin_panel.handle_callback(ADMIN_ID, "c:tier:SILVER", "private", NOW)
     preview = bot.admin_panel.consume_text(ADMIN_ID, "66", NOW)
-    assert "Trước: hoàn 65.000đ, phần còn 35.000đ" in preview.text
+    assert "Trước: hoàn 65.000đ, phần còn 24.020đ" in preview.text
 
 
 def test_tong_quan_khong_lap_dong(tmp_path):

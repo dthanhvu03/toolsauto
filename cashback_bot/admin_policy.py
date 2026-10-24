@@ -27,9 +27,11 @@ from cashback_bot.admin_reserve import (
     AppliedShare,
     active_reserve,
     active_share,
+    effective_from,
     next_midnight,
     parse_when,
     recent_commissions,
+    resolve_policy,
     upcoming_reserves,
     upcoming_shares,
     vn_time,
@@ -72,6 +74,7 @@ from cashback_bot.admin_ui import (
     shopee_connected_keyboard,
     shopee_prompt_cookie_text,
     shopee_text,
+    simulation_keyboard,
     simulation_text,
     stats_detail_text,
     stats_keyboard,
@@ -83,7 +86,8 @@ from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
-from cashback_bot.pricing import MAX_SHARE_BPS, EstimatePolicy, estimate_cashback, share_cashback
+from cashback_bot import policy_snapshot
+from cashback_bot.pricing import MAX_SHARE_BPS, CashbackQuote, EstimatePolicy, PolicyResolution, cashback_for
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
 from cashback_bot.shopee_sync import AUTO_SYNC_KEY, SYNC_REQUEST_KEY
@@ -113,7 +117,9 @@ _RESULTS = {
     "applied": "đã áp dụng",
 }
 DIRECTIONAL_BPS = {"BRONZE": 6_000, "SILVER": 6_500, "GOLD": 7_000}
-SAMPLE_VND = (10_000, 100_000)
+SAMPLE_VND = 100_000
+# Hoa hồng giả định admin chọn ở 🧮 Mô phỏng. Chỉ các mốc này, không nhận số tự do qua callback.
+SIM_AMOUNTS = (10_000, 50_000, 100_000, 500_000)
 # Admin gõ phần trăm: "10", "0,98", "0.98", "62,5%". Lưu nội bộ bằng bps.
 _NUMBER = re.compile(r"^(\d{1,3})(?:[.,](\d{1,2}))?\s*%?$")
 _MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy)$")
@@ -121,6 +127,7 @@ _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD)$")
 _RESERVE = re.compile(r"^c:rs:(\d+):([0-9a-f]{8}):(k:[PIH]|keep|w:now|w:tmr|ok|no)$")
 _SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
 _STATS = re.compile(r"^c:st:(today|7d|30d|all)(:more)?$")
+_SIM = re.compile(r"^c:sim:(10000|50000|100000|500000)$")
 _SHARE_NUMBER = re.compile(r"^(\d{1,3})\s*%?$")
 _DECISION = re.compile(r"^c:(ok|no):(\d+):([0-9a-f]{8})$")
 # Telegram tách tin dài hơn 4.096 ký tự. Gom các phần JSON cookie trong RAM, không ghi DB.
@@ -159,8 +166,13 @@ def customer_policy_due(rows: list[dict], now: datetime) -> dict | None:
     return chosen
 
 
-def simulate_share(amount_vnd: int, before_bps: int, after_bps: int) -> tuple[tuple[int, int], tuple[int, int]]:
-    return share_cashback(amount_vnd, before_bps), share_cashback(amount_vnd, after_bps)
+def simulate_share(
+    amount_vnd: int, policy: PolicyResolution, before_bps: int, after_bps: int
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    """(hoàn, phần còn) trước và sau khi đổi tỷ lệ, cùng công thức báo giá đang chạy."""
+    before = cashback_for(amount_vnd, replace(policy, share_bps=before_bps))
+    after = cashback_for(amount_vnd, replace(policy, share_bps=after_bps))
+    return (before.cashback_vnd, before.remainder_vnd), (after.cashback_vnd, after.remainder_vnd)
 
 
 @dataclass(frozen=True)
@@ -175,6 +187,9 @@ class AdminPanel:
     # V1.2 khách đang nhận; None nghĩa là V1.1.
     estimate_policy: EstimatePolicy | None = None
     admin_notifier: AdminNotifier | None = None
+    # Dự phòng khác và đơn vị làm tròn của V1.2 (.env). Dùng cả khi so sánh V1.2 lúc đang chạy V1.1.
+    other_reserve_vnd: int = 0
+    rounding_unit: int = 1
     _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
@@ -238,6 +253,9 @@ class AdminPanel:
         tier = _TIER.fullmatch(data or "")
         if tier:
             return self._begin(user_id, tier.group(1), now)
+        sim = _SIM.fullmatch(data or "")
+        if sim:
+            return self._simulation(now, int(sim.group(1)))
         stats = _STATS.fullmatch(data or "")
         if stats:
             return self._stats(stats.group(1), now, detail=bool(stats.group(2)))
@@ -285,33 +303,28 @@ class AdminPanel:
             )
             return BotReply(text, inline_keyboard=MENU_KEYBOARD)
         if name == "policy":
-            reserve = None
-            live = self.live_policy(now)
+            live = self.resolve_policy(now)
             with self._connect() as conn:
                 share = active_share(conn, now, self.displayed_rate_percent * 100)
                 upcoming = upcoming_shares(conn, now)
-            if live is None:
-                customer, remain = share_cashback(100_000, self.displayed_rate_percent * 100)
-            else:
-                result = estimate_cashback(100_000, live)
-                customer = result.estimated_cashback_vnd
-                remain = result.distributable_vnd - customer
-                reserve = (
-                    _percent(live.service_fee_bps),
-                    _percent(live.tax_risk_reserve_bps),
-                    result.fee_reserve_vnd,
-                    result.tax_risk_reserve_vnd,
-                )
+            v12 = live.pricing_version == "v1.2"
+            result = cashback_for(SAMPLE_VND, live)
             warning = ""
-            if live is None and (share.policy_id is not None or upcoming):
+            if not v12 and (share.policy_id is not None or upcoming):
                 warning = "Đang chạy V1.1: tỷ lệ admin đặt có tác dụng khi bật V1.2."
             text = policy_text(
-                rate_percent=self._rate_percent(now),
+                rate_percent=live.rate_percent,
                 pending=self._pending_count(now),
-                customer_vnd=customer,
-                remain_vnd=remain,
-                reserve=reserve,
-                since=vn_time(share.effective_at) if share.effective_at and live is not None else None,
+                customer_vnd=result.cashback_vnd,
+                remain_vnd=result.remainder_vnd,
+                reserve=(
+                    _percent(live.fee_bps),
+                    _percent(live.tax_reserve_bps),
+                    result.fee_reserve_vnd,
+                    result.tax_reserve_vnd,
+                ),
+                v12=v12,
+                since=vn_time(share.effective_at) if share.effective_at and v12 else None,
                 upcoming=[f"{_percent(item.share_bps)} từ {vn_time(item.effective_at or '')}" for item in upcoming],
                 warning=warning,
                 notice=notice,
@@ -319,45 +332,41 @@ class AdminPanel:
             return BotReply(text, inline_keyboard=POLICY_KEYBOARD)
         if name == "rank":
             rates = self._safe_rates()
+            live = self.resolve_policy(now)
             tiers = [
-                (TIER_EMOJI[code], label, _percent(rates[code]), *share_cashback(100_000, rates[code]))
+                (TIER_EMOJI[code], label, _percent(rates[code]), *_split(cashback_for(SAMPLE_VND, replace(live, share_bps=rates[code]))))
                 for code, label in TIERS.items()
             ]
             text = rank_text(tiers=tiers, notice=notice)
             return BotReply(text, inline_keyboard=RANK_KEYBOARD)
         if name == "fee":
+            live = self.resolve_policy(now)
             with self._connect() as conn:
                 active = active_reserve(conn, now, self.fee_default_bps, self.tax_default_bps)
                 upcoming = upcoming_reserves(conn, now)
-            result = estimate_cashback(100_000, self._policy_with(active, self._share_bps(now)))
+            result = cashback_for(SAMPLE_VND, live)
             text = fee_text(
-                calculator_on=self.estimate_policy is not None,
+                calculator_on=live.pricing_version == "v1.2",
                 kind=_kind_label(active),
                 fee=_percent(active.fee_bps),
                 tax=_percent(active.tax_reserve_bps),
                 since=vn_time(active.effective_at) if active.effective_at else None,
                 upcoming=[_upcoming_line(item) for item in upcoming],
-                rate_percent=self._rate_percent(now),
+                rate_percent=live.rate_percent,
                 sim_fee=result.fee_reserve_vnd,
-                sim_tax=result.tax_risk_reserve_vnd,
+                sim_tax=result.tax_reserve_vnd,
                 sim_dist=result.distributable_vnd,
-                sim_customer=result.estimated_cashback_vnd,
+                sim_customer=result.cashback_vnd,
                 notice=notice,
             )
             return BotReply(text, inline_keyboard=FEE_KEYBOARD)
         if name == "sim":
-            rates = self._safe_rates()
-            table = [
-                (amount, [(label, _percent(rates[code]), *share_cashback(amount, rates[code])) for code, label in TIERS.items()])
-                for amount in SAMPLE_VND
-            ]
-            text = simulation_text(
-                quote=quote_label(self._rate_percent(now), self.estimate_policy is not None),
-                table=table,
-            )
-            return BotReply(text, inline_keyboard=NAV_KEYBOARD)
+            return self._simulation(now, SAMPLE_VND)
         if name == "hist":
-            return BotReply(history_text(self._history_rows()), inline_keyboard=NAV_KEYBOARD)
+            return BotReply(
+                history_text(self._history_rows(), self._policy_versions(now)),
+                inline_keyboard=NAV_KEYBOARD,
+            )
         if name == "shopee":
             return self._shopee_screen(now, notice)
         return BotReply(command_copy_text(), inline_keyboard=NAV_KEYBOARD)
@@ -562,7 +571,7 @@ class AdminPanel:
         if ordered != sorted(ordered):
             return BotReply("Tỷ lệ phải đi theo thứ tự Đồng ≤ Bạc ≤ Vàng. Gửi lại số khác.", inline_keyboard=retry)
         before = self._rates()[draft["tier"]]
-        before_split, after_split = simulate_share(100_000, before, parsed)
+        before_split, after_split = simulate_share(SAMPLE_VND, self.resolve_policy(now), before, parsed)
         body = rank_preview_text(
             tier_name=TIERS[draft["tier"]],
             before=_percent(before),
@@ -725,7 +734,7 @@ class AdminPanel:
                 changes = {"step": "preview", "effective_at": _stamp(next_midnight(now))}
             elif action == "ok" and step == "preview":
                 active = active_share(conn, now, self.displayed_rate_percent * 100)
-                effective = draft["effective_at"] or _stamp(now)
+                effective = effective_from(draft["effective_at"], now)
                 cursor = conn.execute(
                     """
                     INSERT INTO share_policies (share_bps, effective_at, draft_id, created_by, created_at)
@@ -748,7 +757,9 @@ class AdminPanel:
         if draft["step"] == "cancelled":
             return replace(self._screen("policy", now, "✖️ Đã hủy. Tỷ lệ đang áp dụng không đổi."), toast="Đã hủy")
         if applied_id is not None:
-            when = vn_time(draft["effective_at"]) if draft["effective_at"] else "ngay bây giờ"
+            # Mốc đã qua lúc bấm Áp dụng thì effective_from ghi giờ bấm, không hồi tố.
+            scheduled = draft["effective_at"] and draft["effective_at"] > _stamp(now)
+            when = vn_time(draft["effective_at"]) if scheduled else "ngay bây giờ"
             notice = (
                 f"✅ Đã áp dụng tỷ lệ chia {_percent(int(draft['share_bps']))} (#{applied_id}) cho link mới, "
                 f"hiệu lực {when}. Link đã gửi giữ số cũ."
@@ -809,23 +820,11 @@ class AdminPanel:
         new_bps = int(draft["share_bps"])
         sample = recent = None
         if self.estimate_policy is not None:
-            reserve = self.active_reserve(now)
-            before, after = self._policy_with(reserve, active.share_bps), self._policy_with(reserve, new_bps)
-            old, new = estimate_cashback(100_000, before), estimate_cashback(100_000, after)
-            sample = (
-                old.estimated_cashback_vnd,
-                new.estimated_cashback_vnd,
-                old.distributable_vnd - old.estimated_cashback_vnd,
-                new.distributable_vnd - new.estimated_cashback_vnd,
-            )
-            with self._connect() as conn:
-                commissions = recent_commissions(conn)
-            if commissions:
-                recent = (
-                    len(commissions),
-                    sum(estimate_cashback(c, before).estimated_cashback_vnd for c in commissions),
-                    sum(estimate_cashback(c, after).estimated_cashback_vnd for c in commissions),
-                )
+            before = self.resolve_policy(now)
+            after = replace(before, share_bps=new_bps)
+            old, new = cashback_for(SAMPLE_VND, before), cashback_for(SAMPLE_VND, after)
+            sample = (old.cashback_vnd, new.cashback_vnd, old.remainder_vnd, new.remainder_vnd)
+            recent = self._recent_totals(before, after)
         text = share_preview_text(
             calculator_on=self.estimate_policy is not None,
             share=(_percent(active.share_bps), _percent(new_bps)),
@@ -879,28 +878,112 @@ class AdminPanel:
         with self._connect() as conn:
             return active_share(conn, now, self.displayed_rate_percent * 100)
 
-    def live_policy(self, now: datetime) -> EstimatePolicy | None:
-        """Công thức V1.2 đang báo giá, đã gồm mức admin áp dụng. None khi chạy V1.1."""
-        if self.estimate_policy is None:
-            return None
-        return self._policy_with(self.active_reserve(now), self.active_share(now).share_bps)
-
-    def _share_bps(self, now: datetime) -> int:
-        if self.estimate_policy is None:
-            return self.displayed_rate_percent * 100
-        return self.active_share(now).share_bps
+    def resolve_policy(self, now: datetime, v12: bool | None = None) -> PolicyResolution:
+        """Chính sách báo giá link mới lúc `now` (PLAN-076). Màn admin, báo giá và snapshot dùng chung."""
+        on = self.estimate_policy is not None if v12 is None else v12
+        with self._connect() as conn:
+            return resolve_policy(
+                conn,
+                now,
+                v12=on,
+                default_share_bps=self.displayed_rate_percent * 100,
+                fee_default=self.fee_default_bps,
+                tax_default=self.tax_default_bps,
+                other_reserve_vnd=self.other_reserve_vnd,
+                rounding_unit=self.rounding_unit,
+            )
 
     def _rate_percent(self, now: datetime) -> int:
-        return self._share_bps(now) // 100
+        return self.resolve_policy(now).rate_percent
 
-    def _policy_with(self, reserve: AppliedReserve, share_bps: int | None = None) -> EstimatePolicy:
-        base = self.estimate_policy or EstimatePolicy(cashback_share_bps=self.displayed_rate_percent * 100)
-        return replace(
-            base,
-            service_fee_bps=reserve.fee_bps,
-            tax_risk_reserve_bps=reserve.tax_reserve_bps,
-            cashback_share_bps=base.cashback_share_bps if share_bps is None else share_bps,
+    def _recent_totals(self, before: PolicyResolution, after: PolicyResolution) -> tuple[int, int, int] | None:
+        """Tổng tiền hoàn trên hoa hồng ước tính của các link gần nhất, trước và sau thay đổi."""
+        with self._connect() as conn:
+            commissions = recent_commissions(conn)
+        if not commissions:
+            return None
+        return (
+            len(commissions),
+            sum(cashback_for(c, before).cashback_vnd for c in commissions),
+            sum(cashback_for(c, after).cashback_vnd for c in commissions),
         )
+
+    def _simulation(self, now: datetime, amount: int) -> BotReply:
+        """🧮 Mô phỏng: chỉ đọc. Cùng cashback_for với báo giá khách; không ghi gì, không bật gì."""
+        live = self.resolve_policy(now)
+        v12 = live.pricing_version == "v1.2"
+        # Cột so sánh dùng cùng tỷ lệ và dự phòng, chỉ đổi công thức. Không bật công thức nào.
+        if v12:
+            other = replace(live, pricing_version="v1.1", other_reserve_vnd=0, rounding_unit=1)
+        else:
+            other = replace(live, pricing_version="v1.2", other_reserve_vnd=self.other_reserve_vnd, rounding_unit=self.rounding_unit)
+        current, compare = cashback_for(amount, live), cashback_for(amount, other)
+        scheduled = []
+        with self._connect() as conn:
+            moments = sorted(
+                {item.effective_at for item in upcoming_shares(conn, now) if v12 and item.effective_at}
+                | {item.effective_at for item in upcoming_reserves(conn, now) if item.effective_at}
+            )[:3]
+        for moment in moments:
+            at = datetime.strptime(moment, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            future = self.resolve_policy(at)
+            result = cashback_for(amount, future)
+            scheduled.append(
+                f"Từ {vn_time(moment)}: chia {_percent(future.share_bps)}, phí {_percent(future.fee_bps)}, "
+                f"thuế {_percent(future.tax_reserve_bps)} → khách {format_vnd(result.cashback_vnd)}"
+            )
+        rates = self._safe_rates()
+        ranks = [
+            (label, _percent(rates[code]), *_split(cashback_for(amount, replace(live, share_bps=rates[code]))))
+            for code, label in TIERS.items()
+        ]
+        text = simulation_text(
+            quote=quote_label(live.rate_percent, v12),
+            amount=amount,
+            settings=(_percent(live.share_bps), _percent(live.fee_bps), _percent(live.tax_reserve_bps)),
+            columns=(("V1.2" if v12 else "V1.1", current), ("V1.1" if v12 else "V1.2", compare)),
+            scheduled=scheduled,
+            ranks=ranks,
+        )
+        return BotReply(text, inline_keyboard=simulation_keyboard(SIM_AMOUNTS, amount))
+
+    def _policy_versions(self, now: datetime) -> list[str] | None:
+        """Phiên bản tỷ lệ chia và dự phòng đã áp dụng, kèm trạng thái; và độ phủ snapshot link."""
+        try:
+            with self._connect() as conn:
+                live = self.resolve_policy(now)
+                shares = conn.execute("SELECT * FROM share_policies ORDER BY effective_at DESC, id DESC LIMIT 5").fetchall()
+                reserves = conn.execute("SELECT * FROM reserve_policies ORDER BY effective_at DESC, id DESC LIMIT 5").fetchall()
+                tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+                coverage = policy_snapshot.coverage(conn) if "link_policy_snapshots" in tables else None
+        except (AdminSafetyError, sqlite3.Error):
+            return None
+        stamp_now = _stamp(now)
+
+        def state(row: sqlite3.Row, active_id: int | None) -> str:
+            if str(row["effective_at"]) > stamp_now:
+                return "🗓️ ĐÃ HẸN GIỜ"
+            return "🟢 ĐANG ÁP DỤNG" if int(row["id"]) == active_id else "⚪ ĐÃ THAY"
+
+        share_active = live.share_policy_id if live.pricing_version == "v1.2" else None
+        lines = [f"<b>Tỷ lệ chia</b> (V1.2){'' if live.pricing_version == 'v1.2' else ' · đang chạy V1.1, chưa dùng'}"]
+        lines += [
+            f"• #{row['id']} {_percent(int(row['share_bps']))} từ {vn_time(str(row['effective_at']))} · {state(row, share_active)}"
+            for row in shares
+        ] or [f"• Mặc định cấu hình {self.displayed_rate_percent}% · 🟢 ĐANG ÁP DỤNG"]
+        lines.append("<b>Dự phòng phí và thuế</b>")
+        lines += [
+            f"• #{row['id']} phí {_percent(int(row['fee_bps']))}, thuế {_percent(int(row['tax_reserve_bps']))} "
+            f"từ {vn_time(str(row['effective_at']))} · {state(row, live.reserve_policy_id)}"
+            for row in reserves
+        ] or [f"• Mặc định cấu hình phí {_percent(self.fee_default_bps)}, thuế {_percent(self.tax_default_bps)} · 🟢 ĐANG ÁP DỤNG"]
+        if coverage is not None:
+            done = coverage[policy_snapshot.CAPTURED] + coverage[policy_snapshot.BACKFILLED]
+            lines.append(
+                f"<b>Link đã chốt chính sách</b>: {done} · chưa xác định: "
+                f"{coverage[policy_snapshot.UNRESOLVED] + coverage['missing']}"
+            )
+        return lines
 
     def _reserve_start(self, user_id: int, now: datetime) -> BotReply:
         with self._connect() as conn:
@@ -942,7 +1025,7 @@ class AdminPanel:
             elif action == "w:tmr" and step == "when":
                 changes = {"step": "preview", "effective_at": _stamp(next_midnight(now))}
             elif action == "ok" and step == "preview":
-                effective = draft["effective_at"] or _stamp(now)
+                effective = effective_from(draft["effective_at"], now)
                 cursor = conn.execute(
                     """
                     INSERT INTO reserve_policies (
@@ -975,7 +1058,9 @@ class AdminPanel:
                 toast="Đã hủy",
             )
         if applied_id is not None:
-            when = vn_time(draft["effective_at"]) if draft["effective_at"] else "ngay bây giờ"
+            # Mốc đã qua lúc bấm Áp dụng thì effective_from ghi giờ bấm, không hồi tố.
+            scheduled = draft["effective_at"] and draft["effective_at"] > _stamp(now)
+            when = vn_time(draft["effective_at"]) if scheduled else "ngay bây giờ"
             notice = f"✅ Đã áp dụng mức #{applied_id} cho link mới, hiệu lực {when}. Link đã gửi giữ số cũ."
             return replace(self._screen("fee", now, notice), toast=f"Đã áp dụng mức #{applied_id}")
         # Nút của bước đã qua: hiện lại bước hiện tại.
@@ -1055,20 +1140,10 @@ class AdminPanel:
         new = AppliedReserve(int(draft["fee_bps"]), int(draft["tax_reserve_bps"]))
         sample = recent = None
         if self.estimate_policy is not None:
-            share_bps = self.active_share(now).share_bps
-            before, after = self._policy_with(active, share_bps), self._policy_with(new, share_bps)
-            sample = (
-                estimate_cashback(100_000, before).estimated_cashback_vnd,
-                estimate_cashback(100_000, after).estimated_cashback_vnd,
-            )
-            with self._connect() as conn:
-                commissions = recent_commissions(conn)
-            if commissions:
-                recent = (
-                    len(commissions),
-                    sum(estimate_cashback(c, before).estimated_cashback_vnd for c in commissions),
-                    sum(estimate_cashback(c, after).estimated_cashback_vnd for c in commissions),
-                )
+            before = replace(self.resolve_policy(now), fee_bps=active.fee_bps, tax_reserve_bps=active.tax_reserve_bps)
+            after = replace(before, fee_bps=new.fee_bps, tax_reserve_bps=new.tax_reserve_bps)
+            sample = (cashback_for(SAMPLE_VND, before).cashback_vnd, cashback_for(SAMPLE_VND, after).cashback_vnd)
+            recent = self._recent_totals(before, after)
         text = reserve_preview_text(
             calculator_on=self.estimate_policy is not None,
             kind=(_kind_label(active) or "Chưa khai báo", kind),
@@ -1191,6 +1266,10 @@ def _draft_target(code: str) -> tuple[str, str, dict]:
         "subject": f"Hạng {TIERS[code]}",
         "ask": "Gửi tỷ lệ mới theo %, từ 0 đến 70. Ví dụ: <code>62</code> hoặc <code>62,5</code>",
     }
+
+
+def _split(quote: CashbackQuote) -> tuple[int, int]:
+    return quote.cashback_vnd, quote.remainder_vnd
 
 
 def _screen_of(domain: str) -> str:

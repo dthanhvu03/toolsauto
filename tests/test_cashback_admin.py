@@ -9,7 +9,7 @@ from pathlib import Path
 
 from cashback_bot.admin_policy import AdminPanel, customer_policy_due
 from cashback_bot.messages import BOT_COMMANDS
-from cashback_bot.pricing import quote_displayed_vnd
+from cashback_bot.pricing import cashback_for, quote_displayed_vnd
 from cashback_bot.poller import process_updates
 from tests.test_cashback_bot import FakeClient, payload, service
 
@@ -93,9 +93,9 @@ def test_luu_dong_60_khong_kich_hoat_bao_gia_khach(tmp_path):
     effect = conn.execute("SELECT customer_effect FROM policy_versions").fetchone()[0]
     assert effect == "none"
     assert quote_displayed_vnd(10_000, 70) == 7_000
-    amount, _policy, _render, rate = bot._quote_cashback(10_000, NOW)
-    assert rate == 70
-    assert amount == 7_000
+    resolution = bot._resolve_policy(NOW)
+    assert resolution.rate_percent == 70
+    assert cashback_for(10_000, resolution).cashback_vnd == 7_000
     assert client.calls == 0
 
 

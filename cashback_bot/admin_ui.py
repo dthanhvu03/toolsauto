@@ -118,13 +118,14 @@ def policy_text(
     pending: int | None,
     customer_vnd: int,
     remain_vnd: int,
-    reserve: tuple[str, str, int, int] | None = None,
+    reserve: tuple[str, str, int, int],
+    v12: bool,
     since: str | None = None,
     upcoming: list[str] | None = None,
     warning: str = "",
     notice: str = "",
 ) -> str:
-    """reserve (V1.2): (% phí, % thuế, tiền phí, tiền thuế) trên 100.000đ. None là V1.1.
+    """reserve: (% phí, % thuế, tiền phí, tiền thuế) trên 100.000đ. V1.1: admin chịu, không trừ khi chia.
 
     since: mốc tỷ lệ chia admin áp dụng (ADR-048); None là mặc định cấu hình.
     """
@@ -134,15 +135,19 @@ def policy_text(
         effect += f"⚠️ {warning}\n"
     if upcoming:
         effect += "🗓️ Sắp áp dụng: " + "; ".join(upcoming) + "\n"
-    if reserve is None:
+    fee_pct, tax_pct, fee_vnd, tax_vnd = reserve
+    if not v12:
         applied = (
             "• Phiên bản: <b>V1.1</b>\n"
             f"• Tỷ lệ: <b>{rate_percent}% hoa hồng ước tính</b>\n"
             "• Chưa trừ thuế và phí dự phòng khi báo giá\n"
         )
-        sim = f"• Khách nhận ({rate_percent}%): <b>{format_vnd(customer_vnd)}</b>\n"
+        sim = (
+            f"• Khách nhận ({rate_percent}%): <b>{format_vnd(customer_vnd)}</b>\n"
+            f"• Dự phòng phí ({fee_pct}, admin chịu): -{format_vnd(fee_vnd)}\n"
+            f"• Dự phòng thuế ({tax_pct}, admin chịu): -{format_vnd(tax_vnd)}\n"
+        )
     else:
-        fee_pct, tax_pct, fee_vnd, tax_vnd = reserve
         applied = (
             "• Phiên bản: <b>V1.2</b>\n"
             f"• Tỷ lệ: <b>{rate_percent}% phần còn lại</b> sau dự phòng phí {fee_pct} và thuế {tax_pct}\n"
@@ -190,9 +195,10 @@ def rank_text(
         "🟡 <b>BẢN NHÁP / ĐỊNH HƯỚNG</b> · chưa áp dụng cho khách\n"
         + rates
         + "Quy tắc: Đồng ≤ Bạc ≤ Vàng. Trần V1 là 70%.\n\n"
-        "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ\n"
+        "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ, công thức đang báo giá\n"
         + sims
-        + "\nⓘ Chưa có dữ liệu đơn thật nên không có nút kích hoạt tự động.\n\n"
+        + "\nⓘ «còn» là phần dư sau dự phòng trong mô hình, chưa gồm mọi chi phí thực tế. "
+        "Chưa có dữ liệu đơn thật nên không có nút kích hoạt tự động.\n\n"
         "Chọn hạng để tạo bản nháp:"
     )
 
@@ -208,7 +214,7 @@ def fee_text(
     rate_percent: int,
     sim_fee: int,
     sim_tax: int,
-    sim_dist: int,
+    sim_dist: int | None,
     sim_customer: int,
     notice: str = "",
 ) -> str:
@@ -231,7 +237,7 @@ def fee_text(
         "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ",
         f"• Phí dự phòng ({fee}): -{format_vnd(sim_fee)}",
         f"• Thuế dự phòng ({tax}): -{format_vnd(sim_tax)}",
-        f"• Quỹ phân chia: {format_vnd(sim_dist)}",
+        f"• Quỹ phân chia: {format_vnd(sim_dist)}" if sim_dist is not None else "• V1.1 chia trên hoa hồng gốc, admin chịu dự phòng",
         f"• Khách nhận ({rate_percent}%): <b>{format_vnd(sim_customer)}</b>",
         "",
         "ⓘ Dự phòng khi ước tính, không phải thuế phải nộp. Link đã gửi giữ số cũ.",
@@ -239,37 +245,88 @@ def fee_text(
     return "\n".join(lines)
 
 
+def simulation_keyboard(amounts: tuple[int, ...], current: int) -> Keyboard:
+    row = tuple((f"{'• ' if amount == current else ''}{short_vnd(amount)}", f"c:sim:{amount}") for amount in amounts)
+    return (row, BACK_HOME)
+
+
 def simulation_text(
     *,
     quote: str,
-    table: list[tuple[int, list[tuple[str, str, int, int]]]],
+    amount: int,
+    settings: tuple[str, str, str],
+    columns: tuple[tuple[str, object], tuple[str, object]],
+    scheduled: list[str],
+    ranks: list[tuple[str, str, int, int]],
 ) -> str:
-    """table: (quỹ, [(tên hạng, %, hoàn, phần còn)])."""
+    """columns: ((nhãn, CashbackQuote) đang báo giá, (nhãn, CashbackQuote) so sánh). ranks: (hạng, %, hoàn, còn)."""
+    share, fee, tax = settings
+    (live_name, live), (other_name, other) = columns
+
+    def cell(value: int | None, minus: bool = False) -> str:
+        if value is None:
+            return "—"
+        return ("-" if minus and value else "") + format_vnd(value).removesuffix("đ")
+
+    rows = [
+        ("Hoa hồng", cell(live.commission_vnd), cell(other.commission_vnd)),
+        ("Dự phòng phí", cell(live.fee_reserve_vnd, True), cell(other.fee_reserve_vnd, True)),
+        ("Dự phòng thuế", cell(live.tax_reserve_vnd, True), cell(other.tax_reserve_vnd, True)),
+    ]
+    if live.other_reserve_vnd or other.other_reserve_vnd:
+        rows.append(("Dự phòng khác", cell(live.other_reserve_vnd, True), cell(other.other_reserve_vnd, True)))
+    rows += [
+        ("Quỹ chia", cell(live.distributable_vnd), cell(other.distributable_vnd)),
+        ("Khách nhận", cell(live.cashback_vnd), cell(other.cashback_vnd)),
+        ("Còn lại", cell(live.remainder_vnd), cell(other.remainder_vnd)),
+    ]
+    first = max(len(name) for name, _a, _b in rows)
+    widths = [max(len(live_name), *(len(a) for _n, a, _b in rows)), max(len(other_name), *(len(b) for _n, _a, b in rows))]
+    table = [f"{'':<{first}} {live_name:>{widths[0]}} {other_name:>{widths[1]}}"]
+    table += [f"{name:<{first}} {a:>{widths[0]}} {b:>{widths[1]}}" for name, a, b in rows]
+    diff = live.cashback_vnd - other.cashback_vnd
+    sign = "+" if diff > 0 else ("-" if diff < 0 else "")
     lines = [
         _title("Mô phỏng").rstrip("\n"),
         "",
-        "🟢 <b>ĐANG ÁP DỤNG CHO KHÁCH</b>",
+        "🟢 <b>ĐANG ÁP DỤNG CHO LINK MỚI</b>",
         f"• Báo giá: <b>{quote}</b>",
+        f"• Tỷ lệ chia {share} · Phí dự phòng {fee} · Thuế dự phòng {tax}",
         "",
-        "🔵 <b>MÔ PHỎNG THEO HẠNG</b>",
-        "Thử trên quỹ giả định, không phải lợi nhuận và không phát sinh tiền phải trả.",
+        f"🔵 <b>MÔ PHỎNG</b> · hoa hồng giả định {format_vnd(amount)}",
+        "<pre>" + html.escape("\n".join(table)) + "</pre>",
+        f"• Khách nhận {live_name} so với {other_name}: {sign}{format_vnd(abs(diff))}",
+        f"• Cột {live_name} là công thức đang báo giá. Cột {other_name} chỉ để so sánh, không bật công thức nào.",
     ]
-    for amount, rows in table:
-        lines.append(f"\n<b>Quỹ {format_vnd(amount)}</b>")
-        for name, percent, cash, rem in rows:
-            lines.append(f"• {name} {percent}: hoàn {format_vnd(cash)} · còn {format_vnd(rem)}")
-    lines.append("\nⓘ Mô phỏng không đổi số dư và không phát sinh nghĩa vụ.")
+    if scheduled:
+        lines += ["", "🗓️ <b>ĐÃ HẸN GIỜ</b> · cho link tạo sau mốc"] + [f"• {item}" for item in scheduled]
+    lines += ["", "🟡 <b>HẠNG THÀNH VIÊN</b> · bản nháp, chưa bật"]
+    lines += [f"• {name} {percent}: hoàn {format_vnd(cash)} · còn {format_vnd(rem)}" for name, percent, cash, rem in ranks]
+    lines += [
+        "",
+        "ⓘ Phép tính trên hoa hồng giả định, không phải lợi nhuận và không phát sinh tiền phải trả. "
+        "Hoa hồng thật, phí và thuế cuối cùng cần chứng từ. "
+        "«Còn lại» là phần dư sau dự phòng trong mô hình chia, chưa gồm mọi chi phí và nghĩa vụ thực tế. "
+        "Mô phỏng không đổi số dư, không lưu gì.",
+    ]
     return "\n".join(lines)
 
 
-def history_text(rows: list[str] | None) -> str:
-    """rows None: không đọc được database."""
+def history_text(rows: list[str] | None, versions: list[str] | None = None) -> str:
+    """rows None: không đọc được database. versions: phiên bản chính sách (PLAN-076)."""
     head = _title("Lịch sử cấu hình")
+    policy = ""
+    if versions:
+        policy = (
+            "🧾 <b>PHIÊN BẢN CHÍNH SÁCH</b>\n"
+            + "\n".join(versions)
+            + "\nⓘ Mỗi link giữ chính sách lúc tạo. Phiên bản mới chỉ áp cho link tạo sau mốc hiệu lực.\n\n"
+        )
     if rows is None:
-        return head + "Chưa đọc được lịch sử trên database đang chạy."
+        return head + policy + "Chưa đọc được lịch sử trên database đang chạy."
     if not rows:
-        return head + "Chưa có thay đổi nào. Đổi cấu hình ở Hạng thành viên, Thuế &amp; phí, Chính sách hoặc Ví khách."
-    return head + "\n".join(rows) + "\n\nⓘ 8 thao tác gần nhất, giờ Việt Nam."
+        return head + policy + "Chưa có thay đổi nào. Đổi cấu hình ở Hạng thành viên, Thuế &amp; phí, Chính sách hoặc Ví khách."
+    return head + policy + "🕘 <b>THAO TÁC GẦN NHẤT</b>\n" + "\n".join(rows) + "\n\nⓘ 8 thao tác gần nhất, giờ Việt Nam."
 
 
 def command_copy_text() -> str:
@@ -309,7 +366,7 @@ def rank_preview_text(
     return (
         _title("Hạng thành viên", "Xem trước")
         + f"Hạng {tier_name}: {before} → <b>{after}</b>\n\n"
-        "🔵 Mô phỏng quỹ phân chia 100.000đ. Không phải lợi nhuận.\n"
+        "🔵 Mô phỏng hoa hồng 100.000đ theo công thức đang báo giá. Không phải lợi nhuận.\n"
         f"• Trước: hoàn {format_vnd(before_split[0])}, phần còn {format_vnd(before_split[1])}\n"
         f"• Sau: hoàn {format_vnd(after_split[0])}, phần còn {format_vnd(after_split[1])}\n\n"
         "ⓘ Xác nhận chỉ lưu phiên bản, chưa kích hoạt cho khách. Báo giá đã lưu không tự tính lại."

@@ -1,3 +1,19 @@
+## Phiên 2026-10-24 (ai) — PLAN-076 Pricing & Policy Consistency (code + test xong, CHƯA triển khai)
+
+Claude Code, chủ bot giao PLAN-076. Worktree `/home/vu/toolsauto-cashback-pricing`, nhánh `cursor/cashback-plan076-pricing`. Báo cáo: `reports/CASHBACK_PLAN076_PRICING.md`, ADR-053.
+
+- Preflight: production `main@a9ff267`, PID 604968, `.env` v1.2 / 70%, `reserve_policies` #1 (0,98% / 10%), `share_policies` trống; 27 link V1.1 + 4 link V1.2 `+r1`; 2 khoản pending trên link V1.1 (12.157đ, 960đ). Baseline 412 passed.
+- Lỗi tìm thấy: sổ ví tính lại pending theo chính sách tra theo giờ + `.env` hiện tại (không theo nhãn r/s); quote và giờ ghi link có thể lệch chính sách ở mốc chuyển; mốc đã qua lúc Áp dụng vẫn được ghi (hồi tố); 🧮 Mô phỏng và 🎖️ Hạng tính tỷ lệ × quỹ, không theo V1.2.
+- Đã làm: `pricing.cashback_for` + `PolicyResolution` là một cửa tính tiền; `admin_reserve.resolve_policy` (một transaction đọc); bảng chỉ thêm `link_policy_snapshots` ghi cùng transaction với link; backfill link cũ chỉ khi tính ra đúng số đã báo, không thì `unresolved`; sổ ví tính theo snapshot; `effective_from` chặn hồi tố; trigger chỉ-thêm cho `share_policies`/`reserve_policies`; màn Mô phỏng mới (so sánh V1.1/V1.2, lịch hẹn, hạng bản nháp, chọn 10k–500k); 📊 Lịch sử có phiên bản chính sách; `/cachtinh` và trang chủ sửa chữ. Không đổi công thức, không đổi 70% / 0,98% / 10%.
+- Proof: **456 passed** (412 + 44 `tests/test_cashback_pricing_policy.py`), ruff sạch phần thay đổi. Diễn tập trên bản sao DB production (0600, đã xoá): 31/31 backfilled, 0 unresolved, 0 lệch quote ↔ snapshot, 2 khoản pending giữ số, bảng cũ không đổi (hash), khoá tài chính còn, integrity ok.
+- KHÔNG merge, KHÔNG restart, KHÔNG sửa production.
+
+Next:
+- Chủ bot duyệt phát hành PLAN-076 (quy trình ở mục 16 của báo cáo) và nghĩa mới của «còn lại» (phần dư sau dự phòng).
+- Sau đó: mẫu chứng từ thật cho parser + APPROVED có chứng từ; thuế người nhận; chính sách thu hồi.
+
+---
+
 ## Phiên 2026-10-24 (ah) — Đã triển khai PLAN-075 Settlement & Fund Reconciliation
 
 Claude Code. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN075.md`.

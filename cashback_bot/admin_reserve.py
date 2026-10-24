@@ -13,6 +13,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from cashback_bot.pricing import V11, V12, PolicyResolution
+
 SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "005_reserve_policies.sql"
 SHARE_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "006_share_policies.sql"
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -111,6 +113,51 @@ def upcoming_shares(conn: sqlite3.Connection, now: datetime) -> list[AppliedShar
         (stamp(now),),
     ).fetchall()
     return [AppliedShare(int(row["share_bps"]), int(row["id"]), str(row["effective_at"])) for row in rows]
+
+
+def resolve_policy(
+    conn: sqlite3.Connection,
+    now: datetime,
+    *,
+    v12: bool,
+    default_share_bps: int,
+    fee_default: int,
+    tax_default: int,
+    other_reserve_vnd: int = 0,
+    rounding_unit: int = 1,
+) -> PolicyResolution:
+    """Chọn chính sách cho link báo giá lúc `now` (PLAN-076). Đọc hai bảng trong một transaction đọc.
+
+    V1.1 chia theo CASHBACK_RATE_PERCENT, không đọc share_policies; phí, thuế chỉ để tính phần admin chịu.
+    """
+    started = not conn.in_transaction
+    if started:
+        conn.execute("BEGIN")
+    try:
+        reserve = active_reserve(conn, now, fee_default, tax_default)
+        share = active_share(conn, now, default_share_bps) if v12 else AppliedShare(default_share_bps)
+    finally:
+        if started:
+            conn.commit()
+    return PolicyResolution(
+        pricing_version=V12 if v12 else V11,
+        share_bps=share.share_bps,
+        fee_bps=reserve.fee_bps,
+        tax_reserve_bps=reserve.tax_reserve_bps,
+        other_reserve_vnd=other_reserve_vnd if v12 else 0,
+        rounding_unit=rounding_unit if v12 else 1,
+        share_policy_id=share.policy_id,
+        reserve_policy_id=reserve.policy_id,
+        resolved_at=stamp(now),
+    )
+
+
+def effective_from(requested: str | None, now: datetime) -> str:
+    """Mốc ghi vào bảng chính sách. Không bao giờ sớm hơn lúc bấm Áp dụng: không hồi tố (PLAN-076)."""
+    current = stamp(now)
+    if requested is None or requested < current:
+        return current
+    return requested
 
 
 def parse_when(text: str, now: datetime) -> tuple[datetime | None, str | None]:

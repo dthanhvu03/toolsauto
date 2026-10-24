@@ -26,3 +26,9 @@ CREATE TABLE IF NOT EXISTS reserve_drafts (
     expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- PLAN-076: mỗi dòng là một phiên bản đã áp dụng. Không sửa, không xoá; đổi mức thì thêm dòng mới.
+CREATE TRIGGER IF NOT EXISTS reserve_policies_no_update BEFORE UPDATE ON reserve_policies
+BEGIN SELECT RAISE(ABORT, 'reserve_policies is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS reserve_policies_no_delete BEFORE DELETE ON reserve_policies
+BEGIN SELECT RAISE(ABORT, 'reserve_policies is append-only'); END;

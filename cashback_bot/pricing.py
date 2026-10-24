@@ -1,7 +1,8 @@
 """Một cửa cho công thức tiền.
 
-Khách đang thấy V1.1: quote_displayed_vnd gọi money.estimated_cashback.
-V1.2 chỉ chạy khi caller đưa EstimatePolicy. Module này không gọi mạng và không ghi SQLite.
+Báo giá link mới, tính lại trên hoa hồng Shopee, màn Mô phỏng và các màn chính sách đều đi qua
+cashback_for với một PolicyResolution (PLAN-076). V1.1: hoa hồng × tỷ lệ. V1.2: trừ dự phòng phí,
+thuế rồi mới chia. Module này không gọi mạng và không ghi SQLite.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from cashback_bot.calculator import (
+    POLICY_ID,
     CalculationError,
     EstimatePolicy,
     EstimateResult,
@@ -23,6 +25,109 @@ from cashback_bot.money import estimated_cashback
 
 DISPLAYED_POLICY_ID = "v1.1-gross"
 MAX_SHARE_BPS = 7_000
+V11 = "v1.1"
+V12 = "v1.2"
+# Công thức và cách làm tròn ghi vào snapshot link. Đổi công thức thì phải thêm mã mới, không sửa mã cũ.
+FORMULAS = {V11: "gross_x_share_floor", V12: "reserve_ceil_then_share_floor"}
+ROUNDING_RULE = "reserve_ceil_vnd_share_floor_vnd"
+
+
+@dataclass(frozen=True)
+class PolicyResolution:
+    """Chính sách áp cho một link, chọn một lần lúc báo giá. Báo giá, snapshot và tính lại đọc từ đây.
+
+    share_policy_id / reserve_policy_id None: mặc định cấu hình lúc chọn. V1.1 không trừ dự phòng khi chia;
+    phí và thuế dự phòng chỉ để tính phần admin chịu.
+    """
+
+    pricing_version: str
+    share_bps: int
+    fee_bps: int
+    tax_reserve_bps: int
+    other_reserve_vnd: int = 0
+    rounding_unit: int = 1
+    share_policy_id: int | None = None
+    reserve_policy_id: int | None = None
+    resolved_at: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.pricing_version not in FORMULAS:
+            raise CalculationError("pricing_version")
+        if isinstance(self.share_bps, bool) or not isinstance(self.share_bps, int) or not 0 <= self.share_bps <= MAX_SHARE_BPS:
+            raise CalculationError("above_v1_cap")
+        self.estimate_policy()
+
+    @property
+    def rate_percent(self) -> int:
+        return self.share_bps // 100
+
+    @property
+    def formula(self) -> str:
+        return FORMULAS[self.pricing_version]
+
+    @property
+    def label(self) -> str:
+        """Nhãn ghi trên link và sổ ví. Giữ đúng dạng cũ: `v1.1:70`, `v1.2-reserve-…+r1+s2`."""
+        if self.pricing_version == V11:
+            return f"v1.1:{self.rate_percent}"
+        label = POLICY_ID
+        if self.reserve_policy_id is not None:
+            label += f"+r{self.reserve_policy_id}"
+        if self.share_policy_id is not None:
+            label += f"+s{self.share_policy_id}"
+        return label
+
+    def estimate_policy(self) -> EstimatePolicy:
+        return EstimatePolicy(
+            cashback_share_bps=self.share_bps,
+            service_fee_bps=self.fee_bps,
+            tax_risk_reserve_bps=self.tax_reserve_bps,
+            other_cost_reserve_vnd=self.other_reserve_vnd,
+            rounding_unit=self.rounding_unit,
+        )
+
+
+@dataclass(frozen=True)
+class CashbackQuote:
+    """Một phép tính trên một hoa hồng. Không phải khoản phải trả.
+
+    remainder_vnd: hoa hồng − khách − dự phòng phí − dự phòng thuế − dự phòng khác. Là phần dư trong
+    mô hình chia, chưa gồm mọi chi phí và nghĩa vụ thực tế. Có thể âm nếu dự phòng cấu hình quá cao.
+    """
+
+    pricing_version: str
+    commission_vnd: int
+    fee_reserve_vnd: int
+    tax_reserve_vnd: int
+    other_reserve_vnd: int
+    distributable_vnd: int | None
+    cashback_vnd: int
+    remainder_vnd: int
+
+
+def cashback_for(commission_vnd: int, policy: PolicyResolution) -> CashbackQuote:
+    """Công thức duy nhất cho tiền hoàn. V1.1 chia trên hoa hồng gốc; V1.2 trừ dự phòng trước khi chia."""
+    reserve = estimate_cashback(commission_vnd, policy.estimate_policy(), reliable=True)
+    if policy.pricing_version == V12:
+        cashback = reserve.estimated_cashback_vnd
+        distributable: int | None = reserve.distributable_vnd
+        other = reserve.other_reserve_vnd
+    else:
+        # Cùng số với quote_displayed_vnd khi tỷ lệ là số % nguyên: (c × r) // 100 = (c × r × 100) // 10000.
+        cashback = bps_floor(commission_vnd, policy.share_bps)
+        distributable = None
+        other = 0
+    remainder = commission_vnd - cashback - reserve.fee_reserve_vnd - reserve.tax_risk_reserve_vnd - other
+    return CashbackQuote(
+        policy.pricing_version,
+        commission_vnd,
+        reserve.fee_reserve_vnd,
+        reserve.tax_risk_reserve_vnd,
+        other,
+        distributable,
+        cashback,
+        remainder,
+    )
 
 
 @dataclass(frozen=True)
@@ -191,7 +296,14 @@ def exact_sub_id(conversion_sub_id: str, known_sub_ids: set[str]) -> bool:
 
 __all__ = [
     "DISPLAYED_POLICY_ID",
+    "FORMULAS",
+    "ROUNDING_RULE",
+    "V11",
+    "V12",
     "CalculationBreakdown",
+    "CashbackQuote",
+    "PolicyResolution",
+    "cashback_for",
     "EstimatePolicy",
     "LinkBenefitSnapshot",
     "calculate_final_cashback",
