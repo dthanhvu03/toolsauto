@@ -456,6 +456,28 @@ Quỹ 100.000đ                                                 V1.2    V1.1
 
 ---
 
+## 22. Tin báo admin khi gửi link: bảng chia tiền (chủ bot yêu cầu 24/10, sau triển khai)
+
+- Trước đây tin "🔗 Đã gửi link" chỉ có giá và tiền hoàn. Nay có thêm bảng chia tiền, tính bằng `cashback_for` trên **snapshot của chính link đó**:
+  - HH ước tính và tỷ lệ, gồm phần từ shop và từ Shopee/Xtra;
+  - dự phòng phí, dự phòng thuế;
+  - quỹ chia (chỉ V1.2);
+  - khách nhận;
+  - Admin còn.
+- Ghi chú dưới bảng nói rõ cách chia (V1.2 chia trên quỹ sau dự phòng; V1.1 chia trên HH gốc, admin chịu dự phòng) và rằng đây là số ước tính theo giá tham khảo.
+- Khối mã kỹ thuật thêm dòng `Chính sách <code>…</code>`.
+- Không có snapshot dùng được, hoặc tính lại không ra số đã báo khách: **không hiện bảng**, để không bao giờ hiện số có thể sai.
+- Kiểm tra trên link thật `rpyO7mei` (DOPI, giá 339.000đ):
+  - HH 25.425 (7,5% = shop 16.950 + Xtra 8.475);
+  - dự phòng phí −250, dự phòng thuế −2.543;
+  - quỹ chia 22.632;
+  - khách nhận 15.842: đúng với thẻ khách;
+  - Admin còn 6.790.
+- Hai link cùng sản phẩm sáng 24/10 báo 19.012đ vì lúc đó Shopee Xtra trả 4% (HH 9%), nên số khác là đúng.
+- Test: 493 passed (+3).
+
+---
+
 ## Câu hỏi nghiệm thu
 
 **Q1. Cùng hoa hồng giả định, cùng chính sách, Admin và khách có ra cùng số không?**

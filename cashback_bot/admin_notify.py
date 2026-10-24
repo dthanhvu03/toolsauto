@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import html
 import logging
+import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -14,9 +15,11 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from cashback_bot import policy_snapshot
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
+from cashback_bot.pricing import V12, cashback_for
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -38,6 +41,52 @@ def _who(telegram_user_id: int, username: str | None) -> str:
 def _details(*lines: str) -> str:
     """Mã kỹ thuật gom vào khối thu gọn, bấm mới mở."""
     return "<blockquote expandable>" + "\n".join(lines) + "</blockquote>"
+
+
+def _pct(bps: int) -> str:
+    whole, frac = divmod(int(bps), 100)
+    return f"{whole}%" if frac == 0 else f"{whole}.{frac:02d}".rstrip("0").replace(".", ",") + "%"
+
+
+def link_split_lines(link: sqlite3.Row, found: "policy_snapshot.LinkPolicy | None") -> list[str]:
+    """Bảng chia tiền của một link cho admin, theo đúng snapshot chính sách đã dùng để báo giá khách.
+
+    Rỗng khi không có snapshot dùng được hoặc tính lại không ra số đã báo: không hiện số có thể sai.
+    """
+    commission, quoted = link["estimated_commission"], link["estimated_cashback"]
+    if found is None or found.policy is None or commission is None or quoted is None:
+        return []
+    policy = found.policy
+    quote = cashback_for(int(commission), policy)
+    if quote.cashback_vnd != int(quoted):
+        return []
+    keys = link.keys()
+    rate = link["commission_rate_bps"] if "commission_rate_bps" in keys else None
+    rows: list[tuple[str, int, bool]] = [(f"HH ước tính{' ' + _pct(rate) if rate else ''}", quote.commission_vnd, False)]
+    seller = link["seller_commission_vnd"] if "seller_commission_vnd" in keys else None
+    shopee = link["shopee_commission_vnd"] if "shopee_commission_vnd" in keys else None
+    if seller is not None and shopee is not None and int(seller) + int(shopee) == quote.commission_vnd:
+        rows.append(("· từ shop", int(seller), False))
+        rows.append((f"· từ Shopee{' Xtra' if link['is_xtra'] else ''}", int(shopee), False))
+    v12 = policy.pricing_version == V12
+    rows.append((f"Dự phòng phí {_pct(policy.fee_bps)}", quote.fee_reserve_vnd, True))
+    rows.append((f"Dự phòng thuế {_pct(policy.tax_reserve_bps)}", quote.tax_reserve_vnd, True))
+    if quote.other_reserve_vnd:
+        rows.append(("Dự phòng khác", quote.other_reserve_vnd, True))
+    if v12 and quote.distributable_vnd is not None:
+        rows.append(("Quỹ chia", quote.distributable_vnd, False))
+    rows.append((f"Khách nhận {_pct(policy.share_bps)}{' quỹ' if v12 else ' HH'}", quote.cashback_vnd, False))
+    rows.append(("Admin còn", quote.remainder_vnd, False))
+    cells = [("-" if minus and value else "") + f"{value:,}".replace(",", ".") for _label, value, minus in rows]
+    label_w = max(len(label) for label, _v, _m in rows)
+    num_w = max(len(cell) for cell in cells)
+    table = [f"{label.ljust(label_w)} {cell.rjust(num_w)}" for (label, _v, _m), cell in zip(rows, cells)]
+    basis = "V1.2: chia trên quỹ sau dự phòng" if v12 else "V1.1: khách nhận trên HH gốc, admin chịu dự phòng"
+    return [
+        "<pre>" + html.escape("\n".join(table)) + "</pre>",
+        f"<i>{basis}. Ước tính theo giá tham khảo, chốt theo chính sách của link. "
+        "Admin còn = HH − khách − dự phòng.</i>",
+    ]
 
 
 logger = logging.getLogger(__name__)
@@ -167,16 +216,28 @@ class AdminNotifier:
             return
         user = self.repo.get_user(row.telegram_user_id)
         username = None if user is None else user["username"]
+        split: list[str] = []
+        label = row.estimate_policy or (f"v1.1:{row.cashback_rate_percent}" if row.cashback_rate_percent else None)
+        try:
+            with self.repo.connect() as conn:
+                link = conn.execute("SELECT * FROM link_requests WHERE id = ?", (row.id,)).fetchone()
+                found = policy_snapshot.load(conn, row.id)
+            split = link_split_lines(link, found)
+            label = found.label if found is not None else label
+        except sqlite3.Error:
+            logger.warning("[Cashback] không đọc được snapshot link id=%s cho tin báo admin", row.id)
         body = (
             f"🔗 <b>Đã gửi link</b> · {_who(row.telegram_user_id, username)}\n\n"
             f"🛍️ {html.escape(buyer_name(row.product_name or '-'))}\n"
             f"💰 Giá {format_vnd(row.price_vnd or 0)} · Hoàn <b>{format_vnd(row.estimated_cashback or 0)}</b>\n"
-            f"🕓 {_vn_now_text()}\n"
+            + "".join(f"{line}\n" for line in split)
+            + f"🕓 {_vn_now_text()}\n"
             + _details(
                 f"User <code>{row.telegram_user_id}</code>",
                 f"Item <code>{row.item_id or '-'}</code>",
                 f"Sub <code>{row.sub_id}</code>",
                 f"Update <code>{update_id}</code>",
+                *([f"Chính sách <code>{html.escape(label)}</code>"] if label else []),
             )
         )
         self.repo.enqueue_admin_event(

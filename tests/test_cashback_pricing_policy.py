@@ -839,3 +839,55 @@ def test_backfill_khong_dung_chinh_sach_da_huy(tmp_path):
     _restart(tmp_path)
     snap = [row for row in _snapshots(tmp_path) if row["link_id"] == link_id][0]
     assert snap["provenance"] == "unresolved"
+
+
+# --- Tin báo admin khi gửi link: bảng chia tiền theo snapshot ------------------------------
+
+
+def _link_notice(tmp_path, bot, update_id: int) -> str:
+    from cashback_bot.admin_notify import AdminNotifier
+
+    notifier = AdminNotifier(repo=bot.repo, telegram=None, enabled=True, chat_id=999)
+    notifier.notify_link_sent(update_id)
+    rows = _rows(tmp_path, f"SELECT message_html FROM admin_notifications WHERE event_key = 'link_sent:{update_id}'")
+    return rows[0][0]
+
+
+def test_bao_admin_link_v12_co_bang_chia_dung_snapshot(tmp_path):
+    bot = _bot(tmp_path)
+    bot.client.payload["productInfo"].update(
+        price=339_000, commission=25_425, sellerComFinal=16_950, shopeeComFinal=8_475, totalRatePercent="7.5", isXtra=True
+    )
+    card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    assert "<b>15.842đ</b>" in card.text
+    html = _link_notice(tmp_path, bot, 1)
+    head, details = html.split("<blockquote expandable>")
+    flat = " ".join(head.split())
+    assert "💰 Giá 339.000đ · Hoàn <b>15.842đ</b>" in head
+    for line in ("HH ước tính 7,5% 25.425", "· từ shop 16.950", "· từ Shopee Xtra 8.475",
+        "Dự phòng phí 0,98% -250", "Dự phòng thuế 10% -2.543", "Quỹ chia 22.632",
+        "Khách nhận 70% quỹ 15.842", "Admin còn 6.790",
+    ):
+        assert line in flat, line
+    assert "V1.2: chia trên quỹ sau dự phòng" in head
+    assert "Chính sách <code>v1.2-reserve-2026-10-23</code>" in details
+
+
+def test_bao_admin_link_v11_admin_chiu_du_phong(tmp_path):
+    bot = _bot(tmp_path, v12=False)
+    bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    flat = " ".join(_link_notice(tmp_path, bot, 1).split())
+    assert "HH ước tính" in flat and "Khách nhận 70% HH 14.000" in flat
+    assert "Dự phòng phí 0,98% -196" in flat and "Dự phòng thuế 10% -2.000" in flat
+    assert "Admin còn 3.804" in flat
+    assert "V1.1: khách nhận trên HH gốc, admin chịu dự phòng" in flat
+    assert "Quỹ chia" not in flat
+
+
+def test_bao_admin_link_khong_snapshot_thi_khong_hien_bang(tmp_path):
+    bot = _bot(tmp_path)
+    _legacy_link(tmp_path, label="v0-la", rate=70, commission=20_000, cashback=14_000)
+    _restart(tmp_path)
+    html = _link_notice(tmp_path, bot, 900)
+    assert "💰 Giá 250.000đ · Hoàn <b>14.000đ</b>" in html
+    assert "<pre>" not in html and "Admin còn" not in html
