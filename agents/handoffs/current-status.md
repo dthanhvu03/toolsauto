@@ -1,3 +1,25 @@
+## Phiên 2026-10-24 (bg) — PLAN-082 kênh Zalo ĐANG CHẠY
+
+Báo cáo `reports/CASHBACK_PLAN082_ZALO.md` (mục "Đã triển khai").
+
+- **System State:**
+  - bot Telegram PID 686054 (`main@6fa5a38`);
+  - bot Zalo PID 686122 (`python -m cashback_bot.zalo_bot`, log `logs/cashback_zalo.log`);
+  - 1 khách Zalo (chủ bot), 1 link Zalo 17.011đ;
+  - `gate_b_check` OK; ví khoá.
+- **Done:**
+  - chủ bot nhắn thử đủ luồng (menu, gõ số, thẻ xem trước, link, đơn);
+  - admin nhận "Zalo #1";
+  - `text_styles` hiển thị đúng trên Zalo thật.
+- **Sửa sau triển khai:** `main@f184972` (link Zalo ghi đã giao), 689 passed. Chờ chủ bot khởi động lại riêng tiến trình Zalo.
+- **Unfinished:**
+  - thử bot tự nhắn trước sau 1–2 ngày (thông báo đơn);
+  - gói BASIC 50 người;
+  - trang hướng dẫn chung còn chữ "nút".
+- **Next:** chủ bot restart Zalo (`kill -TERM 686122` + lệnh khởi động); ~2026-10-26 xin thử tin chủ động.
+
+---
+
 ## Phiên 2026-10-24 (bf) — PLAN-082 kênh Zalo: code + test + diễn tập, đã lên main (chờ chủ bot khởi động)
 
 Chủ bot: "triển khai em viết em làm toàn như các báo cáo vừa làm hôm nay". Báo cáo `reports/CASHBACK_PLAN082_ZALO.md`, PLAN `agents/plans/active/PLAN-082-cashback-zalo-channel.md`.

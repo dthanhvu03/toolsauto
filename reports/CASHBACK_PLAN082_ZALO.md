@@ -67,3 +67,25 @@
    - `gate_b_check`.
 
 **Tắt:** `kill -TERM <PID zalo>`. Khách Zalo vẫn nằm trong sổ chung.
+
+## Đã triển khai (2026-10-24)
+
+| Bước | Giờ (UTC) | Kết quả |
+|---|---|---|
+| Backup | 15:21 | `cashback-20261024T152104Z.sqlite`, 45 bảng, 38 link |
+| Merge | 15:22 | `main@6fa5a38`, 689 passed, ruff sạch, đã push |
+| Restart Telegram | 15:26:19 | PID 686054, log khởi động sạch |
+| Khởi động Zalo | 15:26:26 | PID 686122, `zalo start bot=Bot Săn Hoàn Tiền type=BASIC customer_notify=True` |
+| Chủ bot nhắn thử | 15:26–15:28 | `menu` → chào + trang chủ 5 lựa chọn; `1` → Đơn hàng; `1` → Cách dùng; dán link (thẻ xem trước) → hướng dẫn ✕; link `vn.shp.ee` (đã bấm ✕) → link hoàn tiền 17.011đ, URL trần bấm được |
+| Admin Telegram | 15:26 / 15:28 | "🆕 Người dùng mới · Zalo #1", "🔗 Đã gửi link · Zalo #1" (bảng chia V1.2) |
+
+**Kiểm tra chỉ đọc:**
+- `channel_identities` có 1 khách (−1);
+- `zalo_inbox`: 5 tin `replied`;
+- 1 link Zalo `created`;
+- 0 tin khách Zalo kẹt;
+- `gate_b_check` OK (2 khoản pending 12.157đ / 960đ, ví 0, trigger 6/6).
+
+**`text_styles` chạy được trên Zalo thật:** chữ đậm hiện đúng.
+
+**Sửa sau triển khai:** `f184972`. Link tạo qua Zalo nay ghi `delivery_status='sent'` như luồng Telegram; trước đó cột này đứng ở `pending`, không màn nào đọc nên không ảnh hưởng. Cần khởi động lại riêng tiến trình Zalo; link …−5 tạo trước bản sửa vẫn ghi `pending`.
