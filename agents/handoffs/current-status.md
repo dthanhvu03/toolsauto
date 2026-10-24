@@ -1,3 +1,21 @@
+## Phiên 2026-10-24 (ad) — Đã triển khai PLAN-073 Safety Hardening V1
+
+Claude Code, chủ bot duyệt "oke em triển khai tiếp đi". Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_SAFETY_V1.md`.
+
+- Backup trước triển khai: `data/backups/cashback-20261024T025715Z.sqlite` (verify ok, 29 link).
+- `main` fast-forward `eca64fd` → `a9bb42a`, 334 passed, đã push. Chủ bot restart lúc 02:58:43 UTC, PID 597550; có `chmod 600` log và backup cũ.
+- Migration: thêm `failed_updates` và 4 trigger `financial_lock_*`. Dữ liệu cũ nguyên vẹn (29 link, 6 user, 2 pending).
+- Backup tự động lần đầu chạy ok lúc 02:59:19 (`cashback-20261024T025919Z.sqlite`, 0600).
+- Khoá tài chính đã kiểm trên bản sao backup: ví khoá với 2 lý do, nút cũ, gọi hàm và SQL trực tiếp đều bị chặn.
+- Log: 0 chuỗi token/cookie; không có ERROR từ sau restart.
+- PLAN-073 đã chuyển sang `agents/plans/archive/`.
+
+Next:
+- Chủ bot chọn nơi lưu backup ngoài máy (mã hoá); quyết định bot công khai hay không.
+- PLAN đối soát: luồng nhập bằng chứng kỳ Shopee đã trả; điều chỉnh âm khi hoa hồng giảm sau khi vào ví; quyết định thuế người nhận.
+
+---
+
 ## Phiên 2026-10-24 (ac) — PLAN-073 Production Safety Hardening V1 (nhánh, chưa triển khai)
 
 Claude Code, user giao task "CASHBACK BOT: PRODUCTION SAFETY HARDENING V1". Làm trong worktree `/home/vu/toolsauto-cashback-safety`, nhánh `cursor/cashback-safety-hardening`. Production không đổi (main@eca64fd, PID 590993 không restart).

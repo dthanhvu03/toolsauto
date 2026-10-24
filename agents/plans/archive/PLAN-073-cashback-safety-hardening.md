@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **DONE trên nhánh `cursor/cashback-safety-hardening`. Chưa triển khai (NOT AUTHORIZED)** |
+| Trạng thái | **DONE, ĐÃ TRIỂN KHAI 2026-10-24 (`a9bb42a`, PID 597550). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_SAFETY_V1.md`** |
 | Executor | Claude Code (user giao trực tiếp task "PRODUCTION SAFETY HARDENING V1", 2026-10-24; ngoại lệ backend như ADR-010) |
 | Đầu vào | `reports/CASHBACK_FULL_AUDIT.md` (P0-4, P1-8, P1-9, khoá cho P0-1/2/3) |
 | Phạm vi | `cashback_bot/` (poller, db, redact mới, telegram_api, shopee_sync, shopee_cookie, backup, payout_gate mới, wallet, admin_wallet, admin_ui, admin_stats, admin_notify, messages, migrations/007 DRAFT), tests, BACKUP.md, ADR-050 |
