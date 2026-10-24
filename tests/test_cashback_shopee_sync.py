@@ -535,13 +535,21 @@ class TestShopeeReviewFixes:
         notifier.notify_shopee_sync_result(True, "Đồng bộ xong", orders)
         with repo.connect() as conn:
             html_text = conn.execute("SELECT message_html FROM admin_notifications").fetchone()[0]
-        lines = html_text.split("\n")
-        # Đơn mới lên đầu; tên dài bị cắt, ký tự HTML được escape.
-        assert lines[3].startswith("• 🆕 Kem &lt;b&gt;nền&lt;/b&gt; ")
-        assert lines[3].endswith("… · trả 231.570đ · HH <b>17.368đ</b> · ⏳ Chờ thanh toán")
-        assert lines[4] == "• Bộ 5 Cọ Trang Điểm · trả 54.900đ · HH <b>1.372đ</b> · ⏳ Chờ duyệt"
-        assert lines[5] == "• SN_DONE · HH <b>5.000đ</b> · ✅ Hoàn thành"
-        assert lines[6] == "• Áo · trả 99.000đ · HH <b>0đ</b> · ❌ Đã huỷ"
+        table = html_text.split("<pre>")[1].split("</pre>")[0].split("\n")
+        # Cột thẳng hàng: mọi dòng bảng (trừ dòng kẻ) dài bằng nhau tới trước cột TT.
+        assert table[0] == "#     Trả     HH Khách Phí+T Admin TT"
+        assert table[1] == "1 231.570 17.368     -     -     - ⏳"  # đơn mới lên đầu; chưa có sổ thì "-"
+        assert table[2] == "2  54.900  1.372     -     -     - ⏳"
+        assert table[3] == "3       -  5.000     -     -     - ✅"
+        assert table[4] == "4  99.000      0     -     -     - ❌"
+        assert table[6] == "Σ 286.470 23.740     0     0     0"  # không tính đơn huỷ
+        after = html_text.split("</pre>\n")[1].split("\n")
+        # Tên dài bị cắt, ký tự HTML được escape.
+        assert after[0].startswith("1. 🆕 Kem &lt;b&gt;nền&lt;/b&gt; ")
+        assert after[0].endswith("… · ⏳ Chờ thanh toán")
+        assert after[1] == "2. Bộ 5 Cọ Trang Điểm · ⏳ Chờ duyệt"
+        assert after[2] == "3. SN_DONE · ✅ Hoàn thành"
+        assert after[3] == "4. Áo · ❌ Đã huỷ"
 
     def test_paid_and_unpaid_count_as_pending(self, tmp_path):
         repo = _setup_repo(tmp_path)
@@ -561,7 +569,8 @@ class TestShopeeReviewFixes:
         notifier.notify_shopee_sync_result(True, "Đồng bộ xong", orders)
         with repo.connect() as conn:
             html_text = conn.execute("SELECT message_html FROM admin_notifications").fetchone()[0]
-        assert html_text.count("\n• ") == 10
+        assert html_text.count(" ⏳\n") + html_text.count(" ⏳</pre>") == 10
+        assert "\n10. Món 9 · ⏳ Chờ duyệt" in html_text
         assert "… và 3 đơn khác" in html_text
 
     def test_endpoint_rejected_is_reported_as_partial(self, tmp_path):

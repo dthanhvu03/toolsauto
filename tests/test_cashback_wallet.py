@@ -239,8 +239,9 @@ class TestLedger:
         with bot.repo.connect() as conn:
             text = conn.execute("SELECT message_html FROM admin_notifications ORDER BY id DESC").fetchone()[0]
         keep = 17_368 - 12_157 - shopee.bot_fee_vnd - shopee.bot_tax_vnd
-        assert f"↳ khách 12.157đ · phí + dự phòng thuế {format_vnd(shopee.bot_fee_vnd + shopee.bot_tax_vnd)}" in text
-        assert f"admin còn <b>{format_vnd(keep)}</b>" in text
+        costs = format_vnd(shopee.bot_fee_vnd + shopee.bot_tax_vnd).removesuffix("đ")
+        row = f"1 231.570 17.368 12.157 {costs:>5} {format_vnd(keep).removesuffix('đ'):>5} ⏳"
+        assert row in text
 
 
 # --- Bước 4: ngân hàng, rút tiền, admin duyệt ---------------------------------

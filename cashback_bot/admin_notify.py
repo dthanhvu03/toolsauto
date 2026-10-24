@@ -56,30 +56,50 @@ _SHOPEE_STATUS = {
 SYNC_ORDER_LINES = 10
 
 
-def _bot_order_line(order, split=None) -> str:
-    """• 🆕 DOPI Kem Nền… · trả 231.570đ · HH <b>17.368đ</b> · ⏳ Chờ duyệt
+def _num(amount: int | None) -> str:
+    return "-" if amount is None else f"{amount:,}".replace(",", ".")
 
-    split: dòng cashback_entries của đơn (có sau khi cập nhật sổ) → thêm dòng chia tiền.
+
+def _orders_table(orders, splits: dict) -> list[str]:
+    """Bảng chữ đều (Telegram không có bảng HTML): mỗi đơn một dòng, tên món đánh số bên dưới.
+
+    splits: dòng cashback_entries theo conversion_id; chưa có sổ thì cột chia tiền để "-".
     """
-    status = (order.order_status or "").upper()
-    icon = "✅" if status == "COMPLETED" else "❌" if status in ("CANCELLED", "CANCELED") else "⏳"
-    name = (order.item_name or order.order_sn).strip()
-    name = name if len(name) <= 40 else name[:39].rstrip() + "…"
-    parts = [("🆕 " if order.is_new else "") + html.escape(name)]
-    if order.gmv_vnd:
-        parts.append(f"trả {format_vnd(order.gmv_vnd)}")
-    if order.commission_vnd is not None:
-        parts.append(f"HH <b>{format_vnd(order.commission_vnd)}</b>")
-    parts.append(f"{icon} {html.escape(_SHOPEE_STATUS.get(status, order.order_status or 'Chờ duyệt'))}")
-    line = "• " + " · ".join(parts)
-    if split is not None and order.commission_vnd is not None:
-        costs = int(split["fee_vnd"]) + int(split["tax_vnd"])
-        keep = int(order.commission_vnd) - int(split["cashback_vnd"]) - costs
-        line += (
-            f"\n   ↳ khách {format_vnd(int(split['cashback_vnd']))} · phí + dự phòng thuế {format_vnd(costs)}"
-            f" · admin còn <b>{format_vnd(keep)}</b>"
-        )
-    return line
+    headers = ("#", "Trả", "HH", "Khách", "Phí+T", "Admin")
+    rows: list[tuple[str, ...]] = []
+    icons: list[str] = []
+    names: list[str] = []
+    total = [0, 0, 0, 0, 0]
+    for index, order in enumerate(orders, 1):
+        status = (order.order_status or "").upper()
+        cancelled = status in ("CANCELLED", "CANCELED")
+        icon = "✅" if status == "COMPLETED" else "❌" if cancelled else "⏳"
+        split = splits.get(order.conversion_id)
+        cashback = costs = keep = None
+        if split is not None and order.commission_vnd is not None:
+            cashback = int(split["cashback_vnd"])
+            costs = int(split["fee_vnd"]) + int(split["tax_vnd"])
+            keep = int(order.commission_vnd) - cashback - costs
+        values = (order.gmv_vnd, order.commission_vnd, cashback, costs, keep)
+        if not cancelled:
+            total = [t + (v or 0) for t, v in zip(total, values)]
+        rows.append((str(index), *(_num(v) for v in values)))
+        icons.append(icon)
+        name = (order.item_name or order.order_sn).strip()
+        name = name if len(name) <= 40 else name[:39].rstrip() + "…"
+        label = html.escape(_SHOPEE_STATUS.get(status, order.order_status or "Chờ duyệt"))
+        names.append(f"{index}. {'🆕 ' if order.is_new else ''}{html.escape(name)} · {icon} {label}")
+    footer = ("Σ", *(_num(v) for v in total)) if len(rows) > 1 else None
+    every = [headers, *rows] + ([footer] if footer else [])
+    widths = [max(len(row[i]) for row in every) for i in range(len(headers))]
+
+    def fmt(row: tuple[str, ...]) -> str:
+        return " ".join(cell.rjust(width) if i else cell.ljust(width) for i, (cell, width) in enumerate(zip(row, widths)))
+
+    table = [fmt(headers) + " TT"] + [fmt(row) + " " + icon for row, icon in zip(rows, icons)]
+    if footer:
+        table += ["─" * len(fmt(footer)), fmt(footer)]
+    return ["<pre>" + html.escape("\n".join(table)) + "</pre>", *names, "<i>Đơn vị: đồng · Phí+T = phí + dự phòng thuế · Σ không tính đơn huỷ</i>"]
 
 
 @dataclass
@@ -229,8 +249,8 @@ class AdminNotifier:
         lines = [title, "", html.escape(message)]
         ordered = sorted(bot_orders, key=lambda order: not order.is_new)
         splits = self._entry_splits([order.conversion_id for order in ordered[:SYNC_ORDER_LINES]])
-        for order in ordered[:SYNC_ORDER_LINES]:
-            lines.append(_bot_order_line(order, splits.get(order.conversion_id)))
+        if ordered:
+            lines += _orders_table(ordered[:SYNC_ORDER_LINES], splits)
         if len(ordered) > SYNC_ORDER_LINES:
             lines.append(f"… và {len(ordered) - SYNC_ORDER_LINES} đơn khác (xem 📊 Thống kê).")
         lines.append(f"🕓 {_vn_now_text()}")

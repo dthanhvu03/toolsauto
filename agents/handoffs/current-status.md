@@ -1,3 +1,17 @@
+## Phiên 2026-10-24 (y) — Cashback: tin 🔄 hiển thị dạng bảng
+
+Claude Code, user yêu cầu "hiển thị dạng table cho dễ quan sát".
+
+- Telegram không có bảng HTML, nên dùng `<pre>` chữ đều. Cột: `# Trả HH Khách Phí+T Admin TT`, có dòng Σ (không tính đơn huỷ).
+- Độ rộng cột tính theo số dài nhất. Với 2 đơn hiện tại, bảng rộng khoảng 38 ký tự.
+- Tên món đánh số bên dưới bảng, kèm trạng thái và 🆕. Chưa có dòng sổ ví thì cột chia tiền để "-".
+- Test: 287 passed, ruff sạch.
+
+Next:
+- User restart bot, bấm 🔄 và xem bảng trên điện thoại. Nếu bị xuống dòng thì bỏ cột Trả.
+
+---
+
 ## Phiên 2026-10-24 (x) — Cashback: hiện phần admin còn sau mọi chi phí
 
 Claude Code, user yêu cầu: "admin chưa thấy được phần admin nhận về sau khi trừ hết các chi phí".
