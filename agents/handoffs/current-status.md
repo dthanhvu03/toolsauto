@@ -1,3 +1,20 @@
+## Phiên 2026-10-24 (bj) — Điều khoản V2 đã công bố; rớt mạng 17:22Z tự hồi; PLAN-084 chờ duyệt
+
+- **V2:** chủ bot công bố lúc 17:28:14Z. DB: V1 `SUPERSEDED`, V2 `PUBLISHED` (hash `cfe2f6af…`).
+  - Nội dung khớp `DRAFT_SECTIONS`; khác V1 đúng 2 câu "Telegram hoặc Zalo".
+  - Dựng thử Zalo `dieukien` trên bản sao 0600 (đã shred): "Phiên bản V2 · hiệu lực từ 25/10/2026", mục 4 ghi "Mã tài khoản Telegram hoặc Zalo".
+  - `CASHBACK_TERMS_REQUIRED` tắt nên khách chưa đồng ý V2 vẫn tạo link bình thường.
+- **Sự cố mạng:** 17:22–17:27Z máy mất mạng. Cả hai bot `ConnectionError` rồi tự chạy lại, không restart. Admin nhận 3 tin "Lỗi bot `telegram_poll_failed`" (đều `sent`). Không có tin Zalo kẹt; heartbeat Zalo 17:28:22Z.
+- **PLAN-084** `agents/plans/active/PLAN-084-cashback-net-outage-alert.md`: gộp lỗi mạng thành 1 tin khi kết nối lại; bỏ khối `Update -` / `User -`. Chờ chủ bot duyệt.
+- **System State:**
+  - Telegram PID 692497 (`main@e34fb0f`), Zalo PID 690595 (`21e1532`);
+  - `gate_b_check` OK (2 pending 12.157đ / 960đ, ví khoá, trigger 6/6).
+- **Next:**
+  1. chủ bot duyệt PLAN-084 → làm trên nhánh, test, merge, chủ bot restart Telegram;
+  2. khoảng 2026-10-26: xin duyệt rồi thử tin chủ động Zalo.
+
+---
+
 ## Phiên 2026-10-24 (bi) — PLAN-083 phần B: mẫu điều khoản V2 (Telegram hoặc Zalo); rút gọn link không làm
 
 Chủ bot: "anh quyết theo đề xuất của em nhé triển khai luôn".
