@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **CODE READY, CHỜ RELEASE REVIEW (Gate A).** Gate B (Financial Activation): NOT AUTHORIZED |
+| Trạng thái | **Gate A DONE, ĐÃ TRIỂN KHAI 2026-10-24 (`e50afeb`, PID 629793). Gate B NOT AUTHORIZED. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN078.md`** |
 | Executor | Claude Code (chủ bot giao trực tiếp ngày 2026-10-24) |
 | Đầu vào | `main@88ebf63` (production `5a14fc1`), ADR-049/050/052/053/054 |
 | Nhánh | `cursor/cashback-plan078-payout`, worktree `/home/vu/toolsauto-cashback-payout` |

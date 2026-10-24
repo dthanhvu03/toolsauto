@@ -7,7 +7,7 @@
 | Nhánh | `cursor/cashback-plan078-payout`, tách từ `main@88ebf63` (production `5a14fc1`) |
 | Worktree | `/home/vu/toolsauto-cashback-payout` |
 | ADR | ADR-055 (mới) |
-| Trạng thái | **CODE READY.** Chưa merge, chưa triển khai. Gate A chờ review; Gate B (mở ví, chi tiền) **NOT AUTHORIZED** |
+| Trạng thái | **Gate A đã triển khai 2026-10-24** tại `e50afeb`, PID 629793 (chủ bot duyệt). Gate B (mở ví, chi tiền) **NOT AUTHORIZED**. Chi tiết: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN078.md` |
 
 > **CODE READY ≠ TEST READY ≠ FINANCIAL READY ≠ LIVE PAYOUT ENABLED.** Bản này chỉ đạt CODE READY: code chạy đúng trên DB test. Production vẫn khoá và không phát sinh đồng nào.
 
@@ -396,7 +396,7 @@ requested ─► under_review ─► approved_for_payment ─► processing ─�
 | Financial Lock | **GO** |
 | Migration | **GO** |
 | Regression | **GO** (554/554) |
-| Production Code Deployment | **NOT AUTHORIZED UNTIL REVIEW** |
+| Production Code Deployment | **GO, đã triển khai** (chủ bot duyệt 2026-10-24) |
 | Wallet Activation | **NOT AUTHORIZED** |
 | Real Payout | **NOT AUTHORIZED** |
 

@@ -1,3 +1,16 @@
+## Phiên 2026-10-24 (ap) — Đã triển khai PLAN-078 Gate A (code, ví vẫn khoá)
+
+Claude Code, chủ bot duyệt "có phát hành". Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN078.md`.
+
+- Backup trước triển khai: `data/backups/cashback-20261024T071547Z.sqlite` (verify ok).
+- `main` fast-forward `88ebf63` → `e50afeb`, 554 passed, đã push. Chủ bot restart 07:18:41 UTC, PID 629793.
+- Sau triển khai: log 0 lỗi, 0 token, 0 số tài khoản; 6 bảng mới (chỉ `bank_account_history` có 1 dòng, 4 số cuối); thêm cột và index của `cashback_payouts`; trigger khoá cũ còn đủ, thêm `financial_lock_payout_progress` và `payout_paid_needs_evidence`; 2 khoản pending giữ 12.157đ / 960đ; ví 0, 0 available, 0 payout; bất biến ổn; không gửi tin. Trên bản sao: bật ví bị chặn, tạo yêu cầu rút trả `locked`, `/vi` hiện câu ví đóng mới. PLAN-078 đã chuyển sang `agents/plans/archive/`.
+
+Next (Gate B, chưa được phép):
+- Kỳ Shopee MATCHED thật và bằng chứng APPROVED; quyết định thuế (kế toán), thu hồi, điều khoản chi trả, hạn mức, xác minh tài khoản, quy trình chuyển khoản; bước phát hành riêng để ghi quyết định và mở khoá cũ; đợt thử nhỏ.
+
+---
+
 ## Phiên 2026-10-24 (ao) — PLAN-078 Wallet & Payout Readiness (CODE READY, CHƯA triển khai)
 
 Claude Code, chủ bot giao PLAN-078. Worktree `/home/vu/toolsauto-cashback-payout`, nhánh `cursor/cashback-plan078-payout`. Báo cáo `reports/CASHBACK_PLAN078_WALLET_PAYOUT.md`, ADR-055.
