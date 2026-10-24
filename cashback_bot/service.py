@@ -32,6 +32,7 @@ from cashback_bot.messages import (
     hang_message,
     home_reply,
     how_to_calc,
+    food_link_reply,
     invalid_link_reply,
     page_reply,
     rate_limited_reply,
@@ -44,7 +45,7 @@ from cashback_bot.messages import (
 )
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
-from cashback_bot.shopee_url import parse_shopee_target
+from cashback_bot.shopee_url import is_shopee_food_link, parse_shopee_target
 from cashback_bot.wallet import BANKS, BankAccount, Split, Wallet, parse_bank_text
 
 logger = logging.getLogger("cashback_bot")
@@ -449,6 +450,9 @@ class CashbackService:
             return rate_limited_reply(self.settings.user_cooldown_sec)
         if target is None:
             # Tin không phải link sản phẩm: không lưu nội dung (PLAN-077, dữ liệu tối thiểu), chỉ lưu độ dài.
+            if is_shopee_food_link(stripped):
+                self._reject(update_id, telegram_user_id, f"[link ShopeeFood · {len(stripped)} ký tự]", "food_link")
+                return food_link_reply()
             self._reject(update_id, telegram_user_id, f"[không phải link · {len(stripped)} ký tự]", "invalid_link")
             return invalid_link_reply()
         gate = self.desk.terms_gate(telegram_user_id, moment)
@@ -625,4 +629,6 @@ class CashbackService:
             return BotReply(NOT_FOUND)
         if row.reject_reason == "invalid_link":
             return invalid_link_reply()
+        if row.reject_reason == "food_link":
+            return food_link_reply()
         return BotReply(STALE)

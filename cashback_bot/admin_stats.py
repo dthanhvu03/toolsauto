@@ -24,6 +24,7 @@ PERIODS = {
 }
 REJECT_LABELS = {
     "invalid_link": "Link sai",
+    "food_link": "Link ShopeeFood",
     "not_found": "Không thấy sản phẩm",
     "link_build_failed": "Lỗi tạo link",
     "reserve_read_failed": "Lỗi đọc cấu hình",

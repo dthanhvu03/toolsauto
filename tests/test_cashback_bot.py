@@ -816,3 +816,22 @@ def test_khuon_chu_khach_plan_060(tmp_path):
     zero = render_success("Áo Polo Nam", 250_000, 0, "https://s.shopee.vn/x").text
     assert "Đã tạo link mua" in zero
     assert "Đã tạo link hoàn tiền" not in zero
+
+
+def test_link_shopeefood_tra_loi_ro_chua_ho_tro(tmp_path):
+    from cashback_bot.shopee_url import is_shopee_food_link
+
+    text = "Khám phá BÁNH TRÁNG CUỐN LÒNG ĐÀO TRỘN trên ShopeeFood nhé! https://spf.shopee.vn/AKbbczw9TO"
+    assert is_shopee_food_link(text) and is_shopee_food_link("https://spf.shopee.vn/AKbbczw9TO")
+    assert not is_shopee_food_link("https://s.shopee.vn/abc") and not is_shopee_food_link("xin chào")
+    client = FakeClient(payload())
+    bot = service(tmp_path, client)
+    reply = bot.handle_text(111, "u", text, update_id=9101, now=NOW)
+    assert "ShopeeFood" in reply.text and "Chưa nhận ra link" not in reply.text
+    assert client.calls == 0, "không gọi nguồn dữ liệu sản phẩm"
+    again = bot.handle_text(111, "u", text, update_id=9101, now=NOW)  # Telegram gửi lại cùng update
+    assert "ShopeeFood" in again.text
+    with bot.repo.connect() as conn:
+        row = conn.execute("SELECT reject_reason, original_url FROM link_requests WHERE telegram_update_id = 9101").fetchone()
+    assert row["reject_reason"] == "food_link" and "spf.shopee.vn" not in row["original_url"], "không lưu nội dung tin"
+    assert "Chưa nhận ra link" in bot.handle_text(111, "u", "https://example.com/x", update_id=9102, now=NOW).text

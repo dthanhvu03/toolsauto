@@ -15,6 +15,8 @@ _PRODUCT_PATH = re.compile(r"^/product/(\d+)/(\d+)/?$")
 _I_PATH = re.compile(r"-i\.(\d+)\.(\d+)(?:/|$)")
 _SHORT_HOSTS = {"s.shopee.vn", "vn.shp.ee"}
 _PRODUCT_HOSTS = {"shopee.vn", "www.shopee.vn"}
+# Link chia sẻ ShopeeFood (đồ ăn): không phải sản phẩm sàn, bot không có giá / hoa hồng để báo hoàn tiền.
+_FOOD_HOSTS = {"spf.shopee.vn", "shopeefood.vn", "www.shopeefood.vn"}
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,11 @@ def parse_shopee_target(text: str) -> ShopeeTarget | None:
             item_id = int(inline.group(2))
             return ShopeeTarget(raw, item_id, shop_id, None)
     return None
+
+
+def is_shopee_food_link(text: str) -> bool:
+    """Tin có link ShopeeFood (không có link sản phẩm sàn nào): để trả lời đúng thay vì «chưa nhận ra link»."""
+    return any((urlparse(raw).hostname or "").lower() in _FOOD_HOSTS for raw in _URL_RE.findall(text or ""))
 
 
 def canonical_product_url(shop_id: int, item_id: int) -> str:

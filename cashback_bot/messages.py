@@ -150,6 +150,11 @@ INVALID_LINK = (
     "Mình cần link sản phẩm Shopee: shopee.vn hoặc link rút gọn s.shopee.vn.\n"
     "Bấm nút dưới hoặc gõ /huongdan để xem cách lấy link."
 )
+FOOD_LINK = (
+    "🍜 <b>Đây là link ShopeeFood</b>\n"
+    "Hiện bot chỉ hoàn tiền cho sản phẩm trên sàn Shopee, chưa hỗ trợ đơn ShopeeFood.\n"
+    "Bạn gửi link sản phẩm shopee.vn hoặc s.shopee.vn nhé. Gõ /huongdan để xem cách lấy link."
+)
 STALE = (
     "⏳ <b>Chưa lấy được dữ liệu sản phẩm</b>\n"
     "Thông tin hoàn tiền của món này chưa sẵn sàng.\n"
@@ -249,6 +254,10 @@ def page_reply(text: str) -> BotReply:
 
 def invalid_link_reply() -> BotReply:
     return BotReply(INVALID_LINK, inline_keyboard=GUIDE_KEYBOARD)
+
+
+def food_link_reply() -> BotReply:
+    return BotReply(FOOD_LINK, inline_keyboard=GUIDE_KEYBOARD)
 
 
 def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str) -> BotReply:
