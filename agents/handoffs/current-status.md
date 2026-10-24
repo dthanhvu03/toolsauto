@@ -1,3 +1,21 @@
+## Phiên 2026-10-24 (bc) — PLAN-081: Phương án B lên main; thử nguồn thành công; Phương án A lên main (cờ tắt)
+
+Chủ bot: "triển khai pa B đi em, có em cho phép thực thi phương án A luôn".
+
+- **Backup:** `cashback-20261024T112613Z.sqlite` (verify ok: 43 bảng, 37 link). Phương án B merge `ea1359c`, 666 passed.
+- **Thử nguồn:** 1 yêu cầu `report/list`, giờ mua ± 60 giây của đơn …7156 (30,91 ngày) → `code=0`, 1 dòng khớp. Không ghi DB, không in cookie.
+- **Phương án A:**
+  - tra khung hẹp trong lượt `SyncCoordinator`, tối đa 10 đơn / lượt, 1 lần / đơn / ngày, tuổi 30–180 ngày;
+  - cờ `SHOPEE_RECONCILE_LOOKUP_ENABLED` mặc định tắt;
+  - 676 passed.
+- **System State:** chờ chủ bot restart (đang chạy PID 656347 bản cũ).
+- **Next:**
+  - chủ bot (tuỳ chọn) thêm `SHOPEE_RECONCILE_LOOKUP_ENABLED=1`, rồi restart;
+  - kiểm tra log (`reconcile_lookup=...`), màn 🧾 (2 đơn "Đang theo dõi"), `gate_b_check`;
+  - sau lượt tự đồng bộ kế tiếp, "lần cuối thấy" hết nhãn "(suy ra)".
+
+---
+
 ## Phiên 2026-10-24 (bb) — PLAN-081 Gate B Phương án B: theo dõi đơn quá 30 ngày (CODE READY, chưa triển khai)
 
 Claude Code, chủ bot duyệt Gate A ("anh duyệt"). Báo cáo `reports/CASHBACK_PLAN081_GATE_B.md`; ADR-058 Accepted cho Phương án B.

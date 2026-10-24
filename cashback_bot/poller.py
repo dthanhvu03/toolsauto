@@ -91,9 +91,11 @@ def main() -> None:
     coordinator.start()
     SyncWorker(coordinator).start()
     logger.info(
-        "shopee auto sync enabled=%s interval_min=%s",
+        "shopee auto sync enabled=%s interval_min=%s reconcile_lookup=%s max=%s",
         settings.auto_sync.enabled,
         settings.auto_sync.interval_minutes,
+        settings.auto_sync.reconcile_lookup,
+        settings.auto_sync.reconcile_lookup_max,
     )
     _loop(service, telegram, repo, admin_notifier, coordinator)
 

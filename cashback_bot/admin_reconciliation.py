@@ -24,6 +24,7 @@ STATUS_LABELS = {
     "RECONCILED": "✅ Đã đối soát",
 }
 LIMIT = 12
+ATTEMPT_LABELS = {"seen": "tra được", "not_returned": "Shopee không trả đơn này"}
 
 
 def _vn(stamp: str | None) -> str:
@@ -43,8 +44,10 @@ def _age(stamp: str | None, now: datetime) -> str:
 
 
 class ReconciliationAdmin:
-    def __init__(self, repo: TrackingRepository):
+    def __init__(self, repo: TrackingRepository, lookup: bool = False):
         self.repo = repo
+        # PLAN-081 Phương án A (SHOPEE_RECONCILE_LOOKUP_ENABLED): bot tra lại đơn đã ra khung mỗi ngày.
+        self.lookup = lookup
 
     def route(self, data: str, now: datetime | None = None) -> BotReply:
         if data == "c:rc:home":
@@ -68,14 +71,20 @@ class ReconciliationAdmin:
                 seen = _vn(row["last_seen_at"]) + (" (suy ra)" if row["last_seen_source"] == "backfill_updated_at" else "")
                 lines.append(f"{STATUS_LABELS[row['tracking_status']]} · {order} · {name}")
                 lines.append(f"  mua {_vn(row['purchase_time'])} ({_age(row['purchase_time'], now)}) · lần cuối bot thấy: {seen}")
+                if row["last_attempt_at"]:
+                    lines.append(f"  lần tra Shopee gần nhất: {_vn(row['last_attempt_at'])} · "
+                                 f"{ATTEMPT_LABELS.get(row['last_attempt_result'], html.escape(str(row['last_attempt_result'])))}")
                 lines.append(f"  {html.escape(REASON_LABELS.get(row['reason'], row['reason'] or '-'))}"
                              + (f" · 👉 {html.escape(row['next_action'])}" if row["next_action"] else ""))
             if len(rows) > LIMIT:
                 lines.append(f"… và {len(rows) - LIMIT} đơn khác.")
+        scope = (
+            "ⓘ Bot quét đơn mua trong 30 ngày gần nhất; đơn qua bot đang chờ đã ra khung được tra lại trên Shopee tối đa "
+            "1 lần / ngày. " if self.lookup else "ⓘ Bot chỉ đọc được đơn mua trong 30 ngày gần nhất. "
+        )
         lines += [
             "",
-            "ⓘ Bot chỉ đọc được đơn mua trong 30 ngày gần nhất. Đơn ngoài khung giữ nguyên số tiền và trạng thái; "
-            "bot không tự kết luận Shopee đã duyệt, từ chối hay huỷ.",
+            scope + "Đơn ngoài khung giữ nguyên số tiền và trạng thái; bot không tự kết luận Shopee đã duyệt, từ chối hay huỷ.",
         ]
         keyboard = (
             (("🧾 Đối soát thanh toán", "c:sm:home"),),

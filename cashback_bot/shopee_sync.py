@@ -26,7 +26,8 @@ from typing import Any
 
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.commission_validation import assess
-from cashback_bot.db import TrackingRepository
+from cashback_bot import reconciliation
+from cashback_bot.db import NARROW_SOURCE, SEEN_SOURCE, TrackingRepository
 from cashback_bot.shopee_client import (
     AUTH_EXPIRED,
     NEEDS_AUTH_CATEGORIES,
@@ -154,6 +155,22 @@ def _paged(fetch, start_time: int, end_time: int, list_keys: tuple[str, ...], st
     stats.problems.append(f"{TRUNCATED}:{MAX_PAGES}")
 
 
+def _conversion_id(top_item: dict[str, Any], order_dict: dict[str, Any]) -> str:
+    """Khoá đơn trong DB: conversion_id, rồi order_id, rồi checkout:order, rồi order_sn (như PLAN-065)."""
+    checkout_id = top_item.get("checkout_id") or top_item.get("id") or ""
+    order_id = order_dict.get("order_id") or order_dict.get("id") or ""
+    order_sn = str(order_dict.get("order_sn") or order_id or checkout_id)
+    return str(
+        order_dict.get("conversion_id")
+        or order_dict.get("order_id")
+        or (f"{checkout_id}:{order_id}" if checkout_id and order_id else order_sn)
+    )
+
+
+# PLAN-081 Phương án A: khung hẹp quanh giờ mua khi tra lại một đơn đã ra khung 30 ngày.
+LOOKUP_SPAN_SECONDS = 60
+
+
 def _int(val: Any) -> int:
     try:
         return int(val)
@@ -235,6 +252,7 @@ class ShopeeSyncEngine:
         heartbeat: Callable[[], bool] | None = None,
         alert_auth: bool = True,
         sleep: Callable[[float], None] = time.sleep,
+        lookups: list[tuple[str, int]] | None = None,
     ) -> SyncResult:
         """Thực hiện đồng bộ toàn diện Clicks và Conversions.
 
@@ -365,6 +383,10 @@ class ShopeeSyncEngine:
             if order_pages.problems and "đơn hàng" not in failed_parts:
                 failed_parts.append("đơn hàng")
 
+            # 4b. PLAN-081 Phương án A: tra lại đơn qua bot đang chờ đã ra khung 30 ngày (khung hẹp quanh giờ mua).
+            if lookups:
+                self._lookup_outside_window(client, lookups, heartbeat)
+
             # 5. Ghi nhận hoàn thành. Một phần lỗi thì không được báo "xong".
             failed = ", ".join(failed_parts) or None
             run_stats = stats()
@@ -478,6 +500,40 @@ class ShopeeSyncEngine:
                 stats=run_stats,
             )
 
+    def _lookup_outside_window(self, client, lookups: list[tuple[str, int]], heartbeat) -> None:
+        """Một yêu cầu cho mỗi đơn: report/list với purchase_time ±60 giây, 1 trang. Chỉ ghi đúng đơn cần tra, qua
+        record_conversion_snapshot (lịch sử thay đổi, snapshot tiền, thông báo PLAN-079 dùng lại nguyên). Ghi kết quả
+        từng lần tra; không thấy đơn thì không đổi gì. Lỗi phiên / 429 dừng cả lượt như phần quét chính."""
+        now = datetime.now(timezone.utc)
+        for conversion_id, purchase in lookups:
+            if heartbeat is not None and not heartbeat():
+                raise LeaseLost()
+            try:
+                payload = client.fetch_conversions(start_time=purchase - LOOKUP_SPAN_SECONDS,
+                                                   end_time=purchase + LOOKUP_SPAN_SECONDS, page_no=1, page_size=PAGE_SIZE)
+            except ShopeeApiError as exc:
+                category = getattr(exc, "category", None) or "UNKNOWN_ERROR"
+                reconciliation.record_attempt(self.repo, conversion_id, f"error:{category}", now)
+                if exc.status_code in (401, 403) or category in NEEDS_AUTH_CATEGORIES | {RATE_LIMITED}:
+                    raise
+                continue
+            data = payload.get("data") if isinstance(payload, dict) else None
+            rows = (data.get("list") or data.get("nodes") or []) if isinstance(data, dict) else []
+            found = False
+            self._seen_source = NARROW_SOURCE
+            try:
+                for item in rows if isinstance(rows, list) else []:
+                    if not isinstance(item, dict):
+                        continue
+                    orders = [o for o in item.get("orders") or [] if isinstance(o, dict)] or [item]
+                    for order in orders:
+                        if _conversion_id(item, order) == conversion_id:
+                            self._process_order_item(item, order, single_order=len(orders) == 1)
+                            found = True
+            finally:
+                self._seen_source = SEEN_SOURCE
+            reconciliation.record_attempt(self.repo, conversion_id, "seen" if found else "not_returned", now)
+
     def _mark_expired(self, reason: str, alert: bool = True) -> None:
         self.repo.update_shopee_cookie_status(status="expired", last_error=reason)
         if alert and self.admin_notifier:
@@ -497,12 +553,7 @@ class ShopeeSyncEngine:
         checkout_id = top_item.get("checkout_id") or top_item.get("id") or ""
         order_id = order_dict.get("order_id") or order_dict.get("id") or ""
         order_sn = str(order_dict.get("order_sn") or order_id or checkout_id)
-
-        conversion_id = str(
-            order_dict.get("conversion_id")
-            or order_dict.get("order_id")
-            or (f"{checkout_id}:{order_id}" if checkout_id and order_id else order_sn)
-        )
+        conversion_id = _conversion_id(top_item, order_dict)
 
         if not conversion_id.strip():
             # Không có mã đơn nào dùng được: không ghi (tránh gộp nhiều đơn vào khoá rỗng).
@@ -551,6 +602,7 @@ class ShopeeSyncEngine:
             details=details,
             assessment=assess(top_item, order_dict, net_comm),
             sync_run_id=self._run_id,
+            seen_source=getattr(self, "_seen_source", SEEN_SOURCE),
         )
         is_new, is_matched, user_id = result.is_new, result.is_matched, result.telegram_user_id
         counts = getattr(self, "_counts", None)

@@ -826,8 +826,10 @@ CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_polic
 
 
 # Cột thêm cho hàng đợi gửi (PLAN-079). status: pending, sending, sent, retry, failed, suppressed, unknown.
-# PLAN-081: nguồn của last_seen_at khi ghi từ lượt đồng bộ (report/list, khung 30 ngày theo giờ mua).
+# PLAN-081: nguồn của last_seen_at khi ghi từ lượt đồng bộ (report/list, khung 30 ngày theo giờ mua) và khi tra
+# khung hẹp quanh giờ mua của một đơn đã ra khung (Phương án A).
 SEEN_SOURCE = "report_list_30d"
+NARROW_SOURCE = "report_list_narrow"
 SYNC_RUN_COLUMNS = (
     ("lease_owner", "TEXT"),
     ("error_category", "TEXT"),
@@ -976,6 +978,9 @@ class TrackingRepository:
             _add_column(conn, "shopee_conversions", "last_seen_at", "TEXT")
             _add_column(conn, "shopee_conversions", "last_seen_run_id", "INTEGER")
             _add_column(conn, "shopee_conversions", "last_seen_source", "TEXT")
+            # Phương án A: lần tra khung hẹp gần nhất của đơn đang theo dõi.
+            _add_column(conn, "conversion_reconciliation", "last_attempt_at", "TEXT")
+            _add_column(conn, "conversion_reconciliation", "last_attempt_result", "TEXT")
             conn.execute(
                 "UPDATE shopee_conversions SET last_seen_at = updated_at, last_seen_source = 'backfill_updated_at' "
                 "WHERE last_seen_at IS NULL AND last_seen_source IS NULL AND updated_at IS NOT NULL"
@@ -1603,6 +1608,7 @@ class TrackingRepository:
         details: dict | None = None,
         assessment: Assessment | None = None,
         sync_run_id: int | None = None,
+        seen_source: str = SEEN_SOURCE,
     ) -> ConversionResult:
         """Ghi một lần Shopee báo về đơn (PLAN-074), trong một transaction.
 
@@ -1696,7 +1702,7 @@ class TrackingRepository:
                 "validation_confidence": CONFIDENCE_INFERRED,
                 "evidence_ref": f"sync_run:{sync_run_id}" if sync_run_id else (None if prev is None else prev["evidence_ref"]),
                 # PLAN-081: chỉ đường đồng bộ (có mã lượt) mới là «thấy trong nguồn».
-                **({"last_seen_at": now, "last_seen_run_id": sync_run_id, "last_seen_source": SEEN_SOURCE}
+                **({"last_seen_at": now, "last_seen_run_id": sync_run_id, "last_seen_source": seen_source}
                    if sync_run_id else {}),
                 "review_status": review,
             }

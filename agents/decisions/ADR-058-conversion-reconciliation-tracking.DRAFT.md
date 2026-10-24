@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **Accepted cho Phương án B** (chủ bot duyệt 2026-10-24); Phương án A chờ thử nguồn. Code: `reports/CASHBACK_PLAN081_GATE_B.md` |
+| Trạng thái | **Accepted** (chủ bot duyệt 2026-10-24): Phương án B, và Phương án A sau lần thử nguồn thành công (đơn 30,9 ngày vẫn trả về). A bật bằng `SHOPEE_RECONCILE_LOOKUP_ENABLED`. Code: `reports/CASHBACK_PLAN081_GATE_B.md` |
 | Ngày | 2026-10-24 |
 | Liên quan | ADR-051 (trạng thái hoa hồng), ADR-056 (hàng đợi thông báo), ADR-057 (tự đồng bộ), PLAN-075 (chứng từ đối soát) |
 | Audit | `reports/CASHBACK_PLAN081_GATE_A_AUDIT.md` |

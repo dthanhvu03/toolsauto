@@ -78,3 +78,44 @@
 ## Còn lại
 - Phương án A cần một lần thử nguồn được chủ bot xác nhận riêng.
 - Đối soát tay dựa vào chứng từ PLAN-075 (🧾 Đối soát thanh toán). Chưa biết portal xuất chứng từ theo đơn được không.
+
+---
+
+## Phương án A — tra khung hẹp cho đơn đã ra khung (2026-10-24)
+
+**Duyệt:** chủ bot: "có em cho phép thực thi phương án A luôn".
+
+### Lần thử nguồn (1 yêu cầu thật, chỉ đọc, không ghi DB)
+- Đơn …7156: mua 2026-09-23 13:43:37Z, **30,91 ngày tuổi** lúc thử.
+- Gọi `report/list` với `purchase_time_s/e` = giờ mua ± 60 giây, trang 1, 100 dòng.
+- Kết quả:
+  - `code=0`, `total_count=1`, 1 checkout;
+  - đơn khớp đúng mã (`order_status=COMPLETED`, `is_fraud=1` ở cả 3 món, `conversion_status=3`);
+  - không in cookie hay header.
+- **Kết luận:** website endpoint nhận khung giờ mua cũ hơn 30 ngày, ít nhất ~31 ngày. 45 / 60 / 90 ngày **chưa chứng minh**; code ghi kết quả từng lần tra nên đơn không bị mất dấu nếu Shopee không trả.
+
+### Thiết kế đã làm
+- **Cờ:** `SHOPEE_RECONCILE_LOOKUP_ENABLED` (mặc định **tắt**) và `SHOPEE_RECONCILE_LOOKUP_MAX` (mặc định 10, trong khoảng 1–50).
+- **Chạy ở đâu:** trong cùng lượt của `SyncCoordinator` (cùng khoá, heartbeat, `MAX_RUNTIME`), sau phần quét 30 ngày.
+- **Mỗi đơn cần tra** (đơn qua bot đang chờ, tuổi 30–180 ngày, chưa tra hôm nay theo giờ VN): 1 yêu cầu `report/list` với giờ mua ± 60 giây. Chỉ ghi đúng đơn đó, qua `record_conversion_snapshot` với `last_seen_source='report_list_narrow'`.
+- **Kết quả từng lần tra:** `seen` / `not_returned` / `error:<loại>`, ghi vào `conversion_reconciliation.last_attempt_*` và vào sự kiện chỉ thêm.
+- **Lỗi:** lỗi phiên hoặc 429 dừng lượt như phần quét chính (NEEDS_AUTH / lùi lịch).
+- **Nhãn:** đơn ngoài khung nhưng tra được trong 48 giờ → `OBSERVED_RECENTLY` ("ngoài khung 30 ngày nhưng bot vẫn tra được trên Shopee"). Shopee có kết luận thật → `RECONCILED`; khách nhận tin cập nhật qua đúng luồng PLAN-079, một lần.
+- **Màn 🧾:** hiện "lần tra Shopee gần nhất" và kết quả; câu ghi chú đổi theo cờ.
+- **Chi phí:** tối đa N yêu cầu / lượt và 1 yêu cầu / đơn / ngày. Hiện 0 đơn cần tra; từ 2026-11-23 có 2 đơn.
+
+### Bằng chứng
+- **Test:** 676 passed (666 + 10 `tests/test_cashback_reconciliation_lookup.py`):
+  - cờ tắt thì không tra;
+  - tra đúng khung ± 60 giây;
+  - 1 lần / ngày;
+  - kết luận thật → `RECONCILED`, 1 tin khách qua PLAN-079;
+  - Shopee không trả → ghi `not_returned`, không đổi gì;
+  - trần N;
+  - lỗi phiên dừng lượt và ghi lần tra;
+  - đơn trong khung hoặc > 180 ngày không tra;
+  - không đổi tiền, không available, không payout;
+  - màn admin.
+
+  Ruff sạch.
+- **Bản sao DB** (đã xoá): migrate thêm 2 cột, `integrity_check` ok; hôm nay 0 đơn cần tra; ngày 23/11 cần tra đúng 2 đơn qua bot.

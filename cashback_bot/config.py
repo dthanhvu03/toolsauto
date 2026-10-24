@@ -35,6 +35,9 @@ class AutoSyncConfig:
     interval_minutes: int = 120
     max_runtime_seconds: int = 600
     failure_threshold: int = 3
+    # PLAN-081 Phương án A: trong lượt đồng bộ, tra khung hẹp quanh giờ mua của đơn qua bot đang chờ đã ra khung 30 ngày.
+    reconcile_lookup: bool = False
+    reconcile_lookup_max: int = 10
 
     @property
     def interval(self) -> timedelta:
@@ -179,6 +182,8 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
                                           MAX_INTERVAL_MINUTES),
             max_runtime_seconds=_bounded_int(env, "SHOPEE_AUTO_SYNC_MAX_RUNTIME_SECONDS", 600, 120, 3600),
             failure_threshold=_bounded_int(env, "SHOPEE_AUTO_SYNC_FAILURE_THRESHOLD", 3, 1, 20),
+            reconcile_lookup=_flag(env.get("SHOPEE_RECONCILE_LOOKUP_ENABLED")),
+            reconcile_lookup_max=_bounded_int(env, "SHOPEE_RECONCILE_LOOKUP_MAX", 10, 1, 50),
         ),
     )
 

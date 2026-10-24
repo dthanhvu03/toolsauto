@@ -27,6 +27,10 @@ APPROACHING_AGE = timedelta(days=20)
 WINDOW_AGE = timedelta(days=30)
 REQUIRED_AGE = timedelta(days=45)
 MISSED_RUNS_REQUIRED = 2
+# Phương án A: tra được trong 48 giờ qua bằng khung hẹp thì coi là còn quan sát được, dù đã ngoài khung 30 ngày.
+NARROW_FRESH = timedelta(hours=48)
+# Không tra quá 180 ngày tuổi (nguồn chưa chứng minh trả đơn quá cũ; đơn vẫn ở danh sách cần đối soát).
+LOOKUP_MAX_AGE = timedelta(days=180)
 WAITING = ("PENDING", "UNKNOWN", "NEEDS_REVIEW")
 CONCLUDED = ("APPROVED", "REJECTED", "FRAUD")
 BACKLOG = ("APPROACHING_WINDOW", "OUTSIDE_WINDOW_UNVERIFIED", "RECONCILIATION_REQUIRED")
@@ -63,6 +67,9 @@ def classify(row, now: datetime, missed: int) -> tuple[str, str]:
     if purchase is None:
         return "RECONCILIATION_REQUIRED", "no_purchase_time"
     age = now - purchase
+    seen = _parse(row["last_seen_at"]) if "last_seen_at" in row.keys() else None
+    if age >= WINDOW_AGE and seen is not None and row["last_seen_source"] == "report_list_narrow" and now - seen <= NARROW_FRESH:
+        return "OBSERVED_RECENTLY", "seen_outside_window"
     if age >= REQUIRED_AGE:
         return "RECONCILIATION_REQUIRED", "age_45d"
     if age >= WINDOW_AGE:
@@ -87,7 +94,7 @@ def evaluate(repo: TrackingRepository, now: datetime, run_id: int | None = None,
         rows = conn.execute(
             """
             SELECT c.conversion_id, c.order_sn, c.purchase_time, c.validation_status, c.settlement_status,
-                   c.last_seen_run_id, r.tracking_status, r.missed_runs, r.last_run_id
+                   c.last_seen_run_id, c.last_seen_at, c.last_seen_source, r.tracking_status, r.missed_runs, r.last_run_id
             FROM shopee_conversions c LEFT JOIN conversion_reconciliation r ON r.conversion_id = c.conversion_id
             WHERE c.matched_link_id IS NOT NULL
               AND (c.validation_status IN ('PENDING', 'UNKNOWN', 'NEEDS_REVIEW') OR r.conversion_id IS NOT NULL)
@@ -191,6 +198,7 @@ def _alerts(conn: sqlite3.Connection, repo: TrackingRepository, summary: Summary
 
 REASON_LABELS = {
     "seen": "bot vẫn thấy đơn trong nguồn",
+    "seen_outside_window": "ngoài khung 30 ngày nhưng bot vẫn tra được trên Shopee",
     "age_20d": "sắp ra khỏi khung đồng bộ 30 ngày",
     "outside_30d_window": "đã ngoài khung đồng bộ 30 ngày, bot không còn đọc được",
     "age_45d": "quá 45 ngày chưa có kết luận",
@@ -203,6 +211,50 @@ REASON_LABELS = {
 def _order_ref(conn: sqlite3.Connection, conversion_id: str) -> str:
     row = conn.execute("SELECT order_sn FROM shopee_conversions WHERE conversion_id = ?", (conversion_id,)).fetchone()
     return "••••" + str((row["order_sn"] if row and row["order_sn"] else conversion_id))[-4:]
+
+
+def lookup_targets(repo: TrackingRepository, now: datetime, limit: int) -> list[tuple[str, int]]:
+    """Phương án A: đơn qua bot đang chờ, đã ra khung 30 ngày, chưa tra hôm nay (giờ VN), tuổi ≤ 180 ngày.
+    Trả (conversion_id, giờ mua unix). Đơn chưa tra bao giờ hoặc tra lâu nhất đi trước."""
+    today = now.astimezone(ICT).strftime("%Y-%m-%d")
+    picked: list[tuple[str, int]] = []
+    with repo.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT c.conversion_id, c.purchase_time, r.last_attempt_at
+            FROM conversion_reconciliation r JOIN shopee_conversions c ON c.conversion_id = r.conversion_id
+            WHERE r.tracking_status IN ('OUTSIDE_WINDOW_UNVERIFIED', 'RECONCILIATION_REQUIRED', 'OBSERVED_RECENTLY')
+              AND c.matched_link_id IS NOT NULL AND c.validation_status IN ('PENDING', 'UNKNOWN', 'NEEDS_REVIEW')
+              AND c.purchase_time IS NOT NULL
+            ORDER BY r.last_attempt_at IS NOT NULL, r.last_attempt_at, c.purchase_time
+            """
+        ).fetchall()
+    for row in rows:
+        purchase = _parse(row["purchase_time"])
+        if purchase is None or now - purchase < WINDOW_AGE or now - purchase > LOOKUP_MAX_AGE:
+            continue
+        attempted = _parse(row["last_attempt_at"])
+        if attempted is not None and attempted.astimezone(ICT).strftime("%Y-%m-%d") == today:
+            continue
+        picked.append((str(row["conversion_id"]), int(purchase.timestamp())))
+        if len(picked) >= limit:
+            break
+    return picked
+
+
+def record_attempt(repo: TrackingRepository, conversion_id: str, result: str, now: datetime) -> None:
+    """Ghi lần tra khung hẹp: seen / not_returned / error:<loại>. Không đổi nhãn hay tiền (evaluate() làm sau)."""
+    stamp = _stamp(now)
+    with repo.connect() as conn:
+        conn.execute(
+            "UPDATE conversion_reconciliation SET last_attempt_at = ?, last_attempt_result = ? WHERE conversion_id = ?",
+            (stamp, result[:60], conversion_id),
+        )
+        conn.execute(
+            "INSERT INTO conversion_reconciliation_events (conversion_id, from_status, to_status, reason, run_id, created_at) "
+            "SELECT conversion_id, tracking_status, tracking_status, ?, NULL, ? FROM conversion_reconciliation WHERE conversion_id = ?",
+            (f"lookup:{result[:50]}", stamp, conversion_id),
+        )
 
 
 def backlog(repo: TrackingRepository) -> list[sqlite3.Row]:

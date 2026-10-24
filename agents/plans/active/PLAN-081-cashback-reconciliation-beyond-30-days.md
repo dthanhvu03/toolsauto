@@ -25,3 +25,4 @@ Mục 21 báo cáo: phương án (khuyến nghị B trước), ngưỡng 20 / 30
 - **Test:** 666 passed (+17 `tests/test_cashback_reconciliation.py`); ruff sạch.
 - **Diễn tập trên bản sao DB:** migrate không đổi dữ liệu khác; mô phỏng mốc 12/11, 22/11, 08/12 cho 2 đơn qua bot cho đúng nhãn và tin admin; tiền và lịch không đổi.
 - **Báo cáo:** `reports/CASHBACK_PLAN081_GATE_B.md`.
+- **Phương án A:** lần thử nguồn 1 yêu cầu (đơn …7156, 30,91 ngày) trả đúng đơn. Đã làm tra khung hẹp sau cờ `SHOPEE_RECONCILE_LOOKUP_ENABLED`; 676 passed.

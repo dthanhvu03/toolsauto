@@ -304,6 +304,11 @@ class SyncCoordinator:
                   "alert_auth": False}
         if self.client_factory is not None:
             kwargs["client"] = self.client_factory()
+        if self.cfg.reconcile_lookup:
+            # PLAN-081 Phương án A: cùng lượt, cùng khoá; có trần số đơn mỗi lượt và 1 lần / đơn / ngày.
+            targets = reconciliation.lookup_targets(self.repo, now, self.cfg.reconcile_lookup_max)
+            if targets:
+                kwargs["lookups"] = targets
         try:
             result = engine.sync(**kwargs)
         except Exception as exc:
