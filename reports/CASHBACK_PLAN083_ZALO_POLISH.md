@@ -49,3 +49,13 @@
 3. **Khoảng 2026-10-26:** thử 1 tin chủ động cho chủ bot sau ≥ 48 giờ không nhắn.
 4. Ảnh đại diện và mô tả bot trong Zalo Bot Creator.
 5. Lên gói Pro khi gần 50 người.
+
+## Phần B — chủ bot quyết theo đề xuất (2026-10-24: "anh quyết theo đề xuất của em nhé triển khai luôn")
+
+| Việc | Kết quả |
+|---|---|
+| B1 Điều khoản V2 | Mẫu `terms_content.py` lên **V2**. Đã đối chiếu: mẫu cũ trùng hash bản V1 đang công bố (`63c0d16d…`). V2 chỉ đổi 2 câu: "gắn với tài khoản Telegram **hoặc Zalo** đã gửi link", "Mã tài khoản Telegram **hoặc Zalo**, tên người dùng **hoặc tên hiển thị**". Không đổi quyền lợi, cách tính, trạng thái chi trả. **Chủ bot công bố:** /admin → 📋 Điều khoản → "📝 Tạo bản nháp V2 từ mẫu" → xem → Công bố → xác nhận. Cờ bắt buộc đồng ý đang tắt nên khách không bị chặn |
+| B2 Rút gọn link | **Không làm.** Trang "short link" của AddLiveTag là tài liệu Shopee Open API `generateShortLink` (cần App ID + chữ ký, mình không có). Rút gọn qua phiên cookie Shopee thì mỗi link khách gọi Shopee một lần → rủi ro phiên bị kiểm tra, hỏng đồng bộ đơn. Giữ link `s.shopee.vn/an_redir…` ở tin riêng (A4) |
+| B3 Tin chủ động | Hẹn khoảng 2026-10-26 (sau ≥ 48 giờ chủ bot không nhắn bot Zalo) |
+| B4 Ảnh, mô tả | Chủ bot tự làm trong Zalo Bot Creator (câu mô tả đã đề xuất trong phiên) |
+| B5 Gói Pro | Khi có cảnh báo khách thứ 40 (A8) |

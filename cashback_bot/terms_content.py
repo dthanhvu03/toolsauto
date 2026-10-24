@@ -1,4 +1,7 @@
-"""Dự thảo điều khoản khách V1 (PLAN-077). CHƯA DUYỆT: admin tạo bản nháp từ mẫu này rồi mới công bố.
+"""Dự thảo điều khoản khách (PLAN-077). Admin tạo bản nháp từ mẫu này rồi mới công bố.
+
+V1 công bố 2026-10-24. V2 (PLAN-083): bot có thêm kênh Zalo; chỉ đổi hai câu nói «tài khoản Telegram» thành
+«tài khoản Telegram hoặc Zalo». Không đổi quyền lợi, cách tính hay trạng thái chi trả.
 
 Viết theo đúng chức năng bot đang chạy (audit PLAN-077 mục 3). Không hứa thời hạn rút, mức rút hay cam kết
 chi trả. Khi chức năng đổi (mở ví, hạng thành viên), phải ra phiên bản mới, không sửa bản đã công bố.
@@ -7,7 +10,7 @@ Mỗi mục là một tin Telegram, giữ dưới 3.500 ký tự.
 
 from __future__ import annotations
 
-DRAFT_VERSION = "V1"
+DRAFT_VERSION = "V2"
 DRAFT_TITLE = "Điều khoản sử dụng chương trình hoàn tiền"
 
 # (mã, tiêu đề nút, nội dung HTML Telegram)
@@ -37,7 +40,7 @@ DRAFT_SECTIONS: tuple[tuple[str, str, str], ...] = (
         "ghi_nhan",
         "💰 Ghi nhận và cách tính",
         "<b>1. Đơn được ghi nhận cho ai</b>\n"
-        "• Mỗi link bot tạo có một mã theo dõi (Sub ID) riêng, gắn với tài khoản Telegram đã gửi link cho bot.\n"
+        "• Mỗi link bot tạo có một mã theo dõi (Sub ID) riêng, gắn với tài khoản Telegram hoặc Zalo đã gửi link cho bot.\n"
         "• Đơn mua qua link đó được ghi nhận cho <b>người đã tạo link</b>, kể cả khi người khác bấm link và "
         "đặt hàng. Chia sẻ link không chuyển quyền nhận hoàn tiền sang người mua.\n"
         "• Muốn tự nhận hoàn tiền, mỗi người tự gửi link sản phẩm cho bot để có link riêng.\n"
@@ -77,7 +80,7 @@ DRAFT_SECTIONS: tuple[tuple[str, str, str], ...] = (
         "du_lieu",
         "🛡 Dữ liệu cá nhân",
         "<b>Bot lưu những gì</b>\n"
-        "• Mã tài khoản Telegram, tên người dùng (username), thời điểm dùng bot.\n"
+        "• Mã tài khoản Telegram hoặc Zalo, tên người dùng hoặc tên hiển thị, thời điểm dùng bot.\n"
         "• Link Shopee bạn gửi, thông tin sản phẩm, link bot tạo và mã theo dõi (Sub ID).\n"
         "• Thông tin đơn qua link từ báo cáo Shopee Affiliate: mã đơn, tên sản phẩm, trạng thái, hoa hồng.\n"
         "• Nội dung bạn gửi trong yêu cầu hỗ trợ.\n"

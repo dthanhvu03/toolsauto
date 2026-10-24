@@ -311,3 +311,9 @@ class _Admin:
 
     def notify_link_sent(self, update_id):
         pass
+
+
+def test_dieu_khoan_mau_noi_ca_telegram_va_zalo():
+    body = "\n".join(text for _key, _label, text in DRAFT_SECTIONS)
+    assert body.count("Telegram hoặc Zalo") == 2
+    assert "tài khoản Telegram," not in body and "tài khoản Telegram đã" not in body

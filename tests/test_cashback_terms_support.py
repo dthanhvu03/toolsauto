@@ -13,7 +13,7 @@ from cashback_bot import admin_support, customer_desk, support, terms
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_ui import wallet_member_text
 from cashback_bot.messages import how_to_calc
-from cashback_bot.terms_content import DRAFT_SECTIONS
+from cashback_bot.terms_content import DRAFT_SECTIONS, DRAFT_VERSION
 from cashback_bot.wallet import Balance, BankAccount, PayoutBlocked
 from tests.test_cashback_bot import FakeClient, payload, service
 from tests.test_cashback_wallet import _financially_ready, _order
@@ -53,7 +53,7 @@ def _buttons(reply) -> list[str]:
 def _publish_v1(bot, now=NOW) -> int:
     panel = bot.admin_panel
     panel.handle_callback(ADMIN, "c:tm:new", "private", now)
-    version_id = _rows(bot_path(bot), "SELECT id FROM customer_terms_versions WHERE version = 'V1'")[0][0]
+    version_id = _rows(bot_path(bot), f"SELECT id FROM customer_terms_versions WHERE version = '{DRAFT_VERSION}'")[0][0]
     confirm = panel.handle_callback(ADMIN, f"c:tm:pub:{version_id}", "private", now)
     ok = [d for d in _buttons(confirm) if d.endswith(":ok")][0]
     panel.handle_callback(ADMIN, ok, "private", now)
@@ -90,7 +90,7 @@ def test_01_02_tao_ban_nhap_va_cong_bo_sau_khi_xac_nhan_hash(tmp_path):
     assert "c:tm:new" in _buttons(home)
     draft = bot.admin_panel.handle_callback(ADMIN, "c:tm:new", "private", NOW)
     assert "Khách chưa thấy bản nháp" in draft.text
-    assert _rows(tmp_path, "SELECT version, status FROM customer_terms_versions") == [("V1", "DRAFT")]
+    assert _rows(tmp_path, "SELECT version, status FROM customer_terms_versions") == [(DRAFT_VERSION, "DRAFT")]
     assert "Để đơn được ghi nhận" in bot.handle_text(BUYER, "b", "/dieukien", update_id=1, now=NOW).text, "nháp chưa hiện cho khách"
     confirm = bot.admin_panel.handle_callback(ADMIN, "c:tm:pub:1", "private", NOW)
     assert "Không gửi tin cho khách" in confirm.text
@@ -99,13 +99,13 @@ def test_01_02_tao_ban_nhap_va_cong_bo_sau_khi_xac_nhan_hash(tmp_path):
     assert "Nội dung đã đổi" in wrong.text
     ok = [d for d in _buttons(confirm) if d.endswith(":ok")][0]
     done = bot.admin_panel.handle_callback(ADMIN, ok, "private", NOW)
-    assert "Đã công bố V1" in done.text
+    assert f"Đã công bố {DRAFT_VERSION}" in done.text
     row = _rows(tmp_path, "SELECT status, approved_by, effective_from FROM customer_terms_versions")[0]
     assert row == ("PUBLISHED", f"admin:{ADMIN}", "2026-10-21T08:08:00Z")
     assert _rows(tmp_path, "SELECT COUNT(*) FROM customer_terms_acceptances") == [(0,)], "công bố không ghi chấp thuận"
     assert _rows(tmp_path, "SELECT COUNT(*) FROM admin_notifications WHERE chat_id = ?", (BUYER,)) == [(0,)], "không gửi tin khách"
     hist = bot.admin_panel.handle_callback(ADMIN, "c:menu:hist", "private", NOW)
-    assert "Điều khoản: công bố V1" in hist.text and "Điều khoản: tạo bản nháp V1" in hist.text
+    assert f"Điều khoản: công bố {DRAFT_VERSION}" in hist.text and f"Điều khoản: tạo bản nháp {DRAFT_VERSION}" in hist.text
 
 
 def test_03_04_khong_sua_khong_xoa_ban_da_cong_bo(tmp_path):
@@ -132,12 +132,12 @@ def test_05_06_07_chap_thuan_A_khong_chuyen_sang_B(tmp_path):
     assert accepted.toast == "Đã ghi nhận bạn đồng ý điều khoản."
     assert "Bạn đã đồng ý phiên bản này" in accepted.text
     with bot.repo.connect() as conn:
-        v2 = terms.create_draft(conn, "V2", "Điều khoản V2", DRAFT_SECTIONS, "admin:7", NOW)
+        v2 = terms.create_draft(conn, "V9", "Điều khoản V9", DRAFT_SECTIONS, "admin:7", NOW)
         terms.publish(conn, v2, terms.get(conn, v2).content_hash, "admin:7", NOW + timedelta(days=1))
     assert _rows(tmp_path, "SELECT id, status FROM customer_terms_versions ORDER BY id") == [(v1, "SUPERSEDED"), (v2, "PUBLISHED")]
     assert _rows(tmp_path, "SELECT terms_version_id FROM customer_terms_acceptances WHERE telegram_user_id = ?", (BUYER,)) == [(v1,)]
     page = bot.handle_text(BUYER, "b", "/dieukien", update_id=5, now=NOW + timedelta(days=1))
-    assert "Phiên bản <b>V2</b>" in page.text and "Bạn chưa xác nhận phiên bản này" in page.text
+    assert "Phiên bản <b>V9</b>" in page.text and "Bạn chưa xác nhận phiên bản này" in page.text
     old = _press(bot, BUYER, f"u:t:ok:{v1}")
     assert "không còn hiện hành" in old.toast
     assert _rows(tmp_path, "SELECT COUNT(*) FROM customer_terms_acceptances") == [(1,)]
@@ -149,7 +149,7 @@ def test_08_15_xem_khong_phai_dong_y_va_khong_ghi_thay(tmp_path):
     bot.handle_text(BUYER, "b", "/dieukien", update_id=1, now=NOW)
     for key, _label, _body in DRAFT_SECTIONS:
         section = _press(bot, BUYER, f"u:t:s:{key}")
-        assert "phiên bản V1" in section.text
+        assert f"phiên bản {DRAFT_VERSION}" in section.text
     assert _rows(tmp_path, "SELECT COUNT(*) FROM customer_terms_acceptances") == [(0,)]
     with bot.repo.connect() as conn:
         with pytest.raises(terms.TermsError):
@@ -224,7 +224,7 @@ def test_13_14_dieukien_dung_phien_ban_va_khong_hua_rut_tien(tmp_path):
     bot = _bot(tmp_path)
     _publish_v1(bot)
     page = bot.handle_text(BUYER, "b", "/dieukien", update_id=1, now=NOW)
-    assert "Phiên bản <b>V1</b> · hiệu lực từ 21/10/2026" in page.text
+    assert f"Phiên bản <b>{DRAFT_VERSION}</b> · hiệu lực từ 21/10/2026" in page.text
     assert "Ví hoàn tiền và chi trả chưa mở" in page.text
     body = " ".join(text for _k, _l, text in DRAFT_SECTIONS)
     assert "chưa mở" in body and "không phải</b> số thuế" in body
