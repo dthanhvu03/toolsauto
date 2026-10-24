@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS cashback_entries (
     item_name TEXT,
     commission_vnd INTEGER NOT NULL DEFAULT 0,
     cashback_vnd INTEGER NOT NULL DEFAULT 0,
+    fee_vnd INTEGER NOT NULL DEFAULT 0,
+    tax_vnd INTEGER NOT NULL DEFAULT 0,
     policy_label TEXT,
     status TEXT NOT NULL,
     purchase_time TEXT,
@@ -256,6 +258,9 @@ class TrackingRepository:
                 _add_column(conn, "link_requests", column, ddl)
             for column, ddl in SHOPEE_CONVERSION_COLUMNS:
                 _add_column(conn, "shopee_conversions", column, ddl)
+            # Phần admin chịu trên từng đơn: phí và dự phòng thuế (admin còn = HH − hoàn − phí − thuế).
+            _add_column(conn, "cashback_entries", "fee_vnd", "INTEGER NOT NULL DEFAULT 0")
+            _add_column(conn, "cashback_entries", "tax_vnd", "INTEGER NOT NULL DEFAULT 0")
 
     def upsert_user(self, telegram_user_id: int, username: str | None) -> bool:
         now = _utc_now()

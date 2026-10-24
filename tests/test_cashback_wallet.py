@@ -8,11 +8,13 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import cashback_bot.poller as poller
+from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_stats import collect
-from cashback_bot.admin_ui import stats_text
+from cashback_bot.admin_ui import shopee_stats_lines, stats_text
+from cashback_bot.money import format_vnd
 from cashback_bot.poller import _check_shopee_auto_sync, _check_wallet_refresh, process_updates
 from cashback_bot.shopee_client import ShopeeStatusResult
-from cashback_bot.shopee_sync import SYNC_REQUEST_KEY, ShopeeSyncEngine, SyncResult
+from cashback_bot.shopee_sync import SYNC_REQUEST_KEY, BotOrder, ShopeeSyncEngine, SyncResult
 from cashback_bot.wallet import BankAccount, parse_bank_text
 from tests.test_cashback_bot import NOW, FakeClient, payload, service
 
@@ -205,9 +207,40 @@ class TestLedger:
     def test_v12_link_uses_policy_in_force_when_link_was_made(self, tmp_path):
         bot = _bot(tmp_path)
         row = {"estimate_policy": "v1.2", "link_created_at": "2026-10-21T08:08:00Z", "cashback_rate_percent": 70}
-        amount, label = bot._real_cashback(10_000, row)
-        assert label == "v1.2"
-        assert 0 < amount < 7_000  # đã trừ dự phòng phí và thuế trước khi chia
+        split = bot._real_cashback(10_000, row)
+        assert split.label == "v1.2"
+        assert 0 < split.cashback_vnd < 7_000  # đã trừ dự phòng phí và thuế trước khi chia
+        assert split.fee_vnd > 0 and split.tax_vnd > 0
+
+    def test_v11_link_admin_bears_fee_and_tax(self, tmp_path):
+        # Số thật đơn DOPI 2026-10-24: HH 17.368, hoàn 70% trên HH gốc; phí 0,98% và thuế 10% admin chịu.
+        bot = _bot(tmp_path)
+        row = {"estimate_policy": None, "link_created_at": "2026-10-23T03:18:39Z", "cashback_rate_percent": 70}
+        split = bot._real_cashback(17_368, row)
+        assert (split.cashback_vnd, split.label) == (12_157, "v1.1:70")
+        assert (split.fee_vnd, split.tax_vnd) == (171, 1_737)
+
+    def test_admin_keep_in_stats_and_sync_message(self, tmp_path):
+        bot = _bot(tmp_path, admin_notifications_enabled=True, admin_chat_id=ADMIN)
+        sub = _link(bot)
+        _order(bot, sub, commission=17_368)
+        _order(bot, sub, status="CANCELLED", commission=5_000, cid="c2")
+        bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
+        with bot.repo.connect() as conn:
+            shopee = collect(conn, "all", datetime(2026, 10, 21, 12, tzinfo=timezone.utc)).shopee
+        # Đơn huỷ không tính.
+        assert (shopee.bot_commission_vnd, shopee.bot_cashback_vnd) == (17_368, 12_157)
+        assert shopee.admin_keep_vnd == 17_368 - 12_157 - shopee.bot_fee_vnd - shopee.bot_tax_vnd
+        assert "Admin còn" in "\n".join(shopee_stats_lines(shopee))
+        with bot.repo.connect() as conn:
+            conversion_id = conn.execute("SELECT conversion_id FROM cashback_entries WHERE status != 'cancelled'").fetchone()[0]
+        order = BotOrder("SN", "DOPI", 231_570, 17_368, "UNPAID", False, conversion_id)
+        AdminNotifier(bot.repo, MagicMock(), enabled=True, chat_id=ADMIN).notify_shopee_sync_result(True, "ok", [order])
+        with bot.repo.connect() as conn:
+            text = conn.execute("SELECT message_html FROM admin_notifications ORDER BY id DESC").fetchone()[0]
+        keep = 17_368 - 12_157 - shopee.bot_fee_vnd - shopee.bot_tax_vnd
+        assert f"↳ khách 12.157đ · phí + dự phòng thuế {format_vnd(shopee.bot_fee_vnd + shopee.bot_tax_vnd)}" in text
+        assert f"admin còn <b>{format_vnd(keep)}</b>" in text
 
 
 # --- Bước 4: ngân hàng, rút tiền, admin duyệt ---------------------------------

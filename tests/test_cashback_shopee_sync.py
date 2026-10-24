@@ -517,7 +517,7 @@ class TestShopeeReviewFixes:
              "orders": [{"order_id": "o2", "order_sn": "SN2", "order_status": "PAID", "items": []}]},
         ]}}
         first = ShopeeSyncEngine(repo).sync(client=client)
-        assert first.bot_orders == (BotOrder("SN1", "DOPI Kem Nền", 231_570, 17_368, "UNPAID", True),)
+        assert first.bot_orders == (BotOrder("SN1", "DOPI Kem Nền", 231_570, 17_368, "UNPAID", True, "o1"),)
         assert "qua bot 1 (1 mới, 0 cập nhật)" in first.message
         second = ShopeeSyncEngine(repo).sync(client=client)
         assert [o.is_new for o in second.bot_orders] == [False]
@@ -542,6 +542,17 @@ class TestShopeeReviewFixes:
         assert lines[4] == "• Bộ 5 Cọ Trang Điểm · trả 54.900đ · HH <b>1.372đ</b> · ⏳ Chờ duyệt"
         assert lines[5] == "• SN_DONE · HH <b>5.000đ</b> · ✅ Hoàn thành"
         assert lines[6] == "• Áo · trả 99.000đ · HH <b>0đ</b> · ❌ Đã huỷ"
+
+    def test_paid_and_unpaid_count_as_pending(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        for cid, status in (("a", "UNPAID"), ("b", "PAID"), ("c", "COMPLETED"), ("d", "CANCELLED")):
+            repo.record_shopee_conversion(
+                conversion_id=cid, sub_id=None, order_sn=cid, order_status=status, conversion_status="",
+                purchase_time="2026-10-23T08:00:00Z", gross_commission_vnd=1_000, net_commission_vnd=1_000,
+            )
+        with repo.connect() as conn:
+            shopee = collect(conn, "all", NOW).shopee
+        assert (shopee.orders_pending, shopee.orders_completed, shopee.orders_cancelled) == (2, 1, 1)
 
     def test_sync_message_caps_order_list(self, tmp_path):
         repo = _setup_repo(tmp_path)

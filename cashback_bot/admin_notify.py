@@ -6,6 +6,7 @@ Queue in SQLite first, then deliver best-effort to avoid breaking customer flow.
 from __future__ import annotations
 
 import html
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,6 +40,8 @@ def _details(*lines: str) -> str:
     return "<blockquote expandable>" + "\n".join(lines) + "</blockquote>"
 
 
+logger = logging.getLogger(__name__)
+
 # Trạng thái đơn Shopee hay gặp; giá trị lạ thì hiện nguyên văn.
 _SHOPEE_STATUS = {
     "UNPAID": "Chờ thanh toán",
@@ -53,8 +56,11 @@ _SHOPEE_STATUS = {
 SYNC_ORDER_LINES = 10
 
 
-def _bot_order_line(order) -> str:
-    """• 🆕 DOPI Kem Nền… · trả 231.570đ · HH <b>17.368đ</b> · ⏳ Chờ duyệt"""
+def _bot_order_line(order, split=None) -> str:
+    """• 🆕 DOPI Kem Nền… · trả 231.570đ · HH <b>17.368đ</b> · ⏳ Chờ duyệt
+
+    split: dòng cashback_entries của đơn (có sau khi cập nhật sổ) → thêm dòng chia tiền.
+    """
     status = (order.order_status or "").upper()
     icon = "✅" if status == "COMPLETED" else "❌" if status in ("CANCELLED", "CANCELED") else "⏳"
     name = (order.item_name or order.order_sn).strip()
@@ -65,7 +71,15 @@ def _bot_order_line(order) -> str:
     if order.commission_vnd is not None:
         parts.append(f"HH <b>{format_vnd(order.commission_vnd)}</b>")
     parts.append(f"{icon} {html.escape(_SHOPEE_STATUS.get(status, order.order_status or 'Chờ duyệt'))}")
-    return "• " + " · ".join(parts)
+    line = "• " + " · ".join(parts)
+    if split is not None and order.commission_vnd is not None:
+        costs = int(split["fee_vnd"]) + int(split["tax_vnd"])
+        keep = int(order.commission_vnd) - int(split["cashback_vnd"]) - costs
+        line += (
+            f"\n   ↳ khách {format_vnd(int(split['cashback_vnd']))} · phí + dự phòng thuế {format_vnd(costs)}"
+            f" · admin còn <b>{format_vnd(keep)}</b>"
+        )
+    return line
 
 
 @dataclass
@@ -214,8 +228,9 @@ class AdminNotifier:
         title = "✅ <b>Đồng bộ Shopee xong</b>" if ok else "⚠️ <b>Đồng bộ Shopee chưa trọn</b>"
         lines = [title, "", html.escape(message)]
         ordered = sorted(bot_orders, key=lambda order: not order.is_new)
+        splits = self._entry_splits([order.conversion_id for order in ordered[:SYNC_ORDER_LINES]])
         for order in ordered[:SYNC_ORDER_LINES]:
-            lines.append(_bot_order_line(order))
+            lines.append(_bot_order_line(order, splits.get(order.conversion_id)))
         if len(ordered) > SYNC_ORDER_LINES:
             lines.append(f"… và {len(ordered) - SYNC_ORDER_LINES} đơn khác (xem 📊 Thống kê).")
         lines.append(f"🕓 {_vn_now_text()}")
@@ -225,6 +240,23 @@ class AdminNotifier:
             chat_id=int(self.chat_id),
             message_html="\n".join(lines),
         )
+
+    def _entry_splits(self, conversion_ids: list[str]) -> dict:
+        """Phần chia đã ghi sổ của các đơn. Lỗi đọc sổ thì bỏ dòng chia, tin vẫn gửi."""
+        ids = [cid for cid in conversion_ids if cid]
+        if not ids:
+            return {}
+        try:
+            with self.repo.connect() as conn:
+                rows = conn.execute(
+                    "SELECT conversion_id, cashback_vnd, fee_vnd, tax_vnd FROM cashback_entries "
+                    f"WHERE conversion_id IN ({','.join('?' * len(ids))})",
+                    ids,
+                ).fetchall()
+        except Exception:
+            logger.exception("[Cashback] đọc sổ hoàn tiền cho tin đồng bộ lỗi")
+            return {}
+        return {row["conversion_id"]: row for row in rows}
 
     def notify_payout_request(self, payout, username: str | None) -> None:
         """Khách bấm Rút (PLAN-066). Chuyển xong thì admin bấm ✅ trong /admin → 👛 Ví khách."""

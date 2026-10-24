@@ -1,3 +1,24 @@
+## Phiên 2026-10-24 (x) — Cashback: hiện phần admin còn sau mọi chi phí
+
+Claude Code, user yêu cầu: "admin chưa thấy được phần admin nhận về sau khi trừ hết các chi phí".
+
+- `cashback_entries` thêm `fee_vnd`, `tax_vnd` (migrate tự thêm cột). `wallet.Split` thay cho tuple trả từ `_real_cashback`.
+  - Phí và dự phòng thuế lấy theo mức /admin áp dụng lúc tạo link.
+  - V1.1 hoàn 70% trên HH gốc nên admin chịu cả hai khoản. V1.2 trừ hai khoản trước khi chia.
+- 📊 Thống kê thêm dòng `💼 Qua bot: HH − khách − phí − dự phòng thuế → Admin còn` (không tính đơn huỷ).
+- Tin 🔄: dưới mỗi đơn có dòng `↳ khách · phí + dự phòng thuế · admin còn`. Poller cập nhật sổ trước rồi mới gửi tin.
+- Sửa thêm: "Chờ duyệt" trên màn thống kê đếm cả PAID (trước chỉ đếm UNPAID/PENDING/WAIT), khớp `wallet.order_state`.
+- Bản sao DB thật:
+  - DOPI: HH 17.368, khách 12.157, phí 171, thuế 1.737, admin còn 3.303.
+  - Cọ: HH 1.372, khách 960, admin còn 260.
+  - Tổng admin còn 3.563 / HH 18.740 (khoảng 19%, vì 2 link này tạo theo V1.1).
+- Test: 287 passed, ruff sạch.
+
+Next:
+- User restart bot, bấm 🔄, kiểm tra 📊 Thống kê.
+
+---
+
 ## Phiên 2026-10-24 (w) — Cashback: tin 🔄 liệt kê hoa hồng từng đơn, gửi ngay
 
 Claude Code, user đồng ý ("oke em anh đồng ý") sau khi báo "anh bấm rồi mà nó không thông báo gì hết".

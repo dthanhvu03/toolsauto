@@ -50,7 +50,8 @@ class Insight:
 # Trạng thái đơn Shopee (order_status), dùng chung cho thống kê và sổ hoàn tiền.
 _CANCELLED = "(order_status LIKE '%CANCEL%')"
 _COMPLETED = "(order_status LIKE '%COMPLETED%' OR order_status LIKE '%SUCCESS%')"
-_PENDING = "(order_status LIKE '%PENDING%' OR order_status LIKE '%WAIT%' OR order_status LIKE '%UNPAID%')"
+# Như wallet.order_state: chưa huỷ, chưa hoàn thành là chờ duyệt (UNPAID, PAID, PENDING, …).
+_PENDING = f"(NOT {_CANCELLED} AND NOT {_COMPLETED})"
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,15 @@ class ShopeeStats:
     cancelled_gmv_vnd: int = 0
     lost_commission_vnd: int = 0
     daily: list[ShopeeDay] = field(default_factory=list)
+    # Đơn qua bot (sổ cashback_entries, không tính huỷ): HH − khách − phí − dự phòng thuế = admin còn.
+    bot_commission_vnd: int = 0
+    bot_cashback_vnd: int = 0
+    bot_fee_vnd: int = 0
+    bot_tax_vnd: int = 0
+
+    @property
+    def admin_keep_vnd(self) -> int:
+        return self.bot_commission_vnd - self.bot_cashback_vnd - self.bot_fee_vnd - self.bot_tax_vnd
 
 
 @dataclass(frozen=True)
@@ -308,6 +318,7 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str, trend_start: datetime | Non
 
     # CR chỉ tính phần đi qua link bot: đơn khớp Sub ID / click mang Sub ID của bot.
     cr = round((matched / bot_clicks) * 100, 1) if bot_clicks > 0 else None
+    split = _bot_split(conn, lo, tables)
 
     return ShopeeStats(
         total_clicks=total_clicks,
@@ -326,7 +337,28 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str, trend_start: datetime | Non
         cancelled_gmv_vnd=cancelled_gmv,
         lost_commission_vnd=lost,
         daily=_shopee_daily(conn, trend_start, col) if trend_start else [],
+        bot_commission_vnd=split[0],
+        bot_cashback_vnd=split[1],
+        bot_fee_vnd=split[2],
+        bot_tax_vnd=split[3],
     )
+
+
+def _bot_split(conn: sqlite3.Connection, lo: str, tables: set[str]) -> tuple[int, int, int, int]:
+    if "cashback_entries" not in tables:
+        return 0, 0, 0, 0
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(cashback_entries)")}
+    fee, tax = ("fee_vnd", "tax_vnd") if "fee_vnd" in columns else ("0", "0")
+    row = conn.execute(
+        f"""
+        SELECT COALESCE(SUM(commission_vnd), 0), COALESCE(SUM(cashback_vnd), 0),
+               COALESCE(SUM({fee}), 0), COALESCE(SUM({tax}), 0)
+        FROM cashback_entries
+        WHERE status != 'cancelled' AND COALESCE(purchase_time, created_at) >= ?
+        """,
+        (lo,),
+    ).fetchone()
+    return int(row[0]), int(row[1]), int(row[2]), int(row[3])
 
 
 def _shopee_daily(conn: sqlite3.Connection, trend_start: datetime, col) -> list[ShopeeDay]:

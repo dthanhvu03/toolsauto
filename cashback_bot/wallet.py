@@ -90,8 +90,18 @@ BANK_ALIASES = {
 _ACCOUNT_NO = re.compile(r"^\d{6,19}$")
 _ACCOUNT_NAME = re.compile(r"^[A-Z ]{3,50}$")
 
-# (hoa hồng thật, dòng link) → (tiền hoàn cho khách, nhãn chính sách). Do service cung cấp.
-CashbackFor = Callable[[int, sqlite3.Row], tuple[int, str]]
+@dataclass(frozen=True)
+class Split:
+    """Chia hoa hồng một đơn: khách nhận, phí và dự phòng thuế admin chịu. Phần còn lại là của admin."""
+
+    cashback_vnd: int
+    label: str
+    fee_vnd: int = 0
+    tax_vnd: int = 0
+
+
+# (hoa hồng thật, dòng link) → Split. Do service cung cấp.
+CashbackFor = Callable[[int, sqlite3.Row], Split]
 
 
 @dataclass(frozen=True)
@@ -273,9 +283,12 @@ class Wallet:
                     commission = row["gross_commission_vnd"] or 0
                 if prev is not None and prev["status"] == "available":
                     # Shopee huỷ sau khi đã vào ví: giữ số đã chốt để admin thấy khoản bị trừ.
-                    cashback, label = int(prev["cashback_vnd"]), prev["policy_label"]
+                    split = Split(
+                        int(prev["cashback_vnd"]), prev["policy_label"], int(prev["fee_vnd"]), int(prev["tax_vnd"])
+                    )
                 else:
-                    cashback, label = cashback_for(max(0, int(commission)), row)
+                    split = cashback_for(max(0, int(commission)), row)
+                cashback, label = split.cashback_vnd, split.label
                 completed_at = row["complete_time"] or (prev["completed_at"] if prev is not None else None)
                 available_at = None
                 if state == "cancelled":
@@ -292,13 +305,15 @@ class Wallet:
                     """
                     INSERT INTO cashback_entries (
                         conversion_id, telegram_user_id, link_id, order_sn, item_name, commission_vnd,
-                        cashback_vnd, policy_label, status, purchase_time, completed_at, available_at,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        cashback_vnd, fee_vnd, tax_vnd, policy_label, status, purchase_time, completed_at,
+                        available_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(conversion_id) DO UPDATE SET
                         item_name = excluded.item_name,
                         commission_vnd = excluded.commission_vnd,
                         cashback_vnd = excluded.cashback_vnd,
+                        fee_vnd = excluded.fee_vnd,
+                        tax_vnd = excluded.tax_vnd,
                         policy_label = excluded.policy_label,
                         status = excluded.status,
                         purchase_time = excluded.purchase_time,
@@ -308,7 +323,8 @@ class Wallet:
                     """,
                     (
                         row["conversion_id"], int(row["telegram_user_id"]), row["matched_link_id"], row["order_sn"],
-                        item_name, int(commission), int(cashback), label, status, row["purchase_time"],
+                        item_name, int(commission), int(cashback), int(split.fee_vnd), int(split.tax_vnd), label,
+                        status, row["purchase_time"],
                         completed_at, available_at, now_text, now_text,
                     ),
                 )

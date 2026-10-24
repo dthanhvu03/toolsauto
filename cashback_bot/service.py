@@ -44,7 +44,7 @@ from cashback_bot.messages import (
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.shopee_url import parse_shopee_target
-from cashback_bot.wallet import BANKS, BankAccount, Wallet, parse_bank_text
+from cashback_bot.wallet import BANKS, BankAccount, Split, Wallet, parse_bank_text
 
 logger = logging.getLogger("cashback_bot")
 
@@ -271,22 +271,36 @@ class CashbackService:
                 ),
             )
 
-    def _real_cashback(self, commission_vnd: int, row) -> tuple[int, str]:
-        """Tiền hoàn cho hoa hồng thật, cùng cửa pricing.py, theo chính sách lúc tạo link (ADR-045)."""
+    def _real_cashback(self, commission_vnd: int, row) -> Split:
+        """Tiền hoàn cho hoa hồng thật, cùng cửa pricing.py, theo chính sách lúc tạo link (ADR-045).
+
+        Phí và dự phòng thuế theo mức /admin áp dụng lúc tạo link. V1.1 hoàn trên HH gốc nên
+        hai khoản này admin chịu hết; V1.2 trừ trước khi chia.
+        """
+        created = datetime.strptime(row["link_created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        reserve = self.admin_panel.active_reserve(created)
+        policy = replace(
+            self._estimate_policy(),
+            service_fee_bps=reserve.fee_bps,
+            tax_risk_reserve_bps=reserve.tax_reserve_bps,
+        )
         if row["estimate_policy"]:
-            created = datetime.strptime(row["link_created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-            reserve = self.admin_panel.active_reserve(created)
-            share = self.admin_panel.active_share(created)
-            policy = replace(
-                self._estimate_policy(),
-                cashback_share_bps=share.share_bps,
-                service_fee_bps=reserve.fee_bps,
-                tax_risk_reserve_bps=reserve.tax_reserve_bps,
-            )
+            policy = replace(policy, cashback_share_bps=self.admin_panel.active_share(created).share_bps)
             result = estimate_cashback(commission_vnd, policy, reliable=True)
-            return result.estimated_cashback_vnd, str(row["estimate_policy"])
+            return Split(
+                result.estimated_cashback_vnd,
+                str(row["estimate_policy"]),
+                result.fee_reserve_vnd,
+                result.tax_risk_reserve_vnd + result.other_reserve_vnd,
+            )
         rate = row["cashback_rate_percent"] or self.settings.cashback_rate_percent
-        return quote_displayed_vnd(commission_vnd, int(rate)), f"v1.1:{rate}"
+        costs = estimate_cashback(commission_vnd, policy, reliable=True)
+        return Split(
+            quote_displayed_vnd(commission_vnd, int(rate)),
+            f"v1.1:{rate}",
+            costs.fee_reserve_vnd,
+            costs.tax_risk_reserve_vnd,
+        )
 
     def handle_text(
         self,

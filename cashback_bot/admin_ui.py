@@ -595,6 +595,12 @@ def shopee_stats_lines(shopee) -> list[str]:
         f"→ <b>HH sau cùng {format_vnd(shopee.real_commission_vnd)}</b>",
         f"• Click <b>{shopee.total_clicks}</b> (qua bot <b>{shopee.clicks_with_bot_sub_id}</b>){cr_text}",
     ]
+    if shopee.bot_commission_vnd:
+        lines.append(
+            f"💼 Qua bot: HH {format_vnd(shopee.bot_commission_vnd)} − khách {format_vnd(shopee.bot_cashback_vnd)} "
+            f"− phí {format_vnd(shopee.bot_fee_vnd)} − dự phòng thuế {format_vnd(shopee.bot_tax_vnd)} "
+            f"→ <b>Admin còn {format_vnd(shopee.admin_keep_vnd)}</b>"
+        )
     if shopee.orders_cancelled:
         lines.append(
             f"• Huỷ: doanh số {format_vnd(shopee.cancelled_gmv_vnd)} · HH mất {format_vnd(shopee.lost_commission_vnd)}"

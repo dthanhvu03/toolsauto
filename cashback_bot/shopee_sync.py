@@ -136,6 +136,7 @@ class BotOrder:
     commission_vnd: int | None
     order_status: str
     is_new: bool
+    conversion_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -380,6 +381,7 @@ class ShopeeSyncEngine:
                 commission_vnd=net_comm,
                 order_status=order_status,
                 is_new=is_new,
+                conversion_id=conversion_id,
             ))
 
         if is_new and is_matched:
