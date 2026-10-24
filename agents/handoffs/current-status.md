@@ -1,3 +1,30 @@
+## Phiên 2026-10-24 (ab) — Audit toàn hệ thống Cashback Bot (chỉ đọc)
+
+Claude Code. Task "CASHBACK BOT FULL SYSTEM AUDIT", audit only: không sửa code, không restart, không ghi DB, không gọi Shopee/AddLiveTag.
+
+- Báo cáo: `reports/CASHBACK_FULL_AUDIT.md`. Worktree `toolsauto-cashback-arch` không còn; 6 nhánh cashback đều đã vào main.
+- Production: PID 590993 chạy HEAD `6de6f82` (xác định qua mtime), bot **công khai** (`CUSTOMER_ACCESS_ENABLED=true`).
+  - 5 người dùng, 28 link, 7 click có Sub ID.
+  - 2 đơn thật khớp đúng người (đang chờ duyệt). Ví tắt, 0 lần chi.
+- P0:
+  - (1) Mốc "có thể rút" = COMPLETED + 15 ngày, không đọc cờ gian lận hay trạng thái duyệt. Đơn đã vào ví thì bỏ qua thay đổi hoa hồng.
+  - (2) Không đối chiếu tiền Shopee trả, không có trần quỹ.
+  - (3) Chưa quyết định thuế.
+  - (4) Update Telegram lỗi lặp lại làm cả bot im lặng (`poller.py:228-296`).
+- P1:
+  - Token có thể vào log (`telegram_api.py:165, 214`; chưa xảy ra).
+  - Backup chạy tay.
+  - Chữ /admin gây hiểu nhầm.
+  - Snapshot V1.2 chưa đọc.
+  - Ước tính lệch −17% đến −43%.
+- Hạng thành viên và tax_profile chỉ là code + test, không nối vào báo giá hay ví.
+
+Next:
+- Chủ bot đọc báo cáo, quyết 7 mục ở phần 12.
+- Anti lập PLAN cho P0-4, P1-8, P1-9 (sửa nhanh) và P0-1, P0-2 (trước khi chi tiền).
+
+---
+
 ## Phiên 2026-10-24 (aa) — Cashback: sửa câu chữ số tiền hoàn cho khách
 
 Claude Code, user yêu cầu "chỉnh sửa lại câu từ cho người dùng về số tiền được hoàn về".
