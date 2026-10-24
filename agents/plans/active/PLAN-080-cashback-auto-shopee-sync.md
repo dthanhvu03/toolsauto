@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **CODE READY**, chưa merge. Gate A (deploy code, cờ tắt) và Gate B (bật tự đồng bộ): NOT AUTHORIZED UNTIL REVIEW |
+| Trạng thái | **Gate A ĐÃ TRIỂN KHAI 2026-10-24** (`5232840`, PID 652982, cờ tắt). Gate B (bật tự đồng bộ): NOT AUTHORIZED. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md` |
 | Executor | Claude Code (chủ bot giao trực tiếp ngày 2026-10-24, nội dung PLAN dán trong phiên) |
 | Đầu vào | `main@4712c9a`, ADR-056 |
 | Nhánh | `cursor/cashback-plan080-auto-sync`, worktree `/home/vu/toolsauto-cashback-notifications` |

@@ -1,3 +1,21 @@
+## Phiên 2026-10-24 (ay) — Đã triển khai PLAN-080 Gate A (tự đồng bộ Shopee: code lên, cờ TẮT)
+
+Claude Code, chủ bot duyệt ("oke anh duyệt nhé"). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md`.
+
+- **System State:**
+  - `main@5232840`, PID 652982, khởi động 10:26:34 UTC, 2 luồng (poll + đồng bộ);
+  - `.env` không có `SHOPEE_AUTO_SYNC_*`, nên tự đồng bộ tắt; thông báo đơn vẫn bật;
+  - 2 khoản pending 12.157đ / 960đ; ví khoá; trigger 6/6.
+- **Done:**
+  - backup `cashback-20261024T102126Z.sqlite`; merge 648 passed; push;
+  - log 0 lỗi, 0 locked, 0 token;
+  - lượt 🔄 #10: thành công, 2 trang, 0 mới / 0 đổi / 2 không đổi, 0 tin khách, khoá đã nhả;
+  - màn ⏱ đúng (ảnh chủ bot).
+- **Unfinished:** Gate B chờ duyệt riêng; quyết định khung quét > 30 ngày.
+- **Next:** Gate B = bấm 🔄 kiểm tra nguồn → thêm `SHOPEE_AUTO_SYNC_ENABLED=1` → restart → theo dõi 24–48 giờ (mục 19 báo cáo PLAN-080).
+
+---
+
 ## Phiên 2026-10-24 (ax) — PLAN-080 Automatic Shopee Sync (CODE READY, CHƯA triển khai)
 
 Claude Code, chủ bot giao PLAN-080. Báo cáo `reports/CASHBACK_PLAN080_AUTO_SYNC.md`, ADR-057, PLAN `agents/plans/active/PLAN-080-cashback-auto-shopee-sync.md`.

@@ -6,7 +6,7 @@
 | Người làm | Claude Code |
 | Nhánh | `cursor/cashback-plan080-auto-sync`, tách từ `main@4712c9a` (worktree `/home/vu/toolsauto-cashback-notifications`) |
 | ADR | ADR-057 (mới) |
-| Trạng thái | **CODE READY**, chưa merge. Gate A và Gate B đều **NOT AUTHORIZED UNTIL REVIEW** |
+| Trạng thái | **Gate A đã triển khai 2026-10-24** (`main@5232840`, PID 652982, tự đồng bộ TẮT). Gate B **NOT AUTHORIZED**. Chi tiết: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md` |
 
 Trong lúc làm PLAN này, em không gọi Shopee thật, không đổi cookie, không merge, không restart và không đổi `.env` production. DB production chỉ được đọc (`mode=ro`) hoặc chép ra bản sao quyền 0600 trong scratchpad; bản sao đã xoá sau khi dùng.
 
@@ -373,7 +373,7 @@ Tất cả lưu giờ UTC; màn admin hiển thị giờ Việt Nam.
 | Admin Monitoring | **GO** |
 | Financial Lock | **GO** |
 | Regression | **GO** (648/648) |
-| Gate A Code Deployment | **NOT AUTHORIZED UNTIL REVIEW** |
+| Gate A Code Deployment | **GO, đã triển khai** (chủ bot duyệt 2026-10-24) |
 | Gate B Auto Sync Activation | **NOT AUTHORIZED UNTIL REVIEW** |
 | Wallet & Payout | **NOT AUTHORIZED** |
 
