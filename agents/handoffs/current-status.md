@@ -1,3 +1,23 @@
+## Phiên 2026-10-24 (ba) — PLAN-081 Gate A: audit đơn Shopee quá 30 ngày (chỉ đọc)
+
+Claude Code. Báo cáo `reports/CASHBACK_PLAN081_GATE_A_AUDIT.md`, ADR-058 (DRAFT), PLAN `agents/plans/active/PLAN-081-cashback-reconciliation-beyond-30-days.md`.
+
+- **System State:**
+  - production không đổi: `main@4f4a701`, PID 656347;
+  - tự đồng bộ 240 phút, lượt kế 14:39Z;
+  - 2 khoản pending 12.157đ / 960đ; ví khoá.
+- **Done (chỉ đọc):**
+  - khung quét là 30 ngày theo `purchase_time`, cố định trong code;
+  - đơn …7156 (không qua bot, FRAUD) đã vắng từ lượt #4, chứng minh đơn ra khung không được đọc lại;
+  - không có `last_seen_at` riêng (`updated_at` / `evidence_ref` gần nghĩa);
+  - 2 đơn qua bot ra khung ngày 2026-11-22;
+  - website endpoint > 30 ngày UNVERIFIED; Open API không có quyền.
+- **Đề xuất:** Phương án B (theo dõi + cảnh báo + chứng từ PLAN-075) trước 2026-11-12; A (khung hẹp theo giờ mua) chỉ sau một lần thử nguồn được duyệt.
+- **Unfinished / Blockers:** chờ chủ bot duyệt mục 21 của báo cáo. Gate B NOT AUTHORIZED.
+- **Next:** chủ bot chọn phương án và ngưỡng → viết Gate B (code + test matrix 31 case) → diễn tập → triển khai trước 2026-11-12.
+
+---
+
 ## Phiên 2026-10-24 (az) — PLAN-080 Gate B: tự đồng bộ Shopee ĐÃ BẬT (mỗi 240 phút)
 
 Chủ bot thêm `SHOPEE_AUTO_SYNC_ENABLED=1`, `SHOPEE_AUTO_SYNC_INTERVAL_MINUTES=240` và restart. Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN080.md` (mục Gate B).
