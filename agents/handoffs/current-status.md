@@ -1,3 +1,26 @@
+## Phiên 2026-10-24 (au) — Đã triển khai PLAN-079 Gate A.1 + Gate B (thông báo đơn BẬT cho mọi khách)
+
+Claude Code + chủ bot ("oke thực hiện 3 mục cho anh đi em"). Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN079_GATE_B.md`.
+
+- **System State:**
+  - `main@792397d`, PID 644839, khởi động 09:21:18 UTC;
+  - `.env`: `CUSTOMER_NOTIFICATIONS_ENABLED=1`, không có `CUSTOMER_NOTIFICATIONS_TEST_IDS`;
+  - chế độ `on`, mốc kích hoạt 09:21:19Z; lịch sử `off` (08:52) → `test` (08:55) → `on` (09:21);
+  - ví khoá: 2 khoản pending 12.157đ / 960đ, 0 available, 0 payout, 6 trigger; `gate_b_check` OK.
+- **Done:**
+  - backup `cashback-20261024T084807Z.sqlite`; merge 606 passed, đã push;
+  - chế độ test với tài khoản admin: tin thử gửi đúng; xử lý lại không thành tin thứ hai; tắt "Đơn mới" thì bỏ qua; bật lại thì gửi; 0 tin đơn tới khách thật;
+  - log 0 lỗi, 0 token qua 3 lần restart.
+- **Không thử thật** (đã có test tự động): khách chặn bot (chưa có tài khoản phụ); 🔄 trong chế độ test.
+- **Unfinished:** không.
+- **Next:**
+  - sau mỗi lần 🔄 chạy `.venv/bin/python -m cashback_bot.gate_b_check` và xem /admin → 🔔; 2 khách thật có thể nhận tin "cập nhật" lần đầu;
+  - tắt nhanh: xoá dòng `CUSTOMER_NOTIFICATIONS_ENABLED=1`, rồi restart;
+  - PLAN riêng nếu muốn tự đồng bộ Shopee (tin gần thời gian thực);
+  - Gate B ví (PLAN-078) vẫn chờ chứng từ và quyết định.
+
+---
+
 ## Phiên 2026-10-24 (at) — PLAN-079 Gate B pre-activation review (CONDITIONAL GO, chưa triển khai)
 
 Claude Code, chủ bot giao audit Gate B. Báo cáo `reports/CASHBACK_PLAN079_GATE_B_REVIEW.md`; ADR-056 có mục sửa đổi.

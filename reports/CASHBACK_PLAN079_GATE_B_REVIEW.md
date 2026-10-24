@@ -9,6 +9,7 @@
 | Nhánh rollback | `rollback/plan079-compat` (worktree `/home/vu/toolsauto-cashback-rollback`), **chỉ dùng khi chủ bot duyệt rollback** |
 | ADR | ADR-056, thêm mục "Sửa đổi 2026-10-24 — Gate B pre-activation review" |
 | Kết luận | **CONDITIONAL GO**: điều kiện ở mục 9 |
+| Triển khai | **Đã bật cho mọi khách 2026-10-24 09:21:19 UTC**, `main@792397d`, PID 644839. Chi tiết: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN079_GATE_B.md` |
 
 Không merge, không restart, không đổi `.env` production, không bật `CUSTOMER_NOTIFICATIONS_ENABLED`, không gửi tin Telegram thật. DB production chỉ đọc ở chế độ `mode=ro`. Mọi diễn tập chạy trên bản sao quyền 0600 trong scratchpad, đã xoá.
 
