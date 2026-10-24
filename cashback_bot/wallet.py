@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from cashback_bot.db import TrackingRepository
+from cashback_bot.payout_gate import FinancialGate, PayoutBlocked
 
 KEY_ENABLED = "wallet_enabled"
 KEY_HOLD_DAYS = "wallet_hold_days"
@@ -106,9 +107,12 @@ CashbackFor = Callable[[int, sqlite3.Row], Split]
 
 @dataclass(frozen=True)
 class WalletSettings:
+    """`enabled` là trạng thái hiệu lực: công tắc admin VÀ khoá tài chính đã mở (hardening V1)."""
+
     enabled: bool
     hold_days: int
     min_withdraw_vnd: int
+    locked_reasons: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -223,6 +227,7 @@ def transfer_note(payout_id: int) -> str:
 class Wallet:
     def __init__(self, repo: TrackingRepository):
         self.repo = repo
+        self.gate = FinancialGate(repo)
 
     # --- Cài đặt (bot_state) -------------------------------------------------
 
@@ -233,13 +238,20 @@ class Wallet:
             except ValueError:
                 return default
 
+        readiness = self.gate.readiness()
         return WalletSettings(
-            enabled=self.repo.get_state(KEY_ENABLED) == "1",
+            enabled=self.repo.get_state(KEY_ENABLED) == "1" and readiness.ok,
             hold_days=number(KEY_HOLD_DAYS, DEFAULT_HOLD_DAYS),
             min_withdraw_vnd=number(KEY_MIN_WITHDRAW, DEFAULT_MIN_WITHDRAW),
+            locked_reasons=readiness.reasons,
         )
 
     def set_enabled(self, enabled: bool) -> None:
+        """Tắt luôn được. Bật chỉ khi khoá tài chính đã mở; không thì ném PayoutBlocked."""
+        if enabled:
+            readiness = self.gate.readiness()
+            if not readiness.ok:
+                raise PayoutBlocked(" ".join(readiness.reasons))
         self.repo.set_state(KEY_ENABLED, "1" if enabled else "0")
 
     def set_hold_days(self, days: int) -> None:
@@ -264,12 +276,14 @@ class Wallet:
             link_columns = {row[1] for row in conn.execute("PRAGMA table_info(link_requests)")}
             # Cột V1.2 chỉ có sau migration 001; DB chưa chạy thì mọi link là V1.1.
             policy = "l.estimate_policy" if "estimate_policy" in link_columns else "NULL"
+            conversion_columns = {row[1] for row in conn.execute("PRAGMA table_info(shopee_conversions)")}
+            validation = "c.validation_month" if "validation_month" in conversion_columns else "NULL"
             rows = conn.execute(
                 f"""
                 SELECT c.conversion_id, c.telegram_user_id, c.matched_link_id, c.order_sn, c.order_status,
                        c.net_commission_vnd, c.gross_commission_vnd, c.purchase_time, c.complete_time, c.item_name,
                        l.product_name, {policy} AS estimate_policy, l.cashback_rate_percent, l.estimated_cashback,
-                       l.created_at AS link_created_at
+                       l.created_at AS link_created_at, c.raw_json, {validation} AS validation_month
                 FROM shopee_conversions c JOIN link_requests l ON l.id = c.matched_link_id
                 WHERE c.telegram_user_id IS NOT NULL
                 """
@@ -295,10 +309,16 @@ class Wallet:
                 if state == "cancelled":
                     status = "cancelled"
                 elif state == "completed":
+                    # Hoàn thành + đủ ngày giữ KHÔNG đủ để vào ví (hardening V1): còn cần Shopee duyệt,
+                    # không gian lận, và kỳ đó Shopee đã trả tiền. Thiếu bằng chứng thì ở 'holding'.
                     completed_at = completed_at or now_text
                     done = _parse(completed_at) or now
-                    available_at = _stamp(done + hold)
-                    status = "available" if available_at <= now_text else "holding"
+                    eligible_at = _stamp(done + hold)
+                    payable = eligible_at <= now_text and self.gate.entry_payable(
+                        conn, row["validation_month"], row["raw_json"]
+                    )
+                    status = "available" if payable else "holding"
+                    available_at = eligible_at if payable else None
                 else:
                     status = "pending"
                 item_name = row["item_name"] or row["product_name"] or row["order_sn"] or "-"
@@ -394,8 +414,13 @@ class Wallet:
             ).fetchone()
 
     def request_payout(self, user_id: int, now: datetime) -> tuple[sqlite3.Row | None, str]:
-        """Rút toàn bộ số đang rút được. Trả (yêu cầu, 'ok') hoặc (None, mã lỗi)."""
+        """Rút toàn bộ số đang rút được. Trả (yêu cầu, 'ok') hoặc (None, mã lỗi).
+
+        Mã lỗi khoá tài chính: locked (thiếu bằng chứng Shopee trả / thuế), fund (vượt tiền Shopee đã trả).
+        """
         settings = self.settings()
+        if settings.locked_reasons:
+            return None, "locked"
         if not settings.enabled:
             return None, "disabled"
         account = self.bank(user_id)
@@ -410,6 +435,9 @@ class Wallet:
             amount = _balance(conn, user_id).withdrawable_vnd
             if amount < settings.min_withdraw_vnd or amount <= 0:
                 return None, "below_min"
+            blocked = self.gate.check_withdrawal(conn, amount)
+            if blocked:
+                return None, blocked
             cursor = conn.execute(
                 """
                 INSERT INTO cashback_payouts (
@@ -430,8 +458,20 @@ class Wallet:
             return conn.execute("SELECT * FROM cashback_payouts WHERE id = ?", (payout_id,)).fetchone()
 
     def decide_payout(self, payout_id: int, paid: bool, admin_id: int, now: datetime) -> sqlite3.Row | None:
-        """Chỉ đổi yêu cầu còn 'requested'. Bấm hai lần thì lần sau trả None."""
+        """Chỉ đổi yêu cầu còn 'requested'. Bấm hai lần thì lần sau trả None.
+
+        Xác nhận đã chuyển (paid) phải qua khoá tài chính, không đạt thì ném PayoutBlocked. Từ chối luôn được:
+        tiền trở lại ví, không phát sinh chi.
+        """
         with self.repo.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if paid:
+                current = conn.execute(
+                    "SELECT amount_vnd FROM cashback_payouts WHERE id = ? AND status = 'requested'", (payout_id,)
+                ).fetchone()
+                if current is None:
+                    return None
+                self.gate.check_payout(conn, int(current["amount_vnd"]))
             cursor = conn.execute(
                 """
                 UPDATE cashback_payouts SET status = ?, decided_at = ?, decided_by = ?

@@ -115,6 +115,7 @@ class Stats:
     top_products: list[tuple[str, int]]
     delivery_pending: int
     errors: int
+    quarantined_updates: int = 0
     insight: Insight | None = None
     shopee: ShopeeStats | None = None
 
@@ -228,6 +229,8 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
             f"SELECT COUNT(*) FROM admin_notifications WHERE event_type = 'REQUEST_FAILED' AND {in_period}",
             (lo,),
         ),
+        # Update Telegram bị cách ly (hardening P0-4). DB cũ chưa có bảng thì _count trả 0.
+        quarantined_updates=_count(conn, "SELECT COUNT(*) FROM failed_updates WHERE status = 'quarantined'"),
     )
 
 

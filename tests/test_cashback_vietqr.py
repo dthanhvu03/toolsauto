@@ -12,7 +12,17 @@ from cashback_bot.poller import process_updates
 from cashback_bot.vietqr import VietQRError, build_payload, clean_note, crc16_ccitt, parse_tlv, qr_png
 from cashback_bot.wallet import BANKS, BankAccount, parse_bank_text
 from tests.test_cashback_bot import NOW
-from tests.test_cashback_wallet import ADMIN, USER, _bot, _buttons, _callback, _customer_events, _link, _order
+from tests.test_cashback_wallet import (
+    ADMIN,
+    USER,
+    _bot,
+    _buttons,
+    _callback,
+    _customer_events,
+    _financially_ready,
+    _link,
+    _order,
+)
 
 PNG = b"\x89PNG\r\n\x1a\n"
 
@@ -20,6 +30,7 @@ PNG = b"\x89PNG\r\n\x1a\n"
 def _ready(tmp_path, commission=20_000, bank=True):
     bot = _bot(tmp_path, admin_notifications_enabled=True, admin_chat_id=ADMIN)
     bot.admin_notifier = MagicMock()
+    _financially_ready(bot)
     bot.wallet.set_enabled(True)
     bot.wallet.set_hold_days(0)
     sub = _link(bot)

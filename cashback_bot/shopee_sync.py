@@ -26,6 +26,7 @@ from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.db import TrackingRepository
 from cashback_bot.shopee_client import ShopeeAffiliateClient, ShopeeApiError
 from cashback_bot.shopee_cookie import load_cookies
+from cashback_bot.redact import error_brief, redact
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +228,7 @@ class ShopeeSyncEngine:
             except ShopeeApiError as exc:
                 if exc.status_code in (401, 403):
                     raise
-                logger.warning("[ShopeeSync] Đồng bộ click gặp lỗi: %s", exc)
+                logger.warning("[ShopeeSync] Đồng bộ click gặp lỗi: %s", error_brief(exc))
                 failed_parts.append("click")
 
             # 4. Đồng bộ Conversion Report
@@ -247,7 +248,7 @@ class ShopeeSyncEngine:
             except ShopeeApiError as exc:
                 if exc.status_code in (401, 403):
                     raise
-                logger.warning("[ShopeeSync] Đồng bộ conversion gặp lỗi: %s", exc)
+                logger.warning("[ShopeeSync] Đồng bộ conversion gặp lỗi: %s", error_brief(exc))
                 failed_parts.append("đơn hàng")
 
             # 5. Ghi nhận hoàn thành. Một phần lỗi thì không được báo "xong".
@@ -286,7 +287,7 @@ class ShopeeSyncEngine:
         except Exception as exc:
             auth = isinstance(exc, ShopeeApiError) and exc.status_code in (401, 403)
             if auth:
-                self._mark_expired(str(exc))
+                self._mark_expired(redact(exc)[:200])
             else:
                 logger.exception("[ShopeeSync] Lỗi không mong muốn trong quá trình đồng bộ")
             self.repo.complete_shopee_sync_run(
@@ -295,7 +296,7 @@ class ShopeeSyncEngine:
                 clicks=clicks_count,
                 conversions=conversions_count,
                 new_orders=new_matched_orders,
-                error=str(exc)[:200],
+                error=redact(exc)[:200],
             )
             message = "Cookie Shopee hết hạn giữa chừng." if auth else f"Lỗi đồng bộ: {type(exc).__name__}"
             return SyncResult(

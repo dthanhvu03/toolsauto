@@ -95,7 +95,7 @@ def save_cookies(cookies: dict[str, str], path: Path | str | None = None) -> Pat
     try:
         os.chmod(temp_target, 0o600)
     except OSError as exc:
-        logger.warning("[Cashback] Không thể đặt chmod 0600 cho cookie file: %s", exc)
+        logger.warning("[Cashback] Không thể đặt chmod 0600 cho cookie file: %s", type(exc).__name__)
     temp_target.replace(target)
     try:
         os.chmod(target, 0o600)
@@ -115,7 +115,8 @@ def load_cookies(path: Path | str | None = None) -> dict[str, str] | None:
         if isinstance(data, dict):
             return {str(k): str(v) for k, v in data.items()}
     except (json.JSONDecodeError, OSError) as exc:
-        logger.error("[Cashback] Không thể đọc file cookie %s: %s", target, exc)
+        # Không in thông điệp lỗi: lỗi parse có thể trích một đoạn nội dung cookie.
+        logger.error("[Cashback] Không thể đọc file cookie %s: %s", target, type(exc).__name__)
     return None
 
 

@@ -188,8 +188,11 @@ class AdminNotifier:
                 f"User <code>{'-' if telegram_user_id is None else telegram_user_id}</code>",
             )
         )
+        # Lỗi không gắn update (poll, vòng lặp) thêm mốc giây: trước đây khoá trùng nên chỉ báo một lần trong đời DB.
+        # Chống spam vẫn do cooldown theo error_type ở trên.
+        scope = update_id if update_id is not None else f"t{int(now)}"
         self.repo.enqueue_admin_event(
-            event_key=f"request_failed:{error_type}:{update_id or 0}:{telegram_user_id or 0}",
+            event_key=f"request_failed:{error_type}:{scope}:{telegram_user_id or 0}",
             event_type="REQUEST_FAILED",
             chat_id=int(self.chat_id),
             message_html=body,

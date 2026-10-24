@@ -160,6 +160,47 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
     updated_at TEXT NOT NULL
 );
 
+-- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
+-- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
+CREATE TABLE IF NOT EXISTS failed_updates (
+    telegram_update_id INTEGER PRIMARY KEY,
+    update_type TEXT NOT NULL,
+    telegram_user_id INTEGER,
+    category TEXT NOT NULL,
+    error_code TEXT NOT NULL,
+    error_detail TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL CHECK (status IN ('retrying', 'quarantined', 'resolved')),
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL
+);
+
+-- Khoá tài chính ở tầng DB (Production Safety Hardening V1): chưa có bảng bằng chứng Shopee đã trả
+-- và chính sách thuế người nhận thì không ghi được khoản 'available', yêu cầu rút mới hay trạng thái 'paid',
+-- kể cả khi gọi SQL trực tiếp. Điều kiện chi tiết (có dòng, đủ quỹ, không gian lận) ở payout_gate.py.
+CREATE TRIGGER IF NOT EXISTS financial_lock_entry_insert BEFORE INSERT ON cashback_entries
+WHEN NEW.status = 'available' AND (
+    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
+    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
+
+CREATE TRIGGER IF NOT EXISTS financial_lock_entry_update BEFORE UPDATE OF status ON cashback_entries
+WHEN NEW.status = 'available' AND OLD.status != 'available' AND (
+    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
+    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
+
+CREATE TRIGGER IF NOT EXISTS financial_lock_payout_insert BEFORE INSERT ON cashback_payouts
+WHEN NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
+    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies')
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
+
+CREATE TRIGGER IF NOT EXISTS financial_lock_payout_paid BEFORE UPDATE OF status ON cashback_payouts
+WHEN NEW.status = 'paid' AND (
+    NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'shopee_settlements')
+    OR NOT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'payout_tax_policies'))
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement evidence'); END;
+
 CREATE INDEX IF NOT EXISTS idx_cashback_entries_user ON cashback_entries(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_cashback_payouts_user ON cashback_payouts(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_shopee_conversions_sub_id ON shopee_conversions(sub_id);
@@ -612,6 +653,69 @@ class TrackingRepository:
                 """,
                 (_utc_now(), error_code[:80], event_id),
             )
+
+    def record_update_failure(
+        self,
+        update_id: int,
+        update_type: str,
+        telegram_user_id: int | None,
+        category: str,
+        error_code: str,
+        error_detail: str,
+    ) -> int:
+        """Ghi một lần xử lý lỗi, trả số lần đã lỗi. Lỗi ghi DB thì ném ra: caller không được tiến offset."""
+        now = _utc_now()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO failed_updates (
+                    telegram_update_id, update_type, telegram_user_id, category, error_code, error_detail,
+                    attempt_count, status, first_seen_at, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, 'retrying', ?, ?)
+                ON CONFLICT(telegram_update_id) DO UPDATE SET
+                    category = excluded.category,
+                    error_code = excluded.error_code,
+                    error_detail = excluded.error_detail,
+                    attempt_count = failed_updates.attempt_count + 1,
+                    status = CASE WHEN failed_updates.status = 'quarantined' THEN 'quarantined' ELSE 'retrying' END,
+                    last_seen_at = excluded.last_seen_at
+                """,
+                (update_id, update_type, telegram_user_id, category, error_code, error_detail, now, now),
+            )
+            row = conn.execute(
+                "SELECT attempt_count FROM failed_updates WHERE telegram_update_id = ?", (update_id,)
+            ).fetchone()
+        return int(row["attempt_count"])
+
+    def quarantine_update(self, update_id: int) -> None:
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "UPDATE failed_updates SET status = 'quarantined', last_seen_at = ? WHERE telegram_update_id = ?",
+                (_utc_now(), update_id),
+            )
+            if cursor.rowcount != 1:
+                raise sqlite3.OperationalError("failed_updates row missing")
+
+    def resolve_update_failure(self, update_id: int) -> None:
+        """Update từng lỗi tạm rồi xử lý được: đánh dấu resolved, giữ lịch sử."""
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE failed_updates SET status = 'resolved', last_seen_at = ? "
+                "WHERE telegram_update_id = ? AND status = 'retrying'",
+                (_utc_now(), update_id),
+            )
+
+    def update_failure(self, update_id: int) -> sqlite3.Row | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM failed_updates WHERE telegram_update_id = ?", (update_id,)).fetchone()
+
+    def count_quarantined_updates(self) -> int:
+        try:
+            with self.connect() as conn:
+                row = conn.execute("SELECT COUNT(*) FROM failed_updates WHERE status = 'quarantined'").fetchone()
+        except sqlite3.OperationalError:
+            return 0
+        return int(row[0])
 
     def get_state(self, key: str) -> str | None:
         with self.connect() as conn:

@@ -1,14 +1,31 @@
-# Khôi phục Cashback SQLite
+# Backup và khôi phục Cashback SQLite
 
-Lệnh tạo bản sao, không sửa file đang chạy:
+## Tự động (Production Safety Hardening V1)
+
+Bot tự backup **mỗi 24 giờ** trong vòng lặp chính (`poller._check_backup`). Không cần cron:
+
+- Dùng SQLite Backup API, ghi ra `cashback-YYYYMMDDTHHMMSSZ.sqlite.partial`, kiểm tra `integrity_check` và đủ các bảng chính, rồi mới đổi tên. File 0600, thư mục 0700.
+- Sau khi tạo, bot mở lại bản vừa tạo ở chế độ chỉ đọc để kiểm tra như lúc khôi phục.
+- Giữ `CASHBACK_BACKUP_KEEP` bản (mặc định 14, sàn tối thiểu 3). Chỉ file đúng mẫu tên `cashback-<UTC>Z.sqlite` mới bị dọn; file khác trong thư mục không bao giờ bị xoá.
+- Thành công: log `backup ok file=… tables=… links=…`, lưu `bot_state.backup_last_ok`.
+- Thất bại: log `backup tự động thất bại`, báo admin (`backup_failed`), thử lại sau 1 giờ.
+
+**Không cài thêm cron cho cùng việc này.** Nếu sau này muốn chạy khi bot tắt, thay bằng một dòng cron
+`python -m cashback_bot.backup` và bỏ `_check_backup`; không chạy cả hai.
+
+Chạy tay khi cần (ví dụ ngay trước khi triển khai):
 
 ```bash
-python -m cashback_bot.backup
+cd /home/vu/toolsauto && umask 077 && .venv/bin/python -m cashback_bot.backup
 ```
 
-File nằm ở `CASHBACK_BACKUP_DIR` (mặc định `./data/backups`), tên `cashback-YYYYMMDDTHHMMSSZ.sqlite`. Bản sao được tạo bằng SQLite Backup API rồi kiểm tra `integrity_check`. Số bản giữ lại là `CASHBACK_BACKUP_KEEP` (mặc định 14).
+Lệnh trả mã 1 nếu backup lỗi.
 
-Chưa có lịch tự chạy. Khi cần, gọi lệnh trên bằng tay hoặc một cron bên ngoài. Không bật cron trên production từ task này.
+## Ngoài máy chủ
+
+`OFFSITE_BACKUP = NOT CONFIGURED`. Backup hiện nằm cùng ổ đĩa với DB: hỏng ổ hoặc mất máy là mất cả hai.
+Đề xuất (cần chủ bot duyệt nơi lưu): mã hoá bằng `age` hoặc `gpg` với khoá chỉ chủ bot giữ, rồi chép bản đã mã hoá
+sang ổ ngoài hoặc dịch vụ lưu trữ. Không upload DB chưa mã hoá. Backup có số tài khoản ngân hàng khách khai.
 
 ## Khi database hỏng hoặc mất
 

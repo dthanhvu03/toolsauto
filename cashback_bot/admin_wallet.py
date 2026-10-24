@@ -25,8 +25,9 @@ from cashback_bot.admin_ui import (
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply, payout_notice
 from cashback_bot.money import format_vnd
+from cashback_bot.payout_gate import PayoutBlocked
 from cashback_bot.vietqr import VietQRError, build_payload, qr_png
-from cashback_bot.wallet import BANKS, HOLD_DAY_CHOICES, MIN_WITHDRAW_CHOICES, Wallet
+from cashback_bot.wallet import BANKS, HOLD_DAY_CHOICES, KEY_ENABLED, MIN_WITHDRAW_CHOICES, Wallet
 
 _PAYOUT = re.compile(r"^c:wl:(rq|paid|rej):(\d+)(:ok)?$")
 _MEMBER = re.compile(r"^c:wl:u:(\d+)$")
@@ -50,14 +51,21 @@ class WalletAdmin:
     def route(self, admin_id: int, data: str, now: datetime) -> BotReply:
         if data == "c:menu:wallet":
             return self.screen()
+        if data in ("c:wl:on", "c:wl:on:ok") and self.wallet.settings().locked_reasons:
+            # Khoá tài chính (hardening V1): nút cũ hay callback gõ tay đều không bật được.
+            return self.screen("🔒 Chưa bật được ví: còn khoá tài chính (xem lý do bên dưới).")
         if data == "c:wl:on":
             return BotReply(WALLET_ENABLE_CONFIRM, inline_keyboard=WALLET_ENABLE_KEYBOARD)
         if data == "c:wl:on:ok":
-            self._log(admin_id, "wallet_enabled", {"on": self.wallet.settings().enabled}, {"on": True}, now)
-            self.wallet.set_enabled(True)
+            try:
+                self.wallet.set_enabled(True)
+            except PayoutBlocked:
+                return self.screen("🔒 Chưa bật được ví: còn khoá tài chính (xem lý do bên dưới).")
+            self._log(admin_id, "wallet_enabled", {"on": False}, {"on": True}, now)
             return self.screen("🟢 Đã bật ví. Khách thấy nút 👛 Ví của tôi từ tin kế tiếp.")
         if data == "c:wl:off":
-            self._log(admin_id, "wallet_enabled", {"on": self.wallet.settings().enabled}, {"on": False}, now)
+            before = self.repo.get_state(KEY_ENABLED) == "1"  # công tắc đã lưu, không phải trạng thái hiệu lực
+            self._log(admin_id, "wallet_enabled", {"on": before}, {"on": False}, now)
             self.wallet.set_enabled(False)
             return self.screen("⏸️ Đã tắt ví. Yêu cầu rút đang chờ vẫn xử lý được ở đây.")
         if data == "c:wl:cfg":
@@ -123,7 +131,10 @@ class WalletAdmin:
             return self._payout_detail(row, "Yêu cầu này đã được xử lý trước đó.")
         if not confirmed:
             return BotReply(payout_confirm_text(row, paid), inline_keyboard=payout_confirm_keyboard(row, paid))
-        decided = self.wallet.decide_payout(payout_id, paid, admin_id, now)
+        try:
+            decided = self.wallet.decide_payout(payout_id, paid, admin_id, now)
+        except PayoutBlocked as exc:
+            return self._payout_detail(row, f"🔒 Chưa xác nhận được: {exc.reason}")
         if decided is None:
             return self._payout_detail(row, "Yêu cầu này đã được xử lý trước đó.")
         self.repo.enqueue_admin_event(
@@ -136,7 +147,14 @@ class WalletAdmin:
 
     def _payout_detail(self, row, notice: str = "") -> BotReply:
         user = self.repo.get_user(int(row["telegram_user_id"]))
-        photo, qr_problem = (None, None) if row["status"] != "requested" else self._qr(row)
+        locked = self.wallet.settings().locked_reasons
+        if row["status"] != "requested":
+            photo, qr_problem = None, None
+        elif locked:
+            # Không đưa mã chuyển khoản khi còn khoá: tránh chuyển tay khoản Shopee chưa trả.
+            photo, qr_problem = None, "Không tạo mã QR khi còn khoá tài chính."
+        else:
+            photo, qr_problem = self._qr(row)
         text = payout_text(
             row,
             None if user is None else user["username"],

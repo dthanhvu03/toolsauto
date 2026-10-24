@@ -1,3 +1,22 @@
+## Phiên 2026-10-24 (ac) — PLAN-073 Production Safety Hardening V1 (nhánh, chưa triển khai)
+
+Claude Code, user giao task "CASHBACK BOT: PRODUCTION SAFETY HARDENING V1". Làm trong worktree `/home/vu/toolsauto-cashback-safety`, nhánh `cursor/cashback-safety-hardening`. Production không đổi (main@eca64fd, PID 590993 không restart).
+
+- P0-4: mỗi update được cô lập. Lỗi tạm thì thử lại tối đa 5 lần, lỗi vĩnh viễn thì ghi `failed_updates` rồi mới tiến offset. Admin được báo; 📊 hiện "Update cách ly".
+- P1-8: thêm `redact.py` và `RedactingFormatter` cho mọi handler; sửa 11 chỗ log lỗi thô (token có thể nằm trong URL của requests).
+- P1-9: bot tự backup mỗi 24 giờ (Backup API, `.partial`, verify, 0600/0700, dọn đúng mẫu tên, sàn 3 bản), lỗi thì báo admin. `OFFSITE_BACKUP = NOT CONFIGURED`.
+- Khoá tài chính (ADR-050): cần bảng bằng chứng Shopee đã trả và thuế đã duyệt (chưa có, DDL nháp 007), nên mặc định KHOÁ.
+  - Chặn: bật ví, yêu cầu rút, xác nhận đã chuyển, chuyển khoản sang `available`.
+  - Có thêm 4 trigger SQLite chặn SQL trực tiếp.
+- Test: 334 passed. Đã diễn tập migrate trên bản sao DB production (0600, đã xoá).
+
+Next:
+- Chủ bot duyệt và triển khai theo `reports/CASHBACK_SAFETY_HARDENING_V1.md` mục F (backup → merge ff → restart với umask 077 → xác minh).
+- `chmod 600` log và backup cũ (lệnh ở mục F).
+- PLAN đối soát: luồng nhập bằng chứng kỳ Shopee đã trả; điều chỉnh âm khi hoa hồng giảm sau khi vào ví.
+
+---
+
 ## Phiên 2026-10-24 (ab) — Audit toàn hệ thống Cashback Bot (chỉ đọc)
 
 Claude Code. Task "CASHBACK BOT FULL SYSTEM AUDIT", audit only: không sửa code, không restart, không ghi DB, không gọi Shopee/AddLiveTag.

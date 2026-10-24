@@ -606,8 +606,11 @@ def stats_text(stats, *, period_label: str, since: str | None) -> str:
         "",
         *_week_lines(stats),
     ]
-    if stats.delivery_pending or stats.errors:
-        lines += ["", f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>"]
+    if stats.delivery_pending or stats.errors or stats.quarantined_updates:
+        health = f"🩺 Tin gửi khách chưa xong: <b>{stats.delivery_pending}</b> · Lỗi hệ thống: <b>{stats.errors}</b>"
+        if stats.quarantined_updates:
+            health += f" · Update cách ly: <b>{stats.quarantined_updates}</b>"
+        lines += ["", health]
     return "\n".join(lines)
 
 
@@ -744,9 +747,17 @@ def wallet_admin_text(settings, totals, requests, notice: str = "") -> str:
     ]
     if notice:
         lines += [notice, ""]
+    lines += [f"Trạng thái: {state}"]
+    if settings.locked_reasons:
+        lines += [
+            "",
+            "🔒 <b>KHOÁ TÀI CHÍNH</b> · không bật ví, không tạo yêu cầu rút, không xác nhận chuyển khoản",
+            *(f"• {html.escape(reason)}" for reason in settings.locked_reasons),
+            "ⓘ Bot vẫn tạo link, đồng bộ đơn và ghi tiền chờ duyệt bình thường.",
+        ]
     lines += [
-        f"Trạng thái: {state}",
-        f"• Giữ tiền {settings.hold_days} ngày sau khi đơn hoàn thành · Rút tối thiểu {format_vnd(settings.min_withdraw_vnd)}",
+        f"• Giữ tiền {settings.hold_days} ngày sau khi đơn hoàn thành, và chỉ vào ví khi Shopee đã duyệt và đã trả · "
+        f"Rút tối thiểu {format_vnd(settings.min_withdraw_vnd)}",
         "",
         f"⏳ Chờ duyệt: <b>{format_vnd(totals.pending_vnd)}</b>",
         f"✅ Trong ví chưa rút: <b>{format_vnd(max(0, totals.withdrawable_vnd))}</b>",
@@ -765,7 +776,12 @@ def wallet_admin_keyboard(settings, requests) -> Keyboard:
         for row in requests[:5]
     ]
     rows.append((("👥 Thành viên", "c:wl:members"), ("⚙️ Cài đặt", "c:wl:cfg")))
-    rows.append((("⏸️ Tắt ví", "c:wl:off"),) if settings.enabled else (("🟢 Bật ví cho khách", "c:wl:on"),))
+    if settings.enabled:
+        rows.append((("⏸️ Tắt ví", "c:wl:off"),))
+    elif settings.locked_reasons:
+        rows.append((("🔒 Bật ví (đang khoá)", "c:wl:on"),))
+    else:
+        rows.append((("🟢 Bật ví cho khách", "c:wl:on"),))
     rows.append(BACK_HOME)
     return tuple(rows)
 

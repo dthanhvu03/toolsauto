@@ -7,6 +7,7 @@ import logging
 import requests
 
 from cashback_bot.messages import BOT_COMMANDS
+from cashback_bot.redact import error_brief, redact
 
 logger = logging.getLogger("cashback_bot")
 
@@ -162,7 +163,8 @@ class TelegramApi:
                 timeout=self._timeout,
             )
         except requests.RequestException as exc:
-            logger.error("[Cashback] editMessageText network error: %s", exc)
+            # Chuỗi lỗi của requests chứa URL /bot<TOKEN>/…: chỉ log bản đã che (P1-8).
+            logger.error("[Cashback] editMessageText network error: %s", error_brief(exc))
             return False
         if response.status_code == 400:
             try:
@@ -172,10 +174,10 @@ class TelegramApi:
                     return True
             except Exception:
                 pass
-            logger.warning("[Cashback] editMessageText http=400: %s", response.text)
+            logger.warning("[Cashback] editMessageText http=400: %s", redact(response.text)[:200])
             return False
         if response.status_code >= 400:
-            logger.error("[Cashback] editMessageText http=%s: %s", response.status_code, response.text)
+            logger.error("[Cashback] editMessageText http=%s: %s", response.status_code, redact(response.text)[:200])
             return False
         try:
             payload = response.json()
@@ -206,12 +208,12 @@ class TelegramApi:
                 timeout=self._timeout,
             )
             if response.status_code >= 400:
-                logger.warning("[Cashback] deleteMessage http=%s: %s", response.status_code, response.text)
+                logger.warning("[Cashback] deleteMessage http=%s: %s", response.status_code, redact(response.text)[:200])
                 return False
             payload = response.json()
             return bool(payload.get("ok"))
         except requests.RequestException as exc:
-            logger.error("[Cashback] deleteMessage network error: %s", exc)
+            logger.error("[Cashback] deleteMessage network error: %s", error_brief(exc))
             return False
 
     def send_document(self, chat_id: int, filename: str, data: bytes, caption: str | None = None) -> bool:

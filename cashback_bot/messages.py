@@ -278,6 +278,9 @@ WITHDRAW_ERRORS = {
     "no_bank": "🏦 <b>Chưa có tài khoản nhận tiền</b>\nBấm Tài khoản nhận tiền để khai trước khi rút.",
     "pending_exists": "📤 <b>Bạn đang có một yêu cầu rút chờ chuyển</b>\nBot sẽ báo khi admin chuyển xong.",
     "below_min": "⏳ <b>Chưa đủ số tối thiểu để rút</b>\nTiền hoàn sẽ cộng dần khi đơn được duyệt.",
+    # Khoá tài chính (hardening V1): chưa có bằng chứng Shopee đã trả hoặc vượt số Shopee đã trả.
+    "locked": "⏳ <b>Chưa mở rút tiền</b>\nBot chỉ chi khi Shopee đã duyệt và thanh toán hoa hồng. Tiền hoàn của bạn vẫn được ghi lại.",
+    "fund": "⏳ <b>Chưa rút được lúc này</b>\nKỳ thanh toán Shopee chưa về đủ. Bot sẽ báo khi rút được.",
 }
 
 
@@ -397,9 +400,8 @@ def entry_notice(
     if status == "holding":
         return (
             "✅ <b>Đơn đã hoàn thành</b>\n\n"
-            f"🛍️ {item}\n💰 Hoàn: <b>{format_vnd(cashback_vnd)}</b>\n"
-            f"📅 Vào ví ngày: <b>{vn_date(available_at)}</b>\n\n"
-            f"ⓘ Bot giữ {hold_days} ngày để Shopee đối soát xong."
+            f"🛍️ {item}\n💰 Hoàn: <b>{format_vnd(cashback_vnd)}</b>\n\n"
+            "ⓘ Tiền vào ví khi Shopee duyệt và thanh toán hoa hồng cho đơn này. Bot sẽ báo khi vào ví."
         )
     if status == "available":
         return (

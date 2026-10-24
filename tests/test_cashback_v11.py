@@ -276,12 +276,18 @@ def test_prune_backup_cu(tmp_path):
     conn.commit()
     conn.close()
     folder = tmp_path / "backups"
-    first = backup_database(source, folder, now=NOW, keep=2)
-    second = backup_database(source, folder, now=NOW + timedelta(seconds=1), keep=2)
-    third = backup_database(source, folder, now=NOW + timedelta(seconds=2), keep=2)
+    # File lạ trong thư mục backup không bao giờ bị dọn (hardening P1-9).
+    (folder).mkdir()
+    (folder / "ghi-chu.txt").write_text("giữ", encoding="utf-8")
+    (folder / "cashback-manual.sqlite").write_text("giữ", encoding="utf-8")
+    made = [backup_database(source, folder, now=NOW + timedelta(seconds=i), keep=3) for i in range(4)]
     names = sorted(path.name for path in folder.glob("cashback-*.sqlite"))
-    assert first.name not in names
-    assert names == [second.name, third.name]
+    assert made[0].name not in names
+    assert names == sorted([m.name for m in made[1:]] + ["cashback-manual.sqlite"])
+    assert (folder / "ghi-chu.txt").exists()
+    # keep thấp hơn mức sàn vẫn giữ tối thiểu 3 bản.
+    backup_database(source, folder, now=NOW + timedelta(seconds=9), keep=1)
+    assert len([n for n in folder.iterdir() if n.name.endswith("Z.sqlite")]) == 3
 
 
 def test_production_db_khong_doi_va_khong_dong_conversion_sync():

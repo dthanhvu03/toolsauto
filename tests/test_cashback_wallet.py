@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import cashback_bot.poller as poller
@@ -34,7 +36,35 @@ def _link(bot) -> str:
         return conn.execute("SELECT sub_id FROM link_requests WHERE link_status = 'created'").fetchone()[0]
 
 
-def _order(bot, sub_id: str, status: str = "PENDING", commission: int = 10_000, complete: str | None = None, cid="o1"):
+DRAFT_EVIDENCE = Path(__file__).resolve().parents[1] / "cashback_bot" / "migrations" / "007_settlement_evidence.DRAFT.sql"
+
+
+def _financially_ready(bot, period: str = "2026-10", amount: int = 10_000_000) -> None:
+    """CHỈ DB TEST: dựng bằng chứng kỳ Shopee đã trả + thuế người nhận đã duyệt để thử luồng rút tiền."""
+    with bot.repo.connect() as conn:
+        conn.executescript(DRAFT_EVIDENCE.read_text(encoding="utf-8"))
+        conn.execute(
+            "INSERT INTO shopee_settlements (period, amount_vnd, evidence_ref, recorded_by, recorded_at) "
+            "VALUES (?, ?, ?, 1, '2026-11-15T00:00:00Z')",
+            (period, amount, f"TEST-{period}-{amount}"),
+        )
+        conn.execute(
+            "INSERT INTO payout_tax_policies (policy_ref, approved_by, approved_at) "
+            "VALUES ('TEST-ADR', 1, '2026-11-15T00:00:00Z')"
+        )
+
+
+def _order(
+    bot,
+    sub_id: str,
+    status: str = "PENDING",
+    commission: int = 10_000,
+    complete: str | None = None,
+    cid="o1",
+    validation: str | None = "2026-10",
+    fraud: bool = False,
+):
+    item = {"is_fraud": 1 if fraud else 0, "fraud_reason": "Rejected due to fraudulent activity" if fraud else ""}
     bot.repo.record_shopee_conversion(
         conversion_id=cid,
         sub_id=sub_id,
@@ -44,7 +74,14 @@ def _order(bot, sub_id: str, status: str = "PENDING", commission: int = 10_000, 
         purchase_time=PURCHASE,
         gross_commission_vnd=commission,
         net_commission_vnd=commission,
-        details={"item_name": "Áo Polo Nam", "gmv_vnd": 250_000, "item_qty": 1, "complete_time": complete},
+        raw_json=json.dumps({"top": {}, "order": {"items": [item]}}),
+        details={
+            "item_name": "Áo Polo Nam",
+            "gmv_vnd": 250_000,
+            "item_qty": 1,
+            "complete_time": complete,
+            "validation_month": validation,
+        },
     )
 
 
@@ -153,6 +190,7 @@ class TestReconciliation:
 class TestLedger:
     def test_order_moves_pending_holding_available(self, tmp_path):
         bot = _bot(tmp_path)
+        _financially_ready(bot)
         bot.wallet.set_enabled(True)
         sub = _link(bot)
         _order(bot, sub)
@@ -163,7 +201,8 @@ class TestLedger:
         bot.refresh_wallet(datetime(2026, 10, 22, 1, tzinfo=timezone.utc))
         entry = bot.wallet.entries(USER)[0]
         assert entry["status"] == "holding"
-        assert entry["available_at"] == "2026-11-21T00:00:00Z"  # 30 ngày mặc định
+        # Hardening V1: chưa có ngày vào ví cố định; vào ví khi đủ 30 ngày VÀ kỳ Shopee đã trả.
+        assert entry["available_at"] is None
 
         bot.refresh_wallet(datetime(2026, 11, 21, 1, tzinfo=timezone.utc))
         balance = bot.wallet.balance(USER)
@@ -178,6 +217,7 @@ class TestLedger:
     def test_amount_frozen_once_available_and_clawback_alerts_admin(self, tmp_path):
         bot = _bot(tmp_path, admin_notifications_enabled=True, admin_chat_id=ADMIN)
         bot.admin_notifier = MagicMock()
+        _financially_ready(bot)
         bot.wallet.set_hold_days(0)
         sub = _link(bot)
         _order(bot, sub, status="COMPLETED", complete="2026-10-22T00:00:00Z")
@@ -201,6 +241,7 @@ class TestLedger:
 
     def test_old_order_first_seen_is_not_announced(self, tmp_path):
         bot = _bot(tmp_path)
+        _financially_ready(bot)
         bot.wallet.set_enabled(True)
         sub = _link(bot)
         _order(bot, sub)
@@ -258,6 +299,7 @@ class TestPayout:
     def _ready(self, tmp_path, amount=20_000):
         bot = _bot(tmp_path, admin_notifications_enabled=True, admin_chat_id=ADMIN)
         bot.admin_notifier = MagicMock()
+        _financially_ready(bot)
         bot.wallet.set_enabled(True)
         bot.wallet.set_hold_days(0)
         sub = _link(bot)
@@ -340,6 +382,7 @@ class TestSwitch:
 
     def test_enable_needs_confirm_then_home_and_calc_change(self, tmp_path):
         bot = _bot(tmp_path)
+        _financially_ready(bot)
         ask = _callback(bot, ADMIN, "c:wl:on")
         assert "Bật ví cho khách?" in ask.text
         assert bot.wallet.settings().enabled is False
@@ -375,6 +418,7 @@ class TestHistory:
         _callback(bot, ADMIN, "c:wl:hold:15")
         _callback(bot, ADMIN, "c:wl:hold:15")  # bấm lại cùng mức: không ghi thêm dòng
         _callback(bot, ADMIN, "c:wl:min:20000")
+        _financially_ready(bot)
         _callback(bot, ADMIN, "c:wl:on:ok")
         _callback(bot, ADMIN, "c:wl:off")
         text = self._history(bot)
@@ -456,6 +500,7 @@ class TestPaidBasisWording:
 
     def test_refresh_passes_link_estimate_to_customer(self, tmp_path):
         bot = _bot(tmp_path)
+        _financially_ready(bot)
         bot.wallet.set_enabled(True)
         sub = _link(bot)
         _order(bot, sub, commission=1_000)
