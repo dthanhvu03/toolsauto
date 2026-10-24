@@ -30,7 +30,9 @@ def _vn_now_text() -> str:
 
 
 def _who(telegram_user_id: int, username: str | None) -> str:
-    """Tiêu đề hiện @username; chưa có username thì hiện ID."""
+    """Tiêu đề hiện @username; chưa có username thì hiện ID. Khách Zalo (ID âm, PLAN-082) hiện Zalo #N."""
+    if telegram_user_id < 0:
+        return f"Zalo #{-telegram_user_id}"
     if username:
         return f"@{html.escape(username)}"
     return f"<code>{telegram_user_id}</code>"

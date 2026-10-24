@@ -78,6 +78,8 @@ class Settings:
     customer_notification_test_ids: frozenset[int] = frozenset()
     # PLAN-080: tự đồng bộ Shopee. Mặc định TẮT; chỉ chủ bot bật trong .env (Gate B).
     auto_sync: AutoSyncConfig = AutoSyncConfig()
+    # PLAN-082: token Zalo Bot Platform. Chỉ tiến trình cashback_bot.zalo_bot dùng; trống thì không chạy kênh Zalo.
+    zalo_bot_token: str | None = None
 
 
 def _flag(raw: str | None) -> bool:
@@ -185,6 +187,7 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
             reconcile_lookup=_flag(env.get("SHOPEE_RECONCILE_LOOKUP_ENABLED")),
             reconcile_lookup_max=_bounded_int(env, "SHOPEE_RECONCILE_LOOKUP_MAX", 10, 1, 50),
         ),
+        zalo_bot_token=(env.get("ZALO_BOT_TOKEN") or "").strip() or None,
     )
 
 

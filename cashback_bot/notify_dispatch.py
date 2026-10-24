@@ -104,11 +104,15 @@ class DispatchResult:
 
 
 class Dispatcher:
+    """`telegram`: bộ gửi có send_message(chat_id, html, ...). PLAN-082: channel='zalo' chỉ lấy tin khách ID âm,
+    gửi qua ZaloSender; channel='telegram' không bao giờ lấy tin của khách Zalo."""
+
     def __init__(self, repo: TrackingRepository, telegram, admin_enabled: bool, admin_chat_id: int | None,
-                 customer_enabled: bool, test_ids: frozenset[int] = frozenset()):
+                 customer_enabled: bool, test_ids: frozenset[int] = frozenset(), channel: str = "telegram"):
         self.repo = repo
         self.telegram = telegram
-        self.admin_active = admin_enabled and admin_chat_id is not None
+        self.channel = channel
+        self.admin_active = admin_enabled and admin_chat_id is not None and channel == "telegram"
         self.cfg = NotifyConfig(customer_enabled, test_ids)
 
     def flush(self, limit: int = 10, now: datetime | None = None) -> DispatchResult:
@@ -116,7 +120,7 @@ class Dispatcher:
         result = DispatchResult()
         audiences = ("admin", "customer") if self.admin_active else ("customer",)
         rows = self.repo.list_pending_admin_events(
-            limit=limit, max_attempts=MAX_ATTEMPTS, now=_stamp(moment), audiences=audiences
+            limit=limit, max_attempts=MAX_ATTEMPTS, now=_stamp(moment), audiences=audiences, channel=self.channel
         )
         for row in rows:
             customer = row["audience"] == "customer"

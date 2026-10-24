@@ -623,6 +623,32 @@ CREATE TABLE IF NOT EXISTS customer_notification_prefs (
     updated_at TEXT NOT NULL
 );
 
+-- PLAN-082: khách kênh khác Telegram mang ID nội bộ âm, đi qua cùng sổ link / ví / đối soát.
+CREATE TABLE IF NOT EXISTS channel_identities (
+    internal_user_id INTEGER PRIMARY KEY CHECK (internal_user_id < 0),
+    channel TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    display_name TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (channel, external_id)
+);
+
+-- Tin Zalo đã nhận (chống xử lý trùng theo message_id). −id là update_id cho lõi. Không lưu nội dung khách gửi;
+-- reply_json là câu trả lời của bot, để gửi lại khi lỗi mạng mà không chạy lại thao tác.
+CREATE TABLE IF NOT EXISTS zalo_inbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id TEXT NOT NULL UNIQUE,
+    internal_user_id INTEGER NOT NULL,
+    event_name TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('received', 'replied', 'retry', 'failed')),
+    reply_json TEXT,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    next_retry_at TEXT,
+    received_at TEXT NOT NULL,
+    replied_at TEXT
+);
+
 -- Update Telegram xử lý lỗi (hardening P0-4). Khoá chính là update_id: không ghi trùng.
 -- retrying: còn thử lại, chưa tiến offset. quarantined: đã cách ly, offset đi tiếp, admin xem.
 CREATE TABLE IF NOT EXISTS failed_updates (
@@ -1311,14 +1337,20 @@ class TrackingRepository:
             )
 
     def list_pending_admin_events(self, limit: int = 10, max_attempts: int = 5, now: str | None = None,
-                                  audiences: tuple[str, ...] = ("admin", "customer")) -> list[sqlite3.Row]:
-        """Tin tới lượt gửi: pending, hoặc retry đã tới giờ. Không lấy sending / unknown / failed / suppressed."""
+                                  audiences: tuple[str, ...] = ("admin", "customer"),
+                                  channel: str = "telegram") -> list[sqlite3.Row]:
+        """Tin tới lượt gửi: pending, hoặc retry đã tới giờ. Không lấy sending / unknown / failed / suppressed.
+
+        PLAN-082: Telegram lấy tin admin và tin khách ID dương; Zalo chỉ lấy tin khách ID âm.
+        """
         marks = ", ".join("?" for _ in audiences)
+        scope = "audience = 'customer' AND chat_id < 0" if channel == "zalo" else "(audience = 'admin' OR chat_id > 0)"
         with self.connect() as conn:
             return conn.execute(
                 f"""
                 SELECT * FROM admin_notifications
                 WHERE status IN ('pending', 'retry') AND attempt_count < ? AND audience IN ({marks})
+                  AND {scope}
                   AND (next_retry_at IS NULL OR next_retry_at <= ?)
                 ORDER BY id ASC
                 LIMIT ?
