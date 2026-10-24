@@ -202,7 +202,9 @@ class CustomerDesk:
     def _accept(self, user_id: int, version_id: int, now: datetime) -> BotReply:
         try:
             with self.repo.connect() as conn:
-                _acceptance_id, created = terms.accept(conn, user_id, version_id, "telegram_button", now)
+                # Khách Zalo (ID âm, PLAN-082) đồng ý bằng cách gõ số: ghi đúng nguồn làm bằng chứng.
+                source = "zalo_choice" if user_id < 0 else "telegram_button"
+                _acceptance_id, created = terms.accept(conn, user_id, version_id, source, now)
         except terms.TermsError:
             return BotReply("", toast="Phiên bản này không còn hiện hành. Mở lại /dieukien.", show_alert=True)
         page = self.rules_page(user_id, now)

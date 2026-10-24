@@ -472,6 +472,33 @@ def _check_reconciliation(repo: TrackingRepository, admin_notifier: AdminNotifie
         logger.exception("[Cashback] cập nhật theo dõi đối soát định kỳ thất bại")
 
 
+ZALO_HEARTBEAT_KEY = "zalo_heartbeat"
+ZALO_CHECK_INTERVAL_SEC = 300
+ZALO_DOWN_AFTER_SEC = 600
+
+
+def _check_zalo_health(repo: TrackingRepository, admin_notifier: AdminNotifier, now: float | None = None) -> None:
+    """PLAN-083: tiến trình Zalo ghi nhịp sống mỗi lần nhận tin thành công (~30 giây). Im quá 10 phút → báo admin
+    một lần; chạy lại → báo đã chạy lại. Chưa từng chạy Zalo thì không báo."""
+    moment = time.time() if now is None else now
+    last = repo.get_state("zalo_check_last")
+    try:
+        if last and moment - float(last) < ZALO_CHECK_INTERVAL_SEC:
+            return
+        repo.set_state("zalo_check_last", str(moment))
+        beat = repo.get_state(ZALO_HEARTBEAT_KEY)
+        if not beat:
+            return
+        last_beat = float(beat)
+        down = moment - last_beat > ZALO_DOWN_AFTER_SEC
+        alerted = repo.get_state("zalo_down_alerted") == "1"
+        if down != alerted:
+            admin_notifier.notify_zalo_health(down, last_beat)
+            repo.set_state("zalo_down_alerted", "1" if down else "0")
+    except (ValueError, sqlite3.Error):
+        logger.exception("[Cashback] kiểm tra nhịp sống bot Zalo thất bại")
+
+
 BACKUP_INTERVAL_SEC = 86_400
 BACKUP_RETRY_SEC = 3_600
 
@@ -516,6 +543,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             drain_sync_results(coordinator, service, admin_notifier)
             _check_wallet_refresh(service, repo)
             _check_reconciliation(repo, admin_notifier)
+            _check_zalo_health(repo, admin_notifier)
             _check_backup(service, repo, admin_notifier)
         except KeyboardInterrupt:
             logger.info("stop")

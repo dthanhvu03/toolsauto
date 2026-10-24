@@ -1,14 +1,18 @@
-"""PLAN-082: kênh Zalo dùng chung lõi với Telegram qua ID nội bộ âm."""
+"""PLAN-082 / PLAN-083: kênh Zalo dùng chung lõi với Telegram qua ID nội bộ âm."""
 
 from __future__ import annotations
 
-from cashback_bot import zalo_api
-from cashback_bot.admin_notify import _who
-from cashback_bot.messages import HUONGDAN, BotReply
+import inspect
+
+from cashback_bot import messages, terms, zalo_api
+from cashback_bot.admin_notify import _update_line, _user_line, _who
+from cashback_bot.messages import BotReply
 from cashback_bot.notify_dispatch import Dispatcher
+from cashback_bot.poller import ZALO_DOWN_AFTER_SEC, ZALO_HEARTBEAT_KEY, _check_zalo_health
 from cashback_bot.telegram_api import TelegramDeliveryError
+from cashback_bot.terms_content import DRAFT_SECTIONS, DRAFT_TITLE
 from cashback_bot.zalo_bot import ZaloChannel, ZaloSender, ZaloStore
-from cashback_bot.zalo_render import LINK_CARD, MAX_LEN, flatten, render
+from cashback_bot.zalo_render import BUY_LEAD, ERROR_REPLY, LINK_CARD, MAX_LEN, PHRASES, flatten, render, zalo_wording
 from tests.test_cashback_bot import NOW, FakeClient, payload, service
 
 ZALO_ID = "f06e3b4f5605bf5be614"
@@ -65,7 +69,10 @@ def test_gui_link_tao_link_affiliate_gan_id_am(tmp_path):
     assert link["telegram_user_id"] == -1 and link["telegram_update_id"] < 0 and link["sub_id"]
     text = _texts(zalo)
     assert "Chào bạn" in text and "bot tự động" in text, "tin đầu tiên báo đây là bot tự động"
-    assert f"sub_id={link['sub_id']}" in text and "🛒 Mua trên Shopee: https://" in text, "link mua là URL trần"
+    card, buy = zalo.sent[-2][1], zalo.sent[-1][1]
+    assert "Đã tạo link hoàn tiền" in card and "sub_id=" not in card
+    assert buy.startswith(BUY_LEAD + "\nhttps://") and f"sub_id={link['sub_id']}" in buy, "link mua là tin riêng cuối"
+    assert "Gõ số để chọn:" in buy, "danh sách số nằm cuối cùng"
     assert "<b>" not in text and "&amp;" not in text
     assert all(chat == ZALO_ID for chat, _t, _s in zalo.sent) and zalo.typing == 1
     with bot.repo.connect() as conn:
@@ -99,10 +106,12 @@ def test_the_xem_truoc_tra_huong_dan_bam_x(tmp_path):
     assert "bấm dấu ✕" in _texts(zalo) and "s.shopee.vn/abc123" in _texts(zalo)
 
 
-def test_lenh_go_tat_va_huong_dan_co_meo_zalo(tmp_path):
+def test_lenh_go_tat_va_trang_huong_dan_rieng_zalo(tmp_path):
     _bot, channel, zalo = _channel(tmp_path)
     channel.handle(_update("HD"), now=NOW)
-    assert "Trên Zalo" in _texts(zalo)
+    text = _texts(zalo)
+    assert "Cách dùng trên Zalo" in text and "bấm dấu ✕" in text and "link 🛒 Mua trên Shopee" in text
+    assert "nút" not in text.split("Cách dùng trên Zalo", 1)[1]
 
 
 def test_go_so_chay_dung_nut_va_so_sai_bao_het_han(tmp_path):
@@ -114,7 +123,7 @@ def test_go_so_chay_dung_nut_va_so_sai_bao_het_han(tmp_path):
     target = menu.index("u:p:guide") + 1
     zalo.sent.clear()
     channel.handle(_update(str(target), "m2"), now=NOW)
-    assert flatten(HUONGDAN)[0].splitlines()[0] in _texts(zalo), "số đó là nút Hướng dẫn"
+    assert "Cách dùng trên Zalo" in _texts(zalo), "số đó là nút Hướng dẫn"
     zalo.sent.clear()
     channel.handle(_update("99", "m3"), now=NOW)
     assert "hết hạn" in _texts(zalo)
@@ -194,3 +203,111 @@ def test_zalo_api_tu_choi_dinh_dang_thi_gui_chu_thuan(monkeypatch):
     monkeypatch.setattr(zalo_api.requests, "post", post)
     assert zalo_api.ZaloApi("1:t").send_message("c", "chào", [{"start": 0, "len": 4, "st": ["b"]}]) == "x"
     assert "text_styles" in bodies[0] and "text_styles" not in bodies[1] and len(bodies) == 2
+
+
+def test_cau_chu_telegram_doi_sang_lenh_go_tat_zalo():
+    assert zalo_wording("Gửi yêu cầu tại /hotro.") == "Gửi yêu cầu bằng cách gõ <b>hotro</b>."
+    assert zalo_wording("Gõ /vi để xem số dư.") == "Gõ <b>vi</b> để xem số dư."
+    assert zalo_wording("Mở /dieukien, đọc") == "Gõ <b>dieukien</b>, đọc"
+    assert zalo_wording("xem /cachtinh.") == "xem bằng cách gõ <b>cachtinh</b>."
+    assert zalo_wording("xem ở /dieukien.") == "xem bằng cách gõ <b>dieukien</b>."
+    assert zalo_wording("https://shopee.vn/vi/hotro") == "https://shopee.vn/vi/hotro", "không đụng URL"
+    assert zalo_wording(messages.INVALID_LINK).endswith("Gõ <b>hd</b> để xem cách lấy link.")
+
+
+def test_cau_goc_can_doi_van_con_trong_messages():
+    source = inspect.getsource(messages)
+    missing = [old for old, _new in PHRASES if old not in source]
+    assert missing == [], "câu Telegram đã đổi: cập nhật zalo_render.PHRASES"
+
+
+def test_loi_xu_ly_tra_loi_xin_loi_va_bao_admin(tmp_path, monkeypatch):
+    bot, channel, zalo = _channel(tmp_path)
+    admin = _Admin()
+    channel.admin_notifier = admin
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(bot, "handle_text", boom)
+    channel.handle(_update("don"), now=NOW)
+    assert flatten(ERROR_REPLY)[0] in _texts(zalo)
+    assert admin.failed and admin.failed[0]["error_type"] == "zalo_update_failed"
+    with bot.repo.connect() as conn:
+        assert conn.execute("SELECT status FROM zalo_inbox").fetchone()[0] == "replied"
+
+
+def test_bao_admin_khi_khach_zalo_thu_40(tmp_path):
+    bot, channel, _zalo = _channel(tmp_path)
+    admin = _Admin()
+    channel.admin_notifier = admin
+    for number in range(39):
+        channel.store.identity(f"u{number}", None, NOW)
+    channel.handle(_update("hd", sender="khach-40"), now=NOW)
+    assert admin.capacity == [(40, 50)]
+
+
+def test_nhip_song_zalo_bao_dung_mot_lan_va_bao_chay_lai(tmp_path):
+    bot, _channel_, _zalo = _channel(tmp_path)
+    admin = _Admin()
+    _check_zalo_health(bot.repo, admin, now=1_000.0)
+    assert admin.health == [], "chưa từng chạy Zalo thì không báo"
+    bot.repo.set_state(ZALO_HEARTBEAT_KEY, "1000")
+    _check_zalo_health(bot.repo, admin, now=1_000.0 + ZALO_DOWN_AFTER_SEC + 1)
+    _check_zalo_health(bot.repo, admin, now=1_000.0 + ZALO_DOWN_AFTER_SEC + 400)
+    assert admin.health == [True], "báo dừng một lần"
+    bot.repo.set_state(ZALO_HEARTBEAT_KEY, "2000")
+    _check_zalo_health(bot.repo, admin, now=2_400.0)
+    assert admin.health == [True, False]
+
+
+def test_admin_dong_chi_tiet_zalo():
+    assert _user_line(-1) == "Zalo <code>#1</code>" and _update_line(-5) == "Tin Zalo <code>#5</code>"
+    assert _user_line(111) == "User <code>111</code>" and _update_line(None) == "Update <code>-</code>"
+
+
+def test_dong_y_dieu_khoan_qua_zalo_ghi_nguon_zalo_va_hien_xac_nhan(tmp_path):
+    bot, channel, zalo = _channel(tmp_path)
+    with bot.repo.connect() as conn:
+        version = _publish_terms(conn)
+    channel.handle(_update("dieukien", "m1"), now=NOW)
+    menu = channel.store.menu(-1, NOW)
+    assert "Gõ số của từng mục để đọc." in _texts(zalo)
+    zalo.sent.clear()
+    channel.handle(_update(str(menu.index(f"u:t:ok:{version}") + 1), "m2"), now=NOW)
+    assert _texts(zalo).startswith("Đã ghi nhận bạn đồng ý điều khoản.")
+    with bot.repo.connect() as conn:
+        row = conn.execute("SELECT telegram_user_id, acceptance_source FROM customer_terms_acceptances").fetchone()
+    assert tuple(row) == (-1, "zalo_choice")
+
+
+def test_cai_dat_thong_bao_go_so_de_bat_tat(tmp_path):
+    _bot, channel, zalo = _channel(tmp_path)
+    channel.handle(_update("thongbao"), now=NOW)
+    assert "Gõ số để bật / tắt." in _texts(zalo) and "Bấm" not in _texts(zalo).split("Cài đặt thông báo", 1)[1]
+
+
+def _publish_terms(conn) -> int:
+    version_id = terms.create_draft(conn, "V1", DRAFT_TITLE, DRAFT_SECTIONS, "admin:test", NOW)
+    terms.publish(conn, version_id, terms.get(conn, version_id).content_hash, "admin:test", NOW)
+    return version_id
+
+
+class _Admin:
+    def __init__(self):
+        self.failed, self.capacity, self.health = [], [], []
+
+    def notify_request_failed(self, **kwargs):
+        self.failed.append(kwargs)
+
+    def notify_zalo_capacity(self, count, limit):
+        self.capacity.append((count, limit))
+
+    def notify_zalo_health(self, down, last_beat):
+        self.health.append(down)
+
+    def notify_new_user(self, *args):
+        pass
+
+    def notify_link_sent(self, update_id):
+        pass

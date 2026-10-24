@@ -38,6 +38,20 @@ def _who(telegram_user_id: int, username: str | None) -> str:
     return f"<code>{telegram_user_id}</code>"
 
 
+def _user_line(user_id: int | None) -> str:
+    """Dòng chi tiết người dùng. Khách Zalo mang ID nội bộ âm (PLAN-082): hiện Zalo #N."""
+    if user_id is None:
+        return "User <code>-</code>"
+    return f"Zalo <code>#{-user_id}</code>" if user_id < 0 else f"User <code>{user_id}</code>"
+
+
+def _update_line(update_id: int | None) -> str:
+    """Update Telegram, hoặc tin Zalo thứ N (update âm, PLAN-082)."""
+    if update_id is None:
+        return "Update <code>-</code>"
+    return f"Tin Zalo <code>#{-update_id}</code>" if update_id < 0 else f"Update <code>{update_id}</code>"
+
+
 def _details(*lines: str) -> str:
     """Mã kỹ thuật gom vào khối thu gọn, bấm mới mở."""
     return "<blockquote expandable>" + "\n".join(lines) + "</blockquote>"
@@ -202,7 +216,7 @@ class AdminNotifier:
             f"🆕 <b>Người dùng mới</b> · {_who(telegram_user_id, username)}\n\n"
             f"👥 Tổng: <b>{total}</b> người dùng\n"
             f"🕓 {_vn_now_text()}\n"
-            + _details(f"User <code>{telegram_user_id}</code>")
+            + _details(_user_line(telegram_user_id))
         )
         self.repo.enqueue_admin_event(
             event_key=f"new_user:{telegram_user_id}",
@@ -222,7 +236,7 @@ class AdminNotifier:
             f"🕓 {_vn_now_text()}\n"
             "Mở: /admin → 📩 Hỗ trợ\n"
             + _details(
-                f"User <code>{ticket.telegram_user_id}</code>",
+                _user_line(ticket.telegram_user_id),
                 f"Link <code>{ticket.link_id or '-'}</code>",
                 f"Đơn <code>{html.escape(short_order(ticket.conversion_id)) if ticket.conversion_id else '-'}</code>",
             )
@@ -274,10 +288,10 @@ class AdminNotifier:
             + "".join(f"{line}\n" for line in split)
             + f"🕓 {_vn_now_text()}\n"
             + _details(
-                f"User <code>{row.telegram_user_id}</code>",
+                _user_line(row.telegram_user_id),
                 f"Item <code>{row.item_id or '-'}</code>",
                 f"Sub <code>{row.sub_id}</code>",
-                f"Update <code>{update_id}</code>",
+                _update_line(update_id),
                 *([f"Chính sách <code>{html.escape(label)}</code>"] if label else []),
             )
         )
@@ -315,8 +329,8 @@ class AdminNotifier:
             f"📌 Trạng thái: <b>{html.escape(status)}</b>\n"
             f"🕓 {_vn_now_text()}\n"
             + _details(
-                f"Update <code>{'-' if update_id is None else update_id}</code>",
-                f"User <code>{'-' if telegram_user_id is None else telegram_user_id}</code>",
+                _update_line(update_id),
+                _user_line(telegram_user_id),
             )
         )
         # Lỗi không gắn update (poll, vòng lặp) thêm mốc giây: trước đây khoá trùng nên chỉ báo một lần trong đời DB.
@@ -467,6 +481,45 @@ class AdminNotifier:
         self.repo.enqueue_admin_event(
             event_key=f"wallet_clawback:{transition.conversion_id}",
             event_type="WALLET_CLAWBACK",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_zalo_health(self, down: bool, last_beat: float) -> None:
+        """PLAN-083: bot Telegram thấy tiến trình Zalo im quá lâu (dừng hoặc mất kết nối), hoặc đã chạy lại."""
+        if not self._active():
+            return
+        seen = datetime.fromtimestamp(last_beat, timezone.utc).astimezone(ICT).strftime("%H:%M · %d/%m")
+        if down:
+            body = (
+                "🔴 <b>Bot Zalo không hoạt động</b>\n\n"
+                f"Lần cuối nhận tin được từ Zalo: {seen}.\n"
+                "Tin khách Zalo gửi lúc này sẽ mất (Zalo không giữ lại).\n"
+                "Kiểm tra <code>logs/cashback_zalo.log</code>, rồi khởi động lại:\n"
+                "<code>cd /home/vu/toolsauto &amp;&amp; umask 077 &amp;&amp; setsid nohup .venv/bin/python -m "
+                "cashback_bot.zalo_bot &gt;&gt; logs/cashback_zalo.log 2&gt;&amp;1 &amp;</code>"
+            )
+        else:
+            body = f"🟢 <b>Bot Zalo hoạt động lại</b>\n🕓 {_vn_now_text()}"
+        self.repo.enqueue_admin_event(
+            event_key=f"zalo_{'down' if down else 'up'}:{int(last_beat)}",
+            event_type="ZALO_DOWN" if down else "ZALO_UP",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_zalo_capacity(self, count: int, limit: int) -> None:
+        """PLAN-083: gói Zalo BASIC giới hạn số người dùng mỗi bot."""
+        if not self._active():
+            return
+        head = "🔴 <b>Bot Zalo đã chạm trần gói miễn phí</b>" if count >= limit else "🟡 <b>Bot Zalo sắp chạm trần</b>"
+        body = (
+            f"{head}\n\n👥 {count}/{limit} khách Zalo (gói BASIC).\n"
+            "Khách mới có thể không nhắn được bot. Cân nhắc lên gói Pro khi Zalo mở bán."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"zalo_capacity:{count}",
+            event_type="ZALO_CAPACITY",
             chat_id=int(self.chat_id),
             message_html=body,
         )

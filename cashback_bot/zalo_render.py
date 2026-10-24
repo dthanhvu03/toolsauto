@@ -3,17 +3,19 @@
 Zalo không có nút và bỏ link trong thẻ <a> (đã thử thật 2026-10-24), nên:
 - chữ gửi dạng thuần kèm `text_styles` (đậm / nghiêng / gạch chân / gạch ngang), không gửi HTML: tên sản phẩm có
   ký tự & < > không bị hiểu nhầm;
-- <a href="URL">nhãn</a> thành «nhãn: URL»; nút Mua thành «🛒 Mua trên Shopee: URL» (URL trần, bấm được);
+- <a href="URL">nhãn</a> thành «nhãn: URL»; nút Mua thành một tin riêng ngay sau thẻ báo giá (URL trần, bấm được);
 - nút u:* thành danh sách «1 · …»; khách gõ số thì tiến trình Zalo chạy đúng nút đó;
+- câu chữ dùng chung với Telegram: «/hotro», «bấm nút…» đổi sang lệnh gõ tắt của Zalo (PLAN-083);
 - tin dài cắt theo dòng, mỗi tin tối đa 2000 ký tự.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-from cashback_bot.messages import BUY_BUTTON, BotReply
+from cashback_bot.messages import HUONGDAN, BotReply
 
 MAX_LEN = 2000
 STYLE_CODES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "ins": "u", "s": "s", "del": "s", "strike": "s"}
@@ -31,12 +33,45 @@ LINK_CARD = (
     "1. Dán link, bấm dấu ✕ trên thẻ xem trước rồi mới gửi.\n"
     "2. Hoặc xoá phần https:// ở đầu link, ví dụ: s.shopee.vn/abc123"
 )
-GUIDE_TIP = (
-    "\n\n📱 <b>Trên Zalo:</b> khi dán link, bấm dấu ✕ trên thẻ xem trước rồi mới gửi "
-    "(hoặc xoá phần https:// ở đầu link)."
+GUIDE = (
+    "📖 <b>Cách dùng trên Zalo</b>\n\n"
+    "1. Mở sản phẩm trên Shopee, bấm <b>Chia sẻ</b> rồi <b>Sao chép liên kết</b>.\n"
+    "2. Dán link vào đây. Zalo hiện thẻ xem trước thì bấm dấu <b>✕</b> trên thẻ rồi mới gửi "
+    "(hoặc xoá phần https:// ở đầu link).\n"
+    "3. Bot gửi lại số tiền hoàn dự kiến và link <b>🛒 Mua trên Shopee</b>.\n"
+    "4. Bấm link đó để mở sản phẩm và đặt hàng như bình thường.\n\n"
+    "Gõ <b>don</b> để xem đơn, <b>hotro</b> khi cần hỗ trợ, <b>menu</b> để về trang chủ.\n\n"
+    "Bot không thu phí sử dụng. Bạn thanh toán trực tiếp trên Shopee.\n\n"
+    "ⓘ Số hoàn là ước tính, không bảo đảm đơn hàng được ghi nhận hay được hoàn tiền."
 )
+BUY_LEAD = "👉 Bấm link dưới để mua trên Shopee:"
+# Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.
+PHRASES = (
+    ("Bấm nút dưới hoặc gõ /huongdan", "Gõ /huongdan"),
+    ("nút <b>🛒 Mua trên Shopee</b>", "link <b>🛒 Mua trên Shopee</b>"),
+    ("Bấm nút đó", "Bấm link đó"),
+    ("Bấm chọn ngân hàng của bạn.", "Gõ số để chọn ngân hàng của bạn."),
+    ("Bạn bấm chọn ngân hàng trước", "Bạn chọn ngân hàng trước"),
+    ("Bấm Tài khoản nhận tiền để khai", "Chọn Tài khoản nhận tiền để khai"),
+    ("đọc và bấm đồng ý bản hiện hành", "đọc và chọn đồng ý bản hiện hành"),
+    ("Bấm từng mục để đọc.", "Gõ số của từng mục để đọc."),
+    ("nếu đồng ý thì bấm nút cuối.", "nếu đồng ý thì gõ số của dòng ✅ Tôi đã đọc và đồng ý."),
+    ("Bấm để bật / tắt.", "Gõ số để bật / tắt."),
+)
+# Lệnh Telegram → lệnh gõ tắt Zalo (zalo_bot.SHORTCUTS nhận cả hai).
+COMMANDS = {
+    "huongdan": "hd", "donhang": "don", "hotro": "hotro", "vi": "vi", "dieukien": "dieukien",
+    "cachtinh": "cachtinh", "thongbao": "thongbao", "hang": "hang", "start": "menu",
+}
+_CMD = "|".join(COMMANDS)
+_VERB_CMD = re.compile(rf"\b(Gõ|gõ|Nhắn|nhắn|Mở|mở) /({_CMD})\b")
+_PREP_CMD = re.compile(rf"\b(?:tại|qua|ở) /({_CMD})\b")
+_SEE_CMD = re.compile(rf"\bxem /({_CMD})\b")
+_BARE_CMD = re.compile(rf"(?<![\w/.:])/({_CMD})\b")
+_ARROWS = ("◀️", "▶️")
 NON_TEXT = "🙏 Bot chỉ đọc được tin chữ. Bạn gửi link sản phẩm Shopee dạng chữ nhé. Gõ <b>hd</b> để xem hướng dẫn."
 NUMBER_STALE = "Danh sách lựa chọn đã hết hạn hoặc không có số này. Gõ <b>menu</b> để mở trang chủ."
+ERROR_REPLY = "⚠️ Bot đang gặp lỗi khi xử lý tin này. Bạn thử lại sau ít phút nhé, hoặc gõ <b>hotro</b>."
 
 Style = tuple[int, int, str]
 
@@ -98,6 +133,23 @@ class _Flatten(HTMLParser):
             self.link_text.append(data)
 
 
+def zalo_wording(html_text: str) -> str:
+    """Đổi câu chữ kiểu Telegram sang Zalo: «Gõ /hotro» → «Gõ hotro», «tại /hotro» → «bằng cách gõ hotro»."""
+    text = html_text or ""
+    for old, new in PHRASES:
+        text = text.replace(old, new)
+    text = _VERB_CMD.sub(lambda m: f"{'Gõ' if m.group(1)[0].isupper() else 'gõ'} <b>{COMMANDS[m.group(2)]}</b>", text)
+    text = _PREP_CMD.sub(lambda m: f"bằng cách gõ <b>{COMMANDS[m.group(1)]}</b>", text)
+    text = _SEE_CMD.sub(lambda m: f"xem bằng cách gõ <b>{COMMANDS[m.group(1)]}</b>", text)
+    return _BARE_CMD.sub(lambda m: f"gõ <b>{COMMANDS[m.group(1)]}</b>", text)
+
+
+def _label(label: str) -> str:
+    for arrow in _ARROWS:
+        label = label.replace(arrow, "")
+    return label.strip()
+
+
 def flatten(html_text: str) -> tuple[str, list[Style]]:
     """HTML Telegram → (chữ thuần, style). Thẻ khác (code, pre, blockquote…) bỏ thẻ, giữ chữ."""
     parser = _Flatten()
@@ -151,8 +203,17 @@ def split(text: str, styles: list[Style]) -> list[ZaloMessage]:
 
 
 def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
-    """BotReply → (các tin Zalo, callback theo số 1..n). Tin rỗng (chỉ toast) thì gửi nội dung toast."""
-    text, styles = flatten(reply.text or reply.toast or "")
+    """BotReply → (các tin Zalo, callback theo số 1..n). Tin rỗng (chỉ toast) thì gửi nội dung toast.
+
+    Có nút Mua: thẻ báo giá một tin, link mua (kèm danh sách số) một tin ngay sau, để link nằm cuối, dễ bấm.
+    """
+    # Telegram hiện toast thành popup; Zalo không có popup nên đặt toast lên đầu tin.
+    body = f"{reply.toast}\n\n{reply.text}" if reply.text and reply.toast else reply.text or reply.toast or ""
+    card_text, card_styles = flatten(zalo_wording(GUIDE if body == HUONGDAN else body))
+    if reply.button_url:
+        text, styles = "", []
+    else:
+        text, styles = card_text, card_styles
 
     def add(piece: str, bold: bool = False) -> None:
         nonlocal text
@@ -161,13 +222,15 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         text += piece
 
     if reply.button_url:
-        add("\n\n")
-        add(BUY_BUTTON, bold=True)
-        add(f": {reply.button_url}")
+        add(BUY_LEAD, bold=True)
+        add(f"\n{reply.button_url}")
     choices = [(label, data) for row in reply.inline_keyboard or () for label, data in row if data.startswith("u:")]
     if choices:
         add("\n\n")
         add(MENU_TITLE, bold=True)
         for number, (label, _data) in enumerate(choices, start=1):
-            add(f"\n{number} · {label}")
-    return split(text, sorted(styles)), tuple(data for _label, data in choices)
+            add(f"\n{number} · {_label(label)}")
+    messages = split(text, sorted(styles))
+    if reply.button_url:
+        messages = split(card_text, sorted(card_styles)) + messages
+    return messages, tuple(data for _name, data in choices)

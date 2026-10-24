@@ -22,14 +22,14 @@ from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.notify_dispatch import Dispatcher
-from cashback_bot.poller import _acquire_single_process_lock, _default_dotenv, configure_logging
+from cashback_bot.poller import ZALO_HEARTBEAT_KEY, _acquire_single_process_lock, _default_dotenv, configure_logging
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import error_brief
 from cashback_bot.service import CashbackService
 from cashback_bot.shopee_url import parse_shopee_target
 from cashback_bot.telegram_api import TelegramDeliveryError
 from cashback_bot.zalo_api import ZaloApi
-from cashback_bot.zalo_render import GUIDE_TIP, LINK_CARD, NON_TEXT, NUMBER_STALE, WELCOME, ZaloMessage, render
+from cashback_bot.zalo_render import ERROR_REPLY, LINK_CARD, NON_TEXT, NUMBER_STALE, WELCOME, ZaloMessage, render
 
 logger = logging.getLogger("cashback_bot")
 
@@ -39,6 +39,9 @@ MENU_TTL = timedelta(minutes=30)
 RETRY_LIMIT = 5
 TEXT_EVENT = "message.text.received"
 UNSUPPORTED_EVENT = "message.unsupported.received"
+# PLAN-083: trần gói BASIC và các mốc báo admin. Nhịp sống (ZALO_HEARTBEAT_KEY) do poller._check_zalo_health canh.
+BASIC_LIMIT = 50
+CAPACITY_ALERTS = (40, 50)
 # Lệnh gõ tắt (Zalo không có nút lệnh). Lệnh /… của Telegram vẫn dùng được.
 SHORTCUTS = {
     "menu": "/start", "start": "/start", "batdau": "/start", "hd": "/huongdan", "huongdan": "/huongdan",
@@ -134,6 +137,13 @@ class ZaloStore:
     def set_menu(self, internal_id: int, items: tuple[str, ...], now: datetime) -> None:
         self.repo.set_state(f"zalo_menu:{internal_id}", json.dumps({"at": _stamp(now), "items": list(items)}))
 
+    def customer_count(self) -> int:
+        with self.repo.connect() as conn:
+            return int(conn.execute("SELECT COUNT(*) FROM channel_identities WHERE channel = ?", (CHANNEL,)).fetchone()[0])
+
+    def beat(self, moment: float | None = None) -> None:
+        self.repo.set_state(ZALO_HEARTBEAT_KEY, str(time.time() if moment is None else moment))
+
 
 class ZaloChannel:
     def __init__(self, service: CashbackService, store: ZaloStore, api: ZaloApi, admin_notifier=None):
@@ -158,10 +168,20 @@ class ZaloChannel:
         if row["status"] != "received":
             return
         update_id = -int(row["id"])
-        reply = self._reply(internal, update, update_id, external, moment)
+        try:
+            reply = self._reply(internal, update, update_id, external, moment)
+        except Exception:
+            # Khách vẫn nhận câu trả lời; admin được báo (chống spam theo loại lỗi ở AdminNotifier).
+            logger.exception("[Cashback] zalo xử lý tin inbox=%s thất bại", row["id"])
+            reply = BotReply(ERROR_REPLY)
+            if self.admin_notifier:
+                self.admin_notifier.notify_request_failed(
+                    error_type="zalo_update_failed", update_id=update_id, telegram_user_id=internal, status="ERROR"
+                )
         messages, menu = render(reply)
         if is_new:
             messages = render(BotReply(WELCOME))[0] + messages
+            self._capacity_check()
         self.store.set_menu(internal, menu, moment)
         self.store.save_reply(int(row["id"]), messages)
         if self._deliver(int(row["id"]), external, messages, 0, moment):
@@ -187,10 +207,12 @@ class ZaloChannel:
                 self.api.send_chat_action(external, "typing")
             except requests.RequestException as exc:
                 logger.warning("[Cashback] zalo typing failed: %s", error_brief(exc))
-        reply = self.service.handle_text(internal, None, command, update_id=update_id, now=now)
-        if command == "/huongdan":
-            reply = BotReply(reply.text + GUIDE_TIP, button_url=reply.button_url, inline_keyboard=reply.inline_keyboard)
-        return reply
+        return self.service.handle_text(internal, None, command, update_id=update_id, now=now)
+
+    def _capacity_check(self) -> None:
+        count = self.store.customer_count()
+        if count in CAPACITY_ALERTS and self.admin_notifier:
+            self.admin_notifier.notify_zalo_capacity(count, BASIC_LIMIT)
 
     def _press(self, internal: int, data: str) -> BotReply:
         """Chạy nút u:* qua đúng đường callback của Telegram (chat riêng, chat_id = khách)."""
@@ -301,6 +323,7 @@ def main() -> None:
         me = api.get_me()
         logger.info("zalo start bot=%s type=%s customer_notify=%s", me.get("display_name"), me.get("account_type"),
                     settings.customer_notifications_enabled)
+        store.beat()
     except requests.RequestException as exc:
         logger.error("zalo getMe failed: %s", type(exc).__name__)
     _loop(channel, dispatcher, api)
@@ -309,7 +332,9 @@ def main() -> None:
 def _loop(channel: ZaloChannel, dispatcher: Dispatcher, api: ZaloApi) -> None:
     while True:
         try:
-            for update in api.get_updates():
+            updates = api.get_updates()
+            channel.store.beat()
+            for update in updates:
                 try:
                     channel.handle(update)
                 except Exception:
