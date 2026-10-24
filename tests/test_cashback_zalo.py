@@ -68,6 +68,8 @@ def test_gui_link_tao_link_affiliate_gan_id_am(tmp_path):
     assert f"sub_id={link['sub_id']}" in text and "🛒 Mua trên Shopee: https://" in text, "link mua là URL trần"
     assert "<b>" not in text and "&amp;" not in text
     assert all(chat == ZALO_ID for chat, _t, _s in zalo.sent) and zalo.typing == 1
+    with bot.repo.connect() as conn:
+        assert conn.execute("SELECT delivery_status FROM link_requests").fetchone()[0] == "sent"
 
 
 def test_zalo_gui_lai_cung_message_id_khong_tao_link_moi(tmp_path):
@@ -129,7 +131,7 @@ def test_loi_mang_luu_cau_tra_loi_gui_lai_khong_chay_lai(tmp_path):
     channel.retry_due(now=NOW.replace(hour=23))
     with bot.repo.connect() as conn:
         assert conn.execute("SELECT status FROM zalo_inbox").fetchone()[0] == "replied"
-        assert conn.execute("SELECT COUNT(*) FROM link_requests").fetchone()[0] == 1
+        assert tuple(conn.execute("SELECT COUNT(*), MAX(delivery_status) FROM link_requests").fetchone()) == (1, "sent")
     assert bot.client.calls == client_calls, "gửi lại câu đã lưu, không gọi lại nguồn giá"
     assert "sub_id=" in _texts(zalo)
 

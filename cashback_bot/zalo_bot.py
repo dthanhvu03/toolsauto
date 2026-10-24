@@ -164,8 +164,8 @@ class ZaloChannel:
             messages = render(BotReply(WELCOME))[0] + messages
         self.store.set_menu(internal, menu, moment)
         self.store.save_reply(int(row["id"]), messages)
-        if self._deliver(int(row["id"]), external, messages, 0, moment) and self.admin_notifier:
-            self.admin_notifier.notify_link_sent(update_id)
+        if self._deliver(int(row["id"]), external, messages, 0, moment):
+            self._delivered(update_id)
 
     def _reply(self, internal: int, update: dict, update_id: int, external: str, now: datetime) -> BotReply:
         event = update.get("event_name")
@@ -229,8 +229,13 @@ class ZaloChannel:
                 self.store.finish(int(row["id"]), "failed", int(row["attempt_count"]), "no_identity")
                 continue
             if self._deliver(int(row["id"]), external, _load(row["reply_json"]), int(row["attempt_count"]), moment):
-                if self.admin_notifier:
-                    self.admin_notifier.notify_link_sent(-int(row["id"]))
+                self._delivered(-int(row["id"]))
+
+    def _delivered(self, update_id: int) -> None:
+        """Như luồng Telegram: link (nếu tin này tạo link) ghi đã giao, báo admin «Đã gửi link»."""
+        self.service.repo.mark_delivered(update_id)
+        if self.admin_notifier:
+            self.admin_notifier.notify_link_sent(update_id)
 
 
 class ZaloSender:
