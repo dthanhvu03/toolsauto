@@ -26,7 +26,7 @@ MENU_KEYBOARD: Keyboard = (
     (("🧾 Thuế & phí", "c:menu:fee"), ("🧮 Mô phỏng", "c:menu:sim")),
     (("📊 Lịch sử", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
     (("📩 Hỗ trợ", "c:hp:home"), ("📋 Điều khoản", "c:tm:home")),
-    (("⚖️ Sẵn sàng chi trả", "c:rd:home"),),
+    (("⚖️ Sẵn sàng chi trả", "c:rd:home"), ("🔔 Thông báo khách", "c:nt:home")),
 )
 
 NAV_KEYBOARD: Keyboard = (BACK_HOME,)

@@ -51,6 +51,8 @@ class Settings:
     admin_user_ids: frozenset[int] = frozenset()
     # PLAN-077: bắt buộc đồng ý điều khoản trước khi tạo link mới. Mặc định tắt; chỉ bật khi chủ bot duyệt.
     terms_required: bool = False
+    # PLAN-079: thông báo đơn hàng chủ động cho khách. Mặc định tắt; chỉ bật khi chủ bot duyệt (Gate B).
+    customer_notifications_enabled: bool = False
 
 
 def _flag(raw: str | None) -> bool:
@@ -145,6 +147,7 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
         estimate_rounding_unit=_bounded_int(env, "CASHBACK_ESTIMATE_ROUNDING_UNIT", 1, 1, 1_000),
         admin_user_ids=_allowed_ids(env.get("CASHBACK_ADMIN_USER_IDS")),
         terms_required=_flag(env.get("CASHBACK_TERMS_REQUIRED")),
+        customer_notifications_enabled=_flag(env.get("CUSTOMER_NOTIFICATIONS_ENABLED")),
     )
 
 

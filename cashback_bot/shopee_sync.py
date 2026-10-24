@@ -284,6 +284,9 @@ class ShopeeSyncEngine:
                 msg += f" {len(self._changes)} thay đổi hoa hồng/trạng thái đã ghi lịch sử."
             if failed:
                 msg += f" ⚠️ Shopee từ chối phần {failed}, xem log bot. Đơn chưa đọc được giữ nguyên số cũ."
+            queued, skipped = self.repo.customer_events_since(now_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            if queued or skipped:
+                msg += f" Thông báo khách: {queued} chờ gửi, {skipped} bỏ qua (xem /admin → 🔔)."
             significant = [(sn, change) for sn, change in self._changes if change.significant]
             if significant and self.admin_notifier:
                 self.admin_notifier.notify_commission_changes(run_id, significant)

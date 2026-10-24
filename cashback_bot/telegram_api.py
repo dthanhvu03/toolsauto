@@ -103,7 +103,8 @@ class TelegramApi:
         html: str,
         reply_markup: dict | None = None,
         disable_notification: bool = False,
-    ) -> None:
+    ) -> int | None:
+        """Gửi tin. Trả message_id Telegram (None nếu response không có)."""
         body: dict = {
             "chat_id": chat_id,
             "text": html,
@@ -139,6 +140,8 @@ class TelegramApi:
             raise TelegramDeliveryError("transient") from exc
         if not payload.get("ok"):
             raise TelegramDeliveryError("permanent", status_code=response.status_code)
+        message_id = (payload.get("result") or {}).get("message_id") if isinstance(payload.get("result"), dict) else None
+        return message_id if isinstance(message_id, int) else None
 
     def edit_message_text(
         self,

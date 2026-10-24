@@ -451,7 +451,7 @@ def test_set_my_commands_co_lenh_thong_tin(monkeypatch):
     assert api.set_my_commands() is True
     commands = captured["json"]["commands"]
     names = [item["command"] for item in commands]
-    assert names == ["start", "huongdan", "dieukien", "cachtinh", "hotro", "help"]
+    assert names == ["start", "huongdan", "dieukien", "cachtinh", "donhang", "hotro", "thongbao", "help"]
     assert all(len(item["description"]) <= 256 for item in commands)
 
 
@@ -726,7 +726,7 @@ def test_admin_send_loi_khong_anh_huong_khach(tmp_path):
         "SELECT attempt_count, status FROM admin_notifications ORDER BY id DESC LIMIT 1"
     ).fetchone()
     assert ev[0] >= 1
-    assert ev[1] == "pending"
+    assert ev[1] == "retry", "PLAN-079: lỗi tạm thì chờ thử lại có giãn cách, không chặn tin khách"
 
 
 def test_api_loi_notify_admin_khong_lo_secret(tmp_path):

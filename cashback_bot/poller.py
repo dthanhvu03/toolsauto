@@ -67,7 +67,11 @@ def main() -> None:
         telegram=telegram,
         enabled=settings.admin_notifications_enabled,
         chat_id=settings.admin_chat_id,
+        customer_notifications_enabled=settings.customer_notifications_enabled,
     )
+    stuck = repo.recover_sending()
+    if stuck:
+        logger.warning("[Cashback] %s tin đang gửi dở lúc dừng bot, chuyển 'unknown' (không tự gửi lại)", stuck)
     service = CashbackService(settings, repo, client, admin_notifier=admin_notifier)
     _register_profile(telegram, settings.admin_user_ids, wallet_on=service.wallet.settings().enabled)
     logger.info(

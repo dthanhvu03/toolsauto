@@ -87,6 +87,7 @@ from cashback_bot.admin_ui import (
     stats_keyboard,
     stats_text,
 )
+from cashback_bot.admin_customer_notify import CustomerNotifyAdmin
 from cashback_bot.admin_readiness import ReadinessAdmin
 from cashback_bot.admin_settlement import SettlementAdmin
 from cashback_bot.admin_support import SupportAdmin
@@ -228,6 +229,8 @@ class AdminPanel:
     # Dự phòng khác và đơn vị làm tròn của V1.2 (.env). Dùng cả khi so sánh V1.2 lúc đang chạy V1.1.
     other_reserve_vnd: int = 0
     rounding_unit: int = 1
+    # PLAN-079: cờ CUSTOMER_NOTIFICATIONS_ENABLED, để màn 🔔 nói đúng trạng thái.
+    customer_notifications_enabled: bool = False
     _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang được hỏi hoa hồng giả định cho 🧮 Mô phỏng: user_id → hạn chờ.
     _sim_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
@@ -339,6 +342,10 @@ class AdminPanel:
             return self._support().route(user_id, data, now)
         if data.startswith("c:tm:"):
             return TermsAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
+        if data.startswith("c:nt:"):
+            return CustomerNotifyAdmin(
+                TrackingRepository(self.db_path), self.customer_notifications_enabled, audit=self._log_setting
+            ).route(user_id, data, now)
         if data.startswith("c:rd:"):
             return ReadinessAdmin(TrackingRepository(self.db_path)).route(user_id, data, now)
         if data == "c:menu:shopee":
@@ -1502,7 +1509,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     action = row["action"]
     if action not in {
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync",
-        "commission_review_ack", "terms_draft", "terms_publish", "bank_verified",
+        "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1514,6 +1521,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action == "wallet_min_withdraw":
         old = format_vnd(int(before["vnd"])) if "vnd" in before else "-"
         return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
+    if action == "customer_notify_retry":
+        return f"Thông báo khách: gửi lại tin #{after.get('id', '-')}"
     if action == "bank_verified":
         return f"Ví khách: xác minh tài khoản ••••{html.escape(str(after.get('last4', '-')))} (yêu cầu #{after.get('payout', '-')})"
     if action in {"terms_draft", "terms_publish"}:

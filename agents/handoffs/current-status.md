@@ -1,3 +1,18 @@
+## Phiên 2026-10-24 (ar) — PLAN-079 Customer Order Tracking & Notifications (CODE READY, CHƯA triển khai)
+
+Claude Code, chủ bot giao PLAN-079. Worktree `/home/vu/toolsauto-cashback-notifications`, nhánh `cursor/cashback-plan079-notifications`. Báo cáo `reports/CASHBACK_PLAN079_CUSTOMER_NOTIFICATIONS.md`, ADR-056.
+
+- Audit: tin khách (ví, chi trả, hỗ trợ) đi chung `admin_notifications` với tin admin; chỉ xả khi thông báo admin bật; không giãn cách khi thử lại, không đọc retry_after, không biết khách chặn bot, không lưu message_id. Chưa có thông báo đơn và chưa có trang xem đơn.
+- Đã làm: `/donhang` (tổng quan, phân trang, chi tiết, chỉ đơn của chính khách); `/thongbao` (4 loại, riêng từng khách); sự kiện đơn sinh trong transaction ghi đơn (`conversion_hooks` + SAVEPOINT); khoá chống trùng theo sự kiện, gom một tin mỗi đơn mỗi lần đồng bộ, ngưỡng 500đ/10%, tiền theo snapshot; một bộ gửi chung `notify_dispatch` (429 theo retry_after, 5xx giãn cách, 4xx → failed + đánh dấu chặn bot, không rõ kết quả → unknown không tự gửi lại, dừng giữa lúc gửi → unknown); cờ `CUSTOMER_NOTIFICATIONS_ENABLED` mặc định tắt (sự kiện khi tắt → suppressed, không gửi dồn); mốc kích hoạt chống báo đơn lịch sử; màn admin 🔔 Thông báo khách; số tin khách trong tin kết quả đồng bộ.
+- Proof: **588 passed** (+33). Diễn tập trên bản sao DB production: ghi lại y hệt 2 đơn → 0 tin; `/donhang` đúng số; ví khoá; integrity ok.
+- KHÔNG merge, KHÔNG restart. Gate B (bật thông báo đơn) NOT AUTHORIZED.
+
+Next:
+- Chủ bot duyệt Gate A. Gate B: thử với tài khoản test, duyệt ngưỡng và câu chữ, rồi bật cờ.
+- Đề xuất PLAN riêng cho tự đồng bộ Shopee nếu muốn tin gần thời gian thực.
+
+---
+
 ## Phiên 2026-10-24 (aq) — Sửa chữ hai điều kiện hạn mức (màn Sẵn sàng chi trả)
 
 - Chủ bot duyệt. `main` `c4b9b1a`, backup trước `data/backups/cashback-20261024T073103Z.sqlite`. Chủ bot restart 07:36:31 UTC, PID 631959.

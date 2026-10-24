@@ -176,7 +176,9 @@ def _order(
 def _customer_events(bot) -> list[str]:
     with bot.repo.connect() as conn:
         rows = conn.execute(
-            "SELECT message_html FROM admin_notifications WHERE chat_id = ? ORDER BY id", (USER,)
+            # Dòng 'suppressed' (PLAN-079: cờ tắt, đơn lịch sử…) không bao giờ được gửi.
+            "SELECT message_html FROM admin_notifications WHERE chat_id = ? AND status != 'suppressed' ORDER BY id",
+            (USER,)
         ).fetchall()
     return [row[0] for row in rows]
 

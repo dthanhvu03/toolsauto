@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from cashback_bot import support, terms
+from cashback_bot import customer_orders, support, terms
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import (
     DIEUKIEN,
@@ -20,8 +20,12 @@ from cashback_bot.messages import (
     SUPPORT_CLOSED,
     SUPPORT_EMPTY,
     SUPPORT_REPLY_ASK,
+    ORDERS_EMPTY,
     TERMS_REQUIRED,
     BotReply,
+    notify_settings_reply,
+    order_detail_reply,
+    orders_summary_reply,
     page_reply,
     support_created_reply,
     support_home_reply,
@@ -42,12 +46,18 @@ _TICKET = re.compile(r"^u:h:(t|r):(\d{1,9})$")
 _CATEGORY = re.compile(r"^u:h:c:([a-z_]{2,16})$")
 _SECTION = re.compile(r"^u:t:s:([a-z_]{2,24})$")
 _ACCEPT = re.compile(r"^u:t:ok:(\d{1,9})$")
+_ORDER_PAGE = re.compile(r"^u:o:l:(\d{1,4})$")
+_ORDER = re.compile(r"^u:o:d:([0-9A-Za-z_-]{1,48})$")
+_NOTIFY = re.compile(r"^u:n:t:(orders|updates|support|wallet)$")
 
 
 class CustomerDesk:
-    def __init__(self, repo: TrackingRepository, admin_notifier: "AdminNotifier | None" = None, terms_required: bool = False):
+    def __init__(self, repo: TrackingRepository, admin_notifier: "AdminNotifier | None" = None, terms_required: bool = False,
+                 orders_live: bool = False):
         self.repo = repo
         self.admin_notifier = admin_notifier
+        # PLAN-079: CUSTOMER_NOTIFICATIONS_ENABLED, chỉ để nói thật với khách ở /thongbao.
+        self.orders_live = orders_live
         # Cổng bắt buộc đồng ý trước khi tạo link mới. Mặc định tắt; chỉ có tác dụng khi đã có bản công bố.
         self.terms_required = terms_required
 
@@ -76,6 +86,28 @@ class CustomerDesk:
     def link_terms(self, user_id: int, now: datetime) -> dict:
         with self.repo.connect() as conn:
             return terms.link_context(conn, user_id, now)
+
+    # --- Đơn hàng và thông báo (PLAN-079) -----------------------------------------------------
+
+    def orders_page(self, user_id: int, number: int = 1) -> BotReply:
+        with self.repo.connect() as conn:
+            stats = customer_orders.summary(conn, user_id)
+            if not stats["total"]:
+                return BotReply(ORDERS_EMPTY, inline_keyboard=((("📩 Hỗ trợ", "u:p:support"), ("◀️ Trang chủ", "u:p:home")),))
+            rows, current, pages = customer_orders.page(conn, user_id, number)
+        return orders_summary_reply(stats, rows, current, pages)
+
+    def order_detail(self, user_id: int, conversion_id: str) -> BotReply:
+        with self.repo.connect() as conn:
+            row = customer_orders.detail(conn, user_id, conversion_id)
+        if row is None:
+            return BotReply("", toast="Không thấy đơn này trong các đơn của bạn.")
+        return order_detail_reply(row)
+
+    def notify_page(self, user_id: int) -> BotReply:
+        with self.repo.connect() as conn:
+            current = customer_orders.prefs(conn, user_id)
+        return notify_settings_reply(current, self.orders_live)
 
     # --- Hỗ trợ -------------------------------------------------------------------------------
 
@@ -110,7 +142,7 @@ class CustomerDesk:
 
     def callback(self, user_id: int, chat_id: int | None, data: str, now: datetime) -> BotReply | None:
         """Nút u:t:* và u:h:*. None: không phải nút của module này."""
-        if not (data.startswith("u:t:") or data.startswith("u:h:")):
+        if not (data.startswith("u:t:") or data.startswith("u:h:") or data.startswith("u:o:") or data.startswith("u:n:")):
             return None
         if chat_id is not None and chat_id != user_id:
             return BotReply("", toast="Nút này chỉ dùng trong cuộc trò chuyện riêng của bạn.", show_alert=True)
@@ -124,6 +156,14 @@ class CustomerDesk:
             return reply or BotReply("", toast="Mục này không còn trong điều khoản hiện hành.")
         if (matched := _ACCEPT.fullmatch(data)) is not None:
             return self._accept(user_id, int(matched.group(1)), now)
+        if (matched := _ORDER_PAGE.fullmatch(data)) is not None:
+            return self.orders_page(user_id, int(matched.group(1)))
+        if (matched := _ORDER.fullmatch(data)) is not None:
+            return self.order_detail(user_id, matched.group(1))
+        if (matched := _NOTIFY.fullmatch(data)) is not None:
+            with self.repo.connect() as conn:
+                current = customer_orders.toggle(conn, user_id, matched.group(1), now.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            return notify_settings_reply(current, self.orders_live, "Đã lưu lựa chọn của bạn.")
         if (matched := _CATEGORY.fullmatch(data)) is not None:
             category = matched.group(1)
             if category not in support.CATEGORIES:

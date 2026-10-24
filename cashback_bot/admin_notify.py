@@ -13,21 +13,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-import requests
 
 from cashback_bot import policy_snapshot
 from cashback_bot.db import TrackingRepository
+from cashback_bot.notify_dispatch import Dispatcher
 from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
 from cashback_bot.pricing import V12, cashback_for
 from cashback_bot.support import CATEGORIES
-from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
+from cashback_bot.telegram_api import TelegramApi
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 # Sự kiện thường ngày gửi im lặng; lỗi vẫn kêu chuông.
-SILENT_EVENTS = {"NEW_USER", "LINK_SENT"}
-
-
 def _vn_now_text() -> str:
     return datetime.now(timezone.utc).astimezone(ICT).strftime("%H:%M · %d/%m")
 
@@ -188,6 +185,8 @@ class AdminNotifier:
     enabled: bool
     chat_id: int | None
     fail_cooldown_sec: int = 60
+    # PLAN-079: cờ CUSTOMER_NOTIFICATIONS_ENABLED cho thông báo đơn hàng chủ động.
+    customer_notifications_enabled: bool = False
 
     def _active(self) -> bool:
         return self.enabled and self.chat_id is not None
@@ -470,18 +469,7 @@ class AdminNotifier:
         )
 
     def flush_pending(self, limit: int = 10) -> None:
-        if not self._active():
-            return
-        rows = self.repo.list_pending_admin_events(limit=limit, max_attempts=5)
-        for row in rows:
-            try:
-                self.telegram.send_message(
-                    int(row["chat_id"]),
-                    str(row["message_html"]),
-                    disable_notification=row["event_type"] in SILENT_EVENTS,
-                )
-            except (requests.RequestException, TelegramDeliveryError) as exc:
-                self.repo.mark_admin_event_failed(int(row["id"]), type(exc).__name__)
-                continue
-            self.repo.mark_admin_event_sent(int(row["id"]))
+        """Gửi hàng đợi chung qua Dispatcher (PLAN-079): tin admin khi bật thông báo admin, tin khách theo cờ và
+        tuỳ chọn của khách."""
+        Dispatcher(self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled).flush(limit)
 

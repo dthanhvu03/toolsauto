@@ -12,7 +12,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import policy_snapshot
+from cashback_bot import order_notify, policy_snapshot
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
@@ -88,7 +88,14 @@ class CashbackService:
         self.client = client
         self.admin_notifier = admin_notifier
         self.wallet = Wallet(repo)
-        self.desk = CustomerDesk(repo, admin_notifier, terms_required=settings.terms_required)
+        self.desk = CustomerDesk(
+            repo, admin_notifier, terms_required=settings.terms_required,
+            orders_live=settings.customer_notifications_enabled,
+        )
+        # PLAN-079: sự kiện thông báo đơn sinh trong transaction ghi đơn. Mốc kích hoạt đặt lần đầu bật cờ.
+        if settings.customer_notifications_enabled and repo.get_state(order_notify.BASELINE_KEY) is None:
+            repo.set_state(order_notify.BASELINE_KEY, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        repo.conversion_hooks[:] = [order_notify.make_hook(order_notify.NotifyConfig(settings.customer_notifications_enabled))]
         policy = self._estimate_policy() if self._v12_ready() else None
         calculator = "V1.2" if policy else "V1.1, chưa bật V1.2"
         self.admin_panel = AdminPanel(
@@ -103,6 +110,7 @@ class CashbackService:
             admin_notifier=admin_notifier,
             other_reserve_vnd=settings.estimate_other_reserve_vnd,
             rounding_unit=settings.estimate_rounding_unit,
+            customer_notifications_enabled=settings.customer_notifications_enabled,
         )
         self._snapshots_on = False
         self._backfill_snapshots()
@@ -222,6 +230,10 @@ class CashbackService:
             return self.desk.rules_page(user_id, datetime.now(timezone.utc))
         if name == "support" and user_id is not None:
             return self.desk.support_page(user_id)
+        if name == "orders" and user_id is not None:
+            return self.desk.orders_page(user_id)
+        if name == "notify" and user_id is not None:
+            return self.desk.notify_page(user_id)
         if name == "calc":
             if wallet.enabled:
                 return page_reply(how_to_calc(self._v12_ready(), wallet.hold_days, wallet.min_withdraw_vnd))
@@ -407,7 +419,7 @@ class CashbackService:
 
         pages = {
             "/huongdan": "guide", "/dieukien": "rules", "/cachtinh": "calc", "/hang": "rank", "/vi": "wallet",
-            "/hotro": "support",
+            "/hotro": "support", "/donhang": "orders", "/thongbao": "notify",
         }
         if command:
             self._set_bank_waiting(telegram_user_id, None)

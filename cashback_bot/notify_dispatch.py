@@ -1,0 +1,154 @@
+"""Gửi hàng đợi `admin_notifications` cho admin và khách (PLAN-079, ADR-056). Một bộ gửi duy nhất.
+
+- Đánh dấu 'sending' trước khi gọi Telegram, không giữ transaction SQLite trong lúc gọi.
+- 429: thử lại sau retry_after. 5xx / lỗi tạm: thử lại có giãn cách, tối đa MAX_ATTEMPTS rồi 'failed'.
+- 4xx (khách chặn bot, chat không tồn tại): 'failed', đánh dấu khách đã chặn; khách nhắn lại thì bỏ đánh dấu.
+- Hết giờ / mất kết nối khi gửi tin khách: 'unknown', KHÔNG tự gửi lại (Telegram có thể đã nhận). Admin xem
+  và gửi lại tay. Tin admin thì thử lại (trùng tin admin chấp nhận được).
+- Tin khách kiểm tra lại lúc gửi: cờ toàn cục (thông báo đơn), tuỳ chọn của khách, khách đã chặn bot, tin quá cũ.
+Không đảm bảo đúng-một-lần với Telegram; chọn tối-đa-một-lần cho tin khách khi không rõ kết quả.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+
+import requests
+
+from cashback_bot.db import TrackingRepository
+from cashback_bot.redact import redact
+from cashback_bot.telegram_api import TelegramDeliveryError
+
+logger = logging.getLogger("cashback_bot")
+
+MAX_ATTEMPTS = 5
+ORDER_STALE = timedelta(hours=72)
+SILENT_EVENTS = {"NEW_USER", "LINK_SENT"}
+# Loại tin khách → cột tuỳ chọn. Tin đơn hàng còn cần cờ CUSTOMER_NOTIFICATIONS_ENABLED.
+PREF_COLUMNS = {"order_new": "orders", "order_update": "updates", "support": "support", "wallet": "wallet"}
+ORDER_CATEGORIES = ("order_new", "order_update")
+
+
+def _stamp(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse(stamp: str | None) -> datetime | None:
+    try:
+        return datetime.strptime(stamp or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def customer_block_reason(conn, row, customer_enabled: bool, now: datetime) -> str | None:
+    """Lý do không gửi một tin khách, hoặc None. Dùng cả lúc ghi sự kiện và lúc gửi."""
+    category = row["category"]
+    if category in ORDER_CATEGORIES:
+        if not customer_enabled:
+            return "feature_off"
+        created = _parse(row["created_at"])
+        if created is not None and now - created > ORDER_STALE:
+            return "stale"
+    user = conn.execute(
+        "SELECT * FROM telegram_users WHERE telegram_user_id = ?", (row["chat_id"],)
+    ).fetchone()
+    if user is None:
+        return "not_started"
+    if "notify_blocked_at" in user.keys() and user["notify_blocked_at"]:
+        return "blocked"
+    column = PREF_COLUMNS.get(category or "")
+    if column:
+        pref = conn.execute(
+            f"SELECT {column} FROM customer_notification_prefs WHERE telegram_user_id = ?", (row["chat_id"],)
+        ).fetchone()
+        if pref is not None and not pref[0]:
+            return "pref_off"
+    return None
+
+
+@dataclass
+class DispatchResult:
+    sent: int = 0
+    retry: int = 0
+    failed: int = 0
+    suppressed: int = 0
+    unknown: int = 0
+    skipped: list[int] = field(default_factory=list)
+
+
+class Dispatcher:
+    def __init__(self, repo: TrackingRepository, telegram, admin_enabled: bool, admin_chat_id: int | None,
+                 customer_enabled: bool):
+        self.repo = repo
+        self.telegram = telegram
+        self.admin_active = admin_enabled and admin_chat_id is not None
+        self.customer_enabled = customer_enabled
+
+    def flush(self, limit: int = 10, now: datetime | None = None) -> DispatchResult:
+        moment = now or datetime.now(timezone.utc)
+        result = DispatchResult()
+        for row in self.repo.list_pending_admin_events(limit=limit, max_attempts=MAX_ATTEMPTS, now=_stamp(moment)):
+            customer = (row["audience"] if "audience" in row.keys() else "admin") == "customer"
+            if not customer and not self.admin_active:
+                result.skipped.append(int(row["id"]))
+                continue
+            if customer:
+                with self.repo.connect() as conn:
+                    reason = customer_block_reason(conn, row, self.customer_enabled, moment)
+                if reason:
+                    self.repo.suppress_admin_event(int(row["id"]), reason)
+                    result.suppressed += 1
+                    continue
+            if not self.repo.claim_admin_event(int(row["id"])):
+                continue
+            self._send(row, customer, moment, result)
+        return result
+
+    def _send(self, row, customer: bool, moment: datetime, result: DispatchResult) -> None:
+        event_id = int(row["id"])
+        markup = None
+        if "reply_markup_json" in row.keys() and row["reply_markup_json"]:
+            markup = json.loads(row["reply_markup_json"])
+        attempts = int(row["attempt_count"]) + 1
+        try:
+            kwargs = {"disable_notification": row["event_type"] in SILENT_EVENTS}
+            if markup:
+                kwargs["reply_markup"] = markup
+            message_id = self.telegram.send_message(int(row["chat_id"]), str(row["message_html"]), **kwargs)
+        except TelegramDeliveryError as exc:
+            self._failed(row, customer, exc.kind, exc.retry_after, exc.status_code, attempts, moment, result)
+            return
+        except requests.RequestException as exc:
+            self._failed(row, customer, "ambiguous", None, None, attempts, moment, result, redact(type(exc).__name__))
+            return
+        self.repo.finish_admin_event(event_id, "sent", message_id=message_id if isinstance(message_id, int) else None)
+        result.sent += 1
+
+    def _failed(self, row, customer: bool, kind: str, retry_after: int | None, status_code: int | None,
+                attempts: int, moment: datetime, result: DispatchResult, detail: str | None = None) -> None:
+        event_id = int(row["id"])
+        error = f"{kind}:{status_code or ''}{':' + detail if detail else ''}"
+        if kind == "permanent":
+            self.repo.finish_admin_event(event_id, "failed", error)
+            if customer and status_code in (400, 403):
+                with self.repo.connect() as conn:
+                    conn.execute(
+                        "UPDATE telegram_users SET notify_blocked_at = ? WHERE telegram_user_id = ?",
+                        (_stamp(moment), int(row["chat_id"])),
+                    )
+            result.failed += 1
+            return
+        if kind == "ambiguous" and customer:
+            self.repo.finish_admin_event(event_id, "unknown", error)
+            result.unknown += 1
+            return
+        if attempts >= MAX_ATTEMPTS:
+            self.repo.finish_admin_event(event_id, "failed", error)
+            result.failed += 1
+            return
+        delay = retry_after if kind == "rate_limited" and retry_after else 30 * 2 ** (attempts - 1)
+        self.repo.finish_admin_event(event_id, "retry", error, next_retry_at=_stamp(moment + timedelta(seconds=delay)))
+        result.retry += 1
