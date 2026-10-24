@@ -14,6 +14,7 @@ Chủ bot restart ("reset r em"). Báo cáo `reports/CASHBACK_DEPLOY_2026-10-24_
 - **Unfinished:**
   - chủ bot thử lại link `spf.shopee.vn`;
   - sau lượt 14:39Z, kiểm tra màn 🧾 hết "(suy ra)".
+- **ShopeeFood (chủ bot hỏi):** AddLiveTag `product-data` với `url=spf.shopee.vn/...` trả `status=error` "item_id or valid Shopee URL is required" (1 lần gọi, chủ bot yêu cầu). Shopee Affiliate có hoa hồng ShopeeFood (app ghi tới 9%; Sapo: trần ~10.000đ/đơn, 1 đơn/khách/7 ngày). Chưa hỗ trợ; muốn làm cần thử nguồn link + báo cáo đơn và chính sách % hoa hồng thực nhận, chủ bot quyết.
 - **Next:**
   - 2026-11-12: kiểm tra 2 đơn chuyển 🟡 và tin tổng hợp admin;
   - trước 2026-11-22: chủ bot quyết định bật `SHOPEE_RECONCILE_LOOKUP_ENABLED=1`.

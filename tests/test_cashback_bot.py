@@ -20,7 +20,7 @@ from cashback_bot.messages import STALE
 from cashback_bot.money import estimated_cashback
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.service import CashbackService
-from cashback_bot.shopee_url import parse_shopee_target
+from cashback_bot.shopee_url import is_shopee_food_link, parse_shopee_target
 
 NOW = datetime(2026, 10, 21, 8, 8, tzinfo=timezone.utc)
 ROOT = Path(__file__).resolve().parents[1]
@@ -819,8 +819,6 @@ def test_khuon_chu_khach_plan_060(tmp_path):
 
 
 def test_link_shopeefood_tra_loi_ro_chua_ho_tro(tmp_path):
-    from cashback_bot.shopee_url import is_shopee_food_link
-
     text = "Khám phá BÁNH TRÁNG CUỐN LÒNG ĐÀO TRỘN trên ShopeeFood nhé! https://spf.shopee.vn/AKbbczw9TO"
     assert is_shopee_food_link(text) and is_shopee_food_link("https://spf.shopee.vn/AKbbczw9TO")
     assert not is_shopee_food_link("https://s.shopee.vn/abc") and not is_shopee_food_link("xin chào")
