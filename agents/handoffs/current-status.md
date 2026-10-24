@@ -1,3 +1,13 @@
+## Phiên 2026-10-24 (aq) — Sửa chữ hai điều kiện hạn mức (màn Sẵn sàng chi trả)
+
+- Chủ bot duyệt. `main` `c4b9b1a`, backup trước `data/backups/cashback-20261024T073103Z.sqlite`. Chủ bot restart 07:36:31 UTC, PID 631959.
+- «Hạn mức rút» → «Quyết định chính sách hạn mức rút»; «Hạn mức rút đang hiệu lực (có người duyệt)» → «Bảng số hạn mức đã duyệt, đang dùng». Chỉ đổi chữ; thêm test chống trùng chữ. 555 passed.
+- Sau restart: log 0 lỗi, 0 token; 2 khoản pending giữ 12.157đ / 960đ; ví 0, 0 available, 0 payout; 6 trigger khoá; bất biến ổn; quick_check ok.
+
+Next: như mục (ap), Gate B chưa được phép.
+
+---
+
 ## Phiên 2026-10-24 (ap) — Đã triển khai PLAN-078 Gate A (code, ví vẫn khoá)
 
 Claude Code, chủ bot duyệt "có phát hành". Báo cáo: `reports/CASHBACK_DEPLOY_2026-10-24_PLAN078.md`.
