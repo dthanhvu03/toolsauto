@@ -151,6 +151,20 @@ def test_phan_loai_loi(monkeypatch, status, error, kind):
     assert caught.value.kind == kind and caught.value.status_code == status
 
 
+def test_doc_loi_dang_long_cua_riohub(monkeypatch):
+    """Dạng lỗi thật (thử 2026-10-25): creator chưa vào RioMCN."""
+    client, _http, _ = _client(monkeypatch, FakeResponse(403, {"error": {
+        "code": "mcn_membership_required", "message": "Creator 'twot283' chưa là thành viên RioMCN"}}))
+    with pytest.raises(RioHubError) as caught:
+        list(client.iter_orders(0, 1))
+    assert caught.value.kind == "creator" and caught.value.code == "mcn_membership_required"
+    assert "RioMCN" in caught.value.message
+    client, _http, _ = _client(monkeypatch, FakeResponse(422, {"error": {"code": "product_not_promotable"}}))
+    with pytest.raises(RioHubError) as caught:
+        client.create_link("1729", "abc123")
+    assert caught.value.kind == "not_promotable"
+
+
 def test_log_khong_ghi_khoa(monkeypatch, caplog):
     client, _http, _ = _client(monkeypatch, FakeResponse(401, {"error": "unauthorized"}))
     with caplog.at_level(logging.INFO, logger="cashback_bot"), pytest.raises(RioHubError):

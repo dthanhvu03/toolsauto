@@ -8,6 +8,7 @@
 
 ## 0. Điều kiện trước khi viết code
 1. Chủ bot có tài khoản TikTok đã bật TikTok Shop Affiliate, đã kết nối vào RioHub; biết `creator_username`.
+   **Thử thật 2026-10-25:** API đòi creator là **thành viên RioMCN đã được duyệt** (`403 mcn_membership_required`). Vào RioMCN nghĩa là MCN được chia hoa hồng (`shared_with_partner`), có thể có phí thành viên → phải biết tỷ lệ trước khi tính hoàn cho khách.
 2. RioHub trả lời bằng văn bản: được dùng API cho bot hoàn tiền (chia lại hoa hồng cho người mua).
 3. Chủ bot tự thêm vào `.env`: `RIOHUB_API_KEY`, `RIOHUB_CREATOR_USERNAME`. Không gửi khoá qua chat.
 4. Chủ bot quyết hồ sơ phí / thuế cho TikTok: `actual_commission` đã trừ TNCN 10% và phần chia MCN, không trừ dự phòng thuế 10% lần nữa.
@@ -56,3 +57,9 @@ Chủ bot dán spec đủ 8 phần và chọn "Viết client, chưa nối bot". 
 **Chưa chắc theo spec:** tên field mã lỗi trong thân phản hồi lỗi (đọc `error` rồi `code`); `update_time` và `settled_at_iso` có trong mô tả nhưng không có trong ví dụ phản hồi `orders`.
 
 **Kiểm thử:** 24 test mới đạt; toàn bộ 727 test có 1 hỏng có từ trước: `test_cashback_auto_sync.py::test_14_bam_tay_khi_tu_dong_dang_chay` (giờ giả `T0 = 2026-10-25 02:00Z`, màn admin dùng giờ thật nên từ 02:00Z hôm nay lượt giả bị coi là hết hạn). Hỏng cả khi bỏ bản này. Ruff sạch.
+
+## Thử thật lần 1 (2026-10-25, chủ bot duyệt "Đúng, thử thêm 1 link")
+- `.env` có `RIOHUB_API_KEY` (52 ký tự, file quyền 600), `RIOHUB_CREATOR_USERNAME=twot283` (chủ bot xác nhận đúng tài khoản).
+- `python -m cashback_bot.riohub_client orders --days 7` (chỉ đọc) → `http=403`, `{"error": {"code": "mcn_membership_required", "message": "Creator 'twot283' chưa là thành viên RioMCN (chưa được duyệt) nên chưa thể dùng chức năng này."}}`. Khoá hợp lệ (không phải 401).
+- Sửa client: đọc lỗi dạng lồng `error.code` / `error.message`; CLI in một dòng thay vì traceback; +1 test (25).
+- **Chưa tạo link thử:** tài khoản chưa vào RioMCN thì gần như chắc cũng bị chặn; chờ duyệt RioMCN.

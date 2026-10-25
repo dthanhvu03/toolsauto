@@ -45,6 +45,8 @@
 
 **Hệ quả với chính sách V1.2 của bot:** báo giá hiện trừ "dự phòng thuế 10%" trên hoa hồng gộp. Với TikTok, TNCN 10% và phần chia MCN đã bị trừ trong `actual_commission`. Nếu đem công thức Shopee áp nguyên thì **trừ thuế hai lần**. Cần một hồ sơ phí / thuế riêng cho TikTok (chủ bot quyết mức).
 
+**Thử thật 2026-10-25 (chủ bot duyệt, chỉ đọc):** `GET /orders` → `403 mcn_membership_required`: creator phải là **thành viên RioMCN đã được duyệt** mới dùng được API. Vậy tiền đi TikTok → MCN RioHub (`shared_with_partner`, số âm trong `actual_commission`) → chủ bot.
+
 ## 3. Điều khoản RioHub (trang /terms)
 
 | Điểm | Nội dung | Ảnh hưởng tới bot |

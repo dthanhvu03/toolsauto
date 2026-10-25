@@ -57,11 +57,12 @@ class RioHubError(Exception):
     """
 
     def __init__(self, kind: str, status_code: int | None = None, code: str | None = None,
-                 retry_after: int | None = None):
+                 retry_after: int | None = None, message: str | None = None):
         self.kind = kind
         self.status_code = status_code
         self.code = code
         self.retry_after = retry_after
+        self.message = message
         super().__init__(kind if code is None else f"{kind}:{code}")
 
 
@@ -315,12 +316,18 @@ class RioHubClient:
             if not isinstance(payload, dict):
                 raise RioHubError("bad_response", status_code=code)
             return payload
-        # Spec ghi mã lỗi (vd product_not_promotable) nhưng không ghi tên field; đọc `error` rồi `code`.
-        error = None
+        # Thử thật 2026-10-25: {"error": {"code": "mcn_membership_required", "message": "..."}}. Vẫn nhận dạng
+        # phẳng {"error": "..."} / {"code": "..."} vì spec không ghi tên field.
+        error = message = None
         if isinstance(payload, dict):
-            error = _text(payload.get("error") or payload.get("code"))
+            raw = payload.get("error")
+            if isinstance(raw, dict):
+                error, message = _text(raw.get("code")), _text(raw.get("message"))
+            else:
+                error, message = _text(raw or payload.get("code")), _text(payload.get("message"))
         logger.error("[Cashback] riohub %s %s http=%s error=%s", method, path, code, error or "-")
-        raise RioHubError(_kind(code, error), status_code=code, code=error, retry_after=_retry_after(response))
+        raise RioHubError(_kind(code, error), status_code=code, code=error, retry_after=_retry_after(response),
+                          message=message)
 
 
 def _kind(code: int, error: str | None) -> str:
@@ -362,7 +369,14 @@ def main() -> None:
     if not settings.riohub_api_key or not settings.riohub_creator_username:
         raise SystemExit("thiếu RIOHUB_API_KEY hoặc RIOHUB_CREATOR_USERNAME trong .env")
     client = RioHubClient(settings.riohub_api_key, settings.riohub_creator_username)
+    try:
+        _run(client, args)
+    except RioHubError as exc:
+        raise SystemExit(f"RioHub lỗi: {exc.kind} http={exc.status_code or '-'} mã={exc.code or '-'}"
+                         f" — {exc.message or ''}") from exc
 
+
+def _run(client: RioHubClient, args: argparse.Namespace) -> None:
     if args.cmd == "products":
         found, missing = client.get_products(args.product_ids)
         for item in found:
