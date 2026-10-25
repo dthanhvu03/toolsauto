@@ -80,6 +80,9 @@ class Settings:
     auto_sync: AutoSyncConfig = AutoSyncConfig()
     # PLAN-082: token Zalo Bot Platform. Chỉ tiến trình cashback_bot.zalo_bot dùng; trống thì không chạy kênh Zalo.
     zalo_bot_token: str | None = None
+    # PLAN-085: TikTok Shop qua RioHub, chưa nối vào luồng khách.
+    riohub_api_key: str | None = None
+    riohub_creator_username: str | None = None
 
 
 def _flag(raw: str | None) -> bool:
@@ -188,6 +191,8 @@ def load_settings(environ: dict[str, str] | None = None, dotenv_path: Path | Non
             reconcile_lookup_max=_bounded_int(env, "SHOPEE_RECONCILE_LOOKUP_MAX", 10, 1, 50),
         ),
         zalo_bot_token=(env.get("ZALO_BOT_TOKEN") or "").strip() or None,
+        riohub_api_key=(env.get("RIOHUB_API_KEY") or "").strip() or None,
+        riohub_creator_username=(env.get("RIOHUB_CREATOR_USERNAME") or "").strip().lstrip("@") or None,
     )
 
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **Nháp, chưa được thực hiện.** Chờ chủ bot trả lời các điều kiện ở mục 0 và duyệt |
+| Trạng thái | **Nháp.** A2 (client) đã viết theo lựa chọn của chủ bot 2026-10-25 ("Viết client, chưa nối bot"); phần còn lại chờ mục 0 |
 | Executor | Phần client / đơn / đối soát là backend → cần người làm backend (theo `CLAUDE.md`, không thuộc vai Claude Code). Claude Code làm câu chữ, UX, test diễn tập, báo cáo |
 | Nghiên cứu | `reports/CASHBACK_TIKTOK_RIOHUB_RESEARCH.md` (đã bổ sung spec tích hợp 09/10/2026) |
 
@@ -42,3 +42,17 @@
 
 ## 5. Không làm
 Không đăng ký thay chủ bot; không gọi RioHub khi chưa duyệt; không bật ví; không đổi công thức Shopee.
+
+## Đã làm (2026-10-25)
+Chủ bot dán spec đủ 8 phần và chọn "Viết client, chưa nối bot". Không làm `/general-links` + `event_id`, trang chuyển hướng `/go/…`, webhook, tìm theo tên, báo cáo (cần HTTPS công khai hoặc bot không dùng).
+
+| File | Nội dung |
+|---|---|
+| `cashback_bot/riohub_client.py` (mới) | `RioHubClient`: `create_link`, `create_product_link`, `get_products` (gom 100 id), `iter_orders` (200 / trang, lặp hết). Đổi tên miền chỉ khi lỗi mạng; 429 chờ `Retry-After` (tối đa 30 giây, thử lại 1 lần); `RioHubError.kind` phân loại 401 / 403 / 404 / 422 / 424 / 429 / 503 / 5xx. Hàm đọc phòng thủ: `commission_rate_bps` (observed trước), `price_range_vnd`, `parse_order` (Decimal → đồng, làm tròn xuống), `sync_window` (chồng lấn 10 phút). CLI `products` / `link` / `orders` để chủ bot thử tay |
+| `cashback_bot/config.py` | `RIOHUB_API_KEY`, `RIOHUB_CREATOR_USERNAME` (tuỳ chọn) |
+| `.env.example` | Thêm `ZALO_BOT_TOKEN`, 2 biến RioHub |
+| `tests/test_cashback_riohub.py` (mới) | 24 test, phản hồi giả theo ví dụ trong spec, không gọi mạng |
+
+**Chưa chắc theo spec:** tên field mã lỗi trong thân phản hồi lỗi (đọc `error` rồi `code`); `update_time` và `settled_at_iso` có trong mô tả nhưng không có trong ví dụ phản hồi `orders`.
+
+**Kiểm thử:** 24 test mới đạt; toàn bộ 727 test có 1 hỏng có từ trước: `test_cashback_auto_sync.py::test_14_bam_tay_khi_tu_dong_dang_chay` (giờ giả `T0 = 2026-10-25 02:00Z`, màn admin dùng giờ thật nên từ 02:00Z hôm nay lượt giả bị coi là hết hạn). Hỏng cả khi bỏ bản này. Ruff sạch.
