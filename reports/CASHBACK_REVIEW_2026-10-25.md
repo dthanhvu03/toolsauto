@@ -5,6 +5,16 @@ Test thử của agent nằm ở scratchpad phiên này (không commit).
 
 Mức: 🔴 nặng · 🟠 trung bình · 🟡 nhẹ. **Đã kiểm chứng** = Claude Code tự xác nhận lại.
 
+**Trạng thái sau khi vá:**
+- A2–A11 và D1, D2, D4, D5 đã vá trong PLAN-087.
+- B1–B16 và C3–C7 đã vá trong PLAN-088.
+- Còn mở:
+  - C1: công bố V3.
+  - C2: công cụ xoá dữ liệu, chờ chủ bot chọn hạn lưu.
+  - D3: chép backup ra ngoài máy, chờ chủ bot chọn nơi lưu.
+  - Parser báo cáo thanh toán Shopee (ADR-059).
+- Cài systemd và logrotate: chủ bot làm theo `deploy/cashback/README.md`.
+
 ## A. Ảnh hưởng ngay lúc này (bot đang chạy)
 
 | # | Mức | Vấn đề | Chỗ | Ghi chú |

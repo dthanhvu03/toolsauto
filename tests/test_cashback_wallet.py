@@ -87,6 +87,7 @@ def _payout_policies_ready(conn, period: str = "2026-10", fund: int = 10_000_000
         "parser, recorded_by, recorded_at) VALUES (?, 'shopee_payment_report', 'test', ?, ?, 'x', 1, 'test', 'test', 'x')",
         (batch, f"TEST-{batch}", hashlib.sha256(f"test-{batch}".encode()).hexdigest()),
     ).lastrowid
+    conn.execute("UPDATE settlement_batches SET statement_evidence_id = ? WHERE id = ?", (evidence, batch))
     conn.execute(
         "INSERT INTO settlement_items (batch_id, evidence_id, order_ref, is_bot, settled_vnd, match_status, created_at) "
         "VALUES (?, ?, 'TEST-FUND', 1, ?, 'MATCHED', 'x')",
@@ -476,7 +477,7 @@ class TestPayout:
         assert bot.wallet.payout(1)["status"] == "requested", "từ chối phải có lý do"
         bot.handle_text(ADMIN, "admin", "Tên chủ tài khoản không khớp", update_id=12, now=NOW)
         assert bot.wallet.balance(USER).withdrawable_vnd == 14_000
-        assert "chưa được duyệt" in _customer_events(bot)[-1] and "Tên chủ tài khoản không khớp" in _customer_events(bot)[-1]
+        assert "không được duyệt" in _customer_events(bot)[-1] and "Tên chủ tài khoản không khớp" in _customer_events(bot)[-1]
 
     def test_below_minimum_cannot_withdraw(self, tmp_path):
         bot = self._ready(tmp_path, amount=10_000)  # 7.000đ < 10.000đ
@@ -510,11 +511,15 @@ class TestSwitch:
         assert "u:p:wallet" in _buttons(home)
         assert "chưa chi trả" not in home.text
         calc = bot.handle_text(USER, "buyer", "/cachtinh", update_id=2, now=NOW)
-        assert "30 ngày" in calc.text and "%" not in calc.text
+        assert "15 ngày" in calc.text and "%" not in calc.text
+        assert "Shopee đã duyệt và thanh toán" in calc.text, "B11: không hứa vào ví chỉ sau N ngày"
 
     def test_settings_presets(self, tmp_path):
         bot = _bot(tmp_path)
-        _callback(bot, ADMIN, "c:wl:hold:7")
+        ask = _callback(bot, ADMIN, "c:wl:hold:7")
+        assert "15 ngày → <b>7 ngày</b>" in ask.text and bot.wallet.settings().hold_days == 15, "B16: hỏi lại trước"
+        assert "0 ngày" in _callback(bot, ADMIN, "c:wl:hold:0").text
+        _callback(bot, ADMIN, "c:wl:hold:7:ok")
         reply = _callback(bot, ADMIN, "c:wl:min:50000")
         assert "<b>7 ngày</b>" in reply.text and "50.000đ" in reply.text
         assert bot.wallet.settings().hold_days == 7
@@ -576,14 +581,14 @@ class TestHistory:
 
     def test_wallet_settings_show_in_history(self, tmp_path):
         bot = _bot(tmp_path)
-        _callback(bot, ADMIN, "c:wl:hold:15")
-        _callback(bot, ADMIN, "c:wl:hold:15")  # bấm lại cùng mức: không ghi thêm dòng
+        _callback(bot, ADMIN, "c:wl:hold:30:ok")
+        _callback(bot, ADMIN, "c:wl:hold:30:ok")  # bấm lại cùng mức: không ghi thêm dòng
         _callback(bot, ADMIN, "c:wl:min:20000")
         _financially_ready(bot)
         _callback(bot, ADMIN, "c:wl:on:ok")
         _callback(bot, ADMIN, "c:wl:off")
         text = self._history(bot)
-        assert "Ví khách: giữ tiền 30 → 15 ngày sau khi đơn hoàn thành" in text
+        assert "Ví khách: giữ tiền 15 → 30 ngày sau khi đơn hoàn thành" in text
         assert text.count("giữ tiền") == 1
         assert "Ví khách: rút tối thiểu 10.000đ → 20.000đ" in text
         assert "Ví khách → bật" in text and "Ví khách → tắt" in text

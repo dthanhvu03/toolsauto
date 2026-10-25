@@ -508,19 +508,28 @@ class TestFinancialLock:
         rejected, step = bot.wallet.advance(pid, "rejected", ADMIN, 2, NOW, note="Chưa đủ điều kiện thuế")
         assert (step, rejected["status"]) == ("ok", "rejected")
 
-    def test_paid_blocked_when_total_exceeds_settlement(self, tmp_path):
+    def test_processing_blocked_when_total_exceeds_settlement(self, tmp_path):
+        """Chặn trước khi tiền rời tài khoản (bắt đầu chuyển). Đã gửi rồi thì ghi đã trả được (B7)."""
         bot = self._ready_with_request(tmp_path, settled=14_000)
         payout, code = bot.wallet.request_payout(USER, NOW)
         assert code == "ok"
         pid = int(payout["id"])
         _verify_bank(bot)
-        for version, target in enumerate(("under_review", "approved_for_payment", "processing", "sent_unconfirmed"), 1):
+        for version, target in enumerate(("under_review", "approved_for_payment"), 1):
             assert bot.wallet.advance(pid, target, ADMIN, version, NOW)[1] == "ok"
         with bot.repo.connect() as conn:
             conn.execute("UPDATE shopee_settlements SET amount_vnd = 1000")  # số Shopee trả được sửa lại thấp hơn
-        _row, step = bot.wallet.advance(pid, "paid_confirmed", ADMIN, 5, NOW, evidence="FT26102411111")
+        _row, step = bot.wallet.advance(pid, "processing", ADMIN, 3, NOW)
         assert step == "fund"
-        assert bot.wallet.payout(pid)["status"] == "sent_unconfirmed"
+        assert bot.wallet.payout(pid)["status"] == "approved_for_payment"
+        with bot.repo.connect() as conn:
+            conn.execute("UPDATE shopee_settlements SET amount_vnd = 14000")
+        for version, target in enumerate(("processing", "sent_unconfirmed"), 3):
+            assert bot.wallet.advance(pid, target, ADMIN, version, NOW)[1] == "ok"
+        with bot.repo.connect() as conn:
+            conn.execute("UPDATE shopee_settlements SET amount_vnd = 1000")
+        _row, step = bot.wallet.advance(pid, "paid_confirmed", ADMIN, 5, NOW, evidence="FT26102411111")
+        assert step == "ok", "tiền đã đi: ghi đúng sự thật, không ép bấm «thất bại»"
 
     def test_raw_sql_bypass_blocked_by_triggers(self, tmp_path):
         bot = _bot(tmp_path)

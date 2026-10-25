@@ -11,11 +11,13 @@ from __future__ import annotations
 import re
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from cashback_bot.redact import redact
 
 MAX_MESSAGE = 1_000
+# PLAN-088 (C6): chống spam vào chat admin. Bổ sung vào ticket cũ không bị giới hạn.
+MAX_NEW_PER_DAY = 5
 CATEGORIES = {
     "missing": "📦 Không thấy đơn",
     "amount": "💰 Số hoàn không đúng",
@@ -137,6 +139,11 @@ def open_ticket(
         old = conn.execute("SELECT * FROM support_tickets WHERE source_update_id = ?", (source_update_id,)).fetchone()
         if old is not None:
             return _ticket(old), False
+    since = _stamp(now - timedelta(days=1))
+    if conn.execute(
+        "SELECT COUNT(*) FROM support_tickets WHERE telegram_user_id = ? AND created_at >= ?", (user_id, since)
+    ).fetchone()[0] >= MAX_NEW_PER_DAY:
+        raise SupportError("limit")
     link_id, conversion_id = _own_references(conn, user_id, message)
     stamp = _stamp(now)
     cursor = conn.execute(

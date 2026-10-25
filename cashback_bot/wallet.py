@@ -9,6 +9,11 @@ Mỗi đơn Shopee khớp link bot là một dòng `cashback_entries`:
 
 Rút được = tổng available − yêu cầu đang chờ − đã trả. Đơn đã available mà Shopee huỷ sau đó thì
 chuyển cancelled, số dư có thể âm; admin được báo để xử lý.
+
+Thu hồi (ADR-059, PLAN-088): khoản đã vào ví không bị tính lại, nhưng
+- Shopee giảm hoa hồng: thêm một dòng `<conversion>:clawback:<n>` số âm, trạng thái available, theo đúng tỉ lệ
+  đã chốt. Số dư giảm (có thể âm) và khách chưa rút được cho tới khi đơn sau bù đủ. Không đòi khách chuyển trả.
+- Kỳ đối soát bị đảo (đơn không còn SETTLED): khoản quay về holding, vào lại ví khi kỳ khớp lại.
 """
 
 from __future__ import annotations
@@ -28,7 +33,8 @@ from cashback_bot.payout_gate import FinancialGate, PayoutBlocked
 KEY_ENABLED = "wallet_enabled"
 KEY_HOLD_DAYS = "wallet_hold_days"
 KEY_MIN_WITHDRAW = "wallet_min_withdraw_vnd"
-DEFAULT_HOLD_DAYS = 30
+DEFAULT_HOLD_DAYS = 15  # ADR-059: chủ bot chọn 15 ngày
+CLAWBACK_TAG = ":clawback:"
 DEFAULT_MIN_WITHDRAW = 10_000
 HOLD_DAY_CHOICES = (0, 7, 15, 30, 45)
 MIN_WITHDRAW_CHOICES = (10_000, 20_000, 50_000, 100_000)
@@ -303,13 +309,18 @@ class Wallet:
                     # Shopee gắn gian lận / từ chối hoa hồng (PLAN-074): không phát sinh nghĩa vụ chi.
                     # Lịch sử nằm ở shopee_conversion_changes; đơn đã vào ví thì đi nhánh trừ lại như huỷ.
                     state = "cancelled"
-                if prev is not None and prev["status"] == "available" and state != "cancelled":
-                    continue
                 commission = row["net_commission_vnd"]
                 if commission is None:
                     commission = row["gross_commission_vnd"] or 0
+                reversed_batch = row["settlement_status"] not in (None, "SETTLED")
+                if prev is not None and prev["status"] == "available" and state != "cancelled" and not reversed_batch:
+                    claw = _claw_partial(conn, prev, int(commission), now_text)
+                    if claw is not None:
+                        transitions.append(claw)
+                    continue
+                # Kỳ bị đảo: đi tiếp như khoản chưa vào ví (entry_payable cần SETTLED nên về holding), giữ số đã chốt.
                 if prev is not None and prev["status"] == "available":
-                    # Shopee huỷ sau khi đã vào ví: giữ số đã chốt để admin thấy khoản bị trừ.
+                    # Shopee huỷ (hoặc kỳ bị đảo) sau khi đã vào ví: giữ số đã chốt để admin thấy khoản bị trừ.
                     split = Split(
                         int(prev["cashback_vnd"]), prev["policy_label"], int(prev["fee_vnd"]), int(prev["tax_vnd"])
                     )
@@ -364,6 +375,12 @@ class Wallet:
                     ),
                 )
                 previous = None if prev is None else str(prev["status"])
+                if (previous == "available") != (status == "available"):
+                    # Dòng thu hồi đi theo khoản gốc: gốc rời ví (huỷ, kỳ bị đảo) thì không trừ thêm lần nữa.
+                    conn.execute(
+                        "UPDATE cashback_entries SET status = ?, updated_at = ? WHERE instr(conversion_id, ?) = 1",
+                        (status, now_text, str(row["conversion_id"]) + CLAWBACK_TAG),
+                    )
                 if previous != status:
                     transitions.append(
                         Transition(
@@ -381,6 +398,11 @@ class Wallet:
             # PLAN-078: khoản đang giữ cho yêu cầu rút mà không còn đủ điều kiện → yêu cầu sang cần kiểm tra.
             payouts.flag_cancelled_reservations(conn, now)
         return transitions
+
+    def request_amount(self, user_id: int, now: datetime) -> int:
+        """Số nút Rút sẽ tạo: toàn bộ số rút được, cắt theo hạn mức còn lại của khách."""
+        with self.repo.connect() as conn:
+            return payouts.request_amount(conn, user_id, now)
 
     def balance(self, user_id: int) -> Balance:
         with self.repo.connect() as conn:
@@ -493,6 +515,11 @@ class Wallet:
         """
 
         def money_out(conn: sqlite3.Connection, row: sqlite3.Row) -> str | None:
+            if target in (payouts.SENT, payouts.PAID):
+                # Ghi việc đã chuyển / ngân hàng đã xác nhận: không chặn vì backup cũ, hạn mức vừa hạ hay quỹ, để
+                # admin không phải bấm «thất bại» (tiền về ví, khách rút lần nữa). Mọi điều kiện đã kiểm ở bước
+                # duyệt chi và bắt đầu chuyển.
+                return None
             readiness = self.gate.readiness(conn)
             if not readiness.ok:
                 return "locked"
@@ -501,7 +528,7 @@ class Wallet:
             for item in payout_readiness.payout_conditions(conn, row, now):
                 if not item.ok:
                     return item.code
-            if target == payouts.PAID:
+            if target == payouts.PROCESSING:
                 try:
                     self.gate.check_payout(conn, int(row["amount_vnd"]))
                 except PayoutBlocked:
@@ -558,6 +585,36 @@ class Wallet:
     def totals(self) -> Balance:
         with self.repo.connect() as conn:
             return _balance(conn, None)
+
+
+def _claw_partial(conn: sqlite3.Connection, prev: sqlite3.Row, commission: int, now_text: str) -> Transition | None:
+    """Shopee giảm hoa hồng của khoản đã vào ví: thêm dòng thu hồi số âm cho phần chưa trừ. Tăng thì giữ nguyên."""
+    old_commission = int(prev["commission_vnd"] or 0)
+    if old_commission <= 0 or commission >= old_commission:
+        return None
+    conversion_id = str(prev["conversion_id"])
+    target = int(prev["cashback_vnd"]) * max(0, commission) // old_commission
+    rows = conn.execute(
+        "SELECT COUNT(*), COALESCE(SUM(cashback_vnd), 0) FROM cashback_entries WHERE instr(conversion_id, ?) = 1",
+        (conversion_id + CLAWBACK_TAG,),
+    ).fetchone()
+    delta = int(prev["cashback_vnd"]) + int(rows[1]) - target
+    if delta <= 0:
+        return None
+    claw_id = f"{conversion_id}{CLAWBACK_TAG}{int(rows[0]) + 1}"
+    conn.execute(
+        """
+        INSERT INTO cashback_entries (
+            conversion_id, telegram_user_id, link_id, order_sn, item_name, commission_vnd, cashback_vnd, fee_vnd,
+            tax_vnd, policy_label, status, purchase_time, completed_at, available_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 'available', ?, ?, ?, ?, ?)
+        """,
+        (claw_id, int(prev["telegram_user_id"]), prev["link_id"], prev["order_sn"], prev["item_name"],
+         commission - old_commission, -delta, prev["policy_label"], prev["purchase_time"], prev["completed_at"],
+         now_text, now_text, now_text),
+    )
+    return Transition(claw_id, int(prev["telegram_user_id"]), None, "clawback", prev["item_name"] or "-", -delta,
+                      now_text, prev["purchase_time"])
 
 
 def _balance(conn: sqlite3.Connection, user_id: int | None) -> Balance:

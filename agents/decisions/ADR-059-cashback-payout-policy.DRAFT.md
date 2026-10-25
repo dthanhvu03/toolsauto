@@ -31,8 +31,8 @@
 |---|---|---|
 | Bảng `payout_tax_policies` (khoá cũ "Chưa chốt chính sách thuế") | Backend, cần PLAN | Bảng nằm trong migration nháp 007 (cùng `shopee_settlements`), chưa có trên production → gộp vào PLAN đọc báo cáo thanh toán |
 | Đọc báo cáo thanh toán Shopee vào đối soát | Backend, cần PLAN | ADR-052 đòi "tổng theo đơn = tổng kỳ"; Shopee chỉ cho tổng theo ngày hoàn thành → ghép bằng tổng hoa hồng các đơn hoàn thành cùng ngày (báo cáo chuyển đổi). Kỳ là hoá đơn theo ngày, không phải tháng |
-| Chờ 7 ngày khi đổi tài khoản + admin cho rút ngay | Backend, cần PLAN | Code hiện chỉ đưa tài khoản mới về `UNVERIFIED`, chưa có mốc 7 ngày |
-| Thu hồi: trừ tiền sau + khoá rút | Backend, cần PLAN | ADR-052 mục 7 hiện "không thu hồi tiền, không đổi sổ ví" → phải sửa |
+| Chờ 7 ngày khi đổi tài khoản + admin cho rút ngay | ✅ PLAN-088 | `bank_cooldown`; admin xác minh ở 👥 Thành viên thì khách rút ngay; khai lần đầu không chờ |
+| Thu hồi: trừ tiền sau + khoá rút | ✅ PLAN-088 | Huỷ: khoản về `cancelled` (đã có). Giảm hoa hồng: dòng `<conv>:clawback:n` số âm. Số dư âm thì không rút được, yêu cầu đang mở sang «cần kiểm tra». Kỳ bị đảo thì khoản về `holding`. ADR-052 mục 7 (điều chỉnh trong kỳ) vẫn ghi `settlement_adjustments` như cũ |
 | Điều khoản V3 | Claude Code soạn, chủ bot duyệt | Sau khi có A1 |
 | Ghi 6 quyết định + bảng hạn mức vào bot | Sau khi chủ bot duyệt bản này | Bảng chỉ thêm; ghi sai phải thêm dòng `REVOKED` |
 | Kỳ Shopee đầu tiên khớp (báo cáo + sao kê ngân hàng) | Chờ Shopee trả đơn qua bot | Điều kiện cuối của khoá tài chính |

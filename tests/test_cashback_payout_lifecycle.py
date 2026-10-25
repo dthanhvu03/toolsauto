@@ -246,9 +246,10 @@ def test_18_19_25_yeu_cau_hop_le_thieu_tien_va_vuot_han_muc(tmp_path):
             "INSERT INTO payout_limit_policies (min_vnd, max_per_request_vnd, daily_total_vnd, monthly_total_vnd, status, "
             "created_by, approved_by, approved_at, created_at) VALUES (1000, 10000, 50000, 100000, 'ACTIVE', 't', 't', 'x', 'x')"
         )
-    assert bot.wallet.request_payout(USER, T) == (None, "over_request_limit")
-    payout, code = bot.wallet.request_payout(USER, T, amount=10_000)
-    assert code == "ok" and payout["transfer_note"] == "Hoan tien 000001"
+    assert bot.wallet.request_payout(USER, T, amount=12_000) == (None, "over_request_limit")
+    # B6: nút Rút (không chọn số) lấy đúng số tối đa được rút, phần còn lại rút lần sau.
+    payout, code = bot.wallet.request_payout(USER, T)
+    assert code == "ok" and payout["amount_vnd"] == 10_000 and payout["transfer_note"] == "Hoan tien 000001"
 
 
 def test_han_muc_ban_nhap_khong_co_hieu_luc(tmp_path):
@@ -521,6 +522,7 @@ def test_43_44_50_tien_ngoai_bot_chua_phan_bo_va_phi_thue_khong_vao_quy(tmp_path
             "1000000, 't', 'x', 'x')"
         ).lastrowid
         evidence = conn.execute("SELECT id FROM settlement_evidence LIMIT 1").fetchone()[0]
+        conn.execute("UPDATE settlement_batches SET statement_evidence_id = ? WHERE id = ?", (evidence, batch))
         for ref, is_bot, amount, status in (("bot", 1, 20_000, "MATCHED"), ("ngoai", 0, 800_000, "NOT_BOT"),
                                             ("la", 0, 50_000, "UNKNOWN_ORDER")):
             conn.execute(

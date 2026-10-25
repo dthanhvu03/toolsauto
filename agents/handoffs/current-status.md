@@ -1,3 +1,29 @@
+## Phiên 2026-10-25 (bw) — PLAN-087 vận hành + PLAN-088 sổ chi trả (chủ bot: "duyệt và vá tất cả")
+
+- **PLAN-087** (`main@4d1f789`):
+  - Mất mạng (DNS / không kết nối được) là `offline`: tin trả về hàng đợi, không tính lượt thử, không còn `unknown` hay bị bỏ.
+  - Chỉ 403 mới đánh dấu khách chặn bot.
+  - Zalo lỗi DB giữa chừng thì báo khách và báo admin. Tin nhiều phần không gửi lặp phần đầu. Mỗi bot gỡ kẹt `sending` của kênh mình.
+  - Đồng bộ Shopee không còn quay vòng. Chia phí MCN cho checkout nhiều đơn.
+  - Backup tay có tên `cashback-manual-*` và được dọn riêng.
+  - `ops_watch`: báo khi hai bot chạy khác commit; bot Zalo canh bot Telegram; tóm tắt tin gửi lỗi lúc 8 giờ.
+  - `deploy/cashback/`: unit systemd và logrotate (chưa cài). `test_14` đã sửa.
+- **PLAN-088**:
+  - B1–B16: không chi khi đơn nguồn đã huỷ; không chuyển tiền 2 lần; quỹ không đếm đôi; thu hồi theo ADR-059 (dòng `:clawback:` số âm, kỳ bị đảo thì về `holding`).
+  - Zalo rút được nhiều lần. Nút Rút tự cắt theo hạn mức. Ghi «đã trả» không bị chặn.
+  - Trigger DB mới: máy trạng thái và `financial_lock_v2_*`. Chờ 7 ngày khi đổi tài khoản, admin xác minh thì rút ngay.
+  - Câu chữ ví, tin chi trả kèm mã giao dịch, màn admin.
+  - C3–C7: xoá số tài khoản trong tin đã gửi; cảnh báo chat admin; CSV; tối đa 5 ticket mỗi ngày; `gemini_cookies.json` → 0600.
+- Proof: 773 passed; bản sao production chạy `migrate` hai lần không lỗi, 5 trigger mới, ví vẫn khoá (4 lý do), số liệu không đổi.
+- **Chưa làm (cần chủ bot):**
+  - C2: công cụ xoá dữ liệu và hạn lưu.
+  - D3: nơi chép backup ra ngoài máy.
+  - Parser báo cáo thanh toán Shopee + migration 007 (cần file thật).
+  - Công bố V3 khi ví sắp mở.
+- **Next:** chủ bot restart CẢ HAI bot (hoặc cài systemd theo `deploy/cashback/README.md`). Sau đó Claude Code kiểm tra log, `code_version` của hai bot và `gate_b_check`.
+
+---
+
 ## Phiên 2026-10-25 (bv) — Rà soát 4 góc nhìn
 
 - `reports/CASHBACK_REVIEW_2026-10-25.md`: 4 agent chỉ đọc code (tiền, bảo mật, vận hành, câu chữ); Claude Code kiểm chứng các điểm nặng.

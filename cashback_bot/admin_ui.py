@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html
 
+from cashback_bot.db import SCRUB_AFTER_SEND_MARK
 from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
 
@@ -895,7 +896,7 @@ def wallet_admin_keyboard(settings, requests) -> Keyboard:
     rows: list[tuple[tuple[str, str], ...]] = [
         ((f"📤 {row['transfer_note'] or row['id']} · {format_vnd(int(row['amount_vnd']))} · "
           f"{_who_short(int(row['telegram_user_id']), row['username'])}", f"c:wl:rq:{row['id']}"),)
-        for row in requests[:5]
+        for row in requests
     ]
     rows.append((("👥 Thành viên", "c:wl:members"), ("⚙️ Cài đặt", "c:wl:cfg")))
     if settings.enabled:
@@ -1057,6 +1058,9 @@ STEP_HELP = {
 _BANK_STATE = {"VERIFIED": "✅ đã xác minh", "REJECTED": "❌ xác minh không đạt"}
 
 
+PAYOUT_TEXT_MAX = 4000
+
+
 def payout_text(payout, username, bank_name: str, *, allocations, conditions, events, bank_state: str,
                 shared_users: int, fund, notice: str = "", show_account: bool = False, qr_problem: str | None = None,
                 qr_sent: bool = False) -> str:
@@ -1078,19 +1082,21 @@ def payout_text(payout, username, bank_name: str, *, allocations, conditions, ev
         "",
         "🧾 <b>Nguồn từng đồng</b>",
     ]
-    lines += [
+    sources = [
         f"• {format_vnd(int(a['amount_vnd']))} ← đơn …{html.escape((a['order_sn'] or a['conversion_id'])[-6:])} · "
         f"link <code>{html.escape(a['sub_id'] or '-')}</code> · {html.escape(a['policy_label'] or 'chưa có snapshot')} · "
         f"duyệt {a['validation_status'] or '-'} · đối soát {a['settlement_status'] or '-'} (kỳ {a['batches'] or '-'})"
+        + ("" if a["entry_status"] in (None, "available") else f" · ⚠️ khoản {a['entry_status']}")
         for a in allocations
     ] or ["• Yêu cầu cũ, không có phân bổ theo đơn."]
+    head, lines = lines, []
     lines += ["", "🔐 <b>Điều kiện</b>"] + [f"{'✅' if c.ok else '❌'} {html.escape(c.label)}" for c in conditions]
     if fund.verified:
         lines.append(f"Quỹ có chứng từ còn: {format_vnd(fund.headroom_vnd)}")
     else:
         lines.append("Quỹ có chứng từ: <b>Chưa xác minh</b> (chưa có kỳ đối soát khớp)")
     if show_account:
-        lines += ["", "🏦 <b>Chuyển tay</b>: đúng số tiền, đúng nội dung. Kiểm tên người nhận app hiện ra trùng Chủ TK."]
+        lines += ["", f"{SCRUB_AFTER_SEND_MARK}: đúng số tiền, đúng nội dung. Kiểm tên người nhận app hiện ra trùng Chủ TK."]
         if qr_sent:
             lines.append("📷 Ảnh mã QR gửi ngay dưới tin này. Mã QR không chứng minh đã chuyển tiền.")
         if qr_problem:
@@ -1101,7 +1107,17 @@ def payout_text(payout, username, bank_name: str, *, allocations, conditions, ev
         + (f" · chứng từ {html.escape(e['evidence_ref'][:40])}" if e["evidence_ref"] else "")
         for e in events[-8:]
     ]
-    return "\n".join(lines)[:4000]
+    # B12: tin tối đa ~4096 ký tự. Không cắt giữa thẻ HTML; bớt dòng nguồn để giữ phần Điều kiện và Lịch sử.
+    budget = PAYOUT_TEXT_MAX - len("\n".join(head + lines)) - 80
+    shown: list[str] = []
+    for line in sources:
+        if sum(len(item) + 1 for item in shown) + len(line) + 1 > budget:
+            break
+        shown.append(line)
+    if len(shown) < len(sources):
+        rest = allocations[len(shown):]
+        shown.append(f"• … và {len(rest)} khoản khác ({format_vnd(sum(int(a['amount_vnd']) for a in rest))})")
+    return "\n".join(head + shown + lines)
 
 
 def payout_keyboard(payout, targets: list[str], locked: bool) -> Keyboard:

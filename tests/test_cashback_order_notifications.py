@@ -194,7 +194,7 @@ def test_17_20_donhang_tong_quan_va_chi_tiet(tmp_path):
     assert "Shopee đã ghi nhận <b>2</b> đơn qua link của bạn" in page.text
     assert "⏳ 2 chờ xác minh" in page.text and "đã duyệt" not in page.text, "chỉ hiện số khác 0"
     assert "💰 Hoàn tạm tính: <b>13.117đ</b>" in page.text
-    assert "Chưa có khoản nào rút được: ví hoàn tiền chưa mở." in page.text
+    assert "Chưa có khoản nào vào ví." in page.text
     assert "<b>1. Áo Polo Nam</b>" in page.text and "🛒 Mua 21/10/2026 · Đang xử lý" in page.text
     assert [label for row in page.inline_keyboard for label, _d in row][:2] == ["1. Áo Polo Nam · 960đ", "2. Áo Polo Nam · 12.157đ"]
     detail = _callback(bot, USER, "u:o:d:o1")
@@ -202,7 +202,7 @@ def test_17_20_donhang_tong_quan_va_chi_tiet(tmp_path):
     assert "💰 Hoàn tạm tính: <b>12.157đ</b>" in detail.text and "V1.1" not in detail.text
     assert "✅ Shopee ghi nhận đơn qua link của bạn" in detail.text and "⏳ Đơn đang được xử lý" in detail.text
     assert "⏳ Chờ Shopee duyệt hoa hồng" in detail.text and "✅ Shopee đã duyệt" not in detail.text
-    assert "⏳ Chờ Shopee thanh toán hoa hồng cho chương trình" in detail.text and "ví hoàn tiền chưa mở" in detail.text
+    assert "⏳ Chờ Shopee thanh toán hoa hồng cho chương trình" in detail.text and "Tiền hoàn chưa vào ví" in detail.text
     assert "raw" not in detail.text.lower() and "SN-o1" not in detail.text
     assert "u:h:c:amount" in [d for row in detail.inline_keyboard for _l, d in row]
 

@@ -322,10 +322,12 @@ class TestSecurityAndLock:
             evidence = conn.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('shopee_settlements', 'payout_tax_policies')"
             ).fetchone()[0]
-        # 4 trigger gốc còn nguyên; PLAN-078 thêm financial_lock_payout_progress (chỉ chặt hơn).
+        # 4 trigger gốc còn nguyên; PLAN-078 thêm financial_lock_payout_progress, PLAN-088 thêm khoá theo dữ liệu
+        # (v2). Chỉ chặt hơn.
         assert {t for t in triggers if t.startswith("financial_lock_")} == {
             "financial_lock_entry_insert", "financial_lock_entry_update", "financial_lock_payout_insert",
-            "financial_lock_payout_paid", "financial_lock_payout_progress"}
+            "financial_lock_payout_paid", "financial_lock_payout_progress", "financial_lock_v2_payout_insert",
+            "financial_lock_v2_entry_insert", "financial_lock_v2_entry_update"}
         assert evidence == 0 and bot.wallet.settings().locked_reasons
 
     def test_no_payout_created_and_triggers_still_block(self, bot):

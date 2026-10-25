@@ -9,6 +9,11 @@ Trạng thái (`cashback_payouts.status`):
 - Trạng thái đưa tiền ra cần khoá tài chính mở (payout_gate + trigger) cộng điều kiện của PLAN-078.
 - Đã từng tới processing / sent_unconfirmed thì không còn đường «từ chối / huỷ» để giải phóng tiền: chỉ
   failed (có chứng từ không thực hiện) hoặc đi tiếp tới paid. Không có đường tự chuyển lại.
+- needs_review (PLAN-088): chưa từng tới processing thì chỉ quay lại kiểm tra hoặc từ chối; đã từng tới thì chỉ
+  ghi «đã gửi» hoặc «thất bại», không quay lại vòng duyệt (tránh chuyển tiền hai lần).
+- Trước khi duyệt chi / bắt đầu chuyển: mọi khoản nguồn của yêu cầu phải còn 'available' (Shopee không huỷ,
+  kỳ không bị đảo).
+- Đổi tài khoản nhận tiền: chờ BANK_COOLDOWN mới rút về tài khoản mới, trừ khi admin đã xác minh (ADR-059).
 Module không gọi ngân hàng, không gửi tiền.
 """
 
@@ -40,6 +45,8 @@ RELEASED = (REJECTED, FAILED, CANCELLED, RETURNED)  # tiền trở lại ví
 MONEY_LEFT = (PROCESSING, SENT)  # đã từng tới đây thì có thể tiền đã rời tài khoản
 POLICY_TOPICS = ("tax", "clawback", "payout_terms", "bank_verification", "payment_limits", "manual_payment")
 EVIDENCE_MIN = 4
+BANK_COOLDOWN = timedelta(days=7)
+SOURCE_CHECKED = (APPROVED, PROCESSING)  # bước trước khi tiền rời tài khoản
 # Lựa chọn hạn mức admin chỉnh trong /admin → 👛 Ví khách → ⚙️ Cài đặt (ADR-059). Tối thiểu theo «Rút tối thiểu».
 # Ngày / tháng tính theo từng khách; khách tích 5–10tr phải rút được một lần.
 LIMIT_CHOICES = {
@@ -151,9 +158,12 @@ def fund_position(conn: sqlite3.Connection) -> FundPosition:
     batches = conn.execute("SELECT * FROM settlement_batches WHERE status = 'MATCHED'").fetchall()
     bot = costs = non_bot = unknown = allocatable = 0
     for batch in batches:
+        # Chỉ dòng của chứng từ thanh toán hiện hành: chứng từ bị thay vẫn giữ dòng cũ (chỉ thêm), đếm cả hai là
+        # quỹ gấp đôi.
         items = conn.execute(
-            "SELECT match_status, is_bot, settled_vnd, adjustment_vnd FROM settlement_items WHERE batch_id = ?",
-            (batch["id"],),
+            "SELECT match_status, is_bot, settled_vnd, adjustment_vnd FROM settlement_items "
+            "WHERE batch_id = ? AND evidence_id = ?",
+            (batch["id"], batch["statement_evidence_id"]),
         ).fetchall()
 
         def total(status: str, want_bot: bool | None = None) -> int:
@@ -251,6 +261,22 @@ def decision(conn: sqlite3.Connection, topic: str) -> sqlite3.Row | None:
     ).fetchone()
 
 
+def _used_since(conn: sqlite3.Connection, user_id: int, since: datetime, exclude_id: int | None) -> int:
+    marks = ", ".join("?" for _ in RELEASED)
+    return int(conn.execute(
+        f"SELECT COALESCE(SUM(amount_vnd), 0) FROM cashback_payouts WHERE telegram_user_id = ? AND created_at >= ? "
+        f"AND status NOT IN ({marks}) AND id != ?",
+        (user_id, stamp(since), *RELEASED, exclude_id or 0),
+    ).fetchone()[0])
+
+
+def _windows(limits: LimitPolicy, now: datetime) -> tuple[tuple[datetime, int, str], ...]:
+    local = now.astimezone(timezone(timedelta(hours=7)))
+    day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return ((day_start, limits.daily_total_vnd, "over_daily_limit"),
+            (day_start.replace(day=1), limits.monthly_total_vnd, "over_monthly_limit"))
+
+
 def check_limits(conn: sqlite3.Connection, user_id: int, amount: int, now: datetime,
                  exclude_id: int | None = None) -> str | None:
     """None nếu trong hạn mức. Tổng ngày/tháng tính trên các yêu cầu chưa bị giải phóng của chính khách (ADR-059)."""
@@ -261,20 +287,29 @@ def check_limits(conn: sqlite3.Connection, user_id: int, amount: int, now: datet
         return "below_min"
     if amount > limits.max_per_request_vnd:
         return "over_request_limit"
-    local = now.astimezone(timezone(timedelta(hours=7)))
-    day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
-    month_start = day_start.replace(day=1)
-    marks = ", ".join("?" for _ in RELEASED)
-    for since, cap, code in ((day_start, limits.daily_total_vnd, "over_daily_limit"),
-                             (month_start, limits.monthly_total_vnd, "over_monthly_limit")):
-        used = int(conn.execute(
-            f"SELECT COALESCE(SUM(amount_vnd), 0) FROM cashback_payouts WHERE telegram_user_id = ? AND created_at >= ? "
-            f"AND status NOT IN ({marks}) AND id != ?",
-            (user_id, stamp(since), *RELEASED, exclude_id or 0),
-        ).fetchone()[0])
-        if used + amount > cap:
+    for since, cap, code in _windows(limits, now):
+        if _used_since(conn, user_id, since, exclude_id) + amount > cap:
             return code
     return None
+
+
+def limit_room(conn: sqlite3.Connection, user_id: int, now: datetime) -> int | None:
+    """Số lớn nhất khách được rút trong một yêu cầu lúc này: mỗi lần, phần còn lại của ngày và của tháng.
+    None khi chưa có hạn mức đã duyệt."""
+    limits = active_limits(conn)
+    if limits is None:
+        return None
+    room = limits.max_per_request_vnd
+    for since, cap, _code in _windows(limits, now):
+        room = min(room, cap - _used_since(conn, user_id, since, None))
+    return max(0, room)
+
+
+def request_amount(conn: sqlite3.Connection, user_id: int, now: datetime) -> int:
+    """Số mặc định của nút Rút: toàn bộ số rút được, cắt theo hạn mức còn lại (phần dư rút lần sau)."""
+    can = withdrawable(conn, user_id)
+    room = limit_room(conn, user_id, now)
+    return can if room is None else min(can, room)
 
 
 # --- Tài khoản nhận tiền -------------------------------------------------------------------------
@@ -290,6 +325,34 @@ def bank_status(conn: sqlite3.Connection, user_id: int, sha: str | None) -> str:
         (user_id, sha),
     ).fetchone()
     return "UNVERIFIED" if row is None else str(row[0])
+
+
+def bank_cooldown_until(conn: sqlite3.Connection, user_id: int, sha: str | None) -> datetime | None:
+    """Tài khoản vừa đổi (không phải khai lần đầu) và chưa được admin xác minh: rút được từ thời điểm trả về.
+    None: không phải chờ."""
+    if not sha or bank_status(conn, user_id, sha) == "VERIFIED":
+        return None
+    row = conn.execute(
+        "SELECT action, created_at FROM bank_account_history WHERE telegram_user_id = ? AND account_sha = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (user_id, sha),
+    ).fetchone()
+    if row is None or row["action"] != "change":
+        return None
+    try:
+        changed = datetime.strptime(row["created_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+    return changed + BANK_COOLDOWN
+
+
+def sources_available(conn: sqlite3.Connection, payout_id: int) -> bool:
+    """Mọi khoản nguồn của yêu cầu còn 'available'. Yêu cầu cũ không có phân bổ thì không chặn."""
+    return conn.execute(
+        "SELECT 1 FROM payout_allocations a LEFT JOIN cashback_entries e ON e.conversion_id = a.conversion_id "
+        "WHERE a.payout_id = ? AND COALESCE(e.status, '') != 'available' LIMIT 1",
+        (payout_id,),
+    ).fetchone() is None
 
 
 def shared_account_users(conn: sqlite3.Connection, sha: str) -> int:
@@ -405,7 +468,7 @@ def create_request(
             conn.rollback()
             return None, "pending_exists"
         can = withdrawable(conn, user_id)
-        want = can if amount is None else int(amount)
+        want = request_amount(conn, user_id, now) if amount is None else int(amount)
         if want <= 0 or want > can:
             conn.rollback()
             return None, "below_min" if amount is None else "insufficient"
@@ -416,6 +479,11 @@ def create_request(
         if limit is not None:
             conn.rollback()
             return None, limit
+        sha = account_sha(account.bank_code, account.account_no)
+        until = bank_cooldown_until(conn, user_id, sha)
+        if until is not None and now < until:
+            conn.rollback()
+            return None, "bank_cooldown"
         fund = fund_position(conn)
         if not fund.verified or fund.headroom_vnd < want:
             conn.rollback()
@@ -425,7 +493,6 @@ def create_request(
             if blocked:
                 conn.rollback()
                 return None, blocked
-        sha = account_sha(account.bank_code, account.account_no)
         cursor = conn.execute(
             """
             INSERT INTO cashback_payouts (telegram_user_id, amount_vnd, status, bank_code, account_no, account_name,
@@ -547,9 +614,17 @@ def transition(
         if rule.needs_evidence and (proof is None or len(proof) < EVIDENCE_MIN):
             conn.rollback()
             return row, "evidence"
-        if target in (REJECTED, CANCELLED) and ever_reached(conn, payout_id, MONEY_LEFT):
+        money_left = ever_reached(conn, payout_id, MONEY_LEFT)
+        if target in (REJECTED, CANCELLED, UNDER_REVIEW) and money_left:
             conn.rollback()
             return row, "money_may_have_left"
+        if row["status"] == NEEDS_REVIEW and target == SENT and not money_left:
+            # Chưa từng bắt đầu chuyển thì phải đi lại vòng duyệt, không nhảy thẳng tới «đã gửi».
+            conn.rollback()
+            return row, "transition"
+        if target in SOURCE_CHECKED and not sources_available(conn, payout_id):
+            conn.rollback()
+            return row, "source_changed"
         if rule.money_out and money_out_check is not None:
             blocked = money_out_check(conn, row)
             if blocked:
@@ -647,8 +722,10 @@ def structural_problems(conn: sqlite3.Connection, user_id: int | None = None) ->
 
 
 def flag_cancelled_reservations(conn: sqlite3.Connection, now: datetime) -> list[int]:
-    """Khoản đang giữ cho yêu cầu rút mà Shopee huỷ / từ chối sau đó: yêu cầu chuyển cần kiểm tra. Không trừ tiền."""
-    marks = ", ".join("?" for _ in OPEN if _ != NEEDS_REVIEW)
+    """Khoản đang giữ cho yêu cầu rút mà Shopee huỷ / từ chối sau đó, hoặc số dư khách âm do thu hồi: yêu cầu
+    chuyển cần kiểm tra. Không trừ tiền."""
+    states = tuple(s for s in OPEN if s != NEEDS_REVIEW)
+    marks = ", ".join("?" for _ in states)
     rows = conn.execute(
         f"""
         SELECT DISTINCT p.* FROM cashback_payouts p
@@ -656,8 +733,13 @@ def flag_cancelled_reservations(conn: sqlite3.Connection, now: datetime) -> list
         JOIN cashback_entries e ON e.conversion_id = a.conversion_id
         WHERE p.status IN ({marks}) AND e.status != 'available'
         """,
-        tuple(s for s in OPEN if s != NEEDS_REVIEW),
+        states,
     ).fetchall()
+    flagged = {int(row["id"]) for row in rows}
     for row in rows:
         _move(conn, row, NEEDS_REVIEW, "system", "Khoản nguồn không còn đủ điều kiện (Shopee huỷ hoặc điều chỉnh)", None, now)
-    return [int(row["id"]) for row in rows]
+    for row in conn.execute(f"SELECT * FROM cashback_payouts WHERE status IN ({marks})", states).fetchall():
+        if int(row["id"]) not in flagged and withdrawable(conn, int(row["telegram_user_id"])) < 0:
+            _move(conn, row, NEEDS_REVIEW, "system", "Shopee giảm hoa hồng đơn đã vào ví: số dư khách âm", None, now)
+            flagged.add(int(row["id"]))
+    return sorted(flagged)

@@ -20,7 +20,15 @@ from cashback_bot.backup import run_scheduled_backup
 from cashback_bot.calculator import CalculationError, ReconciliationRequired
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import ADMIN_COMMANDS, BOT_COMMANDS, BUY_BUTTON, DESCRIPTION, SHORT_DESCRIPTION, WALLET_COMMAND
+from cashback_bot.messages import (
+    ADMIN_COMMANDS,
+    BOT_COMMANDS,
+    BUY_BUTTON,
+    DESCRIPTION,
+    DESCRIPTION_WALLET,
+    SHORT_DESCRIPTION,
+    WALLET_COMMAND,
+)
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import RedactingFormatter, error_brief
 from cashback_bot.service import CashbackService
@@ -73,6 +81,9 @@ def main() -> None:
         customer_notification_test_ids=settings.customer_notification_test_ids,
     )
     ops_watch.record_version(repo, "telegram")
+    if settings.admin_chat_id is not None and settings.admin_chat_id not in settings.admin_user_ids:
+        # C4: tin admin có nội dung ticket và số tài khoản; chỉ nên gửi vào chat riêng của admin.
+        logger.warning("[Cashback] CASHBACK_ADMIN_CHAT_ID không phải chat riêng của admin (nhóm hoặc người khác)")
     stuck = repo.recover_sending()
     if stuck:
         logger.warning("[Cashback] %s tin đang gửi dở lúc dừng bot, chuyển 'unknown' (không tự gửi lại)", stuck)
@@ -106,7 +117,7 @@ def _register_profile(telegram: TelegramApi, admin_user_ids, wallet_on: bool = F
     extra = (WALLET_COMMAND,) if wallet_on else ()
     steps = [
         ("setMyCommands", lambda: telegram.set_my_commands(BOT_COMMANDS + extra)),
-        ("setMyDescription", lambda: telegram.set_my_description(DESCRIPTION)),
+        ("setMyDescription", lambda: telegram.set_my_description(DESCRIPTION_WALLET if wallet_on else DESCRIPTION)),
         ("setMyShortDescription", lambda: telegram.set_my_short_description(SHORT_DESCRIPTION)),
     ]
     for admin_id in sorted(admin_user_ids):

@@ -15,11 +15,13 @@ from typing import TYPE_CHECKING
 from cashback_bot import customer_orders, support, terms
 from cashback_bot.db import TrackingRepository
 from cashback_bot.notify_dispatch import NotifyConfig
+from cashback_bot.wallet import KEY_ENABLED
 from cashback_bot.messages import (
     DIEUKIEN,
     SUPPORT_ASK,
     SUPPORT_CLOSED,
     SUPPORT_EMPTY,
+    SUPPORT_LIMIT,
     SUPPORT_REPLY_ASK,
     ORDERS_EMPTY,
     TERMS_REQUIRED,
@@ -71,7 +73,8 @@ class CustomerDesk:
             accepted = None if live is None or user_id is None else terms.acceptance(conn, user_id, live.id)
         if live is None:
             return page_reply(DIEUKIEN)
-        return terms_home_reply(live, None if accepted is None else accepted["accepted_at"])
+        wallet_open = self.repo.get_state(KEY_ENABLED) == "1"
+        return terms_home_reply(live, None if accepted is None else accepted["accepted_at"], wallet_open)
 
     def terms_gate(self, user_id: int, now: datetime) -> BotReply | None:
         """Chỉ khi bật cờ và có bản công bố mà khách chưa đồng ý: chặn tạo link mới, mời đọc điều khoản."""
@@ -228,6 +231,9 @@ class CustomerDesk:
         except support.SupportError as exc:
             if exc.args and exc.args[0] == "empty":
                 return support_prompt_reply(SUPPORT_EMPTY)
+            if exc.args and exc.args[0] == "limit":
+                self._set_waiting(user_id, None)
+                return self.support_page(user_id, SUPPORT_LIMIT)
             self._set_waiting(user_id, None)
             return self.support_page(user_id, SUPPORT_CLOSED)
         except sqlite3.Error:

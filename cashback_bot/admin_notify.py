@@ -465,13 +465,15 @@ class AdminNotifier:
         )
 
     def notify_wallet_clawback(self, transition) -> None:
-        """Đơn đã vào ví nhưng Shopee huỷ sau đó: số dư khách bị trừ, có thể âm."""
+        """Đơn đã vào ví nhưng Shopee huỷ hoặc giảm hoa hồng sau đó (status 'clawback', số âm): số dư khách bị trừ,
+        có thể âm."""
         if not self._active():
             return
+        title = "Shopee giảm hoa hồng đơn đã vào ví" if transition.status == "clawback" else "Đơn đã vào ví bị huỷ"
         body = (
-            "⚠️ <b>Đơn đã vào ví bị huỷ</b>\n\n"
+            f"⚠️ <b>{title}</b>\n\n"
             f"🛍️ {html.escape(buyer_name(transition.item_name))}\n"
-            f"Trừ khỏi ví: <b>{format_vnd(transition.cashback_vnd)}</b>\n"
+            f"Trừ khỏi ví: <b>{format_vnd(abs(transition.cashback_vnd))}</b>\n"
             f"👤 <code>{transition.telegram_user_id}</code>\n"
             f"🕓 {_vn_now_text()}\n\n"
             "ⓘ Nếu khách đã rút khoản này, số dư sẽ âm cho tới khi có đơn mới bù lại."

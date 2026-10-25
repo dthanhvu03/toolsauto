@@ -1,7 +1,9 @@
 # Điều khoản V3 — bản nháp để chủ bot duyệt (2026-10-25)
 
 Nguồn: V2 đang hiệu lực (`cashback_bot/terms_content.py`) + quyết định ADR-059.
-**Chưa đưa vào bot.** Chỉ đưa vào code và công bố khi ví sắp mở, sau khi xong 3 PLAN backend (chờ 7 ngày khi đổi tài khoản, trừ khi Shopee thu hồi, đọc báo cáo thanh toán). Nếu công bố trước, điều khoản hứa những việc bot chưa làm.
+**Chưa đưa vào bot.** Chỉ đưa vào code và công bố khi ví sắp mở.
+- PLAN-088 đã làm: chờ 7 ngày khi đổi tài khoản, trừ khi Shopee thu hồi, tin chi trả kèm mã giao dịch.
+- Còn lại: đọc báo cáo thanh toán Shopee. Nếu công bố trước khi xong, điều khoản hứa việc bot chưa làm.
 
 Chủ bot đã trả lời các câu hỏi (2026-10-25): hạn mức ngày / tháng tính theo từng khách và khách được rút số lớn một lần; không thêm câu "tự chịu nghĩa vụ thuế"; đổi mức không cần báo trước.
 

@@ -491,5 +491,15 @@ def conversions_csv(conn: sqlite3.Connection, since: datetime) -> tuple[bytes, i
         values = list(row)
         values[0] = _vn(values[0])
         values[12] = _vn(values[12])
-        writer.writerow(["" if value is None else value for value in values])
+        writer.writerow([_csv_cell(value) for value in values])
     return buffer.getvalue().encode("utf-8-sig"), len(rows)
+
+
+def _csv_cell(value):
+    """C5: chữ bắt đầu bằng = + - @ (tên sản phẩm, username) thì Excel chạy như công thức: thêm ' ở đầu.
+    Số giữ nguyên."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value

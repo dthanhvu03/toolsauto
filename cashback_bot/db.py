@@ -514,6 +514,38 @@ BEGIN SELECT RAISE(ABORT, 'payout_policy_decisions is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS payout_policy_decisions_no_delete BEFORE DELETE ON payout_policy_decisions
 BEGIN SELECT RAISE(ABORT, 'payout_policy_decisions is append-only'); END;
 
+-- PLAN-088 (B8): máy trạng thái yêu cầu rút ở tầng DB, đúng như payouts.TRANSITIONS (test so khớp hai bên).
+CREATE TRIGGER IF NOT EXISTS payout_status_machine BEFORE UPDATE OF status ON cashback_payouts
+WHEN NEW.status != OLD.status AND (OLD.status || '>' || NEW.status) NOT IN (
+    'requested>under_review', 'requested>rejected', 'requested>cancelled', 'requested>needs_review',
+    'under_review>approved_for_payment', 'under_review>rejected', 'under_review>needs_review',
+    'approved_for_payment>processing', 'approved_for_payment>cancelled', 'approved_for_payment>needs_review',
+    'processing>sent_unconfirmed', 'processing>failed', 'processing>needs_review',
+    'sent_unconfirmed>paid_confirmed', 'sent_unconfirmed>failed', 'sent_unconfirmed>needs_review',
+    'needs_review>under_review', 'needs_review>sent_unconfirmed', 'needs_review>rejected', 'needs_review>failed',
+    'paid_confirmed>returned')
+BEGIN SELECT RAISE(ABORT, 'payout: transition not allowed'); END;
+-- Đã từng bắt đầu chuyển thì không quay lại vòng duyệt / từ chối (chuyển hai lần, giải phóng tiền đã đi).
+CREATE TRIGGER IF NOT EXISTS payout_no_second_round BEFORE UPDATE OF status ON cashback_payouts
+WHEN OLD.status = 'needs_review' AND NEW.status IN ('under_review', 'rejected') AND EXISTS (
+    SELECT 1 FROM payout_events WHERE payout_id = NEW.id AND to_status IN ('processing', 'sent_unconfirmed'))
+BEGIN SELECT RAISE(ABORT, 'payout: money may have left'); END;
+-- Khoá theo dữ liệu thật, không chỉ theo bảng có tồn tại: tạo bảng rỗng (migration 007) không mở được khoá.
+-- Yêu cầu rút cần một kỳ đối soát MATCHED và quyết định thuế mới nhất APPROVED; khoản vào ví cần đơn đã SETTLED
+-- (settlement._sync_conversion_settlement chỉ gán khi đơn nằm trong kỳ MATCHED). Dòng thu hồi (số âm) không bị chặn.
+CREATE TRIGGER IF NOT EXISTS financial_lock_v2_payout_insert BEFORE INSERT ON cashback_payouts
+WHEN NOT EXISTS (SELECT 1 FROM settlement_batches WHERE status = 'MATCHED')
+    OR (SELECT status FROM payout_policy_decisions WHERE topic = 'tax' ORDER BY id DESC LIMIT 1) IS NOT 'APPROVED'
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no matched settlement or tax decision'); END;
+CREATE TRIGGER IF NOT EXISTS financial_lock_v2_entry_insert BEFORE INSERT ON cashback_entries
+WHEN NEW.status = 'available' AND NEW.cashback_vnd > 0 AND NOT EXISTS (
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND settlement_status = 'SETTLED')
+BEGIN SELECT RAISE(ABORT, 'financial_lock: entry not in a matched settlement'); END;
+CREATE TRIGGER IF NOT EXISTS financial_lock_v2_entry_update BEFORE UPDATE OF status ON cashback_entries
+WHEN NEW.status = 'available' AND OLD.status != 'available' AND NEW.cashback_vnd > 0 AND NOT EXISTS (
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND settlement_status = 'SETTLED')
+BEGIN SELECT RAISE(ABORT, 'financial_lock: entry not in a matched settlement'); END;
+
 -- Hạn mức rút. Dòng mới nhất có hiệu lực; chỉ ACTIVE có người duyệt mới được dùng. Mặc định không có dòng nào.
 CREATE TABLE IF NOT EXISTS payout_limit_policies (
     id INTEGER PRIMARY KEY,
@@ -772,6 +804,12 @@ class ConversionResult:
 
 def _text(value) -> str | None:
     return None if value is None else str(value)
+
+
+# PLAN-088 (C3): tin admin có số tài khoản đầy đủ (bước Đang chuyển) mang dấu này. Gửi xong thì xoá nội dung khỏi
+# outbound_messages để số không nằm lại trong DB và các bản backup sau đó.
+SCRUB_AFTER_SEND_MARK = "🏦 <b>Chuyển tay</b>"
+SCRUBBED_BODY = "(đã xoá sau khi gửi: có số tài khoản)"
 
 
 def _channel_scope(channel: str) -> str:
@@ -1308,10 +1346,11 @@ class TrackingRepository:
             conn.execute(
                 """
                 UPDATE outbound_messages
-                SET status = 'sent', sent_at = ?, last_error = NULL, next_retry_at = NULL
+                SET status = 'sent', sent_at = ?, last_error = NULL, next_retry_at = NULL,
+                    body_html = CASE WHEN instr(body_html, ?) > 0 THEN ? ELSE body_html END
                 WHERE id = ?
                 """,
-                (_utc_now(), outbound_id),
+                (_utc_now(), SCRUB_AFTER_SEND_MARK, SCRUBBED_BODY, outbound_id),
             )
 
     def schedule_outbound(

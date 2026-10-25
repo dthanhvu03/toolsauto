@@ -74,10 +74,13 @@ def user_conditions(conn: sqlite3.Connection, user_id: int) -> list[Condition]:
     version = payout_terms_version(conn)
     accepted = False
     if version is not None:
+        # Bản ghi trong quyết định hoặc bản công bố sau nó (B13): công bố V4 không làm mọi khách mất điều kiện.
+        # Đổi điều kiện chi trả thì chủ bot ghi quyết định payout_terms mới trỏ tới bản đó.
         accepted = conn.execute(
             """
             SELECT 1 FROM customer_terms_acceptances a JOIN customer_terms_versions v ON v.id = a.terms_version_id
-            WHERE a.telegram_user_id = ? AND v.version = ? AND v.status = 'PUBLISHED'
+            WHERE a.telegram_user_id = ? AND v.status = 'PUBLISHED'
+              AND v.id >= (SELECT MIN(id) FROM customer_terms_versions WHERE version = ?)
             """,
             (user_id, version),
         ).fetchone() is not None
@@ -92,4 +95,6 @@ def payout_conditions(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime)
         Condition("bank_verified", "Tài khoản nhận tiền đã xác minh (không phải chỉ tạo được QR)", status == "VERIFIED", "payout"),
         Condition("fund", "Quỹ có chứng từ còn đủ cho yêu cầu này", fund.verified and fund.headroom_vnd >= 0, "payout"),
         Condition("limits", "Trong hạn mức rút", limit is None, "payout"),
+        Condition("sources", "Các khoản nguồn còn trong ví (Shopee không huỷ / giảm, kỳ không bị đảo)",
+                  payouts.sources_available(conn, int(row["id"])), "payout"),
     ]

@@ -12,7 +12,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import order_notify, policy_snapshot
+from cashback_bot import order_notify, payouts, policy_snapshot
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
@@ -252,6 +252,8 @@ class CashbackService:
         settings = self.wallet.settings()
         if not settings.enabled:
             return page_reply(WALLET_CLOSED)
+        with self.repo.connect() as conn:
+            limits = payouts.active_limits(conn)
         return wallet_reply(
             settings,
             self.wallet.balance(user_id),
@@ -259,6 +261,8 @@ class CashbackService:
             self.wallet.bank(user_id),
             self.wallet.open_request(user_id),
             notice=notice,
+            limits=limits,
+            request_vnd=self.wallet.request_amount(user_id, datetime.now(timezone.utc)),
         )
 
     def _wallet_action(self, user_id: int, action: str, query_id: str | None = None) -> BotReply:
@@ -274,14 +278,21 @@ class CashbackService:
             return bank_prompt_reply(BANKS[code][1])
         if action == "out":
             bank = self.wallet.bank(user_id)
-            amount = self.wallet.balance(user_id).withdrawable_vnd
+            balance = self.wallet.balance(user_id).withdrawable_vnd
             if bank is None:
                 return withdraw_error_reply("no_bank")
             if self.wallet.open_request(user_id) is not None:
                 return withdraw_error_reply("pending_exists")
-            if amount < self.wallet.settings().min_withdraw_vnd or amount <= 0:
+            minimum = self.wallet.settings().min_withdraw_vnd
+            if balance < minimum or balance <= 0:
                 return withdraw_error_reply("below_min")
-            return withdraw_confirm_reply(amount, bank)
+            # B6: số dư lớn hơn hạn mức thì rút phần được phép, phần còn lại rút lần sau.
+            now = datetime.now(timezone.utc)
+            amount = self.wallet.request_amount(user_id, now)
+            if amount < minimum:
+                with self.repo.connect() as conn:
+                    return withdraw_error_reply(payouts.check_limits(conn, user_id, minimum, now) or "over_daily_limit")
+            return withdraw_confirm_reply(amount, bank, balance)
         if action == "out:ok":
             # Telegram gửi lại cùng callback: cùng khoá, không tạo yêu cầu thứ hai (PLAN-078).
             key = None if query_id is None else f"cb:{user_id}:{query_id}"
@@ -323,7 +334,8 @@ class CashbackService:
         settings = self.wallet.settings()
         recent = (moment - NEW_ORDER_NOTICE_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")
         for item in transitions:
-            if item.previous == "available" and item.status == "cancelled" and self.admin_notifier:
+            if (item.previous == "available" and item.status == "cancelled" or item.status == "clawback") \
+                    and self.admin_notifier:
                 self.admin_notifier.notify_wallet_clawback(item)
             if not settings.enabled:
                 continue

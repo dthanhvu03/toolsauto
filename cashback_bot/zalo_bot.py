@@ -239,7 +239,7 @@ class ZaloChannel:
             number = int(key)
             if not 1 <= number <= len(menu):
                 return BotReply(NUMBER_STALE)
-            return self._press(internal, menu[number - 1])
+            return self._press(internal, menu[number - 1], update_id)
         command = SHORTCUTS.get(key, text)
         if parse_shopee_target(command) is not None:
             try:
@@ -253,10 +253,13 @@ class ZaloChannel:
         if count in CAPACITY_ALERTS and self.admin_notifier:
             self.admin_notifier.notify_zalo_capacity(count, BASIC_LIMIT)
 
-    def _press(self, internal: int, data: str) -> BotReply:
-        """Chạy nút u:* qua đúng đường callback của Telegram (chat riêng, chat_id = khách)."""
+    def _press(self, internal: int, data: str, update_id: int) -> BotReply:
+        """Chạy nút u:* qua đúng đường callback của Telegram (chat riêng, chat_id = khách).
+
+        Mã callback theo từng tin Zalo (như query_id Telegram): Zalo gửi lại cùng tin thì cùng mã (chống trùng),
+        lần bấm sau là mã mới. Mã chung cho mọi lần bấm làm khách chỉ rút được một lần (B5)."""
         update = {"callback_query": {
-            "id": f"zalo:{internal}", "from": {"id": internal}, "data": data,
+            "id": f"zalo:{internal}:{-update_id}", "from": {"id": internal}, "data": data,
             "message": {"chat": {"id": internal, "type": "private"}},
         }}
         outcome = self.service.handle_update(update)

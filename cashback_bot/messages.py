@@ -50,6 +50,11 @@ DESCRIPTION = (
     "Bot không thu phí sử dụng."
 )
 SHORT_DESCRIPTION = "Dán link Shopee, xem số tiền hoàn dự kiến. Bot đang thử nghiệm."
+DESCRIPTION_WALLET = (
+    "Dán link sản phẩm Shopee, bot gửi lại link mua và số tiền hoàn dự kiến.\n\n"
+    "Mua qua link của bot: bot theo dõi đơn, tiền hoàn vào ví khi Shopee đã duyệt và thanh toán hoa hồng. "
+    "Bot không thu phí sử dụng."
+)
 
 
 def home_keyboard(show_rank: bool = False, show_wallet: bool = False) -> Keyboard:
@@ -129,7 +134,8 @@ def how_to_calc(v12: bool, wallet_hold_days: int | None = None, wallet_min_vnd: 
         + (
             "ⓘ Ví hoàn tiền chưa mở, bot chưa chi trả."
             if wallet_hold_days is None
-            else f"ⓘ Tiền hoàn vào ví {wallet_hold_days} ngày sau khi đơn hoàn thành. "
+            else "ⓘ Tiền hoàn vào ví khi Shopee đã duyệt và thanh toán hoa hồng, sớm nhất "
+            f"{wallet_hold_days} ngày sau khi đơn hoàn thành. "
             f"Rút từ {format_vnd(wallet_min_vnd or 0)}, chuyển khoản về tài khoản bạn khai."
         )
     )
@@ -297,18 +303,23 @@ BANK_ERRORS = {
 WITHDRAW_ERRORS = {
     "disabled": WALLET_CLOSED,
     "no_bank": "🏦 <b>Chưa có tài khoản nhận tiền</b>\nBấm Tài khoản nhận tiền để khai trước khi rút.",
-    "pending_exists": "📤 <b>Bạn đang có một yêu cầu rút chờ chuyển</b>\nBot sẽ báo khi admin chuyển xong.",
+    "pending_exists": "📤 <b>Bạn đang có một yêu cầu rút chờ chuyển</b>\nYêu cầu này xong bạn mới tạo được yêu cầu mới. Bot sẽ báo khi admin chuyển xong.",
     "below_min": "⏳ <b>Chưa đủ số tối thiểu để rút</b>\nTiền hoàn sẽ cộng dần khi đơn được duyệt.",
     # Khoá tài chính (hardening V1): chưa có bằng chứng Shopee đã trả hoặc vượt số Shopee đã trả.
     "locked": "⏳ <b>Chưa mở rút tiền</b>\nBot chỉ chi khi Shopee đã duyệt và thanh toán hoa hồng. Tiền hoàn của bạn vẫn được ghi lại.",
-    "fund": "⏳ <b>Chưa rút được lúc này</b>\nKỳ thanh toán Shopee chưa về đủ. Bot sẽ báo khi rút được.",
+    "fund": "⏳ <b>Chưa rút được lúc này</b>\nKỳ thanh toán Shopee chưa về đủ. Bạn thử lại sau vài ngày nhé.",
     # PLAN-078
     "terms": "📋 <b>Cần đồng ý điều khoản chi trả</b>\nMở /dieukien, đọc và bấm đồng ý bản hiện hành rồi rút lại.",
     "insufficient": "⏳ <b>Số tiền vượt số đang rút được</b>\nMở lại ví để xem số rút được.",
     "limits_missing": "⏳ <b>Chưa mở rút tiền</b>\nHạn mức rút chưa được duyệt.",
-    "over_request_limit": "⏳ <b>Vượt hạn mức một lần rút</b>\nThử rút số nhỏ hơn hoặc nhắn /hotro.",
-    "over_daily_limit": "⏳ <b>Hôm nay đã hết hạn mức chi của bot</b>\nBạn thử lại vào ngày mai nhé.",
-    "over_monthly_limit": "⏳ <b>Tháng này đã hết hạn mức chi của bot</b>\nBot sẽ báo khi rút được.",
+    "over_request_limit": "⏳ <b>Vượt hạn mức một lần rút</b>\nMở lại 👛 Ví: nút Rút tự lấy đúng số tối đa được rút.",
+    "over_daily_limit": "⏳ <b>Hôm nay bạn đã rút tới hạn mức ngày</b>\nBạn rút tiếp từ ngày mai nhé.",
+    "over_monthly_limit": "⏳ <b>Tháng này bạn đã rút tới hạn mức tháng</b>\nBạn rút tiếp từ tháng sau nhé.",
+    # ADR-059: đổi tài khoản thì chờ 7 ngày, admin xác minh được thì rút sớm hơn.
+    "bank_cooldown": (
+        "🏦 <b>Bạn vừa đổi tài khoản nhận tiền</b>\n"
+        "Để an toàn, bot chờ 7 ngày rồi mới chuyển về tài khoản mới. Cần rút sớm hơn, nhắn /hotro để admin xác minh."
+    ),
 }
 PAYOUT_CUSTOMER_STATUS = {
     "requested": "đã gửi, chờ kiểm tra",
@@ -332,14 +343,19 @@ def vn_date(stamp: str | None) -> str:
 
 def _entry_line(entry) -> str:
     label = ENTRY_LABELS.get(entry["status"], entry["status"])
-    if entry["status"] == "holding" and entry["available_at"]:
+    if int(entry["cashback_vnd"]) < 0:
+        label = "Shopee giảm hoa hồng, trừ lại"
+    elif entry["status"] == "holding" and entry["available_at"]:
         label = f"Chờ duyệt tới {vn_date(entry['available_at'])}"
     return f"• {html.escape(buyer_name(entry['item_name'] or '-'))} · <b>{format_vnd(int(entry['cashback_vnd']))}</b> · {label}"
 
 
-def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "") -> BotReply:
-    """settings, balance, bank: kiểu trong wallet.py; entries, open_request: dòng SQLite."""
+def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "", limits=None,
+                 request_vnd: int | None = None) -> BotReply:
+    """settings, balance, bank: kiểu trong wallet.py; entries, open_request: dòng SQLite; limits: payouts.LimitPolicy.
+    request_vnd: số nút Rút sẽ tạo (cắt theo hạn mức còn lại); None thì bằng số có thể rút."""
     withdrawable = max(0, balance.withdrawable_vnd)
+    request = withdrawable if request_vnd is None else max(0, min(request_vnd, withdrawable))
     lines = ["👛 <b>Ví hoàn tiền</b>", ""]
     if notice:
         lines += [notice, ""]
@@ -349,6 +365,11 @@ def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "
         f"🔒 Đang giữ, chờ đủ điều kiện: <b>{format_vnd(balance.held_vnd)}</b>",
         f"💸 Đã nhận: <b>{format_vnd(balance.paid_vnd)}</b>",
     ]
+    if balance.withdrawable_vnd < 0:
+        lines.append(
+            f"⚠️ Đang trừ lại: <b>{format_vnd(-balance.withdrawable_vnd)}</b> (Shopee giảm hoặc huỷ hoa hồng đơn đã rút). "
+            "Đơn sau sẽ bù vào trước."
+        )
     if open_request is not None:
         label = PAYOUT_CUSTOMER_STATUS.get(open_request["status"], open_request["status"])
         lines.append(f"📤 Đang xử lý rút: <b>{format_vnd(int(open_request['amount_vnd']))}</b> · {label}")
@@ -357,11 +378,19 @@ def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "
     lines += ["", f"🏦 Nhận tiền: {html.escape(bank.masked)}" if bank else "🏦 Chưa khai tài khoản nhận tiền."]
     lines += [
         "",
-        f"ⓘ Tiền vào ví {settings.hold_days} ngày sau khi đơn hoàn thành. Rút từ {format_vnd(settings.min_withdraw_vnd)}.",
+        "ⓘ Tiền vào ví khi Shopee đã duyệt và thanh toán hoa hồng, sớm nhất "
+        f"{settings.hold_days} ngày sau khi đơn hoàn thành. Rút từ {format_vnd(settings.min_withdraw_vnd)}.",
     ]
+    if limits is not None:
+        lines.append(
+            f"ⓘ Hạn mức rút: {format_vnd(limits.max_per_request_vnd)} mỗi lần · {format_vnd(limits.daily_total_vnd)} "
+            f"mỗi ngày · {format_vnd(limits.monthly_total_vnd)} mỗi tháng."
+        )
+    if request < withdrawable and request >= settings.min_withdraw_vnd:
+        lines.append(f"ⓘ Lần này rút được {format_vnd(request)} theo hạn mức; phần còn lại rút lần sau.")
     rows: list[tuple[tuple[str, str], ...]] = []
-    if open_request is None and bank and withdrawable >= settings.min_withdraw_vnd:
-        rows.append(((f"💸 Rút {format_vnd(withdrawable)}", "u:w:out"),))
+    if open_request is None and bank and request >= settings.min_withdraw_vnd:
+        rows.append(((f"💸 Rút {format_vnd(request)}", "u:w:out"),))
     rows.append((("🏦 Tài khoản nhận tiền", "u:w:bank"),))
     rows.append((("◀️ Trang chủ", "u:p:home"),))
     return BotReply("\n".join(lines), inline_keyboard=tuple(rows))
@@ -387,14 +416,17 @@ def bank_prompt_reply(bank_name: str, error: str | None = None) -> BotReply:
     return BotReply(text, inline_keyboard=((("🔁 Chọn ngân hàng khác", "u:w:bank"),), (("✖️ Hủy", "u:p:wallet"),)))
 
 
-def withdraw_confirm_reply(amount_vnd: int, bank) -> BotReply:
+def withdraw_confirm_reply(amount_vnd: int, bank, balance_vnd: int | None = None) -> BotReply:
+    rest = ""
+    if balance_vnd is not None and balance_vnd > amount_vnd:
+        rest = f"Số dư {format_vnd(balance_vnd)}; phần còn lại rút lần sau (hạn mức).\n"
     text = (
         "💸 <b>Xác nhận rút tiền</b>\n\n"
         f"Số tiền: <b>{format_vnd(amount_vnd)}</b>\n"
-        f"Về: {html.escape(bank.masked)}\n"
+        + rest
+        + f"Về: {html.escape(bank.masked)}\n"
         f"Chủ tài khoản: {html.escape(bank.account_name)}\n\n"
-        "ⓘ Admin kiểm tra và chuyển khoản tay, bot báo khi ngân hàng xác nhận. Tài khoản cần được xác minh "
-        "trước khi chuyển."
+        "ⓘ Admin kiểm tra tên người nhận rồi chuyển khoản tay trong 3–7 ngày làm việc. Bot báo khi chuyển xong."
     )
     return BotReply(text, inline_keyboard=((("✅ Xác nhận rút", "u:w:out:ok"),), (("◀️ Ví của tôi", "u:p:wallet"),)))
 
@@ -455,19 +487,31 @@ def entry_notice(
     )
 
 
-def payout_notice(payout, paid: bool) -> str:
+PAYOUT_RELEASED_TITLES = {
+    "rejected": "Yêu cầu rút không được duyệt",
+    "cancelled": "Yêu cầu rút đã huỷ",
+    "failed": "Chuyển tiền không thành công",
+    "returned": "Ngân hàng hoàn lại tiền",
+}
+
+
+def payout_notice(payout, paid: bool, status: str | None = None, bank_ref: str | None = None) -> str:
+    """paid: đã chuyển (kèm mã giao dịch ngân hàng nếu có); không thì tiền trở lại ví, tiêu đề theo status."""
     amount = format_vnd(int(payout["amount_vnd"]))
     if paid:
+        ref = f"Mã giao dịch: <code>{html.escape(bank_ref)}</code>\n" if bank_ref else ""
         return (
             "💸 <b>Đã chuyển tiền hoàn</b>\n\n"
             f"Số tiền: <b>{amount}</b>\n"
-            f"Nội dung: <code>{html.escape(payout['transfer_note'] or '')}</code>\n\n"
-            "Bạn kiểm tra tài khoản giúp mình nhé."
+            f"Nội dung: <code>{html.escape(payout['transfer_note'] or '')}</code>\n"
+            + ref
+            + "\nBạn kiểm tra tài khoản giúp mình nhé."
         )
+    title = PAYOUT_RELEASED_TITLES.get(status or "", "Yêu cầu rút chưa hoàn tất")
     return (
-        "⚠️ <b>Yêu cầu rút chưa được duyệt</b>\n\n"
+        f"⚠️ <b>{title}</b>\n\n"
         f"Số tiền {amount} đã trở lại ví. Bạn kiểm tra lại tài khoản nhận tiền rồi rút lại, "
-        "hoặc nhắn admin để biết lý do."
+        "hoặc gửi /hotro để hỏi lý do."
     )
 
 
@@ -480,7 +524,7 @@ def _vn_stamp(stamp: str | None) -> str:
     return moment.astimezone(ICT).strftime("%d/%m/%Y")
 
 
-def terms_home_reply(version, accepted_at: str | None) -> BotReply:
+def terms_home_reply(version, accepted_at: str | None, wallet_open: bool = False) -> BotReply:
     """/dieukien khi có bản điều khoản đang công bố. Xem không phải đồng ý: nút đồng ý tách riêng."""
     lines = [
         f"📋 <b>{html.escape(version.title)}</b>",
@@ -492,7 +536,7 @@ def terms_home_reply(version, accepted_at: str | None) -> BotReply:
             else "Bạn chưa xác nhận phiên bản này. Đọc xong, nếu đồng ý thì bấm nút cuối."
         ),
         "",
-        "ⓘ Ví hoàn tiền và chi trả chưa mở. Số hoàn trên link là dự kiến.",
+        "ⓘ Số hoàn trên link là dự kiến." if wallet_open else "ⓘ Ví hoàn tiền và chi trả chưa mở. Số hoàn trên link là dự kiến.",
     ]
     rows: list[tuple[tuple[str, str], ...]] = [((label, f"u:t:s:{key}"),) for key, label, _body in version.sections]
     if not accepted_at:
@@ -531,6 +575,10 @@ SUPPORT_ASK = (
     "Bot chờ trong 15 phút."
 )
 SUPPORT_REPLY_ASK = "✍️ <b>Bổ sung cho yêu cầu #{ticket}</b>\nGửi một tin (tối đa 1.000 ký tự). Bot chờ trong 15 phút."
+SUPPORT_LIMIT = (
+    "⏳ Bạn đã gửi nhiều yêu cầu trong 24 giờ qua. Admin sẽ trả lời các yêu cầu đang mở; cần thêm thông tin thì "
+    "bạn bổ sung vào yêu cầu cũ trong 🗂 Yêu cầu của tôi nhé."
+)
 SUPPORT_EMPTY = "Chưa đọc được nội dung. Gửi lại một tin bằng chữ nhé."
 SUPPORT_CLOSED = "Yêu cầu này đã kết thúc. Nếu cần, bạn mở yêu cầu mới trong /hotro."
 
@@ -611,7 +659,7 @@ COMMISSION_LABELS = {
 COMMISSION_WAITING = "Hoa hồng đang chờ Shopee xác minh"
 SETTLED_LABEL = "Shopee đã thanh toán hoa hồng cho chương trình"
 NOT_SETTLED_LABEL = "Chưa có xác nhận Shopee thanh toán hoa hồng"
-NOT_WITHDRAWABLE = "Chưa phải tiền có thể rút: ví hoàn tiền chưa mở."
+NOT_WITHDRAWABLE = "Chưa phải tiền có thể rút: tiền chỉ vào ví khi Shopee đã duyệt và thanh toán hoa hồng."
 ORDERS_EMPTY = (
     "📦 <b>Đơn hàng của tôi</b>\n\n"
     "Hiện Shopee chưa ghi nhận giao dịch nào khớp với các link bạn đã tạo.\n\n"
@@ -744,7 +792,7 @@ def orders_summary_reply(stats: dict, rows, page: int, pages: int, start: int = 
     lines += [
         "",
         "ⓘ Số tạm tính, có thể thay đổi. "
-        + ("Chưa có khoản nào rút được: ví hoàn tiền chưa mở." if not stats.get("available") else "")
+        + ("Chưa có khoản nào vào ví." if not stats.get("available") else "")
         + "\nBấm vào đơn để xem tiến trình.",
     ]
     keyboard: list[tuple[tuple[str, str], ...]] = []
@@ -786,7 +834,7 @@ def _order_steps(row: dict) -> list[str]:
     steps.append(
         "✅ " + SETTLED_LABEL if row["settlement_status"] == "SETTLED" else "⏳ Chờ Shopee thanh toán hoa hồng cho chương trình"
     )
-    steps.append("✅ Tiền hoàn đã vào ví" if row.get("entry_status") == "available" else "🔒 Tiền hoàn vào ví: ví hoàn tiền chưa mở")
+    steps.append("✅ Tiền hoàn đã vào ví" if row.get("entry_status") == "available" else "🔒 Tiền hoàn chưa vào ví")
     return steps
 
 

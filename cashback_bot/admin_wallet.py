@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -34,6 +35,7 @@ from cashback_bot.wallet import BANKS, HOLD_DAY_CHOICES, KEY_ENABLED, MIN_WITHDR
 _PAYOUT = re.compile(r"^c:wl:rq:(\d{1,9})$")
 _STEP = re.compile(r"^c:wl:mv:(\d{1,9}):(\d{1,6}):(rv|ap|pr|se|pd|rj|ca|fl|nr|rt)(:ok)?$")
 _VERIFY = re.compile(r"^c:wl:vb:(\d{1,9})$")
+_VERIFY_MEMBER = re.compile(r"^c:wl:vm:(-?\d{1,15})$")
 WAIT_TTL = timedelta(minutes=10)
 # Bước cần admin gõ thêm: (mô tả ô nhập, cần lý do, cần chứng từ).
 _TEXT_STEPS = {
@@ -57,9 +59,12 @@ _ERRORS = {
     "fund": "Quỹ có chứng từ không đủ.",
     "limits": "Vượt hạn mức hoặc hạn mức chưa duyệt.",
     "not_found": "Không tìm thấy yêu cầu này.",
+    "source_changed": "Có khoản nguồn không còn trong ví (Shopee huỷ / giảm, hoặc kỳ bị đảo). Chuyển «Cần xử lý» "
+                      "hoặc từ chối.",
+    "sources": "Có khoản nguồn không còn trong ví.",
 }
-_MEMBER = re.compile(r"^c:wl:u:(\d+)$")
-_HOLD = re.compile(r"^c:wl:hold:(\d+)$")
+_MEMBER = re.compile(r"^c:wl:u:(-?\d+)$")
+_HOLD = re.compile(r"^c:wl:hold:(\d+)(:ok)?$")
 _MIN = re.compile(r"^c:wl:min:(\d+)$")
 _LIMIT = re.compile(r"^c:wl:lim:(req|day|month):(\d+)$")
 _LIMIT_FIELDS = {"req": "max_per_request_vnd", "day": "daily_total_vnd", "month": "monthly_total_vnd"}
@@ -105,7 +110,15 @@ class WalletAdmin:
         hold = _HOLD.fullmatch(data)
         if hold and int(hold.group(1)) in HOLD_DAY_CHOICES:
             days = int(hold.group(1))
-            self._log(admin_id, "wallet_hold_days", {"days": self.wallet.settings().hold_days}, {"days": days}, now)
+            current = self.wallet.settings().hold_days
+            if days == current:
+                return self._settings()
+            if not hold.group(2):
+                # B16: đổi ngày giữ ảnh hưởng mọi đơn chưa vào ví: hỏi lại trước khi ghi.
+                return BotReply(_hold_confirm_text(current, days), inline_keyboard=(
+                    (("✅ Đổi", f"c:wl:hold:{days}:ok"),), (("◀️ Quay lại", "c:wl:cfg"),),
+                ))
+            self._log(admin_id, "wallet_hold_days", {"days": current}, {"days": days}, now)
             self.wallet.set_hold_days(days)
             return self._settings()
         low = _MIN.fullmatch(data)
@@ -132,6 +145,8 @@ class WalletAdmin:
                               bool(step.group(4)), now)
         if (verify := _VERIFY.fullmatch(data)) is not None:
             return self._ask_verify(admin_id, int(verify.group(1)), now)
+        if (verify := _VERIFY_MEMBER.fullmatch(data)) is not None:
+            return self._ask_verify_member(admin_id, int(verify.group(1)), now)
         return BotReply("Nút này không còn hiệu lực.", inline_keyboard=(WALLET_ADMIN_BACK,))
 
     def screen(self, notice: str = "") -> BotReply:
@@ -175,16 +190,29 @@ class WalletAdmin:
             ),
         )
 
-    def _member(self, user_id: int) -> BotReply:
+    def _member(self, user_id: int, notice: str = "") -> BotReply:
         user = self.repo.get_user(user_id)
+        bank = self.wallet.bank(user_id)
         text = wallet_member_text(
             user_id,
             None if user is None else user["username"],
             self.wallet.balance(user_id),
             self.wallet.entries(user_id, limit=10),
-            self.wallet.bank(user_id),
+            bank,
         )
-        return BotReply(text, inline_keyboard=((("◀️ Thành viên", "c:wl:members"),), WALLET_ADMIN_BACK))
+        rows: list[tuple[tuple[str, str], ...]] = []
+        if bank is not None:
+            sha = payouts.account_sha(bank.bank_code, bank.account_no)
+            with self.repo.connect() as conn:
+                state = payouts.bank_status(conn, user_id, sha)
+                until = payouts.bank_cooldown_until(conn, user_id, sha)
+            if until is not None and until > datetime.now(timezone.utc):
+                text += f"\n\n⏳ Vừa đổi tài khoản: khách rút được từ {_vn_time(until)} (hoặc khi admin xác minh)."
+            if state != "VERIFIED":
+                rows.append((("✅ Xác minh tài khoản", f"c:wl:vm:{user_id}"),))
+        if notice:
+            text = f"{notice}\n\n{text}"
+        return BotReply(text, inline_keyboard=(*rows, (("◀️ Thành viên", "c:wl:members"),), WALLET_ADMIN_BACK))
 
     # --- Yêu cầu rút (PLAN-078) -------------------------------------------------------------
 
@@ -229,9 +257,9 @@ class WalletAdmin:
     def _notify_customer(self, row, target: str, text: str | None) -> None:
         """Chỉ báo khách khi có kết luận: đã trả (có chứng từ), tiền trở lại ví, hoặc cần kiểm tra tài khoản."""
         if target == payouts.PAID:
-            body = payout_notice(row, True)
+            body = payout_notice(row, True, bank_ref=text)
         elif target in (payouts.REJECTED, payouts.CANCELLED, payouts.FAILED, payouts.RETURNED):
-            body = payout_notice(row, False) + (f"\n\nLý do: {text}" if text else "")
+            body = payout_notice(row, False, target) + (f"\n\nLý do: {html.escape(text)}" if text else "")
         elif target == payouts.NEEDS_REVIEW:
             body = (
                 "⚠️ <b>Yêu cầu rút cần kiểm tra thêm</b>\n\n"
@@ -260,6 +288,20 @@ class WalletAdmin:
             inline_keyboard=((("✖️ Hủy", f"c:wl:rq:{payout_id}"),),),
         )
 
+    def _ask_verify_member(self, admin_id: int, user_id: int, now: datetime) -> BotReply:
+        """ADR-059: khách vừa đổi tài khoản phải chờ 7 ngày; admin xác minh được thì khách rút ngay."""
+        bank = self.wallet.bank(user_id)
+        if bank is None:
+            return self._member(user_id)
+        self.waiting[admin_id] = ("verify_member", user_id, 0, "", now + WAIT_TTL)
+        return BotReply(
+            "✅ <b>Xác minh tài khoản nhận tiền</b>\n\n"
+            f"{html.escape(bank.masked)} · {html.escape(bank.account_name)}.\n"
+            "Gõ bằng chứng xác minh (ví dụ: «chuyển thử 1.000đ, app hiện đúng tên, mã GD …»). Xác minh xong khách "
+            "rút được ngay, không phải chờ 7 ngày sau khi đổi tài khoản.",
+            inline_keyboard=((("✖️ Hủy", f"c:wl:u:{user_id}"),),),
+        )
+
     def consume_text(self, admin_id: int, text: str, now: datetime) -> BotReply | None:
         job = self.waiting.get(admin_id)
         if job is None:
@@ -269,6 +311,18 @@ class WalletAdmin:
         self.waiting.pop(admin_id, None)
         if deadline <= now or not stripped or stripped.startswith("/"):
             return None
+        if kind == "verify_member":
+            user_id, bank = payout_id, self.wallet.bank(payout_id)
+            if bank is None:
+                return self._member(user_id)
+            try:
+                with self.repo.connect() as conn:
+                    payouts.verify_bank(conn, user_id, payouts.account_sha(bank.bank_code, bank.account_no), admin_id,
+                                        "manual", stripped, now)
+            except payouts.PayoutError:
+                return self._member(user_id, f"⚠️ {_ERRORS['evidence']}")
+            self._log(admin_id, "bank_verified", None, {"user": user_id, "last4": bank.account_no[-4:]}, now)
+            return self._member(user_id, "✅ Đã ghi xác minh tài khoản (gắn với đúng số tài khoản này).")
         if kind == "verify":
             row = self.wallet.payout(payout_id)
             if row is None:
@@ -324,6 +378,19 @@ class WalletAdmin:
             return None, "Máy chủ chưa vẽ được ảnh QR."
         caption = f"{row['transfer_note']} · {format_vnd(int(row['amount_vnd']))} · {bank[1]} ••••{row['account_no'][-4:]}"
         return (f"qr-{row['transfer_note'] or row['id']}.png".replace(" ", "-"), image, caption), None
+
+
+def _vn_time(moment: datetime) -> str:
+    return moment.astimezone(timezone(timedelta(hours=7))).strftime("%H:%M %d/%m")
+
+
+def _hold_confirm_text(current: int, days: int) -> str:
+    warn = "\n⚠️ 0 ngày: đơn vào ví ngay khi Shopee duyệt và thanh toán, không còn thời gian chờ trả hàng." if days == 0 else ""
+    return (
+        "⏳ <b>Đổi số ngày giữ tiền</b>\n\n"
+        f"{current} ngày → <b>{days} ngày</b> sau khi đơn hoàn thành.\n"
+        "Áp dụng cho đơn chưa vào ví; khoản đã vào ví giữ nguyên." + warn
+    )
 
 
 def _limits_dict(limits: payouts.LimitPolicy) -> dict:
