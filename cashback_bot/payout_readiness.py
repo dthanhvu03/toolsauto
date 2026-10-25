@@ -87,7 +87,7 @@ def user_conditions(conn: sqlite3.Connection, user_id: int) -> list[Condition]:
 def payout_conditions(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime) -> list[Condition]:
     status = payouts.bank_status(conn, int(row["telegram_user_id"]), row["account_sha"])
     fund = payouts.fund_position(conn)
-    limit = payouts.check_limits(conn, int(row["amount_vnd"]), now, exclude_id=int(row["id"]))
+    limit = payouts.check_limits(conn, int(row["telegram_user_id"]), int(row["amount_vnd"]), now, exclude_id=int(row["id"]))
     return [
         Condition("bank_verified", "Tài khoản nhận tiền đã xác minh (không phải chỉ tạo được QR)", status == "VERIFIED", "payout"),
         Condition("fund", "Quỹ có chứng từ còn đủ cho yêu cầu này", fund.verified and fund.headroom_vnd >= 0, "payout"),

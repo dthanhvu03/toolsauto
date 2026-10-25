@@ -931,7 +931,7 @@ def wallet_settings_text(settings, limits=None, notice: str = "") -> str:
         limit_line = "• Hạn mức rút: <b>chưa duyệt</b>\n"
     else:
         limit_line = (
-            f"• Hạn mức rút: tối đa <b>{format_vnd(limits.max_per_request_vnd)}</b>/lần · "
+            f"• Hạn mức rút mỗi khách: tối đa <b>{format_vnd(limits.max_per_request_vnd)}</b>/lần · "
             f"<b>{format_vnd(limits.daily_total_vnd)}</b>/ngày · <b>{format_vnd(limits.monthly_total_vnd)}</b>/tháng\n"
         )
     return (

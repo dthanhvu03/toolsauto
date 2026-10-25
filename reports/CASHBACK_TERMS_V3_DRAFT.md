@@ -3,7 +3,7 @@
 Nguồn: V2 đang hiệu lực (`cashback_bot/terms_content.py`) + quyết định ADR-059.
 **Chưa đưa vào bot.** Chỉ đưa vào code và công bố khi ví sắp mở, sau khi xong 3 PLAN backend (chờ 7 ngày khi đổi tài khoản, trừ khi Shopee thu hồi, đọc báo cáo thanh toán). Nếu công bố trước, điều khoản hứa những việc bot chưa làm.
 
-Chỗ đánh dấu **[CẦN ANH CHỌN]** là câu em chưa được quyết.
+Chủ bot đã trả lời các câu hỏi (2026-10-25): hạn mức ngày / tháng tính theo từng khách và khách được rút số lớn một lần; không thêm câu "tự chịu nghĩa vụ thuế"; đổi mức không cần báo trước.
 
 ## Tóm tắt thay đổi so với V2
 
@@ -56,8 +56,7 @@ Giữ nguyên V2. Câu cuối thay bằng:
 - Bạn đã đồng ý phiên bản điều khoản này trong bot.
 - Số dư rút được từ mức tối thiểu trở lên (hiện **10.000đ**).
 - Mỗi lần một yêu cầu: yêu cầu trước xong mới tạo được yêu cầu mới.
-- Mỗi yêu cầu tối đa **500.000đ**.
-- Tổng tiền chương trình chi cho mọi người có giới hạn mỗi ngày và mỗi tháng. Khi chạm giới hạn, bạn tạo yêu cầu vào ngày hoặc tháng sau.
+- Mỗi yêu cầu, và tổng rút của bạn mỗi ngày, mỗi tháng, không vượt hạn mức đang hiện trong 👛 Ví. Chạm hạn mức ngày hoặc tháng thì bạn rút tiếp vào ngày hoặc tháng sau.
 
 **2. Tài khoản nhận tiền**
 - Tài khoản ngân hàng phải đứng tên bạn, và tên chủ tài khoản phải trùng tên bạn khai.
@@ -68,13 +67,11 @@ Giữ nguyên V2. Câu cuối thay bằng:
 - Người vận hành chuyển khoản thủ công trong **3–7 ngày làm việc** kể từ khi bạn gửi yêu cầu.
 - Nội dung chuyển khoản: `Hoan tien` kèm mã yêu cầu.
 - Bạn nhận đúng số tiền trong yêu cầu, không bị trừ phí hay thuế.
-- **[CẦN ANH CHỌN]** Có thêm câu: "Bạn tự chịu nghĩa vụ thuế (nếu có) với khoản nhận được theo quy định pháp luật." Câu này phổ biến trong điều khoản; bỏ cũng được.
 - Chuyển xong, bot báo bạn kèm mã giao dịch ngân hàng. Chuyển lỗi hoặc ngân hàng hoàn lại thì tiền trở lại ví.
 
 **4. Thay đổi mức**
-- Mức tối thiểu, mức tối đa mỗi yêu cầu và số ngày giữ tiền có thể thay đổi. Mức đang áp dụng luôn hiện trong 👛 Ví.
+- Mức tối thiểu, hạn mức rút và số ngày giữ tiền có thể thay đổi. Mức đang áp dụng luôn hiện trong 👛 Ví.
 - Mức mới áp dụng cho yêu cầu tạo sau khi đổi. Số ngày giữ mới áp dụng cho đơn chưa vào ví; khoản đã vào ví giữ nguyên.
-- **[CẦN ANH CHỌN]** V2 nói mọi thay đổi điều khoản phải ra phiên bản mới. Mục này cho anh chỉnh các mức trong /admin mà không cần ra bản V4, vì bản này chỉ hứa "theo mức đang hiện trong bot". Nếu anh muốn mỗi lần đổi mức đều báo trước cho khách, em thêm câu "báo trước trong bot ít nhất N ngày".
 
 ## 🛡 Dữ liệu cá nhân
 

@@ -41,10 +41,11 @@ MONEY_LEFT = (PROCESSING, SENT)  # đã từng tới đây thì có thể tiền
 POLICY_TOPICS = ("tax", "clawback", "payout_terms", "bank_verification", "payment_limits", "manual_payment")
 EVIDENCE_MIN = 4
 # Lựa chọn hạn mức admin chỉnh trong /admin → 👛 Ví khách → ⚙️ Cài đặt (ADR-059). Tối thiểu theo «Rút tối thiểu».
+# Ngày / tháng tính theo từng khách; khách tích 5–10tr phải rút được một lần.
 LIMIT_CHOICES = {
-    "req": (200_000, 500_000, 1_000_000, 2_000_000),
-    "day": (1_000_000, 2_000_000, 5_000_000, 10_000_000),
-    "month": (5_000_000, 10_000_000, 20_000_000, 50_000_000),
+    "req": (500_000, 2_000_000, 5_000_000, 10_000_000),
+    "day": (2_000_000, 5_000_000, 10_000_000, 20_000_000),
+    "month": (10_000_000, 20_000_000, 50_000_000, 100_000_000),
 }
 
 
@@ -250,8 +251,9 @@ def decision(conn: sqlite3.Connection, topic: str) -> sqlite3.Row | None:
     ).fetchone()
 
 
-def check_limits(conn: sqlite3.Connection, amount: int, now: datetime, exclude_id: int | None = None) -> str | None:
-    """None nếu trong hạn mức. Tổng ngày/tháng tính trên mọi yêu cầu chưa bị giải phóng của cả bot."""
+def check_limits(conn: sqlite3.Connection, user_id: int, amount: int, now: datetime,
+                 exclude_id: int | None = None) -> str | None:
+    """None nếu trong hạn mức. Tổng ngày/tháng tính trên các yêu cầu chưa bị giải phóng của chính khách (ADR-059)."""
     limits = active_limits(conn)
     if limits is None:
         return "limits_missing"
@@ -266,9 +268,9 @@ def check_limits(conn: sqlite3.Connection, amount: int, now: datetime, exclude_i
     for since, cap, code in ((day_start, limits.daily_total_vnd, "over_daily_limit"),
                              (month_start, limits.monthly_total_vnd, "over_monthly_limit")):
         used = int(conn.execute(
-            f"SELECT COALESCE(SUM(amount_vnd), 0) FROM cashback_payouts WHERE created_at >= ? "
+            f"SELECT COALESCE(SUM(amount_vnd), 0) FROM cashback_payouts WHERE telegram_user_id = ? AND created_at >= ? "
             f"AND status NOT IN ({marks}) AND id != ?",
-            (stamp(since), *RELEASED, exclude_id or 0),
+            (user_id, stamp(since), *RELEASED, exclude_id or 0),
         ).fetchone()[0])
         if used + amount > cap:
             return code
@@ -410,7 +412,7 @@ def create_request(
         if want < min_vnd:
             conn.rollback()
             return None, "below_min"
-        limit = check_limits(conn, want, now)
+        limit = check_limits(conn, user_id, want, now)
         if limit is not None:
             conn.rollback()
             return None, limit

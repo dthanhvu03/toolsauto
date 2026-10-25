@@ -260,7 +260,8 @@ def test_han_muc_ban_nhap_khong_co_hieu_luc(tmp_path):
     assert bot.wallet.settings().locked_reasons, "hạn mức nháp làm mất hạn mức đang hiệu lực → khoá"
 
 
-def test_47_48_han_muc_ngay_va_thang_cua_ca_bot(tmp_path):
+def test_47_48_han_muc_ngay_va_thang_theo_tung_khach(tmp_path):
+    """ADR-059: tổng ngày / tháng tính riêng từng khách; khách này rút không làm khách khác chạm hạn mức."""
     bot = _ready(tmp_path, users=(USER, OTHER))
     with bot.repo.connect() as conn:
         conn.execute(
@@ -273,10 +274,17 @@ def test_47_48_han_muc_ngay_va_thang_cua_ca_bot(tmp_path):
     bot.wallet.save_bank(USER, ACCOUNT, T)
     bot.wallet.save_bank(OTHER, BankAccount("VCB", "1111111111", "TRAN B"), T)
     assert bot.wallet.request_payout(USER, T)[1] == "ok"
-    assert bot.wallet.request_payout(OTHER, T) == (None, "over_daily_limit")
-    assert bot.wallet.request_payout(OTHER, T + timedelta(days=1), amount=14_000)[1] == "ok"
+    assert bot.wallet.request_payout(OTHER, T)[1] == "ok", "khách khác không bị tính chung"
     with bot.repo.connect() as conn:
-        assert payouts.check_limits(conn, 5_000, T + timedelta(days=2)) == "over_monthly_limit"
+        assert payouts.check_limits(conn, USER, 7_000, T) == "over_daily_limit"
+        assert payouts.check_limits(conn, USER, 6_000, T) is None
+        assert payouts.check_limits(conn, USER, 14_000, T + timedelta(days=1)) is None
+        conn.execute("UPDATE cashback_payouts SET created_at = ? WHERE telegram_user_id = ?",
+                     ("2026-10-01T00:00:00Z", USER))
+        assert payouts.check_limits(conn, USER, 14_000, T + timedelta(days=1)) is None
+        conn.execute("UPDATE cashback_payouts SET amount_vnd = 20000 WHERE telegram_user_id = ?", (USER,))
+        assert payouts.check_limits(conn, USER, 14_000, T + timedelta(days=1)) == "over_monthly_limit"
+        assert payouts.check_limits(conn, OTHER, 1_000, T + timedelta(days=1)) is None
 
 
 def test_20_22_thieu_ky_doi_soat_hoac_quyet_dinh_thue_thi_khoa(tmp_path):
