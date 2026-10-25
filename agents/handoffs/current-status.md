@@ -1,3 +1,17 @@
+## Phiên 2026-10-25 (bl) — PLAN-084 ĐANG CHẠY, đã archive
+
+- **Restart:** chủ bot restart Telegram lúc 01:44:06Z, PID 747966 (`main@6f91065`), log khởi động sạch, `shopee auto sync enabled=True interval_min=240`.
+- **System State:**
+  - Zalo PID 690595 không đổi, heartbeat bình thường;
+  - hàng thông báo: 57 `sent`, 1 `suppressed`, không còn tin chờ; chưa có `net_down_since`;
+  - `gate_b_check` OK (2 pending 12.157đ / 960đ, ví khoá, trigger 6/6).
+- PLAN-084 chuyển vào `agents/plans/archive/`.
+- **Next:**
+  1. lần rớt mạng tới: kiểm tra chỉ 1 tin "📡 Bot đã kết nối lại" (≥ 60 giây) hoặc không có tin (< 60 giây);
+  2. khoảng 2026-10-26: xin duyệt rồi thử tin chủ động Zalo.
+
+---
+
 ## Phiên 2026-10-25 (bk) — PLAN-084 gộp tin lỗi mạng: lên main (chờ restart Telegram)
 
 Chủ bot: "anh duyệt nhé sáng nay bot báo lỗi nữa em".

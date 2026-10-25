@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Executor | Claude Code (chủ bot đồng ý lên plan sau sự cố 2026-10-24 17:22Z) |
-| Trạng thái | Chủ bot duyệt 2026-10-25 ("anh duyệt nhé"); đã lên main, chờ restart Telegram |
+| Trạng thái | Done 2026-10-25: chạy trên production (Telegram PID 747966, 01:44:06Z) |
 
 ## Sự cố gốc
 - 2026-10-24, 17:22–17:27Z: máy mất mạng khoảng 4–5 phút. Bot Telegram và bot Zalo cùng báo `ConnectionError`, rồi tự chạy lại; không cần restart.
