@@ -1,3 +1,16 @@
+## Phiên 2026-10-25 (bq) — Thống kê: tên khách Zalo + số click theo link
+
+- **Hỏi:** click Zalo trong Báo cáo click Shopee không có sub_id. Kết luận: 4 click 22:03–22:05 24/10 xảy ra trước khi bot Zalo chạy lần đầu (22:26), không phải link bot; link bot luôn có sub_id.
+- **Chủ bot duyệt cả 2 (a)+(b):** `main@b7cbcc4` (backup `cashback-20261025T100632Z.sqlite`).
+  - `admin_stats.py`: `TopUser` (tên Telegram / tên Zalo, link, click), `RecentLink` (5 link gần nhất kèm click); click = `shopee_clicks` khớp `sub_id`.
+  - `admin_ui.py`: "Gửi nhiều nhất" hiện `Zalo · tên` (chưa có tên: `Zalo #N`) thay cho −1, thêm "· N click"; mục mới "🖱️ Link gần nhất" ở màn Chi tiết.
+  - `admin_support.py`: dòng link trong ticket thêm "· N click".
+- **Test:** 729 passed, 1 hỏng có từ trước (`test_14`); ruff sạch. Dựng thử trên bản sao DB (đã shred): 1.762 ký tự.
+- **Chưa:** chủ bot restart bot Telegram (PID 747966). Bot Zalo không cần restart.
+- **Next:** sau restart mở /admin → 📈 Thống kê → 🔎 Chi tiết để kiểm tra; link `priYghQy` (22:28 24/10) vẫn `delivery_status=pending`, chưa xem nguyên nhân.
+
+---
+
 ## Phiên 2026-10-25 (bp) — Thử RioHub lần 1: creator chưa vào RioMCN
 
 - Chủ bot thêm `RIOHUB_API_KEY` + `RIOHUB_CREATOR_USERNAME=twot283` (xác nhận đúng tài khoản); duyệt thử đọc đơn + 1 link.
