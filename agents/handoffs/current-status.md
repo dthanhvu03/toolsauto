@@ -3,7 +3,7 @@
 - Chủ bot: rút tối thiểu 10k được, hạn mức admin tự chỉnh. Phát hiện lệch: ví 10k nhưng hạn mức 20k (bot lấy số lớn hơn).
 - `main@159f9fb`: ⚙️ Cài đặt thêm 3 hàng nút (mỗi lần 200k–2tr, ngày 1tr–10tr, tháng 5tr–50tr); mỗi lần đổi thêm dòng `payout_limit_policies` ACTIVE `admin:<id>`; «Rút tối thiểu» kéo theo `min_vnd`; sai thứ tự thì không ghi; Lịch sử có dòng "hạn mức rút". 730 passed, 1 hỏng có từ trước (`test_14`).
 - Ghi `payout_policy_decisions` id 5 `payment_limits` APPROVED (backup `cashback-20261025T105051Z.sqlite`). Giữ tiền đã là 15 ngày (chủ bot tự chọn).
-- **Chưa:** chủ bot restart bot Telegram (PID 798434), rồi bấm lại «10k» ở Rút tối thiểu để bảng hạn mức về 10k (hiện 20k).
+- **Đã:** restart PID 802976 (10:51:33Z, không lỗi); chủ bot bấm 10k → 20k → 10k, hạn mức hiện hành id 4: 10k / 500k / 2tr / 10tr (`admin:`), ví 10k, giữ 15 ngày. `gate_b_check` OK.
 
 ---
 
