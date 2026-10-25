@@ -1,3 +1,18 @@
+## Phiên 2026-10-25 (bm) — Nghiên cứu TikTok Shop qua RioHub API (chỉ đọc)
+
+Chủ bot gửi bài RioHub, đồng ý nghiên cứu. Báo cáo `reports/CASHBACK_TIKTOK_RIOHUB_RESEARCH.md`.
+
+- Mẹo "1 link gốc" trong bài: Shopee đã làm sẵn (bot tự ghép `an_redir` + `sub_id`). Với TikTok qua RioHub thì dùng được (`/general-links` + `event_id`).
+- RioHub có tạo link, tra giá + hoa hồng, kéo đơn (status 1/2/3, `est_commission` / `actual_commission`). Webhook cần HTTPS công khai nên sẽ dùng `GET /orders`.
+- **Vướng:** điều khoản RioHub cấm "tự mua qua link của mình" và cấm bot ngoài phạm vi; không nói tới cashback; tiền về Ví RioHub, chưa rõ tỷ lệ RioHub giữ; công thức `actual_commission` trong tài liệu mâu thuẫn.
+- **Không làm:** không đăng ký, không gọi API RioHub, không viết code.
+- **Next:**
+  1. chủ bot xác nhận có tài khoản TikTok Affiliate (≥ 1.000 follow);
+  2. chủ bot hỏi `hotro@riohub.vn` 4 câu trong mục 7 của báo cáo;
+  3. sau đó mới viết PLAN (phần client / đơn là việc backend).
+
+---
+
 ## Phiên 2026-10-25 (bl) — PLAN-084 ĐANG CHẠY, đã archive
 
 - **Restart:** chủ bot restart Telegram lúc 01:44:06Z, PID 747966 (`main@6f91065`), log khởi động sạch, `shopee auto sync enabled=True interval_min=240`.
