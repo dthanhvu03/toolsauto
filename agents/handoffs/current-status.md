@@ -1,3 +1,16 @@
+## Phiên 2026-10-25 (bx) — PLAN-087: giữ video READY 21 ngày, lấy lại 42 video đạo lý
+
+- `main@28845a4`: file `reup` của material READY được giữ 21 ngày, thay vì 7. Restart Maintenance + Web_Dashboard.
+- 42 material nguồn #5 (18 DUPLICATE, 24 FAILED vì bị dọn) về NEW, trỏ Sống Nhẹ Tuổi 40. Backup `data/backups/viral-daoly-rescue-before-20261025T141702Z.json`.
+- Đang xử lý: tải lại, lên READY, viết caption, tự hẹn giờ (#1312 hẹn 17:30 26/10). Tổng khoảng 60 video đạo lý, đủ khoảng 12 ngày.
+- 9Router auth 404: caption tự chuyển sang Gemini, chưa xử lý.
+- **Next:**
+  - Kiểm tra NEW nguồn #5 về 0 và không có DUPLICATE mới.
+  - Khoảng 01/11: so số liệu Meta, quyết định bật lại nguồn đầm #4.
+  - Owner gửi thêm kênh đạo lý. Owner chọn cách xử lý 0 click link.
+
+---
+
 ## Phiên 2026-10-25 (bx) — PLAN-089 dashboard khách hàng + dòng tiền (Telegram + web)
 
 - Chủ bot: làm cả hai, đủ chỉ số CEO / COO; chi phí vận hành và hạ tầng chưa tính, nên thêm ô nhập chi phí mỗi tháng.

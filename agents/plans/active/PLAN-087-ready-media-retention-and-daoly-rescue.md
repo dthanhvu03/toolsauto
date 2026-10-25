@@ -37,4 +37,9 @@ Page Sống Nhẹ Tuổi 40 (`6adb578c…9cde9a`) có video đạo lý tốt nh�
 
 ## Proof
 
-(điền sau)
+2026-10-25, Claude Code:
+
+- `tests/test_storage_cleanup.py`: 48 passed, trong đó 3 test mới: READY 14 ngày giữ, READY 30 ngày xóa, lỗi DB trả set rỗng. Trên code cũ (`git stash`) cả 3 test mới fail.
+- Dữ liệu: backup `data/backups/viral-daoly-rescue-before-20261025T141702Z.json`. 42 material (18 DUPLICATE, 24 FAILED vì bị dọn) về NEW, trỏ page `6adb578c…9cde9a`.
+- `main@28845a4`. Restart Maintenance + Web_Dashboard. Vòng đầu tải lại #1312, #1302 (trước đó #1302 là bản gốc bị coi là trùng), lên READY, viết caption, tự hẹn Sống Nhẹ Tuổi 40 lúc 17:30 26/10. Nguồn #5 lúc này: NEW 50, PROCESSING 2, READY 6. Chưa video nào bị đánh trùng với ngưỡng 5.
+- Ghi chú: 9Router trả 404 khi xác thực, caption tự chuyển sang Gemini và vẫn chạy được. Việc này nằm ngoài PLAN.
