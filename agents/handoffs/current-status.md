@@ -20,7 +20,13 @@
   - D3: nơi chép backup ra ngoài máy.
   - Parser báo cáo thanh toán Shopee + migration 007 (cần file thật).
   - Công bố V3 khi ví sắp mở.
-- **Next:** chủ bot restart CẢ HAI bot (hoặc cài systemd theo `deploy/cashback/README.md`). Sau đó Claude Code kiểm tra log, `code_version` của hai bot và `gate_b_check`.
+- **Đã:** chủ bot cài systemd (cách A) lúc 13:47:46Z.
+  - `cashback-bot` PID 828613 và `cashback-zalo` PID 828614, đều `enabled`, `NRestarts=0`.
+  - Hai bot chạy `1b957b7`, nhịp sống bình thường, log không lỗi.
+  - DB có đủ 5 trigger mới; logrotate đã cài; `gate_b_check` OK.
+  - PLAN-087 và PLAN-088 đã chuyển sang archive.
+- **Restart từ nay:** `systemctl restart cashback-bot cashback-zalo`.
+- **Next:** chờ chủ bot quyết C2 (xoá dữ liệu, hạn lưu) và D3 (nơi chép backup); parser báo cáo thanh toán chờ file Shopee thật.
 
 ---
 

@@ -21,7 +21,7 @@ systemctl status cashback-bot cashback-zalo --no-pager
 
 | Việc | Lệnh |
 |---|---|
-| Restart cả hai bot sau khi đổi code | `systemctl restart cashback-bot cashback-zalo` |
+| Restart cả hai bot sau khi đổi code (đã cài 2026-10-25) | `systemctl restart cashback-bot cashback-zalo` |
 | Xem trạng thái | `systemctl status cashback-bot cashback-zalo --no-pager` |
 | Dừng hẳn một bot | `systemctl stop cashback-zalo` (bot không tự chạy lại cho tới `start`) |
 | Xem log | `tail -f logs/cashback_bot.log` / `logs/cashback_zalo.log` (vẫn là file cũ) |

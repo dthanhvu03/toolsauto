@@ -5,7 +5,7 @@
 | Executor | Claude Code (chủ bot giao trực tiếp 2026-10-25: "duyệt và vá tất cả") |
 | Nguồn | `reports/CASHBACK_REVIEW_2026-10-25.md` mục B1–B17, C1–C7; ADR-059 |
 | Không đổi | Khoá tài chính vẫn đóng; không bật ví, không tạo payout, không ghi quyết định chính sách |
-| Trạng thái | Code xong, chờ chủ bot restart cả hai bot |
+| Trạng thái | ✅ Done 2026-10-25: hai bot chạy `1b957b7`. Việc còn mở ở mục «Chưa làm» chuyển sang PLAN sau |
 
 ## Scope đã làm
 
@@ -54,3 +54,4 @@
   - kỳ trong test có chứng từ hiện hành.
 - `ruff check cashback_bot/`: sạch.
 - Bản sao DB production (0600, scratchpad, đã shred): `migrate` hai lần không lỗi, có 5 trigger mới, ví vẫn khoá (4 lý do), số liệu không đổi.
+- Production sau restart: 5 trigger mới đã có trong DB; ví vẫn khoá (`wallet_enabled=0`, 0 payout); `gate_b_check` OK.

@@ -5,7 +5,7 @@
 | Executor | Claude Code (chủ bot giao trực tiếp 2026-10-25: "duyệt và vá tất cả") |
 | Nguồn | `reports/CASHBACK_REVIEW_2026-10-25.md` mục A3–A11, D1–D5 |
 | Không đổi | Ví, payout, khoá tài chính, quyết định chính sách, `.env` production |
-| Trạng thái | Code xong, chờ chủ bot restart cả hai bot |
+| Trạng thái | ✅ Done 2026-10-25: chủ bot cài systemd, hai bot chạy `1b957b7` từ 13:47:46Z |
 
 ## Scope
 
@@ -37,3 +37,7 @@ Ngoài scope:
 - `ruff check cashback_bot/`: sạch. Ba lỗi ruff ở `tests/test_cashback_admin.py`, `tests/test_cashback_admin_ui_ux.py`, `tests/test_cashback_wallet.py` có từ trước.
 - `systemd-analyze verify` hai unit: không lỗi. `logrotate -d`: đọc được cấu hình.
 - Đã thử thật trên máy: lỗi khi gọi `127.0.0.1:9` (từ chối kết nối) và `no-such-host.invalid` (DNS) đều được xếp loại `offline`.
+- Sau restart (13:47:46Z, systemd): `cashback-bot` PID 828613, `cashback-zalo` PID 828614, `NRestarts=0`.
+  - Log hai bot ghi "chạy code 1b957b7"; `code_version` hai bot trùng nhau.
+  - Nhịp sống bot Telegram cách lúc kiểm tra 3 giây, bot Zalo 8 giây.
+  - Không có lỗi trong log, không tin nào kẹt. `gate_b_check` OK.
