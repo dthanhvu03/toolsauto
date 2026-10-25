@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 
 # Bài Buffer quá giờ hẹn bấy nhiêu giây thì thôi giữ video (Buffer có thể đăng trễ, hoặc đăng lại).
 BUFFER_FETCH_GRACE_SEC = 2 * 86400
+# Video READY là hàng chờ đăng: giữ lâu hơn video thường để page đăng kịp (PLAN-087).
+READY_RETENTION_DAYS = 21
 _VIRAL_ID_RE = re.compile(r"viral_(\d+)_", re.IGNORECASE)
 
 
@@ -362,6 +364,20 @@ class StorageCleanupService:
             logger.debug("Buffer scheduled jobs query skipped/failed: %s", exc)
             return set()
 
+    def _get_ready_material_ids(self) -> set[int]:
+        """Material READY chưa đăng. Page đăng 5 bài/ngày nên 7 ngày không đủ để đăng hết hàng chờ."""
+        try:
+            from app.core.database.core import SessionLocal
+            from app.core.database.models import ViralMaterial
+            from app.constants import ViralStatus
+
+            with SessionLocal() as db:
+                rows = db.query(ViralMaterial.id).filter(ViralMaterial.status == ViralStatus.READY).all()
+                return {int(mid) for (mid,) in rows}
+        except Exception as exc:
+            logger.debug("Ready materials query skipped/failed: %s", exc)
+            return set()
+
     def _get_active_profile_names(self) -> set[str]:
         """Returns union of known active profiles and DB accounts."""
         active = set(self.KNOWN_ACTIVE_PROFILES)
@@ -433,6 +449,8 @@ class StorageCleanupService:
         posted_cutoff_ts = now - (posted_retention_days * 86400.0) if posted_retention_days > 0 else now + 86400.0
         protected_paths = self._get_active_job_media_paths()
         buffer_material_ids = self._get_buffer_scheduled_material_ids()
+        ready_material_ids = self._get_ready_material_ids()
+        ready_cutoff_ts = now - (max(retention_days, READY_RETENTION_DAYS) * 86400.0)
 
         # 1. Prune da-dang posted files
         for da_dang_dir in self.media_root.glob("reup/*/da-dang"):
@@ -456,9 +474,12 @@ class StorageCleanupService:
                     if norm_path in protected_paths:
                         continue
                     id_match = _VIRAL_ID_RE.search(file_path.name)
-                    if id_match and int(id_match.group(1)) in buffer_material_ids:
+                    material_id = int(id_match.group(1)) if id_match else None
+                    if material_id in buffer_material_ids:
                         continue
                     mtime = file_path.stat().st_mtime
+                    if material_id in ready_material_ids and mtime > ready_cutoff_ts:
+                        continue
                     if mtime <= cutoff_ts:
                         size = file_path.stat().st_size
                         reclaimed += size

@@ -289,6 +289,40 @@ class TestStorageCleanupMediaPruning:
 
         assert not stale_reup.exists()
 
+    def test_prune_media_keeps_ready_material_within_ready_retention(self, cleanup_env):
+        """PLAN-087: video READY 14 ngày tuổi vẫn là hàng chờ đăng — chưa xóa trước 21 ngày."""
+        svc: StorageCleanupService = cleanup_env["service"]
+        stale_reup = cleanup_env["files"]["stale_reup"]
+
+        with patch.object(svc, "_get_active_job_media_paths", return_value=set()), \
+             patch.object(svc, "_get_buffer_scheduled_material_ids", return_value=set()), \
+             patch.object(svc, "_get_ready_material_ids", return_value={301}), \
+             patch.object(svc, "_update_material_failed_if_stale") as mock_update:
+            svc.prune_media(retention_days=7, dry_run=False)
+
+        assert stale_reup.exists()
+        mock_update.assert_not_called()
+
+    def test_prune_media_ready_material_past_ready_retention_is_pruned(self, cleanup_env):
+        svc: StorageCleanupService = cleanup_env["service"]
+        stale_reup = cleanup_env["files"]["stale_reup"]
+        old = time.time() - 30 * 86400
+        os.utime(stale_reup, (old, old))
+
+        with patch.object(svc, "_get_active_job_media_paths", return_value=set()), \
+             patch.object(svc, "_get_buffer_scheduled_material_ids", return_value=set()), \
+             patch.object(svc, "_get_ready_material_ids", return_value={301}), \
+             patch.object(svc, "_update_material_failed_if_stale"):
+            svc.prune_media(retention_days=7, dry_run=False)
+
+        assert not stale_reup.exists()
+
+    def test_ready_material_ids_db_error_returns_empty(self, cleanup_env):
+        svc: StorageCleanupService = cleanup_env["service"]
+
+        with patch("app.core.database.core.SessionLocal", side_effect=RuntimeError("db down")):
+            assert svc._get_ready_material_ids() == set()
+
     def test_buffer_scheduled_material_ids_db_error_returns_empty(self, cleanup_env):
         svc: StorageCleanupService = cleanup_env["service"]
 
