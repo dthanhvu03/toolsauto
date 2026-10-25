@@ -14,7 +14,7 @@
 - `reports/CASHBACK_TERMS_V3_DRAFT.md`: nháp V3 đã theo câu trả lời, chưa đưa vào bot (công bố khi ví sắp mở).
 - Ghi `payout_policy_decisions` id 7 (backup `cashback-20261025T111224Z.sqlite`); reference ghi nhầm `main@e8e3828`, đúng là `515b3ee` (ghi chú ở ADR-059).
 - Main có commit PLAN-086 (buffer, `e8e3828`) của luồng khác; đã rebase, không đụng.
-- **Chưa:** chủ bot restart bot Telegram (PID 802976); chủ bot nâng hạn mức trong ⚙️ Cài đặt nếu muốn (hiện 500k/lần, 2tr/ngày, 10tr/tháng mỗi khách).
+- **Đã:** restart PID 808308 (11:14:56Z, không lỗi mới); chủ bot chỉnh hạn mức → id 6: tối thiểu 10k, 1tr/lần, 5tr/ngày, 10tr/tháng mỗi khách. `gate_b_check` OK.
 
 ---
 
