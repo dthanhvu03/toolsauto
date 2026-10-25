@@ -1,3 +1,12 @@
+## Phiên 2026-10-25 (bv) — Rà soát 4 góc nhìn
+
+- `reports/CASHBACK_REVIEW_2026-10-25.md`: 4 agent chỉ đọc code (tiền, bảo mật, vận hành, câu chữ); Claude Code kiểm chứng các điểm nặng.
+- Ảnh hưởng ngay: bot Zalo chạy code cũ từ 24/10 15:59Z (A1); backup chỉ giữ ~1 ngày vì bản tay chung mẫu tên (A2); tin khách thành `unknown` khi mất mạng (A3); 400 bị coi là chặn bot (A5).
+- Trước khi mở ví: 4 lỗi đỏ B1–B4 (chi dù đơn huỷ, chuyển 2 lần, quỹ đếm đôi, thu hồi chưa có), Zalo chỉ rút 1 lần (B5), số dư > hạn mức không rút được (B6).
+- **Next:** chủ bot restart Zalo + đặt `CASHBACK_BACKUP_KEEP`; chủ bot chọn gói PLAN làm trước.
+
+---
+
 ## Phiên 2026-10-25 (bv) — PLAN-086: kênh kín không hỏi suất; test đang gọi Buffer thật
 
 - `main@e8e3828`: `schedule_reup` đếm hàng chờ trước `_quota_block`. Restart Maintenance 11:11Z: 3 kênh kín, không còn request `Limits`.
