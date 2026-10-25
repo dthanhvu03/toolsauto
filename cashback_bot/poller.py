@@ -499,6 +499,44 @@ def _check_zalo_health(repo: TrackingRepository, admin_notifier: AdminNotifier, 
         logger.exception("[Cashback] kiểm tra nhịp sống bot Zalo thất bại")
 
 
+NET_DOWN_KEY = "net_down_since"
+NET_ALERT_AFTER_SEC = 60
+NET_STILL_DOWN_SEC = 300
+
+
+def _net_failed(repo: TrackingRepository, admin_notifier: AdminNotifier, now: float | None = None) -> None:
+    """PLAN-084: lỗi mạng khi nhận tin Telegram không báo ngay. Ghi mốc lỗi đầu; kéo dài quá 5 phút thì báo
+    "đang mất kết nối" một lần (gửi được nếu chỉ getUpdates lỗi)."""
+    moment = time.time() if now is None else now
+    try:
+        since = repo.get_state(NET_DOWN_KEY)
+        if not since:
+            repo.set_state(NET_DOWN_KEY, str(moment))
+            repo.set_state("net_down_alerted", "0")
+            return
+        if moment - float(since) >= NET_STILL_DOWN_SEC and repo.get_state("net_down_alerted") != "1":
+            admin_notifier.notify_connection(float(since))
+            repo.set_state("net_down_alerted", "1")
+    except (ValueError, sqlite3.Error):
+        logger.exception("[Cashback] ghi trạng thái mất kết nối thất bại")
+
+
+def _net_recovered(repo: TrackingRepository, admin_notifier: AdminNotifier, now: float | None = None) -> None:
+    """PLAN-084: nhận tin được lại. Mất kết nối từ 1 phút trở lên → một tin "đã kết nối lại"; ngắn hơn chỉ có log."""
+    moment = time.time() if now is None else now
+    try:
+        since = repo.get_state(NET_DOWN_KEY)
+        if not since:
+            return
+        repo.set_state(NET_DOWN_KEY, "")
+        if moment - float(since) >= NET_ALERT_AFTER_SEC:
+            admin_notifier.notify_connection(float(since), moment)
+        else:
+            logger.info("telegram poll recovered after %ds", int(moment - float(since)))
+    except (ValueError, sqlite3.Error):
+        logger.exception("[Cashback] ghi trạng thái kết nối lại thất bại")
+
+
 BACKUP_INTERVAL_SEC = 86_400
 BACKUP_RETRY_SEC = 3_600
 
@@ -539,6 +577,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             flush_outbound(service, telegram, repo, admin_notifier, limit=3)
             offset = repo.get_offset()
             updates = telegram.get_updates(offset)
+            _net_recovered(repo, admin_notifier)
             process_updates(service, telegram, repo, updates, admin_notifier)
             drain_sync_results(coordinator, service, admin_notifier)
             _check_wallet_refresh(service, repo)
@@ -550,12 +589,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             return
         except requests.RequestException as exc:
             logger.error("telegram poll failed: %s", type(exc).__name__)
-            admin_notifier.notify_request_failed(
-                error_type="telegram_poll_failed",
-                update_id=None,
-                telegram_user_id=None,
-                status="POLL_ERROR",
-            )
+            _net_failed(repo, admin_notifier)
             admin_notifier.flush_pending(limit=5)
             time.sleep(5)
         except Exception:

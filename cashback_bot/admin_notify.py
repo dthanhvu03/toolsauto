@@ -328,11 +328,9 @@ class AdminNotifier:
             f"❌ <code>{html.escape(error_type)}</code>\n"
             f"📌 Trạng thái: <b>{html.escape(status)}</b>\n"
             f"🕓 {_vn_now_text()}\n"
-            + _details(
-                _update_line(update_id),
-                _user_line(telegram_user_id),
-            )
         )
+        if update_id is not None or telegram_user_id is not None:
+            body += _details(_update_line(update_id), _user_line(telegram_user_id))
         # Lỗi không gắn update (poll, vòng lặp) thêm mốc giây: trước đây khoá trùng nên chỉ báo một lần trong đời DB.
         # Chống spam vẫn do cooldown theo error_type ở trên.
         scope = update_id if update_id is not None else f"t{int(now)}"
@@ -481,6 +479,36 @@ class AdminNotifier:
         self.repo.enqueue_admin_event(
             event_key=f"wallet_clawback:{transition.conversion_id}",
             event_type="WALLET_CLAWBACK",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_connection(self, since: float, until: float | None = None) -> None:
+        """PLAN-084: bot Telegram không nhận được tin (mạng máy chủ hoặc Telegram lỗi). Một tin khi kéo dài,
+        một tin khi kết nối lại; thay cho tin "Lỗi bot" mỗi phút."""
+        if not self._active():
+            return
+        start = datetime.fromtimestamp(since, timezone.utc).astimezone(ICT)
+        if until is None:
+            body = (
+                "📡 <b>Bot đang mất kết nối</b>\n\n"
+                f"Không nhận được tin từ Telegram từ {start.strftime('%H:%M · %d/%m')}.\n"
+                "Bot tự thử lại, không cần restart."
+            )
+            key = f"net_down:{int(since)}"
+        else:
+            end = datetime.fromtimestamp(until, timezone.utc).astimezone(ICT)
+            minutes = max(1, round((until - since) / 60))
+            body = (
+                "📡 <b>Bot đã kết nối lại</b>\n\n"
+                f"Mất kết nối {start.strftime('%H:%M')}–{end.strftime('%H:%M · %d/%m')} ({minutes} phút).\n"
+                "Bot tự chạy lại, không cần restart.\n"
+                "Nếu mạng máy chủ rớt, tin khách Zalo gửi trong lúc này có thể bị mất."
+            )
+            key = f"net_up:{int(since)}"
+        self.repo.enqueue_admin_event(
+            event_key=key,
+            event_type="NET_DOWN" if until is None else "NET_UP",
             chat_id=int(self.chat_id),
             message_html=body,
         )

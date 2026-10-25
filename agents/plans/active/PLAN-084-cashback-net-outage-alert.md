@@ -3,12 +3,13 @@
 | | |
 |---|---|
 | Executor | Claude Code (chủ bot đồng ý lên plan sau sự cố 2026-10-24 17:22Z) |
-| Trạng thái | Chờ chủ bot duyệt |
+| Trạng thái | Chủ bot duyệt 2026-10-25 ("anh duyệt nhé"); đã lên main, chờ restart Telegram |
 
 ## Sự cố gốc
 - 2026-10-24, 17:22–17:27Z: máy mất mạng khoảng 4–5 phút. Bot Telegram và bot Zalo cùng báo `ConnectionError`, rồi tự chạy lại; không cần restart.
 - Admin nhận 3 tin giống nhau "⚠️ Lỗi bot · `telegram_poll_failed` · POLL_ERROR". Cả 3 chỉ tới sau khi mạng có lại.
 - Khối chi tiết có `Update -` / `User -`: hai dòng không mang thông tin gì.
+- 2026-10-25 01:11:45–01:12:26Z: Telegram trả 502 rồi quá giờ, khoảng 1 phút (bot Zalo không lỗi) → 1 tin "Lỗi bot". PLAN-084 không báo loại này.
 - Trước đó còn 2 lần rớt mạng ngắn (2026-10-23 01:13, 2026-10-24 01:11–01:12). Mỗi lần chỉ hỏng 1–2 lượt nhận tin, nhưng lần nào cũng báo admin.
 
 ## Hiện tại
@@ -40,3 +41,14 @@
 1. Backup. Làm trên nhánh, merge `--ff-only`, chạy test, push.
 2. Chủ bot restart riêng bot Telegram. Bot Zalo không cần.
 3. Kiểm tra log khởi động, chạy `gate_b_check`.
+
+## Đã làm (2026-10-25)
+- **Backup:** `cashback-20261025T013601Z.sqlite` (47 bảng, 40 link).
+- `poller.py`:
+  - `_net_failed` / `_net_recovered`, hằng `NET_DOWN_KEY`, `NET_ALERT_AFTER_SEC = 60`, `NET_STILL_DOWN_SEC = 300`;
+  - lỗi mạng khi nhận tin không còn gọi `notify_request_failed("telegram_poll_failed")`.
+- `admin_notify.py`:
+  - `notify_connection(since, until=None)`: tin `NET_DOWN` / `NET_UP`;
+  - "Lỗi bot" bỏ khối chi tiết khi không có update / user.
+- `tests/test_cashback_net_outage.py`: 5 test theo mục Kiểm thử.
+- **Kết quả:** 703 passed, ruff sạch.
