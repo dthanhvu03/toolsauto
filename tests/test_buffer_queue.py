@@ -231,3 +231,36 @@ def test_sweep_skips_locked_channel_and_schedules_next(db, monkeypatch):
     assert sweep_unscheduled_ready(db, limit=4) == 1
     mats = db.query(ViralMaterial).order_by(ViralMaterial.id).all()
     assert calls == [mats[1].id]
+
+
+def test_queue_full_skips_quota_request(db, monkeypatch):
+    """Kênh đã 10 bài thì báo kín ngay, không tốn request hỏi suất (PLAN-086)."""
+    calls = {"n": 0}
+
+    def _count(*a, **k):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr("app.features.buffer.queue_job._channels", lambda: CHANNELS)
+    monkeypatch.setattr("app.features.buffer.queue_job._quota_block", _count)
+    channel_id = CHANNELS[0]["id"]
+    base = int(time.time()) + 3600
+    for i in range(10):
+        db.add(
+            Job(
+                platform="buffer",
+                caption=f"cu {i}",
+                target_page=channel_id,
+                schedule_ts=base + i * 600,
+                status=JobStatus.DONE,
+                external_post_id=f"p{i}",
+            )
+        )
+    mat = ViralMaterial(platform="tiktok", url="https://t/full", ai_caption="Demo kín")
+    db.add(mat)
+    db.commit()
+
+    ok, msg = schedule_reup(db, mat.id, channel_id, base + 86400)
+    assert ok is False
+    assert "đã kín (10/10 bài)" in msg
+    assert calls["n"] == 0

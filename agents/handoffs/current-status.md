@@ -1,3 +1,14 @@
+## Phiên 2026-10-25 (bu) — Buffer: báo cáo sau khi 3 key mở lại
+
+- Từ khi bật log `[Buffer][req]` (PLAN-072): 0 request lỗi, 0 lần 429 thật. Dòng "post_statuses ... 429" là cooldown nội bộ, không gửi đi.
+- Suất ngày còn lại lúc 18:00 25/10: `f8pL` 173/250 (30 ngày 2673/3000), `RZX2` 233/250 (1529/3000), `ZVsP` 172/250 (2172/3000).
+- 20 bài đến hạn từ 24/10 07:30: 19 bài có Facebook/Buffer tải video lúc đăng. Bài lỗi duy nhất là material 1300 (job 1118), đã biết, file mất trước PLAN-069. Hàng chờ: Uyển Nhi 10, Hoa Lệ 10, TikTok trnvp89 10, Sống Nhẹ Tuổi 40 3. Page này hết READY sau 26/10 11:30 vì nguồn đang tắt.
+- "Bỏ first_comment" chỉ ghi 1 lần mỗi key (job 1135, 1156), đúng PLAN-070.
+- **Phát hiện tốn suất:** `queue_job.schedule_reup` gọi `_quota_block` (GetOrganizations + Limits, 2 request) TRƯỚC khi đếm hàng chờ trong DB. Kênh đã 10/10 nên cứ 5 phút lại mất 2 request rồi mới báo "đã kín". `f8pL`: 75 request nền hôm 24/10, chỉ 8 CreatePost. Mức giữ 70% chặn được 429, nhưng phần suất nền bị dùng hết vào việc này, nên `post_statuses` không chạy được (job DONE không có `post_url`).
+- **Next:** chờ Owner duyệt PLAN sửa: đếm hàng chờ trước `_quota_block` (1 file + test). Owner cân nhắc bật nguồn cho Sống Nhẹ Tuổi 40 (`/nguon`; PLAN-071 chỉ quét khi < 15 READY).
+
+---
+
 ## Phiên 2026-10-25 (bt) — Thuế A1: không khấu trừ khi chi tiền hoàn
 
 - Chủ bot chốt: chi tiền hoàn như chuyển khoản thường, không khấu trừ TNCN; bot lưu chứng từ từng lần chi để kê khai khi cần; thuế của chủ bot lấy từ dự phòng 10%.

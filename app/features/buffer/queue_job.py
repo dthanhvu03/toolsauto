@@ -483,10 +483,7 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
     if existing:
         return _apply_reschedule(db, existing, int(when_ts), name)
 
-    block = _quota_block(channel_id, int(when_ts))
-    if block:
-        return False, block
-
+    # Đếm hàng chờ trong DB trước: kênh đã kín thì không tốn request hỏi suất (PLAN-086).
     now = now_ts()
     future_count = (
         db.query(Job)
@@ -500,6 +497,10 @@ def schedule_reup(db, material_id: int, channel_id: str, when_ts: int) -> tuple[
     )
     if future_count >= 10:
         return False, f"Hàng chờ {name} đã kín ({future_count}/10 bài)."
+
+    block = _quota_block(channel_id, int(when_ts))
+    if block:
+        return False, block
 
     job = Job(
         platform="buffer",
