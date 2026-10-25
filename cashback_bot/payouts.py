@@ -40,6 +40,12 @@ RELEASED = (REJECTED, FAILED, CANCELLED, RETURNED)  # tiền trở lại ví
 MONEY_LEFT = (PROCESSING, SENT)  # đã từng tới đây thì có thể tiền đã rời tài khoản
 POLICY_TOPICS = ("tax", "clawback", "payout_terms", "bank_verification", "payment_limits", "manual_payment")
 EVIDENCE_MIN = 4
+# Lựa chọn hạn mức admin chỉnh trong /admin → 👛 Ví khách → ⚙️ Cài đặt (ADR-059). Tối thiểu theo «Rút tối thiểu».
+LIMIT_CHOICES = {
+    "req": (200_000, 500_000, 1_000_000, 2_000_000),
+    "day": (1_000_000, 2_000_000, 5_000_000, 10_000_000),
+    "month": (5_000_000, 10_000_000, 20_000_000, 50_000_000),
+}
 
 
 @dataclass(frozen=True)
@@ -207,6 +213,35 @@ def create_limit_draft(conn: sqlite3.Connection, *, min_vnd: int, max_per_reques
         (min_vnd, max_per_request_vnd, daily_total_vnd, monthly_total_vnd, actor, stamp(now)),
     )
     return int(cursor.lastrowid)
+
+
+def set_limits(conn: sqlite3.Connection, current: LimitPolicy, *, admin_id: int, now: datetime, **changes: int) -> LimitPolicy:
+    """Admin chỉnh hạn mức: thêm một dòng ACTIVE mới (bảng chỉ thêm), admin bấm là người duyệt.
+
+    changes: min_vnd / max_per_request_vnd / daily_total_vnd / monthly_total_vnd. Không giữ thứ tự
+    tối thiểu ≤ mỗi lần ≤ ngày ≤ tháng thì ném ValueError("order"), không ghi gì.
+    """
+    values = {
+        "min_vnd": current.min_vnd,
+        "max_per_request_vnd": current.max_per_request_vnd,
+        "daily_total_vnd": current.daily_total_vnd,
+        "monthly_total_vnd": current.monthly_total_vnd,
+        **changes,
+    }
+    if not (0 < values["min_vnd"] <= values["max_per_request_vnd"] <= values["daily_total_vnd"]
+            <= values["monthly_total_vnd"]):
+        raise ValueError("order")
+    actor = f"admin:{admin_id}"
+    cursor = conn.execute(
+        """
+        INSERT INTO payout_limit_policies (min_vnd, max_per_request_vnd, daily_total_vnd, monthly_total_vnd,
+            status, created_by, approved_by, approved_at, created_at)
+        VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?)
+        """,
+        (values["min_vnd"], values["max_per_request_vnd"], values["daily_total_vnd"], values["monthly_total_vnd"],
+         actor, actor, stamp(now), stamp(now)),
+    )
+    return LimitPolicy(int(cursor.lastrowid), **values)
 
 
 def decision(conn: sqlite3.Connection, topic: str) -> sqlite3.Row | None:

@@ -920,23 +920,50 @@ WALLET_ENABLE_CONFIRM = (
 WALLET_ENABLE_KEYBOARD: Keyboard = ((("✅ Bật ví", "c:wl:on:ok"),), WALLET_ADMIN_BACK)
 
 
-def wallet_settings_text(settings) -> str:
+def _limit_vnd(amount: int) -> str:
+    """Nhãn nút gọn: 500k, 2tr (không «2,0tr»)."""
+    return short_vnd(amount).replace(",0tr", "tr")
+
+
+def wallet_settings_text(settings, limits=None, notice: str = "") -> str:
+    """limits: payouts.LimitPolicy đang dùng, hoặc None (chưa duyệt bảng hạn mức)."""
+    if limits is None:
+        limit_line = "• Hạn mức rút: <b>chưa duyệt</b>\n"
+    else:
+        limit_line = (
+            f"• Hạn mức rút: tối đa <b>{format_vnd(limits.max_per_request_vnd)}</b>/lần · "
+            f"<b>{format_vnd(limits.daily_total_vnd)}</b>/ngày · <b>{format_vnd(limits.monthly_total_vnd)}</b>/tháng\n"
+        )
     return (
         _title("Ví khách", "Cài đặt")
+        + (f"{notice}\n\n" if notice else "")
         + f"• Giữ tiền: <b>{settings.hold_days} ngày</b> sau khi đơn hoàn thành\n"
-        f"• Rút tối thiểu: <b>{format_vnd(settings.min_withdraw_vnd)}</b>\n\n"
+        f"• Rút tối thiểu: <b>{format_vnd(settings.min_withdraw_vnd)}</b>\n"
+        + limit_line
+        + "\n"
         "ⓘ Shopee còn đối soát theo tháng; trả hàng hay gian lận có thể bị trừ lại. "
         "Giữ ngắn thì khách nhận sớm nhưng anh chịu rủi ro ứng trước. "
         "Đổi số ngày áp dụng cho đơn chưa vào ví; đơn đã vào ví giữ nguyên."
     )
 
 
-def wallet_settings_keyboard(settings, hold_choices, min_choices) -> Keyboard:
+def wallet_settings_keyboard(settings, hold_choices, min_choices, limits=None, limit_choices=None) -> Keyboard:
     hold = tuple((("• " if d == settings.hold_days else "") + f"{d} ngày", f"c:wl:hold:{d}") for d in hold_choices)
     low = tuple(
         (("• " if v == settings.min_withdraw_vnd else "") + short_vnd(v), f"c:wl:min:{v}") for v in min_choices
     )
-    return (hold, low, WALLET_ADMIN_BACK)
+    rows = [hold, low]
+    if limits is not None and limit_choices:
+        for key, unit, current in (
+            ("req", "lần", limits.max_per_request_vnd),
+            ("day", "ngày", limits.daily_total_vnd),
+            ("month", "tháng", limits.monthly_total_vnd),
+        ):
+            rows.append(tuple(
+                (("• " if v == current else "") + f"{_limit_vnd(v)}/{unit}", f"c:wl:lim:{key}:{v}")
+                for v in limit_choices[key]
+            ))
+    return (*rows, WALLET_ADMIN_BACK)
 
 
 def wallet_members_text(members) -> str:

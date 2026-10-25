@@ -521,6 +521,46 @@ class TestSwitch:
         _callback(bot, ADMIN, "c:wl:hold:3")  # không có trong lựa chọn → bỏ qua
         assert bot.wallet.settings().hold_days == 7
 
+    def test_admin_chinh_han_muc_rut(self, tmp_path):
+        """ADR-059: admin chỉnh hạn mức trong ⚙️ Cài đặt; mỗi lần đổi thêm một dòng ACTIVE, «Rút tối thiểu» kéo theo."""
+        bot = _bot(tmp_path)
+        assert "Hạn mức rút: <b>chưa duyệt</b>" in _callback(bot, ADMIN, "c:wl:cfg").text
+        assert "Chưa có bảng hạn mức" in _callback(bot, ADMIN, "c:wl:lim:req:1000000").text
+        with bot.repo.connect() as conn:
+            conn.execute(
+                "INSERT INTO payout_limit_policies (min_vnd, max_per_request_vnd, daily_total_vnd, monthly_total_vnd, "
+                "status, created_by, approved_by, approved_at, created_at) "
+                "VALUES (20000, 500000, 2000000, 10000000, 'ACTIVE', 'chu_bot', 'chu_bot', 'x', 'x')"
+            )
+
+        def limits():
+            with bot.repo.connect() as conn:
+                return payouts.active_limits(conn)
+
+        screen = _callback(bot, ADMIN, "c:wl:cfg")
+        assert "tối đa <b>500.000đ</b>/lần · <b>2.000.000đ</b>/ngày · <b>10.000.000đ</b>/tháng" in screen.text
+        assert ("• 500k/lần", "c:wl:lim:req:500000") in screen.inline_keyboard[2]
+        assert ("• 2tr/ngày", "c:wl:lim:day:2000000") in screen.inline_keyboard[3]
+
+        _callback(bot, ADMIN, "c:wl:min:10000")  # trùng mặc định ví, nhưng bảng hạn mức đang 20k → kéo về 10k
+        assert limits().min_vnd == 10_000
+        _callback(bot, ADMIN, "c:wl:lim:req:1000000")
+        _callback(bot, ADMIN, "c:wl:lim:day:1000000")
+        assert (limits().max_per_request_vnd, limits().daily_total_vnd) == (1_000_000, 1_000_000)
+        refused = _callback(bot, ADMIN, "c:wl:lim:req:2000000")  # vượt tổng ngày
+        assert "Không đổi" in refused.text and limits().max_per_request_vnd == 1_000_000
+        _callback(bot, ADMIN, "c:wl:lim:day:3000000")  # không có trong lựa chọn → bỏ qua
+        _callback(bot, ADMIN, "c:wl:lim:day:1000000")  # bấm lại cùng mức: không thêm dòng
+        _callback(bot, USER, "c:wl:lim:month:50000000")  # khách không chỉnh được
+        assert limits().monthly_total_vnd == 10_000_000
+        with bot.repo.connect() as conn:
+            rows = conn.execute("SELECT approved_by FROM payout_limit_policies ORDER BY id").fetchall()
+        assert [r[0] for r in rows] == ["chu_bot", f"admin:{ADMIN}", f"admin:{ADMIN}", f"admin:{ADMIN}"]
+
+        history = _callback(bot, ADMIN, "c:menu:hist").text
+        assert "Ví khách: hạn mức rút tối thiểu 20.000đ → 10.000đ" in history
+        assert "Ví khách: hạn mức rút mỗi ngày 2.000.000đ → 1.000.000đ" in history
+
     def test_customer_cannot_use_admin_wallet_buttons(self, tmp_path):
         bot = _bot(tmp_path)
         reply = _callback(bot, USER, "c:wl:on:ok")

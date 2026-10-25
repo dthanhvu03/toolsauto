@@ -1518,7 +1518,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     """Dòng lịch sử cho cài đặt đổi ngay (PLAN-066). None: không phải loại này."""
     action = row["action"]
     if action not in {
-        "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "shopee_cookie", "shopee_auto_sync",
+        "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
         "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro",
     }:
@@ -1532,6 +1532,13 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action == "wallet_min_withdraw":
         old = format_vnd(int(before["vnd"])) if "vnd" in before else "-"
         return f"Ví khách: rút tối thiểu {old} → {format_vnd(int(after['vnd']))}"
+    if action == "wallet_limits":
+        parts = [
+            f"{label} {format_vnd(int(before[key]))} → {format_vnd(int(after[key]))}"
+            for key, label in (("min", "tối thiểu"), ("req", "mỗi lần"), ("day", "mỗi ngày"), ("month", "mỗi tháng"))
+            if key in after and before.get(key) != after[key]
+        ]
+        return "Ví khách: hạn mức rút " + ", ".join(parts)
     if action == "customer_notify_retry":
         return f"Thông báo khách: gửi lại tin #{after.get('id', '-')}"
     if action in {"customer_notify_smoke", "customer_notify_intro"}:

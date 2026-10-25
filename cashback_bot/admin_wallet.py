@@ -61,6 +61,8 @@ _ERRORS = {
 _MEMBER = re.compile(r"^c:wl:u:(\d+)$")
 _HOLD = re.compile(r"^c:wl:hold:(\d+)$")
 _MIN = re.compile(r"^c:wl:min:(\d+)$")
+_LIMIT = re.compile(r"^c:wl:lim:(req|day|month):(\d+)$")
+_LIMIT_FIELDS = {"req": "max_per_request_vnd", "day": "daily_total_vnd", "month": "monthly_total_vnd"}
 
 # (admin, action, trước, sau, lúc): ghi vào admin_change_audit để màn 📊 Lịch sử thấy.
 AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
@@ -112,7 +114,10 @@ class WalletAdmin:
             before = {"vnd": self.wallet.settings().min_withdraw_vnd}
             self._log(admin_id, "wallet_min_withdraw", before, {"vnd": amount}, now)
             self.wallet.set_min_withdraw(amount)
-            return self._settings()
+            # Một con số tối thiểu: bảng hạn mức đang dùng theo «Rút tối thiểu» (ADR-059).
+            return self._settings(self._change_limits(admin_id, now, min_vnd=amount))
+        if (limit := _LIMIT.fullmatch(data)) is not None and int(limit.group(2)) in payouts.LIMIT_CHOICES[limit.group(1)]:
+            return self._settings(self._change_limits(admin_id, now, **{_LIMIT_FIELDS[limit.group(1)]: int(limit.group(2))}))
         if data == "c:wl:members":
             members = self.wallet.members()
             return BotReply(wallet_members_text(members), inline_keyboard=wallet_members_keyboard(members))
@@ -144,11 +149,30 @@ class WalletAdmin:
             inline_keyboard=wallet_admin_keyboard(settings, requests),
         )
 
-    def _settings(self) -> BotReply:
+    def _change_limits(self, admin_id: int, now: datetime, **changes: int) -> str:
+        """Thêm dòng hạn mức mới nếu có đổi. Trả thông báo cho admin ('' nếu không có gì để báo)."""
+        with self.repo.connect() as conn:
+            current = payouts.active_limits(conn)
+            if current is None:
+                return "" if "min_vnd" in changes else "Chưa có bảng hạn mức đã duyệt."
+            if all(getattr(current, key) == value for key, value in changes.items()):
+                return ""
+            try:
+                after = payouts.set_limits(conn, current, admin_id=admin_id, now=now, **changes)
+            except ValueError:
+                return "⚠️ Không đổi: cần tối thiểu ≤ mỗi lần ≤ mỗi ngày ≤ mỗi tháng."
+        self._log(admin_id, "wallet_limits", _limits_dict(current), _limits_dict(after), now)
+        return ""
+
+    def _settings(self, notice: str = "") -> BotReply:
         settings = self.wallet.settings()
+        with self.repo.connect() as conn:
+            limits = payouts.active_limits(conn)
         return BotReply(
-            wallet_settings_text(settings),
-            inline_keyboard=wallet_settings_keyboard(settings, HOLD_DAY_CHOICES, MIN_WITHDRAW_CHOICES),
+            wallet_settings_text(settings, limits, notice),
+            inline_keyboard=wallet_settings_keyboard(
+                settings, HOLD_DAY_CHOICES, MIN_WITHDRAW_CHOICES, limits, payouts.LIMIT_CHOICES
+            ),
         )
 
     def _member(self, user_id: int) -> BotReply:
@@ -300,3 +324,12 @@ class WalletAdmin:
             return None, "Máy chủ chưa vẽ được ảnh QR."
         caption = f"{row['transfer_note']} · {format_vnd(int(row['amount_vnd']))} · {bank[1]} ••••{row['account_no'][-4:]}"
         return (f"qr-{row['transfer_note'] or row['id']}.png".replace(" ", "-"), image, caption), None
+
+
+def _limits_dict(limits: payouts.LimitPolicy) -> dict:
+    return {
+        "min": limits.min_vnd,
+        "req": limits.max_per_request_vnd,
+        "day": limits.daily_total_vnd,
+        "month": limits.monthly_total_vnd,
+    }
