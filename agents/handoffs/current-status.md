@@ -1,3 +1,20 @@
+## Phiên 2026-10-25 (bk) — PLAN-084 gộp tin lỗi mạng: lên main (chờ restart Telegram)
+
+Chủ bot: "anh duyệt nhé sáng nay bot báo lỗi nữa em".
+
+- **Lỗi sáng nay:** 01:11:45–01:12:26Z (08:11 VN), Telegram trả 502 rồi quá giờ khoảng 1 phút. Bot Zalo không lỗi, bot tự hồi → 1 tin "Lỗi bot" (id 59, `sent`). Hôm qua cũng lỗi khung giờ này.
+- **Backup:** `cashback-20261025T013601Z.sqlite`.
+- **Code:** `main@6f91065`, 703 passed, ruff sạch.
+  - Lỗi mạng khi nhận tin Telegram không báo ngay. Mất ≥ 60 giây → 1 tin "📡 Bot đã kết nối lại"; > 5 phút → thêm 1 tin "đang mất kết nối".
+  - "Lỗi bot" bỏ khối `Update -` / `User -` khi trống.
+- **System State:** Telegram PID 692497 vẫn chạy bản cũ; Zalo PID 690595 không cần restart.
+- **Next:**
+  1. chủ bot restart Telegram, rồi kiểm tra log khởi động + `gate_b_check`;
+  2. archive PLAN-084 sau khi chạy ổn;
+  3. khoảng 2026-10-26: xin duyệt rồi thử tin chủ động Zalo.
+
+---
+
 ## Phiên 2026-10-24 (bj) — Điều khoản V2 đã công bố; rớt mạng 17:22Z tự hồi; PLAN-084 chờ duyệt
 
 - **V2:** chủ bot công bố lúc 17:28:14Z. DB: V1 `SUPERSEDED`, V2 `PUBLISHED` (hash `cfe2f6af…`).
