@@ -1,3 +1,15 @@
+## Phiên 2026-10-25 (bp) — Thử RioHub lần 1: creator chưa vào RioMCN
+
+- Chủ bot thêm `RIOHUB_API_KEY` + `RIOHUB_CREATOR_USERNAME=twot283` (xác nhận đúng tài khoản); duyệt thử đọc đơn + 1 link.
+- `orders --days 7` → `403 mcn_membership_required` ("chưa là thành viên RioMCN (chưa được duyệt)"). Khoá hợp lệ.
+- Sửa client đọc lỗi `{"error": {"code", "message"}}`, CLI in 1 dòng; 25 test RioHub đạt, ruff sạch.
+- **Chưa tạo link thử** (chờ RioMCN). Không ghi DB, bot không đổi.
+- **Next:**
+  1. chủ bot đăng ký / chờ duyệt RioMCN, hỏi tỷ lệ chia MCN + phí thành viên;
+  2. duyệt xong: thử lại `orders`, rồi `link <link sản phẩm> test085`.
+
+---
+
 ## Phiên 2026-10-25 (bo) — PLAN-085 A2: client RioHub lên main (chưa nối bot)
 
 Chủ bot dán spec đủ 8 phần, chọn "Viết client, chưa nối bot".
