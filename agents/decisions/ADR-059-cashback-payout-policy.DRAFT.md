@@ -10,7 +10,7 @@
 
 | Chủ đề (`topic`) | Quyết định |
 |---|---|
-| `tax` | **A1 chưa trả lời** (khấu trừ TNCN trên tiền hoàn cho khách): chờ kế toán. A2: **giữ dự phòng thuế 10%** trên hoa hồng như hiện tại |
+| `tax` | A1 (chủ bot 2026-10-25): **không khấu trừ TNCN** khi chi tiền hoàn; chi như chuyển khoản thông thường; bot lưu đủ chứng từ từng lần chi (người nhận, số tiền, ngày, mã giao dịch) để kê khai khi cần. Chủ bot kê khai doanh thu hoa hồng như bình thường. A2: **giữ dự phòng thuế 10%** trên hoa hồng (thuế của chủ bot lấy từ đây). Ghi quyết định id 6 |
 | `clawback` | Shopee thu hồi sau khi đã trả khách: **trừ vào tiền hoàn sau này của khách, khoá rút đến khi bù đủ**. Không đòi lại ngoài bot |
 | (cài đặt ví) | Giữ tiền **mặc định 15 ngày** sau khi đơn hoàn thành (admin chỉnh được 0 / 7 / 15 / 30 / 45); vẫn phải có kỳ Shopee đã trả |
 | `payout_terms` | **Soạn điều khoản V3** gồm các mục trong bảng này; chủ bot duyệt rồi công bố |
@@ -29,7 +29,7 @@
 
 | Việc | Ai | Ghi chú |
 |---|---|---|
-| A1 thuế khi chi cho khách | Chủ bot hỏi kế toán | Hai câu: tiền hoàn là giảm giá hay thu nhập của người mua; có phải khấu trừ TNCN, từ mức nào |
+| Bảng `payout_tax_policies` (khoá cũ "Chưa chốt chính sách thuế") | Backend, cần PLAN | Bảng nằm trong migration nháp 007 (cùng `shopee_settlements`), chưa có trên production → gộp vào PLAN đọc báo cáo thanh toán |
 | Đọc báo cáo thanh toán Shopee vào đối soát | Backend, cần PLAN | ADR-052 đòi "tổng theo đơn = tổng kỳ"; Shopee chỉ cho tổng theo ngày hoàn thành → ghép bằng tổng hoa hồng các đơn hoàn thành cùng ngày (báo cáo chuyển đổi). Kỳ là hoá đơn theo ngày, không phải tháng |
 | Chờ 7 ngày khi đổi tài khoản + admin cho rút ngay | Backend, cần PLAN | Code hiện chỉ đưa tài khoản mới về `UNVERIFIED`, chưa có mốc 7 ngày |
 | Thu hồi: trừ tiền sau + khoá rút | Backend, cần PLAN | ADR-052 mục 7 hiện "không thu hồi tiền, không đổi sổ ví" → phải sửa |

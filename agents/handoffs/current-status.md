@@ -1,3 +1,12 @@
+## Phiên 2026-10-25 (bt) — Thuế A1: không khấu trừ khi chi tiền hoàn
+
+- Chủ bot chốt: chi tiền hoàn như chuyển khoản thường, không khấu trừ TNCN; bot lưu chứng từ từng lần chi để kê khai khi cần; thuế của chủ bot lấy từ dự phòng 10%.
+- Ghi `payout_policy_decisions` id 6 `tax` APPROVED (backup `cashback-20261025T105632Z.sqlite`); ADR-059 cập nhật.
+- Khoá tài chính còn 4 lý do: bằng chứng kỳ Shopee đã trả; "Chưa chốt chính sách thuế" (bảng `payout_tax_policies` thuộc migration nháp 007, chưa có trên production → PLAN backend); điều khoản chi trả (V3); một kỳ đối soát khớp.
+- **Next:** Claude Code soạn điều khoản V3 (nháp) cho chủ bot duyệt; PLAN backend: migration 007 + parser báo cáo thanh toán, chờ 7 ngày đổi tài khoản, thu hồi.
+
+---
+
 ## Phiên 2026-10-25 (bs) — Admin chỉnh hạn mức rút
 
 - Chủ bot: rút tối thiểu 10k được, hạn mức admin tự chỉnh. Phát hiện lệch: ví 10k nhưng hạn mức 20k (bot lấy số lớn hơn).
