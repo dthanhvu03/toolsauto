@@ -1,3 +1,20 @@
+## Phiên 2026-10-25 (bw) — Sống Nhẹ Tuổi 40: ưu tiên video đạo lý
+
+- Meta 27/9–24/10: 14,1K view (99,4% người chưa theo dõi), 0 click link. Video đạo lý 22/10 07:30 (`nunhanthongtue`, material 1275) được 4,8K view; video đầm 300–1,5K.
+- Nguồn đạo lý (#5) quét 16/10 được 50 video, chỉ 4 đã đăng. 24 bị dọn sau 7 ngày. 18 bị pHash (khoảng cách 6–8) chặn nhầm là trùng: cùng người, cùng phông, khác nội dung.
+- Owner duyệt bước 1, làm qua hàm của app. Backup: `data/backups/viral-settings-before-daoly-20261025T140950Z.json`.
+  - `viral.phash_max_distance` từ 8 xuống 5, qua `upsert_setting`, updated_by `claude-code`.
+  - Nguồn #5 `max_videos` từ NULL (50) lên 80, qua `SourceService.set_source_limits`.
+  - Owner tự bật nguồn #5. Nguồn đầm #4 vẫn tắt.
+- Quét tay nguồn #5: found 18, skipped 50. 18 material NEW cho `6adb578c…9cde9a`. Kênh chỉ có khoảng 68 video đạt mức xem, nên đợt này đủ khoảng 3–4 ngày (5 bài/ngày).
+- **Next:**
+  - Khoảng 28/10, khi READY đạo lý dưới 5: hỏi Owner duyệt bước 2, đưa 42 material cũ (24 FAILED dọn, 18 DUPLICATE) về NEW, backup trước.
+  - Sau 1 tuần: so số liệu Meta, quyết định bật lại nguồn đầm.
+  - PLAN chia tỉ lệ theo nguồn nếu cần.
+  - Còn 0 click link vì gói Free không có bình luận đầu tiên: Owner chưa chọn cách xử lý.
+
+---
+
 ## Phiên 2026-10-25 (bw) — PLAN-087 vận hành + PLAN-088 sổ chi trả (chủ bot: "duyệt và vá tất cả")
 
 - **PLAN-087** (`main@4d1f789`):
