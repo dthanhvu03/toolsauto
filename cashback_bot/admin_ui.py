@@ -710,6 +710,13 @@ def stats_text(stats, *, period_label: str, since: str | None) -> str:
     return "\n".join(lines)
 
 
+def _stats_who(user_id: int, name: str | None) -> str:
+    """Telegram: @username hoặc ID. Khách Zalo (ID âm, PLAN-082): Zalo · tên hiển thị, chưa có tên thì Zalo #N."""
+    if user_id < 0:
+        return f"Zalo · {html.escape(name[:24])}" if name else f"Zalo #{-user_id}"
+    return f"@{html.escape(name)}" if name else f"<code>{user_id}</code>"
+
+
 def stats_detail_text(stats, *, period_label: str, since: str | None) -> str:
     created_rate = f" ({stats.links_created * 100 // stats.links_total}%)" if stats.links_total else ""
     errors = " · ".join(f"{label} {count}" for label, count in stats.rejected) or "không có"
@@ -748,9 +755,15 @@ def stats_detail_text(stats, *, period_label: str, since: str | None) -> str:
     lines += _insight_lines(stats.insight, stats.links_created)
     if stats.top_users:
         lines += ["", "🏆 <b>Gửi nhiều nhất</b>"]
-        for rank, (user_id, username, count) in enumerate(stats.top_users, start=1):
-            who = f"@{html.escape(username)}" if username else f"<code>{user_id}</code>"
-            lines.append(f"{rank}. {who} · {count} link")
+        for rank, top in enumerate(stats.top_users, start=1):
+            lines.append(f"{rank}. {_stats_who(top.user_id, top.name)} · {top.links} link · {top.clicks} click")
+    if stats.recent_links:
+        lines += ["", "🖱️ <b>Link gần nhất</b> · click tới lần đồng bộ Shopee gần nhất"]
+        for link in stats.recent_links:
+            lines.append(
+                f"• <code>{html.escape(link.sub_id or '-')}</code> {link.when} · "
+                f"{_stats_who(link.user_id, link.name)} · {link.clicks} click"
+            )
     if stats.top_products:
         lines += ["", "🛍️ <b>Món được hỏi nhiều</b>"]
         for rank, (name, count) in enumerate(stats.top_products, start=1):

@@ -421,6 +421,21 @@ def test_admin_chi_tiet_ticket_chi_hien_du_lieu_cua_khach_do(tmp_path):
     assert theirs not in detail.text and "Khách chưa tạo link nào" in detail.text
 
 
+def test_admin_chi_tiet_ticket_hien_so_click_cua_link(tmp_path):
+    bot = _bot(tmp_path)
+    bot.handle_text(BUYER, "b", LINK, update_id=1, now=NOW)
+    sub = _rows(tmp_path, "SELECT sub_id FROM link_requests")[0][0]
+    with bot.repo.connect() as conn:
+        for click_id, click_sub in (("k1", sub), ("k2", sub), ("k3", "khac1234"), ("k4", None)):
+            conn.execute(
+                "INSERT INTO shopee_clicks (click_id, sub_id, click_time, raw_json, created_at) VALUES (?, ?, ?, '{}', ?)",
+                (click_id, click_sub, "2026-10-21T08:10:00Z", "2026-10-21T09:00:00Z"),
+            )
+    _open(bot, text=f"Link {sub} chưa thấy đơn")
+    detail = bot.admin_panel.handle_callback(ADMIN, "c:hp:t:1", "private", NOW)
+    assert f"Link <code>{sub}</code>" in detail.text and " · 2 click · " in detail.text
+
+
 # --- Thuế, thu hồi, an toàn tài chính (29–40) -----------------------------------------------
 
 

@@ -100,6 +100,25 @@ class ShopeeStats:
 
 
 @dataclass(frozen=True)
+class TopUser:
+    """name: @username Telegram, hoặc tên hiển thị Zalo (ID âm, PLAN-082). clicks: tới lần đồng bộ gần nhất."""
+
+    user_id: int
+    name: str | None
+    links: int
+    clicks: int
+
+
+@dataclass(frozen=True)
+class RecentLink:
+    sub_id: str | None
+    when: str  # giờ VN, "HH:MM dd/mm"
+    user_id: int
+    name: str | None
+    clicks: int
+
+
+@dataclass(frozen=True)
 class Stats:
     period: str
     since: datetime | None
@@ -112,13 +131,14 @@ class Stats:
     commission_vnd: int
     cashback_vnd: int
     trend: list[tuple[str, int]]
-    top_users: list[tuple[int, str | None, int]]
+    top_users: list[TopUser]
     top_products: list[tuple[str, int]]
     delivery_pending: int
     errors: int
     quarantined_updates: int = 0
     insight: Insight | None = None
     shopee: ShopeeStats | None = None
+    recent_links: list[RecentLink] = field(default_factory=list)
 
 
 def _stamp(moment: datetime) -> str:
@@ -132,6 +152,10 @@ def period_start(period: str, now: datetime) -> datetime | None:
     local = now.astimezone(ICT)
     midnight = datetime(local.year, local.month, local.day, tzinfo=ICT)
     return (midnight - timedelta(days=back)).astimezone(timezone.utc)
+
+
+def _vn_short(stamp: str) -> str:
+    return datetime.fromisoformat(stamp).astimezone(ICT).strftime("%H:%M %d/%m")
 
 
 def _count(conn: sqlite3.Connection, sql: str, args: tuple = ()) -> int:
@@ -178,14 +202,38 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
         day = (trend_start + timedelta(days=offset)).astimezone(ICT)
         trend.append((day.strftime("%d/%m"), int(by_day.get(day.strftime("%Y-%m-%d"), 0))))
 
+    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    # Click khớp sub_id của link (báo cáo click Shopee, PLAN-065); DB cũ chưa có bảng thì 0.
+    clicks = (
+        "(SELECT COUNT(*) FROM shopee_clicks k WHERE k.sub_id = l.sub_id)" if "shopee_clicks" in tables else "0"
+    )
+    name = (
+        "COALESCE(u.username, (SELECT display_name FROM channel_identities c "
+        "WHERE c.internal_user_id = l.telegram_user_id AND l.telegram_user_id < 0))"
+        if "channel_identities" in tables
+        else "u.username"
+    )
+    users = "LEFT JOIN telegram_users u ON u.telegram_user_id = l.telegram_user_id"
     top_users = [
-        (int(user_id), username, int(count))
-        for user_id, username, count in conn.execute(
+        TopUser(int(user_id), user_name, int(count), int(user_clicks))
+        for user_id, user_name, count, user_clicks in conn.execute(
             f"""
-            SELECT l.telegram_user_id, u.username, COUNT(*) AS n
-            FROM link_requests l LEFT JOIN telegram_users u ON u.telegram_user_id = l.telegram_user_id
+            SELECT l.telegram_user_id, MAX({name}), COUNT(*) AS n, SUM({clicks})
+            FROM link_requests l {users}
             WHERE l.link_status = 'created' AND l.{in_period}
-            GROUP BY 1, 2 ORDER BY n DESC, 1 LIMIT ?
+            GROUP BY 1 ORDER BY n DESC, 1 LIMIT ?
+            """,
+            (lo, TOP),
+        ).fetchall()
+    ]
+    recent_links = [
+        RecentLink(sub_id, _vn_short(created_at), int(user_id), user_name, int(link_clicks))
+        for sub_id, created_at, user_id, user_name, link_clicks in conn.execute(
+            f"""
+            SELECT l.sub_id, l.created_at, l.telegram_user_id, {name}, {clicks}
+            FROM link_requests l {users}
+            WHERE l.link_status = 'created' AND l.{in_period}
+            ORDER BY l.id DESC LIMIT ?
             """,
             (lo, TOP),
         ).fetchall()
@@ -222,6 +270,7 @@ def collect(conn: sqlite3.Connection, period: str, now: datetime) -> Stats:
         trend=trend,
         top_users=top_users,
         top_products=top_products,
+        recent_links=recent_links,
         delivery_pending=_count(
             conn, "SELECT COUNT(*) FROM outbound_messages WHERE status IN ('pending', 'retry', 'ambiguous', 'needs_review')"
         ),

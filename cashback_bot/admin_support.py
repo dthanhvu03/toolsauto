@@ -187,8 +187,11 @@ class SupportAdmin:
             status, version, _accepted = terms.link_terms(conn, link_id)
             snap = "chưa có snapshot" if found is None else f"{SNAPSHOT_LABELS.get(found.provenance, found.provenance)} ({html.escape(found.label)})"
             mark = "📌" if link_id == ticket.link_id else "•"
+            # Click theo báo cáo Shopee (tới lần đồng bộ gần nhất), khớp sub_id của link.
+            clicks = conn.execute("SELECT COUNT(*) FROM shopee_clicks WHERE sub_id = ?", (link["sub_id"],)).fetchone()[0]
             lines.append(
                 f"{mark} Link <code>{html.escape(link['sub_id'] or '-')}</code> {_vn(link['created_at'])} · "
+                f"{clicks} click · "
                 f"báo {format_vnd(int(link['estimated_cashback'] or 0))} · {snap} · điều khoản: "
                 f"{TERMS_LABELS[status]}{'' if version is None else ' ' + html.escape(version.version)}"
             )

@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from cashback_bot.admin_policy import AdminPanel
-from cashback_bot.admin_stats import collect, period_start
+from cashback_bot.admin_stats import TopUser, collect, period_start
 from tests.test_cashback_bot import FakeClient, payload, repo, service
 
 ADMIN = 7
@@ -69,7 +69,7 @@ def test_so_lieu_hom_nay(tmp_path):
     assert (stats.links_total, stats.links_created) == (6, 3)
     assert stats.rejected == [("Dữ liệu sản phẩm chưa sẵn", 2), ("Link sai", 1)]
     assert (stats.commission_vnd, stats.cashback_vnd) == (50_000, 33_462)
-    assert stats.top_users == [(1, "an", 2), (2, None, 1)]
+    assert stats.top_users == [TopUser(1, "an", 2, 0), TopUser(2, None, 1, 0)]
     assert stats.top_products == [("Áo Polo Nam", 2), ("Mực in HP", 1)]
     assert stats.trend[-2:] == [("22/10", 1), ("23/10", 3)]
     assert len(stats.trend) == 7
@@ -110,8 +110,8 @@ def test_man_thong_ke_trong_admin(tmp_path):
     assert "Gửi: <b>6</b> · Tạo được: <b>3</b> (50%)" in detail.text
     assert "Lỗi: Dữ liệu sản phẩm chưa sẵn 2 · Link sai 1" in detail.text
     assert "Chênh lệch trước phí, thuế: <b>16.538đ</b>" in detail.text
-    assert "1. @an · 2 link" in detail.text
-    assert "2. <code>2</code> · 1 link" in detail.text
+    assert "1. @an · 2 link · 0 click" in detail.text
+    assert "2. <code>2</code> · 1 link · 0 click" in detail.text
     assert "chưa phải doanh thu" in detail.text
     # Đổi kỳ ở màn chi tiết thì vẫn ở chi tiết.
     assert detail.inline_keyboard[0][1] == ("7 ngày", "c:st:7d:more")
@@ -150,3 +150,46 @@ def test_thong_ke_chay_duoc_tren_ket_noi_chi_doc(tmp_path):
     conn = sqlite3.connect(f"file:{tmp_path / 'cashback.sqlite'}?mode=ro", uri=True)
     for period in ("today", "7d", "30d", "all"):
         collect(conn, period, NOW)
+
+
+def test_khach_zalo_hien_ten_va_so_click(tmp_path):
+    """Khách Zalo (ID âm, PLAN-082) hiện tên Zalo thay cho -1; click khớp sub_id từ báo cáo Shopee."""
+    store = _seed(tmp_path)
+    with store.connect() as conn:
+        conn.executemany(
+            "INSERT INTO telegram_users (telegram_user_id, username, created_at, last_seen_at) VALUES (?, NULL, ?, ?)",
+            [(-1, "2026-10-23T08:00:00Z", "2026-10-23T08:00:00Z"), (-2, "2026-10-23T08:00:00Z", "2026-10-23T08:00:00Z")],
+        )
+        conn.executemany(
+            "INSERT INTO channel_identities (internal_user_id, channel, external_id, display_name, created_at) "
+            "VALUES (?, 'zalo', ?, ?, '2026-10-23T08:00:00Z')",
+            [(-1, "z1", "Chị <Lan>"), (-2, "z2", None)],
+        )
+        conn.executemany(
+            "INSERT INTO link_requests (telegram_user_id, sub_id, item_id, product_name, link_status, created_at, original_url) "
+            "VALUES (?, ?, 7, 'Mực', 'created', ?, 'u')",
+            [(-1, "zaloAAA1", "2026-10-23T08:40:00Z"), (-1, "zaloAAA2", "2026-10-23T08:41:00Z"),
+             (-2, "zaloBBB1", "2026-10-23T08:42:00Z")],
+        )
+        conn.executemany(
+            "INSERT INTO shopee_clicks (click_id, sub_id, click_time, raw_json, created_at) VALUES (?, ?, ?, '{}', ?)",
+            [("c1", "zaloAAA1", "2026-10-23T08:45:00Z", NOW.isoformat()),
+             ("c2", "zaloAAA1", "2026-10-23T08:46:00Z", NOW.isoformat()),
+             ("c3", "zaloAAA2", "2026-10-23T08:47:00Z", NOW.isoformat()),
+             ("c4", None, "2026-10-23T08:48:00Z", NOW.isoformat())],
+        )
+        stats = collect(conn, "today", NOW)
+    assert stats.top_users[0] == TopUser(-1, "Chị <Lan>", 2, 3)
+    assert TopUser(-2, None, 1, 0) in stats.top_users
+    assert [(link.sub_id, link.when, link.clicks) for link in stats.recent_links[:2]] == [
+        ("zaloBBB1", "15:42 23/10", 0),
+        ("zaloAAA2", "15:41 23/10", 1),
+    ]
+
+    bot = service(tmp_path, FakeClient(payload()), admin_user_ids=frozenset({ADMIN}))
+    detail = bot.admin_panel.handle_callback(ADMIN, "c:st:today:more", "private", NOW)
+    assert "1. Zalo · Chị &lt;Lan&gt; · 2 link · 3 click" in detail.text
+    assert "Zalo #2 · 1 link · 0 click" in detail.text
+    assert "• <code>zaloAAA2</code> 15:41 23/10 · Zalo · Chị &lt;Lan&gt; · 1 click" in detail.text
+    assert "-1" not in detail.text
+    assert len(detail.text) < 3500
