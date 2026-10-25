@@ -3,7 +3,8 @@
 - `reports/CASHBACK_REVIEW_2026-10-25.md`: 4 agent chỉ đọc code (tiền, bảo mật, vận hành, câu chữ); Claude Code kiểm chứng các điểm nặng.
 - Ảnh hưởng ngay: bot Zalo chạy code cũ từ 24/10 15:59Z (A1); backup chỉ giữ ~1 ngày vì bản tay chung mẫu tên (A2); tin khách thành `unknown` khi mất mạng (A3); 400 bị coi là chặn bot (A5).
 - Trước khi mở ví: 4 lỗi đỏ B1–B4 (chi dù đơn huỷ, chuyển 2 lần, quỹ đếm đôi, thu hồi chưa có), Zalo chỉ rút 1 lần (B5), số dư > hạn mức không rút được (B6).
-- **Next:** chủ bot restart Zalo + đặt `CASHBACK_BACKUP_KEEP`; chủ bot chọn gói PLAN làm trước.
+- **Đã:** chủ bot restart Zalo (PID 812884, 11:36:33Z) và Telegram (PID 813170, 11:38:12Z), cả hai chạy `main` mới; `.env` có `CASHBACK_BACKUP_KEEP=60` (bot đọc được 60). `gate_b_check` OK.
+- **Next:** chủ bot chọn gói PLAN làm trước (gợi ý: Vận hành).
 
 ---
 
