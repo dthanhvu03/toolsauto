@@ -15,7 +15,7 @@
 | (cài đặt ví) | Giữ tiền **mặc định 15 ngày** sau khi đơn hoàn thành (admin chỉnh được 0 / 7 / 15 / 30 / 45); vẫn phải có kỳ Shopee đã trả |
 | `payout_terms` | **Soạn điều khoản V3** gồm các mục trong bảng này; chủ bot duyệt rồi công bố |
 | `bank_verification` | Tên chủ tài khoản trùng tên khách khai; admin kiểm tra tên người nhận trên app ngân hàng. **Đổi tài khoản thì chờ 7 ngày**, admin xác minh được thì cho rút ngay tuỳ trường hợp |
-| `payment_limits` | Ban đầu 20k / 500k / 2tr / 10tr. **Cập nhật cùng ngày:** rút tối thiểu 10.000đ được; admin tự chỉnh trong /admin → 👛 Ví khách → ⚙️ Cài đặt (mỗi lần chỉnh thêm dòng ACTIVE, admin là người duyệt; «Rút tối thiểu» kéo theo bảng hạn mức). Ghi quyết định id 5 |
+| `payment_limits` | Ban đầu 20k / 500k / 2tr / 10tr. **Cập nhật cùng ngày:** rút tối thiểu 10.000đ được; admin tự chỉnh trong /admin → 👛 Ví khách → ⚙️ Cài đặt (mỗi lần chỉnh thêm dòng ACTIVE, admin là người duyệt; «Rút tối thiểu» kéo theo bảng hạn mức). Ghi quyết định id 5. **Cập nhật lần 2:** tổng ngày / tháng tính **theo từng khách**, khách tích 5–10tr rút được một lần (nút chọn tới 10tr/lần, 20tr/ngày, 100tr/tháng), đổi mức không báo trước. Ghi quyết định id 7 — cột reference ghi nhầm `main@e8e3828` (commit PLAN-086 vừa vào main), commit đúng là `main@515b3ee`; bảng chỉ thêm nên không sửa |
 | `manual_payment` | Chuyển từ **tài khoản cá nhân** của chủ bot; xử lý trong **3–7 ngày làm việc**; chứng từ: **mã giao dịch ngân hàng** nhập vào bot |
 
 ## Báo cáo thanh toán Shopee thật (ảnh chủ bot gửi 2026-10-25)

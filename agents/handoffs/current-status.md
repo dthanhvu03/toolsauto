@@ -1,3 +1,14 @@
+## Phiên 2026-10-25 (bu) — Hạn mức theo từng khách + V3 nháp
+
+- Chủ bot: hạn mức ngày / tháng theo từng khách, khách tích 5–10tr phải rút được một lần; không thêm câu "tự chịu thuế"; đổi mức không báo trước.
+- `main@515b3ee`: `check_limits(conn, user_id, …)` chỉ cộng yêu cầu của chính khách; nút chọn mỗi lần 500k–10tr, ngày 2tr–20tr, tháng 10tr–100tr; màn ghi "Hạn mức rút mỗi khách". Test 47/48 đổi sang theo từng khách. 730 passed, 1 hỏng có từ trước (`test_14`).
+- `reports/CASHBACK_TERMS_V3_DRAFT.md`: nháp V3 đã theo câu trả lời, chưa đưa vào bot (công bố khi ví sắp mở).
+- Ghi `payout_policy_decisions` id 7 (backup `cashback-20261025T111224Z.sqlite`); reference ghi nhầm `main@e8e3828`, đúng là `515b3ee` (ghi chú ở ADR-059).
+- Main có commit PLAN-086 (buffer, `e8e3828`) của luồng khác; đã rebase, không đụng.
+- **Chưa:** chủ bot restart bot Telegram (PID 802976); chủ bot nâng hạn mức trong ⚙️ Cài đặt nếu muốn (hiện 500k/lần, 2tr/ngày, 10tr/tháng mỗi khách).
+
+---
+
 ## Phiên 2026-10-25 (bu) — Buffer: báo cáo sau khi 3 key mở lại
 
 - Từ khi bật log `[Buffer][req]` (PLAN-072): 0 request lỗi, 0 lần 429 thật. Dòng "post_statuses ... 429" là cooldown nội bộ, không gửi đi.
