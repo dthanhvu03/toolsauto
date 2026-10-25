@@ -1,0 +1,58 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Cashback · Khách hàng{% endblock %}
+{% block page_title %}Cashback · Khách hàng{% endblock %}
+{% block page_subtitle %}{{ people | length }} / {{ total }} khách. Biên = hoa hồng ròng − phần khách − dự phòng thuế / phí, tạm tính.{% endblock %}
+
+{% block head_extra %}{% include "fragments/cashback_style.html" %}{% endblock %}
+
+{% block content %}
+<div class="cb-tabs flex flex-wrap gap-2 mb-3">
+  <a href="/cashback">← Dòng tiền</a>
+  <a href="/cashback/users?sort={{ sort }}" class="{{ 'on' if not segment }}">Tất cả {{ total }}</a>
+  {% for key, label in segments.items() %}
+  <a href="/cashback/users?segment={{ key }}&sort={{ sort }}" class="{{ 'on' if key == segment }}">{{ label }} {{ counts[key] }}</a>
+  {% endfor %}
+</div>
+
+<form method="get" action="/cashback/users" class="cb-card flex flex-wrap items-center gap-3 mb-4">
+  <input type="hidden" name="segment" value="{{ segment }}">
+  <input name="q" value="{{ q }}" placeholder="Tìm tên hoặc ID" class="px-3 py-2 rounded border border-[var(--color-border)] bg-transparent text-sm">
+  <select name="channel" class="px-3 py-2 rounded border border-[var(--color-border)] bg-transparent text-sm">
+    <option value="">Mọi kênh</option>
+    <option value="telegram" {{ 'selected' if channel == 'telegram' }}>Telegram</option>
+    <option value="zalo" {{ 'selected' if channel == 'zalo' }}>Zalo</option>
+  </select>
+  <select name="sort" class="px-3 py-2 rounded border border-[var(--color-border)] bg-transparent text-sm">
+    {% for key, label in sorts.items() %}<option value="{{ key }}" {{ 'selected' if key == sort }}>Xếp theo: {{ label }}</option>{% endfor %}
+  </select>
+  <button class="px-4 py-2 rounded text-sm font-semibold border border-[var(--color-torch-border)] text-[var(--color-torch)]">Lọc</button>
+</form>
+
+<div class="cb-card overflow-x-auto">
+  <table class="cb-table">
+    <tr>
+      <th>Khách</th><th>Nhóm</th><th>Vào</th><th>Dùng gần nhất</th>
+      <th class="num">Link</th><th class="num">Click</th><th class="num">Đơn</th><th class="num">Huỷ</th>
+      <th class="num">GMV</th><th class="num">HH ròng</th><th class="num">Khách nhận</th><th class="num">Biên</th>
+      <th class="num">Ví</th><th class="num">Chờ chuyển</th><th>Cảnh báo</th>
+    </tr>
+    {% for c in people %}
+    <tr>
+      <td><a href="/cashback/users/{{ c.user_id }}" class="text-[var(--color-torch)] font-semibold">{{ c.label }}</a>
+        <div class="cb-note">{{ 'Zalo' if c.channel == 'zalo' else 'Telegram' }} · {{ c.user_id }}</div></td>
+      <td><span class="cb-pill">{{ segments[c.segment] }}</span></td>
+      <td>{{ when(c.joined) }}</td><td>{{ when(c.last_active) }}</td>
+      <td class="num">{{ c.links }}</td><td class="num">{{ c.clicks }}</td><td class="num">{{ c.orders }}</td>
+      <td class="num">{{ c.cancelled }}</td><td class="num">{{ vnd(c.gmv) }}</td><td class="num">{{ vnd(c.net) }}</td>
+      <td class="num">{{ vnd(c.cashback) }}</td>
+      <td class="num {{ 'cb-bad' if c.margin < 0 else '' }}"><strong>{{ vnd(c.margin) }}</strong></td>
+      <td class="num {{ 'cb-bad' if c.wallet < 0 else '' }}">{{ vnd(c.wallet) }}</td><td class="num">{{ vnd(c.requested) }}</td>
+      <td>{% for flag in c.flags %}<span class="cb-pill cb-bad">{{ flag }}</span> {% endfor %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="15" class="cb-note">Không có khách khớp bộ lọc.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -28,6 +28,7 @@ from app.features.jobs import router as jobs
 from app.features.accounts import router as accounts
 from app.features.threads import router as threads
 from app.features.affiliates import router as affiliates
+from app.features.cashback_insights import router as cashback_insights
 from app.features.system_panel import router as system_panel
 from app.features.system_panel import worker_router as worker
 from app.features.system_panel import config_router as platform_config
@@ -90,6 +91,7 @@ app.include_router(fb_pro_tasks.router)
 app.include_router(system_panel.router)
 app.include_router(pages.router)
 app.include_router(manual_job.router)
+app.include_router(cashback_insights.router)
 app.include_router(affiliates.router)
 app.include_router(compliance.router)
 app.include_router(database.router)

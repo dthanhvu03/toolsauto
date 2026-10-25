@@ -96,7 +96,9 @@ from cashback_bot.admin_settlement import SettlementAdmin
 from cashback_bot.admin_support import SupportAdmin
 from cashback_bot.admin_terms import TermsAdmin
 from cashback_bot.admin_validation import ValidationAdmin
+from cashback_bot.admin_insights import InsightsAdmin
 from cashback_bot.admin_wallet import WalletAdmin
+from cashback_bot.wallet import Wallet
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
@@ -244,6 +246,8 @@ class AdminPanel:
     _support_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang gõ lý do / chứng từ cho một bước của yêu cầu rút (PLAN-078).
     _wallet_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
+    # Admin đang gõ chi phí vận hành / tháng cho 💹 Dòng tiền (PLAN-089): user_id → hạn chờ.
+    _insights_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -277,6 +281,9 @@ class AdminPanel:
         payout = self._wallet_admin().consume_text(user_id, text, now)
         if payout is not None:
             return payout
+        cost = self._insights().consume_text(user_id, text, now)
+        if cost is not None:
+            return cost
 
         reserve = self._reserve_text(user_id, (text or "").strip(), now)
         if reserve is not None:
@@ -340,6 +347,8 @@ class AdminPanel:
             return self._share_start(user_id, now)
         if data == "c:menu:wallet" or data.startswith("c:wl:"):
             return self._wallet_admin().route(user_id, data, now)
+        if data.startswith("c:in:"):
+            return self._insights().route(user_id, data, now)
         if data.startswith("c:cv:"):
             return ValidationAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:sm:"):
@@ -1049,6 +1058,14 @@ class AdminPanel:
     def _wallet_admin(self) -> WalletAdmin:
         return WalletAdmin(TrackingRepository(self.db_path), audit=self._log_setting, waiting=self._wallet_waiting)
 
+    def _insights(self) -> InsightsAdmin:
+        repo = TrackingRepository(self.db_path)
+        return InsightsAdmin(
+            self.db_path, audit=self._log_setting, waiting=self._insights_waiting,
+            sync_interval_minutes=self.auto_sync.interval_minutes,
+            locked_reasons=lambda: Wallet(repo).settings().locked_reasons,
+        )
+
     def _support(self) -> SupportAdmin:
         return SupportAdmin(TrackingRepository(self.db_path), self._support_waiting)
 
@@ -1520,7 +1537,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action not in {
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
-        "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro",
+        "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro", "ops_cost",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1549,7 +1566,11 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         kind = "xử lý lại sự kiện thử (chống trùng)" if after.get("repeat") else "tin thử mới"
         return f"Thông báo khách: {kind} tới tài khoản test {who}"
     if action == "bank_verified":
-        return f"Ví khách: xác minh tài khoản ••••{html.escape(str(after.get('last4', '-')))} (yêu cầu #{after.get('payout', '-')})"
+        target = f"khách …{str(after['user'])[-3:]}" if "user" in after else f"yêu cầu #{after.get('payout', '-')}"
+        return f"Ví khách: xác minh tài khoản ••••{html.escape(str(after.get('last4', '-')))} ({html.escape(target)})"
+    if action == "ops_cost":
+        old = format_vnd(int(before["vnd"])) if "vnd" in before else "chưa nhập"
+        return f"Chi phí vận hành / hạ tầng: {old} → {format_vnd(int(after['vnd']))} mỗi tháng"
     if action in {"terms_draft", "terms_publish"}:
         verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
         return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"

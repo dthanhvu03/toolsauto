@@ -1,0 +1,169 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Cashback · Dòng tiền{% endblock %}
+{% block page_title %}Cashback · Dòng tiền & khách hàng{% endblock %}
+{% block page_subtitle %}Tạm tính = mọi đơn chưa huỷ. Thực = đơn Shopee đã trả, đối soát khớp. Chỉ đọc, cùng số với /admin Telegram.{% endblock %}
+
+{% block head_extra %}
+<script src="{{ config.CDN_CHARTJS }}"></script>
+{% include "fragments/cashback_style.html" %}
+{% endblock %}
+
+{% block content %}
+{% set m = view.money %}{% set d = view.liabilities %}{% set g = view.growth %}{% set f = view.funnel %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+  <div class="cb-tabs flex flex-wrap gap-2">
+    {% for key, label in periods.items() %}
+    <a href="/cashback?period={{ key }}" class="{{ 'on' if key == view.period }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+  <div class="cb-tabs flex gap-2"><a href="/cashback/users">👥 Danh sách khách →</a></div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+  <div class="cb-card"><div class="cb-label">GMV qua bot</div><div class="cb-value">{{ vnd(m.gmv) }}</div>
+    <div class="cb-sub">{{ m.orders }} đơn · {{ m.customers }} khách</div></div>
+  <div class="cb-card"><div class="cb-label">Hoa hồng ròng</div><div class="cb-value">{{ vnd(m.net) }}</div>
+    <div class="cb-sub">gộp {{ vnd(m.gross) }} · MCN −{{ vnd(m.mcn_fee) }}</div></div>
+  <div class="cb-card"><div class="cb-label">Phần của khách</div><div class="cb-value">{{ vnd(m.cashback) }}</div>
+    <div class="cb-sub">{{ pct(m.cashback, m.net) }} hoa hồng ròng</div></div>
+  <div class="cb-card"><div class="cb-label">Biên sau dự phòng</div><div class="cb-value">{{ vnd(m.margin) }}</div>
+    <div class="cb-sub">{{ pct(m.margin, m.net) }} · trước dự phòng {{ vnd(m.margin_before_reserve) }}</div></div>
+  <div class="cb-card"><div class="cb-label">Lãi sau vận hành</div>
+    {% if m.profit is none %}<div class="cb-value cb-sub">chưa nhập</div>
+    <div class="cb-note">Nhập chi phí / tháng: /admin → 💹 Dòng tiền → ✍️</div>
+    {% else %}<div class="cb-value {{ 'cb-bad' if m.profit < 0 else 'cb-good' }}">{{ vnd(m.profit) }}</div>
+    <div class="cb-sub">chi phí {{ vnd(m.ops_cost) }} ({{ m.days }} ngày)</div>{% endif %}</div>
+  <div class="cb-card"><div class="cb-label">Mất do huỷ</div><div class="cb-value cb-bad">{{ vnd(m.cancelled_net) }}</div>
+    <div class="cb-sub">{{ m.cancelled_orders }} đơn · {{ '%.0f' % (m.cancel_rate * 100) }}%</div></div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-5">
+  <div class="cb-card xl:col-span-2">
+    <div class="cb-h">Hoa hồng ròng và biên theo ngày</div>
+    <div style="height: 240px"><canvas id="cbDaily"></canvas></div>
+  </div>
+  <div class="cb-card">
+    <div class="cb-h">Từ hoa hồng tới túi anh</div>
+    {% set steps = [("Hoa hồng gộp", m.gross), ("− Phí MCN", -m.mcn_fee), ("= Hoa hồng ròng", m.net),
+                    ("− Phần khách", -m.cashback), ("− Dự phòng thuế / phí", -m.reserve), ("= Biên sau dự phòng", m.margin)] %}
+    {% for label, value in steps %}
+    <div class="cb-row"><span>{{ label }}</span><span class="{{ 'cb-bad' if value < 0 }}">{{ vnd(value) }}</span></div>
+    {% endfor %}
+    {% if m.ops_cost is not none %}
+    <div class="cb-row"><span>− Vận hành / hạ tầng</span><span class="cb-bad">{{ vnd(-m.ops_cost) }}</span></div>
+    <div class="cb-row"><strong>= Lãi</strong><strong>{{ vnd(m.profit) }}</strong></div>
+    {% endif %}
+    <div class="cb-row mt-3"><span>✅ Thực: ròng / biên</span><span>{{ vnd(m.settled_net) }} / {{ vnd(m.settled_margin) }}</span></div>
+    <div class="cb-row"><span>⏳ Shopee đã duyệt, chưa trả</span><span>{{ vnd(d.upcoming) }}</span></div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-5">
+  <div class="cb-card">
+    <div class="cb-h">Nghĩa vụ với khách (hiện tại)</div>
+    {% for label, value in [("Chờ Shopee duyệt", d.pending), ("Đang giữ, chờ đủ điều kiện", d.holding),
+                            ("Trong ví, chưa rút", d.in_wallet), ("Đang chờ chuyển", d.requested), ("Đã trả", d.paid),
+                            ("Đang trừ lại (thu hồi)", d.negative)] %}
+    <div class="cb-row"><span>{{ label }}</span><span>{{ vnd(value) }}</span></div>
+    {% endfor %}
+    <div class="cb-row"><span>Shopee đã trả về tài khoản</span><span>{{ vnd(d.shopee_paid) }}</span></div>
+    <div class="cb-row"><span>Quỹ có chứng từ còn</span><span>{{ 'chưa có kỳ khớp' if d.fund_headroom is none else vnd(d.fund_headroom) }}</span></div>
+  </div>
+  <div class="cb-card">
+    <div class="cb-h">Phễu (khách tạo link trong kỳ)</div>
+    {% for label, value in [("Tạo link", f.linked), ("Có click", f.clicked), ("Có đơn", f.ordered),
+                            ("Đơn hoàn thành", f.completed), ("Shopee đã trả", f.settled)] %}
+    <div class="mb-2"><div class="flex justify-between text-[13px]"><span>{{ label }}</span>
+      <span>{{ value }} · {{ pct(value, f.linked) }}</span></div>
+      <div class="cb-track"><div class="cb-bar" style="width: {{ (value * 100 / f.linked) if f.linked else 0 }}%"></div></div></div>
+    {% endfor %}
+    <div class="cb-note mt-2">{{ f.links }} link · {{ f.clicks }} click · {{ f.orders }} đơn · click → đơn {{ pct(f.orders, f.clicks) }}</div>
+  </div>
+  <div class="cb-card">
+    <div class="cb-h">Ra tiền (trung vị)</div>
+    {% set t = view.timing %}
+    {% for label, value, n in [("Mua → hoàn thành", t.purchase_to_complete, t.samples[0]),
+                               ("Hoàn thành → Shopee trả", t.complete_to_settled, t.samples[1]),
+                               ("Yêu cầu rút → đã trả", t.request_to_paid, t.samples[2])] %}
+    <div class="cb-row"><span>{{ label }}</span><span>{{ '–' if value is none else '%g ngày' % value }} <span class="cb-note">({{ n }} mẫu)</span></span></div>
+    {% endfor %}
+    <div class="cb-note mt-2">Cam kết chuyển tiền cho khách: 3–7 ngày làm việc.</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-5">
+  <div class="cb-card">
+    <div class="cb-h">Khách và giá trị</div>
+    {% set active = [g.active_30d, 1] | max %}
+    <div class="cb-row"><span>Tổng khách</span><span>{{ g.total }} (Telegram {{ g.telegram }} · Zalo {{ g.zalo }})</span></div>
+    <div class="cb-row"><span>Mới trong kỳ</span><span>{{ g.new }} (TG {{ g.new_telegram }} · Zalo {{ g.new_zalo }})</span></div>
+    <div class="cb-row"><span>Hoạt động 7 / 30 ngày</span><span>{{ g.active_7d }} / {{ g.active_30d }}</span></div>
+    <div class="cb-row"><span>Biên / khách hoạt động</span><span>{{ vnd(m.margin // active) }}</span></div>
+    <div class="cb-row"><span>GMV / đơn · HH / đơn</span><span>{{ vnd(m.gmv // m.orders) if m.orders else '–' }} · {{ vnd(m.net // m.orders) if m.orders else '–' }}</span></div>
+    <div class="cb-row"><span>Khách lớn nhất / top 10%</span><span>{{ '%.0f' % (view.concentration.top1_share * 100) }}% / {{ '%.0f' % (view.concentration.top10_share * 100) }}% biên</span></div>
+    {% for name, label in [("telegram", "Telegram"), ("zalo", "Zalo")] %}{% set ch = view.channels[name] %}
+    <div class="cb-row"><span>{{ label }}</span><span>{{ ch[0] }} khách · {{ ch[1] }} đơn · {{ vnd(ch[2]) }}</span></div>
+    {% endfor %}
+  </div>
+  <div class="cb-card">
+    <div class="cb-h">Ngành hàng và shop (HH ròng)</div>
+    {% for title, rows in [("Ngành", view.categories), ("Shop", view.shops)] %}
+    <div class="cb-label mt-2 mb-1">{{ title }}</div>
+    {% for r in rows %}<div class="cb-row"><span class="truncate">{{ r.label }}</span><span>{{ r.orders }} đơn · {{ vnd(r.net) }}</span></div>
+    {% else %}<div class="cb-note">Chưa có.</div>{% endfor %}
+    {% endfor %}
+  </div>
+  <div class="cb-card">
+    <div class="cb-h">Giữ chân theo tuần vào</div>
+    <table class="cb-table"><tr><th>Tuần</th><th class="num">Khách</th><th class="num">Tuần sau</th><th class="num">Tuần 4</th></tr>
+    {% for k in view.cohorts %}<tr><td>{{ k.week }}</td><td class="num">{{ k.size }}</td>
+      <td class="num">{{ pct(k.next_week, k.size) }}</td><td class="num">{{ pct(k.week_4, k.size) }}</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+  <div class="cb-card">
+    <div class="cb-h">Vận hành</div>
+    {% for c in view.checks %}
+    <div class="cb-row"><span>{{ '🟢' if c.ok else '🔴' }} {{ c.label }}</span><span class="{{ 'cb-bad' if not c.ok }}">{{ c.value }}</span></div>
+    {% endfor %}
+  </div>
+  <div class="cb-card">
+    <div class="cb-h">Khách đóng góp biên nhiều nhất</div>
+    <table class="cb-table">
+      <tr><th>Khách</th><th>Nhóm</th><th class="num">Đơn</th><th class="num">Biên</th><th class="num">Ví</th></tr>
+      {% for c in view.top_customers %}
+      <tr><td><a href="/cashback/users/{{ c.user_id }}" class="text-[var(--color-torch)]">{{ c.label }}</a></td>
+        <td><span class="cb-pill">{{ segments[c.segment] }}</span></td><td class="num">{{ c.orders }}</td>
+        <td class="num">{{ vnd(c.margin) }}</td><td class="num">{{ vnd(c.wallet) }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block script_extra %}
+<script>
+(function () {
+  const data = {{ chart | tojson }};
+  const el = document.getElementById('cbDaily');
+  if (!el || typeof Chart === 'undefined') return;
+  const css = getComputedStyle(document.documentElement);
+  const torch = css.getPropertyValue('--color-torch').trim() || '#e09a3e';
+  const moss = css.getPropertyValue('--color-lichen').trim() || '#7fa36b';
+  const ink = css.getPropertyValue('--color-ash').trim() || '#888';
+  new Chart(el, {
+    type: 'bar',
+    data: { labels: data.labels, datasets: [
+      { label: 'Hoa hồng ròng', data: data.net, backgroundColor: torch },
+      { label: 'Biên sau dự phòng', data: data.margin, backgroundColor: moss },
+    ] },
+    options: { maintainAspectRatio: false, plugins: { legend: { labels: { color: ink } },
+      tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toLocaleString('vi-VN') + 'đ' } } },
+      scales: { x: { ticks: { color: ink } }, y: { ticks: { color: ink, callback: (v) => v.toLocaleString('vi-VN') } } } },
+  });
+})();
+</script>
+{% endblock %}

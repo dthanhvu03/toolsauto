@@ -1,0 +1,30 @@
+<style>
+  .cb-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl);
+             box-shadow: var(--shadow-soft); color: var(--color-ink); padding: 1.25rem; min-width: 0; }
+  .cb-label { color: var(--color-ash); font-size: var(--text-2xs); font-weight: var(--weight-bold);
+              letter-spacing: var(--tracking-wider); text-transform: uppercase; }
+  .cb-value { font-family: var(--font-display); font-size: clamp(1.25rem, 2vw, 1.75rem); font-weight: var(--weight-extrabold);
+              letter-spacing: var(--tracking-tight); color: var(--color-ink); }
+  .cb-sub { color: var(--color-mist); font-size: 12px; }
+  .cb-h { font-family: var(--font-display); font-weight: var(--weight-bold); font-size: 15px; color: var(--color-ink);
+          margin-bottom: .75rem; }
+  .cb-good { color: var(--color-lichen); }
+  .cb-bad { color: var(--color-danger); }
+  .cb-tabs a { padding: .4rem .8rem; border-radius: var(--radius-lg); border: 1px solid var(--color-border);
+               font-size: 13px; font-weight: 600; color: var(--color-mist); background: var(--color-surface); }
+  .cb-tabs a.on, .cb-tabs a:hover { color: var(--color-torch); border-color: var(--color-torch-border); }
+  .cb-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+  .cb-table th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--color-ash); font-weight: 600;
+                 padding: .5rem .6rem; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+  .cb-table td { padding: .5rem .6rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
+  .cb-table td.num, .cb-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cb-table tr:hover td { background: var(--color-torch-dim); }
+  .cb-bar { height: .5rem; border-radius: 999px; background: var(--color-torch); }
+  .cb-track { height: .5rem; border-radius: 999px; background: var(--color-surface-sunken); }
+  .cb-pill { display: inline-block; padding: 0 .45rem; border-radius: 999px; font-size: 11px; border: 1px solid var(--color-border);
+             color: var(--color-mist); white-space: nowrap; }
+  .cb-row { display: flex; justify-content: space-between; gap: 1rem; padding: .3rem 0; font-size: 13px;
+            border-bottom: 1px dashed var(--color-border); }
+  .cb-row span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cb-note { font-size: 11px; color: var(--color-ash); }
+</style>

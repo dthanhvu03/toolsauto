@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Executor | Claude Code (chủ bot giao 2026-10-25: "cả 2", "cần hết theo góc nhìn CEO, COO") |
-| Trạng thái | **Nháp, chờ chủ bot duyệt** |
+| Trạng thái | Chủ bot duyệt 2026-10-25 ("triển khai tất cả theo plan"). Code xong, chờ restart 2 bot + Web_Dashboard |
 | Không đổi | Chỉ đọc DB (`mode=ro`); không sửa sổ ví, chính sách hay trạng thái đơn; không gọi Shopee |
 | Nguồn dữ liệu | `data/cashback.sqlite`: `telegram_users`, `channel_identities`, `link_requests`, `shopee_clicks`, `shopee_conversions`, `cashback_entries`, `cashback_payouts`, `settlement_batches/items`, `support_tickets`, `admin_notifications`, `outbound_messages`, `bot_state` |
 
@@ -177,3 +177,35 @@ Restart:
 2. "Biên của chủ bot" = hoa hồng ròng − phần khách − dự phòng thuế/phí (theo snapshot từng link). Dự phòng 10% có tính là chi phí không, hay anh muốn xem cả hai số (trước và sau dự phòng)?
 3. Ngưỡng nhóm khách và ngưỡng cảnh báo vận hành (mục 2.3, 2.4).
 4. Web: trang `:8000` đang mở `0.0.0.0` (máy khác trong mạng vào được, có đăng nhập). Giữ như vậy, hay chỉ cho xem trên máy này (`127.0.0.1`)?
+
+## Trả lời của chủ bot (2026-10-25)
+
+- Làm cả Telegram và web, đủ chỉ số theo góc nhìn CEO / COO.
+- Hiện mới tính một phần dự phòng, chưa tính chi phí vận hành và hạ tầng. Vì vậy dashboard hiện biên ba mức:
+  - trước dự phòng;
+  - sau dự phòng;
+  - lãi sau chi phí vận hành / hạ tầng: admin nhập mỗi tháng ở /admin → 💹 Dòng tiền → ✍️, bot chia theo số ngày của kỳ, lưu `bot_state.ops_cost_monthly_vnd` và ghi vào 📊 Lịch sử. Chưa nhập thì ghi "chưa nhập", không tự đoán.
+- Ngưỡng nhóm khách và ngưỡng cảnh báo: dùng mức đề xuất (hằng số đầu `insights.py`).
+- Web: giữ nguyên cách mở `0.0.0.0:8000` có đăng nhập (chủ bot chưa đổi).
+
+## Đã làm
+
+| Phần | File |
+|---|---|
+| Tính số (chỉ đọc, `mode=ro`) | `cashback_bot/insights.py` |
+| Telegram: 💹 Dòng tiền · 📈 Tăng trưởng · 🛠 Vận hành · 👥 Khách hàng (lọc theo nhóm, sắp xếp, chi tiết) · ✍️ chi phí | `cashback_bot/admin_insights.py`, `admin_policy.py`, `admin_ui.py` (menu) |
+| Web: `/cashback`, `/cashback/users`, `/cashback/users/{id}`, mục "Cashback" ở menu trái | `app/features/cashback_insights/`, `app/templates/pages/cashback_*.html`, `fragments/cashback_style.html`, `app/main.py`, `layouts/app.html` |
+
+Hai chỉ số chưa có trong lần này:
+- **Hạng thành viên** của từng khách: tính năng hạng chưa bật.
+- **Thời gian Shopee trả**: chưa có kỳ đối soát nào, nên chưa có số.
+
+## Proof
+
+- `pytest tests/test_cashback_*.py tests/test_admin_api_lists.py`: 800 passed. `tests/test_cashback_insights.py` có 13 test mới.
+- Các test giao diện web khác dùng chung layout: 81 passed.
+- `ruff`: sạch.
+- Chạy thử trên DB production (chỉ đọc): ròng 18.740đ − khách 13.117đ − dự phòng 2.060đ = biên 3.563đ (19%).
+  - Phễu: 11 khách → 5 có click → 2 có đơn.
+  - Vận hành: 🔴 "Link 24 giờ: chưa giao tới khách 1" (link `priYghQy` còn `pending`).
+- Web chạy thử bằng TestClient: 3 trang trả 200; khách không tồn tại trả 404; chưa đăng nhập thì chuyển `/login`; DB không bị ghi.

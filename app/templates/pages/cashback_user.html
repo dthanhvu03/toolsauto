@@ -1,0 +1,54 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Cashback · {{ c.label }}{% endblock %}
+{% block page_title %}{{ c.label }}{% endblock %}
+{% block page_subtitle %}{{ segments[c.segment] }} · {{ 'Zalo' if c.channel == 'zalo' else 'Telegram' }} · ID {{ c.user_id }} · vào {{ when(c.joined) }} · dùng gần nhất {{ when(c.last_active) }}{% endblock %}
+
+{% block head_extra %}{% include "fragments/cashback_style.html" %}{% endblock %}
+
+{% block content %}
+<div class="cb-tabs flex flex-wrap gap-2 mb-4">
+  <a href="/cashback/users">← Danh sách khách</a><a href="/cashback">Dòng tiền</a>
+  {% for flag in c.flags %}<span class="cb-pill cb-bad">{{ flag }}</span>{% endfor %}
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+  <div class="cb-card"><div class="cb-label">Link · click</div><div class="cb-value">{{ c.links }} · {{ c.clicks }}</div>
+    <div class="cb-sub">click / link {{ pct(c.clicks, c.links) }}</div></div>
+  <div class="cb-card"><div class="cb-label">Đơn</div><div class="cb-value">{{ c.orders }}</div>
+    <div class="cb-sub">{{ c.completed }} hoàn thành · {{ c.cancelled }} huỷ</div></div>
+  <div class="cb-card"><div class="cb-label">GMV</div><div class="cb-value">{{ vnd(c.gmv) }}</div>
+    <div class="cb-sub">30 ngày {{ vnd(recent.gmv) }}</div></div>
+  <div class="cb-card"><div class="cb-label">Hoa hồng ròng</div><div class="cb-value">{{ vnd(c.net) }}</div>
+    <div class="cb-sub">30 ngày {{ vnd(recent.net) }}</div></div>
+  <div class="cb-card"><div class="cb-label">Biên (giá trị tích luỹ)</div>
+    <div class="cb-value {{ 'cb-bad' if c.margin < 0 }}">{{ vnd(c.margin) }}</div>
+    <div class="cb-sub">khách nhận {{ vnd(c.cashback) }} · dự phòng {{ vnd(c.reserve) }}</div></div>
+  <div class="cb-card"><div class="cb-label">Ví</div><div class="cb-value {{ 'cb-bad' if c.wallet < 0 }}">{{ vnd(c.wallet) }}</div>
+    <div class="cb-sub">chờ chuyển {{ vnd(c.requested) }} · đã nhận {{ vnd(c.paid) }}</div></div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+  <div class="cb-card">
+    <div class="cb-h">Tiền thực và hồ sơ</div>
+    <div class="cb-row"><span>✅ Thực (Shopee đã trả): ròng</span><span>{{ vnd(lifetime.settled_net) }}</span></div>
+    <div class="cb-row"><span>✅ Thực: biên</span><span>{{ vnd(lifetime.settled_margin) }}</span></div>
+    <div class="cb-row"><span>Shopee đã duyệt</span><span>{{ vnd(lifetime.approved_net) }}</span></div>
+    <div class="cb-row"><span>Mất do huỷ</span><span class="cb-bad">{{ vnd(lifetime.cancelled_net) }} ({{ lifetime.cancelled_orders }} đơn)</span></div>
+    <div class="cb-row"><span>Tài khoản nhận tiền</span><span>{{ prof.bank or 'chưa khai' }}{% if prof.bank %} · {{ prof.bank_state }}{% endif %}</span></div>
+    <div class="cb-row"><span>Điều khoản đã đồng ý</span><span>{{ prof.terms or 'chưa' }}</span></div>
+    <div class="cb-row"><span>Thông báo đang tắt</span><span>
+      {% if prof.prefs %}{% set off = [] %}{% for k, on in prof.prefs.items() %}{% if not on %}{% set _ = off.append(k) %}{% endif %}{% endfor %}{{ off | join(', ') or 'không' }}{% else %}mặc định (bật hết){% endif %}</span></div>
+    <div class="cb-row"><span>Ticket đang mở</span><span>{{ c.open_tickets }}</span></div>
+    <div class="cb-note mt-2">Số tài khoản chỉ hiện 4 số cuối. Chỉnh ví, xác minh tài khoản: /admin → 👛 Ví khách.</div>
+  </div>
+  <div class="cb-card xl:col-span-2">
+    <div class="cb-h">Dòng thời gian</div>
+    <table class="cb-table">
+      {% for e in events %}
+      <tr><td class="whitespace-nowrap">{{ when(e.at) }}</td><td><span class="cb-pill">{{ e.kind }}</span></td><td>{{ e.text }}</td></tr>
+      {% else %}<tr><td class="cb-note">Chưa có hoạt động.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

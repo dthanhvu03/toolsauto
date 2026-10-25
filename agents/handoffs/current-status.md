@@ -1,3 +1,21 @@
+## Phiên 2026-10-25 (bx) — PLAN-089 dashboard khách hàng + dòng tiền (Telegram + web)
+
+- Chủ bot: làm cả hai, đủ chỉ số CEO / COO; chi phí vận hành và hạ tầng chưa tính, nên thêm ô nhập chi phí mỗi tháng.
+- `cashback_bot/insights.py` (chỉ đọc) tính:
+  - Dòng tiền: GMV → hoa hồng → MCN → phần khách → dự phòng → biên → lãi sau chi phí.
+  - Nghĩa vụ với khách, thời gian ra tiền.
+  - Tăng trưởng: phễu, mức tập trung, kênh, ngành / shop, giữ chân theo tuần.
+  - Vận hành: 11 mục.
+  - Từng khách: 6 nhóm, dòng thời gian.
+- Telegram /admin có 4 nút mới. Web có `/cashback` (sau đăng nhập dashboard).
+- Proof: 800 passed. Chạy thử trên production chỉ đọc: biên 3.563đ / ròng 18.740đ.
+- **Next:**
+  - Chủ bot chạy `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+  - Claude Code kiểm tra màn /admin và trang `/cashback` thật.
+  - Chủ bot nhập chi phí vận hành mỗi tháng.
+
+---
+
 ## Phiên 2026-10-25 (bw) — Sống Nhẹ Tuổi 40: ưu tiên video đạo lý
 
 - Meta 27/9–24/10: 14,1K view (99,4% người chưa theo dõi), 0 click link. Video đạo lý 22/10 07:30 (`nunhanthongtue`, material 1275) được 4,8K view; video đầm 300–1,5K.
