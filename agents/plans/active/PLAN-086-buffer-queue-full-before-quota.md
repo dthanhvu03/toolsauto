@@ -40,3 +40,9 @@ Revert commit.
 - Hồi quy `test_buffer*.py` + `test_telegram_schedule.py` + `test_challenger_m1_2_concurrency.py` + `test_storage_cleanup.py`: 493 passed, 12 failed. Cả 12 lỗi có từ trước:
   - 11 test cluster/concurrency đọc DB thật (xem PLAN-068).
   - `test_edit_post_gui_kem_gio_va_chu`: fake `execute` thiếu tham số `purpose`. Fail cả trên code cũ.
+- Restart Maintenance 11:11Z: vòng đầu báo 3 kênh "đã kín (10/10 bài)" mà không có dòng `Limits`. Mỗi key chỉ gửi 1 GetOrganizations (làm mới kênh).
+- **Phát hiện thêm:** 17 test trong `test_buffer_cluster.py` và `test_challenger_m1_2_concurrency.py` gọi thẳng `api.buffer.com` bằng key thật trong `.env`.
+  - Lần hồi quy 11:03–11:10Z làm mất 57 suất (key `f8pL`), 43 suất (`RZX2`) và 58 suất (`ZVsP`) trong 30 ngày. Cùng lúc đó PM2 không ghi dòng `[Buffer][req]` nào.
+  - Chạy lại có plugin chặn socket (`-p block_buffer_net`) thì thấy 17 test cố kết nối ra ngoài, không tốn suất.
+  - Đây gần như chắc là phần "suất mất không rõ" hôm 23/10.
+  - KHÔNG chạy 2 file này khi chưa chặn mạng. Cần PLAN riêng để chặn mạng trong test (conftest).

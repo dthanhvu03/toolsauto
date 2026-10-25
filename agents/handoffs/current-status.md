@@ -1,3 +1,12 @@
+## Phiên 2026-10-25 (bv) — PLAN-086: kênh kín không hỏi suất; test đang gọi Buffer thật
+
+- `main@e8e3828`: `schedule_reup` đếm hàng chờ trước `_quota_block`. Restart Maintenance 11:11Z: 3 kênh kín, không còn request `Limits`.
+- **Rò suất:** 17 test (`test_buffer_cluster.py`, `test_challenger_m1_2_concurrency.py`) gọi `api.buffer.com` bằng key thật. Một lần chạy hồi quy mất 43–58 suất mỗi key. Chi tiết trong PLAN-086.
+- Suất lúc 11:11Z (15 phút / ngày / 30 ngày): `f8pL` 43/116/2616, `RZX2` 57/207/1486, `ZVsP` 42/192/2114. Mức giữ 70% đang chặn request nền, đăng bài vẫn được.
+- **Next:** Owner duyệt PLAN chặn mạng trong test (autouse fixture trong `tests/conftest.py`). Trước đó KHÔNG chạy 2 file trên nếu không có `-p block_buffer_net`.
+
+---
+
 ## Phiên 2026-10-25 (bu) — Hạn mức theo từng khách + V3 nháp
 
 - Chủ bot: hạn mức ngày / tháng theo từng khách, khách tích 5–10tr phải rút được một lần; không thêm câu "tự chịu thuế"; đổi mức không báo trước.
