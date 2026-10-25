@@ -24,7 +24,7 @@ from cashback_bot.messages import ADMIN_COMMANDS, BOT_COMMANDS, BUY_BUTTON, DESC
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import RedactingFormatter, error_brief
 from cashback_bot.service import CashbackService
-from cashback_bot import reconciliation
+from cashback_bot import ops_watch, reconciliation
 from cashback_bot.sync_scheduler import SyncCoordinator, SyncWorker
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError, classify_delivery_error
 
@@ -72,6 +72,7 @@ def main() -> None:
         customer_notifications_enabled=settings.customer_notifications_enabled,
         customer_notification_test_ids=settings.customer_notification_test_ids,
     )
+    ops_watch.record_version(repo, "telegram")
     stuck = repo.recover_sending()
     if stuck:
         logger.warning("[Cashback] %s tin đang gửi dở lúc dừng bot, chuyển 'unknown' (không tự gửi lại)", stuck)
@@ -189,6 +190,9 @@ def _send_outbound(
             )
     except Exception as exc:
         kind, retry_after = classify_delivery_error(exc)
+        if kind == "offline":
+            # Chưa kết nối được: tin chưa đi. Không tính lượt thử, không báo admin, gửi lại khi có mạng.
+            attempts = max(0, attempts - 1)
         status, nxt = _next_delivery(service, kind, retry_after, attempts, moment)
         repo.schedule_outbound(int(row["id"]), status, nxt, kind, attempts)
         repo.mark_link_delivery(update_id, status, attempts, nxt, kind)
@@ -201,7 +205,7 @@ def _send_outbound(
             attempts,
             kind,
         )
-        if admin_notifier:
+        if admin_notifier and kind != "offline":
             admin_notifier.notify_request_failed(
                 error_type="delivery_needs_review" if status == "needs_review" else "telegram_send_customer_failed",
                 update_id=update_id,
@@ -574,6 +578,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
           coordinator: SyncCoordinator) -> None:
     while True:
         try:
+            ops_watch.beat(repo)
             flush_outbound(service, telegram, repo, admin_notifier, limit=3)
             offset = repo.get_offset()
             updates = telegram.get_updates(offset)
@@ -583,6 +588,8 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             _check_wallet_refresh(service, repo)
             _check_reconciliation(repo, admin_notifier)
             _check_zalo_health(repo, admin_notifier)
+            ops_watch.check_versions(repo, admin_notifier)
+            ops_watch.check_delivery_digest(repo, admin_notifier)
             _check_backup(service, repo, admin_notifier)
         except KeyboardInterrupt:
             logger.info("stop")

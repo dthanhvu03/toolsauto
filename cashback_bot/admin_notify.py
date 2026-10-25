@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 
-from cashback_bot import policy_snapshot
+from cashback_bot import ops_watch, policy_snapshot
 from cashback_bot.db import TrackingRepository
 from cashback_bot.notify_dispatch import Dispatcher
 from cashback_bot.messages import buyer_name
@@ -524,14 +524,53 @@ class AdminNotifier:
                 f"Lần cuối nhận tin được từ Zalo: {seen}.\n"
                 "Tin khách Zalo gửi lúc này sẽ mất (Zalo không giữ lại).\n"
                 "Kiểm tra <code>logs/cashback_zalo.log</code>, rồi khởi động lại:\n"
-                "<code>cd /home/vu/toolsauto &amp;&amp; umask 077 &amp;&amp; setsid nohup .venv/bin/python -m "
-                "cashback_bot.zalo_bot &gt;&gt; logs/cashback_zalo.log 2&gt;&amp;1 &amp;</code>"
+                f"<code>{html.escape(ops_watch.restart_command('zalo'))}</code>"
             )
         else:
             body = f"🟢 <b>Bot Zalo hoạt động lại</b>\n🕓 {_vn_now_text()}"
         self.repo.enqueue_admin_event(
             event_key=f"zalo_{'down' if down else 'up'}:{int(last_beat)}",
             event_type="ZALO_DOWN" if down else "ZALO_UP",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_code_mismatch(self, telegram: str, zalo: str, stale: str, restart: str) -> None:
+        """PLAN-087: hai bot chạy khác commit; bot khởi động trước đang chạy code cũ."""
+        if not self._active():
+            return
+        name = "Telegram" if stale == "telegram" else "Zalo"
+        body = (
+            "⚠️ <b>Hai bot đang chạy code khác nhau</b>\n\n"
+            f"Telegram: <code>{html.escape(telegram)}</code> · Zalo: <code>{html.escape(zalo)}</code>\n"
+            f"Bot {name} khởi động trước nên đang chạy code cũ. Khởi động lại bot {name}:\n"
+            f"<code>{html.escape(restart)}</code>"
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"code_mismatch:{telegram}:{zalo}",
+            event_type="CODE_MISMATCH",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_delivery_digest(self, day: str, counts: dict[str, int]) -> None:
+        """PLAN-087: tóm tắt mỗi sáng các tin gửi không thành công trong 24 giờ."""
+        if not self._active():
+            return
+        labels = (
+            ("customer_unknown", "Tin khách không rõ đã tới chưa (không tự gửi lại)"),
+            ("customer_failed", "Tin khách gửi lỗi"),
+            ("admin_failed", "Tin admin gửi lỗi"),
+            ("reply_needs_review", "Trả lời khách cần xem lại"),
+        )
+        lines = [f"• {label}: <b>{counts[key]}</b>" for key, label in labels if counts.get(key)]
+        body = (
+            "📬 <b>Tin gửi không thành công (24 giờ qua)</b>\n\n" + "\n".join(lines)
+            + "\n\nXem và gửi lại ở /admin → 🔔 Thông báo khách."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"delivery_digest:{day}",
+            event_type="DELIVERY_DIGEST",
             chat_id=int(self.chat_id),
             message_html=body,
         )

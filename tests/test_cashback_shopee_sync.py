@@ -501,6 +501,31 @@ class TestShopeeReviewFixes:
             rows = conn.execute("SELECT order_sn, net_commission_vnd FROM shopee_conversions ORDER BY order_sn").fetchall()
         assert [(r["order_sn"], r["net_commission_vnd"]) for r in rows] == [("SN1", 17_368), ("SN2", 1_372)]
 
+    def test_multi_order_checkout_tru_phi_mcn_theo_ti_le(self, tmp_path):
+        repo = _setup_repo(tmp_path)
+        client = MagicMock()
+        client.check_status.return_value = _status(True)
+        client.fetch_clicks.return_value = {"code": 0, "data": {"list": []}}
+        client.fetch_conversions.return_value = {"code": 0, "data": {"list": [{
+            "checkout_id": "chk_1",
+            "purchase_time": 1792742400,
+            "utm_content": "----",
+            "affiliate_net_commission": "270000000",
+            "mcn_management_fee_commission": "30000000",
+            "orders": [
+                {"order_id": "o1", "order_sn": "SN1", "order_status": "COMPLETED",
+                 "items": [{"item_commission": 100_000_000}]},
+                {"order_id": "o2", "order_sn": "SN2", "order_status": "COMPLETED",
+                 "items": [{"item_commission": 200_000_000}]},
+            ],
+        }]}}
+        ShopeeSyncEngine(repo).sync(client=client)
+        with repo.connect() as conn:
+            rows = conn.execute(
+                "SELECT order_sn, gross_commission_vnd, net_commission_vnd FROM shopee_conversions ORDER BY order_sn"
+            ).fetchall()
+        assert [tuple(r) for r in rows] == [("SN1", 1_000, 900), ("SN2", 2_000, 1_800)]
+
     def test_sync_result_lists_bot_orders_new_then_updated(self, tmp_path):
         repo = _setup_repo(tmp_path)
         _insert_link(repo, "u3e52GNL")

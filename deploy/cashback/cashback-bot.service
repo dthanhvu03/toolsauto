@@ -1,0 +1,25 @@
+# PLAN-087: bot cashback Telegram. Cài: xem deploy/cashback/README.md
+[Unit]
+Description=Cashback bot (Telegram)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/vu/toolsauto
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/vu/toolsauto/.venv/bin/python -m cashback_bot
+Restart=always
+RestartSec=10
+# 2: thiếu cấu hình .env; 3: đã có một bot khác đang chạy (khoá file). Khởi động lại cũng không giải quyết được.
+RestartPreventExitStatus=2 3
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=append:/home/vu/toolsauto/logs/cashback_bot.log
+StandardError=append:/home/vu/toolsauto/logs/cashback_bot.log
+
+[Install]
+WantedBy=multi-user.target

@@ -774,6 +774,11 @@ def _text(value) -> str | None:
     return None if value is None else str(value)
 
 
+def _channel_scope(channel: str) -> str:
+    """PLAN-082: bot Telegram lo tin admin và tin khách ID dương; bot Zalo lo tin khách ID âm."""
+    return "audience = 'customer' AND chat_id < 0" if channel == "zalo" else "(audience = 'admin' OR chat_id > 0)"
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -1344,7 +1349,7 @@ class TrackingRepository:
         PLAN-082: Telegram lấy tin admin và tin khách ID dương; Zalo chỉ lấy tin khách ID âm.
         """
         marks = ", ".join("?" for _ in audiences)
-        scope = "audience = 'customer' AND chat_id < 0" if channel == "zalo" else "(audience = 'admin' OR chat_id > 0)"
+        scope = _channel_scope(channel)
         with self.connect() as conn:
             return conn.execute(
                 f"""
@@ -1383,6 +1388,15 @@ class TrackingRepository:
                 (status, None if error is None else error[:120], next_retry_at, message_id, status, _utc_now(), event_id),
             )
 
+    def release_admin_event(self, event_id: int, error: str, next_retry_at: str) -> None:
+        """Chưa kết nối được nên tin chưa đi: trả về 'retry' và hoàn lượt thử vừa tính lúc claim."""
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE admin_notifications SET status = 'retry', attempt_count = MAX(0, attempt_count - 1), "
+                "last_error = ?, next_retry_at = ? WHERE id = ? AND status = 'sending'",
+                (error[:120], next_retry_at, event_id),
+            )
+
     def suppress_admin_event(self, event_id: int, reason: str) -> None:
         with self.connect() as conn:
             conn.execute(
@@ -1409,15 +1423,16 @@ class TrackingRepository:
             ).fetchone()
         return int(row[0]), int(row[1])
 
-    def recover_sending(self) -> int:
-        """Lúc khởi động: tin kẹt ở 'sending' (bot dừng giữa lúc gửi) thành 'unknown'.
+    def recover_sending(self, channel: str = "telegram") -> int:
+        """Lúc khởi động: tin kẹt ở 'sending' (bot dừng giữa lúc gửi) thành 'unknown'. Mỗi bot chỉ gỡ tin của kênh
+        mình, để bot này khởi động không đụng tin bot kia đang gửi.
 
         Không tự gửi lại: Telegram có thể đã nhận tin. Admin xem và chủ động gửi lại ở 🔔 Thông báo khách.
         """
         with self.connect() as conn:
             return conn.execute(
                 "UPDATE admin_notifications SET status = 'unknown', last_error = 'interrupted_while_sending' "
-                "WHERE status = 'sending'"
+                f"WHERE status = 'sending' AND {_channel_scope(channel)}"
             ).rowcount
 
     def mark_admin_event_sent(self, event_id: int) -> None:

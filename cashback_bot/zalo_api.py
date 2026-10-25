@@ -12,7 +12,7 @@ import logging
 
 import requests
 
-from cashback_bot.telegram_api import TelegramDeliveryError
+from cashback_bot.telegram_api import TelegramDeliveryError, never_sent
 
 logger = logging.getLogger("cashback_bot")
 
@@ -56,7 +56,7 @@ class ZaloApi:
         try:
             response = requests.post(f"{self._base}/sendMessage", json=body, timeout=self._timeout)
         except requests.RequestException as exc:
-            raise TelegramDeliveryError("ambiguous") from exc
+            raise TelegramDeliveryError("offline" if never_sent(exc) else "ambiguous") from exc
         code = response.status_code
         try:
             payload = response.json()
@@ -78,7 +78,7 @@ class ZaloApi:
             # Zalo từ chối định dạng thì gửi lại một lần chữ thuần: khách vẫn nhận được nội dung.
             logger.warning("[Cashback] zalo sendMessage bỏ text_styles, gửi lại chữ thuần")
             return self.send_message(chat_id, text)
-        # 4xx (khách chặn bot, chat không tồn tại…): Dispatcher đánh dấu khách đã chặn khi 400 / 403.
+        # 4xx (khách chặn bot, chat không tồn tại…): Dispatcher chỉ đánh dấu khách đã chặn khi 403.
         raise TelegramDeliveryError("permanent", status_code=error_code if 400 <= error_code < 500 else None)
 
     def send_chat_action(self, chat_id: str, action: str = "typing") -> None:

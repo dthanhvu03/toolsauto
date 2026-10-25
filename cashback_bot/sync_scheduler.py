@@ -299,23 +299,28 @@ class SyncCoordinator:
             if trigger == "manual" and current is not None:
                 self._notify_busy(current)
             return None
-        engine = self.engine_factory(self.repo, admin_notifier=self.admin_notifier)
-        kwargs = {"trigger": trigger, "run_id": run_id, "heartbeat": lambda: self._heartbeat(owner, run_id),
-                  "alert_auth": False}
-        if self.client_factory is not None:
-            kwargs["client"] = self.client_factory()
-        if self.cfg.reconcile_lookup:
-            # PLAN-081 Phương án A: cùng lượt, cùng khoá; có trần số đơn mỗi lượt và 1 lần / đơn / ngày.
-            targets = reconciliation.lookup_targets(self.repo, now, self.cfg.reconcile_lookup_max)
-            if targets:
-                kwargs["lookups"] = targets
         try:
+            engine = self.engine_factory(self.repo, admin_notifier=self.admin_notifier)
+            kwargs = {"trigger": trigger, "run_id": run_id, "heartbeat": lambda: self._heartbeat(owner, run_id),
+                      "alert_auth": False}
+            if self.client_factory is not None:
+                kwargs["client"] = self.client_factory()
+            if self.cfg.reconcile_lookup:
+                # PLAN-081 Phương án A: cùng lượt, cùng khoá; có trần số đơn mỗi lượt và 1 lần / đơn / ngày.
+                targets = reconciliation.lookup_targets(self.repo, now, self.cfg.reconcile_lookup_max)
+                if targets:
+                    kwargs["lookups"] = targets
             result = engine.sync(**kwargs)
         except Exception as exc:
             logger.exception("[ShopeeAutoSync] lượt %s lỗi ngoài dự kiến", run_id)
             result = SyncResult(ok=False, message=f"Lỗi đồng bộ: {type(exc).__name__}", status="failed",
                                 category="UNKNOWN_ERROR", run_id=run_id)
-        if not self._finish(owner, run_id, trigger, result):
+        try:
+            finished = self._finish(owner, run_id, trigger, result)
+        except Exception:
+            self._abandon(owner, run_id)
+            raise
+        if not finished:
             logger.warning("[ShopeeAutoSync] lượt %s mất khoá, không ghi kết quả", run_id)
             return result
         self._incident(run_id, result)
@@ -329,6 +334,20 @@ class SyncCoordinator:
             logger.exception("[ShopeeAutoSync] cập nhật theo dõi đối soát sau lượt %s lỗi", run_id)
         self.completed.put((trigger, result))
         return result
+
+    def _abandon(self, owner: str, run_id: int) -> None:
+        """Không đóng được lượt (thường là lỗi DB): nhả khoá và hẹn thử lại sau RETRY_BASE, để luồng nền không lấy
+        lại việc liên tục trong lúc khoá cũ còn hạn."""
+        now = self.clock()
+        try:
+            with self.repo.connect() as conn:
+                row = _state(conn)
+                if row["lease_owner"] != owner or row["lease_run_id"] != run_id:
+                    return
+                self._interrupt(conn, row, now, "không đóng được lượt, đã nhả khoá")
+                conn.execute("UPDATE shopee_sync_state SET next_due_at = ? WHERE id = 1", (_stamp(now + RETRY_BASE),))
+        except Exception:
+            logger.exception("[ShopeeAutoSync] lượt %s không nhả được khoá", run_id)
 
     def _next_due(self, row, result: SyncResult, failures: int, now: datetime) -> str | None:
         if not self.cfg.enabled or row["paused"] or result.category in NEEDS_AUTH_CATEGORIES:
@@ -505,8 +524,8 @@ class SyncWorker(threading.Thread):
         while not self.stop_event.is_set():
             try:
                 job = self.coordinator.next_job()
-                if job is not None:
-                    self.coordinator.run(job)
+                # Bận (lượt khác giữ khoá) thì run trả None: đợi một nhịp, không hỏi lại liên tục.
+                if job is not None and self.coordinator.run(job) is not None:
                     continue
             except Exception:
                 logger.exception("[ShopeeAutoSync] vòng lập lịch lỗi")

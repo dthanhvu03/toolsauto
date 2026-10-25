@@ -283,7 +283,8 @@ def test_13_dong_bo_khong_chan_luong_chinh(tmp_path):
 
 def test_14_bam_tay_khi_tu_dong_dang_chay(tmp_path):
     bot = _ready_bot(tmp_path)
-    clock = Clock()
+    # Nút admin dùng giờ thật, nên khoá giả phải còn hạn theo giờ thật (T0 cố định sẽ hết hạn sau 10 phút).
+    clock = Clock(datetime.now(timezone.utc))
     coordinator = _coord(bot.repo, clock=clock, notifier=_admin(bot.repo))
     owner, run_id, _ = coordinator._acquire("auto", clock())
     assert request_manual(bot.repo, clock()) == (run_id, "auto")

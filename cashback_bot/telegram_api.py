@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 import requests
+from urllib3.exceptions import NewConnectionError
 
 from cashback_bot.messages import BOT_COMMANDS
 from cashback_bot.redact import error_brief, redact
@@ -22,6 +23,16 @@ class TelegramDeliveryError(Exception):
         super().__init__(kind)
 
 
+def never_sent(exc: BaseException) -> bool:
+    """Lỗi xảy ra trước khi kết nối được (DNS, mất mạng, từ chối kết nối): chắc chắn tin chưa đi, gửi lại an toàn.
+    Lỗi giữa chừng (hết giờ chờ trả lời, đứt kết nối) vẫn là 'ambiguous'."""
+    if isinstance(exc, requests.ConnectTimeout):
+        return True
+    if isinstance(exc, requests.ConnectionError) and exc.args:
+        return isinstance(getattr(exc.args[0], "reason", None), NewConnectionError)
+    return False
+
+
 def _retry_after_seconds(response: requests.Response) -> int | None:
     raw = (response.headers.get("Retry-After") or "").strip()
     if raw.isdigit():
@@ -32,6 +43,8 @@ def _retry_after_seconds(response: requests.Response) -> int | None:
 def classify_delivery_error(exc: BaseException) -> tuple[str, int | None]:
     if isinstance(exc, TelegramDeliveryError):
         return exc.kind, exc.retry_after
+    if never_sent(exc):
+        return "offline", None
     if isinstance(exc, requests.Timeout):
         return "ambiguous", None
     if isinstance(exc, requests.ConnectionError):
@@ -121,10 +134,8 @@ class TelegramApi:
                 json=body,
                 timeout=self._timeout,
             )
-        except requests.Timeout as exc:
-            raise TelegramDeliveryError("ambiguous") from exc
         except requests.RequestException as exc:
-            raise TelegramDeliveryError("ambiguous") from exc
+            raise TelegramDeliveryError("offline" if never_sent(exc) else "ambiguous") from exc
         if response.status_code == 429:
             logger.error("[Cashback] sendMessage http=429")
             raise TelegramDeliveryError("rate_limited", retry_after=_retry_after_seconds(response), status_code=429)

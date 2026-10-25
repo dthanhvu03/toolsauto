@@ -2,6 +2,8 @@
 
 Hardening P1-9: bot tự gọi `run_scheduled_backup` mỗi ngày (poller). Bản sao ghi ra file tạm,
 kiểm tra integrity và các bảng chính, rồi mới đổi tên; quyền 0600, thư mục 0700.
+PLAN-087: bản chạy tay (`python -m cashback_bot.backup`, trước mỗi lần sửa DB) mang tên `cashback-manual-…` và
+được dọn riêng, để nhiều bản tay không đẩy mất bản tự động hằng ngày.
 """
 
 from __future__ import annotations
@@ -19,8 +21,9 @@ from cashback_bot.redact import RedactingFormatter, error_brief
 
 logger = logging.getLogger("cashback_bot")
 
-# Chỉ file đúng mẫu này mới được tính là bản backup và mới có thể bị dọn.
-BACKUP_NAME = re.compile(r"^cashback-\d{8}T\d{6}Z\.sqlite$")
+# Chỉ file đúng mẫu này mới được tính là bản backup và mới có thể bị dọn. Nhóm 1: nhãn ("manual") hoặc rỗng.
+BACKUP_NAME = re.compile(r"^cashback-(?:(manual)-)?(\d{8}T\d{6}Z)\.sqlite$")
+MANUAL = "manual"
 # Bản sao thiếu một trong các bảng này thì không dùng để khôi phục được.
 REQUIRED_TABLES = ("telegram_users", "link_requests", "bot_state", "outbound_messages")
 MIN_KEEP = 3
@@ -69,6 +72,7 @@ def backup_database(
     now: datetime | None = None,
     keep: int = 14,
     required: tuple[str, ...] = (),
+    label: str = "",
 ) -> Path:
     source = Path(source)
     dest_dir = Path(dest_dir)
@@ -79,7 +83,8 @@ def backup_database(
     moment = now or datetime.now(timezone.utc)
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
-    dest = dest_dir / f"cashback-{moment.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.sqlite"
+    prefix = f"cashback-{label}-" if label else "cashback-"
+    dest = dest_dir / f"{prefix}{moment.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.sqlite"
     if dest.exists():
         raise FileExistsError(dest.name)
     partial = dest.with_name(dest.name + ".partial")
@@ -92,7 +97,7 @@ def backup_database(
     except Exception:
         partial.unlink(missing_ok=True)
         raise
-    _prune(dest_dir, keep, newest=dest)
+    _prune(dest_dir, keep, newest=dest, label=label)
     return dest
 
 
@@ -114,22 +119,30 @@ def restore_database(backup: Path, dest: Path, protected: Path | None = None) ->
 
 
 def latest_backup(dest_dir: Path) -> Path | None:
-    files = _backups(Path(dest_dir))
-    return files[-1] if files else None
+    """Bản mới nhất theo thời điểm tạo, tính cả bản tự động và bản tay."""
+    files = _backups(Path(dest_dir), label=None)
+    return max(files, key=lambda path: BACKUP_NAME.fullmatch(path.name).group(2)) if files else None
 
 
-def run_scheduled_backup(source: Path, dest_dir: Path, keep: int, now: datetime | None = None) -> BackupCheck:
-    """Một lần backup định kỳ: tạo bản sao rồi kiểm tra lại bản vừa tạo như lúc khôi phục."""
-    path = backup_database(source, dest_dir, now=now, keep=keep, required=REQUIRED_TABLES)
+def run_scheduled_backup(source: Path, dest_dir: Path, keep: int, now: datetime | None = None,
+                         label: str = "") -> BackupCheck:
+    """Một lần backup: tạo bản sao rồi kiểm tra lại bản vừa tạo như lúc khôi phục. label="" là bản tự động."""
+    path = backup_database(source, dest_dir, now=now, keep=keep, required=REQUIRED_TABLES, label=label)
     check = verify_backup(path)
     logger.info("[Cashback] backup ok file=%s tables=%s links=%s", path.name, check.tables, check.link_requests)
     return check
 
 
-def _backups(dest_dir: Path) -> list[Path]:
+def _backups(dest_dir: Path, label: str | None = "") -> list[Path]:
+    """Các bản backup của một nhóm ("" tự động, "manual" bản tay), cũ trước. label=None: mọi nhóm."""
     if not dest_dir.is_dir():
         return []
-    return sorted(path for path in dest_dir.iterdir() if path.is_file() and BACKUP_NAME.fullmatch(path.name))
+    files = []
+    for path in dest_dir.iterdir():
+        match = BACKUP_NAME.fullmatch(path.name)
+        if path.is_file() and match and (label is None or (match.group(1) or "") == label):
+            files.append(path)
+    return sorted(files)
 
 
 def _copy_consistent(source: Path, dest: Path) -> None:
@@ -144,10 +157,11 @@ def _copy_consistent(source: Path, dest: Path) -> None:
         src.close()
 
 
-def _prune(dest_dir: Path, keep: int, newest: Path | None = None) -> None:
-    """Giữ `keep` bản mới nhất (tối thiểu MIN_KEEP). Không đụng file khác mẫu tên hay bản vừa tạo."""
+def _prune(dest_dir: Path, keep: int, newest: Path | None = None, label: str = "") -> None:
+    """Giữ `keep` bản mới nhất của cùng nhóm (tối thiểu MIN_KEEP). Không đụng nhóm khác, file khác mẫu tên hay bản
+    vừa tạo."""
     keep = max(MIN_KEEP, int(keep))
-    files = _backups(dest_dir)
+    files = _backups(dest_dir, label)
     extra = len(files) - keep
     for old in files[: max(0, extra)]:
         if newest is not None and old == newest:
@@ -171,7 +185,8 @@ def main() -> None:
     except ConfigError as exc:
         raise SystemExit(str(exc)) from exc
     try:
-        check = run_scheduled_backup(Path(settings.db_path), Path(settings.backup_dir), keep=settings.backup_keep)
+        check = run_scheduled_backup(Path(settings.db_path), Path(settings.backup_dir), keep=settings.backup_keep,
+                                     label=MANUAL)
     except Exception as exc:
         logger.error("[Cashback] backup failed: %s", error_brief(exc))
         raise SystemExit(1) from exc

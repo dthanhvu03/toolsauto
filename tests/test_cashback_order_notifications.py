@@ -465,11 +465,11 @@ def test_48_49_50_khong_cham_vi(tmp_path):
 def test_man_admin_thong_bao_khach(tmp_path):
     bot = _ready(tmp_path)
     _order(bot, _link(bot), commission=10_000)
-    _flush(bot, FakeTelegram([TelegramDeliveryError("permanent", status_code=400)]))
+    _flush(bot, FakeTelegram([TelegramDeliveryError("permanent", status_code=403)]))
     home = bot.admin_panel.handle_callback(ADMIN, "c:nt:home", "private", QUOTE_NOW)
     assert "❌ Gửi lỗi: <b>1</b>" in home.text and "Khách chặn bot: <b>1</b>" in home.text
     failed = bot.admin_panel.handle_callback(ADMIN, "c:nt:l:failed", "private", QUOTE_NOW)
-    assert "permanent:400" in failed.text and "c:nt:r:" in str(failed.inline_keyboard)
+    assert "permanent:403" in failed.text and "c:nt:r:" in str(failed.inline_keyboard)
     event_id = _events(bot)[0]["id"]
     ask = bot.admin_panel.handle_callback(ADMIN, f"c:nt:r:{event_id}", "private", QUOTE_NOW)
     assert "Gửi lại đúng tin" in ask.text and _events(bot)[0]["status"] == "failed"

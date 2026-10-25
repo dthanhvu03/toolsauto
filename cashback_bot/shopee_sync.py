@@ -587,6 +587,11 @@ class ShopeeSyncEngine:
                 sum(_int(item.get("item_commission")) + _int(item.get("capped_brand_commission")) for item in items)
             )
             net_comm = gross_comm
+            # Phí MCN chỉ có ở cấp checkout: chia cho từng đơn theo tỉ lệ net / (net + phí), làm tròn xuống.
+            top_net = parse_shopee_money_vnd(top_item.get("affiliate_net_commission"))
+            fee = parse_shopee_money_vnd(top_item.get("mcn_management_fee_commission"))
+            if gross_comm is not None and top_net is not None and fee and top_net + fee > 0:
+                net_comm = gross_comm * top_net // (top_net + fee)
 
         details = _order_details(top_item, order_dict, single_order)
         result = self.repo.record_conversion_snapshot(

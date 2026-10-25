@@ -1,0 +1,12 @@
+# PLAN-087: xoay log hai bot cashback mỗi tuần, giữ 8 tuần. Cài: cp vào /etc/logrotate.d/cashback
+/home/vu/toolsauto/logs/cashback_bot.log /home/vu/toolsauto/logs/cashback_zalo.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # Bot giữ file log mở suốt lúc chạy: chép rồi cắt, không đổi tên file đang mở.
+    copytruncate
+    su root root
+}

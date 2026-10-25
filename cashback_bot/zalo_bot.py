@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from cashback_bot import ops_watch
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
@@ -27,7 +28,7 @@ from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import error_brief
 from cashback_bot.service import CashbackService
 from cashback_bot.shopee_url import parse_shopee_target
-from cashback_bot.telegram_api import TelegramDeliveryError
+from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
 from cashback_bot.zalo_api import ZaloApi
 from cashback_bot.zalo_render import ERROR_REPLY, LINK_CARD, NON_TEXT, NUMBER_STALE, WELCOME, ZaloMessage, render
 
@@ -167,6 +168,26 @@ class ZaloChannel:
         row = self.store.receive(message_id, internal, str(update.get("event_name") or ""), moment)
         if row["status"] != "received":
             return
+        inbox_id, update_id = int(row["id"]), -int(row["id"])
+        try:
+            messages = self._prepare(row, internal, is_new, update, external, moment)
+        except Exception:
+            # Lỗi sau khi đã ghi inbox (thường là DB): Zalo không gửi lại tin, nên báo khách thử lại và báo admin
+            # thay vì để dòng kẹt ở 'received'.
+            logger.exception("[Cashback] zalo inbox=%s lỗi giữa chừng", inbox_id)
+            self._rescue(inbox_id, internal, external)
+            return
+        try:
+            if self._deliver(inbox_id, external, messages, 0, moment):
+                self._delivered(update_id)
+        except Exception:
+            # Có thể đã gửi tới khách một phần: không gửi thêm tin báo lỗi, chỉ báo admin.
+            logger.exception("[Cashback] zalo inbox=%s lỗi sau khi gửi", inbox_id)
+            self._notify_failed(update_id, internal)
+
+    def _prepare(self, row, internal: int, is_new: bool, update: dict, external: str,
+                 moment: datetime) -> list[ZaloMessage]:
+        """Tính câu trả lời, lưu menu số và câu trả lời trước khi gửi."""
         update_id = -int(row["id"])
         try:
             reply = self._reply(internal, update, update_id, external, moment)
@@ -174,18 +195,36 @@ class ZaloChannel:
             # Khách vẫn nhận câu trả lời; admin được báo (chống spam theo loại lỗi ở AdminNotifier).
             logger.exception("[Cashback] zalo xử lý tin inbox=%s thất bại", row["id"])
             reply = BotReply(ERROR_REPLY)
-            if self.admin_notifier:
-                self.admin_notifier.notify_request_failed(
-                    error_type="zalo_update_failed", update_id=update_id, telegram_user_id=internal, status="ERROR"
-                )
+            self._notify_failed(update_id, internal)
         messages, menu = render(reply)
         if is_new:
             messages = render(BotReply(WELCOME))[0] + messages
             self._capacity_check()
         self.store.set_menu(internal, menu, moment)
         self.store.save_reply(int(row["id"]), messages)
-        if self._deliver(int(row["id"]), external, messages, 0, moment):
-            self._delivered(update_id)
+        return messages
+
+    def _rescue(self, inbox_id: int, internal: int, external: str) -> None:
+        try:
+            self.store.finish(inbox_id, "failed", 0, "handler_error")
+        except Exception:
+            logger.exception("[Cashback] zalo inbox=%s không ghi được trạng thái lỗi", inbox_id)
+        try:
+            for message in render(BotReply(ERROR_REPLY))[0]:
+                self.api.send_message(external, message.text, message.payload_styles())
+        except (TelegramDeliveryError, requests.RequestException) as exc:
+            logger.error("[Cashback] zalo inbox=%s không gửi được tin báo lỗi: %s", inbox_id, error_brief(exc))
+        self._notify_failed(-inbox_id, internal)
+
+    def _notify_failed(self, update_id: int, internal: int) -> None:
+        if not self.admin_notifier:
+            return
+        try:
+            self.admin_notifier.notify_request_failed(
+                error_type="zalo_update_failed", update_id=update_id, telegram_user_id=internal, status="ERROR"
+            )
+        except Exception:
+            logger.exception("[Cashback] zalo update_id=%s không báo được admin", update_id)
 
     def _reply(self, internal: int, update: dict, update_id: int, external: str, now: datetime) -> BotReply:
         event = update.get("event_name")
@@ -229,7 +268,8 @@ class ZaloChannel:
             try:
                 self.api.send_message(external, message.text, message.payload_styles())
             except TelegramDeliveryError as exc:
-                attempts += 1
+                # Chưa kết nối được thì tin chưa đi: không tính lượt thử.
+                attempts += 0 if exc.kind == "offline" else 1
                 self.store.save_reply(inbox_id, messages[index:])
                 if exc.kind == "permanent" or attempts >= RETRY_LIMIT:
                     self.store.finish(inbox_id, "failed", attempts, f"{exc.kind}:{exc.status_code or ''}")
@@ -279,8 +319,14 @@ class ZaloSender:
             if buttons:
                 keyboard.append(buttons)
         messages, menu = render(BotReply(html_text, button_url=button_url, inline_keyboard=tuple(keyboard) or None))
-        for message in messages:
-            self.api.send_message(external, message.text, message.payload_styles())
+        for index, message in enumerate(messages):
+            try:
+                self.api.send_message(external, message.text, message.payload_styles())
+            except TelegramDeliveryError as exc:
+                if index == 0:
+                    raise
+                # Phần đầu đã tới khách: gửi lại cả tin sẽ trùng. Coi như không rõ, admin xem và gửi lại tay.
+                raise TelegramDeliveryError("ambiguous", status_code=exc.status_code) from exc
         if menu:
             self.store.set_menu(int(chat_id), menu, datetime.now(timezone.utc))
         return None
@@ -303,6 +349,10 @@ def main() -> None:
 
     repo = TrackingRepository(settings.db_path)
     repo.migrate()
+    ops_watch.record_version(repo, CHANNEL)
+    stuck = repo.recover_sending(channel=CHANNEL)
+    if stuck:
+        logger.warning("[Cashback] zalo: %s tin đang gửi dở lúc dừng bot, chuyển 'unknown' (không tự gửi lại)", stuck)
     admin_notifier = AdminNotifier(
         repo=repo,
         telegram=None,
@@ -326,10 +376,13 @@ def main() -> None:
         store.beat()
     except requests.RequestException as exc:
         logger.error("zalo getMe failed: %s", type(exc).__name__)
-    _loop(channel, dispatcher, api)
+    # PLAN-087: canh bot Telegram; báo thẳng qua API Telegram vì hàng đợi tin admin do bot đó gửi.
+    watch_chat = settings.admin_chat_id if settings.admin_notifications_enabled else None
+    _loop(channel, dispatcher, api, TelegramApi(settings.bot_token), watch_chat)
 
 
-def _loop(channel: ZaloChannel, dispatcher: Dispatcher, api: ZaloApi) -> None:
+def _loop(channel: ZaloChannel, dispatcher: Dispatcher, api: ZaloApi, telegram: TelegramApi | None = None,
+          watch_chat: int | None = None) -> None:
     while True:
         try:
             updates = api.get_updates()
@@ -341,6 +394,7 @@ def _loop(channel: ZaloChannel, dispatcher: Dispatcher, api: ZaloApi) -> None:
                     logger.exception("zalo update failed")
             channel.retry_due()
             dispatcher.flush(limit=5)
+            ops_watch.check_telegram_health(channel.store.repo, telegram, watch_chat)
         except KeyboardInterrupt:
             logger.info("zalo stop")
             return

@@ -2,9 +2,11 @@
 
 - Đánh dấu 'sending' trước khi gọi Telegram, không giữ transaction SQLite trong lúc gọi.
 - 429: thử lại sau retry_after. 5xx / lỗi tạm: thử lại có giãn cách, tối đa MAX_ATTEMPTS rồi 'failed'.
-- 4xx (khách chặn bot, chat không tồn tại): 'failed', đánh dấu khách đã chặn; khách nhắn lại thì bỏ đánh dấu.
-- Hết giờ / mất kết nối khi gửi tin khách: 'unknown', KHÔNG tự gửi lại (Telegram có thể đã nhận). Admin xem
-  và gửi lại tay. Tin admin thì thử lại (trùng tin admin chấp nhận được).
+- 4xx: 'failed'. Chỉ 403 (khách chặn bot) mới đánh dấu khách đã chặn; khách nhắn lại thì bỏ đánh dấu. 400 thường
+  là lỗi nội dung tin, không phải lỗi của khách.
+- Chưa kết nối được (DNS, mất mạng): tin chắc chắn chưa đi → 'retry', hoàn lượt thử, dừng vòng gửi tới vòng sau.
+- Hết giờ / đứt kết nối giữa chừng khi gửi tin khách: 'unknown', KHÔNG tự gửi lại (Telegram có thể đã nhận).
+  Admin xem và gửi lại tay. Tin admin thì thử lại (trùng tin admin chấp nhận được).
 - Tin khách kiểm tra lại lúc gửi: cờ toàn cục (thông báo đơn), tài khoản test (Gate B), tin trước lần bật gần nhất,
   tuỳ chọn của khách, khách đã chặn bot, tin quá cũ.
 - 429 là giới hạn của cả bot: dừng vòng gửi, các tin còn lại đợi vòng sau.
@@ -23,11 +25,12 @@ import requests
 
 from cashback_bot.db import TrackingRepository
 from cashback_bot.redact import redact
-from cashback_bot.telegram_api import TelegramDeliveryError
+from cashback_bot.telegram_api import TelegramDeliveryError, never_sent
 
 logger = logging.getLogger("cashback_bot")
 
 MAX_ATTEMPTS = 5
+OFFLINE_RETRY_SEC = 30
 ORDER_STALE = timedelta(hours=72)
 SILENT_EVENTS = {"NEW_USER", "LINK_SENT"}
 # Loại tin khách → cột tuỳ chọn. Tin đơn hàng còn cần cờ CUSTOMER_NOTIFICATIONS_ENABLED.
@@ -133,7 +136,7 @@ class Dispatcher:
                     continue
             if not self.repo.claim_admin_event(int(row["id"])):
                 continue
-            if self._send(row, customer, moment, result) == "rate_limited":
+            if self._send(row, customer, moment, result) in ("rate_limited", "offline"):
                 break
         return result
 
@@ -153,8 +156,9 @@ class Dispatcher:
             self._failed(row, customer, exc.kind, exc.retry_after, exc.status_code, attempts, moment, result)
             return exc.kind
         except requests.RequestException as exc:
-            self._failed(row, customer, "ambiguous", None, None, attempts, moment, result, redact(type(exc).__name__))
-            return "ambiguous"
+            kind = "offline" if never_sent(exc) else "ambiguous"
+            self._failed(row, customer, kind, None, None, attempts, moment, result, redact(type(exc).__name__))
+            return kind
         self.repo.finish_admin_event(event_id, "sent", message_id=message_id if isinstance(message_id, int) else None)
         result.sent += 1
         return None
@@ -163,9 +167,13 @@ class Dispatcher:
                 attempts: int, moment: datetime, result: DispatchResult, detail: str | None = None) -> None:
         event_id = int(row["id"])
         error = f"{kind}:{status_code or ''}{':' + detail if detail else ''}"
+        if kind == "offline":
+            self.repo.release_admin_event(event_id, error, _stamp(moment + timedelta(seconds=OFFLINE_RETRY_SEC)))
+            result.retry += 1
+            return
         if kind == "permanent":
             self.repo.finish_admin_event(event_id, "failed", error)
-            if customer and status_code in (400, 403):
+            if customer and status_code == 403:
                 with self.repo.connect() as conn:
                     conn.execute(
                         "UPDATE telegram_users SET notify_blocked_at = ? WHERE telegram_user_id = ?",
