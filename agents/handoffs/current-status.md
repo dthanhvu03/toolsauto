@@ -9,10 +9,11 @@
   - Từng khách: 6 nhóm, dòng thời gian.
 - Telegram /admin có 4 nút mới. Web có `/cashback` (sau đăng nhập dashboard).
 - Proof: 800 passed. Chạy thử trên production chỉ đọc: biên 3.563đ / ròng 18.740đ.
-- **Next:**
-  - Chủ bot chạy `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
-  - Claude Code kiểm tra màn /admin và trang `/cashback` thật.
-  - Chủ bot nhập chi phí vận hành mỗi tháng.
+- **Đã:** 14:14:59Z hai bot (PID 833260 / 833261) chạy `a193faa`; Web_Dashboard PID 833370.
+  - `/cashback` chưa đăng nhập thì chuyển `/login`. Màn Telegram render đúng trên DB thật (chỉ đọc).
+  - Claude Code không tự tạo cookie đăng nhập (auto mode chặn), nên trang web cần chủ bot tự mở xem.
+- **Lưu ý:** cổng :8000 đang nhận request từ Internet (IP Facebook / AWS lấy `/buffer-media`). `/cashback` có đăng nhập, nhưng nên cân nhắc giới hạn.
+- **Next:** chủ bot mở /admin → 💹 và web `/cashback`, nhập chi phí vận hành mỗi tháng.
 
 ---
 

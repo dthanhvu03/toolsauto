@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Executor | Claude Code (chủ bot giao 2026-10-25: "cả 2", "cần hết theo góc nhìn CEO, COO") |
-| Trạng thái | Chủ bot duyệt 2026-10-25 ("triển khai tất cả theo plan"). Code xong, chờ restart 2 bot + Web_Dashboard |
+| Trạng thái | Chủ bot duyệt 2026-10-25 ("triển khai tất cả theo plan"). ✅ Đã chạy 2026-10-25 14:15Z (`a193faa`), chờ chủ bot xem thử |
 | Không đổi | Chỉ đọc DB (`mode=ro`); không sửa sổ ví, chính sách hay trạng thái đơn; không gọi Shopee |
 | Nguồn dữ liệu | `data/cashback.sqlite`: `telegram_users`, `channel_identities`, `link_requests`, `shopee_clicks`, `shopee_conversions`, `cashback_entries`, `cashback_payouts`, `settlement_batches/items`, `support_tickets`, `admin_notifications`, `outbound_messages`, `bot_state` |
 
