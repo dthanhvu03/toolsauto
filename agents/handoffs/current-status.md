@@ -1,3 +1,22 @@
+## Phiên 2026-10-25 (bo) — PLAN-085 A2: client RioHub lên main (chưa nối bot)
+
+Chủ bot dán spec đủ 8 phần, chọn "Viết client, chưa nối bot".
+
+- **Code:** `main@0d613ea`.
+  - `cashback_bot/riohub_client.py`: tạo link / link + sản phẩm, tra sản phẩm, kéo đơn, phân loại lỗi, CLI thử tay;
+  - `config.py`: `RIOHUB_API_KEY`, `RIOHUB_CREATOR_USERNAME`;
+  - `.env.example`;
+  - 24 test giả lập.
+- **Không gọi RioHub.** Không nối vào luồng khách. Bot đang chạy không cần restart (không file nào đang chạy dùng tới).
+- **Test:** 726 passed, 1 failed có từ trước: `test_cashback_auto_sync.py::test_14_bam_tay_khi_tu_dong_dang_chay`. Test đặt giờ giả 2026-10-25 02:00Z nhưng màn admin dùng giờ thật, nên test hỏng từ 02:00Z hôm nay. Chưa sửa vì ngoài phạm vi; cần chủ bot cho sửa test.
+- **System State:** Telegram PID 747966, Zalo PID 690595; ví khoá.
+- **Next:**
+  1. chủ bot hỏi RioHub, thêm khoá vào `.env`;
+  2. thử tay `python -m cashback_bot.riohub_client products <id>` (cần duyệt);
+  3. sửa test_14 nếu chủ bot đồng ý.
+
+---
+
 ## Phiên 2026-10-25 (bn) — Spec tích hợp RioHub: bổ sung nghiên cứu, PLAN-085 nháp
 
 Chủ bot dán spec "RioHub × TikTok Shop Affiliate API" (09/10/2026, phần yêu cầu viết code).
