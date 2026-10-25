@@ -6,7 +6,7 @@
   - `admin_ui.py`: "Gửi nhiều nhất" hiện `Zalo · tên` (chưa có tên: `Zalo #N`) thay cho −1, thêm "· N click"; mục mới "🖱️ Link gần nhất" ở màn Chi tiết.
   - `admin_support.py`: dòng link trong ticket thêm "· N click".
 - **Test:** 729 passed, 1 hỏng có từ trước (`test_14`); ruff sạch. Dựng thử trên bản sao DB (đã shred): 1.762 ký tự.
-- **Chưa:** chủ bot restart bot Telegram (PID 747966). Bot Zalo không cần restart.
+- **Đã restart:** bot Telegram PID 798434 (10:16:46Z, `main@0bc045c`); `gate_b_check` OK (2 pending 13.117đ, ví khoá, trigger 6/6). Bot Zalo không đổi.
 - **Next:** sau restart mở /admin → 📈 Thống kê → 🔎 Chi tiết để kiểm tra; link `priYghQy` (22:28 24/10) vẫn `delivery_status=pending`, chưa xem nguyên nhân.
 
 ---
