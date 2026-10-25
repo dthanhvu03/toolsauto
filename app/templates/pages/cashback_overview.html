@@ -123,6 +123,32 @@
   </div>
 </div>
 
+{% set b = view.breakeven %}
+<div class="cb-card mb-5">
+  <div class="cb-h">🧮 Hoà vốn theo mức % hoàn</div>
+  {% if b.ops_cost_monthly is none %}
+  <div class="cb-note">Chưa có chi phí vận hành. Nhập ở /admin → 💹 Dòng tiền → ✍️ Chi phí vận hành / tháng.</div>
+  {% else %}
+  <div class="cb-sub mb-3">Chi phí {{ vnd(b.ops_cost_monthly) }}/tháng · {{ b.orders }} đơn thật · HH ròng TB
+    {{ '–' if b.net_per_order is none else vnd(b.net_per_order) }}/đơn · dự phòng {{ '%.1f' % (b.reserve_rate * 100) }}% ·
+    đang hoàn {{ '–' if b.current_share is none else '%.0f%%' % (b.current_share * 100) }} ({{ b.formula | upper }}) ·
+    30 ngày qua HH ròng {{ vnd(b.net_30d) }}</div>
+  <table class="cb-table">
+    <tr><th>% hoàn</th><th class="num">Biên của anh</th><th class="num">Cần HH ròng / tháng</th><th class="num">Cần đơn / tháng</th>
+      <th class="num">30 ngày qua đạt</th></tr>
+    {% for r in b.rows %}
+    <tr class="{{ 'font-bold' if b.current is not none and r is sameas b.current }}">
+      <td>{{ '👉 ' if b.current is not none and r is sameas b.current }}{{ r.share_percent }}%</td>
+      <td class="num">{{ '%.0f' % (r.margin_rate * 100) }}%</td>
+      <td class="num">{{ '–' if r.need_net_month is none else vnd(r.need_net_month) }}</td>
+      <td class="num">{{ '–' if r.need_orders_month is none else r.need_orders_month }}</td>
+      <td class="num">{{ '–' if not r.need_net_month else '%.1f%%' % (b.net_30d * 100 / r.need_net_month) }}</td></tr>
+    {% endfor %}
+  </table>
+  <div class="cb-note mt-2">Chỉ để xem, không đổi % hoàn của khách. Đổi % ở /admin → 💰 Chính sách (áp cho link mới). Còn ít đơn nên số trung bình còn dao động.</div>
+  {% endif %}
+</div>
+
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
   <div class="cb-card">
     <div class="cb-h">Vận hành</div>

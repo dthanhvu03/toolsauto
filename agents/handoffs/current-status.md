@@ -1,3 +1,12 @@
+## Phiên 2026-10-25 (by) — 🧮 Hoà vốn (hướng A: chi phí vận hành tính ngoài % khách)
+
+- Chủ bot hỏi có nên trừ chi phí vận hành vào % của khách không. Claude Code đề xuất A: giữ 70%, tính chi phí ngoài, xem hoà vốn rồi mới chọn %. Chủ bot đồng ý.
+- Thêm `insights.breakeven` và màn 🧮 Hoà vốn (Telegram `c:in:b` + thẻ web). Chỉ xem, không đổi chính sách.
+- Production: chi phí 1tr/tháng (chủ bot đã nhập); mức 70% cần khoảng 5,26tr hoa hồng ròng (khoảng 562 đơn) mỗi tháng; 30 ngày qua đạt 0,4%.
+- **Next:** chủ bot chạy `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+
+---
+
 ## Phiên 2026-10-25 (bx) — PLAN-087: giữ video READY 21 ngày, lấy lại 42 video đạo lý
 
 - `main@28845a4`: file `reup` của material READY được giữ 21 ngày, thay vì 7. Restart Maintenance + Web_Dashboard.

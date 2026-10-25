@@ -183,3 +183,40 @@ def test_moc_ky(tmp_path):
         assert insights.period_bounds(conn, "7d", NOW) == (NOW - timedelta(days=7), 7)
         start, days = insights.period_bounds(conn, "month", NOW)
         assert start.day == 1 and days >= 1
+
+
+# --- Hoà vốn ----------------------------------------------------------------------------------------
+
+
+def test_hoa_von_theo_muc_hoan(tmp_path):
+    bot = _bot(tmp_path)
+    _order(bot, _link(bot), commission=10_000, cid="a")
+    bot.refresh_wallet(NOW)
+    with insights.open_readonly(bot.repo.path) as conn:
+        assert insights.breakeven(conn, NOW).rows[0].need_net_month is None, "chưa có chi phí thì không tính"
+    bot.repo.set_state(insights.OPS_COST_KEY, "1000000")
+    with insights.open_readonly(bot.repo.path) as conn:
+        b = insights.breakeven(conn, NOW)
+    assert b.formula == "v1.1" and round(b.current_share, 2) == 0.70 and b.current.share_percent == 70
+    row = b.current
+    assert abs(row.margin_rate - (1 - 0.70 - b.reserve_rate)) < 1e-9
+    assert row.need_net_month * row.margin_rate >= 1_000_000 - 1
+    assert row.need_orders_month == -(-row.need_net_month // b.net_per_order)
+    assert [r.need_net_month for r in b.rows] == sorted(r.need_net_month for r in b.rows), "hoàn càng nhiều càng cần nhiều"
+    assert abs(insights.margin_rate(0.7, 0.1, "v1.2") - 0.27) < 1e-9
+
+
+def test_man_hoa_von_telegram_va_web(tmp_path, monkeypatch):
+    bot = _bot(tmp_path)
+    assert "Chưa có chi phí vận hành" in _callback(bot, ADMIN, "c:in:b").text
+    _order(bot, _link(bot), commission=10_000, cid="a")
+    bot.refresh_wallet(NOW)
+    bot.repo.set_state(insights.OPS_COST_KEY, "1000000")
+    text = _callback(bot, ADMIN, "c:in:b").text
+    assert "👉 70%" in text and "không đổi % hoàn" in text
+    assert "c:in:b" in str(_callback(bot, ADMIN, "c:in:m:30d").inline_keyboard)
+    monkeypatch.setenv("CASHBACK_DB_PATH", str(bot.repo.path))
+    app = FastAPI()
+    app.include_router(cashback_router)
+    page = TestClient(app).get("/cashback")
+    assert page.status_code == 200 and "Hoà vốn theo mức % hoàn" in page.text and "👉 70%" in page.text

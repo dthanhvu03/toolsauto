@@ -1,7 +1,7 @@
 """/admin → 💹 Dòng tiền · 📈 Tăng trưởng · 🛠 Vận hành · 👥 Khách hàng (PLAN-089). Số tính ở insights.py.
 
 Chỉ đọc DB, trừ một việc: admin nhập chi phí vận hành và hạ tầng mỗi tháng (bot_state, ghi 📊 Lịch sử).
-Callback: c:in:m:<kỳ> · c:in:g:<kỳ> · c:in:o · c:in:u:<sắp xếp|nhóm>:<trang> · c:in:d:<id> · c:in:cost
+Callback: c:in:m:<kỳ> · c:in:g:<kỳ> · c:in:o · c:in:u:<sắp xếp|nhóm>:<trang> · c:in:d:<id> · c:in:cost · c:in:b
 """
 
 from __future__ import annotations
@@ -153,6 +153,37 @@ def growth_text(view: insights.Overview) -> str:
     return "\n".join(lines)
 
 
+def breakeven_text(b: insights.Breakeven) -> str:
+    """Hoà vốn theo từng mức % hoàn. Chỉ để xem: không đổi chính sách."""
+    lines = [_title("Hoà vốn").rstrip("\n"), ""]
+    if b.ops_cost_monthly is None:
+        return "\n".join(lines + ["Chưa có chi phí vận hành. Bấm ✍️ Chi phí vận hành / tháng để nhập trước."])
+    share = "–" if b.current_share is None else f"{b.current_share * 100:.0f}%"
+    lines += [
+        f"💼 Chi phí vận hành / hạ tầng: <b>{format_vnd(b.ops_cost_monthly)}</b>/tháng",
+        f"📊 Số thật: {b.orders} đơn · HH ròng TB "
+        f"{'–' if b.net_per_order is None else format_vnd(b.net_per_order)}/đơn · dự phòng {b.reserve_rate * 100:.1f}% · "
+        f"đang hoàn {share} ({b.formula.upper()})",
+        f"📅 30 ngày qua: HH ròng {format_vnd(b.net_30d)} · {b.orders_30d} đơn",
+        "",
+        "<b>% hoàn · biên của anh · cần mỗi tháng để hoà vốn</b>",
+    ]
+    current = b.current
+    for row in b.rows:
+        mark = "👉 " if current is not None and row is current else "• "
+        need = "–" if row.need_net_month is None else format_vnd(row.need_net_month)
+        orders = "" if row.need_orders_month is None else f" (~{row.need_orders_month:,} đơn)".replace(",", ".")
+        lines.append(f"{mark}{row.share_percent}% · biên {row.margin_rate * 100:.0f}% · HH ròng {need}{orders}")
+    if current is not None and current.need_net_month:
+        lines += ["", f"Ở mức đang hoàn: 30 ngày qua đạt {b.net_30d * 100 / current.need_net_month:.1f}% mức hoà vốn."]
+    lines += [
+        "",
+        "ⓘ Chỉ để xem, không đổi % hoàn của khách. Đổi % ở 💰 Chính sách (áp cho link mới).",
+        "ⓘ Còn ít đơn nên HH ròng trung bình mỗi đơn còn dao động.",
+    ]
+    return "\n".join(lines)
+
+
 def ops_text(checks: list[insights.Check], locked: tuple[str, ...] = ()) -> str:
     lines = [_title("Vận hành").rstrip("\n"), ""]
     lines += [f"{'🟢' if c.ok else '🔴'} <b>{html.escape(c.label)}</b>: {html.escape(c.value)}" for c in checks]
@@ -239,6 +270,10 @@ class InsightsAdmin:
             return self._users(found.group(1), int(found.group(2)), now)
         if (found := _DETAIL.fullmatch(data)) is not None:
             return self._detail(int(found.group(1)), now)
+        if data == "c:in:b":
+            with insights.open_readonly(self.db_path) as conn:
+                text = breakeven_text(insights.breakeven(conn, now))
+            return BotReply(text, inline_keyboard=((("✍️ Chi phí vận hành / tháng", "c:in:cost"),), *NAV))
         if data == "c:in:cost":
             self.waiting[admin_id] = now + COST_WAIT
             with insights.open_readonly(self.db_path) as conn:
@@ -281,7 +316,7 @@ class InsightsAdmin:
             text = f"{notice}\n\n{text}"
         rows: list[tuple[tuple[str, str], ...]] = [_periods(kind, view.period)]
         if kind == "m":
-            rows.append((("✍️ Chi phí vận hành / tháng", "c:in:cost"),))
+            rows.append((("✍️ Chi phí vận hành / tháng", "c:in:cost"), ("🧮 Hoà vốn", "c:in:b")))
         return BotReply(text[:4000], inline_keyboard=(*rows, *NAV))
 
     def _users(self, key: str, page: int, now: datetime) -> BotReply:

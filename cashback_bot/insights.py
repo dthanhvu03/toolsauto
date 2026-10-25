@@ -799,6 +799,79 @@ def operations(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: i
     return checks
 
 
+# --- Hoà vốn --------------------------------------------------------------------------------------
+
+SHARE_CHOICES = (50, 55, 60, 65, 70, 75)
+
+
+@dataclass(frozen=True)
+class BreakevenRow:
+    share_percent: int
+    margin_rate: float
+    need_net_month: int | None
+    need_orders_month: int | None
+
+
+@dataclass(frozen=True)
+class Breakeven:
+    """Cần bao nhiêu hoa hồng ròng / đơn mỗi tháng để biên sau dự phòng bù đủ chi phí vận hành.
+
+    Số thật: hoa hồng ròng trung bình mỗi đơn và tỉ lệ dự phòng lấy từ sổ (đơn chưa huỷ). Công thức theo cách tính
+    đang chạy: V1.1 khách nhận share × hoa hồng; V1.2 khách nhận share × (hoa hồng − dự phòng).
+    """
+
+    ops_cost_monthly: int | None
+    formula: str
+    orders: int
+    net_per_order: int | None
+    reserve_rate: float
+    current_share: float | None
+    net_30d: int
+    orders_30d: int
+    rows: tuple[BreakevenRow, ...]
+
+    @property
+    def current(self) -> BreakevenRow | None:
+        if self.current_share is None:
+            return None
+        return min(self.rows, key=lambda r: abs(r.share_percent / 100 - self.current_share))
+
+
+def margin_rate(share: float, reserve_rate: float, formula: str) -> float:
+    if formula == "v1.2":
+        return (1 - share) * (1 - reserve_rate)
+    return 1 - share - reserve_rate
+
+
+def breakeven(conn: sqlite3.Connection, now: datetime) -> Breakeven:
+    row = conn.execute(
+        f"""
+        SELECT COUNT(DISTINCT CASE WHEN instr(conversion_id, '{CLAWBACK}') = 0 THEN conversion_id END),
+               COALESCE(SUM(commission_vnd), 0), COALESCE(SUM(cashback_vnd), 0), COALESCE(SUM(fee_vnd + tax_vnd), 0),
+               COALESCE(SUM(policy_label LIKE 'v1.2%'), 0), COUNT(*)
+        FROM cashback_entries WHERE status != 'cancelled'
+        """
+    ).fetchone()
+    orders, net, cashback, reserve, v12, total = (int(v) for v in row)
+    formula = "v1.2" if total and v12 * 2 > total else "v1.1"
+    reserve_rate = reserve / net if net > 0 else 0.0
+    per_order = net // orders if orders else None
+    recent = money(conn, now - timedelta(days=30), 30)
+    cost = ops_cost_monthly(conn)
+    rows = []
+    for percent in SHARE_CHOICES:
+        rate = margin_rate(percent / 100, reserve_rate, formula)
+        need_net = need_orders = None
+        if cost is not None and rate > 0:
+            need_net = -(-cost * 10_000 // int(round(rate * 10_000)))
+            need_orders = -(-need_net // per_order) if per_order else None
+        rows.append(BreakevenRow(percent, rate, need_net, need_orders))
+    current = None
+    if net > 0:
+        current = cashback / net if formula == "v1.1" else cashback / max(1, net - reserve)
+    return Breakeven(cost, formula, orders, per_order, reserve_rate, current, recent.net, recent.orders, tuple(rows))
+
+
 # --- Gói cho màn hình -----------------------------------------------------------------------------
 
 
@@ -819,6 +892,7 @@ class Overview:
     days: list[DayPoint]
     cohorts: list[Cohort]
     checks: list[Check]
+    breakeven: Breakeven
 
 
 def overview(conn: sqlite3.Connection, period: str, now: datetime, sync_interval_minutes: int = 240) -> Overview:
@@ -835,4 +909,5 @@ def overview(conn: sqlite3.Connection, period: str, now: datetime, sync_interval
         funnel(conn, since), concentration(people), sort_customers(people)[:5],
         top_categories(conn, since), top_categories(conn, since, "shop_name"), channels,
         daily(conn, chart_since, now), cohorts(conn, now), operations(conn, now, sync_interval_minutes),
+        breakeven(conn, now),
     )

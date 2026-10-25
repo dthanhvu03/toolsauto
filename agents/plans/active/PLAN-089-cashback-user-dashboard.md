@@ -209,3 +209,12 @@ Hai chỉ số chưa có trong lần này:
   - Phễu: 11 khách → 5 có click → 2 có đơn.
   - Vận hành: 🔴 "Link 24 giờ: chưa giao tới khách 1" (link `priYghQy` còn `pending`).
 - Web chạy thử bằng TestClient: 3 trang trả 200; khách không tồn tại trả 404; chưa đăng nhập thì chuyển `/login`; DB không bị ghi.
+
+## Bổ sung: 🧮 Hoà vốn (chủ bot chọn hướng A, 2026-10-25)
+
+- Giữ % hoàn của khách như hiện tại; chi phí vận hành tính ngoài công thức (không đổi điều khoản, không đổi snapshot link).
+- Màn **🧮 Hoà vốn** (Telegram `c:in:b`, nút trong 💹 Dòng tiền) và một thẻ trên web `/cashback`.
+  - Với từng mức hoàn 50–75%, màn tính biên của anh, hoa hồng ròng và số đơn cần mỗi tháng để bù chi phí vận hành, cùng tỉ lệ 30 ngày qua đã đạt.
+  - Số đầu vào là số thật: hoa hồng ròng trung bình mỗi đơn, tỉ lệ dự phòng, công thức đang chạy (V1.1 / V1.2).
+- Màn chỉ để xem. Đổi % vẫn làm ở 💰 Chính sách và chỉ áp cho link mới.
+- Production (chi phí 1.000.000đ/tháng, mức 70%): cần 5.260.390đ hoa hồng ròng, khoảng 562 đơn mỗi tháng. Mức 60%: khoảng 3,45tr, khoảng 368 đơn.
