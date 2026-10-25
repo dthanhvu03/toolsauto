@@ -1,3 +1,15 @@
+## Phiên 2026-10-25 (bn) — Spec tích hợp RioHub: bổ sung nghiên cứu, PLAN-085 nháp
+
+Chủ bot dán spec "RioHub × TikTok Shop Affiliate API" (09/10/2026, phần yêu cầu viết code).
+
+- Báo cáo `reports/CASHBACK_TIKTOK_RIOHUB_RESEARCH.md` thêm phần spec: `actual_commission` đã trừ TNCN 10% + chia MCN (dấu âm), báo giá dùng `observed_commission`, `/product-links` cho link + giá 1 lượt, `sub_id` không được chứa `-`, khoá đơn (`order_id`, `sku_id`).
+- **Rủi ro:** áp nguyên chính sách V1.2 → trừ thuế hai lần cho TikTok.
+- `agents/plans/active/PLAN-085-cashback-tiktok-riohub.md`: **nháp**, 3 giai đoạn.
+- **Chưa viết code:** vướng điều kiện mục 0 (tài khoản TikTok, RioHub cho phép cashback, khoá trong `.env`, hồ sơ thuế); phần client / đơn là backend.
+- **Next:** chủ bot trả lời mục 0 của PLAN-085.
+
+---
+
 ## Phiên 2026-10-25 (bm) — Nghiên cứu TikTok Shop qua RioHub API (chỉ đọc)
 
 Chủ bot gửi bài RioHub, đồng ý nghiên cứu. Báo cáo `reports/CASHBACK_TIKTOK_RIOHUB_RESEARCH.md`.

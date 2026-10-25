@@ -5,6 +5,7 @@
 | Ngày | 2026-10-25 |
 | Người làm | Claude Code (chỉ đọc tài liệu công khai; không đăng ký, không gọi API RioHub, không viết code) |
 | Yêu cầu | Chủ bot gửi bài giới thiệu RioHub ("từ 100.000 xuống 1.000 lượt gọi API") và đồng ý cho nghiên cứu |
+| Cập nhật | 2026-10-25: bổ sung spec tích hợp RioHub (bản 09/10/2026) chủ bot gửi |
 | Kết luận | **Về kỹ thuật làm được.** RioHub có đủ 3 thứ bot cần: tạo link có mã theo dõi, tra giá + hoa hồng, kéo đơn. Còn **3 điều phải hỏi rõ trước khi viết code**: (1) chủ bot có tài khoản TikTok đủ điều kiện affiliate chưa; (2) RioHub giữ lại bao nhiêu hoa hồng, tiền về ví RioHub như thế nào; (3) RioHub có cho dùng API để chạy bot hoàn tiền không |
 
 ## 1. Mẹo "1 link gốc" trong bài và bot mình
@@ -32,7 +33,17 @@
 | Giới hạn | 300 lượt/phút, 100.000 lượt/ngày mỗi khoá; TikTok còn giới hạn riêng theo creator (`429 tiktok_rate_limited`) |
 | Dự phòng | 2 tên miền phụ (`riohub.riokupon.com`, `.me`), chỉ dùng khi lỗi mạng |
 
-**Chỗ tài liệu tự mâu thuẫn:** công thức `actual_commission` ở mô tả trường và ở bản đặc tả cho AI khác nhau (có trừ `pit` và phí thưởng hay không). Phải đối chiếu bằng đơn thật trước khi tính tiền cho khách.
+**Đã rõ nhờ spec tích hợp (bản 09/10/2026, chủ bot gửi):**
+- `actual_commission` = `actual_standard_commission + actual_bonus_commission + actual_shop_ads_commission + shared_with_partner + pit + actual_creator_commission_reward_fee`. 3 khoản cuối **đã mang dấu âm**: phần chia MCN, **thuế TNCN 10%**, phí reward. Tức là `actual_commission` đã trừ hết, không trừ thêm.
+- **Tỷ lệ để báo giá:** `commission.rate` chỉ là tỷ lệ chuẩn, không gồm thưởng. Dùng `observed_commission.commission_rate` (tỷ lệ tổng lấy từ đơn gần nhất; `scope` = creator hoặc global). Không có thì dùng `commission.rate` + `shop_ads_commission.rate`. `rate` thô ÷ 100 = %.
+- **Giá:** `sales_price` có thể rỗng → dùng `original_price`; giá và hoa hồng có thể là khoảng "min - max".
+- **Link riêng từng khách:** `/links` (1 lượt mỗi khách) hoặc `/links/batch` (tối đa 50 `sub_id` một lượt, mỗi `sub_id` vẫn tính 1 lượt quota). Đơn mang `trace_type = SPECIFIC`, `trace_id` = `sub_id`. `/product-links` trả link + giá + hoa hồng trong 1 lượt, hợp nhất cho bot.
+- **`sub_id` tách 4 phần bằng dấu `-`:** `sub_id` của bot không được chứa `-`.
+- **Đồng bộ đơn:** lọc `update_time_start` / `update_time_end`, `page_size` tối đa 200. Khoá đơn là (`order_id`, `sku_id`) vì một đơn có nhiều SKU.
+- **`settled_at`:** về `null` khi đơn chuyển huỷ / hoàn; chốt lại thì nhận mốc mới. Lệch TikTok tối đa khoảng 3 giờ (nhịp đồng bộ của RioHub).
+- **Lỗi riêng:** `424 creator_token_invalid` (token TikTok của creator hỏng, không phải khoá API sai), `503 tiktok_scope_unavailable` (thử lại không giúp), `502 tiktok_shop_error` (thử lại có giãn cách).
+
+**Hệ quả với chính sách V1.2 của bot:** báo giá hiện trừ "dự phòng thuế 10%" trên hoa hồng gộp. Với TikTok, TNCN 10% và phần chia MCN đã bị trừ trong `actual_commission`. Nếu đem công thức Shopee áp nguyên thì **trừ thuế hai lần**. Cần một hồ sơ phí / thuế riêng cho TikTok (chủ bot quyết mức).
 
 ## 3. Điều khoản RioHub (trang /terms)
 
@@ -68,7 +79,7 @@
 
 1. **Điều khoản:** câu cấm "tự mua qua link của mình" và cấm bot ngoài phạm vi. Nếu RioHub coi bot hoàn tiền là vi phạm thì có thể giữ hoa hồng hoặc khoá tài khoản.
 2. **Trung gian:** tiền đi TikTok → RioHub → chủ bot. Thêm một bên có thể chậm hoặc giữ tiền; tỷ lệ RioHub giữ lại chưa rõ.
-3. **Số liệu tiền chưa chắc:** công thức `actual_commission` mâu thuẫn; `settled_at` rỗng với đơn cũ hoặc đơn quyết toán sau 60 ngày.
+3. **Số liệu tiền:** `actual_commission` đã trừ TNCN 10% + phần chia MCN, dễ trừ thuế hai lần nếu dùng chung công thức Shopee; `settled_at` rỗng với đơn quyết toán sau 60 ngày. Vẫn phải đối chiếu bằng đơn thật.
 4. **Phụ thuộc tài khoản TikTok của chủ bot:** API chỉ chạy trên creator đã kết nối. Tài khoản TikTok bị hạn chế thì toàn bộ kênh dừng.
 5. **Giới hạn TikTok theo creator:** lúc đông khách có thể gặp `tiktok_rate_limited`, cần thông báo khách thử lại.
 
@@ -78,8 +89,8 @@
 2. Nếu có: tự đăng ký RioHub, kết nối tài khoản TikTok, tạo khoá API, rồi tự thêm `RIOHUB_API_KEY` vào `.env`. Em không đăng ký thay, không cần xem khoá.
 3. Gửi email `hotro@riohub.vn`, hỏi 4 câu:
    - dùng API để chạy bot hoàn tiền (chia lại một phần hoa hồng cho người mua) có được phép không;
-   - RioHub giữ lại bao nhiêu phần trăm hoa hồng, phí rút tiền, thời gian về ví;
-   - `actual_commission` đã trừ `pit` và phí thưởng chưa;
+   - phần `shared_with_partner` (chia MCN) thường là bao nhiêu phần trăm, phí rút tiền, thời gian về ví;
+   - TNCN 10% đã khấu trừ có chứng từ cho chủ bot không;
    - pháp nhân, mã số thuế, chứng từ khi rút tiền.
 4. Sau khi có trả lời: em viết PLAN và thử 1 lần trên tài khoản thật (cần chủ bot duyệt): tạo 1 link gốc, ghép `event_id`, tra 1 sản phẩm, kéo đơn. Không tạo khách, không ghi tiền.
 
