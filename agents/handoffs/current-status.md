@@ -1,3 +1,16 @@
+## Phiên 2026-10-25 (br) — Chính sách chi trả: ADR-059, ghi 4 quyết định + hạn mức
+
+- Chủ bot muốn mở ví → không mở được (khoá tài chính, không có công tắc vượt). Liệt kê 10 điều kiện, chủ bot trả lời bộ câu hỏi + gửi ảnh báo cáo thanh toán Shopee.
+- `agents/decisions/ADR-059-cashback-payout-policy.DRAFT.md`: quyết định + phát hiện từ báo cáo thanh toán (07/2026 Shopee không trừ thuế; chi tiết gom theo ngày hoàn thành, không theo đơn; hoá đơn theo ngày, trả thứ Ba / Năm).
+- Chủ bot "duyệt" → ghi production (backup `cashback-20261025T103648Z.sqlite`): `payout_policy_decisions` 4 dòng APPROVED (clawback, bank_verification, payment_limits, manual_payment), `payout_limit_policies` id 1 ACTIVE 20k/500k/2tr/10tr. Không bật ví, không tạo payout. `gate_b_check` OK.
+- Khoá tài chính còn 5 lý do: bằng chứng kỳ Shopee đã trả (2 dòng), thuế (2 dòng), điều khoản chi trả.
+- **Next:**
+  1. chủ bot: hỏi kế toán A1; vào /admin → 👛 Ví khách → ⚙️ Cài đặt chọn giữ 15 ngày, rút tối thiểu 20k (hiện 30 ngày / 10k);
+  2. Claude Code: soạn điều khoản V3 sau A1;
+  3. cần PLAN backend: parser báo cáo thanh toán Shopee (ghép theo ngày hoàn thành), chờ 7 ngày khi đổi tài khoản, thu hồi trừ tiền sau + khoá rút (sửa ADR-052 mục 7).
+
+---
+
 ## Phiên 2026-10-25 (bq) — Thống kê: tên khách Zalo + số click theo link
 
 - **Hỏi:** click Zalo trong Báo cáo click Shopee không có sub_id. Kết luận: 4 click 22:03–22:05 24/10 xảy ra trước khi bot Zalo chạy lần đầu (22:26), không phải link bot; link bot luôn có sub_id.

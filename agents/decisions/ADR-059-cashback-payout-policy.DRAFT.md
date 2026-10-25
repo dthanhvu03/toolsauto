@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **Nháp.** Chủ bot trả lời 2026-10-25; chưa ghi vào `payout_policy_decisions` (bảng chỉ thêm, không sửa / xoá được) |
+| Trạng thái | Chủ bot **duyệt** 2026-10-25. Đã ghi 10:36:49Z (backup trước `cashback-20261025T103648Z.sqlite`): `clawback`, `bank_verification`, `payment_limits`, `manual_payment` = APPROVED (reference `ADR-059 (main@db76cbb)`); `payout_limit_policies` id 1 ACTIVE 20k / 500k / 2tr / 10tr. **Chưa ghi** `tax` (chờ A1), `payout_terms` (chờ V3 công bố) |
 | Liên quan | ADR-052 (đối soát kỳ), ADR-055 (vòng đời payout), PLAN-078 (điều kiện mở ví) |
 | Không đổi | Khoá tài chính vẫn giữ; ADR này không mở ví, không tạo payout |
 
