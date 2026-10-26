@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (bz) — Kiểm tra sáng 26/10 (08:15 giờ VN)
+
+- Buffer: 0 lỗi 429 kể từ khi mở lại key. 24h qua đăng 14 bài, cả 4 kênh còn 10/10 bài chờ.
+  - Suất 1 ngày còn: f8pL 194, RZX2 205, ZVsP 178 trên 250.
+  - Suất 30 ngày còn: RZX2 1484/3000 và ZVsP 2100/3000, đều ở dưới hoặc ngay mức giữ 70%, nên việc nền (quét kênh, `post_statuses`) bị dừng. Đăng bài vẫn chạy.
+- Đạo lý: nguồn #5 không còn NEW. Sống Nhẹ có 58 READY. Từ 14:30 26/10, mọi bài hẹn giờ của Sống Nhẹ đều là đạo lý; xếp lịch tới 28/10 07:30.
+  - 4 DUPLICATE ở pHash 0–4 là trùng thật.
+- 3 job FAILED đều từ 23/10, kênh cũ đã gỡ. Không có lỗi mới.
+- Cashback: `cashback-bot` và `cashback-zalo` chạy `c1554bd` (restart 25/10 16:24Z). Web_Dashboard restart cùng giờ. Không có log lỗi trong 12h.
+- **Next:** như phiên (bx). Thêm: theo dõi suất 30 ngày của RZX2 và ZVsP.
+
+---
+
 ## Phiên 2026-10-25 (by) — 🧮 Hoà vốn (hướng A: chi phí vận hành tính ngoài % khách)
 
 - Chủ bot hỏi có nên trừ chi phí vận hành vào % của khách không. Claude Code đề xuất A: giữ 70%, tính chi phí ngoài, xem hoà vốn rồi mới chọn %. Chủ bot đồng ý.
