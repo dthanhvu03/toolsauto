@@ -1,3 +1,18 @@
+## Phiên 2026-10-26 (cf) — BUG: 🧮 Hoà vốn tính theo cách tính cũ (V1.1) thay vì V1.2 đang chạy
+
+- Phát hiện khi rà điều khoản V3:
+  - Từ 24/10 mọi link mới đều tạo theo V1.2 (23 link). Sổ chỉ có 2 đơn của link cũ V1.1.
+  - `insights.breakeven` (PLAN-089) đoán cách tính theo đa số dòng trong sổ, nên ra V1.1.
+- Ảnh hưởng: chỉ con số hiển thị (màn 🧮 Hoà vốn, thẻ web, gợi ý HH ròng ở 🎯). Không đụng tiền hay chính sách.
+  - Trước khi sửa: mức 70% có biên 19%, cần 5,26tr (~562 đơn) mỗi tháng.
+  - Đúng là: V1.2 biên 26,7%, cần 3,74tr (~400 đơn) mỗi tháng.
+- Sửa: lấy cách tính, % hoàn và dự phòng từ `link_policy_snapshots` của link mới nhất; chưa có snapshot thì suy từ sổ như cũ.
+  - Test `test_hoa_von_theo_chinh_sach_link_moi_nhat`: hỏng khi chưa sửa, qua khi đã sửa.
+- Proof: 800 test cashback qua.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+
+---
+
 ## Phiên 2026-10-26 (ce) — PLAN-092: 🌙 bản tin tối cho chủ bot
 
 - Chủ bot chọn "mỗi tối", và dặn "phát hiện bug thì báo anh".

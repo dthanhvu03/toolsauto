@@ -20,6 +20,9 @@ from cashback_bot.admin_ui import MENU_KEYBOARD
 from cashback_bot.db import TrackingRepository
 from tests.test_cashback_payout_lifecycle import T as PAY_T
 from tests.test_cashback_payout_lifecycle import _available, _b3, _ready
+from tests.test_cashback_reserve import LINK as RESERVE_LINK
+from tests.test_cashback_reserve import NOW as RESERVE_NOW
+from tests.test_cashback_reserve import _bot as _reserve_bot
 from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _link, _order
 
 NOW = datetime.now(timezone.utc)
@@ -209,6 +212,29 @@ def test_hoa_von_theo_muc_hoan(tmp_path):
     assert row.need_orders_month == -(-row.need_net_month // b.net_per_order)
     assert [r.need_net_month for r in b.rows] == sorted(r.need_net_month for r in b.rows), "hoàn càng nhiều càng cần nhiều"
     assert abs(insights.margin_rate(0.7, 0.1, "v1.2") - 0.27) < 1e-9
+
+
+def test_hoa_von_theo_chinh_sach_link_moi_nhat(tmp_path):
+    """Sổ chỉ có đơn link cũ (V1.1); link mới đã sang V1.2 thì hoà vốn tính theo V1.2 (production 26/10)."""
+    old = _reserve_bot(tmp_path, v12=False)
+    old.handle_text(USER, "buyer", RESERVE_LINK, update_id=1, now=RESERVE_NOW)
+    with old.repo.connect() as conn:
+        sub = conn.execute("SELECT sub_id FROM link_requests").fetchone()[0]
+    _order(old, sub, commission=10_000, cid="a")
+    old.refresh_wallet(RESERVE_NOW)
+    old.repo.set_state(insights.OPS_COST_KEY, "1000000")
+    with insights.open_readonly(old.repo.path) as conn:
+        assert insights.breakeven(conn, RESERVE_NOW).formula == "v1.1"
+    newer = _reserve_bot(tmp_path)
+    newer.handle_text(USER, "buyer", RESERVE_LINK, update_id=2, now=RESERVE_NOW)
+    with newer.repo.connect() as conn:
+        snap = conn.execute("SELECT pricing_version, share_bps, fee_bps, tax_reserve_bps FROM link_policy_snapshots "
+                            "ORDER BY link_id DESC LIMIT 1").fetchone()
+    with insights.open_readonly(newer.repo.path) as conn:
+        b = insights.breakeven(conn, RESERVE_NOW)
+    assert snap[0].startswith("v1.2") and b.formula == "v1.2" and b.current_share == snap[1] / 10_000
+    assert abs(b.reserve_rate - (snap[2] + snap[3]) / 10_000) < 1e-9
+    assert abs(b.current.margin_rate - (1 - b.current_share) * (1 - b.reserve_rate)) < 1e-9
 
 
 def test_man_hoa_von_telegram_va_web(tmp_path, monkeypatch):

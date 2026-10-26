@@ -839,8 +839,9 @@ class BreakevenRow:
 class Breakeven:
     """Cần bao nhiêu hoa hồng ròng / đơn mỗi tháng để biên sau dự phòng bù đủ chi phí vận hành.
 
-    Số thật: hoa hồng ròng trung bình mỗi đơn và tỉ lệ dự phòng lấy từ sổ (đơn chưa huỷ). Công thức theo cách tính
-    đang chạy: V1.1 khách nhận share × hoa hồng; V1.2 khách nhận share × (hoa hồng − dự phòng).
+    Số thật: hoa hồng ròng trung bình mỗi đơn lấy từ sổ (đơn chưa huỷ). Cách tính, % hoàn và tỉ lệ dự phòng lấy theo
+    chính sách link mới nhất (link_policy_snapshots), tức cách tính đang áp cho đơn sắp tới; chưa có snapshot thì
+    suy từ sổ. V1.1 khách nhận share × hoa hồng; V1.2 khách nhận share × (hoa hồng − dự phòng).
     """
 
     ops_cost_monthly: int | None
@@ -878,6 +879,19 @@ def breakeven(conn: sqlite3.Connection, now: datetime) -> Breakeven:
     orders, net, cashback, reserve, v12, total = (int(v) for v in row)
     formula = "v1.2" if total and v12 * 2 > total else "v1.1"
     reserve_rate = reserve / net if net > 0 else 0.0
+    current = None
+    if net > 0:
+        current = cashback / net if formula == "v1.1" else cashback / max(1, net - reserve)
+    # Sổ chỉ có đơn của link cũ; link mới có thể đã sang cách tính khác (26/10: sổ V1.1, link mới V1.2).
+    snap = conn.execute(
+        "SELECT pricing_version, share_bps, fee_bps, tax_reserve_bps FROM link_policy_snapshots "
+        "WHERE share_bps IS NOT NULL ORDER BY link_id DESC LIMIT 1"
+    ).fetchone()
+    if snap is not None:
+        formula = "v1.2" if str(snap[0] or "").startswith("v1.2") else "v1.1"
+        current = int(snap[1]) / 10_000
+        if formula == "v1.2":
+            reserve_rate = (int(snap[2] or 0) + int(snap[3] or 0)) / 10_000
     per_order = net // orders if orders else None
     recent = money(conn, now - timedelta(days=30), 30)
     cost = ops_cost_monthly(conn)
@@ -889,9 +903,6 @@ def breakeven(conn: sqlite3.Connection, now: datetime) -> Breakeven:
             need_net = -(-cost * 10_000 // int(round(rate * 10_000)))
             need_orders = -(-need_net // per_order) if per_order else None
         rows.append(BreakevenRow(percent, rate, need_net, need_orders))
-    current = None
-    if net > 0:
-        current = cashback / net if formula == "v1.1" else cashback / max(1, net - reserve)
     return Breakeven(cost, formula, orders, per_order, reserve_rate, current, recent.net, recent.orders, tuple(rows))
 
 
