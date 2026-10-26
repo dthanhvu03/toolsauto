@@ -5,11 +5,13 @@
 - Bot Telegram ghi nhịp sống mỗi vòng. Bot Zalo canh nhịp này; im quá 10 phút thì nhắn admin thẳng qua API
   Telegram (hàng đợi tin admin do chính bot Telegram gửi, nên không dùng được lúc bot đó chết).
 - Mỗi sáng (từ 8 giờ VN) bot Telegram tóm tắt tin gửi không thành công trong 24 giờ, chỉ khi có.
+- PLAN-092: mỗi tối (từ 21 giờ VN) bot Telegram gửi admin 🌙 bản tin mục tiêu.
 """
 
 from __future__ import annotations
 
 import html
+import json
 import logging
 import sqlite3
 import time
@@ -17,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from cashback_bot import admin_insights, insights
 from cashback_bot.db import TrackingRepository
 from cashback_bot.telegram_api import TelegramDeliveryError
 
@@ -30,6 +33,9 @@ TELEGRAM_CHECK_INTERVAL_SEC = 300
 TELEGRAM_DOWN_AFTER_SEC = 600
 DIGEST_KEY = "delivery_digest_day"
 DIGEST_HOUR = 8
+BRIEF_KEY = "nightly_brief_day"
+BRIEF_MILESTONES_KEY = "nightly_brief_milestones"
+BRIEF_HOUR = 21
 UNIT_DIR = Path("/etc/systemd/system")
 UNITS = {"telegram": "cashback-bot", "zalo": "cashback-zalo"}
 MODULES = {"telegram": "cashback_bot >> logs/cashback_bot.log", "zalo": "cashback_bot.zalo_bot >> logs/cashback_zalo.log"}
@@ -164,3 +170,29 @@ def check_delivery_digest(repo: TrackingRepository, admin_notifier, now: datetim
             admin_notifier.notify_delivery_digest(day, counts)
     except sqlite3.Error:
         logger.exception("[Cashback] tóm tắt tin gửi lỗi thất bại")
+
+
+def check_nightly_brief(repo: TrackingRepository, admin_notifier, sync_interval_minutes: int = 240,
+                        now: datetime | None = None) -> None:
+    """Một lần mỗi ngày từ BRIEF_HOUR giờ VN. Mốc G1 mới: so với bản tin trước (bản đầu tiên không báo mốc cũ)."""
+    moment = now or datetime.now(timezone.utc)
+    local = moment.astimezone(ICT)
+    day = local.strftime("%Y-%m-%d")
+    try:
+        if local.hour < BRIEF_HOUR or repo.get_state(BRIEF_KEY) == day:
+            return
+        repo.set_state(BRIEF_KEY, day)
+        with insights.open_readonly(repo.path) as conn:
+            goals = insights.goals(conn, moment, sync_interval_minutes)
+            today = insights.day_stats(conn, moment)
+            top = insights.top_since(conn, moment - timedelta(days=7))
+        reached = [label for label, ok in goals.milestones if ok]
+        try:
+            before = json.loads(repo.get_state(BRIEF_MILESTONES_KEY) or "null")
+        except ValueError:
+            before = None
+        fresh = [label for label in reached if label not in before] if isinstance(before, list) else []
+        repo.set_state(BRIEF_MILESTONES_KEY, json.dumps(reached, ensure_ascii=False))
+        admin_notifier.notify_nightly_brief(day, admin_insights.brief_text(goals, today, top, fresh, local))
+    except sqlite3.Error:
+        logger.exception("[Cashback] bản tin tối thất bại")

@@ -1,4 +1,4 @@
-"""PLAN-089: số dòng tiền / khách hàng (insights.py), màn /admin Telegram và trang web /cashback. PLAN-090: mục tiêu. PLAN-091: tìm mã."""
+"""PLAN-089: số dòng tiền / khách hàng (insights.py), màn /admin Telegram và trang web /cashback. PLAN-090: mục tiêu. PLAN-091: tìm mã. PLAN-092: bản tin tối."""
 
 from __future__ import annotations
 
@@ -7,13 +7,15 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.features.cashback_insights.router import router as cashback_router
-from cashback_bot import insights
+from cashback_bot import insights, ops_watch
 from cashback_bot.admin_insights import parse_cost, parse_goal
+from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_ui import MENU_KEYBOARD
 from cashback_bot.db import TrackingRepository
 from tests.test_cashback_payout_lifecycle import T as PAY_T
@@ -386,3 +388,56 @@ def test_web_tim_va_chi_tiet_link(tmp_path, monkeypatch):
     assert client.get("/cashback/links/424242").status_code == 404
     assert "Không thấy kết quả" in client.get("/cashback/search?q=khongcoma").text
     assert 'action="/cashback/search"' in client.get("/cashback").text
+
+
+# --- Bản tin tối (PLAN-092) -------------------------------------------------------------------------
+
+
+def _briefs(bot):
+    with bot.repo.connect() as conn:
+        return [r[0] for r in conn.execute(
+            "SELECT message_html FROM admin_notifications WHERE event_type = 'NIGHTLY_BRIEF' ORDER BY id")]
+
+
+def _recent(bot):
+    """Đơn mẫu đặt lúc PURCHASE cố định; dời về NOW để số «hôm nay», «7 ngày» không hỏng theo ngày chạy test."""
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE shopee_conversions SET purchase_time = ?", (_stamp(NOW),))
+        conn.execute("UPDATE cashback_entries SET purchase_time = ?", (_stamp(NOW),))
+
+
+def test_ban_tin_toi_moi_ngay_mot_lan_va_moc_moi(tmp_path):
+    bot = _bot(tmp_path)
+    admin = AdminNotifier(bot.repo, MagicMock(), enabled=True, chat_id=ADMIN)
+    sub = _link(bot)
+    _order(bot, sub, cid="a")
+    bot.refresh_wallet(NOW)
+    _recent(bot)
+    bot.repo.set_state(insights.GOALS_KEY, json.dumps({"completed": 100}))
+    evening = NOW.astimezone(ops_watch.ICT).replace(hour=20, minute=50)
+    ops_watch.check_nightly_brief(bot.repo, admin, now=evening)
+    assert _briefs(bot) == [], "chưa tới 21 giờ"
+    ops_watch.check_nightly_brief(bot.repo, admin, now=evening.replace(hour=21, minute=1))
+    ops_watch.check_nightly_brief(bot.repo, admin, now=evening.replace(hour=23))
+    briefs = _briefs(bot)
+    assert len(briefs) == 1, "mỗi ngày một lần"
+    text = briefs[0]
+    assert "Bản tin tối" in text and "Hôm nay" in text and "/ 100" in text and "Top khách 7 ngày" in text
+    assert "Mốc mới" not in text, "bản tin đầu tiên không báo mốc đã đạt từ trước"
+    _order(bot, sub, status="COMPLETED", complete=_stamp(NOW), cid="b")
+    bot.refresh_wallet(NOW)
+    ops_watch.check_nightly_brief(bot.repo, admin, now=evening.replace(hour=21) + timedelta(days=1))
+    assert "Mốc mới: <b>Đơn đầu tiên hoàn thành</b>" in _briefs(bot)[-1]
+
+
+def test_so_lieu_hom_nay_va_top_tuan(tmp_path):
+    bot = _bot(tmp_path)
+    sub = _link(bot)
+    _order(bot, sub, commission=10_000, cid="a")
+    bot.refresh_wallet(NOW)
+    _recent(bot)
+    with insights.open_readonly(bot.repo.path) as conn:
+        today = insights.day_stats(conn, NOW)
+        top = insights.top_since(conn, NOW - timedelta(days=7))
+    assert (today.new, today.links, today.orders, today.net) == (1, 1, 1, 10_000)
+    assert top == [("@buyer", 1, 10_000)]

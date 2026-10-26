@@ -1050,6 +1050,54 @@ def goals(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: int = 
     )
 
 
+# --- Bản tin tối (PLAN-092) -----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DayStats:
+    new: int
+    links: int
+    orders: int
+    completed: int
+    net: int
+
+
+def day_stats(conn: sqlite3.Connection, now: datetime) -> DayStats:
+    """Từ 0 giờ VN hôm nay."""
+    start = now.astimezone(ICT).replace(hour=0, minute=0, second=0, microsecond=0)
+    lo = _stamp(start)
+    new = conn.execute("SELECT COUNT(*) FROM telegram_users WHERE created_at >= ?", (lo,)).fetchone()[0]
+    links = conn.execute(
+        "SELECT COUNT(*) FROM link_requests WHERE sub_id IS NOT NULL AND created_at >= ?", (lo,)
+    ).fetchone()[0]
+    orders = conn.execute(
+        "SELECT COUNT(*) FROM shopee_conversions WHERE telegram_user_id IS NOT NULL "
+        "AND COALESCE(purchase_time, created_at) >= ?",
+        (lo,),
+    ).fetchone()[0]
+    completed = conn.execute(
+        "SELECT COUNT(DISTINCT c.conversion_id) FROM shopee_conversions c JOIN cashback_entries e "
+        "ON e.conversion_id = c.conversion_id WHERE e.status != 'cancelled' AND c.complete_time >= ?",
+        (lo,),
+    ).fetchone()[0]
+    return DayStats(int(new), int(links), int(orders), int(completed), money(conn, start, 1).net)
+
+
+def top_since(conn: sqlite3.Connection, since: datetime, limit: int = 3) -> list[tuple[str, int, int]]:
+    """(nhãn khách, số đơn, HH ròng) theo HH ròng từ `since`, đơn chưa huỷ."""
+    rows = conn.execute(
+        f"""
+        SELECT telegram_user_id,
+               COUNT(DISTINCT CASE WHEN instr(conversion_id, '{CLAWBACK}') = 0 THEN conversion_id END),
+               SUM(commission_vnd)
+        FROM cashback_entries WHERE status != 'cancelled' AND COALESCE(purchase_time, created_at) >= ?
+        GROUP BY telegram_user_id HAVING SUM(commission_vnd) > 0 ORDER BY 3 DESC LIMIT ?
+        """,
+        (_stamp(since), limit),
+    ).fetchall()
+    return [(user_label(conn, int(uid)), int(orders), int(net)) for uid, orders, net in rows]
+
+
 # --- Tìm mã (PLAN-091) ---------------------------------------------------------------------------
 
 SEARCH_LIMIT = 10

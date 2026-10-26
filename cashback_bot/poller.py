@@ -601,6 +601,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             _check_zalo_health(repo, admin_notifier)
             ops_watch.check_versions(repo, admin_notifier)
             ops_watch.check_delivery_digest(repo, admin_notifier)
+            ops_watch.check_nightly_brief(repo, admin_notifier, service.admin_panel.auto_sync.interval_minutes)
             _check_backup(service, repo, admin_notifier)
         except KeyboardInterrupt:
             logger.info("stop")

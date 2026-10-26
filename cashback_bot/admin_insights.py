@@ -143,6 +143,42 @@ def goal_history(before: dict, after: dict) -> str:
 _STATUS = {"done": "✅ đạt", "on_track": "🟢 kịp", "behind": "🔴 chậm", "nodata": "⚪"}
 
 
+def _goal_line(r: insights.GoalRow) -> str:
+    line = f"{'⭐' if r.key == 'completed' else '•'} {r.label}: <b>{goal_value(r.unit, r.actual)}</b>"
+    if r.target is None:
+        line += " · chưa đặt"
+    else:
+        status = "🔴 chưa đạt" if r.status == "behind" and r.kind == "level" else _STATUS[r.status]
+        line += f" / {goal_value(r.unit, r.target)} {status}"
+    if r.forecast is not None:
+        line += f" · dự báo {goal_value(r.unit, r.forecast)}"
+    if r.per_day:
+        line += f" · cần ~{goal_value(r.unit, r.per_day)}/ngày"
+    return line
+
+
+def brief_text(g: insights.Goals, today: insights.DayStats, top: list[tuple[str, int, int]],
+               fresh: list[str], local: datetime) -> str:
+    """🌙 Bản tin tối gửi admin (PLAN-092)."""
+    lines = [f"🌙 <b>Bản tin tối {local:%d/%m}</b> · tháng {g.month}, ngày {g.day}/{g.days_in_month}", "",
+             f"📍 {g.stage}"]
+    lines += [f"🎉 Mốc mới: <b>{html.escape(label)}</b>" for label in fresh]
+    lines += ["", f"📅 <b>Hôm nay</b>: {today.new} khách mới · {today.links} link · {today.orders} đơn đặt · "
+                  f"{today.completed} đơn hoàn thành · HH ròng {format_vnd(today.net)}", "", "🎯 <b>Mục tiêu tháng</b>"]
+    chosen = [r for r in g.rows if r.kind != "cap" and r.target is not None]
+    lines += [_goal_line(r) for r in chosen] or ["Chưa đặt mục tiêu nào."]
+    red = [c.label for c in g.guards if not c.ok]
+    if g.row("cancel").status == "behind":
+        red.insert(0, "Tỉ lệ huỷ 30 ngày")
+    lines += ["", "🛡 An toàn: " + ("🟢 tất cả ổn" if not red else "🔴 " + html.escape(", ".join(red)))]
+    if top:
+        lines += ["", "👥 <b>Top khách 7 ngày</b> (HH ròng)"]
+        lines += [f"{n}. {html.escape(label)} · {orders} đơn · {format_vnd(net)}"
+                  for n, (label, orders, net) in enumerate(top, 1)]
+    lines += ["", "Xem đủ: /admin → 🎯 Mục tiêu"]
+    return "\n".join(lines)
+
+
 def goals_text(g: insights.Goals) -> str:
     lines = [_title(f"Mục tiêu · tháng {g.month}").rstrip("\n"), ""]
     lines.append(f"📍 Giai đoạn: <b>{g.stage}</b>")
@@ -151,17 +187,7 @@ def goals_text(g: insights.Goals) -> str:
     for r in g.rows:
         if r.kind == "cap":
             continue
-        line = f"{'⭐' if r.key == 'completed' else '•'} {r.label}: <b>{goal_value(r.unit, r.actual)}</b>"
-        if r.target is None:
-            line += " · chưa đặt"
-        else:
-            status = "🔴 chưa đạt" if r.status == "behind" and r.kind == "level" else _STATUS[r.status]
-            line += f" / {goal_value(r.unit, r.target)} {status}"
-        if r.forecast is not None:
-            line += f" · dự báo {goal_value(r.unit, r.forecast)}"
-        if r.per_day:
-            line += f" · cần ~{goal_value(r.unit, r.per_day)}/ngày"
-        lines.append(line)
+        lines.append(_goal_line(r))
         if r.key == "completed":
             lines.append(f"   đơn đặt trong tháng: {g.placed} (thành hoàn thành sau khi khách nhận hàng)")
         if r.key == "activation":

@@ -577,6 +577,17 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_nightly_brief(self, day: str, body: str) -> None:
+        """PLAN-092: 🌙 bản tin tối (mục tiêu, hôm nay, an toàn), mỗi ngày một lần."""
+        if not self._active():
+            return
+        self.repo.enqueue_admin_event(
+            event_key=f"nightly_brief:{day}",
+            event_type="NIGHTLY_BRIEF",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
     def notify_zalo_capacity(self, count: int, limit: int) -> None:
         """PLAN-083: gói Zalo BASIC giới hạn số người dùng mỗi bot."""
         if not self._active():

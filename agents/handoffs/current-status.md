@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (ce) — PLAN-092: 🌙 bản tin tối cho chủ bot
+
+- Chủ bot chọn "mỗi tối", và dặn "phát hiện bug thì báo anh".
+- 21:00 giờ VN mỗi ngày, bot Telegram gửi admin một tin (hàng đợi tin admin, `NIGHTLY_BRIEF`) gồm: giai đoạn, 🎉 mốc G1 mới, số hôm nay, các mục tiêu đã đặt, giới hạn an toàn, top 3 khách 7 ngày. Không gửi khách.
+- Proof: 799 test cashback qua, ruff sạch. Xem trước trên production hiển thị đúng.
+- Bug trong lúc làm: không có bug production. Test mới của em lúc đầu dựa vào đơn mẫu cố định ngày 21/10, sẽ tự hỏng sau 28/10; đã sửa trước khi merge.
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo` (web không đổi).
+  - Tối nay 21:00 kiểm tra bản tin đầu tiên.
+  - Mục 3 (rà điều khoản V3).
+
+---
+
 ## Phiên 2026-10-26 (cd) — PLAN-091: 🔍 Tìm mã cho admin (Telegram + web)
 
 - Chủ bot duyệt ("oke em triển khai plan này đi").
