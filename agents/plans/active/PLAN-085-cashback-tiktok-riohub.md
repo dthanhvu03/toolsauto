@@ -74,3 +74,5 @@ Chủ bot dán spec đủ 8 phần và chọn "Viết client, chưa nối bot". 
   - `sub_id` rỗng (đơn không đi qua link bot).
 - **Sửa nhận định cũ:** spec ghi `actual_commission` gồm `pit` (số âm), nhưng ở đơn thật này `pit = 0`, tức **chưa trừ TNCN**. Không được giả định TikTok đã trừ thuế. Hồ sơ thuế TikTok cần đọc `pit` từng đơn; mức dự phòng do chủ bot quyết.
 - Field thật có thêm so với ví dụ trong spec: `sub1`–`sub4`, `payment_status`, `tt_order_status`, `refunded_quantity`, `returned_quantity`, `settled_at`, `time_delivered(_iso)`, `content_id`, `content_type`.
+- `link https://vt.tiktok.com/ZS9yNg6SvUjFB-tq8JF/ test085` (chủ bot gửi link, 2026-10-26) → link rút gọn `https://www.tiktok.com/t/ZSgCQR9y3/`, kèm tên sản phẩm (máy mài chân KY Y5), giá 300.000đ, hoa hồng 500 bps (5%), cùng 1 lượt gọi. Link `vt.tiktok.com` dùng thẳng được, không cần tự đổi sang id sản phẩm. Không tạo khách, không ghi DB.
+- Chưa kiểm được `sub_id=test085` có về trong đơn hay không: cần một đơn thật đi qua link thử.
