@@ -12,10 +12,10 @@ import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from cashback_bot import terms
+from cashback_bot import retention, terms
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
-from cashback_bot.terms_content import DRAFT_SECTIONS, DRAFT_TITLE, DRAFT_VERSION
+from cashback_bot.terms_content import DRAFT_TITLE, DRAFT_VERSION, draft_sections
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 HOME = "c:tm:home"
@@ -88,12 +88,16 @@ class TermsAdmin:
         rows = [((f"👁 #{item.id} {item.version} · {STATUS_LABELS[item.status]}", f"c:tm:v:{item.id}"),) for item in items[:6]]
         if not any(item.version == DRAFT_VERSION for item in items):
             rows.insert(0, ((f"📝 Tạo bản nháp {DRAFT_VERSION} từ mẫu", "c:tm:new"),))
+            lines.append(f"ⓘ Mẫu {DRAFT_VERSION} có ví và rút tiền: chỉ công bố khi chuẩn bị bật ví. Mục dữ liệu cá nhân "
+                         "ghi thời hạn lưu đang cài ở 🗄 lúc tạo bản nháp.")
+        rows.append((("🗄 Thời hạn lưu dữ liệu", "c:rt:home"),))
         return BotReply("\n".join(lines), inline_keyboard=(*rows, BACK_MENU))
 
     def _new_draft(self, admin_id: int, now: datetime) -> BotReply:
         try:
             with self.repo.connect() as conn:
-                version_id = terms.create_draft(conn, DRAFT_VERSION, DRAFT_TITLE, DRAFT_SECTIONS, f"admin:{admin_id}", now)
+                sections = draft_sections(retention.load(conn))
+                version_id = terms.create_draft(conn, DRAFT_VERSION, DRAFT_TITLE, sections, f"admin:{admin_id}", now)
         except terms.TermsError:
             return self._home(now, "⚠️ Đã có phiên bản này.")
         if self.audit:

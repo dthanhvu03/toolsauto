@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from cashback_bot import admin_support, customer_desk, support, terms
+from cashback_bot import admin_support, customer_desk, retention, support, terms
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_ui import wallet_member_text
 from cashback_bot.messages import how_to_calc
@@ -227,9 +227,10 @@ def test_13_14_dieukien_dung_phien_ban_va_khong_hua_rut_tien(tmp_path):
     assert f"Phiên bản <b>{DRAFT_VERSION}</b> · hiệu lực từ 21/10/2026" in page.text
     assert "Ví hoàn tiền và chi trả chưa mở" in page.text
     body = " ".join(text for _k, _l, text in DRAFT_SECTIONS)
-    assert "chưa mở" in body and "không phải</b> số thuế" in body
-    assert "không phải số chắc chắn nhận" in body
-    for banned in ("sẽ được hoàn", "rút tối thiểu", "trong vòng", "ngày làm việc", "cam kết hoàn", "bảo đảm nhận"):
+    # V3 (ADR-059, chủ bot duyệt 2026-10-26) mới hứa rút tiền và «3–7 ngày làm việc»; ví vẫn do người vận hành bật.
+    assert "Ví chỉ hoạt động khi người vận hành bật" in body and "không phải</b> số thuế" in body
+    assert "không phải số chắc chắn nhận" in body and "3–7 ngày làm việc" in body
+    for banned in ("sẽ được hoàn", "rút tối thiểu", "trong vòng", "cam kết hoàn", "bảo đảm nhận"):
         assert banned not in body.lower()
     assert "Chia sẻ link không chuyển quyền nhận hoàn tiền" in body
     assert "không có nghĩa</b> là bạn gian lận" in body
@@ -541,3 +542,42 @@ def test_migrate_hai_lan(tmp_path):
     bot.repo.migrate()
     names = {r[0] for r in _rows(tmp_path, "SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"customer_terms_versions", "customer_terms_acceptances", "link_terms_context", "support_tickets", "support_ticket_events"} <= names
+
+
+# --- Thời hạn lưu dữ liệu (C2, chủ bot duyệt 2026-10-26) -------------------------------------------
+
+
+def test_thoi_han_luu_admin_chinh_va_ban_nhap_ghi_dung_moc(tmp_path):
+    bot = _bot(tmp_path)
+    panel = bot.admin_panel
+    assert "c:rt:home" in _buttons(panel.handle_callback(ADMIN, "c:tm:home", "private", NOW))
+    home = panel.handle_callback(ADMIN, "c:rt:home", "private", NOW)
+    assert "<b>10 năm</b>" in home.text and "<b>24 tháng</b>" in home.text and "chưa tự xoá" in home.text
+    ask = panel.handle_callback(ADMIN, "c:rt:e:finance_years", "private", NOW)
+    assert "từ 5 đến 20" in ask.text and "c:rt:d:finance_years" in _buttons(ask)
+    assert "Gõ một số từ 5 đến 20" in panel.consume_text(ADMIN, "3", NOW).text
+    saved = panel.consume_text(ADMIN, "12", NOW)
+    assert "Đã lưu" in saved.text and "<b>12 năm</b> (mặc định 10 năm)" in saved.text
+    assert panel.consume_text(ADMIN, "15", NOW) is None, "lưu xong thì thôi chờ"
+    panel.handle_callback(ADMIN, "c:tm:new", "private", NOW)
+    with bot.repo.connect() as conn:
+        draft = terms.get(conn, conn.execute("SELECT MAX(id) FROM customer_terms_versions").fetchone()[0])
+    data = next(body for key, _label, body in draft.sections if key == "du_lieu")
+    assert "<b>12 năm</b>" in data and "<b>24 tháng</b>" in data, "bản nháp ghi mốc đang cài"
+    panel.handle_callback(ADMIN, "c:rt:d:finance_years", "private", NOW)
+    with bot.repo.connect() as conn:
+        assert retention.load(conn)["finance_years"] == 10 and retention.custom(conn) == {}
+    history = panel.handle_callback(ADMIN, "c:menu:hist", "private", NOW).text
+    assert "Thời hạn lưu dữ liệu: Sổ ví, yêu cầu rút, chứng từ chuyển khoản 10 năm → 12 năm" in history
+    assert "12 năm → 10 năm" in history
+
+
+def test_thoi_han_luu_bo_qua_gia_tri_hong():
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE bot_state (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute("INSERT INTO bot_state VALUES (?, ?)",
+                 (retention.RETENTION_KEY, '{"finance_years": 99, "ticket_months": 6, "x": 1, "bank_idle_months": "3"}'))
+    assert retention.custom(conn) == {"ticket_months": 6}
+    assert retention.load(conn) == {**retention.DEFAULTS, "ticket_months": 6}
+    conn.execute("UPDATE bot_state SET value = 'không phải json'")
+    assert retention.load(conn) == retention.DEFAULTS

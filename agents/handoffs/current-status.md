@@ -1,3 +1,17 @@
+## Phiên 2026-10-26 (cg) — Test ví Zalo + PLAN-093 thời hạn lưu dữ liệu + mẫu điều khoản V3
+
+- Chủ bot duyệt: "oke em triển khai nhé em, có thể admin cấu hình những con số cho sau này".
+- Việc 3 (`19fda4c`): test luồng ví trên Zalo (khai tài khoản → rút → "Hoan tien 000001"; chưa đồng ý điều khoản thì chặn). Không có bug.
+- Việc 2: `retention.py` + màn 🗄 (📋 Điều khoản → 🗄 Thời hạn lưu dữ liệu). Mặc định: tài chính 10 năm; tài khoản chưa nhận tiền, link/đơn không ra tiền, ticket: 24 tháng. Admin chỉnh được, có 📊 Lịch sử.
+- Việc 1: mẫu V3 vào `terms_content.py` (bản nháp tạo theo mốc lưu đang cài). **Chưa công bố.** Điều kiện công bố: parser báo cáo thanh toán + việc tự xoá dữ liệu hết hạn + bật ví.
+- Proof: 804 test cashback qua, ruff sạch.
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo`.
+  - Việc 4: backup ra Google Drive bằng rclone crypt (chủ bot tự đăng nhập Google và đặt mật khẩu).
+  - Sau 10:52 giờ VN: xem click link Zalo.
+
+---
+
 ## Phiên 2026-10-26 (cf) — BUG: 🧮 Hoà vốn tính theo cách tính cũ (V1.1) thay vì V1.2 đang chạy
 
 - Phát hiện khi rà điều khoản V3:

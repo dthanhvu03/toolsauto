@@ -97,6 +97,8 @@ from cashback_bot.admin_support import SupportAdmin
 from cashback_bot.admin_terms import TermsAdmin
 from cashback_bot.admin_validation import ValidationAdmin
 from cashback_bot.admin_insights import InsightsAdmin, goal_history
+from cashback_bot.admin_retention import RetentionAdmin
+from cashback_bot.admin_retention import history_line as retention_history
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.wallet import Wallet
 from cashback_bot.db import TrackingRepository
@@ -249,6 +251,8 @@ class AdminPanel:
     _wallet_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang gõ chi phí vận hành / tháng (PLAN-089) hoặc mục tiêu tháng (PLAN-090): user_id → (loại, hạn chờ).
     _insights_waiting: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
+    # Admin đang gõ một mốc thời hạn lưu dữ liệu (C2): user_id → (mã mốc, hạn chờ).
+    _retention_waiting: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -285,6 +289,9 @@ class AdminPanel:
         payout = self._wallet_admin().consume_text(user_id, text, now)
         if payout is not None:
             return payout
+        kept = self._retention().consume_text(user_id, text, now)
+        if kept is not None:
+            return kept
         cost = self._insights().consume_text(user_id, text, now)
         if cost is not None:
             return cost
@@ -353,6 +360,8 @@ class AdminPanel:
             return self._wallet_admin().route(user_id, data, now)
         if data.startswith("c:in:"):
             return self._insights().route(user_id, data, now)
+        if data.startswith("c:rt:"):
+            return self._retention().route(user_id, data, now)
         if data.startswith("c:cv:"):
             return ValidationAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:sm:"):
@@ -1070,6 +1079,9 @@ class AdminPanel:
             locked_reasons=lambda: Wallet(repo).settings().locked_reasons,
         )
 
+    def _retention(self) -> RetentionAdmin:
+        return RetentionAdmin(TrackingRepository(self.db_path), audit=self._log_setting, waiting=self._retention_waiting)
+
     def _support(self) -> SupportAdmin:
         return SupportAdmin(TrackingRepository(self.db_path), self._support_waiting)
 
@@ -1542,7 +1554,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
         "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro", "ops_cost",
-        "goal",
+        "goal", "retention",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1578,6 +1590,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         return f"Chi phí vận hành / hạ tầng: {old} → {format_vnd(int(after['vnd']))} mỗi tháng"
     if action == "goal":
         return goal_history(before, after)
+    if action == "retention":
+        return retention_history(before, after)
     if action in {"terms_draft", "terms_publish"}:
         verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
         return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"
