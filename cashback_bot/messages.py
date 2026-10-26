@@ -178,6 +178,13 @@ GENERIC_FAIL = (
 )
 BUY_BUTTON = "🛒 Mua trên Shopee"
 TIKTOK_BUY_BUTTON = "🛒 Mua trên TikTok Shop"
+# PLAN-095: đơn TikTok Shop nằm chung bảng đơn với Shopee, mã đơn bắt đầu bằng tiền tố này.
+TIKTOK_CONVERSION_PREFIX = "tt:"
+
+
+def source_text(text: str, conversion_id: str | None) -> str:
+    """Tin về một đơn chỉ nhắc «Shopee» với nghĩa nơi ghi nhận đơn; đơn TikTok Shop thì đổi thành «TikTok»."""
+    return text.replace("Shopee", "TikTok") if (conversion_id or "").startswith(TIKTOK_CONVERSION_PREFIX) else text
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
@@ -802,7 +809,7 @@ def _order_list_entry(number: int, row: dict) -> list[str]:
     return [
         f"<b>{number}. {html.escape(_order_title(row))}</b>",
         f"🛒 Mua {row['date']} · {status}",
-        money,
+        source_text(money, row.get("conversion_id")),
     ]
 
 
@@ -816,7 +823,7 @@ def orders_summary_reply(stats: dict, rows, page: int, pages: int, start: int = 
     lines = [
         "📦 <b>Đơn hàng của tôi</b>",
         "",
-        f"Shopee đã ghi nhận <b>{stats['total']}</b> đơn qua link của bạn",
+        f"Đã ghi nhận <b>{stats['total']}</b> đơn qua link của bạn",
         f"💰 Hoàn tạm tính: <b>{format_vnd(stats['estimated'])}</b>" if stats["estimated"] else "💰 Hoàn tạm tính: chưa có",
         " · ".join(counts),
     ]
@@ -897,7 +904,7 @@ def order_detail_reply(row: dict) -> BotReply:
         (("📩 Yêu cầu kiểm tra", "u:h:c:amount"),),
         (("◀️ Đơn hàng của tôi", "u:o:l:1"), ("◀️ Trang chủ", "u:p:home")),
     )
-    return BotReply("\n".join(lines), inline_keyboard=keyboard)
+    return BotReply(source_text("\n".join(lines), row.get("conversion_id")), inline_keyboard=keyboard)
 
 
 NOTIFY_OPTIONS = (

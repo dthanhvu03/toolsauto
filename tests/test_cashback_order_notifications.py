@@ -191,7 +191,7 @@ def test_17_20_donhang_tong_quan_va_chi_tiet(tmp_path):
     _order(bot, sub, commission=1_372, cid="o2")
     bot.refresh_wallet(datetime(2026, 10, 22, tzinfo=timezone.utc))
     page = bot.handle_text(USER, "b", "/donhang", update_id=801, now=QUOTE_NOW)
-    assert "Shopee đã ghi nhận <b>2</b> đơn qua link của bạn" in page.text
+    assert "Đã ghi nhận <b>2</b> đơn qua link của bạn" in page.text
     assert "⏳ 2 chờ xác minh" in page.text and "đã duyệt" not in page.text, "chỉ hiện số khác 0"
     assert "💰 Hoàn tạm tính: <b>13.117đ</b>" in page.text
     assert "Chưa có khoản nào vào ví." in page.text

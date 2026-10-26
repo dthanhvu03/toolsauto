@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from cashback_bot import policy_snapshot
 from cashback_bot.commission_validation import APPROVED, FRAUD, REJECTED
 from cashback_bot.db import TrackingRepository, enqueue_event
-from cashback_bot.messages import order_new_notice, order_update_notice
+from cashback_bot.messages import order_new_notice, order_update_notice, source_text
 from cashback_bot.notify_dispatch import BASELINE_KEY, NotifyConfig, customer_block_reason
 from cashback_bot.pricing import cashback_for
 
@@ -141,7 +141,10 @@ def make_hook(cfg: NotifyConfig):
         first = prev is None or prev["matched_link_id"] is None
         if first:
             baseline = conn.execute("SELECT value FROM bot_state WHERE key = ?", (BASELINE_KEY,)).fetchone()
-            html = order_new_notice(order, cashback_of(conn, link_id, net), status, values.get("validation_status"))
+            html = source_text(
+                order_new_notice(order, cashback_of(conn, link_id, net), status, values.get("validation_status")),
+                conversion_id,
+            )
             key = f"conversion:{conversion_id}:first_matched"
             purchase = values.get("purchase_time") or ""
             if baseline is None:
@@ -181,8 +184,8 @@ def make_hook(cfg: NotifyConfig):
         if not (lines or ineligible or approved or new_cb is not None):
             return
         last = max(change_id for _change, change_id in recorded)
-        html = order_update_notice(order, statuses=lines, ineligible=ineligible, approved=approved,
-                                   old_cashback=old_cb, new_cashback=new_cb)
+        html = source_text(order_update_notice(order, statuses=lines, ineligible=ineligible, approved=approved,
+                                               old_cashback=old_cb, new_cashback=new_cb), conversion_id)
         _queue(conn, cfg, key=f"conversion:{conversion_id}:changes:{last}", category="order_update", user=int(user),
                html=html, conversion_id=conversion_id, now=now)
 

@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (ck) — PLAN-095: đồng bộ đơn TikTok Shop (giai đoạn B)
+
+- Chủ bot duyệt: kéo mỗi 2 giờ, báo đơn cho khách như Shopee.
+- Link TikTok thật đầu tiên (id 56, admin): giá 300.000đ, hoa hồng 5% (15.000đ), hoàn **9.347đ** (V1.2 70%, phí 0,98%, thuế 10%), đã giao.
+- Giai đoạn B: `tiktok_sync.py` chạy nền trong bot Telegram, ghi đơn `tt:<order>:<sku>` vào `shopee_conversions`, dùng chung sổ ví, thông báo, dashboard. Không đổi cấu trúc DB, không gán APPROVED / SETTLED, ví khoá.
+- Đối soát Shopee bỏ qua đơn TikTok. Tin và màn đơn TikTok ghi "TikTok".
+- Proof: 820 test cashback qua.
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo`. Lượt đồng bộ đầu chạy ngay sau khi bot lên (kéo 7 ngày).
+  - Kiểm 🎵 TikTok Shop sau vài phút.
+
+---
+
 ## Phiên 2026-10-26 (cj) — 🧾 Duyệt hoa hồng: đơn đã xem không còn nằm ở "Cần kiểm tra"
 
 - Chủ bot hỏi: đã bấm "đã kiểm tra" mà đơn ••••20NS vẫn hiện ở "Cần kiểm tra". Nguyên nhân: mục này đếm theo trạng thái Shopee (`NEEDS_REVIEW`), không xét admin đã xem.

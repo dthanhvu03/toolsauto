@@ -1,19 +1,23 @@
 """/admin → 🎵 TikTok Shop (PLAN-085 giai đoạn A): ai được tạo link TikTok Shop qua RioHub.
 
 Chế độ ở `bot_state.tiktok_mode`: off (tắt) · admin (chỉ admin thử, mặc định) · all (mở cho khách).
-Giai đoạn A chỉ tạo link và báo giá; đơn TikTok chưa đồng bộ (giai đoạn B) nên chưa ghi tiền, chưa báo đơn cho khách.
+Giai đoạn A tạo link và báo giá. Giai đoạn B (PLAN-095, tiktok_sync.py) kéo đơn mỗi 2 giờ, ghi sổ và báo đơn như Shopee;
+ví vẫn khoá.
 Callback: c:tk:home · c:tk:m:<chế độ> · c:tk:m:all:ok (mở cho khách cần xác nhận). Ghi 📊 Lịch sử action `tiktok_mode`.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 
+ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 MODE_KEY = "tiktok_mode"
 MODES = {"off": "⚪ Tắt", "admin": "🧪 Chỉ admin thử", "all": "🟢 Mở cho khách"}
 DEFAULT_MODE = "admin"
@@ -32,6 +36,22 @@ def current_mode(repo: TrackingRepository) -> str:
 def open_for(repo: TrackingRepository, user_id: int, admin_ids: frozenset[int]) -> bool:
     mode = current_mode(repo)
     return mode == "all" or (mode == "admin" and user_id in admin_ids)
+
+
+def _sync_line(repo: TrackingRepository, now: datetime) -> str:
+    error = repo.get_state("tiktok_sync_last_error") or ""
+    try:
+        last = float(repo.get_state("tiktok_sync_last_ok") or 0)
+        counts = json.loads(repo.get_state("tiktok_sync_last_count") or "{}")
+    except ValueError:
+        last, counts = 0.0, {}
+    if not last and not error:
+        return "chưa chạy lần nào"
+    text = "chưa thành công lần nào" if not last else (
+        datetime.fromtimestamp(last, timezone.utc).astimezone(ICT).strftime("%H:%M %d/%m")
+        + f" · {counts.get('rows', 0)} dòng, {counts.get('matched_new', 0)} đơn mới qua link bot"
+    )
+    return text + (f" · 🔴 lỗi gần nhất: {error}" if error else "")
 
 
 def history_line(before: dict, after: dict) -> str:
@@ -68,6 +88,10 @@ class TikTokAdmin:
             refused = conn.execute(
                 "SELECT COUNT(*) FROM link_requests WHERE reject_reason LIKE 'tiktok%' AND created_at >= ?", (since,)
             ).fetchone()[0]
+            orders, matched = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(matched_link_id IS NOT NULL), 0) FROM shopee_conversions "
+                "WHERE conversion_id LIKE 'tt:%'"
+            ).fetchone()
         lines = ["⚙️ Quản trị › <b>🎵 TikTok Shop</b>", ""]
         if notice:
             lines += [notice, ""]
@@ -76,8 +100,11 @@ class TikTokAdmin:
             f"Chế độ: <b>{MODES[mode]}</b>",
             f"Link TikTok đã tạo: {total} (7 ngày: {week}) · bị từ chối 7 ngày: {refused}",
             "",
-            "ⓘ Giai đoạn A: bot tạo link và báo số hoàn dự kiến, dùng chung cách tính với Shopee.",
-            "ⓘ Đơn TikTok <b>chưa đồng bộ</b> (giai đoạn B): chưa ghi tiền, chưa báo đơn cho khách.",
+            f"Đơn TikTok đã ghi: {orders} (qua link bot: {matched})",
+            "Đồng bộ đơn (mỗi 2 giờ): " + _sync_line(self.repo, now),
+            "",
+            "ⓘ Báo giá dùng chung cách tính với Shopee. Đơn qua link bot được ghi sổ và báo khách như Shopee; "
+            "ví vẫn khoá.",
         ]
         rows = [((("• " if key == mode else "") + label, f"c:tk:m:{key}"),) for key, label in MODES.items()]
         return BotReply("\n".join(lines), inline_keyboard=(*rows, *NAV))
@@ -86,7 +113,7 @@ class TikTokAdmin:
         return BotReply(
             "⚙️ Quản trị › 🎵 TikTok Shop › <b>Mở cho khách?</b>\n\n"
             "Mọi khách dán link TikTok Shop sẽ nhận link mua và số hoàn dự kiến.\n"
-            "⚠️ Đơn TikTok chưa đồng bộ (giai đoạn B): khách mua xong chưa thấy đơn trong bot, chưa có thông báo đơn.\n"
+            "Đơn mua qua link được đồng bộ mỗi 2 giờ, ghi sổ và báo khách như đơn Shopee; ví vẫn khoá.\n"
             "⚠️ Nên có xác nhận bằng văn bản của RioHub cho phép dùng làm bot hoàn tiền trước khi mở.",
             inline_keyboard=((("✅ Mở cho khách", "c:tk:m:all:ok"),), (("◀️ Quay lại", HOME),)),
         )
