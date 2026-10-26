@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (ca) — PLAN-090: 🎯 Mục tiêu của bot (Telegram + web)
+
+- Chủ bot hỏi góp ý về mục tiêu cho bot. Claude Code đề xuất: chỉ số chính (North Star) là đơn hoàn thành mỗi tháng; giai đoạn G1 (chạy trọn vòng tiền) → G2 (khoảng 100 đơn, 50 khách hoạt động) → G3 (hoà vốn); kèm các giới hạn an toàn. Chủ bot nói "triển khai đi".
+- Đã thêm `insights.goals` và màn 🎯 Mục tiêu (Telegram `c:in:t`, nút ✍️ `c:in:t:<mã>`, 📊 Lịch sử action `goal`), cộng thẻ trên web `/cashback`.
+  - Bot không tự đặt số. Số gợi ý G2 và mức hoà vốn chỉ hiện ở màn nhập.
+- Production (đọc `mode=ro`): G1 đạt 1/4 mốc (có đơn đầu tiên; chưa có đơn hoàn thành). Tháng 10: 2 đơn đặt, 0 hoàn thành, 11 khách mới; % có đơn trong 7 ngày chưa đủ mẫu. Giới hạn an toàn đều xanh.
+- Proof: 792 test cashback qua, ruff sạch. Web render được với DB production.
+- **Next:**
+  - Chủ bot chạy `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+  - Chủ bot nhập mục tiêu ở `/admin` → 🎯 Mục tiêu.
+
+---
+
 ## Phiên 2026-10-26 (bz) — Kiểm tra sáng 26/10 (08:15 giờ VN)
 
 - Buffer: 0 lỗi 429 kể từ khi mở lại key. 24h qua đăng 14 bài, cả 4 kênh còn 10/10 bài chờ.

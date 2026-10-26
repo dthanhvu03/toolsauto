@@ -20,6 +20,44 @@
   <div class="cb-tabs flex gap-2"><a href="/cashback/users">👥 Danh sách khách →</a></div>
 </div>
 
+{% macro goal_value(unit, value) %}{% if value is none %}chưa đủ mẫu{% elif unit == 'vnd' %}{{ vnd(value | int) }}{% elif unit == 'percent' %}{{ '%.0f' % value }}%{% else %}{{ value | int }}{% endif %}{% endmacro %}
+{% set gl = goals %}
+<div class="cb-card mb-5">
+  <div class="cb-h">🎯 Mục tiêu tháng {{ gl.month }} <span class="cb-sub">· ngày {{ gl.day }}/{{ gl.days_in_month }}</span></div>
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div>
+      <div class="cb-label mb-2">Giai đoạn: {{ gl.stage }}</div>
+      {% for label, ok in gl.milestones %}<div class="cb-row"><span>{{ '✅' if ok else '⬜' }} {{ label }}</span></div>{% endfor %}
+      <div class="cb-label mt-4 mb-2">Giới hạn an toàn</div>
+      {% set cancel = gl.row('cancel') %}
+      <div class="cb-row"><span>{{ {'unset': '⚪', 'done': '🟢', 'behind': '🔴'}[cancel.status] }} Tỉ lệ huỷ 30 ngày</span>
+        <span class="{{ 'cb-bad' if cancel.status == 'behind' }}">{{ '%.0f' % cancel.actual }}%{{ ' / tối đa %d%%' % cancel.target if cancel.target is not none else ' · chưa đặt ngưỡng' }}</span></div>
+      {% for c in gl.guards %}<div class="cb-row"><span>{{ '🟢' if c.ok else '🔴' }} {{ c.label }}</span><span class="{{ 'cb-bad' if not c.ok }}">{{ c.value }}</span></div>{% endfor %}
+    </div>
+    <div class="xl:col-span-2 overflow-x-auto">
+      <table class="cb-table">
+        <tr><th>Mục tiêu</th><th class="num">Đã đạt</th><th class="num">Mục tiêu</th><th>Tiến độ</th><th class="num">Dự báo cuối tháng</th><th class="num">Cần / ngày</th></tr>
+        {% for r in gl.rows if r.kind != 'cap' %}
+        <tr class="{{ 'font-bold' if r.key == 'completed' }}">
+          <td>{{ '⭐ ' if r.key == 'completed' }}{{ r.label }}
+            {% if r.key == 'completed' %}<div class="cb-note">đơn đặt trong tháng: {{ gl.placed }}</div>{% endif %}
+            {% if r.key == 'activation' %}<div class="cb-note">trên {{ gl.activation_size }} khách vào 7–37 ngày trước · {{ gl.activation_waiting }} chưa đủ 7 ngày</div>{% endif %}</td>
+          <td class="num">{{ goal_value(r.unit, r.actual) }}</td>
+          <td class="num">{{ 'chưa đặt' if r.target is none else goal_value(r.unit, r.target) }}</td>
+          <td style="min-width: 8rem">{% if r.target and r.actual is not none %}
+            <div class="cb-track"><div class="cb-bar" style="width: {{ [100, (r.actual * 100 / r.target) | round] | min }}%"></div></div>
+            <div class="cb-note">{{ {'done': '✅ đạt', 'on_track': '🟢 kịp', 'behind': ('🔴 chưa đạt' if r.kind == 'level' else '🔴 chậm')}[r.status] }}</div>
+            {% else %}<span class="cb-note">–</span>{% endif %}</td>
+          <td class="num">{{ '–' if r.forecast is none else goal_value(r.unit, r.forecast) }}</td>
+          <td class="num">{{ goal_value(r.unit, r.per_day) if r.per_day else '–' }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      <div class="cb-note mt-2">Bot không tự đặt mục tiêu. Nhập ở /admin → 🎯 Mục tiêu → ✍️. Đơn hoàn thành đến sau ngày đặt vài tuần, nên dự báo đầu tháng còn thấp.</div>
+    </div>
+  </div>
+</div>
+
 <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
   <div class="cb-card"><div class="cb-label">GMV qua bot</div><div class="cb-value">{{ vnd(m.gmv) }}</div>
     <div class="cb-sub">{{ m.orders }} đơn · {{ m.customers }} khách</div></div>

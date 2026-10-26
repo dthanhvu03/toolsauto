@@ -11,6 +11,7 @@ Module chỉ dùng thư viện chuẩn và sổ chi trả, để web (venv khác
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -870,6 +871,161 @@ def breakeven(conn: sqlite3.Connection, now: datetime) -> Breakeven:
     if net > 0:
         current = cashback / net if formula == "v1.1" else cashback / max(1, net - reserve)
     return Breakeven(cost, formula, orders, per_order, reserve_rate, current, recent.net, recent.orders, tuple(rows))
+
+
+# --- Mục tiêu (PLAN-090) --------------------------------------------------------------------------
+
+GOALS_KEY = "goals_monthly"
+# mã: (nhãn, đơn vị, kiểu). month: cộng dồn trong tháng, có dự báo · level: mức hiện tại · cap: không được vượt.
+GOALS = {
+    "completed": ("Đơn hoàn thành trong tháng", "count", "month"),
+    "net": ("Hoa hồng ròng trong tháng", "vnd", "month"),
+    "new": ("Khách mới trong tháng", "count", "month"),
+    "active": ("Khách hoạt động 30 ngày", "count", "level"),
+    "activation": ("Khách mới có đơn trong 7 ngày", "percent", "level"),
+    "cancel": ("Tỉ lệ huỷ 30 ngày tối đa", "percent", "cap"),
+}
+ACTIVATION_DAYS = 7
+ACTIVATION_WINDOW = 30
+
+
+def goal_targets(conn: sqlite3.Connection) -> dict[str, int]:
+    """Mục tiêu admin đã nhập. Mục chưa nhập hoặc hỏng thì bỏ qua."""
+    try:
+        raw = json.loads(_state(conn, GOALS_KEY) or "{}")
+    except ValueError:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {k: int(v) for k, v in raw.items() if k in GOALS and isinstance(v, int) and v >= 0}
+
+
+@dataclass(frozen=True)
+class GoalRow:
+    key: str
+    label: str
+    unit: str
+    kind: str
+    actual: float | None
+    target: int | None
+    forecast: int | None
+    per_day: int | None
+
+    @property
+    def status(self) -> str:
+        """unset · nodata (chưa có mẫu) · done (đã đạt / trong giới hạn) · on_track (kịp cuối tháng) · behind."""
+        if self.target is None:
+            return "unset"
+        if self.actual is None:
+            return "nodata"
+        if self.kind == "cap":
+            return "done" if self.actual <= self.target else "behind"
+        if self.actual >= self.target:
+            return "done"
+        if self.forecast is not None and self.forecast >= self.target:
+            return "on_track"
+        return "behind"
+
+
+@dataclass(frozen=True)
+class Goals:
+    month: str
+    day: int
+    days_in_month: int
+    rows: tuple[GoalRow, ...]
+    milestones: tuple[tuple[str, bool], ...]
+    guards: tuple[Check, ...]
+    placed: int
+    activation_size: int
+    activation_waiting: int
+    breakeven_net: int | None
+
+    @property
+    def stage(self) -> str:
+        done = sum(ok for _label, ok in self.milestones)
+        if done < len(self.milestones):
+            return f"G1 · Chạy trọn vòng tiền ({done}/{len(self.milestones)} mốc)"
+        return "G2+ · Tăng theo mục tiêu tháng"
+
+    def row(self, key: str) -> GoalRow:
+        return next(r for r in self.rows if r.key == key)
+
+
+def _exists(conn: sqlite3.Connection, sql: str) -> bool:
+    return conn.execute(f"SELECT EXISTS ({sql})").fetchone()[0] == 1
+
+
+def goals(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: int = 240) -> Goals:
+    start, day = period_bounds(conn, "month", now)
+    local = start.astimezone(ICT)
+    following = (local.replace(day=28) + timedelta(days=4)).replace(day=1)
+    days_in_month = (following - local).days
+    elapsed = max(1.0, (now - start).total_seconds() / 86_400)
+    left = max(1.0, days_in_month - elapsed)
+    lo = _stamp(start)
+    completed = conn.execute(
+        "SELECT COUNT(DISTINCT c.conversion_id) FROM shopee_conversions c JOIN cashback_entries e "
+        "ON e.conversion_id = c.conversion_id WHERE e.status != 'cancelled' AND c.complete_time >= ?",
+        (lo,),
+    ).fetchone()[0]
+    month_money = money(conn, start, day)
+    new = conn.execute("SELECT COUNT(*) FROM telegram_users WHERE created_at >= ?", (lo,)).fetchone()[0]
+    active = growth(conn, start, now).active_30d
+    first_order = {
+        int(uid): parse_stamp(first) for uid, first in conn.execute(
+            "SELECT telegram_user_id, MIN(COALESCE(purchase_time, created_at)) FROM shopee_conversions "
+            "WHERE telegram_user_id IS NOT NULL GROUP BY telegram_user_id"
+        )
+    }
+    size = activated = waiting = 0
+    window = timedelta(days=ACTIVATION_DAYS)
+    for uid, joined_raw in conn.execute("SELECT telegram_user_id, created_at FROM telegram_users"):
+        joined = parse_stamp(joined_raw)
+        if joined is None:
+            continue
+        if now - joined < window:
+            waiting += 1
+        elif now - joined <= window + timedelta(days=ACTIVATION_WINDOW):
+            size += 1
+            first = first_order.get(int(uid))
+            activated += first is not None and first - joined <= window
+    cancel = money(conn, now - timedelta(days=30), 30).cancel_rate * 100
+    actual = {
+        "completed": float(completed), "net": float(month_money.net), "new": float(new), "active": float(active),
+        "activation": activated * 100 / size if size else None, "cancel": cancel,
+    }
+    targets = goal_targets(conn)
+    rows = []
+    for key, (label, unit, kind) in GOALS.items():
+        target, value = targets.get(key), actual[key]
+        forecast = per_day = None
+        if kind == "month" and value is not None:
+            forecast = int(value * days_in_month / elapsed)
+            if target is not None and target > value:
+                per_day = int(-(-(target - value) // left))
+        rows.append(GoalRow(key, label, unit, kind, value, target, forecast, per_day))
+    milestones = (
+        ("Đơn đầu tiên qua bot", _exists(conn, "SELECT 1 FROM shopee_conversions WHERE telegram_user_id IS NOT NULL")),
+        ("Đơn đầu tiên hoàn thành", _exists(
+            conn, "SELECT 1 FROM shopee_conversions WHERE telegram_user_id IS NOT NULL AND complete_time IS NOT NULL")),
+        ("Shopee trả tiền đơn đầu tiên (đối soát khớp)", _exists(
+            conn, "SELECT 1 FROM shopee_conversions WHERE telegram_user_id IS NOT NULL AND settlement_status = 'SETTLED'")),
+        ("Khách đầu tiên nhận tiền", _exists(conn, "SELECT 1 FROM payout_events WHERE to_status = 'paid_confirmed'")),
+    )
+    people = customers(conn, now)
+    losing = sum(1 for c in people if c.margin < 0)
+    owing = sum(1 for c in people if c.wallet < 0)
+    checks = {c.code: c for c in operations(conn, now, sync_interval_minutes)}
+    guards = (
+        Check("losing", "Khách có biên âm", str(losing), losing == 0),
+        Check("owing", "Khách có số dư âm", str(owing), owing == 0),
+        checks["notices"], checks["tickets"], checks["ledger"],
+    )
+    current = breakeven(conn, now).current
+    return Goals(
+        local.strftime("%m/%Y"), now.astimezone(ICT).day, days_in_month, tuple(rows), milestones, guards,
+        month_money.orders, size, waiting, None if current is None else current.need_net_month,
+    )
 
 
 # --- Gói cho màn hình -----------------------------------------------------------------------------

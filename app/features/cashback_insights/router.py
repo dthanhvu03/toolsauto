@@ -55,13 +55,14 @@ def overview_page(request: Request, period: str = "30d"):
     now = datetime.now(timezone.utc)
     with insights.open_readonly(_db_path()) as conn:
         view = insights.overview(conn, period, now, _sync_interval())
+        goals = insights.goals(conn, now, _sync_interval())
     chart = {
         "labels": [p.day[5:] for p in view.days],
         "net": [p.net for p in view.days],
         "margin": [p.margin for p in view.days],
     }
     return templates.TemplateResponse(
-        "pages/cashback_overview.html", _context(request, view=view, chart=chart, active_tab="cashback")
+        "pages/cashback_overview.html", _context(request, view=view, goals=goals, chart=chart, active_tab="cashback")
     )
 
 

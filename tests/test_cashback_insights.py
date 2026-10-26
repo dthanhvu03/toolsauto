@@ -1,7 +1,8 @@
-"""PLAN-089: số dòng tiền / khách hàng (insights.py), màn /admin Telegram và trang web /cashback."""
+"""PLAN-089: số dòng tiền / khách hàng (insights.py), màn /admin Telegram và trang web /cashback. PLAN-090: mục tiêu."""
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -12,8 +13,9 @@ from fastapi.testclient import TestClient
 
 from app.features.cashback_insights.router import router as cashback_router
 from cashback_bot import insights
-from cashback_bot.admin_insights import parse_cost
+from cashback_bot.admin_insights import parse_cost, parse_goal
 from cashback_bot.admin_ui import MENU_KEYBOARD
+from cashback_bot.db import TrackingRepository
 from tests.test_cashback_payout_lifecycle import _available, _ready
 from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _link, _order
 
@@ -220,3 +222,78 @@ def test_man_hoa_von_telegram_va_web(tmp_path, monkeypatch):
     app.include_router(cashback_router)
     page = TestClient(app).get("/cashback")
     assert page.status_code == 200 and "Hoà vốn theo mức % hoàn" in page.text and "👉 70%" in page.text
+
+
+# --- Mục tiêu (PLAN-090) ----------------------------------------------------------------------------
+
+
+def _stamp(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _goals(bot, now=NOW):
+    with insights.open_readonly(bot.repo.path) as conn:
+        return insights.goals(conn, now)
+
+
+def test_muc_tieu_so_that_trang_thai_va_moc(tmp_path):
+    bot = _bot(tmp_path)
+    _order(bot, _link(bot), status="COMPLETED", complete=_stamp(NOW), cid="a")
+    bot.refresh_wallet(NOW)
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE telegram_users SET created_at = ?", (_stamp(NOW - timedelta(days=10)),))
+        conn.execute("UPDATE shopee_conversions SET purchase_time = ?", (_stamp(NOW - timedelta(days=9)),))
+    g = _goals(bot)
+    assert all(r.status == "unset" for r in g.rows), "chưa nhập thì bot không tự đặt mục tiêu"
+    fresh = _goals(bot, NOW - timedelta(days=9))
+    assert fresh.row("activation").actual is None and fresh.activation_waiting == 1, "khách chưa đủ 7 ngày: chưa có mẫu"
+    assert g.row("completed").actual == 1 and g.row("active").actual == 1
+    assert (g.row("activation").actual, g.activation_size, g.activation_waiting) == (100.0, 1, 0)
+    assert [ok for _label, ok in g.milestones] == [True, True, False, False] and g.stage.startswith("G1")
+    assert {c.code for c in g.guards} >= {"losing", "owing", "notices", "tickets", "ledger"}
+    bot.repo.set_state(insights.GOALS_KEY, json.dumps({"completed": 1, "active": 5, "cancel": 10, "bad": 3, "new": "x"}))
+    g = _goals(bot)
+    assert (g.row("completed").status, g.row("active").status, g.row("cancel").status) == ("done", "behind", "done")
+    assert g.row("new").target is None, "mục hỏng hoặc lạ thì bỏ qua"
+    bot.repo.set_state(insights.GOALS_KEY, json.dumps({"completed": 10_000}))
+    far = _goals(bot).row("completed")
+    assert far.status == "behind" and far.per_day and far.forecast is not None and far.forecast < 10_000
+
+
+def test_man_muc_tieu_telegram_nhap_bo_va_lich_su(tmp_path):
+    bot = _bot(tmp_path)
+    assert "c:in:t" in [d for row in MENU_KEYBOARD for _label, d in row]
+    screen = _callback(bot, ADMIN, "c:in:t")
+    assert "Giai đoạn" in screen.text and "chưa đặt" in screen.text and "c:in:t:completed" in str(screen.inline_keyboard)
+    ask = _callback(bot, ADMIN, "c:in:t:completed")
+    assert "Gợi ý G2: 100" in ask.text
+    assert "Chưa đọc được" in bot.admin_panel.consume_text(ADMIN, "nhiều", NOW).text
+    saved = bot.admin_panel.consume_text(ADMIN, "100", NOW)
+    assert "Đã đặt mục tiêu" in saved.text and json.loads(bot.repo.get_state(insights.GOALS_KEY)) == {"completed": 100}
+    assert bot.admin_panel.consume_text(ADMIN, "200", NOW) is None, "lưu xong thì thôi chờ"
+    _callback(bot, ADMIN, "c:in:t:net")
+    assert "5.000.000đ" in bot.admin_panel.consume_text(ADMIN, "5tr", NOW).text
+    _callback(bot, ADMIN, "c:in:t:completed")
+    assert "Đã bỏ" in bot.admin_panel.consume_text(ADMIN, "bỏ", NOW).text
+    assert json.loads(bot.repo.get_state(insights.GOALS_KEY)) == {"net": 5_000_000}
+    _callback(bot, ADMIN, "c:in:t:cancel")
+    _callback(bot, ADMIN, "c:in:o")
+    assert bot.admin_panel.consume_text(ADMIN, "10", NOW) is None, "bấm màn khác thì thôi chờ"
+    history = _callback(bot, ADMIN, "c:menu:hist").text
+    assert "Mục tiêu: Đơn hoàn thành trong tháng chưa đặt → 100" in history
+    assert "Mục tiêu: Đơn hoàn thành trong tháng 100 → bỏ" in history
+    assert "Mục tiêu: Hoa hồng ròng trong tháng chưa đặt → 5.000.000đ" in history
+
+
+def test_doc_so_muc_tieu():
+    assert [parse_goal("count", t) for t in ("100", "1.000", "0", "abc", "-3")] == [100, 1_000, None, None, None]
+    assert [parse_goal("percent", t) for t in ("30", "30%", "12,5", "0", "101")] == [30, 30, 12, 0, None]
+    assert [parse_goal("vnd", t) for t in ("5tr", "800k", "0")] == [5_000_000, 800_000, None]
+
+
+def test_web_the_muc_tieu(tmp_path, monkeypatch):
+    client, path = _web(tmp_path, monkeypatch)
+    TrackingRepository(str(path)).set_state(insights.GOALS_KEY, json.dumps({"completed": 100, "cancel": 10}))
+    page = client.get("/cashback")
+    assert page.status_code == 200 and "Mục tiêu tháng" in page.text and "Giới hạn an toàn" in page.text
+    assert "tối đa 10%" in page.text

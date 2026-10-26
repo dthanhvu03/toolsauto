@@ -1,12 +1,15 @@
-"""/admin → 💹 Dòng tiền · 📈 Tăng trưởng · 🛠 Vận hành · 👥 Khách hàng (PLAN-089). Số tính ở insights.py.
+"""/admin → 💹 Dòng tiền · 📈 Tăng trưởng · 🛠 Vận hành · 👥 Khách hàng (PLAN-089) · 🎯 Mục tiêu (PLAN-090).
 
-Chỉ đọc DB, trừ một việc: admin nhập chi phí vận hành và hạ tầng mỗi tháng (bot_state, ghi 📊 Lịch sử).
+Số tính ở insights.py. Chỉ đọc DB, trừ hai việc admin nhập (bot_state, ghi 📊 Lịch sử): chi phí vận hành và hạ tầng
+mỗi tháng, và mục tiêu tháng.
 Callback: c:in:m:<kỳ> · c:in:g:<kỳ> · c:in:o · c:in:u:<sắp xếp|nhóm>:<trang> · c:in:d:<id> · c:in:cost · c:in:b
+· c:in:t · c:in:t:<mã mục tiêu>
 """
 
 from __future__ import annotations
 
 import html
+import json
 import re
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -19,8 +22,12 @@ from cashback_bot.money import format_vnd
 _MONEY = re.compile(r"^c:in:(m|g):(7d|30d|month|all)$")
 _USERS = re.compile(r"^c:in:u:([a-z]{2,10}):(\d{1,3})$")
 _DETAIL = re.compile(r"^c:in:d:(-?\d{1,15})$")
+_GOAL = re.compile(r"^c:in:t:([a-z]{3,12})$")
+_PERCENT = re.compile(r"^\s*(\d{1,3}(?:[.,]\d+)?)\s*%?\s*$")
 _COST = re.compile(r"^\s*([\d.,\s]+)\s*(k|nghìn|ngàn|tr|triệu|trieu)?\s*$", re.IGNORECASE)
 COST_MAX = 10_000_000_000
+COUNT_MAX = 1_000_000
+CLEAR_WORDS = ("bỏ", "bo", "xoá", "xóa", "xoa")
 COST_WAIT = timedelta(minutes=10)
 PAGE = 8
 EPOCH = datetime(2000, 1, 1, tzinfo=timezone.utc)
@@ -28,8 +35,19 @@ HOME = (("◀️ Tổng quan", "c:menu:home"),)
 NAV = (
     (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d")),
     (("🛠 Vận hành", "c:in:o"), ("👥 Khách hàng", "c:in:u:margin:1")),
-    HOME,
+    (("🎯 Mục tiêu", "c:in:t"), *HOME),
 )
+GOAL_BUTTONS = {
+    "completed": "⭐ Đơn hoàn thành", "net": "HH ròng", "new": "Khách mới", "active": "Khách hoạt động",
+    "activation": "% có đơn 7 ngày", "cancel": "Ngưỡng huỷ",
+}
+# Chỉ hiện ở màn nhập để admin tham khảo; bot không tự lưu (PLAN-090 mục 1).
+GOAL_HINTS = {"completed": "Gợi ý G2: 100 đơn / tháng.", "active": "Gợi ý G2: 50 khách hoạt động."}
+GOAL_EXAMPLES = {
+    "count": "<code>100</code>",
+    "vnd": "<code>5000000</code>, <code>5tr</code> hoặc <code>800k</code>",
+    "percent": "<code>30</code> hoặc <code>30%</code>",
+}
 SORT_LABELS = {"margin": "Biên", "orders": "Đơn", "wallet": "Ví", "recent": "Gần đây", "new": "Mới vào"}
 
 AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
@@ -76,6 +94,78 @@ def parse_cost(text: str) -> int | None:
             return None
         amount = int(digits)
     return amount if 0 <= amount <= COST_MAX else None
+
+
+def parse_goal(unit: str, text: str) -> int | None:
+    """Số mục tiêu theo đơn vị. Đếm và tiền phải > 0; phần trăm 0–100. Sai: None."""
+    stripped = (text or "").strip()
+    if unit == "vnd":
+        amount = parse_cost(stripped)
+        return amount if amount else None
+    if unit == "percent":
+        found = _PERCENT.fullmatch(stripped)
+        value = float(found.group(1).replace(",", ".")) if found else -1
+        return int(round(value)) if 0 <= value <= 100 else None
+    digits = stripped.replace(".", "").replace(",", "").replace(" ", "")
+    return int(digits) if digits.isdigit() and 0 < int(digits) <= COUNT_MAX else None
+
+
+def goal_value(unit: str, value: float | None) -> str:
+    if value is None:
+        return "chưa đủ mẫu"
+    if unit == "vnd":
+        return format_vnd(int(value))
+    if unit == "percent":
+        return f"{value:.0f}%"
+    return f"{int(value):,}".replace(",", ".")
+
+
+def goal_history(before: dict, after: dict) -> str:
+    """Dòng 📊 Lịch sử cho action `goal`."""
+    key = str(after.get("key", ""))
+    label, unit, _kind = insights.GOALS.get(key, (html.escape(key), "count", "level"))
+    old = "chưa đặt" if before.get("value") is None else goal_value(unit, before["value"])
+    new = "bỏ" if after.get("value") is None else goal_value(unit, after["value"])
+    return f"Mục tiêu: {label} {old} → {new}"
+
+
+_STATUS = {"done": "✅ đạt", "on_track": "🟢 kịp", "behind": "🔴 chậm", "nodata": "⚪"}
+
+
+def goals_text(g: insights.Goals) -> str:
+    lines = [_title(f"Mục tiêu · tháng {g.month}").rstrip("\n"), ""]
+    lines.append(f"📍 Giai đoạn: <b>{g.stage}</b>")
+    lines += [f"{'✅' if ok else '⬜'} {label}" for label, ok in g.milestones]
+    lines += ["", f"🎯 <b>Tháng này</b> (ngày {g.day}/{g.days_in_month})"]
+    for r in g.rows:
+        if r.kind == "cap":
+            continue
+        line = f"{'⭐' if r.key == 'completed' else '•'} {r.label}: <b>{goal_value(r.unit, r.actual)}</b>"
+        if r.target is None:
+            line += " · chưa đặt"
+        else:
+            status = "🔴 chưa đạt" if r.status == "behind" and r.kind == "level" else _STATUS[r.status]
+            line += f" / {goal_value(r.unit, r.target)} {status}"
+        if r.forecast is not None:
+            line += f" · dự báo {goal_value(r.unit, r.forecast)}"
+        if r.per_day:
+            line += f" · cần ~{goal_value(r.unit, r.per_day)}/ngày"
+        lines.append(line)
+        if r.key == "completed":
+            lines.append(f"   đơn đặt trong tháng: {g.placed} (thành hoàn thành sau khi khách nhận hàng)")
+        if r.key == "activation":
+            lines.append(f"   trên {g.activation_size} khách vào 7–37 ngày trước · {g.activation_waiting} khách chưa đủ 7 ngày")
+    cancel = g.row("cancel")
+    icon = {"unset": "⚪", "done": "🟢", "behind": "🔴"}[cancel.status]
+    limit = "chưa đặt ngưỡng" if cancel.target is None else f"tối đa {cancel.target}%"
+    lines += ["", "🛡 <b>Giới hạn an toàn</b>", f"{icon} Tỉ lệ huỷ 30 ngày: {cancel.actual:.0f}% ({limit})"]
+    lines += [f"{'🟢' if c.ok else '🔴'} {html.escape(c.label)}: {html.escape(c.value)}" for c in g.guards]
+    lines += [
+        "",
+        "ⓘ Bot không tự đặt mục tiêu. Bấm ✍️ để nhập, gõ <code>bỏ</code> để xoá.",
+        "ⓘ Đơn hoàn thành đến sau ngày đặt vài tuần, nên dự báo đầu tháng còn thấp.",
+    ]
+    return "\n".join(lines)
 
 
 def money_text(view: insights.Overview) -> str:
@@ -257,7 +347,7 @@ class InsightsAdmin:
         self.locked_reasons = locked_reasons
 
     def route(self, admin_id: int, data: str, now: datetime) -> BotReply:
-        if data != "c:in:cost":
+        if data != "c:in:cost" and _GOAL.fullmatch(data) is None:
             self.waiting.pop(admin_id, None)
         if (found := _MONEY.fullmatch(data)) is not None:
             return self._overview(found.group(1), found.group(2), now)
@@ -274,8 +364,12 @@ class InsightsAdmin:
             with insights.open_readonly(self.db_path) as conn:
                 text = breakeven_text(insights.breakeven(conn, now))
             return BotReply(text, inline_keyboard=((("✍️ Chi phí vận hành / tháng", "c:in:cost"),), *NAV))
+        if data == "c:in:t":
+            return self._goals(now)
+        if (found := _GOAL.fullmatch(data)) is not None and found.group(1) in insights.GOALS:
+            return self._ask_goal(admin_id, found.group(1), now)
         if data == "c:in:cost":
-            self.waiting[admin_id] = now + COST_WAIT
+            self.waiting[admin_id] = ("cost", now + COST_WAIT)
             with insights.open_readonly(self.db_path) as conn:
                 current = insights.ops_cost_monthly(conn)
             return BotReply(
@@ -289,13 +383,16 @@ class InsightsAdmin:
         return BotReply("Nút này không còn hiệu lực.", inline_keyboard=NAV)
 
     def consume_text(self, admin_id: int, text: str, now: datetime) -> BotReply | None:
-        deadline = self.waiting.get(admin_id)
-        if deadline is None:
+        entry = self.waiting.get(admin_id)
+        if entry is None:
             return None
+        kind, deadline = entry
         stripped = (text or "").strip()
         if deadline <= now or stripped.startswith("/"):
             self.waiting.pop(admin_id, None)
             return None
+        if kind != "cost":
+            return self._save_goal(admin_id, kind, stripped, now)
         amount = parse_cost(stripped)
         if amount is None:
             return BotReply("⚠️ Chưa đọc được số. Gõ ví dụ <code>1500000</code>, <code>1,5tr</code> hoặc <code>800k</code>.",
@@ -307,6 +404,57 @@ class InsightsAdmin:
         if self.audit is not None and before != str(amount):
             self.audit(admin_id, "ops_cost", None if before in (None, "") else {"vnd": int(before)}, {"vnd": amount}, now)
         return self._overview("m", "30d", now, notice=f"✅ Đã lưu chi phí vận hành: {format_vnd(amount)}/tháng.")
+
+    def _goals(self, now: datetime, notice: str = "") -> BotReply:
+        with insights.open_readonly(self.db_path) as conn:
+            text = goals_text(insights.goals(conn, now, self.sync_interval))
+        if notice:
+            text = f"{notice}\n\n{text}"
+        buttons = [(f"✍️ {label}", f"c:in:t:{key}") for key, label in GOAL_BUTTONS.items()]
+        rows = tuple(tuple(buttons[i:i + 2]) for i in range(0, len(buttons), 2))
+        return BotReply(text[:4000], inline_keyboard=(*rows, (("🔄 Làm mới", "c:in:t"),), *NAV))
+
+    def _ask_goal(self, admin_id: int, key: str, now: datetime) -> BotReply:
+        self.waiting[admin_id] = (key, now + COST_WAIT)
+        with insights.open_readonly(self.db_path) as conn:
+            g = insights.goals(conn, now, self.sync_interval)
+        r = g.row(key)
+        hint = GOAL_HINTS.get(key, "")
+        if key == "net" and g.breakeven_net:
+            hint = f"Mức hoà vốn ở % đang hoàn (🧮 Hoà vốn): {format_vnd(g.breakeven_net)} / tháng."
+        if key == "cancel":
+            hint = "Ví dụ 10: tỉ lệ huỷ 30 ngày quá 10% thì báo đỏ."
+        current = "chưa đặt" if r.target is None else goal_value(r.unit, r.target)
+        return BotReply(
+            f"✍️ <b>Mục tiêu: {r.label}</b>\n\n"
+            f"Số thật hiện tại: {goal_value(r.unit, r.actual)} · đang đặt: {current}.\n"
+            + (f"{hint}\n" if hint else "")
+            + f"\nGõ số, ví dụ {GOAL_EXAMPLES[r.unit]}. Gõ <code>bỏ</code> để xoá mục tiêu này.",
+            inline_keyboard=((("✖️ Hủy", "c:in:t"),),),
+        )
+
+    def _save_goal(self, admin_id: int, key: str, text: str, now: datetime) -> BotReply:
+        label, unit, _kind = insights.GOALS[key]
+        clear = text.lower() in CLEAR_WORDS
+        value = None if clear else parse_goal(unit, text)
+        if not clear and value is None:
+            return BotReply(f"⚠️ Chưa đọc được số. Gõ ví dụ {GOAL_EXAMPLES[unit]}, hoặc <code>bỏ</code> để xoá.",
+                            inline_keyboard=((("✖️ Hủy", "c:in:t"),),))
+        self.waiting.pop(admin_id, None)
+        repo = TrackingRepository(self.db_path)
+        try:
+            stored = json.loads(repo.get_state(insights.GOALS_KEY) or "{}")
+        except ValueError:
+            stored = {}
+        stored = stored if isinstance(stored, dict) else {}
+        before = stored.pop(key, None)
+        if value is not None:
+            stored[key] = value
+        repo.set_state(insights.GOALS_KEY, json.dumps(stored, sort_keys=True))
+        if self.audit is not None and before != value:
+            self.audit(admin_id, "goal", {"key": key, "value": before}, {"key": key, "value": value}, now)
+        notice = f"✅ Đã bỏ mục tiêu: {label}." if value is None else f"✅ Đã đặt mục tiêu: {label} {goal_value(unit, value)}."
+        return self._goals(now, notice=notice)
 
     def _overview(self, kind: str, period: str, now: datetime, notice: str = "") -> BotReply:
         with insights.open_readonly(self.db_path) as conn:

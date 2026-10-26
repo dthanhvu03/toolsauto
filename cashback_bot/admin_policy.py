@@ -96,7 +96,7 @@ from cashback_bot.admin_settlement import SettlementAdmin
 from cashback_bot.admin_support import SupportAdmin
 from cashback_bot.admin_terms import TermsAdmin
 from cashback_bot.admin_validation import ValidationAdmin
-from cashback_bot.admin_insights import InsightsAdmin
+from cashback_bot.admin_insights import InsightsAdmin, goal_history
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.wallet import Wallet
 from cashback_bot.db import TrackingRepository
@@ -246,8 +246,8 @@ class AdminPanel:
     _support_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang gõ lý do / chứng từ cho một bước của yêu cầu rút (PLAN-078).
     _wallet_waiting: dict[int, tuple] = field(default_factory=dict, compare=False, repr=False)
-    # Admin đang gõ chi phí vận hành / tháng cho 💹 Dòng tiền (PLAN-089): user_id → hạn chờ.
-    _insights_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
+    # Admin đang gõ chi phí vận hành / tháng (PLAN-089) hoặc mục tiêu tháng (PLAN-090): user_id → (loại, hạn chờ).
+    _insights_waiting: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.admin_user_ids
@@ -1538,6 +1538,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
         "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro", "ops_cost",
+        "goal",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1571,6 +1572,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
     if action == "ops_cost":
         old = format_vnd(int(before["vnd"])) if "vnd" in before else "chưa nhập"
         return f"Chi phí vận hành / hạ tầng: {old} → {format_vnd(int(after['vnd']))} mỗi tháng"
+    if action == "goal":
+        return goal_history(before, after)
     if action in {"terms_draft", "terms_publish"}:
         verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
         return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"
