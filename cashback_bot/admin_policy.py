@@ -1434,7 +1434,7 @@ class AdminPanel:
     def _connect(self) -> sqlite3.Connection:
         path = Path(self.db_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path)
+        conn = sqlite3.connect(path, timeout=15)  # như TrackingRepository.connect: chờ khoá ghi, không lỗi ngay
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))

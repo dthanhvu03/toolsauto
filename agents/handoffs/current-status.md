@@ -1,3 +1,15 @@
+## Phiên 2026-10-26 (cn) — Rà soát đợt 5, phần nhỏ: an toàn vận hành + sổ ví
+
+- `poller._periodic`: 8 việc định kỳ (ví, đối soát, Zalo, version, digest, bản tin, TikTok, backup) chạy riêng. Một việc lỗi chỉ ghi log và báo admin (mỗi việc 10 phút một lần), không chặn việc sau.
+- Trigger `ledger_cashback_cap_insert/update` (phần khách ≤ hoa hồng, trừ dòng đã huỷ) và `ledger_available_frozen` (khoản đã vào ví không đổi số). Production 0 dòng vi phạm (đọc `mode=ro`).
+- Backup `REQUIRED_TABLES` thêm `shopee_conversions`, `cashback_entries`, `cashback_payouts`, `payout_events`.
+- `migrate()` khoá file `<db>.migrate.lock`. Kết nối admin timeout 15 giây.
+- WAL chưa bật (cần thử với đọc `mode=ro`).
+- Proof: 831 test cashback qua. Bot tạo trigger khi khởi động; backup tay trước restart.
+- **Next:** đợt 3 (câu chữ khách), rồi đợt 4 (màn admin).
+
+---
+
 ## Phiên 2026-10-26 (cm) — Rà soát đợt 2: TikTok đúng nền tảng
 
 - Chủ bot: "triển khai theo từng mục".

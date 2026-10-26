@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import logging
 import sqlite3
@@ -902,6 +903,20 @@ SEEN_SOURCE = "report_list_30d"
 # Nguồn đánh giá theo nền tảng (validation_source, shopee_conversion_changes.source).
 PLATFORM_SOURCES = {"tiktok": "riohub_orders"}
 # Chưa có nguồn đối soát tiền thật cho nền tảng khác Shopee: khoản của đơn đó không được vào ví (tầng DB, sau khi có cột).
+# Sổ ví (rà soát 2026-10-26): phần khách không vượt hoa hồng (trừ dòng đã huỷ: giữ số đã chốt để thấy khoản bị trừ);
+# khoản đã vào ví thì số tiền không đổi được nữa
+# (huỷ / thu hồi đi bằng trạng thái và dòng «:clawback:» riêng).
+LEDGER_GUARD_SQL = """
+CREATE TRIGGER IF NOT EXISTS ledger_cashback_cap_insert BEFORE INSERT ON cashback_entries
+WHEN NEW.cashback_vnd > 0 AND NEW.status != 'cancelled' AND NEW.cashback_vnd > NEW.commission_vnd
+BEGIN SELECT RAISE(ABORT, 'ledger_guard: cashback above commission'); END;
+CREATE TRIGGER IF NOT EXISTS ledger_cashback_cap_update BEFORE UPDATE OF cashback_vnd, commission_vnd ON cashback_entries
+WHEN NEW.cashback_vnd > 0 AND NEW.status != 'cancelled' AND NEW.cashback_vnd > NEW.commission_vnd
+BEGIN SELECT RAISE(ABORT, 'ledger_guard: cashback above commission'); END;
+CREATE TRIGGER IF NOT EXISTS ledger_available_frozen BEFORE UPDATE OF cashback_vnd ON cashback_entries
+WHEN OLD.status = 'available' AND NEW.cashback_vnd != OLD.cashback_vnd
+BEGIN SELECT RAISE(ABORT, 'ledger_guard: available amount is frozen'); END;
+"""
 PLATFORM_LOCK_SQL = """
 CREATE TRIGGER IF NOT EXISTS financial_lock_platform_entry_insert BEFORE INSERT ON cashback_entries
 WHEN NEW.status = 'available' AND EXISTS (
@@ -1013,6 +1028,17 @@ class TrackingRepository:
         return conn
 
     def migrate(self) -> None:
+        # Hai bot khởi động cùng lúc cùng chạy migrate: khoá file để ALTER TABLE không chạy chồng (rà soát 2026-10-26).
+        lock_path = Path(f"{self.path}.migrate.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lock_path, "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                self._migrate()
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
+    def _migrate(self) -> None:
         with self.connect() as conn:
             conn.executescript(SCHEMA)
             conn.executescript(CANCEL_SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -1075,6 +1101,7 @@ class TrackingRepository:
             conn.execute("UPDATE shopee_conversions SET platform = 'tiktok' WHERE conversion_id LIKE 'tt:%' AND platform != 'tiktok'")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_conversions_platform_user ON shopee_conversions(platform, telegram_user_id)")
             conn.executescript(PLATFORM_LOCK_SQL)
+            conn.executescript(LEDGER_GUARD_SQL)
             # Mỗi khách tối đa một yêu cầu còn giữ tiền: chặn rút trùng ở tầng DB.
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_payout_one_open ON cashback_payouts(telegram_user_id) "

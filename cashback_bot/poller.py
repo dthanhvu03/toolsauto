@@ -354,6 +354,22 @@ def process_updates(
     admin_notifier.flush_pending(limit=10)
 
 
+def _periodic(name: str, call, admin_notifier=None) -> None:
+    """Việc định kỳ trong vòng poll: lỗi chỉ ghi log và báo admin (mỗi việc tối đa 10 phút một lần), không chặn
+    các việc sau (backup, đồng bộ TikTok…) như khi cả vòng chung một khối try."""
+    try:
+        call()
+    except Exception:
+        now = time.time()
+        if now - _periodic_failed.get(name, 0.0) < PERIODIC_REPORT_SEC:
+            return
+        _periodic_failed[name] = now
+        logger.exception("[Cashback] việc định kỳ %s lỗi", name)
+        if admin_notifier is not None:
+            _side_call("notify periodic failure", lambda: admin_notifier.notify_request_failed(
+                error_type=f"periodic_{name}", update_id=None, telegram_user_id=None, status="PERIODIC_ERROR"))
+
+
 def _side_call(name: str, call) -> None:
     """Gọi Telegram phụ (typing, xoá tin, trả lời nút, gửi file). Lỗi chỉ ghi log, không chặn tin chính."""
     try:
@@ -554,6 +570,8 @@ def _net_recovered(repo: TrackingRepository, admin_notifier: AdminNotifier, now:
 
 
 BACKUP_INTERVAL_SEC = 86_400
+PERIODIC_REPORT_SEC = 600
+_periodic_failed: dict[str, float] = {}
 BACKUP_RETRY_SEC = 3_600
 
 
@@ -597,14 +615,18 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
             _net_recovered(repo, admin_notifier)
             process_updates(service, telegram, repo, updates, admin_notifier)
             drain_sync_results(coordinator, service, admin_notifier)
-            _check_wallet_refresh(service, repo)
-            _check_reconciliation(repo, admin_notifier)
-            _check_zalo_health(repo, admin_notifier)
-            ops_watch.check_versions(repo, admin_notifier)
-            ops_watch.check_delivery_digest(repo, admin_notifier)
-            ops_watch.check_nightly_brief(repo, admin_notifier, service.admin_panel.auto_sync.interval_minutes)
-            tiktok_sync.maybe_start(repo, service.riohub, admin_notifier)
-            _check_backup(service, repo, admin_notifier)
+            interval = service.admin_panel.auto_sync.interval_minutes
+            for name, call in (
+                ("wallet_refresh", lambda: _check_wallet_refresh(service, repo)),
+                ("reconciliation", lambda: _check_reconciliation(repo, admin_notifier)),
+                ("zalo_health", lambda: _check_zalo_health(repo, admin_notifier)),
+                ("versions", lambda: ops_watch.check_versions(repo, admin_notifier)),
+                ("delivery_digest", lambda: ops_watch.check_delivery_digest(repo, admin_notifier)),
+                ("nightly_brief", lambda: ops_watch.check_nightly_brief(repo, admin_notifier, interval)),
+                ("tiktok_sync", lambda: tiktok_sync.maybe_start(repo, service.riohub, admin_notifier)),
+                ("backup", lambda: _check_backup(service, repo, admin_notifier)),
+            ):
+                _periodic(name, call, admin_notifier)
         except KeyboardInterrupt:
             logger.info("stop")
             return

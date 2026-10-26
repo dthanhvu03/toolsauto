@@ -94,8 +94,8 @@ def test_b8_khoa_theo_du_lieu_khong_theo_bang_ton_tai(tmp_path):
             )
         with pytest.raises(sqlite3.IntegrityError, match="entry not in a matched settlement"):
             conn.execute(
-                "INSERT INTO cashback_entries (conversion_id, telegram_user_id, cashback_vnd, status, created_at, updated_at) "
-                "VALUES ('raw', ?, 5000, 'available', 'x', 'x')", (USER,)
+                "INSERT INTO cashback_entries (conversion_id, telegram_user_id, commission_vnd, cashback_vnd, status, "
+                "created_at, updated_at) VALUES ('raw', ?, 10000, 5000, 'available', 'x', 'x')", (USER,)
             )
 
 

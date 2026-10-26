@@ -86,13 +86,13 @@ Mức: **P1** sai hoặc hỏng · **P2** gây hiểu nhầm hoặc nợ kỹ th
 
 | Mức | Việc | Cỡ |
 |---|---|---|
-| P2 | Mỗi việc định kỳ trong vòng poll chạy riêng (`_side_call`): một việc lỗi không chặn backup hoặc đồng bộ | S |
-| P2 | SQLite bật WAL + `busy_timeout` thống nhất (hiện chế độ cũ, đọc lâu chặn ghi; 2 tiến trình + 2 luồng cùng ghi) | S |
-| P2 | Trigger DB: phần khách ≤ hoa hồng; khoá số tiền khi dòng sổ đã `available` | S |
-| P2 | Backup: kiểm cả bảng tài chính; backup thêm sau mỗi bước chi trả; diễn tập khôi phục | S/M |
+| P2 | ✅ (2026-10-26) Mỗi việc định kỳ trong vòng poll chạy riêng (`poller._periodic`): một việc lỗi không chặn backup hoặc đồng bộ | S |
+| P2 | SQLite bật WAL + `busy_timeout` thống nhất. ✅ Phần timeout (kết nối admin 15 giây). **WAL chưa bật**: web và insights mở DB `mode=ro`; DB WAL đọc chỉ-đọc cần file `-wal`/`-shm` có sẵn, nên phải thử trên bản sao trước khi bật | S |
+| P2 | ✅ (2026-10-26) Trigger DB: phần khách ≤ hoa hồng (trừ dòng đã huỷ); khoá số tiền khi dòng sổ đã `available` | S |
+| P2 | Backup: ✅ kiểm cả bảng tài chính. Chưa làm: backup thêm sau mỗi bước chi trả (ví còn khoá), diễn tập khôi phục | S/M |
 | P2 | Gom tính tiền / trạng thái huỷ về một chỗ (đang có 3 định nghĩa "huỷ", 3 chỗ tính biên) | M |
 | P2 | Tách dần `admin_policy.py` (1.617 dòng), `db.py` (1.932 dòng); `_connect` của admin chạy lại schema mỗi lần gọi | L |
 | P3 | Tạo link TikTok gọi đồng bộ trong vòng poll (tối đa 60–90 giây nếu RioHub treo); phải đưa ra luồng riêng trước khi mở cho khách | S |
-| P3 | Hai tiến trình cùng chạy `migrate()` lúc khởi động; chưa có bảng phiên bản schema | S |
+| P3 | ✅ (2026-10-26) `migrate()` có khoá file. Chưa có bảng phiên bản schema | S |
 
 **Thứ tự đề xuất:** đợt 1 (đã sửa) → đợt 2 trước khi mở TikTok cho khách → đợt 5 phần S → đợt 3, 4 → phần còn lại của đợt 5.

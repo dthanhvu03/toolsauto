@@ -25,7 +25,11 @@ logger = logging.getLogger("cashback_bot")
 BACKUP_NAME = re.compile(r"^cashback-(?:(manual)-)?(\d{8}T\d{6}Z)\.sqlite$")
 MANUAL = "manual"
 # Bản sao thiếu một trong các bảng này thì không dùng để khôi phục được.
-REQUIRED_TABLES = ("telegram_users", "link_requests", "bot_state", "outbound_messages")
+# Bản backup phải có cả sổ tiền: đơn, sổ ví, yêu cầu rút và lịch sử chi trả (rà soát 2026-10-26).
+REQUIRED_TABLES = (
+    "telegram_users", "link_requests", "bot_state", "outbound_messages",
+    "shopee_conversions", "cashback_entries", "cashback_payouts", "payout_events",
+)
 MIN_KEEP = 3
 
 
