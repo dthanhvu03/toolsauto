@@ -46,4 +46,75 @@ Thử không ghi gì: `logrotate -d /etc/logrotate.d/cashback`.
 - Bot tự backup mỗi ngày: `data/backups/cashback-YYYYMMDDTHHMMSSZ.sqlite`.
 - Backup chạy tay (`.venv/bin/python -m cashback_bot.backup`) có tên `cashback-manual-…` và được dọn riêng, nên không đẩy mất bản tự động.
 - Mỗi nhóm giữ `CASHBACK_BACKUP_KEEP` bản (hiện 60).
-- Chép ra ngoài máy: chưa có. Chủ bot chọn nơi lưu (ổ khác, cloud) rồi mới làm.
+- Chép ra ngoài máy (D3, PLAN-094): Google Drive qua rclone, **mã hoá trước khi gửi**. Hướng dẫn cài ở mục dưới.
+
+## Backup ngoài máy (Google Drive, mã hoá)
+
+`cashback-offsite.timer` chạy mỗi ngày lúc 03:30 (giờ máy). Mỗi lần chạy:
+- chép bản backup mới nhất lên Drive;
+- tải lại về để so khớp, xác nhận bản trên Drive mở được;
+- giữ 30 bản mới nhất (`CASHBACK_OFFSITE_KEEP`).
+
+Kết quả hiện ở `/admin` → 🛠 Vận hành, dòng "Backup ngoài máy". File trên Drive đã mã hoá: lộ tài khoản Google cũng không đọc được.
+
+Bot không đụng tài khoản Google hay mật khẩu mã hoá. Mọi bước dưới đây do chủ bot tự làm.
+
+**1. Cài rclone** (quyền root)
+```bash
+curl https://rclone.org/install.sh | bash
+rclone version
+```
+
+**2. Nối Google Drive**: `rclone config`, rồi trả lời theo thứ tự:
+- `n` (remote mới) → tên `gdrive` → loại `drive`.
+- `client_id`, `client_secret`: Enter (bỏ trống).
+- `scope`: chọn `drive.file` (rclone chỉ thấy file do nó tạo, không đọc được file khác trong Drive).
+- `root_folder_id`, `service_account_file`: Enter.
+- Advanced config: `n`.
+- Auto config: `y`. rclone in ra một link. Nếu WSL không tự mở trình duyệt, chép link vào trình duyệt Windows, đăng nhập Google và cho phép.
+- Shared drive: `n` → `y` (lưu).
+
+**3. Thêm lớp mã hoá**: vẫn trong `rclone config`:
+- `n` → tên `cashback-crypt` → loại `crypt`.
+- `remote`: `gdrive:cashback-backup`.
+- `filename_encryption`: `standard`; `directory_name_encryption`: `true`.
+- Mật khẩu: chọn `y` rồi **tự gõ một mật khẩu dài**. Mật khẩu thứ hai (salt): chọn `g` để tạo ngẫu nhiên, rồi **chép lại**.
+- Advanced config: `n` → `y` → `q` (thoát).
+
+> ⚠️ **Ghi hai mật khẩu ở bước 3 ra chỗ khác** (sổ tay, trình quản lý mật khẩu), không để trên máy này. Máy hỏng mà mất mật khẩu thì bản trên Drive không mở được.
+> File `/root/.config/rclone/rclone.conf` giữ quyền vào Drive. Không gửi file này cho ai, không commit: `chmod 600 /root/.config/rclone/rclone.conf`.
+
+**4. Thử remote**
+```bash
+rclone mkdir cashback-crypt:
+rclone lsf cashback-crypt:
+```
+Lệnh thứ hai không báo lỗi là được (thư mục còn trống).
+
+**5. Khai remote cho bot**: chủ bot tự thêm một dòng vào `/home/vu/toolsauto/.env`:
+```
+CASHBACK_OFFSITE_REMOTE=cashback-crypt:
+```
+
+**6. Chạy thử một lần**
+```bash
+cd /home/vu/toolsauto && .venv/bin/python -m cashback_bot.offsite; echo "exit=$?"
+rclone lsf cashback-crypt:
+```
+Kết quả đúng: `exit=0`, log có `backup ngoài máy ok file=…`, và `lsf` hiện tên file `cashback-…sqlite`.
+
+**7. Cài lịch chạy mỗi ngày**
+```bash
+cp deploy/cashback/cashback-offsite.service deploy/cashback/cashback-offsite.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now cashback-offsite.timer
+systemctl list-timers cashback-offsite.timer --no-pager
+```
+
+**Khôi phục từ Drive** (khi máy hỏng, sau khi cài lại rclone với đúng hai mật khẩu ở bước 3):
+```bash
+rclone lsf cashback-crypt:
+rclone copyto cashback-crypt:cashback-YYYYMMDDTHHMMSSZ.sqlite /tmp/restore.sqlite
+.venv/bin/python -c "from cashback_bot.backup import restore_database; restore_database('/tmp/restore.sqlite', 'data/cashback-restored.sqlite')"
+```
+Kiểm tra `data/cashback-restored.sqlite`, dừng hai bot, rồi mới đổi tên file thành `data/cashback.sqlite`.

@@ -815,6 +815,14 @@ def operations(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: i
     backup = beat("backup_last_ok")
     checks.append(Check("backup", "Backup tự động gần nhất", _age_text(backup),
                         backup is not None and backup <= BACKUP_STALE.total_seconds()))
+    offsite = beat("offsite_last_ok")
+    offsite_error = _state(conn, "offsite_last_error") or ""
+    if offsite is None and not offsite_error:
+        offsite_text = "chưa cài (deploy/cashback/README.md)"
+    else:
+        offsite_text = f"{_age_text(offsite)} trước" + (f" · lỗi: {offsite_error[:80]}" if offsite_error else "")
+    checks.append(Check("offsite", "Backup ngoài máy (Google Drive mã hoá)", offsite_text,
+                        offsite is not None and offsite <= BACKUP_STALE.total_seconds() and not offsite_error))
     problems = payouts.invariants(conn)
     checks.append(Check("ledger", "Cảnh báo sổ ví", "không có" if not problems else ", ".join(problems[:3]), not problems))
     checks.append(Check("wallet", "Ví khách", "đang bật" if _state(conn, "wallet_enabled") == "1" else "đang tắt / khoá",

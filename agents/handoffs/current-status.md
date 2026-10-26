@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (ch) — PLAN-094: backup ngoài máy (Google Drive, rclone crypt)
+
+- Code xong: `offsite.py` + systemd timer 03:30 + dòng "Backup ngoài máy" ở 🛠 Vận hành. Hướng dẫn trong `deploy/cashback/README.md`, mục "Backup ngoài máy".
+- 🛠 Vận hành sẽ báo đỏ dòng này cho tới khi chủ bot cài xong. Đây là lời nhắc, không phải lỗi.
+- Proof: 808 test cashback qua.
+- **Next (chủ bot):**
+  - Cài rclone, `rclone config` (gdrive + cashback-crypt), ghi hai mật khẩu ra chỗ khác.
+  - Thêm `CASHBACK_OFFSITE_REMOTE=cashback-crypt:` vào `.env`.
+  - Chạy thử, rồi cài timer.
+  - Restart `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard` (Vận hành có dòng mới).
+
+---
+
 ## Phiên 2026-10-26 (cg) — Test ví Zalo + PLAN-093 thời hạn lưu dữ liệu + mẫu điều khoản V3
 
 - Chủ bot duyệt: "oke em triển khai nhé em, có thể admin cấu hình những con số cho sau này".

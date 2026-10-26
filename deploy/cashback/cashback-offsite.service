@@ -1,0 +1,15 @@
+# D3 (PLAN-094): chép bản backup cashback mới nhất ra remote rclone đã mã hoá. Cài: xem deploy/cashback/README.md
+[Unit]
+Description=Cashback backup ngoài máy (rclone crypt)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/vu/toolsauto
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/vu/toolsauto/.venv/bin/python -m cashback_bot.offsite
+StandardOutput=append:/home/vu/toolsauto/logs/cashback_bot.log
+StandardError=append:/home/vu/toolsauto/logs/cashback_bot.log

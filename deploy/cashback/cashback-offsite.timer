@@ -1,0 +1,11 @@
+# D3 (PLAN-094): mỗi ngày 03:30 giờ máy, sau khi bot đã có bản backup tự động trong ngày.
+[Unit]
+Description=Cashback backup ngoài máy mỗi ngày
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target
