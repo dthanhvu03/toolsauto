@@ -50,7 +50,8 @@ _CATEGORY = re.compile(r"^u:h:c:([a-z_]{2,16})$")
 _SECTION = re.compile(r"^u:t:s:([a-z_]{2,24})$")
 _ACCEPT = re.compile(r"^u:t:ok:(\d{1,9})$")
 _ORDER_PAGE = re.compile(r"^u:o:l:(\d{1,4})$")
-_ORDER = re.compile(r"^u:o:d:([0-9A-Za-z_-]{1,48})$")
+# Mã đơn TikTok có dấu «:» (tt:<order>:<sku>, PLAN-095); callback_data Telegram tối đa 64 byte.
+_ORDER = re.compile(r"^u:o:d:([0-9A-Za-z:_-]{1,58})$")
 _NOTIFY = re.compile(r"^u:n:t:(orders|updates|support|wallet)$")
 
 

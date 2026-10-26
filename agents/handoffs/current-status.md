@@ -1,3 +1,22 @@
+## Phiên 2026-10-26 (cl) — Rà soát câu chữ, UI/UX, kiến trúc + sửa đợt 1
+
+- Chủ bot yêu cầu rà soát toàn bộ (Shopee + TikTok, Telegram + Zalo). Ba lượt rà chỉ đọc, chạy trên DB tạm. Claude Code kiểm lại mọi phát hiện P1.
+- Báo cáo: `reports/CASHBACK_REVIEW_2026-10-26.md`, gồm đợt 1–5.
+- Đợt 1, đã sửa (bug thật):
+  - nút "📦 Xem đơn" của đơn TikTok bị chết;
+  - đơn TikTok huỷ làm số hoàn tăng;
+  - tin đơn huỷ in dòng tiền, tiêu đề sai;
+  - admin bấm màn khác mà vẫn bị chờ gõ (tin kế tiếp bị nuốt);
+  - kéo đơn TikTok dừng ở trang đầu khi thiếu `total`; chồng lấn 10 phút đổi thành 24 giờ;
+  - 🛠 Vận hành chưa kiểm đồng bộ TikTok;
+  - cookie hết hạn thì menu Shopee ẩn công cụ duyệt / đối soát.
+- Proof: test cashback qua hết, ruff sạch.
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo`.
+  - Chủ bot chọn đợt 2–5.
+
+---
+
 ## Phiên 2026-10-26 (ck) — PLAN-095: đồng bộ đơn TikTok Shop (giai đoạn B)
 
 - Chủ bot duyệt: kéo mỗi 2 giờ, báo đơn cho khách như Shopee.

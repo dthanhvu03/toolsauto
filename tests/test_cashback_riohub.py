@@ -221,6 +221,13 @@ def test_keo_don_lap_het_trang(monkeypatch):
     assert http.calls[0]["params"]["update_time_start"] == 1000 and http.calls[0]["params"]["update_time_end"] == 2000
 
 
+def test_keo_don_khong_co_total_van_doc_het_trang(monkeypatch):
+    """Rà soát 2026-10-26: spec không chắc có «total»; thiếu thì đọc tới trang thiếu, không dừng ở trang đầu."""
+    page = [dict(ORDER, sku_id=str(number)) for number in range(200)]
+    client, http, _ = _client(monkeypatch, FakeResponse(200, {"orders": page}), FakeResponse(200, {"orders": [ORDER]}))
+    assert len(list(client.iter_orders(1000, 2000))) == 201 and len(http.calls) == 2
+
+
 def test_doc_don_dung_decimal_va_trang_thai():
     order = parse_order(ORDER)
     assert (order.order_id, order.sku_id, order.status, order.trace_type) == (

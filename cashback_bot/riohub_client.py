@@ -203,9 +203,10 @@ def parse_order(row: dict) -> TikTokOrder | None:
     )
 
 
-def sync_window(last_end: int | None, now: int, first_lookback_sec: int = 7 * 86_400) -> tuple[int, int]:
-    """Mốc kéo đơn: từ lần trước trừ 10 phút (chồng lấn để không sót) tới bây giờ. Lưu `now` sau khi chạy xong."""
-    start = now - first_lookback_sec if last_end is None else last_end - SYNC_OVERLAP_SEC
+def sync_window(last_end: int | None, now: int, first_lookback_sec: int = 7 * 86_400,
+                overlap_sec: int = SYNC_OVERLAP_SEC) -> tuple[int, int]:
+    """Mốc kéo đơn: từ lần trước trừ phần chồng lấn (để không sót) tới bây giờ. Lưu `now` sau khi chạy xong."""
+    start = now - first_lookback_sec if last_end is None else last_end - overlap_sec
     return max(0, start), now
 
 
@@ -274,8 +275,9 @@ class RioHubClient:
             })
             rows = [row for row in payload.get("orders") or [] if isinstance(row, dict)]
             yield from rows
-            total = _int(payload.get("total")) or 0
-            if not rows or page * ORDERS_PAGE_SIZE >= total:
+            total = _int(payload.get("total"))
+            # Không có «total» (spec không chắc có) thì đọc tới khi gặp trang thiếu, không dừng ở trang đầu.
+            if not rows or (page * ORDERS_PAGE_SIZE >= total if total is not None else len(rows) < ORDERS_PAGE_SIZE):
                 return
             page += 1
 

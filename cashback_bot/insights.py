@@ -811,6 +811,15 @@ def operations(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: i
     ).fetchone()[0]
     checks.append(Check("settle", "Đơn hoàn thành > 45 ngày chưa đối soát", str(stale), int(stale) == 0))
     zalo = conn.execute("SELECT COUNT(*) FROM channel_identities WHERE channel = 'zalo'").fetchone()[0]
+    # Đồng bộ đơn TikTok (PLAN-095): chỉ kiểm khi đã từng chạy (có khoá RioHub). Quá 6 giờ không thành công là đỏ.
+    if any(_state(conn, f"tiktok_sync_last_{key}") for key in ("attempt", "ok", "error")):
+        ok_age = beat("tiktok_sync_last_ok")
+        error = _state(conn, "tiktok_sync_last_error") or ""
+        checks.append(Check(
+            "tiktok", "Đồng bộ đơn TikTok",
+            f"thành công gần nhất {_age_text(ok_age)}" + (f" · lỗi: {error[:60]}" if error else ""),
+            ok_age is not None and ok_age <= 6 * 3600 and not error,
+        ))
     checks.append(Check("zalo", "Sức chứa Zalo BASIC", f"{zalo}/{ZALO_LIMIT}", int(zalo) < ZALO_WARN))
     backup = beat("backup_last_ok")
     checks.append(Check("backup", "Backup tự động gần nhất", _age_text(backup),
@@ -1061,6 +1070,7 @@ def goals(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: int = 
         Check("losing", "Khách có biên âm", str(losing), losing == 0),
         Check("owing", "Khách có số dư âm", str(owing), owing == 0),
         checks["notices"], checks["links"], checks["tickets"], checks["ledger"],
+        *([checks["tiktok"]] if "tiktok" in checks else []),
     )
     current = breakeven(conn, now).current
     return Goals(

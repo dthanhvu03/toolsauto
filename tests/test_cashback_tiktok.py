@@ -6,7 +6,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import timedelta
 
-from cashback_bot import admin_tiktok, reconciliation, tiktok_sync
+from cashback_bot import admin_tiktok, insights, reconciliation, tiktok_sync
 from cashback_bot.messages import TIKTOK_BUY_BUTTON
 from cashback_bot.riohub_client import ProductLink, RioHubError
 from cashback_bot.tiktok_url import parse_tiktok_target
@@ -235,7 +235,10 @@ def test_loi_riohub_giu_moc_va_thu_lai_som(tmp_path):
     failing = FakeOrders(error=RioHubError("creator", 424, "creator_token_invalid"))
     assert tiktok_sync.run(bot.repo, failing, NOW + timedelta(hours=2)) is None
     assert bot.repo.get_state(tiktok_sync.LAST_END_KEY) == end and bot.repo.get_state(tiktok_sync.ERROR_KEY) == "creator:creator_token_invalid"
-    assert failing.windows[0][0] == int(end) - 600, "lần sau kéo chồng lấn 10 phút từ mốc cũ"
+    assert failing.windows[0][0] == int(end) - tiktok_sync.OVERLAP_SEC, "lần sau đọc lại 24 giờ trước mốc cũ"
+    with bot.repo.connect() as conn:
+        check = {c.code: c for c in insights.operations(conn, NOW + timedelta(hours=2))}["tiktok"]
+    assert not check.ok and "creator_token_invalid" in check.value, "🛠 Vận hành báo đồng bộ TikTok hỏng"
     attempt = (NOW + timedelta(hours=2)).timestamp()
     bot.repo.set_state(tiktok_sync.ATTEMPT_KEY, str(attempt))
     assert not tiktok_sync.due(bot.repo, attempt + 600) and tiktok_sync.due(bot.repo, attempt + 15 * 60)
@@ -261,3 +264,43 @@ def test_doi_soat_shopee_bo_qua_don_tiktok(tmp_path):
     reconciliation.evaluate(bot.repo, NOW + timedelta(days=50), run_id=99, run_success=True)
     with bot.repo.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM conversion_reconciliation WHERE conversion_id LIKE 'tt:%'").fetchone()[0] == 0
+
+
+# --- Rà soát 2026-10-26, đợt 1 ------------------------------------------------------------------------
+
+
+def _press(bot, user_id: int, data: str):
+    update = {"update_id": 900, "callback_query": {"id": f"q-{data}", "from": {"id": user_id}, "data": data,
+                                                    "message": {"message_id": 5, "chat": {"type": "private"}}}}
+    return bot.handle_update(update)[1]
+
+
+def test_nut_xem_don_tiktok_mo_duoc(tmp_path):
+    bot = _bot(tmp_path)
+    tiktok_sync.run(bot.repo, FakeOrders([_order(_tiktok_link(bot))]), NOW)
+    detail = _press(bot, ADMIN, f"u:o:d:{_conversion(bot)['conversion_id']}")
+    assert "không còn hiệu lực" not in (detail.text + (detail.toast or "")) and "TikTok" in detail.text
+    assert len(f"u:o:d:{_conversion(bot)['conversion_id']}".encode()) <= 64, "giới hạn callback_data của Telegram"
+
+
+def test_don_tiktok_huy_sau_khi_chot_khong_tang_hoan(tmp_path):
+    bot = _bot(tmp_path)
+    sub = _tiktok_link(bot)
+    tiktok_sync.run(bot.repo, FakeOrders([_order(sub, status=2, actual="9000.00")]), NOW)
+    tiktok_sync.run(bot.repo, FakeOrders([_order(sub, status=3)]), NOW + timedelta(hours=2))
+    assert _conversion(bot)["net_commission_vnd"] == 9_000, "huỷ giữ số đã ghi, không về số ước tính"
+    with bot.repo.connect() as conn:
+        notice = conn.execute("SELECT message_html FROM admin_notifications WHERE event_type = 'ORDER_ORDER_UPDATE' "
+                              "ORDER BY id DESC").fetchone()[0]
+    assert "Đơn đã huỷ" in notice and "Hoàn tạm tính" not in notice and "TikTok" in notice
+
+
+def test_bam_man_khac_thi_thoi_cho_go(tmp_path):
+    bot = _bot(tmp_path)
+    panel = bot.admin_panel
+    for start in ("c:in:f", "c:in:t:net", "c:rt:e:finance_years"):
+        panel.handle_callback(ADMIN, start, "private", NOW)
+        panel.handle_callback(ADMIN, "c:menu:home", "private", NOW)
+        assert panel.consume_text(ADMIN, "12", NOW) is None, start
+    reply = bot.handle_text(ADMIN, "admin", "https://shopee.vn/product/9/8", update_id=50, now=NOW)
+    assert "Đã tạo link" in reply.text, "link Shopee không bị nuốt thành từ khoá tìm"

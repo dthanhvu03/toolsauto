@@ -291,6 +291,7 @@ class TestShopeeAdminUIAndCookieWorkflow:
         reply = panel.handle_callback(ADMIN_ID, "c:menu:shopee", "private", NOW)
         assert "CHƯA KẾT NỐI" in reply.text
         assert "🔑 Kết nối Cookie" in [label for row in reply.inline_keyboard for label, _data in row]
+        assert "c:cv:home" in [data for row in reply.inline_keyboard for _label, data in row], "duyệt HH không cần cookie"
 
         # 2. Cập nhật đã kết nối
         repo.update_shopee_cookie_status(status="connected", account_name="shopee_vip")

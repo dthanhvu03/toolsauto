@@ -757,12 +757,13 @@ def order_update_notice(order: str, *, statuses: list[str], ineligible: bool, ap
                         old_cashback: int | None, new_cashback: int | None) -> str:
     """Một tin cho mọi thay đổi có ý nghĩa của một đơn trong một lần đồng bộ, tiêu đề theo việc quan trọng nhất."""
     cancelled = any(s in ("CANCELLED", "CANCELED") for s in statuses)
-    if ineligible:
-        title = "⚠️ <b>Giao dịch không đủ điều kiện</b>"
-        body = "Shopee đã ghi nhận trạng thái không đủ điều kiện hoa hồng. Hoàn của đơn này hiện không được tính để chi trả."
-    elif cancelled:
+    # Huỷ đơn kéo theo «không đủ điều kiện»: báo việc khách hiểu được (đơn đã huỷ) trước.
+    if cancelled:
         title = "⚠️ <b>Đơn đã huỷ</b>"
         body = "Shopee ghi nhận đơn đã huỷ, nên hoàn của đơn này không được tính."
+    elif ineligible:
+        title = "⚠️ <b>Giao dịch không đủ điều kiện</b>"
+        body = "Shopee đã ghi nhận trạng thái không đủ điều kiện hoa hồng. Hoàn của đơn này hiện không được tính để chi trả."
     elif approved:
         title = "✅ <b>Hoa hồng đã được Shopee duyệt</b>"
         body = "Shopee chưa thanh toán hoa hồng này cho chương trình; bot sẽ báo tiếp."
@@ -774,7 +775,7 @@ def order_update_notice(order: str, *, statuses: list[str], ineligible: bool, ap
         body = COMMISSION_WAITING + "."
     lines = [title, "", f"Mã đơn: {order}"]
     lines += [f"• {order_status_label(s)}" for s in statuses]
-    if new_cashback is not None and old_cashback is not None:
+    if new_cashback is not None and old_cashback is not None and not (ineligible or cancelled):
         lines.append(f"• Hoàn tạm tính: {format_vnd(old_cashback)} → <b>{format_vnd(new_cashback)}</b>")
     lines += ["", body]
     if ineligible or cancelled:

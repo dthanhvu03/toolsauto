@@ -330,6 +330,11 @@ class AdminPanel:
             self._support_waiting.pop(user_id, None)
         if not (data.startswith("c:wl:mv:") or data.startswith("c:wl:vb:")):
             self._wallet_waiting.pop(user_id, None)
+        # Màn khác (kể cả ◀️ Tổng quan, ✖️ Hủy) là thôi chờ gõ: tin kế tiếp không bị hiểu nhầm là từ khoá / số.
+        if data not in ("c:in:cost", "c:in:f") and not data.startswith("c:in:t:"):
+            self._insights_waiting.pop(user_id, None)
+        if not data.startswith("c:rt:e:"):
+            self._retention_waiting.pop(user_id, None)
         reply = self._route_callback(user_id, data, now)
         if reply.inline_keyboard is None:
             # Callback sửa đè tin cũ. Thiếu nút thì admin kẹt ở màn chỉ có chữ.

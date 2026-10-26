@@ -26,6 +26,8 @@ from cashback_bot.riohub_client import RioHubClient, RioHubError, parse_order, s
 logger = logging.getLogger("cashback_bot")
 
 INTERVAL_SEC = 2 * 3600
+# RioHub có thể ghi đơn trễ: mỗi lượt đọc lại 24 giờ trước mốc cũ (ghi lại y hệt không tạo dòng mới).
+OVERLAP_SEC = 24 * 3600
 RETRY_SEC = 15 * 60
 SEEN_SOURCE = "riohub_orders"
 LAST_END_KEY = "tiktok_sync_last_end"
@@ -70,6 +72,8 @@ def record(repo: TrackingRepository, row: dict, now: datetime) -> bool | None:
     commission = order.actual_commission_vnd if status == "COMPLETED" and order.actual_commission_vnd is not None \
         else order.est_commission_vnd
     if status == "CANCELLED":
+        commission = None  # giữ số đã ghi: đơn huỷ không được làm «hoàn tạm tính» tăng lên
+    if status == "CANCELLED":
         assessment = Assessment(REJECTED, "order_cancelled", 0, None, order.settlement_status, True)
     else:
         reason = "tiktok_settled_unverified" if status == "COMPLETED" else "tiktok_pending"
@@ -108,7 +112,7 @@ def run(repo: TrackingRepository, client: RioHubClient, now: datetime | None = N
     moment = now or datetime.now(timezone.utc)
     stamp = int(moment.timestamp())
     raw_end = repo.get_state(LAST_END_KEY)
-    start, end = sync_window(int(raw_end) if raw_end and raw_end.isdigit() else None, stamp)
+    start, end = sync_window(int(raw_end) if raw_end and raw_end.isdigit() else None, stamp, overlap_sec=OVERLAP_SEC)
     rows = matched = skipped = 0
     try:
         for row in client.iter_orders(start, end):

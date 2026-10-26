@@ -46,6 +46,9 @@ def shopee_connected_keyboard() -> Keyboard:
 
 SHOPEE_KEYBOARD_DISCONNECTED: Keyboard = (
     (("🔑 Kết nối Cookie", "c:shopee:auth"),),
+    # Duyệt / đối soát / lịch đồng bộ đọc dữ liệu đã có, không cần cookie: vẫn mở được khi cookie hết hạn.
+    (("🧾 Duyệt hoa hồng", "c:cv:home"), ("🧾 Đối soát thanh toán", "c:sm:home")),
+    (("⏱ Tự động đồng bộ", "c:sy:home"), ("🧾 Đơn cần đối soát", "c:rc:home")),
     BACK_HOME,
 )
 
