@@ -89,17 +89,17 @@ def link_split_lines(link: sqlite3.Row, found: "policy_snapshot.LinkPolicy | Non
         rows.append(("Dự phòng khác", quote.other_reserve_vnd, True))
     if v12 and quote.distributable_vnd is not None:
         rows.append(("Quỹ chia", quote.distributable_vnd, False))
-    rows.append((f"Khách nhận {_pct(policy.share_bps)}{' quỹ' if v12 else ' HH'}", quote.cashback_vnd, False))
-    rows.append(("Admin còn", quote.remainder_vnd, False))
+    rows.append((f"Phần khách {_pct(policy.share_bps)}{' quỹ' if v12 else ' HH'}", quote.cashback_vnd, False))
+    rows.append(("Biên", quote.remainder_vnd, False))
     cells = [("-" if minus and value else "") + f"{value:,}".replace(",", ".") for _label, value, minus in rows]
     label_w = max(len(label) for label, _v, _m in rows)
     num_w = max(len(cell) for cell in cells)
     table = [f"{label.ljust(label_w)} {cell.rjust(num_w)}" for (label, _v, _m), cell in zip(rows, cells)]
-    basis = "V1.2: chia trên quỹ sau dự phòng" if v12 else "V1.1: khách nhận trên HH gốc, admin chịu dự phòng"
+    basis = "V1.2: chia trên quỹ sau dự phòng" if v12 else "V1.1: phần khách tính trên HH gốc, biên chịu dự phòng"
     return [
         "<pre>" + html.escape("\n".join(table)) + "</pre>",
         f"<i>{basis}. Ước tính theo giá tham khảo, chốt theo chính sách của link. "
-        "Admin còn = HH − khách − dự phòng.</i>",
+        "Biên = HH − phần khách − dự phòng.</i>",
     ]
 
 

@@ -131,7 +131,7 @@ def test_man_telegram_dong_tien_tang_truong_khach(tmp_path):
     _order(bot, _link(bot), commission=10_000, cid="a")
     bot.refresh_wallet(NOW)
     money = _callback(bot, ADMIN, "c:in:m:all")
-    assert "Biên sau dự phòng" in money.text and "chưa nhập" in money.text
+    assert "Biên" in money.text and "chưa nhập" in money.text
     assert "Phễu" in _callback(bot, ADMIN, "c:in:g:7d").text
     assert "Hai bot sống" in _callback(bot, ADMIN, "c:in:o").text
     users = _callback(bot, ADMIN, "c:in:u:margin:1")
@@ -170,7 +170,7 @@ def _web(tmp_path, monkeypatch):
 
 def test_web_trang_tong_quan_khach_va_chi_tiet(tmp_path, monkeypatch):
     client, _path = _web(tmp_path, monkeypatch)
-    for url, marker in (("/cashback?period=7d", "Biên sau dự phòng"), ("/cashback/users?segment=top", "HH ròng"),
+    for url, marker in (("/cashback?period=7d", "Biên"), ("/cashback/users?segment=top", "HH ròng"),
                         (f"/cashback/users/{USER}", "Dòng thời gian")):
         page = client.get(url)
         assert page.status_code == 200 and marker in page.text, url

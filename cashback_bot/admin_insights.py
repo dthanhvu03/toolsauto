@@ -258,10 +258,10 @@ def money_text(view: insights.Overview) -> str:
         "",
         f"🛒 GMV <b>{format_vnd(m.gmv)}</b> · {m.orders} đơn · {m.customers} khách",
         f"💰 Hoa hồng gộp {format_vnd(m.gross)} − MCN {format_vnd(m.mcn_fee)} = ròng <b>{format_vnd(m.net)}</b>",
-        f" ├ Khách nhận: {format_vnd(m.cashback)} ({_pct(m.cashback, m.net)})",
+        f" ├ Phần khách: {format_vnd(m.cashback)} ({_pct(m.cashback, m.net)})",
         f" ├ Biên trước dự phòng: {format_vnd(m.margin_before_reserve)} ({_pct(m.margin_before_reserve, m.net)})",
         f" ├ Dự phòng thuế / phí: {format_vnd(m.reserve)}",
-        f" ├ Biên sau dự phòng: <b>{format_vnd(m.margin)}</b> ({_pct(m.margin, m.net)})",
+        f" ├ Biên: <b>{format_vnd(m.margin)}</b> ({_pct(m.margin, m.net)})",
     ]
     if m.ops_cost is None:
         lines.append(" └ Chi phí vận hành / hạ tầng: <b>chưa nhập</b> (bấm ✍️ bên dưới)")
@@ -405,7 +405,7 @@ def detail_text(c: insights.Customer, m: insights.Money, prof: insights.Profile,
         "",
         f"🔗 {c.links} link · {c.clicks} click · {c.orders} đơn ({c.completed} hoàn thành, {c.cancelled} huỷ)",
         f"🛒 GMV {format_vnd(c.gmv)} · HH ròng {format_vnd(c.net)}",
-        f"💸 Khách nhận {format_vnd(c.cashback)} · dự phòng {format_vnd(c.reserve)} · biên <b>{format_vnd(c.margin)}</b>",
+        f"💸 Phần khách {format_vnd(c.cashback)} · dự phòng {format_vnd(c.reserve)} · biên <b>{format_vnd(c.margin)}</b>",
         f"✅ Thực (Shopee đã trả): ròng {format_vnd(m.settled_net)} · biên {format_vnd(m.settled_margin)}",
         f"👛 Ví {format_vnd(c.wallet)} · chờ chuyển {format_vnd(c.requested)} · đã nhận {format_vnd(c.paid)}",
         "",

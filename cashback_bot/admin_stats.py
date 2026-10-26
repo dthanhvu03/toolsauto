@@ -455,7 +455,7 @@ def _shopee_daily(conn: sqlite3.Connection, trend_start: datetime, col) -> list[
 
 CSV_HEADER = (
     "Ngày đặt (giờ VN)", "Mã đơn", "Trạng thái", "Tên món", "Số lượng", "Doanh số",
-    "HH gốc", "Phí MCN", "HH sau cùng", "Sub ID", "Telegram ID", "Username", "Hoàn thành lúc", "Tháng duyệt dự kiến",
+    "HH gốc", "Phí MCN", "HH ròng", "Sub ID", "Telegram ID", "Username", "Hoàn thành lúc", "Tháng duyệt dự kiến",
 )
 
 

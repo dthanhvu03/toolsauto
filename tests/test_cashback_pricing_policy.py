@@ -100,7 +100,7 @@ def test_03_mo_phong_bang_bao_gia_that_cung_dau_vao(tmp_path):
     for amount in admin_policy.SIM_AMOUNTS:
         sim = bot.admin_panel.handle_callback(ADMIN, f"c:sim:{amount}", "private", NOW)
         expected = cashback_for(amount, live).cashback_vnd
-        assert f"Khách nhận {_cell(expected)}" in " ".join(sim.text.split())
+        assert f"Phần khách {_cell(expected)}" in " ".join(sim.text.split())
 
 
 def _cell(value: int) -> str:
@@ -497,15 +497,15 @@ def test_30_so_sanh_v11_v12_cung_dau_vao(tmp_path):
     sim = bot.admin_panel.handle_callback(ADMIN, "c:sim:100000", "private", NOW)
     flat = " ".join(sim.text.split())
     assert "V1.2 V1.1" in flat
-    assert "Khách nhận 62.314 70.000" in flat
+    assert "Phần khách 62.314 70.000" in flat
     assert "Quỹ chia 89.020 —" in flat
-    assert "Admin còn 26.706 19.020" in flat
-    assert "Khách nhận V1.2 so với V1.1: -7.686đ" in sim.text
+    assert "Biên 26.706 19.020" in flat
+    assert "Phần khách V1.2 so với V1.1: -7.686đ" in sim.text
     assert "không bật công thức nào" in sim.text
     v11 = _bot(tmp_path / "v11", v12=False)
     sim11 = v11.admin_panel.handle_callback(ADMIN, "c:sim:100000", "private", NOW)
     assert "V1.1 V1.2" in " ".join(sim11.text.split())
-    assert "Khách nhận V1.1 so với V1.2: +7.686đ" in sim11.text
+    assert "Phần khách V1.1 so với V1.2: +7.686đ" in sim11.text
 
 
 def test_mo_phong_hien_lich_hen(tmp_path):
@@ -515,7 +515,7 @@ def test_mo_phong_hien_lich_hen(tmp_path):
     sim = bot.admin_panel.handle_callback(ADMIN, "c:menu:sim", "private", NOW)
     assert "ĐÃ HẸN GIỜ" in sim.text
     assert "Từ 00:00 24/10/2026: chia 65%, phí 0,98%, thuế 10% → khách 57.863đ" in sim.text
-    assert "Khách nhận 62.314" in " ".join(sim.text.split()), "cột hiện hành chưa đổi trước mốc"
+    assert "Phần khách 62.314" in " ".join(sim.text.split()), "cột hiện hành chưa đổi trước mốc"
 
 
 def test_31_32_ban_nhap_hang_khong_thanh_dang_ap_dung(tmp_path):
@@ -679,15 +679,15 @@ def test_admin_con_mot_dinh_nghia_moi_man(tmp_path):
     policy = bot.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", NOW)
     rank = bot.admin_panel.handle_callback(ADMIN, "c:menu:rank", "private", NOW)
     sim = bot.admin_panel.handle_callback(ADMIN, "c:menu:sim", "private", NOW)
-    assert "Admin còn (sau dự phòng): <b>26.706đ</b>" in policy.text
+    assert "Biên (sau dự phòng): <b>26.706đ</b>" in policy.text
     assert "Vàng 70%: hoàn 62.314đ · admin còn 26.706đ" in rank.text
-    assert "Admin còn 26.706 19.020" in " ".join(sim.text.split())
+    assert "Biên 26.706 19.020" in " ".join(sim.text.split())
     for text in (policy.text, rank.text, sim.text):
-        assert "«Admin còn» = hoa hồng − khách nhận − dự phòng phí − dự phòng thuế" in text
+        assert "«Biên» = HH ròng − phần khách − dự phòng phí − dự phòng thuế" in text
         assert "Phần còn lại:" not in text and "· còn " not in text
     v11 = _bot(tmp_path / "v11", v12=False)
     policy11 = v11.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", NOW)
-    assert "Admin còn (sau dự phòng): <b>19.020đ</b>" in policy11.text
+    assert "Biên (sau dự phòng): <b>19.020đ</b>" in policy11.text
     assert "Dự phòng phí (0,98%, admin chịu): -980đ" in policy11.text
 
 
@@ -721,7 +721,7 @@ def test_mo_phong_nhap_so_tu_do(tmp_path):
     flat = " ".join(sim.text.split())
     assert "hoa hồng giả định 150.000đ" in sim.text
     quote = cashback_for(150_000, bot.admin_panel.resolve_policy(NOW))
-    assert f"Khách nhận {_cell(quote.cashback_vnd)}" in flat
+    assert f"Phần khách {_cell(quote.cashback_vnd)}" in flat
     assert all(not label.startswith("• ") for row in sim.inline_keyboard for label, _d in row), "150k không phải mốc có sẵn"
     assert bot.admin_panel.consume_text(ADMIN, "65", NOW) is None, "đã thôi chờ sau khi tính"
     assert _counts(tmp_path) == before, "nhập số mô phỏng không ghi DB"
@@ -866,7 +866,7 @@ def test_bao_admin_link_v12_co_bang_chia_dung_snapshot(tmp_path):
     assert "💰 Giá 339.000đ · Hoàn <b>15.842đ</b>" in head
     for line in ("HH ước tính 7,5% 25.425", "· từ shop 16.950", "· từ Shopee Xtra 8.475",
         "Dự phòng phí 0,98% -250", "Dự phòng thuế 10% -2.543", "Quỹ chia 22.632",
-        "Khách nhận 70% quỹ 15.842", "Admin còn 6.790",
+        "Phần khách 70% quỹ 15.842", "Biên 6.790",
     ):
         assert line in flat, line
     assert "V1.2: chia trên quỹ sau dự phòng" in head
@@ -877,10 +877,10 @@ def test_bao_admin_link_v11_admin_chiu_du_phong(tmp_path):
     bot = _bot(tmp_path, v12=False)
     bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
     flat = " ".join(_link_notice(tmp_path, bot, 1).split())
-    assert "HH ước tính" in flat and "Khách nhận 70% HH 14.000" in flat
+    assert "HH ước tính" in flat and "Phần khách 70% HH 14.000" in flat
     assert "Dự phòng phí 0,98% -196" in flat and "Dự phòng thuế 10% -2.000" in flat
-    assert "Admin còn 3.804" in flat
-    assert "V1.1: khách nhận trên HH gốc, admin chịu dự phòng" in flat
+    assert "Biên 3.804" in flat
+    assert "V1.1: phần khách tính trên HH gốc, biên chịu dự phòng" in flat
     assert "Quỹ chia" not in flat
 
 
@@ -890,4 +890,4 @@ def test_bao_admin_link_khong_snapshot_thi_khong_hien_bang(tmp_path):
     _restart(tmp_path)
     html = _link_notice(tmp_path, bot, 900)
     assert "💰 Giá 250.000đ · Hoàn <b>14.000đ</b>" in html
-    assert "<pre>" not in html and "Admin còn" not in html
+    assert "<pre>" not in html and "Biên" not in html

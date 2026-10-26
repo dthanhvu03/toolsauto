@@ -44,7 +44,9 @@ from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_reserve import CANCEL_SCHEMA_PATH, SHARE_SCHEMA_PATH
 from cashback_bot.admin_stats import PERIODS, collect, conversions_csv
 from cashback_bot.admin_ui import (
+    BACK_HOME,
     FEE_KEYBOARD,
+    GLOSSARY,
     MENU_KEYBOARD,
     NAV_KEYBOARD,
     ORDERS_MENU_KEYBOARD,
@@ -155,7 +157,7 @@ _SIM_UNIT = re.compile(r"^(\d{1,6})(?:[.,](\d{1,3}))?\s*(k|nghìn|ngàn|tr|tri�
 _SIM_UNITS = {"k": 1_000, "nghìn": 1_000, "ngàn": 1_000, "tr": 1_000_000, "triệu": 1_000_000}
 # Admin gõ phần trăm: "10", "0,98", "0.98", "62,5%". Lưu nội bộ bằng bps.
 _NUMBER = re.compile(r"^(\d{1,3})(?:[.,](\d{1,2}))?\s*%?$")
-_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders)$")
+_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders|glossary)$")
 _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD)$")
 _RESERVE = re.compile(r"^c:rs:(\d+):([0-9a-f]{8}):(k:[PIH]|keep|w:now|w:tmr|ok|no)$")
 _SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
@@ -439,6 +441,8 @@ class AdminPanel:
             return BotReply(text, inline_keyboard=SETTINGS_MENU_KEYBOARD)
         if name == "orders":
             return BotReply(self._orders_text(), inline_keyboard=ORDERS_MENU_KEYBOARD)
+        if name == "glossary":
+            return BotReply(GLOSSARY, inline_keyboard=((("◀️ Cài đặt", "c:menu:settings"),), BACK_HOME))
         if name == "policy":
             live = self.resolve_policy(now)
             with self._connect() as conn:

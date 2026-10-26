@@ -229,7 +229,7 @@ class TestReconciliation:
             assert row["validation_month"] == "2026-11"
             stats = collect(conn, "7d", datetime(2026, 10, 24, 12, tzinfo=timezone.utc))
         text = stats_text(stats, period_label="7 ngày", since=None)
-        assert "Doanh số 399.000" in text
+        assert "Doanh số 399.000" in " ".join(text.split())
         assert "7 ngày gần nhất" in text
         detail = stats_detail_text(stats, period_label="7 ngày", since=None)
         assert "Doanh số <b>399.000đ</b>" in detail
@@ -382,7 +382,7 @@ class TestLedger:
         keep = format_vnd(shopee.admin_keep_vnd).removesuffix("đ")
         overview = stats_text(stats, period_label="Tất cả", since=None)
         assert f"= Biên {keep}" in " ".join(overview.split())
-        assert "Admin còn" in stats_detail_text(stats, period_label="Tất cả", since=None)
+        assert "Biên" in stats_detail_text(stats, period_label="Tất cả", since=None)
         with bot.repo.connect() as conn:
             conversion_id = conn.execute("SELECT conversion_id FROM cashback_entries WHERE status != 'cancelled'").fetchone()[0]
         order = BotOrder("SN", "DOPI", 231_570, 17_368, "UNPAID", False, conversion_id)

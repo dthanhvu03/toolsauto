@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+from cashback_bot import support
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_ui import MENU_KEYBOARD
 from cashback_bot.messages import fit_html
@@ -56,3 +58,16 @@ def test_cat_tin_khong_lam_hong_the_html():
     assert cut.count("<b>") == cut.count("</b>") and cut.count("<code>") == cut.count("</code>")
     assert fit_html("ngắn") == "ngắn"
 
+
+
+def test_bang_thuat_ngu_va_ticket_khong_ma_tho(tmp_path):
+    bot = _bot(tmp_path)
+    glossary = _callback(bot, ADMIN, "c:menu:glossary")
+    assert "HH ròng" in glossary.text and "Biên</b> = HH ròng − phần khách − dự phòng" in glossary.text
+    assert "c:menu:glossary" in _buttons(_callback(bot, ADMIN, "c:menu:settings"))
+    with bot.repo.connect() as conn:
+        ticket, _new = support.open_ticket(conn, 111, "missing", "không thấy đơn", datetime.now(timezone.utc), None)
+    _callback(bot, ADMIN, f"c:hp:s:{ticket.id}:IN_REVIEW")
+    detail = _callback(bot, ADMIN, f"c:hp:t:{ticket.id}")
+    assert "Khách · mở yêu cầu" in detail.text and "Admin · đổi trạng thái 🆕 Mới → 🔎 Đang xử lý" in detail.text
+    assert "user:" not in detail.text and "OPEN" not in detail.text

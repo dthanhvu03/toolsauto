@@ -78,8 +78,8 @@ Còn lại:
 - `fit_html` thay các chỗ cắt tin thô.
 
 Còn lại:
-- Bảng thuật ngữ chung cho mọi màn (Admin còn / Biên / HH ròng…).
-- Ticket hiện mã thô (OPEN→IN_REVIEW…).
+- ✅ (2026-10-26) Bảng thuật ngữ chung: HH ròng · Phần khách · Dự phòng · Biên · Lãi · Tạm tính / Thực; màn ⚙️ Cài đặt → 📖 Thuật ngữ.
+- ✅ (2026-10-26) Ticket không còn mã thô.
 - Đổi rút tối thiểu chưa cần xác nhận.
 - NAV lặp 3 hàng ở các màn số.
 - Dấu thập phân và định dạng ngày chưa thống nhất.

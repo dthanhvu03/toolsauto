@@ -40,6 +40,7 @@ SETTINGS_MENU_KEYBOARD: Keyboard = (
     (("🎖️ Hạng thành viên", "c:menu:rank"), ("📋 Điều khoản", "c:tm:home")),
     (("🔔 Thông báo khách", "c:nt:home"), ("⚖️ Sẵn sàng chi trả", "c:rd:home")),
     (("📊 Lịch sử cấu hình", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
+    (("📖 Thuật ngữ", "c:menu:glossary"),),
     BACK_HOME,
 )
 
@@ -93,10 +94,23 @@ def decision_keyboard(draft_id: int, nonce: str) -> Keyboard:
     )
 
 
-# Một định nghĩa cho mọi màn, cùng nghĩa «Admin còn» ở 📈 Thống kê (PLAN-076).
+# Một định nghĩa cho mọi màn (PLAN-076; thuật ngữ chung từ rà soát 2026-10-26, xem GLOSSARY).
 ADMIN_KEEP_NOTE = (
-    "«Admin còn» = hoa hồng − khách nhận − dự phòng phí − dự phòng thuế. "
+    "«Biên» = HH ròng − phần khách − dự phòng phí − dự phòng thuế. "
     "Là số ước tính, chưa trừ phí và thuế thực tế theo chứng từ."
+)
+# Bảng thuật ngữ dùng chung cho mọi màn admin, Telegram và web (⚙️ Cài đặt → 📖 Thuật ngữ).
+GLOSSARY = (
+    "⚙️ Quản trị › Cài đặt › <b>📖 Thuật ngữ</b>\n\n"
+    "• <b>HH ròng</b>: hoa hồng sàn trả cho chương trình, sau phí MCN.\n"
+    "• <b>Phần khách</b>: tiền hoàn chia cho khách, theo % hoàn lưu kèm từng link.\n"
+    "• <b>Dự phòng</b>: dự phòng phí và thuế bot tự đặt, chưa phải tiền đã nộp.\n"
+    "• <b>Biên</b> = HH ròng − phần khách − dự phòng: phần anh giữ.\n"
+    "• <b>Lãi</b> = biên − chi phí vận hành / hạ tầng (anh nhập ở 💹 Dòng tiền).\n"
+    "• <b>Tạm tính</b>: tính trên mọi đơn chưa huỷ; sàn chưa trả tiền.\n"
+    "• <b>Thực</b>: chỉ đơn sàn đã trả tiền và đối soát khớp.\n"
+    "• <b>Đơn hoàn thành</b>: người mua đã nhận hàng; hoa hồng vẫn chờ sàn duyệt và thanh toán.\n"
+    "• <b>Hoàn dự kiến → hoàn tạm tính → tiền hoàn</b>: số khách thấy lúc tạo link → khi đã có đơn → khi đã vào ví."
 )
 
 
@@ -180,7 +194,7 @@ def policy_text(
             "• Chưa trừ thuế và phí dự phòng khi báo giá\n"
         )
         sim = (
-            f"• Khách nhận ({rate_percent}%): <b>{format_vnd(customer_vnd)}</b>\n"
+            f"• Phần khách ({rate_percent}%): <b>{format_vnd(customer_vnd)}</b>\n"
             f"• Dự phòng phí ({fee_pct}, admin chịu): -{format_vnd(fee_vnd)}\n"
             f"• Dự phòng thuế ({tax_pct}, admin chịu): -{format_vnd(tax_vnd)}\n"
         )
@@ -192,7 +206,7 @@ def policy_text(
         sim = (
             f"• Dự phòng phí ({fee_pct}): -{format_vnd(fee_vnd)}\n"
             f"• Dự phòng thuế ({tax_pct}): -{format_vnd(tax_vnd)}\n"
-            f"• Khách nhận ({rate_percent}% phần còn lại): <b>{format_vnd(customer_vnd)}</b>\n"
+            f"• Phần khách ({rate_percent}% phần còn lại): <b>{format_vnd(customer_vnd)}</b>\n"
         )
     return (
         _title("Chính sách")
@@ -207,7 +221,7 @@ def policy_text(
         "• Trần tỷ lệ chia và hạng V1: <b>70%</b>\n\n"
         "🔵 <b>MÔ PHỎNG</b> · hoa hồng 100.000đ\n"
         + sim
-        + f"• Admin còn (sau dự phòng): <b>{format_vnd(remain_vnd)}</b>\n\n"
+        + f"• Biên (sau dự phòng): <b>{format_vnd(remain_vnd)}</b>\n\n"
         f"ⓘ {ADMIN_KEEP_NOTE} Báo giá đã lưu không tự tính lại. Không có cam kết chi trả tự động."
     )
 
@@ -274,7 +288,7 @@ def fee_text(
         f"• Phí dự phòng ({fee}): -{format_vnd(sim_fee)}",
         f"• Thuế dự phòng ({tax}): -{format_vnd(sim_tax)}",
         f"• Quỹ phân chia: {format_vnd(sim_dist)}" if sim_dist is not None else "• V1.1 chia trên hoa hồng gốc, admin chịu dự phòng",
-        f"• Khách nhận ({rate_percent}%): <b>{format_vnd(sim_customer)}</b>",
+        f"• Phần khách ({rate_percent}%): <b>{format_vnd(sim_customer)}</b>",
         "",
         "ⓘ Dự phòng khi ước tính, không phải thuế phải nộp. Link đã gửi giữ số cũ.",
     ]
@@ -344,8 +358,8 @@ def simulation_text(
         rows.append(("Dự phòng khác", cell(live.other_reserve_vnd, True), cell(other.other_reserve_vnd, True)))
     rows += [
         ("Quỹ chia", cell(live.distributable_vnd), cell(other.distributable_vnd)),
-        ("Khách nhận", cell(live.cashback_vnd), cell(other.cashback_vnd)),
-        ("Admin còn", cell(live.remainder_vnd), cell(other.remainder_vnd)),
+        ("Phần khách", cell(live.cashback_vnd), cell(other.cashback_vnd)),
+        ("Biên", cell(live.remainder_vnd), cell(other.remainder_vnd)),
     ]
     first = max(len(name) for name, _a, _b in rows)
     widths = [max(len(live_name), *(len(a) for _n, a, _b in rows)), max(len(other_name), *(len(b) for _n, _a, b in rows))]
@@ -362,7 +376,7 @@ def simulation_text(
         "",
         f"🔵 <b>MÔ PHỎNG</b> · hoa hồng giả định {format_vnd(amount)}",
         "<pre>" + html.escape("\n".join(table)) + "</pre>",
-        f"• Khách nhận {live_name} so với {other_name}: {sign}{format_vnd(abs(diff))}",
+        f"• Phần khách {live_name} so với {other_name}: {sign}{format_vnd(abs(diff))}",
         f"• Cột {live_name} là công thức đang báo giá. Cột {other_name} chỉ để so sánh, không bật công thức nào.",
     ]
     if scheduled:
@@ -526,8 +540,8 @@ def share_preview_text(
         lines += [
             "",
             "🔵 Hoa hồng 100.000đ, sau phí và thuế dự phòng:",
-            f"• Khách nhận: {format_vnd(before)} → <b>{format_vnd(after)}</b>",
-            f"• Admin còn (sau dự phòng): {format_vnd(kept_before)} → <b>{format_vnd(kept_after)}</b>",
+            f"• Phần khách: {format_vnd(before)} → <b>{format_vnd(after)}</b>",
+            f"• Biên (sau dự phòng): {format_vnd(kept_before)} → <b>{format_vnd(kept_after)}</b>",
         ]
     if recent is not None:
         count, total_before, total_after = recent
@@ -675,9 +689,9 @@ def _money_lines(shopee) -> list[str]:
         f"· huỷ {shopee.orders_cancelled}",
         _aligned([
             ("Doanh số", shopee.gmv_vnd, ""),
-            ("HH", shopee.real_commission_vnd, "sau phí MCN"),
-            ("− Khách", shopee.bot_cashback_vnd, ""),
-            ("− Phí+T", costs, "phí + dự phòng thuế"),
+            ("HH ròng", shopee.real_commission_vnd, "sau phí MCN"),
+            ("− Phần khách", shopee.bot_cashback_vnd, ""),
+            ("− Dự phòng", costs, "phí + thuế"),
             ("= Biên", keep, "anh giữ"),
         ]),
     ]
@@ -769,13 +783,13 @@ def stats_detail_text(stats, *, period_label: str, since: str | None) -> str:
             "🛒 <b>Đối soát Shopee</b>",
             f"• <b>{shopee.item_qty}</b> món · Doanh số <b>{format_vnd(shopee.gmv_vnd)}</b>",
             f"• HH gốc {format_vnd(shopee.gross_commission_vnd)} − phí MCN {format_vnd(shopee.mcn_fee_vnd)} "
-            f"→ <b>HH sau cùng {format_vnd(shopee.real_commission_vnd)}</b>",
+            f"→ <b>HH ròng {format_vnd(shopee.real_commission_vnd)}</b>",
         ]
         if shopee.bot_commission_vnd:
             lines.append(
-                f"• Qua bot: HH {format_vnd(shopee.bot_commission_vnd)} − khách {format_vnd(shopee.bot_cashback_vnd)} "
-                f"− phí {format_vnd(shopee.bot_fee_vnd)} − dự phòng thuế {format_vnd(shopee.bot_tax_vnd)} "
-                f"→ <b>Admin còn {format_vnd(shopee.admin_keep_vnd)}</b>"
+                f"• Qua bot: HH ròng {format_vnd(shopee.bot_commission_vnd)} − phần khách {format_vnd(shopee.bot_cashback_vnd)} "
+                f"− dự phòng phí {format_vnd(shopee.bot_fee_vnd)} − dự phòng thuế {format_vnd(shopee.bot_tax_vnd)} "
+                f"→ <b>Biên {format_vnd(shopee.admin_keep_vnd)}</b>"
             )
         if shopee.orders_cancelled:
             lines.append(

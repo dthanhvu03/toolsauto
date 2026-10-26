@@ -13,7 +13,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from cashback_bot import policy_snapshot, support, terms
+from cashback_bot import insights, policy_snapshot, support, terms
 from cashback_bot.admin_notify import short_order
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply, fit_html
@@ -61,6 +61,29 @@ def _vn(stamp: str | None) -> str:
     moment = datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     return moment.astimezone(ICT).strftime("%H:%M %d/%m")
 
+
+# Rà soát 2026-10-26: màn ticket không hiện mã thô (user:111 · open, PENDING, NOT_VERIFIED, v1.1:70…).
+ACTION_WORDS = {"open": "mở yêu cầu", "status": "đổi trạng thái", "reply": "trả lời khách",
+                "customer_reply": "khách bổ sung"}
+SETTLEMENT_WORDS = {"SETTLED": "đã đối soát", "NOT_VERIFIED": "chưa xác minh"}
+ENTRY_WORDS = {"pending": "chờ", "holding": "đang giữ", "available": "đã vào ví", "cancelled": "không được hoàn"}
+
+
+def _actor(actor: str | None) -> str:
+    kind = (actor or "").split(":", 1)[0]
+    return {"user": "Khách", "admin": "Admin"}.get(kind, html.escape(actor or "-"))
+
+
+def _status(code: str | None) -> str:
+    return support.STATUS_LABELS.get(code or "", code or "-")
+
+
+def _policy_name(label: str | None) -> str:
+    """«v1.1:70» → «V1.1 · 70%»; «v1.2-reserve-…» → «V1.2»."""
+    text = label or "-"
+    if text.startswith("v1.1:"):
+        return f"V1.1 · {text.split(':', 1)[1]}%"
+    return "V1.2" if text.startswith("v1.2") else text
 
 class SupportAdmin:
     def __init__(self, repo: TrackingRepository, waiting: dict[int, tuple[str, int, str, datetime]], audit=None):
@@ -153,8 +176,8 @@ class SupportAdmin:
             lines += ["", f"Kết luận: {html.escape(ticket.resolution)}"]
         lines += ["", "🔎 <b>Dữ liệu đối chiếu</b> (chỉ đọc)"] + facts
         lines += ["", "🕘 <b>Lịch sử</b>"] + [
-            f"• {_vn(row['created_at'])} {html.escape(row['actor'])} · {row['action']}"
-            + (f" {row['from_status']}→{row['to_status']}" if row["action"] == "status" else "")
+            f"• {_vn(row['created_at'])} {_actor(row['actor'])} · {ACTION_WORDS.get(row['action'], row['action'])}"
+            + (f" {_status(row['from_status'])} → {_status(row['to_status'])}" if row["action"] == "status" else "")
             + (f": {html.escape(str(row['note'])[:120])}" if row["note"] else "")
             for row in history[-6:]
         ]
@@ -185,7 +208,8 @@ class SupportAdmin:
             link = conn.execute("SELECT * FROM link_requests WHERE id = ?", (link_id,)).fetchone()
             found = policy_snapshot.load(conn, link_id)
             status, version, _accepted = terms.link_terms(conn, link_id)
-            snap = "chưa có snapshot" if found is None else f"{SNAPSHOT_LABELS.get(found.provenance, found.provenance)} ({html.escape(found.label)})"
+            snap = ("chưa lưu cách tính" if found is None else
+                    f"{SNAPSHOT_LABELS.get(found.provenance, found.provenance)} ({html.escape(_policy_name(found.label))})")
             mark = "📌" if link_id == ticket.link_id else "•"
             # Click theo báo cáo Shopee (tới lần đồng bộ gần nhất), khớp sub_id của link.
             clicks = conn.execute("SELECT COUNT(*) FROM shopee_clicks WHERE sub_id = ?", (link["sub_id"],)).fetchone()[0]
@@ -206,9 +230,10 @@ class SupportAdmin:
             ).fetchall()
             for order in orders:
                 lines.append(
-                    f"   ↳ Đơn …{html.escape(short_order(order['order_sn']))} · {html.escape(order['order_status'] or '-')} · "
-                    f"duyệt {order['validation_status'] or '-'} · đối soát {order['settlement_status'] or '-'} · "
-                    f"ví {order['entry_status'] or '-'} {format_vnd(int(order['cashback_vnd'] or 0))}"
+                    f"   ↳ Đơn …{html.escape(short_order(order['order_sn']))} · {insights.status_word(order['order_status'])} · "
+                    f"duyệt: {insights.status_word(order['validation_status'])} · "
+                    f"đối soát: {SETTLEMENT_WORDS.get(order['settlement_status'] or '', '-')} · "
+                    f"ví: {ENTRY_WORDS.get(order['entry_status'] or '', '-')} {format_vnd(int(order['cashback_vnd'] or 0))}"
                 )
         if ticket.conversion_id and not any(ticket.conversion_id in line for line in lines):
             lines.append(f"📌 Đơn gắn với ticket: <code>{html.escape(short_order(ticket.conversion_id))}</code>")

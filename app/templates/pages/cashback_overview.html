@@ -68,7 +68,7 @@
     <div class="cb-sub">gộp {{ vnd(m.gross) }} · MCN −{{ vnd(m.mcn_fee) }}</div></div>
   <div class="cb-card"><div class="cb-label">Phần của khách</div><div class="cb-value">{{ vnd(m.cashback) }}</div>
     <div class="cb-sub">{{ pct(m.cashback, m.net) }} hoa hồng ròng</div></div>
-  <div class="cb-card"><div class="cb-label">Biên sau dự phòng</div><div class="cb-value">{{ vnd(m.margin) }}</div>
+  <div class="cb-card"><div class="cb-label">Biên</div><div class="cb-value">{{ vnd(m.margin) }}</div>
     <div class="cb-sub">{{ pct(m.margin, m.net) }} · trước dự phòng {{ vnd(m.margin_before_reserve) }}</div></div>
   <div class="cb-card"><div class="cb-label">Lãi sau vận hành</div>
     {% if m.profit is none %}<div class="cb-value cb-sub">chưa nhập</div>
@@ -87,7 +87,7 @@
   <div class="cb-card">
     <div class="cb-h">Từ hoa hồng tới túi anh</div>
     {% set steps = [("Hoa hồng gộp", m.gross), ("− Phí MCN", -m.mcn_fee), ("= Hoa hồng ròng", m.net),
-                    ("− Phần khách", -m.cashback), ("− Dự phòng thuế / phí", -m.reserve), ("= Biên sau dự phòng", m.margin)] %}
+                    ("− Phần khách", -m.cashback), ("− Dự phòng thuế / phí", -m.reserve), ("= Biên", m.margin)] %}
     {% for label, value in steps %}
     <div class="cb-row"><span>{{ label }}</span><span class="{{ 'cb-bad' if value < 0 }}">{{ vnd(value) }}</span></div>
     {% endfor %}
@@ -226,7 +226,7 @@
     type: 'bar',
     data: { labels: data.labels, datasets: [
       { label: 'Hoa hồng ròng', data: data.net, backgroundColor: torch },
-      { label: 'Biên sau dự phòng', data: data.margin, backgroundColor: moss },
+      { label: 'Biên', data: data.margin, backgroundColor: moss },
     ] },
     options: { maintainAspectRatio: false, plugins: { legend: { labels: { color: ink } },
       tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.y.toLocaleString('vi-VN') + 'đ' } } },

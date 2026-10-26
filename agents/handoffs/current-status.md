@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (cq) — Thuật ngữ chung + ticket không mã thô
+
+- Thuật ngữ trên mọi màn admin, tin admin và web: **HH ròng · Phần khách · Dự phòng · Biên** (= HH ròng − phần khách − dự phòng) **· Lãi · Tạm tính / Thực**.
+  - Bỏ "Admin còn", "= Admin", "Khách nhận", "HH sau cùng", "Phí+T", "Biên sau dự phòng".
+  - Màn `c:menu:glossary` (⚙️ Cài đặt → 📖 Thuật ngữ).
+- Ticket:
+  - lịch sử ghi "Khách · mở yêu cầu", "Admin · đổi trạng thái 🆕 Mới → 🔎 Đang xử lý";
+  - đơn ghi trạng thái, duyệt, đối soát, ví bằng chữ; cách tính "V1.1 · 70%" / "V1.2".
+- Proof: test cashback qua hết.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+
+---
+
 ## Phiên 2026-10-26 (cp) — Rà soát đợt 4: màn admin
 
 - Trang chủ `/admin`: 📌 Việc cần làm, 📅 Hôm nay, báo giá, ví. Bỏ "Calculator V1.2" và dòng "Đối soát & chi trả: Chưa mở" ghi cứng.
