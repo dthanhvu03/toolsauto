@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (cj) — 🧾 Duyệt hoa hồng: đơn đã xem không còn nằm ở "Cần kiểm tra"
+
+- Chủ bot hỏi: đã bấm "đã kiểm tra" mà đơn ••••20NS vẫn hiện ở "Cần kiểm tra". Nguyên nhân: mục này đếm theo trạng thái Shopee (`NEEDS_REVIEW`), không xét admin đã xem.
+- Sửa (`admin_validation.py`):
+  - "Cần kiểm tra" và danh sách 🚨 chỉ còn đơn admin chưa xem.
+  - Thêm dòng và danh sách "✔️ Đã xem, chờ Shopee" (`c:cv:l:seen`).
+  - Bảng nới cột lên 19 ký tự.
+- Production (đọc `mode=ro`): Cần kiểm tra 0, Đã xem chờ Shopee 1.
+- Proof: test cashback qua hết.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo`.
+
+---
+
 ## Phiên 2026-10-26 (ci) — PLAN-085 giai đoạn A: link TikTok Shop (chỉ admin thử)
 
 - RioHub đã mở quyền: `orders` đọc được (1 đơn đã chốt, `pit = 0`, tức chưa trừ TNCN); tạo link thử `test085` được. Rio giữ 0%.

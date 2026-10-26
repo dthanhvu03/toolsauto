@@ -349,7 +349,7 @@ class TestValidationScreen:
         _sync(bot, _checkout(sub=sub))
         home = _callback(bot, ADMIN, "c:cv:home")
         assert "Đơn qua bot: <b>1</b>" in home.text and NO_APPROVAL_NOTE in home.text
-        assert "Chờ xác minh       1" in home.text and "Shopee đã duyệt    0" in home.text
+        assert f"{'Chờ xác minh':<19}{1:>4}" in home.text and f"{'Shopee đã duyệt':<19}{0:>4}" in home.text
         assert NO_APPROVAL_NOTE in _callback(bot, ADMIN, "c:cv:l:approved").text
         bot.repo.update_shopee_cookie_status(status="connected")
         shopee = _callback(bot, ADMIN, "c:menu:shopee")
@@ -376,6 +376,13 @@ class TestValidationScreen:
         alert = _callback(bot, ADMIN, "c:cv:l:alert")
         assert any("c:cv:o:o1" == data for row in alert.inline_keyboard for _l, data in row)
         assert "🚨 Gian lận" in _callback(bot, ADMIN, "c:cv:h").text
+        _callback(bot, ADMIN, "c:cv:ack:o1")
+        home = _callback(bot, ADMIN, "c:cv:home").text
+        assert f"{'Cần kiểm tra':<19}{0:>4}" in home and f"{'Đã xem, chờ Shopee':<19}{1:>4}" in home, "đã xem thì hết việc"
+        alert = _callback(bot, ADMIN, "c:cv:l:alert")
+        assert not any("c:cv:o:o1" == data for row in alert.inline_keyboard for _l, data in row)
+        seen = _callback(bot, ADMIN, "c:cv:l:seen")
+        assert "Đã xem, chờ Shopee" in seen.text and any("c:cv:o:o1" == d for row in seen.inline_keyboard for _l, d in row)
 
     def test_alert_message_one_per_sync(self, tmp_path):
         bot = _bot(tmp_path)

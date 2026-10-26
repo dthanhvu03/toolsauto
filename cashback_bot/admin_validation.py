@@ -30,7 +30,7 @@ SOURCE_NOTE = (
 )
 
 _CONV = re.compile(r"^c:cv:(o|ack):([0-9A-Za-z:_-]{1,48})$")
-_LIST = re.compile(r"^c:cv:l:(pending|approved|rejected|alert|changed)$")
+_LIST = re.compile(r"^c:cv:l:(pending|approved|rejected|alert|seen|changed)$")
 
 STATUS_LABELS = {
     UNKNOWN: "❔ Chưa xác định",
@@ -63,9 +63,15 @@ LISTS = {
     "pending": ("📋 Chờ xác minh", f"validation_status IN ('{PENDING}', '{UNKNOWN}')"),
     "approved": ("✅ Đã duyệt", f"validation_status = '{APPROVED}'"),
     "rejected": ("❌ Bị từ chối", f"validation_status = '{REJECTED}'"),
+    # Cần kiểm tra = việc admin còn phải xem. Đã bấm ✔️ mà Shopee chưa đổi trạng thái thì sang «Đã xem, chờ Shopee».
     "alert": (
         "🚨 Gian lận / cần kiểm tra",
-        f"(validation_status IN ('{FRAUD}', '{NEEDS_REVIEW}') OR review_status = 'needs_review')",
+        f"((validation_status IN ('{FRAUD}', '{NEEDS_REVIEW}') AND COALESCE(review_status, '') != 'reviewed') "
+        "OR review_status = 'needs_review')",
+    ),
+    "seen": (
+        "✔️ Đã xem, chờ Shopee",
+        f"(validation_status IN ('{FRAUD}', '{NEEDS_REVIEW}') AND review_status = 'reviewed')",
     ),
     "changed": (
         "🔄 Hoa hồng thay đổi",
@@ -125,7 +131,8 @@ class ValidationAdmin:
         counts["review"] = int(
             conn.execute(
                 f"SELECT COUNT(*) FROM shopee_conversions WHERE {_BOT} AND "
-                f"(validation_status = '{NEEDS_REVIEW}' OR review_status = 'needs_review')"
+                f"((validation_status = '{NEEDS_REVIEW}' AND COALESCE(review_status, '') != 'reviewed') "
+                "OR review_status = 'needs_review')"
             ).fetchone()[0]
         )
         return counts
@@ -140,9 +147,10 @@ class ValidationAdmin:
             ("Bị từ chối", counts["rejected"]),
             ("Gian lận", counts["fraud"]),
             ("Cần kiểm tra", counts["review"]),
+            ("Đã xem, chờ Shopee", counts["seen"]),
             ("Hoa hồng đã đổi", counts["changed"]),
         ]
-        table = "\n".join(f"{label:<16}{value:>4}" for label, value in rows)
+        table = "\n".join(f"{label:<19}{value:>4}" for label, value in rows)
         sync = "chưa đồng bộ" if last is None else f"{_vn(last['completed_at'])} ({html.escape(str(last['status']))})"
         lines = [
             _title("Shopee Affiliate", "Duyệt hoa hồng"),
@@ -156,7 +164,8 @@ class ValidationAdmin:
         keyboard = (
             ((f"📋 Chờ xác minh ({counts['pending']})", "c:cv:l:pending"), (f"✅ Đã duyệt ({counts['approved']})", "c:cv:l:approved")),
             ((f"❌ Bị từ chối ({counts['rejected']})", "c:cv:l:rejected"), (f"🚨 Cần kiểm tra ({counts['alert']})", "c:cv:l:alert")),
-            ((f"🔄 Hoa hồng thay đổi ({counts['changed']})", "c:cv:l:changed"), ("🕘 Lịch sử", "c:cv:h")),
+            ((f"🔄 Hoa hồng thay đổi ({counts['changed']})", "c:cv:l:changed"), (f"✔️ Đã xem ({counts['seen']})", "c:cv:l:seen")),
+            (("🕘 Lịch sử", "c:cv:h"),),
             BACK_SHOPEE,
         )
         return BotReply("\n".join(lines), inline_keyboard=keyboard)
