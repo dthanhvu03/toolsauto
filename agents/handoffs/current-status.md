@@ -5,9 +5,8 @@
   - Bot không tự đặt số. Số gợi ý G2 và mức hoà vốn chỉ hiện ở màn nhập.
 - Production (đọc `mode=ro`): G1 đạt 1/4 mốc (có đơn đầu tiên; chưa có đơn hoàn thành). Tháng 10: 2 đơn đặt, 0 hoàn thành, 11 khách mới; % có đơn trong 7 ngày chưa đủ mẫu. Giới hạn an toàn đều xanh.
 - Proof: 792 test cashback qua, ruff sạch. Web render được với DB production.
-- **Next:**
-  - Chủ bot chạy `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
-  - Chủ bot nhập mục tiêu ở `/admin` → 🎯 Mục tiêu.
+- Chạy production: 26/10 01:35Z, chủ bot restart. Hai bot `code_version` đều là `bbc1da8`, heartbeat còn mới, log không có lỗi mới. Web_Dashboard đang chạy. PLAN-090 đã vào archive.
+- **Next:** chủ bot nhập mục tiêu ở `/admin` → 🎯 Mục tiêu (gợi ý G2: 100 đơn hoàn thành, 50 khách hoạt động; ngưỡng huỷ do chủ bot chọn). Phần đăng bài không thuộc phạm vi phiên cashback.
 
 ---
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Executor | Claude Code (chủ bot giao 2026-10-26: "xây dựng mục tiêu của bot", "oke em triển khai đi") |
-| Trạng thái | ✅ Đã merge vào main 2026-10-26, chờ chủ bot restart |
+| Trạng thái | ✅ Đang chạy production từ 2026-10-26 01:35Z (`bbc1da8`, chủ bot đã restart) |
 | Không đổi | Không đổi % hoàn, sổ ví, chính sách hay trạng thái đơn; không gọi Shopee. Ghi duy nhất: mục tiêu admin nhập (`bot_state.goals_monthly`, có 📊 Lịch sử) |
 | Nguồn số | `cashback_bot/insights.py`, cùng nguồn với PLAN-089 |
 
