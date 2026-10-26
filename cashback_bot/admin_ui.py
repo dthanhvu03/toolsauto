@@ -24,7 +24,7 @@ MENU_KEYBOARD: Keyboard = (
     (("📈 Thống kê", "c:st:7d"), ("🎯 Mục tiêu", "c:in:t"), ("🔍 Tìm", "c:in:f")),
     (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d")),
     (("🛠 Vận hành", "c:in:o"), ("👥 Khách hàng", "c:in:u:margin:1")),
-    (("🔗 Shopee Affiliate", "c:menu:shopee"), ("👛 Ví khách", "c:menu:wallet")),
+    (("🔗 Shopee Affiliate", "c:menu:shopee"), ("🎵 TikTok Shop", "c:tk:home"), ("👛 Ví khách", "c:menu:wallet")),
     (("💰 Chính sách", "c:menu:policy"), ("🎖️ Hạng thành viên", "c:menu:rank")),
     (("🧾 Thuế & phí", "c:menu:fee"), ("🧮 Mô phỏng", "c:menu:sim")),
     (("📊 Lịch sử", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),

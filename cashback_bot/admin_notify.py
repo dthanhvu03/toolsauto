@@ -282,7 +282,8 @@ class AdminNotifier:
         except sqlite3.Error:
             logger.warning("[Cashback] không đọc được snapshot link id=%s cho tin báo admin", row.id)
         body = (
-            f"🔗 <b>Đã gửi link</b> · {_who(row.telegram_user_id, username)}\n\n"
+            f"🔗 <b>Đã gửi link</b>{' · 🎵 TikTok' if row.platform == 'tiktok' else ''} · "
+            f"{_who(row.telegram_user_id, username)}\n\n"
             f"🛍️ {html.escape(buyer_name(row.product_name or '-'))}\n"
             f"💰 Giá {format_vnd(row.price_vnd or 0)} · Hoàn <b>{format_vnd(row.estimated_cashback or 0)}</b>\n"
             + "".join(f"{line}\n" for line in split)

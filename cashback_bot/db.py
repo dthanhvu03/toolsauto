@@ -879,6 +879,7 @@ class LinkRow:
     link_status: str
     reject_reason: str | None
     estimate_policy: str | None = None
+    platform: str = "shopee"
 
 
 def insert_snapshot(conn: sqlite3.Connection, link_id: int, snapshot: dict) -> None:
@@ -1008,6 +1009,8 @@ class TrackingRepository:
             _add_column(conn, "link_requests", "delivery_attempts", "INTEGER NOT NULL DEFAULT 0")
             _add_column(conn, "link_requests", "next_retry_at", "TEXT")
             _add_column(conn, "link_requests", "last_delivery_error", "TEXT")
+            # PLAN-085 A5: link Shopee hay TikTok Shop. Dòng cũ đều là Shopee.
+            _add_column(conn, "link_requests", "platform", "TEXT NOT NULL DEFAULT 'shopee'")
             _add_column(conn, "telegram_users", "rate_window_start", "TEXT")
             _add_column(conn, "telegram_users", "rate_count", "INTEGER NOT NULL DEFAULT 0")
             _add_column(conn, "telegram_users", "cooldown_until", "TEXT")
@@ -1153,6 +1156,8 @@ class TrackingRepository:
         if fields.get("estimate_policy") and "estimate_policy" in existing:
             columns.append("estimate_policy")
         columns += [name for name, _ddl in PRODUCT_INSIGHT_COLUMNS if name in existing and name in fields]
+        if fields.get("platform") and "platform" in existing:
+            columns.append("platform")
         payload = {key: fields.get(key) for key in columns}
         payload["created_at"] = payload["created_at"] or _utc_now()
         placeholders = ", ".join("?" for _ in columns)
@@ -1923,4 +1928,5 @@ def _row(row: sqlite3.Row) -> LinkRow:
         link_status=row["link_status"],
         reject_reason=row["reject_reason"],
         estimate_policy=row["estimate_policy"] if "estimate_policy" in row.keys() else None,
+        platform=(row["platform"] if "platform" in row.keys() else None) or "shopee",
     )

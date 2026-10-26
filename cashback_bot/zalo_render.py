@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-from cashback_bot.messages import HUONGDAN, BotReply
+from cashback_bot.messages import HUONGDAN, TIKTOK_BUY_BUTTON, BotReply
 
 MAX_LEN = 2000
 STYLE_CODES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "ins": "u", "s": "s", "del": "s", "strike": "s"}
@@ -45,9 +45,11 @@ GUIDE = (
     "ⓘ Số hoàn là ước tính, không bảo đảm đơn hàng được ghi nhận hay được hoàn tiền."
 )
 BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app Shopee sẽ không được hoàn:"
+TIKTOK_BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app TikTok sẽ không được hoàn:"
 # Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.
 PHRASES = (
     ("👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng.", "👉 Bấm link ở tin dưới rồi đặt hàng."),
+    ("👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng.", "👉 Bấm link ở tin dưới rồi đặt hàng."),
     ("Bấm nút dưới hoặc gõ /huongdan", "Gõ /huongdan"),
     ("nút <b>🛒 Mua trên Shopee</b>", "link <b>🛒 Mua trên Shopee</b>"),
     ("Bấm nút đó", "Bấm link đó"),
@@ -223,7 +225,7 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         text += piece
 
     if reply.button_url:
-        add(BUY_LEAD, bold=True)
+        add(TIKTOK_BUY_LEAD if reply.button_label == TIKTOK_BUY_BUTTON else BUY_LEAD, bold=True)
         add(f"\n{reply.button_url}")
     choices = [(label, data) for row in reply.inline_keyboard or () for label, data in row if data.startswith("u:")]
     if choices:

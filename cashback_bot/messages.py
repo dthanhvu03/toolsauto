@@ -177,8 +177,10 @@ GENERIC_FAIL = (
     "Bạn thử lại sau ít phút nhé."
 )
 BUY_BUTTON = "🛒 Mua trên Shopee"
+TIKTOK_BUY_BUTTON = "🛒 Mua trên TikTok Shop"
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
+TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
 BUY_WARNING = (
     "⚠️ Mua thẳng trong app (không qua link của bot) sẽ không được hoàn.\n"
     "Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
@@ -195,6 +197,28 @@ _NOTE_V12 = (
     f"Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. {_PAID_BASIS}\n"
     "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
 )
+# PLAN-085 A6: TikTok Shop dùng chung cách tính với Shopee (chủ bot 2026-10-26: «giống với shopee»).
+_TIKTOK_PAID_BASIS = "TikTok tính trên số tiền bạn thực trả, nên dùng voucher hoặc mua lúc giảm giá thì tiền hoàn giảm theo."
+_NOTE_TIKTOK_V11 = (
+    f"Số hoàn tính theo giá tham khảo. {_TIKTOK_PAID_BASIS}\n"
+    "Chỉ được hoàn khi TikTok xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
+)
+_NOTE_TIKTOK_V12 = (
+    f"Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. {_TIKTOK_PAID_BASIS}\n"
+    "Chỉ được hoàn khi TikTok xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
+)
+TIKTOK_NOT_OPEN = (
+    "🎵 <b>Bot chưa hỗ trợ link TikTok Shop</b>\n"
+    "Hiện bot chỉ hoàn tiền cho sản phẩm Shopee. Bạn gửi link shopee.vn hoặc s.shopee.vn nhé."
+)
+TIKTOK_NOT_PROMOTABLE = (
+    "⚠️ <b>Sản phẩm này không có hoa hồng TikTok</b>\n"
+    "TikTok không trả hoa hồng cho món này nên bot không tạo được link hoàn tiền. Bạn thử món khác nhé."
+)
+TIKTOK_NO_INFO = (
+    "⏳ <b>Chưa lấy được thông tin sản phẩm TikTok</b>\n"
+    "Bot chưa tính được số hoàn cho món này. Bạn thử gửi lại sau ít phút nhé."
+)
 
 
 @dataclass(frozen=True)
@@ -205,6 +229,8 @@ class BotReply:
     button_url: str | None = None
     inline_keyboard: Keyboard | None = None
     callback_query_id: str | None = None
+    # Chữ trên nút mở `button_url`; None: «🛒 Mua trên Shopee».
+    button_label: str | None = None
     edit_message_id: int | None = None
     delete_message_id: int | None = None
     toast: str | None = None
@@ -217,7 +243,7 @@ class BotReply:
     def markup(self) -> dict | None:
         rows: list[list[dict]] = []
         if self.button_url:
-            rows.append([{"text": BUY_BUTTON, "url": self.button_url}])
+            rows.append([{"text": self.button_label or BUY_BUTTON, "url": self.button_url}])
         for row in self.inline_keyboard or ():
             rows.append([{"text": label, "callback_data": data} for label, data in row])
         return {"inline_keyboard": rows} if rows else None
@@ -243,17 +269,19 @@ def buyer_name(name: str) -> str:
     return (cut or text[:51]).rstrip(" ,.-") + "…"
 
 
-def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str) -> BotReply:
+def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str,
+                 tiktok: bool = False) -> BotReply:
     safe_name = html.escape(buyer_name(name))
     title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
     text = (
-        f"{title}\n\n"
+        f"{title}" + (" · 🎵 TikTok Shop" if tiktok else "") + "\n\n"
         f"💰 Hoàn dự kiến: khoảng <b>{format_vnd(cashback_vnd)}</b>\n"
         f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}\n\n"
-        f"{BUY_HINT}\n" + (f"{BUY_WARNING}\n\n" if cashback_vnd > 0 else "\n")
+        f"{TIKTOK_BUY_HINT if tiktok else BUY_HINT}\n" + (f"{BUY_WARNING}\n\n" if cashback_vnd > 0 else "\n")
         + f"ⓘ {note}"
     )
-    return BotReply(text=text, button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD)
+    return BotReply(text=text, button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD,
+                    button_label=TIKTOK_BUY_BUTTON if tiktok else None)
 
 
 def home_reply(show_rank: bool = False, show_wallet: bool = False) -> BotReply:
@@ -272,12 +300,13 @@ def food_link_reply() -> BotReply:
     return BotReply(FOOD_LINK, inline_keyboard=GUIDE_KEYBOARD)
 
 
-def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_V11)
+def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, tiktok: bool = False) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V11 if tiktok else _NOTE_V11, tiktok)
 
 
-def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_V12)
+def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str,
+                       tiktok: bool = False) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V12 if tiktok else _NOTE_V12, tiktok)
 
 
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------

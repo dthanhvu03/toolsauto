@@ -1,3 +1,18 @@
+## Phiên 2026-10-26 (ci) — PLAN-085 giai đoạn A: link TikTok Shop (chỉ admin thử)
+
+- RioHub đã mở quyền: `orders` đọc được (1 đơn đã chốt, `pit = 0`, tức chưa trừ TNCN); tạo link thử `test085` được. Rio giữ 0%.
+- Thuế TikTok: giống Shopee (chủ bot).
+- Giai đoạn A đã code: dán link TikTok Shop → thẻ báo giá + nút "Mua trên TikTok Shop" (Telegram + Zalo). Chế độ mặc định **chỉ admin**; `/admin` → 🎵 TikTok Shop để mở cho khách (cần xác nhận). Đơn TikTok chưa đồng bộ (giai đoạn B).
+- Đơn Shopee ••••20NS: hoa hồng không đổi (1.372đ). Mã trạng thái Shopee mới `2` (display "Completed") nên bot chuyển "cần kiểm tra", đúng thiết kế. Click Zalo đã về (4/11 link có click).
+- Bot sẽ thêm cột `link_requests.platform` khi khởi động. Có backup tay trước khi restart.
+- Proof: 815 test cashback qua.
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo`.
+  - Chủ bot dán thử 1 link TikTok trên Telegram (admin).
+  - Giai đoạn B.
+
+---
+
 ## Phiên 2026-10-26 (ch) — PLAN-094: backup ngoài máy (Google Drive, rclone crypt)
 
 - Code xong: `offsite.py` + systemd timer 03:30 + dòng "Backup ngoài máy" ở 🛠 Vận hành. Hướng dẫn trong `deploy/cashback/README.md`, mục "Backup ngoài máy".

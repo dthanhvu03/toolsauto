@@ -98,6 +98,8 @@ from cashback_bot.admin_terms import TermsAdmin
 from cashback_bot.admin_validation import ValidationAdmin
 from cashback_bot.admin_insights import InsightsAdmin, goal_history
 from cashback_bot.admin_retention import RetentionAdmin
+from cashback_bot.admin_tiktok import TikTokAdmin
+from cashback_bot.admin_tiktok import history_line as tiktok_history
 from cashback_bot.admin_retention import history_line as retention_history
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.wallet import Wallet
@@ -242,6 +244,8 @@ class AdminPanel:
     customer_notification_test_ids: frozenset[int] = frozenset()
     # PLAN-080: cấu hình tự đồng bộ (.env), để màn ⏱ nói đúng và chỉ cho tạm dừng khi cờ đã bật.
     auto_sync: AutoSyncConfig = AutoSyncConfig()
+    # PLAN-085: .env có khoá RioHub (RIOHUB_API_KEY + RIOHUB_CREATOR_USERNAME).
+    tiktok_configured: bool = False
     _cookie_parts: dict[int, tuple[str, datetime]] = field(default_factory=dict, compare=False, repr=False)
     # Admin đang được hỏi hoa hồng giả định cho 🧮 Mô phỏng: user_id → hạn chờ.
     _sim_waiting: dict[int, datetime] = field(default_factory=dict, compare=False, repr=False)
@@ -362,6 +366,9 @@ class AdminPanel:
             return self._insights().route(user_id, data, now)
         if data.startswith("c:rt:"):
             return self._retention().route(user_id, data, now)
+        if data.startswith("c:tk:"):
+            return TikTokAdmin(TrackingRepository(self.db_path), self.tiktok_configured, audit=self._log_setting).route(
+                user_id, data, now)
         if data.startswith("c:cv:"):
             return ValidationAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:sm:"):
@@ -1554,7 +1561,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
         "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro", "ops_cost",
-        "goal", "retention",
+        "goal", "retention", "tiktok_mode",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1592,6 +1599,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         return goal_history(before, after)
     if action == "retention":
         return retention_history(before, after)
+    if action == "tiktok_mode":
+        return tiktok_history(before, after)
     if action in {"terms_draft", "terms_publish"}:
         verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
         return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"

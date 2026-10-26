@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trạng thái | **Nháp.** A2 (client) đã viết theo lựa chọn của chủ bot 2026-10-25 ("Viết client, chưa nối bot"); phần còn lại chờ mục 0 |
+| Trạng thái | **Giai đoạn A đã merge 2026-10-26** (chế độ mặc định: chỉ admin thử). Giai đoạn B (đồng bộ đơn) chưa làm |
 | Executor | Phần client / đơn / đối soát là backend → cần người làm backend (theo `CLAUDE.md`, không thuộc vai Claude Code). Claude Code làm câu chữ, UX, test diễn tập, báo cáo |
 | Nghiên cứu | `reports/CASHBACK_TIKTOK_RIOHUB_RESEARCH.md` (đã bổ sung spec tích hợp 09/10/2026) |
 
@@ -76,3 +76,19 @@ Chủ bot dán spec đủ 8 phần và chọn "Viết client, chưa nối bot". 
 - Field thật có thêm so với ví dụ trong spec: `sub1`–`sub4`, `payment_status`, `tt_order_status`, `refunded_quantity`, `returned_quantity`, `settled_at`, `time_delivered(_iso)`, `content_id`, `content_type`.
 - `link https://vt.tiktok.com/ZS9yNg6SvUjFB-tq8JF/ test085` (chủ bot gửi link, 2026-10-26) → link rút gọn `https://www.tiktok.com/t/ZSgCQR9y3/`, kèm tên sản phẩm (máy mài chân KY Y5), giá 300.000đ, hoa hồng 500 bps (5%), cùng 1 lượt gọi. Link `vt.tiktok.com` dùng thẳng được, không cần tự đổi sang id sản phẩm. Không tạo khách, không ghi DB.
 - Chưa kiểm được `sub_id=test085` có về trong đơn hay không: cần một đơn thật đi qua link thử.
+
+## Giai đoạn A — đã làm (2026-10-26, chủ bot: "triển khai giai đoạn A")
+- **Quyết định của chủ bot:** Rio giữ 0%; thuế TikTok **giống Shopee** (dùng chung chính sách dự phòng đang áp). Claude Code hiểu câu "Không giữ dự phòng thuế (chỉ phí 0,98%) vẫn giữ cho anh nhé, giống với shopee" là *giữ*; chủ bot sửa nếu sai.
+- `tiktok_url.py`: nhận `vt.tiktok.com/…`, `vm.tiktok.com/…`, `www.tiktok.com/t/…`, `(www|shop).tiktok.com/view/product/<id>`; nhận cả link không có `https://` (Zalo).
+- `service.py`: nhánh `_tiktok_link`.
+  - Kiểm chế độ → kiểm điều khoản → `create_product_link(url, sub_id)` → giá thấp nhất × `commission_rate_bps` → `cashback_for` cùng chính sách với Shopee → ghi `link_requests` (`platform='tiktok'`) + snapshot.
+  - Lỗi: 422 không có hoa hồng thì báo khách. Các lỗi auth / creator / bad_response / network / invalid thì báo admin (`riohub_<kind>`). Không có thông tin sản phẩm thì báo khách thử lại.
+  - Tách `_resolve_or_reject`, `_save_link` dùng chung với Shopee.
+- `db.py`: cột `link_requests.platform TEXT NOT NULL DEFAULT 'shopee'`. Cột thêm lúc bot khởi động; dòng cũ là Shopee.
+- `messages.py` / `zalo_render.py`: thẻ "· 🎵 TikTok Shop", nút "🛒 Mua trên TikTok Shop", ghi chú "TikTok xác nhận đơn hợp lệ"; Zalo: dòng dẫn link riêng cho TikTok.
+- `admin_tiktok.py`: `/admin` → 🎵 TikTok Shop.
+  - Chế độ Tắt / 🧪 Chỉ admin thử (mặc định) / Mở cho khách. Mở cho khách phải xác nhận và có cảnh báo chưa đồng bộ đơn.
+  - 📊 Lịch sử ghi `tiktok_mode`.
+- Tin admin "Đã gửi link" ghi "· 🎵 TikTok". `riohub_client` bỏ import `poller` (tránh import vòng).
+- **Proof:** 815 test cashback qua, ruff sạch. `tests/test_cashback_tiktok.py` có 7 test: nhận link, admin tạo link + báo giá + snapshot + gửi lại + Zalo, chế độ, thiếu khoá, lỗi RioHub, màn admin, cột platform.
+- **Còn lại:** giai đoạn B (đồng bộ đơn TikTok, báo đơn, ghi sổ); kiểm `sub_id` về trong đơn thật; xác nhận bằng văn bản của RioHub trước khi mở cho khách.

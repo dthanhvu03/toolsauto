@@ -24,11 +24,12 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal, InvalidOperation
+from pathlib import Path
 
 import requests
 
 from cashback_bot.config import ConfigError, load_settings
-from cashback_bot.poller import _default_dotenv, configure_logging
+from cashback_bot.redact import RedactingFormatter
 
 logger = logging.getLogger("cashback_bot")
 
@@ -347,6 +348,18 @@ def _kind(code: int, error: str | None) -> str:
 def _retry_after(response: requests.Response) -> int | None:
     raw = response.headers.get("Retry-After")
     return int(raw) if raw and raw.strip().isdigit() else None
+
+
+def _default_dotenv() -> Path:
+    return Path(__file__).resolve().parents[1] / ".env"
+
+
+def configure_logging() -> None:
+    """CLI thử tay: log qua RedactingFormatter (che khoá API). Không import poller: poller → service → client."""
+    fmt = "%(asctime)s [Cashback] %(levelname)s %(message)s"
+    logging.basicConfig(level=logging.INFO, format=fmt)
+    for handler in logging.getLogger().handlers:
+        handler.setFormatter(RedactingFormatter(fmt))
 
 
 def main() -> None:

@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
+from cashback_bot import admin_tiktok
 from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, new_sub_id
 from cashback_bot.config import Settings
@@ -22,6 +23,9 @@ from cashback_bot.messages import (
     HUONGDAN,
     NOT_FOUND,
     STALE,
+    TIKTOK_NO_INFO,
+    TIKTOK_NOT_OPEN,
+    TIKTOK_NOT_PROMOTABLE,
     TIP_ALERT,
     WALLET_CLOSED,
     WALLET_CLOSED_ALERT,
@@ -45,7 +49,9 @@ from cashback_bot.messages import (
 )
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
+from cashback_bot.riohub_client import RioHubClient, RioHubError, commission_rate_bps, price_range_vnd, product_title
 from cashback_bot.shopee_url import is_shopee_food_link, parse_shopee_target
+from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.wallet import BANKS, BankAccount, Split, Wallet, parse_bank_text
 
 logger = logging.getLogger("cashback_bot")
@@ -83,11 +89,17 @@ class CashbackService:
         repo: TrackingRepository,
         client: ProductDataClient,
         admin_notifier: "AdminNotifier | None" = None,
+        riohub: RioHubClient | None = None,
     ):
         self.settings = settings
         self.repo = repo
         self.client = client
         self.admin_notifier = admin_notifier
+        # PLAN-085: link TikTok Shop qua RioHub; None khi .env chưa có khoá.
+        tiktok_configured = bool(settings.riohub_api_key and settings.riohub_creator_username)
+        self.riohub = riohub if riohub is not None else (
+            RioHubClient(settings.riohub_api_key, settings.riohub_creator_username) if tiktok_configured else None
+        )
         self.wallet = Wallet(repo)
         notify_cfg = order_notify.NotifyConfig(
             settings.customer_notifications_enabled, settings.customer_notification_test_ids
@@ -113,6 +125,7 @@ class CashbackService:
             customer_notifications_enabled=settings.customer_notifications_enabled,
             customer_notification_test_ids=settings.customer_notification_test_ids,
             auto_sync=settings.auto_sync,
+            tiktok_configured=tiktok_configured,
         )
         self._snapshots_on = False
         self._backfill_snapshots()
@@ -442,7 +455,9 @@ class CashbackService:
             return self._page(pages[command], telegram_user_id)
         if command:
             return self._page("home")
-        only_link = parse_shopee_target(stripped) is not None and len(stripped.split()) == 1
+        tiktok_url = parse_tiktok_target(stripped)
+        is_link = parse_shopee_target(stripped) is not None or tiktok_url is not None
+        only_link = is_link and len(stripped.split()) == 1
         if not only_link:
             # Đang chờ nội dung yêu cầu hỗ trợ: mọi tin (kể cả kèm link) là nội dung ticket.
             desk = self.desk.consume_text(telegram_user_id, username, stripped, now or datetime.now(timezone.utc), update_id)
@@ -451,8 +466,8 @@ class CashbackService:
         else:
             self.desk.clear(telegram_user_id)
         waiting_bank = self._bank_waiting(telegram_user_id)
-        if waiting_bank and parse_shopee_target(stripped) is not None:
-            # Đang khai ngân hàng mà dán link Shopee: khách muốn mua, bỏ chờ và tạo link như thường.
+        if waiting_bank and is_link:
+            # Đang khai ngân hàng mà dán link sản phẩm: khách muốn mua, bỏ chờ và tạo link như thường.
             self._set_bank_waiting(telegram_user_id, None)
         elif waiting_bank and self.wallet.settings().enabled:
             return self._consume_bank(telegram_user_id, waiting_bank, stripped, now or datetime.now(timezone.utc))
@@ -460,6 +475,8 @@ class CashbackService:
         moment = now or datetime.now(timezone.utc)
         if not self._within_rate_limit(telegram_user_id, moment):
             return rate_limited_reply(self.settings.user_cooldown_sec)
+        if target is None and tiktok_url is not None:
+            return self._tiktok_link(update_id, telegram_user_id, tiktok_url, moment)
         if target is None:
             # Tin không phải link sản phẩm: không lưu nội dung (PLAN-077, dữ liệu tối thiểu), chỉ lưu độ dài.
             if is_shopee_food_link(stripped):
@@ -487,18 +504,8 @@ class CashbackService:
                 return BotReply(NOT_FOUND)
             return BotReply(STALE)
 
-        try:
-            resolution = self._resolve_policy(moment)
-        except sqlite3.Error:
-            logger.exception("[Cashback] đọc mức dự phòng thất bại item=%s", quote.item_id)
-            self._reject(update_id, telegram_user_id, target.original_url, "reserve_read_failed")
-            if self.admin_notifier:
-                self.admin_notifier.notify_request_failed(
-                    error_type="reserve_read_failed",
-                    update_id=update_id,
-                    telegram_user_id=telegram_user_id,
-                    status="REQUEST_FAILED",
-                )
+        resolution = self._resolve_or_reject(update_id, telegram_user_id, target.original_url, moment)
+        if resolution is None:
             return BotReply(GENERIC_FAIL)
         priced = cashback_for(quote.commission_vnd, resolution)
         cashback = priced.cashback_vnd
@@ -519,40 +526,68 @@ class CashbackService:
                 )
             return BotReply(GENERIC_FAIL)
 
+        saved = self._save_link(
+            {
+                "telegram_update_id": update_id,
+                "telegram_user_id": telegram_user_id,
+                "sub_id": sub_id,
+                "original_url": target.original_url[:500],
+                "affiliate_url": affiliate_url,
+                "item_id": quote.item_id,
+                "shop_id": quote.shop_id,
+                "product_name": quote.name[:300],
+                "price_vnd": quote.price_vnd,
+                "estimated_commission": quote.commission_vnd,
+                "estimated_cashback": cashback,
+                "cashback_rate_percent": resolution.rate_percent,
+                "estimate_policy": resolution.label if v12 else None,
+                "api_status": quote.api_status,
+                "data_source": quote.data_source,
+                "product_last_update": quote.last_update.strftime("%Y-%m-%d %H:%M:%S"),
+                "cat_name": quote.category,
+                "shop_name": quote.shop_name,
+                "seller_commission_vnd": quote.seller_commission_vnd,
+                "shopee_commission_vnd": quote.shopee_commission_vnd,
+                "commission_rate_bps": quote.commission_rate_bps,
+                "is_xtra": quote.is_xtra,
+                "is_capped": quote.is_capped,
+                "link_status": "created",
+                "reject_reason": None,
+            },
+            update_id, telegram_user_id, resolution, priced, moment,
+        )
+        if not saved:
+            return BotReply(GENERIC_FAIL)
+        return render(quote.name, quote.price_vnd, cashback, affiliate_url)
+
+    def _resolve_or_reject(self, update_id: int | None, telegram_user_id: int, original_url: str,
+                           moment: datetime) -> PolicyResolution | None:
+        """Chính sách báo giá lúc `moment`; đọc DB lỗi thì ghi link bị từ chối, báo admin, trả None."""
+        try:
+            return self._resolve_policy(moment)
+        except sqlite3.Error:
+            logger.exception("[Cashback] đọc mức dự phòng thất bại")
+            self._reject(update_id, telegram_user_id, original_url, "reserve_read_failed")
+            if self.admin_notifier:
+                self.admin_notifier.notify_request_failed(
+                    error_type="reserve_read_failed",
+                    update_id=update_id,
+                    telegram_user_id=telegram_user_id,
+                    status="REQUEST_FAILED",
+                )
+            return None
+
+    def _save_link(self, fields: dict, update_id: int | None, telegram_user_id: int, resolution: PolicyResolution,
+                   priced, moment: datetime) -> bool:
+        """Ghi link đã tạo cùng snapshot chính sách và điều khoản. Lỗi DB thì báo admin, trả False."""
         try:
             self.repo.insert_created(
-                {
-                    "telegram_update_id": update_id,
-                    "telegram_user_id": telegram_user_id,
-                    "sub_id": sub_id,
-                    "original_url": target.original_url[:500],
-                    "affiliate_url": affiliate_url,
-                    "item_id": quote.item_id,
-                    "shop_id": quote.shop_id,
-                    "product_name": quote.name[:300],
-                    "price_vnd": quote.price_vnd,
-                    "estimated_commission": quote.commission_vnd,
-                    "estimated_cashback": cashback,
-                    "cashback_rate_percent": resolution.rate_percent,
-                    "estimate_policy": resolution.label if v12 else None,
-                    "api_status": quote.api_status,
-                    "data_source": quote.data_source,
-                    "product_last_update": quote.last_update.strftime("%Y-%m-%d %H:%M:%S"),
-                    "cat_name": quote.category,
-                    "shop_name": quote.shop_name,
-                    "seller_commission_vnd": quote.seller_commission_vnd,
-                    "shopee_commission_vnd": quote.shopee_commission_vnd,
-                    "commission_rate_bps": quote.commission_rate_bps,
-                    "is_xtra": quote.is_xtra,
-                    "is_capped": quote.is_capped,
-                    "link_status": "created",
-                    "reject_reason": None,
-                },
+                fields,
                 snapshot=self._snapshot_record(resolution, priced),
                 terms=self.desk.link_terms(telegram_user_id, moment) if self._snapshots_on else None,
             )
         except sqlite3.IntegrityError:
-            logger.error("[Cashback] db integrity item=%s", quote.item_id)
+            logger.error("[Cashback] db integrity item=%s", fields.get("item_id"))
             if self.admin_notifier:
                 self.admin_notifier.notify_request_failed(
                     error_type="sqlite_integrity_error",
@@ -560,7 +595,7 @@ class CashbackService:
                     telegram_user_id=telegram_user_id,
                     status="FAILED_DB_WRITE",
                 )
-            return BotReply(GENERIC_FAIL)
+            return False
         except sqlite3.Error:
             logger.exception("[Cashback] db write failed")
             if self.admin_notifier:
@@ -570,9 +605,80 @@ class CashbackService:
                     telegram_user_id=telegram_user_id,
                     status="FAILED_DB_WRITE",
                 )
-            return BotReply(GENERIC_FAIL)
+            return False
+        return True
 
-        return render(quote.name, quote.price_vnd, cashback, affiliate_url)
+    def _tiktok_link(self, update_id: int | None, telegram_user_id: int, url: str, moment: datetime) -> BotReply:
+        """PLAN-085 giai đoạn A: link TikTok Shop qua RioHub `/product-links`, báo giá cùng cách tính với Shopee."""
+        if self.riohub is None or not admin_tiktok.open_for(self.repo, telegram_user_id, self.settings.admin_user_ids):
+            self._reject(update_id, telegram_user_id, url, "tiktok_not_open")
+            return BotReply(TIKTOK_NOT_OPEN)
+        gate = self.desk.terms_gate(telegram_user_id, moment)
+        if gate is not None:
+            return gate
+        try:
+            sub_id = self._unique_sub_id()
+            made = self.riohub.create_product_link(url, sub_id)
+        except ProductDataError:
+            self._reject(update_id, telegram_user_id, url, "link_build_failed")
+            return BotReply(GENERIC_FAIL)
+        except RioHubError as exc:
+            logger.info("[Cashback] riohub từ chối link kind=%s code=%s", exc.kind, exc.code or "-")
+            self._reject(update_id, telegram_user_id, url, f"tiktok_{exc.kind}")
+            if exc.kind == "not_promotable":
+                return BotReply(TIKTOK_NOT_PROMOTABLE)
+            if self.admin_notifier and exc.kind in {"auth", "creator", "bad_response", "network", "invalid"}:
+                self.admin_notifier.notify_request_failed(
+                    error_type=f"riohub_{exc.kind}",
+                    update_id=update_id,
+                    telegram_user_id=telegram_user_id,
+                    status="REQUEST_FAILED",
+                )
+            return BotReply(GENERIC_FAIL)
+        product = made.product or {}
+        prices = price_range_vnd(product)
+        rate_bps = commission_rate_bps(product)
+        name = product_title(product)
+        if not prices or rate_bps is None or not name:
+            self._reject(update_id, telegram_user_id, url, "tiktok_no_product")
+            return BotReply(TIKTOK_NO_INFO)
+        price_vnd = prices[0]  # khoảng giá: báo theo mức thấp (PLAN-085 A4)
+        commission_vnd = price_vnd * rate_bps // 10_000
+        resolution = self._resolve_or_reject(update_id, telegram_user_id, url, moment)
+        if resolution is None:
+            return BotReply(GENERIC_FAIL)
+        priced = cashback_for(commission_vnd, resolution)
+        v12 = resolution.pricing_version == "v1.2"
+        product_id = made.product_id or ""
+        saved = self._save_link(
+            {
+                "telegram_update_id": update_id,
+                "telegram_user_id": telegram_user_id,
+                "sub_id": sub_id,
+                "original_url": url[:500],
+                "affiliate_url": made.affiliate_link,
+                "item_id": int(product_id) if product_id.isdigit() else None,
+                "shop_id": None,
+                "product_name": name[:300],
+                "price_vnd": price_vnd,
+                "estimated_commission": commission_vnd,
+                "estimated_cashback": priced.cashback_vnd,
+                "cashback_rate_percent": resolution.rate_percent,
+                "estimate_policy": resolution.label if v12 else None,
+                "api_status": "riohub",
+                "data_source": "riohub",
+                "product_last_update": moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                "commission_rate_bps": rate_bps,
+                "platform": "tiktok",
+                "link_status": "created",
+                "reject_reason": None,
+            },
+            update_id, telegram_user_id, resolution, priced, moment,
+        )
+        if not saved:
+            return BotReply(GENERIC_FAIL)
+        render = render_success_v12 if v12 else render_success
+        return render(name, price_vnd, priced.cashback_vnd, made.affiliate_link, tiktok=True)
 
     def _v12_ready(self) -> bool:
         if self.settings.estimate_policy != "v1.2":
@@ -636,6 +742,7 @@ class CashbackService:
                 row.price_vnd or 0,
                 row.estimated_cashback or 0,
                 row.affiliate_url,
+                tiktok=row.platform == "tiktok",
             )
         if row.reject_reason in _NOT_FOUND_CODES:
             return BotReply(NOT_FOUND)

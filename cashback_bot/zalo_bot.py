@@ -28,6 +28,7 @@ from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import error_brief
 from cashback_bot.service import CashbackService
 from cashback_bot.shopee_url import parse_shopee_target
+from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
 from cashback_bot.zalo_api import ZaloApi
 from cashback_bot.zalo_render import ERROR_REPLY, LINK_CARD, NON_TEXT, NUMBER_STALE, WELCOME, ZaloMessage, render
@@ -241,7 +242,7 @@ class ZaloChannel:
                 return BotReply(NUMBER_STALE)
             return self._press(internal, menu[number - 1], update_id)
         command = SHORTCUTS.get(key, text)
-        if parse_shopee_target(command) is not None:
+        if parse_shopee_target(command) is not None or parse_tiktok_target(command) is not None:
             try:
                 self.api.send_chat_action(external, "typing")
             except requests.RequestException as exc:
