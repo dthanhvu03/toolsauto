@@ -47,9 +47,11 @@ from cashback_bot.admin_ui import (
     FEE_KEYBOARD,
     MENU_KEYBOARD,
     NAV_KEYBOARD,
+    ORDERS_MENU_KEYBOARD,
     POLICY_KEYBOARD,
     RANK_KEYBOARD,
     SHOPEE_KEYBOARD_DISCONNECTED,
+    SETTINGS_MENU_KEYBOARD,
     SHOPEE_PROMPT_KEYBOARD,
     collecting_keyboard,
     collecting_text,
@@ -62,6 +64,7 @@ from cashback_bot.admin_ui import (
     quote_label,
     rank_preview_text,
     rank_text,
+    settings_text,
     reserve_decision_keyboard,
     reserve_keep_keyboard,
     reserve_kind_keyboard,
@@ -95,6 +98,7 @@ from cashback_bot.admin_readiness import ReadinessAdmin
 from cashback_bot.admin_settlement import SettlementAdmin
 from cashback_bot.admin_support import SupportAdmin
 from cashback_bot.admin_terms import TermsAdmin
+from cashback_bot.admin_validation import LISTS as VALIDATION_LISTS
 from cashback_bot.admin_validation import ValidationAdmin
 from cashback_bot.admin_insights import InsightsAdmin, goal_history
 from cashback_bot.admin_retention import RetentionAdmin
@@ -106,7 +110,7 @@ from cashback_bot.wallet import Wallet
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
-from cashback_bot import policy_snapshot
+from cashback_bot import insights, payouts, policy_snapshot
 from cashback_bot.pricing import MAX_SHARE_BPS, CashbackQuote, EstimatePolicy, PolicyResolution, cashback_for
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
@@ -151,7 +155,7 @@ _SIM_UNIT = re.compile(r"^(\d{1,6})(?:[.,](\d{1,3}))?\s*(k|nghìn|ngàn|tr|tri�
 _SIM_UNITS = {"k": 1_000, "nghìn": 1_000, "ngàn": 1_000, "tr": 1_000_000, "triệu": 1_000_000}
 # Admin gõ phần trăm: "10", "0,98", "0.98", "62,5%". Lưu nội bộ bằng bps.
 _NUMBER = re.compile(r"^(\d{1,3})(?:[.,](\d{1,2}))?\s*%?$")
-_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy)$")
+_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders)$")
 _TIER = re.compile(r"^c:tier:(BRONZE|SILVER|GOLD)$")
 _RESERVE = re.compile(r"^c:rs:(\d+):([0-9a-f]{8}):(k:[PIH]|keep|w:now|w:tmr|ok|no)$")
 _SHARE = re.compile(r"^c:sh:(\d+):([0-9a-f]{8}):(w:now|w:tmr|ok|no)$")
@@ -419,13 +423,22 @@ class AdminPanel:
 
     def _screen(self, name: str, now: datetime, notice: str = "") -> BotReply:
         if name == "home":
+            todo, today = self._todo(now)
             text = home_text(
                 rate_percent=self._rate_percent(now),
-                membership_on=self.membership_on,
                 calculator=self.calculator_label,
                 pending=self._pending_count(now),
+                todo=todo,
+                today=today,
+                wallet_on=self._wallet_on(),
             )
             return BotReply(text, inline_keyboard=MENU_KEYBOARD)
+        if name == "settings":
+            text = settings_text(rate_percent=self._rate_percent(now), membership_on=self.membership_on,
+                                 calculator=self.calculator_label, pending=self._pending_count(now))
+            return BotReply(text, inline_keyboard=SETTINGS_MENU_KEYBOARD)
+        if name == "orders":
+            return BotReply(self._orders_text(), inline_keyboard=ORDERS_MENU_KEYBOARD)
         if name == "policy":
             live = self.resolve_policy(now)
             with self._connect() as conn:
@@ -1371,6 +1384,59 @@ class AdminPanel:
             recent=recent,
         )
         return BotReply(text, inline_keyboard=reserve_decision_keyboard(draft_id, nonce))
+
+    def _todo(self, now: datetime) -> tuple[list[str], str]:
+        """(việc cần làm, dòng số hôm nay) cho trang chủ. Đọc mode=ro; lỗi đọc thì báo một dòng, không vỡ màn."""
+        todo: list[str] = []
+        try:
+            with insights.open_readonly(self.db_path) as conn:
+                tickets = conn.execute(
+                    "SELECT COUNT(*) FROM support_tickets WHERE status NOT IN ('RESOLVED', 'REJECTED', 'CLOSED')"
+                ).fetchone()[0]
+                marks = ", ".join("?" for _ in payouts.OPEN)
+                requests = conn.execute(
+                    f"SELECT COUNT(*) FROM cashback_payouts WHERE status IN ({marks})", payouts.OPEN
+                ).fetchone()[0]
+                review = conn.execute(
+                    f"SELECT COUNT(*) FROM shopee_conversions WHERE matched_link_id IS NOT NULL AND {VALIDATION_LISTS['alert'][1]}"
+                ).fetchone()[0]
+                red = [c for c in insights.operations(conn, now, self.auto_sync.interval_minutes) if not c.ok]
+                day = insights.day_stats(conn, now)
+        except sqlite3.Error:
+            return ["⚠️ Chưa đọc được số liệu (thử lại sau ít phút)."], ""
+        if tickets:
+            todo.append(f"📩 {tickets} yêu cầu hỗ trợ đang mở")
+        if requests:
+            todo.append(f"👛 {requests} yêu cầu rút đang chờ")
+        if review:
+            todo.append(f"🧾 {review} đơn cần kiểm tra (🧾 Đơn & hoa hồng)")
+        todo += [f"🔴 {c.label}: {c.value}" for c in red if c.code not in ("tickets", "payouts")]
+        today = (f"📅 <b>Hôm nay</b>: {day.orders} đơn · HH ròng {format_vnd(day.net)} · {day.new} khách mới · "
+                 f"{day.links} link")
+        return todo, today
+
+    def _wallet_on(self) -> bool:
+        try:
+            return TrackingRepository(self.db_path).get_state("wallet_enabled") == "1"
+        except sqlite3.Error:
+            return False
+
+    def _orders_text(self) -> str:
+        with insights.open_readonly(self.db_path) as conn:
+            counts = dict(conn.execute(
+                "SELECT platform, COUNT(*) FROM shopee_conversions WHERE matched_link_id IS NOT NULL GROUP BY platform"
+            ).fetchall())
+            review = conn.execute(
+                f"SELECT COUNT(*) FROM shopee_conversions WHERE matched_link_id IS NOT NULL AND {VALIDATION_LISTS['alert'][1]}"
+            ).fetchone()[0]
+        return (
+            "⚙️ Quản trị › <b>Đơn &amp; hoa hồng</b>\n\n"
+            f"Đơn qua link bot: 🛒 Shopee <b>{counts.get('shopee', 0)}</b> · 🎵 TikTok <b>{counts.get('tiktok', 0)}</b>\n"
+            f"Cần kiểm tra: <b>{review}</b>\n\n"
+            "• 🧾 Duyệt hoa hồng: trạng thái hoa hồng từng đơn (cả Shopee và TikTok).\n"
+            "• 💳 Đối soát thanh toán: khớp báo cáo Shopee đã trả với đơn.\n"
+            "• 🔎 Đơn cần đối soát: đơn chờ lâu hoặc vắng trong báo cáo Shopee."
+        )
 
     def _pending_count(self, now: datetime) -> int | None:
         try:

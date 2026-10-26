@@ -354,7 +354,9 @@ def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
 
     home = bot.admin_panel.menu(ADMIN, now)
     assert "V1.2 · 70% phần còn lại sau dự phòng phí và thuế" in home.text
-    assert "Calculator V1.2: Đã bật" in home.text
+    assert "Báo giá đang chạy: V1.2" in home.text
+    settings = bot.admin_panel.handle_callback(ADMIN, "c:menu:settings", "private", now)
+    assert "cách tính V1.2" in settings.text
     policy = bot.admin_panel.handle_callback(ADMIN, "c:menu:policy", "private", now)
     assert "Phiên bản: <b>V1.2</b>" in policy.text
     assert "Dự phòng phí (0,98%): -980đ" in policy.text

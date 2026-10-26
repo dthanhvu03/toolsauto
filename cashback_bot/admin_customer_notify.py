@@ -13,9 +13,10 @@ import html
 import json
 import re
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from cashback_bot.db import TrackingRepository, enqueue_event
-from cashback_bot.messages import BotReply, order_new_notice, order_update_notice
+from cashback_bot.messages import BotReply, fit_html, order_new_notice, order_update_notice
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
 from cashback_bot.order_notify import BASELINE_KEY, HISTORY_KEY
 
@@ -42,6 +43,17 @@ SMOKE_MARKUP = json.dumps({"inline_keyboard": [[
     {"text": "📦 Đơn hàng của tôi", "callback_data": "u:o:l:1"}, {"text": "📩 Hỗ trợ", "callback_data": "u:p:support"},
 ]]})
 
+
+ICT = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+def _vn(stamp: str | None) -> str:
+    """Mốc UTC của DB → «dd/mm HH:MM» giờ VN như các màn khác (rà soát 2026-10-26)."""
+    try:
+        moment = datetime.strptime(str(stamp), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return str(stamp or "-")[5:16].replace("T", " ")
+    return moment.astimezone(ICT).strftime("%d/%m %H:%M")
 
 def _reason(error: str | None) -> str:
     if not error:
@@ -103,7 +115,7 @@ class CustomerNotifyAdmin:
         changes = json.loads(history[0]) if history else []
         if changes:
             lines.append("Đổi chế độ gần đây: " + " · ".join(
-                f"{c['at'][5:16].replace('T', ' ')} {MODE_LABELS.get(c.get('mode'), c.get('mode'))}" for c in changes[-3:]
+                f"{_vn(c['at'])} {MODE_LABELS.get(c.get('mode'), c.get('mode'))}" for c in changes[-3:]
             ))
         lines.append("")
         lines += [f"{label}: <b>{int(counts.get(status, 0))}</b>" for status, label in STATUS_LABELS.items()]
@@ -137,7 +149,7 @@ class CustomerNotifyAdmin:
         lines = [f"⚙️ Quản trị › Thông báo khách › <b>{STATUS_LABELS[status]}</b>", ""]
         lines += [
             f"• #{row['id']} {CATEGORY_LABELS.get(row['category'], row['category'] or '-')} · khách <code>{row['chat_id']}</code> · "
-            f"{row['created_at'][5:16].replace('T', ' ')} · {_reason(row['last_error'])}"
+            f"{_vn(row['created_at'])} · {_reason(row['last_error'])}"
             for row in rows
         ] or ["Không có tin nào."]
         buttons = [((f"🔁 Gửi lại #{row['id']}", f"c:nt:r:{row['id']}"),) for row in rows if status in ("failed", "unknown")]
@@ -242,4 +254,4 @@ class CustomerNotifyAdmin:
         text = "⚙️ Quản trị › Thông báo khách › <b>Mẫu tin</b>\n\nSố liệu trong mẫu là ví dụ.\n\n" + "\n\n— — —\n\n".join(
             f"<i>{title}</i>\n{body}" for title, body in samples
         )
-        return BotReply(text[:4000], inline_keyboard=(BACK_HOME,))
+        return BotReply(fit_html(text), inline_keyboard=(BACK_HOME,))

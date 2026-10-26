@@ -63,7 +63,26 @@ Còn lại:
 - Ví hiện các dòng 0đ.
 - Tin admin trả lời ticket không ghi "Hỗ trợ trả lời".
 
-## Đợt 4 — màn admin (chờ duyệt, cỡ M)
+## Đợt 4 — màn admin (✅ đã làm 2026-10-26, trừ các mục ghi «còn lại»)
+
+Đã làm:
+- Trang chủ mới: 📌 Việc cần làm (ticket, yêu cầu rút, đơn cần kiểm tra, mọi dòng đỏ của 🛠 Vận hành), 📅 Hôm nay, báo giá, trạng thái ví.
+- Menu còn 13 nút; menu con 🧾 Đơn & hoa hồng và ⚙️ Cài đặt. Mọi màn cũ vào được trong 2 lần bấm (có test).
+- 📈 Thống kê: "Tiền thật" đổi thành "Tạm tính", "= Admin" đổi thành "= Biên".
+- Tin "Hoa hồng Shopee thay đổi" chỉ dùng khi số tiền đổi; trạng thái hiện bằng chữ; nút dẫn đúng màn.
+- Mã thô thành chữ: dòng thời gian khách, kết quả 🔍 Tìm.
+- Nút 🚨 ghi đúng "Gian lận / cần kiểm tra".
+- Thông báo khách hiện giờ VN.
+- TikTok không mở cho khách được khi chưa có khoá.
+- Biểu tượng 💳 / 🔎 tách khỏi 🧾.
+- `fit_html` thay các chỗ cắt tin thô.
+
+Còn lại:
+- Bảng thuật ngữ chung cho mọi màn (Admin còn / Biên / HH ròng…).
+- Ticket hiện mã thô (OPEN→IN_REVIEW…).
+- Đổi rút tối thiểu chưa cần xác nhận.
+- NAV lặp 3 hàng ở các màn số.
+- Dấu thập phân và định dạng ngày chưa thống nhất.
 
 **P1 / P2**
 - Tin "Hoa hồng Shopee thay đổi" gửi cả khi chỉ đổi trạng thái (huỷ, cần kiểm tra), giá trị là mã thô (PENDING → REJECTED), nút dẫn tới danh sách rỗng.

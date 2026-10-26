@@ -91,7 +91,9 @@ def test_man_thong_ke_trong_admin(tmp_path):
     _seed(tmp_path)
     bot = service(tmp_path, FakeClient(payload()), admin_user_ids=frozenset({ADMIN}))
     home = bot.admin_panel.menu(ADMIN, NOW)
-    assert home.inline_keyboard[0] == (("📈 Thống kê", "c:st:7d"), ("🎯 Mục tiêu", "c:in:t"), ("🔍 Tìm", "c:in:f"))
+    assert home.inline_keyboard[0] == (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d"), ("🎯 Mục tiêu", "c:in:t"))
+    orders = bot.admin_panel.handle_callback(ADMIN, "c:menu:orders", "private", NOW)
+    assert ("🗓 Thống kê Shopee 7 ngày", "c:st:7d") in [b for row in orders.inline_keyboard for b in row]
 
     reply = bot.admin_panel.handle_callback(ADMIN, "c:st:today", "private", NOW)
     assert reply.text.startswith("⚙️ Quản trị › <b>Thống kê · Hôm nay</b>")
@@ -131,7 +133,7 @@ def test_chua_co_du_lieu(tmp_path):
     reply = panel.handle_callback(ADMIN, "c:st:7d", "private", NOW)
     assert "Người dùng 0  mới 0 · gửi link 0" in reply.text
     assert "Chưa có hoạt động." in reply.text
-    assert "Chưa có dữ liệu đối soát" in reply.text
+    assert "Chưa có dữ liệu" in reply.text
     detail = panel.handle_callback(ADMIN, "c:st:7d:more", "private", NOW)
     assert "Lỗi: không có" in detail.text
     assert "Gửi nhiều nhất" not in detail.text

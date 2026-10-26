@@ -1,3 +1,17 @@
+## Phiên 2026-10-26 (cp) — Rà soát đợt 4: màn admin
+
+- Trang chủ `/admin`: 📌 Việc cần làm, 📅 Hôm nay, báo giá, ví. Bỏ "Calculator V1.2" và dòng "Đối soát & chi trả: Chưa mở" ghi cứng.
+- Menu 13 nút + menu con `c:menu:orders` (🧾 Đơn & hoa hồng) và `c:menu:settings` (⚙️ Cài đặt). Test kiểm mọi màn cũ còn đường vào.
+- Thống kê ghi "Tạm tính" và "= Biên". Tin COMMISSION_CHANGED đổi tiêu đề theo nội dung, trạng thái bằng chữ.
+- `insights.STATUS_WORDS`, `NOTICE_WORDS`, `SEND_WORDS`; `messages.fit_html`. Giờ VN ở 🔔 Thông báo khách.
+- 🎵 TikTok chặn "Mở cho khách" khi chưa có khoá.
+- Proof: 838 test cashback qua.
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+  - Phần còn lại ghi trong `reports/CASHBACK_REVIEW_2026-10-26.md`.
+
+---
+
 ## Phiên 2026-10-26 (co) — Rà soát đợt 3: câu chữ cho khách
 
 - Câu nói sai ý:

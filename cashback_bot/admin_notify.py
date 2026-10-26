@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 
-from cashback_bot import ops_watch, policy_snapshot
+from cashback_bot import insights, ops_watch, policy_snapshot
 from cashback_bot.db import TrackingRepository
 from cashback_bot.notify_dispatch import Dispatcher
 from cashback_bot.messages import buyer_name
@@ -145,7 +145,10 @@ def change_value(field: str, value: str | None) -> str:
         return "có" if value == "1" else "không"
     if field == "attribution":
         return f"link #{html.escape(value)}"
+    if field in ("order_status", "validation_status"):
+        return html.escape(insights.status_word(value))
     return html.escape(value)
+
 
 
 def _num(amount: int | None) -> str:
@@ -347,7 +350,9 @@ class AdminNotifier:
         trạng thái lùi, Sub ID trỏ link khác. Chỉ báo, không tự sửa tiền hay quyền rút."""
         if not self._active() or not changes:
             return
-        lines = ["🔔 <b>Hoa hồng Shopee thay đổi</b>", ""]
+        # Rà soát 2026-10-26: chỉ gọi «hoa hồng thay đổi» khi số tiền đổi; đổi trạng thái thì báo «cần xem».
+        money = any(change.field == "net_commission_vnd" for _order, change in changes)
+        lines = ["🔔 <b>Hoa hồng Shopee thay đổi</b>" if money else "🔔 <b>Đơn Shopee có thay đổi cần xem</b>", ""]
         for order_sn, change in list(changes)[:10]:
             label = _CHANGE_LABELS.get(change.field, change.field)
             old = change_value(change.field, change.old)
@@ -355,7 +360,7 @@ class AdminNotifier:
             lines.append(f"• <code>{html.escape(short_order(order_sn))}</code> {label}: {old} → <b>{new}</b>")
         if len(changes) > 10:
             lines.append(f"… và {len(changes) - 10} thay đổi khác.")
-        lines += ["", "👉 /admin → 🔗 Shopee Affiliate → 🧾 Duyệt hoa hồng.", f"🕓 {_vn_now_text()}"]
+        lines += ["", "👉 /admin → 🧾 Đơn & hoa hồng → 🧾 Duyệt hoa hồng (🚨 cần kiểm tra).", f"🕓 {_vn_now_text()}"]
         self.repo.enqueue_admin_event(
             event_key=f"commission_changes:{run_id}",
             event_type="COMMISSION_CHANGED",
@@ -420,7 +425,7 @@ class AdminNotifier:
         if ordered:
             lines += _orders_table(ordered[:SYNC_ORDER_LINES], splits)
         if len(ordered) > SYNC_ORDER_LINES:
-            lines.append(f"… và {len(ordered) - SYNC_ORDER_LINES} đơn khác (xem 📊 Thống kê).")
+            lines.append(f"… và {len(ordered) - SYNC_ORDER_LINES} đơn khác (xem 🧾 Đơn & hoa hồng → 🗓 Thống kê).")
         lines.append(f"🕓 {_vn_now_text()}")
         self.repo.enqueue_admin_event(
             event_key=f"shopee_sync_result:{datetime.now(timezone.utc).timestamp()}",

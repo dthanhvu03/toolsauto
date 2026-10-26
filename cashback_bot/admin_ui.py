@@ -20,16 +20,27 @@ Keyboard = tuple[tuple[tuple[str, str], ...], ...]
 HOME_TARGET = "c:menu:home"
 BACK_HOME = (("◀️ Tổng quan", HOME_TARGET),)
 
+# Rà soát 2026-10-26 (đợt 4): việc hằng ngày ở trang chủ; đơn & hoa hồng và cài đặt gom vào hai menu con.
 MENU_KEYBOARD: Keyboard = (
-    (("📈 Thống kê", "c:st:7d"), ("🎯 Mục tiêu", "c:in:t"), ("🔍 Tìm", "c:in:f")),
-    (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d")),
-    (("🛠 Vận hành", "c:in:o"), ("👥 Khách hàng", "c:in:u:margin:1")),
-    (("🔗 Shopee Affiliate", "c:menu:shopee"), ("🎵 TikTok Shop", "c:tk:home"), ("👛 Ví khách", "c:menu:wallet")),
-    (("💰 Chính sách", "c:menu:policy"), ("🎖️ Hạng thành viên", "c:menu:rank")),
-    (("🧾 Thuế & phí", "c:menu:fee"), ("🧮 Mô phỏng", "c:menu:sim")),
-    (("📊 Lịch sử", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
-    (("📩 Hỗ trợ", "c:hp:home"), ("📋 Điều khoản", "c:tm:home")),
-    (("⚖️ Sẵn sàng chi trả", "c:rd:home"), ("🔔 Thông báo khách", "c:nt:home")),
+    (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d"), ("🎯 Mục tiêu", "c:in:t")),
+    (("👥 Khách hàng", "c:in:u:margin:1"), ("🔍 Tìm", "c:in:f"), ("📩 Hỗ trợ", "c:hp:home")),
+    (("🧾 Đơn & hoa hồng", "c:menu:orders"),),
+    (("🛒 Shopee", "c:menu:shopee"), ("🎵 TikTok", "c:tk:home"), ("👛 Ví khách", "c:menu:wallet")),
+    (("🛠 Vận hành", "c:in:o"), ("⚙️ Cài đặt", "c:menu:settings")),
+)
+ORDERS_MENU_KEYBOARD: Keyboard = (
+    (("🧾 Duyệt hoa hồng", "c:cv:home"),),
+    (("💳 Đối soát thanh toán", "c:sm:home"), ("🔎 Đơn cần đối soát", "c:rc:home")),
+    (("🗓 Thống kê Shopee 7 ngày", "c:st:7d"),),
+    BACK_HOME,
+)
+SETTINGS_MENU_KEYBOARD: Keyboard = (
+    (("💰 Chính sách", "c:menu:policy"), ("🧾 Thuế & phí", "c:menu:fee")),
+    (("🧪 Mô phỏng", "c:menu:sim"), ("🧮 Hoà vốn", "c:in:b")),
+    (("🎖️ Hạng thành viên", "c:menu:rank"), ("📋 Điều khoản", "c:tm:home")),
+    (("🔔 Thông báo khách", "c:nt:home"), ("⚖️ Sẵn sàng chi trả", "c:rd:home")),
+    (("📊 Lịch sử cấu hình", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
+    BACK_HOME,
 )
 
 NAV_KEYBOARD: Keyboard = (BACK_HOME,)
@@ -38,8 +49,8 @@ def shopee_connected_keyboard() -> Keyboard:
     # PLAN-080: bật tự đồng bộ do chủ bot đặt trong .env; ở đây chỉ xem lịch, lịch sử, tạm dừng / tiếp tục.
     return (
         (("🔄 Đồng bộ ngay", "c:shopee:sync"), ("📤 CSV 30 ngày", "c:shopee:csv")),
-        (("🧾 Duyệt hoa hồng", "c:cv:home"), ("🧾 Đối soát thanh toán", "c:sm:home")),
-        (("⏱ Tự động đồng bộ", "c:sy:home"), ("🧾 Đơn cần đối soát", "c:rc:home")),
+        (("🧾 Duyệt hoa hồng", "c:cv:home"), ("💳 Đối soát thanh toán", "c:sm:home")),
+        (("⏱ Tự động đồng bộ", "c:sy:home"), ("🔎 Đơn cần đối soát", "c:rc:home")),
         (("🔑 Cập nhật Cookie", "c:shopee:auth"),),
         BACK_HOME,
     )
@@ -47,8 +58,8 @@ def shopee_connected_keyboard() -> Keyboard:
 SHOPEE_KEYBOARD_DISCONNECTED: Keyboard = (
     (("🔑 Kết nối Cookie", "c:shopee:auth"),),
     # Duyệt / đối soát / lịch đồng bộ đọc dữ liệu đã có, không cần cookie: vẫn mở được khi cookie hết hạn.
-    (("🧾 Duyệt hoa hồng", "c:cv:home"), ("🧾 Đối soát thanh toán", "c:sm:home")),
-    (("⏱ Tự động đồng bộ", "c:sy:home"), ("🧾 Đơn cần đối soát", "c:rc:home")),
+    (("🧾 Duyệt hoa hồng", "c:cv:home"), ("💳 Đối soát thanh toán", "c:sm:home")),
+    (("⏱ Tự động đồng bộ", "c:sy:home"), ("🔎 Đơn cần đối soát", "c:rc:home")),
     BACK_HOME,
 )
 
@@ -107,23 +118,34 @@ def quote_label(rate_percent: int, v12: bool) -> str:
 def home_text(
     *,
     rate_percent: int,
-    membership_on: bool,
     calculator: str,
     pending: int | None,
+    todo: list[str],
+    today: str,
+    wallet_on: bool = False,
 ) -> str:
+    """Trang chủ /admin: việc cần làm trước, rồi số hôm nay, rồi báo giá đang chạy."""
+    quote = quote_label(rate_percent, calculator == "V1.2")
+    lines = ["⚙️ <b>Quản trị</b>", "", "📌 <b>Việc cần làm</b>"]
+    lines += [f"• {item}" for item in todo] or ["✅ Không có việc gấp."]
+    if today:
+        lines += ["", today]
+    lines += ["", f"💰 Báo giá đang chạy: {quote}",
+              "👛 Ví khách: " + ("đang bật" if wallet_on else "đang tắt (bot chưa chi trả)")]
+    if pending:
+        lines.append(f"🟡 Bản nháp chính sách chờ kích hoạt: <b>{pending}</b> (⚙️ Cài đặt → 💰 Chính sách)")
+    return "\n".join(lines)
+
+
+def settings_text(*, rate_percent: int, membership_on: bool, calculator: str, pending: int | None) -> str:
     v12 = calculator == "V1.2"
-    quote = quote_label(rate_percent, v12)
     pending_line = "không đọc được" if pending is None else str(pending)
     return (
-        "⚙️ <b>Quản trị</b>\n\n"
-        "🟢 <b>Khách đang nhận</b>\n"
-        f"• Chính sách báo giá: {quote}\n"
-        f"• Calculator V1.2: {'Đã bật' if v12 else 'Chưa bật'}\n"
+        "⚙️ Quản trị › <b>Cài đặt</b>\n\n"
+        f"• Báo giá: {quote_label(rate_percent, v12)} · cách tính {'V1.2' if v12 else 'V1.1 (chưa bật V1.2)'}\n"
         f"• Hạng thành viên: {'Đã bật' if membership_on else 'Chưa bật'}\n"
-        "• Đối soát &amp; chi trả: Chưa mở\n\n"
-        f"🟡 Bản nháp đang chờ: <b>{pending_line}</b>\n\n"
-        "ⓘ Sửa cấu hình không đổi báo giá khách cho tới khi kích hoạt. "
-        "Báo giá đã lưu không tự tính lại."
+        f"• Bản nháp chính sách đang chờ: <b>{pending_line}</b>\n\n"
+        "ⓘ Sửa cấu hình không đổi báo giá khách cho tới khi kích hoạt. Báo giá đã lưu không tự tính lại."
     )
 
 
@@ -641,13 +663,14 @@ def _aligned(rows: list[tuple[str, int, str]]) -> str:
 
 
 def _money_lines(shopee) -> list[str]:
-    """Tiền thật từ Shopee, không tính đơn huỷ. Khách, phí, dự phòng thuế lấy từ sổ đơn qua bot."""
+    """Tiền tạm tính từ báo cáo Shopee (đơn chưa huỷ, chưa phải tiền Shopee đã trả). Khách, phí, dự phòng thuế lấy từ
+    sổ đơn qua bot. Tiền thực (đã trả, đối soát khớp) xem ở 💹 Dòng tiền."""
     if shopee is None or (shopee.total_clicks == 0 and shopee.orders_total == 0):
-        return ["💰 <b>Tiền thật</b>", "ⓘ Chưa có dữ liệu đối soát. Vào 🔗 Shopee Affiliate → 🔄 để đồng bộ."]
+        return ["💰 <b>Tạm tính</b>", "ⓘ Chưa có dữ liệu. Vào 🛒 Shopee → 🔄 Đồng bộ ngay."]
     costs = shopee.bot_fee_vnd + shopee.bot_tax_vnd
     keep = shopee.real_commission_vnd - shopee.bot_cashback_vnd - costs
     lines = [
-        "💰 <b>Tiền thật</b> · Shopee",
+        "💰 <b>Tạm tính</b> · Shopee, đơn chưa huỷ (tiền thực xem ở 💹 Dòng tiền)",
         f"Đơn <b>{shopee.orders_total}</b>: chờ {shopee.orders_pending} · xong {shopee.orders_completed} "
         f"· huỷ {shopee.orders_cancelled}",
         _aligned([
@@ -655,7 +678,7 @@ def _money_lines(shopee) -> list[str]:
             ("HH", shopee.real_commission_vnd, "sau phí MCN"),
             ("− Khách", shopee.bot_cashback_vnd, ""),
             ("− Phí+T", costs, "phí + dự phòng thuế"),
-            ("= Admin", keep, ""),
+            ("= Biên", keep, "anh giữ"),
         ]),
     ]
     outside = shopee.real_commission_vnd - shopee.bot_commission_vnd

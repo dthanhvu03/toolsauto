@@ -270,9 +270,9 @@ def test_dau_phay_trong_cau_chu_khong_bi_doi_thanh_dau_cham(tmp_path):
 def test_tong_quan_khong_lap_dong(tmp_path):
     bot, _client = _admin_bot(tmp_path)
     home = bot.admin_panel.menu(ADMIN_ID, NOW)
-    assert home.text.count("Đối soát") == 1
+    assert home.text.count("Đối soát") <= 1
     assert "Tỷ lệ ước tính hiện tại" not in home.text
-    assert "Chính sách báo giá: V1.1 · 70% hoa hồng ước tính" in home.text
+    assert "Báo giá đang chạy: V1.1 · 70% hoa hồng ước tính" in home.text and "Việc cần làm" in home.text
 
 
 def test_nut_het_hieu_luc_van_giu_nut_dieu_huong(tmp_path):

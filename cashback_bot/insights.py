@@ -39,6 +39,26 @@ ZALO_WARN = 40
 BACKUP_STALE = timedelta(hours=26)
 LINK_STUCK = timedelta(hours=1)
 NEW_DAYS, ACTIVE_DAYS, CHURN_DAYS = 7, 14, 30
+# Mã thô → chữ cho chủ bot (rà soát 2026-10-26): trạng thái đơn / duyệt, loại tin và kết quả gửi.
+STATUS_WORDS = {
+    "PENDING": "Chờ xử lý", "UNPAID": "Chưa thanh toán", "PAID": "Đã thanh toán", "COMPLETED": "Hoàn thành",
+    "CANCELLED": "Đã huỷ", "CANCELED": "Đã huỷ", "APPROVED": "Đã duyệt", "REJECTED": "Bị từ chối",
+    "FRAUD": "Gian lận", "NEEDS_REVIEW": "Cần kiểm tra", "UNKNOWN": "Chưa rõ",
+}
+NOTICE_WORDS = {
+    "ORDER_ORDER_NEW": "báo đơn mới", "ORDER_ORDER_UPDATE": "cập nhật đơn", "WALLET_ENTRY": "báo ví",
+    "PAYOUT": "báo chi trả", "SUPPORT_REPLY": "trả lời hỗ trợ",
+}
+SEND_WORDS = {
+    "sent": "đã gửi", "suppressed": "không gửi (tắt thông báo hoặc đơn cũ)", "unknown": "không rõ đã tới chưa",
+    "failed": "gửi lỗi", "pending": "chờ gửi", "retry": "chờ gửi lại", "sending": "đang gửi",
+}
+
+
+def status_word(code: str | None) -> str:
+    return STATUS_WORDS.get((code or "").upper(), code or "-")
+
+
 SEGMENTS = {
     "attention": "🔴 Cần xử lý",
     "top": "💎 Giá trị cao",
@@ -653,7 +673,8 @@ def timeline(conn: sqlite3.Connection, user_id: int, limit: int = 40) -> list[Ev
         "SELECT COALESCE(purchase_time, created_at), order_sn, order_status, net_commission_vnd, item_name, complete_time "
         "FROM shopee_conversions WHERE telegram_user_id = ?", (user_id,)
     ):
-        events.append(Event(r[0], "order", f"Đơn …{(r[1] or '')[-6:]} · {(r[4] or '-')[:40]} · {r[2]} · HH {r[3] or 0}"))
+        events.append(Event(r[0], "order", f"Đơn …{(r[1] or '')[-6:]} · {(r[4] or '-')[:40]} · {status_word(r[2])} · "
+                                          f"HH {r[3] or 0:,}đ".replace(",", ".")))
         if r[5]:
             events.append(Event(r[5], "order", f"Đơn …{(r[1] or '')[-6:]} hoàn thành"))
     for r in conn.execute(
@@ -677,7 +698,7 @@ def timeline(conn: sqlite3.Connection, user_id: int, limit: int = 40) -> list[Ev
         "SELECT created_at, event_type, status FROM admin_notifications WHERE audience = 'customer' AND chat_id = ?",
         (user_id,),
     ):
-        events.append(Event(r[0], "notice", f"Bot nhắn {r[1]} → {r[2]}"))
+        events.append(Event(r[0], "notice", f"Bot {NOTICE_WORDS.get(r[1], r[1])}: {SEND_WORDS.get(r[2], r[2])}"))
     events.sort(key=lambda e: e.at or "", reverse=True)
     return events[:limit]
 
@@ -1184,7 +1205,8 @@ def search(conn: sqlite3.Connection, query: str, limit: int = SEARCH_LIMIT) -> l
         (code, code),
     ):
         owner = user_label(conn, int(r[4])) if r[4] is not None else "không khớp link bot"
-        add("order", r[0], r[3] or 0, f"Đơn {r[1] or r[0]} · {r[2]} · {(r[5] or '-')[:30].rstrip()} · {owner}")
+        add("order", r[0], r[3] or 0,
+            f"Đơn {r[1] or r[0]} · {status_word(r[2])} · {(r[5] or '-')[:30].rstrip()} · {owner}")
     if param:
         return hits
     if _USER_ID.fullmatch(q):

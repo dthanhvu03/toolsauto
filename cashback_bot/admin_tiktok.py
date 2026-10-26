@@ -71,6 +71,8 @@ class TikTokAdmin:
             return self._home(now)
         if (found := _MODE.fullmatch(data)) is not None:
             mode, confirmed = found.group(1), bool(found.group(2))
+            if mode == "all" and not self.configured:
+                return self._home(now, "🔴 Chưa có khoá RioHub trong .env nên chưa mở cho khách được.")
             if mode == "all" and not confirmed and current_mode(self.repo) != "all":
                 return self._confirm_open()
             return self._set(admin_id, mode, now)

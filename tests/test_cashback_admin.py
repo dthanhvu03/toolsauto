@@ -32,9 +32,10 @@ def test_admin_mo_menu_user_thuong_bi_chan(tmp_path):
     admin = bot.handle_text(ADMIN, "owner", "/admin", update_id=1, now=NOW)
     stranger = bot.handle_text(222, "buyer", "/admin", update_id=2, now=NOW)
     assert "<b>Quản trị</b>" in admin.text
-    assert "Chính sách báo giá: V1.1" in admin.text
+    assert "Báo giá đang chạy: V1.1" in admin.text
     assert "Phiên bản đang phục vụ" not in admin.text
-    assert "Báo giá đã lưu không tự tính lại" in admin.text
+    settings = bot.admin_panel.handle_callback(ADMIN, "c:menu:settings", "private", NOW)
+    assert "Báo giá đã lưu không tự tính lại" in settings.text
     assert "Link cũ không đổi" not in admin.text
     assert admin.inline_keyboard is not None
     assert "chỉ dành cho quản trị" in stranger.text
@@ -283,7 +284,7 @@ def test_vi_mac_dinh_tat_khach_khong_thay_chi_tra(tmp_path):
     reply = bot.handle_text(ADMIN, "owner", "/admin", update_id=13, now=NOW)
     blob = " ".join(data for row in reply.inline_keyboard for _label, data in row)
     assert "c:menu:wallet" in blob
-    assert "Chưa mở" in reply.text
+    assert "Ví khách: đang tắt" in reply.text
     assert bot.wallet.settings().enabled is False
     home = bot.handle_text(111, "khach", "/start", update_id=14, now=NOW)
     assert "u:p:wallet" not in " ".join(data for row in home.inline_keyboard for _label, data in row)

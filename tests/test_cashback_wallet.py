@@ -381,7 +381,7 @@ class TestLedger:
         assert shopee.admin_keep_vnd == 17_368 - 12_157 - shopee.bot_fee_vnd - shopee.bot_tax_vnd
         keep = format_vnd(shopee.admin_keep_vnd).removesuffix("đ")
         overview = stats_text(stats, period_label="Tất cả", since=None)
-        assert f"= Admin    {keep}" in overview or f"= Admin {keep}" in overview.replace("  ", " ")
+        assert f"= Biên {keep}" in " ".join(overview.split())
         assert "Admin còn" in stats_detail_text(stats, period_label="Tất cả", since=None)
         with bot.repo.connect() as conn:
             conversion_id = conn.execute("SELECT conversion_id FROM cashback_entries WHERE status != 'cancelled'").fetchone()[0]

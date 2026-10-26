@@ -403,7 +403,7 @@ class TestSettlementScreen:
         assert "0đ" not in payout_line
         bot.repo.update_shopee_cookie_status(status="connected")
         shopee = _callback(bot, ADMIN, "c:menu:shopee")
-        assert ("🧾 Đối soát thanh toán", "c:sm:home") in [b for row in shopee.inline_keyboard for b in row]
+        assert ("💳 Đối soát thanh toán", "c:sm:home") in [b for row in shopee.inline_keyboard for b in row]
 
     def test_batch_detail_items_evidence_viewed_and_history(self, world):
         bot, engine = world

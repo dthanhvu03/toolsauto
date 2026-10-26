@@ -231,6 +231,27 @@ TIKTOK_NO_INFO = (
 )
 
 
+_TAG = re.compile(r"<(/?)(b|i|u|s|code|pre)>")
+
+
+def fit_html(text: str, limit: int = 4000) -> str:
+    """Cắt tin HTML Telegram cho vừa giới hạn: cắt ở cuối dòng, đóng thẻ còn mở (cắt thô làm Telegram từ chối tin)."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 2]
+    while True:
+        cut = cut[: cut.rfind("\n")] if "\n" in cut else cut[: max(0, len(cut) - 40)]
+        cut = cut[: cut.rfind("<")] if cut.rfind("<") > cut.rfind(">") else cut
+        opened: list[str] = []
+        for closing, tag in _TAG.findall(cut):
+            if closing and opened and opened[-1] == tag:
+                opened.pop()
+            elif not closing:
+                opened.append(tag)
+        result = cut + "".join(f"</{tag}>" for tag in reversed(opened)) + "\n…"
+        if len(result) <= limit or not cut:
+            return result
+
 @dataclass(frozen=True)
 class BotReply:
     """text rỗng: chỉ trả lời callback (toast/popup), không gửi hay sửa tin."""

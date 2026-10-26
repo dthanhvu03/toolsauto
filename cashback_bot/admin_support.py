@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from cashback_bot import policy_snapshot, support, terms
 from cashback_bot.admin_notify import short_order
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import BotReply
+from cashback_bot.messages import BotReply, fit_html
 from cashback_bot.money import format_vnd
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -166,7 +166,7 @@ class SupportAdmin:
         if ticket.status != "CLOSED":
             rows.insert(0, (("💬 Trả lời khách", f"c:hp:r:{ticket.id}"),))
         text = "\n".join(lines)
-        return BotReply(text[:4000], inline_keyboard=(*rows, BACK_HOME))
+        return BotReply(fit_html(text), inline_keyboard=(*rows, BACK_HOME))
 
     def _facts(self, conn, ticket: support.Ticket) -> list[str]:
         """Dữ liệu chỉ của chính khách mở ticket: link gắn với ticket, đơn gắn với ticket, 5 link gần nhất."""

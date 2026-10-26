@@ -529,7 +529,7 @@ def test_31_32_ban_nhap_hang_khong_thanh_dang_ap_dung(tmp_path):
     assert "HẠNG THÀNH VIÊN</b> · bản nháp, chưa bật" in sim.text
     assert "Đồng 55%" in sim.text
     assert MEMBERSHIP_CUTOVER is False
-    assert "Hạng thành viên: Chưa bật" in bot.admin_panel.menu(ADMIN, NOW).text
+    assert "Hạng thành viên: Chưa bật" in bot.admin_panel.handle_callback(ADMIN, "c:menu:settings", "private", NOW).text
     assert "<b>12.462đ</b>" in bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text
     assert _snapshots(tmp_path)[0]["share_bps"] == 7_000
 

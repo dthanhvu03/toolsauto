@@ -165,7 +165,7 @@ class ValidationAdmin:
         lines += ["", SOURCE_NOTE]
         keyboard = (
             ((f"📋 Chờ xác minh ({counts['pending']})", "c:cv:l:pending"), (f"✅ Đã duyệt ({counts['approved']})", "c:cv:l:approved")),
-            ((f"❌ Bị từ chối ({counts['rejected']})", "c:cv:l:rejected"), (f"🚨 Cần kiểm tra ({counts['alert']})", "c:cv:l:alert")),
+            ((f"❌ Bị từ chối ({counts['rejected']})", "c:cv:l:rejected"), (f"🚨 Gian lận / cần kiểm tra ({counts['alert']})", "c:cv:l:alert")),
             ((f"🔄 Hoa hồng thay đổi ({counts['changed']})", "c:cv:l:changed"), (f"✔️ Đã xem ({counts['seen']})", "c:cv:l:seen")),
             (("🕘 Lịch sử", "c:cv:h"),),
             BACK_SHOPEE,

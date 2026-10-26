@@ -4,6 +4,7 @@ PLAN-095 (giai đoạn B): đồng bộ đơn. RioHub giả, không gọi mạng
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import timedelta
 from unittest.mock import MagicMock
 
@@ -131,6 +132,9 @@ def test_loi_riohub(tmp_path):
 def test_man_admin_tiktok(tmp_path):
     bot = _bot(tmp_path)
     panel = bot.admin_panel
+    blocked = panel.handle_callback(ADMIN, "c:tk:m:all:ok", "private", NOW)
+    assert "Chưa có khoá RioHub" in blocked.text and admin_tiktok.current_mode(bot.repo) == "admin"
+    panel = replace(panel, tiktok_configured=True)
     home = panel.handle_callback(ADMIN, "c:tk:home", "private", NOW)
     assert "🧪 Chỉ admin thử" in home.text and "Đồng bộ đơn (mỗi 2 giờ): chưa chạy lần nào" in home.text
     ask = panel.handle_callback(ADMIN, "c:tk:m:all", "private", NOW)

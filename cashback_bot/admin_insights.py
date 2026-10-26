@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 from cashback_bot import insights
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import BotReply
+from cashback_bot.messages import BotReply, fit_html
 from cashback_bot.money import format_vnd
 
 _MONEY = re.compile(r"^c:in:(m|g):(7d|30d|month|all)$")
@@ -417,7 +417,7 @@ def detail_text(c: insights.Customer, m: insights.Money, prof: insights.Profile,
         lines.append("🔔 Tắt thông báo: " + (", ".join(off) if off else "không"))
     lines += ["", "🕘 <b>Gần đây</b>"]
     lines += [f"• {_when(e.at)} {html.escape(e.text)}" for e in events[:12]] or ["Chưa có."]
-    return "\n".join(lines)[:3900]
+    return fit_html("\n".join(lines), 3900)
 
 
 class InsightsAdmin:
@@ -511,7 +511,7 @@ class InsightsAdmin:
             detail = insights.link_detail(conn, link_id)
         if detail is None:
             return BotReply("Không thấy link này.", inline_keyboard=((("🔍 Tìm tiếp", "c:in:f"),), *NAV))
-        return BotReply(link_text(detail)[:4000], inline_keyboard=(
+        return BotReply(fit_html(link_text(detail)), inline_keyboard=(
             (("👤 Hồ sơ khách", f"c:in:d:{detail.user_id}"),),
             (("🔍 Tìm tiếp", "c:in:f"),),
             *NAV,
@@ -524,7 +524,7 @@ class InsightsAdmin:
             text = f"{notice}\n\n{text}"
         buttons = [(f"✍️ {label}", f"c:in:t:{key}") for key, label in GOAL_BUTTONS.items()]
         rows = tuple(tuple(buttons[i:i + 2]) for i in range(0, len(buttons), 2))
-        return BotReply(text[:4000], inline_keyboard=(*rows, (("🔄 Làm mới", "c:in:t"),), *NAV))
+        return BotReply(fit_html(text), inline_keyboard=(*rows, (("🔄 Làm mới", "c:in:t"),), *NAV))
 
     def _ask_goal(self, admin_id: int, key: str, now: datetime) -> BotReply:
         self.waiting[admin_id] = (key, now + COST_WAIT)
@@ -577,7 +577,7 @@ class InsightsAdmin:
         rows: list[tuple[tuple[str, str], ...]] = [_periods(kind, view.period)]
         if kind == "m":
             rows.append((("✍️ Chi phí vận hành / tháng", "c:in:cost"), ("🧮 Hoà vốn", "c:in:b")))
-        return BotReply(text[:4000], inline_keyboard=(*rows, *NAV))
+        return BotReply(fit_html(text), inline_keyboard=(*rows, *NAV))
 
     def _users(self, key: str, page: int, now: datetime) -> BotReply:
         if key not in SORT_LABELS and key not in insights.SEGMENTS:
