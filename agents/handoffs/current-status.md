@@ -1,3 +1,21 @@
+## Phiên 2026-10-26 (cm) — Rà soát đợt 2: TikTok đúng nền tảng
+
+- Chủ bot: "triển khai theo từng mục".
+- Cột `shopee_conversions.platform`:
+  - mặc định `shopee`; migrate gán `tiktok` cho mã `tt:`; có index (platform, telegram_user_id);
+  - `record_conversion_snapshot(platform=…)`, nguồn TikTok là `riohub_orders`.
+- Trigger mới `financial_lock_platform_entry_insert/update`: khoản của đơn không phải Shopee không được `available`.
+- Lọc `platform = 'shopee'` ở:
+  - đối soát Shopee, khớp báo cáo thanh toán (`settlement.py`);
+  - 📈 Thống kê, CSV, đếm ở màn Shopee Affiliate;
+  - kiểm "đơn hoàn thành > 45 ngày".
+- 🧾 Duyệt hoa hồng: biểu tượng 🎵, lý do TikTok viết thường, nguồn RioHub.
+- Tin admin "🎉 Có N đơn TikTok mới"; lỗi đồng bộ viết thường, mỗi loại lỗi một lần mỗi ngày.
+- Còn chờ chủ bot quyết: đơn có `pit` âm (hoa hồng giảm, kéo theo "cần kiểm tra" và tin hoàn giảm).
+- Proof: 827 test cashback qua. Bot thêm cột và trigger khi khởi động; backup tay trước khi restart.
+
+---
+
 ## Phiên 2026-10-26 (cl) — Rà soát câu chữ, UI/UX, kiến trúc + sửa đợt 1
 
 - Chủ bot yêu cầu rà soát toàn bộ (Shopee + TikTok, Telegram + Zalo). Ba lượt rà chỉ đọc, chạy trên DB tạm. Claude Code kiểm lại mọi phát hiện P1.

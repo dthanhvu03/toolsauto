@@ -103,6 +103,7 @@ def record(repo: TrackingRepository, row: dict, now: datetime) -> bool | None:
         },
         assessment=assessment,
         seen_source=SEEN_SOURCE,
+        platform="tiktok",
     )
     return result.is_new and result.is_matched
 
@@ -154,9 +155,13 @@ def maybe_start(repo: TrackingRepository, client: RioHubClient | None, admin_not
     def work() -> None:
         try:
             result = run(repo, client)
-            if result is None and admin_notifier is not None:
-                kind = (repo.get_state(ERROR_KEY) or "unknown").split(":", 1)[0]
-                admin_notifier.notify_request_failed(error_type=f"tiktok_sync_{kind}", status="SYNC_FAILED")
+            if admin_notifier is not None:
+                day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                if result is None:
+                    kind = (repo.get_state(ERROR_KEY) or "unknown").split(":", 1)[0]
+                    admin_notifier.notify_tiktok_sync_failed(day, kind)
+                elif result.matched_new:
+                    admin_notifier.notify_tiktok_new_orders(str(int(moment)), result.matched_new)
         except Exception:
             logger.exception("[Cashback] đồng bộ đơn TikTok lỗi bất ngờ")
             repo.set_state(ERROR_KEY, "unexpected")

@@ -335,6 +335,8 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str, trend_start: datetime | Non
         return name if name in columns else "0"
 
     bot_sub = "sub_id IN (SELECT sub_id FROM link_requests WHERE sub_id IS NOT NULL)"
+    # Khối Shopee chỉ tính đơn Shopee (đơn TikTok chung bảng từ PLAN-095; click chỉ có của Shopee).
+    shopee_only = "platform = 'shopee'" if "platform" in columns else "1 = 1"
     clicks_row = conn.execute(
         f"""
         SELECT COUNT(*), COALESCE(SUM({bot_sub}), 0)
@@ -362,7 +364,7 @@ def _shopee_stats(conn: sqlite3.Connection, lo: str, trend_start: datetime | Non
             COALESCE(SUM(CASE WHEN {_CANCELLED} THEN {col("gmv_vnd")} ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN {_CANCELLED} THEN COALESCE(net_commission_vnd, gross_commission_vnd) ELSE 0 END), 0)
         FROM shopee_conversions
-        WHERE COALESCE(purchase_time, created_at) >= ?
+        WHERE COALESCE(purchase_time, created_at) >= ? AND {shopee_only}
         """,
         (lo,),
     ).fetchone()
@@ -417,6 +419,7 @@ def _bot_split(conn: sqlite3.Connection, lo: str, tables: set[str]) -> tuple[int
 def _shopee_daily(conn: sqlite3.Connection, trend_start: datetime, col) -> list[ShopeeDay]:
     """Bảng 7 ngày như trang Thống kê của Addlivetag, theo ngày giờ VN."""
     lo = _stamp(trend_start)
+    shopee_only = "platform = 'shopee'" if col("platform") == "platform" else "1 = 1"
     orders = {
         row[0]: row[1:]
         for row in conn.execute(
@@ -425,7 +428,7 @@ def _shopee_daily(conn: sqlite3.Connection, trend_start: datetime, col) -> list[
                    COUNT(*), COALESCE(SUM({_CANCELLED}), 0),
                    COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE {col("gmv_vnd")} END), 0),
                    COALESCE(SUM(CASE WHEN {_CANCELLED} THEN 0 ELSE net_commission_vnd END), 0)
-            FROM shopee_conversions WHERE COALESCE(purchase_time, created_at) >= ?
+            FROM shopee_conversions WHERE COALESCE(purchase_time, created_at) >= ? AND {shopee_only}
             GROUP BY 1
             """,
             (lo,),
@@ -479,7 +482,7 @@ def conversions_csv(conn: sqlite3.Connection, since: datetime) -> tuple[bytes, i
                {col("gmv_vnd")}, c.gross_commission_vnd, {col("mcn_fee_vnd")}, c.net_commission_vnd, c.sub_id,
                c.telegram_user_id, u.username, {col("complete_time")}, {col("validation_month")}
         FROM shopee_conversions c LEFT JOIN telegram_users u ON u.telegram_user_id = c.telegram_user_id
-        WHERE COALESCE(c.purchase_time, c.created_at) >= ?
+        WHERE COALESCE(c.purchase_time, c.created_at) >= ? AND {"c.platform = 'shopee'" if "platform" in columns else "1 = 1"}
         ORDER BY 1 DESC
         """,
         (_stamp(since),),

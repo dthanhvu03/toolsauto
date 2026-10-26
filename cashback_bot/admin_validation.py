@@ -51,6 +51,8 @@ REASON_LABELS = {
     "status_regression": "trạng thái lùi lại (dữ liệu cũ hoặc Shopee sửa)",
     "missing_fields": "báo cáo thiếu dữ liệu",
     "missing_commission": "báo cáo thiếu hoa hồng",
+    "tiktok_pending": "TikTok chưa chốt đơn",
+    "tiktok_settled_unverified": "TikTok đã chốt hoa hồng, chưa có nguồn đối soát tiền thật",
 }
 ORDER_LABELS = {
     "UNPAID": "Chưa thanh toán",
@@ -175,7 +177,7 @@ class ValidationAdmin:
         with self.repo.connect() as conn:
             rows = conn.execute(
                 f"""
-                SELECT conversion_id, order_sn, item_name, net_commission_vnd, validation_status
+                SELECT conversion_id, order_sn, item_name, net_commission_vnd, validation_status, platform
                 FROM shopee_conversions WHERE {_BOT} AND {where}
                 ORDER BY COALESCE(purchase_time, created_at) DESC LIMIT 10
                 """
@@ -190,7 +192,8 @@ class ValidationAdmin:
             icon = STATUS_LABELS.get(row["validation_status"], "❔").split(" ", 1)[0]
             name = buyer_name(row["item_name"] or row["order_sn"] or "-")[:28]
             amount = "-" if row["net_commission_vnd"] is None else format_vnd(int(row["net_commission_vnd"]))
-            buttons.append(((f"{icon} {name} · {amount}", f"c:cv:o:{row['conversion_id']}"),))
+            mark = "🎵 " if row["platform"] == "tiktok" else ""
+            buttons.append(((f"{icon} {mark}{name} · {amount}", f"c:cv:o:{row['conversion_id']}"),))
         return BotReply("\n".join(lines), inline_keyboard=(*buttons, BACK_HOME_ROW))
 
     def detail(self, conversion_id: str, notice: str = "") -> BotReply:
@@ -211,18 +214,20 @@ class ValidationAdmin:
             diff = "+" + diff
         who = f"@{html.escape(row['username'])}" if row["username"] else f"<code>{row['telegram_user_id']}</code>"
         reason = REASON_LABELS.get(row["validation_reason"] or "", row["validation_reason"] or "-")
+        tiktok = row["platform"] == "tiktok"
+        market, source = ("TikTok", "RioHub (TikTok Shop)") if tiktok else ("Shopee", "báo cáo Shopee")
         lines = [_title("Shopee Affiliate", "Duyệt hoa hồng", "Chi tiết đơn"), ""]
         if notice:
             lines += [notice, ""]
         lines += [
-            f"🛍️ {html.escape(buyer_name(row['item_name'] or '-'))}",
+            f"🛍️ {html.escape(buyer_name(row['item_name'] or '-'))}" + (" · 🎵 TikTok Shop" if tiktok else ""),
             f"• Mã đơn: <code>{html.escape(short_order(row['order_sn']))}</code> · Sub ID: <code>{html.escape(row['sub_id'] or '-')}</code>",
             f"• Người được ghi nhận: {who}",
             f"• Trạng thái đơn: <b>{_order_label(row['order_status'])}</b>",
             f"• Duyệt hoa hồng: <b>{STATUS_LABELS.get(row['validation_status'], row['validation_status'])}</b> · {html.escape(reason)}",
-            "• Tiền Shopee đã trả: <b>chưa xác minh</b>",
+            f"• Tiền {market} đã trả: <b>chưa xác minh</b>",
             f"• Hoa hồng ban đầu: {_money(first)} · hiện tại: <b>{_money(current)}</b> · chênh: {diff}",
-            f"• Đồng bộ gần nhất: {_vn(row['updated_at'])} · nguồn: báo cáo Shopee · độ tin cậy: suy luận",
+            f"• Đồng bộ gần nhất: {_vn(row['updated_at'])} · nguồn: {source} · độ tin cậy: suy luận",
         ]
         if row["review_status"] == "needs_review":
             lines.append("• 🔎 <b>Có cảnh báo chưa kiểm tra</b>")

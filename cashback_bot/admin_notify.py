@@ -578,6 +578,38 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_tiktok_new_orders(self, run_key: str, count: int) -> None:
+        """PLAN-095 (rà soát đợt 2): có đơn TikTok mới khớp link bot sau một lượt đồng bộ."""
+        if not self._active() or count <= 0:
+            return
+        body = (
+            f"🎉 <b>Có {count} đơn TikTok mới qua bot</b>\n\n"
+            "Đơn đã ghi sổ (hoàn tạm tính) và khách được báo như đơn Shopee.\n"
+            "Xem: /admin → 🎵 TikTok Shop, hoặc 🧾 Duyệt hoa hồng."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"tiktok_new:{run_key}", event_type="TIKTOK_NEW_ORDERS", chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
+    def notify_tiktok_sync_failed(self, day: str, kind: str) -> None:
+        """Lỗi đồng bộ đơn TikTok viết thường; mỗi loại lỗi báo tối đa một lần mỗi ngày (bot tự thử lại 15 phút)."""
+        if not self._active():
+            return
+        reason = {
+            "auth": "Khoá RioHub bị từ chối (sai hoặc hết hạn). Kiểm tra RIOHUB_API_KEY trong .env.",
+            "creator": "Tài khoản TikTok mất kết nối với RioHub, hoặc chưa còn là thành viên RioMCN. "
+                       "Đăng nhập RioHub để kết nối lại.",
+        }.get(kind, "Không gọi được RioHub (mạng hoặc RioHub đang lỗi).")
+        body = (
+            "⚠️ <b>Chưa kéo được đơn TikTok</b>\n\n"
+            f"{reason}\nBot tự thử lại sau 15 phút. Trạng thái: /admin → 🎵 TikTok Shop."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"tiktok_sync_failed:{kind}:{day}", event_type="TIKTOK_SYNC_FAILED", chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
     def notify_nightly_brief(self, day: str, body: str) -> None:
         """PLAN-092: 🌙 bản tin tối (mục tiêu, hôm nay, an toàn), mỗi ngày một lần."""
         if not self._active():

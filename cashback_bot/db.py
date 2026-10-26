@@ -899,6 +899,19 @@ CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_polic
 # PLAN-081: nguồn của last_seen_at khi ghi từ lượt đồng bộ (report/list, khung 30 ngày theo giờ mua) và khi tra
 # khung hẹp quanh giờ mua của một đơn đã ra khung (Phương án A).
 SEEN_SOURCE = "report_list_30d"
+# Nguồn đánh giá theo nền tảng (validation_source, shopee_conversion_changes.source).
+PLATFORM_SOURCES = {"tiktok": "riohub_orders"}
+# Chưa có nguồn đối soát tiền thật cho nền tảng khác Shopee: khoản của đơn đó không được vào ví (tầng DB, sau khi có cột).
+PLATFORM_LOCK_SQL = """
+CREATE TRIGGER IF NOT EXISTS financial_lock_platform_entry_insert BEFORE INSERT ON cashback_entries
+WHEN NEW.status = 'available' AND EXISTS (
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND platform != 'shopee')
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement source for this platform'); END;
+CREATE TRIGGER IF NOT EXISTS financial_lock_platform_entry_update BEFORE UPDATE OF status ON cashback_entries
+WHEN NEW.status = 'available' AND OLD.status != 'available' AND EXISTS (
+    SELECT 1 FROM shopee_conversions WHERE conversion_id = NEW.conversion_id AND platform != 'shopee')
+BEGIN SELECT RAISE(ABORT, 'financial_lock: no settlement source for this platform'); END;
+"""
 NARROW_SOURCE = "report_list_narrow"
 SYNC_RUN_COLUMNS = (
     ("lease_owner", "TEXT"),
@@ -1057,6 +1070,11 @@ class TrackingRepository:
                 "UPDATE shopee_conversions SET last_seen_at = updated_at, last_seen_source = 'backfill_updated_at' "
                 "WHERE last_seen_at IS NULL AND last_seen_source IS NULL AND updated_at IS NOT NULL"
             )
+            # Rà soát 2026-10-26 (đợt 2): đơn Shopee hay TikTok Shop. Đơn TikTok (mã «tt:») có từ PLAN-095.
+            _add_column(conn, "shopee_conversions", "platform", "TEXT NOT NULL DEFAULT 'shopee'")
+            conn.execute("UPDATE shopee_conversions SET platform = 'tiktok' WHERE conversion_id LIKE 'tt:%' AND platform != 'tiktok'")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_conversions_platform_user ON shopee_conversions(platform, telegram_user_id)")
+            conn.executescript(PLATFORM_LOCK_SQL)
             # Mỗi khách tối đa một yêu cầu còn giữ tiền: chặn rút trùng ở tầng DB.
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_payout_one_open ON cashback_payouts(telegram_user_id) "
@@ -1700,6 +1718,7 @@ class TrackingRepository:
         assessment: Assessment | None = None,
         sync_run_id: int | None = None,
         seen_source: str = SEEN_SOURCE,
+        platform: str = "shopee",
     ) -> ConversionResult:
         """Ghi một lần Shopee báo về đơn (PLAN-074), trong một transaction.
 
@@ -1789,7 +1808,8 @@ class TrackingRepository:
                 "fraud_flag": fraud_flag,
                 "affiliate_item_status": item_statuses,
                 "checkout_status": checkout,
-                "validation_source": SOURCE_REPORT,
+                "validation_source": PLATFORM_SOURCES.get(platform, SOURCE_REPORT),
+                "platform": platform,
                 "validation_confidence": CONFIDENCE_INFERRED,
                 "evidence_ref": f"sync_run:{sync_run_id}" if sync_run_id else (None if prev is None else prev["evidence_ref"]),
                 # PLAN-081: chỉ đường đồng bộ (có mã lượt) mới là «thấy trong nguồn».
@@ -1816,7 +1836,8 @@ class TrackingRepository:
                     (conversion_id, field, old_value, new_value, significant, source, sync_run_id, detected_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (conversion_id, change.field, change.old, change.new, int(change.significant), SOURCE_REPORT, sync_run_id, now),
+                    (conversion_id, change.field, change.old, change.new, int(change.significant),
+                     PLATFORM_SOURCES.get(platform, SOURCE_REPORT), sync_run_id, now),
                 )
                 if cursor.rowcount == 1:
                     recorded.append((change, int(cursor.lastrowid)))

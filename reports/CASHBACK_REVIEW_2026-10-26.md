@@ -16,7 +16,7 @@ Mức: **P1** sai hoặc hỏng · **P2** gây hiểu nhầm hoặc nợ kỹ th
 | 6 | Kéo đơn TikTok bị treo hoặc hỏng lâu không ai biết (🛠 Vận hành không kiểm) | `insights.operations` |
 | 7 | Cookie Shopee hết hạn thì menu Shopee ẩn luôn 🧾 Duyệt hoa hồng / Đối soát / Tự đồng bộ (các mục này không cần cookie) | `admin_policy.py:524`, `admin_ui.py:47` |
 
-## Đợt 2 — TikTok đúng "nền tảng" ở mọi màn (chờ chủ bot duyệt, cỡ M)
+## Đợt 2 — TikTok đúng "nền tảng" ở mọi màn (✅ đã làm 2026-10-26, trừ mục `pit` chờ quyết)
 
 - Thêm cột `shopee_conversions.platform` (mặc định `shopee`, gán `tiktok` cho mã `tt:`), ghi cùng lúc với đơn.
 - Lọc theo nền tảng ở:

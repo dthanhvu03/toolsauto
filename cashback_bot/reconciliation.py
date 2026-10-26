@@ -96,7 +96,7 @@ def evaluate(repo: TrackingRepository, now: datetime, run_id: int | None = None,
             SELECT c.conversion_id, c.order_sn, c.purchase_time, c.validation_status, c.settlement_status,
                    c.last_seen_run_id, c.last_seen_at, c.last_seen_source, r.tracking_status, r.missed_runs, r.last_run_id
             FROM shopee_conversions c LEFT JOIN conversion_reconciliation r ON r.conversion_id = c.conversion_id
-            WHERE c.matched_link_id IS NOT NULL AND c.conversion_id NOT LIKE 'tt:%'
+            WHERE c.matched_link_id IS NOT NULL AND c.platform = 'shopee'
               AND (c.validation_status IN ('PENDING', 'UNKNOWN', 'NEEDS_REVIEW') OR r.conversion_id IS NOT NULL)
             """
         ).fetchall()

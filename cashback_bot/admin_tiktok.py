@@ -90,7 +90,7 @@ class TikTokAdmin:
             ).fetchone()[0]
             orders, matched = conn.execute(
                 "SELECT COUNT(*), COALESCE(SUM(matched_link_id IS NOT NULL), 0) FROM shopee_conversions "
-                "WHERE conversion_id LIKE 'tt:%'"
+                "WHERE platform = 'tiktok'"
             ).fetchone()
         lines = ["⚙️ Quản trị › <b>🎵 TikTok Shop</b>", ""]
         if notice:

@@ -308,7 +308,8 @@ class SettlementEngine:
     def _insert_item(self, conn: sqlite3.Connection, batch_id: int, evidence_id: int, item: dict, now: str) -> None:
         conv = conn.execute(
             "SELECT conversion_id, matched_link_id, telegram_user_id, net_commission_vnd, validation_status "
-            "FROM shopee_conversions WHERE order_sn = ? OR conversion_id = ? LIMIT 1",
+            # Báo cáo thanh toán Shopee chỉ khớp đơn Shopee (đơn TikTok có order_sn riêng của TikTok).
+            "FROM shopee_conversions WHERE platform = 'shopee' AND (order_sn = ? OR conversion_id = ?) LIMIT 1",
             (item["order_ref"], item["order_ref"]),
         ).fetchone()
         settled = item["settled_vnd"]

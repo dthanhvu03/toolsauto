@@ -804,9 +804,9 @@ def operations(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: i
                         f"{_age_text((now - oldest_pay).total_seconds()) if oldest_pay else '-'}".replace(",", "."),
                         oldest_pay is None or now - oldest_pay <= PAYOUT_STALE))
     stale = conn.execute(
-        "SELECT COUNT(*) FROM shopee_conversions WHERE telegram_user_id IS NOT NULL AND complete_time IS NOT NULL "
-        "AND complete_time < ? AND COALESCE(settlement_status, '') != 'SETTLED' AND COALESCE(validation_status, '') "
-        "NOT IN ('FRAUD', 'REJECTED')",
+        "SELECT COUNT(*) FROM shopee_conversions WHERE platform = 'shopee' AND telegram_user_id IS NOT NULL "
+        "AND complete_time IS NOT NULL AND complete_time < ? AND COALESCE(settlement_status, '') != 'SETTLED' "
+        "AND COALESCE(validation_status, '') NOT IN ('FRAUD', 'REJECTED')",
         (_stamp(now - SETTLE_STALE),),
     ).fetchone()[0]
     checks.append(Check("settle", "Đơn hoàn thành > 45 ngày chưa đối soát", str(stale), int(stale) == 0))

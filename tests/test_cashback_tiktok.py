@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import timedelta
+from unittest.mock import MagicMock
 
-from cashback_bot import admin_tiktok, insights, reconciliation, tiktok_sync
+from cashback_bot import admin_stats, admin_tiktok, insights, reconciliation, tiktok_sync
+from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.messages import TIKTOK_BUY_BUTTON
 from cashback_bot.riohub_client import ProductLink, RioHubError
 from cashback_bot.tiktok_url import parse_tiktok_target
@@ -304,3 +306,56 @@ def test_bam_man_khac_thi_thoi_cho_go(tmp_path):
         assert panel.consume_text(ADMIN, "12", NOW) is None, start
     reply = bot.handle_text(ADMIN, "admin", "https://shopee.vn/product/9/8", update_id=50, now=NOW)
     assert "Đã tạo link" in reply.text, "link Shopee không bị nuốt thành từ khoá tìm"
+
+
+# --- Rà soát 2026-10-26, đợt 2: TikTok đúng nền tảng -------------------------------------------------
+
+
+def test_cot_platform_va_khoa_tien_tiktok_o_tang_db(tmp_path):
+    bot = _bot(tmp_path)
+    tiktok_sync.run(bot.repo, FakeOrders([_order(_tiktok_link(bot), status=2, actual="9000.00")]), NOW)
+    row = _conversion(bot)
+    assert (row["platform"], row["validation_source"]) == ("tiktok", "riohub_orders")
+    with bot.repo.connect() as conn:  # dòng có từ trước khi có cột: migrate gán lại theo mã «tt:»
+        conn.execute("UPDATE shopee_conversions SET platform = 'shopee'")
+    bot.repo.migrate()
+    assert _conversion(bot)["platform"] == "tiktok"
+    bot.refresh_wallet(NOW + timedelta(days=30))
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE shopee_conversions SET settlement_status = 'SETTLED' WHERE platform = 'tiktok'")
+    try:
+        with bot.repo.connect() as conn:
+            conn.execute("UPDATE cashback_entries SET status = 'available' WHERE conversion_id LIKE 'tt:%'")
+        raise AssertionError("khoản TikTok không được vào ví khi chưa có nguồn đối soát TikTok")
+    except sqlite3.IntegrityError as exc:
+        assert "platform" in str(exc)
+
+
+def test_thong_ke_shopee_va_duyet_hoa_hong_tach_tiktok(tmp_path):
+    bot = _bot(tmp_path)
+    tiktok_sync.run(bot.repo, FakeOrders([_order(_tiktok_link(bot))]), NOW)
+    with bot.repo.connect() as conn:
+        stats = admin_stats._shopee_stats(conn, "2000-01-01T00:00:00Z")
+    assert stats.orders_total == 0, "đơn TikTok không cộng vào khối Shopee"
+    conv = _conversion(bot)["conversion_id"]
+    listing = bot.admin_panel.handle_callback(ADMIN, "c:cv:l:pending", "private", NOW)
+    assert any(label.startswith("📋 🎵") or "🎵" in label for row in listing.inline_keyboard for label, _d in row)
+    detail = bot.admin_panel.handle_callback(ADMIN, f"c:cv:o:{conv}", "private", NOW)
+    assert "🎵 TikTok Shop" in detail.text and "RioHub" in detail.text and "TikTok chưa chốt đơn" in detail.text
+    assert "Tiền TikTok đã trả" in detail.text and "báo cáo Shopee" not in detail.text
+
+
+def test_bao_admin_don_tiktok_moi_va_loi_dong_bo(tmp_path):
+    bot = _bot(tmp_path)
+    admin = AdminNotifier(bot.repo, MagicMock(), enabled=True, chat_id=ADMIN)
+    sub = _tiktok_link(bot)
+    tiktok_sync.maybe_start(bot.repo, FakeOrders([_order(sub)]), admin, now=NOW.timestamp()).join(5)
+    failing = FakeOrders(error=RioHubError("creator", 424, "creator_token_invalid"))
+    for hours in (3, 4):
+        tiktok_sync.maybe_start(bot.repo, failing, admin, now=(NOW + timedelta(hours=hours)).timestamp()).join(5)
+    with bot.repo.connect() as conn:
+        rows = dict(conn.execute("SELECT event_type, message_html FROM admin_notifications "
+                                 "WHERE event_type LIKE 'TIKTOK_%'").fetchall())
+        failed = conn.execute("SELECT COUNT(*) FROM admin_notifications WHERE event_type = 'TIKTOK_SYNC_FAILED'").fetchone()[0]
+    assert "Có 1 đơn TikTok mới qua bot" in rows["TIKTOK_NEW_ORDERS"]
+    assert "mất kết nối với RioHub" in rows["TIKTOK_SYNC_FAILED"] and failed == 1, "mỗi loại lỗi một lần mỗi ngày"

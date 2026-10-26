@@ -518,9 +518,12 @@ class AdminPanel:
             last_err = str(c_row["last_error"]) if c_row and c_row["last_error"] else None
 
             clicks_count = int(conn.execute("SELECT COUNT(*) FROM shopee_clicks").fetchone()[0]) if "shopee_clicks" in tables else 0
-            orders_count = int(conn.execute("SELECT COUNT(*) FROM shopee_conversions").fetchone()[0]) if "shopee_conversions" in tables else 0
+            # Màn Shopee chỉ đếm đơn Shopee; đơn TikTok xem ở 🎵 TikTok Shop.
+            orders_count = int(conn.execute(
+                "SELECT COUNT(*) FROM shopee_conversions WHERE platform = 'shopee'").fetchone()[0]) if "shopee_conversions" in tables else 0
             matched_count = (
-                int(conn.execute("SELECT COUNT(*) FROM shopee_conversions WHERE matched_link_id IS NOT NULL").fetchone()[0])
+                int(conn.execute("SELECT COUNT(*) FROM shopee_conversions WHERE platform = 'shopee' "
+                                 "AND matched_link_id IS NOT NULL").fetchone()[0])
                 if "shopee_conversions" in tables
                 else 0
             )
