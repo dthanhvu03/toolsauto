@@ -1,3 +1,18 @@
+## Phiên 2026-10-26 (cc) — Tin trả link nhắc mua qua link của bot + sửa dòng link 39
+
+- Chủ bot duyệt ("oke em triển khai đi"):
+  - Thẻ link (Telegram + Zalo) có thêm 3 dòng: 👉 bấm mua; ⚠️ mua thẳng trong app không được hoàn; món đã có trong giỏ thì xoá rồi mở lại bằng link của bot. Link không có hoàn thì không hiện dòng ⚠️.
+  - Dòng dẫn link trên Zalo: "Bấm link này để mua. Mua thẳng trong app Shopee sẽ không được hoàn:".
+  - Mục Phễu (Telegram + web) ghi chú click về trễ khoảng 1 ngày. Báo cáo click Shopee về chậm: ví dụ click 24/10 02Z mới vào lần đồng bộ 25/10 03:51Z.
+- Production: đã backup `cashback-manual-20261026T020857Z.sqlite`, sửa link id 39 (`priYghQy`) từ `pending` thành `sent`. Hiện còn 0 link kẹt.
+- Proof: 793 test cashback qua, ruff sạch.
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+  - Chủ bot tự bấm thử một link trên Zalo xem có mở đúng sản phẩm trong app Shopee.
+  - Sau 10:52 giờ VN 26/10 (lần đồng bộ đầu tiên có click ngày 25/10), xem lại click của link Zalo.
+
+---
+
 ## Phiên 2026-10-26 (cb) — Link Zalo `priYghQy` "kẹt": tin đã tới khách, chỉ thiếu cờ đã giao
 
 - Nguyên nhân:

@@ -133,7 +133,8 @@ def test_ac01_link_hop_le_va_cashback_70(tmp_path):
         111, "buyer", "mua https://shopee.vn/product/9/8 nhe", update_id=1, now=NOW
     )
     assert "Áo Polo Nam" in reply.text
-    assert "Giá tham khảo: 250.000đ" in reply.text
+    assert "giá tham khảo 250.000đ" in reply.text
+    assert "Mua thẳng trong app" in reply.text and "xoá đi rồi mở lại" in reply.text, "nhắc mua qua link của bot"
     assert "20.000đ" not in reply.text
     assert "✅ <b>Đã tạo link hoàn tiền</b>" in reply.text
     assert "💰 Hoàn dự kiến:" in reply.text
@@ -816,6 +817,7 @@ def test_khuon_chu_khach_plan_060(tmp_path):
     zero = render_success("Áo Polo Nam", 250_000, 0, "https://s.shopee.vn/x").text
     assert "Đã tạo link mua" in zero
     assert "Đã tạo link hoàn tiền" not in zero
+    assert "Mua thẳng trong app" not in zero, "không có hoàn thì không doạ mất hoàn"
 
 
 def test_link_shopeefood_tra_loi_ro_chua_ho_tro(tmp_path):

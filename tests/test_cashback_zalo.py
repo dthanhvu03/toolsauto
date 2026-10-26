@@ -71,6 +71,7 @@ def test_gui_link_tao_link_affiliate_gan_id_am(tmp_path):
     assert "Chào bạn" in text and "bot tự động" in text, "tin đầu tiên báo đây là bot tự động"
     card, buy = zalo.sent[-2][1], zalo.sent[-1][1]
     assert "Đã tạo link hoàn tiền" in card and "sub_id=" not in card
+    assert "Bấm link ở tin dưới" in card and "bên dưới" not in card, "Zalo không có nút: chỉ sang tin chứa link"
     assert buy.startswith(BUY_LEAD + "\nhttps://") and f"sub_id={link['sub_id']}" in buy, "link mua là tin riêng cuối"
     assert "Gõ số để chọn:" in buy, "danh sách số nằm cuối cùng"
     assert "<b>" not in text and "&amp;" not in text

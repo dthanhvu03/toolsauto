@@ -177,6 +177,12 @@ GENERIC_FAIL = (
     "Bạn thử lại sau ít phút nhé."
 )
 BUY_BUTTON = "🛒 Mua trên Shopee"
+# Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
+BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
+BUY_WARNING = (
+    "⚠️ Mua thẳng trong app (không qua link của bot) sẽ không được hoàn.\n"
+    "Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
+)
 # Shopee tính hoa hồng trên số tiền khách thực trả, bot chỉ biết giá tham khảo (đơn thật 24/10: báo 21.357đ, thật 12.157đ).
 _PAID_BASIS = (
     "Shopee tính trên số tiền bạn thực trả, nên dùng voucher, xu hoặc mua lúc giảm giá thì tiền hoàn giảm theo."
@@ -242,10 +248,10 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
     title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
     text = (
         f"{title}\n\n"
-        f"💰 Hoàn dự kiến: khoảng <b>{format_vnd(cashback_vnd)}</b>\n\n"
-        f"🛍️ {safe_name}\n"
-        f"Giá tham khảo: {format_vnd(price_vnd)}\n\n"
-        f"ⓘ {note}"
+        f"💰 Hoàn dự kiến: khoảng <b>{format_vnd(cashback_vnd)}</b>\n"
+        f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}\n\n"
+        f"{BUY_HINT}\n" + (f"{BUY_WARNING}\n\n" if cashback_vnd > 0 else "\n")
+        + f"ⓘ {note}"
     )
     return BotReply(text=text, button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD)
 

@@ -44,9 +44,10 @@ GUIDE = (
     "Bot không thu phí sử dụng. Bạn thanh toán trực tiếp trên Shopee.\n\n"
     "ⓘ Số hoàn là ước tính, không bảo đảm đơn hàng được ghi nhận hay được hoàn tiền."
 )
-BUY_LEAD = "👉 Bấm link dưới để mua trên Shopee:"
+BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app Shopee sẽ không được hoàn:"
 # Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.
 PHRASES = (
+    ("👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng.", "👉 Bấm link ở tin dưới rồi đặt hàng."),
     ("Bấm nút dưới hoặc gõ /huongdan", "Gõ /huongdan"),
     ("nút <b>🛒 Mua trên Shopee</b>", "link <b>🛒 Mua trên Shopee</b>"),
     ("Bấm nút đó", "Bấm link đó"),

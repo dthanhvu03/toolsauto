@@ -221,6 +221,7 @@ def growth_text(view: insights.Overview) -> str:
         f"{f.linked} tạo link → {f.clicked} có click ({_pct(f.clicked, f.linked)}) → {f.ordered} có đơn "
         f"({_pct(f.ordered, f.linked)}) → {f.completed} hoàn thành → {f.settled} Shopee đã trả",
         f"{f.links} link · {f.clicks} click · {f.orders} đơn · click → đơn {_pct(f.orders, f.clicks)}",
+        "ⓘ Click lấy từ báo cáo Shopee, về trễ khoảng 1 ngày: link mới tạo chưa có click là bình thường.",
         "",
         "💎 <b>Giá trị</b>",
         f"Biên / khách hoạt động 30 ngày: {format_vnd(m.margin // active)} · HH ròng / khách: {format_vnd(m.net // active)}",

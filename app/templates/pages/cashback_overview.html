@@ -117,6 +117,7 @@
       <div class="cb-track"><div class="cb-bar" style="width: {{ (value * 100 / f.linked) if f.linked else 0 }}%"></div></div></div>
     {% endfor %}
     <div class="cb-note mt-2">{{ f.links }} link · {{ f.clicks }} click · {{ f.orders }} đơn · click → đơn {{ pct(f.orders, f.clicks) }}</div>
+    <div class="cb-note">Click lấy từ báo cáo Shopee, về trễ khoảng 1 ngày: link mới tạo chưa có click là bình thường.</div>
   </div>
   <div class="cb-card">
     <div class="cb-h">Ra tiền (trung vị)</div>
