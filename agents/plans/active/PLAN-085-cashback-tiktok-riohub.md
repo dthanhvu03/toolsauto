@@ -63,3 +63,14 @@ Chủ bot dán spec đủ 8 phần và chọn "Viết client, chưa nối bot". 
 - `python -m cashback_bot.riohub_client orders --days 7` (chỉ đọc) → `http=403`, `{"error": {"code": "mcn_membership_required", "message": "Creator 'twot283' chưa là thành viên RioMCN (chưa được duyệt) nên chưa thể dùng chức năng này."}}`. Khoá hợp lệ (không phải 401).
 - Sửa client: đọc lỗi dạng lồng `error.code` / `error.message`; CLI in một dòng thay vì traceback; +1 test (25).
 - **Chưa tạo link thử:** tài khoản chưa vào RioMCN thì gần như chắc cũng bị chặn; chờ duyệt RioMCN.
+
+## Thử thật lần 2 (2026-10-26, chủ bot duyệt "oke em triển khai")
+- Chủ bot báo đã được cấp quyền (RioMCN). Chủ bot cho biết **Rio giữ 0%**.
+- `orders --days 7` (chỉ đọc) → hết 403: `chờ=0 đã chốt=1 huỷ/hoàn=0`.
+- Tiền của đơn đã chốt (chỉ đọc cột tiền, không lưu DB):
+  - `price` = `commission_gmv` = 159.343đ; `commission_rate` = 1000 (10%); `commission_model` = Fixed commission;
+  - `est_commission` = `actual_commission` = `actual_standard_commission` = **15.934đ** (đúng 10% × 159.343);
+  - `pit` = **0.00**; `shared_with_partner` = rỗng (khớp "Rio giữ 0%"); `settlement_status` = SETTLED; `settled_at_iso` rỗng;
+  - `sub_id` rỗng (đơn không đi qua link bot).
+- **Sửa nhận định cũ:** spec ghi `actual_commission` gồm `pit` (số âm), nhưng ở đơn thật này `pit = 0`, tức **chưa trừ TNCN**. Không được giả định TikTok đã trừ thuế. Hồ sơ thuế TikTok cần đọc `pit` từng đơn; mức dự phòng do chủ bot quyết.
+- Field thật có thêm so với ví dụ trong spec: `sub1`–`sub4`, `payment_status`, `tt_order_status`, `refunded_quantity`, `returned_quantity`, `settled_at`, `time_delivered(_iso)`, `content_id`, `content_type`.

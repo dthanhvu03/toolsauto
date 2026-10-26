@@ -35,6 +35,7 @@
 
 **Đã rõ nhờ spec tích hợp (bản 09/10/2026, chủ bot gửi):**
 - `actual_commission` = `actual_standard_commission + actual_bonus_commission + actual_shop_ads_commission + shared_with_partner + pit + actual_creator_commission_reward_fee`. 3 khoản cuối **đã mang dấu âm**: phần chia MCN, **thuế TNCN 10%**, phí reward. Tức là `actual_commission` đã trừ hết, không trừ thêm.
+  - **Đơn thật 2026-10-26:** `pit = 0.00`, `actual_commission` = đúng 10% giá (15.934đ / 159.343đ), tức **chưa trừ TNCN**. Phải đọc `pit` từng đơn, không giả định đã trừ thuế (PLAN-085, thử thật lần 2).
 - **Tỷ lệ để báo giá:** `commission.rate` chỉ là tỷ lệ chuẩn, không gồm thưởng. Dùng `observed_commission.commission_rate` (tỷ lệ tổng lấy từ đơn gần nhất; `scope` = creator hoặc global). Không có thì dùng `commission.rate` + `shop_ads_commission.rate`. `rate` thô ÷ 100 = %.
 - **Giá:** `sales_price` có thể rỗng → dùng `original_price`; giá và hoa hồng có thể là khoảng "min - max".
 - **Link riêng từng khách:** `/links` (1 lượt mỗi khách) hoặc `/links/batch` (tối đa 50 `sub_id` một lượt, mỗi `sub_id` vẫn tính 1 lượt quota). Đơn mang `trace_type = SPECIFIC`, `trace_id` = `sub_id`. `/product-links` trả link + giá + hoa hồng trong 1 lượt, hợp nhất cho bot.
