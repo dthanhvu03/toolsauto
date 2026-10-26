@@ -141,6 +141,7 @@ SIM_AMOUNTS = (10_000, 50_000, 100_000, 500_000)
 # Nhập số tự do: một hoa hồng một đơn, từ 1đ tới 100 triệu. Chờ nhập giữ trong RAM, không ghi DB.
 SIM_MAX_VND = 100_000_000
 SIM_WAIT_TTL = timedelta(minutes=10)
+_SEARCH_COMMAND = re.compile(r"^/tim(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
 _SIM_PLAIN = re.compile(r"^(\d{1,3}(?:[.,]\d{3})+|\d{1,9})\s*(?:đ|vnd|vnđ)?$")
 _SIM_UNIT = re.compile(r"^(\d{1,6})(?:[.,](\d{1,3}))?\s*(k|nghìn|ngàn|tr|triệu)$")
 _SIM_UNITS = {"k": 1_000, "nghìn": 1_000, "ngàn": 1_000, "tr": 1_000_000, "triệu": 1_000_000}
@@ -261,6 +262,9 @@ class AdminPanel:
     def consume_text(self, user_id: int, text: str, now: datetime, message_id: int | None = None) -> BotReply | None:
         if not self.is_admin(user_id):
             return None
+        # /tim <mã>: tìm link, đơn, ticket, yêu cầu rút, khách (PLAN-091).
+        if (search := _SEARCH_COMMAND.fullmatch(text or "")) is not None:
+            return self._insights().search(user_id, search.group(1) or "", now)
         # Kiểm tra trạng thái chờ dán cookie Shopee
         try:
             with self._connect() as conn:

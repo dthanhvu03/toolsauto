@@ -91,7 +91,7 @@ def test_man_thong_ke_trong_admin(tmp_path):
     _seed(tmp_path)
     bot = service(tmp_path, FakeClient(payload()), admin_user_ids=frozenset({ADMIN}))
     home = bot.admin_panel.menu(ADMIN, NOW)
-    assert home.inline_keyboard[0] == (("📈 Thống kê", "c:st:7d"), ("🎯 Mục tiêu", "c:in:t"))
+    assert home.inline_keyboard[0] == (("📈 Thống kê", "c:st:7d"), ("🎯 Mục tiêu", "c:in:t"), ("🔍 Tìm", "c:in:f"))
 
     reply = bot.admin_panel.handle_callback(ADMIN, "c:st:today", "private", NOW)
     assert reply.text.startswith("⚙️ Quản trị › <b>Thống kê · Hôm nay</b>")

@@ -104,7 +104,7 @@ BOT_COMMANDS = (
     ("help", "Trợ giúp"),
 )
 # Chỉ đăng ký với scope chat của từng admin.
-ADMIN_COMMANDS = BOT_COMMANDS + (("admin", "Quản trị"),)
+ADMIN_COMMANDS = BOT_COMMANDS + (("tim", "Tìm mã link, đơn, khách"), ("admin", "Quản trị"))
 # Thêm vào menu lệnh lúc khởi động nếu ví đang bật (PLAN-066).
 WALLET_COMMAND = ("vi", "Ví hoàn tiền")
 

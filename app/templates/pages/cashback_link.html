@@ -1,0 +1,44 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Cashback · Link {{ d.sub_id or d.link_id }}{% endblock %}
+{% block page_title %}Link {{ d.sub_id or d.link_id }}{% endblock %}
+{% block page_subtitle %}{{ d.user }} · ID {{ d.user_id }} · tạo {{ when(d.created_at) }}{% endblock %}
+
+{% block head_extra %}{% include "fragments/cashback_style.html" %}{% endblock %}
+
+{% block content %}
+{% set delivery = {"sent": "✅ đã giao tới khách", "pending": "⏳ chưa giao", "retry": "⏳ đang gửi lại",
+                   "failed": "🔴 gửi lỗi", "needs_review": "🟠 cần kiểm tra"} %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <div class="cb-tabs flex gap-2"><a href="/cashback">← Dòng tiền</a><a href="/cashback/users/{{ d.user_id }}">👤 Hồ sơ khách</a></div>
+  {% include "fragments/cashback_search_box.html" %}
+</div>
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+  <div class="cb-card">
+    <div class="cb-h">Link</div>
+    <div class="cb-row"><span>Sản phẩm</span><span>{{ (d.product or '-')[:60] }}</span></div>
+    <div class="cb-row"><span>Giá tham khảo</span><span>{{ '-' if d.price is none else vnd(d.price) }}</span></div>
+    <div class="cb-row"><span>Hoàn dự kiến</span><span>{{ '-' if not d.cashback_estimate else vnd(d.cashback_estimate) }}</span></div>
+    <div class="cb-row"><span>Trạng thái</span><span>{{ delivery.get(d.delivery_status, d.delivery_status or '-') if d.link_status == 'created' else 'không tạo được (' ~ d.link_status ~ ')' }}</span></div>
+    <div class="cb-row"><span>Click</span><span>{{ d.clicks }}{{ ' · gần nhất ' ~ when(d.last_click) if d.last_click }}</span></div>
+    <div class="cb-note mt-2">Click lấy từ báo cáo Shopee, về trễ khoảng 1 ngày.</div>
+    {% if d.tickets %}<div class="cb-row mt-2"><span>Ticket</span><span>{% for tid, status in d.tickets %}#{{ tid }} ({{ status }}) {% endfor %}</span></div>{% endif %}
+  </div>
+  <div class="cb-card xl:col-span-2">
+    <div class="cb-h">Đơn</div>
+    <table class="cb-table">
+      <tr><th>Mã đơn</th><th>Trạng thái</th><th class="num">HH ròng</th><th>Đặt</th><th>Hoàn thành</th></tr>
+      {% for o in d.orders %}
+      <tr><td>…{{ o.order_sn[-8:] }}</td><td>{{ o.status }}</td><td class="num">{{ vnd(o.net) }}</td>
+        <td>{{ when(o.purchase_time) }}</td><td>{{ when(o.complete_time) }}</td></tr>
+      {% else %}<tr><td colspan="5" class="cb-note">Chưa có đơn.</td></tr>{% endfor %}
+    </table>
+    <div class="cb-h mt-4">Sổ ví</div>
+    <table class="cb-table">
+      {% for e in d.entries %}
+      <tr><td>{{ 'Thu hồi' if e.clawback else 'Phần khách' }}</td><td class="num">{{ vnd(e.cashback) }}</td><td>{{ e.status }}</td></tr>
+      {% else %}<tr><td class="cb-note">Chưa có.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

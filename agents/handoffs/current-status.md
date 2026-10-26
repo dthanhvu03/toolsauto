@@ -1,3 +1,16 @@
+## Phiên 2026-10-26 (cd) — PLAN-091: 🔍 Tìm mã cho admin (Telegram + web)
+
+- Chủ bot duyệt ("oke em triển khai plan này đi").
+- Telegram: `/tim <mã>` hoặc `/admin` → 🔍 Tìm (`c:in:f`). Màn chi tiết link `c:in:l:<id>`.
+- Web: ô tìm trên `/cashback`, trang `/cashback/search?q=` và `/cashback/links/{id}`.
+- Bot tự nhận loại mã: mã link (hoặc cả link có sub_id=), mã đơn, #ticket, «Hoan tien N», ID khách, @tên, tên Zalo, tên sản phẩm. Chỉ đọc, không ghi gì.
+- Proof: 797 test cashback qua, ruff sạch. Production: `BiE1mRa5` → link của Zalo · Thanh Vu, đã giao, 0 click (báo cáo click chưa về).
+- **Next:**
+  - Chủ bot restart `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`.
+  - Sau lần đồng bộ 10:52 giờ VN, tra lại click của các link Zalo.
+
+---
+
 ## Phiên 2026-10-26 (cc) — Tin trả link nhắc mua qua link của bot + sửa dòng link 39
 
 - Chủ bot duyệt ("oke em triển khai đi"):

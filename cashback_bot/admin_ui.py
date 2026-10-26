@@ -21,7 +21,7 @@ HOME_TARGET = "c:menu:home"
 BACK_HOME = (("◀️ Tổng quan", HOME_TARGET),)
 
 MENU_KEYBOARD: Keyboard = (
-    (("📈 Thống kê", "c:st:7d"), ("🎯 Mục tiêu", "c:in:t")),
+    (("📈 Thống kê", "c:st:7d"), ("🎯 Mục tiêu", "c:in:t"), ("🔍 Tìm", "c:in:f")),
     (("💹 Dòng tiền", "c:in:m:30d"), ("📈 Tăng trưởng", "c:in:g:30d")),
     (("🛠 Vận hành", "c:in:o"), ("👥 Khách hàng", "c:in:u:margin:1")),
     (("🔗 Shopee Affiliate", "c:menu:shopee"), ("👛 Ví khách", "c:menu:wallet")),

@@ -1,9 +1,10 @@
-"""/admin → 💹 Dòng tiền · 📈 Tăng trưởng · 🛠 Vận hành · 👥 Khách hàng (PLAN-089) · 🎯 Mục tiêu (PLAN-090).
+"""/admin → 💹 Dòng tiền · 📈 Tăng trưởng · 🛠 Vận hành · 👥 Khách hàng (PLAN-089) · 🎯 Mục tiêu (PLAN-090)
+· 🔍 Tìm (PLAN-091).
 
 Số tính ở insights.py. Chỉ đọc DB, trừ hai việc admin nhập (bot_state, ghi 📊 Lịch sử): chi phí vận hành và hạ tầng
 mỗi tháng, và mục tiêu tháng.
 Callback: c:in:m:<kỳ> · c:in:g:<kỳ> · c:in:o · c:in:u:<sắp xếp|nhóm>:<trang> · c:in:d:<id> · c:in:cost · c:in:b
-· c:in:t · c:in:t:<mã mục tiêu>
+· c:in:t · c:in:t:<mã mục tiêu> · c:in:f (tìm) · c:in:l:<link_id>
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ _MONEY = re.compile(r"^c:in:(m|g):(7d|30d|month|all)$")
 _USERS = re.compile(r"^c:in:u:([a-z]{2,10}):(\d{1,3})$")
 _DETAIL = re.compile(r"^c:in:d:(-?\d{1,15})$")
 _GOAL = re.compile(r"^c:in:t:([a-z]{3,12})$")
+_LINK = re.compile(r"^c:in:l:(\d{1,9})$")
 _PERCENT = re.compile(r"^\s*(\d{1,3}(?:[.,]\d+)?)\s*%?\s*$")
 _COST = re.compile(r"^\s*([\d.,\s]+)\s*(k|nghìn|ngàn|tr|triệu|trieu)?\s*$", re.IGNORECASE)
 COST_MAX = 10_000_000_000
@@ -48,6 +50,15 @@ GOAL_EXAMPLES = {
     "vnd": "<code>5000000</code>, <code>5tr</code> hoặc <code>800k</code>",
     "percent": "<code>30</code> hoặc <code>30%</code>",
 }
+SEARCH_ICONS = {"link": "🔗", "order": "📦", "ticket": "📩", "payout": "👛", "user": "👤"}
+SEARCH_HELP = (
+    "Gõ một trong các dạng:\n"
+    "• mã link 8 ký tự, ví dụ <code>BiE1mRa5</code> (hoặc dán cả link mua có sub_id)\n"
+    "• mã đơn Shopee, ví dụ <code>261023CC4UWJ0N</code>\n"
+    "• <code>#12</code>: ticket hỗ trợ\n"
+    "• <code>Hoan tien 000012</code>: yêu cầu rút (nội dung chuyển khoản)\n"
+    "• ID khách, <code>@username</code>, tên Zalo hoặc tên sản phẩm"
+)
 SORT_LABELS = {"margin": "Biên", "orders": "Đơn", "wallet": "Ví", "recent": "Gần đây", "new": "Mới vào"}
 
 AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
@@ -165,6 +176,51 @@ def goals_text(g: insights.Goals) -> str:
         "ⓘ Bot không tự đặt mục tiêu. Bấm ✍️ để nhập, gõ <code>bỏ</code> để xoá.",
         "ⓘ Đơn hoàn thành đến sau ngày đặt vài tuần, nên dự báo đầu tháng còn thấp.",
     ]
+    return "\n".join(lines)
+
+
+def _search_target(hit: insights.Hit) -> str | None:
+    if hit.ref <= 0:
+        return None
+    return {"link": f"c:in:l:{hit.ref}", "order": f"c:in:l:{hit.ref}", "ticket": f"c:hp:t:{hit.ref}",
+            "payout": f"c:wl:rq:{hit.ref}", "user": f"c:in:d:{hit.ref}"}[hit.kind]
+
+
+def search_text(query: str, hits: list[insights.Hit]) -> str:
+    lines = [_title("🔍 Tìm").rstrip("\n") + f": <code>{html.escape(query[:60])}</code>", ""]
+    if not hits:
+        return "\n".join(lines + ["Không thấy kết quả nào.", "", SEARCH_HELP])
+    lines.append(f"{len(hits)} kết quả" + (f" (hiện tối đa {insights.SEARCH_LIMIT})" if len(hits) >= insights.SEARCH_LIMIT else "") + ":")
+    lines += [f"{SEARCH_ICONS[h.kind]} {html.escape(h.title)}" + ("" if _search_target(h) else " · không có màn chi tiết")
+              for h in hits]
+    return "\n".join(lines)
+
+
+_DELIVERY = {"sent": "✅ đã giao tới khách", "pending": "⏳ chưa giao", "retry": "⏳ đang gửi lại",
+             "failed": "🔴 gửi lỗi", "needs_review": "🟠 cần kiểm tra"}
+
+
+def link_text(d: insights.LinkDetail) -> str:
+    lines = [_title("🔍 Tìm", f"Link {html.escape(d.sub_id or str(d.link_id))}").rstrip("\n"), ""]
+    lines.append(f"👤 {html.escape(d.user)} · ID <code>{d.user_id}</code>")
+    product = html.escape((d.product or "-")[:80])
+    price = "" if d.price is None else f" · {format_vnd(int(d.price))}"
+    estimate = "" if not d.cashback_estimate else f" · hoàn dự kiến {format_vnd(int(d.cashback_estimate))}"
+    lines.append(f"🛍️ {product}{price}{estimate}")
+    state = _DELIVERY.get(d.delivery_status or "", html.escape(d.delivery_status or "-"))
+    if d.link_status != "created":
+        state = f"không tạo được link ({html.escape(d.link_status)})"
+    lines.append(f"🕘 Tạo {_when(d.created_at)} · {state}")
+    lines.append(f"👆 Click: {d.clicks}" + (f" · gần nhất {_when(d.last_click)}" if d.last_click else ""))
+    lines.append("ⓘ Click lấy từ báo cáo Shopee, về trễ khoảng 1 ngày.")
+    lines += ["", "📦 <b>Đơn</b>"]
+    lines += [f"• …{html.escape(o.order_sn[-8:])} · {html.escape(o.status)} · HH {format_vnd(o.net)} · đặt {_when(o.purchase_time)}"
+              + (f" · hoàn thành {_when(o.complete_time)}" if o.complete_time else "") for o in d.orders] or ["Chưa có."]
+    lines += ["", "👛 <b>Sổ ví</b>"]
+    lines += [f"• {'Thu hồi' if e.clawback else 'Phần khách'} {format_vnd(e.cashback)} · {html.escape(e.status)}"
+              for e in d.entries] or ["Chưa có."]
+    if d.tickets:
+        lines += ["", "📩 <b>Ticket</b>: " + ", ".join(f"#{tid} ({html.escape(status)})" for tid, status in d.tickets)]
     return "\n".join(lines)
 
 
@@ -348,7 +404,7 @@ class InsightsAdmin:
         self.locked_reasons = locked_reasons
 
     def route(self, admin_id: int, data: str, now: datetime) -> BotReply:
-        if data != "c:in:cost" and _GOAL.fullmatch(data) is None:
+        if data not in ("c:in:cost", "c:in:f") and _GOAL.fullmatch(data) is None:
             self.waiting.pop(admin_id, None)
         if (found := _MONEY.fullmatch(data)) is not None:
             return self._overview(found.group(1), found.group(2), now)
@@ -367,6 +423,10 @@ class InsightsAdmin:
             return BotReply(text, inline_keyboard=((("✍️ Chi phí vận hành / tháng", "c:in:cost"),), *NAV))
         if data == "c:in:t":
             return self._goals(now)
+        if data == "c:in:f":
+            return self.search(admin_id, "", now)
+        if (found := _LINK.fullmatch(data)) is not None:
+            return self._link(int(found.group(1)))
         if (found := _GOAL.fullmatch(data)) is not None and found.group(1) in insights.GOALS:
             return self._ask_goal(admin_id, found.group(1), now)
         if data == "c:in:cost":
@@ -392,6 +452,9 @@ class InsightsAdmin:
         if deadline <= now or stripped.startswith("/"):
             self.waiting.pop(admin_id, None)
             return None
+        if kind == "search":
+            self.waiting.pop(admin_id, None)
+            return self.search(admin_id, stripped, now)
         if kind != "cost":
             return self._save_goal(admin_id, kind, stripped, now)
         amount = parse_cost(stripped)
@@ -405,6 +468,28 @@ class InsightsAdmin:
         if self.audit is not None and before != str(amount):
             self.audit(admin_id, "ops_cost", None if before in (None, "") else {"vnd": int(before)}, {"vnd": amount}, now)
         return self._overview("m", "30d", now, notice=f"✅ Đã lưu chi phí vận hành: {format_vnd(amount)}/tháng.")
+
+    def search(self, admin_id: int, query: str, now: datetime) -> BotReply:
+        """`/tim <mã>` hoặc nút 🔍 Tìm. Không có mã: chờ admin gõ (10 phút)."""
+        query = " ".join((query or "").split())
+        if not query:
+            self.waiting[admin_id] = ("search", now + COST_WAIT)
+            return BotReply(_title("🔍 Tìm") + SEARCH_HELP, inline_keyboard=((("✖️ Hủy", "c:menu:home"),),))
+        with insights.open_readonly(self.db_path) as conn:
+            hits = insights.search(conn, query)
+        rows = [((f"{SEARCH_ICONS[h.kind]} {h.title}"[:60], target),) for h in hits if (target := _search_target(h))]
+        return BotReply(search_text(query, hits), inline_keyboard=(*rows, (("🔍 Tìm tiếp", "c:in:f"),), *NAV))
+
+    def _link(self, link_id: int) -> BotReply:
+        with insights.open_readonly(self.db_path) as conn:
+            detail = insights.link_detail(conn, link_id)
+        if detail is None:
+            return BotReply("Không thấy link này.", inline_keyboard=((("🔍 Tìm tiếp", "c:in:f"),), *NAV))
+        return BotReply(link_text(detail)[:4000], inline_keyboard=(
+            (("👤 Hồ sơ khách", f"c:in:d:{detail.user_id}"),),
+            (("🔍 Tìm tiếp", "c:in:f"),),
+            *NAV,
+        ))
 
     def _goals(self, now: datetime, notice: str = "") -> BotReply:
         with insights.open_readonly(self.db_path) as conn:

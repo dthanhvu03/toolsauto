@@ -1,4 +1,4 @@
-"""PLAN-089: số dòng tiền / khách hàng (insights.py), màn /admin Telegram và trang web /cashback. PLAN-090: mục tiêu."""
+"""PLAN-089: số dòng tiền / khách hàng (insights.py), màn /admin Telegram và trang web /cashback. PLAN-090: mục tiêu. PLAN-091: tìm mã."""
 
 from __future__ import annotations
 
@@ -16,7 +16,8 @@ from cashback_bot import insights
 from cashback_bot.admin_insights import parse_cost, parse_goal
 from cashback_bot.admin_ui import MENU_KEYBOARD
 from cashback_bot.db import TrackingRepository
-from tests.test_cashback_payout_lifecycle import _available, _ready
+from tests.test_cashback_payout_lifecycle import T as PAY_T
+from tests.test_cashback_payout_lifecycle import _available, _b3, _ready
 from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _link, _order
 
 NOW = datetime.now(timezone.utc)
@@ -309,3 +310,79 @@ def test_van_hanh_bao_link_ket_cu_ngoai_24_gio(tmp_path):
         check = next(c for c in insights.operations(conn, NOW) if c.code == "links")
     assert not check.ok and "kẹt quá 1 giờ (từ đầu): 1" in check.value
     assert "links" in {c.code for c in _goals(bot).guards}
+
+
+# --- Tìm mã (PLAN-091) ------------------------------------------------------------------------------
+
+
+def _search(bot, query):
+    with insights.open_readonly(bot.repo.path) as conn:
+        return insights.search(conn, query)
+
+
+def test_tim_ma_link_don_khach_san_pham(tmp_path):
+    bot = _bot(tmp_path)
+    sub = _link(bot)
+    _order(bot, sub, cid="conv-1")
+    bot.refresh_wallet(NOW)
+    with bot.repo.connect() as conn:
+        link_id = conn.execute("SELECT id FROM link_requests WHERE sub_id = ?", (sub,)).fetchone()[0]
+    for query in (sub, sub.lower(), f"https://s.shopee.vn/an_redir?origin_link=x&sub_id={sub}"):
+        hits = _search(bot, query)
+        assert hits and hits[0].kind == "link" and hits[0].ref == link_id, query
+    order = _search(bot, "sn-conv-1")
+    assert [(h.kind, h.ref) for h in order] == [("order", link_id)], "mã đơn không phân biệt hoa thường"
+    assert [h.kind for h in _search(bot, str(USER))] == ["user"]
+    assert [h.kind for h in _search(bot, "@buy")] == ["user"]
+    assert [h.kind for h in _search(bot, "polo")] == ["link"], "tên có dấu, khác hoa thường vẫn tìm ra"
+    assert _search(bot, "x") == [] and _search(bot, "") == [] and _search(bot, "#999") == []
+    with insights.open_readonly(bot.repo.path) as conn:
+        detail = insights.link_detail(conn, link_id)
+        assert insights.link_detail(conn, 424242) is None
+    assert detail.sub_id == sub and detail.user_id == USER and detail.delivery_status == "pending"
+    assert [o.order_sn for o in detail.orders] == ["SN-conv-1"] and len(detail.entries) == 1
+
+
+def test_tim_ticket_va_yeu_cau_rut(tmp_path):
+    bot = _b3(tmp_path)
+    payout, _code = bot.wallet.request_payout(USER, PAY_T, amount=20_000)
+    pid = payout["id"]
+    with bot.repo.connect() as conn:
+        conn.execute(
+            "INSERT INTO support_tickets (telegram_user_id, category, message, status, created_at, updated_at) "
+            "VALUES (?, 'missing', 'không thấy đơn', 'OPEN', ?, ?)", (USER, _stamp(NOW), _stamp(NOW)))
+        ticket = conn.execute("SELECT MAX(id) FROM support_tickets").fetchone()[0]
+    assert [(h.kind, h.ref) for h in _search(bot, f"#{ticket}")] == [("ticket", ticket)]
+    assert [(h.kind, h.ref) for h in _search(bot, f"Hoan tien {pid:06d}")] == [("payout", pid)]
+
+
+def test_man_tim_telegram_lenh_va_nut(tmp_path):
+    bot = _bot(tmp_path)
+    sub = _link(bot)
+    assert "c:in:f" in [d for row in MENU_KEYBOARD for _label, d in row]
+    reply = bot.handle_text(ADMIN, "admin", f"/tim {sub}", update_id=77, now=NOW)
+    assert "1 kết quả" in reply.text and "c:in:l:" in str(reply.inline_keyboard)
+    target = next(d for row in reply.inline_keyboard for _l, d in row if d.startswith("c:in:l:"))
+    detail = _callback(bot, ADMIN, target)
+    assert f"Link {sub}" in detail.text and "chưa giao" in detail.text and "về trễ" in detail.text
+    assert f"c:in:d:{USER}" in str(detail.inline_keyboard)
+    ask = _callback(bot, ADMIN, "c:in:f")
+    assert "mã link 8 ký tự" in ask.text
+    found = bot.admin_panel.consume_text(ADMIN, sub, NOW)
+    assert found is not None and "1 kết quả" in found.text
+    assert bot.admin_panel.consume_text(ADMIN, sub, NOW) is None, "tìm xong thì thôi chờ"
+    assert "Không thấy kết quả" in bot.handle_text(ADMIN, "admin", "/tim khongcoma", update_id=78, now=NOW).text
+    assert "kết quả" not in bot.handle_text(USER, "buyer", f"/tim {sub}", update_id=80, now=NOW).text, "khách không tìm được"
+
+
+def test_web_tim_va_chi_tiet_link(tmp_path, monkeypatch):
+    client, path = _web(tmp_path, monkeypatch)
+    with insights.open_readonly(str(path)) as conn:
+        sub, link_id = conn.execute("SELECT sub_id, id FROM link_requests").fetchone()
+    page = client.get(f"/cashback/search?q={sub}")
+    assert page.status_code == 200 and f"/cashback/links/{link_id}" in page.text
+    detail = client.get(f"/cashback/links/{link_id}")
+    assert detail.status_code == 200 and f"Link {sub}" in detail.text and "Sổ ví" in detail.text
+    assert client.get("/cashback/links/424242").status_code == 404
+    assert "Không thấy kết quả" in client.get("/cashback/search?q=khongcoma").text
+    assert 'action="/cashback/search"' in client.get("/cashback").text

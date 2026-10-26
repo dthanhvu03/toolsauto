@@ -1,0 +1,34 @@
+{% extends "layouts/app.html" %}
+
+{% block title %}Cashback · Tìm{% endblock %}
+{% block page_title %}Cashback · Tìm{% endblock %}
+{% block page_subtitle %}Mã link (hoặc dán cả link có sub_id), mã đơn Shopee, #ticket, «Hoan tien 000012», ID khách, @username, tên Zalo, tên sản phẩm.{% endblock %}
+
+{% block head_extra %}{% include "fragments/cashback_style.html" %}{% endblock %}
+
+{% block content %}
+{% set icons = {"link": "🔗", "order": "📦", "ticket": "📩", "payout": "👛", "user": "👤"} %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <div class="cb-tabs flex gap-2"><a href="/cashback">← Dòng tiền</a><a href="/cashback/users">👥 Danh sách khách</a></div>
+  {% include "fragments/cashback_search_box.html" %}
+</div>
+<div class="cb-card">
+  {% if not q.strip() %}
+  <div class="cb-note">Gõ mã cần tìm vào ô phía trên.</div>
+  {% elif not hits %}
+  <div class="cb-sub">Không thấy kết quả nào cho “{{ q }}”.</div>
+  {% else %}
+  <div class="cb-h">{{ hits | length }} kết quả{{ ' (hiện tối đa %d)' % limit if hits | length >= limit }}</div>
+  <table class="cb-table">
+    {% for h in hits %}
+    <tr><td style="width: 2rem">{{ icons[h.kind] }}</td><td>
+      {% if h.ref > 0 and h.kind in ('link', 'order') %}<a href="/cashback/links/{{ h.ref }}" class="text-[var(--color-torch)] font-semibold">{{ h.title }}</a>
+      {% elif h.ref > 0 and h.kind == 'user' %}<a href="/cashback/users/{{ h.ref }}" class="text-[var(--color-torch)] font-semibold">{{ h.title }}</a>
+      {% else %}{{ h.title }}
+        <span class="cb-note">{{ '· xem ở /admin Telegram' if h.kind in ('ticket', 'payout') else '· không có màn chi tiết' }}</span>{% endif %}
+    </td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+{% endblock %}

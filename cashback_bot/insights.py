@@ -12,6 +12,7 @@ Module chỉ dùng thư viện chuẩn và sổ chi trả, để web (venv khác
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -487,9 +488,22 @@ class Customer:
 
     @property
     def label(self) -> str:
-        if self.channel == "zalo":
-            return f"Zalo · {self.name}" if self.name else f"Zalo #{-self.user_id}"
-        return f"@{self.name}" if self.name else f"ID {self.user_id}"
+        return _label(self.user_id, self.name)
+
+
+def _label(user_id: int, name: str | None) -> str:
+    if user_id < 0:
+        return f"Zalo · {name}" if name else f"Zalo #{-user_id}"
+    return f"@{name}" if name else f"ID {user_id}"
+
+
+def user_label(conn: sqlite3.Connection, user_id: int) -> str:
+    row = conn.execute(
+        "SELECT COALESCE(u.username, ci.display_name) FROM telegram_users u LEFT JOIN channel_identities ci "
+        "ON ci.internal_user_id = u.telegram_user_id AND u.telegram_user_id < 0 WHERE u.telegram_user_id = ?",
+        (user_id,),
+    ).fetchone()
+    return _label(user_id, row[0] if row else None)
 
 
 def customers(conn: sqlite3.Connection, now: datetime) -> list[Customer]:
@@ -1033,6 +1047,160 @@ def goals(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: int = 
     return Goals(
         local.strftime("%m/%Y"), now.astimezone(ICT).day, days_in_month, tuple(rows), milestones, guards,
         month_money.orders, size, waiting, None if current is None else current.need_net_month,
+    )
+
+
+# --- Tìm mã (PLAN-091) ---------------------------------------------------------------------------
+
+SEARCH_LIMIT = 10
+SEARCH_SCAN = 5_000
+_SUB_PARAM = re.compile(r"[?&]sub_id=([A-Za-z0-9]{4,32})")
+_TICKET_REF = re.compile(r"^#(\d{1,9})$")
+_PAYOUT_REF = re.compile(r"^hoan\s*tien\s*(\d{1,9})$", re.IGNORECASE)
+_USER_ID = re.compile(r"^-?\d{1,15}$")
+
+
+@dataclass(frozen=True)
+class Hit:
+    """kind: link · order · ticket · payout · user. ref: id để mở chi tiết (đơn: id link; 0 = không có màn)."""
+
+    kind: str
+    ref: int
+    title: str
+
+
+def search(conn: sqlite3.Connection, query: str, limit: int = SEARCH_LIMIT) -> list[Hit]:
+    """Tự nhận loại mã: link (hoặc cả link có sub_id=), đơn, #ticket, «Hoan tien N», ID khách, @tên, tên sản phẩm."""
+    q = " ".join((query or "").split())
+    hits: list[Hit] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(kind: str, key: object, ref: int, title: str) -> None:
+        if (kind, str(key)) not in seen and len(hits) < limit:
+            seen.add((kind, str(key)))
+            hits.append(Hit(kind, int(ref), title))
+
+    if not q:
+        return hits
+    if (found := _TICKET_REF.fullmatch(q)) is not None:
+        for r in conn.execute("SELECT id, telegram_user_id, category, status FROM support_tickets WHERE id = ?",
+                              (int(found.group(1)),)):
+            add("ticket", r[0], r[0], f"Ticket #{r[0]} · {r[2]} · {r[3]} · {user_label(conn, int(r[1]))}")
+        return hits
+    if (found := _PAYOUT_REF.fullmatch(q)) is not None:
+        for r in conn.execute("SELECT id, telegram_user_id, amount_vnd, status FROM cashback_payouts WHERE id = ?",
+                              (int(found.group(1)),)):
+            add("payout", r[0], r[0],
+                f"Rút #{r[0]} · {r[2]:,}đ · {r[3]} · {user_label(conn, int(r[1]))}".replace(",", "."))
+        return hits
+    param = _SUB_PARAM.search(q)
+    code = param.group(1) if param else q
+    for r in conn.execute(
+        "SELECT id, sub_id, product_name, telegram_user_id FROM link_requests WHERE sub_id = ? "
+        "OR lower(sub_id) = lower(?) ORDER BY sub_id = ? DESC",
+        (code, code, code),
+    ):
+        add("link", r[0], r[0], f"Link {r[1]} · {(r[2] or '-')[:40].rstrip()} · {user_label(conn, int(r[3]))}")
+    for r in conn.execute(
+        "SELECT conversion_id, order_sn, order_status, matched_link_id, telegram_user_id, item_name "
+        "FROM shopee_conversions WHERE upper(order_sn) = upper(?) OR conversion_id = ?",
+        (code, code),
+    ):
+        owner = user_label(conn, int(r[4])) if r[4] is not None else "không khớp link bot"
+        add("order", r[0], r[3] or 0, f"Đơn {r[1] or r[0]} · {r[2]} · {(r[5] or '-')[:30].rstrip()} · {owner}")
+    if param:
+        return hits
+    if _USER_ID.fullmatch(q):
+        for (uid,) in conn.execute("SELECT telegram_user_id FROM telegram_users WHERE telegram_user_id = ?", (int(q),)):
+            add("user", uid, uid, f"Khách {user_label(conn, int(uid))}")
+    needle = q.lstrip("@").casefold()
+    if len(needle) < 2:
+        return hits
+    # So khớp chữ bằng Python: lower() của SQLite không hạ chữ có dấu tiếng Việt.
+    for uid, name in conn.execute(
+        "SELECT u.telegram_user_id, COALESCE(u.username, ci.display_name) FROM telegram_users u "
+        "LEFT JOIN channel_identities ci ON ci.internal_user_id = u.telegram_user_id AND u.telegram_user_id < 0"
+    ):
+        if name and needle in name.casefold():
+            add("user", uid, uid, f"Khách {_label(int(uid), name)}")
+    if not q.startswith("@"):
+        for r in conn.execute(
+            "SELECT id, sub_id, product_name, telegram_user_id FROM link_requests WHERE sub_id IS NOT NULL "
+            "ORDER BY id DESC LIMIT ?",
+            (SEARCH_SCAN,),
+        ):
+            if r[2] and needle in r[2].casefold():
+                add("link", r[0], r[0], f"Link {r[1]} · {r[2][:40].rstrip()} · {user_label(conn, int(r[3]))}")
+    return hits
+
+
+@dataclass(frozen=True)
+class LinkOrder:
+    order_sn: str
+    status: str
+    net: int
+    purchase_time: str | None
+    complete_time: str | None
+
+
+@dataclass(frozen=True)
+class LinkEntry:
+    status: str
+    cashback: int
+    clawback: bool
+
+
+@dataclass(frozen=True)
+class LinkDetail:
+    link_id: int
+    sub_id: str | None
+    user_id: int
+    user: str
+    product: str | None
+    price: int | None
+    cashback_estimate: int | None
+    created_at: str | None
+    link_status: str
+    delivery_status: str | None
+    clicks: int
+    last_click: str | None
+    orders: tuple[LinkOrder, ...]
+    entries: tuple[LinkEntry, ...]
+    tickets: tuple[tuple[int, str], ...]
+
+
+def link_detail(conn: sqlite3.Connection, link_id: int) -> LinkDetail | None:
+    row = conn.execute(
+        "SELECT id, sub_id, telegram_user_id, product_name, price_vnd, estimated_cashback, created_at, link_status, "
+        "delivery_status FROM link_requests WHERE id = ?",
+        (link_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    clicks, last_click = conn.execute(
+        "SELECT COUNT(*), MAX(click_time) FROM shopee_clicks WHERE sub_id = ?", (row["sub_id"],)
+    ).fetchone() if row["sub_id"] else (0, None)
+    orders = tuple(
+        LinkOrder(r[0] or r[1], r[2] or "-", int(r[3] or 0), r[4], r[5]) for r in conn.execute(
+            "SELECT order_sn, conversion_id, order_status, net_commission_vnd, purchase_time, complete_time "
+            "FROM shopee_conversions WHERE matched_link_id = ? ORDER BY COALESCE(purchase_time, created_at)",
+            (link_id,),
+        )
+    )
+    entries = tuple(
+        LinkEntry(r[0], int(r[1]), CLAWBACK in r[2]) for r in conn.execute(
+            "SELECT status, cashback_vnd, conversion_id FROM cashback_entries WHERE link_id = ? ORDER BY created_at",
+            (link_id,),
+        )
+    )
+    tickets = tuple((int(r[0]), r[1]) for r in conn.execute(
+        "SELECT id, status FROM support_tickets WHERE link_id = ? ORDER BY id", (link_id,)
+    ))
+    uid = int(row["telegram_user_id"])
+    return LinkDetail(
+        int(row["id"]), row["sub_id"], uid, user_label(conn, uid), row["product_name"], row["price_vnd"],
+        row["estimated_cashback"], row["created_at"], row["link_status"], row["delivery_status"], int(clicks),
+        last_click, orders, entries, tickets,
     )
 
 

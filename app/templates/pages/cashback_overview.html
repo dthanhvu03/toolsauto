@@ -17,7 +17,10 @@
     <a href="/cashback?period={{ key }}" class="{{ 'on' if key == view.period }}">{{ label }}</a>
     {% endfor %}
   </div>
-  <div class="cb-tabs flex gap-2"><a href="/cashback/users">👥 Danh sách khách →</a></div>
+  <div class="flex flex-wrap items-center gap-2">
+    {% include "fragments/cashback_search_box.html" %}
+    <div class="cb-tabs flex gap-2"><a href="/cashback/users">👥 Danh sách khách →</a></div>
+  </div>
 </div>
 
 {% macro goal_value(unit, value) %}{% if value is none %}chưa đủ mẫu{% elif unit == 'vnd' %}{{ vnd(value | int) }}{% elif unit == 'percent' %}{{ '%.0f' % value }}%{% else %}{{ value | int }}{% endif %}{% endmacro %}

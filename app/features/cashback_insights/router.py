@@ -1,4 +1,4 @@
-"""Dashboard khách hàng và dòng tiền cashback (PLAN-089). Chỉ đọc DB của bot cashback (`mode=ro`).
+"""Dashboard khách hàng và dòng tiền cashback (PLAN-089), tìm mã (PLAN-091). Chỉ đọc DB của bot cashback (`mode=ro`).
 
 Số liệu tính ở cashback_bot/insights.py, cùng nguồn với màn /admin Telegram. Trang nằm sau cookie đăng nhập của
 dashboard (middleware trong app/main.py). Không hiện số tài khoản đầy đủ, không xuất file.
@@ -99,3 +99,21 @@ def user_page(request: Request, user_id: int):
     return templates.TemplateResponse("pages/cashback_user.html", _context(
         request, c=found, lifetime=lifetime, recent=recent, prof=prof, events=events, active_tab="cashback",
     ))
+
+
+@router.get("/search", response_class=HTMLResponse)
+def search_page(request: Request, q: str = ""):
+    with insights.open_readonly(_db_path()) as conn:
+        hits = insights.search(conn, q)
+    return templates.TemplateResponse("pages/cashback_search.html", _context(
+        request, q=q, hits=hits, limit=insights.SEARCH_LIMIT, active_tab="cashback",
+    ))
+
+
+@router.get("/links/{link_id}", response_class=HTMLResponse)
+def link_page(request: Request, link_id: int):
+    with insights.open_readonly(_db_path()) as conn:
+        detail = insights.link_detail(conn, link_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Không thấy link này")
+    return templates.TemplateResponse("pages/cashback_link.html", _context(request, d=detail, active_tab="cashback"))
