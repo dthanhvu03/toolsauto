@@ -388,7 +388,7 @@ def test_lenh_cach_tinh(tmp_path):
         reply = bot.handle_text(111, "buyer", text, update_id=update_id, now=NOW)
         assert "💰 <b>Cách tính tiền hoàn</b>" in reply.text
         assert "%" not in reply.text, "không lộ tỷ lệ chia, phí, thuế cho khách"
-        assert "chưa trừ thuế và phí" in reply.text
+        assert "không trừ thêm thuế hay phí" in reply.text
         assert "chưa bật" not in reply.text
         assert "dự phòng" not in reply.text
         assert reply.button_url is None

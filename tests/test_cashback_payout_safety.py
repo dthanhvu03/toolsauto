@@ -141,7 +141,7 @@ def test_b4_shopee_giam_hoa_hong_tru_vao_vi_va_khoa_rut(tmp_path):
         ("a:clawback:1", -7_000, "available")]
     assert bot.wallet.request_payout(USER, T)[1] == "below_min"
     page = _callback(bot, USER, "u:p:wallet")
-    assert "Đang trừ lại: <b>7.000đ</b>" in page.text and "Shopee giảm hoa hồng, trừ lại" in page.text
+    assert "Đang trừ lại: <b>7.000đ</b>" in page.text and "Sàn giảm hoa hồng, trừ lại" in page.text
     _available(bot, 20_000, "b", sub=sub)
     bot.refresh_wallet(T)
     assert bot.wallet.balance(USER).withdrawable_vnd == 7_000, "đơn sau bù khoản bị trừ trước"

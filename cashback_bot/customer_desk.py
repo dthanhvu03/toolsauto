@@ -18,6 +18,7 @@ from cashback_bot.notify_dispatch import NotifyConfig
 from cashback_bot.wallet import KEY_ENABLED
 from cashback_bot.messages import (
     DIEUKIEN,
+    STALE_BUTTON,
     SUPPORT_ASK,
     SUPPORT_CLOSED,
     SUPPORT_EMPTY,
@@ -174,7 +175,7 @@ class CustomerDesk:
         if (matched := _CATEGORY.fullmatch(data)) is not None:
             category = matched.group(1)
             if category not in support.CATEGORIES:
-                return BotReply("", toast="Nút này không còn hiệu lực.")
+                return BotReply("", toast=STALE_BUTTON)
             self._set_waiting(user_id, f"new|{category}|{until}")
             return support_prompt_reply(SUPPORT_ASK.format(category=support.CATEGORIES[category]))
         if data == "u:h:mine":
@@ -201,7 +202,7 @@ class CustomerDesk:
             return support_ticket_reply(
                 ticket, support.CATEGORIES, support.STATUS_LABELS, replies, ticket.status not in support.FINAL
             )
-        return BotReply("", toast="Nút này không còn hiệu lực.")
+        return BotReply("", toast=STALE_BUTTON)
 
     def _accept(self, user_id: int, version_id: int, now: datetime) -> BotReply:
         try:
@@ -210,7 +211,7 @@ class CustomerDesk:
                 source = "zalo_choice" if user_id < 0 else "telegram_button"
                 _acceptance_id, created = terms.accept(conn, user_id, version_id, source, now)
         except terms.TermsError:
-            return BotReply("", toast="Phiên bản này không còn hiện hành. Mở lại /dieukien.", show_alert=True)
+            return BotReply("", toast="Phiên bản này không còn hiện hành. Gõ /dieukien để xem bản mới.", show_alert=True)
         page = self.rules_page(user_id, now)
         toast = "Đã ghi nhận bạn đồng ý điều khoản." if created else "Bạn đã đồng ý phiên bản này trước đó."
         return BotReply(page.text, inline_keyboard=page.inline_keyboard, toast=toast)

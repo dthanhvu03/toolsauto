@@ -28,7 +28,14 @@ Mức: **P1** sai hoặc hỏng · **P2** gây hiểu nhầm hoặc nợ kỹ th
 - Báo admin "🎉 Có đơn TikTok mới" như Shopee; tin lỗi đồng bộ viết thường, không dùng mã lỗi.
 - Hoa hồng TikTok: đơn chốt có `pit` âm sẽ làm hoa hồng giảm từ 10% trở lên, kéo theo "cần kiểm tra" và tin "hoa hồng giảm" cho khách. Cần quyết cách xử lý trước khi gặp đơn như vậy.
 
-## Đợt 3 — câu chữ cho khách (chờ duyệt, cỡ M)
+## Đợt 3 — câu chữ cho khách (✅ đã làm 2026-10-26, trừ các mục ghi «còn lại»)
+
+Còn lại:
+- Tin báo đơn trên Zalo thay menu số đang dùng (cần thiết kế lại cách gửi menu kèm tin báo).
+- Có thể báo một đơn hai lần khi ví mở (luồng ví và luồng đơn); ví còn khoá.
+- Thống nhất cách xưng hô; ẩn các dòng 0đ trong ví.
+- Câu cảnh báo lặp trên Zalo: giữ theo chữ chủ bot đã duyệt.
+- Các trang chung (giới thiệu, hướng dẫn) vẫn chỉ nói Shopee vì TikTok chưa mở cho khách; đổi khi mở TikTok.
 
 **P1**
 - Trang 💰 Cách tính (V1.1): "Số dự kiến chưa trừ thuế và phí" ngược với V3 "không trừ thêm thuế hay phí".

@@ -67,7 +67,7 @@ def test_01_41_don_moi_dung_sub_id_bao_dung_nguoi_tao_link(tmp_path):
     _order(bot, sub, status="PENDING", commission=10_000)
     (event,) = _events(bot)
     assert (event["chat_id"], event["status"], event["event_key"]) == (USER, "pending", "conversion:o1:first_matched")
-    assert "Đã ghi nhận giao dịch" in event["message_html"] and "<b>7.000đ</b>" in event["message_html"]
+    assert "Có đơn mới qua link của bạn" in event["message_html"] and "<b>7.000đ</b>" in event["message_html"]
     assert "Chưa phải tiền có thể rút" in event["message_html"]
     assert json.loads(event["reply_markup_json"])["inline_keyboard"][0][0]["callback_data"] == "u:o:d:o1"
     telegram = FakeTelegram()
@@ -210,7 +210,7 @@ def test_17_20_donhang_tong_quan_va_chi_tiet(tmp_path):
 def test_18_chua_co_don(tmp_path):
     bot = _ready(tmp_path)
     page = bot.handle_text(USER, "b", "/donhang", update_id=802, now=QUOTE_NOW)
-    assert "chưa ghi nhận giao dịch nào khớp với các link bạn đã tạo" in page.text and "/hotro" in page.text
+    assert "Chưa có đơn nào mua qua link bạn đã tạo" in page.text and "/hotro" in page.text
     assert "u:p:guide" in str(page.inline_keyboard)
 
 
@@ -246,7 +246,7 @@ def test_21_22_khong_xem_duoc_don_nguoi_khac(tmp_path):
     bot = _ready(tmp_path)
     _order(bot, _link(bot), commission=10_000, cid="mine")
     assert _callback(bot, OTHER, "u:o:d:mine").toast == "Không thấy đơn này trong các đơn của bạn."
-    assert "chưa ghi nhận giao dịch" in bot.handle_text(OTHER, "o", "/donhang", update_id=2, now=QUOTE_NOW).text
+    assert "Chưa có đơn nào mua qua link" in bot.handle_text(OTHER, "o", "/donhang", update_id=2, now=QUOTE_NOW).text
     assert "Nút này không còn hiệu lực" in _callback(bot, USER, "u:o:d:../x").toast
     group = bot.handle_update({"update_id": 5, "callback_query": {"id": "q", "from": {"id": USER}, "data": "u:o:d:mine",
                                                                    "message": {"message_id": 1, "chat": {"type": "group", "id": -1}}}})[1]

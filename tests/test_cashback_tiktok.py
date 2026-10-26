@@ -359,3 +359,10 @@ def test_bao_admin_don_tiktok_moi_va_loi_dong_bo(tmp_path):
         failed = conn.execute("SELECT COUNT(*) FROM admin_notifications WHERE event_type = 'TIKTOK_SYNC_FAILED'").fetchone()[0]
     assert "Có 1 đơn TikTok mới qua bot" in rows["TIKTOK_NEW_ORDERS"]
     assert "mất kết nối với RioHub" in rows["TIKTOK_SYNC_FAILED"] and failed == 1, "mỗi loại lỗi một lần mỗi ngày"
+
+
+def test_gui_lai_link_tiktok_bi_tu_choi_tra_dung_ly_do(tmp_path):
+    bot = _bot(tmp_path)
+    first = bot.handle_text(BUYER, "khach", LINK, update_id=7, now=NOW)
+    again = bot.handle_text(BUYER, "khach", LINK, update_id=7, now=NOW)
+    assert "chưa hỗ trợ link TikTok Shop" in first.text and again.text == first.text

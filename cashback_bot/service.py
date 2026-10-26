@@ -19,6 +19,8 @@ from cashback_bot.db import LinkRow, TrackingRepository
 from cashback_bot.messages import (
     CLOSED,
     CLOSED_ALERT,
+    DIEUKIEN,
+    STALE_BUTTON,
     GENERIC_FAIL,
     HUONGDAN,
     NOT_FOUND,
@@ -27,6 +29,7 @@ from cashback_bot.messages import (
     TIKTOK_NOT_OPEN,
     TIKTOK_NOT_PROMOTABLE,
     TIP_ALERT,
+    TIPS_KEYBOARD,
     WALLET_CLOSED,
     WALLET_CLOSED_ALERT,
     BotReply,
@@ -231,7 +234,7 @@ class CashbackService:
             return self._wallet_action(user_id, data.removeprefix("u:w:"), query_id)
         page = self._page(data.removeprefix("u:p:"), user_id) if data.startswith("u:p:") else None
         if page is None:
-            return BotReply("", toast="Nút này không còn hiệu lực.")
+            return BotReply("", toast=STALE_BUTTON)
         return page
 
     def _page(self, name: str, user_id: int | None = None) -> BotReply | None:
@@ -243,6 +246,8 @@ class CashbackService:
             return page_reply(HUONGDAN)
         if name == "rules":
             return self.desk.rules_page(user_id, datetime.now(timezone.utc))
+        if name == "tips":
+            return BotReply(DIEUKIEN, inline_keyboard=TIPS_KEYBOARD)
         if name == "support" and user_id is not None:
             return self.desk.support_page(user_id)
         if name == "orders" and user_id is not None:
@@ -318,7 +323,7 @@ class CashbackService:
                 user = self.repo.get_user(user_id)
                 self.admin_notifier.notify_payout_request(payout, None if user is None else user["username"])
             return withdraw_done_reply(payout)
-        return BotReply("", toast="Nút này không còn hiệu lực.")
+        return BotReply("", toast=STALE_BUTTON)
 
     def _bank_waiting(self, user_id: int) -> str | None:
         """Mã ngân hàng khách đã bấm chọn và bot đang chờ số tài khoản; None: không chờ."""
@@ -750,4 +755,9 @@ class CashbackService:
             return invalid_link_reply()
         if row.reject_reason == "food_link":
             return food_link_reply()
+        # Link TikTok bị từ chối: trả đúng lý do như lần đầu (rà soát 2026-10-26).
+        tiktok = {"tiktok_not_open": TIKTOK_NOT_OPEN, "tiktok_not_promotable": TIKTOK_NOT_PROMOTABLE,
+                  "tiktok_no_product": TIKTOK_NO_INFO}
+        if (row.reject_reason or "").startswith("tiktok_"):
+            return BotReply(tiktok.get(row.reject_reason, GENERIC_FAIL))
         return BotReply(STALE)

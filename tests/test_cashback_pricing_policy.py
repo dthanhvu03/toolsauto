@@ -577,7 +577,7 @@ def test_35_36_cachtinh_theo_calculator_dang_chay(tmp_path):
     assert "đã trừ trước dự phòng phí và thuế" in text12
     v11 = _bot(tmp_path / "v11", v12=False)
     text11 = v11.handle_text(BUYER, "buyer", "/cachtinh", update_id=1, now=NOW).text
-    assert "chưa trừ thuế và phí" in text11
+    assert "không trừ thêm thuế hay phí" in text11
     assert "dự phòng" not in text11
     for text in (text11, text12):
         assert "Mỗi link giữ cách tính lúc bot tạo link" in text

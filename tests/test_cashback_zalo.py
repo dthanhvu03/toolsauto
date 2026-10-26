@@ -379,3 +379,19 @@ def test_vi_tren_zalo_chua_dong_y_dieu_khoan_thi_chua_rut(tmp_path):
     assert "Cần đồng ý điều khoản chi trả" in reply and "/dieukien" not in reply, "Zalo không có lệnh /"
     with bot.repo.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM cashback_payouts").fetchone()[0] == 0
+
+
+# --- Rà soát câu chữ 2026-10-26 (đợt 3) -------------------------------------------------------------
+
+
+def test_menu_zalo_khong_danh_so_hai_lan():
+    reply = BotReply("x", inline_keyboard=((("1. Áo Polo · 10.500đ", "u:o:d:a"),), (("6. Quần · 5.000đ", "u:o:d:b"),)))
+    text = render(reply)[0][-1].text
+    assert "1 · Áo Polo · 10.500đ" in text and "2 · Quần" in text and "1. Áo" not in text
+
+
+def test_cau_lenh_tren_zalo_dung_ngu_phap():
+    for source in (messages.SUPPORT_CLOSED, messages.ORDERS_EMPTY, messages.WALLET_CLOSED):
+        text = zalo_wording(source)
+        assert "dùng gõ" not in text and "trong gõ" not in text and "/" not in text.replace("</b>", ""), text
+    assert zalo_wording(messages.STALE_BUTTON) == "Lựa chọn này đã hết hạn. Gõ menu để mở trang chủ."

@@ -12,6 +12,7 @@ from cashback_bot.messages import (
     ADMIN_COMMANDS,
     BOT_COMMANDS,
     DESCRIPTION,
+    DIEUKIEN,
     SHORT_DESCRIPTION,
     TIP_ALERT,
 )
@@ -95,7 +96,7 @@ def test_start_co_nut_va_trang_con_doi_bang_edit(tmp_path):
     tg = Telegram()
     process_updates(bot, tg, bot.repo, [_message(1, "/start")], Admin())
     home = tg.sent[0]
-    assert _callbacks(home["markup"]) == ["u:p:orders", "u:p:guide", "u:p:rules", "u:p:calc", "u:p:support"]
+    assert _callbacks(home["markup"]) == ["u:p:orders", "u:p:guide", "u:p:tips", "u:p:calc", "u:p:support"]
     assert "u:p:rank" not in _callbacks(home["markup"])
 
     process_updates(bot, tg, bot.repo, [_callback(2, "u:p:calc")], Admin())
@@ -163,7 +164,7 @@ def test_dong_cu_chua_co_markup_van_dung_nut_mua(tmp_path):
 def test_link_sai_co_nut_cach_lay_link(tmp_path):
     bot = service(tmp_path, _fresh_client())
     reply = bot.handle_text(111, "buyer", "xin chào", update_id=60)
-    assert reply.inline_keyboard == ((("📖 Cách lấy link", "u:p:guide"),),)
+    assert reply.inline_keyboard == ((("📖 Cách dùng", "u:p:guide"),),)
     again = bot.handle_text(111, "buyer", "xin chào", update_id=60)
     assert again.inline_keyboard == reply.inline_keyboard
 
@@ -388,3 +389,11 @@ def test_khach_khong_thay_so_noi_bo(tmp_path):
     texts.append(bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=50).text)
     for text in texts:
         assert "%" not in text, text
+
+
+def test_nut_de_duoc_ghi_nhan_luon_mo_trang_meo(tmp_path):
+    """Rà soát 2026-10-26: khi có điều khoản công bố, /dieukien mở điều khoản; nút 🛡️ vẫn mở trang mẹo."""
+    bot = service(tmp_path, FakeClient(payload()))
+    reply = bot.handle_update({"update_id": 1, "callback_query": {
+        "id": "q", "from": {"id": 111}, "data": "u:p:tips", "message": {"message_id": 5, "chat": {"type": "private"}}}})[1]
+    assert reply.text == DIEUKIEN and ("📋 Điều khoản", "u:p:rules") in [b for row in reply.inline_keyboard for b in row]

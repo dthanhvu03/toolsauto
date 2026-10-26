@@ -1,3 +1,27 @@
+## Phiên 2026-10-26 (co) — Rà soát đợt 3: câu chữ cho khách
+
+- Câu nói sai ý:
+  - 💰 Cách tính V1.1: "chưa trừ thuế và phí" đổi thành "không trừ thêm thuế hay phí khi chi trả";
+  - ví khoá: lý do thật là "Bot chưa chi trả";
+  - nút "🛡️ Để được ghi nhận" luôn mở trang mẹo (`u:p:tips`), kèm nút 📋 Điều khoản;
+  - mẫu V3 trung tính Shopee / TikTok Shop.
+- Zalo:
+  - sửa câu lệnh sai ngữ pháp ("hãy dùng gõ hotro"…);
+  - thêm PHRASES cho các câu "bấm";
+  - "Nút này không còn hiệu lực" thành "Lựa chọn này đã hết hạn. Gõ menu…" (gom về `messages.STALE_BUTTON`);
+  - menu số không đánh số hai lần.
+- Từ ngữ:
+  - "giao dịch" đổi thành "đơn";
+  - "Hoàn tạm tính thay đổi";
+  - "Mã link" (hỗ trợ chỉ đúng nơi xem);
+  - ví và tin đơn ghi "sàn" thay "Shopee";
+  - "Nội dung chuyển khoản"; "xoá" / "huỷ".
+- Gửi lại link TikTok bị từ chối thì trả đúng lý do. Lời chào Zalo ghi đủ mục đích lưu dữ liệu.
+- Proof: 835 test cashback qua.
+- Còn lại: xem `reports/CASHBACK_REVIEW_2026-10-26.md`, đợt 3.
+
+---
+
 ## Phiên 2026-10-26 (cn) — Rà soát đợt 5, phần nhỏ: an toàn vận hành + sổ ví
 
 - `poller._periodic`: 8 việc định kỳ (ví, đối soát, Zalo, version, digest, bản tin, TikTok, backup) chạy riêng. Một việc lỗi chỉ ghi log và báo admin (mỗi việc 10 phút một lần), không chặn việc sau.

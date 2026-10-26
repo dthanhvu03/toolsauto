@@ -24,7 +24,8 @@ MENU_TITLE = "Gõ số để chọn:"
 WELCOME = (
     "👋 <b>Chào bạn! Đây là bot tự động hoàn tiền mua sắm</b>, không phải người trả lời.\n"
     "Dán link sản phẩm Shopee, bot gửi lại link mua và số tiền hoàn dự kiến.\n"
-    "Bot lưu link bạn gửi, đơn mua qua link đó và nội dung bạn gửi khi cần hỗ trợ, chỉ để tính hoàn tiền.\n"
+    "Bot lưu link bạn gửi, đơn mua qua link đó và nội dung bạn gửi khi cần hỗ trợ, chỉ để tính hoàn tiền "
+    "và hỗ trợ bạn.\n"
     "Gõ <b>hd</b> để xem hướng dẫn, <b>menu</b> để mở trang chủ."
 )
 LINK_CARD = (
@@ -49,6 +50,10 @@ TIKTOK_BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app TikTok 
 # Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.
 PHRASES = (
     ("👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng.", "👉 Bấm link ở tin dưới rồi đặt hàng."),
+    # Rà soát 2026-10-26: câu «bấm» của Telegram còn lọt sang Zalo.
+    ("Bấm vào đơn để xem tiến trình.", "Gõ số của đơn để xem tiến trình."),
+    ("Nếu bạn thấy chưa đúng, bấm 📩 Yêu cầu kiểm tra.", "Nếu bạn thấy chưa đúng, chọn 📩 Yêu cầu kiểm tra."),
+    ("Nút này không còn hiệu lực.", "Lựa chọn này đã hết hạn. Gõ menu để mở trang chủ."),
     ("👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng.", "👉 Bấm link ở tin dưới rồi đặt hàng."),
     ("Bấm nút dưới hoặc gõ /huongdan", "Gõ /huongdan"),
     ("nút <b>🛒 Mua trên Shopee</b>", "link <b>🛒 Mua trên Shopee</b>"),
@@ -147,10 +152,14 @@ def zalo_wording(html_text: str) -> str:
     return _BARE_CMD.sub(lambda m: f"gõ <b>{COMMANDS[m.group(1)]}</b>", text)
 
 
+_ORDINAL = re.compile(r"^\d{1,3}\.\s+")
+
+
 def _label(label: str) -> str:
     for arrow in _ARROWS:
         label = label.replace(arrow, "")
-    return label.strip()
+    # Nhãn nút đã có số thứ tự riêng («1. Áo…»): Zalo tự đánh số, bỏ số cũ để khách không gõ nhầm.
+    return _ORDINAL.sub("", label.strip())
 
 
 def flatten(html_text: str) -> tuple[str, list[Style]]:
