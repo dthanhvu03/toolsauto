@@ -1,3 +1,14 @@
+## Phiên 2026-10-26 (cb) — Link Zalo `priYghQy` "kẹt": tin đã tới khách, chỉ thiếu cờ đã giao
+
+- Nguyên nhân:
+  - Link id 39 (khách Zalo, 24/10 15:28Z) nằm trong tin trả lời Zalo inbox #5. Tin này đã `replied` và có link, tức khách đã nhận.
+  - Bản vá ghi `delivery_status` cho luồng Zalo (`f184972`) lên lúc 15:32Z, sau tin đó 4 phút, nên dòng link còn `pending`.
+  - Không cần gửi lại cho khách.
+- Vá theo dõi: 🛠 Vận hành mục "Link giao tới khách" giờ đếm cả link kẹt quá 1 giờ tính từ đầu, không chỉ trong 24 giờ. 🎯 Mục tiêu thêm mục này vào giới hạn an toàn.
+- Dòng 39 trên production vẫn `pending`, nên Vận hành sẽ báo đỏ cho tới khi sửa. Sửa thành `sent` cần chủ bot duyệt và backup trước.
+
+---
+
 ## Phiên 2026-10-26 (ca) — PLAN-090: 🎯 Mục tiêu của bot (Telegram + web)
 
 - Chủ bot hỏi góp ý về mục tiêu cho bot. Claude Code đề xuất: chỉ số chính (North Star) là đơn hoàn thành mỗi tháng; giai đoạn G1 (chạy trọn vòng tiền) → G2 (khoảng 100 đơn, 50 khách hoạt động) → G3 (hoà vốn); kèm các giới hạn an toàn. Chủ bot nói "triển khai đi".

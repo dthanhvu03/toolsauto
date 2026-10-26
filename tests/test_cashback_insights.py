@@ -297,3 +297,15 @@ def test_web_the_muc_tieu(tmp_path, monkeypatch):
     page = client.get("/cashback")
     assert page.status_code == 200 and "Mục tiêu tháng" in page.text and "Giới hạn an toàn" in page.text
     assert "tối đa 10%" in page.text
+
+
+def test_van_hanh_bao_link_ket_cu_ngoai_24_gio(tmp_path):
+    bot = _bot(tmp_path)
+    _link(bot)
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE link_requests SET delivery_status = 'pending', created_at = ?",
+                     (_stamp(NOW - timedelta(days=2)),))
+    with insights.open_readonly(bot.repo.path) as conn:
+        check = next(c for c in insights.operations(conn, NOW) if c.code == "links")
+    assert not check.ok and "kẹt quá 1 giờ (từ đầu): 1" in check.value
+    assert "links" in {c.code for c in _goals(bot).guards}

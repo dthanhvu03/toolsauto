@@ -36,6 +36,7 @@ PAYOUT_STALE = timedelta(days=7)
 SETTLE_STALE = timedelta(days=45)
 ZALO_WARN = 40
 BACKUP_STALE = timedelta(hours=26)
+LINK_STUCK = timedelta(hours=1)
 NEW_DAYS, ACTIVE_DAYS, CHURN_DAYS = 7, 14, 30
 SEGMENTS = {
     "attention": "🔴 Cần xử lý",
@@ -762,8 +763,15 @@ def operations(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: i
         "FROM link_requests WHERE created_at >= ?",
         (day,),
     ).fetchone()
-    checks.append(Check("links", "Link 24 giờ", f"tạo lỗi {links[0]} · chưa giao tới khách {links[1]}",
-                        int(links[1]) == 0))
+    # Link kẹt quá 1 giờ tính từ đầu, không chỉ 24 giờ: link cũ kẹt không được lặng lẽ rơi khỏi cửa sổ.
+    stuck = conn.execute(
+        "SELECT COUNT(*) FROM link_requests WHERE link_status = 'created' "
+        "AND COALESCE(delivery_status, 'sent') != 'sent' AND created_at < ?",
+        (_stamp(now - LINK_STUCK),),
+    ).fetchone()[0]
+    checks.append(Check("links", "Link giao tới khách",
+                        f"24 giờ: tạo lỗi {links[0]} · chưa giao {links[1]} · kẹt quá 1 giờ (từ đầu): {stuck}",
+                        int(links[1]) == 0 and int(stuck) == 0))
     tickets = conn.execute(
         "SELECT COUNT(*), MIN(created_at) FROM support_tickets WHERE status NOT IN ('RESOLVED', 'REJECTED', 'CLOSED')"
     ).fetchone()
@@ -1019,7 +1027,7 @@ def goals(conn: sqlite3.Connection, now: datetime, sync_interval_minutes: int = 
     guards = (
         Check("losing", "Khách có biên âm", str(losing), losing == 0),
         Check("owing", "Khách có số dư âm", str(owing), owing == 0),
-        checks["notices"], checks["tickets"], checks["ledger"],
+        checks["notices"], checks["links"], checks["tickets"], checks["ledger"],
     )
     current = breakeven(conn, now).current
     return Goals(
