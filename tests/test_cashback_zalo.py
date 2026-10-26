@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import inspect
+import re
+from datetime import timedelta
 
 from cashback_bot import messages, terms, zalo_api
 from cashback_bot.admin_notify import _update_line, _user_line, _who
@@ -14,6 +16,7 @@ from cashback_bot.terms_content import DRAFT_SECTIONS, DRAFT_TITLE
 from cashback_bot.zalo_bot import ZaloChannel, ZaloSender, ZaloStore
 from cashback_bot.zalo_render import BUY_LEAD, ERROR_REPLY, LINK_CARD, MAX_LEN, PHRASES, flatten, render, zalo_wording
 from tests.test_cashback_bot import NOW, FakeClient, payload, service
+from tests.test_cashback_wallet import _financially_ready, _order
 
 ZALO_ID = "f06e3b4f5605bf5be614"
 
@@ -318,3 +321,61 @@ def test_dieu_khoan_mau_noi_ca_telegram_va_zalo():
     body = "\n".join(text for _key, _label, text in DRAFT_SECTIONS)
     assert body.count("Telegram hoặc Zalo") == 2
     assert "tài khoản Telegram," not in body and "tài khoản Telegram đã" not in body
+
+
+# --- Ví trên Zalo (2026-10-26: trước khi mở ví, giữ luồng chạy tay bằng test) -------------------------
+
+
+def _zalo_wallet(tmp_path, accepted: bool):
+    """Khách Zalo -1 có 70.000đ rút được; `accepted`: đã đồng ý điều khoản chi trả."""
+    bot, channel, zalo = _channel(tmp_path)
+    channel.handle(_update("https://s.shopee.vn/abc123", message_id="w0"), now=NOW)
+    with bot.repo.connect() as conn:
+        sub = conn.execute("SELECT sub_id FROM link_requests").fetchone()[0]
+    _financially_ready(bot, users=(-1,) if accepted else ())
+    _order(bot, sub, status="COMPLETED", commission=100_000, complete="2026-09-01T10:00:00Z", cid="z1", approved=True)
+    bot.wallet.set_enabled(True)
+    bot.refresh_wallet(NOW + timedelta(days=60))
+    step = iter(range(1, 100))
+
+    def say(text: str) -> str:
+        before = len(zalo.sent)
+        channel.handle(_update(text, message_id=f"w{next(step)}"), now=NOW + timedelta(minutes=next(step)))
+        return "\n".join(t for _c, t, _s in zalo.sent[before:])
+
+    return bot, say
+
+
+def _number(text: str, label: str) -> str:
+    return re.search(rf"(\d+) · [^\n]*{label}", text).group(1)
+
+
+def test_vi_tren_zalo_khai_tai_khoan_va_rut(tmp_path):
+    bot, say = _zalo_wallet(tmp_path, accepted=True)
+    wallet = say(_number(say("menu"), "Ví của tôi"))
+    assert "Có thể rút: 70.000đ" in wallet and "Chưa khai tài khoản" in wallet
+    banks = say(_number(wallet, "Tài khoản nhận tiền"))
+    assert "Gõ số để chọn ngân hàng" in banks
+    say(_number(banks, "Vietcombank"))
+    saved = say("0123456789 NGUYEN VAN TUAN")
+    assert "Đã lưu tài khoản Vietcombank ••••6789" in saved and "0123456789" not in saved
+    confirm = say(_number(saved, "Rút 70.000đ"))
+    assert "Xác nhận rút tiền" in confirm and "3–7 ngày làm việc" in confirm
+    done = say(_number(confirm, "Xác nhận rút"))
+    assert "Đã gửi yêu cầu rút" in done and "Hoan tien 000001" in done
+    with bot.repo.connect() as conn:
+        row = conn.execute("SELECT telegram_user_id, amount_vnd, status FROM cashback_payouts").fetchone()
+    assert tuple(row) == (-1, 70_000, "requested")
+
+
+def test_vi_tren_zalo_chua_dong_y_dieu_khoan_thi_chua_rut(tmp_path):
+    bot, say = _zalo_wallet(tmp_path, accepted=False)
+    wallet = say(_number(say("menu"), "Ví của tôi"))
+    banks = say(_number(wallet, "Tài khoản nhận tiền"))
+    say(_number(banks, "Vietcombank"))
+    saved = say("0123456789 NGUYEN VAN TUAN")
+    reply = say(_number(saved, "Rút 70.000đ"))
+    reply += say(_number(reply, "Xác nhận rút")) if "Xác nhận rút" in reply else ""
+    assert "Cần đồng ý điều khoản chi trả" in reply and "/dieukien" not in reply, "Zalo không có lệnh /"
+    with bot.repo.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM cashback_payouts").fetchone()[0] == 0
