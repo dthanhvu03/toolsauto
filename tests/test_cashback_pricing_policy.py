@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import inspect
+import json
 import sqlite3
 from dataclasses import replace
 from datetime import timedelta
 
 import pytest
 
-from cashback_bot import admin_policy, service as service_module
+from cashback_bot import admin_policy, order_notify, service as service_module
 from cashback_bot.admin_reserve import effective_from, resolve_policy, stamp
 from cashback_bot.calculator import CalculationError
-from cashback_bot.messages import DIEUKIEN, HOME, HUONGDAN, how_to_calc
+from cashback_bot.messages import DIEUKIEN, HOME, HUONGDAN, how_to_calc, order_new_notice
 from cashback_bot.pricing import V11, V12, PolicyResolution, cashback_for, quote_displayed_vnd
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.wallet import PayoutBlocked
@@ -905,12 +906,11 @@ def test_shopee_comm_tren_2_5_chi_ghi_co_the_duoc_them(tmp_path):
     card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
     policy = bot._resolve_policy(NOW)
     expected = cashback_for(11_875, policy).cashback_vnd
-    extra = cashback_for(38_000, policy).cashback_vnd - expected
     assert f"<b>{expected:,}đ</b>".replace(",", ".") in card.text
-    assert f"Có thể được thêm tới {extra:,}đ nếu Shopee áp mức cao hơn".replace(",", ".") in card.text
+    assert "Có thể được thêm nếu Shopee áp mức cao hơn" in card.text
     assert _rows(tmp_path, "SELECT estimated_commission, shopee_commission_vnd FROM link_requests")[0] == (11_875, 38_000)
     # Bố cục thẻ: số hoàn → «có thể thêm» → điều kiện để được hoàn → chữ nhỏ → lời bấm nút nằm cuối, sát nút.
-    order = ["Hoàn dự kiến", "Có thể được thêm", "⚠️ <b>Để được hoàn</b>", "Mua đúng món này", "ⓘ <i>", "👉 Bấm"]
+    order = ["Hoàn dự kiến", "Có thể được thêm", "🔒", "⚠️ <b>Để được hoàn</b>", "Mua đúng món này", "ⓘ <i>", "👉 Bấm"]
     positions = [card.text.index(part) for part in order]
     assert positions == sorted(positions) and card.text.endswith("rồi đặt hàng.")
     flat = " ".join(_link_notice(tmp_path, bot, 1).split())
@@ -928,3 +928,48 @@ def test_xtra_va_shopee_2_5_giu_nguyen(tmp_path):
     assert "Có thể được thêm" not in card.text
     assert _rows(tmp_path, "SELECT estimated_commission FROM link_requests")[0] == (47_850,)
     assert "AddLiveTag báo" not in _link_notice(tmp_path, bot, 1)
+
+
+def test_the_link_tran_an_va_voucher_thanh_gach_dau_dong(tmp_path):
+    bot = _bot(tmp_path)
+    bot.client.payload["productInfo"].update(
+        price=475_000, commission=38_000, sellerComFinal=0, shopeeComFinal=38_000, totalRatePercent="8", isXtra=False
+    )
+    card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text
+    assert "➕ Có thể được thêm nếu Shopee áp mức cao hơn" in card and "thêm tới" not in card
+    assert "🔒 Link mở thẳng Shopee" in card and "bot không thu tiền gì" in card
+    assert "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo." in card
+    assert card.count("voucher") == 1, "voucher chỉ nói một lần, ở khối «Để được hoàn»"
+
+
+def _order_values(link_id: int, *, item_id: int, paid: int) -> dict:
+    raw = json.dumps({"order": {"items": [{"item_id": item_id}]}})
+    return {"raw_json": raw, "gmv_vnd": paid, "matched_link_id": link_id}
+
+
+def test_tin_don_moi_noi_ly_do_hoan_thap_hon_luc_tao_link(tmp_path):
+    bot = _bot(tmp_path)
+    bot.client.payload["productInfo"].update(
+        price=475_000, commission=38_000, sellerComFinal=0, shopeeComFinal=38_000, totalRatePercent="8", isXtra=False
+    )
+    bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    with bot.repo.connect() as conn:
+        link_id = conn.execute("SELECT id FROM link_requests").fetchone()[0]
+        # Đơn F1 thật: trả 415.650đ, Shopee 2,5% = 10.391đ. Báo theo cách A thì chỉ lệch do giá trả.
+        cashback = order_notify.cashback_of(conn, link_id, 10_391)
+        text = order_notify.why_lower(conn, link_id, cashback, _order_values(link_id, item_id=8, paid=415_650))
+        assert text == "" or ("415.650đ" in text and "Shopee tính mức" not in text)
+        # Link cũ báo theo 8% (23.678đ): thêm lý do Shopee tính thấp hơn.
+        conn.execute("UPDATE link_requests SET estimated_cashback = 23678 WHERE id = ?", (link_id,))
+        text = order_notify.why_lower(conn, link_id, cashback, _order_values(link_id, item_id=8, paid=415_650))
+        assert "Lúc tạo link bot báo khoảng 23.678đ. Số thấp hơn vì:" in text
+        assert "• bạn trả 415.650đ (sau voucher, xu, giảm giá), thấp hơn giá tham khảo 475.000đ" in text
+        assert "• Shopee tính mức hoa hồng thấp hơn lúc tạo link" in text
+        # Đơn khung bằng khen thật: mua món khác ở shop khác.
+        other = order_notify.why_lower(conn, link_id, order_notify.cashback_of(conn, link_id, 2_120),
+                                       _order_values(link_id, item_id=41_456_045_493, paid=84_800))
+        assert "• bạn mua món khác món trong link" in other and "Shopee tính mức" not in other
+        assert order_notify.why_lower(conn, link_id, 23_678, _order_values(link_id, item_id=8, paid=475_000)) == ""
+    notice = order_new_notice("••••PNSD1", cashback, "PAID", "PENDING", text)
+    assert notice.index("Số thấp hơn vì") < notice.index("ⓘ")
+    assert "Số thấp hơn" not in order_new_notice("••••PNSD1", 0, "CANCELLED", "REJECTED", text)

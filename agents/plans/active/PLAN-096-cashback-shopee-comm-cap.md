@@ -31,11 +31,23 @@
 - Khối "Để được hoàn" có thêm ý "Mua đúng món này. Mua món khác thì số hoàn sẽ khác." (đơn 261027N7MJJKFV mất 12% XTRA vì khách mua ở shop khác).
 - Zalo dùng chung chữ; thẻ `<i>` / `<b>` đổi sang style của Zalo.
 
-## Còn lại (chủ bot chưa duyệt)
+## Đợt 3: câu chữ theo tâm lý khách (chủ bot duyệt 2026-10-27)
 
-- Tin báo đơn giải thích khi hoàn thực thấp hơn hẳn số dự kiến.
+- Dòng ➕ bỏ số tiền ("Có thể được thêm nếu Shopee áp mức cao hơn"): ghi "thêm tới Xđ" thì khách cộng lại và lấy tổng làm mốc.
+- Thêm dòng 🔒 "Link mở thẳng Shopee. Bạn thanh toán trên Shopee như bình thường, bot không thu tiền gì." (TikTok có câu riêng).
+- Câu voucher chuyển từ chữ nhỏ thành gạch đầu dòng thứ 4 trong khối "Để được hoàn".
+- Tin "📦 Có đơn mới qua link của bạn": khi hoàn thấp hơn hẳn số báo lúc tạo link (ngưỡng như tin thay đổi: ≥500đ hoặc ≥10%), thêm "Lúc tạo link bot báo khoảng X. Số thấp hơn vì:" kèm từng lý do lấy từ dữ liệu đơn:
+  - mua món khác món trong link (item_id trong raw_json);
+  - trả ít hơn giá tham khảo (gmv_vnd);
+  - Shopee tính mức thấp hơn (đã trừ phần do giá trả mà vẫn thấp hơn hẳn).
+  - Đơn huỷ / không đủ điều kiện thì không thêm.
+
+## Còn lại
+
+- Thẻ link nói thời điểm tiền vào ví: chờ chủ bot chốt chính sách thời gian.
+- `entry_notice` (tin khi ví mở) vẫn chỉ nói lý do giá trả; nên dùng `why_lower` khi mở ví.
 
 ## Proof
 
 - `test_shopee_comm_tren_2_5_chi_ghi_co_the_duoc_them` (số thật link F1) và `test_xtra_va_shopee_2_5_giu_nguyen` (số thật link Cúp pha lê).
-- Toàn bộ test cashback: 841 passed. ruff sạch.
+- Toàn bộ test cashback: 843 passed (đợt 3). ruff sạch trên file đã sửa.

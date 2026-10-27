@@ -192,32 +192,33 @@ def source_text(text: str, conversion_id: str | None) -> str:
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
 # Thẻ link 2026-10-27: gom điều kiện thành khối «Để được hoàn», mỗi ý một dòng (đơn thật: khách sang shop khác mua, mất XTRA).
-BUY_WARNING = (
+# Voucher nằm trong khối này chứ không ở chữ nhỏ: khách ít đọc chữ nhỏ, nhận số thấp hơn thì tưởng bị bớt.
+_BUY_RULES = (
     "⚠️ <b>Để được hoàn</b>\n"
     "• Mua qua link của bot. Mua thẳng trong app sẽ không được hoàn.\n"
     "• Mua đúng món này. Mua món khác thì số hoàn sẽ khác.\n"
-    "• Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
+    "• Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot.\n"
 )
-# Shopee tính hoa hồng trên số tiền khách thực trả, bot chỉ biết giá tham khảo (đơn thật 24/10: báo 21.357đ, thật 12.157đ).
-_PAID_BASIS = (
-    "Shopee tính trên số tiền bạn thực trả, nên dùng voucher, xu hoặc mua lúc giảm giá thì tiền hoàn giảm theo."
-)
+BUY_WARNING = _BUY_RULES + "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo."
+TIKTOK_BUY_WARNING = _BUY_RULES + "• Dùng voucher hoặc mua lúc giảm giá thì số hoàn giảm theo."
+# Câu trấn an «link này có lừa không» (khách quen của chủ bot từng sợ lừa đảo).
+TRUST_LINE = "🔒 Link mở thẳng Shopee. Bạn thanh toán trên Shopee như bình thường, bot không thu tiền gì."
+TIKTOK_TRUST_LINE = "🔒 Link mở thẳng TikTok Shop. Bạn thanh toán trên TikTok như bình thường, bot không thu tiền gì."
 _NOTE_V11 = (
-    f"Số hoàn tính theo giá tham khảo. {_PAID_BASIS}\n"
+    "Số hoàn tính theo giá tham khảo. "
     "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
 )
 _NOTE_V12 = (
-    f"Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. {_PAID_BASIS}\n"
+    "Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. "
     "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
 )
 # PLAN-085 A6: TikTok Shop dùng chung cách tính với Shopee (chủ bot 2026-10-26: «giống với shopee»).
-_TIKTOK_PAID_BASIS = "TikTok tính trên số tiền bạn thực trả, nên dùng voucher hoặc mua lúc giảm giá thì tiền hoàn giảm theo."
 _NOTE_TIKTOK_V11 = (
-    f"Số hoàn tính theo giá tham khảo. {_TIKTOK_PAID_BASIS}\n"
+    "Số hoàn tính theo giá tham khảo. "
     "Chỉ được hoàn khi TikTok xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
 )
 _NOTE_TIKTOK_V12 = (
-    f"Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. {_TIKTOK_PAID_BASIS}\n"
+    "Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. "
     "Chỉ được hoàn khi TikTok xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
 )
 TIKTOK_NOT_OPEN = (
@@ -304,12 +305,13 @@ def buyer_name(name: str) -> str:
 
 
 # Đối chiếu AMS 2026-10-27: Shopee Comm AddLiveTag báo trên 2,5% không phải đơn nào cũng được.
-EXTRA_LINE = "➕ Có thể được thêm tới {amount} nếu Shopee áp mức cao hơn"
+# Không ghi số tiền: «thêm tới Xđ» làm khách cộng lại và lấy tổng làm mốc (tâm lý neo số, chủ bot duyệt 2026-10-27).
+EXTRA_LINE = "➕ Có thể được thêm nếu Shopee áp mức cao hơn"
 
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str,
                  tiktok: bool = False, extra_vnd: int = 0) -> BotReply:
-    """Thẻ link: sản phẩm → số hoàn (đậm) → điều kiện để được hoàn → chữ nhỏ → lời bấm nút ngay trên nút."""
+    """Thẻ link: sản phẩm → số hoàn (đậm) → câu trấn an → điều kiện để được hoàn → chữ nhỏ → lời bấm nút ngay trên nút."""
     safe_name = html.escape(buyer_name(name))
     title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
     lines = [
@@ -319,9 +321,10 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
         f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>",
     ]
     if extra_vnd > 0:
-        lines.append(EXTRA_LINE.format(amount=format_vnd(extra_vnd)))
+        lines.append(EXTRA_LINE)
+    lines += ["", TIKTOK_TRUST_LINE if tiktok else TRUST_LINE]
     if cashback_vnd > 0:
-        lines += ["", BUY_WARNING]
+        lines += ["", TIKTOK_BUY_WARNING if tiktok else BUY_WARNING]
     lines += ["", f"ⓘ <i>{note}</i>", "", TIKTOK_BUY_HINT if tiktok else BUY_HINT]
     return BotReply(text="\n".join(lines), button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD,
                     button_label=TIKTOK_BUY_BUTTON if tiktok else None)
@@ -776,7 +779,23 @@ def _cashback_line(amount: int | None) -> str:
     return f"Hoàn tạm tính: <b>{format_vnd(amount)}</b>" if amount is not None else "Hoàn tạm tính: chưa xác định được"
 
 
-def order_new_notice(order: str, cashback: int | None, order_status: str | None, validation: str | None) -> str:
+def lower_than_link(estimated_vnd: int, *, other_item: bool, paid_vnd: int | None, price_vnd: int | None,
+                    rate_lower: bool) -> str:
+    """Đoạn giải thích vì sao hoàn thấp hơn số báo lúc tạo link, mỗi lý do một dòng."""
+    reasons = []
+    if other_item:
+        reasons.append("bạn mua món khác món trong link, nên tính theo món đã mua")
+    if paid_vnd and price_vnd and paid_vnd < price_vnd:
+        reasons.append(f"bạn trả {format_vnd(paid_vnd)} (sau voucher, xu, giảm giá), "
+                       f"thấp hơn giá tham khảo {format_vnd(price_vnd)}")
+    if rate_lower or not reasons:
+        reasons.append("Shopee tính mức hoa hồng thấp hơn lúc tạo link")
+    return (f"Lúc tạo link bot báo khoảng {format_vnd(estimated_vnd)}. Số thấp hơn vì:\n"
+            + "\n".join(f"• {reason}" for reason in reasons))
+
+
+def order_new_notice(order: str, cashback: int | None, order_status: str | None, validation: str | None,
+                     lower: str = "") -> str:
     # Đơn đã huỷ / không đủ điều kiện ngay lần đầu thấy: không hiện số hoàn (khớp /donhang).
     ineligible = validation in ("REJECTED", "FRAUD") or (order_status or "").upper() in ("CANCELLED", "CANCELED")
     amount = "Hoàn: không được tính cho đơn này" if ineligible else _cashback_line(cashback)
@@ -791,7 +810,8 @@ def order_new_notice(order: str, cashback: int | None, order_status: str | None,
         f"Tình trạng đơn: {order_status_label(order_status)}\n"
         f"{amount}\n"
         f"{commission_label(validation, order_status)}.\n\n"
-        f"{footer}"
+        + (f"{lower}\n\n" if lower and not ineligible else "")
+        + f"{footer}"
     )
 
 

@@ -1,3 +1,17 @@
+## Phiên 2026-10-27 (ct) — Câu chữ theo tâm lý khách (PLAN-096 đợt 3)
+
+- Thẻ link:
+  - ➕ không ghi số tiền;
+  - thêm dòng 🔒 "Link mở thẳng Shopee… bot không thu tiền gì";
+  - voucher thành gạch đầu dòng trong ⚠️ Để được hoàn.
+- Tin đơn mới: hoàn thấp hơn hẳn số lúc tạo link thì nói lý do (mua món khác / trả ít hơn giá tham khảo / Shopee tính mức thấp hơn).
+- Proof: 843 test cashback qua; test dùng số thật đơn F1 và đơn khung bằng khen.
+- **Next:**
+  - chủ bot restart `systemctl restart cashback-bot cashback-zalo`;
+  - chờ chủ bot chốt câu thời điểm tiền vào ví.
+
+---
+
 ## Phiên 2026-10-27 (cs) — Thẻ link làm lại bố cục
 
 - Thứ tự mới: sản phẩm → 💰 hoàn dự kiến (đậm cả dòng) → ➕ có thể được thêm → ⚠️ Để được hoàn (3 ý, có ý "Mua đúng món này") → chữ nhỏ nghiêng → 👉 lời bấm nút ở cuối.

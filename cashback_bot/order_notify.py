@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from cashback_bot import policy_snapshot
 from cashback_bot.commission_validation import APPROVED, FRAUD, REJECTED
 from cashback_bot.db import TrackingRepository, enqueue_event
-from cashback_bot.messages import order_new_notice, order_update_notice, source_text
+from cashback_bot.messages import lower_than_link, order_new_notice, order_update_notice, source_text
 from cashback_bot.notify_dispatch import BASELINE_KEY, NotifyConfig, customer_block_reason
 from cashback_bot.pricing import cashback_for
 
@@ -101,6 +101,32 @@ def significant_change(old: int | None, new: int | None) -> bool:
     return delta >= MIN_CHANGE_VND or (old > 0 and delta / old >= MIN_CHANGE_RATIO)
 
 
+def _bought_items(raw_json: str | None) -> set[int]:
+    try:
+        items = json.loads(raw_json or "{}").get("order", {}).get("items") or []
+        return {int(item["item_id"]) for item in items if item.get("item_id") is not None}
+    except (ValueError, TypeError, AttributeError, KeyError):
+        return set()
+
+
+def why_lower(conn: sqlite3.Connection, link_id: int, cashback: int | None, values: dict) -> str:
+    """Hoàn thực thấp hơn hẳn số báo lúc tạo link thì nói lý do (mua món khác / trả ít hơn / Shopee tính thấp hơn)."""
+    link = conn.execute("SELECT estimated_cashback, price_vnd, item_id FROM link_requests WHERE id = ?",
+                        (link_id,)).fetchone()
+    if link is None or link[0] is None or cashback is None:
+        return ""
+    estimated, price, item_id = int(link[0]), link[1], link[2]
+    if cashback >= estimated or not significant_change(estimated, cashback):
+        return ""
+    bought = _bought_items(values.get("raw_json"))
+    other_item = bool(bought) and item_id is not None and int(item_id) not in bought
+    paid = values.get("gmv_vnd")
+    # Đã trừ phần do trả ít hơn mà vẫn thấp hơn hẳn: Shopee tính mức thấp hơn số AddLiveTag báo.
+    expected = estimated * int(paid) // int(price) if paid and price and int(paid) < int(price) else estimated
+    rate_lower = not other_item and cashback < expected and significant_change(expected, cashback)
+    return lower_than_link(estimated, other_item=other_item, paid_vnd=paid, price_vnd=price, rate_lower=rate_lower)
+
+
 def _attribution_conflict(conn: sqlite3.Connection, conversion_id: str, recorded) -> bool:
     if any(change.field == "attribution" for change, _id in recorded):
         return True
@@ -141,8 +167,10 @@ def make_hook(cfg: NotifyConfig):
         first = prev is None or prev["matched_link_id"] is None
         if first:
             baseline = conn.execute("SELECT value FROM bot_state WHERE key = ?", (BASELINE_KEY,)).fetchone()
+            cashback = cashback_of(conn, link_id, net)
             html = source_text(
-                order_new_notice(order, cashback_of(conn, link_id, net), status, values.get("validation_status")),
+                order_new_notice(order, cashback, status, values.get("validation_status"),
+                                 why_lower(conn, int(link_id), cashback, values)),
                 conversion_id,
             )
             key = f"conversion:{conversion_id}:first_matched"
