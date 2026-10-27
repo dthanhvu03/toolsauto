@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
@@ -9,9 +10,12 @@ from unittest.mock import MagicMock
 from cashback_bot import engagement, sale_calendar
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_ui import SETTINGS_MENU_KEYBOARD
-from cashback_bot.messages import SALE_REMINDER_FOOTER, SALE_REMINDERS, BotReply
+from cashback_bot.messages import DORMANT_OPENER, SALE_REMINDER_FOOTER, SALE_REMINDERS, BotReply, link_nudge
 from cashback_bot.zalo_render import render
-from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _link
+from tests.test_cashback_bot import NOW
+from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _link, _order
+
+OTHER = 222
 
 ICT = sale_calendar.ICT
 
@@ -36,7 +40,8 @@ def test_lich_sale_cuoi_nam_2026():
 
 
 def _ready(tmp_path):
-    bot = _bot(tmp_path)
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    bot = _bot(tmp_path, allowed_telegram_ids=frozenset({USER, OTHER}))
     _link(bot)
     admin = AdminNotifier(bot.repo, MagicMock(), enabled=True, chat_id=ADMIN)
     return bot, admin
@@ -116,3 +121,86 @@ def test_cau_nhac_ngan_co_cach_tat_va_doi_sang_zalo():
     text = engagement.text_for(sale_calendar.find("2026-11-11:eve"))
     zalo = render(BotReply(text))[0][0].text
     assert "gõ thongbao" in zalo and "/thongbao" not in zalo
+
+
+# --- Khách ngủ: câu mở đầu trong tin nhắc sale · nhắc link chưa dùng ------------------------------------------
+
+
+def _set_created(bot, user: int, stamp: str) -> int:
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE link_requests SET created_at = ? WHERE telegram_user_id = ?", (stamp, user))
+        return conn.execute("SELECT id FROM link_requests WHERE telegram_user_id = ?", (user,)).fetchone()[0]
+
+
+def test_khach_ngu_nhan_cau_mo_dau_trong_tin_sale(tmp_path):
+    bot, admin = _ready(tmp_path)
+    bot.handle_text(OTHER, "other", "https://shopee.vn/product/9/8", update_id=2, now=NOW)
+    _set_created(bot, OTHER, "2026-12-05T00:00:00Z")
+    bot.repo.set_state(engagement.ENABLED_KEY, "1")
+    slot = sale_calendar.find("2026-12-12:eve")
+    engagement.save(bot.repo, slot.id, {"status": "approved"})
+    engagement.tick(bot.repo, admin, slot.at + timedelta(minutes=1))
+    sent = dict(_rows(bot, "SELECT chat_id, message_html FROM admin_notifications WHERE event_type = 'SALE_REMINDER'"))
+    assert sent[USER].startswith(DORMANT_OPENER), "link cuối từ 21/10, quá 21 ngày"
+    assert DORMANT_OPENER not in sent[OTHER], "mới tạo link 05/12"
+    assert engagement.record(bot.repo, slot.id)["dormant"] == 1
+
+
+def _nudges(bot):
+    return _rows(bot, "SELECT chat_id, message_html, reply_markup_json FROM admin_notifications "
+                      "WHERE event_type = 'LINK_NUDGE'")
+
+
+def test_nhac_link_chua_dung_dung_luat(tmp_path):
+    bot, admin = _ready(tmp_path)
+    link_id = _set_created(bot, USER, "2026-10-22T10:00:00Z")
+    evening = datetime(2026, 10, 23, 13, 0, tzinfo=timezone.utc)  # 20:00 giờ VN, link 27 giờ tuổi
+    engagement.tick(bot.repo, admin, evening)
+    assert _nudges(bot) == [], "đang tắt"
+    bot.repo.set_state(engagement.NUDGE_KEY, "1")
+    engagement.tick(bot.repo, admin, evening.replace(hour=9))  # 16:00 giờ VN: ngoài khung
+    assert _nudges(bot) == []
+    for _ in range(2):
+        engagement.tick(bot.repo, admin, evening)
+    ((chat, text, markup),) = _nudges(bot)
+    assert chat == USER and "Áo Polo Nam" in text and "bạn chưa mua" not in text and SALE_REMINDER_FOOTER in text
+    button = json.loads(markup)["inline_keyboard"][0][0]
+    with bot.repo.connect() as conn:
+        url = conn.execute("SELECT affiliate_url FROM link_requests WHERE id = ?", (link_id,)).fetchone()[0]
+    assert button == {"text": "🛒 Mua trên Shopee", "url": url}
+    engagement.tick(bot.repo, admin, evening + timedelta(days=1))
+    assert len(_nudges(bot)) == 1, "mỗi link một lần, mỗi khách tối đa 1 tin / 7 ngày"
+
+
+def test_khong_nhac_link_da_co_don_hay_khach_tat_nhac_hay_sat_ngay_sale(tmp_path):
+    bot, admin = _ready(tmp_path)
+    bot.repo.set_state(engagement.NUDGE_KEY, "1")
+    sub = _set_created(bot, USER, "2026-10-22T10:00:00Z")
+    evening = datetime(2026, 10, 23, 13, 0, tzinfo=timezone.utc)
+    _callback(bot, USER, "u:n:t:reminders")
+    engagement.tick(bot.repo, admin, evening)
+    assert _nudges(bot) == [], "khách tắt 🛒 Nhắc mùa sale"
+    _callback(bot, USER, "u:n:t:reminders")
+    with bot.repo.connect() as conn:
+        sub_id = conn.execute("SELECT sub_id FROM link_requests WHERE id = ?", (sub,)).fetchone()[0]
+    _order(bot, sub_id)
+    engagement.tick(bot.repo, admin, evening)
+    assert _nudges(bot) == [], "link đã có đơn"
+    # Sát lượt nhắc 11.11 (tối 10/11) khi nhắc sale đang bật: nhường tin sale.
+    bot2, admin2 = _ready(tmp_path / "b")
+    bot2.repo.set_state(engagement.NUDGE_KEY, "1")
+    bot2.repo.set_state(engagement.ENABLED_KEY, "1")
+    _set_created(bot2, USER, "2026-11-09T10:00:00Z")
+    engagement.send_nudges(bot2.repo, datetime(2026, 11, 10, 13, 0, tzinfo=timezone.utc))
+    assert _nudges(bot2) == []
+
+
+def test_man_admin_bat_nhac_link_va_zalo_gui_link_rieng(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    home = _callback(bot, ADMIN, "c:eg:home")
+    assert "Nhắc link chưa dùng" in home.text and "c:eg:nudge:on" in [d for row in home.inline_keyboard for _l, d in row]
+    _callback(bot, ADMIN, "c:eg:nudge:on")
+    assert engagement.nudge_enabled(bot.repo)
+    assert "Nhắc link chưa dùng: bật" in _callback(bot, ADMIN, "c:menu:hist").text
+    messages, _menu = render(BotReply(link_nudge("Áo Polo Nam"), button_url="https://s.shopee.vn/x"))
+    assert "Bấm link ở tin dưới rồi đặt hàng" in messages[0].text and "https://s.shopee.vn/x" in messages[1].text

@@ -853,11 +853,26 @@ SALE_REMINDERS = {
 SALE_REMINDER_FOOTER = "Phiền quá thì gõ /thongbao tắt nhắc nha 🫶"
 
 
-def sale_reminder(kind: str, stage: str, label: str, seed: str) -> str:
+# Khách lâu không tạo link: tin nhắc sale có thêm câu mở đầu, không gửi tin riêng (chủ bot duyệt 2026-10-27).
+DORMANT_OPENER = "👋 <b>Lâu rồi hông thấy bạn ghé nè!</b>"
+
+
+def sale_reminder(kind: str, stage: str, label: str, seed: str, dormant: bool = False) -> str:
     """Tin nhắc một dịp sale; đổi câu theo `seed` (mã lượt nhắc) để các dịp liền nhau không trùng câu."""
     variants = SALE_REMINDERS[(kind, stage)]
     body = variants[sum(map(ord, seed)) % len(variants)].format(label=label)
-    return f"{body}\n\n{SALE_REMINDER_FOOTER}"
+    return (f"{DORMANT_OPENER}\n" if dormant else "") + f"{body}\n\n{SALE_REMINDER_FOOTER}"
+
+
+def link_nudge(product_name: str, tiktok: bool = False) -> str:
+    """Nhắc một link đã tạo mà chưa có đơn. Không nói «bạn chưa mua» để khách khỏi thấy bị theo dõi."""
+    name = html.escape(buyer_name(product_name or "món này"))
+    return (
+        f"👀 Món <b>{name}</b> bạn gửi bot hôm trước vẫn còn đó nè.\n"
+        "Muốn chốt thì mở lại bằng link bot, vẫn được hoàn nha 😎\n"
+        f"{TIKTOK_BUY_HINT if tiktok else BUY_HINT}\n\n"
+        f"{SALE_REMINDER_FOOTER}"
+    )
 
 
 def come_back_line(order: str) -> str:

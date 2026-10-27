@@ -1,3 +1,19 @@
+## Phiên 2026-10-27 (cz) — Khách ngủ + nhắc link chưa dùng
+
+- Khách ngủ (link gần nhất cũ hơn 21 ngày): tin nhắc sale có thêm dòng đầu "👋 Lâu rồi hông thấy bạn ghé nè!". Không gửi tin riêng.
+- Nhắc link chưa dùng (`engagement.send_nudges`, công tắc `link_nudge_enabled`, **mặc định tắt**), tự gửi theo luật:
+  - link mới nhất, có hoàn, 24–72 giờ tuổi, chưa có đơn (không dựa vào click);
+  - chỉ 19:00–21:30; mỗi link 1 lần; mỗi khách tối đa 1 tin / 7 ngày;
+  - nhường ngày có nhắc sale; tôn trọng /thongbao và chặn bot.
+  - Kèm nút 🛒 Mua (Zalo: link thành tin riêng).
+- Màn 📣 Nhắc mùa sale có thêm số khách ngủ, công tắc nhắc link, thống kê 7 ngày. Bật / tắt ghi 📊 Lịch sử.
+- Proof: 856 test cashback qua.
+- **Next:**
+  - chủ bot restart;
+  - bật 🟢 Nhắc link nếu muốn.
+
+---
+
 ## Phiên 2026-10-27 (cy) — Tin nhắc sale giọng Gen Z đậm
 
 - Chủ bot xem 3 mức giọng (Gen Z vui / Gen Z đậm / thân thiện nhẹ nhàng) và chọn **Gen Z đậm**.

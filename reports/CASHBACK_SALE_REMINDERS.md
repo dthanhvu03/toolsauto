@@ -80,7 +80,30 @@ Câu đang dùng: `messages.SALE_REMINDERS`.
 - Bot sập hay quá 60 phút sau giờ gửi thì **bỏ lượt**, không gửi muộn (tin "mai 11.11" gửi lúc 2h sáng là sai).
 - Mọi thao tác bật / tắt / duyệt / bỏ qua ghi vào 📊 Lịch sử cấu hình.
 
-## 5. Còn mở
+## 5. Khách ngủ và nhắc link chưa dùng (chủ bot duyệt 2026-10-27)
+
+**Khách ngủ** (link gần nhất cũ hơn 21 ngày): không gửi tin riêng. Tin nhắc sale của họ có thêm dòng đầu
+"👋 **Lâu rồi hông thấy bạn ghé nè!**". Số khách ngủ hiện ở màn 📣 và ghi trong trạng thái lượt đã gửi.
+
+**Nhắc link chưa dùng** (công tắc riêng ở màn 📣, **mặc định tắt**). Tự gửi theo luật, không duyệt từng tin:
+
+| Luật | Lý do |
+|---|---|
+| Link **mới nhất** của khách, có hoàn, tạo **24–72 giờ** trước | Khách đã tạo link mới thì đang hoạt động, nhắc link cũ là lạc |
+| **Chưa có đơn** khớp link | Không dựa vào click: dữ liệu click về trễ khoảng 1 ngày, dễ nhắc nhầm người đã mua |
+| Chỉ gửi **19:00–21:30** giờ VN | Khung tối khách lướt điện thoại |
+| Mỗi link 1 lần; mỗi khách tối đa **1 tin / 7 ngày** | Chống làm phiền |
+| Nhường ngày có nhắc sale (trong 24 giờ, khi nhắc sale đang bật) | Khỏi nhận hai tin một tối |
+| Dùng chung mục 🛒 Nhắc ở /thongbao, chặn bot thì không gửi | Như mọi tin khách |
+
+Câu (không nói "bạn chưa mua", để khách khỏi thấy bị theo dõi):
+> 👀 Món **[tên món]** bạn gửi bot hôm trước vẫn còn đó nè.
+> Muốn chốt thì mở lại bằng link bot, vẫn được hoàn nha 😎
+> 👉 Bấm **🛒 Mua trên Shopee** bên dưới rồi đặt hàng.
+
+Kèm nút 🛒 Mua trên Shopee (Telegram). Trên Zalo, link đi thành tin riêng ngay sau.
+
+## 6. Còn mở
 
 - Zalo: tin chủ động tới chủ bot ngày 27/10 **gửi được** (1 giờ sau lần chủ bot nhắn cuối). Chưa kiểm sau 48 giờ im lặng; khách Zalo lâu không nhắn có thể không nhận được.
 - Lượt đầu tiên là 10/11 20:30 (11.11), không có lượt nào sớm hơn để thử. Tin nhắc dùng chung đường gửi với tin báo đơn, mà đường này đã chạy thật trên Telegram.

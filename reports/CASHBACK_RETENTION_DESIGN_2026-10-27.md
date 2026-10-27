@@ -27,7 +27,7 @@
 4. Bảng 🔁 Giữ chân đo đúng (chưa tới / đang đo). ✅ Đã làm 2026-10-27.
 5. Mở ví và xử lý trần 50 người Zalo.
 6. So mức hoàn với các bot hoàn tiền khác.
-7. Từ ~100 khách: mới xây tầng C / D, có rào chắn.
+7. ~~Từ ~100 khách mới xây tầng C / D.~~ Chủ bot duyệt làm sớm (2026-10-27): C = nhắc mùa sale, D gộp vào tin sale, A2 nhắc link chưa dùng có luật. Xem `reports/CASHBACK_SALE_REMINDERS.md`.
 
 ## 1. Hiện trạng (DB production, đọc ngày 2026-10-27)
 
