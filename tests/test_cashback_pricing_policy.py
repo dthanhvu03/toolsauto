@@ -891,3 +891,36 @@ def test_bao_admin_link_khong_snapshot_thi_khong_hien_bang(tmp_path):
     html = _link_notice(tmp_path, bot, 900)
     assert "💰 Giá 250.000đ · Hoàn <b>14.000đ</b>" in html
     assert "<pre>" not in html and "Biên" not in html
+
+
+# --- Shopee Comm tối đa 2,5% khi báo hoàn (đối chiếu AMS 2026-10-27) -------------------------
+
+
+def test_shopee_comm_tren_2_5_chi_ghi_co_the_duoc_them(tmp_path):
+    # Link F1 thật: AddLiveTag báo Shopee 8%, AMS ghi 2,5%.
+    bot = _bot(tmp_path)
+    bot.client.payload["productInfo"].update(
+        price=475_000, commission=38_000, sellerComFinal=0, shopeeComFinal=38_000, totalRatePercent="8", isXtra=False
+    )
+    card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    policy = bot._resolve_policy(NOW)
+    expected = cashback_for(11_875, policy).cashback_vnd
+    extra = cashback_for(38_000, policy).cashback_vnd - expected
+    assert f"<b>{expected:,}đ</b>".replace(",", ".") in card.text
+    assert f"Có thể được thêm tới {extra:,}đ nếu Shopee áp mức hoa hồng cao hơn".replace(",", ".") in card.text
+    assert _rows(tmp_path, "SELECT estimated_commission, shopee_commission_vnd FROM link_requests")[0] == (11_875, 38_000)
+    flat = " ".join(_link_notice(tmp_path, bot, 1).split())
+    assert "HH ước tính 2,5% 11.875" in flat and "· từ Shopee 11.875" in flat
+    assert "AddLiveTag báo Shopee Comm 38.000đ; bot chỉ tính tối đa 2,5%" in flat
+
+
+def test_xtra_va_shopee_2_5_giu_nguyen(tmp_path):
+    # Link Cúp pha lê thật: XTRA 12% + Shopee 2,5% đều được tính, không có dòng «có thể được thêm».
+    bot = _bot(tmp_path)
+    bot.client.payload["productInfo"].update(
+        price=330_000, commission=47_850, sellerComFinal=39_600, shopeeComFinal=8_250, totalRatePercent="14.5", isXtra=True
+    )
+    card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    assert "Có thể được thêm" not in card.text
+    assert _rows(tmp_path, "SELECT estimated_commission FROM link_requests")[0] == (47_850,)
+    assert "AddLiveTag báo" not in _link_notice(tmp_path, bot, 1)

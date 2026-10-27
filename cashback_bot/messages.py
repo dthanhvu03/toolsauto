@@ -300,14 +300,19 @@ def buyer_name(name: str) -> str:
     return (cut or text[:51]).rstrip(" ,.-") + "…"
 
 
+# Đối chiếu AMS 2026-10-27: Shopee Comm AddLiveTag báo trên 2,5% không phải đơn nào cũng được.
+EXTRA_LINE = "➕ Có thể được thêm tới {amount} nếu Shopee áp mức hoa hồng cao hơn"
+
+
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str,
-                 tiktok: bool = False) -> BotReply:
+                 tiktok: bool = False, extra_vnd: int = 0) -> BotReply:
     safe_name = html.escape(buyer_name(name))
     title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
     text = (
         f"{title}" + (" · 🎵 TikTok Shop" if tiktok else "") + "\n\n"
         f"💰 Hoàn dự kiến: khoảng <b>{format_vnd(cashback_vnd)}</b>\n"
-        f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}\n\n"
+        + (EXTRA_LINE.format(amount=format_vnd(extra_vnd)) + "\n" if extra_vnd > 0 else "")
+        + f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}\n\n"
         f"{TIKTOK_BUY_HINT if tiktok else BUY_HINT}\n" + (f"{BUY_WARNING}\n\n" if cashback_vnd > 0 else "\n")
         + f"ⓘ {note}"
     )
@@ -331,13 +336,16 @@ def food_link_reply() -> BotReply:
     return BotReply(FOOD_LINK, inline_keyboard=GUIDE_KEYBOARD)
 
 
-def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, tiktok: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V11 if tiktok else _NOTE_V11, tiktok)
+def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, tiktok: bool = False,
+                   extra_vnd: int = 0) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V11 if tiktok else _NOTE_V11, tiktok,
+                        extra_vnd)
 
 
 def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str,
-                       tiktok: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V12 if tiktok else _NOTE_V12, tiktok)
+                       tiktok: bool = False, extra_vnd: int = 0) -> BotReply:
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V12 if tiktok else _NOTE_V12, tiktok,
+                        extra_vnd)
 
 
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------

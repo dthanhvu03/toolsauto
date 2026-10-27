@@ -20,6 +20,7 @@ from cashback_bot.notify_dispatch import Dispatcher
 from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
 from cashback_bot.pricing import V12, cashback_for
+from cashback_bot.product_data import SHOPEE_BASE_BPS
 from cashback_bot.support import CATEGORIES
 from cashback_bot.telegram_api import TelegramApi
 
@@ -76,12 +77,17 @@ def link_split_lines(link: sqlite3.Row, found: "policy_snapshot.LinkPolicy | Non
         return []
     keys = link.keys()
     rate = link["commission_rate_bps"] if "commission_rate_bps" in keys else None
-    rows: list[tuple[str, int, bool]] = [(f"HH ước tính{' ' + _pct(rate) if rate else ''}", quote.commission_vnd, False)]
     seller = link["seller_commission_vnd"] if "seller_commission_vnd" in keys else None
     shopee = link["shopee_commission_vnd"] if "shopee_commission_vnd" in keys else None
-    if seller is not None and shopee is not None and int(seller) + int(shopee) == quote.commission_vnd:
+    split = seller is not None and shopee is not None and int(seller) + int(shopee) >= quote.commission_vnd
+    # Shopee Comm AddLiveTag báo trên 2,5% không đưa vào báo giá (SHOPEE_BASE_BPS): tỷ lệ hiện theo số đã tính.
+    capped = split and int(seller) + int(shopee) > quote.commission_vnd
+    if capped and link["price_vnd"]:
+        rate = quote.commission_vnd * 10_000 // int(link["price_vnd"])
+    rows: list[tuple[str, int, bool]] = [(f"HH ước tính{' ' + _pct(rate) if rate else ''}", quote.commission_vnd, False)]
+    if split:
         rows.append(("· từ shop", int(seller), False))
-        rows.append((f"· từ Shopee{' Xtra' if link['is_xtra'] else ''}", int(shopee), False))
+        rows.append((f"· từ Shopee{' Xtra' if link['is_xtra'] else ''}", quote.commission_vnd - int(seller), False))
     v12 = policy.pricing_version == V12
     rows.append((f"Dự phòng phí {_pct(policy.fee_bps)}", quote.fee_reserve_vnd, True))
     rows.append((f"Dự phòng thuế {_pct(policy.tax_reserve_bps)}", quote.tax_reserve_vnd, True))
@@ -96,11 +102,15 @@ def link_split_lines(link: sqlite3.Row, found: "policy_snapshot.LinkPolicy | Non
     num_w = max(len(cell) for cell in cells)
     table = [f"{label.ljust(label_w)} {cell.rjust(num_w)}" for (label, _v, _m), cell in zip(rows, cells)]
     basis = "V1.2: chia trên quỹ sau dự phòng" if v12 else "V1.1: phần khách tính trên HH gốc, biên chịu dự phòng"
-    return [
+    lines = [
         "<pre>" + html.escape("\n".join(table)) + "</pre>",
         f"<i>{basis}. Ước tính theo giá tham khảo, chốt theo chính sách của link. "
         "Biên = HH − phần khách − dự phòng.</i>",
     ]
+    if capped:
+        lines.append(f"<i>AddLiveTag báo Shopee Comm {format_vnd(int(shopee))}; bot chỉ tính tối đa "
+                     f"{_pct(SHOPEE_BASE_BPS)}, phần dư khách thấy là «có thể được thêm».</i>")
+    return lines
 
 
 logger = logging.getLogger(__name__)

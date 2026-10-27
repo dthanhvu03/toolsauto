@@ -512,8 +512,10 @@ class CashbackService:
         resolution = self._resolve_or_reject(update_id, telegram_user_id, target.original_url, moment)
         if resolution is None:
             return BotReply(GENERIC_FAIL)
-        priced = cashback_for(quote.commission_vnd, resolution)
+        # Báo theo hoa hồng chắc chắn; phần Shopee Comm trên 2,5% chỉ ghi là có thể được thêm.
+        priced = cashback_for(quote.sure_commission_vnd, resolution)
         cashback = priced.cashback_vnd
+        extra = cashback_for(quote.commission_vnd, resolution).cashback_vnd - cashback
         v12 = resolution.pricing_version == "v1.2"
         render = render_success_v12 if v12 else render_success
         try:
@@ -542,7 +544,7 @@ class CashbackService:
                 "shop_id": quote.shop_id,
                 "product_name": quote.name[:300],
                 "price_vnd": quote.price_vnd,
-                "estimated_commission": quote.commission_vnd,
+                "estimated_commission": quote.sure_commission_vnd,
                 "estimated_cashback": cashback,
                 "cashback_rate_percent": resolution.rate_percent,
                 "estimate_policy": resolution.label if v12 else None,
@@ -563,7 +565,7 @@ class CashbackService:
         )
         if not saved:
             return BotReply(GENERIC_FAIL)
-        return render(quote.name, quote.price_vnd, cashback, affiliate_url)
+        return render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra)
 
     def _resolve_or_reject(self, update_id: int | None, telegram_user_id: int, original_url: str,
                            moment: datetime) -> PolicyResolution | None:

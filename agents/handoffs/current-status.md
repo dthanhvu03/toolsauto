@@ -1,3 +1,15 @@
+## Phiên 2026-10-27 (cr) — Báo hoàn theo Shopee Comm tối đa 2,5% (PLAN-096)
+
+- Kiểm 2 đơn mới, đối chiếu AMS: số trong bot khớp AMS. Lệch nằm ở số AddLiveTag báo lúc tạo link:
+  - F1 `261026KTPPNSD1`: link báo Shopee Comm 8%, thực tế 2,5%;
+  - Khung bằng khen `261027N7MJJKFV`: khách mua ở shop khác nên mất XTRA 12%.
+- Chủ bot chọn cách A: thẻ link chỉ tính Shopee Comm tối đa 2,5%, cộng XTRA. Phần cao hơn ghi "➕ Có thể được thêm tới Xđ nếu Shopee áp mức hoa hồng cao hơn".
+- Tin admin khi tạo link ghi rõ số AddLiveTag báo và số bot tính. Link cũ giữ nguyên số đã báo.
+- Proof: 841 test cashback qua, ruff sạch.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo` và `pm2 restart Web_Dashboard`. Chờ duyệt 2 việc ở mục "Còn lại" của PLAN-096.
+
+---
+
 ## Phiên 2026-10-26 (cq) — Thuật ngữ chung + ticket không mã thô
 
 - Thuật ngữ trên mọi màn admin, tin admin và web: **HH ròng · Phần khách · Dự phòng · Biên** (= HH ròng − phần khách − dự phòng) **· Lãi · Tạm tính / Thực**.

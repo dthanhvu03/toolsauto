@@ -12,6 +12,9 @@ import requests
 from cashback_bot.shopee_url import ShopeeTarget, canonical_product_url, is_canonical_product_url
 
 _VALID_SOURCES = {"api", "db"}
+# Mức hoa hồng Shopee mọi đơn thật đều được (đối chiếu AMS 2026-10-27). Phần AddLiveTag báo cao hơn
+# chỉ là «có thể được thêm», không đưa vào số hoàn dự kiến để khách không bị hụt.
+SHOPEE_BASE_BPS = 250
 _BROKEN_STATUS = {"stale", "skipped", "not_found", "error"}
 
 
@@ -40,6 +43,14 @@ class ProductQuote:
     commission_rate_bps: int | None = None
     is_xtra: bool | None = None
     is_capped: bool | None = None
+
+    @property
+    def sure_commission_vnd(self) -> int:
+        """Hoa hồng dùng để báo hoàn: Shopee Comm tối đa SHOPEE_BASE_BPS, cộng XTRA. Thiếu phần tách thì giữ tổng."""
+        if self.shopee_commission_vnd is None:
+            return self.commission_vnd
+        base = min(self.shopee_commission_vnd, self.price_vnd * SHOPEE_BASE_BPS // 10_000)
+        return min(self.commission_vnd, base + (self.seller_commission_vnd or 0))
 
 
 def _whole_vnd(value: object) -> int | None:
