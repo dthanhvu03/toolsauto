@@ -903,6 +903,18 @@ def sale_reminder(kind: str, stage: str, label: str, seed: str, dormant: bool = 
     return (f"{DORMANT_OPENER}\n" if dormant else "") + f"{body}\n\n{SALE_REMINDER_FOOTER}"
 
 
+def price_drop(product_name: str, price_vnd: int, percent: int, flash_sale: bool = False) -> str:
+    """Món khách từng tạo link đang giảm giá (price_watch). Không ghi số hoàn: giá đổi thì hoàn đổi theo."""
+    name = html.escape(buyer_name(product_name or "món này"))
+    return (
+        f"📉 <b>Món {name} bạn xem hôm trước đang giảm còn {format_vnd(price_vnd)} (−{percent}%) nè!</b>\n"
+        + ("⚡ Đang flash sale, nhanh tay kẻo hết nha.\n" if flash_sale else "")
+        + "Chốt qua link bot vẫn được hoàn nha 😎\n"
+        f"{BUY_HINT}\n\n"
+        f"{SALE_REMINDER_FOOTER}"
+    )
+
+
 def link_nudge(product_name: str, tiktok: bool = False) -> str:
     """Nhắc một link đã tạo mà chưa có đơn. Không nói «bạn chưa mua» để khách khỏi thấy bị theo dõi."""
     name = html.escape(buyer_name(product_name or "món này"))

@@ -4,7 +4,7 @@
 |---|---|
 | Ngày | 2026-10-27 |
 | Yêu cầu | Chủ bot: xem AddLiveTag có gì để kiếm thêm; làm mục 1 (kênh deal) và mục 2 (ShopeeFood) |
-| Trạng thái | Nghiên cứu xong, **chưa làm code** |
+| Trạng thái | Mục 2A đã làm (2026-10-27, `price_watch.py`, **mặc định tắt**). 2B và ShopeeFood chưa làm |
 
 ## 1. AddLiveTag có gì
 
@@ -55,3 +55,17 @@ Không có API "deal / % giảm giá" trực tiếp. Hai cách làm được:
 1. Ảnh chụp mức hoa hồng ShopeeFood trong app Shopee Tiếp thị liên kết.
 2. Một link affiliate ShopeeFood tạo từ trang affiliate (Custom Link). Che `affiliate_id` cũng được, chỉ cần thấy định dạng.
 3. Trong affiliate.shopee.vn → Báo cáo chuyển đổi, đơn ShopeeFood có nằm chung với đơn Shopee không.
+
+## 4. Đã làm: báo giảm giá (2A)
+
+- `price_watch.py`: mỗi tối một lượt (19:00–21:30, luồng nền), kiểm tối đa 200 món, 50 món mỗi lần gọi `history.php` (`type=price`, 7 ngày).
+- Báo khi giá mới ≤ 85% giá lúc tạo link và còn hàng. Mỗi khách 1 món giảm sâu nhất; mỗi link 1 lần.
+- Dùng chung giới hạn 1 tin / 7 ngày với nhắc link chưa dùng; nhường tối có nhắc sale.
+- Lỗi AddLiveTag: ghi trạng thái, báo admin, tối mai thử lại.
+- Câu:
+  > 📉 **Món [tên] bạn xem hôm trước đang giảm còn 200.000đ (−20%) nè!**
+  > (⚡ Đang flash sale, nhanh tay kẻo hết nha.)
+  > Chốt qua link bot vẫn được hoàn nha 😎
+  > 👉 Bấm **🛒 Mua trên Shopee** bên dưới rồi đặt hàng.
+- Bật ở ⚙️ Cài đặt → 📣 Nhắc mùa sale → 🟢 Bật báo giảm giá.
+- Lần bật đầu tiên là lần đầu bot gọi `history.php` thật: định dạng phản hồi mới đọc theo tài liệu, chưa thử với dữ liệu thật.

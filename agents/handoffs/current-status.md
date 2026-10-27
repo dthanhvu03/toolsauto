@@ -1,3 +1,21 @@
+## Phiên 2026-10-27 (dd) — Báo giảm giá món khách từng xem
+
+- `price_watch.py` (AddLiveTag `price-tracking/history.php`, cùng khoá API), mặc định tắt. Bật ở 📣 Nhắc mùa sale.
+- Luật:
+  - mỗi tối một lượt 19:00–21:30, chạy ở luồng nền;
+  - link Shopee 30 ngày, có hoàn, chưa có đơn; giá giảm từ 15% và còn hàng;
+  - mỗi khách 1 món, mỗi link 1 lần;
+  - chung ngân sách 1 tin / 7 ngày với nhắc link; nhường tối có nhắc sale; tôn trọng /thongbao.
+- Chưa thử với dữ liệu thật: lần bật đầu là lần đầu gọi `history.php`. Lỗi thì báo admin, tối mai thử lại.
+- Proof: 864 test cashback qua; `tests/test_cashback_price_drop.py`.
+- **Next:**
+  - chủ bot restart;
+  - bật 🟢 Báo giảm giá;
+  - hỏi AddLiveTag chuyện dùng thương mại;
+  - gửi 3 thông tin ShopeeFood.
+
+---
+
 ## Phiên 2026-10-27 (dc) — Chuẩn bị mở TikTok cho khách
 
 - Chủ bot cho biết RioHub thuộc hệ sinh thái AddLiveTag và **đã đồng ý** (memory `riohub-addlivetag-consent`).

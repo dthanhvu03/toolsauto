@@ -55,6 +55,7 @@ from cashback_bot.messages import (
     withdraw_done_reply,
     withdraw_error_reply,
 )
+from cashback_bot.price_watch import PriceHistoryClient
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.riohub_client import RioHubClient, RioHubError, commission_rate_bps, price_range_vnd, product_title
@@ -113,6 +114,8 @@ class CashbackService:
         self._tiktok_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tiktok-link")
         self.tiktok_runner: Callable[[Callable[[], None]], object] = self._tiktok_pool.submit
         self.after_deferred: Callable[[], object] | None = None
+        # Báo giảm giá món khách từng xem (price_watch): cùng khoá AddLiveTag với báo giá. Chỉ bot Telegram chạy lượt.
+        self.price_history = PriceHistoryClient(settings.api_key)
         self.wallet = Wallet(repo)
         notify_cfg = order_notify.NotifyConfig(
             settings.customer_notifications_enabled, settings.customer_notification_test_ids

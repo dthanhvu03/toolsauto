@@ -138,7 +138,7 @@ def _send(repo: TrackingRepository, slot: Slot, data: dict, now: datetime) -> No
     save(repo, slot.id, {**data, "status": "sent", "sent": len(users), "dormant": len(sleepy & set(users)), "at": stamp})
 
 
-def _near_sale(repo: TrackingRepository, now: datetime) -> bool:
+def near_sale(repo: TrackingRepository, now: datetime) -> bool:
     """Trong 24 giờ có lượt nhắc sale (khi nhắc sale đang bật): nhường cho tin sale, khỏi nhắn khách hai tin."""
     if not enabled(repo):
         return False
@@ -156,7 +156,7 @@ def nudge_candidates(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Ro
           AND l.created_at = (SELECT MAX(created_at) FROM link_requests x
                               WHERE x.telegram_user_id = l.telegram_user_id AND x.link_status = 'created')
           AND NOT EXISTS (SELECT 1 FROM shopee_conversions c WHERE c.matched_link_id = l.id)
-          AND NOT EXISTS (SELECT 1 FROM admin_notifications n WHERE n.event_type = 'LINK_NUDGE'
+          AND NOT EXISTS (SELECT 1 FROM admin_notifications n WHERE n.event_type IN ('LINK_NUDGE', 'PRICE_DROP')
                           AND n.chat_id = l.telegram_user_id AND n.created_at >= ?)
         ORDER BY l.created_at LIMIT ?
         """,
@@ -165,6 +165,13 @@ def nudge_candidates(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Ro
     cfg = NotifyConfig(True)
     return [r for r in rows
             if customer_block_reason(conn, {"category": CATEGORY, "chat_id": r["telegram_user_id"]}, cfg, now) is None]
+
+
+def recently_nudged(conn: sqlite3.Connection, user: int, now: datetime) -> bool:
+    """Khách đã nhận tin nhắc link hay báo giảm giá trong 7 ngày: hai loại dùng chung ngân sách 1 tin / 7 ngày."""
+    return conn.execute(
+        "SELECT 1 FROM admin_notifications WHERE event_type IN ('LINK_NUDGE', 'PRICE_DROP') AND chat_id = ? "
+        "AND created_at >= ?", (user, _stamp(now - NUDGE_GAP))).fetchone() is not None
 
 
 def nudge_stats(conn: sqlite3.Connection, now: datetime) -> tuple[int, int]:
@@ -177,7 +184,7 @@ def nudge_stats(conn: sqlite3.Connection, now: datetime) -> tuple[int, int]:
 
 def send_nudges(repo: TrackingRepository, now: datetime) -> int:
     local = now.astimezone(sale_calendar.ICT).time()
-    if not NUDGE_HOURS[0] <= local <= NUDGE_HOURS[1] or _near_sale(repo, now):
+    if not NUDGE_HOURS[0] <= local <= NUDGE_HOURS[1] or near_sale(repo, now):
         return 0
     stamp = _stamp(now)
     with repo.connect() as conn:
