@@ -859,10 +859,14 @@ class ReupProcessor:
         from app.core import settings as runtime_settings
 
         metrics = metrics if metrics is not None else {}
+        metrics["dub_enabled"] = bool(runtime_settings.get_bool("reup.dub_enabled", False))
         metrics["subtitle_enabled"] = bool(runtime_settings.get_bool("reup.subtitle_enabled", False))
         metrics["audio_voice_enabled"] = bool(runtime_settings.get_bool("reup.audio_voice_enabled", False))
         metrics["audio_music_enabled"] = bool(runtime_settings.get_bool("reup.audio_music_enabled", False))
-        if not (metrics["subtitle_enabled"] or metrics["audio_voice_enabled"] or metrics["audio_music_enabled"]):
+        if not (
+            metrics["dub_enabled"] or metrics["subtitle_enabled"]
+            or metrics["audio_voice_enabled"] or metrics["audio_music_enabled"]
+        ):
             return current_path
 
         def _promote(tmp: str, layer: str) -> bool:
@@ -875,6 +879,41 @@ class ReupProcessor:
                 logger.warning("[ReupProcessor] %s skip, keep previous: %s", layer, err)
             return not err
 
+        # ADR-060: thuyết minh chạy trước, phụ đề dùng luôn câu đã dịch.
+        dubbed_segments = None
+        if metrics["dub_enabled"]:
+            from app.core.ai.use_cases import AIPurpose, AIUseCases
+            from app.features.viral_intake import audio_layer, dub_layer
+            target = runtime_settings.get_str("reup.dub_target_lang", "vi") or "vi"
+
+            def _translate(prompt: str) -> Optional[str]:
+                text, _meta = AIUseCases.generate_text(prompt, purpose=AIPurpose.DUB_TRANSLATE)
+                return text
+
+            def _synthesize(text: str, out_path: str, voice: str) -> bool:
+                # piper dự phòng chỉ có giọng Việt — ngôn ngữ khác chỉ dùng edge-tts.
+                return audio_layer.synthesize_voice(
+                    text, out_path, voice=voice, engine="auto" if target == "vi" else "edge",
+                )
+
+            tmp = final_output_path + ".with_dub.tmp.mp4"
+            dub = dub_layer.apply(
+                current_path, tmp,
+                target_lang=target,
+                translate=_translate,
+                synthesize=_synthesize,
+                voice_gender=runtime_settings.get_str("reup.dub_voice_gender", "female"),
+                background_volume=float(runtime_settings.get_str("reup.dub_background_volume", "1.0") or 1.0),
+            )
+            metrics["dub_source_lang"] = dub.source_lang
+            metrics["dub_reason"] = dub.reason
+            metrics["dub_applied"] = bool(dub.ok and _promote(tmp, "dub"))
+            if metrics["dub_applied"]:
+                current_path = final_output_path
+                dubbed_segments = dub.segments
+            elif not dub.ok:
+                logger.info("[ReupProcessor] dub skip, keep previous: %s", dub.reason)
+
         if metrics["subtitle_enabled"]:
             from app.features.viral_intake import subtitle_layer
             tmp = final_output_path + ".with_sub.tmp.mp4"
@@ -882,6 +921,7 @@ class ReupProcessor:
                 current_path, tmp,
                 font_size=runtime_settings.get_int("reup.subtitle_font_size", 64),
                 margin_v=runtime_settings.get_int("reup.subtitle_margin_v", 260),
+                segments=dubbed_segments,
             )
             metrics["subtitle_applied"] = bool(ok and _promote(tmp, "subtitle"))
             if metrics["subtitle_applied"]:
@@ -1238,7 +1278,7 @@ class ReupProcessor:
             if (
                 metrics.get("intro_applied") or metrics.get("outro_applied")
                 or metrics.get("hook_applied") or metrics.get("subtitle_applied")
-                or metrics.get("audio_applied")
+                or metrics.get("audio_applied") or metrics.get("dub_applied")
             ):
                 # Refresh size/duration after VIP stages
                 try:

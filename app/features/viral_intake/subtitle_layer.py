@@ -323,21 +323,35 @@ def transcribe_words(video_path: str, model: Any = None) -> list[dict]:
     bỏ đoạn im lặng (nhạc nền không bị bịa chữ). Video không có audio → ``[]``.
     ``model=None`` → dùng singleton ``ContentOrchestrator._get_whisper_model()``.
     """
+    segments, _lang = transcribe_segments(video_path, model=model, language="vi")
+    return segments
+
+
+def transcribe_segments(
+    media_path: str, model: Any = None, *, language: Optional[str] = "vi",
+) -> tuple[list[dict], Optional[str]]:
+    """
+    Như ``transcribe_words`` nhưng chọn được ngôn ngữ và trả kèm mã ngôn ngữ.
+
+    ``language=None`` → Whisper tự nhận ngôn ngữ (ADR-060, lớp thuyết minh).
+    Trả ``(segments, mã ngôn ngữ)``; không có audio → ``([], None)``.
+    """
     fd, audio_path = tempfile.mkstemp(prefix="sub_", suffix=".wav")
     os.close(fd)
     try:
-        if not _extract_audio(video_path, audio_path):
-            logger.info("[subtitle_layer] no audio track: %s", os.path.basename(video_path))
-            return []
+        if not _extract_audio(media_path, audio_path):
+            logger.info("[subtitle_layer] no audio track: %s", os.path.basename(media_path))
+            return [], None
         if model is None:
             model = ContentOrchestrator._get_whisper_model()
-        segments, _info = model.transcribe(
+        segments, info = model.transcribe(
             audio_path,
-            language="vi",
+            language=language,
             beam_size=5,
             word_timestamps=True,
             vad_filter=True,
         )
+        detected = getattr(info, "language", None) or language
         out: list[dict] = []
         for seg in segments:
             text = _WS_RE.sub(" ", unicodedata.normalize("NFC", seg.text or "")).strip()
@@ -355,7 +369,7 @@ def transcribe_words(video_path: str, model: Any = None) -> list[dict]:
             if ratio is not None:
                 item["compression_ratio"] = float(ratio)
             out.append(item)
-        return keep_speech_segments(out)
+        return keep_speech_segments(out), detected
     finally:
         try:
             os.remove(audio_path)
@@ -524,9 +538,13 @@ def apply(
     fonts_dir: Optional[str] = None,
     font_size: int = 64,
     margin_v: int = 260,
+    segments: Optional[list[dict]] = None,
 ) -> bool:
     """
     transcribe → build ASS (file tạm cạnh output) → burn → xoá tạm.
+
+    ``segments`` có sẵn (câu đã dịch từ lớp thuyết minh, ADR-060) → đốt thẳng,
+    không chạy Whisper lần nữa.
 
     Trả ``False`` và KHÔNG tạo output khi không có segment nào; mọi exception →
     ``logger.warning`` + ``False``. Không bao giờ raise (ADR-016 quyết định 3).
@@ -534,7 +552,9 @@ def apply(
     ass_path = os.path.splitext(output_path)[0] + ".sub.tmp.ass"
     ok = False
     try:
-        segments = keep_speech_segments(transcribe_words(input_path, model=model))
+        if segments is None:
+            segments = transcribe_words(input_path, model=model)
+        segments = keep_speech_segments(segments)
         if not segments:
             logger.info("[subtitle_layer] no speech found, skip: %s", os.path.basename(input_path))
             return False
