@@ -62,17 +62,29 @@ def _point(raw: dict) -> PricePoint | None:
     return PricePoint(price, flash, in_stock) if price > 0 else None
 
 
+@dataclass(frozen=True)
+class PriceStats:
+    """Giá hôm nay so với 30 ngày (bỏ điểm giá 0 của flash sale ẩn giá)."""
+
+    price: int
+    usual: int  # trung vị
+    lowest: int
+    flash_sale: bool
+    in_stock: bool | None
+    last_date: str
+
+
 class PriceHistoryClient:
     def __init__(self, api_key: str, url: str = HISTORY_URL, timeout: float = 20):
         self._api_key = api_key
         self._url = url
         self._timeout = timeout
 
-    def latest(self, item_ids: list[int]) -> dict[int, PricePoint]:
-        """Giá mới nhất của từng món (bỏ món không có dữ liệu). Lỗi mạng hay phản hồi lạ: PriceWatchError."""
-        found: dict[int, PricePoint] = {}
+    def points(self, item_ids: list[int], days: int = 7) -> dict[int, list[dict]]:
+        """Các điểm giá theo ngày của từng món (đã sắp theo ngày). Lỗi mạng hay phản hồi lạ: PriceWatchError."""
+        found: dict[int, list[dict]] = {}
         for start in range(0, len(item_ids), BATCH):
-            body = {"item_ids": item_ids[start:start + BATCH], "type": "price", "days": 7, "no_product": 1}
+            body = {"item_ids": item_ids[start:start + BATCH], "type": "price", "days": days, "no_product": 1}
             try:
                 response = requests.post(self._url, json=body, headers={"X-API-Key": self._api_key},
                                          timeout=self._timeout)
@@ -82,18 +94,36 @@ class PriceHistoryClient:
             if response.status_code != 200 or not isinstance(payload.get("items"), list):
                 raise PriceWatchError(f"http_{response.status_code}")
             for item in payload["items"]:
-                points = ((item.get("price") or {}).get("points") or []) if item.get("status") == "success" else []
-                points = [p for p in points if isinstance(p, dict)]
-                if not points:
-                    continue
-                last = max(points, key=lambda p: (str(p.get("date") or ""), str(p.get("recordedTime") or "")))
-                point = _point(last)
+                raw = ((item.get("price") or {}).get("points") or []) if item.get("status") == "success" else []
+                rows = sorted((p for p in raw if isinstance(p, dict)),
+                              key=lambda p: (str(p.get("date") or ""), str(p.get("recordedTime") or "")))
                 try:
                     item_id = int(item.get("itemId"))
                 except (TypeError, ValueError):
                     continue
-                if point is not None:
-                    found[item_id] = point
+                if rows:
+                    found[item_id] = rows
+        return found
+
+    def latest(self, item_ids: list[int]) -> dict[int, PricePoint]:
+        """Giá mới nhất của từng món (bỏ món không có dữ liệu hay điểm cuối không đọc được)."""
+        found: dict[int, PricePoint] = {}
+        for item_id, rows in self.points(item_ids).items():
+            point = _point(rows[-1])
+            if point is not None:
+                found[item_id] = point
+        return found
+
+    def stats(self, item_ids: list[int], days: int = 30) -> dict[int, PriceStats]:
+        found: dict[int, PriceStats] = {}
+        for item_id, rows in self.points(item_ids, days).items():
+            last = _point(rows[-1])
+            prices = sorted(p.price for p in (_point(r) for r in rows) if p is not None)
+            if last is None or len(prices) < 7:
+                continue  # điểm cuối ẩn giá hay quá ít ngày: không đủ để nói «rẻ hơn thường ngày»
+            usual = prices[len(prices) // 2]
+            found[item_id] = PriceStats(last.price, usual, prices[0], last.flash_sale, last.in_stock,
+                                        str(rows[-1].get("date") or ""))
         return found
 
 

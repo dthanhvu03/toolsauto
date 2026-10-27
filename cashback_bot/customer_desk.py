@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from cashback_bot import customer_orders, support, terms
+from cashback_bot import customer_orders, deals, support, terms
 from cashback_bot.db import TrackingRepository
 from cashback_bot.notify_dispatch import NotifyConfig
 from cashback_bot.wallet import KEY_ENABLED
@@ -115,7 +115,7 @@ class CustomerDesk:
     def notify_page(self, user_id: int) -> BotReply:
         with self.repo.connect() as conn:
             current = customer_orders.prefs(conn, user_id)
-        return notify_settings_reply(current, self.orders_live.live_for(user_id))
+        return notify_settings_reply(current, self.orders_live.live_for(user_id), deals_open=deals.enabled(self.repo))
 
     # --- Hỗ trợ -------------------------------------------------------------------------------
 
@@ -171,7 +171,8 @@ class CustomerDesk:
         if (matched := _NOTIFY.fullmatch(data)) is not None:
             with self.repo.connect() as conn:
                 current = customer_orders.toggle(conn, user_id, matched.group(1), now.strftime("%Y-%m-%dT%H:%M:%SZ"))
-            return notify_settings_reply(current, self.orders_live.live_for(user_id), "Đã lưu lựa chọn của bạn.")
+            return notify_settings_reply(current, self.orders_live.live_for(user_id), "Đã lưu lựa chọn của bạn.",
+                                         deals_open=deals.enabled(self.repo))
         if (matched := _CATEGORY.fullmatch(data)) is not None:
             category = matched.group(1)
             if category not in support.CATEGORIES:

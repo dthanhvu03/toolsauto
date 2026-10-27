@@ -1119,7 +1119,27 @@ NOTIFY_OPTIONS = (
 )
 
 
-def notify_settings_reply(prefs: dict, orders_live: bool, notice: str = "") -> BotReply:
+DEAL_PROMPT: Keyboard = ((("🛍️ Nhận deal hời mỗi tối 20:08", "u:dc:home"),),)
+
+
+def deal_categories_reply(labels: dict[str, str], selected: list[str], notice: str = "") -> BotReply:
+    """Khách chọn tối đa 3 danh mục để nhận deal hời (deals.py). Bỏ chọn hết là không nhận nữa."""
+    lines = ["🛍️ <b>Deal hời theo danh mục</b>", ""]
+    if notice:
+        lines += [notice, ""]
+    lines += [
+        "Chọn tối đa 3 danh mục bạn hay săn. Tối nào có món <b>rẻ hơn giá thường ngày</b> bot gửi lúc 20:08 nha 🔥",
+        "Bỏ chọn hết là không nhận nữa.",
+        "",
+        "Đang chọn: " + (", ".join(labels[k] for k in selected) if selected else "chưa có"),
+    ]
+    items = [(f"{'✅' if key in selected else '⬜'} {label}", f"u:dc:t:{key}") for key, label in labels.items()]
+    rows = tuple(tuple(items[i:i + 2]) for i in range(0, len(items), 2))
+    rows += ((("🔔 Cài đặt thông báo", "u:p:notify"), ("◀️ Trang chủ", "u:p:home")),)
+    return BotReply("\n".join(lines), inline_keyboard=rows)
+
+
+def notify_settings_reply(prefs: dict, orders_live: bool, notice: str = "", deals_open: bool = False) -> BotReply:
     lines = ["🔔 <b>Cài đặt thông báo</b>", ""]
     if notice:
         lines += [notice, ""]
@@ -1130,5 +1150,7 @@ def notify_settings_reply(prefs: dict, orders_live: bool, notice: str = "") -> B
         "" if orders_live else "ⓘ Bot chưa bật gửi thông báo đơn hàng tự động. Bạn vẫn xem đơn ở /donhang.",
     ]
     keyboard = tuple(((f"{'✅' if prefs[key] else '⬜'} {label}", f"u:n:t:{key}"),) for key, label in NOTIFY_OPTIONS)
+    if deals_open:
+        keyboard += DEAL_PROMPT
     keyboard += ((("📦 Đơn hàng của tôi", "u:o:l:1"), ("◀️ Trang chủ", "u:p:home")),)
     return BotReply("\n".join(lines).rstrip(), inline_keyboard=keyboard)

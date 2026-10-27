@@ -16,7 +16,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import order_notify, payouts, policy_snapshot
+from cashback_bot import deals, order_notify, payouts, policy_snapshot
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
@@ -32,6 +32,8 @@ from cashback_bot.messages import (
     TIKTOK_NOT_OPEN,
     TIKTOK_NOT_PROMOTABLE,
     TIKTOK_WORKING,
+    DEAL_PROMPT,
+    deal_categories_reply,
     with_tiktok,
     TIP_ALERT,
     TIPS_KEYBOARD,
@@ -222,10 +224,12 @@ class CashbackService:
                 str(chat.get("type") or ""),
                 datetime.now(timezone.utc),
             )
+        # Bấm một món trong tin deal: thẻ link là tin mới, không sửa đè danh sách deal (khách còn bấm món khác).
+        keep = data.startswith("u:dl:")
         return user_id, replace(
             reply,
             callback_query_id=query_id,
-            edit_message_id=message_id if isinstance(message_id, int) else None,
+            edit_message_id=message_id if isinstance(message_id, int) and not keep else None,
         )
 
     def _customer_callback(
@@ -243,6 +247,8 @@ class CashbackService:
         self.desk.clear(user_id)
         if data == "u:tip":
             return BotReply("", toast=TIP_ALERT, show_alert=True)
+        if data.startswith(("u:dc:", "u:dl:")):
+            return self._deal_action(user_id, data)
         if data.startswith("u:w:"):
             return self._wallet_action(user_id, data.removeprefix("u:w:"), query_id)
         page = self._page(data.removeprefix("u:p:"), user_id) if data.startswith("u:p:") else None
@@ -253,6 +259,19 @@ class CashbackService:
     def tiktok_open(self) -> bool:
         """TikTok Shop đã mở cho mọi khách (🎵 chế độ «all») và có khoá RioHub: trang chung nhắc cả hai sàn."""
         return self.riohub is not None and admin_tiktok.current_mode(self.repo) == "all"
+
+    def _deal_action(self, user_id: int, data: str) -> BotReply:
+        """Deal hời (deals.py): chọn danh mục; bấm một món thì tạo link như khi khách tự dán link."""
+        labels = {key: label for key, (label, _keywords) in deals.CATEGORIES.items()}
+        if data == "u:dc:home":
+            return deal_categories_reply(labels, deals.user_categories(self.repo, user_id))
+        if data.startswith("u:dc:t:") and data.removeprefix("u:dc:t:") in labels:
+            selected, notice = deals.toggle_category(self.repo, user_id, data.removeprefix("u:dc:t:"))
+            return deal_categories_reply(labels, selected, notice)
+        parts = data.split(":")
+        if len(parts) == 4 and parts[1] == "dl" and parts[2].isdigit() and parts[3].isdigit():
+            return self.handle_text(user_id, None, f"https://shopee.vn/product/{parts[2]}/{parts[3]}")
+        return BotReply("", toast=STALE_BUTTON)
 
     def _page(self, name: str, user_id: int | None = None) -> BotReply | None:
         """Trang thông tin dùng chung cho lệnh gõ tay và nút u:p:*."""
@@ -588,7 +607,12 @@ class CashbackService:
         )
         if not saved:
             return BotReply(GENERIC_FAIL)
-        return render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped))
+        card = render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped))
+        if deals.enabled(self.repo) and not deals.user_categories(self.repo, telegram_user_id) and \
+                self._first_link(telegram_user_id):
+            # Link đầu tiên: mời chọn danh mục deal hời một lần (khách chưa chọn).
+            card = replace(card, inline_keyboard=(card.inline_keyboard or ()) + DEAL_PROMPT)
+        return card
 
     def _resolve_or_reject(self, update_id: int | None, telegram_user_id: int, original_url: str,
                            moment: datetime) -> PolicyResolution | None:
@@ -738,6 +762,11 @@ class CashbackService:
             return BotReply(GENERIC_FAIL)
         render = render_success_v12 if v12 else render_success
         return render(name, price_vnd, priced.cashback_vnd, made.affiliate_link, tiktok=True)
+
+    def _first_link(self, user_id: int) -> bool:
+        with self.repo.connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM link_requests WHERE telegram_user_id = ? AND link_status = 'created'",
+                                (user_id,)).fetchone()[0] == 1
 
     def _invalid_link(self) -> BotReply:
         reply = invalid_link_reply()

@@ -4,7 +4,7 @@
 |---|---|
 | Ngày | 2026-10-27 |
 | Yêu cầu | Chủ bot: xem AddLiveTag có gì để kiếm thêm; làm mục 1 (kênh deal) và mục 2 (ShopeeFood) |
-| Trạng thái | Mục 2A đã làm (2026-10-27, `price_watch.py`, **mặc định tắt**). 2B và ShopeeFood chưa làm |
+| Trạng thái | 2A báo giảm giá (`price_watch.py`) và 2B deal hời theo danh mục (`deals.py`) đã làm, **mặc định tắt**. ShopeeFood chưa làm |
 
 ## 1. AddLiveTag có gì
 
@@ -69,3 +69,24 @@ Không có API "deal / % giảm giá" trực tiếp. Hai cách làm được:
   > 👉 Bấm **🛒 Mua trên Shopee** bên dưới rồi đặt hàng.
 - Bật ở ⚙️ Cài đặt → 📣 Nhắc mùa sale → 🟢 Bật báo giảm giá.
 - Lần bật đầu tiên là lần đầu bot gọi `history.php` thật: định dạng phản hồi mới đọc theo tài liệu, chưa thử với dữ liệu thật.
+
+## 5. Đã làm: deal hời theo danh mục (2B, chủ bot duyệt 2026-10-27: mỗi tối, 3–5 món, giờ đẹp)
+
+- Khách chọn tối đa 3 trong 10 danh mục ở /thongbao → 🛍️ (hoặc nút mời sau link đầu tiên). Chọn = đồng ý nhận.
+- 17:30: với mỗi danh mục có người chọn, lấy 30 món bán chạy mỗi từ khoá (5 từ khoá / danh mục, Market Search), kiểm lịch sử giá 30 ngày.
+  - "Hời thật" = giá hôm nay ≤ thấp nhất 30 ngày **và** rẻ hơn trung vị ≥ 10%; đánh giá ≥ 4,5; bán ≥ 100 / 30 ngày.
+  - Mỗi danh mục tối đa 5 món, kèm số hoàn (AddLiveTag product-data, cách tính như thẻ link).
+  - Giãn nhịp 500 món / phút vì AddLiveTag chặn 429 khi vượt 600 món / phút.
+- Báo admin xem trước; admin bỏ được cả ngày hoặc từng món. **20:08 ("giờ phát lộc")** tự gửi, mỗi khách tối đa 5 món chia đều danh mục; quá 21:08 thì bỏ.
+- Khách bấm món thì bot tạo link như khi tự dán link (thẻ link mới, không sửa đè tin deal).
+- Có tin nhắc sale trong 3 giờ (tối 20:30 trước ngày sale) thì nhường; tối đúng ngày sale vẫn gửi.
+
+**Chạy thử dữ liệu thật** (chỉ đọc, 2026-10-27):
+
+| Danh mục | 15 món / từ khoá | 30 món / từ khoá |
+|---|---|---|
+| Làm đẹp | 1 deal | 3 |
+| Thời trang nữ | 2 | 3 |
+| Điện tử | 0 | — (bị 429 khi thử) |
+
+Ví dụ deal thật: kem chống nắng d'Alba 408k (thường 457k, −11%, ⭐4.9, bán 1.306); áo thun nữ form boxy 35k (thường 45k, −22%).

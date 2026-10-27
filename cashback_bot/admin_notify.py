@@ -653,6 +653,18 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_deals_ready(self, day: str, count: int, people: int) -> None:
+        """Deal hời hôm nay đã soạn: anh xem trước, không làm gì thì 20:08 tự gửi."""
+        if not self._active():
+            return
+        body = (
+            f"🔥 <b>Deal hời hôm nay đã soạn: {count} món</b>\n\n"
+            f"20:08 tự gửi cho {people} khách đã chọn danh mục.\n"
+            "Xem trước, bỏ món hay bỏ cả ngày: /admin → ⚙️ Cài đặt → 📣 Nhắc mùa sale → 🔥 Deal hời."
+        )
+        self.repo.enqueue_admin_event(event_key=f"deals_ready:{day}", event_type="DEALS_READY",
+                                      chat_id=int(self.chat_id), message_html=body)
+
     def notify_zalo_capacity(self, count: int, limit: int) -> None:
         """PLAN-083: gói Zalo BASIC giới hạn số người dùng mỗi bot."""
         if not self._active():

@@ -126,7 +126,8 @@ class EngagementAdmin:
         toggle = ("⚪ Tắt nhắc mùa sale", "c:eg:off") if on else ("🟢 Bật nhắc mùa sale", "c:eg:on")
         nudge = ("⚪ Tắt nhắc link", "c:eg:nudge:off") if nudge_on else ("🟢 Bật nhắc link", "c:eg:nudge:on")
         drop = ("⚪ Tắt báo giảm giá", "c:eg:drop:off") if drop_on else ("🟢 Bật báo giảm giá", "c:eg:drop:on")
-        return BotReply("\n".join(lines), inline_keyboard=((toggle, nudge), (drop,), *rows[:8], *NAV))
+        return BotReply("\n".join(lines), inline_keyboard=((toggle, nudge), (drop, ("🔥 Deal hời", "c:dl:home")),
+                                                           *rows[:8], *NAV))
 
     def _preview(self, slot: sale_calendar.Slot, now: datetime, notice: str = "") -> BotReply:
         state = engagement.status(self.repo, slot)

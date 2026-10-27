@@ -1,3 +1,24 @@
+## Phiên 2026-10-27 (df) — Deal hời theo danh mục, 20:08 mỗi tối
+
+- `deals.py` + `admin_deals.py` (⚙️ → 📣 → 🔥 Deal hời), mặc định tắt. Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 5.
+- Khách:
+  - chọn tối đa 3 danh mục (`bot_state.deal_cats:<id>`) ở /thongbao → 🛍️, hoặc nút mời trên thẻ link đầu tiên (chỉ hiện khi đã bật);
+  - bấm món (`u:dl:<shop>:<item>`) thì tạo link như tự dán link, thẻ là tin mới.
+- Lịch:
+  - 17:30 soạn ở luồng nền (Market Search 30 món / từ khoá + lịch sử giá 30 ngày, giãn 500 món / phút);
+  - báo admin `DEALS_READY`;
+  - 20:08–21:08 gửi `DEALS` (category `deal`); nhường khi có nhắc sale trong 3 giờ.
+- Sửa thêm: `PriceHistoryClient.points/stats` dùng chung cho báo giảm giá và deal.
+- Proof:
+  - `tests/test_cashback_deals.py` 7 test;
+  - chạy thử dữ liệu thật: Làm đẹp 3 deal, Thời trang nữ 3 deal (30 món / từ khoá); gặp 429 khi gọi dồn nên thêm giãn nhịp.
+- **Next:**
+  - chủ bot restart;
+  - bật 🔥 Deal hời;
+  - xem bản soạn đầu tiên lúc 17:30 ngày bật.
+
+---
+
 ## Phiên 2026-10-27 (de) — Sửa báo giảm giá theo dữ liệu thật
 
 - Gọi thử AddLiveTag `history.php` (12 món, chỉ đọc): `stockAvailable` = 0 ở cả món đang bán bình thường (chỉ là suất flash sale); giá 0 là flash sale ẩn giá; `discountPercent` so với "giá gốc" shop ghi, không đáng tin.
