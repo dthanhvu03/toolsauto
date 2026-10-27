@@ -907,10 +907,10 @@ def test_shopee_comm_tren_2_5_chi_ghi_co_the_duoc_them(tmp_path):
     policy = bot._resolve_policy(NOW)
     expected = cashback_for(11_875, policy).cashback_vnd
     assert f"<b>{expected:,}đ</b>".replace(",", ".") in card.text
-    assert "Có thể được thêm nếu Shopee áp mức cao hơn" in card.text
+    assert "Bot báo theo mức <b>thận trọng</b>, không phải mức tối đa" in card.text
     assert _rows(tmp_path, "SELECT estimated_commission, shopee_commission_vnd FROM link_requests")[0] == (11_875, 38_000)
     # Bố cục thẻ: số hoàn → «có thể thêm» → điều kiện để được hoàn → chữ nhỏ → lời bấm nút nằm cuối, sát nút.
-    order = ["Hoàn dự kiến", "Có thể được thêm", "🔒", "⚠️ <b>Để được hoàn</b>", "Mua đúng món này", "ⓘ <i>", "👉 Bấm"]
+    order = ["Hoàn dự kiến", "mức <b>thận trọng</b>", "🔒", "⚠️ <b>Để được hoàn</b>", "Mua đúng món này", "ⓘ <i>", "👉 Bấm"]
     positions = [card.text.index(part) for part in order]
     assert positions == sorted(positions) and card.text.endswith("rồi đặt hàng.")
     flat = " ".join(_link_notice(tmp_path, bot, 1).split())
@@ -925,7 +925,7 @@ def test_xtra_va_shopee_2_5_giu_nguyen(tmp_path):
         price=330_000, commission=47_850, sellerComFinal=39_600, shopeeComFinal=8_250, totalRatePercent="14.5", isXtra=True
     )
     card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
-    assert "Có thể được thêm" not in card.text
+    assert "thận trọng" not in card.text
     assert _rows(tmp_path, "SELECT estimated_commission FROM link_requests")[0] == (47_850,)
     assert "AddLiveTag báo" not in _link_notice(tmp_path, bot, 1)
 
@@ -936,7 +936,7 @@ def test_the_link_tran_an_va_voucher_thanh_gach_dau_dong(tmp_path):
         price=475_000, commission=38_000, sellerComFinal=0, shopeeComFinal=38_000, totalRatePercent="8", isXtra=False
     )
     card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text
-    assert "➕ Có thể được thêm nếu Shopee áp mức cao hơn" in card and "thêm tới" not in card
+    assert "➕ Bot báo theo mức <b>thận trọng</b>" in card and "thêm tới" not in card and "chắc chắn" not in card
     assert "🔒 Link mở thẳng Shopee" in card and "bot không thu tiền gì" in card
     assert "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo." in card
     assert card.count("voucher") == 1, "voucher chỉ nói một lần, ở khối «Để được hoàn»"

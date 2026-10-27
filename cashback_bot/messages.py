@@ -306,7 +306,9 @@ def buyer_name(name: str) -> str:
 
 # Đối chiếu AMS 2026-10-27: Shopee Comm AddLiveTag báo trên 2,5% không phải đơn nào cũng được.
 # Không ghi số tiền: «thêm tới Xđ» làm khách cộng lại và lấy tổng làm mốc (tâm lý neo số, chủ bot duyệt 2026-10-27).
-EXTRA_LINE = "➕ Có thể được thêm nếu Shopee áp mức cao hơn"
+# «Thận trọng» chứ không «chắc chắn»: bot chỉ thận trọng ở mức hoa hồng; số tiền cuối còn theo voucher (gạch đầu dòng
+# ở khối Để được hoàn). Khách đặt cạnh bot khác báo mức tối đa thì hiểu vì sao số nhỏ hơn.
+EXTRA_LINE = "➕ Bot báo theo mức <b>thận trọng</b>, không phải mức tối đa. Shopee trả cao hơn thì bạn được thêm."
 
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str,

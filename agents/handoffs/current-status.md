@@ -1,3 +1,16 @@
+## Phiên 2026-10-27 (da) — Dòng ➕ "mức thận trọng" sau khi so HOANTIENSP
+
+- Chủ bot thử cùng link ở HOANTIENSP: họ báo khoảng 60% hoa hồng gốc, chưa trừ thuế, tính Shopee Comm 4%. Bot mình chia 62,3% nhưng tính Shopee Comm 2,5%.
+  - Ghi ở `reports/CASHBACK_COMPETITORS_2026-10-27.md` mục 5.
+- Thẻ link: dòng ➕ đổi thành "Bot báo theo mức **thận trọng**, không phải mức tối đa. Shopee trả cao hơn thì bạn được thêm."
+  - Không dùng "chắc chắn" vì voucher vẫn làm giảm số hoàn.
+- Proof: 856 test cashback qua.
+- **Next:**
+  - chủ bot restart;
+  - chờ duyệt dòng cảnh báo sản phẩm bị Shopee giới hạn hoa hồng mỗi đơn (`is_capped`).
+
+---
+
 ## Phiên 2026-10-27 (cz) — Khách ngủ + nhắc link chưa dùng
 
 - Khách ngủ (link gần nhất cũ hơn 21 ngày): tin nhắc sale có thêm dòng đầu "👋 Lâu rồi hông thấy bạn ghé nè!". Không gửi tin riêng.

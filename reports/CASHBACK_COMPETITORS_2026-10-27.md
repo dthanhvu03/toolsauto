@@ -58,3 +58,17 @@ Chính sách V1.2: trừ dự phòng phí 0,98% và dự phòng thuế 10% (kh�
    - khi mở ví, hiện công khai "Bot đã hoàn X đồng cho Y người".
 4. **Ưu tiên mở ví.** Đây là khoảng cách lớn nhất với đối thủ.
 5. Cân nhắc **hiện thêm tỷ lệ** cạnh số tiền trên thẻ link (ví dụ "≈ 1,6% giá"). Hiện % theo giá thì nhỏ hơn % theo hoa hồng mà đối thủ hay dùng, nên cần chủ bot quyết cách ghi.
+
+## 5. Thử thực tế với HOANTIENSP (chủ bot làm, 2026-10-27)
+
+| Sản phẩm | AddLiveTag báo | HOANTIENSP báo | Bot mình báo |
+|---|---|---|---|
+| Máy rửa mặt Halio, 919.000đ | XTRA 6% + Shopee 4% | 55.140đ = 60% × 10% giá | 48.675đ |
+| Mô hình xe F1, 475.000đ | Shopee 8% | 11.400đ = 60% × 4% giá | 7.399đ |
+
+- Cách tính suy ra: HOANTIENSP chia **khoảng 60% hoa hồng gốc, chưa trừ thuế**, và tính Shopee Comm ở **4%**.
+- Bot mình chia **62,3%**, sau khi trừ dự phòng, nhưng chỉ tính Shopee Comm **2,5%**: mức AMS ghi cho cả 3 đơn thật.
+- Đơn F1 thật (khách trả 415.650đ, hoa hồng 10.391đ): bên kia trả khách khoảng 6.235đ (suy ra theo cách tính 60%), bot mình trả 6.474đ.
+- Mình chỉ *trông* thấp hơn. Vì vậy dòng ➕ trên thẻ link đổi thành "Bot báo theo mức **thận trọng**, không phải mức tối đa. Shopee trả cao hơn thì bạn được thêm."
+  - Không dùng chữ "chắc chắn", vì voucher vẫn làm giảm số hoàn (chủ bot chỉ ra).
+- Khi có thêm đơn thật mà Shopee trả trên 2,5%: xem lại mức tính.
