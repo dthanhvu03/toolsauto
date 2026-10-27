@@ -1120,6 +1120,18 @@ NOTIFY_OPTIONS = (
 
 
 DEAL_PROMPT: Keyboard = ((("🛍️ Nhận deal hời mỗi tối 20:08", "u:dc:home"),),)
+# Tin giới thiệu tính năng mới, gửi một lần cho khách đã từng tạo link (chủ bot duyệt nội dung trước khi gửi).
+DEALS_ANNOUNCE = (
+    "🆕 <b>Bot có tính năng mới nè!</b>\n\n"
+    "🔥 <b>Deal hời mỗi tối 20:08</b>: chọn danh mục bạn hay săn, tối nào có món rẻ thật (giá thấp nhất 30 ngày) "
+    "bot gửi liền, bấm là có link hoàn tiền.\n"
+    "📉 Món bạn từng xem mà giảm giá, bot cũng báo luôn.\n"
+    "🎵 Giờ dán link <b>TikTok Shop</b> cũng được hoàn rồi nha!\n\n"
+    "👉 Bấm nút dưới để chọn danh mục deal.\n"
+    "Phiền thì gõ /thongbao tắt nha 🫶"
+)
+DEALS_ANNOUNCE_KEYBOARD: Keyboard = ((("🛍️ Chọn danh mục deal", "u:dc:home"),),)
+DEALS_PICK_HINT = "Bấm món muốn mua, bot gửi link hoàn tiền liền 😎"
 
 
 def deal_categories_reply(labels: dict[str, str], selected: list[str], notice: str = "") -> BotReply:

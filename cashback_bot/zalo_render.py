@@ -64,7 +64,11 @@ PHRASES = (
     ("đọc và bấm đồng ý bản hiện hành", "đọc và chọn đồng ý bản hiện hành"),
     ("Bấm từng mục để đọc.", "Gõ số của từng mục để đọc."),
     ("nếu đồng ý thì bấm nút cuối.", "nếu đồng ý thì gõ số của dòng ✅ Tôi đã đọc và đồng ý."),
-    ("Bấm để bật / tắt.", "Gõ số để bật / tắt."),
+    ("Bấm để bật / tắt.", "Gõ số để bật / tắt. Chọn nhiều thì gõ các số cách nhau, ví dụ: 1 3 5."),
+    ("Bỏ chọn hết là không nhận nữa.",
+     "Bỏ chọn hết là không nhận nữa. Chọn nhiều thì gõ các số cách nhau, ví dụ: 1 3 5."),
+    ("👉 Bấm nút dưới để chọn danh mục deal.", "👉 Gõ số 1 để chọn danh mục deal."),
+    ("Bấm món muốn mua, bot gửi link hoàn tiền liền 😎", "Gõ số món muốn mua, bot gửi link hoàn tiền liền 😎"),
 )
 # Lệnh Telegram → lệnh gõ tắt Zalo (zalo_bot.SHORTCUTS nhận cả hai).
 COMMANDS = {

@@ -12,6 +12,7 @@ from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.messages import DEAL_PROMPT
 from cashback_bot.price_watch import PriceStats
 from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback
+from tests.test_cashback_zalo import _channel, _update
 
 BUILD = datetime(2026, 10, 21, 10, 40, tzinfo=timezone.utc)  # 17:40 giờ VN
 SEND = datetime(2026, 10, 21, 13, 10, tzinfo=timezone.utc)  # 20:10 giờ VN
@@ -172,3 +173,29 @@ def test_man_admin_deal_hoi(tmp_path):
     assert deals.record(bot.repo, day)["status"] == "skipped"
     history = _callback(bot, ADMIN, "c:menu:hist").text
     assert "Deal hời: bật" in history and "bỏ món 1" in history and "⏭ Bỏ hôm nay" in history
+
+
+def test_zalo_go_nhieu_so_mot_tin_de_chon_danh_muc(tmp_path):
+    bot, channel, zalo = _channel(tmp_path)
+    bot.repo.set_state(deals.ENABLED_KEY, "1")
+    channel.handle(_update("thongbao", message_id="a"), now=BUILD)
+    with bot.repo.connect() as conn:
+        internal = conn.execute("SELECT internal_user_id FROM channel_identities").fetchone()[0]
+    number = channel.store.menu(internal, BUILD).index("u:dc:home") + 1
+    channel.handle(_update(str(number), message_id="b"), now=BUILD)
+    channel.handle(_update("1 3, 5", message_id="c"), now=BUILD)
+    assert deals.user_categories(bot.repo, internal) == ["nu", "dep", "nha"]
+    last = zalo.sent[-1][1]
+    assert "✅ 👗 Thời trang nữ" in last and "ví dụ: 1 3 5" in last
+    channel.handle(_update("2 4", message_id="d"), now=BUILD)
+    assert deals.user_categories(bot.repo, internal) == ["nu", "dep", "nha"], "đủ 3 mục thì không thêm"
+    channel.handle(_update("menu", message_id="e"), now=BUILD)
+    channel.handle(_update("1 2", message_id="f"), now=BUILD)
+    assert "chỉ dùng khi chọn danh mục deal" in zalo.sent[-1][1], "màn khác chỉ nhận một số"
+
+
+def test_ten_mon_bo_nhan_khuyen_mai_va_gia_le():
+    assert deals._short("[MUA 2 TẶNG 1] Combo 2 Nước Tẩy Trang") == "Combo 2 Nước Tẩy Trang"
+    assert deals._short("【DAILY】[HOT] Kem Chống Nắng d'Alba") == "Kem Chống Nắng d'Alba"
+    assert deals._short("[Chỉ có nhãn]") == "[Chỉ có nhãn]"
+    assert (deals._k(64_500), deals._k(75_000), deals._k(89_499), deals._k(500)) == ("64,5k", "75k", "89,5k", "500đ")

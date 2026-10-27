@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -63,6 +64,12 @@ def _dump(messages: list[ZaloMessage]) -> str:
 def _load(raw: str | None) -> list[ZaloMessage]:
     return [ZaloMessage(text, tuple(tuple(s) for s in styles)) for text, styles in json.loads(raw or "[]")]
 
+
+
+# Gõ nhiều số một tin («1 3 5», «1,3,5»): chỉ cho các màn bật / tắt, bấm nhầm cũng bấm lại được.
+_MULTI_PICK = re.compile(r"\d{1,2}(?:[\s,;.]+\d{1,2})+")
+MULTI_PICK_PREFIXES = ("u:dc:t:", "u:n:t:")
+MULTI_PICK_ONLY = "Gõ nhiều số một lần chỉ dùng khi chọn danh mục deal hay bật / tắt thông báo. Ở đây gõ từng số nha."
 
 class ZaloStore:
     """Bảng channel_identities, zalo_inbox và menu số gần nhất của khách (bot_state)."""
@@ -236,6 +243,9 @@ class ZaloChannel:
             return BotReply(NON_TEXT)
         text = str((update.get("message") or {}).get("text") or "").strip()
         key = text.lower()
+        picks = _MULTI_PICK.fullmatch(key)
+        if picks and len(numbers := [int(n) for n in re.findall(r"\d+", key)]) > 1:
+            return self._press_many(internal, numbers, update_id, now)
         if key.isdigit() and len(key) <= 2:
             menu = self.store.menu(internal, now)
             number = int(key)
@@ -255,13 +265,26 @@ class ZaloChannel:
         if count in CAPACITY_ALERTS and self.admin_notifier:
             self.admin_notifier.notify_zalo_capacity(count, BASIC_LIMIT)
 
-    def _press(self, internal: int, data: str, update_id: int) -> BotReply:
+    def _press_many(self, internal: int, numbers: list[int], update_id: int, now: datetime) -> BotReply:
+        """«1 3 5»: bấm lần lượt nhiều mục của một màn bật / tắt (danh mục deal, thông báo). Màn khác chỉ nhận một số."""
+        menu = self.store.menu(internal, now)
+        if not all(1 <= n <= len(menu) for n in numbers):
+            return BotReply(NUMBER_STALE)
+        picked = [menu[n - 1] for n in dict.fromkeys(numbers)]
+        if not all(data.startswith(MULTI_PICK_PREFIXES) for data in picked):
+            return BotReply(MULTI_PICK_ONLY)
+        reply = BotReply(NUMBER_STALE)
+        for part, data in enumerate(picked):
+            reply = self._press(internal, data, update_id, part)
+        return reply
+
+    def _press(self, internal: int, data: str, update_id: int, part: int = 0) -> BotReply:
         """Chạy nút u:* qua đúng đường callback của Telegram (chat riêng, chat_id = khách).
 
         Mã callback theo từng tin Zalo (như query_id Telegram): Zalo gửi lại cùng tin thì cùng mã (chống trùng),
         lần bấm sau là mã mới. Mã chung cho mọi lần bấm làm khách chỉ rút được một lần (B5)."""
         update = {"callback_query": {
-            "id": f"zalo:{internal}:{-update_id}", "from": {"id": internal}, "data": data,
+            "id": f"zalo:{internal}:{-update_id}" + (f":{part}" if part else ""), "from": {"id": internal}, "data": data,
             "message": {"chat": {"id": internal, "type": "private"}},
         }}
         outcome = self.service.handle_update(update)

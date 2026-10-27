@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import threading
 import time as clock
@@ -29,6 +30,7 @@ import requests
 
 from cashback_bot import engagement, sale_calendar
 from cashback_bot.db import TrackingRepository, enqueue_event
+from cashback_bot.messages import DEALS_PICK_HINT
 from cashback_bot.money import format_vnd
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
 from cashback_bot.price_watch import PriceHistoryClient, PriceWatchError
@@ -234,13 +236,21 @@ def build(repo: TrackingRepository, service, market: MarketSearchClient, history
 # --- Tin gửi khách ----------------------------------------------------------------------------------------------
 
 
+_PROMO_TAG = re.compile(r"^\s*(?:[\[【(][^\]】)]{0,40}[\]】)]\s*)+")
+
+
 def _short(name: str, limit: int = 42) -> str:
-    text = " ".join(name.split())
+    """Bỏ nhãn khuyến mãi shop gắn ở đầu tên («[MUA 2 TẶNG 1]», «【DAILY】») rồi cắt gọn."""
+    text = " ".join(_PROMO_TAG.sub("", name).split()) or " ".join(name.split())
     return text if len(text) <= limit else text[: limit - 1].rstrip(" ,.-") + "…"
 
 
 def _k(vnd: int) -> str:
-    return f"{vnd // 1000}k" if vnd >= 1000 else format_vnd(vnd)
+    """64.500đ → «64,5k» (không làm tròn xuống thành 64k, thấp hơn giá thật)."""
+    if vnd < 1000:
+        return format_vnd(vnd)
+    thousands = round(vnd / 1000, 1)
+    return (f"{thousands:.0f}" if thousands == int(thousands) else f"{thousands:.1f}".replace(".", ",")) + "k"
 
 
 def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]) -> tuple[str, list[dict]] | None:
@@ -268,7 +278,7 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
                          f"· hoàn ~{_k(deal['cashback'])}")
             buttons.append({"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
                             "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"})
-    lines += ["", "Bấm món muốn mua, bot gửi link hoàn tiền liền 😎",
+    lines += ["", DEALS_PICK_HINT,
               "Giá theo dữ liệu lúc 17:30, có thể đổi khi bạn mở.",
               "Đổi danh mục hay tắt deal: gõ /thongbao nha 🫶"]
     return "\n".join(lines), [[b] for b in buttons]
