@@ -653,6 +653,7 @@ CREATE TABLE IF NOT EXISTS customer_notification_prefs (
     updates INTEGER NOT NULL DEFAULT 1,
     support INTEGER NOT NULL DEFAULT 1,
     wallet INTEGER NOT NULL DEFAULT 1,
+    reminders INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL
 );
 
@@ -1050,6 +1051,8 @@ class TrackingRepository:
             _add_column(conn, "link_requests", "last_delivery_error", "TEXT")
             # PLAN-085 A5: link Shopee hay TikTok Shop. Dòng cũ đều là Shopee.
             _add_column(conn, "link_requests", "platform", "TEXT NOT NULL DEFAULT 'shopee'")
+            # Nhắc mùa sale (engagement.py): khách tắt được ở /thongbao.
+            _add_column(conn, "customer_notification_prefs", "reminders", "INTEGER NOT NULL DEFAULT 1")
             _add_column(conn, "telegram_users", "rate_window_start", "TEXT")
             _add_column(conn, "telegram_users", "rate_count", "INTEGER NOT NULL DEFAULT 0")
             _add_column(conn, "telegram_users", "cooldown_until", "TEXT")

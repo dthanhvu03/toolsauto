@@ -15,7 +15,7 @@ from cashback_bot.order_notify import cashback_of, short_order
 
 PAGE_SIZE = 5
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
-PREF_KEYS = ("orders", "updates", "support", "wallet")
+PREF_KEYS = ("orders", "updates", "support", "wallet", "reminders")
 INELIGIBLE = ("REJECTED", "FRAUD")
 
 
@@ -117,10 +117,11 @@ def toggle(conn: sqlite3.Connection, user_id: int, key: str, now: str) -> dict:
     current[key] = not current[key]
     conn.execute(
         """
-        INSERT INTO customer_notification_prefs (telegram_user_id, orders, updates, support, wallet, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO customer_notification_prefs (telegram_user_id, orders, updates, support, wallet, reminders, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(telegram_user_id) DO UPDATE SET orders = excluded.orders, updates = excluded.updates,
-            support = excluded.support, wallet = excluded.wallet, updated_at = excluded.updated_at
+            support = excluded.support, wallet = excluded.wallet, reminders = excluded.reminders,
+            updated_at = excluded.updated_at
         """,
         (user_id, *(int(current[k]) for k in PREF_KEYS), now),
     )

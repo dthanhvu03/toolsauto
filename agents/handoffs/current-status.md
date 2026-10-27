@@ -1,3 +1,25 @@
+## Phiên 2026-10-27 (cw) — Nhắc mùa sale tự lập lịch, duyệt từng lượt
+
+- Nghiên cứu: `reports/CASHBACK_SALE_REMINDERS.md`.
+  - 4 cấp: đỉnh 11.11 · 12.12; siêu sale 9.9 · 10.10 · Black Friday; ngày đôi thường; mini 15 · 25.
+  - Giờ gửi: 20:30 tối hôm trước; dịp đỉnh thêm 11:30.
+  - Dịp nhỏ sát dịp lớn (dưới 5 ngày) thì bỏ.
+  - Câu chữ: mốc thời gian, một việc cần làm, nhắc chuyện giỏ hàng, không hứa số tiền.
+- Code:
+  - `sale_calendar.py`, `engagement.py` (chạy định kỳ trong poller), `admin_engagement.py` (⚙️ Cài đặt → 📣 Nhắc mùa sale);
+  - tuỳ chọn khách 🛒 Nhắc mùa sale ở /thongbao: cột mới `customer_notification_prefs.reminders`, migration `_add_column`.
+- An toàn:
+  - **mặc định tắt**; mỗi lượt phải bấm ✅ Duyệt gửi;
+  - báo admin trước giờ gửi 48 giờ;
+  - quá 60 phút sau giờ gửi thì bỏ lượt, không gửi muộn;
+  - mọi thao tác ghi 📊 Lịch sử.
+- Proof: 852 test cashback qua; `tests/test_cashback_sale_reminders.py`.
+- **Next:**
+  - chủ bot restart (migration thêm cột chạy khi khởi động);
+  - bật 📣 Nhắc mùa sale và duyệt lượt 10/11 20:30 (11.11).
+
+---
+
 ## Phiên 2026-10-27 (cv) — Giữ chân đợt 1 + tự phản biện thiết kế
 
 - Bản thiết kế có thêm mục 0 "Tự phản biện" và lộ trình rút gọn.

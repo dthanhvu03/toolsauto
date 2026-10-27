@@ -53,7 +53,7 @@ _ACCEPT = re.compile(r"^u:t:ok:(\d{1,9})$")
 _ORDER_PAGE = re.compile(r"^u:o:l:(\d{1,4})$")
 # Mã đơn TikTok có dấu «:» (tt:<order>:<sku>, PLAN-095); callback_data Telegram tối đa 64 byte.
 _ORDER = re.compile(r"^u:o:d:([0-9A-Za-z:_-]{1,58})$")
-_NOTIFY = re.compile(r"^u:n:t:(orders|updates|support|wallet)$")
+_NOTIFY = re.compile(r"^u:n:t:(orders|updates|support|wallet|reminders)$")
 
 
 class CustomerDesk:

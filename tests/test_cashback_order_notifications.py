@@ -382,8 +382,8 @@ def test_39_40_tuy_chon_va_co_toan_cuc(tmp_path):
     assert _events(bot)[0]["status"] == "suppressed" and _events(bot)[0]["last_error"] == "pref_off"
     _callback(bot, OTHER, "u:n:t:updates")
     with bot.repo.connect() as conn:
-        assert customer_orders.prefs(conn, USER) == {"orders": False, "updates": True, "support": True, "wallet": True}
-        assert customer_orders.prefs(conn, OTHER) == {"orders": True, "updates": False, "support": True, "wallet": True}
+        assert customer_orders.prefs(conn, USER) == {"orders": False, "updates": True, "support": True, "wallet": True, "reminders": True}
+        assert customer_orders.prefs(conn, OTHER) == {"orders": True, "updates": False, "support": True, "wallet": True, "reminders": True}
     bot2 = _ready(tmp_path / "off", enabled=False)
     _order(bot2, _link(bot2), commission=10_000)
     assert _events(bot2)[0]["last_error"] == "feature_off"

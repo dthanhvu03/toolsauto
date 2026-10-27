@@ -23,7 +23,7 @@
 **Lộ trình rút gọn:**
 1. Câu chữ: mừng đơn đầu, câu mời quay lại cuối tin báo đơn. ✅ Đã làm 2026-10-27.
 2. Thử 1 tin Zalo chủ động tới chủ bot. Chờ chủ bot xác nhận tài khoản.
-3. 11.11: chủ bot tự nhắn tay. Không xây hệ thống chiến dịch.
+3. ~~11.11: chủ bot tự nhắn tay.~~ Chủ bot yêu cầu tự thiết lập: đã làm nhắc mùa sale có duyệt từng lượt (`reports/CASHBACK_SALE_REMINDERS.md`).
 4. Bảng 🔁 Giữ chân đo đúng (chưa tới / đang đo). ✅ Đã làm 2026-10-27.
 5. Mở ví và xử lý trần 50 người Zalo.
 6. So mức hoàn với các bot hoàn tiền khác.

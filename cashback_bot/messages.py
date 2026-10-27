@@ -803,6 +803,62 @@ COME_BACK = (
 FIRST_ORDER = "🎉 <b>Đơn đầu tiên của bạn qua bot đó!</b>"
 
 
+# Nhắc mùa sale (sale_calendar, engagement), khoá (loại câu, lượt). Ngày sale khách hay gom giỏ từ trước rồi mua
+# thẳng từ giỏ: mất hoàn.
+# Mỗi tin: mốc thời gian · một việc cần làm (gửi link trước khi chốt đơn) · nhắc món trong giỏ. Không hứa số tiền.
+SALE_REMINDERS = {
+    ("double", "eve"): (
+        "🛒 <b>Mai {label} rồi, giỏ hàng sẵn chưa?</b>\n"
+        "Nhớ gửi link qua bot <b>trước khi chốt đơn</b> để được hoàn tiền nha.\n"
+        "Món nằm sẵn trong giỏ thì xoá đi, mở lại bằng link bot gửi nhé.",
+        "⏰ <b>0h đêm nay {label} mở sale</b>\n"
+        "Thấy món ưng thì dán link vào đây, bot gửi lại link có hoàn tiền.\n"
+        "Mua thẳng từ giỏ hàng là không được hoàn đâu nha.",
+    ),
+    # Siêu sale (9.9, 10.10) và đỉnh (11.11, 12.12): khách gom giỏ nhiều ngày trước, nhấn mạnh chuyện giỏ hàng.
+    ("super", "eve"): (
+        "🔥 <b>Mai siêu sale {label} rồi, giỏ hàng full chưa?</b>\n"
+        "Nhớ gửi link qua bot <b>trước khi chốt đơn</b> để được hoàn tiền nha.\n"
+        "Món gom sẵn trong giỏ thì xoá đi, mở lại bằng link bot gửi nhé, không là mất hoàn đó.",
+        "⏰ <b>0h đêm nay siêu sale {label} mở màn</b>\n"
+        "Món nào đang chờ chốt thì dán link vào đây trước, bot gửi lại link có hoàn tiền.\n"
+        "Mua thẳng từ giỏ hàng là không được hoàn đâu nha.",
+    ),
+    ("super", "day"): (
+        "🔥 <b>{label} còn sale tới hết hôm nay</b>\n"
+        "Khung 12h sắp mở, mua gì nhớ dán link vào bot trước nha để được hoàn.",
+        "🔥 <b>Hôm nay {label}, khung 12h sắp mở</b>\n"
+        "Gửi link qua bot trước khi chốt đơn để được hoàn nha. Món trong giỏ thì mở lại bằng link bot.",
+    ),
+    ("blackfriday", "eve"): (
+        "🖤 <b>Mai Black Friday, sale cả ngày</b>\n"
+        "Mua gì nhớ dán link vào bot <b>trước khi chốt đơn</b> để được hoàn nha. Món trong giỏ thì mở lại bằng link bot.",
+        "🖤 <b>Black Friday tới rồi</b>\n"
+        "Có món đang ngắm thì gửi link qua bot trước khi mua nha, để được hoàn tiền.",
+    ),
+    ("mid", "eve"): (
+        "💸 <b>Mai 15 sale giữa tháng</b>\n"
+        "Có món đang ngắm thì gửi link qua bot <b>trước khi chốt đơn</b> để được hoàn nha.",
+        "💸 <b>Mai sale giữa tháng nè</b>\n"
+        "Mua gì cũng dán link vào bot trước nha. Món trong giỏ thì mở lại bằng link bot gửi.",
+    ),
+    ("payday", "eve"): (
+        "💸 <b>Mai 25 sale cuối tháng, lương về rồi</b>\n"
+        "Mua gì nhớ dán link vào bot <b>trước khi chốt đơn</b> để được hoàn nha.",
+        "💸 <b>Mai sale cuối tháng rồi</b>\n"
+        "Món đang nằm trong giỏ thì xoá đi, mở lại bằng link bot gửi để được hoàn nha.",
+    ),
+}
+SALE_REMINDER_FOOTER = "ⓘ Không muốn nhận nhắc mùa sale thì gõ /thongbao để tắt."
+
+
+def sale_reminder(kind: str, stage: str, label: str, seed: str) -> str:
+    """Tin nhắc một dịp sale; đổi câu theo `seed` (mã lượt nhắc) để các dịp liền nhau không trùng câu."""
+    variants = SALE_REMINDERS[(kind, stage)]
+    body = variants[sum(map(ord, seed)) % len(variants)].format(label=label)
+    return f"{body}\n\n{SALE_REMINDER_FOOTER}"
+
+
 def come_back_line(order: str) -> str:
     return COME_BACK[sum(map(ord, order)) % len(COME_BACK)]
 
@@ -992,6 +1048,7 @@ NOTIFY_OPTIONS = (
     ("updates", "🔄 Trạng thái đơn / hoa hồng thay đổi"),
     ("support", "📩 Trả lời yêu cầu hỗ trợ"),
     ("wallet", "👛 Ví và chi trả (khi ví mở)"),
+    ("reminders", "🛒 Nhắc mùa sale (vài tin mỗi tháng)"),
 )
 
 

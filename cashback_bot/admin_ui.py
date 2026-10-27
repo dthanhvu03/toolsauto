@@ -40,7 +40,7 @@ SETTINGS_MENU_KEYBOARD: Keyboard = (
     (("🎖️ Hạng thành viên", "c:menu:rank"), ("📋 Điều khoản", "c:tm:home")),
     (("🔔 Thông báo khách", "c:nt:home"), ("⚖️ Sẵn sàng chi trả", "c:rd:home")),
     (("📊 Lịch sử cấu hình", "c:menu:hist"), ("📝 Nội dung lệnh", "c:menu:copy")),
-    (("📖 Thuật ngữ", "c:menu:glossary"),),
+    (("📣 Nhắc mùa sale", "c:eg:home"), ("📖 Thuật ngữ", "c:menu:glossary")),
     BACK_HOME,
 )
 

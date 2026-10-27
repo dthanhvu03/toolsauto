@@ -746,10 +746,10 @@ def profile(conn: sqlite3.Connection, user_id: int) -> Profile:
         "JOIN customer_terms_versions v ON v.id = a.terms_version_id WHERE a.telegram_user_id = ? ORDER BY a.id DESC LIMIT 1",
         (user_id,),
     ).fetchone()
-    pref = conn.execute("SELECT orders, updates, support, wallet FROM customer_notification_prefs WHERE telegram_user_id = ?",
-                        (user_id,)).fetchone()
+    pref = conn.execute("SELECT * FROM customer_notification_prefs WHERE telegram_user_id = ?", (user_id,)).fetchone()
+    keys = ("orders", "updates", "support", "wallet", "reminders")
     return Profile(bank, state or "NONE", terms[0] if terms else None,
-                   None if pref is None else {k: bool(pref[k]) for k in ("orders", "updates", "support", "wallet")})
+                   None if pref is None else {k: bool(pref[k]) for k in keys if k in pref.keys()})
 
 
 # --- Vận hành -------------------------------------------------------------------------------------

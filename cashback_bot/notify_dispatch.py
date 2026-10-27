@@ -34,7 +34,8 @@ OFFLINE_RETRY_SEC = 30
 ORDER_STALE = timedelta(hours=72)
 SILENT_EVENTS = {"NEW_USER", "LINK_SENT"}
 # Loại tin khách → cột tuỳ chọn. Tin đơn hàng còn cần cờ CUSTOMER_NOTIFICATIONS_ENABLED.
-PREF_COLUMNS = {"order_new": "orders", "order_update": "updates", "support": "support", "wallet": "wallet"}
+PREF_COLUMNS = {"order_new": "orders", "order_update": "updates", "support": "support", "wallet": "wallet",
+                "reminder": "reminders"}
 ORDER_CATEGORIES = ("order_new", "order_update")
 # Mốc lần bật thông báo đơn gần nhất (bot_state). order_notify.sync_activation đặt lúc khởi động.
 BASELINE_KEY = "customer_notify_baseline_at"

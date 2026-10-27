@@ -636,6 +636,23 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_sale_reminder_pending(self, slot, count: int) -> None:
+        """Nhắc mùa sale: lượt sắp tới chưa được duyệt thì không gửi. Báo một lần, trước giờ gửi 48 giờ."""
+        if not self._active():
+            return
+        at = slot.at.astimezone(ICT).strftime("%H:%M %d/%m")
+        body = (
+            f"📣 <b>Nhắc sale {slot.event.label} chờ anh duyệt</b>\n\n"
+            f"Gửi lúc {at} cho {count} khách. Chưa duyệt thì bot không gửi.\n"
+            "Mở /admin → ⚙️ Cài đặt → 📣 Nhắc mùa sale để xem trước và duyệt."
+        )
+        self.repo.enqueue_admin_event(
+            event_key=f"sale_reminder_pending:{slot.id}",
+            event_type="SALE_REMINDER_PENDING",
+            chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
     def notify_zalo_capacity(self, count: int, limit: int) -> None:
         """PLAN-083: gói Zalo BASIC giới hạn số người dùng mỗi bot."""
         if not self._active():

@@ -107,6 +107,8 @@ from cashback_bot.admin_retention import RetentionAdmin
 from cashback_bot.admin_tiktok import TikTokAdmin
 from cashback_bot.admin_tiktok import history_line as tiktok_history
 from cashback_bot.admin_retention import history_line as retention_history
+from cashback_bot.admin_engagement import EngagementAdmin
+from cashback_bot.admin_engagement import history_line as engagement_history
 from cashback_bot.admin_wallet import WalletAdmin
 from cashback_bot.wallet import Wallet
 from cashback_bot.db import TrackingRepository
@@ -377,6 +379,8 @@ class AdminPanel:
             return self._insights().route(user_id, data, now)
         if data.startswith("c:rt:"):
             return self._retention().route(user_id, data, now)
+        if data.startswith("c:eg:"):
+            return EngagementAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:tk:"):
             return TikTokAdmin(TrackingRepository(self.db_path), self.tiktok_configured, audit=self._log_setting).route(
                 user_id, data, now)
@@ -1639,7 +1643,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
         "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro", "ops_cost",
-        "goal", "retention", "tiktok_mode",
+        "goal", "retention", "tiktok_mode", "sale_reminder",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1679,6 +1683,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         return retention_history(before, after)
     if action == "tiktok_mode":
         return tiktok_history(before, after)
+    if action == "sale_reminder":
+        return engagement_history(before, after)
     if action in {"terms_draft", "terms_publish"}:
         verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
         return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"
