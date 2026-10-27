@@ -395,3 +395,13 @@ def test_cau_lenh_tren_zalo_dung_ngu_phap():
         text = zalo_wording(source)
         assert "dùng gõ" not in text and "trong gõ" not in text and "/" not in text.replace("</b>", ""), text
     assert zalo_wording(messages.STALE_BUTTON) == "Lựa chọn này đã hết hạn. Gõ menu để mở trang chủ."
+
+
+def test_man_bat_tat_tren_zalo_khong_co_o_xam_khong_lap():
+    picked = messages.notify_settings_reply({"orders": True, "updates": False, "support": True, "wallet": True,
+                                             "reminders": True}, True)
+    text = render(picked)[0][0].text
+    assert "⬜" not in text and text.count("Đơn mới được ghi nhận") == 1
+    assert "1 · 📦 Đơn mới được ghi nhận ✅" in text and "2 · 🔄 Trạng thái đơn / hoa hồng thay đổi\n" in text
+    assert "\n\n7 · Trang chủ" in text, "nút điều hướng tách khỏi các lựa chọn"
+    assert "\n\n\n" not in text

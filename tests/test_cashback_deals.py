@@ -186,7 +186,7 @@ def test_zalo_go_nhieu_so_mot_tin_de_chon_danh_muc(tmp_path):
     channel.handle(_update("1 3, 5", message_id="c"), now=BUILD)
     assert deals.user_categories(bot.repo, internal) == ["nu", "dep", "nha"]
     last = zalo.sent[-1][1]
-    assert "✅ 👗 Thời trang nữ" in last and "ví dụ: 1 3 5" in last
+    assert "1 · 👗 Thời trang nữ ✅" in last and "ví dụ: 1 3 5" in last and "⬜" not in last
     channel.handle(_update("2 4", message_id="d"), now=BUILD)
     assert deals.user_categories(bot.repo, internal) == ["nu", "dep", "nha"], "đủ 3 mục thì không thêm"
     channel.handle(_update("menu", message_id="e"), now=BUILD)

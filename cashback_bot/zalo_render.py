@@ -225,6 +225,10 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
     """
     # Telegram hiện toast thành popup; Zalo không có popup nên đặt toast lên đầu tin.
     body = f"{reply.toast}\n\n{reply.text}" if reply.text and reply.toast else reply.text or reply.toast or ""
+    # Màn bật / tắt: Telegram liệt kê ✅/⬜ trong nội dung lẫn trên nút; Zalo đã có danh sách số nên bỏ dòng lặp.
+    toggles = {label for row in reply.inline_keyboard or () for label, _data in row if label[:2] in ("✅ ", "⬜ ")}
+    if toggles:
+        body = re.sub(r"\n{3,}", "\n\n", "\n".join(line for line in body.split("\n") if line not in toggles))
     if body == HUONGDAN:
         body = GUIDE
     elif body == with_tiktok(HUONGDAN):
@@ -248,8 +252,18 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
     if choices:
         add("\n\n")
         add(MENU_TITLE, bold=True)
-        for number, (label, _data) in enumerate(choices, start=1):
-            add(f"\n{number} · {_label(label)}")
+        options = any(not data.startswith("u:p:") for _label_text, data in choices)
+        for number, (label, data) in enumerate(choices, start=1):
+            if options and data.startswith("u:p:") and not choices[number - 2][1].startswith("u:p:"):
+                add("\n")  # tách nút điều hướng (◀️ Trang chủ…) khỏi các lựa chọn
+            name = _label(label)
+            # Màn bật / tắt: Zalo iPhone vẽ ⬜ thành khối xám to (chủ bot 2026-10-27). Mục chưa chọn để trơn,
+            # mục đã chọn in đậm, ✅ đặt cuối.
+            if name.startswith("✅ "):
+                add(f"\n{number} · ")
+                add(f"{name.removeprefix('✅ ')} ✅", bold=True)
+            else:
+                add(f"\n{number} · {name.removeprefix('⬜ ')}")
     messages = split(text, sorted(styles))
     if reply.button_url:
         messages = split(card_text, sorted(card_styles)) + messages
