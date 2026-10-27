@@ -1,3 +1,12 @@
+## Phiên 2026-10-27 (cs) — Thẻ link làm lại bố cục
+
+- Thứ tự mới: sản phẩm → 💰 hoàn dự kiến (đậm cả dòng) → ➕ có thể được thêm → ⚠️ Để được hoàn (3 ý, có ý "Mua đúng món này") → chữ nhỏ nghiêng → 👉 lời bấm nút ở cuối.
+- Áp cho cả Telegram và Zalo; link Shopee lẫn TikTok.
+- Proof: 841 test cashback qua; test mới kiểm thứ tự các khối.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo`.
+
+---
+
 ## Phiên 2026-10-27 (cr) — Báo hoàn theo Shopee Comm tối đa 2,5% (PLAN-096)
 
 - Kiểm 2 đơn mới, đối chiếu AMS: số trong bot khớp AMS. Lệch nằm ở số AddLiveTag báo lúc tạo link:

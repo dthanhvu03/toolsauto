@@ -25,9 +25,14 @@
   - tỷ lệ HH và dòng "· từ Shopee" theo số đã tính;
   - thêm ghi chú "AddLiveTag báo Shopee Comm …; bot chỉ tính tối đa 2,5%".
 
+## Thẻ link mới (chủ bot yêu cầu 2026-10-27: làm lại UI, làm nổi phần đáng chú ý)
+
+- Thứ tự: tiêu đề + sản phẩm → **💰 Hoàn dự kiến** (cả dòng đậm) → ➕ có thể được thêm → khối **⚠️ Để được hoàn** (3 gạch đầu dòng) → chữ nhỏ in nghiêng → 👉 lời bấm nút ở cuối, sát nút.
+- Khối "Để được hoàn" có thêm ý "Mua đúng món này. Mua món khác thì số hoàn sẽ khác." (đơn 261027N7MJJKFV mất 12% XTRA vì khách mua ở shop khác).
+- Zalo dùng chung chữ; thẻ `<i>` / `<b>` đổi sang style của Zalo.
+
 ## Còn lại (chủ bot chưa duyệt)
 
-- Thẻ link thêm câu "Mua đúng sản phẩm này để được hoàn như trên". Đơn 261027N7MJJKFV mất 12% XTRA vì khách mua ở shop khác.
 - Tin báo đơn giải thích khi hoàn thực thấp hơn hẳn số dự kiến.
 
 ## Proof

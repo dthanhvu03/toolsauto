@@ -651,7 +651,7 @@ class TestPaidBasisWording:
 
     def test_link_card_explains_paid_basis(self, tmp_path):
         reply = _bot(tmp_path).handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=901, now=NOW)
-        assert "💰 Hoàn dự kiến: khoảng <b>" in reply.text
+        assert "💰 <b>Hoàn dự kiến: khoảng</b> <b>" in reply.text
         assert "Shopee tính trên số tiền bạn thực trả" in reply.text
         assert "voucher, xu" in reply.text
         assert "%" not in reply.text

@@ -191,9 +191,12 @@ def source_text(text: str, conversion_id: str | None) -> str:
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
+# Thẻ link 2026-10-27: gom điều kiện thành khối «Để được hoàn», mỗi ý một dòng (đơn thật: khách sang shop khác mua, mất XTRA).
 BUY_WARNING = (
-    "⚠️ Mua thẳng trong app (không qua link của bot) sẽ không được hoàn.\n"
-    "Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
+    "⚠️ <b>Để được hoàn</b>\n"
+    "• Mua qua link của bot. Mua thẳng trong app sẽ không được hoàn.\n"
+    "• Mua đúng món này. Mua món khác thì số hoàn sẽ khác.\n"
+    "• Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
 )
 # Shopee tính hoa hồng trên số tiền khách thực trả, bot chỉ biết giá tham khảo (đơn thật 24/10: báo 21.357đ, thật 12.157đ).
 _PAID_BASIS = (
@@ -301,22 +304,26 @@ def buyer_name(name: str) -> str:
 
 
 # Đối chiếu AMS 2026-10-27: Shopee Comm AddLiveTag báo trên 2,5% không phải đơn nào cũng được.
-EXTRA_LINE = "➕ Có thể được thêm tới {amount} nếu Shopee áp mức hoa hồng cao hơn"
+EXTRA_LINE = "➕ Có thể được thêm tới {amount} nếu Shopee áp mức cao hơn"
 
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str,
                  tiktok: bool = False, extra_vnd: int = 0) -> BotReply:
+    """Thẻ link: sản phẩm → số hoàn (đậm) → điều kiện để được hoàn → chữ nhỏ → lời bấm nút ngay trên nút."""
     safe_name = html.escape(buyer_name(name))
     title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
-    text = (
-        f"{title}" + (" · 🎵 TikTok Shop" if tiktok else "") + "\n\n"
-        f"💰 Hoàn dự kiến: khoảng <b>{format_vnd(cashback_vnd)}</b>\n"
-        + (EXTRA_LINE.format(amount=format_vnd(extra_vnd)) + "\n" if extra_vnd > 0 else "")
-        + f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}\n\n"
-        f"{TIKTOK_BUY_HINT if tiktok else BUY_HINT}\n" + (f"{BUY_WARNING}\n\n" if cashback_vnd > 0 else "\n")
-        + f"ⓘ {note}"
-    )
-    return BotReply(text=text, button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD,
+    lines = [
+        title + (" · 🎵 TikTok Shop" if tiktok else ""),
+        f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}",
+        "",
+        f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>",
+    ]
+    if extra_vnd > 0:
+        lines.append(EXTRA_LINE.format(amount=format_vnd(extra_vnd)))
+    if cashback_vnd > 0:
+        lines += ["", BUY_WARNING]
+    lines += ["", f"ⓘ <i>{note}</i>", "", TIKTOK_BUY_HINT if tiktok else BUY_HINT]
+    return BotReply(text="\n".join(lines), button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD,
                     button_label=TIKTOK_BUY_BUTTON if tiktok else None)
 
 

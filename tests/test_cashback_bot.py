@@ -137,7 +137,7 @@ def test_ac01_link_hop_le_va_cashback_70(tmp_path):
     assert "Mua thẳng trong app" in reply.text and "xoá đi rồi mở lại" in reply.text, "nhắc mua qua link của bot"
     assert "20.000đ" not in reply.text
     assert "✅ <b>Đã tạo link hoàn tiền</b>" in reply.text
-    assert "💰 Hoàn dự kiến:" in reply.text
+    assert "💰 <b>Hoàn dự kiến:" in reply.text
     assert "<b>14.000đ</b>" in reply.text
     assert "70%" not in reply.text
     assert "an_redir" not in reply.text
@@ -254,7 +254,7 @@ def test_cashback_bang_0_hien_thi_trung_thuc(tmp_path):
     reply = service(tmp_path, FakeClient(no_commission)).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=12, now=NOW
     )
-    assert "💰 Hoàn dự kiến:" in reply.text
+    assert "💰 <b>Hoàn dự kiến:" in reply.text
     assert "<b>0đ</b>" in reply.text
     assert "Chưa phải tiền có thể rút." in reply.text
     assert reply.button_url is not None

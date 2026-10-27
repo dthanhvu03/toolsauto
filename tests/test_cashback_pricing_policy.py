@@ -907,8 +907,12 @@ def test_shopee_comm_tren_2_5_chi_ghi_co_the_duoc_them(tmp_path):
     expected = cashback_for(11_875, policy).cashback_vnd
     extra = cashback_for(38_000, policy).cashback_vnd - expected
     assert f"<b>{expected:,}đ</b>".replace(",", ".") in card.text
-    assert f"Có thể được thêm tới {extra:,}đ nếu Shopee áp mức hoa hồng cao hơn".replace(",", ".") in card.text
+    assert f"Có thể được thêm tới {extra:,}đ nếu Shopee áp mức cao hơn".replace(",", ".") in card.text
     assert _rows(tmp_path, "SELECT estimated_commission, shopee_commission_vnd FROM link_requests")[0] == (11_875, 38_000)
+    # Bố cục thẻ: số hoàn → «có thể thêm» → điều kiện để được hoàn → chữ nhỏ → lời bấm nút nằm cuối, sát nút.
+    order = ["Hoàn dự kiến", "Có thể được thêm", "⚠️ <b>Để được hoàn</b>", "Mua đúng món này", "ⓘ <i>", "👉 Bấm"]
+    positions = [card.text.index(part) for part in order]
+    assert positions == sorted(positions) and card.text.endswith("rồi đặt hàng.")
     flat = " ".join(_link_notice(tmp_path, bot, 1).split())
     assert "HH ước tính 2,5% 11.875" in flat and "· từ Shopee 11.875" in flat
     assert "AddLiveTag báo Shopee Comm 38.000đ; bot chỉ tính tối đa 2,5%" in flat
