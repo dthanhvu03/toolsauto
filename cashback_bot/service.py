@@ -283,7 +283,7 @@ class CashbackService:
     def _page_body(self, name: str, user_id: int | None = None) -> BotReply | None:
         wallet = self.wallet.settings()
         if name == "home":
-            return home_reply(show_rank=MEMBERSHIP_CUTOVER, show_wallet=wallet.enabled)
+            return home_reply(show_rank=MEMBERSHIP_CUTOVER, show_wallet=wallet.enabled, show_deals=deals.enabled(self.repo))
         if name == "guide":
             return page_reply(HUONGDAN)
         if name == "rules":

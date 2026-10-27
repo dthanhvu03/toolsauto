@@ -60,7 +60,7 @@ DESCRIPTION_WALLET = (
 )
 
 
-def home_keyboard(show_rank: bool = False, show_wallet: bool = False) -> Keyboard:
+def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False) -> Keyboard:
     second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"), ("📩 Hỗ trợ", "u:p:support"))
     if show_rank:
         second += (("🏅 Hạng thành viên", "u:p:rank"),)
@@ -69,6 +69,9 @@ def home_keyboard(show_rank: bool = False, show_wallet: bool = False) -> Keyboar
         (("📖 Cách dùng", "u:p:guide"), ("🛡️ Để được ghi nhận", "u:p:tips")),
         second,
     )
+    if show_deals:
+        # Lối vào màn chọn danh mục deal hời, khỏi phải nhớ /thongbao (chủ bot duyệt 2026-10-27).
+        rows = rows[:1] + ((("🛍️ Deal hời của tôi", "u:dc:home"),),) + rows[1:]
     if show_wallet:
         rows = ((("👛 Ví của tôi", "u:p:wallet"),),) + rows
     return rows
@@ -369,8 +372,9 @@ def with_tiktok(text: str) -> str:
     return text
 
 
-def home_reply(show_rank: bool = False, show_wallet: bool = False) -> BotReply:
-    return BotReply(HOME_WALLET if show_wallet else HOME, inline_keyboard=home_keyboard(show_rank, show_wallet))
+def home_reply(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False) -> BotReply:
+    return BotReply(HOME_WALLET if show_wallet else HOME,
+                    inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals))
 
 
 def page_reply(text: str) -> BotReply:
@@ -1132,6 +1136,7 @@ DEALS_ANNOUNCE = (
 )
 DEALS_ANNOUNCE_KEYBOARD: Keyboard = ((("🛍️ Chọn danh mục deal", "u:dc:home"),),)
 DEALS_PICK_HINT = "Bấm món muốn mua, bot gửi link hoàn tiền liền 😎"
+DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
 
 
 def deal_categories_reply(labels: dict[str, str], selected: list[str], notice: str = "") -> BotReply:

@@ -30,7 +30,7 @@ import requests
 
 from cashback_bot import engagement, sale_calendar
 from cashback_bot.db import TrackingRepository, enqueue_event
-from cashback_bot.messages import DEALS_PICK_HINT
+from cashback_bot.messages import DEALS_CHANGE_HINT, DEALS_PICK_HINT
 from cashback_bot.money import format_vnd
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
 from cashback_bot.price_watch import PriceHistoryClient, PriceWatchError
@@ -280,8 +280,9 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
                             "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"})
     lines += ["", DEALS_PICK_HINT,
               "Giá theo dữ liệu lúc 17:30, có thể đổi khi bạn mở.",
-              "Đổi danh mục hay tắt deal: gõ /thongbao nha 🫶"]
-    return "\n".join(lines), [[b] for b in buttons]
+              DEALS_CHANGE_HINT]
+    # Nút cuối: đổi danh mục ngay từ tin deal (Zalo: một số trong danh sách).
+    return "\n".join(lines), [[b] for b in buttons] + [[{"text": "⚙️ Đổi danh mục", "callback_data": "u:dc:home"}]]
 
 
 def send(repo: TrackingRepository, day: str, data: dict, now: datetime) -> int:

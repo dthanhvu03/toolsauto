@@ -97,9 +97,9 @@ def test_soan_17h30_bao_admin_20h08_gui_khach_da_chon(tmp_path):
         deals.tick(bot.repo, bot, admin, SEND, market, history)
     (sent,) = _events(bot, "DEALS")
     assert sent["chat_id"] == USER and sent["category"] == "deal" and "20:08 giờ phát lộc" in sent["message_html"]
-    assert "200k</b> (thường 250k · thấp nhất 30 ngày)" in sent["message_html"] and "/thongbao" in sent["message_html"]
+    assert "200k</b> (thường 250k · thấp nhất 30 ngày)" in sent["message_html"] and "⚙️ Đổi danh mục" in sent["message_html"]
     keyboard = json.loads(sent["reply_markup_json"])["inline_keyboard"]
-    assert [row[0]["callback_data"] for row in keyboard] == ["u:dl:9:1", "u:dl:9:2"]
+    assert [row[0]["callback_data"] for row in keyboard] == ["u:dl:9:1", "u:dl:9:2", "u:dc:home"]
     assert deals.record(bot.repo, "2026-10-21")["status"] == "sent"
 
 
@@ -122,7 +122,8 @@ def test_tin_toi_da_5_mon_chia_deu_danh_muc():
     pool = {"dep": [dict(row, item_id=i, name=f"Đẹp {i}") for i in range(1, 5)],
             "nu": [dict(row, item_id=i, name=f"Nữ {i}") for i in range(11, 15)]}
     text, keyboard = deals.message_for(["dep", "nu"], pool, removed={2})
-    ids = [r[0]["callback_data"].rsplit(":", 1)[1] for r in keyboard]
+    ids = [r[0]["callback_data"].rsplit(":", 1)[1] for r in keyboard if r[0]["callback_data"].startswith("u:dl:")]
+    assert keyboard[-1][0]["callback_data"] == "u:dc:home", "nút cuối: đổi danh mục"
     assert ids == ["1", "3", "4", "11", "12"], "chia lần lượt từng danh mục, bỏ món admin đã bỏ (2)"
     assert "💄 Làm đẹp" in text and "👗 Thời trang nữ" in text
     assert deals.message_for(["thucung"], pool, set()) is None, "không có món thì không gửi"
@@ -199,3 +200,11 @@ def test_ten_mon_bo_nhan_khuyen_mai_va_gia_le():
     assert deals._short("【DAILY】[HOT] Kem Chống Nắng d'Alba") == "Kem Chống Nắng d'Alba"
     assert deals._short("[Chỉ có nhãn]") == "[Chỉ có nhãn]"
     assert (deals._k(64_500), deals._k(75_000), deals._k(89_499), deals._k(500)) == ("64,5k", "75k", "89,5k", "500đ")
+
+
+def test_trang_chu_co_loi_vao_deal_khi_bat(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    assert "u:dc:home" not in [d for row in _callback(bot, USER, "u:p:home").inline_keyboard for _l, d in row]
+    bot.repo.set_state(deals.ENABLED_KEY, "1")
+    rows = _callback(bot, USER, "u:p:home").inline_keyboard
+    assert rows[1] == (("🛍️ Deal hời của tôi", "u:dc:home"),), "ngay dưới Đơn hàng của tôi"
