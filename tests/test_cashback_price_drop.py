@@ -84,6 +84,13 @@ def test_doc_phan_hoi_addlivetag(monkeypatch):
             {"date": "2026-10-23", "price": "199000.0000", "flashSale": True, "stockAvailable": True},
         ]}},
         {"itemId": "9", "status": "no_data", "price": {"points": []}},
+        # Dữ liệu thật: món bán bình thường cũng có stockAvailable 0; giá 0 là flash sale ẩn giá.
+        {"itemId": "10", "status": "success", "price": {"points": [
+            {"date": "2026-10-27", "price": "408000.0000", "flashSale": False, "stockAvailable": 0}]}},
+        {"itemId": "11", "status": "success", "price": {"points": [
+            {"date": "2026-10-27", "price": "0", "flashSale": True, "stockAvailable": 30}]}},
+        {"itemId": "12", "status": "success", "price": {"points": [
+            {"date": "2026-10-27", "price": "54000", "flashSale": True, "stockAvailable": 0}]}},
     ]}
     sent = {}
 
@@ -92,9 +99,10 @@ def test_doc_phan_hoi_addlivetag(monkeypatch):
         return MagicMock(status_code=200, json=lambda: payload)
 
     monkeypatch.setattr(price_watch.requests, "post", fake_post)
-    result = PriceHistoryClient("k").latest([8, 9])
-    assert result == {8: PricePoint(199_000, True, True)}
-    assert sent["json"]["item_ids"] == [8, 9] and sent["json"]["type"] == "price" and sent["key"] == "k"
+    result = PriceHistoryClient("k").latest([8, 9, 10, 11, 12])
+    assert result == {8: PricePoint(199_000, True, True), 10: PricePoint(408_000, False, None),
+                      12: PricePoint(54_000, True, False)}
+    assert sent["json"]["item_ids"] == [8, 9, 10, 11, 12] and sent["json"]["type"] == "price" and sent["key"] == "k"
 
 
 def test_man_admin_bat_bao_giam_gia(tmp_path):

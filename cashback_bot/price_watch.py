@@ -50,12 +50,16 @@ class PricePoint:
 
 
 def _point(raw: dict) -> PricePoint | None:
+    """Giá 0 (flash sale ẩn giá) thì bỏ. Dữ liệu thật 2026-10-27: `stockAvailable` = 0 ở cả món đang bán bình thường,
+    trường này chỉ là suất flash sale, nên chỉ coi là hết hàng khi đang flash sale mà suất bằng 0."""
     try:
         price = int(float(raw.get("price")))
     except (TypeError, ValueError):
         return None
+    flash = bool(raw.get("flashSale"))
     stock = raw.get("stockAvailable")
-    return PricePoint(price, bool(raw.get("flashSale")), None if stock is None else bool(stock)) if price > 0 else None
+    in_stock = None if not flash or stock is None else bool(stock)
+    return PricePoint(price, flash, in_stock) if price > 0 else None
 
 
 class PriceHistoryClient:

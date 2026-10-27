@@ -1,3 +1,12 @@
+## Phiên 2026-10-27 (de) — Sửa báo giảm giá theo dữ liệu thật
+
+- Gọi thử AddLiveTag `history.php` (12 món, chỉ đọc): `stockAvailable` = 0 ở cả món đang bán bình thường (chỉ là suất flash sale); giá 0 là flash sale ẩn giá; `discountPercent` so với "giá gốc" shop ghi, không đáng tin.
+- Sửa `price_watch._point`: chỉ coi là hết hàng khi đang flash sale và suất = 0. Trước đó tối nay sẽ bỏ sót gần hết món giảm giá (không gửi sai).
+- Proof: test đọc phản hồi có thêm 3 mẫu dữ liệu thật; test price_drop + sale_reminders qua.
+- **Next:** chủ bot restart trước 19:00 tối nay.
+
+---
+
 ## Phiên 2026-10-27 (dd) — Báo giảm giá món khách từng xem
 
 - `price_watch.py` (AddLiveTag `price-tracking/history.php`, cùng khoá API), mặc định tắt. Bật ở 📣 Nhắc mùa sale.
