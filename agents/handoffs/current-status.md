@@ -1,3 +1,17 @@
+## Phiên 2026-10-27 (cu) — Thiết kế hệ thống giữ chân khách
+
+- Bản thiết kế: `reports/CASHBACK_RETENTION_DESIGN_2026-10-27.md`.
+  - 5 tầng: kích hoạt, vòng đời đơn, lịch sale, gọi lại người ngủ, tích luỹ sau khi mở ví;
+  - rào chắn chống spam, giọng nói, đo lường, lộ trình 5 đợt.
+- Số thật: 13/16 khách chỉ dùng 1 ngày; 9 tin chủ động đã gửi đều qua Telegram, Zalo chưa gửi tin chủ động nào.
+- Chưa triển khai gì.
+- **Next:** chủ bot duyệt
+  - đợt 1 (câu chữ: ghim, mừng đơn đầu, câu mời quay lại);
+  - đợt 2 (gửi 1 tin thử Zalo tới chủ bot);
+  - PLAN đợt 3, kịp 11.11.
+
+---
+
 ## Phiên 2026-10-27 (ct) — Câu chữ theo tâm lý khách (PLAN-096 đợt 3)
 
 - Thẻ link:
