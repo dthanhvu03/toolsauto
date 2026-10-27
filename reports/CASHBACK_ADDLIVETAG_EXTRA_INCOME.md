@@ -25,7 +25,7 @@
 
 Nguồn: [data.addlivetag.com](https://data.addlivetag.com/), [/shopee/](https://data.addlivetag.com/shopee/), [/shopeefood/](https://data.addlivetag.com/shopeefood/), [aff-link](https://data.addlivetag.com/shopee/aff-link.html), [addlivetag.com](https://addlivetag.com/), [deal.html](https://addlivetag.com/deal.html).
 
-⚠️ Trang ShopeeFood ghi API "miễn phí cho học tập, nghiên cứu và công cụ nội bộ, không dùng cho mục đích thương mại". Bot đang dùng `product-data.php` cũng là API phi thương mại. Chủ bot nên xác nhận với AddLiveTag (cùng hệ sinh thái với RioHub, đã đồng ý cho dùng) rằng dùng cho bot hoàn tiền là được.
+✅ Trang ShopeeFood ghi API "không dùng cho mục đích thương mại", nhưng chủ bot xác nhận 2026-10-27: AddLiveTag cho dùng với bot hoàn tiền (nhiều người đang dùng công khai trên mạng xã hội).
 
 ## 2. Mục 1: kênh deal
 
