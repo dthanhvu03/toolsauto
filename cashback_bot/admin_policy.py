@@ -109,6 +109,8 @@ from cashback_bot.admin_tiktok import history_line as tiktok_history
 from cashback_bot.admin_retention import history_line as retention_history
 from cashback_bot.admin_engagement import EngagementAdmin
 from cashback_bot.admin_engagement import history_line as engagement_history
+from cashback_bot.admin_announce import AnnounceAdmin
+from cashback_bot.admin_announce import history_line as announce_history
 from cashback_bot.admin_deals import DealsAdmin
 from cashback_bot.admin_deals import history_line as deals_history
 from cashback_bot.admin_wallet import WalletAdmin
@@ -381,6 +383,8 @@ class AdminPanel:
             return self._insights().route(user_id, data, now)
         if data.startswith("c:rt:"):
             return self._retention().route(user_id, data, now)
+        if data.startswith("c:an:"):
+            return AnnounceAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:dl:"):
             return DealsAdmin(TrackingRepository(self.db_path), audit=self._log_setting).route(user_id, data, now)
         if data.startswith("c:eg:"):
@@ -1647,7 +1651,7 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         "wallet_enabled", "wallet_hold_days", "wallet_min_withdraw", "wallet_limits", "shopee_cookie", "shopee_auto_sync",
         "commission_review_ack", "terms_draft", "terms_publish", "bank_verified", "customer_notify_retry",
         "shopee_auto_sync_pause", "customer_notify_smoke", "customer_notify_intro", "ops_cost",
-        "goal", "retention", "tiktok_mode", "sale_reminder", "deals",
+        "goal", "retention", "tiktok_mode", "sale_reminder", "deals", "announce",
     }:
         return None
     after = json.loads(row["after_json"]) if row["after_json"] else {}
@@ -1691,6 +1695,8 @@ def _setting_line(row: sqlite3.Row) -> str | None:
         return engagement_history(before, after)
     if action == "deals":
         return deals_history(before, after)
+    if action == "announce":
+        return announce_history(before, after)
     if action in {"terms_draft", "terms_publish"}:
         verb = "tạo bản nháp" if action == "terms_draft" else "công bố"
         return f"Điều khoản: {verb} {html.escape(str(after.get('version', '-')))}"

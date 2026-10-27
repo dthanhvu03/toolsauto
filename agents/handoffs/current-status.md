@@ -1,3 +1,18 @@
+## Phiên 2026-10-27 (di) — Lối vào deal + nút gửi tin giới thiệu
+
+- Trang chủ có nút 🛍️ Deal hời của tôi (khi đã bật); cuối tin deal có nút ⚙️ Đổi danh mục (Zalo: "gõ số của dòng").
+- Lệnh gửi tin hàng loạt từ phía Claude bị auto mode chặn (Real-World Transactions). Thay bằng màn chủ bot tự bấm:
+  - `admin_announce.py`: ⚙️ → 📣 Nhắc mùa sale → 📣 Tin giới thiệu;
+  - xem trước nội dung, số khách chưa nhận (Telegram / Zalo), bấm ✅ Gửi;
+  - khoá `announce:<mã>:<khách>` nên mỗi khách nhận một lần; ghi 📊 Lịch sử.
+  - Tin hiện có: `deals-v1`.
+- Proof: 876 test cashback qua.
+- **Next:**
+  - chủ bot restart;
+  - vào 📣 Tin giới thiệu → deals-v1 → ✅ Gửi.
+
+---
+
 ## Phiên 2026-10-27 (dh) — Zalo: màn bật / tắt dễ nhìn
 
 - Chủ bot chụp màn chọn danh mục trên Zalo iPhone: ô ⬜ hiện thành khối xám to, trông như lỗi.
