@@ -1,3 +1,28 @@
+## Phiên 2026-10-27 (reup) — Thuyết minh lại video (ADR-060)
+
+- Owner giao trực tiếp: tách giọng (Demucs) → Whisper tự nhận ngôn ngữ → AI dịch từng câu → đọc lại khớp thời gian, trộn lên nền đã tách.
+- Mới:
+  - `viral_intake/dub_layer.py`;
+  - `viral_intake/demucs_separate.py` (chạy tiến trình riêng);
+  - 4 setting `reup.dub_*` trong nhóm "Reup — lớp thêm", **mặc định tắt**, 13 ngôn ngữ đích.
+- Thứ tự lớp: thuyết minh → phụ đề → âm thanh. Đã thuyết minh thì phụ đề là câu đã dịch.
+- Cài vào venv:
+  - torch 2.5.1 **CPU**, torchaudio 2.5.1, demucs 4.0.1 (sympy 1.14.0 → 1.13.1);
+  - edge-tts 7.2.8 → **7.3.1**, vì 7.2.8 bị Microsoft trả 403, nên voice-over hook ADR-016 cũng đang hỏng nếu bật.
+- Proof: video thật 34,6 giây, Việt → Anh.
+  - 5/5 câu; Whisper nghe lại file ra thấy `en` 0,99.
+  - Demucs CPU 93 giây.
+  - Owner nghe bản đầu: "đọc nhanh, cụt cuối câu". Đã sửa: gọt khoảng lặng edge-tts, chừa 0,25 giây nghỉ, tăng tốc tối đa 1,2× (trước 1,5×), câu dài thì lùi câu sau thay vì cắt. Bản mới ở `C:\Users\Admin\Downloads\thuyet_minh_3_tieng_anh_ban_moi.mp4`, chờ Owner nghe.
+  - 220 + 218 test qua. Import-linter không thêm vi phạm.
+- **Chưa commit.**
+- **Next:**
+  - Owner commit;
+  - restart worker reup để nạp code mới và edge-tts 7.3.1;
+  - bật "Thuyết minh lại (dịch + lồng tiếng)" trong /app/settings, chọn ngôn ngữ đích;
+  - xem 1–2 video ra trước khi để chạy hàng loạt.
+
+---
+
 ## Phiên 2026-10-27 (df) — Deal hời theo danh mục, 20:08 mỗi tối
 
 - `deals.py` + `admin_deals.py` (⚙️ → 📣 → 🔥 Deal hời), mặc định tắt. Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 5.

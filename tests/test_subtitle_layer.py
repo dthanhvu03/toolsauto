@@ -151,7 +151,10 @@ def test_post_layers_disabled_keeps_path_and_skips_layer(tmp_path, monkeypatch):
     metrics: dict = {}
     result = ReupProcessor._apply_post_layers(current, current, page_url=None, metrics=metrics)
     assert result == current
-    assert metrics == {"subtitle_enabled": False, "audio_voice_enabled": False, "audio_music_enabled": False}
+    assert metrics == {
+        "dub_enabled": False, "subtitle_enabled": False,
+        "audio_voice_enabled": False, "audio_music_enabled": False,
+    }
     assert not os.path.exists(current + ".with_sub.tmp.mp4")
 
 
@@ -182,7 +185,7 @@ def test_post_layers_enabled_success_promotes_tmp(tmp_path, monkeypatch):
     current.write_bytes(b"old")
 
     def _fake_apply(inp, out, **kw):
-        assert kw == {"font_size": 64, "margin_v": 260}
+        assert kw == {"font_size": 64, "margin_v": 260, "segments": None}
         with open(out, "wb") as fh:
             fh.write(b"x" * (ReupProcessor.MIN_OUTPUT_BYTES + 1))
         return True

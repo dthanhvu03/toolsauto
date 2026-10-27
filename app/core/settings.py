@@ -476,6 +476,52 @@ SETTINGS: dict[str, SettingSpec] = {
         max=800,
         unit="px",
     ),
+    # ADR-060: thuyết minh lại (tách giọng → nhận ngôn ngữ → dịch → đọc lại). Mặc định TẮT.
+    "reup.dub_enabled": SettingSpec(
+        key="reup.dub_enabled",
+        type="bool",
+        default_getter=lambda: False,
+        title="Thuyết minh lại (dịch + lồng tiếng)",
+        section="Reup — lớp thêm",
+        description=(
+            "Tách giọng khỏi nhạc nền (Demucs), nhận ngôn ngữ, AI dịch từng câu, đọc lại bằng giọng mới "
+            "khớp thời gian. Video đã đúng ngôn ngữ đích thì bỏ qua. Bật cùng phụ đề thì phụ đề là câu đã dịch. "
+            "Chạy CPU mất khoảng 3–4 lần độ dài video (video 35 giây ≈ 2 phút). Mặc định tắt."
+        ),
+    ),
+    "reup.dub_target_lang": SettingSpec(
+        key="reup.dub_target_lang",
+        type="enum",
+        default_getter=lambda: "vi",
+        title="Thuyết minh sang",
+        section="Reup — lớp thêm",
+        description="Ngôn ngữ của giọng đọc mới.",
+        choices=["vi", "en", "ja", "ko", "zh", "es", "th", "id", "fr", "de", "pt", "ru", "hi"],
+        enum_labels={
+            "vi": "Tiếng Việt", "en": "Tiếng Anh", "ja": "Tiếng Nhật", "ko": "Tiếng Hàn",
+            "zh": "Tiếng Trung (giản thể)", "es": "Tiếng Tây Ban Nha", "th": "Tiếng Thái",
+            "id": "Tiếng Indonesia", "fr": "Tiếng Pháp", "de": "Tiếng Đức",
+            "pt": "Tiếng Bồ Đào Nha", "ru": "Tiếng Nga", "hi": "Tiếng Hindi",
+        },
+    ),
+    "reup.dub_voice_gender": SettingSpec(
+        key="reup.dub_voice_gender",
+        type="enum",
+        default_getter=lambda: "female",
+        title="Giọng thuyết minh",
+        section="Reup — lớp thêm",
+        description="Giọng edge-tts của ngôn ngữ đích.",
+        choices=["female", "male"],
+        enum_labels={"female": "Nữ", "male": "Nam"},
+    ),
+    "reup.dub_background_volume": SettingSpec(
+        key="reup.dub_background_volume",
+        type="str",
+        default_getter=lambda: "1.0",
+        title="Âm lượng nhạc nền khi thuyết minh",
+        section="Reup — lớp thêm",
+        description="Nhạc nền đã tách giọng, 0.0 – 1.0. Demucs hỏng thì dùng audio gốc ở 0.15.",
+    ),
     "reup.audio_voice_enabled": SettingSpec(
         key="reup.audio_voice_enabled",
         type="bool",

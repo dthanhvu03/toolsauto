@@ -31,6 +31,7 @@ class AIPurpose:
     STUDIO_TEST = "studio_test"
     SPLIT_PLAN = "split_plan"  # ADR-041: chọn chỗ cắt video dài
     FIRST_COMMENT = "first_comment"
+    DUB_TRANSLATE = "dub_translate"  # ADR-060: dịch lời thoại để thuyết minh
     GENERIC = "generic"
 
 
