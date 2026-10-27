@@ -1,19 +1,3 @@
-## Phiên 2026-10-27 (dg) — Thử deal thật + Zalo gõ nhiều số
-
-- Thử thật (đã backup trước khi ghi):
-  - soạn deal cho 3 danh mục chủ bot chọn (dep, nha, nu): 8 deal, 69 giây;
-  - 1 tin `DEALS` gửi Telegram chủ bot 07:35 UTC;
-  - 1 tin giới thiệu gửi Zalo "Thanh Vu" (-2) 07:37 UTC: gửi được.
-- Zalo: gõ nhiều số một tin ("1 3 5", "1,3,5") cho màn bật / tắt (danh mục deal, /thongbao). Màn khác báo "gõ từng số".
-- Tên món bỏ nhãn khuyến mãi đầu tên ("[MUA 2 TẶNG 1]", "【DAILY】"); giá lẻ hiện "64,5k" thay vì làm tròn xuống.
-- Tin giới thiệu: `messages.DEALS_ANNOUNCE`; bản Zalo đổi "Bấm nút dưới" thành "Gõ số 1". **Chưa gửi cho khách**, chờ chủ bot duyệt.
-- Proof: 873 test cashback qua.
-- **Next:**
-  - chủ bot restart;
-  - duyệt gửi tin giới thiệu cho khách đã tạo link.
-
----
-
 ## Phiên 2026-10-27 (df) — Deal hời theo danh mục, 20:08 mỗi tối
 
 - `deals.py` + `admin_deals.py` (⚙️ → 📣 → 🔥 Deal hời), mặc định tắt. Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 5.
