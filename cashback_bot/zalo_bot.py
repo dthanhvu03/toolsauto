@@ -69,7 +69,8 @@ def _load(raw: str | None) -> list[ZaloMessage]:
 # Gõ nhiều số một tin («1 3 5», «1,3,5»): chỉ cho các màn bật / tắt, bấm nhầm cũng bấm lại được.
 _MULTI_PICK = re.compile(r"\d{1,2}(?:[\s,;.]+\d{1,2})+")
 MULTI_PICK_PREFIXES = ("u:dc:t:", "u:n:t:")
-MULTI_PICK_ONLY = "Gõ nhiều số một lần chỉ dùng khi chọn danh mục deal hay bật / tắt thông báo. Ở đây gõ từng số nha."
+MULTI_PICK_ONLY = ("Gõ nhiều số một lần chỉ dùng để bật / tắt các mục có ✅. "
+                   "Số {numbers} là mở màn khác, bạn gõ riêng từng số nha.")
 
 class ZaloStore:
     """Bảng channel_identities, zalo_inbox và menu số gần nhất của khách (bot_state)."""
@@ -271,8 +272,9 @@ class ZaloChannel:
         if not all(1 <= n <= len(menu) for n in numbers):
             return BotReply(NUMBER_STALE)
         picked = [menu[n - 1] for n in dict.fromkeys(numbers)]
-        if not all(data.startswith(MULTI_PICK_PREFIXES) for data in picked):
-            return BotReply(MULTI_PICK_ONLY)
+        others = [str(n) for n in dict.fromkeys(numbers) if not menu[n - 1].startswith(MULTI_PICK_PREFIXES)]
+        if others:
+            return BotReply(MULTI_PICK_ONLY.format(numbers=", ".join(others)))
         reply = BotReply(NUMBER_STALE)
         for part, data in enumerate(picked):
             reply = self._press(internal, data, update_id, part)

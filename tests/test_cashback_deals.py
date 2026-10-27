@@ -191,7 +191,7 @@ def test_zalo_go_nhieu_so_mot_tin_de_chon_danh_muc(tmp_path):
     assert deals.user_categories(bot.repo, internal) == ["nu", "dep", "nha"], "đủ 3 mục thì không thêm"
     channel.handle(_update("menu", message_id="e"), now=BUILD)
     channel.handle(_update("1 2", message_id="f"), now=BUILD)
-    assert "chỉ dùng khi chọn danh mục deal" in zalo.sent[-1][1], "màn khác chỉ nhận một số"
+    assert "Số 1, 2 là mở màn khác" in zalo.sent[-1][1], "nút mở màn khác không gõ gộp được"
 
 
 def test_ten_mon_bo_nhan_khuyen_mai_va_gia_le():

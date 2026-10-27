@@ -252,10 +252,13 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
     if choices:
         add("\n\n")
         add(MENU_TITLE, bold=True)
-        options = any(not data.startswith("u:p:") for _label_text, data in choices)
+        def group(label: str, data: str) -> int:
+            # 0: mục bật / tắt (✅ / ⬜) · 1: lựa chọn khác · 2: điều hướng (u:p:*). Đổi nhóm thì cách một dòng.
+            return 0 if label[:2] in ("✅ ", "⬜ ") else (2 if data.startswith("u:p:") else 1)
+
         for number, (label, data) in enumerate(choices, start=1):
-            if options and data.startswith("u:p:") and not choices[number - 2][1].startswith("u:p:"):
-                add("\n")  # tách nút điều hướng (◀️ Trang chủ…) khỏi các lựa chọn
+            if number > 1 and group(label, data) != group(*choices[number - 2]):
+                add("\n")
             name = _label(label)
             # Màn bật / tắt: Zalo iPhone vẽ ⬜ thành khối xám to (chủ bot 2026-10-27). Mục chưa chọn để trơn,
             # mục đã chọn in đậm, ✅ đặt cuối.
