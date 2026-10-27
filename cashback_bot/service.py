@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -15,7 +18,7 @@ from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
 from cashback_bot import order_notify, payouts, policy_snapshot
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
-from cashback_bot.db import LinkRow, TrackingRepository
+from cashback_bot.db import LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
     CLOSED,
     CLOSED_ALERT,
@@ -28,6 +31,8 @@ from cashback_bot.messages import (
     TIKTOK_NO_INFO,
     TIKTOK_NOT_OPEN,
     TIKTOK_NOT_PROMOTABLE,
+    TIKTOK_WORKING,
+    with_tiktok,
     TIP_ALERT,
     TIPS_KEYBOARD,
     WALLET_CLOSED,
@@ -103,6 +108,11 @@ class CashbackService:
         self.riohub = riohub if riohub is not None else (
             RioHubClient(settings.riohub_api_key, settings.riohub_creator_username) if tiktok_configured else None
         )
+        # Tạo link TikTok chạy nền (rà soát P3). Test thay bằng hàm chạy ngay; tiến trình bot đặt after_deferred để đẩy
+        # tin vừa vào hàng đợi đi luôn (Telegram: flush_pending, Zalo: dispatcher.flush).
+        self._tiktok_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tiktok-link")
+        self.tiktok_runner: Callable[[Callable[[], None]], object] = self._tiktok_pool.submit
+        self.after_deferred: Callable[[], object] | None = None
         self.wallet = Wallet(repo)
         notify_cfg = order_notify.NotifyConfig(
             settings.customer_notifications_enabled, settings.customer_notification_test_ids
@@ -237,8 +247,18 @@ class CashbackService:
             return BotReply("", toast=STALE_BUTTON)
         return page
 
+    def tiktok_open(self) -> bool:
+        """TikTok Shop đã mở cho mọi khách (🎵 chế độ «all») và có khoá RioHub: trang chung nhắc cả hai sàn."""
+        return self.riohub is not None and admin_tiktok.current_mode(self.repo) == "all"
+
     def _page(self, name: str, user_id: int | None = None) -> BotReply | None:
         """Trang thông tin dùng chung cho lệnh gõ tay và nút u:p:*."""
+        page = self._page_body(name, user_id)
+        if page is not None and name in ("home", "guide", "calc", "tips") and self.tiktok_open():
+            return replace(page, text=with_tiktok(page.text))
+        return page
+
+    def _page_body(self, name: str, user_id: int | None = None) -> BotReply | None:
         wallet = self.wallet.settings()
         if name == "home":
             return home_reply(show_rank=MEMBERSHIP_CUTOVER, show_wallet=wallet.enabled)
@@ -488,7 +508,7 @@ class CashbackService:
                 self._reject(update_id, telegram_user_id, f"[link ShopeeFood · {len(stripped)} ký tự]", "food_link")
                 return food_link_reply()
             self._reject(update_id, telegram_user_id, f"[không phải link · {len(stripped)} ký tự]", "invalid_link")
-            return invalid_link_reply()
+            return self._invalid_link()
         gate = self.desk.terms_gate(telegram_user_id, moment)
         if gate is not None:
             return gate
@@ -625,10 +645,39 @@ class CashbackService:
             return gate
         try:
             sub_id = self._unique_sub_id()
-            made = self.riohub.create_product_link(url, sub_id)
         except ProductDataError:
             self._reject(update_id, telegram_user_id, url, "link_build_failed")
             return BotReply(GENERIC_FAIL)
+        # Rà soát P3: RioHub có thể treo tới 60–90 giây (3 địa chỉ × 20 giây). Gọi ở luồng riêng để vòng nhận tin
+        # không đứng; thẻ link đi qua hàng đợi chung (Telegram + Zalo) và được đẩy đi ngay khi xong.
+        self.tiktok_runner(lambda: self._tiktok_deliver(update_id, telegram_user_id, url, sub_id, moment))
+        return BotReply(TIKTOK_WORKING)
+
+    def _tiktok_deliver(self, update_id: int | None, telegram_user_id: int, url: str, sub_id: str,
+                        moment: datetime) -> None:
+        try:
+            reply = self._tiktok_build(update_id, telegram_user_id, url, sub_id, moment)
+        except Exception:
+            logger.exception("[Cashback] tạo link TikTok lỗi")
+            reply = BotReply(GENERIC_FAIL)
+        markup = reply.markup()
+        with self.repo.connect() as conn:
+            enqueue_event(
+                conn, event_key=f"tiktok_link:{sub_id}", event_type="LINK_READY", chat_id=telegram_user_id,
+                message_html=reply.text, audience="customer", category="link_ready",
+                reply_markup_json=json.dumps(markup, ensure_ascii=False) if markup else None,
+                source_ref=f"update:{update_id}",
+            )
+        if self.after_deferred is not None:
+            try:
+                self.after_deferred()
+            except Exception:
+                logger.exception("[Cashback] gửi thẻ link TikTok ngay lỗi; vòng sau sẽ gửi")
+
+    def _tiktok_build(self, update_id: int | None, telegram_user_id: int, url: str, sub_id: str,
+                      moment: datetime) -> BotReply:
+        try:
+            made = self.riohub.create_product_link(url, sub_id)
         except RioHubError as exc:
             logger.info("[Cashback] riohub từ chối link kind=%s code=%s", exc.kind, exc.code or "-")
             self._reject(update_id, telegram_user_id, url, f"tiktok_{exc.kind}")
@@ -686,6 +735,10 @@ class CashbackService:
             return BotReply(GENERIC_FAIL)
         render = render_success_v12 if v12 else render_success
         return render(name, price_vnd, priced.cashback_vnd, made.affiliate_link, tiktok=True)
+
+    def _invalid_link(self) -> BotReply:
+        reply = invalid_link_reply()
+        return replace(reply, text=with_tiktok(reply.text)) if self.tiktok_open() else reply
 
     def _v12_ready(self) -> bool:
         if self.settings.estimate_policy != "v1.2":
@@ -754,7 +807,7 @@ class CashbackService:
         if row.reject_reason in _NOT_FOUND_CODES:
             return BotReply(NOT_FOUND)
         if row.reject_reason == "invalid_link":
-            return invalid_link_reply()
+            return self._invalid_link()
         if row.reject_reason == "food_link":
             return food_link_reply()
         # Link TikTok bị từ chối: trả đúng lý do như lần đầu (rà soát 2026-10-26).

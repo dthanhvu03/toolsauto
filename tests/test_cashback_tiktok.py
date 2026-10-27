@@ -3,14 +3,17 @@ PLAN-095 (giai đoạn B): đồng bộ đơn. RioHub giả, không gọi mạng
 
 from __future__ import annotations
 
+import json
+import re
 import sqlite3
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from cashback_bot import admin_stats, admin_tiktok, insights, reconciliation, tiktok_sync
 from cashback_bot.admin_notify import AdminNotifier
-from cashback_bot.messages import TIKTOK_BUY_BUTTON
+from cashback_bot.messages import TIKTOK_BUY_BUTTON, TIKTOK_OPEN_PHRASES, TIKTOK_WORKING, BotReply
 from cashback_bot.riohub_client import ProductLink, RioHubError
 from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.zalo_render import TIKTOK_BUY_LEAD, render
@@ -55,7 +58,22 @@ def _bot(tmp_path, riohub=None, **overrides):
     overrides.setdefault("allowed_telegram_ids", frozenset({ADMIN, BUYER}))
     bot = service(tmp_path, FakeClient(payload()), **overrides)
     bot.riohub = FakeRioHub() if riohub is None else riohub
+    bot.tiktok_runner = lambda job: job()  # chạy ngay thay vì luồng nền
     return bot
+
+
+def _ask(bot, user: int, text: str, update_id: int) -> BotReply:
+    """Gửi link TikTok: bot trả «đang tạo» ngay, thẻ link (hoặc lỗi) tới qua hàng đợi chung (rà soát P3)."""
+    first = bot.handle_text(user, "u", text, update_id=update_id, now=NOW)
+    assert first.text == TIKTOK_WORKING
+    with bot.repo.connect() as conn:
+        row = conn.execute("SELECT message_html, reply_markup_json FROM admin_notifications WHERE event_type = 'LINK_READY' "
+                           "AND chat_id = ? ORDER BY id DESC", (user,)).fetchone()
+    rows = json.loads(row["reply_markup_json"])["inline_keyboard"] if row["reply_markup_json"] else []
+    url = rows[0][0] if rows and "url" in rows[0][0] else None
+    keyboard = tuple(tuple((b["text"], b["callback_data"]) for b in r) for r in rows if "url" not in r[0])
+    return BotReply(row["message_html"], button_url=url and url["url"], button_label=url and url["text"],
+                    inline_keyboard=keyboard or None)
 
 
 def _links(bot):
@@ -82,7 +100,7 @@ def test_nhan_link_tiktok_shop():
 
 def test_admin_tao_link_tiktok_va_bao_gia(tmp_path):
     bot = _bot(tmp_path)
-    reply = bot.handle_text(ADMIN, "admin", LINK, update_id=1, now=NOW)
+    reply = _ask(bot, ADMIN, LINK, 1)
     assert "🎵 TikTok Shop" in reply.text and "Máy mài chân KY Y5" in reply.text and "300.000đ" in reply.text
     assert "TikTok xác nhận đơn hợp lệ" in reply.text and "Shopee" not in reply.text
     assert reply.markup()["inline_keyboard"][0][0] == {"text": TIKTOK_BUY_BUTTON, "url": "https://www.tiktok.com/t/ZSgCQR9y3/"}
@@ -97,6 +115,27 @@ def test_admin_tao_link_tiktok_va_bao_gia(tmp_path):
     assert replay.text == reply.text and replay.button_label == TIKTOK_BUY_BUTTON, "Telegram gửi lại cùng update"
     zalo = render(reply)[0]
     assert zalo[-1].text.startswith(TIKTOK_BUY_LEAD) and "Bấm link ở tin dưới" in zalo[0].text
+
+
+def test_tao_link_tiktok_khong_chan_vong_nhan_tin(tmp_path):
+    bot = _bot(tmp_path)
+    jobs, flushed = [], []
+    bot.tiktok_runner = jobs.append
+    bot.after_deferred = lambda: flushed.append(True)
+    reply = bot.handle_text(ADMIN, "admin", LINK, update_id=1, now=NOW)
+    assert reply.text == TIKTOK_WORKING and bot.riohub.calls == [], "trả lời ngay, chưa gọi RioHub"
+    (job,) = jobs
+    job()
+    assert len(bot.riohub.calls) == 1 and flushed == [True], "xong thì đẩy hàng đợi đi ngay"
+    with bot.repo.connect() as conn:
+        (event,) = conn.execute("SELECT chat_id, audience, category, message_html FROM admin_notifications "
+                                "WHERE event_type = 'LINK_READY'").fetchall()
+    assert (event["chat_id"], event["audience"], event["category"]) == (ADMIN, "customer", "link_ready")
+    assert "Máy mài chân KY Y5" in event["message_html"]
+    broken = _bot(tmp_path / "b")
+    broken.tiktok_runner = lambda job: job()
+    broken.riohub.create_product_link = lambda *_a: (_ for _ in ()).throw(RuntimeError("treo"))
+    assert "Chưa tạo được link" in _ask(broken, ADMIN, LINK, 1).text, "lỗi lạ vẫn báo khách"
 
 
 def test_che_do_mac_dinh_chi_admin(tmp_path):
@@ -118,14 +157,14 @@ def test_chua_co_khoa_riohub_thi_chua_ho_tro(tmp_path):
 
 def test_loi_riohub(tmp_path):
     bot = _bot(tmp_path, riohub=FakeRioHub(error=RioHubError("not_promotable", 422, "product_not_promotable")))
-    assert "không có hoa hồng TikTok" in bot.handle_text(ADMIN, "a", LINK, update_id=1, now=NOW).text
+    assert "không có hoa hồng TikTok" in _ask(bot, ADMIN, LINK, 1).text
     admin = FakeAdmin()
     bot = _bot(tmp_path / "b", riohub=FakeRioHub(error=RioHubError("creator", 424, "creator_token_invalid")))
     bot.admin_notifier = admin
-    assert "Chưa tạo được link" in bot.handle_text(ADMIN, "a", LINK, update_id=1, now=NOW).text
+    assert "Chưa tạo được link" in _ask(bot, ADMIN, LINK, 1).text
     assert admin.failed == ["riohub_creator"] and _links(bot)[0]["reject_reason"] == "tiktok_creator"
     bot = _bot(tmp_path / "c", riohub=FakeRioHub(product=None))
-    assert "Chưa lấy được thông tin sản phẩm TikTok" in bot.handle_text(ADMIN, "a", LINK, update_id=1, now=NOW).text
+    assert "Chưa lấy được thông tin sản phẩm TikTok" in _ask(bot, ADMIN, LINK, 1).text
     assert _links(bot)[0]["reject_reason"] == "tiktok_no_product"
 
 
@@ -370,3 +409,27 @@ def test_gui_lai_link_tiktok_bi_tu_choi_tra_dung_ly_do(tmp_path):
     first = bot.handle_text(BUYER, "khach", LINK, update_id=7, now=NOW)
     again = bot.handle_text(BUYER, "khach", LINK, update_id=7, now=NOW)
     assert "chưa hỗ trợ link TikTok Shop" in first.text and again.text == first.text
+
+
+def _press(bot, user: int, data: str) -> BotReply:
+    return bot._customer_callback(user, data, "private")
+
+
+def test_mo_tiktok_cho_khach_thi_trang_chung_nhac_ca_hai_san(tmp_path):
+    source = (Path(__file__).resolve().parents[1] / "cashback_bot" / "messages.py").read_text(encoding="utf-8") + \
+        (Path(__file__).resolve().parents[1] / "cashback_bot" / "zalo_render.py").read_text(encoding="utf-8")
+    for old, _new in TIKTOK_OPEN_PHRASES:
+        assert old in re.sub(r'"\s*\n\s*(?:\+\s*)?"', "", source), f"câu gốc đã đổi, cập nhật TIKTOK_OPEN_PHRASES: {old}"
+    bot = _bot(tmp_path)
+    pages = ("u:p:home", "u:p:guide", "u:p:calc", "u:p:tips")
+    closed = {p: _press(bot, BUYER, p).text for p in pages}
+    assert not any("TikTok" in text for text in closed.values()), "chưa mở cho khách thì không nhắc TikTok"
+    bot.repo.set_state(admin_tiktok.MODE_KEY, "all")
+    opened = {p: _press(bot, BUYER, p).text for p in pages}
+    assert "Shopee, TikTok Shop" in opened["u:p:home"] and "Shopee hoặc TikTok Shop" in opened["u:p:guide"]
+    assert "sàn (Shopee, TikTok Shop)" in opened["u:p:calc"] and "không bảo đảm sàn" in opened["u:p:tips"]
+    assert "vt.tiktok.com" in bot.handle_text(BUYER, "khach", "xin chào", update_id=5, now=NOW).text
+    zalo_guide = render(BotReply(opened["u:p:guide"]))[0][0].text
+    assert "Cách dùng trên Zalo" in zalo_guide and "TikTok Shop" in zalo_guide
+    bot.riohub = None
+    assert "TikTok" not in _press(bot, BUYER, "u:p:home").text, "chưa có khoá RioHub thì coi như chưa mở"

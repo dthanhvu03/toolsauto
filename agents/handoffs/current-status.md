@@ -1,3 +1,24 @@
+## Phiên 2026-10-27 (dc) — Chuẩn bị mở TikTok cho khách
+
+- Chủ bot cho biết RioHub thuộc hệ sinh thái AddLiveTag và **đã đồng ý** (memory `riohub-addlivetag-consent`).
+- Rà soát P3 (đã xử lý):
+  - tạo link TikTok chạy ở luồng nền (`service.tiktok_runner`, 2 luồng);
+  - khách nhận ngay "⏳ Đang tạo link TikTok Shop…", thẻ link / lỗi đi qua hàng đợi chung (`LINK_READY`, category `link_ready`);
+  - đẩy đi ngay bằng `service.after_deferred` (Telegram: `flush_pending`, Zalo: `dispatcher.flush`). Vòng nhận tin không còn đứng khi RioHub treo.
+- Trang chung theo chế độ TikTok (`messages.TIKTOK_OPEN_PHRASES` / `with_tiktok`):
+  - khi 🎵 = "Mở cho khách" và có khoá, trang chủ, hướng dẫn (cả Zalo), cách tính, để được ghi nhận, câu báo link sai, lời chào Zalo nhắc cả Shopee lẫn TikTok Shop;
+  - chưa mở thì giữ nguyên.
+- Còn lại trước khi mở:
+  - điều khoản đang công bố là V2, chỉ nói Shopee (V3 trung tính chưa công bố);
+  - mô tả bot Telegram (DESCRIPTION) chưa đổi;
+  - đơn `pit` âm chưa quyết.
+- Proof: 859 test cashback qua.
+- **Next:**
+  - chủ bot restart;
+  - bật 🎵 TikTok Shop → Mở cho khách khi sẵn sàng.
+
+---
+
 ## Phiên 2026-10-27 (db) — Cảnh báo món chạm trần hoa hồng Shopee
 
 - Nghiên cứu: trần phần Shopee trả của tài khoản chủ bot là **40.000đ mỗi lần thanh toán** (`checkout_cap` trong dữ liệu đơn); nguồn công khai ghi 50–70k, tuỳ tài khoản.

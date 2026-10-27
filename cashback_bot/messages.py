@@ -226,6 +226,11 @@ _NOTE_TIKTOK_V12 = (
     "Số hoàn tính theo giá tham khảo, sau dự phòng phí và thuế. "
     "Chỉ được hoàn khi TikTok xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
 )
+# Rà soát P3: tạo link TikTok chạy nền, thẻ link tới sau vài giây qua hàng đợi chung.
+TIKTOK_WORKING = (
+    "⏳ <b>Đang tạo link TikTok Shop…</b>\n"
+    "Vài giây nữa bot gửi link và số hoàn nhé. Quá 1 phút chưa thấy thì bạn gửi lại link."
+)
 TIKTOK_NOT_OPEN = (
     "🎵 <b>Bot chưa hỗ trợ link TikTok Shop</b>\n"
     "Hiện bot chỉ hoàn tiền cho sản phẩm Shopee. Bạn gửi link shopee.vn hoặc s.shopee.vn nhé."
@@ -337,6 +342,31 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
     lines += ["", f"ⓘ <i>{note}</i>", "", TIKTOK_BUY_HINT if tiktok else BUY_HINT]
     return BotReply(text="\n".join(lines), button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD,
                     button_label=TIKTOK_BUY_BUTTON if tiktok else None)
+
+
+# Khi admin mở TikTok Shop cho khách (🎵 chế độ «all»), các trang chung nhắc cả hai sàn. Chưa mở thì giữ nguyên chữ
+# Shopee để không hứa điều bot chưa làm. Câu gốc phải còn nguyên văn trong messages.py / zalo_render.py (test canh).
+TIKTOK_OPEN_PHRASES = (
+    ("Xem món Shopee được hoàn bao nhiêu", "Xem món Shopee, TikTok Shop được hoàn bao nhiêu"),
+    ("Dán link sản phẩm Shopee", "Dán link sản phẩm Shopee hoặc TikTok Shop"),
+    ("Mở sản phẩm trên Shopee,", "Mở sản phẩm trên Shopee hoặc TikTok Shop,"),
+    ("và nút <b>🛒 Mua trên Shopee</b>.", "và nút <b>🛒 Mua</b>."),
+    ("và link <b>🛒 Mua trên Shopee</b>.", "và link <b>🛒 Mua</b>."),
+    ("Bạn thanh toán trực tiếp trên Shopee.", "Bạn thanh toán trực tiếp trên Shopee hoặc TikTok Shop."),
+    ("<b>không bảo đảm Shopee sẽ ghi nhận hoa hồng</b>", "<b>không bảo đảm sàn sẽ ghi nhận hoa hồng</b>"),
+    ("Shopee trả cho chương trình một khoản hoa hồng", "sàn (Shopee, TikTok Shop) trả cho chương trình một khoản hoa hồng"),
+    ("Shopee tính trên số tiền bạn thực trả", "Sàn tính trên số tiền bạn thực trả"),
+    ("khi Shopee đối soát xong", "khi sàn đối soát xong"),
+    ("khi Shopee đã duyệt và thanh toán hoa hồng", "khi sàn đã duyệt và thanh toán hoa hồng"),
+    ("Mình cần link sản phẩm Shopee: shopee.vn hoặc link rút gọn s.shopee.vn.",
+     "Mình cần link sản phẩm Shopee (shopee.vn, s.shopee.vn) hoặc TikTok Shop (vt.tiktok.com)."),
+)
+
+
+def with_tiktok(text: str) -> str:
+    for old, new in TIKTOK_OPEN_PHRASES:
+        text = text.replace(old, new)
+    return text
 
 
 def home_reply(show_rank: bool = False, show_wallet: bool = False) -> BotReply:

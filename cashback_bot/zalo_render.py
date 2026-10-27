@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-from cashback_bot.messages import HUONGDAN, TIKTOK_BUY_BUTTON, BotReply
+from cashback_bot.messages import HUONGDAN, TIKTOK_BUY_BUTTON, BotReply, with_tiktok
 
 MAX_LEN = 2000
 STYLE_CODES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "ins": "u", "s": "s", "del": "s", "strike": "s"}
@@ -221,7 +221,11 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
     """
     # Telegram hiện toast thành popup; Zalo không có popup nên đặt toast lên đầu tin.
     body = f"{reply.toast}\n\n{reply.text}" if reply.text and reply.toast else reply.text or reply.toast or ""
-    card_text, card_styles = flatten(zalo_wording(GUIDE if body == HUONGDAN else body))
+    if body == HUONGDAN:
+        body = GUIDE
+    elif body == with_tiktok(HUONGDAN):
+        body = with_tiktok(GUIDE)  # TikTok đã mở cho khách: hướng dẫn Zalo cũng nhắc cả hai sàn
+    card_text, card_styles = flatten(zalo_wording(body))
     if reply.button_url:
         text, styles = "", []
     else:

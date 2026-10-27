@@ -21,7 +21,7 @@ from cashback_bot import ops_watch
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import BotReply
+from cashback_bot.messages import BotReply, with_tiktok
 from cashback_bot.notify_dispatch import Dispatcher
 from cashback_bot.poller import ZALO_HEARTBEAT_KEY, _acquire_single_process_lock, _default_dotenv, configure_logging
 from cashback_bot.product_data import ProductDataClient
@@ -199,7 +199,8 @@ class ZaloChannel:
             self._notify_failed(update_id, internal)
         messages, menu = render(reply)
         if is_new:
-            messages = render(BotReply(WELCOME))[0] + messages
+            welcome = with_tiktok(WELCOME) if self.service.tiktok_open() else WELCOME
+            messages = render(BotReply(welcome))[0] + messages
             self._capacity_check()
         self.store.set_menu(internal, menu, moment)
         self.store.save_reply(int(row["id"]), messages)
@@ -373,6 +374,8 @@ def main() -> None:
     # Tin admin do bot Telegram gửi; tiến trình này chỉ gửi tin khách Zalo (chat_id âm).
     dispatcher = Dispatcher(repo, ZaloSender(api, store), False, None, settings.customer_notifications_enabled,
                             settings.customer_notification_test_ids, channel=CHANNEL)
+    # Thẻ link TikTok tạo ở luồng nền: vào hàng đợi rồi gửi ngay, không chờ hết vòng getUpdates 30 giây.
+    service.after_deferred = lambda: dispatcher.flush(limit=5)
     try:
         me = api.get_me()
         logger.info("zalo start bot=%s type=%s customer_notify=%s", me.get("display_name"), me.get("account_type"),
