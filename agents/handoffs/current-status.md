@@ -1,3 +1,15 @@
+## Phiên 2026-10-27 (cy) — Tin nhắc sale giọng Gen Z đậm
+
+- Chủ bot xem 3 mức giọng (Gen Z vui / Gen Z đậm / thân thiện nhẹ nhàng) và chọn **Gen Z đậm**.
+- Viết lại cả 12 câu `messages.SALE_REMINDERS` + dòng tắt ("Phiền quá thì gõ /thongbao tắt nhắc nha 🫶").
+  - Vẫn giữ: không hứa số tiền, nhắc món trong giỏ, dưới 260 ký tự.
+- Proof: 852 test cashback qua.
+- **Next:**
+  - chủ bot restart `systemctl restart cashback-bot cashback-zalo`;
+  - xem lại giọng sau 2–3 tháng (tỷ lệ tắt nhắc).
+
+---
+
 ## Phiên 2026-10-27 (cx) — Thử Zalo nhắn chủ động
 
 - Chủ bot xác nhận Zalo "Thanh Vu" (ID nội bộ -2) là của mình. 03:20 UTC 27/10 gửi 1 tin thử chủ động (sendMessage ngoài luồng trả lời): **thành công**.

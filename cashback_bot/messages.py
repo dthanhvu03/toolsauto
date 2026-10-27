@@ -807,49 +807,50 @@ FIRST_ORDER = "🎉 <b>Đơn đầu tiên của bạn qua bot đó!</b>"
 # thẳng từ giỏ: mất hoàn.
 # Mỗi tin: mốc thời gian · một việc cần làm (gửi link trước khi chốt đơn) · nhắc món trong giỏ. Không hứa số tiền.
 SALE_REMINDERS = {
-    ("double", "eve"): (
-        "🛒 <b>Mai {label} rồi, giỏ hàng sẵn chưa?</b>\n"
-        "Nhớ gửi link qua bot <b>trước khi chốt đơn</b> để được hoàn tiền nha.\n"
-        "Món nằm sẵn trong giỏ thì xoá đi, mở lại bằng link bot gửi nhé.",
-        "⏰ <b>0h đêm nay {label} mở sale</b>\n"
-        "Thấy món ưng thì dán link vào đây, bot gửi lại link có hoàn tiền.\n"
-        "Mua thẳng từ giỏ hàng là không được hoàn đâu nha.",
-    ),
-    # Siêu sale (9.9, 10.10) và đỉnh (11.11, 12.12): khách gom giỏ nhiều ngày trước, nhấn mạnh chuyện giỏ hàng.
+    # Giọng Gen Z đậm (chủ bot chọn 2026-10-27). Vẫn giữ: không hứa số tiền, luôn nhắc món trong giỏ, có cách tắt.
     ("super", "eve"): (
-        "🔥 <b>Mai siêu sale {label} rồi, giỏ hàng full chưa?</b>\n"
-        "Nhớ gửi link qua bot <b>trước khi chốt đơn</b> để được hoàn tiền nha.\n"
-        "Món gom sẵn trong giỏ thì xoá đi, mở lại bằng link bot gửi nhé, không là mất hoàn đó.",
-        "⏰ <b>0h đêm nay siêu sale {label} mở màn</b>\n"
-        "Món nào đang chờ chốt thì dán link vào đây trước, bot gửi lại link có hoàn tiền.\n"
-        "Mua thẳng từ giỏ hàng là không được hoàn đâu nha.",
+        "🚨 <b>Ét o ét! Mai {label} sale đỉnh nóc kịch trần rồi nè</b> 🔥\n"
+        "Chốt đơn qua link bot để còn được hoàn, khum là phí lắm á 🥲\n"
+        "🛒 Đồ gom sẵn trong giỏ thì xoá rồi mở lại bằng link bot nha bestie 💅",
+        "⏰ <b>0h đêm nay {label} mở màn, ví ơi chuẩn bị tinh thần</b> 💸\n"
+        "Lướt trúng món nào thì quăng link cho bot trước nha, chốt xong còn được hoàn 😎\n"
+        "🛒 Mua thẳng từ giỏ là toang, mất hoàn liền á!",
     ),
     ("super", "day"): (
-        "🔥 <b>{label} còn sale tới hết hôm nay</b>\n"
-        "Khung 12h sắp mở, mua gì nhớ dán link vào bot trước nha để được hoàn.",
-        "🔥 <b>Hôm nay {label}, khung 12h sắp mở</b>\n"
-        "Gửi link qua bot trước khi chốt đơn để được hoàn nha. Món trong giỏ thì mở lại bằng link bot.",
+        "🔥 <b>{label} còn sale tới hết hôm nay nha mấy bà</b>\n"
+        "Khung 12h sắp mở, quăng link cho bot trước rồi hẵng chốt nha, có hoàn mới vui 🫶",
+        "🛒 <b>Khung 12h {label} sắp mở rồi nè</b>\n"
+        "Chốt gì cũng ghé bot lấy link trước nha bestie, món trong giỏ thì mở lại bằng link bot 💅",
     ),
-    ("blackfriday", "eve"): (
-        "🖤 <b>Mai Black Friday, sale cả ngày</b>\n"
-        "Mua gì nhớ dán link vào bot <b>trước khi chốt đơn</b> để được hoàn nha. Món trong giỏ thì mở lại bằng link bot.",
-        "🖤 <b>Black Friday tới rồi</b>\n"
-        "Có món đang ngắm thì gửi link qua bot trước khi mua nha, để được hoàn tiền.",
+    ("double", "eve"): (
+        "🛒 <b>Mai {label} rồi nè, giỏ hàng đầy chưa</b> 👀\n"
+        "Nhớ quăng link cho bot trước khi chốt đơn nha, được hoàn mới là đỉnh 💸\n"
+        "Đồ nằm sẵn trong giỏ thì xoá rồi mở lại bằng link bot nha!",
+        "⏰ <b>0h đêm nay sale {label} nha mấy bà</b>\n"
+        "Chốt đơn qua link bot để còn được hoàn, khum là tiếc hùi hụi á 🥲\n"
+        "🛒 Đồ trong giỏ thì mở lại bằng link bot nha!",
     ),
     ("mid", "eve"): (
-        "💸 <b>Mai 15 sale giữa tháng</b>\n"
-        "Có món đang ngắm thì gửi link qua bot <b>trước khi chốt đơn</b> để được hoàn nha.",
-        "💸 <b>Mai sale giữa tháng nè</b>\n"
-        "Mua gì cũng dán link vào bot trước nha. Món trong giỏ thì mở lại bằng link bot gửi.",
+        "💸 <b>Mai 15 sale giữa tháng nè</b>\n"
+        "Món nào đang ngắm thì quăng link cho bot trước khi chốt nha, săn deal mà còn được hoàn thì đỉnh của chóp 😎",
+        "👀 <b>Giữa tháng rồi, mai có sale nha bestie</b>\n"
+        "Gửi link cho bot trước rồi hẵng chốt, đồ trong giỏ thì mở lại bằng link bot nha 💅",
     ),
     ("payday", "eve"): (
-        "💸 <b>Mai 25 sale cuối tháng, lương về rồi</b>\n"
-        "Mua gì nhớ dán link vào bot <b>trước khi chốt đơn</b> để được hoàn nha.",
-        "💸 <b>Mai sale cuối tháng rồi</b>\n"
-        "Món đang nằm trong giỏ thì xoá đi, mở lại bằng link bot gửi để được hoàn nha.",
+        "💸 <b>Lương về rồi, mai 25 sale nè mấy bà ơi!</b>\n"
+        "Gửi link cho bot trước khi chốt để còn được hoàn nha, khum thì tiếc lắm á 🥹",
+        "😌 <b>Mai 25 sale cuối tháng, ví dày lên chút rồi đúng hơm</b>\n"
+        "Quăng link cho bot trước rồi hẵng chốt nha, đồ trong giỏ thì mở lại bằng link bot 🛒",
+    ),
+    ("blackfriday", "eve"): (
+        "🖤 <b>Mai Black Friday, sale cả ngày luôn nè</b>\n"
+        "Chốt gì cũng quăng link cho bot trước nha bestie, được hoàn mới chill 😎\n"
+        "🛒 Đồ trong giỏ thì xoá rồi mở lại bằng link bot nha!",
+        "🖤 <b>Black Friday tới nơi rồi mấy bà ơi</b> 🔥\n"
+        "Lướt trúng món ưng thì gửi link cho bot trước khi chốt nha, khum là mất hoàn á 🥲",
     ),
 }
-SALE_REMINDER_FOOTER = "ⓘ Không muốn nhận nhắc mùa sale thì gõ /thongbao để tắt."
+SALE_REMINDER_FOOTER = "Phiền quá thì gõ /thongbao tắt nhắc nha 🫶"
 
 
 def sale_reminder(kind: str, stage: str, label: str, seed: str) -> str:

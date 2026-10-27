@@ -66,7 +66,7 @@ def test_chi_gui_khi_admin_duyet_va_dung_gio(tmp_path):
         engagement.tick(bot.repo, admin, slot.at + timedelta(minutes=5))
     sent = _rows(bot, "SELECT chat_id, category, message_html FROM admin_notifications WHERE event_type = 'SALE_REMINDER'")
     assert [(chat, cat) for chat, cat, _ in sent] == [(USER, "reminder")]
-    assert "siêu sale 11.11" in sent[0][2] and "giỏ hàng" in sent[0][2]
+    assert "11.11" in sent[0][2] and "giỏ" in sent[0][2] and "/thongbao" in sent[0][2]
     assert engagement.record(bot.repo, slot.id)["status"] == "sent"
 
 

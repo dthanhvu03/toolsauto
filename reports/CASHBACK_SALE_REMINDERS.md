@@ -62,11 +62,11 @@ Nguyên tắc:
 1. **Mốc thời gian lên đầu, in đậm**: "Mai 11.11 rồi", "0h đêm nay 11.11 mở sale". Khách hiểu ngay đây là tin gì.
 2. **Một việc cần làm**: gửi link qua bot *trước khi chốt đơn*.
 3. **Nhắc chuyện giỏ hàng.** Ngày sale khách hay gom giỏ từ trước rồi mua thẳng từ giỏ, nên không qua link và mất hoàn. Đây là lý do mất hoàn lớn nhất của ngày sale.
-4. **Không hứa số tiền, không phóng đại** ("hoàn tận…", 🤑): quanh chuyện tiền, giọng càng "trend" càng giống lừa đảo.
-5. **Giọng bạn bè** (*nha, nhé, giỏ hàng sẵn chưa, lương về rồi*), không dùng từ lóng ngắn hạn.
+4. **Không hứa số tiền** ("hoàn tận…", 🤑).
+5. **Giọng Gen Z đậm** (chủ bot chọn 2026-10-27, sau khi xem 3 mức): *ét o ét, đỉnh nóc kịch trần, khum, bestie, mấy bà, quăng link, toang, chill*. Em từng khuyên mức "vừa" vì từ lóng nhanh lỗi thời và người 30+ có thể thấy lạ. Nên xem lại sau 2–3 tháng: tỷ lệ tắt nhắc, từ nào đã cũ.
 6. **Ngắn**: 2–3 dòng, dưới 260 ký tự, đọc được trên màn hình khoá.
-7. **Cách tắt ở cuối**: "gõ /thongbao để tắt". Trên Zalo tự đổi thành "gõ thongbao".
-8. Mỗi loại có **2 câu**, luân phiên theo ngày để các dịp liền nhau không trùng câu. Siêu sale / đỉnh có câu riêng nhấn mạnh "giỏ hàng full chưa", vì khách gom giỏ nhiều ngày trước.
+7. **Cách tắt ở cuối**: "Phiền quá thì gõ /thongbao tắt nhắc nha 🫶". Trên Zalo tự đổi thành "gõ thongbao".
+8. Mỗi loại có **2 câu**, luân phiên theo ngày để các dịp liền nhau không trùng câu. Siêu sale / đỉnh có câu riêng nhấn mạnh đồ gom sẵn trong giỏ, vì khách gom giỏ nhiều ngày trước.
 
 Câu đang dùng: `messages.SALE_REMINDERS`.
 
