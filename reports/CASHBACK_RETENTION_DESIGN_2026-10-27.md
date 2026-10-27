@@ -4,8 +4,30 @@
 |---|---|
 | Ngày | 2026-10-27 |
 | Người viết | Claude Code (chủ bot yêu cầu: "nghiên cứu thiết kế thêm hệ thống giữ chân") |
-| Trạng thái | **Bản thiết kế, chưa triển khai.** Mọi tin chủ động gửi cho khách cần chủ bot duyệt cách gửi và nội dung |
+| Trạng thái | **Đã tự phản biện (mục 0), lộ trình rút gọn.** Đợt 1 đã làm. Mọi tin chủ động gửi cho khách cần chủ bot duyệt cách gửi và nội dung |
 | Phạm vi | Telegram + Zalo; Shopee + TikTok Shop |
+
+## 0. Tự phản biện (đọc trước, thay lộ trình ở mục 9)
+
+| # | Chỗ sai | Sửa |
+|---|---|---|
+| 1 | "13/16 chỉ dùng 1 ngày" là kết luận quá sớm: bot mới chạy 6 ngày, khách vào 25–26/10 chưa có thời gian quay lại. Mốc "14 ngày là người ngủ" có thể chỉ là nhịp mua Shopee bình thường | Đo 30 ngày rồi mới kết luận. Bảng 🔁 Giữ chân ghi "chưa tới" / "đang đo" thay vì 0% |
+| 2 | Chữa triệu chứng. Khách quay lại khi **đã nhận tiền**, nhưng ví chưa mở lại bị xếp cuối (tầng E) | Ưu tiên đường tới khoản hoàn đầu tiên (mở ví) |
+| 3 | Quá to so với 16 khách (5 tầng, migration, màn chiến dịch) | Dưới ~100 khách: chủ bot tự nhắn tay. Chưa xây tầng C / D |
+| 4a | "Ghim thì bot hiện trong khung Chia sẻ của Shopee": chưa thử | Bỏ mẹo ghim cho tới khi thử được |
+| 4b | Giờ yên lặng 21:30–8:00 chặn đúng giờ 0h của ngày sale | Khi làm tầng C: đêm sale được nhắc tới 0h |
+| 4c | Nhắc link chưa dùng dựa vào click về trễ (4 giờ) và không đầy đủ: dễ nhắc nhầm người đã mua, dễ thấy "bị theo dõi" | Hoãn A2 |
+| 4d | Nguồn tham khảo yếu; chưa so mức hoàn với các bot hoàn tiền khác ở VN | Nghiên cứu đối thủ |
+| 5 | Trần 50 người / bot Zalo tới sớm hơn vấn đề giữ chân | Đặt lên trước |
+
+**Lộ trình rút gọn:**
+1. Câu chữ: mừng đơn đầu, câu mời quay lại cuối tin báo đơn. ✅ Đã làm 2026-10-27.
+2. Thử 1 tin Zalo chủ động tới chủ bot. Chờ chủ bot xác nhận tài khoản.
+3. 11.11: chủ bot tự nhắn tay. Không xây hệ thống chiến dịch.
+4. Bảng 🔁 Giữ chân đo đúng (chưa tới / đang đo). ✅ Đã làm 2026-10-27.
+5. Mở ví và xử lý trần 50 người Zalo.
+6. So mức hoàn với các bot hoàn tiền khác.
+7. Từ ~100 khách: mới xây tầng C / D, có rào chắn.
 
 ## 1. Hiện trạng (DB production, đọc ngày 2026-10-27)
 

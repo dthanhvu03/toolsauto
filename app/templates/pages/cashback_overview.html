@@ -160,7 +160,7 @@
     <div class="cb-h">Giữ chân theo tuần vào</div>
     <table class="cb-table"><tr><th>Tuần</th><th class="num">Khách</th><th class="num">Tuần sau</th><th class="num">Tuần 4</th></tr>
     {% for k in view.cohorts %}<tr><td>{{ k.week }}</td><td class="num">{{ k.size }}</td>
-      <td class="num">{{ pct(k.next_week, k.size) }}</td><td class="num">{{ pct(k.week_4, k.size) }}</td></tr>{% endfor %}
+      <td class="num">{{ k.next_text }}</td><td class="num">{{ k.week4_text }}</td></tr>{% endfor %}
     </table>
   </div>
 </div>

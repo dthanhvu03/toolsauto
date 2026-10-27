@@ -1,3 +1,19 @@
+## Phiên 2026-10-27 (cv) — Giữ chân đợt 1 + tự phản biện thiết kế
+
+- Bản thiết kế có thêm mục 0 "Tự phản biện" và lộ trình rút gọn.
+- Tin báo đơn:
+  - đơn đầu tiên của khách có dòng "🎉 Đơn đầu tiên của bạn qua bot đó!";
+  - cuối tin (trừ đơn huỷ / không đủ điều kiện) có 1 câu mời quay lại, đổi luân phiên theo mã đơn.
+  - Không gửi thêm tin nào.
+- Bảng 🔁 Giữ chân (Telegram + web) trước đây ghi 0% cho tuần chưa tới. Giờ ghi "chưa tới" / "x% (đang đo)".
+- Proof: 846 test cashback qua; `tests/test_cashback_engagement.py`.
+- **Next:**
+  - chủ bot restart `systemctl restart cashback-bot cashback-zalo` + `pm2 restart Web_Dashboard`;
+  - chủ bot xác nhận Zalo "Thanh Vu" (-2) là mình thì gửi 1 tin thử chủ động;
+  - 11.11 chủ bot tự nhắn tay.
+
+---
+
 ## Phiên 2026-10-27 (cu) — Thiết kế hệ thống giữ chân khách
 
 - Bản thiết kế: `reports/CASHBACK_RETENTION_DESIGN_2026-10-27.md`.

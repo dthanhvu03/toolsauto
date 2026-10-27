@@ -794,8 +794,21 @@ def lower_than_link(estimated_vnd: int, *, other_item: bool, paid_vnd: int | Non
             + "\n".join(f"• {reason}" for reason in reasons))
 
 
+# Giữ chân (reports/CASHBACK_RETENTION_DESIGN_2026-10-27.md, chủ bot duyệt): tin báo đơn kết thúc bằng một câu mời
+# quay lại, đổi luân phiên theo mã đơn để khỏi nhàm. Không gửi thêm tin nào.
+COME_BACK = (
+    "🛒 Lần sau mua gì, dán link vào đây để được hoàn tiếp nha.",
+    "🛒 Có món đang ngắm? Gửi link qua bot trước khi chốt đơn nhé.",
+)
+FIRST_ORDER = "🎉 <b>Đơn đầu tiên của bạn qua bot đó!</b>"
+
+
+def come_back_line(order: str) -> str:
+    return COME_BACK[sum(map(ord, order)) % len(COME_BACK)]
+
+
 def order_new_notice(order: str, cashback: int | None, order_status: str | None, validation: str | None,
-                     lower: str = "") -> str:
+                     lower: str = "", first: bool = False) -> str:
     # Đơn đã huỷ / không đủ điều kiện ngay lần đầu thấy: không hiện số hoàn (khớp /donhang).
     ineligible = validation in ("REJECTED", "FRAUD") or (order_status or "").upper() in ("CANCELLED", "CANCELED")
     amount = "Hoàn: không được tính cho đơn này" if ineligible else _cashback_line(cashback)
@@ -805,13 +818,15 @@ def order_new_notice(order: str, cashback: int | None, order_status: str | None,
     )
     return (
         "📦 <b>Có đơn mới qua link của bạn</b>\n\n"
-        "Shopee vừa ghi nhận một đơn mua qua link bạn đã tạo.\n\n"
+        + (f"{FIRST_ORDER}\n" if first and not ineligible else "")
+        + "Shopee vừa ghi nhận một đơn mua qua link bạn đã tạo.\n\n"
         f"Mã đơn: {order}\n"
         f"Tình trạng đơn: {order_status_label(order_status)}\n"
         f"{amount}\n"
         f"{commission_label(validation, order_status)}.\n\n"
         + (f"{lower}\n\n" if lower and not ineligible else "")
         + f"{footer}"
+        + ("" if ineligible else f"\n\n{come_back_line(order)}")
     )
 
 
@@ -843,6 +858,8 @@ def order_update_notice(order: str, *, statuses: list[str], ineligible: bool, ap
     if ineligible or cancelled:
         lines.append("Cần kiểm tra thêm thì gõ /hotro.")
     lines += ["", "ⓘ " + NOT_WITHDRAWABLE]
+    if not (ineligible or cancelled):
+        lines += ["", come_back_line(order)]
     return "\n".join(lines)
 
 

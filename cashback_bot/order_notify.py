@@ -127,6 +127,14 @@ def why_lower(conn: sqlite3.Connection, link_id: int, cashback: int | None, valu
     return lower_than_link(estimated, other_item=other_item, paid_vnd=paid, price_vnd=price, rate_lower=rate_lower)
 
 
+def _first_order(conn: sqlite3.Connection, user: int, conversion_id: str) -> bool:
+    """Khách chưa có đơn nào khác khớp link của bot."""
+    return conn.execute(
+        "SELECT 1 FROM shopee_conversions WHERE telegram_user_id = ? AND conversion_id != ? AND matched_link_id IS NOT NULL",
+        (user, conversion_id),
+    ).fetchone() is None
+
+
 def _attribution_conflict(conn: sqlite3.Connection, conversion_id: str, recorded) -> bool:
     if any(change.field == "attribution" for change, _id in recorded):
         return True
@@ -170,7 +178,7 @@ def make_hook(cfg: NotifyConfig):
             cashback = cashback_of(conn, link_id, net)
             html = source_text(
                 order_new_notice(order, cashback, status, values.get("validation_status"),
-                                 why_lower(conn, int(link_id), cashback, values)),
+                                 why_lower(conn, int(link_id), cashback, values), first=_first_order(conn, user, conversion_id)),
                 conversion_id,
             )
             key = f"conversion:{conversion_id}:first_matched"

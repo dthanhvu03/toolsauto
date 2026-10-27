@@ -414,12 +414,31 @@ def growth(conn: sqlite3.Connection, since: datetime, now: datetime) -> Growth:
                   active(7), active(30))
 
 
+def _cohort_cell(part: int, size: int, state: str) -> str:
+    """Tuần chưa tới thì chưa đo được, không phải 0% (rà soát giữ chân 2026-10-27)."""
+    if state == "future" or not size:
+        return "chưa tới"
+    value = f"{part * 100 / size:.0f}%"
+    return f"{value} (đang đo)" if state == "partial" else value
+
+
 @dataclass(frozen=True)
 class Cohort:
     week: str
     size: int
     next_week: int
     week_4: int
+    # done: đã hết tuần đo · partial: đang trong tuần đo · future: chưa tới tuần đo.
+    next_state: str = "done"
+    week4_state: str = "done"
+
+    @property
+    def next_text(self) -> str:
+        return _cohort_cell(self.next_week, self.size, self.next_state)
+
+    @property
+    def week4_text(self) -> str:
+        return _cohort_cell(self.week_4, self.size, self.week4_state)
 
 
 def cohorts(conn: sqlite3.Connection, now: datetime, weeks: int = 6) -> list[Cohort]:
@@ -445,7 +464,11 @@ def cohorts(conn: sqlite3.Connection, now: datetime, weeks: int = 6) -> list[Coh
                 (*users, _stamp(lo), _stamp(hi)),
             ).fetchone()[0])
 
-        result.append(Cohort(start.strftime("%d/%m"), len(users), came_back(1), came_back(4)))
+        def state(offset: int) -> str:
+            lo = start + timedelta(weeks=offset)
+            return "future" if local < lo else ("partial" if local < lo + timedelta(weeks=1) else "done")
+
+        result.append(Cohort(start.strftime("%d/%m"), len(users), came_back(1), came_back(4), state(1), state(4)))
     return result
 
 

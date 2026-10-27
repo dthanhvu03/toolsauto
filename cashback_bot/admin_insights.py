@@ -321,7 +321,7 @@ def growth_text(view: insights.Overview) -> str:
         lines += ["", f"<b>{title}</b> (theo HH ròng)"]
         lines += [f"• {html.escape(r.label[:40])} · {r.orders} đơn · {format_vnd(r.net)}" for r in rows] or ["Chưa có."]
     lines += ["", "🔁 <b>Giữ chân</b> (tuần vào · quay lại tuần sau · tuần thứ 4)"]
-    lines += [f"• {k.week}: {k.size} khách · {_pct(k.next_week, k.size)} · {_pct(k.week_4, k.size)}"
+    lines += [f"• {k.week}: {k.size} khách · {k.next_text} · {k.week4_text}"
               for k in view.cohorts if k.size] or ["Chưa có."]
     return "\n".join(lines)
 
