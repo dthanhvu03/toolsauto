@@ -90,3 +90,15 @@ Không có API "deal / % giảm giá" trực tiếp. Hai cách làm được:
 | Điện tử | 0 | — (bị 429 khi thử) |
 
 Ví dụ deal thật: kem chống nắng d'Alba 408k (thường 457k, −11%, ⭐4.9, bán 1.306); áo thun nữ form boxy 35k (thường 45k, −22%).
+
+## 6. Khách chưa chọn danh mục: bot đoán gu (chủ bot 2026-10-27: "gửi luôn, mà gửi phải thông minh")
+
+- Đoán từ tên món + danh mục AddLiveTag của 10 link gần nhất; món mới nặng ký hơn; khớp nhiều từ khoá nặng hơn.
+  - Tên có cả "nam" lẫn "nữ" thì không đoán thời trang theo giới tính.
+  - Tối đa 2 danh mục.
+- Thưa và chặt hơn khách đã chọn: tối đa 2 tin / tuần (cách ≥ 3 ngày), món rẻ hơn thường ngày ≥ 12%, tối đa 3 món.
+- Tin nói rõ: "Bot đoán bạn thích 👕 Thời trang nam vì bạn từng xem *Sơ Mi Nam…*". Có nút 🛍️ Chọn danh mục chuẩn hơn và 🔕 Không nhận deal.
+- Tự dừng: nhận 3 tin deal mà không tạo link nào thì ngừng, tới khi khách tạo link mới.
+- Không gửi: khách đã chọn hay đã bỏ hết danh mục, bấm Không nhận deal, tắt 🛒 Nhắc, chặn bot, 60 ngày không tạo link.
+- Bật mặc định; tắt ở 🔥 Deal hời → ⚪ Tắt đoán gu.
+- Dữ liệu thật 27/10: đoán được 12 khách (ví dụ Ốp lưng → Điện tử; Sạc nhanh → Điện tử; Áo thể thao → Thể thao; Gấu bông → Đồ chơi; Topper → Nhà cửa).

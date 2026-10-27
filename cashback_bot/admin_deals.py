@@ -1,6 +1,7 @@
 """/admin → ⚙️ Cài đặt → 📣 Nhắc mùa sale → 🔥 Deal hời (deals.py): bật / tắt, xem trước deal hôm nay, bỏ ngày, bỏ món.
 
-Callback: c:dl:home · c:dl:on · c:dl:off · c:dl:skip · c:dl:unskip · c:dl:rm:<item> · c:dl:back:<item>.
+Callback: c:dl:home · c:dl:on · c:dl:off · c:dl:infer:on|off · c:dl:skip · c:dl:unskip · c:dl:rm:<item> ·
+c:dl:back:<item>.
 Ghi 📊 Lịch sử action `deals`.
 """
 
@@ -26,6 +27,8 @@ AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
 
 
 def history_line(before: dict, after: dict) -> str:
+    if "infer" in after:
+        return f"Deal hời cho khách chưa chọn (bot đoán gu): {'bật' if after['infer'] else 'tắt'}"
     if "enabled" in after:
         return f"Deal hời: {'bật' if after['enabled'] else 'tắt'}"
     if "item" in after:
@@ -51,6 +54,11 @@ class DealsAdmin:
             self.repo.set_state(deals.ENABLED_KEY, "1" if on else "0")
             self._log(admin_id, {"enabled": not on}, {"enabled": on}, now)
             return self._home(now, "Đã bật deal hời." if on else "Đã tắt deal hời.")
+        if data in ("c:dl:infer:on", "c:dl:infer:off"):
+            on = data.endswith(":on")
+            self.repo.set_state(deals.INFER_KEY, "1" if on else "0")
+            self._log(admin_id, {"infer": not on}, {"infer": on}, now)
+            return self._home(now, "Đã bật gửi cho khách chưa chọn." if on else "Đã tắt gửi cho khách chưa chọn.")
         if data in ("c:dl:skip", "c:dl:unskip"):
             if current.get("status") not in ("draft", "skipped"):
                 return self._home(now, "Hôm nay chưa có bản deal để bỏ, hoặc đã gửi rồi.")
@@ -76,8 +84,10 @@ class DealsAdmin:
         day = now.astimezone(ICT).date().isoformat()
         data = deals.record(self.repo, day)
         on = deals.enabled(self.repo)
+        infer_on = deals.infer_enabled(self.repo)
         with self.repo.connect() as conn:
             people = deals.subscribers(conn, now)
+            guessed = deals.inferred(conn, now)
         per_cat = {key: sum(key in cats for cats in people.values()) for key in deals.CATEGORIES}
         lines = ["🔥 <b>Deal hời theo danh mục</b>", ""]
         if notice:
@@ -89,6 +99,8 @@ class DealsAdmin:
             "",
             "Khách theo danh mục: " + (" · ".join(f"{deals.CATEGORIES[k][0]} {n}" for k, n in per_cat.items() if n)
                                       or "chưa ai chọn"),
+            f"🤖 Khách chưa chọn, bot đoán gu: {'🟢 bật' if infer_on else '⚪ tắt'} · tối nay đủ điều kiện "
+            f"{len(guessed)} khách (tối đa 2 tin / tuần, món rẻ ≥ 12%, 3 món, nhận 3 tin không tạo link thì dừng)",
             "",
             f"<b>Hôm nay {day[8:]}/{day[5:7]}</b>: {deals.STATUS_LABELS.get(str(data.get('status')), '⏳ Chưa soạn (17:30)')}"
             + (f" · {data['sent']} tin" if data.get("status") == "sent" else ""),
@@ -108,7 +120,8 @@ class DealsAdmin:
                     verb, code = ("↩️ Lấy lại", "back") if deal["item_id"] in removed else ("❌ Bỏ", "rm")
                     buttons.append(((f"{verb} {deals._short(deal['name'], 26)}", f"c:dl:{code}:{deal['item_id']}"),))
         toggle = ("⚪ Tắt deal hời", "c:dl:off") if on else ("🟢 Bật deal hời", "c:dl:on")
-        rows = [(toggle,)]
+        infer = ("⚪ Tắt đoán gu", "c:dl:infer:off") if infer_on else ("🤖 Bật đoán gu", "c:dl:infer:on")
+        rows = [(toggle, infer)]
         if data.get("status") == "draft":
             rows.append((("⏭ Bỏ hôm nay", "c:dl:skip"),))
         elif data.get("status") == "skipped":

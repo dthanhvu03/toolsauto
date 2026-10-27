@@ -33,6 +33,7 @@ from cashback_bot.messages import (
     TIKTOK_NOT_PROMOTABLE,
     TIKTOK_WORKING,
     DEAL_PROMPT,
+    DEALS_OFF_NOTICE,
     deal_categories_reply,
     with_tiktok,
     TIP_ALERT,
@@ -265,6 +266,10 @@ class CashbackService:
         labels = {key: label for key, (label, _keywords) in deals.CATEGORIES.items()}
         if data == "u:dc:home":
             return deal_categories_reply(labels, deals.user_categories(self.repo, user_id))
+        if data == "u:dc:off":
+            # Khách được gửi theo gu bot đoán bấm «Không nhận deal»: lưu lựa chọn rỗng, không gửi nữa.
+            self.repo.set_state(f"{deals.CATS_PREFIX}{user_id}", "")
+            return deal_categories_reply(labels, [], DEALS_OFF_NOTICE)
         if data.startswith("u:dc:t:") and data.removeprefix("u:dc:t:") in labels:
             selected, notice = deals.toggle_category(self.repo, user_id, data.removeprefix("u:dc:t:"))
             return deal_categories_reply(labels, selected, notice)

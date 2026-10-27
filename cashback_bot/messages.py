@@ -1137,6 +1137,8 @@ DEALS_ANNOUNCE = (
 DEALS_ANNOUNCE_KEYBOARD: Keyboard = ((("🛍️ Chọn danh mục deal", "u:dc:home"),),)
 DEALS_PICK_HINT = "Bấm món muốn mua, bot gửi link hoàn tiền liền 😎"
 DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
+DEALS_INFER_HINT = "Chọn danh mục để bot gửi đúng gu hơn, hoặc tắt nếu không cần nha 🫶"
+DEALS_OFF_NOTICE = "🔕 Đã tắt deal hời. Muốn nhận lại thì chọn danh mục bên dưới nha."
 
 
 def deal_categories_reply(labels: dict[str, str], selected: list[str], notice: str = "") -> BotReply:

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 from cashback_bot import deals, engagement
 from cashback_bot.admin_notify import AdminNotifier
+from cashback_bot.db import enqueue_event
 from cashback_bot.messages import DEAL_PROMPT
 from cashback_bot.price_watch import PriceStats
 from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback
@@ -208,3 +209,71 @@ def test_trang_chu_co_loi_vao_deal_khi_bat(tmp_path):
     bot.repo.set_state(deals.ENABLED_KEY, "1")
     rows = _callback(bot, USER, "u:p:home").inline_keyboard
     assert rows[1] == (("🛍️ Deal hời của tôi", "u:dc:home"),), "ngay dưới Đơn hàng của tôi"
+
+
+# --- Khách chưa chọn danh mục: bot đoán gu ----------------------------------------------------------------------
+
+
+def test_doan_gu_tu_mon_da_xem():
+    assert deals.guess([("Sơ Mi Nam Dài Tay SIXMEN", None)]) == (["nam"], "Sơ Mi Nam Dài Tay SIXMEN")
+    assert deals.guess([("RII Pulse 45W Bộ Sạc Nhanh Kèm Cáp Có Đèn LED", None)])[0] == ["dien"], "sạc + cáp hơn chữ đèn"
+    assert deals.guess([("Áo Thun Thể Thao Nam Nữ Ricxie", "Áo Thể Thao")])[0] == ["thethao"], "nam nữ: không đoán giới tính"
+    assert deals.guess([("Gấu Bông Rái Cá gối ôm", None)])[0] == ["dochoi"]
+    assert deals.guess([("Cúp pha lê in logo", "Khác")]) == ([], "")
+
+
+def _deal_row(item: int, price: int, usual: int = 250_000) -> dict:
+    return dict(item_id=item, shop_id=9, name=f"Áo Polo Nam {item}", price=price, usual=usual, lowest_30d=True,
+                cashback=3_000, rating=4.8, sold_30d=500)
+
+
+def test_khach_chua_chon_nhan_tin_doan_gu_thua_va_chat_hon(tmp_path):
+    bot, admin = _ready(tmp_path)
+    bot.repo.set_state(deals.ENABLED_KEY, "1")
+    bot.handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=BUILD)
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE link_requests SET product_name = 'Áo Polo Nam GALIO' WHERE telegram_user_id = ?", (USER,))
+        assert deals.inferred(conn, SEND) == {USER: (["nam"], "Áo Polo Nam GALIO")}
+    pool = {"nam": [_deal_row(1, 200_000), _deal_row(2, 225_000), _deal_row(3, 228_000), _deal_row(4, 190_000),
+                    _deal_row(5, 180_000)]}
+    deals.save(bot.repo, "2026-10-21", {"status": "draft", "deals": pool, "removed": []})
+    deals.tick(bot.repo, bot, admin, SEND)
+    (sent,) = _events(bot, "DEALS")
+    html = sent["message_html"]
+    assert "Vài deal hợp gu bạn nè" in html and "Bot đoán bạn thích 👕 Thời trang nam vì bạn từng xem" in html
+    callbacks = [row[0]["callback_data"] for row in json.loads(sent["reply_markup_json"])["inline_keyboard"]]
+    assert callbacks == ["u:dl:9:1", "u:dl:9:4", "u:dl:9:5", "u:dc:home", "u:dc:off"], \
+        "tối đa 3 món, chỉ món rẻ hơn ≥ 12% (bỏ 225k, 228k)"
+    with bot.repo.connect() as conn:
+        assert deals.inferred(conn, SEND) == {}, "vừa gửi: 3 ngày sau mới gửi tiếp"
+
+
+def test_khach_chua_chon_khong_nhan_khi_tat_hay_lo_qua_3_tin(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    bot.handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=BUILD)
+    with bot.repo.connect() as conn:
+        conn.execute("UPDATE link_requests SET product_name = 'Áo Polo Nam GALIO', created_at = '2026-10-21T10:40:00Z'")
+        for day in (22, 25, 28):  # 3 tin deal sau link cuối (21/10), khách không tạo link nào
+            enqueue_event(conn, event_key=f"deals:2026-10-{day}:{USER}", event_type="DEALS", chat_id=USER,
+                          message_html="x", audience="customer", category="deal", now=f"2026-10-{day}T13:08:00Z")
+        assert deals.inferred(conn, datetime(2026, 11, 1, 13, 0, tzinfo=timezone.utc)) == {}, "3 tin không tạo link"
+    other, _ = _ready(tmp_path / "b")
+    other.handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=BUILD)
+    _callback(other, USER, "u:n:t:reminders")
+    with other.repo.connect() as conn:
+        assert deals.inferred(conn, SEND) == {}, "tắt 🛒 Nhắc"
+    third, _ = _ready(tmp_path / "c")
+    third.handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=BUILD)
+    off = _callback(third, USER, "u:dc:off")
+    assert "Đã tắt deal hời" in off.text and third.repo.get_state(f"{deals.CATS_PREFIX}{USER}") == ""
+    with third.repo.connect() as conn:
+        assert deals.inferred(conn, SEND) == {}, "bấm Không nhận deal"
+
+
+def test_admin_tat_doan_gu(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    home = _callback(bot, ADMIN, "c:dl:home")
+    assert "Khách chưa chọn, bot đoán gu: 🟢 bật" in home.text
+    _callback(bot, ADMIN, "c:dl:infer:off")
+    assert not deals.infer_enabled(bot.repo)
+    assert "Deal hời cho khách chưa chọn (bot đoán gu): tắt" in _callback(bot, ADMIN, "c:menu:hist").text

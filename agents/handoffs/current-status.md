@@ -1,3 +1,17 @@
+## Phiên 2026-10-27 (dj) — Deal cho khách chưa chọn danh mục (bot đoán gu)
+
+- Theo yêu cầu chủ bot. Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 6.
+- `deals.guess` / `deals.inferred`; tin có câu "Bot đoán bạn thích…", nút 🛍️ Chọn danh mục / 🔕 Không nhận deal (`u:dc:off`).
+- Luật: tối đa 2 tin / tuần, rẻ ≥ 12%, tối đa 3 món; dừng sau 3 tin không tạo link.
+- Công tắc `deals_infer_enabled` (bật mặc định) ở 🔥 Deal hời.
+- Dữ liệu thật: 12 khách đủ điều kiện.
+- Proof: 880 test cashback qua.
+- **Next:**
+  - chủ bot quyết bật tối nay hay từ mai (restart trước 20:08 thì tối nay gửi);
+  - sáng mai kiểm khách bấm / tắt.
+
+---
+
 ## Phiên 2026-10-27 (di) — Lối vào deal + nút gửi tin giới thiệu
 
 - Trang chủ có nút 🛍️ Deal hời của tôi (khi đã bật); cuối tin deal có nút ⚙️ Đổi danh mục (Zalo: "gõ số của dòng").

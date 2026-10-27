@@ -16,6 +16,7 @@ Trạng thái ngày ở `bot_state.deals:<YYYY-MM-DD>` (JSON): building · draft
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -30,7 +31,7 @@ import requests
 
 from cashback_bot import engagement, sale_calendar
 from cashback_bot.db import TrackingRepository, enqueue_event
-from cashback_bot.messages import DEALS_CHANGE_HINT, DEALS_PICK_HINT
+from cashback_bot.messages import DEALS_CHANGE_HINT, DEALS_INFER_HINT, DEALS_PICK_HINT
 from cashback_bot.money import format_vnd
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
 from cashback_bot.price_watch import PriceHistoryClient, PriceWatchError
@@ -163,6 +164,88 @@ def subscribers(conn: sqlite3.Connection, now: datetime) -> dict[int, list[str]]
     return found
 
 
+# --- Khách chưa chọn: bot đoán gu (chủ bot 2026-10-27: «khách chưa chọn thì gửi luôn, mà gửi phải thông minh») ----
+# Thưa hơn và chặt hơn khách đã chọn: tối đa 2 tin / tuần, món rẻ hơn thường ngày ≥ 12%, tối đa 3 món, nói rõ vì sao
+# đoán, có nút chọn danh mục / không nhận. Nhận 3 tin không tạo link nào thì dừng tới khi khách tạo link mới.
+# Không gửi: khách đã chọn hay đã bỏ hết danh mục (`deal_cats:<id>` có mặt, kể cả rỗng), tắt 🛒 Nhắc ở /thongbao,
+# chặn bot, 60 ngày không tạo link.
+INFER_KEY = "deals_infer_enabled"  # bật mặc định; admin tắt thì = "0"
+INFER_ACTIVE = timedelta(days=60)
+INFER_GAP = timedelta(days=3)
+INFER_MIN_DROP = 0.12
+INFER_ITEMS = 3
+INFER_STOP_AFTER = 3
+HINTS = {
+    "nu": ("nữ", "váy", "đầm", "croptop"),
+    "nam": ("nam", "polo", "quần âu"),
+    "dep": ("kem", "son", "serum", "trang điểm", "tẩy trang", "dưỡng", "cọ", "mặt nạ", "rửa mặt", "nước hoa", "phấn"),
+    "be": ("bé", "trẻ em", "bỉm", "sơ sinh"),
+    "nha": ("nhà", "bếp", "chăn ga", "gối nằm", "gối ngủ", "nệm", "topper", "đèn ngủ", "đèn bàn", "quạt", "nồi", "chảo",
+            "kệ", "khung", "trải giường", "tủ lạnh"),
+    "dien": ("điện thoại", "tai nghe", "sạc", "cáp", "loa", "bàn phím", "chuột", "ốp lưng", "laptop", "máy tính"),
+    "thethao": ("thể thao", "giày", "yoga", "gym", "chạy bộ"),
+    "anvat": ("ăn vặt", "bánh", "kẹo", "cà phê", "snack", "gà rán"),
+    "thucung": ("chó", "mèo", "thú cưng"),
+    "dochoi": ("đồ chơi", "lắp ráp", "mô hình", "gấu bông", "lego"),
+}
+
+
+def infer_enabled(repo: TrackingRepository) -> bool:
+    return repo.get_state(INFER_KEY) != "0"
+
+
+def _words(text: str | None) -> str:
+    return " " + re.sub(r"[^\w]+", " ", (text or "").lower()) + " "
+
+
+def guess(names: list[tuple[str | None, str | None]]) -> tuple[list[str], str]:
+    """(danh mục đoán, tên món làm lý do) từ các link khách đã tạo (mới nhất trước). Món mới nặng ký hơn."""
+    scores: dict[str, float] = {}
+    reason: dict[str, str] = {}
+    for rank, (product, category) in enumerate(names):
+        text = _words(f"{product} {category}")
+        unisex = " nam " in text and " nữ " in text  # «cho nam nữ»: không nói được gu theo giới tính
+        for key, words in HINTS.items():
+            if unisex and key in ("nam", "nu"):
+                continue
+            hits = sum(f" {w} " in text for w in words)  # khớp nhiều từ (sạc + cáp) nặng hơn một từ lẻ
+            if hits:
+                scores[key] = scores.get(key, 0) + hits / (1 + rank)
+                reason.setdefault(key, product or category or "")
+    top = sorted(scores, key=scores.get, reverse=True)[:2]
+    return top, (reason[top[0]] if top else "")
+
+
+def inferred(conn: sqlite3.Connection, now: datetime) -> dict[int, tuple[list[str], str]]:
+    """Khách chưa chọn danh mục mà tối nay được gửi theo gu bot đoán."""
+    since = _stamp(now - INFER_ACTIVE)
+    users = [int(r[0]) for r in conn.execute(
+        "SELECT DISTINCT telegram_user_id FROM link_requests WHERE link_status = 'created' AND created_at >= ?", (since,))]
+    cfg = NotifyConfig(True)
+    found: dict[int, tuple[list[str], str]] = {}
+    for user in users:
+        if conn.execute("SELECT 1 FROM bot_state WHERE key = ?", (f"{CATS_PREFIX}{user}",)).fetchone():
+            continue
+        if customer_block_reason(conn, {"category": engagement.CATEGORY, "chat_id": user}, cfg, now) is not None:
+            continue
+        last_link = conn.execute("SELECT MAX(created_at) FROM link_requests WHERE telegram_user_id = ? "
+                                 "AND link_status = 'created'", (user,)).fetchone()[0]
+        sent = conn.execute("SELECT COUNT(*), MAX(created_at) FROM admin_notifications WHERE event_type = 'DEALS' "
+                            "AND chat_id = ? AND created_at >= ?", (user, last_link)).fetchone()
+        if sent[0] >= INFER_STOP_AFTER:
+            continue
+        recent = conn.execute("SELECT MAX(created_at) FROM admin_notifications WHERE event_type = 'DEALS' AND chat_id = ?",
+                              (user,)).fetchone()[0]
+        if recent and recent >= _stamp(now - INFER_GAP):
+            continue
+        names = conn.execute("SELECT product_name, cat_name FROM link_requests WHERE telegram_user_id = ? "
+                             "AND link_status = 'created' ORDER BY created_at DESC LIMIT 10", (user,)).fetchall()
+        cats, reason = guess([(r[0], r[1]) for r in names])
+        if cats:
+            found[user] = (cats, reason)
+    return found
+
+
 # --- Soạn deal --------------------------------------------------------------------------------------------------
 
 
@@ -203,7 +286,10 @@ def build(repo: TrackingRepository, service, market: MarketSearchClient, history
           now: datetime, pause: Callable[[float], None] = clock.sleep) -> dict[str, list[dict]]:
     """Deal của từng danh mục có người chọn. Số hoàn tính như thẻ link, theo chính sách lúc soạn."""
     with repo.connect() as conn:
-        wanted = sorted({c for cats in subscribers(conn, now).values() for c in cats})
+        wanted = {c for cats in subscribers(conn, now).values() for c in cats}
+        if infer_enabled(repo):
+            wanted |= {c for cats, _reason in inferred(conn, now).values() for c in cats}
+        wanted = sorted(wanted)
     resolution = service._resolve_policy(now)
     result: dict[str, list[dict]] = {}
     for key in wanted:
@@ -253,17 +339,28 @@ def _k(vnd: int) -> str:
     return (f"{thousands:.0f}" if thousands == int(thousands) else f"{thousands:.1f}".replace(".", ",")) + "k"
 
 
-def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]) -> tuple[str, list[dict]] | None:
-    """Tin của một khách: tối đa 5 món, chia đều các danh mục khách chọn. Không có món nào thì None."""
-    pools = {c: [d for d in deals.get(c, []) if d["item_id"] not in removed] for c in cats}
+def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int], *, limit: int = PER_MESSAGE,
+                min_drop: float = 0.0, reason: str | None = None) -> tuple[str, list[dict]] | None:
+    """Tin của một khách: chia đều các danh mục, tối đa `limit` món. Không có món nào thì None.
+
+    `reason` có giá trị: khách chưa chọn danh mục, bot đoán gu từ món khách từng xem (thưa hơn, chặt hơn, có nút tắt)."""
+    def strong(deal: dict) -> bool:
+        return deal["item_id"] not in removed and deal["price"] <= deal["usual"] * (1 - min_drop)
+
+    pools = {c: [d for d in deals.get(c, []) if strong(d)] for c in cats}
     picked: list[tuple[str, dict]] = []
-    while len(picked) < PER_MESSAGE and any(pools.values()):
+    while len(picked) < limit and any(pools.values()):
         for cat in cats:
-            if pools[cat] and len(picked) < PER_MESSAGE:
+            if pools[cat] and len(picked) < limit:
                 picked.append((cat, pools[cat].pop(0)))
     if not picked:
         return None
-    lines = ["⏰ <b>20:08 giờ phát lộc! Deal hời hôm nay cho bạn nè</b> 🔥"]
+    if reason is None:
+        lines = ["⏰ <b>20:08 giờ phát lộc! Deal hời hôm nay cho bạn nè</b> 🔥"]
+    else:
+        guessed = ", ".join(CATEGORIES[c][0] for c in cats)
+        lines = ["⏰ <b>20:08 giờ phát lộc! Vài deal hợp gu bạn nè</b> 🔥",
+                 f"Bot đoán bạn thích {guessed} vì bạn từng xem <i>{html.escape(_short(reason, 40))}</i>."]
     buttons, number = [], 0
     for cat in cats:
         rows = [d for c, d in picked if c == cat]
@@ -273,16 +370,19 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
         for deal in rows:
             number += 1
             low = " · thấp nhất 30 ngày" if deal["lowest_30d"] else ""
-            name = _short(deal["name"])
+            name = html.escape(_short(deal["name"]))
             lines.append(f"{number}. {name}: <b>{_k(deal['price'])}</b> (thường {_k(deal['usual'])}{low}) "
                          f"· hoàn ~{_k(deal['cashback'])}")
-            buttons.append({"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
-                            "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"})
-    lines += ["", DEALS_PICK_HINT,
-              "Giá theo dữ liệu lúc 17:30, có thể đổi khi bạn mở.",
-              DEALS_CHANGE_HINT]
-    # Nút cuối: đổi danh mục ngay từ tin deal (Zalo: một số trong danh sách).
-    return "\n".join(lines), [[b] for b in buttons] + [[{"text": "⚙️ Đổi danh mục", "callback_data": "u:dc:home"}]]
+            buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
+                             "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"}])
+    lines += ["", DEALS_PICK_HINT, "Giá theo dữ liệu lúc 17:30, có thể đổi khi bạn mở."]
+    if reason is None:
+        lines.append(DEALS_CHANGE_HINT)
+        # Nút cuối: đổi danh mục ngay từ tin deal (Zalo: một số trong danh sách).
+        return "\n".join(lines), buttons + [[{"text": "⚙️ Đổi danh mục", "callback_data": "u:dc:home"}]]
+    lines.append(DEALS_INFER_HINT)
+    return "\n".join(lines), buttons + [[{"text": "🛍️ Chọn danh mục chuẩn hơn", "callback_data": "u:dc:home"}],
+                                         [{"text": "🔕 Không nhận deal", "callback_data": "u:dc:off"}]]
 
 
 def send(repo: TrackingRepository, day: str, data: dict, now: datetime) -> int:
@@ -291,8 +391,12 @@ def send(repo: TrackingRepository, day: str, data: dict, now: datetime) -> int:
     stamp = _stamp(now)
     sent = 0
     with repo.connect() as conn:
-        for user, cats in subscribers(conn, now).items():
-            built = message_for(cats, deals, removed)
+        targets = {user: (cats, None) for user, cats in subscribers(conn, now).items()}
+        if infer_enabled(repo):
+            targets.update({user: guessed for user, guessed in inferred(conn, now).items() if user not in targets})
+        for user, (cats, reason) in targets.items():
+            built = (message_for(cats, deals, removed) if reason is None else
+                     message_for(cats, deals, removed, limit=INFER_ITEMS, min_drop=INFER_MIN_DROP, reason=reason))
             if built is None:
                 continue
             text, keyboard = built
@@ -355,7 +459,8 @@ def tick(repo: TrackingRepository, service, admin_notifier=None, now: datetime |
     send_at = datetime.combine(local.date(), SEND_AT, ICT)
     if state is None and BUILD_AT <= local.time() < SEND_AT:
         with repo.connect() as conn:
-            if not subscribers(conn, moment) or not _running.acquire(blocking=False):
+            someone = subscribers(conn, moment) or (infer_enabled(repo) and inferred(conn, moment))
+            if not someone or not _running.acquire(blocking=False):
                 return
         save(repo, day, {"status": "building"})
         _start_build(repo, service, market or MarketSearchClient(service.settings.api_key),
