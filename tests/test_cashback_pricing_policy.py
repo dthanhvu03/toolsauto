@@ -973,3 +973,17 @@ def test_tin_don_moi_noi_ly_do_hoan_thap_hon_luc_tao_link(tmp_path):
     notice = order_new_notice("••••PNSD1", cashback, "PAID", "PENDING", text)
     assert notice.index("Số thấp hơn vì") < notice.index("ⓘ")
     assert "Số thấp hơn" not in order_new_notice("••••PNSD1", 0, "CANCELLED", "REJECTED", text)
+
+
+def test_mon_bi_shopee_gioi_han_moi_lan_thanh_toan_co_dong_tach_don(tmp_path):
+    # Link tủ lạnh thật: Shopee Comm chạm trần 40.000đ (isCapped), XTRA 101.800đ không bị chặn.
+    bot = _bot(tmp_path)
+    bot.client.payload["productInfo"].update(
+        price=5_090_000, commission=141_800, sellerComFinal=101_800, shopeeComFinal=40_000, totalRatePercent="4.5",
+        isXtra=True, isCapped=True,
+    )
+    card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text
+    assert "<b>Món giá cao:</b> Shopee giới hạn phần hoàn mỗi lần thanh toán" in card and "40.000" not in card
+    assert card.index("Món giá cao") > card.index("Dùng voucher") and card.index("Món giá cao") < card.index("ⓘ <i>")
+    plain = _bot(tmp_path / "b")
+    assert "Món giá cao" not in plain.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text

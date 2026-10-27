@@ -1,3 +1,13 @@
+## Phiên 2026-10-27 (db) — Cảnh báo món chạm trần hoa hồng Shopee
+
+- Nghiên cứu: trần phần Shopee trả của tài khoản chủ bot là **40.000đ mỗi lần thanh toán** (`checkout_cap` trong dữ liệu đơn); nguồn công khai ghi 50–70k, tuỳ tài khoản.
+- Thẻ link: khi AddLiveTag gắn cờ `isCapped`, khối ⚠️ Để được hoàn có thêm "Món giá cao: … thanh toán riêng món này, mỗi lần 1 cái".
+  - Màn gửi lại link cũ (`_render_existing`) chưa có dòng này, vì `LinkRow` chưa có cột `is_capped`.
+- Proof: 857 test cashback qua.
+- **Next:** chủ bot restart.
+
+---
+
 ## Phiên 2026-10-27 (da) — Dòng ➕ "mức thận trọng" sau khi so HOANTIENSP
 
 - Chủ bot thử cùng link ở HOANTIENSP: họ báo khoảng 60% hoa hồng gốc, chưa trừ thuế, tính Shopee Comm 4%. Bot mình chia 62,3% nhưng tính Shopee Comm 2,5%.

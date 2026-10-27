@@ -565,7 +565,7 @@ class CashbackService:
         )
         if not saved:
             return BotReply(GENERIC_FAIL)
-        return render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra)
+        return render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped))
 
     def _resolve_or_reject(self, update_id: int | None, telegram_user_id: int, original_url: str,
                            moment: datetime) -> PolicyResolution | None:

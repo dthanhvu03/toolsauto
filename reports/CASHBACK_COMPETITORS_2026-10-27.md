@@ -72,3 +72,10 @@ Chính sách V1.2: trừ dự phòng phí 0,98% và dự phòng thuế 10% (kh�
 - Mình chỉ *trông* thấp hơn. Vì vậy dòng ➕ trên thẻ link đổi thành "Bot báo theo mức **thận trọng**, không phải mức tối đa. Shopee trả cao hơn thì bạn được thêm."
   - Không dùng chữ "chắc chắn", vì voucher vẫn làm giảm số hoàn (chủ bot chỉ ra).
 - Khi có thêm đơn thật mà Shopee trả trên 2,5%: xem lại mức tính.
+
+## 6. Trần hoa hồng Shopee mỗi lần thanh toán
+
+- Dữ liệu đơn của bot: `checkout_cap = 4000000000`, tức **40.000đ mỗi lần thanh toán** cho phần Shopee trả. Phần XTRA không bị chặn.
+- Các nguồn công khai ghi 50.000đ ([Ahamove](https://kinhdoanh.ahamove.com/shopee-affiliate-la-gi), [Nobi.pro](https://nobi.pro/quy-tac-nhan-hoa-hong-affiliate-cua-shopee/)) hoặc 70.000đ ([GHN](https://ghn.vn/blogs/tip-ban-hang/muc-hoa-hong-tiep-thi-lien-ket-shopee)); một bài [Threads](https://www.threads.com/@thichcarot_/post/DcImdr0n_GE/) ghi "tuỳ tài khoản". HOANTIENSP ghi 50.000đ.
+- AddLiveTag gắn cờ `isCapped` khi món đã chạm trần (1/64 link: tủ lạnh 5,09 triệu). Thẻ link khi đó có thêm gạch đầu dòng "Món giá cao: … thanh toán riêng món này, mỗi lần 1 cái". Không ghi số vì trần đổi theo tài khoản.
+- Chưa làm: tin báo đơn giải thích khi đơn thật bị chặn (`is_shopee_capped` trong dữ liệu đơn).
