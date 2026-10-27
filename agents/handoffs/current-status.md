@@ -1,3 +1,30 @@
+## Phiên 2026-10-27 (dh) — Zalo: màn bật / tắt dễ nhìn
+
+- Chủ bot chụp màn chọn danh mục trên Zalo iPhone: ô ⬜ hiện thành khối xám to, trông như lỗi.
+- `zalo_render.render`, áp cho mọi màn bật / tắt:
+  - mục chưa chọn để trơn; mục đã chọn in đậm, ✅ đặt cuối;
+  - nút điều hướng tách bằng dòng trống;
+  - bỏ danh sách ✅ / ⬜ bị lặp trong nội dung (màn /thongbao).
+- Proof: 874 test cashback qua.
+
+---
+
+## Phiên 2026-10-27 (dg) — Thử deal thật + Zalo gõ nhiều số
+
+- Thử thật (đã backup trước khi ghi):
+  - soạn deal cho 3 danh mục chủ bot chọn (dep, nha, nu): 8 deal, 69 giây;
+  - 1 tin `DEALS` gửi Telegram chủ bot 07:35 UTC;
+  - 1 tin giới thiệu gửi Zalo "Thanh Vu" (-2) 07:37 UTC: gửi được.
+- Zalo: gõ nhiều số một tin ("1 3 5", "1,3,5") cho màn bật / tắt (danh mục deal, /thongbao). Màn khác báo "gõ từng số".
+- Tên món bỏ nhãn khuyến mãi đầu tên; giá lẻ hiện "64,5k".
+- Tin giới thiệu: `messages.DEALS_ANNOUNCE` (bản Zalo: "Gõ số 1"). **Chưa gửi cho khách**, chờ chủ bot duyệt.
+- Lúc merge gặp file đang sửa dở của phiên reup (thư mục chính): không đụng; ghi mục này sau khi họ commit.
+- **Next:**
+  - chủ bot restart 2 bot cashback;
+  - duyệt tin giới thiệu.
+
+---
+
 ## Phiên 2026-10-27 (reup) — Thuyết minh lại video (ADR-060)
 
 - Owner giao trực tiếp: tách giọng (Demucs) → Whisper tự nhận ngôn ngữ → AI dịch từng câu → đọc lại khớp thời gian, trộn lên nền đã tách.
