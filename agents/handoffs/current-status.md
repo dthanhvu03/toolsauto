@@ -1,3 +1,13 @@
+## Phiên 2026-10-27 (cx) — Thử Zalo nhắn chủ động
+
+- Chủ bot xác nhận Zalo "Thanh Vu" (ID nội bộ -2) là của mình. 03:20 UTC 27/10 gửi 1 tin thử chủ động (sendMessage ngoài luồng trả lời): **thành công**.
+  - Zalo từ chối text_styles (400), code tự gửi lại chữ thuần như thiết kế.
+- Chưa kiểm: nhắn sau **48 giờ** khách im lặng. Lần cuối chủ bot nhắn bot là 02:23 UTC 27/10, tin thử chỉ cách đó khoảng 1 giờ.
+- **Next:** từ khoảng 29/10 03:00 UTC, nếu chủ bot không nhắn bot Zalo trong 48 giờ thì gửi tin thử lần 2.
+  - Kết quả quyết định khách Zalo có nhận được nhắc 11.11 (10/11) không.
+
+---
+
 ## Phiên 2026-10-27 (cw) — Nhắc mùa sale tự lập lịch, duyệt từng lượt
 
 - Nghiên cứu: `reports/CASHBACK_SALE_REMINDERS.md`.

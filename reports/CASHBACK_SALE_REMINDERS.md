@@ -82,6 +82,6 @@ Câu đang dùng: `messages.SALE_REMINDERS`.
 
 ## 5. Còn mở
 
-- Zalo chưa từng gửi được tin chủ động. Khách Zalo có thể không nhận được, nên cần tin thử tới tài khoản chủ bot.
+- Zalo: tin chủ động tới chủ bot ngày 27/10 **gửi được** (1 giờ sau lần chủ bot nhắn cuối). Chưa kiểm sau 48 giờ im lặng; khách Zalo lâu không nhắn có thể không nhận được.
 - Lượt đầu tiên là 10/11 20:30 (11.11), không có lượt nào sớm hơn để thử. Tin nhắc dùng chung đường gửi với tin báo đơn, mà đường này đã chạy thật trên Telegram.
 - Đo hiệu quả: số khách tạo link trong 24 giờ sau tin nhắc. Chưa làm.
