@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (du) — 🖼 Ảnh đăng bài: ẩn/hiện từng mục
+
+- Bỏ tên sản phẩm khỏi ảnh (e114224); đơn gần đây 1 dòng, nhãn trạng thái thẳng cột.
+- Nút 🖼 Ảnh đăng bài mở màn chỉnh (`c:pb:home`): bật/tắt Thành viên · Link · Đơn · Hoàn tiền ghi nhận · Biểu đồ (7/14 ngày) · Đơn gần đây (3/4/6) · Ẩn đơn dưới 1.000đ; lưu bot_state `showcase_options`. 🖼 Tạo ảnh (`c:pb:go`) gửi ảnh + bài viết thành tin mới (service keep), màn chỉnh ở lại. Mục tắt không chừa chỗ; bài viết cũng bỏ mục tắt; ghi chú «Số tạm tính…» luôn có.
+- Proof: 898 test qua, ruff sạch; ảnh 14 ngày/ẩn mục dựng từ bản sao DB.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo` rồi bấm thử.
+
+---
+
 ## Phiên 2026-10-28 (store-5) — Bot bán hàng AI Pass Store: icon đúng hãng
 
 - Trạng thái store (PLAN-097, commit 3001f25): @aipass_shop_bot + kênh @ai_pass_store chạy systemd `store-bot`, `store-api`; hàng lấy từ FatCat qua API (giá lẻ = giá đại lý ÷ 0,98), đồng bộ 3 phút, báo hàng mới lên kênh + nhắn mọi khách. Mục (store-1…4) cũ bị ghi đè ở bb0ebfd, chi tiết xem `agents/plans/active/PLAN-097-store-bot.md`.

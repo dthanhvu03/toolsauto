@@ -373,8 +373,8 @@ class AdminPanel:
         stats = _STATS.fullmatch(data or "")
         if stats:
             return self._stats(stats.group(1), now, detail=bool(stats.group(2)))
-        if data == showcase.CARD:
-            return self._showcase(now)
+        if data.startswith("c:pb:"):
+            return self._showcase(data, now)
         if data == "c:rs:new":
             return self._reserve_start(user_id, now)
         if data == "c:sh:new":
@@ -1013,18 +1013,13 @@ class AdminPanel:
         text = render(stats, period_label=PERIODS[period][0], since=since)
         return BotReply(text, inline_keyboard=stats_keyboard(period, detail))
 
-    def _showcase(self, now: datetime) -> BotReply:
-        """🖼 Ảnh đăng bài: ảnh số liệu thật kèm bài viết soạn sẵn (showcase.py)."""
-        back = ((("◀️ Về thống kê", "c:st:all"),), BACK_HOME)
+    def _showcase(self, data: str, now: datetime) -> BotReply:
+        """🖼 Ảnh đăng bài: chỉnh mục hiển thị rồi tạo ảnh số liệu thật (showcase.py)."""
         try:
-            with self._connect() as conn:
-                data = showcase.collect(conn, now)
+            return showcase.ShowcaseAdmin(TrackingRepository(self.db_path)).route(data, now)
         except sqlite3.OperationalError:
             logger.exception("[Cashback] ảnh đăng bài lỗi")
-            return BotReply("Chưa đọc được dữ liệu trên database này.", inline_keyboard=back)
-        caption = f"Số liệu thật lúc {data.updated_at:%H:%M %d/%m/%Y} · tiền tạm tính"
-        return BotReply(showcase.admin_text(data), photo=("so-lieu.png", showcase.render_png(data), caption),
-                        inline_keyboard=back)
+            return BotReply("Chưa đọc được dữ liệu trên database này.", inline_keyboard=showcase.NAV)
 
     def _history_rows(self) -> list[str] | None:
         try:

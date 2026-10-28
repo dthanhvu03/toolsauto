@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from PIL import Image
 
 from cashback_bot import showcase
-from tests.test_cashback_wallet import ADMIN, USER, _bot, _financially_ready, _link
+from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _financially_ready, _link
 
 NOW = datetime(2026, 10, 28, 6, 0, tzinfo=timezone.utc)  # 13:00 28/10 giờ VN
 ZALO = -3
@@ -81,10 +81,68 @@ def test_nut_anh_dang_bai_trong_thong_ke(tmp_path):
     bot = _bot(tmp_path)
     _seed(bot)
     stats = bot.admin_panel.handle_callback(ADMIN, "c:st:all", "private", NOW)
-    assert ("🖼 Ảnh đăng bài", showcase.CARD) in [b for row in stats.inline_keyboard for b in row]
-    reply = bot.admin_panel.handle_callback(ADMIN, showcase.CARD, "private", NOW)
+    assert ("🖼 Ảnh đăng bài", showcase.HOME) in [b for row in stats.inline_keyboard for b in row]
+    home = bot.admin_panel.handle_callback(ADMIN, showcase.HOME, "private", NOW)
+    assert "ẩn / hiện" in home.text and home.photo is None, "màn chỉnh chưa tạo ảnh"
+    assert ("✅ Thành viên", "c:pb:t:members") in home.inline_keyboard[0]
+    reply = _callback(bot, ADMIN, showcase.CARD)
     name, data, caption = reply.photo
     assert name.endswith(".png") and data.startswith(b"\x89PNG") and "tạm tính" in caption
-    assert "<pre>" in reply.text and "13:00 28/10/2026" in reply.text
+    assert "<pre>" in reply.text
+    assert reply.edit_message_id is None, "ảnh là tin mới, màn chỉnh ở lại"
+    assert _callback(bot, ADMIN, showcase.HOME).edit_message_id == 5, "bật/tắt thì sửa tại chỗ"
     stranger = bot.admin_panel.handle_callback(USER, showcase.CARD, "private", NOW)
     assert stranger is None or stranger.photo is None, "chỉ admin"
+
+
+def _press(bot, data: str):
+    return bot.admin_panel.handle_callback(ADMIN, data, "private", NOW)
+
+
+def test_an_hien_tung_muc_va_nho_lua_chon(tmp_path):
+    bot = _bot(tmp_path)
+    _seed(bot)
+    full = _press(bot, showcase.CARD)
+    for key in ("members", "money", "recent"):
+        _press(bot, f"c:pb:t:{key}")
+    home = _press(bot, showcase.HOME)
+    assert ("⬜ Thành viên", "c:pb:t:members") in home.inline_keyboard[0], "bot nhớ lựa chọn"
+    assert ("⬜ Hoàn tiền ghi nhận", "c:pb:t:money") in home.inline_keyboard[1]
+    card = _press(bot, showcase.CARD)
+    assert "thành viên" not in card.text and "hoàn tiền đã ghi nhận" not in card.text
+    assert "🔗 1 link đã tạo · 🛒 2 đơn ghi nhận" in card.text and showcase.NOTE in card.text, "ghi chú luôn có"
+    short = Image.open(io.BytesIO(card.photo[1]))
+    assert short.height < Image.open(io.BytesIO(full.photo[1])).height, "mục tắt không chừa chỗ"
+
+    _press(bot, "c:pb:d:14")
+    _press(bot, "c:pb:n:6")
+    _press(bot, "c:pb:t:hide_small")
+    o = showcase.ShowcaseAdmin(bot.repo).options()
+    with bot.repo.connect() as conn:
+        conn.execute("INSERT INTO shopee_conversions (conversion_id, sub_id, order_sn, order_status, purchase_time, "
+                     "telegram_user_id, created_at, updated_at) VALUES ('c5', 's', 'SN5', 'PENDING', "
+                     "'2026-10-28T01:00:00Z', ?, '', '')", (USER,))
+        conn.execute("INSERT INTO cashback_entries (conversion_id, telegram_user_id, order_sn, item_name, commission_vnd, "
+                     "cashback_vnd, status, purchase_time, created_at, updated_at) VALUES ('c5', ?, 'SN5', 'Cáp', 900, "
+                     "500, 'pending', '2026-10-28T01:00:00Z', '', '')", (USER,))
+    assert (o.chart_days, o.recent_n, o.hide_small, o.recent) == (14, 6, True, True), "chọn số đơn thì bật lại mục"
+    with bot.repo.connect() as conn:
+        s = showcase.collect(conn, NOW, o)
+    assert len(s.daily) == 14 and s.recent == [("B***r", 5_000, "Chờ sàn duyệt", "27/10"),
+                                              ("N***a", 7_000, "Đang giữ", "27/10")], "đơn 500đ bị ẩn"
+    showcase.render_png(s)
+    with bot.repo.connect() as conn:
+        assert showcase.collect(conn, NOW, showcase.Options()).recent[0][1] == 500, "mặc định hiện cả đơn nhỏ"
+
+    for key in ("links", "orders", "chart", "recent"):
+        _press(bot, f"c:pb:t:{key}")
+    bare = _press(bot, showcase.CARD)
+    assert bare.photo[1].startswith(b"\x89PNG"), "tắt hết vẫn tạo được ảnh (tiêu đề + ghi chú)"
+    assert "Nút này không còn hiệu lực" in _press(bot, "c:pb:d:30").text
+
+
+def test_an_don_nho():
+    with_small = showcase.Options(hide_small=True)
+    assert showcase.Options.load(with_small.dump()) == with_small
+    assert showcase.Options.load("hỏng") == showcase.Options()
+    assert showcase.Options.load('{"chart_days": 30, "members": "x"}') == showcase.Options()

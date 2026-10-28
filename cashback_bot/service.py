@@ -229,7 +229,8 @@ class CashbackService:
                 datetime.now(timezone.utc),
             )
         # Bấm một món trong tin deal: thẻ link là tin mới, không sửa đè danh sách deal (khách còn bấm món khác).
-        keep = data.startswith("u:dl:")
+        # 🖼 Tạo ảnh: ảnh và bài viết là tin mới, màn chỉnh mục hiển thị ở lại để tạo tiếp.
+        keep = data.startswith("u:dl:") or data == "c:pb:go"
         return user_id, replace(
             reply,
             callback_query_id=query_id,

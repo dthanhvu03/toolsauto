@@ -103,7 +103,7 @@ def test_man_thong_ke_trong_admin(tmp_path):
     assert "23/10    3     0   0     0" in reply.text
     assert "Gửi nhiều nhất" not in reply.text and "chưa phải doanh thu" not in reply.text
     assert reply.inline_keyboard[0][0] == ("• Hôm nay", "c:st:today")
-    assert reply.inline_keyboard[1] == (("🔎 Chi tiết", "c:st:today:more"), ("🖼 Ảnh đăng bài", "c:pb:card"))
+    assert reply.inline_keyboard[1] == (("🔎 Chi tiết", "c:st:today:more"), ("🖼 Ảnh đăng bài", "c:pb:home"))
     assert reply.inline_keyboard[-1] == (("◀️ Tổng quan", "c:menu:home"),)
     assert reply.text.count("\n") < 30
 
@@ -117,7 +117,7 @@ def test_man_thong_ke_trong_admin(tmp_path):
     assert "chưa phải doanh thu" in detail.text
     # Đổi kỳ ở màn chi tiết thì vẫn ở chi tiết.
     assert detail.inline_keyboard[0][1] == ("7 ngày", "c:st:7d:more")
-    assert detail.inline_keyboard[1] == (("◀️ Về thống kê", "c:st:today"), ("🖼 Ảnh đăng bài", "c:pb:card"))
+    assert detail.inline_keyboard[1] == (("◀️ Về thống kê", "c:st:today"), ("🖼 Ảnh đăng bài", "c:pb:home"))
     assert len(detail.text) < 3500
 
     everything = bot.admin_panel.handle_callback(ADMIN, "c:st:all:more", "private", NOW)

@@ -628,7 +628,7 @@ def stats_keyboard(current: str, detail: bool = False) -> Keyboard:
     suffix = ":more" if detail else ""
     row = tuple((f"• {label}" if key == current else label, f"c:st:{key}{suffix}") for key, label in STATS_PERIODS)
     switch = ("◀️ Về thống kê", f"c:st:{current}") if detail else ("🔎 Chi tiết", f"c:st:{current}:more")
-    return (row, (switch, ("🖼 Ảnh đăng bài", "c:pb:card")), BACK_HOME)
+    return (row, (switch, ("🖼 Ảnh đăng bài", "c:pb:home")), BACK_HOME)
 
 
 def _bar(value: int, peak: int, width: int = 10) -> str:

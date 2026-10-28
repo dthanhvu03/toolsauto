@@ -4,30 +4,40 @@ Chủ bot chọn (2026-10-28): ảnh kèm bài viết soạn sẵn; tiền ghi �
 - Bot chưa chi trả lần nào thì không viết như đã trả. Dòng «Đã chi trả» chỉ hiện khi có lượt rút đã trả.
 - Tên khách chỉ còn chữ đầu và chữ cuối; không có tên thì ghi kênh (Khách Telegram / Khách Zalo).
 - Không hiện tên sản phẩm (chủ bot bỏ 2026-10-28).
-Font Be Vietnam Pro (OFL, cashback_bot/assets/fonts). Callback: c:pb:card.
+- Chủ bot ẩn/hiện từng mục trước khi tạo (Options, lưu bot_state `showcase_options`). Dòng «Số tạm tính…» cuối ảnh
+  luôn có, không tắt được.
+Font Be Vietnam Pro (OFL, cashback_bot/assets/fonts).
+Callback: c:pb:home (màn chỉnh) · c:pb:t:<mục> (bật/tắt) · c:pb:d:<ngày> · c:pb:n:<số đơn> · c:pb:go (tạo ảnh).
 """
 
 from __future__ import annotations
 
 import html
 import io
+import json
 import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from cashback_bot.db import TrackingRepository
+from cashback_bot.messages import BotReply, Keyboard
 from cashback_bot.money import format_vnd
 from cashback_bot.payouts import PAID_STATES
 from cashback_bot.wallet import CLAWBACK_TAG
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
-CARD = "c:pb:card"
-CHART_DAYS = 7
-RECENT = 4
+HOME = "c:pb:home"
+CARD = "c:pb:go"
+STATE_KEY = "showcase_options"
+CHART_CHOICES = (7, 14)
+RECENT_CHOICES = (3, 4, 6)
+SMALL_VND = 1_000
+_ACTION = re.compile(r"^c:pb:(?:(t):([a-z_]{3,12})|(d|n):(\d{1,2}))$")
 FONTS = Path(__file__).parent / "assets" / "fonts"
 STATUS_LABELS = {"pending": "Chờ sàn duyệt", "holding": "Đang giữ", "available": "Đã duyệt"}
 NOTE = "Số tạm tính. Tiền hoàn chỉ chi khi sàn đã duyệt và trả hoa hồng."
@@ -49,6 +59,54 @@ SEGMENTS = {"pending": (255, 179, 102), "holding": (255, 112, 67), "available": 
 
 
 @dataclass(frozen=True)
+class Options:
+    """Mục hiện trên ảnh. Mặc định hiện hết, trừ ẩn đơn nhỏ."""
+
+    members: bool = True
+    links: bool = True
+    orders: bool = True
+    money: bool = True
+    chart: bool = True
+    recent: bool = True
+    hide_small: bool = False
+    chart_days: int = 7
+    recent_n: int = 4
+
+    @classmethod
+    def load(cls, raw: str | None) -> Options:
+        try:
+            saved = json.loads(raw or "{}")
+        except ValueError:
+            saved = {}
+        base = cls()
+        kept = {}
+        for f in fields(cls):
+            value = saved.get(f.name) if isinstance(saved, dict) else None
+            if isinstance(getattr(base, f.name), bool) and isinstance(value, bool):
+                kept[f.name] = value
+        if saved.get("chart_days") in CHART_CHOICES:
+            kept["chart_days"] = saved["chart_days"]
+        if saved.get("recent_n") in RECENT_CHOICES:
+            kept["recent_n"] = saved["recent_n"]
+        return replace(base, **kept)
+
+    def dump(self) -> str:
+        return json.dumps(asdict(self), sort_keys=True)
+
+
+# mục bật/tắt → tên trên nút
+TOGGLES = {
+    "members": "Thành viên",
+    "links": "Link",
+    "orders": "Đơn",
+    "money": "Hoàn tiền ghi nhận",
+    "chart": "Biểu đồ",
+    "recent": "Đơn gần đây",
+    "hide_small": f"Ẩn đơn dưới {format_vnd(SMALL_VND)}",
+}
+
+
+@dataclass(frozen=True)
 class Showcase:
     members: int
     links: int
@@ -63,6 +121,7 @@ class Showcase:
     daily: list[tuple[str, int, int]]  # (nhãn ngày, link, đơn)
     recent: list[tuple[str, int, str, str]]  # (tên che, tiền hoàn, trạng thái, ngày)
     updated_at: datetime
+    options: Options = Options()
 
     @property
     def recorded_vnd(self) -> int:
@@ -83,7 +142,7 @@ def _ict_day(stamp: str | None) -> str | None:
     return moment.astimezone(ICT).strftime("%Y-%m-%d")
 
 
-def collect(conn: sqlite3.Connection, now: datetime) -> Showcase:
+def collect(conn: sqlite3.Connection, now: datetime, options: Options = Options()) -> Showcase:
     members = int(conn.execute("SELECT COUNT(*) FROM telegram_users").fetchone()[0])
     links = conn.execute("SELECT created_at FROM link_requests WHERE link_status = 'created'").fetchall()
     orders = conn.execute(
@@ -114,7 +173,7 @@ def collect(conn: sqlite3.Connection, now: datetime) -> Showcase:
     for order_sn, _user, stamp in orders:
         order_days.setdefault(_ict_day(stamp), set()).add(order_sn)
     daily = []
-    for back in range(CHART_DAYS - 1, -1, -1):
+    for back in range(options.chart_days - 1, -1, -1):
         day = today - timedelta(days=back)
         key = day.isoformat()
         label = "Hôm nay" if back == 0 else day.strftime("%d/%m")
@@ -128,10 +187,10 @@ def collect(conn: sqlite3.Connection, now: datetime) -> Showcase:
                          ORDER BY c.created_at LIMIT 1),
                         (SELECT username FROM telegram_users t WHERE t.telegram_user_id = e.telegram_user_id)) AS name
         FROM cashback_entries e
-        WHERE e.status IN ('pending', 'holding', 'available') AND instr(e.conversion_id, ?) = 0 AND e.cashback_vnd > 0
+        WHERE e.status IN ('pending', 'holding', 'available') AND instr(e.conversion_id, ?) = 0 AND e.cashback_vnd >= ?
         ORDER BY e.purchase_time DESC LIMIT ?
         """,
-        (CLAWBACK_TAG, RECENT),
+        (CLAWBACK_TAG, SMALL_VND if options.hide_small else 1, options.recent_n),
     ).fetchall()
     for user, cashback, status, stamp, name in rows:
         day = _ict_day(stamp)
@@ -142,19 +201,24 @@ def collect(conn: sqlite3.Connection, now: datetime) -> Showcase:
         buyers=len({o[1] for o in orders if o[1] is not None}), days_running=days_running,
         pending_vnd=int(money[0]), holding_vnd=int(money[1]), available_vnd=int(money[2]),
         paid_vnd=int(paid[0]), paid_count=int(paid[1]), daily=daily, recent=recent, updated_at=now.astimezone(ICT),
+        options=options,
     )
 
 
 def post_text(s: Showcase) -> str:
     """Bài viết soạn sẵn để chủ bot sao chép, đi kèm ảnh. Không hứa số, không viết như đã trả khi chưa trả."""
-    lines = [
-        f"🛍 Bot hoàn tiền Shopee & TikTok Shop: số liệu thật sau {s.days_running} ngày chạy",
-        "",
-        f"👥 {s.members} thành viên · 🔗 {s.links} link đã tạo · 🛒 {s.orders} đơn ghi nhận",
-        f"💰 {format_vnd(s.recorded_vnd)} hoàn tiền đã ghi nhận (tạm tính, chờ sàn duyệt)",
-    ]
-    if s.paid_count:
-        lines.append(f"✅ Đã chi trả {format_vnd(s.paid_vnd)} qua {s.paid_count} lượt rút")
+    o = s.options
+    lines = [f"🛍 Bot hoàn tiền Shopee & TikTok Shop: số liệu thật sau {s.days_running} ngày chạy", ""]
+    counts = [text for on, text in ((o.members, f"👥 {s.members} thành viên"), (o.links, f"🔗 {s.links} link đã tạo"),
+                                    (o.orders, f"🛒 {s.orders} đơn ghi nhận")) if on]
+    if counts:
+        lines.append(" · ".join(counts))
+    if o.money:
+        lines.append(f"💰 {format_vnd(s.recorded_vnd)} hoàn tiền đã ghi nhận (tạm tính, chờ sàn duyệt)")
+        if s.paid_count:
+            lines.append(f"✅ Đã chi trả {format_vnd(s.paid_vnd)} qua {s.paid_count} lượt rút")
+    if lines[-1] == "":
+        lines.pop()
     lines += [
         "",
         "Cách dùng:",
@@ -218,10 +282,15 @@ def _header(c: _Canvas, s: Showcase, height: int) -> None:
     c.text((PAD, 226), f"Shopee · TikTok Shop · {s.days_running} ngày chạy", _font("Medium", 34), (255, 236, 226))
 
 
-def _kpis(c: _Canvas, s: Showcase, top: int) -> int:
-    items = [(s.members, "Thành viên"), (s.links, "Link đã tạo"), (s.orders, "Đơn ghi nhận")]
+def _kpis(c: _Canvas, s: Showcase, top: int) -> int | None:
+    o = s.options
+    items = [(value, label) for on, value, label in ((o.members, s.members, "Thành viên"),
+                                                     (o.links, s.links, "Link đã tạo"),
+                                                     (o.orders, s.orders, "Đơn ghi nhận")) if on]
+    if not items:
+        return None
     gap = 24
-    width = (WIDTH - 2 * PAD - 2 * gap) / 3
+    width = (WIDTH - 2 * PAD - (len(items) - 1) * gap) / len(items)
     for i, (value, label) in enumerate(items):
         x0 = PAD + i * (width + gap)
         c.card(x0, top, x0 + width, top + 190)
@@ -230,7 +299,9 @@ def _kpis(c: _Canvas, s: Showcase, top: int) -> int:
     return top + 190
 
 
-def _money(c: _Canvas, s: Showcase, top: int) -> int:
+def _money(c: _Canvas, s: Showcase, top: int) -> int | None:
+    if not s.options.money:
+        return None
     paid_row = 56 if s.paid_count else 0
     bottom = top + 330 + paid_row
     c.card(PAD, top, WIDTH - PAD, bottom)
@@ -265,11 +336,13 @@ def _money(c: _Canvas, s: Showcase, top: int) -> int:
     return bottom
 
 
-def _chart(c: _Canvas, s: Showcase, top: int) -> int:
+def _chart(c: _Canvas, s: Showcase, top: int) -> int | None:
+    if not s.options.chart:
+        return None
     bottom = top + 380
     c.card(PAD, top, WIDTH - PAD, bottom)
     x = PAD + 40
-    c.text((x, top + 40), f"{CHART_DAYS} ngày gần đây", _font("SemiBold", 30), INK)
+    c.text((x, top + 40), f"{len(s.daily)} ngày gần đây", _font("SemiBold", 30), INK)
     font = _font("Medium", 22)
     lx = WIDTH - PAD - 40
     for label, color in (("Đơn", ORANGE), ("Link", PEACH)):
@@ -280,20 +353,25 @@ def _chart(c: _Canvas, s: Showcase, top: int) -> int:
     base, height = bottom - 70, 190
     peak = max([max(links, orders) for _l, links, orders in s.daily] + [1])
     slot = (WIDTH - 2 * PAD - 80) / len(s.daily)
+    # 7 ngày: cột 28 px, ghi nhãn mọi ngày; 14 ngày: cột hẹp lại, nhãn ngày cách một (luôn có Hôm nay)
+    bar = min(28, slot * 0.3)
+    value_font = _font("SemiBold", 22 if bar >= 28 else 18)
+    every = 1 if bar >= 28 else 2
     for i, (label, links, orders) in enumerate(s.daily):
         mid = x + slot * i + slot / 2
-        for offset, value, color in ((-17, links, PEACH), (17, orders, ORANGE)):
+        for offset, value, color in ((-bar * 0.6, links, PEACH), (bar * 0.6, orders, ORANGE)):
             h = max(height * value / peak, 6)
-            c.box(mid + offset - 14, base - h, mid + offset + 14, base, color, radius=10)
+            c.box(mid + offset - bar / 2, base - h, mid + offset + bar / 2, base, color, radius=min(10, bar / 2))
             if value:
-                c.text((mid + offset, base - h - 18), str(value), _font("SemiBold", 22), INK, "mm")
-        c.text((mid, base + 32), label, font, INK if label == "Hôm nay" else MUTED, "mm")
+                c.text((mid + offset, base - h - 18), str(value), value_font, INK, "mm")
+        if (len(s.daily) - 1 - i) % every == 0:
+            c.text((mid, base + 32), label, font, INK if label == "Hôm nay" else MUTED, "mm")
     return bottom
 
 
-def _recent(c: _Canvas, s: Showcase, top: int) -> int:
-    if not s.recent:
-        return top - 32
+def _recent(c: _Canvas, s: Showcase, top: int) -> int | None:
+    if not s.options.recent or not s.recent:
+        return None
     row_h = 76
     bottom = top + 116 + row_h * len(s.recent)
     c.card(PAD, top, WIDTH - PAD, bottom)
@@ -317,20 +395,96 @@ def _recent(c: _Canvas, s: Showcase, top: int) -> int:
     return bottom
 
 
+def _sections(c: _Canvas, s: Showcase, header: int) -> int:
+    """Vẽ các mục đang bật, mục tắt không chừa chỗ. Trả về y sau mục cuối."""
+    y = header - 70  # thẻ đầu đè lên khối cam
+    drawn = False
+    for section in (_kpis, _money, _chart, _recent):
+        bottom = section(c, s, y)
+        if bottom is not None:
+            y, drawn = bottom + 32, True
+    return y if drawn else header + 10
+
+
 def render_png(s: Showcase) -> bytes:
     header = 360
     probe = _Canvas(10)
-    sections = [_kpis, _money, _chart, _recent]
-    y = header - 70
-    for section in sections:
-        y = section(probe, s, y) + 32
-    height = y + 90
+    height = _sections(probe, s, header) + 90
     c = _Canvas(height)
     _header(c, s, header)
-    y = header - 70
-    for section in sections:
-        y = section(c, s, y) + 32
+    y = _sections(c, s, header)
     c.text((WIDTH / 2, y + 30), NOTE, _font("Medium", 24), MUTED, "mm")
     out = io.BytesIO()
     c.image.resize((WIDTH, height), Image.LANCZOS).save(out, "PNG", optimize=True)
     return out.getvalue()
+
+
+# --- Màn chỉnh trong /admin -------------------------------------------------------------------------
+
+NAV = ((("◀️ Về thống kê", "c:st:all"), ("◀️ Tổng quan", "c:menu:home")),)
+
+
+def _mark(on: bool, label: str) -> str:
+    return f"{'✅' if on else '⬜'} {label}"
+
+
+def options_keyboard(o: Options) -> Keyboard:
+    def pick(prefix: str, choices: tuple[int, ...], current: int, unit: str) -> tuple[tuple[str, str], ...]:
+        return tuple((f"• {n}{unit}" if n == current else f"{n}{unit}", f"c:pb:{prefix}:{n}") for n in choices)
+
+    def toggle(key: str) -> tuple[str, str]:
+        return _mark(getattr(o, key), TOGGLES[key]), f"c:pb:t:{key}"
+
+    return (
+        (toggle("members"), toggle("links"), toggle("orders")),
+        (toggle("money"),),
+        (toggle("chart"), *pick("d", CHART_CHOICES, o.chart_days, " ngày")),
+        (toggle("recent"), *pick("n", RECENT_CHOICES, o.recent_n, " đơn")),
+        (toggle("hide_small"),),
+        (("🖼 Tạo ảnh", CARD),),
+        *NAV,
+    )
+
+
+def options_text(o: Options, notice: str = "") -> str:
+    lines = ["🖼 <b>Ảnh đăng bài</b>", "", "Bấm để ẩn / hiện từng mục, xong bấm 🖼 Tạo ảnh. Bot nhớ lựa chọn cho lần sau.",
+             "Dòng «Số tạm tính…» cuối ảnh luôn có."]
+    if notice:
+        lines += ["", notice]
+    return "\n".join(lines)
+
+
+class ShowcaseAdmin:
+    def __init__(self, repo: TrackingRepository):
+        self.repo = repo
+
+    def options(self) -> Options:
+        return Options.load(self.repo.get_state(STATE_KEY))
+
+    def route(self, data: str, now: datetime) -> BotReply:
+        o = self.options()
+        if data == HOME:
+            return BotReply(options_text(o), inline_keyboard=options_keyboard(o))
+        if data == CARD:
+            return self._card(o, now)
+        found = _ACTION.fullmatch(data)
+        if found is None:
+            return BotReply("Nút này không còn hiệu lực.", inline_keyboard=options_keyboard(o))
+        if found.group(1) == "t" and found.group(2) in TOGGLES:
+            key = found.group(2)
+            o = replace(o, **{key: not getattr(o, key)})
+        elif found.group(3) == "d" and int(found.group(4)) in CHART_CHOICES:
+            o = replace(o, chart=True, chart_days=int(found.group(4)))
+        elif found.group(3) == "n" and int(found.group(4)) in RECENT_CHOICES:
+            o = replace(o, recent=True, recent_n=int(found.group(4)))
+        else:
+            return BotReply("Nút này không còn hiệu lực.", inline_keyboard=options_keyboard(o))
+        self.repo.set_state(STATE_KEY, o.dump())
+        return BotReply(options_text(o), inline_keyboard=options_keyboard(o))
+
+    def _card(self, o: Options, now: datetime) -> BotReply:
+        with self.repo.connect() as conn:
+            data = collect(conn, now, o)
+        caption = f"Số liệu thật lúc {data.updated_at:%H:%M %d/%m/%Y} · tiền tạm tính"
+        again = ((("🔁 Chỉnh mục hiển thị", HOME), ("🖼 Tạo lại", CARD)), *NAV)
+        return BotReply(admin_text(data), photo=("so-lieu.png", render_png(data), caption), inline_keyboard=again)
