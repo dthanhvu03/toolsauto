@@ -1,0 +1,24 @@
+# PLAN-097: API đại lý + webhook SePay. Cài: xem deploy/store/README.md
+[Unit]
+Description=Store API (đại lý + webhook nạp tiền)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/vu/toolsauto
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/vu/toolsauto/.venv/bin/python -m store_bot.api_server
+Restart=always
+RestartSec=10
+RestartPreventExitStatus=2
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=append:/home/vu/toolsauto/logs/store_api.log
+StandardError=append:/home/vu/toolsauto/logs/store_api.log
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+# PLAN-097: bot bán hàng Telegram. Cài: xem deploy/store/README.md
+[Unit]
+Description=Store bot (Telegram)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/vu/toolsauto
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/vu/toolsauto/.venv/bin/python -m store_bot
+Restart=always
+RestartSec=10
+# 2: thiếu cấu hình .env; 3: đã có một bot khác đang chạy (khoá file).
+RestartPreventExitStatus=2 3
+KillSignal=SIGTERM
+TimeoutStopSec=30
+StandardOutput=append:/home/vu/toolsauto/logs/store_bot.log
+StandardError=append:/home/vu/toolsauto/logs/store_bot.log
+
+[Install]
+WantedBy=multi-user.target

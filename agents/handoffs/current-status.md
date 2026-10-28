@@ -1,3 +1,53 @@
+## Phiên 2026-10-28 (store-4) — store_bot: báo hàng mới vào chat từng khách (mô hình FatCat)
+
+- "2.639 monthly users" của FatCat là người dùng bot, không phải kênh: FatCat nhắn "HÀNG MỚI VỀ" thẳng vào chat bot từng khách. Làm y vậy:
+  - món tăng hàng (≥ 5 hoặc từ 0) → đăng kênh + nhắn mọi khách (chưa tắt, chưa chặn bot), nút 🛒 Mua ngay / 🔕 Tắt báo hàng mới; ~20 tin/giây, xử lý 429, khách chặn bot thì bỏ khỏi danh sách (/start lại thì nhận lại);
+  - 👤 Hồ sơ bật/tắt; /admin công tắc "Nhắn khách hàng mới" (mặc định bật theo yêu cầu chủ bot); gửi xong báo admin số khách nhận.
+  - /supportadmin + nút 🆘 ở ☎️ Hỗ trợ: báo admin kèm link chat khách, 1 lần/ngày.
+- Chưa làm: /api xin khóa bán sỉ (cần tên miền), /language.
+- Proof: 49 test qua, ruff sạch, migrate bản sao DB thật OK.
+- **Next:** chủ bot restart (`sudo systemctl restart store-bot store-api`). Đã commit + push lên main.
+
+---
+
+## Phiên 2026-10-28 (store-3) — store_bot: dòng tiền, menu cố định, mua thẳng bằng QR
+
+- Đơn FatCat thật đầu tiên chạy đúng 09:51 ICT (Canva 1.000đ, vốn 980đ). Kênh @ai_pass_store đã tạo, bot là admin có quyền đăng (getChatMember: administrator, can_post_messages).
+- 📊 Thống kê thành dòng tiền (nạp / doanh thu / vốn FatCat / lãi / hoàn; hôm nay · 7 ngày · từ đầu) + 💸 Giao dịch gần đây; `orders.unit_cost`.
+- Gõ thẳng số lượng / số tiền ở màn sản phẩm / nạp tiền.
+- Theo mẫu bot đại lý chủ bot gửi: bàn phím menu cố định (🛒 Mua sản phẩm · 👤 Hồ sơ · 📦 Đơn hàng · 🎁 Ví · ☎️ Hỗ trợ), /menu, /support, "Hướng dẫn nhanh"; **mua thẳng**: thiếu tiền → 📱 Thanh toán QR đúng số thiếu (`topups.intent_*`) → admin ✅ / SePay → bot tự mua + giao.
+- Proof: 46 test qua, ruff sạch, migrate trên bản sao DB thật 2 lần OK.
+- **Next:** chủ bot restart; điền `STORE_SUPPORT_TELEGRAM` / `STORE_SUPPORT_ZALO`; nạp ví FatCat (19.823đ); `STORE_API_PUBLIC_URL` vẫn là địa chỉ FatCat → xoá trống; chưa commit.
+
+---
+
+## Phiên 2026-10-28 (store-2) — store_bot lấy hàng từ FatCat Store
+
+- Chủ bot (@Zusem10) là đại lý FatCat; @aipass_shop_bot đã chạy thật từ 02:14 (bản chưa có FatCat).
+- Thêm nguồn FatCat (PLAN-097 bước 2): giá bán = giá lẻ FatCat, bán mọi món khóa được mở, tự đồng bộ 3 phút, tự đăng kênh khi FatCat tăng hàng; đơn FatCat có hoàn tiền khi thiếu / bị từ chối, gọi lại an toàn khi nguồn chậm.
+- Proof: 40 test `tests/test_store_bot.py` qua, ruff sạch; chạy thử bản sao DB thật + GET thật FatCat (không mua). Chưa gọi `/api/buy` thật.
+- **Lưu ý:** ví FatCat chỉ còn 20.803đ → đơn nào lớn hơn sẽ bị FatCat từ chối (khách được hoàn đủ, admin được báo).
+- **Next:**
+  - chủ bot `sudo systemctl restart store-bot store-api`;
+  - nạp ví FatCat; mua thử 1 món rẻ (Slot Canva 1.000đ) bằng tài khoản của mình để xác nhận đơn thật đầu tiên;
+  - chưa commit.
+
+---
+
+## Phiên 2026-10-28 (store-1) — Tool mới: bot bán hàng số (store_bot)
+
+- Chủ bot giao trực tiếp: làm bot kiểu FatCat Store, thư mục ngang `cashback_bot/`. PLAN-097.
+- Mới: `store_bot/` (bot Telegram + API đại lý + webhook SePay), `deploy/store/` (2 service systemd + README cài đặt, tài liệu API).
+- Không đụng code / DB / `.env` cashback. Dùng chung duy nhất `cashback_bot.vietqr`.
+- Proof: `tests/test_store_bot.py` 30 test qua; ruff sạch; chạy thử API với DB tạm trả đúng 200/401.
+- **Chưa chạy thật**: chưa có token bot, kênh, tài khoản ngân hàng.
+- **Next:**
+  - chủ bot tạo bot ở @BotFather + kênh, điền biến `STORE_*` vào `.env` (mẫu ở `deploy/store/README.md`);
+  - cài `store-bot`, `store-api`; trỏ tên miền API (Cloudflare Tunnel / nginx);
+  - thử: thêm 1 sản phẩm → nhập kho → đăng kênh → mua bằng tài khoản phụ → cấp khóa và gọi `/api/v1/products`.
+
+---
+
 ## Phiên 2026-10-28 (dl) — Deal hời thêm lượt trưa 12:08
 
 - Theo yêu cầu chủ bot ("trưa và tối"). Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 7.
