@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cashback_bot.messages import DEALS_ANNOUNCE
+from cashback_bot.messages import DEALS_ANNOUNCE, WALLET_ANNOUNCE
 from tests.test_cashback_bot import NOW
 from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _link
 
@@ -35,3 +35,16 @@ def test_xem_truoc_roi_bam_gui_moi_khach_mot_lan(tmp_path):
     assert [a[0] for a in _announces(bot)] == [USER, OTHER], "khách mới thì gửi thêm cho khách mới"
     history = _callback(bot, ADMIN, "c:menu:hist").text
     assert "gửi 1 khách mới (tổng 1)" in history and "gửi 1 khách mới (tổng 2)" in history
+
+
+def test_tin_gioi_thieu_vi_xem_truoc_khong_hua_rut(tmp_path):
+    bot = _bot(tmp_path)
+    _link(bot)
+    preview = _callback(bot, ADMIN, "c:an:v:wallet-v1")
+    assert WALLET_ANNOUNCE in preview.text and "Ví hoàn tiền xem trước" in preview.text
+    lowered = WALLET_ANNOUNCE.lower()
+    assert "rút tiền chưa mở" in lowered and "cam kết" not in lowered and "chắc chắn" not in lowered
+    _callback(bot, ADMIN, "c:an:ok:wallet-v1")
+    ((chat, html, markup),) = _announces(bot)
+    assert chat == USER and html == WALLET_ANNOUNCE and "u:p:wallet" in markup and "u:p:rules" in markup
+    assert "Chưa mở rút tiền" in _callback(bot, USER, "u:p:wallet").text

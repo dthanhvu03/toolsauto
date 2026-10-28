@@ -1161,6 +1161,17 @@ DEALS_ANNOUNCE = (
     "Phiền thì gõ /thongbao tắt nha 🫶"
 )
 DEALS_ANNOUNCE_KEYBOARD: Keyboard = ((("🛍️ Chọn danh mục deal", "u:dc:home"),),)
+# Tin giới thiệu ví xem trước + điều khoản V3 (2026-10-28): rút chưa mở, không hứa ngày mở.
+WALLET_ANNOUNCE = (
+    "👛 <b>Ví hoàn tiền đã lên bot rồi nè!</b>\n\n"
+    "Giờ bạn xem được tiền hoàn của các đơn mua qua link bot ngay trong 👛 Ví:\n"
+    "⏳ Đang chờ sàn xác nhận · 🔒 Đang giữ · ✅ Có thể rút\n\n"
+    "Tiền vào ví khi sàn đã duyệt và thanh toán hoa hồng, thường vài tuần sau khi đơn hoàn thành. "
+    "Rút tiền chưa mở: bot chỉ chi khi sàn đã trả hoa hồng.\n\n"
+    "📋 Điều khoản mới có thêm phần ví và rút tiền. Mở /dieukien, đọc rồi bấm đồng ý, "
+    "tới lúc mở rút là rút được liền nha 🫶"
+)
+WALLET_ANNOUNCE_KEYBOARD: Keyboard = ((("👛 Xem ví", "u:p:wallet"),), (("📋 Đọc điều khoản", "u:p:rules"),))
 DEALS_PICK_HINT = "Bấm món muốn mua, bot gửi link hoàn tiền liền 😎"
 DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
 DEALS_INFER_HINT = "Chọn danh mục để bot gửi đúng gu hơn, hoặc tắt nếu không cần nha 🫶"
