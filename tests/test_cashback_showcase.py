@@ -47,8 +47,8 @@ def test_so_lieu_that_tam_tinh_che_ten(tmp_path):
     assert (s.members, s.links, s.orders, s.buyers, s.days_running) == (1, 1, 2, 2, 8)
     assert (s.pending_vnd, s.holding_vnd, s.available_vnd, s.recorded_vnd) == (4_000, 7_000, 0, 11_000)
     assert s.daily[0] == ("22/10", 0, 0) and s.daily[-2] == ("27/10", 0, 2) and s.daily[-1][0] == "Hôm nay"
-    assert [r[:4] for r in s.recent] == [("B***r", "Áo Polo Nam", 5_000, "Chờ sàn duyệt"),
-                                         ("N***a", "Mực in HP", 7_000, "Đang giữ")], "bỏ dòng huỷ và clawback"
+    assert s.recent == [("B***r", 5_000, "Chờ sàn duyệt", "27/10"),
+                        ("N***a", 7_000, "Đang giữ", "27/10")], "bỏ dòng huỷ và clawback; không có tên sản phẩm"
     post = showcase.post_text(s)
     assert "11.000đ hoàn tiền đã ghi nhận (tạm tính, chờ sàn duyệt)" in post
     assert "Đã chi trả" not in post, "chưa trả lần nào thì không viết như đã trả"

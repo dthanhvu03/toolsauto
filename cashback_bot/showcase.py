@@ -3,6 +3,7 @@
 Chủ bot chọn (2026-10-28): ảnh kèm bài viết soạn sẵn; tiền ghi «tạm tính»; có đơn gần đây, tên khách che.
 - Bot chưa chi trả lần nào thì không viết như đã trả. Dòng «Đã chi trả» chỉ hiện khi có lượt rút đã trả.
 - Tên khách chỉ còn chữ đầu và chữ cuối; không có tên thì ghi kênh (Khách Telegram / Khách Zalo).
+- Không hiện tên sản phẩm (chủ bot bỏ 2026-10-28).
 Font Be Vietnam Pro (OFL, cashback_bot/assets/fonts). Callback: c:pb:card.
 """
 
@@ -19,7 +20,6 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
 from cashback_bot.payouts import PAID_STATES
 from cashback_bot.wallet import CLAWBACK_TAG
@@ -61,7 +61,7 @@ class Showcase:
     paid_vnd: int
     paid_count: int
     daily: list[tuple[str, int, int]]  # (nhãn ngày, link, đơn)
-    recent: list[tuple[str, str, int, str, str]]  # (tên che, món, tiền hoàn, trạng thái, ngày)
+    recent: list[tuple[str, int, str, str]]  # (tên che, tiền hoàn, trạng thái, ngày)
     updated_at: datetime
 
     @property
@@ -123,7 +123,7 @@ def collect(conn: sqlite3.Connection, now: datetime) -> Showcase:
     recent = []
     rows = conn.execute(
         """
-        SELECT e.telegram_user_id, e.item_name, e.cashback_vnd, e.status, e.purchase_time,
+        SELECT e.telegram_user_id, e.cashback_vnd, e.status, e.purchase_time,
                COALESCE((SELECT display_name FROM channel_identities c WHERE c.internal_user_id = e.telegram_user_id
                          ORDER BY c.created_at LIMIT 1),
                         (SELECT username FROM telegram_users t WHERE t.telegram_user_id = e.telegram_user_id)) AS name
@@ -133,9 +133,9 @@ def collect(conn: sqlite3.Connection, now: datetime) -> Showcase:
         """,
         (CLAWBACK_TAG, RECENT),
     ).fetchall()
-    for user, item, cashback, status, stamp, name in rows:
+    for user, cashback, status, stamp, name in rows:
         day = _ict_day(stamp)
-        recent.append((mask_name(name, int(user)), buyer_name(item or "Sản phẩm"), int(cashback),
+        recent.append((mask_name(name, int(user)), int(cashback),
                        STATUS_LABELS[status], datetime.fromisoformat(day).strftime("%d/%m") if day else ""))
     return Showcase(
         members=members, links=len(links), orders=len({o[0] for o in orders}),
@@ -179,14 +179,6 @@ def admin_text(s: Showcase) -> str:
 
 def _font(weight: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(FONTS / f"BeVietnamPro-{weight}.ttf"), size * SCALE)
-
-
-def _fit(draw: ImageDraw.ImageDraw, text: str, font, width: int) -> str:
-    if draw.textlength(text, font=font) <= width * SCALE:
-        return text
-    while text and draw.textlength(text + "…", font=font) > width * SCALE:
-        text = text[:-1]
-    return text.rstrip(" ,.-") + "…"
 
 
 class _Canvas:
@@ -302,25 +294,26 @@ def _chart(c: _Canvas, s: Showcase, top: int) -> int:
 def _recent(c: _Canvas, s: Showcase, top: int) -> int:
     if not s.recent:
         return top - 32
-    row_h = 92
+    row_h = 76
     bottom = top + 116 + row_h * len(s.recent)
     c.card(PAD, top, WIDTH - PAD, bottom)
     x, right = PAD + 40, WIDTH - PAD - 40
     c.text((x, top + 40), "Đơn gần đây", _font("SemiBold", 30), INK)
-    name_font, item_font, money_font, chip_font = (
-        _font("SemiBold", 28), _font("Regular", 24), _font("ExtraBold", 30), _font("SemiBold", 20))
-    for i, (name, item, cashback, status, day) in enumerate(s.recent):
+    name_font, money_font, chip_font = _font("SemiBold", 28), _font("ExtraBold", 30), _font("SemiBold", 22)
+    # nhãn trạng thái thẳng cột: chừa chỗ theo số tiền dài nhất
+    money_w = max(c.width(f"+{format_vnd(r[1])}", money_font) for r in s.recent)
+    chip_right = right - money_w - 24
+    for i, (name, cashback, status, day) in enumerate(s.recent):
         y = top + 100 + row_h * i
         if i:
             c.box(x, y, right, y + 2, (244, 236, 231), radius=1)
+        mid = y + row_h / 2
+        c.text((x, mid), f"{name} · {day}", name_font, INK, "lm")
         amount = f"+{format_vnd(cashback)}"
-        c.text((right, y + 32), amount, money_font, GREEN, "rm")
-        chip_w = c.width(status, chip_font) + 28
-        c.box(right - chip_w, y + 52, right, y + 80, (255, 238, 228), radius=14)
-        c.text((right - chip_w / 2, y + 66), status, chip_font, ORANGE, "mm")
-        text_w = int(right - x - max(c.width(amount, money_font), chip_w) - 30)
-        c.text((x, y + 32), f"{name} · {day}", name_font, INK, "lm")
-        c.text((x, y + 66), _fit(c.draw, item, item_font, text_w), item_font, MUTED, "lm")
+        c.text((right, mid), amount, money_font, GREEN, "rm")
+        chip_w = c.width(status, chip_font) + 32
+        c.box(chip_right - chip_w, mid - 18, chip_right, mid + 18, (255, 238, 228), radius=18)
+        c.text((chip_right - chip_w / 2, mid), status, chip_font, ORANGE, "mm")
     return bottom
 
 
