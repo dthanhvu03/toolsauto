@@ -1,3 +1,15 @@
+## Phiên 2026-10-28 (dk) — Kết quả đêm đầu deal hời + đoán gu
+
+- Production: a17f06f (Telegram + Zalo), chủ bot restart 18:54 ICT 27/10.
+- 20:08 ICT 27/10: gửi 11 tin DEALS, 0 lỗi (3 khách tự chọn + 8 khách bot đoán gu); 7 LINK_NUDGE; 0 khách chặn bot.
+- Đến 08:18 ICT 28/10:
+  - chỉ Zalo chủ bot (-2) bấm deal → tạo 1 link (nước tẩy trang);
+  - khách thật chưa bấm, chưa đổi danh mục, chưa ai bấm 🔕 (thêm deal_cats = 0).
+- Proof: đọc DB mode=ro (admin_notifications, link_requests, bot_state, telegram_users.notify_blocked_at).
+- **Next:**
+  - 28/10: bot tự soạn 17:30, gửi 20:08 cho khách tự chọn; khách đoán gu nhận lại sớm nhất 30/10 (cách 3 ngày);
+  - sáng 29/10 và 31/10 kiểm lại khách bấm / tắt / chặn.
+
 ## Phiên 2026-10-27 (dj) — Deal cho khách chưa chọn danh mục (bot đoán gu)
 
 - Theo yêu cầu chủ bot. Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 6.
