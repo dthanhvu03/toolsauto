@@ -36,7 +36,7 @@ import requests
 
 from cashback_bot import engagement, sale_calendar
 from cashback_bot.db import TrackingRepository, enqueue_event
-from cashback_bot.messages import DEALS_CHANGE_HINT, DEALS_INFER_HINT, DEALS_PICK_HINT
+from cashback_bot.messages import DEALS_CHANGE_HINT, DEALS_INFER_HINT, DEALS_PICK_HINT, PROMO_TAG
 from cashback_bot.money import format_vnd
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
 from cashback_bot.price_watch import PriceHistoryClient, PriceWatchError
@@ -383,12 +383,9 @@ def build(repo: TrackingRepository, service, market: MarketSearchClient, history
 # --- Tin gửi khách ----------------------------------------------------------------------------------------------
 
 
-_PROMO_TAG = re.compile(r"^\s*(?:[\[【(][^\]】)]{0,40}[\]】)]\s*)+")
-
-
 def _short(name: str, limit: int = 42) -> str:
     """Bỏ nhãn khuyến mãi shop gắn ở đầu tên («[MUA 2 TẶNG 1]», «【DAILY】») rồi cắt gọn."""
-    text = " ".join(_PROMO_TAG.sub("", name).split()) or " ".join(name.split())
+    text = " ".join(PROMO_TAG.sub("", name).split()) or " ".join(name.split())
     return text if len(text) <= limit else text[: limit - 1].rstrip(" ,.-") + "…"
 
 
@@ -423,7 +420,8 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
     else:
         guessed = ", ".join(CATEGORIES[c][0] for c in cats)
         lines = [slot.infer_header,
-                 f"Bot đoán bạn thích {guessed} vì bạn từng xem <i>{html.escape(_short(reason, 40))}</i>."]
+                 f"Bot đoán bạn thích {guessed} vì bạn từng xem <i>{html.escape(_short(reason, 40))}</i>"
+                 + ("" if _short(reason, 40).endswith("…") else ".")]
     buttons, number = [], 0
     for cat in cats:
         rows = [d for c, d in picked if c == cat]

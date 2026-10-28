@@ -525,7 +525,8 @@ class CashbackService:
             return self._consume_bank(telegram_user_id, waiting_bank, stripped, now or datetime.now(timezone.utc))
         target = parse_shopee_target(stripped)
         moment = now or datetime.now(timezone.utc)
-        if not self._within_rate_limit(telegram_user_id, moment):
+        # Chỉ link mới tính suất: tin chat (ok, cảm ơn…) không làm khách bị khoá «gửi nhiều link» (rà Zalo 2026-10-28).
+        if is_link and not self._within_rate_limit(telegram_user_id, moment):
             return rate_limited_reply(self.settings.user_cooldown_sec)
         if target is None and tiktok_url is not None:
             return self._tiktok_link(update_id, telegram_user_id, tiktok_url, moment)
@@ -535,7 +536,7 @@ class CashbackService:
                 self._reject(update_id, telegram_user_id, f"[link ShopeeFood · {len(stripped)} ký tự]", "food_link")
                 return food_link_reply()
             self._reject(update_id, telegram_user_id, f"[không phải link · {len(stripped)} ký tự]", "invalid_link")
-            return self._invalid_link()
+            return self._invalid_link(stripped)
         gate = self.desk.terms_gate(telegram_user_id, moment)
         if gate is not None:
             return gate
@@ -773,8 +774,8 @@ class CashbackService:
             return conn.execute("SELECT COUNT(*) FROM link_requests WHERE telegram_user_id = ? AND link_status = 'created'",
                                 (user_id,)).fetchone()[0] == 1
 
-    def _invalid_link(self) -> BotReply:
-        reply = invalid_link_reply()
+    def _invalid_link(self, text: str = "") -> BotReply:
+        reply = invalid_link_reply(text)
         return replace(reply, text=with_tiktok(reply.text)) if self.tiktok_open() else reply
 
     def _v12_ready(self) -> bool:

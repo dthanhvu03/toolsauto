@@ -41,6 +41,7 @@ from cashback_bot.zalo_render import (
     WELCOME,
     ZaloMessage,
     menu_choices,
+    number_missing,
     render,
 )
 
@@ -235,7 +236,9 @@ class ZaloChannel:
             welcome = with_tiktok(WELCOME) if self.service.tiktok_open() else WELCOME
             messages = render(BotReply(welcome))[0] + messages
             self._capacity_check()
-        self.store.set_menu(internal, menu_choices(reply), moment)
+        # Câu trả lời không có danh sách (gõ nhầm số, tin chat…) thì giữ danh sách trước: gõ lại số đúng vẫn chạy.
+        if choices := menu_choices(reply):
+            self.store.set_menu(internal, choices, moment)
         self.store.save_reply(int(row["id"]), messages)
         return messages
 
@@ -275,8 +278,10 @@ class ZaloChannel:
         if key.isdigit() and len(key) <= 2:
             entries = self.store.menu_entries(internal, now)
             number = int(key)
-            if not 1 <= number <= len(entries):
+            if not entries:
                 return BotReply(NUMBER_STALE)
+            if not 1 <= number <= len(entries):
+                return BotReply(number_missing(number, len(entries)))
             data = entries[number - 1][1]
             reply = self._press(internal, data, update_id)
             return _keep_deal_list(reply, entries) if data.startswith(DEAL_ITEM) else reply
@@ -296,8 +301,10 @@ class ZaloChannel:
     def _press_many(self, internal: int, numbers: list[int], update_id: int, now: datetime) -> BotReply:
         """«1 3 5»: bấm lần lượt nhiều mục của một màn bật / tắt (danh mục deal, thông báo). Màn khác chỉ nhận một số."""
         menu = self.store.menu(internal, now)
-        if not all(1 <= n <= len(menu) for n in numbers):
+        if not menu:
             return BotReply(NUMBER_STALE)
+        if bad := [n for n in numbers if not 1 <= n <= len(menu)]:
+            return BotReply(number_missing(bad[0], len(menu)))
         picked = [menu[n - 1] for n in dict.fromkeys(numbers)]
         others = [str(n) for n in dict.fromkeys(numbers) if not menu[n - 1].startswith(MULTI_PICK_PREFIXES)]
         if others:

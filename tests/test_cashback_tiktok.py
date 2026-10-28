@@ -428,7 +428,7 @@ def test_mo_tiktok_cho_khach_thi_trang_chung_nhac_ca_hai_san(tmp_path):
     opened = {p: _press(bot, BUYER, p).text for p in pages}
     assert "Shopee, TikTok Shop" in opened["u:p:home"] and "Shopee hoặc TikTok Shop" in opened["u:p:guide"]
     assert "sàn (Shopee, TikTok Shop)" in opened["u:p:calc"] and "không bảo đảm sàn" in opened["u:p:tips"]
-    assert "vt.tiktok.com" in bot.handle_text(BUYER, "khach", "xin chào", update_id=5, now=NOW).text
+    assert "vt.tiktok.com" in bot.handle_text(BUYER, "khach", "https://lazada.vn/x", update_id=5, now=NOW).text
     zalo_guide = render(BotReply(opened["u:p:guide"]))[0][0].text
     assert "Cách dùng trên Zalo" in zalo_guide and "TikTok Shop" in zalo_guide
     bot.riohub = None

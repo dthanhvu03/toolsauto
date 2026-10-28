@@ -388,7 +388,7 @@ def test_cho_ho_tro_khong_chan_link_thuan_va_het_han(tmp_path):
     assert "Đã tạo link" in card.text, "chỉ dán link: tạo link như thường"
     _press(bot, BUYER, "u:h:c:other")
     later = bot.handle_text(BUYER, "b", "câu hỏi", update_id=91, now=datetime.now(timezone.utc) + timedelta(minutes=16))
-    assert "Chưa nhận ra link" in later.text
+    assert "Mình là bot tự động" in later.text, "hết hạn chờ: tin chữ không thành ticket"
     assert _rows(tmp_path, "SELECT COUNT(*) FROM support_tickets") == [(0,)]
 
 

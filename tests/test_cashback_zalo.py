@@ -132,7 +132,10 @@ def test_go_so_chay_dung_nut_va_so_sai_bao_het_han(tmp_path):
     assert "Cách dùng trên Zalo" in _texts(zalo), "số đó là nút Hướng dẫn"
     zalo.sent.clear()
     channel.handle(_update("99", "m3"), now=NOW)
-    assert "hết hạn" in _texts(zalo)
+    assert "Không có số 99" in _texts(zalo)
+    zalo.sent.clear()
+    channel.handle(_update("1", "m4"), now=NOW + timedelta(hours=1))
+    assert "hết hạn" in _texts(zalo), "quá 30 phút thì danh sách hết hạn"
 
 
 def test_loi_mang_luu_cau_tra_loi_gui_lai_khong_chay_lai(tmp_path):
@@ -434,3 +437,31 @@ def test_tin_deal_go_so_lay_nhieu_mon_va_doc_muon_van_dung_duoc(tmp_path):
     assert "Đã tạo link hoàn tiền" in _texts(zalo) and "hết hạn" not in _texts(zalo)
     with bot.repo.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM link_requests WHERE link_status = 'created'").fetchone()[0] == 2
+
+
+def test_ra_soat_zalo_chat_go_nham_so_va_trang_chu(tmp_path):
+    """Rà soát Zalo 2026-10-28: tin chat không ăn suất link; gõ nhầm số không xoá danh sách; trang chủ liền khối."""
+    bot, channel, zalo = _channel(tmp_path)
+    for index, text in enumerate(["ok", "cảm ơn", "alo", "🙂", "0901234567", "hihi", "dạ", "vâng", "ừ", "ok nha"]):
+        channel.handle(_update(text, f"c{index}"), now=NOW)
+    assert "Mình là bot tự động" in zalo.sent[-1][1] and "gửi hơi nhiều link" not in _texts(zalo)
+    channel.handle(_update("https://lazada.vn/products/i1.html", "c99"), now=NOW)
+    assert "Chưa nhận ra link" in zalo.sent[-1][1], "tin có dáng link thì vẫn cảnh báo"
+    zalo.sent.clear()
+    channel.handle(_update("menu", "h1"), now=NOW)
+    assert re.search(r"1 · [^\n]+\n2 · [^\n]+\n3 · ", zalo.sent[-1][1]), "trang chủ không chèn dòng trống giữa các mục"
+    count = len(channel.store.menu(-1, NOW))
+    channel.handle(_update("99", "h2"), now=NOW)
+    assert zalo.sent[-1][1] == f"Không có số 99. Tin gần nhất có số 1 đến {count}, hoặc gõ menu để mở trang chủ."
+    assert len(channel.store.menu(-1, NOW)) == count, "gõ nhầm số không xoá danh sách"
+    channel.handle(_update(str(channel.store.menu(-1, NOW).index("u:p:guide") + 1), "h3"), now=NOW)
+    assert "Cách dùng trên Zalo" in zalo.sent[-1][1]
+
+
+def test_ten_mon_bo_nhan_khuyen_mai_shop():
+    assert messages.buyer_name("[MUA 2 TẶNG 1] Combo 2 Nước Tẩy Trang Dầu") == "Combo 2 Nước Tẩy Trang Dầu"
+    assert "[HOT]" not in messages.price_drop("[HOT] Kem chống nắng d'Alba 50ml", 408_000, 11)
+    row = dict(item_id=1, shop_id=9, name="Áo", price=200_000, usual=250_000, lowest_30d=True, cashback=3_000,
+               rating=4.8, sold_30d=500)
+    text, _kb = deals.message_for(["nam"], {"nam": [row]}, set(), reason="Áo Sơ Mi Nam Tay Dài SYLEN – Vải Cotton Lụa")
+    assert "Cotton…</i>\n" in text or "…</i>." not in text, "không ra «….»"

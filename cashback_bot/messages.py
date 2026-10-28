@@ -162,6 +162,13 @@ INVALID_LINK = (
     "Mình cần link sản phẩm Shopee: shopee.vn hoặc link rút gọn s.shopee.vn.\n"
     "Bấm nút dưới hoặc gõ /huongdan để xem cách lấy link."
 )
+# Tin chữ không giống link (ok, cảm ơn, alo…): không cảnh báo ⚠️, chỉ nhắc bot tự động đọc được gì.
+CHAT_TEXT = (
+    "🤖 Mình là bot tự động nên chỉ đọc được link sản phẩm.\n"
+    "Dán link vào đây, bot gửi lại link mua và số tiền hoàn dự kiến nha.\n"
+    "Bấm nút dưới hoặc gõ /huongdan để xem cách lấy link."
+)
+_LOOKS_LIKE_LINK = re.compile(r"https?://|www\.|\w\.(?:vn|com|net|me)\b|/", re.I)
 FOOD_LINK = (
     "🍜 <b>Đây là link ShopeeFood</b>\n"
     "Hiện bot chỉ hoàn tiền cho sản phẩm trên sàn Shopee, chưa hỗ trợ đơn ShopeeFood.\n"
@@ -306,8 +313,12 @@ def rate_limited_reply(cooldown_sec: int) -> BotReply:
     )
 
 
+# Nhãn khuyến mãi shop gắn ở đầu tên («[MUA 2 TẶNG 1]», «【DAILY】»): bỏ khi hiện tên món cho khách.
+PROMO_TAG = re.compile(r"^\s*(?:[\[【(][^\]】)]{0,40}[\]】)]\s*)+")
+
+
 def buyer_name(name: str) -> str:
-    text = " ".join((name or "").split())
+    text = " ".join(PROMO_TAG.sub("", name or "").split()) or " ".join((name or "").split())
     head = re.split(r"[,|]", text, maxsplit=1)[0].strip(" .-")
     if 8 <= len(head) <= 52:
         return head
@@ -381,7 +392,10 @@ def page_reply(text: str) -> BotReply:
     return BotReply(text, inline_keyboard=PAGE_KEYBOARD)
 
 
-def invalid_link_reply() -> BotReply:
+def invalid_link_reply(text: str = "") -> BotReply:
+    """Không phải link sản phẩm. Tin có dáng link (sai sàn, thiếu mã món) thì cảnh báo; tin chữ thường thì nhắc nhẹ."""
+    if text and not _LOOKS_LIKE_LINK.search(text):
+        return BotReply(CHAT_TEXT, inline_keyboard=GUIDE_KEYBOARD)
     return BotReply(INVALID_LINK, inline_keyboard=GUIDE_KEYBOARD)
 
 

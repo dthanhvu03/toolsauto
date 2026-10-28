@@ -85,6 +85,12 @@ _BARE_CMD = re.compile(rf"(?<![\w/.:])/({_CMD})\b")
 _ARROWS = ("◀️", "▶️")
 NON_TEXT = "🙏 Bot chỉ đọc được tin chữ. Bạn gửi link sản phẩm Shopee dạng chữ nhé. Gõ <b>hd</b> để xem hướng dẫn."
 NUMBER_STALE = "Danh sách lựa chọn đã hết hạn hoặc không có số này. Gõ <b>menu</b> để mở trang chủ."
+NUMBER_MISSING = "Không có số {number}. Tin gần nhất có {choices}, hoặc gõ <b>menu</b> để mở trang chủ."
+
+
+def number_missing(number: int, count: int) -> str:
+    """Gõ số ngoài danh sách đang có (danh sách vẫn còn hạn)."""
+    return NUMBER_MISSING.format(number=number, choices="số 1" if count == 1 else f"số 1 đến {count}")
 ERROR_REPLY = "⚠️ Bot đang gặp lỗi khi xử lý tin này. Bạn thử lại sau ít phút nhé, hoặc gõ <b>hotro</b>."
 
 Style = tuple[int, int, str]
@@ -260,8 +266,9 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         add("\n\n")
         add(MENU_TITLE, bold=True)
         def group(label: str, data: str) -> int:
-            # 0: mục bật / tắt (✅ / ⬜) · 1: lựa chọn khác · 2: điều hướng (u:p:*). Đổi nhóm thì cách một dòng.
-            return 0 if label[:2] in ("✅ ", "⬜ ") else (2 if data.startswith("u:p:") else 1)
+            # 0: mục bật / tắt (✅ / ⬜) · 1: lựa chọn khác · 2: về Trang chủ. Đổi nhóm thì cách một dòng.
+            # Chỉ tách Trang chủ (không tách mọi u:p:*): trang chủ xen kẽ u:p / u:dc từng ra «1 · …␤␤2 · …␤␤3».
+            return 0 if label[:2] in ("✅ ", "⬜ ") else (2 if data == "u:p:home" else 1)
 
         for number, (label, data) in enumerate(choices, start=1):
             if number > 1 and group(label, data) != group(*choices[number - 2]):
