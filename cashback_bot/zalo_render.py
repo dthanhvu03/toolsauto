@@ -220,6 +220,11 @@ def split(text: str, styles: list[Style]) -> list[ZaloMessage]:
     return messages
 
 
+def menu_choices(reply: BotReply) -> list[tuple[str, str]]:
+    """(nhãn, callback) của các nút thành danh sách số, theo đúng thứ tự số 1..n."""
+    return [(label, data) for row in reply.inline_keyboard or () for label, data in row if data.startswith("u:")]
+
+
 def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
     """BotReply → (các tin Zalo, callback theo số 1..n). Tin rỗng (chỉ toast) thì gửi nội dung toast.
 
@@ -250,7 +255,7 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
     if reply.button_url:
         add(TIKTOK_BUY_LEAD if reply.button_label == TIKTOK_BUY_BUTTON else BUY_LEAD, bold=True)
         add(f"\n{reply.button_url}")
-    choices = [(label, data) for row in reply.inline_keyboard or () for label, data in row if data.startswith("u:")]
+    choices = menu_choices(reply)
     if choices:
         add("\n\n")
         add(MENU_TITLE, bold=True)

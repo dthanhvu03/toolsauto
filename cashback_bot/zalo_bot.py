@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -32,13 +33,25 @@ from cashback_bot.shopee_url import parse_shopee_target
 from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
 from cashback_bot.zalo_api import ZaloApi
-from cashback_bot.zalo_render import ERROR_REPLY, LINK_CARD, NON_TEXT, NUMBER_STALE, WELCOME, ZaloMessage, render
+from cashback_bot.zalo_render import (
+    ERROR_REPLY,
+    LINK_CARD,
+    NON_TEXT,
+    NUMBER_STALE,
+    WELCOME,
+    ZaloMessage,
+    menu_choices,
+    render,
+)
 
 logger = logging.getLogger("cashback_bot")
 
 LOCK_PATH = "/tmp/cashback_zalo.lock"
 CHANNEL = "zalo"
 MENU_TTL = timedelta(minutes=30)
+# Danh sách số của tin bot tự gửi (deal 20:08, nhắc sale…): khách thường đọc muộn, giữ một ngày (chủ bot 2026-10-28).
+PUSH_MENU_TTL = timedelta(hours=24)
+DEAL_ITEM = "u:dl:"
 RETRY_LIMIT = 5
 TEXT_EVENT = "message.text.received"
 UNSUPPORTED_EVENT = "message.unsupported.received"
@@ -137,15 +150,27 @@ class ZaloStore:
             ).fetchall()
 
     def menu(self, internal_id: int, now: datetime) -> tuple[str, ...]:
+        return tuple(data for _label, data in self.menu_entries(internal_id, now))
+
+    def menu_entries(self, internal_id: int, now: datetime) -> list[tuple[str, str]]:
+        """(nhãn, callback) theo số 1..n. Menu lưu trước khi có nhãn thì nhãn rỗng."""
         try:
             saved = json.loads(self.repo.get_state(f"zalo_menu:{internal_id}") or "{}")
             at = datetime.strptime(saved.get("at", ""), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        except ValueError:
-            return ()
-        return tuple(saved.get("items") or ()) if now - at <= MENU_TTL else ()
+            ttl = timedelta(seconds=int(saved.get("ttl") or MENU_TTL.total_seconds()))
+        except (TypeError, ValueError):
+            return []
+        if now - at > ttl:
+            return []
+        items = list(saved.get("items") or ())
+        labels = list(saved.get("labels") or ())
+        return list(zip(labels if len(labels) == len(items) else [""] * len(items), items))
 
-    def set_menu(self, internal_id: int, items: tuple[str, ...], now: datetime) -> None:
-        self.repo.set_state(f"zalo_menu:{internal_id}", json.dumps({"at": _stamp(now), "items": list(items)}))
+    def set_menu(self, internal_id: int, choices: list[tuple[str, str]], now: datetime,
+                 ttl: timedelta = MENU_TTL) -> None:
+        self.repo.set_state(f"zalo_menu:{internal_id}", json.dumps(
+            {"at": _stamp(now), "items": [data for _label, data in choices],
+             "labels": [label for label, _data in choices], "ttl": int(ttl.total_seconds())}, ensure_ascii=False))
 
     def customer_count(self) -> int:
         with self.repo.connect() as conn:
@@ -205,12 +230,12 @@ class ZaloChannel:
             logger.exception("[Cashback] zalo xử lý tin inbox=%s thất bại", row["id"])
             reply = BotReply(ERROR_REPLY)
             self._notify_failed(update_id, internal)
-        messages, menu = render(reply)
+        messages, _menu = render(reply)
         if is_new:
             welcome = with_tiktok(WELCOME) if self.service.tiktok_open() else WELCOME
             messages = render(BotReply(welcome))[0] + messages
             self._capacity_check()
-        self.store.set_menu(internal, menu, moment)
+        self.store.set_menu(internal, menu_choices(reply), moment)
         self.store.save_reply(int(row["id"]), messages)
         return messages
 
@@ -248,11 +273,13 @@ class ZaloChannel:
         if picks and len(numbers := [int(n) for n in re.findall(r"\d+", key)]) > 1:
             return self._press_many(internal, numbers, update_id, now)
         if key.isdigit() and len(key) <= 2:
-            menu = self.store.menu(internal, now)
+            entries = self.store.menu_entries(internal, now)
             number = int(key)
-            if not 1 <= number <= len(menu):
+            if not 1 <= number <= len(entries):
                 return BotReply(NUMBER_STALE)
-            return self._press(internal, menu[number - 1], update_id)
+            data = entries[number - 1][1]
+            reply = self._press(internal, data, update_id)
+            return _keep_deal_list(reply, entries) if data.startswith(DEAL_ITEM) else reply
         command = SHORTCUTS.get(key, text)
         if parse_shopee_target(command) is not None or parse_tiktok_target(command) is not None:
             try:
@@ -348,7 +375,8 @@ class ZaloSender:
             button_url = button_url or next((b["url"] for b in row if b.get("url")), None)
             if buttons:
                 keyboard.append(buttons)
-        messages, menu = render(BotReply(html_text, button_url=button_url, inline_keyboard=tuple(keyboard) or None))
+        reply = BotReply(html_text, button_url=button_url, inline_keyboard=tuple(keyboard) or None)
+        messages, menu = render(reply)
         for index, message in enumerate(messages):
             try:
                 self.api.send_message(external, message.text, message.payload_styles())
@@ -358,8 +386,19 @@ class ZaloSender:
                 # Phần đầu đã tới khách: gửi lại cả tin sẽ trùng. Coi như không rõ, admin xem và gửi lại tay.
                 raise TelegramDeliveryError("ambiguous", status_code=exc.status_code) from exc
         if menu:
-            self.store.set_menu(int(chat_id), menu, datetime.now(timezone.utc))
+            self.store.set_menu(int(chat_id), menu_choices(reply), datetime.now(timezone.utc), PUSH_MENU_TTL)
         return None
+
+
+def _keep_deal_list(reply: BotReply, entries: list[tuple[str, str]]) -> BotReply:
+    """Khách gõ số một món trong tin deal: tin link giữ nguyên danh sách của tin deal, cùng số, để gõ tiếp số món khác
+    (Zalo chỉ có một danh sách số; trước đây tin link thay danh sách, gõ 2 thì báo hết hạn — chủ bot 2026-10-28).
+    Nút riêng của tin link (Lưu ý trước khi mua…) xếp sau."""
+    if not reply.text or not all(label for label, _data in entries):
+        return reply
+    known = {data for _label, data in entries}
+    rest = tuple(row for row in reply.inline_keyboard or () if not any(data in known for _label, data in row))
+    return replace(reply, inline_keyboard=tuple(((label, data),) for label, data in entries) + rest)
 
 
 def main() -> None:

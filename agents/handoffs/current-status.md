@@ -1,3 +1,16 @@
+## Phiên 2026-10-28 (dm) — Zalo: tin deal lấy được nhiều món, đọc muộn vẫn gõ số được
+
+- Chủ bot báo (ảnh Zalo): gõ 1 trong tin deal ra link, gõ 2 thì "Danh sách lựa chọn đã hết hạn".
+- Nguyên nhân:
+  - Zalo chỉ nhớ một danh sách số; tin link thay danh sách của tin deal;
+  - danh sách sống 30 phút, nên tin deal 20:08 đọc muộn cũng hết hạn.
+- Sửa (`zalo_bot.py`, `zalo_render.menu_choices`):
+  - menu lưu kèm nhãn + ttl;
+  - tin bot tự gửi (Dispatcher Zalo) giữ danh sách 24 giờ;
+  - gõ số món deal (`u:dl:`) thì tin link giữ nguyên danh sách tin deal, cùng số, nút riêng của tin link xếp sau.
+- Proof: 883 test cashback qua (test mới `test_tin_deal_go_so_lay_nhieu_mon_va_doc_muon_van_dung_duoc`), ruff sạch.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo`.
+
 ## Phiên 2026-10-28 (dl) — Deal hời thêm lượt trưa 12:08
 
 - Theo yêu cầu chủ bot ("trưa và tối"). Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 7.
