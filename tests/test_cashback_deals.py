@@ -89,7 +89,7 @@ def test_soan_17h30_bao_admin_20h08_gui_khach_da_chon(tmp_path):
     deals.tick(bot.repo, bot, admin, BUILD, market, history, pause=lambda _s: None)
     data = _wait(bot)
     assert data["status"] == "draft" and [d["item_id"] for d in data["deals"]["dep"]] == [1, 2]
-    assert market.keywords == list(deals.CATEGORIES["dep"][1]) and data["deals"]["dep"][0]["cashback"] > 0
+    assert market.keywords == list(deals.CATEGORIES["dep"][1][:5]) and data["deals"]["dep"][0]["cashback"] > 0
     (ready,) = _events(bot, "DEALS_READY")
     assert "2 món" in ready["message_html"] and "1 khách" in ready["message_html"]
     deals.tick(bot.repo, bot, admin, SEND.replace(minute=0), market, history)
@@ -277,3 +277,66 @@ def test_admin_tat_doan_gu(tmp_path):
     _callback(bot, ADMIN, "c:dl:infer:off")
     assert not deals.infer_enabled(bot.repo)
     assert "Deal hời cho khách chưa chọn (bot đoán gu): tắt" in _callback(bot, ADMIN, "c:menu:hist").text
+
+
+# --- Lượt trưa 12:08 và không lặp món (chủ bot 2026-10-28: «thông báo cho khách trưa và tối») ---------------------
+
+NOON_BUILD = datetime(2026, 10, 21, 3, 40, tzinfo=timezone.utc)  # 10:40 giờ VN
+NOON_SEND = datetime(2026, 10, 21, 5, 10, tzinfo=timezone.utc)  # 12:10 giờ VN
+
+
+def test_luot_trua_tu_khoa_rieng_va_toi_khong_lap_mon(tmp_path):
+    bot, admin = _ready(tmp_path)
+    bot.client.payload["productInfo"]["lastUpdate"] = "2026-10-21 03:30:00"
+    bot.repo.set_state(deals.ENABLED_KEY, "1")
+    deals.toggle_category(bot.repo, USER, "dep")
+    market, history = FakeMarket([_product(1), _product(2)]), FakeHistory({1: GOOD, 2: GOOD})
+    deals.tick(bot.repo, bot, admin, NOON_BUILD, market, history, pause=lambda _s: None)
+    for _ in range(100):
+        if deals.record(bot.repo, "2026-10-21", deals.NOON).get("status") not in (None, "building"):
+            break
+        clock.sleep(0.02)
+    assert deals.record(bot.repo, "2026-10-21", deals.NOON)["status"] == "draft"
+    assert deals.record(bot.repo, "2026-10-21") == {}, "lượt tối chưa soạn"
+    assert market.keywords == list(deals.CATEGORIES["dep"][1][5:]), "lượt trưa tìm bộ từ khoá khác lượt tối"
+    (ready,) = _events(bot, "DEALS_READY")
+    assert "trưa" in ready["message_html"] and "12:08 tự gửi" in ready["message_html"]
+    deals.tick(bot.repo, bot, admin, NOON_SEND, market, history)
+    (noon,) = _events(bot, "DEALS")
+    assert noon["event_key"] == f"deals:2026-10-21:trua:{USER}" and "12:08 nghỉ trưa" in noon["message_html"]
+    assert "dữ liệu lúc 10:30" in noon["message_html"]
+    row = dict(shop_id=9, price=200_000, usual=250_000, lowest_30d=True, cashback=3_000, rating=4.8, sold_30d=500)
+    deals.save(bot.repo, "2026-10-21", {"status": "draft", "deals": {"dep": [dict(row, item_id=1, name="Kem 1"),
+               dict(row, item_id=3, name="Kem 3")]}})
+    deals.tick(bot.repo, bot, admin, SEND)
+    evening = [e for e in _events(bot, "DEALS") if e["event_key"] == f"deals:2026-10-21:{USER}"][0]
+    callbacks = [r[0]["callback_data"] for r in json.loads(evening["reply_markup_json"])["inline_keyboard"]]
+    assert callbacks == ["u:dl:9:3", "u:dc:home"], "món 1 đã gửi trưa nay, tối chỉ gửi món mới"
+    deals.save(bot.repo, "2026-10-22", {"status": "draft", "deals": {"dep": [dict(row, item_id=3, name="Kem 3")]}})
+    deals.tick(bot.repo, bot, admin, SEND.replace(day=22))
+    assert len(_events(bot, "DEALS")) == 2 and deals.record(bot.repo, "2026-10-22")["sent"] == 0, \
+        "không có món mới thì không gửi"
+
+
+def test_admin_tat_luot_trua_va_bo_luot_trua(tmp_path):
+    bot, admin = _ready(tmp_path)
+    bot.repo.set_state(deals.ENABLED_KEY, "1")
+    deals.toggle_category(bot.repo, USER, "dep")
+    day = datetime.now(timezone.utc).astimezone(deals.ICT).date().isoformat()
+    deals.save(bot.repo, day, {"status": "draft", "deals": {"dep": [dict(item_id=1, shop_id=9, name="Kem A",
+               price=200_000, usual=250_000, lowest_30d=True, cashback=3_000, rating=4.8, sold_30d=500)]}}, deals.NOON)
+    home = _callback(bot, ADMIN, "c:dl:home")
+    assert "🍱 Trưa 12:08</b>: 📝 Chờ 12:08" in home.text and "🌙 Tối 20:08</b>: ⏳ Chưa soạn (17:30)" in home.text
+    buttons = [d for row in home.inline_keyboard for _l, d in row]
+    assert "c:dl:skip:trua" in buttons and "c:dl:rm:trua:1" in buttons
+    _callback(bot, ADMIN, "c:dl:rm:trua:1")
+    assert deals.record(bot.repo, day, deals.NOON)["removed"] == [1]
+    _callback(bot, ADMIN, "c:dl:skip:trua")
+    assert deals.record(bot.repo, day, deals.NOON)["status"] == "skipped" and deals.record(bot.repo, day) == {}
+    _callback(bot, ADMIN, "c:dl:noon:off")
+    assert not deals.noon_enabled(bot.repo)
+    market = FakeMarket([_product(1)])
+    deals.tick(bot.repo, bot, admin, NOON_BUILD, market, FakeHistory({1: GOOD}), pause=lambda _s: None)
+    assert market.keywords == [] and deals.record(bot.repo, "2026-10-21", deals.NOON) == {}, "tắt trưa thì không soạn"
+    history = _callback(bot, ADMIN, "c:menu:hist").text
+    assert "lượt trưa 12:08: tắt" in history and f"Deal hời {day} trưa: bỏ món 1" in history

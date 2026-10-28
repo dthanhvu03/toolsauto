@@ -102,3 +102,14 @@ Ví dụ deal thật: kem chống nắng d'Alba 408k (thường 457k, −11%, �
 - Không gửi: khách đã chọn hay đã bỏ hết danh mục, bấm Không nhận deal, tắt 🛒 Nhắc, chặn bot, 60 ngày không tạo link.
 - Bật mặc định; tắt ở 🔥 Deal hời → ⚪ Tắt đoán gu.
 - Dữ liệu thật 27/10: đoán được 12 khách (ví dụ Ốp lưng → Điện tử; Sạc nhanh → Điện tử; Áo thể thao → Thể thao; Gấu bông → Đồ chơi; Topper → Nhà cửa).
+
+## 7. Lượt trưa 12:08 (chủ bot 2026-10-28: "thông báo cho khách trưa và tối, mấy app khác thông báo cả ngày")
+
+- Hai lượt mỗi ngày: 🍱 trưa soạn 10:30, gửi 12:08 (giờ nghỉ trưa, ngay sau khung flash sale 12h); 🌙 tối soạn 17:30, gửi 20:08 như cũ.
+- Mỗi lượt tìm theo bộ từ khoá riêng của danh mục (lượt tối: 5 từ khoá cũ; lượt trưa: 5 từ khoá mới, ví dụ Làm đẹp: toner, kem dưỡng ẩm, mặt nạ, dầu gội, sữa tắm). Lượng gọi AddLiveTag mỗi lượt giữ như cũ.
+- Chống phiền:
+  - món đã gửi cho khách trong 3 ngày thì không gửi lại;
+  - hết món mới thì lượt đó không gửi cho khách ấy, nên khách chỉ nhận tin khi có món mới thật;
+  - khách bot đoán gu vẫn tối đa 2 tin / tuần, lượt nào tới trước thì gửi lượt đó;
+  - ngày sale lớn: lượt trưa nhường tin nhắc sale 11:30.
+- Bật mặc định; tắt riêng lượt trưa ở 🔥 Deal hời → ⚪ Tắt lượt trưa. Admin xem trước, bỏ món, bỏ lượt theo từng lượt.

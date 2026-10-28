@@ -1,3 +1,15 @@
+## Phiên 2026-10-28 (dl) — Deal hời thêm lượt trưa 12:08
+
+- Theo yêu cầu chủ bot ("trưa và tối"). Chi tiết `reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md` mục 7.
+- `deals.SLOTS`: 🍱 trưa (soạn 10:30, gửi 12:08, từ khoá [5:]) và 🌙 tối (soạn 17:30, gửi 20:08, từ khoá [:5]).
+- Bản ghi lượt trưa ở `deals:<ngày>:trua`, event key `deals:<ngày>:trua:<khách>`; lượt tối giữ khoá cũ.
+- Không lặp món đã gửi khách trong 3 ngày (`recently_shown` đọc nút u:dl của tin DEALS). Hết món mới thì không gửi.
+- Công tắc `deals_noon_enabled` (bật mặc định); admin bỏ món / bỏ lượt theo lượt (`c:dl:rm:trua:<id>`, `c:dl:skip:trua`).
+- Proof: 882 test cashback qua (test_cashback_deals 16), ruff sạch.
+- **Next:**
+  - chủ bot restart `systemctl restart cashback-bot cashback-zalo` → lượt trưa đầu tiên 12:08 ngày kế tiếp sau restart (restart trước 10:30 thì có ngay hôm đó);
+  - kiểm khách chặn / tắt sau 2–3 ngày có lượt trưa.
+
 ## Phiên 2026-10-28 (dk) — Kết quả đêm đầu deal hời + đoán gu
 
 - Production: a17f06f (Telegram + Zalo), chủ bot restart 18:54 ICT 27/10.
