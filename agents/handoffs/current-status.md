@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (dx) — PLAN-098 bước C: thử ShopeeFood
+
+- Khảo sát: 30 ngày 0 đơn Food; chưa có tài liệu gắn sub_id cho Food; AddLiveTag không có giá/hoa hồng món Food.
+- Thử (chủ bot duyệt): link an_redir ghép tay sub_id `FOODTEST` tới `spf.shopee.vn/906KKy82bs` mở đúng món; chủ bot tự đặt 1 đơn ~17:15 28/10. AddLiveTag click Food mới nhất là 26/10 (trễ ~2 ngày).
+- Tự mua có thể bị Shopee loại (đơn 23/09 FRAUD); vẫn đủ để xem có dòng đơn kèm sub_id. Khuyên không tự đặt thêm, lần sau nhờ người khác.
+- **Next:** từ 30/10 chủ bot nhắn «kiểm FOODTEST» → 1–2 lệnh đọc `source=food` (items + clicks), kết luận theo PLAN-098. Chủ bot vẫn cần restart để bật bước A, B.
+
+---
+
 ## Phiên 2026-10-28 (dw) — PLAN-098 bước B: nguồn dự phòng AddLiveTag khi cookie Shopee lỗi
 
 - Cookie lỗi / sự cố mở / quá 6 giờ chưa đồng bộ được → mỗi 60 phút đọc AddLiveTag 3 ngày; đơn mới qua link bot (chưa có trong DB, chưa huỷ) → báo admin 🛟 + báo khách «có đơn mới» (cùng điều kiện gửi), ghi bot_state `alt_order:<order_sn>`. Không ghi sổ đơn / ví.
