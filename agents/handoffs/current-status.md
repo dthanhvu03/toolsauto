@@ -1,3 +1,13 @@
+## Phiên 2026-10-28 (dt) — 🖼 Ảnh đăng bài (số liệu thật để đăng bài uy tín)
+
+- Chủ bot chọn: ảnh + bài viết soạn sẵn; tiền ghi «tạm tính»; có đơn gần đây, tên khách che (chữ đầu***chữ cuối).
+- /admin → 🧾 Đơn & hoa hồng → 🗓 Thống kê → 🖼 Ảnh đăng bài (`c:pb:card`): ảnh PNG 1080px (thành viên, link, đơn, hoàn tiền ghi nhận chia chờ sàn/đang giữ/đã duyệt, biểu đồ 7 ngày, 4 đơn gần đây) + bài viết trong <pre> chạm để chép.
+- «Đã chi trả» chỉ hiện khi có lượt rút đã trả. Font Be Vietnam Pro (OFL) ở `cashback_bot/assets/fonts`. Code `cashback_bot/showcase.py`.
+- Proof: 896 test qua, ruff sạch; ảnh dựng từ bản sao DB trong scratchpad.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo` rồi bấm thử. Chưa có @tên bot trên ảnh (không có trong config).
+
+---
+
 ## Phiên 2026-10-28 (ds) — Restart, gửi tin giới thiệu wallet-v1
 
 - Tin xem thử về admin (admin_notifications id 173, gửi 05:12:32Z) → chủ bot duyệt.

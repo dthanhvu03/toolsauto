@@ -118,7 +118,7 @@ from cashback_bot.wallet import Wallet
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
-from cashback_bot import insights, payouts, policy_snapshot
+from cashback_bot import insights, payouts, policy_snapshot, showcase
 from cashback_bot.pricing import MAX_SHARE_BPS, CashbackQuote, EstimatePolicy, PolicyResolution, cashback_for
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
@@ -373,6 +373,8 @@ class AdminPanel:
         stats = _STATS.fullmatch(data or "")
         if stats:
             return self._stats(stats.group(1), now, detail=bool(stats.group(2)))
+        if data == showcase.CARD:
+            return self._showcase(now)
         if data == "c:rs:new":
             return self._reserve_start(user_id, now)
         if data == "c:sh:new":
@@ -1010,6 +1012,19 @@ class AdminPanel:
         render = stats_detail_text if detail else stats_text
         text = render(stats, period_label=PERIODS[period][0], since=since)
         return BotReply(text, inline_keyboard=stats_keyboard(period, detail))
+
+    def _showcase(self, now: datetime) -> BotReply:
+        """🖼 Ảnh đăng bài: ảnh số liệu thật kèm bài viết soạn sẵn (showcase.py)."""
+        back = ((("◀️ Về thống kê", "c:st:all"),), BACK_HOME)
+        try:
+            with self._connect() as conn:
+                data = showcase.collect(conn, now)
+        except sqlite3.OperationalError:
+            logger.exception("[Cashback] ảnh đăng bài lỗi")
+            return BotReply("Chưa đọc được dữ liệu trên database này.", inline_keyboard=back)
+        caption = f"Số liệu thật lúc {data.updated_at:%H:%M %d/%m/%Y} · tiền tạm tính"
+        return BotReply(showcase.admin_text(data), photo=("so-lieu.png", showcase.render_png(data), caption),
+                        inline_keyboard=back)
 
     def _history_rows(self) -> list[str] | None:
         try:
