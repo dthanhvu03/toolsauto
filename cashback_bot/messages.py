@@ -70,8 +70,8 @@ def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals
         second,
     )
     if show_deals:
-        # Lối vào màn chọn danh mục deal hời, khỏi phải nhớ /thongbao (chủ bot duyệt 2026-10-27).
-        rows = rows[:1] + ((("🛍️ Deal hời của tôi", "u:dc:home"),),) + rows[1:]
+        # 🔥 Deal hôm nay xem ngay trong bot (PLAN-099) và màn chọn danh mục nhận tin (chủ bot duyệt 2026-10-27).
+        rows = rows[:1] + ((("🔥 Deal hôm nay", "u:dh"), ("🛍️ Danh mục deal", "u:dc:home")),) + rows[1:]
     if show_wallet:
         rows = ((("👛 Ví của tôi", "u:p:wallet"),),) + rows
     return rows
@@ -105,6 +105,7 @@ BOT_COMMANDS = (
     ("dieukien", "Để đơn được ghi nhận"),
     ("cachtinh", "Cách tính tiền hoàn"),
     ("donhang", "Đơn hàng của tôi"),
+    ("deal", "Deal hời hôm nay"),
     ("hotro", "Hỗ trợ & khiếu nại"),
     ("thongbao", "Cài đặt thông báo"),
     ("help", "Trợ giúp"),

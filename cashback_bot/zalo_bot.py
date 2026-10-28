@@ -66,7 +66,7 @@ CAPACITY_ALERTS = (40, 50)
 SHORTCUTS = {
     "menu": "/start", "start": "/start", "batdau": "/start", "hd": "/huongdan", "huongdan": "/huongdan",
     "don": "/donhang", "donhang": "/donhang", "vi": "/vi", "hotro": "/hotro", "cachtinh": "/cachtinh",
-    "dieukien": "/dieukien", "thongbao": "/thongbao", "hang": "/hang",
+    "dieukien": "/dieukien", "thongbao": "/thongbao", "hang": "/hang", "deal": "/deal",
 }
 
 

@@ -196,10 +196,6 @@ class CashbackService:
         update_id = update.get("update_id")
         if not isinstance(update_id, int):
             return None
-        forwarded = deals.forwarded_channel(message)
-        if forwarded is not None and self.admin_panel.is_admin(user_id):
-            # PLAN-099: admin chuyển tiếp một bài của kênh để gắn kênh deal.
-            return user_id, self.admin_panel.deals_channel_offer(user_id, forwarded, datetime.now(timezone.utc))
         message_id = message.get("message_id")
         reply = self.handle_text(
             user_id,
@@ -256,7 +252,7 @@ class CashbackService:
         self.desk.clear(user_id)
         if data == "u:tip":
             return BotReply("", toast=TIP_ALERT, show_alert=True)
-        if data.startswith(("u:dc:", "u:dl:")):
+        if data.startswith(("u:dc:", "u:dl:", deals.FEED)):
             return self._deal_action(user_id, data)
         if data.startswith("u:w:"):
             return self._wallet_action(user_id, data.removeprefix("u:w:"), query_id)
@@ -272,6 +268,13 @@ class CashbackService:
     def _deal_action(self, user_id: int, data: str) -> BotReply:
         """Deal hời (deals.py): chọn danh mục; bấm một món thì tạo link như khi khách tự dán link."""
         labels = {key: label for key, (label, _keywords) in deals.CATEGORIES.items()}
+        if data == deals.FEED or data.startswith(deals.FEED + ":"):
+            now = datetime.now(timezone.utc)
+            only = data.removeprefix(deals.FEED + ":") if data != deals.FEED else None
+            text, keyboard = deals.feed_message(deals.latest_released(self.repo, now),
+                                                deals.user_categories(self.repo, user_id), only, now)
+            return BotReply(text, inline_keyboard=tuple(tuple((b["text"], b["callback_data"]) for b in row)
+                                                        for row in keyboard))
         if data == "u:dc:home":
             return deal_categories_reply(labels, deals.user_categories(self.repo, user_id))
         if data == "u:dc:off":
@@ -517,9 +520,8 @@ class CashbackService:
             self.desk.clear(telegram_user_id)
         if command in pages:
             return self._page(pages[command], telegram_user_id)
-        if command == "/start" and (deal := deals.start_deal(stripped)) is not None:
-            # Khách bấm món trong kênh deal (PLAN-099): như bấm 🛒 trong tin deal.
-            return self._deal_action(telegram_user_id, deal)
+        if command == "/deal" and deals.enabled(self.repo):
+            return self._deal_action(telegram_user_id, deals.FEED)
         if command:
             return self._page("home")
         tiktok_url = parse_tiktok_target(stripped)

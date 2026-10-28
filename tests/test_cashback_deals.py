@@ -83,15 +83,14 @@ def test_soan_17h30_bao_admin_20h08_gui_khach_da_chon(tmp_path):
     deals.tick(bot.repo, bot, admin, BUILD, market, history, pause=lambda _s: None)
     assert deals.record(bot.repo, "2026-10-21") == {}, "đang tắt thì không làm gì"
     bot.repo.set_state(deals.ENABLED_KEY, "1")
-    deals.tick(bot.repo, bot, admin, BUILD, market, history, pause=lambda _s: None)
-    assert deals.record(bot.repo, "2026-10-21") == {}, "chưa ai chọn danh mục thì không gọi AddLiveTag"
     deals.toggle_category(bot.repo, USER, "dep")
     deals.tick(bot.repo, bot, admin, BUILD, market, history, pause=lambda _s: None)
     data = _wait(bot)
     assert data["status"] == "draft" and [d["item_id"] for d in data["deals"]["dep"]] == [1, 2]
-    assert market.keywords == list(deals.CATEGORIES["dep"][1][:5]) and data["deals"]["dep"][0]["cashback"] > 0
+    assert sorted(data["deals"]) == sorted(deals.CATEGORIES), "soạn đủ danh mục cho 🔥 Deal hôm nay"
+    assert market.keywords[:5] == list(deals.CATEGORIES["nu"][1][:5]) and data["deals"]["dep"][0]["cashback"] > 0
     (ready,) = _events(bot, "DEALS_READY")
-    assert "2 món" in ready["message_html"] and "1 khách" in ready["message_html"]
+    assert "20 món" in ready["message_html"] and "1 khách" in ready["message_html"], "10 danh mục × 2 món"
     deals.tick(bot.repo, bot, admin, SEND.replace(minute=0), market, history)
     assert _events(bot, "DEALS") == [], "chưa tới 20:08"
     for _ in range(2):
@@ -208,7 +207,7 @@ def test_trang_chu_co_loi_vao_deal_khi_bat(tmp_path):
     assert "u:dc:home" not in [d for row in _callback(bot, USER, "u:p:home").inline_keyboard for _l, d in row]
     bot.repo.set_state(deals.ENABLED_KEY, "1")
     rows = _callback(bot, USER, "u:p:home").inline_keyboard
-    assert rows[1:3] == ((("📦 Đơn hàng của tôi", "u:p:orders"),), (("🛍️ Deal hời của tôi", "u:dc:home"),)), \
+    assert rows[1:3] == ((("📦 Đơn hàng của tôi", "u:p:orders"),), (("🔥 Deal hôm nay", "u:dh"), ("🛍️ Danh mục deal", "u:dc:home"))), \
         "ngay dưới Đơn hàng của tôi"
 
 
@@ -299,7 +298,8 @@ def test_luot_trua_tu_khoa_rieng_va_toi_khong_lap_mon(tmp_path):
         clock.sleep(0.02)
     assert deals.record(bot.repo, "2026-10-21", deals.NOON)["status"] == "draft"
     assert deals.record(bot.repo, "2026-10-21") == {}, "lượt tối chưa soạn"
-    assert market.keywords == list(deals.CATEGORIES["dep"][1][5:]), "lượt trưa tìm bộ từ khoá khác lượt tối"
+    assert market.keywords == [k for _label, words in deals.CATEGORIES.values() for k in words[5:]], \
+        "lượt trưa tìm bộ từ khoá khác lượt tối"
     (ready,) = _events(bot, "DEALS_READY")
     assert "trưa" in ready["message_html"] and "12:08 tự gửi" in ready["message_html"]
     deals.tick(bot.repo, bot, admin, NOON_SEND, market, history)

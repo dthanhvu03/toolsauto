@@ -1127,10 +1127,6 @@ class AdminPanel:
     def _wallet_admin(self) -> WalletAdmin:
         return WalletAdmin(TrackingRepository(self.db_path), audit=self._log_setting, waiting=self._wallet_waiting)
 
-    def deals_channel_offer(self, user_id: int, chat: dict, now: datetime) -> BotReply:
-        """Admin chuyển tiếp một bài của kênh (PLAN-099): hỏi có dùng kênh này làm kênh deal không."""
-        return DealsAdmin(TrackingRepository(self.db_path), audit=self._log_setting).offer(chat, now)
-
     def _insights(self) -> InsightsAdmin:
         repo = TrackingRepository(self.db_path)
         return InsightsAdmin(

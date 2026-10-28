@@ -3,14 +3,12 @@ bỏ lượt, bỏ món.
 
 Callback: c:dl:home · c:dl:on · c:dl:off · c:dl:infer:on|off · c:dl:noon:on|off · c:dl:skip[:<lượt>] ·
 c:dl:unskip[:<lượt>] · c:dl:rm[:<lượt>]:<item> · c:dl:back[:<lượt>]:<item>. Lượt: trua · toi (thiếu là toi, nút cũ).
-Kênh Telegram (PLAN-099): c:dl:ch:set · c:dl:ch:on|off · c:dl:ch:intro · c:dl:ch:clear.
 Ghi 📊 Lịch sử action `deals`.
 """
 
 from __future__ import annotations
 
 import html
-import json
 import re
 from collections.abc import Callable
 from datetime import datetime
@@ -31,12 +29,6 @@ AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
 
 
 def history_line(before: dict, after: dict) -> str:
-    if "channel" in after:
-        return f"Kênh deal: gắn {after['channel']}" if after["channel"] else f"Kênh deal: bỏ {before.get('channel')}"
-    if "channel_on" in after:
-        return f"Kênh deal: {'bật' if after['channel_on'] else 'tắt'} đăng bài"
-    if "channel_intro" in after:
-        return "Kênh deal: đăng bài giới thiệu"
     if "infer" in after:
         return f"Deal hời cho khách chưa chọn (bot đoán gu): {'bật' if after['infer'] else 'tắt'}"
     if "noon" in after:
@@ -59,54 +51,8 @@ class DealsAdmin:
         if self.audit is not None:
             self.audit(admin_id, "deals", before, after, now)
 
-    def offer(self, chat: dict, now: datetime) -> BotReply:
-        """Admin chuyển tiếp một bài của kênh: hỏi lại trước khi gắn."""
-        self.repo.set_state(deals.CHANNEL_PENDING_KEY, json.dumps(chat, ensure_ascii=False))
-        current = deals.channel(self.repo)
-        lines = [f"📢 Dùng kênh {deals.channel_label(chat)} làm kênh deal?"]
-        if current and current["id"] != chat["id"]:
-            lines.append(f"Kênh đang gắn {deals.channel_label(current)} sẽ được thay.")
-        lines.append("Bot phải là quản trị kênh, có quyền đăng bài.")
-        return BotReply("\n".join(lines), inline_keyboard=(
-            (("✅ Dùng kênh này", "c:dl:ch:set"), ("Huỷ", HOME)),))
-
-    def _channel(self, admin_id: int, action: str, now: datetime) -> BotReply:
-        current = deals.channel(self.repo)
-        if action == "set":
-            chat = deals.channel(self.repo, deals.CHANNEL_PENDING_KEY)
-            if chat is None:
-                return self._home(now, "Chưa có kênh chờ gắn. Chuyển tiếp lại một bài của kênh vào đây.")
-            self.repo.set_state(deals.CHANNEL_KEY, json.dumps(chat, ensure_ascii=False))
-            self.repo.delete_state(deals.CHANNEL_PENDING_KEY)
-            if current is None or current["id"] != chat["id"]:
-                self.repo.set_state(deals.CHANNEL_ON_KEY, "0")
-            self._log(admin_id, {"channel": current and current.get("title")}, {"channel": chat.get("title")}, now)
-            return self._home(now, f"Đã gắn kênh {deals.channel_label(chat)}. Bấm 📤 Đăng bài giới thiệu để thử bot "
-                                   "đăng được, rồi bật đăng kênh.")
-        if current is None:
-            return self._home(now, "Chưa gắn kênh.")
-        if action in ("on", "off"):
-            on = action == "on"
-            self.repo.set_state(deals.CHANNEL_ON_KEY, "1" if on else "0")
-            self._log(admin_id, {"channel_on": not on}, {"channel_on": on}, now)
-            return self._home(now, "Đã bật đăng deal lên kênh." if on else "Đã tắt đăng deal lên kênh.")
-        if action == "intro":
-            if not deals.post_intro(self.repo, now):
-                return self._home(now, "Chưa biết username bot (cần khởi động lại bot) nên chưa đăng được.")
-            self._log(admin_id, {}, {"channel_intro": True}, now)
-            return self._home(now, "Đã xếp bài giới thiệu, bot đăng trong ít phút. Anh ghim bài lên đầu kênh. "
-                                   "Không thấy bài thì kiểm bot đã là quản trị kênh, có quyền đăng bài chưa.")
-        if action == "clear":
-            self.repo.delete_state(deals.CHANNEL_KEY)
-            self.repo.set_state(deals.CHANNEL_ON_KEY, "0")
-            self._log(admin_id, {"channel": current.get("title")}, {"channel": None}, now)
-            return self._home(now, "Đã bỏ kênh deal.")
-        return BotReply("Nút này không còn hiệu lực.", inline_keyboard=NAV)
-
     def route(self, admin_id: int, data: str, now: datetime) -> BotReply:
         day = now.astimezone(ICT).date().isoformat()
-        if data.startswith("c:dl:ch:"):
-            return self._channel(admin_id, data.removeprefix("c:dl:ch:"), now)
         if data in ("c:dl:on", "c:dl:off"):
             on = data == "c:dl:on"
             self.repo.set_state(deals.ENABLED_KEY, "1" if on else "0")
@@ -176,8 +122,6 @@ class DealsAdmin:
             f"🤖 Khách chưa chọn, bot đoán gu: {'🟢 bật' if infer_on else '⚪ tắt'} · lượt tới đủ điều kiện "
             f"{len(guessed)} khách (tối đa 2 tin / tuần, món rẻ ≥ 12%, 3 món, nhận 3 tin không tạo link thì dừng)",
             "",
-            *self._channel_lines(),
-            "",
             f"<b>Hôm nay {day[8:]}/{day[5:7]}</b>",
         ]
         buttons, skips = [], []
@@ -191,8 +135,7 @@ class DealsAdmin:
             if status == "draft":
                 label = f"📝 Chờ {slot.send_text}"
             lines.append(f"<b>{slot.label} {slot.send_text}</b>: {label}"
-                         + (f" · {data['sent']} tin" if status == "sent" else "")
-                         + (" · 📢 đã đăng kênh" if data.get("channel") else ""))
+                         + (f" · {data['sent']} tin" if status == "sent" else ""))
             removed = set(data.get("removed") or [])
             editable = status in ("draft", "skipped")
             for key, rows in (data.get("deals") or {}).items():
@@ -217,24 +160,6 @@ class DealsAdmin:
         infer = ("⚪ Tắt đoán gu", "c:dl:infer:off") if infer_on else ("🤖 Bật đoán gu", "c:dl:infer:on")
         noon = ("⚪ Tắt lượt trưa", "c:dl:noon:off") if noon_on else ("🍱 Bật lượt trưa", "c:dl:noon:on")
         rows = [(toggle, infer), (noon,)]
-        if deals.channel(self.repo) is not None:
-            channel_on = self.repo.get_state(deals.CHANNEL_ON_KEY) == "1"
-            rows.append((("⚪ Tắt đăng kênh", "c:dl:ch:off") if channel_on else ("📢 Bật đăng kênh", "c:dl:ch:on"),
-                         ("📤 Đăng bài giới thiệu", "c:dl:ch:intro")))
-            rows.append((("🗑 Bỏ kênh", "c:dl:ch:clear"),))
         if skips:
             rows.append(tuple(skips))
         return BotReply("\n".join(lines), inline_keyboard=(*rows, *buttons, *NAV))
-
-    def _channel_lines(self) -> list[str]:
-        chat = deals.channel(self.repo)
-        if chat is None:
-            return ["📢 <b>Kênh Telegram</b>: chưa gắn. Thêm bot làm quản trị kênh (quyền đăng bài), rồi chuyển tiếp "
-                    "một bài bất kỳ của kênh vào chat này."]
-        on = self.repo.get_state(deals.CHANNEL_ON_KEY) == "1"
-        lines = [f"📢 <b>Kênh Telegram</b> {deals.channel_label(chat)}: {'🟢 Đang đăng' if on else '⚪ Chưa đăng'}",
-                 f"Mỗi lượt đăng tối đa {deals.CHANNEL_ITEMS} món rẻ nhất (mỗi danh mục {deals.CHANNEL_PER_CAT}), "
-                 "soạn đủ mọi danh mục. Nút món mở bot, bot tạo link riêng nên đơn tính đúng người."]
-        if deals.bot_username(self.repo) is None:
-            lines.append("⚠️ Bot chưa lấy được username (cần khởi động lại bot): chưa đăng được.")
-        return lines
