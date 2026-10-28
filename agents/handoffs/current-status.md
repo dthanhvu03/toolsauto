@@ -1,3 +1,32 @@
+## Phiên 2026-10-28 (dp) — Tin admin đơn mới: dòng báo khách + đơn gián tiếp
+
+- Chủ bot hỏi 2 đơn gián tiếp (bấm link món A, mua món B shop khác) hôm nay đã cover chưa / khách đã được báo chưa. Đã cover: đơn gán theo Sub ID, hoa hồng lấy đúng món đã mua, tin khách giải thích "mua món khác món trong link". Cả 2 tin khách đã gửi 10:54–10:55 ICT (••KR94 Telegram, ••SER3 Zalo #4).
+- Thêm (456c4f2): tin "Có đơn Shopee mới" có dòng `📨 Báo khách` (⏳ đang chờ → ✅ đã gửi HH:MM / ❌ khách chặn bot / ❔ không rõ / ⏭ bỏ qua + lý do), bot Telegram tự sửa tin khi tin khách xong (cả khách Zalo), sửa lỗi 3 lần thì chỉ ghi DB; dòng `🔀 Mua món khác link: <món>` khi đơn không có món trong link.
+- Proof: 891 test cashback qua, ruff sạch.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` (gồm cả (dm), (dn), (do)).
+
+---
+
+## Phiên 2026-10-28 (do) — Timeout và chống trùng: vá 2 chỗ hở
+
+- Báo cáo `reports/CASHBACK_TIMEOUT_IDEMPOTENCY.md` (timeout, 5 loại lỗi, bảng chống trùng, chọn gửi trùng hay mất, khung cho bot khác).
+- bdb9670: việc tạo link TikTok ghi `bot_state.tiktok_job:<sub_id>`, khởi động thì làm tiếp (≤ 30 phút, không gọi RioHub lần hai khi link đã lưu); Zalo khởi động gửi nốt câu trả lời đã lưu hoặc nhắn khách gửi lại (tin ≤ 6 giờ).
+- Proof: 887 test qua.
+
+---
+
+## Phiên 2026-10-28 (dn) — Rà soát toàn bot Zalo
+
+- de4aa33: tin chat không ăn suất link; trả lời nhẹ cho tin chữ; gõ nhầm số không xoá danh sách và báo đúng số có; trang chủ liền khối; bỏ nhãn [HOT] trong tên món.
+
+---
+
+## Phiên 2026-10-28 (dm) — Zalo: danh sách deal không hết hạn sau khi chọn 1 món
+
+- 3ebd290: gõ số lấy link món khác vẫn giữ danh sách; tin bot tự gửi giữ danh sách số 24 giờ.
+
+---
+
 ## Phiên 2026-10-28 (store-4) — store_bot: báo hàng mới vào chat từng khách (mô hình FatCat)
 
 - "2.639 monthly users" của FatCat là người dùng bot, không phải kênh: FatCat nhắn "HÀNG MỚI VỀ" thẳng vào chat bot từng khách. Làm y vậy:
