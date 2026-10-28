@@ -95,6 +95,7 @@ def main() -> None:
     if resumed:
         logger.warning("[Cashback] làm tiếp %s link TikTok dở dang lúc dừng bot", resumed)
     _register_profile(telegram, settings.admin_user_ids, wallet_on=service.wallet.settings().enabled)
+    _remember_username(telegram, repo)
     logger.info(
         "start db=%s rate=%s max_age_h=%s allowlist=%s public=%s admin_notify=%s",
         settings.db_path,
@@ -134,6 +135,17 @@ def _register_profile(telegram: TelegramApi, admin_user_ids, wallet_on: bool = F
             logger.info("%s %s", name, "ok" if step() else "failed")
         except requests.RequestException as exc:
             logger.error("%s failed: %s", name, type(exc).__name__)
+
+
+def _remember_username(telegram: TelegramApi, repo: TrackingRepository) -> None:
+    """Kênh deal cần username bot cho nút mở bot (PLAN-099). Lỗi chỉ ghi log, giữ username đã lưu lần trước."""
+    try:
+        username = telegram.get_username()
+    except (requests.RequestException, ValueError) as exc:
+        logger.error("getMe failed: %s", type(exc).__name__)
+        return
+    if username:
+        repo.set_state(deals.BOT_USERNAME_KEY, username)
 
 
 def _stamp(moment: datetime) -> str:

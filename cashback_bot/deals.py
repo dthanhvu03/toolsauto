@@ -350,6 +350,8 @@ def build(repo: TrackingRepository, service, market: MarketSearchClient, history
         wanted = {c for cats in subscribers(conn, now).values() for c in cats}
         if infer_enabled(repo):
             wanted |= {c for cats, _reason in inferred(conn, now).values() for c in cats}
+        if channel_live(repo):
+            wanted |= set(CATEGORIES)
         wanted = sorted(wanted)
     resolution = service._resolve_policy(now)
     result: dict[str, list[dict]] = {}
@@ -468,8 +470,139 @@ def send(repo: TrackingRepository, day: str, data: dict, now: datetime, slot: Sl
                           reply_markup_json=json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False),
                           source_ref=slot.record_key(day), now=stamp)
             sent += 1
-    save(repo, day, {**data, "status": "sent", "sent": sent, "at": stamp}, slot)
+        posted = channel_live(repo) and post_channel(conn, repo, day, deals, removed, stamp, slot)
+    save(repo, day, {**data, "status": "sent", "sent": sent, "at": stamp, **({"channel": 1} if posted else {})}, slot)
     return sent
+
+
+# --- Kênh Telegram (PLAN-099) -----------------------------------------------------------------------------------
+# Kênh tắt mặc định. Admin thêm bot làm quản trị kênh rồi chuyển tiếp một bài của kênh vào bot để gắn. Link trong kênh
+# dùng chung nên không gắn mã khách: mỗi món là nút mở bot (`/start dl_<shop>_<item>`), bot tạo link riêng cho người
+# bấm như nút 🛒 trong tin deal. Bài kênh đi qua hàng đợi chung với audience 'admin' (bot Telegram lấy mọi chat_id).
+CHANNEL_KEY = "deals_channel"  # JSON {id, title, username}
+CHANNEL_ON_KEY = "deals_channel_on"
+CHANNEL_PENDING_KEY = "deals_channel_pending"
+BOT_USERNAME_KEY = "bot_username"  # poller ghi lúc khởi động (getMe)
+CHANNEL_ITEMS = 8
+CHANNEL_PER_CAT = 2
+_START = re.compile(r"/start(?:@\w+)?\s+dl_(\d+)_(\d+)", re.IGNORECASE)
+
+
+def channel(repo: TrackingRepository, key: str = CHANNEL_KEY) -> dict | None:
+    try:
+        data = json.loads(repo.get_state(key) or "null")
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("id"), int) else None
+
+
+def bot_username(repo: TrackingRepository) -> str | None:
+    return repo.get_state(BOT_USERNAME_KEY) or None
+
+
+def channel_live(repo: TrackingRepository) -> bool:
+    """Kênh đã gắn, admin đã bật, và biết username bot để làm nút mở bot."""
+    return repo.get_state(CHANNEL_ON_KEY) == "1" and channel(repo) is not None and bot_username(repo) is not None
+
+
+def channel_label(chat: dict) -> str:
+    title = html.escape(chat.get("title") or "Kênh")
+    return f"«{title}»" + (f" (@{html.escape(chat['username'])})" if chat.get("username") else "")
+
+
+def forwarded_channel(message: dict) -> dict | None:
+    """Kênh gốc của một tin chuyển tiếp (Bot API mới: forward_origin; cũ: forward_from_chat), hoặc None."""
+    origin = message.get("forward_origin") or {}
+    chat = origin.get("chat") if origin.get("type") == "channel" else message.get("forward_from_chat")
+    if not isinstance(chat, dict) or chat.get("type") != "channel" or not isinstance(chat.get("id"), int):
+        return None
+    return {"id": chat["id"], "title": str(chat.get("title") or ""), "username": chat.get("username") or None}
+
+
+def start_deal(text: str) -> str | None:
+    """«/start dl_<shop>_<item>» (khách bấm món trong kênh) → callback như nút 🛒 trong tin deal."""
+    found = _START.fullmatch((text or "").strip())
+    return f"u:dl:{found.group(1)}:{found.group(2)}" if found else None
+
+
+def _bot_url(bot: str, start: str | None = None) -> str:
+    return f"https://t.me/{bot}" + (f"?start={start}" if start else "")
+
+
+def channel_post(deals: dict[str, list[dict]], removed: set[int], bot: str, day: str,
+                 slot: Slot = EVENING) -> tuple[str, list] | None:
+    """Bài kênh: tối đa CHANNEL_ITEMS món rẻ nhất so với thường ngày, mỗi danh mục tối đa CHANNEL_PER_CAT."""
+    pool = sorted(((key, d) for key, rows in deals.items() if key in CATEGORIES for d in rows
+                   if d["item_id"] not in removed), key=lambda pair: pair[1]["price"] / pair[1]["usual"])
+    picked, per_cat, seen = [], {}, set()
+    for key, deal in pool:
+        if deal["item_id"] in seen or per_cat.get(key, 0) >= CHANNEL_PER_CAT or len(picked) >= CHANNEL_ITEMS:
+            continue
+        seen.add(deal["item_id"])
+        per_cat[key] = per_cat.get(key, 0) + 1
+        picked.append((key, deal))
+    if not picked:
+        return None
+    lines = [f"🔥 <b>Deal hời {slot.send_text} · {day[8:]}/{day[5:7]}</b>",
+             "Giá hôm nay thấp nhất 30 ngày và rẻ hơn thường ngày, bot đã kiểm lịch sử giá.", ""]
+    buttons = []
+    for number, (key, deal) in enumerate(picked, 1):
+        icon = CATEGORIES[key][0].split()[0]
+        drop = round((deal["usual"] - deal["price"]) * 100 / deal["usual"])
+        lines.append(f"{number}. {icon} {html.escape(_short(deal['name']))}: <b>{_k(deal['price'])}</b> "
+                     f"(thường {_k(deal['usual'])}, −{drop}%) · hoàn ~{_k(deal['cashback'])}")
+        buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
+                         "url": _bot_url(bot, f"dl_{deal['shop_id']}_{deal['item_id']}")}])
+    lines += ["", "👇 Bấm món muốn mua: bot gửi bạn link mua có hoàn tiền.",
+              f"Giá theo dữ liệu lúc {slot.build_at:%H:%M}, có thể đổi khi bạn mở."]
+    return "\n".join(lines), buttons + [[{"text": "🤖 Mở bot hoàn tiền", "url": _bot_url(bot)}]]
+
+
+def intro_post(bot: str, noon: bool) -> tuple[str, list]:
+    """Bài giới thiệu để ghim đầu kênh."""
+    when = "12:08 trưa và 20:08 tối" if noon else "20:08 tối"
+    text = "\n".join([
+        "👋 <b>Kênh deal hời của bot hoàn tiền</b>",
+        "",
+        f"Mỗi ngày {when}, kênh đăng các món đang rẻ thật: giá hôm nay thấp nhất 30 ngày và rẻ hơn giá thường ngày. "
+        "Bot kiểm lịch sử giá, không tin % giảm shop tự ghi.",
+        "",
+        "<b>Mua có hoàn tiền</b>",
+        "1. Bấm món trong bài, bot mở ra và gửi bạn link mua.",
+        "2. Bấm link đó rồi thêm vào giỏ, đặt như bình thường. Giá không đổi.",
+        "3. Bot báo khi có đơn. Tiền hoàn chỉ chi khi sàn đã duyệt và trả hoa hồng.",
+        "",
+        "Món khác ngoài kênh: dán link sản phẩm vào bot là được.",
+    ])
+    return text, [[{"text": "🤖 Mở bot hoàn tiền", "url": _bot_url(bot)}]]
+
+
+def _enqueue_channel(conn: sqlite3.Connection, key: str, chat_id: int, built: tuple[str, list], source: str,
+                     stamp: str) -> bool:
+    text, keyboard = built
+    return enqueue_event(conn, event_key=key, event_type="DEALS_CHANNEL", chat_id=chat_id, message_html=text,
+                         reply_markup_json=json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False),
+                         source_ref=source, now=stamp)
+
+
+def post_channel(conn: sqlite3.Connection, repo: TrackingRepository, day: str, deals: dict[str, list[dict]],
+                 removed: set[int], stamp: str, slot: Slot = EVENING) -> bool:
+    chat, bot = channel(repo), bot_username(repo)
+    built = channel_post(deals, removed, bot, day, slot) if chat and bot else None
+    if built is None:
+        return False
+    key = "deals_channel:" + day + ("" if slot is EVENING else f":{slot.key}")
+    return _enqueue_channel(conn, key, chat["id"], built, slot.record_key(day), stamp)
+
+
+def post_intro(repo: TrackingRepository, now: datetime) -> bool:
+    chat, bot = channel(repo), bot_username(repo)
+    if chat is None or bot is None:
+        return False
+    stamp = _stamp(now)
+    with repo.connect() as conn:
+        return _enqueue_channel(conn, f"deals_channel:intro:{stamp}", chat["id"], intro_post(bot, noon_enabled(repo)),
+                                CHANNEL_KEY, stamp)
 
 
 # --- Lịch chạy --------------------------------------------------------------------------------------------------
@@ -525,7 +658,8 @@ def tick(repo: TrackingRepository, service, admin_notifier=None, now: datetime |
         send_at = datetime.combine(local.date(), slot.send_at, ICT)
         if state is None and slot.build_at <= local.time() < slot.send_at:
             with repo.connect() as conn:
-                someone = subscribers(conn, moment) or (infer_enabled(repo) and inferred(conn, moment))
+                someone = (subscribers(conn, moment) or (infer_enabled(repo) and inferred(conn, moment))
+                           or channel_live(repo))
                 if not someone or not _running.acquire(blocking=False):
                     continue
             save(repo, day, {"status": "building"}, slot)

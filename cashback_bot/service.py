@@ -196,6 +196,10 @@ class CashbackService:
         update_id = update.get("update_id")
         if not isinstance(update_id, int):
             return None
+        forwarded = deals.forwarded_channel(message)
+        if forwarded is not None and self.admin_panel.is_admin(user_id):
+            # PLAN-099: admin chuyển tiếp một bài của kênh để gắn kênh deal.
+            return user_id, self.admin_panel.deals_channel_offer(user_id, forwarded, datetime.now(timezone.utc))
         message_id = message.get("message_id")
         reply = self.handle_text(
             user_id,
@@ -513,6 +517,9 @@ class CashbackService:
             self.desk.clear(telegram_user_id)
         if command in pages:
             return self._page(pages[command], telegram_user_id)
+        if command == "/start" and (deal := deals.start_deal(stripped)) is not None:
+            # Khách bấm món trong kênh deal (PLAN-099): như bấm 🛒 trong tin deal.
+            return self._deal_action(telegram_user_id, deal)
         if command:
             return self._page("home")
         tiktok_url = parse_tiktok_target(stripped)

@@ -86,6 +86,15 @@ class TelegramApi:
         payload = response.json()
         return bool(payload.get("ok"))
 
+    def get_username(self) -> str | None:
+        """Username của bot (getMe), để làm link t.me/<bot>?start=… trong kênh deal (PLAN-099)."""
+        response = requests.get(f"{self._base}/getMe", timeout=self._timeout)
+        if response.status_code >= 400:
+            logger.error("[Cashback] getMe http=%s", response.status_code)
+            return None
+        username = (response.json().get("result") or {}).get("username")
+        return username if isinstance(username, str) and username else None
+
     def set_my_commands(self, commands=BOT_COMMANDS, scope: dict | None = None) -> bool:
         body: dict = {
             "commands": [{"command": command, "description": description} for command, description in commands]
