@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (dz) — PLAN-099 đổi hướng: 🔥 Deal hôm nay ngay trong bot
+
+- Chủ bot: «dùng chung con bot hiện tại, không cần tạo kênh». Đã gỡ phần kênh Telegram (revert 21fd968), thay bằng mục deal xem ngay trong bot (60d9134, 912 test qua, ruff sạch). Mục (dy) bên dưới không còn đúng.
+- Trang chủ có nút «🔥 Deal hôm nay» (cạnh «🛍️ Danh mục deal»), lệnh `/deal`, Zalo gõ `deal`. Hiện lượt gần nhất đã tới giờ gửi (hôm nay hoặc hôm qua, không hiện bản nháp chưa gửi hay lượt admin bỏ): 8 món, mỗi danh mục 2, danh mục khách chọn lên trước, nút lọc theo danh mục, bấm món ra thẻ link.
+- Khi deal hời bật, lượt soạn tìm đủ 10 danh mục (trước chỉ tìm danh mục có người chọn), nên soạn lâu hơn vài phút.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` (bật luôn PLAN-098 bước A, B). Sau restart thử «🔥 Deal hôm nay» trên Telegram và Zalo. Menu lệnh Telegram tự có `/deal` sau restart.
+
+---
+
 ## Phiên 2026-10-28 (dy) — PLAN-099: kênh Telegram deal hời
 
 - Chủ bot hỏi cách để khách nhớ tới bot lúc mua, gửi ảnh trang AddLiveTag (hạ giá mạnh, deal khung giờ, nhóm Telegram). Chủ bot duyệt làm kênh deal.
