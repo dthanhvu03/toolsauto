@@ -89,3 +89,9 @@
 - Kết luận: chưa thể làm hoàn tiền Food theo từng khách. Cần một lần thử thật để biết hai điều: (1) link `an_redir` tới quán Food có sub_id có mở đúng quán không; (2) đơn đặt qua link đó có ra trong báo cáo Food kèm sub_id không.
   - Việc thử cần chủ bot tự đặt 1 đơn nhỏ, rồi hôm sau đọc lại `source=food`.
   - Chủ bot chưa duyệt thì không làm.
+
+## Thử ShopeeFood (chủ bot duyệt 28/10)
+- Link quán chủ bot gửi: `spf.shopee.vn/906KKy82bs`. Ghép tay `s.shopee.vn/an_redir?origin_link=<link>&affiliate_id=<id>&sub_id=FOODTEST`, không đổi code bot.
+- ~17:15 28/10: link mở đúng món trong app (Chè dừa dầm thốt nốt 28.490đ, An Vy, Bàu Cát; món thuộc «ShopeeFood Trùm Deal»). Chủ bot đã đặt 1 đơn qua link.
+- 28/10 sau khi đặt, 1 lệnh đọc `type=clicks&source=food` 2 ngày: chưa có FOODTEST. Lượt bấm mới nhất AddLiveTag có là 27/10, nghĩa là báo cáo trễ.
+- **Next:** 29–30/10 đọc lại `source=food` (items + clicks), tìm FOODTEST. Kết luận theo 3 trường hợp: có mã / có đơn không mã / không có đơn.
