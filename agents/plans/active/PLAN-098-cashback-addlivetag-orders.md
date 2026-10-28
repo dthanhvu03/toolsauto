@@ -1,7 +1,7 @@
 # PLAN-098 — Đơn Shopee qua API AddLiveTag: đối soát chéo, nguồn dự phòng, chuẩn bị ShopeeFood
 
 - Executor: Claude Code. Ngày 28/10/2026, chủ bot chọn "mục 2" (API AddLiveTag không chính thống) và chọn cả ba việc.
-- Trạng thái: chủ bot duyệt 28/10. Bước A, B xong (chờ restart); C chưa làm.
+- Trạng thái: chủ bot duyệt 28/10. Bước A, B xong (chờ restart); C đã khảo sát, chờ chủ bot quyết thử nghiệm.
 
 ## Bối cảnh (đã kiểm 28/10)
 - API: `GET https://addlivetag.com/api/v1/conversions.php` với header `X-API-Key`, tối đa 60 lệnh/phút.
@@ -79,3 +79,13 @@
 - Tin khách dự phòng: `order_new_notice` + «Số tiền sẽ cập nhật khi bot đồng bộ lại với Shopee», nút 📦 Đơn hàng của tôi / 📩 Hỗ trợ; qua `customer_block_reason` + mốc kích hoạt như tin đơn thường.
 - Test thêm 4: khi nào coi cookie lỗi; báo đơn mới 1 lần, bỏ đơn đã có / huỷ / ngoài link, không ghi sổ, cookie chạy lại không báo lần hai; cờ tắt thì đồng bộ chính vẫn báo; lịch 60 phút, lỗi API không nhắn admin. Toàn bộ 909 test qua, ruff sạch.
 - Chạy thật trên bản sao DB (API thật): cookie đang ổn → dự phòng không chạy; gọi thẳng run_fallback ra 0 đơn thiếu. Đã xoá bản sao.
+
+## Khảo sát bước C — ShopeeFood (28/10)
+- 1 lệnh đọc `source=food` khung 30 ngày: 0 đơn Food (`total: 0`). Chưa có mẫu để biết đơn Food có sub_id / utm hay không.
+- Tài liệu `generateShortLink` (Open API chính thức, cần AppID/Secret) chỉ có ví dụ link shopee.vn, không nói gì về Food.
+- Blog bên thứ ba (Sapo, Ecomobi; chưa có tài liệu chính thức Shopee VN): link Food lấy trong app (Tôi → Shopee Tiếp Thị Liên Kết → ShopeeFood), mỗi lần chép ra một link rút gọn khác. Không thấy cách gắn sub_id. Ở Indonesia, hoa hồng Food chỉ tính cho click từ link Food Affiliate.
+- Bot tạo link bằng `an_redir` (affiliate_id + 1 sub_id). Chưa biết `an_redir` có nhận đích `shopeefood.vn` / `spf.shopee.vn` không.
+- AddLiveTag product-data không có giá / hoa hồng món Food, nên bot không báo được số hoàn trước khi mua.
+- Kết luận: chưa thể làm hoàn tiền Food theo từng khách. Cần một lần thử thật để biết hai điều: (1) link `an_redir` tới quán Food có sub_id có mở đúng quán không; (2) đơn đặt qua link đó có ra trong báo cáo Food kèm sub_id không.
+  - Việc thử cần chủ bot tự đặt 1 đơn nhỏ, rồi hôm sau đọc lại `source=food`.
+  - Chủ bot chưa duyệt thì không làm.
