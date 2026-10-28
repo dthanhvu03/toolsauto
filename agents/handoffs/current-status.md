@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (ds) — Restart, gửi tin giới thiệu wallet-v1
+
+- Tin xem thử về admin (admin_notifications id 173, gửi 05:12:32Z) → chủ bot duyệt.
+- Chủ bot restart cả hai bot lúc 06:04:02Z (code 630ff55); log sau restart không có lỗi.
+- Chủ bot bấm gửi 📣 wallet-v1: 17 khách (9 Telegram, 8 Zalo), sent 06:25:50Z–06:26:42Z, 0 failed/unknown.
+- **Next:** theo dõi số khách bấm đồng ý V3 (/dieukien); kỳ Shopee đầu có đơn bot → đối soát → mở rút.
+
+---
+
 ## Phiên 2026-10-28 (dr) — V3 công bố, ghi payout_terms
 
 - Chủ bot công bố V3 lúc 04:46:56Z (id 3, hash 22c5aaf878b0). Rà nội dung với code: khớp (Hoan tien <mã>, mã giao dịch khi chuyển, 3–7 ngày, đổi tài khoản chờ 7 ngày, thu hồi trừ khoản sau, xử lý yêu cầu khi ví tắt). 0 khách đã đồng ý V3 (công bố không gửi tin).
