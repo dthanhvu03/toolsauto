@@ -319,12 +319,13 @@ class CashbackService:
 
     def _wallet_page(self, user_id: int, notice: str = "") -> BotReply:
         settings = self.wallet.settings()
-        if not settings.enabled:
-            # Ví xem trước: chưa mở rút thì vẫn cho khách xem tiền hoàn đang chờ (chủ bot duyệt 2026-10-28).
-            return wallet_reply(settings, self.wallet.balance(user_id), self.wallet.entries(user_id), None, None,
-                                notice=notice, preview=True)
         with self.repo.connect() as conn:
             limits = payouts.active_limits(conn)
+        if not settings.enabled:
+            # Ví xem trước: chưa mở rút thì vẫn cho khách xem tiền hoàn đang chờ (chủ bot duyệt 2026-10-28).
+            # Vẫn hiện hạn mức: điều khoản V3 dẫn khách sang 👛 Ví để xem mức đang áp dụng.
+            return wallet_reply(settings, self.wallet.balance(user_id), self.wallet.entries(user_id), None, None,
+                                notice=notice, limits=limits, preview=True)
         return wallet_reply(
             settings,
             self.wallet.balance(user_id),

@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (dr) — V3 công bố, ghi payout_terms
+
+- Chủ bot công bố V3 lúc 04:46:56Z (id 3, hash 22c5aaf878b0). Rà nội dung với code: khớp (Hoan tien <mã>, mã giao dịch khi chuyển, 3–7 ngày, đổi tài khoản chờ 7 ngày, thu hồi trừ khoản sau, xử lý yêu cầu khi ví tắt). 0 khách đã đồng ý V3 (công bố không gửi tin).
+- Backup `cashback-manual-20261028T044816Z.sqlite` rồi ghi `payout_policy_decisions` id 8: payout_terms APPROVED reference V3. Khoá còn lại duy nhất: `settlement_matched`.
+- Ví xem trước hiện thêm dòng hạn mức (V3 dẫn sang 👛 Ví). Proof: 891 test qua.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo`; kỳ Shopee đầu có đơn bot → đối soát → mở rút.
+
+---
+
 ## Phiên 2026-10-28 (dq) — Ví xem trước (chưa mở rút)
 
 - Chủ bot yêu cầu bật ví. Không bật được: còn 2 khoá (`settlement_matched`: chưa có kỳ Shopee trả cho đơn qua bot; `decision_payout_terms`: V3 chưa công bố). Các quyết định khác đã APPROVED.

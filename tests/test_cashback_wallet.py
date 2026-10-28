@@ -506,6 +506,13 @@ class TestSwitch:
         assert "Áo Polo Nam" in page.text and "Nhận tiền" not in page.text and "tài khoản nhận tiền" not in page.text
         assert _buttons(page) == ["u:p:orders", "u:p:home"]
         assert bot.handle_text(USER, "buyer", "/vi", update_id=2, now=NOW).text == page.text
+        with bot.repo.connect() as conn:
+            conn.execute(
+                "INSERT INTO payout_limit_policies (min_vnd, max_per_request_vnd, daily_total_vnd, monthly_total_vnd, "
+                "status, created_by, approved_by, approved_at, created_at) VALUES (10000, 1000000, 5000000, 10000000, "
+                "'ACTIVE', 'test', 'test', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z')"
+            )
+        assert "Hạn mức rút: 1.000.000đ mỗi lần" in bot.handle_text(USER, "buyer", "/vi", update_id=3, now=NOW).text
         assert "Chưa mở rút tiền" in _callback(bot, USER, "u:w:out:ok").toast
         assert "Chưa mở rút tiền" in _callback(bot, USER, "u:w:bank").toast
 
