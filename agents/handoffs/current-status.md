@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (ea) — PLAN-100: deal hời tự động, có món mới là gửi
+
+- Chủ bot: «bot tự update tự gửi, cứ có là gửi, 1 deal cũng gửi». Chọn: quét 60 phút, tối đa 4 tin/khách/ngày, chỉ 8:00–22:00, bỏ lượt 12:08/20:08.
+- Đã làm (57f262f, 911 test qua, ruff sạch): quét mỗi giờ 7:00–21:00 (giờ chẵn/lẻ xen kẽ từ khoá, đủ 10 danh mục) → kho deal `bot_state.deals_pool` (24 giờ). Sau mỗi lượt gửi khách món mới hợp danh mục: 1–3 món/tin, cách ≥ 2 giờ, không lặp món 3 ngày, nhường nhắc sale. Không còn duyệt từng lượt; admin còn bật/tắt và ❌ Bỏ món. 🔥 Deal hôm nay đọc kho (12 giờ).
+- Chi phí AddLiveTag khoảng 7 lần trước (15 lượt/ngày). Lỗi 429 thì lượt ghi lỗi, giờ sau quét lại. Theo dõi dòng «🔎 Lượt quét gần nhất» ở màn 🔥 Deal hời.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo`. Đang trong 7:00–21:59 thì quét ngay. Khách nhận tin 20:08 hôm nay phải cách 2 giờ nên tin tự động đầu từ 8:00 29/10. Sáng 29/10 xem màn 🔥 Deal hời: số lượt quét, lỗi 429 nếu có, số tin đã gửi.
+
+---
+
 ## Phiên 2026-10-28 (dz) — PLAN-099 đổi hướng: 🔥 Deal hôm nay ngay trong bot
 
 - Chủ bot: «dùng chung con bot hiện tại, không cần tạo kênh». Đã gỡ phần kênh Telegram (revert 21fd968), thay bằng mục deal xem ngay trong bot (60d9134, 912 test qua, ruff sạch). Mục (dy) bên dưới không còn đúng.

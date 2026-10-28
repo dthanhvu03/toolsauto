@@ -70,5 +70,5 @@
   - nhường nhắc sale, đoán gu, màn admin, 🔥 Deal hôm nay.
 - Toàn bộ `tests/test_cashback_*.py`: 911 passed. `ruff check cashback_bot` sạch.
 - Xem trước tin mới bằng deal thật tối 28/10 (chỉ đọc DB): 3 món, chia theo danh mục của khách.
-- Sau restart, lượt quét đầu chạy ở giờ tròn kế tiếp trong 7:00–21:00. Khách đã nhận deal 20:08 tối 28/10 thì tính 1
+- Sau restart, nếu đang trong 7:00–21:59 mà giờ đó chưa quét thì quét ngay; ngoài khung thì chờ 7:00. Khách đã nhận deal 20:08 tối 28/10 thì tính 1
   tin của ngày đó và phải cách 2 giờ, nên tin tự động đầu tiên là từ 8:00 sáng 29/10.
