@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+from dataclasses import dataclass
 from datetime import datetime
 
 from store_bot.db import ICT, ApiKey, Order, Product, StoreError, Topup, User
@@ -28,6 +29,67 @@ ADMIN_COMMANDS = BOT_COMMANDS + [("admin", "Quản lý shop")]
 
 # Tin quá dài thì gửi hàng dạng file .txt (giới hạn tin Telegram 4096 ký tự).
 INLINE_ITEMS_MAX_CHARS = 3500
+
+
+# ---------- icon theo hãng ----------
+# Tên sản phẩm chứa từ khoá → emoji thường (luôn hiện). Logo thật của hãng là emoji tuỳ chỉnh: admin gắn ở
+# ⚙️ Quản lý shop → 🎨 Logo hãng (tài khoản tạo bot phải có Telegram Premium), lưu state `icon:<hãng>`,
+# bot nạp vào CUSTOM_ICONS. Kênh và tin gửi hàng loạt luôn dùng emoji thường (Telegram không cho logo ở kênh).
+
+@dataclass(frozen=True)
+class Brand:
+    key: str
+    label: str
+    keywords: tuple[str, ...]
+    emoji: str
+
+
+BRANDS = (
+    Brand("chatgpt", "ChatGPT", ("chatgpt", "chat gpt", "openai", "gpt"), "🤖"),
+    Brand("gemini", "Gemini", ("gemini",), "✨"),
+    Brand("capcut", "CapCut", ("capcut",), "🎬"),
+    Brand("canva", "Canva", ("canva",), "🎨"),
+    Brand("office", "Microsoft 365", ("office", "microsoft", "copilot"), "💼"),
+    Brand("duolingo", "Duolingo", ("duolingo",), "🦉"),
+    Brand("muse", "Muse AI", ("muse",), "🧠"),
+    Brand("claude", "Claude", ("claude",), "🔶"),
+    Brand("grok", "Grok", ("grok",), "⚡"),
+    Brand("perplexity", "Perplexity", ("perplexity",), "🔎"),
+    Brand("cursor", "Cursor", ("cursor",), "💻"),
+    Brand("youtube", "YouTube", ("youtube",), "▶️"),
+    Brand("netflix", "Netflix", ("netflix",), "🍿"),
+    Brand("spotify", "Spotify", ("spotify",), "🎧"),
+    Brand("adobe", "Adobe", ("adobe", "photoshop"), "🅰️"),
+    Brand("google", "Google One", ("google one", "google drive"), "☁️"),
+)
+DEFAULT_ICON = "📦"
+CUSTOM_ICONS: dict[str, str] = {}  # key hãng → custom_emoji_id
+CUSTOM_EMOJI_RE = re.compile(r'<tg-emoji emoji-id="\d+">(.*?)</tg-emoji>')
+
+
+def brand_of(name: str) -> Brand | None:
+    lowered = name.lower()
+    return next((b for b in BRANDS if any(k in lowered for k in b.keywords)), None)
+
+
+def icon_id(name: str) -> str | None:
+    """custom_emoji_id logo hãng cho nút bấm (None = chưa gắn logo)."""
+    brand = brand_of(name)
+    return CUSTOM_ICONS.get(brand.key) if brand else None
+
+
+def icon(name: str, rich: bool = True) -> str:
+    """Icon đặt trước tên sản phẩm trong tin HTML. rich=False: chỉ emoji thường (kênh, gửi hàng loạt)."""
+    brand = brand_of(name)
+    if brand is None:
+        return DEFAULT_ICON
+    custom = CUSTOM_ICONS.get(brand.key) if rich else None
+    return f'<tg-emoji emoji-id="{custom}">{brand.emoji}</tg-emoji>' if custom else brand.emoji
+
+
+def button_icon(name: str) -> str:
+    """Tiền tố chữ trên nút: nút có logo thật (icon_custom_emoji_id) thì không lặp emoji."""
+    return "" if icon_id(name) else icon(name, rich=False) + " "
 
 
 def esc(text: object) -> str:
@@ -105,11 +167,11 @@ def shop_list(products: list[Product]) -> str:
 
 def product_button(product: Product) -> str:
     stock = f"còn {product.stock}" if product.stock else "hết hàng"
-    return f"📦 {product.name} · {vnd(product.price)} · {stock}"
+    return f"{button_icon(product.name)}{product.name} · {vnd(product.price)} · {stock}"
 
 
 def product_detail(product: Product, balance: int) -> str:
-    lines = [f"📦 <b>{esc(product.name)}</b>"]
+    lines = [f"{icon(product.name)} <b>{esc(product.name)}</b>"]
     if product.description:
         lines += ["", esc(product.description)]
     lines += [
@@ -136,7 +198,7 @@ def confirm_buy(product: Product, quantity: int, balance: int) -> str:
         tail = "Bấm 📱 Thanh toán QR bên dưới, quét mã bằng app ngân hàng là xong."
     return (
         "🧾 <b>Xác nhận mua</b>\n\n"
-        f"📦 {esc(product.name)}\n"
+        f"{icon(product.name)} {esc(product.name)}\n"
         f"Số lượng: <b>{quantity}</b> × {vnd(product.price)}\n"
         f"Tổng: <b>{vnd(total)}</b>\n\n{tail}"
     )
@@ -156,7 +218,7 @@ def order_done(order: Order) -> str:
     return (
         f"{head}\n\n"
         f"🧾 Đơn #{order.id} · {local_time(order.created_at)}\n"
-        f"📦 {esc(order.product_name)} × {len(order.items) if order.refunded else order.quantity}\n"
+        f"{icon(order.product_name)} {esc(order.product_name)} × {len(order.items) if order.refunded else order.quantity}\n"
         f"💸 Đã trừ: {vnd(order.total - order.refunded)}\n"
         f"{partial}"
         f"💼 Số dư còn: {vnd(order.balance_after or 0)}\n\n"
@@ -167,7 +229,7 @@ def order_done(order: Order) -> str:
 def order_waiting(order: Order) -> str:
     return (
         f"⏳ <b>Đã nhận đơn #{order.id}</b>, đang lấy hàng…\n\n"
-        f"📦 {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}\n\n"
+        f"{icon(order.product_name)} {esc(order.product_name)} × {order.quantity} · {vnd(order.total)}\n\n"
         "Thường chỉ vài giây; nguồn chậm thì 1–2 phút. Hàng về bot gửi ngay, không cần bấm mua lại."
     )
 
@@ -175,7 +237,7 @@ def order_waiting(order: Order) -> str:
 def order_failed(order: Order) -> str:
     return (
         f"❌ <b>Đơn #{order.id} chưa lấy được hàng</b>\n\n"
-        f"📦 {esc(order.product_name)} × {order.quantity}\n"
+        f"{icon(order.product_name)} {esc(order.product_name)} × {order.quantity}\n"
         f"↩️ Đã hoàn {vnd(order.refunded)} vào số dư.\n"
         f"💼 Số dư: {vnd(order.balance_after or 0)}\n\n"
         "Món này đang tạm thiếu hàng, bạn thử lại sau ít phút hoặc chọn món khác."
@@ -184,7 +246,7 @@ def order_failed(order: Order) -> str:
 
 def order_items(order: Order) -> str:
     body = "\n".join(f"<code>{esc(item)}</code>" for item in order.items)
-    return f"📦 <b>Đơn #{order.id}</b> · {esc(order.product_name)}\n\n{body}"
+    return f"{icon(order.product_name)} <b>Đơn #{order.id}</b> · {esc(order.product_name)}\n\n{body}"
 
 
 def items_fit_inline(order: Order) -> bool:
@@ -198,7 +260,7 @@ def orders_list(orders: list[Order]) -> str:
 
 
 def order_button(order: Order) -> str:
-    return f"#{order.id} · {order.product_name} × {order.quantity} · {vnd(order.total)}"
+    return f"{button_icon(order.product_name)}#{order.id} · {order.product_name} × {order.quantity} · {vnd(order.total)}"
 
 
 def account(user: User, key: ApiKey | None, api_url: str) -> str:
@@ -266,7 +328,7 @@ def balance_adjusted(delta: int, balance: int, note: str) -> str:
 def restock_announcement(product: Product, added: int) -> str:
     return (
         "🆕 <b>HÀNG MỚI VỀ!</b>\n\n"
-        f"📦 <b>{esc(product.name)}</b>\n"
+        f"{icon(product.name, rich=False)} <b>{esc(product.name)}</b>\n"
         f"➕ Thêm: <b>{added}</b>\n"
         f"🗄️ Tồn kho hiện tại: <b>{product.stock}</b>\n"
         f"💰 Giá: <b>{vnd(product.price)}</b>"
@@ -345,7 +407,7 @@ def admin_product(product: Product) -> str:
         source = (f"🐱 Nguồn FatCat #{product.upstream_id} · giá vốn {vnd(product.cost or 0)} · "
                   f"lãi {vnd(margin)}/món\nGiá, tên, tồn kho tự cập nhật theo FatCat.\n")
     return (
-        f"📦 <b>{esc(product.name)}</b> (#{product.id})\n{desc}\n"
+        f"{icon(product.name)} <b>{esc(product.name)}</b> (#{product.id})\n{desc}\n"
         f"💰 Giá bán: {vnd(product.price)}\n"
         f"🗄️ Tồn kho: {product.stock}\n"
         f"{source}"
@@ -356,7 +418,7 @@ def admin_product(product: Product) -> str:
 def admin_product_button(product: Product) -> str:
     mark = "" if product.on_sale else "⏸ "
     mark += "🐱 " if product.upstream_id is not None else ""
-    return f"{mark}{product.name} · {vnd(product.price)} · {product.stock}"
+    return f"{mark}{button_icon(product.name)}{product.name} · {vnd(product.price)} · {product.stock}"
 
 
 ASK_NEW_PRODUCT = (
@@ -372,6 +434,38 @@ ASK_ADJUST = (
     "Cộng: <code>@abc 50000 hoàn đơn 12</code>\nTrừ: <code>@abc -20000 cộng nhầm</code>"
 )
 ASK_DISCOUNT = "% Gõ mức giảm mới, ví dụ <code>2</code> hoặc <code>2.5</code> (đơn vị %)."
+
+ADMIN_ICONS = (
+    "🎨 <b>Logo hãng</b>\n\n"
+    "Bot tự gắn icon theo tên sản phẩm (CapCut 🎬, ChatGPT 🤖, Gemini ✨…). Muốn hiện <b>logo thật</b> của hãng: "
+    "bấm tên hãng rồi gửi emoji logo đó (emoji động/tuỳ chỉnh trong bộ emoji Telegram).\n\n"
+    "Cần: tài khoản tạo bot có <b>Telegram Premium</b>. Logo hiện trong bot; kênh vẫn dùng icon thường.\n"
+    "✅ = đã gắn logo."
+)
+
+
+def admin_icon_button(brand: Brand) -> str:
+    return f"{'✅' if brand.key in CUSTOM_ICONS else '➖'} {brand.emoji} {brand.label}"
+
+
+def ask_icon(brand: Brand) -> str:
+    return (
+        f"🎨 <b>Logo {esc(brand.label)}</b>\n\n"
+        f"Gửi vào đây <b>một emoji logo {esc(brand.label)}</b> (mở bảng emoji → bộ emoji có logo hãng → bấm chọn → gửi).\n"
+        "Mẹo: thấy logo đó trong tin của bot/kênh khác thì bấm giữ vào emoji để thêm bộ đó.\n"
+        "Gõ /huy để thôi."
+    )
+
+
+ICON_NOT_FOUND = "Tin này không có emoji tuỳ chỉnh nào. Gửi đúng emoji logo (cần Telegram Premium), hoặc gõ /huy."
+
+
+def icon_saved(brand: Brand) -> str:
+    return (
+        f"✅ Đã gắn logo {icon(brand.label)} <b>{esc(brand.label)}</b>.\n\n"
+        "Nhìn nút bên dưới: thấy logo thật là xong. Nếu chỉ thấy emoji thường thì tài khoản tạo bot "
+        "chưa có Telegram Premium (bấm 🗑 Bỏ logo để quay về icon thường)."
+    )
 
 
 def ask_stock(product: Product) -> str:

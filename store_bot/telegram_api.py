@@ -7,6 +7,8 @@ import logging
 
 import requests
 
+from store_bot.messages import CUSTOM_EMOJI_RE
+
 logger = logging.getLogger("store_bot")
 
 
@@ -31,7 +33,13 @@ class TelegramApi:
             return None
         if not payload.get("ok"):
             description = str(payload.get("description", ""))
-            if "message is not modified" not in description.lower():
+            not_modified = "message is not modified" in description.lower()
+            if not not_modified and _has_custom_emoji(json):
+                # Logo hãng (emoji tuỳ chỉnh) bị từ chối, ví dụ chủ bot hết Premium: gửi lại bằng emoji thường.
+                logger.warning("[Store] %s: Telegram từ chối emoji tuỳ chỉnh (%s), gửi lại không logo",
+                               method, description[:120])
+                return self._call(method, json=_without_custom_emoji(json), data=data, files=files)
+            if not not_modified:
                 logger.warning("[Store] %s http=%s: %s", method, response.status_code, description[:200])
             return None
         return payload.get("result")
@@ -128,3 +136,21 @@ class TelegramApi:
             logger.error("[Store] download file error: %s", type(exc).__name__)
             return None
         return response.content[:max_bytes]
+
+
+def _has_custom_emoji(body: dict | None) -> bool:
+    if not body:
+        return False
+    rows = (body.get("reply_markup") or {}).get("inline_keyboard") or []
+    return CUSTOM_EMOJI_RE.search(str(body.get("text", ""))) is not None or any(
+        "icon_custom_emoji_id" in b for row in rows for b in row)
+
+
+def _without_custom_emoji(body: dict) -> dict:
+    plain = dict(body, text=CUSTOM_EMOJI_RE.sub(r"\1", str(body.get("text", ""))))
+    markup = body.get("reply_markup")
+    if markup and "inline_keyboard" in markup:
+        plain["reply_markup"] = {"inline_keyboard": [
+            [{k: v for k, v in b.items() if k != "icon_custom_emoji_id"} for b in row]
+            for row in markup["inline_keyboard"]]}
+    return plain

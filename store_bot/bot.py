@@ -37,8 +37,12 @@ BROADCAST_DELAY_SEC = 0.05  # ~20 tin/giây, dưới giới hạn 30 tin/giây c
 CALLBACK_GAP_SEC = 24 * 3600  # /supportadmin: mỗi khách 1 lần/ngày
 
 
-def button(text: str, data: str) -> dict:
-    return {"text": text, "callback_data": data}
+def button(text: str, data: str, icon_id: str | None = None) -> dict:
+    """icon_id: logo hãng (custom_emoji_id) hiện trước chữ trên nút."""
+    result = {"text": text, "callback_data": data}
+    if icon_id:
+        result["icon_custom_emoji_id"] = icon_id
+    return result
 
 
 def keyboard(*rows: list[dict]) -> dict:
@@ -70,8 +74,17 @@ class StoreBot:
         self.executor = executor or ThreadPoolExecutor(max_workers=4, thread_name_prefix="fulfill")
         # Nhiều món về cùng lúc thì gửi lần lượt, không chạy song song vượt giới hạn tốc độ Telegram.
         self._broadcast_lock = threading.Lock()
+        self.load_icons()
 
     # ---------- tiện ích ----------
+
+    def load_icons(self) -> None:
+        """Nạp logo hãng admin đã gắn (state `icon:<hãng>`) cho messages dùng."""
+        msg.CUSTOM_ICONS.clear()
+        for brand in msg.BRANDS:
+            emoji_id = self.repo.get_state(f"icon:{brand.key}")
+            if emoji_id:
+                msg.CUSTOM_ICONS[brand.key] = emoji_id
 
     def is_admin(self, user_id: int) -> bool:
         return user_id in self.settings.admin_ids
@@ -167,6 +180,9 @@ class StoreBot:
             if document and pending["kind"] == "stock" and self.is_admin(user.user_id):
                 self._stock_from_document(chat_id, user, pending, document)
                 return
+            if pending["kind"] == "icon" and self.is_admin(user.user_id) and not text.startswith("/"):
+                self._set_icon(chat_id, user, pending, message)
+                return
             if text and not text.startswith("/"):
                 self._on_input(chat_id, user, pending, text)
                 return
@@ -185,7 +201,7 @@ class StoreBot:
         answer: str | None = None
         alert = False
         try:
-            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "al", "async", "abt"}:
+            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "al", "async", "abt", "aic"}:
                 if not self.is_admin(user.user_id):
                     answer = "Không có quyền."
                 else:
@@ -294,7 +310,7 @@ class StoreBot:
 
     def show_shop(self, chat_id: int, message_id: int | None) -> None:
         products = self.repo.list_products()
-        rows = [[button(msg.product_button(p), f"p:{p.id}")] for p in products]
+        rows = [[button(msg.product_button(p), f"p:{p.id}", msg.icon_id(p.name))] for p in products]
         rows.append([button("🏠 Trang chủ", "home")])
         self._show(chat_id, message_id, msg.shop_list(products), keyboard(*rows))
 
@@ -496,7 +512,7 @@ class StoreBot:
 
     def show_orders(self, chat_id: int, message_id: int | None, user: User) -> None:
         orders = self.repo.list_orders(user.user_id)
-        rows = [[button(msg.order_button(o), f"o:{o.id}")] for o in orders]
+        rows = [[button(msg.order_button(o), f"o:{o.id}", msg.icon_id(o.product_name))] for o in orders]
         rows.append([button("🏠 Trang chủ", "home")])
         self._show(chat_id, message_id, msg.orders_list(orders), keyboard(*rows))
 
@@ -557,6 +573,8 @@ class StoreBot:
         elif data == "abt":
             self.repo.set_state("restock_dm", "0" if self.restock_dm_enabled() else "1")
             self.show_admin(chat_id, message_id)
+        elif data == "aic":
+            self.show_admin_icons(chat_id, message_id)
         elif data == "async":
             try:
                 count, balance = self.sync_upstream()
@@ -605,6 +623,16 @@ class StoreBot:
             product = self.repo.get_product(ident)
             self._show(chat_id, message_id, f"✅ Nhập xong {added} món. Tồn kho: {product.stock if product else 0}.{note}",
                        keyboard([button("⬅️ Sản phẩm", f"a:p:{ident}")]))
+        elif action in {"ic", "icx"}:
+            brand = msg.BRANDS[ident]
+            if action == "icx":
+                self.repo.delete_state(f"icon:{brand.key}")
+                self.load_icons()
+                self.show_admin_icons(chat_id, message_id)
+                return f"Đã bỏ logo {brand.label}."
+            self._set_await(user.user_id, "icon", brand=ident)
+            rows = [[button("🗑 Bỏ logo", f"a:icx:{ident}")]] if brand.key in msg.CUSTOM_ICONS else []
+            self._show(chat_id, message_id, msg.ask_icon(brand), keyboard(*rows, [button("⬅️ Quay lại", "aic")]))
         elif action == "an":
             return "📢 Đã đăng kênh." if self.announce(ident, 0) else "Không đăng được (kiểm tra STORE_CHANNEL_ID)."
         elif action == "k":
@@ -666,10 +694,32 @@ class StoreBot:
             sync_row,
             [button(("🔔 Nhắn khách hàng mới: Bật" if self.restock_dm_enabled() else "🔕 Nhắn khách hàng mới: Tắt"),
                     "abt")],
-            [button("🔑 Khóa API đại lý", "ak")],
+            [button("🔑 Khóa API đại lý", "ak"), button("🎨 Logo hãng", "aic")],
             [button(f"💳 Nạp chờ duyệt{pending}", "at"), button("💵 Cộng/trừ tiền", "aa")],
             [button("📊 Thống kê", "as"), button("🏠 Trang chủ", "home")],
         ))
+
+    def show_admin_icons(self, chat_id: int, message_id: int | None) -> None:
+        rows = [[button(msg.admin_icon_button(b), f"a:ic:{i}", msg.CUSTOM_ICONS.get(b.key))]
+                for i, b in enumerate(msg.BRANDS)]
+        rows.append([button("⬅️ Quay lại", "adm")])
+        self._show(chat_id, message_id, msg.ADMIN_ICONS, keyboard(*rows))
+
+    def _set_icon(self, chat_id: int, user: User, pending: dict, message: dict) -> None:
+        """Admin gửi emoji logo: lấy custom_emoji_id đầu tiên trong tin."""
+        brand = msg.BRANDS[pending["brand"]]
+        emoji_id = next((e.get("custom_emoji_id") for e in message.get("entities") or []
+                         if e.get("type") == "custom_emoji" and e.get("custom_emoji_id")), None)
+        if not emoji_id:
+            self.tg.send_message(chat_id, msg.ICON_NOT_FOUND)
+            return
+        self.repo.set_state(f"icon:{brand.key}", str(emoji_id))
+        self.load_icons()
+        self._clear_await(user.user_id)
+        index = pending["brand"]
+        self.tg.send_message(chat_id, msg.icon_saved(brand), keyboard(
+            [button(brand.label, "aic", msg.CUSTOM_ICONS.get(brand.key))],
+            [button("🗑 Bỏ logo", f"a:icx:{index}"), button("🎨 Hãng khác", "aic")]))
 
     def _upstream_balance(self) -> int | None:
         raw = self.repo.get_state("upstream_balance")
@@ -677,7 +727,7 @@ class StoreBot:
 
     def show_admin_products(self, chat_id: int, message_id: int | None) -> None:
         products = self.repo.list_products(include_inactive=True)
-        rows = [[button(msg.admin_product_button(p), f"a:p:{p.id}")] for p in products]
+        rows = [[button(msg.admin_product_button(p), f"a:p:{p.id}", msg.icon_id(p.name))] for p in products]
         rows += [[button("➕ Thêm sản phẩm", "apn")], [button("⬅️ Quay lại", "adm")]]
         self._show(chat_id, message_id, f"📦 <b>Sản phẩm</b> ({len(products)})", keyboard(*rows))
 

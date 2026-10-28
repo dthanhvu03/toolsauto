@@ -26,3 +26,7 @@
 ## Proof
 - `tests/test_store_bot.py` 30 test qua (gồm 8 luồng mua đồng thời 1 món cuối: đúng 1 người mua được, tiền khớp).
 - `ruff check store_bot` sạch. Chạy thử `python -m store_bot.api_server` với DB tạm: `/health` 200, `/api/v1/products` không khóa 401, `/docs` 200.
+
+## Bước 5 (28/10): icon đúng hãng
+- Tên sản phẩm → emoji theo hãng (`messages.BRANDS`); logo thật = emoji tuỳ chỉnh admin gắn ở 🎨 Logo hãng (cần chủ bot có Telegram Premium), lưu state `icon:<hãng>`. Kênh / gửi hàng loạt dùng emoji thường; Telegram từ chối logo thì gửi lại không logo.
+- Proof: 52 test qua, ruff sạch.

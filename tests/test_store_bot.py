@@ -14,6 +14,7 @@ from store_bot.bot import StoreBot
 from store_bot.config import BankAccount, ConfigError, Settings, load_settings
 from store_bot.db import StoreError, StoreRepository, unit_price
 from store_bot.fulfill import Fulfiller
+from store_bot.telegram_api import TelegramApi
 from store_bot.upstream import DELIVERED, PENDING, REJECTED, BuyResult, FatCatClient, retail_price
 
 ADMIN = 1
@@ -682,3 +683,69 @@ def test_supportadmin_once_per_day(bot, repo):
     assert sum("nhờ admin nhắn" in h for h in telegram.texts_to(ADMIN)) == 1
     assert telegram.texts_to(BUYER)[-2] == msg.CALLBACK_DONE
     assert telegram.texts_to(BUYER)[-1] == msg.CALLBACK_ALREADY
+
+
+def test_brand_icons_follow_product_name(bot, repo):
+    assert msg.brand_of("Capcut Pro 30D BHF acc cấp").key == "capcut"
+    assert msg.brand_of("Chat GPT Plus Google Pay BH1D").key == "chatgpt"
+    assert msg.brand_of("Slot Microsoft Office 365 12 tháng BHF").key == "office"
+    assert msg.brand_of("Link Duolingo Super 12 tháng KBH").key == "duolingo"
+    assert msg.brand_of("Hàng lạ") is None and msg.icon("Hàng lạ") == msg.DEFAULT_ICON
+    store, telegram = bot
+    repo.add_stock(repo.add_product("Capcut Pro 30D", 50_000), ["acc-1"])
+    store.handle_update(_click(BUYER, "shop"))
+    first = telegram.edits[-1][3]["inline_keyboard"][0][0]
+    assert first["text"].startswith("🎬 Capcut Pro 30D") and "icon_custom_emoji_id" not in first
+
+
+def test_admin_sets_real_brand_logo(bot, repo):
+    store, telegram = bot
+    capcut = next(i for i, b in enumerate(msg.BRANDS) if b.key == "capcut")
+    repo.add_stock(repo.add_product("Capcut Pro 30D", 50_000), ["acc-1"])
+    store.handle_update(_click(ADMIN, f"a:ic:{capcut}", "boss"))
+    store.handle_update(_private(ADMIN, "chữ thường", "boss"))
+    assert telegram.texts_to(ADMIN)[-1] == msg.ICON_NOT_FOUND
+    store.handle_update(_private(ADMIN, "🎬", "boss",
+                                 entities=[{"type": "custom_emoji", "offset": 0, "length": 2,
+                                            "custom_emoji_id": "5368324170671202286"}]))
+    assert repo.get_state("icon:capcut") == "5368324170671202286"
+    assert "Đã gắn logo" in telegram.texts_to(ADMIN)[-1]
+
+    store.handle_update(_click(BUYER, "shop"))
+    first = telegram.edits[-1][3]["inline_keyboard"][0][0]
+    assert first == {"text": "Capcut Pro 30D · 50.000đ · còn 1", "callback_data": first["callback_data"],
+                     "icon_custom_emoji_id": "5368324170671202286"}
+    product = repo.list_products()[0]
+    assert '<tg-emoji emoji-id="5368324170671202286">🎬</tg-emoji>' in msg.product_detail(product, 0)
+    assert "tg-emoji" not in msg.restock_announcement(product, 5)  # kênh + gửi hàng loạt: emoji thường
+
+    StoreBot(_settings(), repo, FakeTelegram(), "test_store_bot")  # khởi động lại vẫn nhớ logo
+    assert msg.icon_id("Capcut Pro 30D") == "5368324170671202286"
+    store.handle_update(_click(ADMIN, f"a:icx:{capcut}", "boss"))
+    assert repo.get_state("icon:capcut") is None and msg.icon_id("Capcut Pro 30D") is None
+
+
+def test_rejected_custom_emoji_is_resent_plain(monkeypatch):
+    calls = []
+
+    class Response:
+        status_code = 400
+
+        def __init__(self, body):
+            self.body = body
+
+        def json(self):
+            if "tg-emoji" in self.body["text"] or "icon_custom_emoji_id" in str(self.body):
+                return {"ok": False, "description": "Bad Request: custom emoji not allowed"}
+            return {"ok": True, "result": {"message_id": 7}}
+
+    def fake_post(url, json=None, **_):
+        calls.append(json)
+        return Response(json)
+
+    monkeypatch.setattr("store_bot.telegram_api.requests.post", fake_post)
+    api = TelegramApi("t")
+    markup = {"inline_keyboard": [[{"text": "Capcut", "callback_data": "p:1", "icon_custom_emoji_id": "1"}]]}
+    assert api.send_message(1, '<tg-emoji emoji-id="1">🎬</tg-emoji> Capcut', markup) == 7
+    assert calls[-1]["text"] == "🎬 Capcut"
+    assert calls[-1]["reply_markup"] == {"inline_keyboard": [[{"text": "Capcut", "callback_data": "p:1"}]]}

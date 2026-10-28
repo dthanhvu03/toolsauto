@@ -1,3 +1,13 @@
+## Phiên 2026-10-28 (store-5) — Bot bán hàng AI Pass Store: icon đúng hãng
+
+- Trạng thái store (PLAN-097, commit 3001f25): @aipass_shop_bot + kênh @ai_pass_store chạy systemd `store-bot`, `store-api`; hàng lấy từ FatCat qua API (giá lẻ = giá đại lý ÷ 0,98), đồng bộ 3 phút, báo hàng mới lên kênh + nhắn mọi khách. Mục (store-1…4) cũ bị ghi đè ở bb0ebfd, chi tiết xem `agents/plans/active/PLAN-097-store-bot.md`.
+- Chủ bot muốn icon đúng hãng (CapCut → icon CapCut…). Làm: `messages.BRANDS` dò từ khoá trong tên → emoji thường (🎬 CapCut, 🤖 ChatGPT, ✨ Gemini, 🎨 Canva, 💼 Microsoft 365, 🦉 Duolingo, 🧠 Muse AI…) ở danh sách, chi tiết, đơn, tin kênh.
+- Logo thật: Telegram chỉ cho bot dùng emoji tuỳ chỉnh khi tài khoản tạo bot có Premium (Bot API 9.4). Admin gắn ở ⚙️ Quản lý shop → 🎨 Logo hãng → gửi emoji logo; lưu state `icon:<hãng>`; nút dùng `icon_custom_emoji_id`, tin dùng `<tg-emoji>`. Kênh và tin gửi hàng loạt luôn emoji thường. Telegram từ chối → `telegram_api` tự gửi lại không logo.
+- Proof: `tests/test_store_bot.py` 52 test qua (thêm 3), ruff sạch; 10 món thật đều ra đúng icon.
+- **Next:** chủ bot `sudo systemctl restart store-bot store-api`; nếu có Premium thì gắn logo từng hãng trong 🎨 Logo hãng.
+
+---
+
 ## Phiên 2026-10-28 (dt) — 🖼 Ảnh đăng bài (số liệu thật để đăng bài uy tín)
 
 - Chủ bot chọn: ảnh + bài viết soạn sẵn; tiền ghi «tạm tính»; có đơn gần đây, tên khách che (chữ đầu***chữ cuối).
