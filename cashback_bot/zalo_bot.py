@@ -35,6 +35,7 @@ from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError
 from cashback_bot.zalo_api import ZaloApi
 from cashback_bot.zalo_render import (
     ERROR_REPLY,
+    INTERRUPTED_REPLY,
     LINK_CARD,
     NON_TEXT,
     NUMBER_STALE,
@@ -54,6 +55,8 @@ MENU_TTL = timedelta(minutes=30)
 PUSH_MENU_TTL = timedelta(hours=24)
 DEAL_ITEM = "u:dl:"
 RETRY_LIMIT = 5
+# Tin kẹt ở 'received' lúc khởi động mà chưa có câu trả lời: trong khoảng này thì nhắn khách gửi lại, cũ hơn thì bỏ.
+INTERRUPTED_APOLOGY_WITHIN = timedelta(hours=6)
 TEXT_EVENT = "message.text.received"
 UNSUPPORTED_EVENT = "message.unsupported.received"
 # PLAN-083: trần gói BASIC và các mốc báo admin. Nhịp sống (ZALO_HEARTBEAT_KEY) do poller._check_zalo_health canh.
@@ -347,6 +350,28 @@ class ZaloChannel:
         self.store.finish(inbox_id, "replied", attempts, now=now)
         return True
 
+    def recover_inbox(self, now: datetime | None = None) -> tuple[int, int]:
+        """Lúc khởi động: tin kẹt ở 'received' (tiến trình bị tắt ngang giữa lúc xử lý; Zalo không gửi lại tin).
+
+        Đã có câu trả lời lưu sẵn: chuyển 'retry' để vòng gửi lại gửi nốt (trả lời khách được gửi lại, trùng thì vô
+        hại). Chưa có (đang tính dở, nội dung tin không lưu): nhắn khách gửi lại tin. Trả (gửi nốt, nhắn gửi lại)."""
+        moment = now or datetime.now(timezone.utc)
+        with self.store.repo.connect() as conn:
+            rows = conn.execute("SELECT id, reply_json, received_at FROM zalo_inbox WHERE status = 'received'").fetchall()
+        resent = apologized = 0
+        for row in rows:
+            inbox_id = int(row["id"])
+            if row["reply_json"]:
+                self.store.finish(inbox_id, "retry", 0, "interrupted")
+                resent += 1
+            elif row["received_at"] >= _stamp(moment - INTERRUPTED_APOLOGY_WITHIN):
+                self.store.save_reply(inbox_id, render(BotReply(INTERRUPTED_REPLY))[0])
+                self.store.finish(inbox_id, "retry", 0, "interrupted")
+                apologized += 1
+            else:
+                self.store.finish(inbox_id, "failed", 0, "interrupted")
+        return resent, apologized
+
     def retry_due(self, now: datetime | None = None) -> None:
         moment = now or datetime.now(timezone.utc)
         for row in self.store.due_retries(moment):
@@ -447,6 +472,11 @@ def main() -> None:
                             settings.customer_notification_test_ids, channel=CHANNEL)
     # Thẻ link TikTok tạo ở luồng nền: vào hàng đợi rồi gửi ngay, không chờ hết vòng getUpdates 30 giây.
     service.after_deferred = lambda: dispatcher.flush(limit=5)
+    resent, apologized = channel.recover_inbox()
+    resumed = service.resume_tiktok_jobs(zalo=True)
+    if resent or apologized or resumed:
+        logger.warning("[Cashback] zalo khởi động: gửi nốt %s, nhắn gửi lại %s, làm tiếp %s link TikTok",
+                       resent, apologized, resumed)
     try:
         me = api.get_me()
         logger.info("zalo start bot=%s type=%s customer_notify=%s", me.get("display_name"), me.get("account_type"),

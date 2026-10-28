@@ -433,3 +433,36 @@ def test_mo_tiktok_cho_khach_thi_trang_chung_nhac_ca_hai_san(tmp_path):
     assert "Cách dùng trên Zalo" in zalo_guide and "TikTok Shop" in zalo_guide
     bot.riohub = None
     assert "TikTok" not in _press(bot, BUYER, "u:p:home").text, "chưa có khoá RioHub thì coi như chưa mở"
+
+
+def _jobs(bot) -> list[str]:
+    with bot.repo.connect() as conn:
+        return [r[0] for r in conn.execute("SELECT key FROM bot_state WHERE key LIKE 'tiktok_job:%'")]
+
+
+def _ready_events(bot) -> int:
+    with bot.repo.connect() as conn:
+        return conn.execute("SELECT COUNT(*) FROM admin_notifications WHERE event_type = 'LINK_READY'").fetchone()[0]
+
+
+def test_bot_tat_giua_luc_tao_link_tiktok_thi_khoi_dong_lam_tiep(tmp_path):
+    """Chỗ hở 1 (rà soát timeout / chống trùng 2026-10-28): việc TikTok nằm trong RAM, restart là mất."""
+    bot = _bot(tmp_path)
+    bot.repo.set_state(admin_tiktok.MODE_KEY, "all")
+    bot.tiktok_runner = lambda job: None  # bot tắt trước khi luồng nền chạy
+    assert bot.handle_text(BUYER, "u", LINK, update_id=1, now=NOW).text == TIKTOK_WORKING
+    assert len(_jobs(bot)) == 1 and _ready_events(bot) == 0
+    bot.tiktok_runner = lambda job: job()
+    assert bot.resume_tiktok_jobs(zalo=True, now=NOW + timedelta(minutes=2)) == 0, "khách Telegram: bot Zalo không lấy"
+    assert bot.resume_tiktok_jobs(zalo=False, now=NOW + timedelta(minutes=2)) == 1
+    assert _ready_events(bot) == 1 and _jobs(bot) == [] and len(bot.riohub.calls) == 1
+    assert bot.resume_tiktok_jobs(zalo=False, now=NOW + timedelta(minutes=3)) == 0, "đã xong thì không làm lại"
+    # Tắt sau khi lưu link, trước khi thẻ vào hàng đợi: gửi thẻ đã có, không gọi RioHub lần hai.
+    bot.repo.set_state("tiktok_job:LATE0001", json.dumps({"update_id": 1, "user": BUYER, "url": LINK,
+                                                         "at": "2026-10-21T08:09:00Z"}))
+    assert bot.resume_tiktok_jobs(zalo=False, now=NOW + timedelta(minutes=5)) == 1
+    assert len(bot.riohub.calls) == 1 and _ready_events(bot) == 2 and len(_links(bot)) == 1
+    # Quá 30 phút: tin «đang tạo» đã dặn khách gửi lại, bỏ việc.
+    bot.repo.set_state("tiktok_job:OLD00001", json.dumps({"update_id": 9, "user": BUYER, "url": LINK,
+                                                         "at": "2026-10-21T07:00:00Z"}))
+    assert bot.resume_tiktok_jobs(zalo=False, now=NOW) == 0 and _jobs(bot) == [] and len(bot.riohub.calls) == 1

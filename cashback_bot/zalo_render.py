@@ -92,6 +92,7 @@ def number_missing(number: int, count: int) -> str:
     """Gõ số ngoài danh sách đang có (danh sách vẫn còn hạn)."""
     return NUMBER_MISSING.format(number=number, choices="số 1" if count == 1 else f"số 1 đến {count}")
 ERROR_REPLY = "⚠️ Bot đang gặp lỗi khi xử lý tin này. Bạn thử lại sau ít phút nhé, hoặc gõ <b>hotro</b>."
+INTERRUPTED_REPLY = "🙏 Bot vừa khởi động lại đúng lúc đọc tin của bạn nên chưa trả lời được. Bạn gửi lại tin giúp mình nhé."
 
 Style = tuple[int, int, str]
 

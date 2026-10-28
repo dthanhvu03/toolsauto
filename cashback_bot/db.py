@@ -1634,6 +1634,10 @@ class TrackingRepository:
                 (key, value),
             )
 
+    def delete_state(self, key: str) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM bot_state WHERE key = ?", (key,))
+
     def set_offset(self, offset: int) -> None:
         with self.connect() as conn:
             conn.execute(

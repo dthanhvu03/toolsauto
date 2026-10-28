@@ -90,6 +90,9 @@ def main() -> None:
         logger.warning("[Cashback] %s tin đang gửi dở lúc dừng bot, chuyển 'unknown' (không tự gửi lại)", stuck)
     service = CashbackService(settings, repo, client, admin_notifier=admin_notifier)
     service.after_deferred = lambda: admin_notifier.flush_pending(limit=5)
+    resumed = service.resume_tiktok_jobs(zalo=False)
+    if resumed:
+        logger.warning("[Cashback] làm tiếp %s link TikTok dở dang lúc dừng bot", resumed)
     _register_profile(telegram, settings.admin_user_ids, wallet_on=service.wallet.settings().enabled)
     logger.info(
         "start db=%s rate=%s max_age_h=%s allowlist=%s public=%s admin_notify=%s",

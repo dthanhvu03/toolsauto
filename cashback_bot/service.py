@@ -92,6 +92,10 @@ def _command_name(text: str) -> str | None:
 _NOT_FOUND_CODES = {"not_found"}
 # Đơn cũ hơn mức này lần đầu bot thấy thì không báo "có đơn mới" (tránh nhắn dồn đơn cũ).
 NEW_ORDER_NOTICE_WINDOW = timedelta(days=7)
+# Việc tạo link TikTok chạy ở luồng nền: ghi vào bot_state trước khi chạy, xong (thẻ đã vào hàng đợi) thì xoá.
+# Bot tắt giữa chừng thì lúc khởi động làm tiếp. Quá 30 phút thì bỏ: tin «đang tạo» đã dặn khách gửi lại sau 1 phút.
+TIKTOK_JOB_PREFIX = "tiktok_job:"
+TIKTOK_RESUME_WITHIN = timedelta(minutes=30)
 
 
 class CashbackService:
@@ -683,13 +687,20 @@ class CashbackService:
             return BotReply(GENERIC_FAIL)
         # Rà soát P3: RioHub có thể treo tới 60–90 giây (3 địa chỉ × 20 giây). Gọi ở luồng riêng để vòng nhận tin
         # không đứng; thẻ link đi qua hàng đợi chung (Telegram + Zalo) và được đẩy đi ngay khi xong.
+        self.repo.set_state(TIKTOK_JOB_PREFIX + sub_id, json.dumps(
+            {"update_id": update_id, "user": telegram_user_id, "url": url,
+             "at": moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}))
         self.tiktok_runner(lambda: self._tiktok_deliver(update_id, telegram_user_id, url, sub_id, moment))
         return BotReply(TIKTOK_WORKING)
 
     def _tiktok_deliver(self, update_id: int | None, telegram_user_id: int, url: str, sub_id: str,
                         moment: datetime) -> None:
+        # Làm tiếp sau restart mà link đã lưu (tắt sau khi lưu, trước khi vào hàng đợi): gửi thẻ đã có, không gọi
+        # RioHub lần hai.
+        previous = None if update_id is None else self.repo.get_by_update_id(update_id)
         try:
-            reply = self._tiktok_build(update_id, telegram_user_id, url, sub_id, moment)
+            reply = (self._render_existing(previous) if previous is not None
+                     else self._tiktok_build(update_id, telegram_user_id, url, sub_id, moment))
         except Exception:
             logger.exception("[Cashback] tạo link TikTok lỗi")
             reply = BotReply(GENERIC_FAIL)
@@ -701,11 +712,47 @@ class CashbackService:
                 reply_markup_json=json.dumps(markup, ensure_ascii=False) if markup else None,
                 source_ref=f"update:{update_id}",
             )
+        self.repo.delete_state(TIKTOK_JOB_PREFIX + sub_id)
         if self.after_deferred is not None:
             try:
                 self.after_deferred()
             except Exception:
                 logger.exception("[Cashback] gửi thẻ link TikTok ngay lỗi; vòng sau sẽ gửi")
+
+    def resume_tiktok_jobs(self, zalo: bool, now: datetime | None = None) -> int:
+        """Lúc khởi động: làm tiếp việc tạo link TikTok dở dang của kênh mình (Zalo: khách ID âm).
+
+        Mỗi tiến trình chỉ lấy khách kênh mình, để hai bot khởi động không cùng làm một việc. Thẻ đã vào hàng đợi
+        (event_key tiktok_link:<sub_id>) thì chỉ dọn, không gửi lại."""
+        moment = now or datetime.now(timezone.utc)
+        since = (moment - TIKTOK_RESUME_WITHIN).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self.repo.connect() as conn:
+            rows = conn.execute("SELECT key, value FROM bot_state WHERE key LIKE ?", (TIKTOK_JOB_PREFIX + "%",)).fetchall()
+        resumed = 0
+        for key, value in rows:
+            try:
+                job = json.loads(value)
+                user, update_id, url, at = int(job["user"]), job.get("update_id"), str(job["url"]), str(job["at"])
+                started = datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError, KeyError):
+                self.repo.delete_state(key)
+                continue
+            if (user < 0) != zalo:
+                continue
+            sub_id = key.removeprefix(TIKTOK_JOB_PREFIX)
+            with self.repo.connect() as conn:
+                done = conn.execute("SELECT 1 FROM admin_notifications WHERE event_key = ?",
+                                    (f"tiktok_link:{sub_id}",)).fetchone()
+            if done or at < since:
+                if not done:
+                    logger.warning("[Cashback] bỏ việc link TikTok dở quá %s phút sub_id=%s",
+                                   int(TIKTOK_RESUME_WITHIN.total_seconds() // 60), sub_id)
+                self.repo.delete_state(key)
+                continue
+            self.tiktok_runner(lambda u=update_id, c=user, link=url, s=sub_id, m=started:
+                               self._tiktok_deliver(u, c, link, s, m))
+            resumed += 1
+        return resumed
 
     def _tiktok_build(self, update_id: int | None, telegram_user_id: int, url: str, sub_id: str,
                       moment: datetime) -> BotReply:

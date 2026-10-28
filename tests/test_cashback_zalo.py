@@ -465,3 +465,26 @@ def test_ten_mon_bo_nhan_khuyen_mai_shop():
                rating=4.8, sold_30d=500)
     text, _kb = deals.message_for(["nam"], {"nam": [row]}, set(), reason="Áo Sơ Mi Nam Tay Dài SYLEN – Vải Cotton Lụa")
     assert "Cotton…</i>\n" in text or "…</i>." not in text, "không ra «….»"
+
+
+def test_khoi_dong_gui_not_tin_ket_va_nhan_khach_gui_lai(tmp_path):
+    """Chỗ hở 2 (rà soát timeout / chống trùng 2026-10-28): tiến trình bị tắt ngang, tin kẹt ở 'received'."""
+    bot, channel, zalo = _channel(tmp_path)
+    channel.handle(_update("hd", "m0"), now=NOW)
+    reply = render(BotReply("Câu trả lời đã soạn"))[0]
+    with bot.repo.connect() as conn:
+        for message_id, received, saved in (("a", "2026-10-21T08:00:00Z", True), ("b", "2026-10-21T08:05:00Z", False),
+                                            ("c", "2026-10-20T00:00:00Z", False)):
+            conn.execute("INSERT INTO zalo_inbox (message_id, internal_user_id, event_name, status, received_at, "
+                         "reply_json) VALUES (?, -1, 'message.text.received', 'received', ?, ?)",
+                         (message_id, received, json.dumps([[m.text, []] for m in reply]) if saved else None))
+    assert channel.recover_inbox(NOW) == (1, 1)
+    zalo.sent.clear()
+    channel.retry_due(NOW)
+    texts = [t for _c, t, _s in zalo.sent]
+    assert texts == ["Câu trả lời đã soạn", "🙏 Bot vừa khởi động lại đúng lúc đọc tin của bạn nên chưa trả lời được. "
+                                              "Bạn gửi lại tin giúp mình nhé."]
+    with bot.repo.connect() as conn:
+        status = dict(conn.execute("SELECT message_id, status FROM zalo_inbox WHERE message_id IN ('a', 'b', 'c')"))
+    assert status == {"a": "replied", "b": "replied", "c": "failed"}, "tin quá 6 giờ thì bỏ, không nhắn"
+    assert channel.recover_inbox(NOW) == (0, 0)
