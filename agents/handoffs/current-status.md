@@ -1,3 +1,14 @@
+## Phiên 2026-10-28 (dy) — PLAN-099: kênh Telegram deal hời
+
+- Chủ bot hỏi cách để khách nhớ tới bot lúc mua, gửi ảnh trang AddLiveTag (hạ giá mạnh, deal khung giờ, nhóm Telegram). Chủ bot duyệt làm kênh deal.
+- Đã làm (21fd968, 915 test qua, ruff sạch): kênh tắt mặc định. Admin thêm bot làm quản trị kênh rồi chuyển tiếp 1 bài của kênh vào bot → ✅ gắn. Màn 🔥 Deal hời có 📢 Bật/Tắt đăng kênh, 📤 Đăng bài giới thiệu, 🗑 Bỏ kênh.
+- Mỗi lượt 12:08 / 20:08 đăng tối đa 8 món (mỗi danh mục 2), soạn đủ 10 danh mục khi kênh bật. Nút món là `t.me/<bot>?start=dl_<shop>_<item>` → bot tạo link riêng cho người bấm. Bài đi qua hàng đợi chung (audience admin, DEALS_CHANNEL).
+- Username bot lấy bằng getMe lúc khởi động (`bot_username`). Không đổi schema, không thêm .env.
+- Xem trước bằng bản nháp thật tối 28/10 (chỉ đọc): 7 món. Chưa gọi Telegram thật.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` → tạo kênh, thêm bot làm quản trị (quyền đăng bài) → chuyển tiếp 1 bài kênh vào bot → ✅ → 📤 Đăng bài giới thiệu (ghim) → 📢 Bật đăng kênh. Ngoài phạm vi: deal khung giờ (cần xem API AddLiveTag), kênh Zalo.
+
+---
+
 ## Phiên 2026-10-28 (dx) — PLAN-098 bước C: thử ShopeeFood
 
 - Khảo sát: 30 ngày 0 đơn Food; chưa có tài liệu gắn sub_id cho Food; AddLiveTag không có giá/hoa hồng món Food.
