@@ -118,7 +118,7 @@ from cashback_bot.wallet import Wallet
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
-from cashback_bot import insights, payouts, policy_snapshot, showcase
+from cashback_bot import addlivetag_orders, insights, payouts, policy_snapshot, showcase
 from cashback_bot.pricing import MAX_SHARE_BPS, CashbackQuote, EstimatePolicy, PolicyResolution, cashback_for
 from cashback_bot.shopee_client import ShopeeAffiliateClient
 from cashback_bot.shopee_cookie import IncompleteCookieError, parse_cookies, save_cookies
@@ -560,6 +560,7 @@ class AdminPanel:
             )
 
         auto_sync = status_label(TrackingRepository(self.db_path), self.auto_sync, now)
+        crosscheck = addlivetag_orders.status_line(TrackingRepository(self.db_path))
         kb = shopee_connected_keyboard() if status == "connected" else SHOPEE_KEYBOARD_DISCONNECTED
         text = shopee_text(
             status=status,
@@ -571,6 +572,7 @@ class AdminPanel:
             last_error=last_err,
             notice=notice,
             auto_sync=auto_sync,
+            crosscheck=crosscheck,
         )
         return BotReply(text, inline_keyboard=kb)
 

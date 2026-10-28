@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (dv) — PLAN-098 bước A: đối soát chéo đơn Shopee với AddLiveTag
+
+- Chủ bot chọn API AddLiveTag không chính thống (mục 2) cho: dự phòng, đối soát chéo, chuẩn bị ShopeeFood; duyệt PLAN-098.
+- Khảo sát (2 lệnh đọc): AddLiveTag = cùng báo cáo Shopee, không có order_id/is_fraud → không bao giờ ghi sổ đơn; «Chờ trả hoa hồng» = Waiting for payment bot đã có; AddLiveTag chậm hơn bot.
+- Bước A xong: 09:00 VN mỗi ngày so 30 ngày theo order_sn, chỉ báo admin khi lệch; dòng 🔁 trên 🔗 Shopee Affiliate. Proof: 905 test, chạy thật trên bản sao DB khớp 4/4.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo`; em làm bước B (dự phòng khi cookie lỗi) rồi C (khảo sát ShopeeFood).
+
+---
+
 ## Phiên 2026-10-28 (du) — 🖼 Ảnh đăng bài: ẩn/hiện từng mục
 
 - Bỏ tên sản phẩm khỏi ảnh (e114224); đơn gần đây 1 dòng, nhãn trạng thái thẳng cột.

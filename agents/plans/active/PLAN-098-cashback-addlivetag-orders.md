@@ -1,7 +1,7 @@
 # PLAN-098 — Đơn Shopee qua API AddLiveTag: đối soát chéo, nguồn dự phòng, chuẩn bị ShopeeFood
 
 - Executor: Claude Code. Ngày 28/10/2026, chủ bot chọn "mục 2" (API AddLiveTag không chính thống) và chọn cả ba việc.
-- Trạng thái: **chờ chủ bot duyệt PLAN**. Chưa code.
+- Trạng thái: chủ bot duyệt 28/10. Bước A xong (chờ restart); B, C chưa làm.
 
 ## Bối cảnh (đã kiểm 28/10)
 - API: `GET https://addlivetag.com/api/v1/conversions.php` với header `X-API-Key`, tối đa 60 lệnh/phút.
@@ -66,3 +66,9 @@
 2. B: test cookie lỗi (đơn mới → báo đúng 1 lần), cookie chạy lại (không báo lại), đơn đã có (không làm gì).
 3. C: ghi chú khảo sát.
 - Mỗi bước: toàn bộ test qua, ruff sạch, ghi proof vào file này, cập nhật current-status. Chủ bot restart.
+
+## Proof bước A (28/10)
+- `cashback_bot/addlivetag_orders.py` mới; gắn vào `poller._loop` (`alt_crosscheck`), `admin_notify.notify_alt_crosscheck`, dòng 🔁 trên màn 🔗 Shopee Affiliate (`admin_policy`, `admin_ui.shopee_text`).
+- `tests/test_cashback_addlivetag_orders.py` 7 test: khớp nhiều món trừ MCN, lệch tiền, lệch huỷ, bot thiếu, mới mua chưa báo, ngoài link bot bỏ qua, AddLiveTag chậm, lệch dưới ngưỡng, 9:00 mỗi ngày 1 lần, không lệch không nhắn, lỗi API chỉ ghi trạng thái, chia trang + map lỗi, không ghi sổ đơn.
+- Toàn bộ 905 test qua, ruff sạch.
+- Chạy thật 1 lượt (bản sao DB, API thật, 09:22Z): so 4 đơn, khớp 4/4, không lệch. Đã xoá bản sao.

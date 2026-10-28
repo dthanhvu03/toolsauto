@@ -670,6 +670,15 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_alt_crosscheck(self, day: str, body: str) -> None:
+        """PLAN-098: đối soát AddLiveTag có lệch; tối đa một tin mỗi ngày."""
+        if not self._active():
+            return
+        self.repo.enqueue_admin_event(
+            event_key=f"alt_crosscheck:{day}", event_type="ALT_CROSSCHECK", chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
     def notify_tiktok_sync_failed(self, day: str, kind: str) -> None:
         """Lỗi đồng bộ đơn TikTok viết thường; mỗi loại lỗi báo tối đa một lần mỗi ngày (bot tự thử lại 15 phút)."""
         if not self._active():

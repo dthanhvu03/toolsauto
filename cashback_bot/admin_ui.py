@@ -834,6 +834,7 @@ def shopee_text(
     last_error: str | None = None,
     notice: str = "",
     auto_sync: str = "⏸️ <b>tắt</b> · bấm 🔄 khi cần",
+    crosscheck: str | None = None,
 ) -> str:
     title = _title("Shopee Affiliate")
     if status == "connected":
@@ -843,6 +844,8 @@ def shopee_text(
             f"• Lần đồng bộ gần nhất: <b>{html.escape(last_sync or 'Chưa đồng bộ')}</b>\n"
             f"• Tự đồng bộ: {auto_sync}\n"
         )
+        if crosscheck:
+            sync_line += f"• {crosscheck}\n"
     elif status == "expired":
         st_badge = "🔴 <b>COOKIE HẾT HẠN</b>"
         account_line = f"• Tài khoản trước đó: <b>{html.escape(account_name or 'N/A')}</b>\n"
