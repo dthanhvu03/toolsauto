@@ -10,7 +10,9 @@ import pytest
 import requests
 
 from cashback_bot import addlivetag_orders as alt
+from cashback_bot import order_notify
 from cashback_bot.admin_ui import shopee_text
+from cashback_bot.notify_dispatch import NotifyConfig
 from tests.test_cashback_wallet import _bot, _link, _order
 
 NOW = datetime(2026, 10, 28, 3, 0, tzinfo=timezone.utc)  # 10:00 28/10 giờ VN
@@ -142,3 +144,92 @@ def test_man_shopee_affiliate_co_dong_doi_soat():
     text = shopee_text(status="connected", account_name="a", last_sync="x", total_clicks=0, total_orders=0,
                        matched_orders=0, crosscheck="🔁 Đối soát AddLiveTag 28/10: khớp 3/3")
     assert "• 🔁 Đối soát AddLiveTag 28/10: khớp 3/3" in text
+
+
+# --- Bước B: nguồn dự phòng khi cookie Shopee lỗi ----------------------------------------------------------
+
+YESTERDAY = int(datetime(2026, 10, 27, 5, 0, tzinfo=timezone.utc).timestamp())
+
+
+def _ready(tmp_path):
+    bot = _bot(tmp_path, customer_notifications_enabled=True)
+    bot.repo.set_state(order_notify.BASELINE_KEY, "2026-10-01T00:00:00Z")
+    return bot, _link(bot)
+
+
+def _customer_events(bot):
+    with bot.repo.connect() as conn:
+        return conn.execute("SELECT event_key, status, last_error, chat_id, message_html, reply_markup_json "
+                            "FROM admin_notifications WHERE audience = 'customer' ORDER BY id").fetchall()
+
+
+def test_khi_nao_coi_cookie_loi(tmp_path):
+    bot = _bot(tmp_path)
+    with bot.repo.connect() as conn:
+        assert alt.cookie_down(conn, NOW), "chưa kết nối cookie"
+    bot.repo.update_shopee_cookie_status(status="connected", last_sync_at="2026-10-28T00:00:00Z")
+    with bot.repo.connect() as conn:
+        assert not alt.cookie_down(conn, NOW), "đồng bộ 3 giờ trước: ổn"
+        assert alt.cookie_down(conn, datetime(2026, 10, 28, 6, 1, tzinfo=timezone.utc)), "quá 6 giờ"
+        conn.execute("INSERT INTO shopee_sync_incidents (category, opened_at, last_seen_at) "
+                     "VALUES ('AUTH_EXPIRED', '2026-10-28T02:00:00Z', '2026-10-28T02:00:00Z')")
+        assert alt.cookie_down(conn, NOW), "có sự cố đang mở"
+
+
+def test_du_phong_bao_don_moi_mot_lan_va_khong_bao_lai_khi_cookie_chay_lai(tmp_path):
+    bot, sub = _ready(tmp_path)
+    _order(bot, sub, cid="o1")  # đơn đã có trong DB: dự phòng bỏ qua
+    cfg = NotifyConfig(True)
+    rows = [_row("SN-new", sub, 10_000, status="paid", bought=YESTERDAY) | {"item_name": "Áo <b>Polo</b>"},
+            _row("SN-o1", sub), _row("SN-cancel", sub, 0, status="cancelled", bought=YESTERDAY),
+            _row("SN-other", "99999999", bought=YESTERDAY)]
+    before = _customer_events(bot)
+    lines = alt.run_fallback(bot.repo, FakeClient(rows), cfg, NOW)
+    assert len(lines) == 1 and "<code>SN-new</code>" in lines[0] and "đã xếp báo khách" in lines[0]
+    assert "Áo &lt;b&gt;Polo&lt;/b&gt;" in lines[0]
+    new = [e for e in _customer_events(bot) if e not in before]
+    assert len(new) == 1
+    key, status, reason, chat, body, markup = new[0]
+    assert key == "alt_order:SN-new:first_matched" and status == "pending" and reason is None
+    assert "Có đơn mới qua link của bạn" in body and alt.FALLBACK_NOTE in body and "u:o:l:1" in markup
+    assert alt.run_fallback(bot.repo, FakeClient(rows), cfg, NOW) == [], "lượt sau không báo lại"
+    with bot.repo.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM shopee_conversions").fetchone()[0] == 1, "không ghi sổ đơn"
+        assert conn.execute("SELECT COUNT(*) FROM cashback_entries WHERE order_sn = 'SN-new'").fetchone()[0] == 0
+
+    _order(bot, sub, cid="new")  # cookie chạy lại: đồng bộ chính ghi đơn SN-new
+    with bot.repo.connect() as conn:
+        row = conn.execute("SELECT status, last_error FROM admin_notifications "
+                           "WHERE event_key = 'conversion:new:first_matched'").fetchone()
+    assert tuple(row) == ("suppressed", "alt_notified"), "khách không nhận tin «có đơn mới» lần hai"
+
+
+def test_du_phong_ton_trong_dieu_kien_gui(tmp_path):
+    bot, sub = _ready(tmp_path)
+    rows = [_row("SN-a", sub, bought=YESTERDAY)]
+    lines = alt.run_fallback(bot.repo, FakeClient(rows), NotifyConfig(False), NOW)
+    assert "không báo khách (feature_off)" in lines[0]
+    assert _customer_events(bot)[-1][1:3] == ("suppressed", "feature_off")
+    _order(bot, sub, cid="a")
+    with bot.repo.connect() as conn:
+        row = conn.execute("SELECT last_error FROM admin_notifications WHERE event_key = 'conversion:a:first_matched'"
+                           ).fetchone()
+    assert row[0] != "alt_notified", "dự phòng không gửi được thì đồng bộ chính vẫn báo như thường"
+
+
+def test_lich_du_phong_60_phut_chi_khi_cookie_loi(tmp_path):
+    bot, sub = _ready(tmp_path)
+    notifier = MagicMock()
+    client = FakeClient([_row("SN-b", sub, bought=YESTERDAY)])
+    bot.repo.update_shopee_cookie_status(status="connected", last_sync_at="2026-10-28T02:00:00Z")
+    assert alt.maybe_fallback(bot.repo, client, NotifyConfig(True), notifier, now=NOW) is None, "cookie ổn"
+    bot.repo.update_shopee_cookie_status(status="expired")
+    alt.maybe_fallback(bot.repo, client, NotifyConfig(True), notifier, now=NOW).join(5)
+    run_key, body = notifier.notify_alt_fallback_orders.call_args.args
+    assert "1 đơn mới qua bot (nguồn dự phòng AddLiveTag)" in body and "<code>SN-b</code>" in body
+    later = NOW.replace(minute=59)
+    assert alt.maybe_fallback(bot.repo, client, NotifyConfig(True), notifier, now=later) is None, "chưa đủ 60 phút"
+    assert client.calls == 1
+    alt.maybe_fallback(bot.repo, FakeClient(error="auth"), NotifyConfig(True), notifier,
+                       now=NOW.replace(hour=4, minute=1)).join(5)
+    assert notifier.notify_alt_fallback_orders.call_count == 1, "lỗi API không nhắn admin mỗi giờ"

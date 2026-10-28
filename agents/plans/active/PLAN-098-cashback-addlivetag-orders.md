@@ -1,7 +1,7 @@
 # PLAN-098 — Đơn Shopee qua API AddLiveTag: đối soát chéo, nguồn dự phòng, chuẩn bị ShopeeFood
 
 - Executor: Claude Code. Ngày 28/10/2026, chủ bot chọn "mục 2" (API AddLiveTag không chính thống) và chọn cả ba việc.
-- Trạng thái: chủ bot duyệt 28/10. Bước A xong (chờ restart); B, C chưa làm.
+- Trạng thái: chủ bot duyệt 28/10. Bước A, B xong (chờ restart); C chưa làm.
 
 ## Bối cảnh (đã kiểm 28/10)
 - API: `GET https://addlivetag.com/api/v1/conversions.php` với header `X-API-Key`, tối đa 60 lệnh/phút.
@@ -72,3 +72,10 @@
 - `tests/test_cashback_addlivetag_orders.py` 7 test: khớp nhiều món trừ MCN, lệch tiền, lệch huỷ, bot thiếu, mới mua chưa báo, ngoài link bot bỏ qua, AddLiveTag chậm, lệch dưới ngưỡng, 9:00 mỗi ngày 1 lần, không lệch không nhắn, lỗi API chỉ ghi trạng thái, chia trang + map lỗi, không ghi sổ đơn.
 - Toàn bộ 905 test qua, ruff sạch.
 - Chạy thật 1 lượt (bản sao DB, API thật, 09:22Z): so 4 đơn, khớp 4/4, không lệch. Đã xoá bản sao.
+
+## Proof bước B (28/10)
+- `addlivetag_orders.py`: `cookie_down`, `run_fallback`, `maybe_fallback` (luồng nền, 60 phút/lượt, 3 ngày). Gắn `poller._loop` (`alt_fallback`, NotifyConfig theo cờ CUSTOMER_NOTIFICATIONS_*), `admin_notify.notify_alt_fallback_orders`.
+- `order_notify`: `ALT_NOTIFIED_KEY`; hook thấy `alt_order:<order_sn>` đã "queued" → tin «có đơn mới» ghi `suppressed` lý do `alt_notified` (nhãn ở `admin_customer_notify.REASON_LABELS`).
+- Tin khách dự phòng: `order_new_notice` + «Số tiền sẽ cập nhật khi bot đồng bộ lại với Shopee», nút 📦 Đơn hàng của tôi / 📩 Hỗ trợ; qua `customer_block_reason` + mốc kích hoạt như tin đơn thường.
+- Test thêm 4: khi nào coi cookie lỗi; báo đơn mới 1 lần, bỏ đơn đã có / huỷ / ngoài link, không ghi sổ, cookie chạy lại không báo lần hai; cờ tắt thì đồng bộ chính vẫn báo; lịch 60 phút, lỗi API không nhắn admin. Toàn bộ 909 test qua, ruff sạch.
+- Chạy thật trên bản sao DB (API thật): cookie đang ổn → dự phòng không chạy; gọi thẳng run_fallback ra 0 đơn thiếu. Đã xoá bản sao.

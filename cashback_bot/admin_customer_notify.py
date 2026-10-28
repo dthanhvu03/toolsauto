@@ -33,6 +33,7 @@ REASON_LABELS = {
     "blocked": "khách đã chặn bot", "not_started": "khách chưa bắt đầu bot", "stale": "tin quá cũ",
     "interrupted_while_sending": "bot dừng giữa lúc gửi", "not_test_account": "không phải tài khoản test",
     "before_activation": "ghi trước lần bật gần nhất", "no_purchase_time": "Shopee không trả thời điểm mua",
+    "alt_notified": "đã báo khách qua nguồn dự phòng AddLiveTag",
 }
 MODE_LABELS = {"off": "TẮT", "test": "THỬ VỚI TÀI KHOẢN TEST", "on": "BẬT cho mọi khách"}
 _LIST = re.compile(r"^c:nt:l:(failed|unknown|suppressed|pending)$")

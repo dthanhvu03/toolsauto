@@ -30,6 +30,8 @@ from cashback_bot.pricing import cashback_for
 logger = logging.getLogger("cashback_bot")
 
 STATE_KEY = "customer_notify_state"
+# PLAN-098 bước B: đơn đã báo khách qua nguồn dự phòng AddLiveTag (giá trị JSON, "customer": "queued" khi đã xếp gửi).
+ALT_NOTIFIED_KEY = "alt_order:{}"
 HISTORY_KEY = "customer_notify_history"
 MIN_CHANGE_VND = 500
 MIN_CHANGE_RATIO = 0.10
@@ -135,6 +137,16 @@ def _first_order(conn: sqlite3.Connection, user: int, conversion_id: str) -> boo
     ).fetchone() is None
 
 
+def _alt_notified(conn: sqlite3.Connection, order_sn: str | None) -> bool:
+    if not order_sn:
+        return False
+    row = conn.execute("SELECT value FROM bot_state WHERE key = ?", (ALT_NOTIFIED_KEY.format(order_sn),)).fetchone()
+    try:
+        return row is not None and json.loads(row[0]).get("customer") == "queued"
+    except (ValueError, AttributeError):
+        return False
+
+
 def _attribution_conflict(conn: sqlite3.Connection, conversion_id: str, recorded) -> bool:
     if any(change.field == "attribution" for change, _id in recorded):
         return True
@@ -185,6 +197,8 @@ def make_hook(cfg: NotifyConfig):
             purchase = values.get("purchase_time") or ""
             if baseline is None:
                 hold = "feature_off"
+            elif _alt_notified(conn, values.get("order_sn")):
+                hold = "alt_notified"  # khách đã nhận tin «có đơn mới» lúc cookie lỗi; ghi để theo dõi, không gửi lại
             elif not purchase:
                 hold = "no_purchase_time"  # không biết mua trước hay sau mốc: không báo «đơn mới»
             elif purchase < baseline[0]:

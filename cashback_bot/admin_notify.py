@@ -679,6 +679,15 @@ class AdminNotifier:
             message_html=body,
         )
 
+    def notify_alt_fallback_orders(self, run_key: str, body: str) -> None:
+        """PLAN-098 bước B: đơn mới qua link bot đọc từ AddLiveTag lúc cookie Shopee lỗi."""
+        if not self._active():
+            return
+        self.repo.enqueue_admin_event(
+            event_key=f"alt_fallback:{run_key}", event_type="ALT_FALLBACK_ORDERS", chat_id=int(self.chat_id),
+            message_html=body,
+        )
+
     def notify_tiktok_sync_failed(self, day: str, kind: str) -> None:
         """Lỗi đồng bộ đơn TikTok viết thường; mỗi loại lỗi báo tối đa một lần mỗi ngày (bot tự thử lại 15 phút)."""
         if not self._active():

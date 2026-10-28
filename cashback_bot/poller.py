@@ -21,6 +21,7 @@ from cashback_bot.backup import run_scheduled_backup
 from cashback_bot.calculator import CalculationError, ReconciliationRequired
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
+from cashback_bot.notify_dispatch import NotifyConfig
 from cashback_bot.messages import (
     ADMIN_COMMANDS,
     BOT_COMMANDS,
@@ -611,6 +612,8 @@ def _check_backup(
 def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier,
           coordinator: SyncCoordinator) -> None:
     alt_orders = addlivetag_orders.AltOrdersClient(service.settings.api_key)
+    alt_cfg = NotifyConfig(service.settings.customer_notifications_enabled,
+                           service.settings.customer_notification_test_ids)
     while True:
         try:
             ops_watch.beat(repo)
@@ -632,6 +635,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
                 ("sale_reminders", lambda: engagement.tick(repo, admin_notifier, datetime.now(timezone.utc))),
                 ("price_drop", lambda: price_watch.maybe_start(repo, service.price_history, admin_notifier)),
                 ("alt_crosscheck", lambda: addlivetag_orders.maybe_start(repo, alt_orders, admin_notifier)),
+                ("alt_fallback", lambda: addlivetag_orders.maybe_fallback(repo, alt_orders, alt_cfg, admin_notifier)),
                 ("deals", lambda: deals.tick(repo, service, admin_notifier)),
                 ("backup", lambda: _check_backup(service, repo, admin_notifier)),
             ):

@@ -1,3 +1,12 @@
+## Phiên 2026-10-28 (dw) — PLAN-098 bước B: nguồn dự phòng AddLiveTag khi cookie Shopee lỗi
+
+- Cookie lỗi / sự cố mở / quá 6 giờ chưa đồng bộ được → mỗi 60 phút đọc AddLiveTag 3 ngày; đơn mới qua link bot (chưa có trong DB, chưa huỷ) → báo admin 🛟 + báo khách «có đơn mới» (cùng điều kiện gửi), ghi bot_state `alt_order:<order_sn>`. Không ghi sổ đơn / ví.
+- Cookie chạy lại: đồng bộ chính ghi đơn như cũ, tin khách «có đơn mới» bị giữ lý do `alt_notified` (không báo lần hai).
+- Proof: 909 test qua, ruff sạch; chạy thật trên bản sao DB: cookie ổn, 0 đơn thiếu.
+- **Next:** chủ bot restart `systemctl restart cashback-bot cashback-zalo`; em làm bước C (khảo sát ShopeeFood, 1 lệnh đọc source=food).
+
+---
+
 ## Phiên 2026-10-28 (dv) — PLAN-098 bước A: đối soát chéo đơn Shopee với AddLiveTag
 
 - Chủ bot chọn API AddLiveTag không chính thống (mục 2) cho: dự phòng, đối soát chéo, chuẩn bị ShopeeFood; duyệt PLAN-098.
