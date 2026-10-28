@@ -259,6 +259,7 @@ class TestShopeeSyncAndReconciliation:
         assert args["username"] == "khach_hang"
         assert args["commission_vnd"] == 4_500
         assert args["order_status"] == "COMPLETED"
+        assert args["conversion_id"]
 
         # Check DB records
         with repo.connect() as conn:

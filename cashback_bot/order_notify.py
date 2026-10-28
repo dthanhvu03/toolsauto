@@ -101,7 +101,7 @@ def significant_change(old: int | None, new: int | None) -> bool:
     return delta >= MIN_CHANGE_VND or (old > 0 and delta / old >= MIN_CHANGE_RATIO)
 
 
-def _bought_items(raw_json: str | None) -> set[int]:
+def bought_items(raw_json: str | None) -> set[int]:
     try:
         items = json.loads(raw_json or "{}").get("order", {}).get("items") or []
         return {int(item["item_id"]) for item in items if item.get("item_id") is not None}
@@ -118,7 +118,7 @@ def why_lower(conn: sqlite3.Connection, link_id: int, cashback: int | None, valu
     estimated, price, item_id = int(link[0]), link[1], link[2]
     if cashback >= estimated or not significant_change(estimated, cashback):
         return ""
-    bought = _bought_items(values.get("raw_json"))
+    bought = bought_items(values.get("raw_json"))
     other_item = bool(bought) and item_id is not None and int(item_id) not in bought
     paid = values.get("gmv_vnd")
     # Đã trừ phần do trả ít hơn mà vẫn thấp hơn hẳn: Shopee tính mức thấp hơn số AddLiveTag báo.

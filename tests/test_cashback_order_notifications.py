@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 from cashback_bot import customer_orders, order_notify
+from cashback_bot.admin_notify import RECEIPT_PENDING, AdminNotifier
 from cashback_bot.messages import order_update_notice
 from cashback_bot.notify_dispatch import Dispatcher
 from cashback_bot.telegram_api import TelegramDeliveryError
@@ -501,3 +502,89 @@ def test_tin_ho_tro_khi_khach_tat_loai_tin(tmp_path):
     with bot.repo.connect() as conn:
         row = conn.execute("SELECT status, last_error FROM admin_notifications WHERE event_key = 'support_customer:1:1'").fetchone()
     assert tuple(row) == ("suppressed", "pref_off")
+
+
+# --- Tin admin «Có đơn Shopee mới»: dòng báo khách và đơn gián tiếp (2026-10-28) ---------------------
+
+
+class EditTelegram(FakeTelegram):
+    def __init__(self, errors=None, edit_ok=True):
+        super().__init__(errors)
+        self.edits: list[tuple[int, int, str]] = []
+        self.edit_ok = edit_ok
+
+    def edit_message_text(self, chat_id, message_id, html, reply_markup=None):
+        self.edits.append((chat_id, message_id, html))
+        return self.edit_ok
+
+
+def _shopee_notice(bot, telegram, cid="o1"):
+    notifier = AdminNotifier(bot.repo, telegram, True, ADMIN, customer_notifications_enabled=True)
+    notifier.notify_shopee_new_order(order_sn=f"SN-{cid}", sub_id="sub", telegram_user_id=USER, username="buyer",
+                                     commission_vnd=10_000, order_status="PAID", conversion_id=cid)
+    return notifier
+
+
+def _admin_html(bot, cid="o1"):
+    with bot.repo.connect() as conn:
+        return conn.execute("SELECT message_html FROM admin_notifications WHERE event_key = ?",
+                            (f"shopee_new_order:SN-{cid}",)).fetchone()[0]
+
+
+def test_tin_admin_don_moi_tu_sua_dong_bao_khach_khi_khach_nhan_tin(tmp_path):
+    bot = _ready(tmp_path)
+    _order(bot, _link(bot), status="PAID")
+    telegram = EditTelegram()
+    notifier = _shopee_notice(bot, telegram)
+    assert RECEIPT_PENDING in _admin_html(bot) and "🔀" not in _admin_html(bot), "đơn có đúng món trong link"
+    notifier.flush_pending(limit=50)
+    assert [chat for chat, _html, _markup in telegram.sent] == [USER, ADMIN]
+    ((chat, message_id, edited),) = telegram.edits
+    assert (chat, message_id) == (ADMIN, 1002) and "📨 Báo khách: ✅ đã gửi" in edited and RECEIPT_PENDING not in edited
+    assert _admin_html(bot) == edited
+    notifier.flush_pending(limit=50)
+    assert len(telegram.edits) == 1, "đã cập nhật thì không sửa lại"
+
+
+def test_tin_khach_xong_truoc_khi_gui_tin_admin_thi_khong_can_sua_tin(tmp_path):
+    bot = _ready(tmp_path)
+    _order(bot, _link(bot), status="PAID")
+    telegram = EditTelegram()
+    notifier = _shopee_notice(bot, telegram)
+    _flush(bot, telegram)  # bộ gửi khác (như bot Zalo) gửi tin khách trước
+    assert notifier.refresh_order_receipts() == 1
+    notifier.flush_pending(limit=50)
+    assert telegram.edits == []
+    assert "📨 Báo khách: ✅ đã gửi" in telegram.sent[-1][1]
+
+
+def test_don_gian_tiep_va_khach_chan_bot_hien_tren_tin_admin(tmp_path):
+    bot = _ready(tmp_path)
+    sub = _link(bot)
+    with bot.repo.connect() as conn:
+        item = conn.execute("SELECT item_id FROM link_requests WHERE sub_id = ?", (sub,)).fetchone()[0]
+    bot.repo.record_shopee_conversion(
+        conversion_id="o1", sub_id=sub, order_sn="SN-o1", order_status="PAID", conversion_status="",
+        purchase_time="2026-10-21T09:00:00Z", gross_commission_vnd=8_000, net_commission_vnd=8_000,
+        raw_json=json.dumps({"top": {}, "order": {"items": [{"item_id": int(item) + 1}]}}),
+        details={"item_name": "Đĩa sứ trắng 20cm", "gmv_vnd": 320_000, "item_qty": 10},
+    )
+    telegram = EditTelegram([TelegramDeliveryError("permanent", status_code=403), None], edit_ok=False)
+    notifier = _shopee_notice(bot, telegram)
+    assert "🔀 Mua món khác link: Đĩa sứ trắng 20cm" in _admin_html(bot)
+    for _ in range(3):
+        notifier.flush_pending(limit=50)
+    assert len(telegram.edits) == 3, "sửa tin lỗi thì thử tối đa 3 lần"
+    assert "📨 Báo khách: ❌ không gửi được (khách chặn bot)" in _admin_html(bot)
+    notifier.flush_pending(limit=50)
+    assert len(telegram.edits) == 3
+
+
+def test_tin_admin_ghi_ro_khi_khong_co_tin_cho_khach(tmp_path):
+    bot = _ready(tmp_path)
+    _shopee_notice(bot, EditTelegram(), cid="missing")
+    assert "📨 Báo khách: ⏭ không gửi (gán người nhận cần xem lại)" in _admin_html(bot, "missing")
+    bot.repo.set_state(order_notify.BASELINE_KEY, "2026-10-30T00:00:00Z")
+    _order(bot, _link(bot), status="PAID")  # mua trước mốc kích hoạt: tin khách bị bỏ qua ngay
+    _shopee_notice(bot, EditTelegram())
+    assert "📨 Báo khách: ⏭ không gửi (đơn trước mốc kích hoạt)" in _admin_html(bot)

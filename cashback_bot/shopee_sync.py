@@ -641,6 +641,7 @@ class ShopeeSyncEngine:
                     username=username,
                     commission_vnd=net_comm,
                     order_status=order_status,
+                    conversion_id=conversion_id,
                 )
             return True
 

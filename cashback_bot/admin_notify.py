@@ -9,14 +9,16 @@ import html
 import logging
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 
 from cashback_bot import insights, ops_watch, policy_snapshot
-from cashback_bot.db import TrackingRepository
+from cashback_bot.admin_customer_notify import REASON_LABELS
+from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.notify_dispatch import Dispatcher
+from cashback_bot.order_notify import bought_items
 from cashback_bot.messages import buyer_name
 from cashback_bot.money import format_vnd
 from cashback_bot.pricing import V12, cashback_for
@@ -28,6 +30,50 @@ ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 # Sự kiện thường ngày gửi im lặng; lỗi vẫn kêu chuông.
 def _vn_now_text() -> str:
     return datetime.now(timezone.utc).astimezone(ICT).strftime("%H:%M · %d/%m")
+
+
+# Dòng 📨 trong tin «Có đơn Shopee mới»: chờ tin «đơn mới» của khách xong rồi sửa tin admin (rà soát 2026-10-28).
+RECEIPT_PENDING = "📨 Báo khách: ⏳ đang chờ gửi"
+RECEIPT_WINDOW = timedelta(hours=72)
+RECEIPT_EDIT_TRIES = 3
+
+
+def receipt_line(row) -> str | None:
+    """Kết quả tin «đơn mới» của khách (status, sent_at, last_error). Chưa xong (chờ / đang gửi) → None."""
+    status, error = row["status"], row["last_error"] or ""
+    if status == "sent":
+        try:
+            moment = datetime.strptime(row["sent_at"] or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            when = " " + moment.astimezone(ICT).strftime("%H:%M · %d/%m")
+        except ValueError:
+            when = ""
+        return f"📨 Báo khách: ✅ đã gửi{when}"
+    if status == "unknown":
+        return "📨 Báo khách: ❔ không rõ khách nhận chưa (mạng đứt lúc gửi)"
+    if status == "failed":
+        why = "khách chặn bot" if error.startswith("permanent:403") else "gửi lỗi, xem /admin → Thông báo khách"
+        return f"📨 Báo khách: ❌ không gửi được ({why})"
+    if status == "suppressed":
+        return f"📨 Báo khách: ⏭ không gửi ({html.escape(REASON_LABELS.get(error, error or 'bỏ qua'))})"
+    return None
+
+
+def _other_item(conn: sqlite3.Connection, conversion_id: str) -> str | None:
+    """Tên món khách mua khi đơn không có món trong link (đơn gián tiếp), hoặc None."""
+    row = conn.execute(
+        """
+        SELECT c.raw_json, c.item_name, l.item_id FROM shopee_conversions c
+        JOIN link_requests l ON l.id = c.matched_link_id WHERE c.conversion_id = ?
+        """,
+        (conversion_id,),
+    ).fetchone()
+    if row is None or row["item_id"] is None:
+        return None
+    bought = bought_items(row["raw_json"])
+    if not bought or int(row["item_id"]) in bought:
+        return None
+    name = (row["item_name"] or "món khác").strip()
+    return name if len(name) <= 60 else name[:59].rstrip() + "…"
 
 
 def _who(telegram_user_id: int, username: str | None) -> str:
@@ -217,6 +263,8 @@ class AdminNotifier:
     # PLAN-079: cờ CUSTOMER_NOTIFICATIONS_ENABLED cho thông báo đơn hàng chủ động.
     customer_notifications_enabled: bool = False
     customer_notification_test_ids: frozenset[int] = frozenset()
+    # Số lần sửa tin admin lỗi theo id (RAM): restart thì thử lại từ đầu.
+    _receipt_failures: dict[int, int] = field(default_factory=dict, repr=False)
 
     def _active(self) -> bool:
         return self.enabled and self.chat_id is not None
@@ -386,9 +434,23 @@ class AdminNotifier:
         username: str | None = None,
         commission_vnd: int | None = None,
         order_status: str | None = None,
+        conversion_id: str | None = None,
     ) -> None:
         if not self._active():
             return
+        other = receipt = None
+        if conversion_id:
+            with self.repo.connect() as conn:
+                other = _other_item(conn, conversion_id)
+                # Tin khách ghi cùng transaction với đơn: không có nghĩa là bot không báo (Sub ID trỏ link khác).
+                customer = conn.execute(
+                    "SELECT status, sent_at, last_error FROM admin_notifications WHERE event_key = ?",
+                    (f"conversion:{conversion_id}:first_matched",),
+                ).fetchone()
+            if customer is None:
+                receipt = "📨 Báo khách: ⏭ không gửi (gán người nhận cần xem lại)"
+            else:
+                receipt = receipt_line(customer) or RECEIPT_PENDING
         comm_text = format_vnd(commission_vnd) if commission_vnd is not None else "Đang cập nhật"
         status_text = html.escape(_SHOPEE_STATUS.get((order_status or "").upper(), order_status or "Chờ duyệt"))
         who = _who(telegram_user_id or 0, username) if telegram_user_id else "Chưa xác định"
@@ -397,16 +459,17 @@ class AdminNotifier:
             f"📦 Đơn hàng: <code>{html.escape(order_sn)}</code>\n"
             f"🏷️ Sub ID: <code>{html.escape(sub_id)}</code>\n"
             f"👤 Người tạo link: {who}\n"
-            f"💵 Hoa hồng Shopee: <b>{comm_text}</b>\n"
+            + (f"🔀 Mua món khác link: {html.escape(other)}\n" if other else "")
+            + f"💵 Hoa hồng Shopee: <b>{comm_text}</b>\n"
             f"📌 Trạng thái: <b>{status_text}</b>\n"
-            f"🕓 {_vn_now_text()}"
+            + (f"{receipt}\n" if receipt else "")
+            + f"🕓 {_vn_now_text()}"
         )
-        self.repo.enqueue_admin_event(
-            event_key=f"shopee_new_order:{order_sn}",
-            event_type="SHOPEE_ORDER",
-            chat_id=int(self.chat_id),
-            message_html=body,
-        )
+        with self.repo.connect() as conn:
+            enqueue_event(
+                conn, event_key=f"shopee_new_order:{order_sn}", event_type="SHOPEE_ORDER", chat_id=int(self.chat_id),
+                message_html=body, source_ref=f"conversion:{conversion_id}" if conversion_id else None,
+            )
 
     def notify_shopee_cookie_expired(self, reason: str = "") -> None:
         if not self._active():
@@ -690,4 +753,44 @@ class AdminNotifier:
             self.repo, self.telegram, self.enabled, self.chat_id, self.customer_notifications_enabled,
             self.customer_notification_test_ids,
         ).flush(limit)
+        self.refresh_order_receipts()
+
+    def refresh_order_receipts(self, limit: int = 5, now: datetime | None = None) -> int:
+        """Tin «Có đơn Shopee mới» còn dòng RECEIPT_PENDING: tin khách xong (bot Telegram hay bot Zalo gửi) thì thay
+        dòng đó bằng kết quả. Tin admin chưa gửi thì chỉ sửa nội dung trong hàng đợi; đã gửi thì sửa tin Telegram.
+        Sửa tin lỗi RECEIPT_EDIT_TRIES lần thì thôi, chỉ ghi kết quả vào DB. Trả số tin đã cập nhật."""
+        if not self._active():
+            return 0
+        since = ((now or datetime.now(timezone.utc)) - RECEIPT_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self.repo.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT a.id, a.chat_id, a.status AS admin_status, a.telegram_message_id, a.message_html,
+                       c.status, c.sent_at, c.last_error
+                FROM admin_notifications a JOIN admin_notifications c ON c.event_key = a.source_ref || ':first_matched'
+                WHERE a.event_type = 'SHOPEE_ORDER' AND a.status IN ('pending', 'retry', 'sent') AND a.created_at >= ?
+                  AND instr(a.message_html, ?) > 0 AND c.status IN ('sent', 'failed', 'unknown', 'suppressed')
+                ORDER BY a.id LIMIT ?
+                """,
+                (since, RECEIPT_PENDING, limit),
+            ).fetchall()
+        updated = 0
+        for row in rows:
+            body = str(row["message_html"]).replace(RECEIPT_PENDING, receipt_line(row) or RECEIPT_PENDING)
+            if row["admin_status"] == "sent":
+                if row["telegram_message_id"] is None:
+                    continue
+                if not self.telegram.edit_message_text(int(row["chat_id"]), int(row["telegram_message_id"]), body):
+                    tries = self._receipt_failures[row["id"]] = self._receipt_failures.get(row["id"], 0) + 1
+                    if tries < RECEIPT_EDIT_TRIES:
+                        continue
+                    logger.warning("[Cashback] không sửa được tin admin #%s, chỉ ghi kết quả báo khách", row["id"])
+                guard = "status = 'sent'"
+            else:
+                guard = "status IN ('pending', 'retry')"  # đang gửi thì để lượt sau, khi đã có mã tin
+            with self.repo.connect() as conn:
+                updated += conn.execute(
+                    f"UPDATE admin_notifications SET message_html = ? WHERE id = ? AND {guard}", (body, row["id"])
+                ).rowcount
+        return updated
 
