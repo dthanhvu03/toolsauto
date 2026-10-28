@@ -51,7 +51,7 @@ logger = logging.getLogger("cashback_bot")
 LOCK_PATH = "/tmp/cashback_zalo.lock"
 CHANNEL = "zalo"
 MENU_TTL = timedelta(minutes=30)
-# Danh sách số của tin bot tự gửi (deal 20:08, nhắc sale…): khách thường đọc muộn, giữ một ngày (chủ bot 2026-10-28).
+# Danh sách số của tin bot tự gửi (deal hời, nhắc sale…): khách thường đọc muộn, giữ một ngày (chủ bot 2026-10-28).
 PUSH_MENU_TTL = timedelta(hours=24)
 DEAL_ITEM = "u:dl:"
 RETRY_LIMIT = 5

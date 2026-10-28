@@ -271,8 +271,7 @@ class CashbackService:
         if data == deals.FEED or data.startswith(deals.FEED + ":"):
             now = datetime.now(timezone.utc)
             only = data.removeprefix(deals.FEED + ":") if data != deals.FEED else None
-            text, keyboard = deals.feed_message(deals.latest_released(self.repo, now),
-                                                deals.user_categories(self.repo, user_id), only, now)
+            text, keyboard = deals.feed_for(self.repo, user_id, only, now)
             return BotReply(text, inline_keyboard=tuple(tuple((b["text"], b["callback_data"]) for b in row)
                                                         for row in keyboard))
         if data == "u:dc:home":

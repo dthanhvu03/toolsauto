@@ -16,6 +16,7 @@ from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback
 from tests.test_cashback_zalo import _channel, _update
 
 BUILD = datetime(2026, 10, 21, 10, 40, tzinfo=timezone.utc)  # 17:40 giờ VN
+SCAN = datetime(2026, 10, 21, 7, 0, tzinfo=timezone.utc)  # 14:00 giờ VN (giờ chẵn)
 SEND = datetime(2026, 10, 21, 13, 10, tzinfo=timezone.utc)  # 20:10 giờ VN
 
 
@@ -24,13 +25,16 @@ def _product(item: int, rating: float = 4.8, sold: int = 500) -> dict:
 
 
 class FakeMarket:
-    def __init__(self, products):
+    """`only`: chỉ từ khoá của danh mục này ra món (để món không rơi vào danh mục đầu tiên)."""
+
+    def __init__(self, products, only: str | None = "dep"):
         self.products = products
+        self.only = only
         self.keywords: list[str] = []
 
     def top(self, keyword, limit=15):
         self.keywords.append(keyword)
-        return self.products
+        return self.products if self.only is None or keyword in deals.CATEGORIES[self.only][1] else []
 
 
 class FakeHistory:
@@ -64,67 +68,33 @@ def _ready(tmp_path):
     return bot, admin
 
 
-def _wait(bot, day="2026-10-21"):
-    for _ in range(100):
-        if deals.record(bot.repo, day).get("status") not in (None, "building"):
-            return deals.record(bot.repo, day)
-        clock.sleep(0.02)
-    raise AssertionError("soạn deal quá lâu")
-
-
 def _events(bot, kind):
     with bot.repo.connect() as conn:
         return conn.execute("SELECT * FROM admin_notifications WHERE event_type = ?", (kind,)).fetchall()
 
 
-def test_soan_17h30_bao_admin_20h08_gui_khach_da_chon(tmp_path):
-    bot, admin = _ready(tmp_path)
-    market, history = FakeMarket([_product(1), _product(2)]), FakeHistory({1: GOOD, 2: GOOD})
-    deals.tick(bot.repo, bot, admin, BUILD, market, history, pause=lambda _s: None)
-    assert deals.record(bot.repo, "2026-10-21") == {}, "đang tắt thì không làm gì"
-    bot.repo.set_state(deals.ENABLED_KEY, "1")
-    deals.toggle_category(bot.repo, USER, "dep")
-    deals.tick(bot.repo, bot, admin, BUILD, market, history, pause=lambda _s: None)
-    data = _wait(bot)
-    assert data["status"] == "draft" and [d["item_id"] for d in data["deals"]["dep"]] == [1, 2]
-    assert sorted(data["deals"]) == sorted(deals.CATEGORIES), "soạn đủ danh mục cho 🔥 Deal hôm nay"
-    assert market.keywords[:5] == list(deals.CATEGORIES["nu"][1][:5]) and data["deals"]["dep"][0]["cashback"] > 0
-    (ready,) = _events(bot, "DEALS_READY")
-    assert "20 món" in ready["message_html"] and "1 khách" in ready["message_html"], "10 danh mục × 2 món"
-    deals.tick(bot.repo, bot, admin, SEND.replace(minute=0), market, history)
-    assert _events(bot, "DEALS") == [], "chưa tới 20:08"
-    for _ in range(2):
-        deals.tick(bot.repo, bot, admin, SEND, market, history)
-    (sent,) = _events(bot, "DEALS")
-    assert sent["chat_id"] == USER and sent["category"] == "deal" and "20:08 giờ phát lộc" in sent["message_html"]
-    assert "200k</b> (thường 250k · thấp nhất 30 ngày)" in sent["message_html"] and "⚙️ Đổi danh mục" in sent["message_html"]
-    keyboard = json.loads(sent["reply_markup_json"])["inline_keyboard"]
-    assert [row[0]["callback_data"] for row in keyboard] == ["u:dl:9:1", "u:dl:9:2", "u:dc:home"]
-    assert deals.record(bot.repo, "2026-10-21")["status"] == "sent"
+def _stock(bot, by_cat: dict, at: datetime) -> None:
+    """Đưa món vào kho deal như một lượt quét lúc `at`."""
+    merged, _new = deals.merge(deals.pool(bot.repo), by_cat, at)
+    bot.repo.set_state(deals.POOL_KEY, json.dumps(merged))
 
 
-def test_qua_gio_bo_va_bo_hom_nay(tmp_path):
-    bot, admin = _ready(tmp_path)
-    bot.repo.set_state(deals.ENABLED_KEY, "1")
-    deals.toggle_category(bot.repo, USER, "dep")
-    deals.save(bot.repo, "2026-10-21", {"status": "draft", "deals": {"dep": [dict(item_id=1, shop_id=9, name="A",
-               price=200_000, usual=250_000, lowest_30d=True, cashback=3_000, rating=4.8, sold_30d=500)]}})
-    deals.tick(bot.repo, bot, admin, SEND.replace(hour=14, minute=30))
-    assert deals.record(bot.repo, "2026-10-21")["status"] == "missed" and _events(bot, "DEALS") == []
-    bot.repo.set_state(engagement.ENABLED_KEY, "1")
-    deals.save(bot.repo, "2026-11-10", {"status": "draft", "deals": {}})
-    deals.tick(bot.repo, bot, admin, datetime(2026, 11, 10, 13, 10, tzinfo=timezone.utc))
-    assert deals.record(bot.repo, "2026-11-10")["status"] == "sale", "tối 10/11 có nhắc sale 11.11 lúc 20:30"
+def _wait_scan(bot) -> dict:
+    for _ in range(200):
+        if deals.scan_record(bot.repo).get("status") not in (None, "building"):
+            return deals.scan_record(bot.repo)
+        clock.sleep(0.02)
+    raise AssertionError("quét deal quá lâu")
 
 
-def test_tin_toi_da_5_mon_chia_deu_danh_muc():
+def test_tin_toi_da_3_mon_chia_deu_danh_muc():
     row = dict(shop_id=9, price=200_000, usual=250_000, lowest_30d=True, cashback=3_000, rating=4.8, sold_30d=500)
     pool = {"dep": [dict(row, item_id=i, name=f"Đẹp {i}") for i in range(1, 5)],
             "nu": [dict(row, item_id=i, name=f"Nữ {i}") for i in range(11, 15)]}
     text, keyboard = deals.message_for(["dep", "nu"], pool, removed={2})
     ids = [r[0]["callback_data"].rsplit(":", 1)[1] for r in keyboard if r[0]["callback_data"].startswith("u:dl:")]
     assert keyboard[-1][0]["callback_data"] == "u:dc:home", "nút cuối: đổi danh mục"
-    assert ids == ["1", "3", "4", "11", "12"], "chia lần lượt từng danh mục, bỏ món admin đã bỏ (2)"
+    assert ids == ["1", "3", "11"], "tối đa 3 món, chia lần lượt từng danh mục, bỏ món đã gửi (2)"
     assert "💄 Làm đẹp" in text and "👗 Thời trang nữ" in text
     assert deals.message_for(["thucung"], pool, set()) is None, "không có món thì không gửi"
 
@@ -156,24 +126,6 @@ def test_link_dau_tien_moi_chon_danh_muc(tmp_path):
     assert DEAL_PROMPT[0][0] in [b for row in first.inline_keyboard for b in row]
     second = bot.handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=2, now=BUILD)
     assert DEAL_PROMPT[0][0] not in [b for row in second.inline_keyboard for b in row]
-
-
-def test_man_admin_deal_hoi(tmp_path):
-    bot, _admin = _ready(tmp_path)
-    assert "c:dl:home" in [d for row in _callback(bot, ADMIN, "c:eg:home").inline_keyboard for _l, d in row]
-    _callback(bot, ADMIN, "c:dl:on")
-    deals.toggle_category(bot.repo, USER, "dep")
-    day = datetime.now(timezone.utc).astimezone(deals.ICT).date().isoformat()
-    deals.save(bot.repo, day, {"status": "draft", "deals": {"dep": [dict(item_id=1, shop_id=9, name="Kem A",
-               price=200_000, usual=250_000, lowest_30d=True, cashback=3_000, rating=4.8, sold_30d=500)]}})
-    home = _callback(bot, ADMIN, "c:dl:home")
-    assert "Kem A: 200.000đ (thường 250.000đ, −20%)" in home.text and "💄 Làm đẹp 1" in home.text
-    _callback(bot, ADMIN, "c:dl:rm:1")
-    assert deals.record(bot.repo, day)["removed"] == [1]
-    _callback(bot, ADMIN, "c:dl:skip")
-    assert deals.record(bot.repo, day)["status"] == "skipped"
-    history = _callback(bot, ADMIN, "c:menu:hist").text
-    assert "Deal hời: bật" in history and "bỏ món 1" in history and "⏭ Bỏ hôm nay" in history
 
 
 def test_zalo_go_nhieu_so_mot_tin_de_chon_danh_muc(tmp_path):
@@ -236,14 +188,14 @@ def test_khach_chua_chon_nhan_tin_doan_gu_thua_va_chat_hon(tmp_path):
         assert deals.inferred(conn, SEND) == {USER: (["nam"], "Áo Polo Nam GALIO")}
     pool = {"nam": [_deal_row(1, 200_000), _deal_row(2, 225_000), _deal_row(3, 228_000), _deal_row(4, 190_000),
                     _deal_row(5, 180_000)]}
-    deals.save(bot.repo, "2026-10-21", {"status": "draft", "deals": pool, "removed": []})
-    deals.tick(bot.repo, bot, admin, SEND)
+    _stock(bot, pool, SEND)
+    assert deals.send_round(bot.repo, SEND) == 1
     (sent,) = _events(bot, "DEALS")
     html = sent["message_html"]
-    assert "Vài deal hợp gu bạn nè" in html and "Bot đoán bạn thích 👕 Thời trang nam vì bạn từng xem" in html
+    assert "Vài món hợp gu bạn" in html and "Bot đoán bạn thích 👕 Thời trang nam vì bạn từng xem" in html
     callbacks = [row[0]["callback_data"] for row in json.loads(sent["reply_markup_json"])["inline_keyboard"]]
-    assert callbacks == ["u:dl:9:1", "u:dl:9:4", "u:dl:9:5", "u:dc:home", "u:dc:off"], \
-        "tối đa 3 món, chỉ món rẻ hơn ≥ 12% (bỏ 225k, 228k)"
+    assert callbacks == ["u:dl:9:5", "u:dl:9:4", "u:dl:9:1", "u:dc:home", "u:dc:off"], \
+        "tối đa 3 món rẻ nhất, chỉ món rẻ hơn ≥ 12% (bỏ 225k, 228k)"
     with bot.repo.connect() as conn:
         assert deals.inferred(conn, SEND) == {}, "vừa gửi: 3 ngày sau mới gửi tiếp"
 
@@ -279,65 +231,120 @@ def test_admin_tat_doan_gu(tmp_path):
     assert "Deal hời cho khách chưa chọn (bot đoán gu): tắt" in _callback(bot, ADMIN, "c:menu:hist").text
 
 
-# --- Lượt trưa 12:08 và không lặp món (chủ bot 2026-10-28: «thông báo cho khách trưa và tối») ---------------------
-
-NOON_BUILD = datetime(2026, 10, 21, 3, 40, tzinfo=timezone.utc)  # 10:40 giờ VN
-NOON_SEND = datetime(2026, 10, 21, 5, 10, tzinfo=timezone.utc)  # 12:10 giờ VN
+# --- Quét mỗi giờ, có món mới là gửi (PLAN-100) -----------------------------------------------------------------
 
 
-def test_luot_trua_tu_khoa_rieng_va_toi_khong_lap_mon(tmp_path):
+def _row(item: int, name: str = "Kem", price: int = 200_000) -> dict:
+    return dict(item_id=item, shop_id=9, name=f"{name} {item}", price=price, usual=250_000, lowest_30d=True,
+                cashback=3_000, rating=4.8, sold_30d=500)
+
+
+def _local(hour: int, minute: int = 0, day: int = 21) -> datetime:
+    return datetime(2026, 10, day, hour, minute, tzinfo=deals.ICT).astimezone(timezone.utc)
+
+
+def test_quet_moi_gio_co_mon_moi_la_gui(tmp_path):
     bot, admin = _ready(tmp_path)
-    bot.client.payload["productInfo"]["lastUpdate"] = "2026-10-21 03:30:00"
-    bot.repo.set_state(deals.ENABLED_KEY, "1")
-    deals.toggle_category(bot.repo, USER, "dep")
+    bot.client.payload["productInfo"]["lastUpdate"] = "2026-10-21 06:30:00"
     market, history = FakeMarket([_product(1), _product(2)]), FakeHistory({1: GOOD, 2: GOOD})
-    deals.tick(bot.repo, bot, admin, NOON_BUILD, market, history, pause=lambda _s: None)
-    for _ in range(100):
-        if deals.record(bot.repo, "2026-10-21", deals.NOON).get("status") not in (None, "building"):
-            break
-        clock.sleep(0.02)
-    assert deals.record(bot.repo, "2026-10-21", deals.NOON)["status"] == "draft"
-    assert deals.record(bot.repo, "2026-10-21") == {}, "lượt tối chưa soạn"
-    assert market.keywords == [k for _label, words in deals.CATEGORIES.values() for k in words[5:]], \
-        "lượt trưa tìm bộ từ khoá khác lượt tối"
-    (ready,) = _events(bot, "DEALS_READY")
-    assert "trưa" in ready["message_html"] and "12:08 tự gửi" in ready["message_html"]
-    deals.tick(bot.repo, bot, admin, NOON_SEND, market, history)
-    (noon,) = _events(bot, "DEALS")
-    assert noon["event_key"] == f"deals:2026-10-21:trua:{USER}" and "12:08 nghỉ trưa" in noon["message_html"]
-    assert "dữ liệu lúc 10:30" in noon["message_html"]
-    row = dict(shop_id=9, price=200_000, usual=250_000, lowest_30d=True, cashback=3_000, rating=4.8, sold_30d=500)
-    deals.save(bot.repo, "2026-10-21", {"status": "draft", "deals": {"dep": [dict(row, item_id=1, name="Kem 1"),
-               dict(row, item_id=3, name="Kem 3")]}})
-    deals.tick(bot.repo, bot, admin, SEND)
-    evening = [e for e in _events(bot, "DEALS") if e["event_key"] == f"deals:2026-10-21:{USER}"][0]
-    callbacks = [r[0]["callback_data"] for r in json.loads(evening["reply_markup_json"])["inline_keyboard"]]
-    assert callbacks == ["u:dl:9:3", "u:dc:home"], "món 1 đã gửi trưa nay, tối chỉ gửi món mới"
-    deals.save(bot.repo, "2026-10-22", {"status": "draft", "deals": {"dep": [dict(row, item_id=3, name="Kem 3")]}})
-    deals.tick(bot.repo, bot, admin, SEND.replace(day=22))
-    assert len(_events(bot, "DEALS")) == 2 and deals.record(bot.repo, "2026-10-22")["sent"] == 0, \
-        "không có món mới thì không gửi"
-
-
-def test_admin_tat_luot_trua_va_bo_luot_trua(tmp_path):
-    bot, admin = _ready(tmp_path)
+    deals.tick(bot.repo, bot, admin, SCAN, market, history, pause=lambda _s: None)
+    assert deals.scan_record(bot.repo) == {} and market.keywords == [], "đang tắt thì không quét"
     bot.repo.set_state(deals.ENABLED_KEY, "1")
     deals.toggle_category(bot.repo, USER, "dep")
-    day = datetime.now(timezone.utc).astimezone(deals.ICT).date().isoformat()
-    deals.save(bot.repo, day, {"status": "draft", "deals": {"dep": [dict(item_id=1, shop_id=9, name="Kem A",
-               price=200_000, usual=250_000, lowest_30d=True, cashback=3_000, rating=4.8, sold_30d=500)]}}, deals.NOON)
+    deals.tick(bot.repo, bot, admin, SCAN, market, history, pause=lambda _s: None)
+    scan = _wait_scan(bot)
+    assert scan["status"] == "done" and (scan["found"], scan["new"], scan["sent"]) == (2, 2, 1)
+    assert market.keywords == [k for _label, words in deals.CATEGORIES.values() for k in words[:5]], \
+        "giờ chẵn: 5 từ khoá đầu, đủ 10 danh mục"
+    assert {d["cat"] for d in deals.pool(bot.repo).values()} == {"dep"}
+    (sent,) = _events(bot, "DEALS")
+    assert sent["chat_id"] == USER and sent["category"] == "deal" and "Deal mới vừa lên" in sent["message_html"]
+    assert "200k</b> (thường 250k · thấp nhất 30 ngày)" in sent["message_html"] and "dữ liệu lúc 14:00" in \
+        sent["message_html"]
+    keyboard = json.loads(sent["reply_markup_json"])["inline_keyboard"]
+    assert [row[0]["callback_data"] for row in keyboard] == ["u:dl:9:1", "u:dl:9:2", "u:dc:home"]
+    searched = len(market.keywords)
+    deals.tick(bot.repo, bot, admin, SCAN.replace(minute=40), market, history, pause=lambda _s: None)
+    assert len(market.keywords) == searched, "mỗi giờ một lượt"
+    deals.tick(bot.repo, bot, admin, SCAN.replace(hour=8), market, history, pause=lambda _s: None)
+    scan = _wait_scan(bot)
+    assert scan["hour"] == "2026-10-21T15" and (scan["new"], scan["sent"]) == (0, 0), "không có món mới: không gửi"
+    assert market.keywords[searched:searched + 5] == list(deals.CATEGORIES["nu"][1][5:]), "giờ lẻ: từ khoá còn lại"
+    deals.tick(bot.repo, bot, admin, _local(22, 5), market, history, pause=lambda _s: None)
+    assert deals.scan_record(bot.repo)["hour"] == "2026-10-21T15", "ngoài 7:00–21:00 không quét"
+
+
+def test_mot_mon_cung_gui_toi_da_4_tin_ngay_cach_2_gio(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    deals.toggle_category(bot.repo, USER, "dep")
+    _stock(bot, {"dep": [_row(1)]}, _local(7, 0))
+    assert deals.send_round(bot.repo, _local(7, 30)) == 0, "trước 8:00 không gửi"
+    assert deals.send_round(bot.repo, _local(8, 0)) == 1, "1 món cũng gửi"
+    _stock(bot, {"dep": [_row(2)]}, _local(9, 0))
+    assert deals.send_round(bot.repo, _local(9, 0)) == 0, "cách tin trước chưa đủ 2 giờ"
+    for hour, item in ((10, 3), (12, 4), (14, 5)):
+        _stock(bot, {"dep": [_row(item)]}, _local(hour))
+        assert deals.send_round(bot.repo, _local(hour)) == 1
+    _stock(bot, {"dep": [_row(6)]}, _local(16))
+    assert deals.send_round(bot.repo, _local(16)) == 0, "đủ 4 tin hôm nay"
+    sent = [json.loads(e["reply_markup_json"])["inline_keyboard"] for e in _events(bot, "DEALS")]
+    assert [[r[0]["callback_data"] for r in k][:-1] for k in sent] == [
+        ["u:dl:9:1"], ["u:dl:9:2", "u:dl:9:3"], ["u:dl:9:4"], ["u:dl:9:5"]], "món để dành gửi lượt sau, không lặp món"
+    _stock(bot, {"dep": [_row(7)]}, _local(8, day=22))
+    assert deals.send_round(bot.repo, _local(8, day=22)) == 1, "sang ngày mới đếm lại"
+    _stock(bot, {"dep": [_row(8)]}, _local(22, 30, day=22))
+    assert deals.send_round(bot.repo, _local(22, 30, day=22)) == 0, "sau 22:00 không gửi"
+
+
+def test_kho_cap_nhat_mon_cu_bo_mon_qua_24_gio_va_mon_admin_bo(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    merged, new = deals.merge({}, {"dep": [_row(1), _row(2)]}, _local(8))
+    assert new == 2 and merged["1"]["first"] == merged["1"]["seen"]
+    merged, new = deals.merge(merged, {"nu": [_row(1, price=190_000)]}, _local(10))
+    assert new == 0 and merged["1"]["cat"] == "dep" and merged["1"]["price"] == 190_000
+    assert merged["1"]["first"] < merged["1"]["seen"]
+    bot.repo.set_state(deals.POOL_KEY, json.dumps(merged))
+    assert deals.current_deals(bot.repo, _local(13))[0] == {}, "quá 2 giờ 30 không thấy lại: không gửi"
+    by_cat, latest = deals.current_deals(bot.repo, _local(13), deals.FEED_FRESH)
+    assert [d["item_id"] for d in by_cat["dep"]] == [1, 2] and deals._clock(latest) == "10:00", "rẻ nhất trước"
+    deals.set_removed(bot.repo, 1, True)
+    assert [d["item_id"] for d in deals.current_deals(bot.repo, _local(13), deals.FEED_FRESH)[0]["dep"]] == [2]
+    merged, _new = deals.merge(merged, {}, _local(9, day=22))
+    assert list(merged) == ["1"], "món 2 không thấy lại 24 giờ thì bỏ"
+
+
+def test_nhuong_tin_nhac_sale(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    deals.toggle_category(bot.repo, USER, "dep")
+    bot.repo.set_state(engagement.ENABLED_KEY, "1")
+    evening = _local(19, 0, day=10).replace(month=11)
+    _stock(bot, {"dep": [_row(1)]}, evening)
+    assert deals.send_round(bot.repo, evening) == 0, "tối 10/11 có nhắc sale 11.11 lúc 20:30"
+
+
+def test_man_admin_deal_hoi(tmp_path):
+    bot, _admin = _ready(tmp_path)
+    assert "c:dl:home" in [d for row in _callback(bot, ADMIN, "c:eg:home").inline_keyboard for _l, d in row]
+    _callback(bot, ADMIN, "c:dl:on")
+    deals.toggle_category(bot.repo, USER, "dep")
     home = _callback(bot, ADMIN, "c:dl:home")
-    assert "🍱 Trưa 12:08</b>: 📝 Chờ 12:08" in home.text and "🌙 Tối 20:08</b>: ⏳ Chưa soạn (17:30)" in home.text
-    buttons = [d for row in home.inline_keyboard for _l, d in row]
-    assert "c:dl:skip:trua" in buttons and "c:dl:rm:trua:1" in buttons
-    _callback(bot, ADMIN, "c:dl:rm:trua:1")
-    assert deals.record(bot.repo, day, deals.NOON)["removed"] == [1]
-    _callback(bot, ADMIN, "c:dl:skip:trua")
-    assert deals.record(bot.repo, day, deals.NOON)["status"] == "skipped" and deals.record(bot.repo, day) == {}
-    _callback(bot, ADMIN, "c:dl:noon:off")
-    assert not deals.noon_enabled(bot.repo)
-    market = FakeMarket([_product(1)])
-    deals.tick(bot.repo, bot, admin, NOON_BUILD, market, FakeHistory({1: GOOD}), pause=lambda _s: None)
-    assert market.keywords == [] and deals.record(bot.repo, "2026-10-21", deals.NOON) == {}, "tắt trưa thì không soạn"
+    assert "Chưa quét lượt nào" in home.text and "Món đang hời" not in home.text
+    now = datetime.now(timezone.utc)
+    _stock(bot, {"dep": [dict(_row(1), name="Kem A")]}, now)
+    bot.repo.set_state(deals.SCAN_KEY, json.dumps({"hour": "x", "status": "done", "at": "2026-10-21T07:00:00Z",
+                                                   "found": 1, "new": 1, "sent": 1}))
+    home = _callback(bot, ADMIN, "c:dl:home")
+    assert "Kem A: 200.000đ (thường 250.000đ, −20%)" in home.text and "💄 Làm đẹp 1" in home.text
+    assert "Lượt quét gần nhất 14:00: ✅ Xong · 1 món hời · 1 món mới · gửi 1 tin" in home.text
+    after = _callback(bot, ADMIN, "c:dl:rm:1")
+    assert deals.removed_items(bot.repo) == {1} and "Kem A (đã bỏ)" in after.text
+    assert "c:dl:back:1" in [d for row in after.inline_keyboard for _l, d in row]
+    _callback(bot, ADMIN, "c:dl:back:1")
+    assert deals.removed_items(bot.repo) == set()
+    assert "không còn hiệu lực" in _callback(bot, ADMIN, "c:dl:skip:trua").text, "nút lượt trưa / tối cũ"
+    bot.repo.set_state(deals.SCAN_KEY, json.dumps({"status": "error", "error": "market_http_429",
+                                                   "at": "2026-10-21T08:00:00Z"}))
+    assert "15:00: 🔴 Lỗi lấy dữ liệu (market_http_429), giờ sau quét lại" in _callback(bot, ADMIN, "c:dl:home").text
     history = _callback(bot, ADMIN, "c:menu:hist").text
-    assert "lượt trưa 12:08: tắt" in history and f"Deal hời {day} trưa: bỏ món 1" in history
+    assert "Deal hời: bật" in history and "bỏ món 1" in history and "lấy lại món 1" in history
+

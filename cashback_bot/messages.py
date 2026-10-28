@@ -1150,7 +1150,7 @@ NOTIFY_OPTIONS = (
 )
 
 
-DEAL_PROMPT: Keyboard = ((("🛍️ Nhận deal hời trưa 12:08 · tối 20:08", "u:dc:home"),),)
+DEAL_PROMPT: Keyboard = ((("🛍️ Nhận deal hời theo danh mục", "u:dc:home"),),)
 # Tin giới thiệu tính năng mới, gửi một lần cho khách đã từng tạo link (chủ bot duyệt nội dung trước khi gửi).
 DEALS_ANNOUNCE = (
     "🆕 <b>Bot có tính năng mới nè!</b>\n\n"
@@ -1185,8 +1185,8 @@ def deal_categories_reply(labels: dict[str, str], selected: list[str], notice: s
     if notice:
         lines += [notice, ""]
     lines += [
-        "Chọn tối đa 3 danh mục bạn hay săn. Có món <b>rẻ hơn giá thường ngày</b> bot gửi lúc 12:08 trưa và 20:08 tối, "
-        "món đã gửi thì không lặp lại nha 🔥",
+        "Chọn tối đa 3 danh mục bạn hay săn. Có món mới <b>rẻ hơn giá thường ngày</b> là bot gửi liền (8:00–22:00, "
+        "tối đa 4 tin / ngày), món đã gửi thì không lặp lại nha 🔥",
         "Bỏ chọn hết là không nhận nữa.",
         "",
         "Đang chọn: " + (", ".join(labels[k] for k in selected) if selected else "chưa có"),

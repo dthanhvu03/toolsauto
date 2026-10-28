@@ -1,22 +1,21 @@
-"""Deal hời theo danh mục, trưa 12:08 và tối 20:08 (chủ bot duyệt 2026-10-27; lượt trưa 2026-10-28;
-reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md mục 2B và 7).
+"""Deal hời tự động (PLAN-100, chủ bot 2026-10-28: «tự update tự gửi, cứ có là gửi, 1 deal cũng gửi»).
 
-- Khách tự chọn tối đa 3 danh mục ở /thongbao → 🛍️ Deal hời. Chọn danh mục là đồng ý nhận; không chọn thì không gửi.
+Thay hai lượt cố định 12:08 / 20:08 (chủ bot duyệt 2026-10-27; reports/CASHBACK_ADDLIVETAG_EXTRA_INCOME.md mục 2B, 7).
+
+- Khách tự chọn tối đa 3 danh mục ở /thongbao → 🛍️ Deal hời. Chọn danh mục là đồng ý nhận.
 - Tắt mặc định: admin bật ở ⚙️ Cài đặt → 📣 Nhắc mùa sale → 🔥 Deal hời (`bot_state.deals_enabled`).
-- Hai lượt mỗi ngày (SLOTS): 🍱 trưa soạn 10:30 gửi 12:08, 🌙 tối soạn 17:30 gửi 20:08. Mỗi lượt tìm theo bộ từ khoá
-  riêng của danh mục nên ra món khác nhau; món đã gửi cho khách trong 3 ngày thì không gửi lại, hết món mới thì lượt đó
-  không gửi cho khách ấy. Lượt trưa tắt được riêng (`bot_state.deals_noon_enabled` = "0").
-- Lúc soạn, luồng nền: với mỗi danh mục có người chọn, lấy top món bán chạy (AddLiveTag Market Search), kiểm lịch
-  sử giá 30 ngày; «hời thật» = giá hôm nay ≤ thấp nhất 30 ngày và rẻ hơn giá thường ngày (trung vị) từ 10%, đánh giá
-  ≥ 4,5, bán ≥ 100 / 30 ngày. Không dùng % giảm shop tự ghi (dữ liệu thật: «giảm 36%» mà đắt hơn thường ngày).
-  Mỗi danh mục tối đa 5 món, kèm số hoàn tính như thẻ link (Shopee Comm tối đa 2,5%).
-- Xong thì báo admin xem trước. Admin không làm gì thì tới giờ tự gửi; bỏ được cả lượt hoặc từng món.
-- Gửi trong 60 phút từ giờ gửi qua hàng đợi chung (category `deal`); quá giờ thì bỏ, không gửi muộn. Có lượt nhắc
-  sale trong 3 giờ (tối 20:30 trước ngày sale, 11:30 ngày sale) thì nhường.
-- Khách bấm món (`u:dl:<shop>:<item>`) thì bot tạo link như khi khách tự dán link: cùng thẻ, cùng cách tính, đơn
-  tính đúng người. Không tạo sẵn link hàng loạt.
-Trạng thái lượt ở `bot_state.deals:<YYYY-MM-DD>` (tối) và `deals:<YYYY-MM-DD>:trua` (JSON): building · draft · empty ·
-error · skipped · sent · missed · sale.
+- Quét mỗi giờ tròn 7:00–21:00 giờ VN, luồng nền. Giờ chẵn 5 từ khoá đầu của danh mục, giờ lẻ phần còn lại; đủ 10
+  danh mục. Với mỗi từ khoá lấy top món bán chạy (AddLiveTag Market Search), kiểm lịch sử giá 30 ngày; «hời thật» =
+  giá hôm nay ≤ thấp nhất 30 ngày và rẻ hơn giá thường ngày (trung vị) từ 10%, đánh giá ≥ 4,5, bán ≥ 100 / 30 ngày.
+  Không dùng % giảm shop tự ghi (dữ liệu thật: «giảm 36%» mà đắt hơn thường ngày). Số hoàn tính như thẻ link.
+- Kho deal `bot_state.deals_pool`: món đạt chuẩn với lần thấy đầu (`first`) và lần gần nhất còn hời (`seen`); 24 giờ
+  không thấy lại thì bỏ. Admin ❌ bỏ món (`deals_removed`): không gửi, không hiện ở 🔥 Deal hôm nay.
+- Sau mỗi lượt quét, trong 8:00–22:00 và không có tin nhắc sale trong 3 giờ: khách có món mới (thấy lại trong 2 giờ 30,
+  chưa gửi khách đó trong 3 ngày) thuộc danh mục của mình thì gửi, 1 món cũng gửi, tối đa 3 món / tin. Mỗi khách tối đa
+  4 tin / ngày, cách nhau ≥ 2 giờ. Không duyệt từng lượt (chủ bot muốn tự gửi).
+- Gửi qua hàng đợi chung (category `deal`). Khách bấm món (`u:dl:<shop>:<item>`) thì bot tạo link như khi khách tự
+  dán link: cùng thẻ, cùng cách tính, đơn tính đúng người. Không tạo sẵn link hàng loạt.
+Lượt quét gần nhất ở `bot_state.deals_scan` (JSON): hour · status (building · done · error) · found · new · sent.
 """
 
 from __future__ import annotations
@@ -49,20 +48,17 @@ logger = logging.getLogger("cashback_bot")
 
 MARKET_URL = "https://data.addlivetag.com/search/market.php"
 ENABLED_KEY = "deals_enabled"
-PREFIX = "deals:"
 CATS_PREFIX = "deal_cats:"
 CATEGORY = "deal"
-NOON_KEY = "deals_noon_enabled"  # bật mặc định; admin tắt thì = "0"
-SEND_WINDOW = timedelta(minutes=60)
 REPEAT_GAP = timedelta(days=3)
 MAX_CATS = 3
 PER_CAT = 5
-PER_MESSAGE = 5
+PER_MESSAGE = 3
 MIN_DROP = 0.10
 MIN_RATING = 4.5
 MIN_SOLD = 100
 # Dữ liệu thật 2026-10-27: 15 món / từ khoá chỉ ra 0–2 deal mỗi danh mục; 30 món ra khoảng 3.
-# Từ khoá: 5 đầu cho lượt tối, phần sau cho lượt trưa (Slot.keywords).
+# Từ khoá: 5 đầu cho lượt giờ chẵn, phần sau cho lượt giờ lẻ (`keywords_for`).
 PER_KEYWORD = 30
 # AddLiveTag lịch sử giá giới hạn 600 món / phút / IP (vượt là 429): giãn nhịp ở mức 500 món / phút.
 HISTORY_ITEMS_PER_MIN = 500
@@ -89,43 +85,25 @@ CATEGORIES = {
     "dochoi": ("🧸 Đồ chơi", ("đồ chơi lắp ráp", "gấu bông", "mô hình", "đồ chơi giáo dục", "xe đồ chơi",
                              "búp bê", "đồ chơi xếp hình", "slime", "xe điều khiển từ xa", "bộ đồ chơi nấu ăn")),
 }
+POOL_KEY = "deals_pool"
+REMOVED_KEY = "deals_removed"
+SCAN_KEY = "deals_scan"
+SCAN_HOURS = range(7, 22)  # 7:00 … 21:00 giờ VN, mỗi giờ một lượt
+SEND_FROM, SEND_UNTIL = time(8), time(22)
+DAILY_MAX = 4
+USER_GAP = timedelta(hours=2)
+FRESH = timedelta(hours=2, minutes=30)  # hai nửa từ khoá chạy xen kẽ: món được kiểm lại ít nhất 2 giờ / lần
+FEED_FRESH = timedelta(hours=12)  # 🔥 Deal hôm nay ban đêm vẫn còn deal của lượt 21:00
+POOL_KEEP = timedelta(hours=24)
+HEADER = "🔥 <b>Deal mới vừa lên! Món rẻ thật cho bạn nè</b>"
+INFER_HEADER = "🔥 <b>Deal mới vừa lên! Vài món hợp gu bạn</b>"
+# Trạng thái lượt quét, và trạng thái lượt trưa / tối cũ (📊 Lịch sử cũ còn ghi).
 STATUS_LABELS = {
-    "building": "⏳ Đang soạn", "draft": "📝 Chờ giờ gửi", "empty": "⚪ Không có deal đạt chuẩn",
-    "error": "🔴 Lỗi lấy dữ liệu", "skipped": "⏭ Bỏ hôm nay", "sent": "📤 Đã gửi", "missed": "⚪ Lỡ giờ, không gửi",
-    "sale": "⏭ Nhường tin nhắc sale",
+    "building": "⏳ Đang quét", "done": "✅ Xong", "error": "🔴 Lỗi lấy dữ liệu",
+    "draft": "📝 Chờ giờ gửi", "empty": "⚪ Không có deal đạt chuẩn", "skipped": "⏭ Bỏ hôm nay", "sent": "📤 Đã gửi",
+    "missed": "⚪ Lỡ giờ, không gửi", "sale": "⏭ Nhường tin nhắc sale",
 }
 _running = threading.Lock()
-
-
-@dataclass(frozen=True)
-class Slot:
-    key: str
-    label: str
-    build_at: time
-    send_at: time
-    keywords: slice
-    header: str
-    infer_header: str
-
-    def record_key(self, day: str) -> str:
-        return PREFIX + day + ("" if self.key == "toi" else f":{self.key}")
-
-    def event_key(self, day: str, user: int) -> str:
-        return f"deals:{day}:{user}" if self.key == "toi" else f"deals:{day}:{self.key}:{user}"
-
-    @property
-    def send_text(self) -> str:
-        return self.send_at.strftime("%H:%M")
-
-
-NOON = Slot("trua", "🍱 Trưa", time(10, 30), time(12, 8), slice(5, None),
-            "🍱 <b>12:08 nghỉ trưa lướt deal nè! Món rẻ thật hôm nay cho bạn</b> 🔥",
-            "🍱 <b>12:08 nghỉ trưa lướt deal nè! Vài món hợp gu bạn</b> 🔥")
-EVENING = Slot("toi", "🌙 Tối", time(17, 30), time(20, 8), slice(0, 5),
-               "⏰ <b>20:08 giờ phát lộc! Deal hời hôm nay cho bạn nè</b> 🔥",
-               "⏰ <b>20:08 giờ phát lộc! Vài deal hợp gu bạn nè</b> 🔥")
-SLOTS = (NOON, EVENING)
-SLOT_BY_KEY = {slot.key: slot for slot in SLOTS}
 
 
 @dataclass(frozen=True)
@@ -172,10 +150,6 @@ def enabled(repo: TrackingRepository) -> bool:
     return repo.get_state(ENABLED_KEY) == "1"
 
 
-def noon_enabled(repo: TrackingRepository) -> bool:
-    return repo.get_state(NOON_KEY) != "0"
-
-
 # --- Danh mục khách chọn ----------------------------------------------------------------------------------------
 
 
@@ -194,7 +168,7 @@ def toggle_category(repo: TrackingRepository, user: int, key: str) -> tuple[list
         return current, f"Chọn tối đa {MAX_CATS} danh mục thôi nha, bỏ bớt một mục trước đã."
     else:
         current.append(key)
-        notice = f"Đã chọn {CATEGORIES[key][0]}. Có deal hời bot gửi lúc 12:08 trưa và 20:08 tối nha 🔥"
+        notice = f"Đã chọn {CATEGORIES[key][0]}. Có món mới rẻ thật là bot gửi bạn liền nha 🔥"
     repo.set_state(f"{CATS_PREFIX}{user}", ",".join(current))
     return current, notice
 
@@ -300,15 +274,76 @@ def inferred(conn: sqlite3.Connection, now: datetime) -> dict[int, tuple[list[st
 # --- Soạn deal --------------------------------------------------------------------------------------------------
 
 
-def record(repo: TrackingRepository, day: str, slot: Slot = EVENING) -> dict:
+def _load(repo: TrackingRepository, key: str, default):
     try:
-        return json.loads(repo.get_state(slot.record_key(day)) or "{}")
+        value = json.loads(repo.get_state(key) or "null")
     except ValueError:
-        return {}
+        return default
+    return value if isinstance(value, type(default)) else default
 
 
-def save(repo: TrackingRepository, day: str, data: dict, slot: Slot = EVENING) -> None:
-    repo.set_state(slot.record_key(day), json.dumps(data, ensure_ascii=False, sort_keys=True))
+def _save(repo: TrackingRepository, key: str, value) -> None:
+    repo.set_state(key, json.dumps(value, ensure_ascii=False, sort_keys=True))
+
+
+def pool(repo: TrackingRepository) -> dict[str, dict]:
+    """Kho deal: mã món → deal + `cat`, `first`, `seen`."""
+    return _load(repo, POOL_KEY, {})
+
+
+def removed_items(repo: TrackingRepository) -> set[int]:
+    return {int(i) for i in _load(repo, REMOVED_KEY, []) if str(i).isdigit()}
+
+
+def set_removed(repo: TrackingRepository, item: int, removed: bool) -> None:
+    items = removed_items(repo)
+    _save(repo, REMOVED_KEY, sorted(items | {item} if removed else items - {item}))
+
+
+def scan_record(repo: TrackingRepository) -> dict:
+    return _load(repo, SCAN_KEY, {})
+
+
+def merge(current: dict[str, dict], found: dict[str, list[dict]], now: datetime) -> tuple[dict[str, dict], int]:
+    """Gộp kết quả một lượt quét vào kho. Trả (kho mới, số món mới). Món 24 giờ không thấy lại thì bỏ."""
+    stamp = _stamp(now)
+    keep = _stamp(now - POOL_KEEP)
+    merged = {key: deal for key, deal in current.items() if deal.get("seen", "") >= keep}
+    new = 0
+    for cat, deals in found.items():
+        for deal in deals:
+            key = str(deal["item_id"])
+            old = merged.get(key)
+            new += old is None
+            merged[key] = {**deal, "cat": old["cat"] if old else cat, "first": old["first"] if old else stamp,
+                           "seen": stamp}
+    return merged, new
+
+
+def current_deals(repo: TrackingRepository, now: datetime, fresh: timedelta = FRESH) -> tuple[dict[str, list[dict]],
+                                                                                                str | None]:
+    """Món còn hời (thấy lại trong `fresh`), admin chưa bỏ, theo danh mục, rẻ nhất trước; kèm lần thấy gần nhất."""
+    since = _stamp(now - fresh)
+    removed = removed_items(repo)
+    by_cat: dict[str, list[dict]] = {}
+    latest = None
+    for deal in pool(repo).values():
+        if deal.get("seen", "") < since or deal["item_id"] in removed or deal.get("cat") not in CATEGORIES:
+            continue
+        by_cat.setdefault(deal["cat"], []).append(deal)
+        latest = max(latest or "", deal["seen"])
+    for rows in by_cat.values():
+        rows.sort(key=lambda d: d["price"] / d["usual"])
+    return by_cat, latest
+
+
+def _clock(stamp: str | None) -> str:
+    """«2026-10-28T07:00:00Z» → «14:00» giờ VN."""
+    try:
+        return datetime.strptime(stamp or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).astimezone(ICT) \
+            .strftime("%H:%M")
+    except ValueError:
+        return ""
 
 
 _SHOWN = re.compile(r"u:dl:\d+:(\d+)")
@@ -343,15 +378,19 @@ def pick(products: list[dict], stats: dict) -> list[dict]:
     return chosen
 
 
+def keywords_for(now: datetime) -> slice:
+    """Giờ chẵn 5 từ khoá đầu, giờ lẻ phần còn lại: hai lượt liền nhau ra món khác nhau."""
+    return slice(0, 5) if now.astimezone(ICT).hour % 2 == 0 else slice(5, None)
+
+
 def build(repo: TrackingRepository, service, market: MarketSearchClient, history: PriceHistoryClient,
-          now: datetime, pause: Callable[[float], None] = clock.sleep, slot: Slot = EVENING) -> dict[str, list[dict]]:
-    """Deal của mọi danh mục (🔥 Deal hôm nay cần đủ hàng để xem). Số hoàn tính như thẻ link, theo chính sách lúc soạn."""
-    wanted = list(CATEGORIES)
+          now: datetime, pause: Callable[[float], None] = clock.sleep) -> dict[str, list[dict]]:
+    """Deal của mọi danh mục trong một lượt quét. Số hoàn tính như thẻ link, theo chính sách lúc quét."""
     resolution = service._resolve_policy(now)
     result: dict[str, list[dict]] = {}
-    for key in wanted:
+    for key in CATEGORIES:
         products: dict[int, dict] = {}
-        for keyword in CATEGORIES[key][1][slot.keywords]:
+        for keyword in CATEGORIES[key][1][keywords_for(now)]:
             for product in market.top(keyword):
                 try:
                     products.setdefault(int(product.get("itemId")), product)
@@ -394,10 +433,9 @@ def _k(vnd: int) -> str:
 
 
 def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int], *, limit: int = PER_MESSAGE,
-                min_drop: float = 0.0, reason: str | None = None,
-                slot: Slot = EVENING) -> tuple[str, list[dict]] | None:
+                min_drop: float = 0.0, reason: str | None = None, at: str = "") -> tuple[str, list[dict]] | None:
     """Tin của một khách: chia đều các danh mục, tối đa `limit` món. Không có món nào thì None.
-    `removed`: món admin bỏ và món đã gửi khách này trong 3 ngày.
+    `removed`: món admin bỏ và món đã gửi khách này trong 3 ngày. `at`: giờ dữ liệu giá («14:00»).
 
     `reason` có giá trị: khách chưa chọn danh mục, bot đoán gu từ món khách từng xem (thưa hơn, chặt hơn, có nút tắt)."""
     def strong(deal: dict) -> bool:
@@ -412,10 +450,10 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
     if not picked:
         return None
     if reason is None:
-        lines = [slot.header]
+        lines = [HEADER]
     else:
         guessed = ", ".join(CATEGORIES[c][0] for c in cats)
-        lines = [slot.infer_header,
+        lines = [INFER_HEADER,
                  f"Bot đoán bạn thích {guessed} vì bạn từng xem <i>{html.escape(_short(reason, 40))}</i>"
                  + ("" if _short(reason, 40).endswith("…") else ".")]
     buttons, number = [], 0
@@ -432,7 +470,8 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
                          f"· hoàn ~{_k(deal['cashback'])}")
             buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
                              "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"}])
-    lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {slot.build_at:%H:%M}, có thể đổi khi bạn mở."]
+    lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {at}, có thể đổi khi bạn mở." if at else
+              "Giá có thể đổi khi bạn mở."]
     if reason is None:
         lines.append(DEALS_CHANGE_HINT)
         # Nút cuối: đổi danh mục ngay từ tin deal (Zalo: một số trong danh sách).
@@ -442,73 +481,71 @@ def message_for(cats: list[str], deals: dict[str, list[dict]], removed: set[int]
                                          [{"text": "🔕 Không nhận deal", "callback_data": "u:dc:off"}]]
 
 
-def send(repo: TrackingRepository, day: str, data: dict, now: datetime, slot: Slot = EVENING) -> int:
-    deals = data.get("deals") or {}
-    removed = set(data.get("removed") or [])
-    stamp = _stamp(now)
+def _today_start(now: datetime) -> str:
+    local = now.astimezone(ICT)
+    return _stamp(datetime.combine(local.date(), time(0), ICT))
+
+
+def quota_ok(conn: sqlite3.Connection, user: int, now: datetime) -> bool:
+    """Tối đa DAILY_MAX tin deal / ngày (giờ VN), hai tin cách nhau ít nhất USER_GAP."""
+    count, last = conn.execute("SELECT COUNT(*), MAX(created_at) FROM admin_notifications WHERE event_type = 'DEALS' "
+                               "AND chat_id = ? AND created_at >= ?", (user, _today_start(now))).fetchone()
+    return count < DAILY_MAX and not (last and last > _stamp(now - USER_GAP))
+
+
+def in_send_window(now: datetime) -> bool:
+    return SEND_FROM <= now.astimezone(ICT).time() < SEND_UNTIL
+
+
+def send_round(repo: TrackingRepository, now: datetime) -> int:
+    """Gửi món mới cho từng khách theo danh mục; trả số tin đã xếp hàng."""
+    if not in_send_window(now) or _sale_soon(repo, now):
+        return 0
+    deals, latest = current_deals(repo, now)
+    if not deals:
+        return 0
+    stamp, at = _stamp(now), _clock(latest)
     sent = 0
     with repo.connect() as conn:
         targets = {user: (cats, None) for user, cats in subscribers(conn, now).items()}
         if infer_enabled(repo):
             targets.update({user: guessed for user, guessed in inferred(conn, now).items() if user not in targets})
         for user, (cats, reason) in targets.items():
-            skip = removed | recently_shown(conn, user, now)
-            built = (message_for(cats, deals, skip, slot=slot) if reason is None else
-                     message_for(cats, deals, skip, limit=INFER_ITEMS, min_drop=INFER_MIN_DROP, reason=reason,
-                                 slot=slot))
+            if not quota_ok(conn, user, now):
+                continue
+            skip = recently_shown(conn, user, now)
+            built = (message_for(cats, deals, skip, at=at) if reason is None else
+                     message_for(cats, deals, skip, limit=INFER_ITEMS, min_drop=INFER_MIN_DROP, reason=reason, at=at))
             if built is None:
                 continue
             text, keyboard = built
-            enqueue_event(conn, event_key=slot.event_key(day, user), event_type="DEALS", chat_id=user,
+            enqueue_event(conn, event_key=f"deals:{stamp}:{user}", event_type="DEALS", chat_id=user,
                           message_html=text, audience="customer", category=CATEGORY,
                           reply_markup_json=json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False),
-                          source_ref=slot.record_key(day), now=stamp)
+                          source_ref=SCAN_KEY, now=stamp)
             sent += 1
-    save(repo, day, {**data, "status": "sent", "sent": sent, "at": stamp}, slot)
     return sent
 
 
 # --- 🔥 Deal hôm nay ngay trong bot (PLAN-099, chủ bot 2026-10-28: «làm kênh deal ngay trong bot») ---------------
-# Khách mở xem lúc nào cũng được (nút trang chủ, /deal), không chờ 12:08 / 20:08. Lấy lượt gần nhất đã tới giờ gửi
-# (admin hết lúc duyệt; lượt admin bỏ thì không hiện), của hôm nay hoặc hôm qua. Lượt soạn đủ mọi danh mục.
+# Khách mở xem lúc nào cũng được (nút trang chủ, /deal): món trong kho thấy lại trong 12 giờ, admin chưa bỏ.
 FEED = "u:dh"
 FEED_ITEMS = 8
 FEED_PER_CAT = 2
-RELEASED = ("sent", "sale", "missed")
 
 
-def latest_released(repo: TrackingRepository, now: datetime) -> tuple[str, Slot, dict] | None:
-    """(ngày, lượt, bản deal) của lượt gần nhất đã tới giờ gửi, hoặc None."""
-    local = now.astimezone(ICT)
-    for back in (0, 1):
-        day = (local.date() - timedelta(days=back))
-        for slot in (EVENING, NOON):
-            send_at = datetime.combine(day, slot.send_at, ICT)
-            if send_at > local:
-                continue
-            data = record(repo, day.isoformat(), slot)
-            if data.get("status") in RELEASED and any(data.get("deals", {}).values()):
-                return day.isoformat(), slot, data
-    return None
-
-
-def feed_message(found: tuple[str, Slot, dict] | None, mine: list[str], only: str | None,
-                 now: datetime) -> tuple[str, list]:
-    """Tin 🔥 Deal hôm nay. `mine`: danh mục khách đã chọn (xếp trước). `only`: chỉ xem một danh mục."""
+def feed_message(pools: dict[str, list[dict]], mine: list[str], only: str | None, at: str = "") -> tuple[str, list]:
+    """Tin 🔥 Deal hôm nay. `pools`: món theo danh mục (rẻ nhất trước). `mine`: danh mục khách đã chọn (xếp trước).
+    `only`: chỉ xem một danh mục. `at`: giờ dữ liệu giá."""
     tail = [[{"text": "⚙️ Chọn danh mục nhận tin", "callback_data": "u:dc:home"},
              {"text": "◀️ Trang chủ", "callback_data": "u:p:home"}]]
-    if found is None:
-        return ("🔥 <b>Deal hời hôm nay</b>\n\nChưa có deal đạt chuẩn. Bot soạn deal mới lúc 12:08 trưa và 20:08 tối, "
+    pools = {key: rows for key, rows in pools.items() if rows and key in CATEGORIES}
+    if not pools:
+        return ("🔥 <b>Deal hời hôm nay</b>\n\nChưa có deal đạt chuẩn. Bot quét deal mới mỗi giờ từ 7:00 tới 21:00, "
                 "bạn ghé lại sau nha 🫶", tail)
-    day, slot, data = found
-    removed = set(data.get("removed") or [])
-    pools = {key: [d for d in rows if d["item_id"] not in removed]
-             for key, rows in (data.get("deals") or {}).items() if key in CATEGORIES}
-    pools = {key: rows for key, rows in pools.items() if rows}
-    when = "hôm nay" if day == now.astimezone(ICT).date().isoformat() else "hôm qua"
     if only in pools:
         picked = [(only, d) for d in pools[only]]
-        title = f"🔥 <b>Deal hời {when}: {html.escape(CATEGORIES[only][0])}</b>"
+        title = f"🔥 <b>Deal hời hôm nay: {html.escape(CATEGORIES[only][0])}</b>"
     else:
         only = None
         ranked = sorted(((key, d) for key, rows in pools.items() for d in rows),
@@ -520,7 +557,7 @@ def feed_message(found: tuple[str, Slot, dict] | None, mine: list[str], only: st
             seen.add(deal["item_id"])
             per_cat[key] = per_cat.get(key, 0) + 1
             picked.append((key, deal))
-        title = f"🔥 <b>Deal hời {when}</b>"
+        title = "🔥 <b>Deal hời hôm nay</b>"
     lines = [title, "Giá thấp nhất 30 ngày và rẻ hơn thường ngày, bot đã kiểm lịch sử giá.", ""]
     buttons = []
     for number, (key, deal) in enumerate(picked, 1):
@@ -530,13 +567,18 @@ def feed_message(found: tuple[str, Slot, dict] | None, mine: list[str], only: st
                      f"(thường {_k(deal['usual'])}, −{drop}%) · hoàn ~{_k(deal['cashback'])}")
         buttons.append([{"text": f"{number}. 🛒 {_short(deal['name'], 28)}",
                          "callback_data": f"u:dl:{deal['shop_id']}:{deal['item_id']}"}])
-    lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {slot.build_at:%H:%M} {when}, có thể đổi khi bạn mở.",
-              "Xem theo danh mục: bấm nút bên dưới."]
+    lines += ["", DEALS_PICK_HINT, f"Giá theo dữ liệu lúc {at}, có thể đổi khi bạn mở." if at else
+              "Giá có thể đổi khi bạn mở.", "Xem theo danh mục: bấm nút bên dưới."]
     chips = [{"text": CATEGORIES[key][0], "callback_data": f"{FEED}:{key}"} for key in pools if key != only]
     if only:
         chips.insert(0, {"text": "🔥 Tất cả", "callback_data": FEED})
     rows = [chips[i:i + 2] for i in range(0, len(chips), 2)]
     return "\n".join(lines), buttons + rows + tail
+
+
+def feed_for(repo: TrackingRepository, user: int, only: str | None, now: datetime) -> tuple[str, list]:
+    pools, latest = current_deals(repo, now, FEED_FRESH)
+    return feed_message(pools, user_categories(repo, user), only, _clock(latest))
 
 
 # --- Lịch chạy --------------------------------------------------------------------------------------------------
@@ -548,27 +590,38 @@ def _sale_soon(repo: TrackingRepository, now: datetime) -> bool:
     return any(abs(slot.at - now) < timedelta(hours=3) for slot in sale_calendar.upcoming(now - timedelta(days=1), 2))
 
 
-def _start_build(repo: TrackingRepository, service, market, history, admin_notifier, day: str, now: datetime,
-                 pause: Callable[[float], None], slot: Slot) -> None:
+def _hour_key(now: datetime) -> str:
+    return now.astimezone(ICT).strftime("%Y-%m-%dT%H")
+
+
+def scan(repo: TrackingRepository, service, market: MarketSearchClient, history: PriceHistoryClient, now: datetime,
+         pause: Callable[[float], None] = clock.sleep) -> dict:
+    """Một lượt quét: soạn, gộp kho, gửi. Trả bản ghi lượt (cũng lưu ở SCAN_KEY)."""
+    hour = _hour_key(now)
+    try:
+        found = build(repo, service, market, history, now, pause)
+    except PriceWatchError as exc:
+        logger.warning("[Cashback] deal hời: AddLiveTag lỗi %s", exc)
+        result = {"hour": hour, "status": "error", "error": str(exc), "at": _stamp(now)}
+        _save(repo, SCAN_KEY, result)
+        return result
+    merged, new = merge(pool(repo), found, now)
+    _save(repo, POOL_KEY, merged)
+    sent = send_round(repo, now)
+    result = {"hour": hour, "status": "done", "at": _stamp(now), "found": sum(len(v) for v in found.values()),
+              "new": new, "sent": sent}
+    _save(repo, SCAN_KEY, result)
+    return result
+
+
+def _start_scan(repo: TrackingRepository, service, market, history, now: datetime,
+                pause: Callable[[float], None]) -> None:
     def work() -> None:
         try:
-            deals = build(repo, service, market, history, now, pause, slot)
-            count = sum(len(v) for v in deals.values())
-            if count and admin_notifier is not None:
-                try:
-                    with repo.connect() as conn:
-                        people = len(subscribers(conn, now))
-                    admin_notifier.notify_deals_ready(day, count, people, slot.key, slot.label, slot.send_text)
-                except Exception:
-                    logger.exception("[Cashback] báo admin deal hời lỗi")
-            save(repo, day, {"status": "draft" if count else "empty", "deals": deals, "removed": [],
-                             "built": _stamp(now)}, slot)
-        except PriceWatchError as exc:
-            logger.warning("[Cashback] deal hời: AddLiveTag lỗi %s", exc)
-            save(repo, day, {"status": "error", "error": str(exc)}, slot)
+            scan(repo, service, market, history, now, pause)
         except Exception:
             logger.exception("[Cashback] deal hời lỗi bất ngờ")
-            save(repo, day, {"status": "error", "error": "unexpected"}, slot)
+            _save(repo, SCAN_KEY, {"hour": _hour_key(now), "status": "error", "error": "unexpected", "at": _stamp(now)})
         finally:
             _running.release()
 
@@ -578,30 +631,14 @@ def _start_build(repo: TrackingRepository, service, market, history, admin_notif
 def tick(repo: TrackingRepository, service, admin_notifier=None, now: datetime | None = None,
          market: MarketSearchClient | None = None, history: PriceHistoryClient | None = None,
          pause: Callable[[float], None] = clock.sleep) -> None:
-    """Gọi mỗi vòng poll của bot Telegram."""
+    """Gọi mỗi vòng poll của bot Telegram: giờ tròn 7:00–21:00 chưa quét thì quét (luồng nền, một lượt / giờ)."""
     if not enabled(repo):
         return
     moment = now or datetime.now(timezone.utc)
-    local = moment.astimezone(ICT)
-    day = local.date().isoformat()
-    for slot in SLOTS:
-        if slot is NOON and not noon_enabled(repo):
-            continue
-        data = record(repo, day, slot)
-        state = data.get("status")
-        send_at = datetime.combine(local.date(), slot.send_at, ICT)
-        if state is None and slot.build_at <= local.time() < slot.send_at:
-            if not _running.acquire(blocking=False):
-                continue
-            save(repo, day, {"status": "building"}, slot)
-            _start_build(repo, service, market or MarketSearchClient(service.settings.api_key),
-                         history or service.price_history, admin_notifier, day, moment, pause, slot)
-            continue
-        if state != "draft" or local < send_at:
-            continue
-        if local >= send_at + SEND_WINDOW:
-            save(repo, day, {**data, "status": "missed"}, slot)
-        elif _sale_soon(repo, moment):
-            save(repo, day, {**data, "status": "sale"}, slot)
-        else:
-            send(repo, day, data, moment, slot)
+    if moment.astimezone(ICT).hour not in SCAN_HOURS or scan_record(repo).get("hour") == _hour_key(moment):
+        return
+    if not _running.acquire(blocking=False):
+        return
+    _save(repo, SCAN_KEY, {**scan_record(repo), "hour": _hour_key(moment), "status": "building", "at": _stamp(moment)})
+    _start_scan(repo, service, market or MarketSearchClient(service.settings.api_key),
+                history or service.price_history, moment, pause)
