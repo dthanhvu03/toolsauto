@@ -225,7 +225,7 @@ def test_13_14_dieukien_dung_phien_ban_va_khong_hua_rut_tien(tmp_path):
     _publish_v1(bot)
     page = bot.handle_text(BUYER, "b", "/dieukien", update_id=1, now=NOW)
     assert f"Phiên bản <b>{DRAFT_VERSION}</b> · hiệu lực từ 21/10/2026" in page.text
-    assert "Ví hoàn tiền và chi trả chưa mở" in page.text
+    assert "Chưa mở rút tiền và chi trả" in page.text
     body = " ".join(text for _k, _l, text in DRAFT_SECTIONS)
     # V3 (ADR-059, chủ bot duyệt 2026-10-26) mới hứa rút tiền và «3–7 ngày làm việc»; ví vẫn do người vận hành bật.
     assert "Ví chỉ hoạt động khi người vận hành bật" in body and "không phải</b> số thuế" in body

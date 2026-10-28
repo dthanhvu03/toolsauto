@@ -38,7 +38,6 @@ from cashback_bot.messages import (
     with_tiktok,
     TIP_ALERT,
     TIPS_KEYBOARD,
-    WALLET_CLOSED,
     WALLET_CLOSED_ALERT,
     BotReply,
     bank_pick_reply,
@@ -292,7 +291,8 @@ class CashbackService:
     def _page_body(self, name: str, user_id: int | None = None) -> BotReply | None:
         wallet = self.wallet.settings()
         if name == "home":
-            return home_reply(show_rank=MEMBERSHIP_CUTOVER, show_wallet=wallet.enabled, show_deals=deals.enabled(self.repo))
+            return home_reply(show_rank=MEMBERSHIP_CUTOVER, show_wallet=True, show_deals=deals.enabled(self.repo),
+                              wallet_open=wallet.enabled)
         if name == "guide":
             return page_reply(HUONGDAN)
         if name == "rules":
@@ -320,7 +320,9 @@ class CashbackService:
     def _wallet_page(self, user_id: int, notice: str = "") -> BotReply:
         settings = self.wallet.settings()
         if not settings.enabled:
-            return page_reply(WALLET_CLOSED)
+            # Ví xem trước: chưa mở rút thì vẫn cho khách xem tiền hoàn đang chờ (chủ bot duyệt 2026-10-28).
+            return wallet_reply(settings, self.wallet.balance(user_id), self.wallet.entries(user_id), None, None,
+                                notice=notice, preview=True)
         with self.repo.connect() as conn:
             limits = payouts.active_limits(conn)
         return wallet_reply(

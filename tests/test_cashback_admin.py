@@ -287,8 +287,11 @@ def test_vi_mac_dinh_tat_khach_khong_thay_chi_tra(tmp_path):
     assert "Ví khách: đang tắt" in reply.text
     assert bot.wallet.settings().enabled is False
     home = bot.handle_text(111, "khach", "/start", update_id=14, now=NOW)
-    assert "u:p:wallet" not in " ".join(data for row in home.inline_keyboard for _label, data in row)
+    home_buttons = " ".join(data for row in home.inline_keyboard for _label, data in row)
+    assert "u:p:wallet" in home_buttons, "ví xem trước (2026-10-28)"
     assert "chưa chi trả" in home.text
-    assert "chưa mở" in bot.handle_text(111, "khach", "/vi", update_id=15, now=NOW).text
+    page = bot.handle_text(111, "khach", "/vi", update_id=15, now=NOW)
+    assert "Chưa mở rút tiền" in page.text
+    assert "u:w:" not in " ".join(data for row in page.inline_keyboard for _label, data in row)
     later = NOW + timedelta(days=1)
     assert customer_policy_due([], later) is None

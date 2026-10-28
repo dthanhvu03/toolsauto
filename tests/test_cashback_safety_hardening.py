@@ -428,7 +428,9 @@ class TestFinancialLock:
         bot.repo.set_state("wallet_enabled", "1")  # ví như DB cũ đã bật trước hardening
         assert bot.wallet.settings().enabled is False
         home = bot.handle_text(USER, "buyer", "/start", update_id=1, now=NOW)
-        assert "u:p:wallet" not in _buttons(home)
+        assert "chưa chi trả" in home.text
+        page = bot.handle_text(USER, "buyer", "/vi", update_id=2, now=NOW)
+        assert "Chưa mở rút tiền" in page.text and not [b for b in _buttons(page) if b.startswith("u:w:")]
 
     def test_completed_plus_hold_without_evidence_stays_holding(self, tmp_path):
         bot = _bot(tmp_path)

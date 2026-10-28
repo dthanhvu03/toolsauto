@@ -494,11 +494,20 @@ class TestPayout:
 
 
 class TestSwitch:
-    def test_wallet_off_customer_sees_nothing_new(self, tmp_path):
+    def test_vi_xem_truoc_khi_chua_mo_rut(self, tmp_path):
         bot = _bot(tmp_path)
         home = bot.handle_text(USER, "buyer", "/start", update_id=1, now=NOW)
-        assert "u:p:wallet" not in _buttons(home)
-        assert "Ví hoàn tiền chưa mở" in _callback(bot, USER, "u:w:out:ok").toast
+        assert "u:p:wallet" in _buttons(home) and "Chưa mở rút tiền, bot chưa chi trả" in home.text
+        _order(bot, _link(bot), status="COMPLETED", complete="2026-10-21T10:00:00Z")
+        bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
+        page = _callback(bot, USER, "u:p:wallet")
+        assert "Chưa mở rút tiền: bot chỉ chi khi sàn đã duyệt và thanh toán hoa hồng" in page.text
+        assert "Có thể rút: <b>0đ</b>" in page.text and "Đang giữ, chờ đủ điều kiện: <b>7.000đ</b>" in page.text
+        assert "Áo Polo Nam" in page.text and "Nhận tiền" not in page.text and "tài khoản nhận tiền" not in page.text
+        assert _buttons(page) == ["u:p:orders", "u:p:home"]
+        assert bot.handle_text(USER, "buyer", "/vi", update_id=2, now=NOW).text == page.text
+        assert "Chưa mở rút tiền" in _callback(bot, USER, "u:w:out:ok").toast
+        assert "Chưa mở rút tiền" in _callback(bot, USER, "u:w:bank").toast
 
     def test_enable_needs_confirm_then_home_and_calc_change(self, tmp_path):
         bot = _bot(tmp_path)

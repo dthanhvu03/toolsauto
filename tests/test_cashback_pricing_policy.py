@@ -602,7 +602,7 @@ def test_38_39_40_khong_hua_khong_goi_du_phong_la_thue_khong_goi_quote_la_so_du(
     calc = how_to_calc(True)
     assert "không phải số thuế bạn phải nộp" in calc
     assert "chưa phải tiền đã duyệt hay có thể rút" in calc
-    assert "Ví hoàn tiền chưa mở" in calc and "Ví hoàn tiền chưa mở" in HOME
+    assert "Chưa mở rút tiền" in calc and "Chưa mở rút tiền" in HOME
     assert "chưa theo dõi đơn" not in HOME
 
 

@@ -20,7 +20,7 @@ HOME = (
     "🎁 <b>Xem món Shopee được hoàn bao nhiêu</b>\n\n"
     "Dán link sản phẩm Shopee vào đây. "
     "Bot gửi lại link mua và số tiền hoàn dự kiến.\n\n"
-    "ⓘ Bot đang thử nghiệm. Số hoàn là ước tính. Ví hoàn tiền chưa mở, bot chưa chi trả."
+    "ⓘ Bot đang thử nghiệm. Số hoàn là ước tính. Chưa mở rút tiền, bot chưa chi trả."
 )
 # Khi admin bật ví (PLAN-066) thì bot đã theo dõi đơn và chi trả; câu ⓘ phải đổi theo.
 HOME_WALLET = (
@@ -49,7 +49,7 @@ STALE_BUTTON = "Nút này không còn hiệu lực."
 # Hiện ở màn "What can this bot do?" trước khi bấm Start. Tối đa 512 và 120 ký tự.
 DESCRIPTION = (
     "Dán link sản phẩm Shopee, bot gửi lại link mua và số tiền hoàn dự kiến.\n\n"
-    "Bot đang thử nghiệm: số hoàn là ước tính, ví hoàn tiền chưa mở và bot chưa chi trả. "
+    "Bot đang thử nghiệm: số hoàn là ước tính, chưa mở rút tiền và bot chưa chi trả. "
     "Bot không thu phí sử dụng."
 )
 SHORT_DESCRIPTION = "Dán link Shopee, xem số tiền hoàn dự kiến. Bot đang thử nghiệm."
@@ -138,7 +138,7 @@ def how_to_calc(v12: bool, wallet_hold_days: int | None = None, wallet_min_vnd: 
         "• Số dự kiến chưa phải tiền đã duyệt hay có thể rút.\n"
         "• Mỗi link giữ cách tính lúc bot tạo link. Bot đổi cách tính thì chỉ áp dụng cho link tạo sau đó.\n\n"
         + (
-            "ⓘ Ví hoàn tiền chưa mở, bot chưa chi trả."
+            "ⓘ Chưa mở rút tiền, bot chưa chi trả."
             if wallet_hold_days is None
             else "ⓘ Tiền hoàn vào ví khi Shopee đã duyệt và thanh toán hoa hồng, sớm nhất "
             f"{wallet_hold_days} ngày sau khi đơn hoàn thành. "
@@ -383,8 +383,11 @@ def with_tiktok(text: str) -> str:
     return text
 
 
-def home_reply(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False) -> BotReply:
-    return BotReply(HOME_WALLET if show_wallet else HOME,
+def home_reply(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
+               wallet_open: bool | None = None) -> BotReply:
+    """wallet_open: ví mở rút thật (đổi câu ⓘ); None thì theo show_wallet. Ví xem trước: show_wallet, chưa mở."""
+    open_ = show_wallet if wallet_open is None else wallet_open
+    return BotReply(HOME_WALLET if open_ else HOME,
                     inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals))
 
 
@@ -419,10 +422,12 @@ def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_u
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 WALLET_CLOSED = (
-    "👛 <b>Ví hoàn tiền chưa mở</b>\n"
+    "⏳ <b>Chưa mở rút tiền</b>\n"
     "Bot chưa chi trả tiền hoàn. Đơn mua qua link vẫn được ghi lại, xem ở /donhang."
 )
-WALLET_CLOSED_ALERT = "Ví hoàn tiền chưa mở."
+WALLET_CLOSED_ALERT = "Chưa mở rút tiền."
+# Ví xem trước (chủ bot duyệt 2026-10-28): khoá tài chính chưa mở thì khách vẫn xem tiền hoàn của mình, không rút.
+WALLET_PREVIEW = "⏳ Chưa mở rút tiền: bot chỉ chi khi sàn đã duyệt và thanh toán hoa hồng. Các số dưới đây là tạm tính."
 WALLET_BACK: Keyboard = ((("◀️ Ví của tôi", "u:p:wallet"),),)
 ENTRY_LABELS = {
     "pending": "Sàn đang xử lý",
@@ -492,9 +497,12 @@ def _entry_line(entry) -> str:
 
 
 def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "", limits=None,
-                 request_vnd: int | None = None) -> BotReply:
+                 request_vnd: int | None = None, preview: bool = False) -> BotReply:
     """settings, balance, bank: kiểu trong wallet.py; entries, open_request: dòng SQLite; limits: payouts.LimitPolicy.
-    request_vnd: số nút Rút sẽ tạo (cắt theo hạn mức còn lại); None thì bằng số có thể rút."""
+    request_vnd: số nút Rút sẽ tạo (cắt theo hạn mức còn lại); None thì bằng số có thể rút.
+    preview: ví chưa mở rút: chỉ xem số tiền và đơn, không có nút Rút / tài khoản nhận tiền."""
+    if preview:
+        notice = WALLET_PREVIEW
     withdrawable = max(0, balance.withdrawable_vnd)
     request = withdrawable if request_vnd is None else max(0, min(request_vnd, withdrawable))
     lines = ["👛 <b>Ví hoàn tiền</b>", ""]
@@ -516,7 +524,8 @@ def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "
         lines.append(f"📤 Đang xử lý rút: <b>{format_vnd(int(open_request['amount_vnd']))}</b> · {label}")
     lines += ["", "🧾 <b>Đơn gần đây</b>"]
     lines += [_entry_line(entry) for entry in entries] or ["Chưa có đơn nào qua link của bạn."]
-    lines += ["", f"🏦 Nhận tiền: {html.escape(bank.masked)}" if bank else "🏦 Chưa khai tài khoản nhận tiền."]
+    if not preview:
+        lines += ["", f"🏦 Nhận tiền: {html.escape(bank.masked)}" if bank else "🏦 Chưa khai tài khoản nhận tiền."]
     lines += [
         "",
         "ⓘ Tiền vào ví khi Shopee đã duyệt và thanh toán hoa hồng, sớm nhất "
@@ -529,6 +538,9 @@ def wallet_reply(settings, balance, entries, bank, open_request, notice: str = "
         )
     if request < withdrawable and request >= settings.min_withdraw_vnd:
         lines.append(f"ⓘ Lần này rút được {format_vnd(request)} theo hạn mức; phần còn lại rút lần sau.")
+    if preview:
+        return BotReply("\n".join(lines), inline_keyboard=((("📦 Đơn hàng của tôi", "u:p:orders"),),
+                                                            (("◀️ Trang chủ", "u:p:home"),)))
     rows: list[tuple[tuple[str, str], ...]] = []
     if open_request is None and bank and request >= settings.min_withdraw_vnd:
         rows.append(((f"💸 Rút {format_vnd(request)}", "u:w:out"),))
@@ -677,7 +689,7 @@ def terms_home_reply(version, accepted_at: str | None, wallet_open: bool = False
             else "Bạn chưa xác nhận phiên bản này. Đọc xong, nếu đồng ý thì bấm nút cuối."
         ),
         "",
-        "ⓘ Số hoàn trên link là dự kiến." if wallet_open else "ⓘ Ví hoàn tiền và chi trả chưa mở. Số hoàn trên link là dự kiến.",
+        "ⓘ Số hoàn trên link là dự kiến." if wallet_open else "ⓘ Chưa mở rút tiền và chi trả. Số hoàn trên link là dự kiến.",
     ]
     rows: list[tuple[tuple[str, str], ...]] = [((label, f"u:t:s:{key}"),) for key, label, _body in version.sections]
     if not accepted_at:

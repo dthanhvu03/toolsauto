@@ -206,7 +206,7 @@ class TestBankInput:
         reply = bot.handle_text(USER, "buyer", "0123456789 Nguyen Van A", update_id=41, now=NOW)
         assert "Đã lưu tài khoản" not in reply.text
         assert bot.wallet.bank(USER) is None
-        assert "Ví hoàn tiền chưa mở" in _callback(bot, USER, "u:w:bk:MB").toast
+        assert "Chưa mở rút tiền" in _callback(bot, USER, "u:w:bk:MB").toast
 
     def test_bank_change_after_request_keeps_old_account_on_payout(self, tmp_path):
         bot = _requested(tmp_path)
@@ -308,7 +308,7 @@ class TestPayoutQR:
         bot = _ready(tmp_path)
         _callback(bot, USER, "u:w:out")
         bot.wallet.set_enabled(False)
-        assert "Ví hoàn tiền chưa mở" in _callback(bot, USER, "u:w:out:ok").toast
+        assert "Chưa mở rút tiền" in _callback(bot, USER, "u:w:out:ok").toast
         assert bot.wallet.payout(1) is None
 
     def test_notes_are_unique_per_request(self, tmp_path):

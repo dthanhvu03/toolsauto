@@ -208,7 +208,8 @@ def test_trang_chu_co_loi_vao_deal_khi_bat(tmp_path):
     assert "u:dc:home" not in [d for row in _callback(bot, USER, "u:p:home").inline_keyboard for _l, d in row]
     bot.repo.set_state(deals.ENABLED_KEY, "1")
     rows = _callback(bot, USER, "u:p:home").inline_keyboard
-    assert rows[1] == (("🛍️ Deal hời của tôi", "u:dc:home"),), "ngay dưới Đơn hàng của tôi"
+    assert rows[1:3] == ((("📦 Đơn hàng của tôi", "u:p:orders"),), (("🛍️ Deal hời của tôi", "u:dc:home"),)), \
+        "ngay dưới Đơn hàng của tôi"
 
 
 # --- Khách chưa chọn danh mục: bot đoán gu ----------------------------------------------------------------------

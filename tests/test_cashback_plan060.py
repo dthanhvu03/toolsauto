@@ -96,7 +96,7 @@ def test_start_co_nut_va_trang_con_doi_bang_edit(tmp_path):
     tg = Telegram()
     process_updates(bot, tg, bot.repo, [_message(1, "/start")], Admin())
     home = tg.sent[0]
-    assert _callbacks(home["markup"]) == ["u:p:orders", "u:p:guide", "u:p:tips", "u:p:calc", "u:p:support"]
+    assert _callbacks(home["markup"]) == ["u:p:wallet", "u:p:orders", "u:p:guide", "u:p:tips", "u:p:calc", "u:p:support"]
     assert "u:p:rank" not in _callbacks(home["markup"])
 
     process_updates(bot, tg, bot.repo, [_callback(2, "u:p:calc")], Admin())

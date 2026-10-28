@@ -1,3 +1,16 @@
+## Phiên 2026-10-28 (dq) — Ví xem trước (chưa mở rút)
+
+- Chủ bot yêu cầu bật ví. Không bật được: còn 2 khoá (`settlement_matched`: chưa có kỳ Shopee trả cho đơn qua bot; `decision_payout_terms`: V3 chưa công bố). Các quyết định khác đã APPROVED.
+- Chủ bot duyệt "ví xem trước": trang chủ luôn có 👛 Ví của tôi; /vi hiện Có thể rút / Đang chờ sàn / Đang giữ / Đã nhận + đơn gần đây, dòng "⏳ Chưa mở rút tiền…", không nút Rút, không khai ngân hàng. Câu "Ví hoàn tiền chưa mở" → "Chưa mở rút tiền". Khoá mở thì ví tự thành bản có nút Rút.
+- Proof: 891 test cashback qua (7 test cũ "ví ẩn khi tắt" sửa theo hành vi mới, vẫn kiểm không có nút u:w:*).
+- **Next:**
+  - chủ bot restart `systemctl restart cashback-bot cashback-zalo`;
+  - chủ bot công bố V3 (/admin → 📋 Điều khoản) → Claude Code backup rồi ghi quyết định `payout_terms` APPROVED reference V3;
+  - việc tự xoá dữ liệu hết hạn (V3 hứa) chưa làm: mốc sớm nhất hết hạn 10/2028 (24 tháng, chưa ai chỉnh), cần chủ bot duyệt riêng khi làm;
+  - kỳ Shopee đầu tiên có đơn bot về → đối soát → mở rút.
+
+---
+
 ## Phiên 2026-10-28 (dp) — Tin admin đơn mới: dòng báo khách + đơn gián tiếp
 
 - Chủ bot hỏi 2 đơn gián tiếp (bấm link món A, mua món B shop khác) hôm nay đã cover chưa / khách đã được báo chưa. Đã cover: đơn gán theo Sub ID, hoa hồng lấy đúng món đã mua, tin khách giải thích "mua món khác món trong link". Cả 2 tin khách đã gửi 10:54–10:55 ICT (••KR94 Telegram, ••SER3 Zalo #4).
