@@ -36,6 +36,9 @@ PAUSE_SECONDS = 1.5
 ACTOR = "shopee_sync"
 # Thuế Shopee giữ: TNCN 5% + VAT 5% trên hoa hồng trước phí, mỗi khoản làm tròn (đối chiếu kỳ 29/10/2026).
 TAX_PERCENT = 5
+# payout_status trên hoá đơn: kỳ 29/10/2026 trang web ghi «Đang xử lý» thì API trả 2. Mã khác chưa gặp nên hiện số.
+# Đã chuyển hay chưa thì xem payment_completed_time.
+SHOPEE_STATUS = {2: "Đang xử lý"}
 CONFIRM = "c:sm:bok"
 OTHER = "c:sm:box"
 
@@ -47,7 +50,17 @@ class Payout:
     bills: tuple[dict, ...]
     gross_vnd: int  # Σ hoa hồng trước phí
     net_vnd: int  # Σ sau phí
-    paid: bool  # Shopee đã ghi giờ chuyển tiền
+    status: int  # payout_status của Shopee
+    paid_at: int  # giờ Shopee ghi đã chuyển tiền, 0 = chưa
+
+    @property
+    def paid(self) -> bool:
+        return self.paid_at > 0
+
+    def status_text(self) -> str:
+        if self.paid:
+            return f"Đã chuyển tiền {datetime.fromtimestamp(self.paid_at, ICT).strftime('%H:%M %d/%m')}"
+        return SHOPEE_STATUS.get(self.status, f"mã {self.status} (bot chưa biết nghĩa)")
 
 
 def _vnd(value) -> int:
@@ -88,7 +101,8 @@ def payouts(payload) -> list[Payout]:
             bills=tuple(bills),
             gross_vnd=sum(_vnd(b.get("eligible_total_amount")) for b in bills),
             net_vnd=sum(_vnd(b.get("bill_total_amount")) for b in bills),
-            paid=any(_int(b.get("payment_completed_time")) for b in bills),
+            status=max(_int(b.get("payout_status")) for b in bills),
+            paid_at=max(_int(b.get("payment_completed_time")) for b in bills),
         )
         for payout_id, bills in groups.items()
     ]
@@ -187,24 +201,27 @@ def _notice(batch, payout: Payout, paid: bool) -> str:
     created = datetime.fromtimestamp(payout.created, ICT).strftime("%d/%m")
     head = ("💸 <b>Shopee đã chuyển tiền kỳ thanh toán</b>" if paid
             else "💳 <b>Shopee khởi tạo kỳ thanh toán mới</b>")
+    step = ("Anh xem sao kê tài khoản, đúng số thì bấm nút dưới." if paid
+            else "Shopee chưa chuyển tiền. Khi Shopee ghi đã chuyển, bot báo lại kèm nút xác nhận.")
     tax = (f"Thuế Shopee giữ: {format_vnd(int(batch['tax_withheld_vnd']))}" if batch["tax_withheld_vnd"] is not None
            else f"Thuế tạm tính (TNCN 5% + VAT 5%): {format_vnd(expected_tax(gross))}")
     return "\n".join([
         head, "",
         f"Mã thanh toán <code>{payout.payout_id}</code> · khởi tạo {created} · {len(payout.bills)} ngày hoàn thành",
+        f"Trạng thái Shopee: <b>{payout.status_text()}</b>",
         f"Hoa hồng sau phí: {format_vnd(net)}",
         tax,
         f"Dự kiến về tài khoản: <b>{format_vnd(amount)}</b>" if amount is not None else "Chưa tính được số dự kiến.",
         "",
         f"Bot đã nhập báo cáo Shopee vào 🧾 Đối soát thanh toán (kỳ #{batch['id']}).",
-        "Khi tài khoản nhận tiền, anh xem số trên sao kê rồi bấm nút dưới. Ví khách vẫn khoá.",
+        f"{step} Ví khách vẫn khoá.",
     ])
 
 
 def _notify(repo: TrackingRepository, chat_id: int | None, batch, payout: Payout, paid: bool) -> None:
     if chat_id is None or batch["bank_evidence_id"] is not None:
         return
-    buttons = confirm_buttons(batch)
+    buttons = confirm_buttons(batch) if paid else ()
     keyboard = [[{"text": text, "callback_data": data} for text, data in buttons]] if buttons else []
     keyboard.append([{"text": "🧾 Xem kỳ", "callback_data": f"c:sm:b:{batch['id']}"}])
     with repo.connect() as conn:

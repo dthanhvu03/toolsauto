@@ -81,3 +81,15 @@
 - Sau restart, lượt đồng bộ Shopee kế tiếp thấy kỳ 17315920094261029 (kỳ #1 đã nhập tay) nên không lập lại. Bot báo
   admin kèm nút «✅ Đã nhận đúng 22.585đ».
   - Bấm nút thì kỳ thành «Khớp một phần»: còn 4.510đ ngày 27/08 chưa có mã đơn, đơn 26/10 lệch 1đ.
+
+## Sửa sau tin đầu tiên (29/10, 10:56)
+- Chủ bot nhận tin kỳ 17315920094261029: «em phải kiểm tra trạng thái rồi mới báo chứ em». Tin chưa ghi trạng thái
+  Shopee mà đã có nút «✅ Đã nhận đúng …» trong khi Shopee còn «Đang xử lý».
+- Sửa `shopee_payout.py`:
+  - đọc `payout_status` của hoá đơn (kỳ 29/10 web ghi «Đang xử lý» thì API trả 2; mã khác hiện số kèm «bot chưa biết
+    nghĩa») và `payment_completed_time`;
+  - tin có dòng «Trạng thái Shopee: …» (đã chuyển thì ghi giờ chuyển);
+  - Shopee chưa chuyển: tin chỉ có «🧾 Xem kỳ», dặn bot sẽ báo lại. Shopee ghi đã chuyển: tin thứ hai có nút
+    «✅ Đã nhận đúng …» / «⚠️ Số khác».
+  - Màn kỳ (🧾 Đối soát thanh toán) vẫn có hai nút để chủ bot tự xác nhận khi cần.
+- Test thêm: trạng thái trong tin, tin «chưa chuyển» không có nút xác nhận, tin «đã chuyển» có nút, mã trạng thái lạ.

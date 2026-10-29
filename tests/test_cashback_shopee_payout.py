@@ -31,7 +31,7 @@ def _bill(start: int, gross: int, net: int, payout: str = PAYOUT, created: int =
         "order_completed_period_start_time": start, "order_completed_period_end_time": start + 86_399,
         "validation_period_start_time": start + 86_400, "validation_period_end_time": start + 172_799,
         "eligible_total_amount": gross * E, "bill_total_amount": net * E, "payment_completed_time": paid,
-        "payment_status": 8, "settlement_cycle": 4,
+        "payment_status": 8, "payout_status": 2, "settlement_cycle": 4,
     }
 
 
@@ -99,6 +99,11 @@ def _buttons(event) -> list[str]:
     return [b["callback_data"] for row in json.loads(event["reply_markup_json"])["inline_keyboard"] for b in row]
 
 
+def test_payout_status_la_ma_la_thi_hien_so():
+    [payout] = shopee_payout.payouts({"data": {"list": [{**_bill(DAY_A, 100, 99), "payout_status": 7}]}})
+    assert payout.status_text() == "mã 7 (bot chưa biết nghĩa)"
+
+
 def test_lap_ky_moi_tu_hoa_don_doi_soat_va_bao_admin_mot_lan(bot):
     client = FakeShopee()
     assert _poll(bot, client) == {"payouts": 2, "created": 1}
@@ -117,7 +122,9 @@ def test_lap_ky_moi_tu_hoa_don_doi_soat_va_bao_admin_mot_lan(bot):
     assert event["chat_id"] == ADMIN and event["audience"] == "admin"
     assert "Hoa hồng sau phí: 19.800đ" in event["message_html"] and "<b>17.800đ</b>" in event["message_html"]
     assert "Thuế tạm tính (TNCN 5% + VAT 5%): 2.000đ" in event["message_html"]
-    assert _buttons(event) == [f"c:sm:bok:{batch['id']}:17800", f"c:sm:box:{batch['id']}", f"c:sm:b:{batch['id']}"]
+    assert "Trạng thái Shopee: <b>Đang xử lý</b>" in event["message_html"]
+    assert "Shopee chưa chuyển tiền" in event["message_html"]
+    assert _buttons(event) == [f"c:sm:b:{batch['id']}"], "Shopee chưa chuyển thì chưa hỏi xác nhận tiền về"
     calls = client.order_calls
     assert _poll(bot, client)["created"] == 0
     assert client.order_calls == calls and len(_events(bot)) == 1, "lượt sau không đọc đơn lại, không báo lại"
@@ -131,6 +138,9 @@ def test_shopee_ghi_da_chuyen_thi_nhac_them_mot_lan(bot):
     events = _events(bot)
     assert [e["event_key"] for e in events] == [f"payout_new:{PAYOUT}", f"payout_paid:{PAYOUT}"]
     assert "Shopee đã chuyển tiền" in events[1]["message_html"]
+    assert "Trạng thái Shopee: <b>Đã chuyển tiền 03:00 29/10</b>" in events[1]["message_html"]
+    batch = _rows(bot, "SELECT id FROM settlement_batches")[0]["id"]
+    assert _buttons(events[1]) == [f"c:sm:bok:{batch}:17800", f"c:sm:box:{batch}", f"c:sm:b:{batch}"]
 
 
 def test_ky_nhap_tay_cung_ma_khong_lap_lai_chi_bao_nut(bot):
@@ -141,7 +151,7 @@ def test_ky_nhap_tay_cung_ma_khong_lap_lai_chi_bao_nut(bot):
               "totals": {"reported_commission_vnd": 20_000, "adjustments_vnd": 0, "fee_vnd": 200, "fee_vat_vnd": 0,
                          "fee_includes_vat": True, "tax_withheld_vnd": 1_900, "payout_vnd": 17_900}, "items": []}
     engine.import_document(batch, json.dumps(manual).encode(), "cli:test")
-    client = FakeShopee()
+    client = FakeShopee(_bills(paid=CREATED + 3_600))
     assert _poll(bot, client)["created"] == 0 and client.order_calls == 0
     [event] = _events(bot)
     assert "Thuế Shopee giữ: 1.900đ" in event["message_html"] and f"c:sm:bok:{batch}:17900" in _buttons(event)
