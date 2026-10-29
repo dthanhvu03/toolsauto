@@ -1,3 +1,13 @@
+## Phiên 2026-10-29 (eb) — Đối soát kỳ thanh toán Shopee 29/10: đã nhập báo cáo Shopee, chờ tiền ngân hàng
+
+- Chủ bot gửi ảnh kỳ 17315920094261029 (khởi tạo 29/10, «Đang xử lý», sau thuế 22.585đ) và bảo nhập ngay. Backup trước: `cashback-manual-20261029T015558Z.sqlite`.
+- Đã nhập `settlement_import`: kỳ #1 (2026-10), chứng từ #1 `shopee_payment_report` chép tay từ ảnh. Tổng: hoa hồng 25.326, phí 203 (191 trên hoá đơn 27/10 + 12 suy ra cho đơn 26/10), thuế giữ 2.538 (TNCN 1.269 + VAT 1.269), sau thuế 22.585, số học khớp.
+- 3 đơn bot MATCHED: `261023CC4UWJ0N` 17.368, `261027N7MJJKFV` 2.120, `261023C6GM20NS` 1.372 (tổng 20.860). 4.466 «hoàn thành 27/08» không phải đơn bot, chưa có mã đơn → UNALLOCATED.
+- Trạng thái kỳ: EVIDENCE_PENDING (NO_BANK). Không đổi ví, settlement_status vẫn NOT_VERIFIED, không tạo payout.
+- **Next:** khi VCB nhận khoản Shopee, nhập chứng từ `bank_statement` (received_vnd) vào kỳ #1. Khớp 22.585 thì kỳ thành PARTIALLY_MATCHED (còn 4.466 ngoài bot chưa có mã đơn). Mở ví vẫn do chủ bot quyết. Đĩa sứ `261027PVSFKR94` (hoàn thành 28/10) vào kỳ sau.
+
+---
+
 ## Phiên 2026-10-28 (ea) — PLAN-100: deal hời tự động, có món mới là gửi
 
 - Chủ bot: «bot tự update tự gửi, cứ có là gửi, 1 deal cũng gửi». Chọn: quét 60 phút, tối đa 4 tin/khách/ngày, chỉ 8:00–22:00, bỏ lượt 12:08/20:08.
