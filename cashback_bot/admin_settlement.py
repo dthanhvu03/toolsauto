@@ -1,8 +1,9 @@
 """Màn /admin → 🔗 Shopee Affiliate → 🧾 Đối soát thanh toán (PLAN-075).
 
-Xem kỳ thanh toán, chứng từ, đối chiếu tiền nhận, chênh lệch, đơn thuộc kỳ, lịch sử. Thao tác ghi duy nhất:
-"👁 Đã xem chứng từ" (không phải xác minh) và "🔄 Đối soát lại" (tính lại từ chứng từ đã có). Không có nút
-nhập số tiền, gán duyệt, gán đã trả hay mở ví. Thiếu chứng từ thì hiện "Chưa xác minh", không hiện 0đ.
+Xem kỳ thanh toán, chứng từ, đối chiếu tiền nhận, chênh lệch, đơn thuộc kỳ, lịch sử. Thao tác ghi:
+"👁 Đã xem chứng từ" (không phải xác minh), "🔄 Đối soát lại" (tính lại từ chứng từ đã có) và, từ PLAN-101 (chủ bot
+duyệt 29/10/2026), "✅ Đã nhận đúng …": xác nhận tài khoản nhận đúng số bot tính (shopee_payout.confirm_bank). Không có
+nút gõ số tiền, gán duyệt, gán đã trả hay mở ví. Thiếu chứng từ thì hiện "Chưa xác minh", không hiện 0đ.
 """
 
 from __future__ import annotations
@@ -13,12 +14,13 @@ import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from cashback_bot import shopee_payout
 from cashback_bot.admin_notify import short_order
 from cashback_bot.commission_validation import PENDING, UNKNOWN
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import BotReply
 from cashback_bot.money import format_vnd
-from cashback_bot.settlement import MATCHED, REVERSED, SettlementEngine
+from cashback_bot.settlement import MATCHED, REVERSED, EvidenceError, SettlementEngine
 
 ICT = ZoneInfo("Asia/Ho_Chi_Minh")
 HOME = "c:sm:home"
@@ -70,6 +72,12 @@ VERIFY_LABELS = {"RECEIVED": "đã nhận, chưa đối chiếu", "VERIFIED": "�
 
 _BATCH = re.compile(r"^c:sm:(b|items|ev|rc):(\d{1,9})$")
 _EVIDENCE = re.compile(r"^c:sm:(e|seen):(\d{1,9})$")
+_CONFIRM = re.compile(r"^c:sm:bok:(\d{1,9}):(\d{1,12})$")
+_OTHER = re.compile(r"^c:sm:box:(\d{1,9})$")
+OTHER_NOTE = (
+    "⚠️ Bot chưa ghi gì. Anh gửi em ảnh trang «Đối soát vào ngày …» trên Shopee (Thanh toán → Lịch sử thanh toán → "
+    "Xem chi tiết) và số tiền tài khoản thực nhận, em nhập tay."
+)
 
 
 def _money(value) -> str:
@@ -127,6 +135,24 @@ class SettlementAdmin:
                 return self.evidence_list(batch_id)
             self.engine.reconcile(batch_id, f"admin:{admin_id}")
             return self.batch_detail(batch_id, "🔄 Đã đối soát lại từ chứng từ đang có.")
+        confirm = _CONFIRM.fullmatch(data)
+        if confirm:
+            batch_id, amount = int(confirm.group(1)), int(confirm.group(2))
+            try:
+                result = shopee_payout.confirm_bank(self.repo, batch_id, amount, admin_id)
+            except EvidenceError as exc:
+                text = {
+                    "bank_already_confirmed": "Kỳ này đã xác nhận tiền về rồi.",
+                    "amount_changed": "Số dự kiến đã đổi. Xem lại kỳ rồi bấm nút mới.",
+                }.get(exc.code, "Không tìm thấy kỳ thanh toán này.")
+                if self.engine.batch(batch_id) is None:
+                    return BotReply(text, inline_keyboard=(BACK_HOME,))
+                return self.batch_detail(batch_id, f"⚠️ {text}")
+            label = STATUS_LABELS.get(result.status, result.status)
+            return self.batch_detail(batch_id, f"✅ Đã ghi tài khoản nhận {format_vnd(amount)}. Kỳ: {label}. Ví khách vẫn khoá.")
+        other = _OTHER.fullmatch(data)
+        if other:
+            return BotReply(OTHER_NOTE, inline_keyboard=((("🧾 Xem kỳ", f"c:sm:b:{int(other.group(1))}"),), BACK_HOME))
         evidence = _EVIDENCE.fullmatch(data)
         if evidence:
             evidence_id = int(evidence.group(2))
@@ -244,6 +270,7 @@ class SettlementAdmin:
                 lines.append(f"• {DISCREPANCY_LABELS.get(item.code, item.code)}{amount}{ref}")
         lines += ["", LOCK_NOTE]
         keyboard = (
+            shopee_payout.confirm_buttons(batch),
             (("📦 Đơn thuộc kỳ", f"c:sm:items:{batch_id}"), ("📄 Chứng từ kỳ", f"c:sm:ev:{batch_id}")),
             ((("🔄 Đối soát lại", f"c:sm:rc:{batch_id}"),) if batch["status"] != REVERSED else ()),
             (("◀️ Kỳ thanh toán", "c:sm:bl"),),

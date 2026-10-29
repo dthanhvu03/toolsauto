@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 USER_STATUS_URL = "https://affiliate.shopee.vn/api/v3/user/status"
 CLICK_REPORT_URL = "https://affiliate.shopee.vn/api/v1/click_report/list"
 CONVERSION_REPORT_URL = "https://affiliate.shopee.vn/api/v3/report/list"
+# PLAN-101: hoá đơn đối soát theo ngày và đơn của một hoá đơn (đã đọc thử thật 29/10/2026). Lịch sử thanh toán và chi
+# tiết kỳ dùng GraphQL, Shopee trả 403 cho bot (mã bảo mật trình duyệt), nên không gọi.
+BILLING_LIST_URL = "https://affiliate.shopee.vn/api/v3/payment/billing_list"
+BILL_ORDERS_URL = "https://affiliate.shopee.vn/api/v3/report/validation_detail/v2"
+DAILY_SETTLEMENT_CYCLE = 4
 
 DEFAULT_HEADERS = {
     "User-Agent": (
@@ -183,10 +188,10 @@ class ShopeeAffiliateClient:
             category=None if allow else ACCESS_DENIED,
         )
 
-    def _report(self, url: str, params: dict, what: str) -> dict[str, Any]:
+    def _report(self, url: str, params: dict, what: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
         """Một trang báo cáo. Lỗi ném ShopeeApiError có loại; không ghi cookie hay header vào thông báo lỗi."""
         try:
-            resp = requests.get(url, params=params, headers=self._headers(), timeout=self._timeout)
+            resp = requests.get(url, params=params, headers={**self._headers(), **(headers or {})}, timeout=self._timeout)
         except requests.RequestException as exc:
             raise ShopeeApiError(f"Lỗi mạng khi lấy {what}: {type(exc).__name__}",
                                  category=classify_exception(exc)) from exc
@@ -243,3 +248,24 @@ class ShopeeAffiliateClient:
             "version": 1,
         }
         return self._report(CONVERSION_REPORT_URL, params, "conversion")
+
+    def fetch_billing_list(self, start_time: int, end_time: int) -> dict[str, Any]:
+        """Hoá đơn đối soát theo ngày hoàn thành (trang Hoá đơn đối soát), mỗi hoá đơn mang mã thanh toán `payout_id`."""
+        params = {
+            "order_completed_start_time": start_time,
+            "order_completed_end_time": end_time,
+            "settlement_cycle": DAILY_SETTLEMENT_CYCLE,
+        }
+        return self._report(BILLING_LIST_URL, params, "hoá đơn đối soát", {"Affiliate-Program-Type": "1"})
+
+    def fetch_bill_orders(self, bill: dict[str, Any], page_no: int = 1, page_size: int = 100) -> dict[str, Any]:
+        """Đơn của một hoá đơn ngày (trang Chi tiết chuyển đổi), theo khung hoàn thành và khung xác thực của hoá đơn."""
+        params = {
+            "start_time": bill.get("order_completed_period_start_time"),
+            "end_time": bill.get("order_completed_period_end_time"),
+            "validation_start_time": bill.get("validation_period_start_time"),
+            "validation_end_time": bill.get("validation_period_end_time"),
+            "page_num": page_no,
+            "page_size": page_size,
+        }
+        return self._report(BILL_ORDERS_URL, params, "đơn của hoá đơn", {"Affiliate-Program-Type": "1"})

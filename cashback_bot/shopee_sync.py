@@ -26,7 +26,7 @@ from typing import Any
 
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.commission_validation import assess
-from cashback_bot import reconciliation
+from cashback_bot import reconciliation, shopee_payout
 from cashback_bot.db import NARROW_SOURCE, SEEN_SOURCE, TrackingRepository
 from cashback_bot.shopee_client import (
     AUTH_EXPIRED,
@@ -387,6 +387,9 @@ class ShopeeSyncEngine:
             if lookups:
                 self._lookup_outside_window(client, lookups, heartbeat)
 
+            # 4c. PLAN-101: kỳ thanh toán Shopee (hoá đơn đối soát). Lỗi phần này chỉ ghi log, không làm hỏng lượt đơn.
+            self._poll_payouts(client, heartbeat, sleep)
+
             # 5. Ghi nhận hoàn thành. Một phần lỗi thì không được báo "xong".
             failed = ", ".join(failed_parts) or None
             run_stats = stats()
@@ -533,6 +536,15 @@ class ShopeeSyncEngine:
             finally:
                 self._seen_source = SEEN_SOURCE
             reconciliation.record_attempt(self.repo, conversion_id, "seen" if found else "not_returned", now)
+
+    def _poll_payouts(self, client, heartbeat, sleep) -> None:
+        notifier = self.admin_notifier
+        chat_id = notifier.chat_id if notifier is not None and notifier.enabled else None
+        try:
+            summary = shopee_payout.poll(self.repo, client, chat_id, sleep=sleep, heartbeat=heartbeat)
+            logger.info("[ShopeeSync] Kỳ thanh toán: %s", summary)
+        except Exception as exc:
+            logger.warning("[ShopeeSync] Đọc kỳ thanh toán lỗi: %s", error_brief(exc))
 
     def _mark_expired(self, reason: str, alert: bool = True) -> None:
         self.repo.update_shopee_cookie_status(status="expired", last_error=reason)
