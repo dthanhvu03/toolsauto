@@ -1,3 +1,16 @@
+## Phiên 2026-10-29 (eg) — PLAN-103: theo dõi giá (🔔 trên thẻ link)
+
+- Chủ bot: «cứ có giảm là thông báo»; khách muốn thì điền giờ kiểm, không điền thì kiểm theo lượt chung. 64d6db3:
+  - thẻ link Shopee có 🔔 Báo khi giảm giá; theo dõi 30 ngày, tối đa 10 món / khách;
+  - mặc định mỗi giờ 7–21 (history.php, thấy rẻ thì đọc product-data xác nhận; một món cách 6 giờ);
+  - giờ riêng tối đa 4 giờ trong 6–23, tới giờ đọc product-data; giá thấp hơn lần trước bot thấy là nhắn;
+  - `/theodoi` (Zalo `theodoi`); admin bật / tắt ở 📣 Nhắc mùa sale; chế độ báo giảm giá tự động bỏ món đang theo dõi.
+- Bảng mới `price_watches` (tự tạo khi khởi động). Backup trước restart: `cashback-manual-20261029T084733Z.sqlite`.
+- Toàn bộ test 930 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` (gồm (ed), PLAN-102, PLAN-103). Sau restart kiểm chỉ đọc: có bảng `price_watches`, `bot_state.price_watch_list_scan` chạy giờ tròn.
+
+---
+
 ## Phiên 2026-10-29 (ef) — PLAN-102: link ShopeeFood chia sub_id riêng
 
 - Chủ bot: «vẫn chia theo subid, lỡ nếu có thì làm căn cứ». 8c19ac9: mỗi lần gửi link Food một sub_id mới ghi `link_requests` (`food_link`, platform `shopeefood`, không lưu link Food). Đơn trùng sub_id Food không gắn khách, không thành tiền hoàn; sub_id vẫn lưu trên đơn để đối chiếu tay.
