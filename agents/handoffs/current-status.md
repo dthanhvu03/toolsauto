@@ -1,3 +1,11 @@
+## Phiên 2026-10-29 (ef) — PLAN-102: link ShopeeFood chia sub_id riêng
+
+- Chủ bot: «vẫn chia theo subid, lỡ nếu có thì làm căn cứ». 8c19ac9: mỗi lần gửi link Food một sub_id mới ghi `link_requests` (`food_link`, platform `shopeefood`, không lưu link Food). Đơn trùng sub_id Food không gắn khách, không thành tiền hoàn; sub_id vẫn lưu trên đơn để đối chiếu tay.
+- Toàn bộ test 919 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` (gồm (ed) và PLAN-102).
+
+---
+
 ## Phiên 2026-10-29 (ee) — FOODTEST kết quả + PLAN-102 link ShopeeFood
 
 - FOODTEST: app Shopee (ShopeeFood → Hiệu quả tiếp thị 28/10) ghi 1 click, 0 đơn; tab «Đơn chuyển đổi» trống. Link an_redir Food được ghi click, đơn tự đặt chưa được tính (chưa rõ lý do; nghi tự mua). Ghi ở PLAN-098.
