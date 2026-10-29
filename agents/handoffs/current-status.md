@@ -1,3 +1,12 @@
+## Phiên 2026-10-29 (ed) — PLAN-101: tin kỳ thanh toán ghi trạng thái Shopee
+
+- 10:56 bot gửi tin kỳ 17315920094261029 (lượt đồng bộ 03:55Z: 2 kỳ đọc được, không lập trùng kỳ #1). Chủ bot: «phải kiểm tra trạng thái rồi mới báo»: tin chưa ghi trạng thái Shopee mà đã có nút ✅ khi Shopee còn «Đang xử lý».
+- Sửa `shopee_payout.py` (09383a5): đọc `payout_status` (2 = Đang xử lý, mã lạ hiện số) và `payment_completed_time`. Tin có dòng «Trạng thái Shopee: …». Chưa chuyển thì chỉ có «🧾 Xem kỳ», dặn bot báo lại. Shopee ghi đã chuyển thì gửi tin thứ hai có ✅ / ⚠️. Màn kỳ vẫn có hai nút.
+- Test 7/7 file payout; toàn bộ 917 qua, 1 hỏng có sẵn (`test_b9…`, phụ thuộc ngày thật). Ruff sạch.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo`. Khi Shopee ghi đã chuyển, bot gửi tin «💸 Shopee đã chuyển tiền» kèm «✅ Đã nhận đúng 22.585đ»; chủ bot đối sao kê VCB rồi bấm.
+
+---
+
 ## Phiên 2026-10-29 (ec) — PLAN-101: kỳ thanh toán Shopee tự động
 
 - Chủ bot hỏi «lần sau tự động được không», duyệt hai lượt đọc thử trang thanh toán bằng cookie bot và nút xác nhận tiền về.
