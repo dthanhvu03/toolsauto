@@ -1,3 +1,12 @@
+## Phiên 2026-10-29 (ei) — Tin giới thiệu watch-v1
+
+- Chủ bot: «làm thông báo gửi tới mọi người có tính năng mới». Thêm tin `watch-v1` vào 📣 Tin giới thiệu: theo dõi giá, deal gửi liền, ShopeeFood sắp có; nút 🔥 Deal hôm nay / 📋 Món đang theo dõi. Zalo: `/deal` → «gõ deal».
+- Không tự gửi: chủ bot xem trước và bấm ✅ Gửi trong /admin → ⚙️ Cài đặt → 📣 Nhắc mùa sale → 📣 Tin giới thiệu. Hiện 17 khách đã tạo link.
+- Toàn bộ test 932 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` rồi bấm gửi.
+
+---
+
 ## Phiên 2026-10-29 (eh) — Kiểm log sau restart + sửa link an_redir dán lại
 
 - Sau restart 08:48Z (code 9291c12): không lỗi; bảng `price_watches` đã có; lượt theo dõi giá 15h chạy (0 món); deal 15h gửi 1 tin; hàng đợi hôm nay 13 tin sent, không kẹt.
