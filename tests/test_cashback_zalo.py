@@ -16,7 +16,9 @@ from cashback_bot.poller import ZALO_DOWN_AFTER_SEC, ZALO_HEARTBEAT_KEY, _check_
 from cashback_bot.telegram_api import TelegramDeliveryError
 from cashback_bot.terms_content import DRAFT_SECTIONS, DRAFT_TITLE
 from cashback_bot.zalo_bot import ZaloChannel, ZaloSender, ZaloStore
-from cashback_bot.zalo_render import BUY_LEAD, ERROR_REPLY, LINK_CARD, MAX_LEN, PHRASES, flatten, render, zalo_wording
+from cashback_bot.zalo_render import (
+    BUY_LEAD, ERROR_REPLY, FOOD_LEAD, LINK_CARD, MAX_LEN, PHRASES, flatten, render, zalo_wording,
+)
 from tests.test_cashback_bot import NOW, FakeClient, payload, service
 from tests.test_cashback_wallet import _financially_ready, _order
 
@@ -83,6 +85,15 @@ def test_gui_link_tao_link_affiliate_gan_id_am(tmp_path):
     assert all(chat == ZALO_ID for chat, _t, _s in zalo.sent) and zalo.typing == 1
     with bot.repo.connect() as conn:
         assert conn.execute("SELECT delivery_status FROM link_requests").fetchone()[0] == "sent"
+
+
+def test_zalo_link_shopeefood_bao_sap_co_va_gui_link_dat_mon(tmp_path):
+    bot, channel, zalo = _channel(tmp_path)
+    channel.handle(_update("https://spf.shopee.vn/906KKy82bs"), now=NOW)
+    card, buy = zalo.sent[-2][1], zalo.sent[-1][1]
+    assert "Hoàn tiền ShopeeFood sắp có" in card and "link ở tin dưới" in card and "nút" not in card
+    assert buy.startswith(FOOD_LEAD + "\nhttps://s.shopee.vn/an_redir?") and "sub_id=FOODLINK" in buy
+    assert BUY_LEAD not in buy, "không ghi «sẽ không được hoàn» như link có hoàn"
 
 
 def test_zalo_gui_lai_cung_message_id_khong_tao_link_moi(tmp_path):

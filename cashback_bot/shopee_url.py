@@ -70,6 +70,16 @@ def is_shopee_food_link(text: str) -> bool:
     return any((urlparse(raw).hostname or "").lower() in _FOOD_HOSTS for raw in _URL_RE.findall(text or ""))
 
 
+def food_url(text: str) -> str | None:
+    """Link ShopeeFood đầu tiên trong tin, dạng https, để ghép link tiếp thị (PLAN-102)."""
+    for raw in _URL_RE.findall(text or ""):
+        raw = _strip_tail(raw)
+        parsed = urlparse(raw)
+        if (parsed.hostname or "").lower() in _FOOD_HOSTS and not parsed.username and not parsed.password:
+            return "https://" + raw.split("://", 1)[1]
+    return None
+
+
 def canonical_product_url(shop_id: int, item_id: int) -> str:
     return f"https://shopee.vn/product/{shop_id}/{item_id}"
 

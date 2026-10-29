@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from cashback_bot import admin_tiktok
 from cashback_bot.admin_policy import AdminPanel
-from cashback_bot.affiliate import build_an_redir, new_sub_id
+from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
 from cashback_bot import deals, order_notify, payouts, policy_snapshot
@@ -61,7 +61,7 @@ from cashback_bot.price_watch import PriceHistoryClient
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.riohub_client import RioHubClient, RioHubError, commission_rate_bps, price_range_vnd, product_title
-from cashback_bot.shopee_url import is_shopee_food_link, parse_shopee_target
+from cashback_bot.shopee_url import food_url, is_shopee_food_link, parse_shopee_target
 from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.wallet import BANKS, BankAccount, Split, Wallet, parse_bank_text
 
@@ -495,6 +495,8 @@ class CashbackService:
         if update_id is not None:
             previous = self.repo.get_by_update_id(update_id)
             if previous is not None:
+                if previous.reject_reason == "food_link":
+                    return self._food_link(text)
                 return self._render_existing(previous)
 
         stripped = (text or "").strip()
@@ -550,7 +552,7 @@ class CashbackService:
             # Tin không phải link sản phẩm: không lưu nội dung (PLAN-077, dữ liệu tối thiểu), chỉ lưu độ dài.
             if is_shopee_food_link(stripped):
                 self._reject(update_id, telegram_user_id, f"[link ShopeeFood · {len(stripped)} ký tự]", "food_link")
-                return food_link_reply()
+                return self._food_link(stripped)
             self._reject(update_id, telegram_user_id, f"[không phải link · {len(stripped)} ký tự]", "invalid_link")
             return self._invalid_link(stripped)
         gate = self.desk.terms_gate(telegram_user_id, moment)
@@ -890,6 +892,16 @@ class CashbackService:
             )
         except sqlite3.Error:
             logger.exception("[Cashback] reject log failed")
+
+    def _food_link(self, text: str) -> BotReply:
+        """Food chưa hoàn tiền: báo sắp có, vẫn gửi link đặt món gắn affiliate (chủ bot yêu cầu 29/10/2026). Không
+        lưu link."""
+        link = food_url(text)
+        try:
+            return food_link_reply(build_food_redir(link, self.settings.affiliate_id) if link else None)
+        except ValueError:
+            logger.warning("[Cashback] không ghép được link ShopeeFood")
+            return food_link_reply()
 
     def _render_existing(self, row: LinkRow) -> BotReply:
         if row.link_status == "created" and row.affiliate_url and row.product_name is not None:
