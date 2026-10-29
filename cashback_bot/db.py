@@ -743,6 +743,28 @@ CREATE INDEX IF NOT EXISTS idx_cashback_payouts_user ON cashback_payouts(telegra
 CREATE INDEX IF NOT EXISTS idx_shopee_conversions_sub_id ON shopee_conversions(sub_id);
 CREATE INDEX IF NOT EXISTS idx_shopee_conversions_user_id ON shopee_conversions(telegram_user_id);
 CREATE INDEX IF NOT EXISTS idx_shopee_clicks_sub_id ON shopee_clicks(sub_id);
+
+-- Theo dõi giá món khách chọn (PLAN-103, watchlist.py). Giá gần nhất: mốc để biết «có giảm».
+CREATE TABLE IF NOT EXISTS price_watches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_user_id INTEGER NOT NULL,
+    link_id INTEGER NOT NULL,
+    item_id INTEGER NOT NULL,
+    shop_id INTEGER NOT NULL,
+    product_name TEXT,
+    start_price_vnd INTEGER NOT NULL,
+    last_price_vnd INTEGER NOT NULL,
+    check_times TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    stopped_at TEXT,
+    last_checked_at TEXT,
+    last_slot TEXT,
+    last_alert_at TEXT,
+    alerts INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (link_id) REFERENCES link_requests(id)
+);
+CREATE INDEX IF NOT EXISTS idx_price_watches_user ON price_watches(telegram_user_id, stopped_at);
 """
 
 

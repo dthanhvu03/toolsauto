@@ -128,7 +128,8 @@ def test_the_ket_qua_co_nut_mua_va_nut_luu_y_popup(tmp_path):
     rows = tg.sent[0]["markup"]["inline_keyboard"]
     assert rows[0][0]["text"] == "🛒 Mua trên Shopee"
     assert rows[0][0]["url"].startswith("https://s.shopee.vn/an_redir?")
-    assert rows[1][0]["callback_data"] == "u:tip"
+    assert rows[1][0]["callback_data"].startswith("u:pw:a:"), "🔔 Báo khi giảm giá (PLAN-103)"
+    assert rows[2][0]["callback_data"] == "u:tip"
 
     process_updates(bot, tg, bot.repo, [_callback(31, "u:tip")], Admin())
     assert tg.answers[-1] == ("q31", TIP_ALERT, True)
@@ -147,7 +148,7 @@ def test_gui_lai_giu_du_nut(tmp_path):
     flush_outbound(bot, tg, bot.repo, Admin(), now=datetime.now(timezone.utc))
     markup = tg.sent[0]["markup"]
     assert markup["inline_keyboard"][0][0]["url"].startswith("https://s.shopee.vn/an_redir?")
-    assert _callbacks(markup) == ["u:tip"]
+    assert [d.split(":")[1] for d in _callbacks(markup)] == ["pw", "tip"]
 
 
 def test_dong_cu_chua_co_markup_van_dung_nut_mua(tmp_path):
@@ -210,7 +211,8 @@ def test_dang_ky_ho_so_bot():
             return True
 
     _register_profile(Api(), frozenset({9, 7}))
-    assert calls[0] == ("commands", ["start", "huongdan", "dieukien", "cachtinh", "donhang", "deal", "hotro", "thongbao", "help"], None)
+    assert calls[0] == ("commands", ["start", "huongdan", "dieukien", "cachtinh", "donhang", "deal", "theodoi", "hotro",
+                                     "thongbao", "help"], None)
     assert ("description", DESCRIPTION) in calls
     assert ("short", SHORT_DESCRIPTION) in calls
     admin_calls = [c for c in calls if c[0] == "commands" and c[2]]

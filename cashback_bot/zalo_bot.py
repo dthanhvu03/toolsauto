@@ -67,6 +67,7 @@ SHORTCUTS = {
     "menu": "/start", "start": "/start", "batdau": "/start", "hd": "/huongdan", "huongdan": "/huongdan",
     "don": "/donhang", "donhang": "/donhang", "vi": "/vi", "hotro": "/hotro", "cachtinh": "/cachtinh",
     "dieukien": "/dieukien", "thongbao": "/thongbao", "hang": "/hang", "deal": "/deal",
+    "theodoi": "/theodoi",
 }
 
 

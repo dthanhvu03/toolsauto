@@ -147,7 +147,8 @@ def last_result_text(repo: TrackingRepository) -> str:
 
 
 def candidates(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Row]:
-    """Link Shopee mới nhất của mỗi (khách, món) trong 30 ngày: có hoàn, chưa có đơn, chưa từng báo giảm giá."""
+    """Link Shopee mới nhất của mỗi (khách, món) trong 30 ngày: có hoàn, chưa có đơn, chưa từng báo giảm giá. Món khách
+    đang tự theo dõi (watchlist, PLAN-103) thì bỏ để không nhắn trùng."""
     rows = conn.execute(
         """
         SELECT l.* FROM link_requests l
@@ -158,6 +159,8 @@ def candidates(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Row]:
                       AND x.item_id = l.item_id AND x.link_status = 'created')
           AND NOT EXISTS (SELECT 1 FROM shopee_conversions c WHERE c.matched_link_id = l.id)
           AND NOT EXISTS (SELECT 1 FROM admin_notifications n WHERE n.event_key = 'price_drop:' || l.id)
+          AND NOT EXISTS (SELECT 1 FROM price_watches w WHERE w.telegram_user_id = l.telegram_user_id
+                          AND w.item_id = l.item_id AND w.stopped_at IS NULL)
         ORDER BY l.created_at DESC LIMIT ?
         """,
         (_stamp(now - timedelta(days=WATCH_DAYS)), MAX_ITEMS),

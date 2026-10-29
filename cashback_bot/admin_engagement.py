@@ -11,7 +11,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-from cashback_bot import engagement, price_watch, sale_calendar
+from cashback_bot import engagement, price_watch, sale_calendar, watchlist
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import DORMANT_OPENER, BotReply
 from cashback_bot.sale_calendar import ICT, TIER_LABELS
@@ -32,6 +32,16 @@ def history_line(before: dict, after: dict) -> str:
     if "enabled" in after:
         return f"Nhắc mùa sale: {'bật' if after['enabled'] else 'tắt'}"
     return f"Nhắc sale {after.get('slot', '-')}: {engagement.STATUS_LABELS.get(str(after.get('status')), '-')}"
+
+
+def _watch_scan(repo) -> str:
+    record = watchlist.scan_record(repo)
+    if not record:
+        return "chưa chạy lượt nào"
+    hour = str(record.get("hour") or "")[-2:]
+    if record.get("status") == "error":
+        return f"lượt {hour}h: 🔴 lỗi {record.get('error')}"
+    return f"lượt {hour}h: kiểm {record.get('checked', 0)} món, {record.get('sent', 0)} tin"
 
 
 def _when(slot: sale_calendar.Slot) -> str:
@@ -61,6 +71,11 @@ class EngagementAdmin:
             self.repo.set_state(price_watch.ENABLED_KEY, "1" if on else "0")
             self._log(admin_id, {"drop": not on}, {"drop": on}, now)
             return self._home(now, "Đã bật báo giảm giá." if on else "Đã tắt báo giảm giá.")
+        if data in ("c:eg:pw:on", "c:eg:pw:off"):
+            on = data.endswith(":on")
+            self.repo.set_state(watchlist.ENABLED_KEY, "1" if on else "0")
+            self._log(admin_id, {"price_watch_list": not on}, {"price_watch_list": on}, now)
+            return self._home(now, "Đã bật theo dõi giá." if on else "Đã tắt theo dõi giá.")
         found = _ACTION.fullmatch(data)
         slot = sale_calendar.find(found.group(2)) if found else None
         if slot is None:
@@ -89,7 +104,9 @@ class EngagementAdmin:
         nudge_on = engagement.nudge_enabled(self.repo)
         drop_on = price_watch.enabled(self.repo)
         drop_last = price_watch.last_result_text(self.repo)
+        watch_on = watchlist.enabled(self.repo)
         with self.repo.connect() as conn:
+            watching, watch_sent = watchlist.stats(conn, now)
             count = len(engagement.recipients(conn))
             sleepy = len(engagement.dormant_users(conn, now) & set(engagement.recipients(conn)))
             nudged = engagement.nudge_stats(conn, now)
@@ -112,6 +129,10 @@ class EngagementAdmin:
             "Mỗi tối 19:00–21:30 kiểm giá món đã tạo link 30 ngày, chưa mua; giảm từ 15% và còn hàng thì nhắn.",
             "Dùng chung giới hạn 1 tin / 7 ngày với nhắc link.",
             "",
+            f"<b>🔔 Theo dõi giá</b>: {'🟢 Đang bật' if watch_on else '⚪ Đang tắt'} · {watching} món đang theo dõi · "
+            f"7 ngày qua: {watch_sent} tin · {_watch_scan(self.repo)}",
+            "Khách bấm 🔔 trên thẻ link; có giảm là bot nhắn. Mặc định kiểm mỗi giờ 7:00–21:00, khách đặt được giờ riêng.",
+            "",
             "<b>45 ngày tới</b>",
         ]
         slots = sale_calendar.upcoming(now)
@@ -126,7 +147,8 @@ class EngagementAdmin:
         toggle = ("⚪ Tắt nhắc mùa sale", "c:eg:off") if on else ("🟢 Bật nhắc mùa sale", "c:eg:on")
         nudge = ("⚪ Tắt nhắc link", "c:eg:nudge:off") if nudge_on else ("🟢 Bật nhắc link", "c:eg:nudge:on")
         drop = ("⚪ Tắt báo giảm giá", "c:eg:drop:off") if drop_on else ("🟢 Bật báo giảm giá", "c:eg:drop:on")
-        return BotReply("\n".join(lines), inline_keyboard=((toggle, nudge), (drop, ("🔥 Deal hời", "c:dl:home")),
+        watch = ("⚪ Tắt theo dõi giá", "c:eg:pw:off") if watch_on else ("🟢 Bật theo dõi giá", "c:eg:pw:on")
+        return BotReply("\n".join(lines), inline_keyboard=((toggle, nudge), (drop, watch), (("🔥 Deal hời", "c:dl:home"),),
                                                            (("📣 Tin giới thiệu", "c:an:home"),), *rows[:8], *NAV))
 
     def _preview(self, slot: sale_calendar.Slot, now: datetime, notice: str = "") -> BotReply:

@@ -16,7 +16,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import deals, order_notify, payouts, policy_snapshot
+from cashback_bot import deals, order_notify, payouts, policy_snapshot, watchlist
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import FOOD_PLATFORM, LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
@@ -230,7 +230,8 @@ class CashbackService:
             )
         # Bấm một món trong tin deal: thẻ link là tin mới, không sửa đè danh sách deal (khách còn bấm món khác).
         # 🖼 Tạo ảnh: ảnh và bài viết là tin mới, màn chỉnh mục hiển thị ở lại để tạo tiếp.
-        keep = data.startswith("u:dl:") or data == "c:pb:go"
+        # 🔔 Báo khi giảm giá: màn theo dõi là tin mới, thẻ link ở lại để khách còn bấm mua.
+        keep = data.startswith(("u:dl:", watchlist.ADD)) or data == "c:pb:go"
         return user_id, replace(
             reply,
             callback_query_id=query_id,
@@ -246,6 +247,10 @@ class CashbackService:
             return BotReply("", toast=CLOSED_ALERT, show_alert=True)
         if not data.startswith("u:w:bk:"):
             self._set_bank_waiting(user_id, None)
+        if data.startswith("u:pw:"):
+            self.desk.clear(user_id)
+            return watchlist.action(self.repo, user_id, data, datetime.now(timezone.utc))
+        watchlist.clear_waiting(self.repo, user_id)
         desk = self.desk.callback(user_id, chat_id, data, datetime.now(timezone.utc))
         if desk is not None:
             return desk
@@ -519,14 +524,23 @@ class CashbackService:
         if command:
             self._set_bank_waiting(telegram_user_id, None)
             self.desk.clear(telegram_user_id)
+            watchlist.clear_waiting(self.repo, telegram_user_id)
         if command in pages:
             return self._page(pages[command], telegram_user_id)
         if command == "/deal" and deals.enabled(self.repo):
             return self._deal_action(telegram_user_id, deals.FEED)
+        if command == "/theodoi" and watchlist.enabled(self.repo):
+            return watchlist.action(self.repo, telegram_user_id, watchlist.LIST, moment)
         if command:
             return self._page("home")
         tiktok_url = parse_tiktok_target(stripped)
         is_link = parse_shopee_target(stripped) is not None or tiktok_url is not None
+        # Đang chờ gõ giờ kiểm giá (PLAN-103): tin không phải link là giờ; dán link thì bỏ chờ, tạo link như thường.
+        watch_id = None if is_link else watchlist.waiting(self.repo, telegram_user_id, moment)
+        if watch_id is not None:
+            return watchlist.consume_times(self.repo, telegram_user_id, watch_id, stripped, moment)
+        if is_link:
+            watchlist.clear_waiting(self.repo, telegram_user_id)
         only_link = is_link and len(stripped.split()) == 1
         if not only_link:
             # Đang chờ nội dung yêu cầu hỗ trợ: mọi tin (kể cả kèm link) là nội dung ticket.
@@ -631,6 +645,8 @@ class CashbackService:
         if not saved:
             return BotReply(GENERIC_FAIL)
         card = render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped))
+        if watchlist.enabled(self.repo):
+            card = replace(card, inline_keyboard=watchlist.card_row(sub_id) + (card.inline_keyboard or ()))
         if deals.enabled(self.repo) and not deals.user_categories(self.repo, telegram_user_id) and \
                 self._first_link(telegram_user_id):
             # Link đầu tiên: mời chọn danh mục deal hời một lần (khách chưa chọn).
@@ -925,13 +941,16 @@ class CashbackService:
     def _render_existing(self, row: LinkRow) -> BotReply:
         if row.link_status == "created" and row.affiliate_url and row.product_name is not None:
             render = render_success_v12 if row.estimate_policy else render_success
-            return render(
+            card = render(
                 row.product_name,
                 row.price_vnd or 0,
                 row.estimated_cashback or 0,
                 row.affiliate_url,
                 tiktok=row.platform == "tiktok",
             )
+            if row.platform == "shopee" and watchlist.enabled(self.repo):
+                card = replace(card, inline_keyboard=watchlist.card_row(row.sub_id) + (card.inline_keyboard or ()))
+            return card
         if row.reject_reason in _NOT_FOUND_CODES:
             return BotReply(NOT_FOUND)
         if row.reject_reason == "invalid_link":

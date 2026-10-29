@@ -106,6 +106,7 @@ BOT_COMMANDS = (
     ("cachtinh", "Cách tính tiền hoàn"),
     ("donhang", "Đơn hàng của tôi"),
     ("deal", "Deal hời hôm nay"),
+    ("theodoi", "Món đang theo dõi giá"),
     ("hotro", "Hỗ trợ & khiếu nại"),
     ("thongbao", "Cài đặt thông báo"),
     ("help", "Trợ giúp"),
