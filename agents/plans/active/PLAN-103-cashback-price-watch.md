@@ -89,3 +89,11 @@
   - Zalo (chọn số, gõ `12h 20h`, `theodoi`).
 - Sửa test cũ theo nút mới: `test_cashback_plan060.py` (3), `test_cashback_bot.py` (lệnh bot).
 - Toàn bộ: 930 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
+
+## Tin giới thiệu (29/10, chủ bot: «làm thông báo gửi tới mọi người có tính năng mới»)
+- `admin_announce.ANNOUNCEMENTS["watch-v1"]` + `messages.WATCH_ANNOUNCE`:
+  - nội dung: theo dõi giá, deal gửi liền (không chờ 20:08), ShopeeFood sắp có (không hứa ngày);
+  - nút 🔥 Deal hôm nay và 📋 Món đang theo dõi.
+- Chủ bot tự xem trước và bấm gửi trong /admin. Mỗi khách một lần, khách đã tạo link, chưa chặn bot.
+- Zalo: `/deal` đổi thành «gõ deal» (`zalo_render.COMMANDS`).
+- Test `test_tin_gioi_thieu_theo_doi_gia_nut_mo_dung_man`. Toàn bộ 932 qua, 1 hỏng có sẵn (`test_b9…`).

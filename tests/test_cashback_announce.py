@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from cashback_bot.messages import DEALS_ANNOUNCE, WALLET_ANNOUNCE
+from cashback_bot.messages import DEALS_ANNOUNCE, WALLET_ANNOUNCE, WATCH_ANNOUNCE
+from cashback_bot.zalo_render import render
+from cashback_bot.messages import BotReply, WATCH_ANNOUNCE_KEYBOARD
 from tests.test_cashback_bot import NOW
 from tests.test_cashback_wallet import ADMIN, USER, _bot, _callback, _link
 
@@ -48,3 +50,18 @@ def test_tin_gioi_thieu_vi_xem_truoc_khong_hua_rut(tmp_path):
     ((chat, html, markup),) = _announces(bot)
     assert chat == USER and html == WALLET_ANNOUNCE and "u:p:wallet" in markup and "u:p:rules" in markup
     assert "Chưa mở rút tiền" in _callback(bot, USER, "u:p:wallet").text
+
+
+def test_tin_gioi_thieu_theo_doi_gia_nut_mo_dung_man(tmp_path):
+    bot = _bot(tmp_path)
+    _link(bot)
+    preview = _callback(bot, ADMIN, "c:an:v:watch-v1")
+    assert WATCH_ANNOUNCE in preview.text and "Theo dõi giá" in preview.text
+    assert "sắp có" in WATCH_ANNOUNCE and "ShopeeFood" in WATCH_ANNOUNCE, "Food chưa hoàn: chỉ báo sắp có"
+    _callback(bot, ADMIN, "c:an:ok:watch-v1")
+    ((chat, html, markup),) = _announces(bot)
+    assert chat == USER and html == WATCH_ANNOUNCE and "u:dh" in markup and "u:pw:l" in markup
+    assert "Món đang theo dõi giá" in _callback(bot, USER, "u:pw:l").text
+    messages, choices = render(BotReply(WATCH_ANNOUNCE, inline_keyboard=WATCH_ANNOUNCE_KEYBOARD))
+    text = "\n".join(m.text for m in messages)
+    assert choices == ("u:dh", "u:pw:l") and "Gõ deal" in text and "theodoi" in text and "/theodoi" not in text

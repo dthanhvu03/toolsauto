@@ -1177,6 +1177,18 @@ WALLET_ANNOUNCE = (
     "tới lúc mở rút là rút được liền nha 🫶"
 )
 WALLET_ANNOUNCE_KEYBOARD: Keyboard = ((("👛 Xem ví", "u:p:wallet"),), (("📋 Đọc điều khoản", "u:p:rules"),))
+# Tin giới thiệu theo dõi giá + deal gửi liền + ShopeeFood sắp có (chủ bot 2026-10-29). Food chưa hoàn: không hứa ngày.
+WATCH_ANNOUNCE = (
+    "🆕 <b>Bot có tính năng mới nè!</b>\n\n"
+    "🔔 <b>Theo dõi giá</b>: dán link món bạn đang để ý rồi chọn <b>🔔 Báo khi giảm giá</b>. Có giảm là bot nhắn "
+    "liền, kèm link mua vẫn được hoàn. Muốn bot kiểm vào giờ riêng (ví dụ 12h, 20h) cũng đặt được luôn.\n"
+    "🔥 <b>Deal hời gửi liền</b>: không chờ 20:08 nữa. Bạn đã chọn danh mục thì có món rẻ thật là bot gửi "
+    "(8:00–22:00). Gõ /deal xem deal hôm nay.\n"
+    "🍜 Hoàn tiền <b>ShopeeFood</b> đang chuẩn bị, sắp có nha!\n\n"
+    "Gõ /theodoi xem các món đang theo dõi.\n"
+    "Phiền thì gõ /thongbao tắt nha 🫶"
+)
+WATCH_ANNOUNCE_KEYBOARD: Keyboard = ((("🔥 Deal hôm nay", "u:dh"),), (("📋 Món đang theo dõi", "u:pw:l"),))
 DEALS_PICK_HINT = "Bấm món muốn mua, bot gửi link hoàn tiền liền 😎"
 DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
 DEALS_INFER_HINT = "Chọn danh mục để bot gửi đúng gu hơn, hoặc tắt nếu không cần nha 🫶"

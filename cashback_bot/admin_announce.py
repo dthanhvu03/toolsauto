@@ -20,6 +20,8 @@ from cashback_bot.messages import (
     DEALS_ANNOUNCE_KEYBOARD,
     WALLET_ANNOUNCE,
     WALLET_ANNOUNCE_KEYBOARD,
+    WATCH_ANNOUNCE,
+    WATCH_ANNOUNCE_KEYBOARD,
     BotReply,
     Keyboard,
 )
@@ -33,6 +35,7 @@ NAV = ((("◀️ Nhắc mùa sale", "c:eg:home"), ("◀️ Tổng quan", "c:menu
 ANNOUNCEMENTS: dict[str, tuple[str, str, Keyboard]] = {
     "deals-v1": ("Deal hời 20:08 · báo giảm giá · TikTok Shop", DEALS_ANNOUNCE, DEALS_ANNOUNCE_KEYBOARD),
     "wallet-v1": ("Ví hoàn tiền xem trước · điều khoản V3", WALLET_ANNOUNCE, WALLET_ANNOUNCE_KEYBOARD),
+    "watch-v1": ("Theo dõi giá · deal gửi liền · ShopeeFood sắp có", WATCH_ANNOUNCE, WATCH_ANNOUNCE_KEYBOARD),
 }
 
 AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
