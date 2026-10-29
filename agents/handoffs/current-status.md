@@ -1,3 +1,17 @@
+## Phiên 2026-10-29 (ec) — PLAN-101: kỳ thanh toán Shopee tự động
+
+- Chủ bot hỏi «lần sau tự động được không», duyệt hai lượt đọc thử trang thanh toán bằng cookie bot và nút xác nhận tiền về.
+- Đọc thử: GraphQL Lịch sử thanh toán / Chi tiết kỳ bị 403 (mã bảo mật trình duyệt, không lách). REST `payment/billing_list`, `payment/billing_detail`, `report/validation_detail/v2` đọc được. Thuế và số sau thuế chỉ có ở GraphQL.
+- Sửa kỳ #1 theo số thật (chứng từ #2 thay #1, backup `cashback-manual-20261029T020649Z.sqlite`): hoa hồng 25.371, phí 248. Đơn `261023C6GM20NS` Shopee duyệt 1.373 (bot 1.372) → AMOUNT_MISMATCH. Ngày 27/08 4.510 chưa có mã đơn.
+- Code (247fbe8, 6 test mới qua, ruff sạch):
+  - cuối mỗi lượt đồng bộ Shopee đọc `billing_list`; kỳ mới (khởi tạo ≤ 14 ngày) tự lập và nhập báo cáo Shopee, chưa có thuế;
+  - báo admin kèm «✅ Đã nhận đúng X» (X = sau phí − thuế tạm tính 10%), «⚠️ Số khác». Bấm ✅ thì nhập ngân hàng và thay báo cáo có thuế;
+  - ví khách vẫn khoá.
+- Toàn bộ test: 916 qua, 1 hỏng có sẵn trên main: `test_b9_doi_tai_khoan_cho_7_ngay…` (test cố định ngày, màn ví dùng giờ thật). Không thuộc phạm vi, chưa sửa.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo`. Lượt đồng bộ Shopee kế tiếp gửi admin tin kỳ 17315920094261029 kèm nút «✅ Đã nhận đúng 22.585đ». Tiền về VCB thì chủ bot bấm; kỳ #1 thành «Khớp một phần».
+
+---
+
 ## Phiên 2026-10-29 (eb) — Đối soát kỳ thanh toán Shopee 29/10: đã nhập báo cáo Shopee, chờ tiền ngân hàng
 
 - Chủ bot gửi ảnh kỳ 17315920094261029 (khởi tạo 29/10, «Đang xử lý», sau thuế 22.585đ) và bảo nhập ngay. Backup trước: `cashback-manual-20261029T015558Z.sqlite`.
