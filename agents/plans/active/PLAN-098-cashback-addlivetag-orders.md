@@ -95,3 +95,7 @@
 - ~17:15 28/10: link mở đúng món trong app (Chè dừa dầm thốt nốt 28.490đ, An Vy, Bàu Cát; món thuộc «ShopeeFood Trùm Deal»). Chủ bot đã đặt 1 đơn qua link.
 - 28/10 sau khi đặt, 1 lệnh đọc `type=clicks&source=food` 2 ngày: chưa có FOODTEST. Lượt bấm mới nhất AddLiveTag có là 27/10, nghĩa là báo cáo trễ.
 - **Next:** 29–30/10 đọc lại `source=food` (items + clicks), tìm FOODTEST. Kết luận theo 3 trường hợp: có mã / có đơn không mã / không có đơn.
+- 29/10 13:40 chủ bot gửi ảnh app Shopee (Tiếp thị liên kết → ShopeeFood → Hiệu quả tiếp thị, ngày 28/10): **1 lượt click, 0 đơn, 0đ**. Trang web affiliate.shopee.vn không có mục Food; số liệu Food chỉ xem được trong app.
+  - Lượt click Food có ghi vào tài khoản affiliate của bot, nên link `an_redir` tới quán Food được Shopee nhận. App không hiện sub_id, nên chưa biết lượt click này có mang FOODTEST không.
+  - Đơn đặt ~17:15 28/10 chưa thành đơn chuyển đổi. Có thể do báo cáo trễ, do Food chỉ tính đơn khi đã giao xong, hoặc do Shopee không tính đơn tự mua qua link của chính mình. Chưa đủ dữ liệu để kết luận.
+  - Vẫn chờ: chủ bot xem tab «Đơn chuyển đổi» trong app, và bot đọc `source=food` của AddLiveTag 30/10 (cần chủ bot nói «kiểm FOODTEST»).
