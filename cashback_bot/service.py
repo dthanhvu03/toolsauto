@@ -18,7 +18,7 @@ from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
 from cashback_bot import deals, order_notify, payouts, policy_snapshot
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
-from cashback_bot.db import LinkRow, TrackingRepository, enqueue_event
+from cashback_bot.db import FOOD_PLATFORM, LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
     CLOSED,
     CLOSED_ALERT,
@@ -496,7 +496,7 @@ class CashbackService:
             previous = self.repo.get_by_update_id(update_id)
             if previous is not None:
                 if previous.reject_reason == "food_link":
-                    return self._food_link(text)
+                    return self._food_reply(text, previous.sub_id)
                 return self._render_existing(previous)
 
         stripped = (text or "").strip()
@@ -551,8 +551,7 @@ class CashbackService:
         if target is None:
             # Tin không phải link sản phẩm: không lưu nội dung (PLAN-077, dữ liệu tối thiểu), chỉ lưu độ dài.
             if is_shopee_food_link(stripped):
-                self._reject(update_id, telegram_user_id, f"[link ShopeeFood · {len(stripped)} ký tự]", "food_link")
-                return self._food_link(stripped)
+                return self._food_link(update_id, telegram_user_id, stripped)
             self._reject(update_id, telegram_user_id, f"[không phải link · {len(stripped)} ký tự]", "invalid_link")
             return self._invalid_link(stripped)
         gate = self.desk.terms_gate(telegram_user_id, moment)
@@ -893,12 +892,32 @@ class CashbackService:
         except sqlite3.Error:
             logger.exception("[Cashback] reject log failed")
 
-    def _food_link(self, text: str) -> BotReply:
-        """Food chưa hoàn tiền: báo sắp có, vẫn gửi link đặt món gắn affiliate (chủ bot yêu cầu 29/10/2026). Không
-        lưu link."""
-        link = food_url(text)
+    def _food_link(self, update_id: int | None, telegram_user_id: int, text: str) -> BotReply:
+        """Food chưa hoàn tiền: báo sắp có, vẫn gửi link đặt món gắn affiliate (chủ bot yêu cầu 29/10/2026).
+
+        Mỗi lần một sub_id riêng gắn với khách, để đơn Food có sub_id thì làm căn cứ. Không lưu link Food: chỉ lưu độ
+        dài tin; platform `shopeefood` để đơn trùng sub_id không tự thành tiền hoàn."""
         try:
-            return food_link_reply(build_food_redir(link, self.settings.affiliate_id) if link else None)
+            sub_id = self._unique_sub_id()
+        except ProductDataError:
+            sub_id = None
+        try:
+            self.repo.insert_rejected({
+                "telegram_update_id": update_id, "telegram_user_id": telegram_user_id, "sub_id": sub_id,
+                "original_url": f"[link ShopeeFood · {len(text)} ký tự]", "reject_reason": "food_link",
+                "product_name": "ShopeeFood (chưa hoàn tiền)", "platform": FOOD_PLATFORM,
+            })
+        except sqlite3.Error:
+            logger.exception("[Cashback] reject log failed")
+            sub_id = None
+        return self._food_reply(text, sub_id)
+
+    def _food_reply(self, text: str, sub_id: str | None) -> BotReply:
+        link = food_url(text)
+        if not link or not sub_id:
+            return food_link_reply()
+        try:
+            return food_link_reply(build_food_redir(link, self.settings.affiliate_id, sub_id))
         except ValueError:
             logger.warning("[Cashback] không ghép được link ShopeeFood")
             return food_link_reply()

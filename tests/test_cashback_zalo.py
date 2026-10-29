@@ -92,7 +92,7 @@ def test_zalo_link_shopeefood_bao_sap_co_va_gui_link_dat_mon(tmp_path):
     channel.handle(_update("https://spf.shopee.vn/906KKy82bs"), now=NOW)
     card, buy = zalo.sent[-2][1], zalo.sent[-1][1]
     assert "Hoàn tiền ShopeeFood sắp có" in card and "link ở tin dưới" in card and "nút" not in card
-    assert buy.startswith(FOOD_LEAD + "\nhttps://s.shopee.vn/an_redir?") and "sub_id=FOODLINK" in buy
+    assert buy.startswith(FOOD_LEAD + "\nhttps://s.shopee.vn/an_redir?") and "&sub_id=" in buy
     assert BUY_LEAD not in buy, "không ghi «sẽ không được hoàn» như link có hoàn"
 
 

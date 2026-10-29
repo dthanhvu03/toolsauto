@@ -13,7 +13,7 @@ import pytest
 import requests
 
 from cashback_bot.admin_notify import AdminNotifier
-from cashback_bot.affiliate import FOOD_SUB_ID, build_an_redir, build_food_redir, is_valid_sub_id
+from cashback_bot.affiliate import build_an_redir, build_food_redir, is_valid_sub_id
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import FOOD_BUTTON, STALE
@@ -832,14 +832,21 @@ def test_link_shopeefood_tra_loi_ro_chua_ho_tro(tmp_path):
     assert client.calls == 0, "không gọi nguồn dữ liệu sản phẩm"
     link = urlparse(reply.button_url)
     assert (link.hostname, link.path) == ("s.shopee.vn", "/an_redir")
+    with bot.repo.connect() as conn:
+        row = conn.execute("SELECT * FROM link_requests WHERE telegram_update_id = 9101").fetchone()
+    assert is_valid_sub_id(row["sub_id"]) and row["telegram_user_id"] == 111 and row["platform"] == "shopeefood"
     assert parse_qs(link.query) == {"origin_link": ["https://spf.shopee.vn/AKbbczw9TO"],
-                                    "affiliate_id": [bot.settings.affiliate_id], "sub_id": [FOOD_SUB_ID]}
+                                    "affiliate_id": [bot.settings.affiliate_id], "sub_id": [row["sub_id"]]}
     assert reply.markup()["inline_keyboard"][0] == [{"text": FOOD_BUTTON, "url": reply.button_url}]
     again = bot.handle_text(111, "u", text, update_id=9101, now=NOW)  # Telegram gửi lại cùng update
     assert again.text == reply.text and again.button_url == reply.button_url
-    with bot.repo.connect() as conn:
-        row = conn.execute("SELECT reject_reason, original_url FROM link_requests WHERE telegram_update_id = 9101").fetchone()
     assert row["reject_reason"] == "food_link" and "spf.shopee.vn" not in row["original_url"], "không lưu nội dung tin"
+    assert row["affiliate_url"] is None
+    other = bot.handle_text(111, "u", text, update_id=9103, now=NOW)
+    assert f"sub_id={row['sub_id']}" not in other.button_url, "mỗi lần gửi một sub_id riêng"
+    result = bot.repo.record_conversion_snapshot("food-1", row["sub_id"], "SN-food", "COMPLETED", "COMPLETED",
+                                                 "2026-10-29 12:00:00", 3_000, 3_000)
+    assert not result.is_matched and result.telegram_user_id is None, "đơn trùng sub_id link Food không gắn khách, không thành tiền hoàn"
     assert "Chưa nhận ra link" in bot.handle_text(111, "u", "https://example.com/x", update_id=9102, now=NOW).text
 
 
@@ -848,6 +855,8 @@ def test_link_shopeefood_chi_ghep_link_food():
     assert food_url("http://shopeefood.vn/ho-chi-minh/quan") == "https://shopeefood.vn/ho-chi-minh/quan"
     assert food_url("https://s.shopee.vn/abc") is None and food_url("https://u:p@spf.shopee.vn/x") is None
     with pytest.raises(ValueError):
-        build_food_redir("https://shopee.vn/product/1/2", "123")
+        build_food_redir("https://shopee.vn/product/1/2", "123", "Ab12Cd34")
     with pytest.raises(ValueError):
-        build_food_redir("https://spf.shopee.vn/x", "abc")
+        build_food_redir("https://spf.shopee.vn/x", "abc", "Ab12Cd34")
+    with pytest.raises(ValueError):
+        build_food_redir("https://spf.shopee.vn/x", "123", "FOOD")

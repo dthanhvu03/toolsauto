@@ -903,6 +903,8 @@ CANCEL_SCHEMA_PATH = Path(__file__).resolve().parent / "migrations" / "008_polic
 SEEN_SOURCE = "report_list_30d"
 # Nguồn đánh giá theo nền tảng (validation_source, shopee_conversion_changes.source).
 PLATFORM_SOURCES = {"tiktok": "riohub_orders"}
+# Link ShopeeFood (PLAN-102): có sub_id riêng để làm căn cứ, nhưng chưa hoàn tiền.
+FOOD_PLATFORM = "shopeefood"
 # Chưa có nguồn đối soát tiền thật cho nền tảng khác Shopee: khoản của đơn đó không được vào ví (tầng DB, sau khi có cột).
 # Sổ ví (rà soát 2026-10-26): phần khách không vượt hoa hồng (trừ dòng đã huỷ: giữ số đã chốt để thấy khoản bị trừ);
 # khoản đã vào ví thì số tiền không đổi được nữa
@@ -1768,9 +1770,11 @@ class TrackingRepository:
             prev = conn.execute("SELECT * FROM shopee_conversions WHERE conversion_id = ?", (conversion_id,)).fetchone()
             found_link, found_user = None, None
             if sub_id:
+                # Link ShopeeFood (PLAN-102) chưa hoàn tiền: đơn trùng sub_id không gắn khách, không thành tiền hoàn.
                 link = conn.execute(
-                    "SELECT id, telegram_user_id FROM link_requests WHERE sub_id = ? ORDER BY id DESC LIMIT 1",
-                    (sub_id,),
+                    "SELECT id, telegram_user_id FROM link_requests WHERE sub_id = ? AND platform != ? "
+                    "ORDER BY id DESC LIMIT 1",
+                    (sub_id, FOOD_PLATFORM),
                 ).fetchone()
                 if link is not None:
                     found_link, found_user = int(link["id"]), int(link["telegram_user_id"])

@@ -41,4 +41,15 @@
 - Test: `test_link_shopeefood_tra_loi_ro_chua_ho_tro` (sửa), `test_link_shopeefood_chi_ghep_link_food`,
   `test_zalo_link_shopeefood_bao_sap_co_va_gui_link_dat_mon`.
 - Toàn bộ: 919 qua, 1 hỏng có sẵn (`test_b9…`, phụ thuộc ngày thật). Ruff sạch.
-- Trạng thái: xong code, chờ chủ bot restart.
+- Trạng thái: xong code (34da621), chưa restart.
+
+## Đổi sang sub_id riêng (29/10, chủ bot: «vẫn chia theo subid, lỡ nếu có thì mình cũng có thể làm căn cứ xem»)
+- Mỗi lần khách gửi link Food: một sub_id mới (cùng cách link sàn) ghi vào `link_requests`:
+  - `reject_reason = food_link`, `platform = shopeefood`, `product_name = «ShopeeFood (chưa hoàn tiền)»`;
+  - `original_url` chỉ ghi độ dài tin, `affiliate_url` để trống, nên vẫn không lưu link Food.
+- Telegram gửi lại cùng update: ghép lại link từ tin với sub_id đã lưu.
+- `db.record_conversion_snapshot`: đơn trùng sub_id của link `shopeefood` không gắn khách, nên không thành tiền hoàn và
+  không báo khách. Đơn vẫn lưu sub_id để đối chiếu tay.
+- Bỏ `FOOD_SUB_ID`. `build_food_redir(link, affiliate_id, sub_id)` kiểm sub_id như link sàn.
+- Thống kê «link đã tạo» / khách hoạt động tính cả link Food. Tìm sub_id trong admin hiện «ShopeeFood (chưa hoàn tiền)».
+- Test: link Food lưu sub_id riêng + platform, gửi lại cùng update giữ sub_id, lần gửi sau sub_id khác, đơn trùng sub_id không gắn khách. Toàn bộ 919 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
