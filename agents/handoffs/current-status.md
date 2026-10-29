@@ -1,3 +1,12 @@
+## Phiên 2026-10-29 (ee) — FOODTEST kết quả + PLAN-102 link ShopeeFood
+
+- FOODTEST: app Shopee (ShopeeFood → Hiệu quả tiếp thị 28/10) ghi 1 click, 0 đơn; tab «Đơn chuyển đổi» trống. Link an_redir Food được ghi click, đơn tự đặt chưa được tính (chưa rõ lý do; nghi tự mua). Ghi ở PLAN-098.
+- Chủ bot yêu cầu: khách gửi link ShopeeFood thì báo «hoàn tiền Food sắp có» và vẫn gửi link đặt món gắn affiliate. PLAN-102 (34da621): nút «🛵 Đặt trên ShopeeFood», sub_id chung `FOODLINK`, không lưu link; Zalo có tin link riêng ghi «đơn Food chưa được hoàn tiền».
+- Toàn bộ test 919 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` (gồm cả bản sửa tin kỳ thanh toán (ed)). Muốn biết Food có tính đơn không: nhờ người khác (tài khoản khác) đặt qua link bot; 30/10 khi chủ bot nói «kiểm FOODTEST» thì đọc `source=food` AddLiveTag 1 lần.
+
+---
+
 ## Phiên 2026-10-29 (ed) — PLAN-101: tin kỳ thanh toán ghi trạng thái Shopee
 
 - 10:56 bot gửi tin kỳ 17315920094261029 (lượt đồng bộ 03:55Z: 2 kỳ đọc được, không lập trùng kỳ #1). Chủ bot: «phải kiểm tra trạng thái rồi mới báo»: tin chưa ghi trạng thái Shopee mà đã có nút ✅ khi Shopee còn «Đang xử lý».
