@@ -1,3 +1,12 @@
+## Phiên 2026-10-29 (eh) — Kiểm log sau restart + sửa link an_redir dán lại
+
+- Sau restart 08:48Z (code 9291c12): không lỗi; bảng `price_watches` đã có; lượt theo dõi giá 15h chạy (0 món); deal 15h gửi 1 tin; hàng đợi hôm nay 13 tin sent, không kẹt.
+- Lỗi trong ngày đã tự hết: Telegram mất kết nối 00:39–01:17Z (HTTPError/502/ReadTimeout); deal hời 07:04Z AddLiveTag ReadTimeout 1 lần.
+- Lỗi khách: 08:51Z khách Zalo dán lại link an_redir bot đã gửi (link #81) → bot hỏi AddLiveTag như link rút gọn → `api_status` → khách nhận «Chưa lấy được dữ liệu». Sửa `shopee_url` (lấy `origin_link` bên trong; an_redir Food → luồng Food; an_redir lồng / thiếu gốc thì bỏ). Test mới, toàn bộ 931 qua, 1 hỏng có sẵn (`test_b9…`).
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo`.
+
+---
+
 ## Phiên 2026-10-29 (eg) — PLAN-103: theo dõi giá (🔔 trên thẻ link)
 
 - Chủ bot: «cứ có giảm là thông báo»; khách muốn thì điền giờ kiểm, không điền thì kiểm theo lượt chung. 64d6db3:
