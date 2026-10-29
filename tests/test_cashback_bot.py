@@ -851,6 +851,25 @@ def test_link_shopeefood_tra_loi_ro_chua_ho_tro(tmp_path):
     assert "Chưa nhận ra link" in bot.handle_text(111, "u", "https://example.com/x", update_id=9102, now=NOW).text
 
 
+def test_dan_lai_link_bot_da_gui_thi_doc_san_pham_goc(tmp_path):
+    # Khách Zalo 29/10/2026 dán lại link an_redir bot gửi hôm trước: trước đây bot hỏi AddLiveTag và báo «chưa lấy được».
+    sent = build_an_redir("https://shopee.vn/product/9/8", "17300001", "Ab12Cd34")
+    target = parse_shopee_target(f"Mua cái này {sent}")
+    assert (target.shop_id, target.item_id, target.short_url) == (9, 8, None)
+    assert target.original_url == "https://shopee.vn/product/9/8", "không lưu sub_id cũ của link"
+    assert parse_shopee_target("https://s.shopee.vn/an_redir?affiliate_id=1&sub_id=x") is None
+    nested = "https://s.shopee.vn/an_redir?origin_link=" + requests.utils.quote(sent, safe="")
+    assert parse_shopee_target(nested) is None
+    food = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fspf.shopee.vn%2F906KKy82bs&affiliate_id=1&sub_id=x"
+    assert parse_shopee_target(food) is None and is_shopee_food_link(food)
+    assert food_url(food) == "https://spf.shopee.vn/906KKy82bs"
+    client = FakeClient(payload())
+    bot = service(tmp_path, client)
+    reply = bot.handle_text(111, "u", sent, update_id=9201, now=NOW)
+    assert "Đã tạo link hoàn tiền" in reply.text and client.targets[-1].item_id == 8
+    assert "sub_id=Ab12Cd34" not in reply.button_url, "link mới, sub_id mới"
+
+
 def test_link_shopeefood_chi_ghep_link_food():
     assert food_url("Món ngon https://spf.shopee.vn/906KKy82bs.") == "https://spf.shopee.vn/906KKy82bs"
     assert food_url("http://shopeefood.vn/ho-chi-minh/quan") == "https://shopeefood.vn/ho-chi-minh/quan"
