@@ -99,3 +99,4 @@
   - Lượt click Food có ghi vào tài khoản affiliate của bot, nên link `an_redir` tới quán Food được Shopee nhận. App không hiện sub_id, nên chưa biết lượt click này có mang FOODTEST không.
   - Đơn đặt ~17:15 28/10 chưa thành đơn chuyển đổi. Có thể do báo cáo trễ, do Food chỉ tính đơn khi đã giao xong, hoặc do Shopee không tính đơn tự mua qua link của chính mình. Chưa đủ dữ liệu để kết luận.
   - Vẫn chờ: chủ bot xem tab «Đơn chuyển đổi» trong app, và bot đọc `source=food` của AddLiveTag 30/10 (cần chủ bot nói «kiểm FOODTEST»).
+  - 29/10: tab «Đơn chuyển đổi» trong app trống. Shopee không tính đơn 28/10 vào tài khoản (chưa biết lý do).
