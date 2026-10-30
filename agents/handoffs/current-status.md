@@ -1,3 +1,13 @@
+## Phiên 2026-10-30 (git-clean) — Dọn worktree và nhánh local
+
+- Đã xoá worktree `/home/vu/toolsauto-cashback-notifications` (sạch, a15663f đã có trên origin/main).
+- Đã push `cursor/feat-douyin-longvideo-login` (aa3d519, 5 commit 23/09, ~1.700 dòng: cookie Douyin từ Chrome, hoãn cắt video dài, thư mục Drive đánh số + ADR-045 bản Drive, login SPA, key Gemini AQ). **Chưa có trên main**, cần review trước khi merge (tách từ 20/09, đụng viral/đăng bài).
+- Xoá 143 nhánh local: 127 đã merge vào origin/main + 16 có nội dung trùng main (theo `git cherry`; phần lệch chỉ là commit khởi tạo lịch sử cũ). Không xoá nhánh nào trên origin.
+- 4 nhánh đã xoá chỉ có ở local, giữ SHA để khôi phục (`git branch <tên> <sha>`, còn tới khi git gc): `ag/feat-ping-gemini-ui` d3c030a, `backup/local-main-before-sync-20260908-072441` 151e5a6, `backup/main-20260313-024514` 1a91861, `cashback-alt-crosscheck` 4cf6159.
+- Còn lại local: `main`, `cursor/feat-douyin-longvideo-login`, `develop` (4 commit tháng 5 chưa có trên main), `rollback/plan079-compat` (nhánh dự phòng). Stash cũ `wip develop before checkout origin/main 20260908-072441` vẫn giữ.
+
+---
+
 ## Phiên 2026-10-30 (reup-wm) — Gỡ tự làm mờ watermark khi reup
 
 - Commit 68b06b9 (tự nhận diện + làm mờ watermark/chữ ký tác giả bằng `delogo`, test trên ảnh Allyollyo) đã lên origin/main; working tree có sẵn bản gỡ nhưng để 2 file rỗng 0 byte. Đã gộp thành 0291766 `Revert "feat(reup)…"`: xoá `watermark_blur.py` + test, `reup_config`/`reup_processor` về đúng như trước 68b06b9.
