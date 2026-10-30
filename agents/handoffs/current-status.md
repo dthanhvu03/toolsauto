@@ -1,3 +1,13 @@
+## Phiên 2026-10-30 (reup-wm) — Gỡ tự làm mờ watermark khi reup
+
+- Commit 68b06b9 (tự nhận diện + làm mờ watermark/chữ ký tác giả bằng `delogo`, test trên ảnh Allyollyo) đã lên origin/main; working tree có sẵn bản gỡ nhưng để 2 file rỗng 0 byte. Đã gộp thành 0291766 `Revert "feat(reup)…"`: xoá `watermark_blur.py` + test, `reup_config`/`reup_processor` về đúng như trước 68b06b9.
+- Lý do: làm mờ chữ ký tác giả trên nội dung người khác để đăng lại là xoá ghi nguồn. Code chưa từng chạy thật (Maintenance chạy từ 25/10, log không có dòng làm mờ nào).
+- Kiểm tra: không còn tham chiếu, ruff sạch; test reup/viral 484 qua, 4 hỏng ở `test_notify_jobless.py` (caption/Whisper) hỏng y hệt trên HEAD trước khi gỡ, ngoài phạm vi.
+- Mục (buffer-chk) ngày 29/10 (kiểm tra Buffer) không còn trong file — bị ghi đè lúc rebase/commit của phiên khác, chưa ghi lại.
+- **Next:** không dựng lại tính năng làm mờ chữ ký tác giả. Hướng nội dung: xin phép tác giả và giữ ghi nguồn, hoặc tự làm hoạt hình mẹo cùng dạng.
+
+---
+
 ## Phiên 2026-10-30 (el) — Báo mã: link lưu mã gắn affiliate + chế độ thử chỉ admin
 
 - Chủ bot: «đăng tay thì gắn được mã aff không» → thử 1 lần trên Chrome chủ bot (cầu nối 192.168.112.1:9223): an_redir bọc trang mã mở đúng trang, URL đích có `utm_medium=affiliates`. a15663f: link trang mã shopee.vn trong kênh tự bọc an_redir, sub_id chung `VOUCHERS` (đơn không gắn khách, chủ bot có hoa hồng).
