@@ -277,6 +277,7 @@ class ReupProcessor:
         logo_path: Optional[str] = None,
         target_w: Optional[int] = None,
         target_h: Optional[int] = None,
+        watermark_box: Optional[tuple[int, int, int, int]] = None,
     ) -> tuple[str, float, dict[str, Any]]:
         """
         Build FFmpeg video filter chain.
@@ -284,6 +285,11 @@ class ReupProcessor:
         """
         knobs = dict(cls.PRESET_KNOBS.get(preset) or cls.PRESET_KNOBS["safe"])
         filters: list[str] = []
+
+        # Tự động làm mờ logo/watermark trước khi crop/zoom
+        if watermark_box:
+            wx, wy, ww, wh = watermark_box
+            filters.append(f"delogo=x={wx}:y={wy}:w={ww}:h={wh}")
 
         if platform == "tiktok" and height > 200:
             crop_bottom = 50
@@ -328,6 +334,7 @@ class ReupProcessor:
             "reels_1080": reels_canvas,
             "target_width": tw if reels_canvas else 0,
             "target_height": th if reels_canvas else 0,
+            "watermark_box": watermark_box,
         }
 
         # Logo overlay needs filter_complex — handled separately in process()
@@ -1068,6 +1075,21 @@ class ReupProcessor:
             )
 
         logo_path = cls._resolve_logo_path()
+
+        # Tự động phát hiện và làm mờ watermark (không xóa, dùng delogo)
+        auto_blur = bool(cfg.get("auto_blur_watermark", True))
+        watermark_box = None
+        if auto_blur:
+            try:
+                from app.core.media.watermark_blur import detect_watermark_box
+                kw = cfg.get("watermark_keywords") or []
+                corner = str(cfg.get("watermark_corner") or "auto")
+                watermark_box = detect_watermark_box(input_path, target_keywords=kw, preferred_zone=corner)
+                if watermark_box:
+                    logger.info("[ReupProcessor] Tự động phát hiện & làm mờ watermark tại: %s", watermark_box)
+            except Exception as exc:
+                logger.warning("[ReupProcessor] Quét watermark thất bại: %s", exc)
+
         vf, speed_factor, applied = cls._build_filter_chain(
             platform,
             width,
@@ -1076,6 +1098,7 @@ class ReupProcessor:
             logo_path=logo_path,
             target_w=target_w,
             target_h=target_h,
+            watermark_box=watermark_box,
         )
 
         if sys.platform.startswith("win"):

@@ -56,6 +56,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "reels_target_height": 1920,
     "reels_1080_crf": 23,
     "reels_1080_x264_preset": "veryfast",
+    # Auto Watermark Blurring (delogo/blur)
+    "auto_blur_watermark": True,
+    "watermark_keywords": [],
+    "watermark_corner": "auto",
 }
 
 _PAGE_SLUG_RE = re.compile(r"[^a-zA-Z0-9._-]+")
