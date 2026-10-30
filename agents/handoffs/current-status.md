@@ -1,3 +1,13 @@
+## Phiên 2026-10-30 (ek) — Báo mã: thử thật, bỏ giới hạn, gửi mọi khách
+
+- Chủ bot làm xong: bot chuyển tin `zt_noti_voucher_bot`, kênh riêng tư «ZT báo mã» (đã gắn), AddLiveTag theo dõi `METAPARIGDOCT2211` (Instagram giảm 22%, tối đa 300K, đơn từ 50K, hiệu lực tới 2038). Thử mã tay `TEST123` → bot gửi chủ bot sau 1 giây; chủ bot bảo gỡ → backup `cashback-manual-20261030T060926Z.sqlite`, đặt `TEST123` = out.
+- Chủ bot: «cứ có mã là báo, không cần giới hạn gì hết» + chọn gửi mọi khách, 0h nhắn ngay. 56e589e: gửi mọi khách đã tạo link (khách tự tắt bằng 🔕 / `/magiam`), bỏ khung 8–22, bỏ cách 12 giờ, bỏ 3 tin / ngày. Toàn bộ test 940 qua, 1 hỏng có sẵn (`test_b9…`).
+- Tìm mã Shopee (Chrome WSL, không đăng nhập, chỉ đọc): Voucher Xtra `VCXBL1030` / `VCXBH1030` / `VCXBHH1030` đang hết lượt; 11.11 chỉ có mã SPayLater; còn lại mã người mới.
+- Điều khiển Chrome Windows: gọi Windows từ WSL chập chờn (`UtilAcceptVsock accept4 failed 110`). Đã viết `C:\Users\Admin\claude-tools\` (cầu nối portproxy 9223 chỉ trên card WSL + luật tường lửa, file gỡ, file mở Chrome). Lệnh admin bị chặn tự động; chủ bot chạy lần 1 chưa có quyền Administrator → chưa bật.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` (nạp 56e589e). Chủ bot chạy lại script cầu nối bằng Administrator nếu muốn em dùng Chrome Windows; xong việc chạy `tat-cau-noi-chrome.ps1`.
+
+---
+
 ## Phiên 2026-10-30 (ej) — PLAN-104: báo mã giảm giá Shopee qua AddLiveTag Theo dõi Voucher
 
 - Chủ bot chọn hướng 2 (báo mã ngay trong bot, «all in one»). Khảo sát qua Chrome của chủ bot (profile `shopee-affiliate-poc`, chủ bot đăng nhập): API `api/portal/voucher-*.php` chỉ có phiên đăng nhập web, không có API key; kho mã dùng chung có 1 mã (đã hết); gói 1 kênh / 3 link. Đã xoá file ghi mạng và mã nguồn tạm.
