@@ -2,7 +2,7 @@
 
 Callback: c:eg:home · c:eg:on · c:eg:off · c:eg:nudge:on|off · c:eg:drop:on|off · c:eg:v:<lượt> · c:eg:ok:<lượt> ·
 c:eg:skip:<lượt> · c:eg:undo:<lượt> · 🎟 Báo mã (PLAN-104): c:eg:vc:home · c:eg:vc:on|off · c:eg:vc:bind:<kênh> ·
-c:eg:vc:unbind.
+c:eg:vc:unbind · c:eg:vc:all|test (gửi khách / chỉ admin).
 <lượt> = <ngày ISO>:<eve|day>. Ghi 📊 Lịch sử action `sale_reminder`.
 """
 
@@ -31,6 +31,8 @@ def history_line(before: dict, after: dict) -> str:
     if "voucher_channel" in after:
         channel = after["voucher_channel"]
         return f"Báo mã: {'gắn kênh ' + str(after.get('title') or channel) if channel else 'gỡ kênh'}"
+    if "voucher_audience" in after:
+        return f"Báo mã: {'gửi mọi khách' if after['voucher_audience'] == 'all' else 'chế độ thử, chỉ admin'}"
     if "voucher" in after:
         return f"Báo mã giảm giá: {'bật' if after['voucher'] else 'tắt'}"
     if "drop" in after:
@@ -185,12 +187,20 @@ class EngagementAdmin:
                 self._log(admin_id, {"voucher_channel": None},
                           {"voucher_channel": seen["id"], "title": seen.get("title")}, now)
                 notice = "✅ Đã gắn kênh. Tin AddLiveTag trong kênh này sẽ được gửi cho khách đã bật."
+        elif data in ("c:eg:vc:all", "c:eg:vc:test"):
+            live = data.endswith(":all")
+            self.repo.set_state(voucher.AUDIENCE_KEY, "all" if live else "test")
+            self._log(admin_id, {"voucher_audience": "test" if live else "all"},
+                      {"voucher_audience": "all" if live else "test"}, now)
+            notice = ("📣 Đã bật gửi khách: có mã là bot nhắn mọi khách đã tạo link." if live else
+                      "🧪 Đã về chế độ thử: tin báo mã chỉ gửi admin.")
         elif data == "c:eg:vc:unbind":
             old = voucher.channel(self.repo)
             self.repo.set_state(voucher.CHANNEL_KEY, "")
             self._log(admin_id, {"voucher_channel": old}, {"voucher_channel": None}, now)
             notice = "Đã gỡ kênh. Bot không đọc tin kênh nào nữa."
         on, bound, seen = voucher.enabled(self.repo), voucher.channel(self.repo), voucher.seen_channel(self.repo)
+        live = voucher.to_customers(self.repo)
         with self.repo.connect() as conn:
             numbers = voucher.stats(conn, now)
         skipped = self.repo.get_state(voucher.SKIPPED_KEY) or "0"
@@ -199,7 +209,9 @@ class EngagementAdmin:
             lines += [notice, ""]
         last = numbers["last"]
         lines += [
-            f"Trạng thái: {'🟢 Đang bật' if on else '⚪ Đang tắt'} · {numbers['on']} khách nhận báo mã",
+            f"Trạng thái: {'🟢 Đang bật' if on else '⚪ Đang tắt'}",
+            ("Người nhận: 📣 <b>mọi khách</b> đã tạo link, chưa tắt báo mã: " + str(numbers["on"]) + " khách" if live else
+             f"Người nhận: 🧪 <b>chỉ admin</b> (chế độ thử). Bật gửi khách thì {numbers['on']} khách sẽ nhận."),
             f"Kênh: {'đã gắn (' + str(bound) + ')' if bound else '⚪ chưa gắn'}",
             f"7 ngày qua: {numbers['posts']} tin mã · {numbers['sent']} tin gửi khách · tin không đọc được: {skipped}",
             f"Mã gần nhất: {html.escape(last[0])} lúc {_clock(last[1])}" if last else "Chưa nhận mã nào.",
@@ -217,6 +229,8 @@ class EngagementAdmin:
             lines += ["", "Chưa thấy kênh nào: thêm bot hoàn tiền làm quản trị kênh rồi đăng một tin bất kỳ vào kênh."]
         if bound:
             rows.append((("Gỡ kênh", "c:eg:vc:unbind"),))
+        rows.append(((("🧪 Về chế độ thử (chỉ admin)", "c:eg:vc:test") if live else
+                      ("📣 Bật gửi khách", "c:eg:vc:all")),))
         rows.append(((("⚪ Tắt báo mã", "c:eg:vc:off") if on else ("🟢 Bật báo mã", "c:eg:vc:on")),))
         return BotReply("\n".join(lines), inline_keyboard=(*rows, (("◀️ Nhắc mùa sale", HOME),), *NAV))
 

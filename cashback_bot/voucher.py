@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
+from cashback_bot.affiliate import build_voucher_redir
 from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import BotReply
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
@@ -24,6 +25,9 @@ CHANNEL_KEY = "voucher_channel"
 SEEN_KEY = "voucher_seen_channel"
 SKIPPED_KEY = "voucher_skipped"
 ON_PREFIX = "voucher_on:"
+# Người nhận: "all" = mọi khách; vắng = chế độ thử, chỉ admin (chủ bot 2026-10-30: «cần test trước cho admin đã»).
+AUDIENCE_KEY = "voucher_audience"
+TEST_NOTE = "🧪 <i>Tin thử: chỉ admin nhận. Bật gửi khách ở /admin → 📣 Nhắc mùa sale → 🎟 Báo mã.</i>"
 CATEGORY = "voucher"
 EVENT_TYPE = "VOUCHER"
 LIST = "u:vc:l"
@@ -139,6 +143,10 @@ def seen_channel(repo: TrackingRepository) -> dict:
     return value if isinstance(value, dict) and isinstance(value.get("id"), int) else {}
 
 
+def to_customers(repo: TrackingRepository) -> bool:
+    return repo.get_state(AUDIENCE_KEY) == "all"
+
+
 def is_on(repo: TrackingRepository, user: int) -> bool:
     """Mặc định nhận (chủ bot 2026-10-30: «cứ có mã là báo»); khách tắt thì `voucher_on:<id>` = "0"."""
     return repo.get_state(f"{ON_PREFIX}{user}") != "0"
@@ -164,8 +172,20 @@ def subscribers(conn: sqlite3.Connection, now: datetime) -> list[int]:
 # --- Tin trong kênh ---------------------------------------------------------------------------------------------
 
 
-def handle_post(repo: TrackingRepository, post: dict, edited: bool, now: datetime) -> int:
-    """Một tin trong kênh. Trả số tin khách đã xếp hàng."""
+def _with_affiliate(url: str | None, affiliate_id: str | None) -> str | None:
+    """Link lưu mã gắn affiliate (sub_id chung). Không bọc được (link rút gọn…) thì giữ link gốc."""
+    if not url or not affiliate_id:
+        return url
+    try:
+        return build_voucher_redir(url, affiliate_id)
+    except ValueError:
+        return url
+
+
+def handle_post(repo: TrackingRepository, post: dict, edited: bool, now: datetime,
+                affiliate_id: str | None = None, admins: frozenset[int] = frozenset()) -> int:
+    """Một tin trong kênh. Trả số tin đã xếp hàng. Link lưu mã lưu sẵn dạng đã gắn affiliate.
+    Chế độ thử (mặc định): chỉ gửi `admins`."""
     chat = post.get("chat") or {}
     chat_id, message_id = chat.get("id"), post.get("message_id")
     if chat.get("type") != "channel" or not isinstance(chat_id, int) or not isinstance(message_id, int):
@@ -184,7 +204,7 @@ def handle_post(repo: TrackingRepository, post: dict, edited: bool, now: datetim
             conn.execute("UPDATE voucher_posts SET status = 'out', updated_at = ? WHERE channel_id = ? AND code = ? "
                          "AND status = 'live'", (stamp, chat_id, voucher.code))
             return 0
-        url = find_url(post)
+        url = _with_affiliate(find_url(post), affiliate_id)
         status = "out" if voucher.out else "live"
         row = conn.execute("SELECT id FROM voucher_posts WHERE channel_id = ? AND message_id = ?",
                            (chat_id, message_id)).fetchone()
@@ -201,14 +221,19 @@ def handle_post(repo: TrackingRepository, post: dict, edited: bool, now: datetim
         # Có mã là gửi ngay, mọi giờ (chủ bot 2026-10-30). Tin AddLiveTag sửa lại (% đã dùng) thì không gửi lại.
         if edited or voucher.out or not enabled(repo):
             return 0
-        return _send(conn, cursor.lastrowid, voucher, url, now)
+        if to_customers(repo):
+            return _send(conn, cursor.lastrowid, voucher, url, now, subscribers(conn, now))
+        return _send(conn, cursor.lastrowid, voucher, url, now, sorted(admins), test=True)
 
 
-def _send(conn: sqlite3.Connection, post_id: int, voucher: Voucher, url: str | None, now: datetime) -> int:
+def _send(conn: sqlite3.Connection, post_id: int, voucher: Voucher, url: str | None, now: datetime,
+          targets: list[int], test: bool = False) -> int:
     text, keyboard = alert(voucher, url)
+    if test:
+        text = f"{TEST_NOTE}\n\n{text}"
     stamp = _stamp(now)
     sent = 0
-    for user in subscribers(conn, now):
+    for user in targets:
         if enqueue_event(conn, event_key=f"voucher:{post_id}:{user}", event_type=EVENT_TYPE, chat_id=user,
                          message_html=text, audience="customer", category=CATEGORY, source_ref=f"voucher:{post_id}",
                          reply_markup_json=json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False), now=stamp):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import secrets
 import string
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from cashback_bot.shopee_url import food_url, is_canonical_product_url
 
@@ -35,6 +35,22 @@ def build_an_redir(product_url: str, affiliate_id: str, sub_id: str) -> str:
             "sub_id": sub_id,
         }
     )
+    return f"https://s.shopee.vn/an_redir?{query}"
+
+
+# Link lưu mã giảm giá (PLAN-104): chung một sub_id, đơn mua sau khi lưu mã tính hoa hồng cho chủ bot, không gắn khách.
+# Thử 30/10/2026: an_redir mở đúng trang mã, URL đích có utm_medium=affiliates.
+VOUCHER_SUB_ID = "VOUCHERS"
+
+
+def build_voucher_redir(link: str, affiliate_id: str) -> str:
+    """Bọc link trang mã shopee.vn bằng an_redir. Link khác (rút gọn, sàn khác) thì ValueError."""
+    parsed = urlparse(link)
+    if parsed.scheme != "https" or (parsed.hostname or "").lower() != "shopee.vn" or parsed.username or parsed.password:
+        raise ValueError("voucher url")
+    if not affiliate_id.isdigit():
+        raise ValueError("affiliate id")
+    query = urlencode({"origin_link": link, "affiliate_id": affiliate_id, "sub_id": VOUCHER_SUB_ID})
     return f"https://s.shopee.vn/an_redir?{query}"
 
 

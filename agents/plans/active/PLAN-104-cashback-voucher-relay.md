@@ -83,3 +83,19 @@
 - Thử thật 30/10: mã tay `TEST123` đăng vào kênh → bot gửi chủ bot sau 1 giây; chủ bot bảo gỡ → backup
   `cashback-manual-20261030T060926Z.sqlite`, đặt `TEST123` = out.
 - AddLiveTag đang theo dõi `METAPARIGDOCT2211` (Instagram giảm 22%, tối đa 300K, đơn từ 50K, hiệu lực tới 2038).
+
+## Link lưu mã gắn affiliate (30/10, chủ bot: «đăng tay thì gắn được mã aff không» → «em thử xem»)
+- Thử 1 lần trên Chrome chủ bot: `s.shopee.vn/an_redir?origin_link=<trang mã VCXBHH1030>&affiliate_id=…&sub_id=VOUCHER`
+  mở đúng trang mã, URL đích có `promotionId` và `utm_medium=affiliates`.
+- Mức 1 (sub_id chung `VOUCHERS`, 8 ký tự như sub_id link): link trang mã `https://shopee.vn/…` trong tin kênh (AddLiveTag hay
+  đăng tay) được bọc an_redir trước khi lưu và gửi khách. Link rút gọn / không phải shopee.vn giữ nguyên.
+- Đơn sub_id `VOUCHERS` không khớp link bot nên không gắn khách, không thành tiền hoàn; chủ bot có hoa hồng. Khách dán link món
+  vào bot sau đó thì lượt bấm mới (sub_id của khách) được tính như thường.
+- `affiliate.build_voucher_redir`, `voucher.handle_post(..., affiliate_id)`. Test `test_link_luu_ma_gan_affiliate_sub_id_chung`.
+
+## Chế độ thử: chỉ admin (30/10, chủ bot: «cần test trước cho admin đã»)
+- `bot_state.voucher_audience`: vắng / "test" = chỉ gửi admin (`CASHBACK_ADMIN_USER_IDS`), đầu tin có dòng 🧪 Tin thử;
+  "all" = mọi khách theo luật trên. Mặc định là thử.
+- /admin → 📣 Nhắc mùa sale → 🎟 Báo mã: 📣 Bật gửi khách / 🧪 Về chế độ thử, màn ghi số khách sẽ nhận; ghi 📊 Lịch sử.
+- Test `test_che_do_thu_mac_dinh_chi_gui_admin`. Toàn bộ (trước chế độ thử) 941 qua, 1 hỏng có sẵn (`test_b9…`);
+  sau chế độ thử chạy lại 9 file liên quan: 144 qua. Ruff sạch.

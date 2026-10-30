@@ -40,6 +40,7 @@ def _bind(bot) -> None:
     screen = admin.route(1, VOUCHER_HOME, NOW)
     [bind] = [data for row in screen.inline_keyboard for _label, data in row if data.startswith("c:eg:vc:bind:")]
     assert "Đã gắn kênh" in admin.route(1, bind, NOW).text
+    assert "Đã bật gửi khách" in admin.route(1, "c:eg:vc:all", NOW).text
 
 
 def _rows(bot, sql: str, *args):
@@ -186,3 +187,51 @@ def test_zalo_go_magiam_va_chon_so_bat(tmp_path):
     channel.handle(_update("1", "m4"), now=NOW)
     assert "Đã tắt báo mã" in zalo.sent[-1][1]
     assert voucher.handle_post(bot.repo, _post(DEFAULT.replace("METAPARIGDOCT2211", "NEW111"), 51), False, NOW) == 0
+
+
+def test_link_luu_ma_gan_affiliate_sub_id_chung(tmp_path):
+    from urllib.parse import parse_qs, urlparse
+
+    from cashback_bot.affiliate import VOUCHER_SUB_ID, build_voucher_redir
+
+    wrapped = build_voucher_redir(VOUCHER_URL, "17300000000")
+    query = parse_qs(urlparse(wrapped).query)
+    assert wrapped.startswith("https://s.shopee.vn/an_redir?")
+    assert query == {"origin_link": [VOUCHER_URL], "affiliate_id": ["17300000000"], "sub_id": [VOUCHER_SUB_ID]}
+    for bad in ("https://s.shopee.vn/abc", "http://shopee.vn/voucher/x", "https://u:p@shopee.vn/voucher/x"):
+        try:
+            build_voucher_redir(bad, "17300000000")
+        except ValueError:
+            continue
+        raise AssertionError(bad)
+    bot = _bot(tmp_path)
+    _bind(bot)
+    bot.repo.set_state(f"{voucher.ON_PREFIX}{USER}", "1")
+    post = _post(DEFAULT, 60, entities=[{"type": "text_link", "url": VOUCHER_URL}])
+    assert voucher.handle_post(bot.repo, post, False, NOW, "17300000000") == 1
+    [row] = _sent(bot)
+    assert json.loads(row["reply_markup_json"])["inline_keyboard"][0][0]["url"] == wrapped
+    assert voucher.list_reply(bot.repo, USER, NOW).button_url == wrapped
+    voucher.handle_post(bot.repo, _post(DEFAULT.replace("METAPARIGDOCT2211", "SHORT1") + "\nhttps://s.shopee.vn/abc", 61),
+                        False, NOW, "17300000000")
+    assert _rows(bot, "SELECT url FROM voucher_posts WHERE message_id = 61")[0]["url"] == "https://s.shopee.vn/abc", \
+        "link rút gọn không bọc được thì giữ nguyên"
+
+
+def test_che_do_thu_mac_dinh_chi_gui_admin(tmp_path):
+    bot = _bot(tmp_path)
+    bot.handle_text(USER, "u", "https://shopee.vn/product/9/8", update_id=next(_ids), now=NOW)
+    voucher.handle_post(bot.repo, _post("xin chào"), False, NOW)
+    admin = EngagementAdmin(bot.repo)
+    admin.route(1, f"c:eg:vc:bind:{CHANNEL}", NOW)
+    screen = admin.route(1, VOUCHER_HOME, NOW)
+    assert "chỉ admin" in screen.text and "1 khách sẽ nhận" in screen.text and "c:eg:vc:all" in _buttons(screen)
+    assert voucher.handle_post(bot.repo, _post(DEFAULT, 70), False, NOW, None, frozenset({999})) == 1
+    [row] = _sent(bot)
+    assert row["chat_id"] == 999 and row["message_html"].startswith(voucher.TEST_NOTE), "chế độ thử: chỉ admin, có nhãn thử"
+    live = admin.route(1, "c:eg:vc:all", NOW)
+    assert "Đã bật gửi khách" in live.text and "c:eg:vc:test" in _buttons(live)
+    assert voucher.handle_post(bot.repo, _post(DEFAULT, 71), False, NOW, None, frozenset({999})) == 1
+    assert _sent(bot)[-1]["chat_id"] == USER and not _sent(bot)[-1]["message_html"].startswith(voucher.TEST_NOTE)
+    assert history_line({}, {"voucher_audience": "all"}) == "Báo mã: gửi mọi khách"
+    assert history_line({}, {"voucher_audience": "test"}) == "Báo mã: chế độ thử, chỉ admin"

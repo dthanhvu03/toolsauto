@@ -187,7 +187,8 @@ class CashbackService:
         post = update.get("channel_post") or update.get("edited_channel_post")
         if isinstance(post, dict):
             # Tin AddLiveTag trong kênh báo mã (PLAN-104): không trả lời trong kênh.
-            voucher.handle_post(self.repo, post, "edited_channel_post" in update, datetime.now(timezone.utc))
+            voucher.handle_post(self.repo, post, "edited_channel_post" in update, datetime.now(timezone.utc),
+                                self.settings.affiliate_id, self.settings.admin_user_ids)
             return None
         message = update.get("message") or {}
         chat = message.get("chat") or {}
