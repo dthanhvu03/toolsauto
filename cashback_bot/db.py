@@ -765,6 +765,26 @@ CREATE TABLE IF NOT EXISTS price_watches (
     FOREIGN KEY (link_id) REFERENCES link_requests(id)
 );
 CREATE INDEX IF NOT EXISTS idx_price_watches_user ON price_watches(telegram_user_id, stopped_at);
+
+-- Mã giảm giá AddLiveTag đọc từ kênh trung gian (PLAN-104, voucher.py). Một dòng = một tin trong kênh.
+CREATE TABLE IF NOT EXISTS voucher_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    name TEXT,
+    discount TEXT,
+    max_discount TEXT,
+    min_spend TEXT,
+    used_percent INTEGER,
+    url TEXT,
+    status TEXT NOT NULL DEFAULT 'live',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    sent INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (channel_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_voucher_posts_code ON voucher_posts(code, created_at);
 """
 
 

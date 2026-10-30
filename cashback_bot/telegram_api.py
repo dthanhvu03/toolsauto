@@ -68,7 +68,9 @@ class TelegramApi:
     def get_updates(self, offset: int) -> list[dict]:
         response = requests.get(
             f"{self._base}/getUpdates",
-            params={"offset": offset, "timeout": 30, "allowed_updates": '["message","callback_query"]'},
+            # channel_post: tin AddLiveTag trong kênh báo mã (PLAN-104, voucher.py).
+            params={"offset": offset, "timeout": 30,
+                    "allowed_updates": '["message","callback_query","channel_post","edited_channel_post"]'},
             timeout=self._timeout,
         )
         response.raise_for_status()

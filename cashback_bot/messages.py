@@ -60,7 +60,8 @@ DESCRIPTION_WALLET = (
 )
 
 
-def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False) -> Keyboard:
+def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
+                  show_voucher: bool = False) -> Keyboard:
     second: tuple[tuple[str, str], ...] = (("💰 Cách tính", "u:p:calc"), ("📩 Hỗ trợ", "u:p:support"))
     if show_rank:
         second += (("🏅 Hạng thành viên", "u:p:rank"),)
@@ -72,6 +73,9 @@ def home_keyboard(show_rank: bool = False, show_wallet: bool = False, show_deals
     if show_deals:
         # 🔥 Deal hôm nay xem ngay trong bot (PLAN-099) và màn chọn danh mục nhận tin (chủ bot duyệt 2026-10-27).
         rows = rows[:1] + ((("🔥 Deal hôm nay", "u:dh"), ("🛍️ Danh mục deal", "u:dc:home")),) + rows[1:]
+    if show_voucher:
+        # 🎟 Mã giảm giá AddLiveTag (PLAN-104): chỉ hiện khi admin đã gắn kênh báo mã.
+        rows = rows[:-2] + ((("🎟 Mã giảm giá", "u:vc:l"),),) + rows[-2:]
     if show_wallet:
         rows = ((("👛 Ví của tôi", "u:p:wallet"),),) + rows
     return rows
@@ -107,6 +111,7 @@ BOT_COMMANDS = (
     ("donhang", "Đơn hàng của tôi"),
     ("deal", "Deal hời hôm nay"),
     ("theodoi", "Món đang theo dõi giá"),
+    ("magiam", "Mã giảm giá Shopee"),
     ("hotro", "Hỗ trợ & khiếu nại"),
     ("thongbao", "Cài đặt thông báo"),
     ("help", "Trợ giúp"),
@@ -388,11 +393,11 @@ def with_tiktok(text: str) -> str:
 
 
 def home_reply(show_rank: bool = False, show_wallet: bool = False, show_deals: bool = False,
-               wallet_open: bool | None = None) -> BotReply:
+               wallet_open: bool | None = None, show_voucher: bool = False) -> BotReply:
     """wallet_open: ví mở rút thật (đổi câu ⓘ); None thì theo show_wallet. Ví xem trước: show_wallet, chưa mở."""
     open_ = show_wallet if wallet_open is None else wallet_open
     return BotReply(HOME_WALLET if open_ else HOME,
-                    inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals))
+                    inline_keyboard=home_keyboard(show_rank, show_wallet, show_deals, show_voucher))
 
 
 def page_reply(text: str) -> BotReply:

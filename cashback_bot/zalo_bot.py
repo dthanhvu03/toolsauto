@@ -68,6 +68,7 @@ SHORTCUTS = {
     "don": "/donhang", "donhang": "/donhang", "vi": "/vi", "hotro": "/hotro", "cachtinh": "/cachtinh",
     "dieukien": "/dieukien", "thongbao": "/thongbao", "hang": "/hang", "deal": "/deal",
     "theodoi": "/theodoi",
+    "magiam": "/magiam",
 }
 
 

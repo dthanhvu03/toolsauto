@@ -211,8 +211,8 @@ def test_dang_ky_ho_so_bot():
             return True
 
     _register_profile(Api(), frozenset({9, 7}))
-    assert calls[0] == ("commands", ["start", "huongdan", "dieukien", "cachtinh", "donhang", "deal", "theodoi", "hotro",
-                                     "thongbao", "help"], None)
+    assert calls[0] == ("commands", ["start", "huongdan", "dieukien", "cachtinh", "donhang", "deal", "theodoi", "magiam",
+                                     "hotro", "thongbao", "help"], None)
     assert ("description", DESCRIPTION) in calls
     assert ("short", SHORT_DESCRIPTION) in calls
     admin_calls = [c for c in calls if c[0] == "commands" and c[2]]

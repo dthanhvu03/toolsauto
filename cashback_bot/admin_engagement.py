@@ -1,22 +1,25 @@
 """/admin → ⚙️ Cài đặt → 📣 Nhắc mùa sale (engagement.py): bật / tắt, lịch 45 ngày tới, xem trước và duyệt từng lượt.
 
 Callback: c:eg:home · c:eg:on · c:eg:off · c:eg:nudge:on|off · c:eg:drop:on|off · c:eg:v:<lượt> · c:eg:ok:<lượt> ·
-c:eg:skip:<lượt> · c:eg:undo:<lượt>.
+c:eg:skip:<lượt> · c:eg:undo:<lượt> · 🎟 Báo mã (PLAN-104): c:eg:vc:home · c:eg:vc:on|off · c:eg:vc:bind:<kênh> ·
+c:eg:vc:unbind.
 <lượt> = <ngày ISO>:<eve|day>. Ghi 📊 Lịch sử action `sale_reminder`.
 """
 
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-from cashback_bot import engagement, price_watch, sale_calendar, watchlist
+from cashback_bot import engagement, price_watch, sale_calendar, voucher, watchlist
 from cashback_bot.db import TrackingRepository
 from cashback_bot.messages import DORMANT_OPENER, BotReply
 from cashback_bot.sale_calendar import ICT, TIER_LABELS
 
 HOME = "c:eg:home"
+VOUCHER_HOME = "c:eg:vc:home"
 _ACTION = re.compile(r"^c:eg:(v|ok|skip|undo):(\d{4}-\d{2}-\d{2}:(?:eve|day))$")
 NAV = ((("◀️ Cài đặt", "c:menu:settings"), ("◀️ Tổng quan", "c:menu:home")),)
 STAGES = {"eve": "tối hôm trước", "day": "trưa trong ngày"}
@@ -25,6 +28,11 @@ AuditFn = Callable[[int, str, dict | None, dict | None, datetime], None]
 
 
 def history_line(before: dict, after: dict) -> str:
+    if "voucher_channel" in after:
+        channel = after["voucher_channel"]
+        return f"Báo mã: {'gắn kênh ' + str(after.get('title') or channel) if channel else 'gỡ kênh'}"
+    if "voucher" in after:
+        return f"Báo mã giảm giá: {'bật' if after['voucher'] else 'tắt'}"
     if "drop" in after:
         return f"Báo giảm giá món khách từng xem: {'bật' if after['drop'] else 'tắt'}"
     if "nudge" in after:
@@ -42,6 +50,13 @@ def _watch_scan(repo) -> str:
     if record.get("status") == "error":
         return f"lượt {hour}h: 🔴 lỗi {record.get('error')}"
     return f"lượt {hour}h: kiểm {record.get('checked', 0)} món, {record.get('sent', 0)} tin"
+
+
+def _clock(stamp: str | None) -> str:
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).astimezone(ICT).strftime("%H:%M %d/%m")
+    except ValueError:
+        return "-"
 
 
 def _when(slot: sale_calendar.Slot) -> str:
@@ -71,6 +86,8 @@ class EngagementAdmin:
             self.repo.set_state(price_watch.ENABLED_KEY, "1" if on else "0")
             self._log(admin_id, {"drop": not on}, {"drop": on}, now)
             return self._home(now, "Đã bật báo giảm giá." if on else "Đã tắt báo giảm giá.")
+        if data.startswith("c:eg:vc:"):
+            return self._voucher(admin_id, data, now)
         if data in ("c:eg:pw:on", "c:eg:pw:off"):
             on = data.endswith(":on")
             self.repo.set_state(watchlist.ENABLED_KEY, "1" if on else "0")
@@ -148,8 +165,60 @@ class EngagementAdmin:
         nudge = ("⚪ Tắt nhắc link", "c:eg:nudge:off") if nudge_on else ("🟢 Bật nhắc link", "c:eg:nudge:on")
         drop = ("⚪ Tắt báo giảm giá", "c:eg:drop:off") if drop_on else ("🟢 Bật báo giảm giá", "c:eg:drop:on")
         watch = ("⚪ Tắt theo dõi giá", "c:eg:pw:off") if watch_on else ("🟢 Bật theo dõi giá", "c:eg:pw:on")
-        return BotReply("\n".join(lines), inline_keyboard=((toggle, nudge), (drop, watch), (("🔥 Deal hời", "c:dl:home"),),
+        return BotReply("\n".join(lines), inline_keyboard=((toggle, nudge), (drop, watch), (("🔥 Deal hời", "c:dl:home"),
+                                                           ("🎟 Báo mã", VOUCHER_HOME)),
                                                            (("📣 Tin giới thiệu", "c:an:home"),), *rows[:8], *NAV))
+
+    def _voucher(self, admin_id: int, data: str, now: datetime, notice: str = "") -> BotReply:
+        """🎟 Báo mã giảm giá (voucher.py): gắn kênh trung gian, bật / tắt, số liệu."""
+        if data in ("c:eg:vc:on", "c:eg:vc:off"):
+            on = data.endswith(":on")
+            self.repo.set_state(voucher.ENABLED_KEY, "1" if on else "0")
+            self._log(admin_id, {"voucher": not on}, {"voucher": on}, now)
+            notice = "Đã bật báo mã." if on else "Đã tắt báo mã."
+        elif data.startswith("c:eg:vc:bind:"):
+            seen = voucher.seen_channel(self.repo)
+            if str(seen.get("id")) != data.removeprefix("c:eg:vc:bind:"):
+                notice = "Nút này không còn hiệu lực, mở lại màn Báo mã."
+            else:
+                self.repo.set_state(voucher.CHANNEL_KEY, str(seen["id"]))
+                self._log(admin_id, {"voucher_channel": None},
+                          {"voucher_channel": seen["id"], "title": seen.get("title")}, now)
+                notice = "✅ Đã gắn kênh. Tin AddLiveTag trong kênh này sẽ được gửi cho khách đã bật."
+        elif data == "c:eg:vc:unbind":
+            old = voucher.channel(self.repo)
+            self.repo.set_state(voucher.CHANNEL_KEY, "")
+            self._log(admin_id, {"voucher_channel": old}, {"voucher_channel": None}, now)
+            notice = "Đã gỡ kênh. Bot không đọc tin kênh nào nữa."
+        on, bound, seen = voucher.enabled(self.repo), voucher.channel(self.repo), voucher.seen_channel(self.repo)
+        with self.repo.connect() as conn:
+            numbers = voucher.stats(conn, now)
+        skipped = self.repo.get_state(voucher.SKIPPED_KEY) or "0"
+        lines = ["🎟 <b>Báo mã giảm giá</b>", ""]
+        if notice:
+            lines += [notice, ""]
+        last = numbers["last"]
+        lines += [
+            f"Trạng thái: {'🟢 Đang bật' if on else '⚪ Đang tắt'} · {numbers['on']} khách bật báo mã",
+            f"Kênh: {'đã gắn (' + str(bound) + ')' if bound else '⚪ chưa gắn'}",
+            f"7 ngày qua: {numbers['posts']} tin mã · {numbers['sent']} tin gửi khách · tin không đọc được: {skipped}",
+            f"Mã gần nhất: {html.escape(last[0])} lúc {_clock(last[1])}" if last else "Chưa nhận mã nào.",
+            "",
+            "AddLiveTag Theo dõi Voucher gửi tin vào kênh Telegram riêng tư bằng <b>bot chuyển tin</b> (bot riêng, không",
+            "dùng token bot hoàn tiền). Bot hoàn tiền là quản trị kênh, đọc tin rồi gửi khách đã bật (/magiam):",
+            "8:00–22:00, một mã cách 12 giờ, mỗi khách tối đa 3 tin / ngày.",
+        ]
+        rows = []
+        if seen and seen["id"] != bound:
+            lines += ["", f"Kênh vừa đăng tin: <b>{html.escape(str(seen.get('title') or seen['id']))}</b> lúc "
+                          f"{_clock(seen.get('at'))}"]
+            rows.append(((f"✅ Dùng kênh «{str(seen.get('title') or seen['id'])[:30]}»", f"c:eg:vc:bind:{seen['id']}"),))
+        elif not bound:
+            lines += ["", "Chưa thấy kênh nào: thêm bot hoàn tiền làm quản trị kênh rồi đăng một tin bất kỳ vào kênh."]
+        if bound:
+            rows.append((("Gỡ kênh", "c:eg:vc:unbind"),))
+        rows.append(((("⚪ Tắt báo mã", "c:eg:vc:off") if on else ("🟢 Bật báo mã", "c:eg:vc:on")),))
+        return BotReply("\n".join(lines), inline_keyboard=(*rows, (("◀️ Nhắc mùa sale", HOME),), *NAV))
 
     def _preview(self, slot: sale_calendar.Slot, now: datetime, notice: str = "") -> BotReply:
         state = engagement.status(self.repo, slot)
