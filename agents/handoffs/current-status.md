@@ -1,3 +1,17 @@
+## Phiên 2026-10-30 (ej) — PLAN-104: báo mã giảm giá Shopee qua AddLiveTag Theo dõi Voucher
+
+- Chủ bot chọn hướng 2 (báo mã ngay trong bot, «all in one»). Khảo sát qua Chrome của chủ bot (profile `shopee-affiliate-poc`, chủ bot đăng nhập): API `api/portal/voucher-*.php` chỉ có phiên đăng nhập web, không có API key; kho mã dùng chung có 1 mã (đã hết); gói 1 kênh / 3 link. Đã xoá file ghi mạng và mã nguồn tạm.
+- Cách A, 7f31b75: AddLiveTag → **bot chuyển tin riêng** → kênh Telegram riêng tư → bot hoàn tiền (quản trị kênh) đọc `channel_post` → gửi khách đã bật (Telegram + Zalo):
+  - đọc mẫu tin mặc định AddLiveTag, mẫu có nhãn, tin hết mã; link Shopee trong tin thành nút 🎟 Lưu mã;
+  - 8:00–22:00, một mã cách 12 giờ, tối đa 3 tin / khách / ngày; khách tự bật (mặc định tắt);
+  - `/magiam` (Zalo `magiam`), nút 🎟 Mã giảm giá ở trang chủ khi đã gắn kênh;
+  - admin: 📣 Nhắc mùa sale → 🎟 Báo mã: gắn / gỡ kênh, bật / tắt, số liệu.
+- Không dùng token bot hoàn tiền cho AddLiveTag (tranh `getUpdates`, lộ quyền điều khiển, bot không đọc được tin của chính mình).
+- Bảng mới `voucher_posts`. Backup trước restart: `cashback-manual-20261030T043250Z.sqlite`. Toàn bộ test 940 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo`, rồi làm 5 bước trong PLAN-104 («Chủ bot làm sau khi restart»). Sau «Gửi thử» trên AddLiveTag: kiểm chỉ đọc `voucher_posts` (bot đọc đúng mã, có link hay không).
+
+---
+
 ## Phiên 2026-10-29 (ei) — Tin giới thiệu watch-v1
 
 - Chủ bot: «làm thông báo gửi tới mọi người có tính năng mới». Thêm tin `watch-v1` vào 📣 Tin giới thiệu: theo dõi giá, deal gửi liền, ShopeeFood sắp có; nút 🔥 Deal hôm nay / 📋 Món đang theo dõi. Zalo: `/deal` → «gõ deal».
