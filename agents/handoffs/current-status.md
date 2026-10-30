@@ -1,3 +1,15 @@
+## Phiên 2026-10-30 (buffer-chk2) — Báo cáo Buffer: Maintenance tắt từ 14:53 (chỉ đọc log + DB)
+
+- **WSL tắt 07:53Z (14:53 VN), khởi động lại 07:54Z và 08:00Z.** Bot cashback và store_bot (systemd) tự lên lại. PM2 không có `pm2 startup` nên Maintenance, Web_Dashboard, 9Router_Gateway và DB_Backup **không chạy lại**; không còn xếp lịch Buffer mới. Danh sách tiến trình cũ còn trong `~/.pm2/dump.pm2` (đã chép ra `dump.pm2.before-20261030-reboot`). Lúc 08:50Z một lệnh `pm2 jlist` khi kiểm tra đã bật daemon PM2 rỗng.
+- Buffer vẫn giữ bài đã hẹn nên page còn lên bài tới: Sống Nhẹ 01/11 14:30; trnvp89, Hoa Lệ Đây, Uyển Nhi 02/11.
+- Job: 29/10 có 14 DONE, 3 FAILED; 30/10 tới 14:53 có 8 DONE, 2 FAILED. Cả 5 lỗi đều «Scheduled posts limit reached 10/10» rơi đúng giờ hẹn (19:00, 19:30, 14:01), cùng kiểu đã báo ở (buffer-chk). 2/5 request của ZVsP trong ngày bị phí vì lỗi này.
+- Suất 30 ngày còn: f8pL 1387/2000, RZX2 466/2000, ZVsP 81/1000 (khoảng 5 request/ngày, còn khoảng 16 ngày).
+- Sync «đã đăng» vẫn tắt trên cả 3 key (mức giữ 70%): lần xác nhận cuối là 28/10 22:29. Qua giờ hẹn mà chưa xác nhận: Hoa Lệ Đây 25, Sống Nhẹ 16, trnvp89 14, Uyển Nhi 5.
+- Kho READY chưa hẹn: Hoa Lệ Đây 179, Sống Nhẹ 21, trnvp89 11, **Uyển Nhi 0** (sau 02/11 15:30 hết bài). Từ 29/10 không có video mới.
+- **Next:** chủ bot bật lại PM2: `pm2 start ecosystem.config.js --only Maintenance,9Router_Gateway,Web_Dashboard,DB_Backup && pm2 save`; muốn tự lên khi WSL khởi động lại thì chạy thêm `pm2 startup`. Bật nguồn video cho Uyển Nhi. Sửa lỗi race hàng chờ và sync bị mức giữ 70% chặn thì cần PLAN backend.
+
+---
+
 ## Phiên 2026-10-30 (git-clean) — Dọn worktree và nhánh local
 
 - Đã xoá worktree `/home/vu/toolsauto-cashback-notifications` (sạch, a15663f đã có trên origin/main).
