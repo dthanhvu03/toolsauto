@@ -6,7 +6,8 @@
 - Suất 30 ngày còn: f8pL 1387/2000, RZX2 466/2000, ZVsP 81/1000 (khoảng 5 request/ngày, còn khoảng 16 ngày).
 - Sync «đã đăng» vẫn tắt trên cả 3 key (mức giữ 70%): lần xác nhận cuối là 28/10 22:29. Qua giờ hẹn mà chưa xác nhận: Hoa Lệ Đây 25, Sống Nhẹ 16, trnvp89 14, Uyển Nhi 5.
 - Kho READY chưa hẹn: Hoa Lệ Đây 179, Sống Nhẹ 21, trnvp89 11, **Uyển Nhi 0** (sau 02/11 15:30 hết bài). Từ 29/10 không có video mới.
-- **Next:** chủ bot bật lại PM2: `pm2 start ecosystem.config.js --only Maintenance,9Router_Gateway,Web_Dashboard,DB_Backup && pm2 save`; muốn tự lên khi WSL khởi động lại thì chạy thêm `pm2 startup`. Bật nguồn video cho Uyển Nhi. Sửa lỗi race hàng chờ và sync bị mức giữ 70% chặn thì cần PLAN backend.
+- **Đã bật lại (chủ bot duyệt), 09:30Z:** `pm2 start ecosystem.config.js --only Maintenance,9Router_Gateway,Web_Dashboard,DB_Backup` + `pm2 save`. 3 app online, 0 restart; DB_Backup chạy 1 lần (pg_dump 7,1 MB, offsite bỏ qua vì không thấy ổ G:) rồi stopped như cấu hình cron. Dashboard trả 401 (cần đăng nhập, bình thường). Lỗi `9Router provider auth unavailable (404)` có từ trước (272 lần trong log), AI tự chuyển sang Gemini và chạy được. `pm2 startup` bị chặn quyền, **chưa cài** nên WSL khởi động lại thì PM2 vẫn không tự lên.
+- **Next:** chủ bot tự chạy `pm2 startup` (in ra 1 lệnh, chạy lệnh đó) rồi `pm2 save`. Bật nguồn video cho Uyển Nhi. Sửa lỗi race hàng chờ và sync bị mức giữ 70% chặn thì cần PLAN backend.
 
 ---
 
