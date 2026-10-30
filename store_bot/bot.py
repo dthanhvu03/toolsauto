@@ -19,11 +19,13 @@ import requests
 
 from cashback_bot import vietqr
 from store_bot import messages as msg
+from store_bot import pricing
 from store_bot.config import ConfigError, Settings, default_dotenv, load_settings
 from store_bot.db import Order, Product, StoreError, StoreRepository, Topup, User
+from store_bot.pricing import Markup
 from store_bot.fulfill import Fulfiller
 from store_bot.telegram_api import TelegramApi
-from store_bot.upstream import BuyResult, FatCatClient, UpstreamError
+from store_bot.upstream import BuyResult, FatCatClient, UpstreamError, retail_price
 
 logger = logging.getLogger("store_bot")
 LOCK_PATH = "/tmp/store_bot.lock"
@@ -34,6 +36,7 @@ RETRY_AFTER_SEC = 40  # đơn mới để luồng mua xử lý trước, quá m�
 STUCK_ALERT_SEC = 15 * 60
 ANNOUNCE_GAP_SEC = 20 * 60  # một món không đăng kênh dày hơn mức này
 BROADCAST_DELAY_SEC = 0.05  # ~20 tin/giây, dưới giới hạn 30 tin/giây của Telegram
+MARKUP_DAYS = 30  # xem trước dòng tăng giá theo số món bán trong 30 ngày qua
 CALLBACK_GAP_SEC = 24 * 3600  # /supportadmin: mỗi khách 1 lần/ngày
 
 
@@ -201,7 +204,7 @@ class StoreBot:
         answer: str | None = None
         alert = False
         try:
-            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "al", "async", "abt", "aic"}:
+            if parts[0] == "a" or data in {"adm", "ap", "apn", "ak", "akn", "at", "aa", "as", "al", "async", "abt", "aic", "amk", "amp"}:
                 if not self.is_admin(user.user_id):
                     answer = "Không có quyền."
                 else:
@@ -573,6 +576,10 @@ class StoreBot:
         elif data == "abt":
             self.repo.set_state("restock_dm", "0" if self.restock_dm_enabled() else "1")
             self.show_admin(chat_id, message_id)
+        elif data == "amk":
+            self.show_markup(chat_id, message_id)
+        elif data == "amp":
+            self.show_markup_products(chat_id, message_id)
         elif data == "aic":
             self.show_admin_icons(chat_id, message_id)
         elif data == "async":
@@ -623,6 +630,8 @@ class StoreBot:
             product = self.repo.get_product(ident)
             self._show(chat_id, message_id, f"✅ Nhập xong {added} món. Tồn kho: {product.stock if product else 0}.{note}",
                        keyboard([button("⬅️ Sản phẩm", f"a:p:{ident}")]))
+        elif action in {"mkh", "mkp", "mka", "mkx"}:
+            return self._on_markup(chat_id, message_id, user, action, ident, parts[3] if len(parts) > 3 else "")
         elif action in {"ic", "icx"}:
             brand = msg.BRANDS[ident]
             if action == "icx":
@@ -694,10 +703,77 @@ class StoreBot:
             sync_row,
             [button(("🔔 Nhắn khách hàng mới: Bật" if self.restock_dm_enabled() else "🔕 Nhắn khách hàng mới: Tắt"),
                     "abt")],
+            [button("💲 Tăng giá bán", "amk")] if self.fulfiller.client else [],
             [button("🔑 Khóa API đại lý", "ak"), button("🎨 Logo hãng", "aic")],
             [button(f"💳 Nạp chờ duyệt{pending}", "at"), button("💵 Cộng/trừ tiền", "aa")],
             [button("📊 Thống kê", "as"), button("🏠 Trang chủ", "home")],
         ))
+
+    # ---------- tăng giá bán ----------
+    # Callback: a:mkh:<sp> màn chọn mức · a:mkp:<sp>:<mã> xem trước · a:mka:<sp>:<mã> áp dụng · a:mkx:<sp> gõ mức.
+    # <sp> = 0: mức chung mọi món FatCat; khác 0: id sản phẩm (giá riêng). <mã> = Markup.code, "x" = bỏ giá riêng.
+
+    def _markup_rows(self, target: int) -> list[list[dict]]:
+        presets = [button(msg.markup_button(m), f"a:mkp:{target}:{m.code}") for m in pricing.PRESETS]
+        return [presets[i:i + 3] for i in range(0, len(presets), 3)] + [[button("✍️ Mức khác", f"a:mkx:{target}")]]
+
+    def show_markup(self, chat_id: int, message_id: int | None) -> None:
+        rows = self.fulfiller.preview(None)
+        self._show(chat_id, message_id, msg.admin_markup(self.fulfiller.global_markup(), rows), keyboard(
+            *self._markup_rows(0),
+            [button("📦 Giá riêng từng món", "amp")],
+            [button("⬅️ Quay lại", "adm")],
+        ))
+
+    def show_markup_products(self, chat_id: int, message_id: int | None) -> None:
+        rows = [[button(f"{'🔒 ' if r.own else ''}{msg.button_icon(r.name)}{r.name} · {msg.vnd(r.price)}",
+                        f"a:mkh:{r.product_id}", msg.icon_id(r.name))]
+                for r in self.fulfiller.preview(None)]
+        rows.append([button("⬅️ Tăng giá bán", "amk")])
+        self._show(chat_id, message_id, "📦 <b>Giá riêng từng món</b>\n🔒 = đang có giá riêng. Chọn món:",
+                   keyboard(*rows))
+
+    def show_markup_preview(self, chat_id: int, message_id: int | None, target: int, markup: Markup | None) -> None:
+        rows = self.fulfiller.preview(markup, target or None)
+        back = f"a:mkh:{target}" if target else "amk"
+        code = markup.code if markup else "x"
+        self._show(chat_id, message_id,
+                   msg.markup_preview(markup, rows, MARKUP_DAYS, self._upstream_balance(), single=bool(target)),
+                   keyboard([button("✅ Áp dụng", f"a:mka:{target}:{code}")], [button("⬅️ Chọn mức khác", back)]))
+
+    def _on_markup(self, chat_id: int, message_id: int, user: User, action: str, target: int, code: str) -> str | None:
+        if target and not self.fulfiller.preview(None, target):
+            return "Món này không phải hàng FatCat đang bán."
+        if action == "mkh":
+            if not target:
+                self.show_markup(chat_id, message_id)
+                return None
+            row = self.fulfiller.preview(None, target)[0]
+            extra = [[button("↩️ Theo mức chung", f"a:mkp:{target}:x")]] if row.own else []
+            self._show(chat_id, message_id, msg.admin_product_markup(row, self.fulfiller.global_markup()), keyboard(
+                *self._markup_rows(target), *extra,
+                [button("⬅️ Sản phẩm", f"a:p:{target}"), button("📦 Món khác", "amp")],
+            ))
+            return None
+        if action == "mkx":
+            self._set_await(user.user_id, "markup", target=target)
+            self._show(chat_id, message_id, msg.ASK_MARKUP,
+                       keyboard([button("⬅️ Quay lại", f"a:mkh:{target}" if target else "amk")]))
+            return None
+        markup = None if code == "x" and target else pricing.decode(code)
+        if markup is None and not (code == "x" and target):
+            return "Mức tăng không hợp lệ."
+        if action == "mkp":
+            self.show_markup_preview(chat_id, message_id, target, markup)
+            return None
+        changed = self.fulfiller.set_markup(markup, target or None)
+        name = self.repo.get_product(target).name if target else None
+        self._show(chat_id, message_id, msg.markup_applied(markup, changed, name), keyboard(
+            [button("💲 Tăng giá bán", "amk"), button("🛒 Xem shop", "shop")],
+            [button("⬅️ Quản lý", "adm")],
+        ))
+        logger.info("[Store] admin %s đổi tăng giá %s → %s (%s món)", user.user_id, target or "chung", code, changed)
+        return "Đã đổi giá."
 
     def show_admin_icons(self, chat_id: int, message_id: int | None) -> None:
         rows = [[button(msg.admin_icon_button(b), f"a:ic:{i}", msg.CUSTOM_ICONS.get(b.key))]
@@ -739,11 +815,16 @@ class StoreBot:
         pid = product.id
         toggle = "⏸ Ẩn khỏi shop" if product.active else "▶️ Mở bán lại"
         # Hàng FatCat: giá, tên, kho đi theo FatCat nên không có nút sửa / nhập kho.
-        local_rows = [] if product.upstream_id is not None else [
+        local_rows = [[button("💲 Tăng giá món này", f"a:mkh:{pid}")]] if product.upstream_id is not None else [
             [button("➕ Nhập kho", f"a:st:{pid}")],
             [button("💰 Đổi giá", f"a:pr:{pid}"), button("✏️ Sửa tên/mô tả", f"a:ed:{pid}")],
         ]
-        self._show(chat_id, message_id, msg.admin_product(product), keyboard(
+        base = rule = None
+        if product.upstream_id is not None and product.cost is not None:
+            base = retail_price(product.cost, self.fulfiller.discount_bps)
+            own = self.fulfiller.own_markup(product.upstream_id)
+            rule = f"🔒 {msg.markup_label(own)} (giá riêng)" if own else msg.markup_label(self.fulfiller.global_markup())
+        self._show(chat_id, message_id, msg.admin_product(product, base, rule or ""), keyboard(
             *local_rows,
             [button(toggle, f"a:tg:{pid}"), button("📢 Đăng kênh", f"a:an:{pid}")],
             [button("⬅️ Sản phẩm", "ap")],
@@ -887,6 +968,13 @@ class StoreBot:
                 self.repo.update_product(pending["pid"], name=name.strip(), description=desc.strip())
                 self._clear_await(user.user_id)
                 self.show_admin_product(chat_id, None, pending["pid"])
+            elif kind == "markup":
+                markup = pricing.parse(text, msg.parse_amount)
+                if markup is None:
+                    self.tg.send_message(chat_id, "Không hiểu mức tăng (tối đa +200% hoặc +5.000.000đ).\n\n" + msg.ASK_MARKUP)
+                    return
+                self._clear_await(user.user_id)
+                self.show_markup_preview(chat_id, None, pending["target"], markup)
             elif kind == "grant":
                 target = self.repo.find_user(text)
                 if target is None:

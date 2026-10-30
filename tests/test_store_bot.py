@@ -9,6 +9,7 @@ import requests as requests_lib
 from fastapi.testclient import TestClient
 
 from store_bot import messages as msg
+from store_bot import pricing
 from store_bot.api_server import create_app
 from store_bot.bot import StoreBot
 from store_bot.config import BankAccount, ConfigError, Settings, load_settings
@@ -749,3 +750,62 @@ def test_rejected_custom_emoji_is_resent_plain(monkeypatch):
     assert api.send_message(1, '<tg-emoji emoji-id="1">🎬</tg-emoji> Capcut', markup) == 7
     assert calls[-1]["text"] == "🎬 Capcut"
     assert calls[-1]["reply_markup"] == {"inline_keyboard": [[{"text": "Capcut", "callback_data": "p:1"}]]}
+
+
+def test_markup_parse_and_math():
+    assert pricing.parse("10%", msg.parse_amount) == pricing.Markup("pct", 1_000)
+    assert pricing.parse("7,5", msg.parse_amount) == pricing.Markup("pct", 750)
+    assert pricing.parse("5.000", msg.parse_amount) == pricing.Markup("vnd", 5_000)
+    assert pricing.parse("+3k", msg.parse_amount) == pricing.Markup("vnd", 3_000)
+    assert pricing.parse("300%", msg.parse_amount) is None and pricing.parse("abc", msg.parse_amount) is None
+    assert pricing.sell_price(20_253, 200, pricing.NO_MARKUP) == 20_666
+    assert pricing.sell_price(20_253, 200, pricing.Markup("pct", 1_000)) == 23_000  # làm tròn lên 1.000đ
+    assert pricing.sell_price(20_253, 200, pricing.Markup("vnd", 5_000)) == 25_666
+    assert pricing.decode(pricing.Markup("pct", 1_500).code) == pricing.Markup("pct", 1_500)
+
+
+def test_admin_previews_markup_before_applying(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    gpt = products[34]
+    repo.adjust_balance(BUYER, 400_000, "test", "admin")
+    repo.buy(BUYER, gpt.id, 2)
+    store.fulfiller.attempt(repo.list_orders(BUYER)[0].id)
+
+    store.handle_update(_click(ADMIN, "amk", "boss"))
+    assert "Đang dùng cho mọi món: <b>giữ giá lẻ FatCat</b>" in telegram.edits[-1][2]
+    store.handle_update(_click(ADMIN, "a:mkp:0:p1000", "boss"))
+    preview = telegram.edits[-1][2]
+    assert "Chưa áp dụng" in preview and "Bán 155.000đ → <b>171.000đ</b>" in preview
+    assert "lãi <b>19.100đ</b>/món" in preview
+    assert "Khách trả: 310.000đ → <b>342.000đ</b>" in preview and "(2 món)" in preview
+    assert "Lãi: 6.200đ → <b>38.200đ</b> (+32.000đ)" in preview
+    assert repo.get_product(gpt.id).price == 155_000  # xem trước không đổi gì
+
+    store.handle_update(_click(ADMIN, "a:mka:0:p1000", "boss"))
+    assert "Đổi giá 2 món" in telegram.edits[-1][2]
+    assert repo.get_product(gpt.id).price == 171_000
+    store.handle_update(_click(ADMIN, "amk", "boss"))  # xem lại: giá FatCat → giá đang bán + mức đã tăng
+    assert "FatCat 155.000đ → <b>171.000đ</b> (+10%) · lãi 19.100đ" in telegram.edits[-1][2]
+    store.handle_update(_click(ADMIN, f"a:p:{gpt.id}", "boss"))
+    assert "Giá lẻ FatCat 155.000đ · bạn tăng: <b>+10%</b>" in telegram.edits[-1][2]
+    store.sync_upstream()  # đồng bộ FatCat vẫn giữ mức tăng
+    assert repo.get_product(gpt.id).price == 171_000
+
+
+def test_admin_sets_own_markup_for_one_product(fatcat, repo):
+    store, telegram, fake, products = fatcat
+    gpt, other = products[34], products[49]
+    store.handle_update(_click(ADMIN, f"a:mkx:{gpt.id}", "boss"))
+    store.handle_update(_private(ADMIN, "5k", "boss"))
+    assert "Giá riêng" in telegram.texts_to(ADMIN)[-1] and "<b>160.000đ</b>" in telegram.texts_to(ADMIN)[-1]
+    store.handle_update(_click(ADMIN, f"a:mka:{gpt.id}:v5000", "boss"))
+    store.handle_update(_click(ADMIN, "a:mka:0:p2000", "boss"))  # đổi mức chung: món có giá riêng giữ nguyên
+    store.handle_update(_click(ADMIN, "amk", "boss"))
+    assert "FatCat 155.000đ → <b>160.000đ</b> (🔒 +5.000đ)" in telegram.edits[-1][2]
+    assert "1 món có giá riêng" in telegram.edits[-1][2]
+    assert repo.get_product(gpt.id).price == 160_000
+    assert repo.get_product(other.id).price == pricing.sell_price(other.cost, 200, pricing.Markup("pct", 2_000))
+    store.handle_update(_click(ADMIN, f"a:mka:{gpt.id}:x", "boss"))  # bỏ giá riêng → theo mức chung +20%
+    assert repo.get_product(gpt.id).price == 186_000
+    store.handle_update(_click(BUYER, "a:mka:0:p0"))
+    assert telegram.answers[-1][0] == "Không có quyền." and repo.get_product(gpt.id).price == 186_000

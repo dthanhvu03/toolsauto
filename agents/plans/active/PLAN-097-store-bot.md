@@ -30,3 +30,9 @@
 ## Bước 5 (28/10): icon đúng hãng
 - Tên sản phẩm → emoji theo hãng (`messages.BRANDS`); logo thật = emoji tuỳ chỉnh admin gắn ở 🎨 Logo hãng (cần chủ bot có Telegram Premium), lưu state `icon:<hãng>`. Kênh / gửi hàng loạt dùng emoji thường; Telegram từ chối logo thì gửi lại không logo.
 - Proof: 52 test qua, ruff sạch.
+
+## Bước 6 (29/10): tăng giá bán không cần sửa code
+- `pricing.py`: giá bán = giá lẻ FatCat + mức tăng (% làm tròn lên 1.000đ, dưới 10.000đ thì 100đ; hoặc số tiền), ≥ giá vốn. Mức chung state `markup`, riêng từng món `markup:<upstream_id>`; đồng bộ FatCat và API dùng chung `Fulfiller.price_for`.
+- /admin → 💲 Tăng giá bán: chọn mức → xem trước (giá cũ → mới, lãi/món, dòng tiền theo số món bán 30 ngày, ví FatCat đủ giao bao nhiêu) → ✅ Áp dụng đổi giá ngay (`reprice_upstream`, không gọi mạng). Giá riêng ở màn sản phẩm FatCat.
+- Proof: 55 test qua (thêm 3), ruff sạch; xem trước trên bản sao DB thật 1.479 ký tự, giá đúng (155.000 → 171.000, Canva 1.000 → 1.100).
+- Bổ sung: màn 💲 Tăng giá bán hiện luôn 📋 bảng giá đang bán (giá lẻ FatCat → giá bán · mức tăng · lãi/món); màn sản phẩm FatCat ghi "Giá lẻ FatCat … · bạn tăng: …". 55 test qua.

@@ -86,6 +86,9 @@ Bot tìm mã `NAPxxxxxx` trong nội dung chuyển khoản và cộng **đúng s
 ## 6. Dùng hằng ngày (admin, gõ `/admin`)
 
 - **🔄 Đồng bộ FatCat**: lấy ngay danh sách / giá / kho mới nhất (bình thường 3 phút tự làm một lần). Món FatCat (🐱) chỉ có nút Ẩn/Mở bán và Đăng kênh; giá, tên, kho đi theo FatCat.
+- **💲 Tăng giá bán**: chọn mức tăng trên giá lẻ FatCat (+5%, +10%, +5.000đ… hoặc gõ mức khác) cho mọi món, hoặc
+  **giá riêng** từng món. Bấm mức là bot **xem trước** giá từng món, lãi/món, dòng tiền nếu bán như 30 ngày qua và ví FatCat
+  đủ giao bao nhiêu — chỉ khi bấm ✅ Áp dụng mới đổi giá. % làm tròn lên 1.000đ (món dưới 10.000đ: 100đ); không bán dưới vốn.
 - **📦 Sản phẩm & kho** → ➕ Thêm sản phẩm (`Tên | Giá | Mô tả`) → vào sản phẩm → **➕ Nhập kho**: dán mỗi dòng một món (gửi nhiều tin hoặc file .txt), xong bấm **📢 Xong + đăng kênh**.
 - **🔑 Khóa API đại lý** → ➕ Cấp khóa mới → gõ `@username` (người đó phải /start bot trước). Khóa chỉ hiện một lần.
   Trong từng khóa: 📦 Sản phẩm được bán (tích chặn), đổi mức giảm, cấp lại, thu hồi.

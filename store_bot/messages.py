@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from store_bot.db import ICT, ApiKey, Order, Product, StoreError, Topup, User
+from store_bot.pricing import Markup, PriceRow, Projection
 
 BOT_COMMANDS = [
     ("start", "🚀 Khởi động bot"),
@@ -395,7 +396,8 @@ def admin_ledger(rows: list[dict]) -> str:
     return "💸 <b>Giao dịch gần đây</b>\n\n" + "\n".join(lines)
 
 
-def admin_product(product: Product) -> str:
+def admin_product(product: Product, base: int | None = None, rule: str = "") -> str:
+    """base: giá lẻ FatCat; rule: mức tăng đang áp cho món (hàng FatCat)."""
     if not product.available:
         state = "⛔ FatCat đã ngừng bán món này cho khóa của bạn"
     else:
@@ -404,8 +406,9 @@ def admin_product(product: Product) -> str:
     source = ""
     if product.upstream_id is not None:
         margin = product.price - (product.cost or 0)
+        markup_note = f"💲 Giá lẻ FatCat {vnd(base)} · bạn tăng: <b>{rule}</b>\n" if base is not None else ""
         source = (f"🐱 Nguồn FatCat #{product.upstream_id} · giá vốn {vnd(product.cost or 0)} · "
-                  f"lãi {vnd(margin)}/món\nGiá, tên, tồn kho tự cập nhật theo FatCat.\n")
+                  f"lãi {vnd(margin)}/món\n{markup_note}Giá, tên, tồn kho tự cập nhật theo FatCat.\n")
     return (
         f"{icon(product.name)} <b>{esc(product.name)}</b> (#{product.id})\n{desc}\n"
         f"💰 Giá bán: {vnd(product.price)}\n"
@@ -413,6 +416,124 @@ def admin_product(product: Product) -> str:
         f"{source}"
         f"{state}"
     )
+
+
+# ---------- tăng giá bán ----------
+
+PREVIEW_MAX_ROWS = 25  # giữ tin dưới giới hạn 4096 ký tự
+
+
+def markup_label(markup: Markup | None) -> str:
+    if markup is None:
+        return "theo mức chung"
+    if not markup.value:
+        return "giữ giá lẻ FatCat"
+    return "+" + (percent(markup.value) if markup.kind == "pct" else vnd(markup.value))
+
+
+def markup_button(markup: Markup) -> str:
+    return "Giá lẻ FatCat" if not markup.value else markup_label(markup)
+
+
+def margin(price: int, cost: int) -> str:
+    """Lãi trên giá bán, 1 số lẻ kiểu Việt: 10,9%."""
+    return f"{(price - cost) * 100 / price:.1f}".replace(".", ",").replace(",0", "") + "%" if price else "0%"
+
+
+def admin_markup(current: Markup, rows: list[PriceRow]) -> str:
+    """Màn 💲 Tăng giá bán: mức đang dùng + bảng giá FatCat → giá đang bán của từng món."""
+    own_count = sum(1 for r in rows if r.own)
+    own = f"\n🔒 {own_count} món có giá riêng (giữ nguyên khi đổi mức chung)." if own_count else ""
+    table = [price_line(r, current) for r in rows[:PREVIEW_MAX_ROWS]]
+    if len(rows) > PREVIEW_MAX_ROWS:
+        table.append(f"… và {len(rows) - PREVIEW_MAX_ROWS} món khác")
+    return (
+        "💲 <b>Tăng giá bán</b>\n\n"
+        f"Đang dùng cho mọi món: <b>{markup_label(current)}</b>{own}\n\n"
+        "📋 <b>Bảng giá đang bán</b> (giá FatCat → giá bạn bán · lãi/món)\n"
+        + ("\n".join(table) or "Chưa có món FatCat nào.")
+        + "\n\nGiá bán = giá lẻ FatCat + phần tăng. % làm tròn lên 1.000đ (món dưới 10.000đ: 100đ); "
+        "số tiền thì cộng đúng. Không bán dưới giá vốn.\n"
+        "Bấm một mức để <b>xem trước</b> giá và dòng tiền. Chưa đổi gì cho tới khi bấm ✅ Áp dụng."
+    )
+
+
+def price_line(row: PriceRow, current_global: Markup) -> str:
+    rule = f"🔒 {markup_label(row.own)}" if row.own else markup_label(current_global)
+    return (f"{icon(row.name)} {esc(row.name)}\n"
+            f"   FatCat {vnd(row.base)} → <b>{vnd(row.price)}</b> ({rule}) · lãi {vnd(row.price - row.cost)}")
+
+
+def admin_product_markup(row: PriceRow, current_global: Markup) -> str:
+    using = markup_label(row.own) if row.own else f"theo mức chung ({markup_label(current_global)})"
+    return (
+        f"💲 <b>Giá riêng: {esc(row.name)}</b>\n\n"
+        f"Vốn {vnd(row.cost)} · lẻ FatCat {vnd(row.base)} · đang bán <b>{vnd(row.price)}</b>\n"
+        f"Đang dùng: <b>{using}</b>\n\n"
+        "Bấm một mức để xem trước. Giá riêng giữ nguyên khi bạn đổi mức chung."
+    )
+
+
+def _preview_row(row: PriceRow, keep_own: bool) -> str:
+    if row.new_price == row.price:
+        sell = f"Bán <b>{vnd(row.price)}</b> (không đổi)"
+    else:
+        sell = f"Bán {vnd(row.price)} → <b>{vnd(row.new_price)}</b>"
+    own = f"\n   🔒 giá riêng {markup_label(row.own)}, không đổi theo mức chung" if keep_own and row.own else ""
+    return (
+        f"{icon(row.name)} <b>{esc(row.name)}</b>\n"
+        f"   Vốn {vnd(row.cost)} · lẻ FatCat {vnd(row.base)}\n"
+        f"   {sell} · lãi <b>{vnd(row.new_price - row.cost)}</b>/món ({margin(row.new_price, row.cost)}){own}"
+    )
+
+
+def markup_preview(markup: Markup | None, rows: list[PriceRow], days: int, upstream_balance: int | None,
+                   single: bool) -> str:
+    title = f"Giá riêng {esc(rows[0].name)}" if single and rows else "Mọi món FatCat"
+    lines = [f"💲 <b>Xem trước: {markup_label(markup)}</b> · {title}",
+             "⚠️ <b>Chưa áp dụng.</b> Bấm ✅ Áp dụng để đổi giá cho khách.", ""]
+    lines += [_preview_row(r, keep_own=not single) for r in rows[:PREVIEW_MAX_ROWS]]
+    if len(rows) > PREVIEW_MAX_ROWS:
+        lines.append(f"… và {len(rows) - PREVIEW_MAX_ROWS} món khác")
+    if not rows:
+        lines.append("Chưa có món FatCat nào đang mở bán.")
+    lines += ["", *flow_lines(Projection.of(rows), rows, days, upstream_balance)]
+    return "\n".join(lines)
+
+
+def flow_lines(p: Projection, rows: list[PriceRow], days: int, upstream_balance: int | None) -> list[str]:
+    new_cost = p.new_revenue - p.new_profit
+    if p.sold:
+        diff = p.new_profit - p.profit
+        lines = [
+            f"📊 <b>Dòng tiền nếu bán như {days} ngày qua</b> ({p.sold} món)",
+            f"💰 Khách trả: {vnd(p.revenue)} → <b>{vnd(p.new_revenue)}</b>",
+            f"🐱 Trả FatCat: {vnd(new_cost)}",
+            f"📈 Lãi: {vnd(p.profit)} → <b>{vnd(p.new_profit)}</b> ({'+' if diff >= 0 else '-'}{vnd(abs(diff))})",
+        ]
+    else:
+        lines = [f"📊 Chưa có đơn nào trong {days} ngày qua để ước tính dòng tiền. Mỗi món bán ra lãi như trên."]
+    total_cost = sum(r.cost for r in rows)
+    if rows:
+        lines.append(f"📐 Lãi trung bình mỗi món: {margin(sum(r.new_price for r in rows), total_cost)} giá bán")
+    if upstream_balance is not None and total_cost:
+        covers = upstream_balance * sum(r.new_price for r in rows) // total_cost
+        lines.append(f"👛 Ví FatCat {vnd(upstream_balance)} đủ giao ~{vnd(covers)} tiền hàng theo giá này")
+    return lines
+
+
+def markup_applied(markup: Markup | None, changed: int, name: str | None) -> str:
+    target = f"<b>{esc(name)}</b>" if name else "mọi món FatCat"
+    return (f"✅ Đã áp dụng <b>{markup_label(markup)}</b> cho {target}. Đổi giá {changed} món.\n"
+            "Khách thấy giá mới ngay. Đồng bộ FatCat sau này vẫn giữ mức tăng này.")
+
+
+ASK_MARKUP = (
+    "✍️ Gõ mức tăng, ví dụ:\n"
+    "<code>12%</code> hoặc <code>7,5%</code> (tăng theo %)\n"
+    "<code>3k</code> hoặc <code>3000</code> (tăng số tiền mỗi món)\n"
+    "<code>0</code> = giữ giá lẻ FatCat. Gõ /huy để thôi."
+)
 
 
 def admin_product_button(product: Product) -> str:

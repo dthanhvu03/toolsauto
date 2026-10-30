@@ -560,8 +560,9 @@ class StoreRepository:
             )
             return _load_order(conn, order_id), True
 
-    def sync_upstream(self, rows: list[dict], discount_bps: int, price_fn) -> list[tuple[Product, int]]:
-        """Cập nhật sản phẩm theo danh sách FatCat. Trả [(sản phẩm, số tăng)] cho món vừa có thêm hàng.
+    def sync_upstream(self, rows: list[dict], price_fn) -> list[tuple[Product, int]]:
+        """Cập nhật sản phẩm theo danh sách FatCat; giá bán = price_fn(giá vốn, upstream_id).
+        Trả [(sản phẩm, số tăng)] cho món vừa có thêm hàng.
         Món FatCat không trả về nữa thì ẩn (upstream_available = 0), không xoá để giữ lịch sử đơn."""
         now = utcnow()
         restocked: list[tuple[Product, int]] = []
@@ -573,7 +574,7 @@ class StoreRepository:
                 cost = int(item.get("regular_price_vnd") or item["price_vnd"])
                 stock = max(int(item.get("stock") or 0), 0)
                 values = (str(item.get("name") or f"#{upstream_id}").strip(), str(item.get("description") or "").strip(),
-                          price_fn(cost, discount_bps), cost, stock, item.get("max_quantity"), now)
+                          price_fn(cost, upstream_id), cost, stock, item.get("max_quantity"), now)
                 old = conn.execute(
                     "SELECT id, upstream_stock, upstream_available FROM products WHERE upstream_id = ?", (upstream_id,)
                 ).fetchone()
@@ -597,6 +598,33 @@ class StoreRepository:
                 if row["upstream_id"] not in seen:
                     conn.execute("UPDATE products SET upstream_available = 0, upstream_stock = 0 WHERE id = ?", (row["id"],))
         return restocked
+
+    def reprice_upstream(self, price_fn) -> int:
+        """Tính lại giá bán mọi món FatCat từ giá vốn đã lưu (admin vừa đổi mức tăng giá). Trả số món đổi giá."""
+        changed = 0
+        with self._tx() as conn:
+            rows = conn.execute(
+                "SELECT id, price, upstream_id, upstream_cost FROM products WHERE upstream_id IS NOT NULL "
+                "AND upstream_cost IS NOT NULL").fetchall()
+            for row in rows:
+                price = price_fn(row["upstream_cost"], row["upstream_id"])
+                if price != row["price"]:
+                    conn.execute("UPDATE products SET price = ? WHERE id = ?", (price, row["id"]))
+                    changed += 1
+        return changed
+
+    def sales_by_product(self, days: int = 30) -> dict[int, tuple[int, int, int]]:
+        """{product_id: (số món đã giao, tiền khách trả, tiền vốn)} trong `days` ngày gần nhất."""
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        with self._read() as conn:
+            rows = conn.execute(
+                """SELECT o.product_id, SUM(n.items), SUM(o.total - o.refunded), SUM(COALESCE(o.unit_cost, 0) * n.items)
+                   FROM orders o JOIN (SELECT order_id, COUNT(*) AS items FROM order_items GROUP BY order_id) n
+                        ON n.order_id = o.id
+                   WHERE o.status IN ('done', 'partial') AND o.created_at >= ? GROUP BY o.product_id""",
+                (since,),
+            ).fetchall()
+        return {row[0]: (int(row[1] or 0), int(row[2] or 0), int(row[3] or 0)) for row in rows}
 
     def get_order(self, order_id: int, user_id: int | None = None) -> Order | None:
         with self._read() as conn:

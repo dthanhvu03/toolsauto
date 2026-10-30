@@ -1,3 +1,39 @@
+## Phiên 2026-10-29 (store-6) — Bot bán hàng: chỉnh tăng giá trong /admin
+
+- Chủ bot muốn tăng giá không phải sửa code, và thấy trước dòng tiền khi chọn. Làm: /admin → 💲 Tăng giá bán (mức chung: +5/10/15/20/30%, +2k/5k/10k, gõ mức khác; giá riêng từng món). Bấm mức → xem trước giá cũ → mới, lãi/món, doanh thu/lãi nếu bán như 30 ngày qua, ví FatCat đủ giao bao nhiêu → ✅ Áp dụng mới đổi giá.
+- Code: `store_bot/pricing.py` mới; `Fulfiller.price_for/preview/set_markup`; `db.reprice_upstream`, `db.sales_by_product`; state `markup`, `markup:<upstream_id>`. Chưa đổi giá thật (mức mặc định = giá lẻ FatCat như cũ).
+- Proof: 55 test qua, ruff sạch; xem trước trên bản sao DB thật đúng giá.
+- **Next:** chủ bot `sudo systemctl restart store-bot store-api` rồi vào 💲 Tăng giá bán.
+
+---
+
+## Phiên 2026-10-29 (buffer-chk) — Kiểm tra Buffer và đăng bài (chỉ đọc log PM2 + DB, không gọi API, không sửa code)
+
+- Tiến trình: Maintenance (đăng Buffer) và Web_Dashboard chạy. FB_Publisher, AI_Generator, Threads_* dừng từ 20/10. Log lỗi không có lỗi mới.
+- Job Buffer theo ngày (DONE/FAILED): 25/10 17/0, 26/10 14/2, 27/10 14/1, 28/10 14/5, 29/10 7/0 (tới 14:25). Mỗi kênh có 10 bài hẹn sẵn, xa nhất 31/10 (Sống Nhẹ) và 01/11 (3 kênh còn lại).
+- 8 lỗi trong 4 ngày: 7 lỗi «Scheduled posts limit reached 10/10», đều rơi đúng giờ hẹn (08:00, 15:30, 19:00, 19:02, 19:30). DB coi bài hết hàng chờ ngay khi qua `schedule_ts` (`queue_job.py:486-499`), còn Buffer cần vài phút mới đăng xong, nên gửi CreatePost lúc đó bị từ chối và tốn 1 request. Lỗi còn lại: job 1216 (trnvp89) «Video could not be read from its URL».
+- Suất 30 ngày còn lại (dòng log cuối): f8pL 1397/2000, RZX2 471/2000, ZVsP 86/1000. Các số «1430/2000…» ở mục (buffer-pol) là suất còn lại, không phải đã dùng. f8pL vừa xuống dưới ngưỡng giữ 1400, nên **cả 3 key đều chặn request nền**, kể cả PostStatuses (sync «đã đăng»). Đăng bài vẫn chạy. ZVsP tụt 90 → 86 từ 28/10, khoảng 4 request mỗi ngày.
+- Hệ quả: bot không còn xác nhận được bài đã lên. Đã qua giờ hẹn mà chưa POSTED: Hoa Lệ Đây 22 bài (từ 20/10), trnvp89 11 bài (từ 26/10), Sống Nhẹ 10, Uyển Nhi 1. Bài lỗi phía Buffer cũng không được báo.
+- Kho READY chưa hẹn: Hoa Lệ Đây 182, Sống Nhẹ 27, trnvp89 14, **Uyển Nhi 3** (khoảng 1 ngày sau khi hết 10 bài đang hẹn, tức khoảng 02/11). Từ 25/10 không có video mới; nguồn duy nhất đang bật (nunhanthongtue → Sống Nhẹ) đang bỏ quét vì page đủ 15 video.
+- Lỗi nhỏ: log «Bo qua N kenh — key dang cooldown…» (`queue_job.py:229-232`) cũng đếm cả kênh đầy hàng chờ. `cluster_router.py:630-633` vẫn tìm chữ `100-in-15min`/`250-in-1day`. `buffer_cooldown.json` còn 2 mục của key cũ (hash không khớp key nào đang dùng), vô hại.
+- **Next (chủ bot chọn):** (1) xem tab Sent/Error trên web Buffer hoặc page thật để biết bài Hoa Lệ Đây/trnvp89 có lên không (web không tốn suất API); (2) bật nguồn cho Uyển Nhi trước khoảng 02/11; (3) nếu muốn sửa thì cần PLAN backend: chừa vài phút sau giờ hẹn khi đếm hàng chờ, và cho PostStatuses vượt mức giữ 70% với số request nhỏ.
+
+---
+
+## Phiên 2026-10-28 (buffer-pol) — Buffer đổi giới hạn API (chỉ báo cáo, không sửa code)
+
+- Trang https://developers.buffer.com/guides/api-limits sửa lúc 06:18Z ngày 28/10. Header thật trên cả 3 key đã đổi theo.
+- Gói Free: 15 phút 100 → 150; 24 giờ 250 → 600; 30 ngày từ 3000 cố định → **1000 × số kênh mở khoá (tối đa 3000)**. Mọi key/MCP của một tổ chức dùng chung một suất.
+- Suất đã dùng giữ nguyên, chỉ trần giảm (log Maintenance): f8pL 1430/2000, RZX2 475/2000, **ZVsP 90/1000** (key 1 kênh = trnvp89). Tổng trần 30 ngày của 3 key: 9000 → 5000.
+- Mức giữ 70% tính theo cửa sổ chật nhất (giờ là 30 ngày): RZX2 + ZVsP đã chặn request nền (post_statuses); f8pL còn ~30 request là bị chặn. Đăng bài vẫn chạy tới khi r=0 → key nghỉ theo t (trần 72 giờ).
+- Lỗi hiển thị: `cluster_router.py:630-633` tìm đúng chữ `100-in-15min` / `250-in-1day` → trang cluster đọc sai số. `client._note_budget` đọc theo mẫu chung nên vẫn đúng.
+- Tốc độ dùng từ lúc Maintenance khởi động lại (25/10 14:17Z, khoảng 2,7 ngày): f8pL +189 (khoảng 70/ngày, phần lớn request nền), RZX2 +11, ZVsP +24 (khoảng 9 CreatePost/ngày). Ước tính: f8pL và RZX2 đủ hơn 30 ngày; **ZVsP hết sau khoảng 10 ngày** nếu suất không hồi. Trong 2,7 ngày suất 30 ngày chưa hồi lần nào, nên chưa biết cửa sổ này cuốn chiếu hay đặt lại cả cửa sổ.
+- Không cần quét thêm: mỗi request đã ghi đủ 3 cửa sổ vào log. Ping hoặc mở trang cluster lại tốn suất (nhất là với ZVsP).
+- Kho video (DB, 28/10), tính bài đã hẹn + READY chưa hẹn rồi chia số bài/ngày: Uyển Nhi 16 bài, khoảng 5 ngày (nguồn tắt); Sống Nhẹ 41 bài, khoảng 8 ngày (nguồn nunhanthongtue bật, vào khoảng 5 video/ngày); trnvp89 27 bài, khoảng 9 ngày (nguồn tắt); Hoa Lệ Đây 195 bài, khoảng 65 ngày; twot283 0 bài, không có nguồn. Chỉ 1/6 nguồn đang bật. ZVsP: 10 bài tốn 24 CreatePost, trung bình 2,4 request mỗi bài, nên xem lại.
+- **Next (chủ bot chọn):** gắn thêm kênh cho tài khoản ZVsP (lên 2000–3000) hoặc giảm tải key đó; muốn sửa mức giữ 70% hoặc regex dashboard thì cần PLAN riêng.
+
+---
+
 ## Phiên 2026-10-30 (ek) — Báo mã: thử thật, bỏ giới hạn, gửi mọi khách
 
 - Chủ bot làm xong: bot chuyển tin `zt_noti_voucher_bot`, kênh riêng tư «ZT báo mã» (đã gắn), AddLiveTag theo dõi `METAPARIGDOCT2211` (Instagram giảm 22%, tối đa 300K, đơn từ 50K, hiệu lực tới 2038). Thử mã tay `TEST123` → bot gửi chủ bot sau 1 giây; chủ bot bảo gỡ → backup `cashback-manual-20261030T060926Z.sqlite`, đặt `TEST123` = out.
