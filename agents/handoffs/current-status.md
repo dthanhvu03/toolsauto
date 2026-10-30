@@ -1,3 +1,13 @@
+## Phiên 2026-10-30 (el) — Báo mã: link lưu mã gắn affiliate + chế độ thử chỉ admin
+
+- Chủ bot: «đăng tay thì gắn được mã aff không» → thử 1 lần trên Chrome chủ bot (cầu nối 192.168.112.1:9223): an_redir bọc trang mã mở đúng trang, URL đích có `utm_medium=affiliates`. a15663f: link trang mã shopee.vn trong kênh tự bọc an_redir, sub_id chung `VOUCHERS` (đơn không gắn khách, chủ bot có hoa hồng).
+- Chủ bot: «cần test trước cho admin đã» → `bot_state.voucher_audience`: mặc định chế độ thử, chỉ gửi admin (tin có dòng 🧪); /admin → 📣 Nhắc mùa sale → 🎟 Báo mã: 📣 Bật gửi khách / 🧪 Về chế độ thử.
+- Shopee: lần 1 Chrome chủ bot bị trang xác thực chống bot → dừng; chủ bot xác minh, chủ bot bảo thử lại 1 lần → đọc được trang Mã giảm giá. 1 request `requests` tới API voucher (chủ bot duyệt) → 403 `90309999`, dừng. Không tự động hoá Shopee thêm.
+- Test: toàn bộ 941 qua + 1 hỏng có sẵn (`test_b9…`) trước chế độ thử; sau đó 144 test liên quan qua. Ruff sạch. Main có commit phiên khác (store, reup) → cherry-pick sang nhánh `feat/cashback-voucher-aff2`.
+- **Next:** chủ bot `systemctl restart cashback-bot cashback-zalo` (nạp a15663f, về chế độ thử); thử bằng tin đăng tay có link mã; ổn thì bấm 📣 Bật gửi khách. Cầu nối: chủ bot chạy `tat-cau-noi-chrome.ps1` (Administrator) khi không cần.
+
+---
+
 ## Phiên 2026-10-29 (store-6) — Bot bán hàng: chỉnh tăng giá trong /admin
 
 - Chủ bot muốn tăng giá không phải sửa code, và thấy trước dòng tiền khi chọn. Làm: /admin → 💲 Tăng giá bán (mức chung: +5/10/15/20/30%, +2k/5k/10k, gõ mức khác; giá riêng từng món). Bấm mức → xem trước giá cũ → mới, lãi/món, doanh thu/lãi nếu bán như 30 ngày qua, ví FatCat đủ giao bao nhiêu → ✅ Áp dụng mới đổi giá.
