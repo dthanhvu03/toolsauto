@@ -12,13 +12,12 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 from cashback_bot.db import TrackingRepository, enqueue_event
 from cashback_bot.messages import BotReply
 from cashback_bot.notify_dispatch import NotifyConfig, customer_block_reason
-from cashback_bot.sale_calendar import ICT
 
 ENABLED_KEY = "voucher_enabled"  # vắng = bật; chỉ chạy khi đã gắn kênh
 CHANNEL_KEY = "voucher_channel"
@@ -30,9 +29,6 @@ EVENT_TYPE = "VOUCHER"
 LIST = "u:vc:l"
 ON = "u:vc:on"
 OFF = "u:vc:off"
-SEND_FROM, SEND_UNTIL = time(8), time(22)
-REPEAT_GAP = timedelta(hours=12)
-DAILY_MAX = 3
 LIVE_FOR = timedelta(hours=24)
 LIST_MAX = 8
 _SHOPEE_HOSTS = ("shp.ee", "shope.ee")
@@ -144,29 +140,28 @@ def seen_channel(repo: TrackingRepository) -> dict:
 
 
 def is_on(repo: TrackingRepository, user: int) -> bool:
-    return repo.get_state(f"{ON_PREFIX}{user}") == "1"
+    """Mặc định nhận (chủ bot 2026-10-30: «cứ có mã là báo»); khách tắt thì `voucher_on:<id>` = "0"."""
+    return repo.get_state(f"{ON_PREFIX}{user}") != "0"
 
 
 def subscribers(conn: sqlite3.Connection, now: datetime) -> list[int]:
-    """Khách đã bật báo mã, chưa chặn bot."""
-    rows = conn.execute("SELECT key FROM bot_state WHERE key LIKE ? AND value = '1'", (ON_PREFIX + "%",))
-    cfg = NotifyConfig(True)
-    found = []
-    for (key,) in rows:
+    """Khách đã tạo link hoặc tự bật, trừ khách tắt báo mã hay chặn bot."""
+    users = {int(r[0]) for r in conn.execute(
+        "SELECT DISTINCT telegram_user_id FROM link_requests WHERE link_status = 'created'")}
+    for key, value in conn.execute("SELECT key, value FROM bot_state WHERE key LIKE ?", (ON_PREFIX + "%",)):
         try:
             user = int(key.removeprefix(ON_PREFIX))
         except ValueError:
             continue
-        if customer_block_reason(conn, {"category": CATEGORY, "chat_id": user}, cfg, now) is None:
-            found.append(user)
-    return found
+        if value == "1":
+            users.add(user)
+        elif value == "0":
+            users.discard(user)
+    cfg = NotifyConfig(True)
+    return sorted(u for u in users if customer_block_reason(conn, {"category": CATEGORY, "chat_id": u}, cfg, now) is None)
 
 
 # --- Tin trong kênh ---------------------------------------------------------------------------------------------
-
-
-def in_send_window(now: datetime) -> bool:
-    return SEND_FROM <= now.astimezone(ICT).time() < SEND_UNTIL
 
 
 def handle_post(repo: TrackingRepository, post: dict, edited: bool, now: datetime) -> int:
@@ -203,28 +198,17 @@ def handle_post(repo: TrackingRepository, post: dict, edited: bool, now: datetim
             "used_percent, url, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (chat_id, message_id, voucher.code, voucher.name, voucher.discount, voucher.max_discount,
              voucher.min_spend, voucher.used, url, status, stamp, stamp))
-        if edited or voucher.out or not enabled(repo) or not in_send_window(now):
+        # Có mã là gửi ngay, mọi giờ (chủ bot 2026-10-30). Tin AddLiveTag sửa lại (% đã dùng) thì không gửi lại.
+        if edited or voucher.out or not enabled(repo):
             return 0
         return _send(conn, cursor.lastrowid, voucher, url, now)
 
 
-def _today_start(now: datetime) -> str:
-    return _stamp(datetime.combine(now.astimezone(ICT).date(), time(0), ICT))
-
-
 def _send(conn: sqlite3.Connection, post_id: int, voucher: Voucher, url: str | None, now: datetime) -> int:
-    recent = conn.execute("SELECT 1 FROM voucher_posts WHERE code = ? AND sent > 0 AND created_at >= ? AND id != ?",
-                          (voucher.code, _stamp(now - REPEAT_GAP), post_id)).fetchone()
-    if recent:
-        return 0
     text, keyboard = alert(voucher, url)
-    stamp, today = _stamp(now), _today_start(now)
+    stamp = _stamp(now)
     sent = 0
     for user in subscribers(conn, now):
-        count = conn.execute("SELECT COUNT(*) FROM admin_notifications WHERE event_type = ? AND chat_id = ? "
-                             "AND created_at >= ?", (EVENT_TYPE, user, today)).fetchone()[0]
-        if count >= DAILY_MAX:
-            continue
         if enqueue_event(conn, event_key=f"voucher:{post_id}:{user}", event_type=EVENT_TYPE, chat_id=user,
                          message_html=text, audience="customer", category=CATEGORY, source_ref=f"voucher:{post_id}",
                          reply_markup_json=json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False), now=stamp):
@@ -297,7 +281,7 @@ def list_reply(repo: TrackingRepository, user: int, now: datetime, notice: str =
         lines += ["", BUY_HINT, DISCOUNT_NOTE]
     else:
         lines.append("Chưa có mã nào đang còn. Bật báo mã để bot nhắn liền khi có mã mới nha.")
-    lines += ["", f"Báo mã mới: {'🟢 Đang bật' if on else '⚪ Đang tắt'} (8:00–22:00, tối đa {DAILY_MAX} tin / ngày)"]
+    lines += ["", f"Báo mã mới: {'🟢 Đang bật' if on else '⚪ Đang tắt'}"]
     toggle = ("🔕 Tắt báo mã", OFF) if on else ("🔔 Bật báo mã mới", ON)
     first = rows[0] if rows and rows[0]["url"] else None
     return BotReply("\n".join(lines), button_url=first["url"] if first else None,
@@ -323,7 +307,7 @@ def action(repo: TrackingRepository, user: int, data: str, now: datetime) -> Bot
 
 def stats(conn: sqlite3.Connection, now: datetime) -> dict:
     week = _stamp(now - timedelta(days=7))
-    on = conn.execute("SELECT COUNT(*) FROM bot_state WHERE key LIKE ? AND value = '1'", (ON_PREFIX + "%",)).fetchone()[0]
+    on = len(subscribers(conn, now))
     posts = conn.execute("SELECT COUNT(*) FROM voucher_posts WHERE created_at >= ?", (week,)).fetchone()[0]
     sent = conn.execute("SELECT COUNT(*) FROM admin_notifications WHERE event_type = ? AND created_at >= ?",
                         (EVENT_TYPE, week)).fetchone()[0]

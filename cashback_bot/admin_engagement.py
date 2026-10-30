@@ -199,14 +199,14 @@ class EngagementAdmin:
             lines += [notice, ""]
         last = numbers["last"]
         lines += [
-            f"Trạng thái: {'🟢 Đang bật' if on else '⚪ Đang tắt'} · {numbers['on']} khách bật báo mã",
+            f"Trạng thái: {'🟢 Đang bật' if on else '⚪ Đang tắt'} · {numbers['on']} khách nhận báo mã",
             f"Kênh: {'đã gắn (' + str(bound) + ')' if bound else '⚪ chưa gắn'}",
             f"7 ngày qua: {numbers['posts']} tin mã · {numbers['sent']} tin gửi khách · tin không đọc được: {skipped}",
             f"Mã gần nhất: {html.escape(last[0])} lúc {_clock(last[1])}" if last else "Chưa nhận mã nào.",
             "",
             "AddLiveTag Theo dõi Voucher gửi tin vào kênh Telegram riêng tư bằng <b>bot chuyển tin</b> (bot riêng, không",
-            "dùng token bot hoàn tiền). Bot hoàn tiền là quản trị kênh, đọc tin rồi gửi khách đã bật (/magiam):",
-            "8:00–22:00, một mã cách 12 giờ, mỗi khách tối đa 3 tin / ngày.",
+            "dùng token bot hoàn tiền). Bot hoàn tiền là quản trị kênh, đọc tin rồi gửi ngay mọi giờ, không giới hạn số tin,",
+            "cho mọi khách đã tạo link. Khách không muốn nhận thì bấm 🔕 Tắt báo mã hoặc vào /magiam.",
         ]
         rows = []
         if seen and seen["id"] != bound:

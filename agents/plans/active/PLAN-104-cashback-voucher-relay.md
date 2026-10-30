@@ -73,3 +73,13 @@
   - `admin_engagement.py`: nút 🎟 Báo mã, màn gắn / gỡ kênh, bật / tắt, số liệu; ghi 📊 Lịch sử.
 - Test `tests/test_cashback_voucher.py` (8). Sửa danh sách lệnh trong `test_cashback_bot.py`, `test_cashback_plan060.py`.
 - Toàn bộ: 940 qua, 1 hỏng có sẵn (`test_b9…`). Ruff sạch.
+
+## Bỏ giới hạn, gửi mọi khách (30/10, chủ bot: «cứ có mã là báo, không cần giới hạn gì hết»)
+- Chủ bot chọn: gửi **mọi khách đã tạo link** (khách tự bật cũng nhận), ai không muốn thì 🔕 Tắt báo mã / `/magiam`
+  (`voucher_on:<id>` = "0"); mã nạp lúc 0h **nhắn ngay**.
+- Bỏ: khung 8:00–22:00, một mã cách 12 giờ, tối đa 3 tin / khách / ngày. Giữ: tin AddLiveTag sửa lại (% đã dùng) không gửi
+  lại; khách chặn bot không gửi.
+- Admin: «N khách nhận báo mã» đếm theo luật mới.
+- Thử thật 30/10: mã tay `TEST123` đăng vào kênh → bot gửi chủ bot sau 1 giây; chủ bot bảo gỡ → backup
+  `cashback-manual-20261030T060926Z.sqlite`, đặt `TEST123` = out.
+- AddLiveTag đang theo dõi `METAPARIGDOCT2211` (Instagram giảm 22%, tối đa 300K, đơn từ 50K, hiệu lực tới 2038).
