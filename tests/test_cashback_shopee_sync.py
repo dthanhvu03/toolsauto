@@ -413,7 +413,7 @@ class TestShopeeReviewFixes:
         reply = panel.consume_text(ADMIN_ID, "SPC_EC=abc", NOW, message_id=5)
         assert reply is None or reply.delete_message_id is None
 
-    @patch("cashback_bot.admin_policy.save_cookies")
+    @patch("cashback_bot.admin.handlers.shopee.save_cookies")
     @patch("cashback_bot.shopee_client.ShopeeAffiliateClient.check_status")
     def test_split_json_cookie_is_joined_and_every_part_deleted(self, mock_check, mock_save, tmp_path):
         repo = _setup_repo(tmp_path)

@@ -12,6 +12,7 @@ Kiến trúc phân tầng (Clean Modular Architecture):
 from __future__ import annotations
 
 import importlib
+
 from cashback_bot.admin.base import AdminContext, BaseAdminHandler
 from cashback_bot.admin.router import AdminRouter
 
@@ -40,23 +41,6 @@ __all__ = [
     "InsightsAdmin",
 ]
 
-_HANDLERS_MAP = {
-    "WalletAdmin": "wallet",
-    "SupportAdmin": "support",
-    "TermsAdmin": "terms",
-    "AutoSyncAdmin": "sync",
-    "TikTokAdmin": "tiktok",
-    "DealsAdmin": "deals",
-    "AnnounceAdmin": "announce",
-    "EngagementAdmin": "engagement",
-    "ValidationAdmin": "validation",
-    "SettlementAdmin": "settlement",
-    "ReconciliationAdmin": "reconciliation",
-    "ReadinessAdmin": "readiness",
-    "RetentionAdmin": "retention",
-    "InsightsAdmin": "insights",
-}
-
 
 def __getattr__(name: str):
     if name in ("AdminPanel", "AdminSafetyError", "customer_policy_due"):
@@ -72,9 +56,10 @@ def __getattr__(name: str):
         from cashback_bot.admin.notify.customer_notify import CustomerNotifyAdmin
         globals()[name] = CustomerNotifyAdmin
         return CustomerNotifyAdmin
-    if name in _HANDLERS_MAP:
-        mod = importlib.import_module(f"cashback_bot.admin.handlers.{_HANDLERS_MAP[name]}")
-        val = getattr(mod, name)
+    # import_module, không dùng «from cashback_bot.admin import handlers»: cách đó gọi lại __getattr__ này.
+    handlers = importlib.import_module("cashback_bot.admin.handlers")
+    if name in handlers.__all__:
+        val = getattr(handlers, name)
         globals()[name] = val
         return val
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

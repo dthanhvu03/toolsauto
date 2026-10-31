@@ -20,6 +20,9 @@ __all__ = [
     "RetentionAdmin",
     "Stats",
     "InsightsAdmin",
+    "ShopeeAdmin",
+    "SimulationAdmin",
+    "PolicyAdmin",
 ]
 
 _MAP = {
@@ -38,6 +41,9 @@ _MAP = {
     "RetentionAdmin": "retention",
     "Stats": "stats",
     "InsightsAdmin": "insights",
+    "ShopeeAdmin": "shopee",
+    "SimulationAdmin": "simulation",
+    "PolicyAdmin": "policy",
 }
 
 
