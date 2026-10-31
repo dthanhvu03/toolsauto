@@ -6,10 +6,12 @@ Trình edit v1 (PLAN-106 P4) — các việc trên một dự án đã có. Gọ
   sửa tay đánh số theo câu đã dời, đoạn cắt đổi là số lệch sang câu khác.
 - ``update_meta``: caption / hashtag / kênh — không cần render lại.
 - ``recompose``: đổi mẫu → dự án mới từ cùng asset (flow ``recompose``), dự án cũ thành REJECTED.
+- ``make_variants``: n biến thể A/B từ cùng asset, mỗi bản một ``seed`` (chỉ video của mình — ADR-061 mục 11).
 - ``frame_strip`` / ``poster``: ảnh dải khung hình cho thanh cắt, ảnh bìa cho bảng duyệt (cache theo file).
 """
 from __future__ import annotations
 
+import random
 import subprocess
 from pathlib import Path
 
@@ -26,6 +28,7 @@ from app.features.studio.spec import ProjectSpec
 
 # Dự án đã sang Buffer thì không sửa ở đây nữa (publish từ chối đổi bài đã hẹn).
 EDITABLE = {ProjectStatus.DRAFT, ProjectStatus.RENDERED, ProjectStatus.REVIEW, ProjectStatus.FAILED, ProjectStatus.REJECTED}
+MAX_VARIANTS = 5
 STRIP_FRAMES = 16
 STRIP_WIDTH = 120
 
@@ -90,8 +93,15 @@ def detail(db: Session, project_id: int) -> dict:
         "channel": {"id": channel.id, "name": channel.name} if channel else None,
         "template": {"id": template.id, "name": template.name, "kind": template.kind} if template else None,
         "subtitle_lines": subtitle_lines(db, spec),
+        "luts": paths.lut_names(),
+        "variants_allowed": bool(asset) and asset.origin != "reup",
         "tasks": [{"id": t.id, "stage": t.stage, "status": t.status, "error": t.error} for t in tasks],
     }
+
+
+def _cuts(spec: ProjectSpec) -> list[tuple]:
+    """Chỉ đầu / cuối đoạn làm lệch số câu phụ đề — lật gương, tiếng lồng thì không."""
+    return [(c.asset, c.start, c.end) for c in spec.clips]
 
 
 def save_spec(db: Session, project_id: int, raw: dict) -> StudioTask:
@@ -105,8 +115,11 @@ def save_spec(db: Session, project_id: int, raw: dict) -> StudioTask:
     missing = spec.asset_ids() - {a for (a,) in db.query(StudioAsset.id).filter(StudioAsset.id.in_(spec.asset_ids()))}
     if missing:
         raise EditError(f"spec trỏ tới asset không có: {sorted(missing)}")
+    reup = {a for (a,) in db.query(StudioAsset.id).filter(StudioAsset.id.in_(spec.asset_ids()), StudioAsset.origin == "reup")}
+    if any(c.hflip and c.asset in reup for c in spec.clips):
+        raise EditError("không lật gương video reup (ADR-061 mục 11) — chỉ video tự quay / của mình")
     old = ProjectSpec.model_validate(project.spec)
-    if [c.model_dump() for c in old.clips] != [c.model_dump() for c in spec.clips] and spec.subtitles.edits == old.subtitles.edits:
+    if _cuts(old) != _cuts(spec) and spec.subtitles.edits == old.subtitles.edits:
         spec.subtitles.edits = {}
     project.spec = spec.model_dump(mode="json")
     project.status = ProjectStatus.DRAFT
@@ -145,6 +158,39 @@ def recompose(db: Session, project_id: int, *, template_id: int | None, channel_
     db.commit()
     payload = {"channel_id": channel_id or project.channel_id, "template_id": template_id}
     return pipeline.start(db, "recompose", asset_id=project.asset_id, payload=payload)
+
+
+def make_variants(db: Session, project_id: int, n: int) -> list[StudioTask]:
+    """
+    n dự án mới từ cùng asset + cùng mẫu / kênh, mỗi bản một ``seed`` → lật / LUT / thứ tự đoạn khác nhau theo
+    tham số ``mirror`` / ``lut`` / mẫu ``ab_montage``. Mẫu chưa đặt ``mirror`` / ``lut`` thì chia đều cho A/B: bản 1, 3…
+    lật, bản 2, 4… không; LUT lần lượt từng file đang có. Mẫu đặt rõ (vd ``mirror: off``) thì giữ. ``seed`` ngẫu nhiên
+    (thứ tự đoạn ``ab_montage``). Dự án gốc giữ nguyên. Asset reup bị từ chối.
+    """
+    project = _project(db, project_id)
+    asset = db.get(StudioAsset, project.asset_id) if project.asset_id else None
+    if asset is None:
+        raise EditError("dự án không có asset gốc")
+    if asset.origin == "reup":
+        raise EditError("không tạo biến thể từ video reup (ADR-061 mục 11) — chỉ video tự quay / của mình")
+    if not 1 <= n <= MAX_VARIANTS:
+        raise EditError(f"số biến thể 1–{MAX_VARIANTS}")
+    _kind, params, _template, _channel = store.template_for(
+        db, {"channel_id": project.channel_id, "template_id": project.template_id},
+    )
+    luts = paths.lut_names()
+    seeds = random.SystemRandom()
+    tasks = []
+    for k in range(n):
+        extra: dict = {"seed": seeds.randrange(1, 10**6)}
+        if "mirror" not in params:
+            extra["mirror"] = "on" if k % 2 == 0 else "off"
+        if "lut" not in params and luts:
+            extra["lut"] = luts[k % len(luts)]
+        tasks.append(pipeline.start(db, "recompose", asset_id=asset.id, payload={
+            "channel_id": project.channel_id, "template_id": project.template_id, "params": extra,
+        }))
+    return tasks
 
 
 def _ffmpeg(args: list[str], out: Path) -> Path:

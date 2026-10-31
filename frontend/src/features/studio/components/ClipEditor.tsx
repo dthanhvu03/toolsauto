@@ -17,12 +17,15 @@ export function ClipEditor({
   main,
   assets,
   disabled,
+  canFlip,
   onChange,
 }: {
   clips: Clip[];
   main: Asset;
   assets: Asset[];
   disabled: boolean;
+  /** false với video reup (ADR-061 mục 11) */
+  canFlip: boolean;
   onChange: (clips: Clip[]) => void;
 }) {
   const dur = main.duration ?? 0;
@@ -124,6 +127,12 @@ export function ClipEditor({
                 />
                 <span className="text-xs text-slate-400">giây</span>
                 {c.audio.length ? <span className="rounded bg-indigo-50 px-1.5 text-[11px] text-indigo-700">tiếng lồng</span> : null}
+                {canFlip ? (
+                  <label className="flex items-center gap-1 text-xs text-slate-600">
+                    <input type="checkbox" checked={c.hflip} disabled={disabled} onChange={(e) => setClip(i, { hflip: e.target.checked })} />
+                    Lật gương
+                  </label>
+                ) : null}
               </>
             ) : (
               <span className="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{names[c.asset] ?? `asset #${c.asset}`}</span>

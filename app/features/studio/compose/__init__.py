@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.core.database.models import StudioAsset, StudioProject, StudioTask
-from app.features.studio import store
+from app.features.studio import paths, store
 from app.features.studio.compose.templates import TEMPLATES, ComposeInput
 from app.features.studio.contracts import ProjectStatus, StageError, StageResult
 
@@ -38,6 +38,9 @@ def run(db: Session, task: StudioTask) -> StageResult:
             transcript_lang=transcript.get("lang"),
             dub=store.analysis(db, asset.id, "dub"),
             silences=store.analysis(db, asset.id, "silences") or [],
+            scenes=store.analysis(db, asset.id, "scenes") or [],
+            origin=asset.origin or "upload",
+            lut_names=paths.lut_names(),
             intro_asset_id=channel.intro_asset_id if channel else None,
             outro_asset_id=channel.outro_asset_id if channel else None,
             logo_asset_id=channel.logo_asset_id if channel else None,

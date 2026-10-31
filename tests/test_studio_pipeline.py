@@ -145,7 +145,7 @@ def test_upload_chay_het_quy_trinh_va_dung_o_cho_duyet(db, media):
     assert project.channel_id == ch.id and project.template_id == tpl.id
     assert project.spec["subtitles"]["enabled"] is True
     assert project.spec["credit"] == "Nguồn: @tacgia"
-    assert project.spec["clips"] == [{"asset": project.asset_id, "start": 0.5, "end": 5.5, "audio": []}]
+    assert project.spec["clips"] == [{"asset": project.asset_id, "start": 0.5, "end": 5.5, "audio": [], "hflip": False}]
     assert _probe_duration(project.output_path) == pytest.approx(5.0, abs=0.15)
     assert project.duration == pytest.approx(5.0, abs=0.15)
     assert project.caption == "Mẹo nhỏ hôm nay" and project.hashtags == ["#meo", "#doisong"]

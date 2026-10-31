@@ -3,9 +3,9 @@ spec → một lệnh ffmpeg (``filter_complex``), **một lượt encode**. Hà
 chạy gì, không ghi file — file phụ (ASS, chữ) trả về trong ``RenderPlan.files`` để runner ghi.
 
 Sơ đồ:
-    mỗi clip → khớp khung (fit) + fps + yuv420p  ┐
+    mỗi clip → [hflip] → khớp khung (fit) + fps   ┐
     mỗi clip → tiếng gốc × original (thiếu → im;  ┘→ concat
-               clip có ``audio`` → trộn các file đó, cùng mốc giây) → [phụ đề → chữ → ghi nguồn → logo] → [vout]
+               clip có ``audio`` → trộn các file đó, cùng mốc giây) → [LUT → phụ đề → chữ → ghi nguồn → logo] → [vout]
     concat audio + các track (trễ / lặp / âm lượng) → amix → [aout]
 """
 from __future__ import annotations
@@ -72,17 +72,20 @@ def clip_ranges(spec: ProjectSpec, media: dict[int, Media]) -> list[tuple[int, f
 
 def _fit_chain(src: str, out: str, i: int, spec: ProjectSpec) -> str:
     c = spec.canvas
+    flip = ""
+    if spec.clips[i].hflip:  # lật trước khi khớp khung: nền mờ của blur_pad lật theo luôn
+        flip, src = f"[{src}]hflip[hf{i}];", f"hf{i}"
     tail = f"setsar=1,fps={c.fps},format=yuv420p[{out}]"
     cover = f"scale={c.w}:{c.h}:force_original_aspect_ratio=increase,crop={c.w}:{c.h}"
     contain = f"scale={c.w}:{c.h}:force_original_aspect_ratio=decrease:force_divisible_by=2"
     if c.fit == "crop":
-        return f"[{src}]{cover},{tail}"
+        return f"{flip}[{src}]{cover},{tail}"
     if c.fit == "pad":
-        return f"[{src}]{contain},pad={c.w}:{c.h}:(ow-iw)/2:(oh-ih)/2:color=black,{tail}"
+        return f"{flip}[{src}]{contain},pad={c.w}:{c.h}:(ow-iw)/2:(oh-ih)/2:color=black,{tail}"
     # Nền mờ làm ở 1/4 kích thước rồi phóng lên: nhìn như nhau, nhanh hơn nhiều lần so với blur full-HD.
     qw, qh = c.w // 8 * 2, c.h // 8 * 2
     return (
-        f"[{src}]split=2[bg{i}][fg{i}];"
+        f"{flip}[{src}]split=2[bg{i}][fg{i}];"
         f"[bg{i}]scale={qw}:{qh}:force_original_aspect_ratio=increase,crop={qw}:{qh},"
         f"boxblur=10:1,scale={c.w}:{c.h}[bgb{i}];"
         f"[fg{i}]{contain}[fgs{i}];"
@@ -99,6 +102,7 @@ def build(
     font_file: str,
     fonts_dir: str,
     transcripts: dict[int, list[dict]] | None = None,  # câu thoại theo giây asset, theo ``subtitles.source``
+    lut_file: str | None = None,  # đường dẫn .cube đã kiểm tồn tại (runner tra từ ``canvas.lut``); None = không nhuộm
     ffmpeg: str = "ffmpeg",
     crf: int = 21,
     preset: str = "veryfast",
@@ -147,6 +151,8 @@ def build(
 
     # ── lớp trên hình ──
     post: list[str] = []
+    if lut_file:  # nhuộm màu trước, chữ / phụ đề / logo vẽ sau nên giữ đúng màu
+        post.append(f"lut3d=file={_q(lut_file)}")
     sub = spec.subtitles
     if sub.enabled:
         if sub.source == "lines":

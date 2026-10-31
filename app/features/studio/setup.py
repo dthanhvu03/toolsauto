@@ -22,6 +22,8 @@ TEMPLATE_DEFAULTS: dict[str, dict] = {
     "reup_dub": {"trim_head": 0, "max_len": 0, "dub_lang": "vi", "dub_voice": "female", "voice_volume": 1.0,
                  "background_volume": 1.0, "fit": "blur_pad", "hook": ""},
     "own_footage": {"cut_silence": True, "min_silence": 0.6, "pad": 0.12, "max_len": 0, "fit": "crop", "hook": ""},
+    "ab_montage": {"max_len": 30, "keep_first": True, "min_clips": 3, "mirror": "random", "lut": "random", "fit": "crop",
+                   "hook": ""},
 }
 
 

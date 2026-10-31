@@ -23,6 +23,8 @@ class Canvas(_Strict):
     fps: int = Field(30, ge=1, le=60)
     # blur_pad: hình gốc giữa khung, nền là chính nó phóng to làm mờ. crop: lấp đầy, cắt mép. pad: viền đen.
     fit: Literal["blur_pad", "crop", "pad"] = "blur_pad"
+    # Tên file .cube trong storage/media/luts/ (chỉ tên, không đường dẫn) — tông màu cả video. Thiếu file thì render bỏ qua.
+    lut: str | None = Field(None, pattern=r"^[\w .()+-]{1,120}\.cube$")
 
 
 class ClipAudio(_Strict):
@@ -37,6 +39,7 @@ class Clip(_Strict):
     # Có thì tiếng của clip lấy từ các asset audio này, **cùng mốc giây với asset hình** (thay tiếng
     # gốc). Dùng cho lồng tiếng: giọng đọc + nền đã tách, dài đúng bằng video gốc.
     audio: list[ClipAudio] = Field(default_factory=list)
+    hflip: bool = False  # lật ngang đoạn này (A/B góc nhìn — chỉ nội dung của mình, ADR-061 mục 11)
 
     @model_validator(mode="after")
     def _end_after_start(self) -> "Clip":

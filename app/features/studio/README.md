@@ -35,6 +35,9 @@ Mẫu (`studio_templates.kind` + `params`):
 - `basic`: cắt đầu / độ dài, phụ đề (chỉ khi lời thoại đúng `subtitle_lang`, mặc định vi), hook, nhạc.
 - `reup_dub`: như basic + tiếng lồng Việt và phụ đề câu đã dịch; không lồng được thì y như basic.
 - `own_footage`: video tự quay — cắt khoảng lặng ≥ `min_silence` (jump cut), không ghi nguồn.
+- `ab_montage`: A/B cho video của mình — cắt theo cảnh, giữ hook, xáo đoạn giữa theo `seed`.
+- Mọi mẫu: `mirror` (`off` / `on` / `random`), `lut` (tên file trong `storage/media/luts/` hoặc `random`), `seed`. Video reup
+  không nhận lật / LUT ngẫu nhiên / xáo / biến thể (ADR-061 mục 11).
 
 Cầu nối Buffer (P3, tới P6): Studio không gọi Buffer. `publish` tạo / cập nhật dòng READY (reup từ hệ cũ thì
 dùng lại chính dòng `STUDIO` của nó), Maintenance (`sweep_unscheduled_ready`) tự lấy ô giờ theo `buffer/slots.py`

@@ -164,6 +164,17 @@ Trạng thái dự án: `DRAFT → RENDERING → RENDERED → REVIEW → APPROVE
 
 **P4 — Giao diện:** SPA (bảng duyệt, trình edit v1, nguyên liệu, mẫu / kênh) + Telegram. Kiểm bằng trình duyệt thật ở 1440 px và 390 px.
 
+**P4.1 — Biến thể A/B cho video tự quay (31/10, anh giao):**
+- Spec: `Clip.hflip` (lật ngang từng đoạn), `Canvas.lut` (tên file `.cube` trong `storage/media/luts/`). Render: `hflip`
+  trước khi khớp khung, `lut3d` sau khi nối (trước phụ đề / chữ để chữ không bị nhuộm). Thiếu file LUT → bỏ qua, không hỏng.
+- Tham số mẫu chung: `mirror` (`off` / `on` / `random`), `lut` (`""` / tên file / `random`), `seed`. Chọn xong ghi thẳng vào
+  spec → xem / sửa được trên trình edit, render lại ra đúng bản đó.
+- Mẫu `ab_montage`: cắt theo mốc đổi cảnh (`scenes`), giữ đoạn đầu làm hook, xáo các đoạn giữa theo `seed`, cắt theo `max_len`.
+- `POST /studio/api/projects/{id}/variants` (n ≤ 5): dựng n biến thể từ cùng asset, mỗi bản một `seed`; nút trên trình edit.
+- **Giới hạn (giữ D1):** asset `origin=reup` không nhận lật gương, LUT ngẫu nhiên, xáo đoạn hay biến thể — mẫu bỏ qua, lưu
+  spec lật đoạn reup bị từ chối, API biến thể từ chối. LUT cố định (tông màu kênh) dùng cho mọi nguồn.
+- Không đụng `viral_intake` / `ReupProcessor`.
+
 **P5 — Video AI:** `script` → `voice` (edge-tts, piper dự phòng) → `visuals` (D3) → compose `ai_faceless` → render.
 
 **P6 — Chuyển kênh + dọn:**
@@ -341,4 +352,27 @@ $ lint-imports → 2 luật Studio KEPT (editor / setup / router / entry nằm t
 #   Studio / trình edit / Nguyên liệu / Kênh & mẫu ở 1440 px, board + editor + setup ở 390 px — 0 lỗi JS, 0 request lỗi.
 #   Thao tác: bấm 2 điểm trên dải → «Bỏ khoảng này» → 2 đoạn, phụ đề khoá, Duyệt bị tắt → Lưu → PUT 200 → worker render
 #   → bản mới 0:08 (10 s − khoảng bỏ), 4 câu phụ đề đúng chỗ, về «Chờ duyệt».
+```
+
+- ✅ **P4.1 (31/10) — biến thể A/B cho video của mình, đã commit.** Anh gửi 2 bản yêu cầu: bản đầu ghi mục đích «lách bản
+  quyền» cho `ReupProcessor` → em từ chối (trái D1); bản sau là A/B test video tự quay → làm trong Studio, có giới hạn ADR-061 mục 11.
+  - `Clip.hflip`, `Canvas.lut` (chỉ tên `.cube`, kiểm bằng regex — không nhận đường dẫn). Render: `hflip` trước khi khớp khung;
+    `lut3d` sau khi nối, trước phụ đề / chữ. Thiếu file LUT → render bình thường, ghi chú «bỏ qua».
+  - Tham số chung mọi mẫu `mirror` / `lut` / `seed`; mẫu mới `ab_montage` (cắt theo cảnh, giữ hook, xáo đoạn giữa, cắt `max_len`).
+  - `POST /studio/api/projects/{id}/variants` (≤ 5) + khối «Biến thể A/B» trên trình edit. Mẫu chưa đặt `mirror` / `lut` thì chia
+    đều: bản lẻ lật, bản chẵn không; LUT lần lượt từng file.
+  - Trình edit: ô «Lật gương» từng đoạn, chọn «Tông màu (LUT)». Lật / âm lượng không còn khoá sửa phụ đề (chỉ đổi đầu / cuối
+    đoạn mới khoá) — sửa cả server (`_cuts`).
+  - Reup: mẫu bỏ qua lật / LUT ngẫu nhiên / xáo; lưu spec lật đoạn reup → 400; API biến thể → 400; nút biến thể ẩn. LUT cố định dùng được.
+
+**Verification Proof (P4.1)**:
+```
+$ unshare -n pytest tests/test_studio_*.py -q
+90 passed   # 15 test mới (test_studio_ab_variants.py): hflip trước fit (3 kiểu khung), lut3d trước chữ, tên LUT bị
+            # chặn đường dẫn, mirror / lut theo seed, intro / outro không lật, reup bị bỏ qua, gộp cảnh ngắn,
+            # ab_montage giữ hook + đủ đoạn + không start ≥ end + cắt max_len, render thật với LUT nhuộm đỏ (đo điểm ảnh
+            # R>200) rồi xoá LUT → màu gốc, biến thể chia đều lật + lần lượt LUT, chặn reup, lật không mất sửa phụ đề
+$ ruff / lint-imports (2 luật Studio KEPT) / tsc / npm run build → ok
+# Trình duyệt (demo SQLite, 1 LUT mẫu): tích «Lật gương» + chọn LUT → PUT 200 (lut + hflip trong spec) → render có LUT;
+# «Dựng biến thể» → POST 200, 4 dự án mới; lật gương không còn khoá phụ đề.
 ```

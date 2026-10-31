@@ -6,6 +6,7 @@ Thêm mẫu: viết hàm, đăng ký vào ``TEMPLATES``. ``StudioTemplate.kind``
 """
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field, replace
 from typing import Callable
 
@@ -22,6 +23,7 @@ from app.features.studio.spec import (
 )
 
 MAX_CUT_CLIPS = 60  # own_footage: quá số đoạn này thì gộp bớt — mỗi đoạn là một input ffmpeg
+MONTAGE_MIN_SEG = 0.6  # ab_montage: đoạn ngắn hơn thì gộp vào đoạn trước
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,9 @@ class ComposeInput:
     transcript_lang: str | None = None  # None = không rõ (coi như đúng ngôn ngữ phụ đề)
     dub: dict | None = None  # phân tích ``dub`` của asset (bước lồng tiếng)
     silences: list[dict] = field(default_factory=list)  # [{"start", "end"}] giây asset
+    scenes: list[float] = field(default_factory=list)  # mốc đổi cảnh, giây asset
+    origin: str = "upload"  # reup = video của người khác → không nhận biến thể A/B (ADR-061 mục 11)
+    lut_names: list[str] = field(default_factory=list)  # file .cube đang có trong storage/media/luts/
     # nhận diện kênh (asset id) — None khi kênh chưa có
     intro_asset_id: int | None = None
     outro_asset_id: int | None = None
@@ -78,9 +83,39 @@ def _subtitles(inp: ComposeInput, source: str) -> Subtitles:
     return subtitles
 
 
-def _finish(inp: ComposeInput, clips: list[Clip], subtitles: Subtitles, *, original: float | None = None) -> ProjectSpec:
-    """Phần chung mọi mẫu: intro / outro / logo của kênh, chữ hook, nhạc nền, ghi nguồn."""
+def _rng(inp: ComposeInput) -> random.Random:
+    """Ngẫu nhiên theo ``seed`` của mẫu / biến thể — cùng asset + cùng seed thì ra cùng một bản."""
+    return random.Random(f"{inp.asset_id}:{inp.params.get('seed') or 0}")
+
+
+def _own(inp: ComposeInput) -> bool:
+    return inp.origin != "reup"
+
+
+def _variant(inp: ComposeInput, clips: list[Clip], rng: random.Random) -> tuple[list[Clip], str | None]:
+    """
+    Biến thể A/B (tham số chung mọi mẫu, ADR-061 mục 11):
+    ``mirror`` ``off`` / ``on`` / ``random`` (+ ``mirror_prob``, 0.5) — lật ngang cả video chính;
+    ``lut`` ``""`` / tên file / ``random`` — tông màu. Kết quả ghi vào spec nên xem / sửa được trên trình edit.
+    Asset reup: không lật, không LUT ngẫu nhiên; LUT cố định (tông màu kênh) vẫn nhận.
+    """
     p = inp.params
+    mirror = str(p.get("mirror") or "off")
+    flip = _own(inp) and (mirror == "on" or (mirror == "random" and rng.random() < float(p.get("mirror_prob", 0.5))))
+    if flip:
+        clips = [c.model_copy(update={"hflip": True}) if c.asset == inp.asset_id else c for c in clips]
+    want = str(p.get("lut") or "")
+    if want == "random":
+        lut = rng.choice(inp.lut_names) if (_own(inp) and inp.lut_names) else None
+    else:
+        lut = want if want in inp.lut_names else None
+    return clips, lut
+
+
+def _finish(inp: ComposeInput, clips: list[Clip], subtitles: Subtitles, *, original: float | None = None) -> ProjectSpec:
+    """Phần chung mọi mẫu: biến thể A/B, intro / outro / logo của kênh, chữ hook, nhạc nền, ghi nguồn."""
+    p = inp.params
+    clips, lut = _variant(inp, clips, _rng(inp))
     if inp.intro_asset_id:
         clips.insert(0, Clip(asset=inp.intro_asset_id))
     if inp.outro_asset_id:
@@ -98,7 +133,7 @@ def _finish(inp: ComposeInput, clips: list[Clip], subtitles: Subtitles, *, origi
     if original is None:
         original = float(p.get("original_volume", 1.0)) if inp.has_audio else 0.0
     return ProjectSpec(
-        canvas=Canvas(fit=p.get("fit") or "blur_pad"),
+        canvas=Canvas(fit=p.get("fit") or "blur_pad", lut=lut),
         clips=clips,
         subtitles=subtitles,
         texts=texts,
@@ -196,8 +231,52 @@ def own_footage(inp: ComposeInput) -> ProjectSpec:
     return _finish(inp, clips, _subtitles(inp, "transcript"))
 
 
+def scene_segments(duration: float, scenes: list[float], *, min_seg: float = MONTAGE_MIN_SEG) -> list[tuple[float, float]]:
+    """Mốc đổi cảnh → các đoạn ``(start, end)`` liền nhau; đoạn ngắn hơn ``min_seg`` gộp vào đoạn trước."""
+    cuts = sorted({round(t, 3) for t in scenes if 0 < t < duration})
+    bounds = [0.0, *cuts, round(duration, 3)]
+    segs: list[tuple[float, float]] = []
+    for a, b in zip(bounds, bounds[1:]):
+        if segs and b - a < min_seg:
+            segs[-1] = (segs[-1][0], b)
+        elif not segs or b - a >= min_seg:
+            segs.append((a, b))
+    if len(segs) > 1 and segs[0][1] - segs[0][0] < min_seg:  # đoạn đầu quá ngắn: gộp sang sau
+        segs[1] = (segs[0][0], segs[1][1])
+        segs.pop(0)
+    return segs
+
+
+def ab_montage(inp: ComposeInput) -> ProjectSpec:
+    """
+    Montage B-roll cho A/B test video của mình: cắt theo mốc đổi cảnh, giữ đoạn đầu làm hook, xáo thứ tự các
+    đoạn giữa theo ``seed`` (mỗi biến thể một seed), dừng khi đủ ``max_len``.
+
+    params thêm: ``keep_first`` (True), ``min_clips`` (3 — ít đoạn hơn thì như ``basic``), ``seed``.
+    Asset reup hoặc video không đủ cảnh → y như ``basic`` (không xáo video của người khác, ADR-061 mục 11).
+    """
+    p = inp.params
+    segs = scene_segments(inp.duration, inp.scenes) if inp.duration else []
+    if not _own(inp) or len(segs) < max(2, int(p.get("min_clips", 3))):
+        return basic(inp)
+    rng = _rng(inp)
+    head = segs[:1] if p.get("keep_first", True) else []
+    rest = segs[len(head):]
+    rng.shuffle(rest)
+    budget = float(p.get("max_len") or 0.0) or float("inf")
+    clips: list[Clip] = []
+    for a, b in head + rest:
+        if budget < 0.2:
+            break
+        b = min(b, a + budget)
+        budget -= b - a
+        clips.append(Clip(asset=inp.asset_id, start=round(a, 3), end=round(b, 3)))
+    return _finish(inp, clips, _subtitles(inp, "transcript"))
+
+
 TEMPLATES: dict[str, Callable[[ComposeInput], ProjectSpec]] = {
     "basic": basic,
     "reup_dub": reup_dub,
     "own_footage": own_footage,
+    "ab_montage": ab_montage,
 }

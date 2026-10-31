@@ -25,6 +25,8 @@ export const updateMeta = (id: number, body: { caption?: string; hashtags?: stri
   sendJson<Ok>(`${BASE}/projects/${id}`, "PATCH", body);
 export const recompose = (id: number, body: { template_id: number | null; channel_id?: number | null }) =>
   sendJson<Ok>(`${BASE}/projects/${id}/recompose`, "POST", body);
+export const makeVariants = (id: number, n: number) =>
+  sendJson<{ ok: boolean; task_ids: number[] }>(`${BASE}/projects/${id}/variants`, "POST", { n });
 export const approveProject = (id: number, body: { caption?: string; hashtags?: string[] } = {}) =>
   sendJson<Ok>(`${BASE}/projects/${id}/approve`, "POST", body);
 export const rejectProject = (id: number, reason = "") =>

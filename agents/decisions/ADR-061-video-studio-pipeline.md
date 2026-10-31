@@ -41,6 +41,11 @@ Accepted. Owner giao trực tiếp ngày 2026-10-30: «tách hết ra để mỗ
 9. **Hệ cũ nhường kênh bằng cờ `studio_channels.take_reup`** (mặc định tắt). Video reup tải + chống trùng xong, có đúng 1 kênh đích và kênh đó bật cờ → hook `studio.take_reup` chuyển file sang hộp thư Studio. Material đổi sang `ViralStatus.STUDIO`, hệ cũ không xử lý tiếp. Phần con của video chia phần vẫn đi đường cũ.
 10. **Caption là bước riêng sau render**, dùng lại `ContentOrchestrator.generate_caption`. AI hỏng chỉ ghi chú, người duyệt viết tay.
 
+### Bổ sung P4.1 (31/10)
+11. **Biến thể A/B (lật gương, LUT, xáo đoạn) chỉ cho nội dung của mình** (`origin` upload / ai / brand). Asset reup bị bỏ qua ở
+    mẫu, chặn ở lưu spec và ở API biến thể. Lý do: cùng D1 — biến đổi ngẫu nhiên trên video của người khác là để né nhận diện
+    trùng / bản quyền, Studio không làm việc đó. LUT cố định theo kênh là tông màu nhận diện, dùng cho mọi nguồn.
+
 ## Ngoại lệ phân vai
 Claude Code làm cả backend cho PLAN-106 (P1–P6), giữ 3 ràng buộc của ADR-010:
 - có PLAN trước khi code;

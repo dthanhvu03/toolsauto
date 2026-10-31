@@ -36,5 +36,15 @@ def inbox_dir() -> Path:
     return _dir("inbox")
 
 
+def luts_dir() -> Path:
+    """Bảng màu .cube anh tự bỏ vào (không tạo thư mục — chưa có thì coi như không có LUT nào)."""
+    return config.STORAGE_MEDIA_DIR / "luts"
+
+
+def lut_names() -> list[str]:
+    folder = luts_dir()
+    return sorted(p.name for p in folder.glob("*.cube") if p.is_file()) if folder.is_dir() else []
+
+
 def fonts_dir() -> Path:
     return Path(config.BASE_DIR) / "app" / "static" / "fonts"

@@ -63,6 +63,11 @@ def run(db: Session, task: StudioTask) -> StageResult:
     if spec.subtitles.enabled and spec.subtitles.source != "lines":
         transcripts = {c.asset: store.lines_for(db, c.asset, spec.subtitles.source) for c in spec.clips}
 
+    lut_file = None
+    if spec.canvas.lut:
+        candidate = paths.luts_dir() / spec.canvas.lut
+        lut_file = str(candidate) if candidate.is_file() else None  # thiếu LUT: render không nhuộm, không hỏng
+
     project.status = ProjectStatus.RENDERING
     project.error = None
     db.commit()
@@ -76,7 +81,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
             plan = build(
                 spec, media, output=str(tmp), workdir=str(work),
                 font_file=str(paths.fonts_dir() / FONT_FILE), fonts_dir=str(paths.fonts_dir()),
-                transcripts=transcripts, ffmpeg=ffmpeg_path.ffmpeg_bin(),
+                transcripts=transcripts, lut_file=lut_file, ffmpeg=ffmpeg_path.ffmpeg_bin(),
             )
         except SpecError as exc:
             raise StageError(str(exc), retryable=False) from exc
@@ -99,4 +104,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
     project.rendered_at = int(time.time())
     project.status = ProjectStatus.RENDERED
     db.commit()
-    return StageResult(project_id=project.id, note=f"{duration:.1f}s")
+    note = f"{duration:.1f}s"
+    if spec.canvas.lut and not lut_file:
+        note += f" · không thấy LUT {spec.canvas.lut}, bỏ qua"
+    return StageResult(project_id=project.id, note=note)

@@ -166,6 +166,19 @@ def recompose(project_id: int, body: RecomposeBody, db: Session = Depends(get_db
     return {"ok": True, "task_id": task.id}
 
 
+class VariantsBody(BaseModel):
+    n: int = 3
+
+
+@router.post("/projects/{project_id}/variants")
+def make_variants(project_id: int, body: VariantsBody, db: Session = Depends(get_db)) -> dict:
+    try:
+        tasks = editor.make_variants(db, project_id, body.n)
+    except editor.EditError as exc:
+        raise _bad(exc) from exc
+    return {"ok": True, "task_ids": [t.id for t in tasks]}
+
+
 class ApproveBody(BaseModel):
     caption: str | None = None
     hashtags: list[str] | None = None

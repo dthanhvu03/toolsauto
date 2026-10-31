@@ -32,7 +32,7 @@ export type ProjectsResponse = {
 };
 
 export type ClipAudio = { asset: number; volume: number };
-export type Clip = { asset: number; start: number; end: number | null; audio: ClipAudio[] };
+export type Clip = { asset: number; start: number; end: number | null; audio: ClipAudio[]; hflip: boolean };
 export type SubLine = { start: number; end: number; text: string };
 export type TextOverlay = { text: string; start: number; end: number | null; pos: "top" | "center" | "bottom"; size: number };
 export type AudioTrack = { asset: number; volume: number; start: number; loop: boolean };
@@ -40,7 +40,7 @@ export type AudioTrack = { asset: number; volume: number; start: number; loop: b
 /** Đúng hình `app/features/studio/spec.py` — server từ chối trường lạ (extra="forbid"). */
 export type ProjectSpec = {
   v: 1;
-  canvas: { w: number; h: number; fps: number; fit: "blur_pad" | "crop" | "pad" };
+  canvas: { w: number; h: number; fps: number; fit: "blur_pad" | "crop" | "pad"; lut: string | null };
   clips: Clip[];
   subtitles: {
     enabled: boolean;
@@ -90,6 +90,9 @@ export type ProjectDetail = {
   channel: { id: number; name: string } | null;
   template: { id: number; name: string; kind: string } | null;
   subtitle_lines: SubLine[];
+  luts: string[];
+  /** false với video reup — không lật gương / không biến thể (ADR-061 mục 11) */
+  variants_allowed: boolean;
   tasks: { id: number; stage: string; status: string; error: string | null }[];
 };
 

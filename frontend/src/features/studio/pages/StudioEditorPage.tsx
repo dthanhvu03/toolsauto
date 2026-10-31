@@ -42,6 +42,7 @@ export function StudioEditorPage() {
   const [tags, setTags] = useState("");
   const [templateId, setTemplateId] = useState<number | "">("");
   const [channelId, setChannelId] = useState<number | "">("");
+  const [variantCount, setVariantCount] = useState(3);
   const renderedAt = d?.project.rendered_at;
   useEffect(() => {
     if (!d) return;
@@ -77,10 +78,13 @@ export function StudioEditorPage() {
     refresh
   );
 
-  const clipsDirty = useMemo(() => !!d && !!spec && JSON.stringify(spec.clips) !== JSON.stringify(d.spec.clips), [d, spec]);
+  const variants = useAction((n: number) => api.makeVariants(id, n), "Đang dựng biến thể — sẽ hiện trong Studio «Đang làm».", refresh);
+  // Chỉ đoạn cắt (đầu / cuối) làm lệch số câu phụ đề — lật gương / âm lượng thì không.
+  const cuts = (clips: ProjectSpec["clips"]) => JSON.stringify(clips.map((c) => [c.asset, c.start, c.end]));
+  const clipsDirty = useMemo(() => !!d && !!spec && cuts(spec.clips) !== cuts(d.spec.clips), [d, spec]);
   const specDirty = useMemo(() => !!d && !!spec && JSON.stringify(spec) !== JSON.stringify(d.spec), [d, spec]);
   const durations = Object.fromEntries((d?.assets ?? []).map((a) => [a.id, a.duration ?? 0]));
-  const msg = save.msg || meta.msg || approve.msg || reject.msg || remake.msg;
+  const msg = save.msg || meta.msg || approve.msg || reject.msg || remake.msg || variants.msg;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -178,7 +182,14 @@ export function StudioEditorPage() {
 
                 {d.asset?.kind === "video" ? (
                   <Section title="Đoạn cắt">
-                    <ClipEditor clips={spec.clips} main={d.asset} assets={d.assets} disabled={!d.project.editable} onChange={(clips) => setSpec({ ...spec, clips })} />
+                    <ClipEditor
+                      clips={spec.clips}
+                      main={d.asset}
+                      assets={d.assets}
+                      disabled={!d.project.editable}
+                      canFlip={d.variants_allowed}
+                      onChange={(clips) => setSpec({ ...spec, clips })}
+                    />
                   </Section>
                 ) : null}
 
@@ -192,9 +203,29 @@ export function StudioEditorPage() {
                   />
                 </Section>
 
-                <Section title="Chữ & âm thanh">
-                  <TextAudioPanel spec={spec} assets={d.assets} disabled={!d.project.editable} onChange={setSpec} />
+                <Section title="Màu, chữ & âm thanh">
+                  <TextAudioPanel spec={spec} assets={d.assets} luts={d.luts} disabled={!d.project.editable} onChange={setSpec} />
                 </Section>
+
+                {d.variants_allowed ? (
+                  <Section title="Biến thể A/B">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select className={selectClass} value={variantCount} onChange={(e) => setVariantCount(Number(e.target.value))}>
+                        {[2, 3, 4, 5].map((n) => (
+                          <option key={n} value={n}>
+                            {n} biến thể
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" className={ghostBtnClass} disabled={variants.busy} onClick={() => variants.run(variantCount)}>
+                        Dựng biến thể
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Cùng video gốc, mỗi bản ngẫu nhiên khác nhau theo tham số mẫu (mirror / lut; mẫu ab_montage xáo thứ tự đoạn). Dự án này giữ nguyên.
+                    </p>
+                  </Section>
+                ) : null}
 
                 <Section title="Đổi mẫu">
                   <div className="flex flex-wrap items-center gap-2">

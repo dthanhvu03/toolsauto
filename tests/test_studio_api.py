@@ -129,7 +129,7 @@ def test_kenh_va_mau(db, media, api, monkeypatch):  # noqa: F811
     monkeypatch.setattr(setup, "buffer_channels", lambda db=None: [{"id": "b1", "name": "Uyển Nhi"}, {"id": "b2", "name": "Sống Nhẹ"}])
     ov = api.get("/studio/api/setup").json()
     assert [b["id"] for b in ov["buffer_channels"]] == ["b1", "b2"]
-    assert {k["kind"] for k in ov["template_kinds"]} == {"basic", "reup_dub", "own_footage"}
+    assert {k["kind"] for k in ov["template_kinds"]} == {"basic", "reup_dub", "own_footage", "ab_montage"}
 
     ch = api.post("/studio/api/channels", json={"buffer_channel_id": "b1"}).json()
     assert ch["name"] == "Uyển Nhi" and ch["auto_approve"] is False and ch["take_reup"] is False

@@ -14,11 +14,14 @@ function Volume({ label, value, onChange, disabled }: { label: string; value: nu
 export function TextAudioPanel({
   spec,
   assets,
+  luts,
   disabled,
   onChange,
 }: {
   spec: ProjectSpec;
   assets: Asset[];
+  /** file .cube trong storage/media/luts/ */
+  luts: string[];
   disabled: boolean;
   onChange: (spec: ProjectSpec) => void;
 }) {
@@ -39,6 +42,24 @@ export function TextAudioPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      <label className="flex items-center gap-3 text-sm">
+        <span className="w-32 shrink-0 text-slate-600">Tông màu (LUT)</span>
+        <select
+          className="h-9 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+          value={spec.canvas.lut ?? ""}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...spec, canvas: { ...spec.canvas, lut: e.target.value || null } })}
+        >
+          <option value="">Màu gốc</option>
+          {luts.map((l) => (
+            <option key={l} value={l}>
+              {l.replace(/\.cube$/, "")}
+            </option>
+          ))}
+          {spec.canvas.lut && !luts.includes(spec.canvas.lut) ? <option value={spec.canvas.lut}>{spec.canvas.lut} (không còn file)</option> : null}
+        </select>
+      </label>
+      {luts.length === 0 ? <p className="-mt-2 text-[11px] text-slate-400">Bỏ file .cube vào storage/media/luts/ để có tông màu.</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <input
           className="h-9 min-w-[12rem] flex-1 rounded-lg border border-slate-200 px-3 text-sm"
