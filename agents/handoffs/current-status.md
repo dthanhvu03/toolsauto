@@ -39,19 +39,31 @@
 - **31/10 12:45 — PLAN-109 DocType kiểu Frappe (code xong, commit cục bộ, CHƯA lên máy thật):** anh chọn «Kiểu DocType như Frappe». Định nghĩa loại dữ liệu trên web (trường, kiểu, link, bảng con) → danh sách + form + API, không cần code / migration cho từng loại. 25 test, trình duyệt thật trên SQLite tạm. Lệnh backup + migration `w0e7f8a9b0c1` + restart web bị chặn quyền → anh tự chạy (xem PLAN-109). Bản build SPA đã hiện mục «Dữ liệu (DocType)» nhưng API chưa có tới khi restart web.
 - **31/10 06:30 — P4.3 (anh giao 4 bước):** bước 1 anh đã tự chạy (kiểm bằng lệnh đọc: ổn); bước 2 tạo `storage/media/luts|bgm`; bước 3 NVENC tự dò + quay về CPU (GTX 1650, driver 516.40 quá cũ cho ffmpeg 6.1 — cần ≥ 522; CPU 18,9 s / video 19,6 s); bước 4 cài VieNeu bị chặn quyền. 128 test (Studio + DocType) qua. Commit cục bộ.
 - **Next:**
-  - Driver NVIDIA (31/10 07:xx, anh: «làm giúp anh»): tải bản laptop 621.01 (21/10/2026, WHQL, link `us.download.nvidia.com`,
-    chữ ký NVIDIA Corporation hợp lệ) về `C:\Users\Admin\Downloads`, cài im lặng `-s -noreboot` qua UAC → exit 0, Windows báo
-    32.0.16.2101. **WSL chưa khởi động lại** nên `nvidia-smi` trong WSL đang lỗi ld.so (thư viện driver cũ còn mount) — không
-    ảnh hưởng gì đang chạy (Studio render CPU). Anh chạy `wsl --shutdown` (PowerShell) hoặc khởi động lại máy lúc rảnh; PM2
-    (`pm2-root.service`, dump có 6 app) và bot cashback (systemd) tự lên.
-  - Sau khi WSL lên lại: kiểm `nvidia-smi`, encode thử `h264_nvenc`, `pm2 restart Studio_Heavy`, đo lại render (mốc CPU 18,9 s / 19,6 s);
-    rồi thử VieNeu GPU (cài torch CUDA vào `/home/vu/venv-vieneu`).
-  - VieNeu (31/10 06:40, anh: «chạy giúp anh»): đã cài `/home/vu/venv-vieneu` (vieneu 3.8.3, onnxruntime 1.31.1, 916 MB) + mẫu
-    `/home/vu/vieneu-samples/mau_*.wav`. onnxruntime 1.31 chặn file .data qua symlink cache HF → đổi symlink 2 model trong cache
-    thành file thật. Đo CPU fp32 (i5-10300H, 4 nhân WSL, máy rảnh): nạp 58 s; RTF ≈ 4–6 (12 s tiếng mất 45–72 s) → quá chậm
-    để lồng tiếng sản xuất trên CPU. Đường nhanh: GPU (PyTorch + CUDA) — cần driver mới (cùng việc NVENC). Chưa nối vào Studio.
+  - **31/10 07:30 — sau khi anh `wsl --shutdown` (kiểm xong):** 6 app PM2 lên đủ (DB_Backup stopped như cũ), `cashback-bot`
+    + `cashback-zalo` active, web cổng 8000 trả 200. `nvidia-smi`: GTX 1650, driver 621.01, 4 GB.
+    - **NVENC chạy được.** Đo trên spec dự án #3 (19,6 s, 1088×1936): x264 14,7 s · NVENC 11,3 s (cổ chai là bộ lọc CPU —
+      phụ đề / scale — nên chỉ nhanh ~25 %). NVENC cq 23 ra file 16,7 MB vs 6,7 MB → đổi `encoder.video_args` sang
+      cq = crf + 7 (= 28): 8,9 MB, SSIM 0,991 so với bản x264. 96 test Studio qua, ruff sạch, `pm2 restart Studio_Heavy` + save.
+    - **VieNeu GPU:** cài `vieneu[cuda]==3.8.3` (torch 2.8.0) vào `/home/vu/venv-vieneu`; `bench_gpu.py`: nạp 92 s (lần đầu,
+      có tải code MOSS tokenizer từ HF — transformers `trust_remote_code`), RTF 0,24–0,27 sau lần làm ấm (CPU 4–6), VRAM 475 MiB.
+      → Đủ nhanh để làm giọng lồng tiếng sản xuất. Chưa nối vào Studio (cần PLAN: worker gọi venv riêng, giữ model nạp sẵn).
+    - Ghi nhận (không phải do phiên này, không sửa): Maintenance `drop_ready_without_file` 01:53 UTC 31/10 chuyển 261
+      `viral_materials` READY → FAILED «Không còn file video» (226 tiktok, 35 facebook). Buffer vẫn gọi `/buffer-media/`
+      của vài id trong số này (1449, 1450, 1505, 1506) → 404 → bài đó trên Buffer sẽ lỗi. Vì sao file mất chưa rõ — việc
+      của phía Buffer / Anti.
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
+
+---
+
+## Phiên 2026-10-31 (admin-router) — PLAN-110: tách UI admin, nối AdminRouter, panel.py 1.725 → 477 dòng (chưa commit)
+
+- Chủ bot: «em làm bước 2 và bước 3 cho anh luôn nha». PLAN-110 (`agents/plans/active/`) ghi phạm vi + proof.
+- **Bước 2:** `admin/ui/` = `keyboards.py` + `views.py` + `glossary.py`, `__init__` re-export (đường import cũ không đổi).
+- **Bước 3:** `admin/routes.py` đăng ký 20 handler vào `AdminRouter`; tách khỏi panel: `handlers/shopee.py`, `simulation.py`, `policy.py`, `history.py`, `admin/common.py`. Luật giữ trạng thái chờ và thứ tự gõ chữ giữ y cũ (khai báo `keeps_state` từng handler).
+- Kiểm tra: so bản cũ / mới cùng 196 nút + 12 lượt gõ → 220 phản hồi giống hệt; toàn bộ test cashback (chặn TCP) 1123 qua + 1 hỏng sẵn `test_b9`; ruff sạch.
+- Không đụng: `app/features/studio/render/encoder.py`, `PROJECT.md` (phiên khác).
+- **Next:** chủ bot duyệt commit + push; sau đó restart `systemctl restart cashback-bot cashback-zalo`; archive PLAN-110 khi đã chạy thật.
 
 ---
 

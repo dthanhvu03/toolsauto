@@ -23,9 +23,10 @@ _cache: dict[str, bool] = {}
 
 
 def video_args(encoder: str, *, crf: int = 21, preset: str = "veryfast") -> list[str]:
-    """Tham số ``-c:v`` tương đương chất lượng giữa hai bộ mã hoá (cq 23 NVENC ≈ crf 21 x264 cho video ngắn dọc)."""
+    """Tham số ``-c:v`` tương đương giữa hai bộ mã hoá: cq 28 NVENC ≈ crf 21 x264 (đo trên dự án thật 31/10:
+    SSIM 0,99 so với bản x264, file 8,9 MB / 6,7 MB; cq 23 ra 16,7 MB)."""
     if encoder == NVENC:
-        return ["-c:v", NVENC, "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", str(crf + 2), "-b:v", "0",
+        return ["-c:v", NVENC, "-preset", "p5", "-tune", "hq", "-rc", "vbr", "-cq", str(crf + 7), "-b:v", "0",
                 "-pix_fmt", "yuv420p"]
     return ["-c:v", X264, "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p"]
 
