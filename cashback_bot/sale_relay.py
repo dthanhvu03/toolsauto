@@ -15,15 +15,18 @@ import json
 import logging
 import re
 import socket
+import threading
 import time
+import zlib
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
 import requests
 
 from cashback_bot.db import TrackingRepository, enqueue_event
+from cashback_bot.money import format_vnd
 from cashback_bot.telegram_api import TelegramApi
 
 logger = logging.getLogger("cashback_bot")
@@ -33,6 +36,10 @@ POLL_INTERVAL_SEC = 90  # 1.5 phút quét một lần
 REQUEST_TIMEOUT = (3.0, 5.0)
 SUB_ID = "AUTOSALE"
 MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
+HEAD_TIMEOUT = (2.0, 3.0)
+MAX_HOPS = 3
+CODES_PER_POST = 20  # voucher_posts.message_id = post_id * 100 + thứ tự mã
+CODE_FRESH_FOR = timedelta(hours=24)  # mã đã có trong voucher_posts trong khoảng này thì không ghi lại
 
 _ALLOWED_SHOPEE_HOSTS = frozenset({
     "shopee.vn",
@@ -42,6 +49,20 @@ _ALLOWED_SHOPEE_HOSTS = frozenset({
     "vn.shp.ee",
     "shope.ee",
 })
+
+# Link rút gọn: phải HEAD để biết trang đích. Host khác (shopee.vn…) đã là trang đích, không gọi thêm.
+_SHORT_HOSTS = frozenset({"s.shopee.vn", "shp.ee", "vn.shp.ee", "shope.ee"})
+_REDIRECTS = (301, 302, 303, 307, 308)
+_LABEL_WORDS = ("mã", "voucher", "giảm", "lưu mã")
+_SEND_WORDS = ("mã", "voucher", "giảm", "lưu mã", "hoàn xu")
+
+# Một lượt quét chạy trong luồng nền (tick); mở link trong pool chung, mỗi luồng một Session giữ kết nối TLS.
+_running = threading.Lock()
+_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sale-relay-link")
+_local = threading.local()
+# Cache trong một lượt quét (run_once): {"dns": {host: an_toàn}, "links": {link gốc: link đã bọc}}. Ngoài lượt quét
+# (gọi lẻ, test) = None: luôn kiểm tra lại.
+_RUN: dict[str, dict] | None = None
 
 _ALLOWED_PHOTO_HOSTS = frozenset({
     "telesco.pe",
@@ -69,6 +90,23 @@ def _is_allowed_shopee_host(hostname: str) -> bool:
     return host in _ALLOWED_SHOPEE_HOSTS or host.endswith(".shopee.vn")
 
 
+def _public_host(hostname: str) -> bool:
+    """Mọi IP của host đều là IP công khai (chống SSRF, DNS rebinding). Lỗi DNS: ngoại lệ, người gọi xử lý."""
+    cache = _RUN["dns"] if _RUN is not None else None
+    if cache is not None and hostname in cache:
+        return cache[hostname]
+    ok = True
+    for _, _, _, _, sockaddr in socket.getaddrinfo(hostname, None):
+        ip = ipaddress.ip_address(sockaddr[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast \
+                or ip.is_unspecified:
+            ok = False
+            break
+    if cache is not None:
+        cache[hostname] = ok
+    return ok
+
+
 def is_safe_shopee_url(url: str) -> bool:
     """Kiểm tra URL Shopee an toàn, chống SSRF và DNS rebinding."""
     try:
@@ -80,19 +118,7 @@ def is_safe_shopee_url(url: str) -> bool:
         hostname = (parsed.hostname or "").lower()
         if not _is_allowed_shopee_host(hostname):
             return False
-        addrs = socket.getaddrinfo(hostname, None)
-        for _, _, _, _, sockaddr in addrs:
-            ip = ipaddress.ip_address(sockaddr[0])
-            if (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_reserved
-                or ip.is_multicast
-                or ip.is_unspecified
-            ):
-                return False
-        return True
+        return _public_host(hostname)
     except Exception:
         return False
 
@@ -110,19 +136,7 @@ def is_safe_photo_url(url: str) -> bool:
             return False
         if not any(hostname == h or hostname.endswith("." + h) for h in _ALLOWED_PHOTO_HOSTS):
             return False
-        addrs = socket.getaddrinfo(hostname, None)
-        for _, _, _, _, sockaddr in addrs:
-            ip = ipaddress.ip_address(sockaddr[0])
-            if (
-                ip.is_private
-                or ip.is_loopback
-                or ip.is_link_local
-                or ip.is_reserved
-                or ip.is_multicast
-                or ip.is_unspecified
-            ):
-                return False
-        return True
+        return _public_host(hostname)
     except Exception:
         return False
 
@@ -162,54 +176,69 @@ def _clean_shopee_url(raw_url: str) -> str:
         return raw_url
 
 
+def _session() -> requests.Session:
+    session = getattr(_local, "session", None)
+    if session is None:
+        session = _local.session = requests.Session()
+        session.headers["User-Agent"] = "Mozilla/5.0"
+    return session
+
+
+def _head(url: str) -> requests.Response:
+    return _session().head(url, allow_redirects=False, timeout=HEAD_TIMEOUT)
+
+
+def _https(url: str) -> str:
+    """http:// của host Shopee → https:// (host lạ giữ nguyên để kiểm tra an toàn chặn)."""
+    if url.startswith("http://") and _is_allowed_shopee_host((urlparse(url).hostname or "").lower()):
+        return "https://" + url[7:]
+    return url
+
+
 def resolve_shopee_link(url: str, affiliate_id: str, sub_id: str = SUB_ID) -> str:
-    """Lấy link đích thực tế và bọc bằng link Affiliate của mình."""
+    """Lấy link đích thực tế và bọc bằng link Affiliate của mình.
+
+    Chỉ HEAD link rút gọn; link an_redir lấy origin_link luôn, trang shopee.vn không gọi thêm.
+    """
     if not affiliate_id or not affiliate_id.isdigit():
         return url
 
-    current_url = url
-    if current_url.startswith("http://"):
-        parsed = urlparse(current_url)
-        if _is_allowed_shopee_host((parsed.hostname or "").lower()):
-            current_url = "https://" + current_url[7:]
-
-    max_hops = 3
-    for _ in range(max_hops):
+    current_url = _https(url)
+    for _ in range(MAX_HOPS):
         if not is_safe_shopee_url(current_url):
             return url
-
+        current_url = _unwrap(current_url)
+        if (urlparse(current_url).hostname or "").lower() not in _SHORT_HOSTS:
+            break
         try:
-            resp = requests.head(
-                current_url,
-                allow_redirects=False,
-                timeout=(2.0, 3.0),
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            if resp.status_code in (301, 302, 303, 307, 308) and "Location" in resp.headers:
-                next_url = resp.headers["Location"].strip()
-                if not next_url.startswith(("http://", "https://")):
-                    next_url = urljoin(current_url, next_url)
-                if next_url.startswith("http://"):
-                    p = urlparse(next_url)
-                    if _is_allowed_shopee_host((p.hostname or "").lower()):
-                        next_url = "https://" + next_url[7:]
-                current_url = next_url
-            else:
-                break
+            resp = _head(current_url)
         except Exception as exc:
             logger.debug("[SaleRelay] Resolve error on %s: %s", current_url, exc)
             break
+        if resp.status_code not in _REDIRECTS or "Location" not in resp.headers:
+            break
+        current_url = _https(urljoin(current_url, resp.headers["Location"].strip()))
 
     if not is_safe_shopee_url(current_url):
         return url
 
-    unwrapped = _unwrap(current_url)
-    clean = _clean_shopee_url(unwrapped)
+    clean = _clean_shopee_url(current_url)
     try:
         query = urlencode({"origin_link": clean, "affiliate_id": affiliate_id, "sub_id": sub_id})
         return f"https://s.shopee.vn/an_redir?{query}"
     except Exception:
         return url
+
+
+def _resolve(link: str, affiliate_id: str) -> str:
+    """resolve_shopee_link, dùng lại kết quả khi một link gặp lại trong cùng lượt quét."""
+    cache = _RUN["links"] if _RUN is not None else None
+    if cache is not None and link in cache:
+        return cache[link]
+    result = resolve_shopee_link(link, affiliate_id)
+    if cache is not None:
+        cache[link] = result
+    return result
 
 
 def _is_shopee_url_candidate(url_str: str) -> bool:
@@ -226,31 +255,39 @@ def _is_shopee_url_candidate(url_str: str) -> bool:
         return False
 
 
+_POST_ID = re.compile(r'data-post="[^"]+/(\d+)"')
+_PHOTO = re.compile(r"background-image:url\('([^']+)'\)")
+_POST_TEXT = re.compile(r"tgme_widget_message_text[^>]*>(.*?)</div>", re.DOTALL)
+_BR = re.compile(r"<br\s*/?>")
+_TAG = re.compile(r"<[^>]+>")
+_LINK = re.compile(r"https?://[^\s<>\"']+")
+
+
 def parse_channel_html(html_text: str) -> list[dict[str, Any]]:
     """Bóc tách các bài viết từ HTML của trang t.me/s/<channel>."""
     posts: list[dict[str, Any]] = []
     blocks = html_text.split("tgme_widget_message_wrap")
     for block in blocks[1:]:
-        msg_id_match = re.search(r'data-post="[^"]+/(\d+)"', block)
+        msg_id_match = _POST_ID.search(block)
         if not msg_id_match:
             continue
         msg_id = int(msg_id_match.group(1))
 
         # Photo
-        photos = re.findall(r"background-image:url\('([^']+)'\)", block)
+        photos = _PHOTO.findall(block)
         photo_url = photos[0] if photos else None
 
         # Text
-        text_match = re.search(r"tgme_widget_message_text[^>]*>(.*?)</div>", block, re.DOTALL)
+        text_match = _POST_TEXT.search(block)
         raw_html = text_match.group(1) if text_match else ""
 
         # Convert simple HTML tags to plain / standard
-        clean_text = re.sub(r"<br\s*/?>", "\n", raw_html)
-        clean_text = re.sub(r"<[^>]+>", " ", clean_text)
+        clean_text = _BR.sub("\n", raw_html)
+        clean_text = _TAG.sub(" ", clean_text)
         clean_text = html.unescape(clean_text).strip()
 
         # Find raw links and strictly filter against allowed Shopee domains
-        links = re.findall(r"https?://[^\s<>\"']+", raw_html + " " + clean_text)
+        links = _LINK.findall(raw_html + " " + clean_text)
         shopee_links = [
             lnk.rstrip(".,)")
             for lnk in links
@@ -266,6 +303,79 @@ def parse_channel_html(html_text: str) -> list[dict[str, Any]]:
     return posts
 
 
+# --- Bóc mã giảm giá từ bài tổng hợp ------------------------------------------------------------------------------
+
+# Mã: chữ HOA + số ASCII 4–20 ký tự, có ít nhất một chữ. Chữ HOA tiếng Việt (MÃ, GIẢM) không khớp vì \b Unicode.
+_CODE = re.compile(r"(?<![\w/])(?=[A-Z0-9]*[A-Z])[A-Z0-9]{4,20}(?![\w/])")
+# Từ HOA hay gặp trong bài săn sale nhưng không phải mã.
+_NOT_CODES = frozenset({
+    "SHOPEE", "SALE", "VOUCHER", "FREESHIP", "XTRA", "LIVE", "MALL", "FLASH", "DEAL", "CODE", "LINK", "FREE",
+    "SHOP", "SPAYLATER", "SPAY", "TIKTOK", "LAZADA", "HTTPS", "HTTP",
+})
+_AMOUNT_TOKEN = re.compile(r"\d+(?:K|M|TR|D)", re.I)  # «100K», «2TR» viết HOA không phải mã
+_URL_SPAN = re.compile(r"https?://\S+")
+_AMOUNT = r"(\d+(?:[.,]\d+)*)\s*(k|nghìn|ngàn|tr|triệu|m|đ|d|vnđ|vnd)?(?![a-zà-ỹ])"
+_PERCENT = re.compile(r"(\d{1,3}(?:[.,]\d+)?)\s*%")
+_MAX = re.compile(r"(?:tối đa|toi da|max)\s*:?\s*" + _AMOUNT, re.I)
+_MIN = re.compile(r"(?:đơn\s*(?:tối thiểu|từ|tt)|don\s*(?:toi thieu|tu)|đtt|min)\s*:?\s*" + _AMOUNT, re.I)
+_OFF_AMOUNT = re.compile(r"(?:giảm|giam|-)\s*:?\s*" + _AMOUNT, re.I)
+_UNITS = {"k": 1_000, "nghìn": 1_000, "ngàn": 1_000, "tr": 1_000_000, "triệu": 1_000_000, "m": 1_000_000}
+
+
+def _vnd(number: str, unit: str | None) -> int:
+    """«50k» → 50000, «1,5tr» → 1500000, «199.000đ» → 199000."""
+    unit = (unit or "").lower()
+    if unit in _UNITS:
+        return int(round(float(number.replace(",", ".")) * _UNITS[unit]))
+    return int(re.sub(r"[.,]", "", number))
+
+
+def extract_voucher_codes(text: str) -> list[dict]:
+    """Bóc các mã giảm giá trong một bài tổng hợp, mỗi mã một dict theo thứ tự xuất hiện (bỏ mã trùng).
+
+    Điều kiện của mã lấy trong đoạn của mã đó: từ đầu dòng (mã đứng sau trên cùng dòng: từ chính mã) tới trước mã
+    kế tiếp; dòng không có mã thì thuộc mã phía trên. Khoá: code, discount (chữ gốc «15%» / «50k»),
+    discount_percent, discount_vnd, max_discount_vnd, min_spend_vnd (None khi bài không ghi).
+    """
+    text = text or ""
+    scan = _URL_SPAN.sub(lambda m: " " * len(m.group()), text)  # mã trong URL không tính, giữ nguyên vị trí
+    hits = [m for m in _CODE.finditer(scan)
+            if m.group() not in _NOT_CODES and not _AMOUNT_TOKEN.fullmatch(m.group())]
+    found: list[dict] = []
+    seen: set[str] = set()
+    for index, hit in enumerate(hits):
+        line_start = scan.rfind("\n", 0, hit.start()) + 1
+        previous = hits[index - 1] if index else None
+        start = hit.start() if previous and previous.end() > line_start else line_start
+        following = hits[index + 1] if index + 1 < len(hits) else None
+        if following is None:
+            end = len(scan)
+        else:
+            next_line = scan.rfind("\n", 0, following.start()) + 1
+            end = following.start() if next_line <= hit.start() else next_line
+        segment = scan[start:end].replace(hit.group(), " ")
+        if hit.group() in seen:
+            continue
+        seen.add(hit.group())
+        maximum, minimum = _MAX.search(segment), _MIN.search(segment)
+        rest = segment
+        for labelled in (maximum, minimum):
+            if labelled:  # số «tối đa» / «đơn từ» không phải mức giảm
+                rest = rest.replace(labelled.group(), " ")
+        percent = _PERCENT.search(rest)
+        off = None if percent else _OFF_AMOUNT.search(rest)
+        found.append({
+            "code": hit.group(),
+            "discount": percent.group().replace(" ", "") if percent else
+            (off.group(1) + (off.group(2) or "") if off else None),
+            "discount_percent": float(percent.group(1).replace(",", ".")) if percent else None,
+            "discount_vnd": _vnd(off.group(1), off.group(2)) if off else None,
+            "max_discount_vnd": _vnd(maximum.group(1), maximum.group(2)) if maximum else None,
+            "min_spend_vnd": _vnd(minimum.group(1), minimum.group(2)) if minimum else None,
+        })
+    return found
+
+
 def process_post_content(post: dict[str, Any], affiliate_id: str) -> tuple[str, str | None, list[dict]]:
     """Thay thế link trong bài thành link Affiliate và dựng inline keyboard."""
     text = post["text"]
@@ -276,23 +386,21 @@ def process_post_content(post: dict[str, Any], affiliate_id: str) -> tuple[str, 
 
     bounded_links = old_links[:10]
 
-    link_map: dict[str, str] = {}
     if len(bounded_links) == 1:
-        link_map[bounded_links[0]] = resolve_shopee_link(bounded_links[0], affiliate_id)
+        link_map = {bounded_links[0]: _resolve(bounded_links[0], affiliate_id)}
     else:
-        max_workers = min(4, len(bounded_links))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            resolved = list(executor.map(lambda lnk: (lnk, resolve_shopee_link(lnk, affiliate_id)), bounded_links))
-            link_map = dict(resolved)
+        link_map = dict(zip(bounded_links, _POOL.map(lambda lnk: _resolve(lnk, affiliate_id), bounded_links)))
 
-    for old_link, new_link in sorted(link_map.items(), key=lambda kv: len(kv[0]), reverse=True):
-        text = text.replace(old_link, new_link)
+    # Một lượt thay: link mới chèn vào không bị link cũ ngắn hơn thay tiếp.
+    pattern = re.compile("|".join(map(re.escape, sorted(link_map, key=len, reverse=True))))
+    text = pattern.sub(lambda m: link_map[m.group(0)], text)
 
     # Nút bấm mở Shopee (chỉ hiện nút nếu bài có ít hơn 4 link, nếu bài quá nhiều link thì để link trong bài cho gọn)
     buttons: list[list[dict]] = []
     first_link = list(link_map.values())[0] if link_map else None
     if first_link and len(link_map) <= 3:
-        is_voucher = any(k in text.lower() for k in ("mã", "voucher", "giảm", "lưu mã"))
+        lowered = text.lower()
+        is_voucher = any(k in lowered for k in _LABEL_WORDS)
         label = "🎟 Lưu mã trên Shopee ↗" if is_voucher else "🛒 Mua ngay trên Shopee ↗"
         buttons.append([{"text": label, "url": first_link}])
 
@@ -397,6 +505,7 @@ def enqueue_for_subscribers(
     """Xếp hàng tin nhắn gửi riêng cho từng khách."""
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     markup_json = json.dumps({"inline_keyboard": buttons}, ensure_ascii=False) if buttons else None
+    message_html = html.escape(text)
     queued = 0
 
     with repo.connect() as conn:
@@ -407,7 +516,7 @@ def enqueue_for_subscribers(
                 event_key=event_key,
                 event_type="VOUCHER",
                 chat_id=user_id,
-                message_html=html.escape(text),
+                message_html=message_html,
                 audience="customer",
                 category="voucher",
                 reply_markup_json=markup_json,
@@ -422,33 +531,83 @@ def enqueue_for_subscribers(
 _LAST_TICK: float = 0.0
 
 
-def tick(repo: TrackingRepository, telegram: TelegramApi, affiliate_id: str | None) -> None:
-    """Hàm định kỳ được gọi trong vòng lặp chính của bot."""
+def tick(repo: TrackingRepository, telegram: TelegramApi, affiliate_id: str | None) -> threading.Thread | None:
+    """Gọi mỗi vòng poll. Tới lượt (POLL_INTERVAL_SEC) và chưa có lượt nào đang chạy thì quét trong luồng nền:
+    tải trang kênh, mở link, tải ảnh không chặn vòng lặp nhận tin của bot."""
     global _LAST_TICK
-    try:
-        now_ts = time.time()
-        if now_ts - _LAST_TICK < POLL_INTERVAL_SEC:
-            return
-        _LAST_TICK = now_ts
+    now_ts = time.time()
+    if not affiliate_id or now_ts - _LAST_TICK < POLL_INTERVAL_SEC or not _running.acquire(blocking=False):
+        return None
+    _LAST_TICK = now_ts
 
-        if not affiliate_id:
-            return
-
-        # Lấy kênh đích: mặc định kênh ZT báo mã
-        raw_channel = repo.get_state("voucher_channel") or "-1004496405998"
+    def work() -> None:
         try:
-            target_channel_id = int(raw_channel)
-        except ValueError:
-            return
+            run_once(repo, telegram, affiliate_id)
+        except Exception as exc:
+            logger.warning("[SaleRelay] tick unexpected error: %s", exc)
+        finally:
+            _running.release()
 
-        channels = DEFAULT_CHANNELS
-        for chan in channels:
+    thread = threading.Thread(target=work, name="sale-relay", daemon=True)
+    thread.start()
+    return thread
+
+
+def run_once(repo: TrackingRepository, telegram: TelegramApi, affiliate_id: str) -> None:
+    """Một lượt quét mọi kênh nguồn (chạy đồng bộ). Cache DNS và link chỉ sống trong lượt này."""
+    global _RUN
+    # Lấy kênh đích: mặc định kênh ZT báo mã
+    raw_channel = repo.get_state("voucher_channel") or "-1004496405998"
+    try:
+        target_channel_id = int(raw_channel)
+    except ValueError:
+        return
+    _RUN = {"dns": {}, "links": {}}
+    try:
+        for chan in DEFAULT_CHANNELS:
             try:
                 _scan_channel(chan, repo, telegram, affiliate_id, target_channel_id)
             except Exception as exc:
                 logger.warning("[SaleRelay] Scan %s error: %s", chan, exc)
-    except Exception as exc:
-        logger.warning("[SaleRelay] tick unexpected error: %s", exc)
+    finally:
+        _RUN = None
+
+
+def source_channel_id(channel_name: str) -> int:
+    """channel_id của kênh nguồn trong voucher_posts: số âm 10 chữ số, không trùng id kênh Telegram thật (-100…)."""
+    return -(zlib.crc32(channel_name.encode()) or 1)
+
+
+def store_codes(repo: TrackingRepository, channel_name: str, post_id: int, text: str, url: str | None,
+                now: datetime | None = None) -> int:
+    """Ghi các mã bóc từ bài (extract_voucher_codes) vào voucher_posts để /magiam hiện. Trả số mã đã ghi.
+
+    sent = 0: voucher.tick không gửi lại (relay đã tự xếp hàng gửi khách). Mã đã có trong 24 giờ qua (AddLiveTag
+    hoặc bài trước) thì giữ bản cũ, kể cả trạng thái hết mã.
+    """
+    codes = extract_voucher_codes(text)[:CODES_PER_POST]
+    if not codes:
+        return 0
+    moment = now or datetime.now(timezone.utc)
+    stamp = moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+    since = (moment - CODE_FRESH_FOR).strftime("%Y-%m-%dT%H:%M:%SZ")
+    channel_id = source_channel_id(channel_name)
+    saved = 0
+    with repo.connect() as conn:
+        for index, found in enumerate(codes):
+            if conn.execute("SELECT 1 FROM voucher_posts WHERE code = ? AND created_at >= ? LIMIT 1",
+                            (found["code"], since)).fetchone():
+                continue
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO voucher_posts (channel_id, message_id, code, name, discount, max_discount, "
+                "min_spend, used_percent, url, status, created_at, updated_at) "
+                "VALUES (?, ?, ?, '', ?, ?, ?, NULL, ?, 'live', ?, ?)",
+                (channel_id, post_id * 100 + index, found["code"], found["discount"] or "",
+                 "" if found["max_discount_vnd"] is None else format_vnd(found["max_discount_vnd"]),
+                 "" if found["min_spend_vnd"] is None else format_vnd(found["min_spend_vnd"]),
+                 url, stamp, stamp))
+            saved += cursor.rowcount
+    return saved
 
 
 def _scan_channel(
@@ -490,6 +649,12 @@ def _scan_channel(
 
     for post in new_posts:
         text, first_link, buttons = process_post_content(post, affiliate_id)
+        try:
+            # Bài một link: link lưu mã là link đó; bài nhiều link không biết link nào của mã nào, để trống.
+            store_codes(repo, channel_name, post["id"], post["text"],
+                        first_link if len(post.get("shopee_links") or []) == 1 else None)
+        except Exception as exc:
+            logger.warning("[SaleRelay] store_codes error for post %s: %s", post["id"], exc)
         if not first_link:
             repo.set_state(state_key, str(post["id"]))
             continue
@@ -502,7 +667,8 @@ def _scan_channel(
             logger.warning("[SaleRelay] send_to_channel error for post %s: %s", post["id"], exc)
 
         # 2. Nếu là tin mã giảm giá / voucher hot -> xếp hàng gửi riêng cho khách
-        is_voucher = any(k in text.lower() for k in ("mã", "voucher", "giảm", "lưu mã", "hoàn xu"))
+        lowered = text.lower()
+        is_voucher = any(k in lowered for k in _SEND_WORDS)
         if is_voucher and subs:
             try:
                 enqueue_for_subscribers(repo, post["id"], text, buttons, subs)

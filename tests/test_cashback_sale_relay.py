@@ -234,7 +234,7 @@ def test_resolve_shopee_link_blocks_redirect_to_private_ip():
     mock_resp.headers = {"Location": "http://127.0.0.1:9224/api/shop_vouchers"}
 
     with patch("cashback_bot.sale_relay.is_safe_shopee_url", side_effect=[True, False]):
-        with patch("requests.head", return_value=mock_resp):
+        with patch("cashback_bot.sale_relay._head", return_value=mock_resp):
             result = sale_relay.resolve_shopee_link("https://s.shopee.vn/short123", "12345")
             # Should not wrap the private redirect
             assert "127.0.0.1" not in result
@@ -255,3 +255,150 @@ def test_sqlite_wal_pragmas(tmp_path):
         assert sync_mode in (1, "NORMAL")
         assert busy_timeout >= 15000
 
+
+
+def test_extract_voucher_codes_bai_tong_hop_moi_dong_mot_ma():
+    text = (
+        "🔥 TỔNG HỢP MÃ SHOPEE 11.11 🔥\n"
+        "1. Mã SVIP15 giảm 15% tối đa 50k đơn tối thiểu 0đ\n"
+        "2. Mã FSV50K giảm 50k đơn từ 199k\n"
+        "3. SPAYLATER11: giảm 20% max 100K, ĐTT 1,5tr\n"
+        "👉 Lưu tại https://s.shopee.vn/ABCD1234"
+    )
+    found = sale_relay.extract_voucher_codes(text)
+    assert [v["code"] for v in found] == ["SVIP15", "FSV50K", "SPAYLATER11"], "bỏ chữ HOA thường gặp và mã trong URL"
+    assert found[0] == {"code": "SVIP15", "discount": "15%", "discount_percent": 15.0, "discount_vnd": None,
+                        "max_discount_vnd": 50_000, "min_spend_vnd": 0}
+    assert (found[1]["discount"], found[1]["discount_vnd"], found[1]["min_spend_vnd"]) == ("50k", 50_000, 199_000)
+    assert (found[2]["discount_percent"], found[2]["max_discount_vnd"], found[2]["min_spend_vnd"]) == \
+        (20.0, 100_000, 1_500_000)
+
+
+def test_extract_voucher_codes_dieu_kien_dong_duoi_va_nhieu_ma_mot_dong():
+    text = (
+        "Mã: METAPARIGDOCT2211\n"
+        "Giảm 22% - Tối đa 300K - Đơn tối thiểu 50.000đ\n"
+        "Hai mã: XBH1030 giảm 10% | XBL1030 giảm 30k đơn từ 0"
+    )
+    found = {v["code"]: v for v in sale_relay.extract_voucher_codes(text)}
+    assert set(found) == {"METAPARIGDOCT2211", "XBH1030", "XBL1030"}
+    assert (found["METAPARIGDOCT2211"]["discount_percent"], found["METAPARIGDOCT2211"]["max_discount_vnd"],
+            found["METAPARIGDOCT2211"]["min_spend_vnd"]) == (22.0, 300_000, 50_000), "dòng dưới thuộc mã phía trên"
+    assert found["XBH1030"]["discount"] == "10%" and found["XBH1030"]["min_spend_vnd"] is None, \
+        "mã cùng dòng không lấy điều kiện của mã sau"
+    assert (found["XBL1030"]["discount_vnd"], found["XBL1030"]["min_spend_vnd"]) == (30_000, 0)
+
+
+def test_extract_voucher_codes_khong_co_ma_va_ma_trung():
+    assert sale_relay.extract_voucher_codes("") == []
+    assert sale_relay.extract_voucher_codes("SALE HOT 100K FREESHIP cho đơn từ 2TR, 12.12 nha cả nhà") == [], \
+        "chữ HOA thường gặp, số tiền viết HOA, ngày sale không phải mã"
+    found = sale_relay.extract_voucher_codes("Mã ABCD99 giảm 5%\nNhắc lại: ABCD99 giảm 5%, mã abcd12 không viết hoa")
+    assert [v["code"] for v in found] == ["ABCD99"], "mã trùng chỉ giữ lần đầu, mã chữ thường bỏ"
+
+
+def test_tick_quet_trong_luong_nen_khong_chay_chong():
+    import threading
+    import time
+
+    gate, started = threading.Event(), threading.Event()
+
+    def slow_run(*_args):
+        started.set()
+        gate.wait(5)
+
+    sale_relay._LAST_TICK = 0.0
+    with patch("cashback_bot.sale_relay.run_once", side_effect=slow_run) as run:
+        thread = sale_relay.tick(MagicMock(), MagicMock(), "17315920094")
+        assert thread is not None and started.wait(5), "tick trả ngay, lượt quét chạy ở luồng nền"
+        sale_relay._LAST_TICK = 0.0
+        assert sale_relay.tick(MagicMock(), MagicMock(), "17315920094") is None, "lượt trước chưa xong: không chạy chồng"
+        gate.set()
+        thread.join(5)
+        assert run.call_count == 1 and not sale_relay._running.locked()
+        sale_relay._LAST_TICK = time.time()
+        assert sale_relay.tick(MagicMock(), MagicMock(), "17315920094") is None, "chưa tới POLL_INTERVAL_SEC"
+    sale_relay._LAST_TICK = 0.0
+    assert sale_relay.tick(MagicMock(), MagicMock(), None) is None, "không có affiliate_id: không quét"
+
+
+def test_resolve_chi_head_link_rut_gon():
+    redirect = MagicMock(status_code=302, headers={"Location": "https://shopee.vn/product/1/2?sp_atk=x"})
+    with patch("cashback_bot.sale_relay.is_safe_shopee_url", return_value=True), \
+         patch("cashback_bot.sale_relay._head", return_value=redirect) as head:
+        wrapped = sale_relay.resolve_shopee_link("https://s.shopee.vn/abc123", "17315920094")
+        assert head.call_count == 1, "tới trang shopee.vn thì dừng, không HEAD thêm"
+        assert "origin_link=https%3A%2F%2Fshopee.vn%2Fproduct%2F1%2F2&" in wrapped
+        sale_relay.resolve_shopee_link("https://shopee.vn/product/1/2", "17315920094")
+        old = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fproduct%2F3%2F4&affiliate_id=1"
+        assert "product%2F3%2F4" in sale_relay.resolve_shopee_link(old, "17315920094")
+        assert head.call_count == 1, "trang sản phẩm và an_redir không cần HEAD"
+
+
+def test_cache_dns_va_link_chi_trong_mot_luot_quet():
+    public = [(2, 1, 6, "", ("147.75.0.1", 0))]
+    with patch("socket.getaddrinfo", return_value=public) as dns:
+        sale_relay._RUN = {"dns": {}, "links": {}}
+        try:
+            assert sale_relay.is_safe_shopee_url("https://shopee.vn/a")
+            assert sale_relay.is_safe_shopee_url("https://shopee.vn/b")
+            assert dns.call_count == 1, "cùng host trong một lượt: phân giải một lần"
+            with patch("cashback_bot.sale_relay.resolve_shopee_link", return_value="W") as resolve:
+                assert sale_relay._resolve("https://s.shopee.vn/x", "1") == sale_relay._resolve("https://s.shopee.vn/x", "1")
+                assert resolve.call_count == 1, "link gặp lại trong lượt: dùng kết quả cũ"
+        finally:
+            sale_relay._RUN = None
+        sale_relay.is_safe_shopee_url("https://shopee.vn/c")
+        assert dns.call_count == 2, "ngoài lượt quét: luôn kiểm tra lại"
+
+
+def test_thay_link_mot_luot_khong_thay_chong():
+    short, page = "https://s.shopee.vn/abcdef", "https://shopee.vn/p"
+    post = {"id": 1, "text": f"A {short} B {page}", "photo_url": None, "shopee_links": [short, page]}
+    mapping = {short: f"NEW1({page})", page: "NEW2"}
+    with patch("cashback_bot.sale_relay._resolve", side_effect=lambda link, _aff: mapping[link]):
+        text, first, _buttons = sale_relay.process_post_content(post, "1")
+    assert text == f"A NEW1({page}) B NEW2" and first == f"NEW1({page})"
+
+
+def test_luu_ma_boc_duoc_vao_voucher_posts_de_magiam_hien(tmp_path):
+    from datetime import datetime, timedelta, timezone
+
+    from cashback_bot import voucher
+    from cashback_bot.db import TrackingRepository
+
+    repo = TrackingRepository(str(tmp_path / "cashback.sqlite"))
+    repo.migrate()
+    now = datetime(2026, 10, 31, 3, 0, tzinfo=timezone.utc)
+    text = "Mã SVIP15 giảm 15% tối đa 50k đơn từ 0đ\nMã FSV50K giảm 50k đơn từ 199k"
+    url = "https://s.shopee.vn/an_redir?origin_link=x&affiliate_id=1&sub_id=AUTOSALE"
+    assert sale_relay.store_codes(repo, "nhomsansale", 500, text, url, now) == 2
+    with repo.connect() as conn:
+        rows = conn.execute("SELECT * FROM voucher_posts ORDER BY id").fetchall()
+        assert [(r["code"], r["discount"], r["max_discount"], r["min_spend"], r["message_id"]) for r in rows] == [
+            ("SVIP15", "15%", "50.000đ", "0đ", 50_000), ("FSV50K", "50k", "", "199.000đ", 50_001)]
+        assert {r["channel_id"] for r in rows} == {sale_relay.source_channel_id("nhomsansale")}
+        assert all(r["sent"] == 0 and r["url"] == url and r["status"] == "live" for r in rows)
+        assert [r["code"] for r in voucher.live(conn, now)] == ["FSV50K", "SVIP15"]
+    assert sale_relay.source_channel_id("nhomsansale") > -10**10, "không trùng id kênh Telegram thật (-100…)"
+    assert sale_relay.store_codes(repo, "nhomsansale", 501, text, None, now + timedelta(hours=1)) == 0, \
+        "mã đã có trong 24 giờ: không ghi lại"
+    assert sale_relay.store_codes(repo, "nhomsansale", 502, text, None, now + timedelta(hours=25)) == 2
+    repo.set_state(voucher.CHANNEL_KEY, "-1001")
+    repo.set_state(voucher.AUDIENCE_KEY, "all")
+    assert voucher.tick(repo, now + timedelta(hours=26)) == 0, "relay tự gửi khách: voucher.tick không gửi lại"
+
+
+def test_scan_channel_luu_ma_ca_bai_khong_co_link():
+    repo = MagicMock()
+    repo.get_state.return_value = "99"
+    sample_html = """
+    <div class="tgme_widget_message_wrap"><div data-post="nhomsansale/100">
+      <div class="tgme_widget_message_text">Mã ABCD99 giảm 10% đơn từ 0đ</div></div></div>
+    """
+    with patch("requests.get") as mock_get, patch("cashback_bot.sale_relay.store_codes") as store:
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.text = sample_html
+        sale_relay._scan_channel("nhomsansale", repo, MagicMock(), "17315920094", -1004496405998)
+    store.assert_called_once_with(repo, "nhomsansale", 100, "Mã ABCD99 giảm 10% đơn từ 0đ", None)
+    repo.set_state.assert_called_with("relay_seen:nhomsansale", "100")

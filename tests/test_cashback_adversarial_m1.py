@@ -99,7 +99,7 @@ def test_is_safe_shopee_url_accepts_valid_shopee_urls():
 @pytest.mark.parametrize("url", ADVERSARIAL_URLS_FROM_PROMPT)
 def test_resolve_shopee_link_rejects_adversarial_input_urls(url):
     """Verify resolve_shopee_link returns safe fallback without fetching adversarial URLs."""
-    with patch("requests.head") as mock_head:
+    with patch("cashback_bot.sale_relay._head") as mock_head:
         resolved = sale_relay.resolve_shopee_link(url, affiliate_id="12345678")
         # For adversarial URLs, it must return the unmodified input URL without making any network call
         assert resolved == url
@@ -112,7 +112,7 @@ def test_resolve_shopee_link_rejects_redirect_to_private_ip():
     mock_resp.status_code = 302
     mock_resp.headers = {"Location": "http://169.254.169.254/latest/meta-data/"}
 
-    with patch("requests.head", return_value=mock_resp):
+    with patch("cashback_bot.sale_relay._head", return_value=mock_resp):
         resolved = sale_relay.resolve_shopee_link("https://s.shopee.vn/short_deal", affiliate_id="12345678")
         assert "169.254.169.254" not in resolved
         assert resolved == "https://s.shopee.vn/short_deal"
@@ -124,7 +124,7 @@ def test_resolve_shopee_link_rejects_redirect_to_open_redirect_external():
     mock_resp.status_code = 302
     mock_resp.headers = {"Location": "https://attacker.com/malicious_payload"}
 
-    with patch("requests.head", return_value=mock_resp):
+    with patch("cashback_bot.sale_relay._head", return_value=mock_resp):
         resolved = sale_relay.resolve_shopee_link("https://s.shopee.vn/short_deal", affiliate_id="12345678")
         assert "attacker.com" not in resolved
         assert resolved == "https://s.shopee.vn/short_deal"
@@ -136,14 +136,14 @@ def test_resolve_shopee_link_bounds_redirect_hops():
     mock_resp.status_code = 302
     mock_resp.headers = {"Location": "https://s.shopee.vn/loop_next"}
 
-    with patch("requests.head", return_value=mock_resp) as mock_head:
+    with patch("cashback_bot.sale_relay._head", return_value=mock_resp) as mock_head:
         sale_relay.resolve_shopee_link("https://s.shopee.vn/loop_start", affiliate_id="12345678")
         assert mock_head.call_count == 3
 
 
 def test_resolve_shopee_link_with_invalid_affiliate_id():
     """Verify non-numeric affiliate IDs return original URL immediately without network calls."""
-    with patch("requests.head") as mock_head:
+    with patch("cashback_bot.sale_relay._head") as mock_head:
         assert sale_relay.resolve_shopee_link("https://s.shopee.vn/test", affiliate_id="") == "https://s.shopee.vn/test"
         assert sale_relay.resolve_shopee_link("https://s.shopee.vn/test", affiliate_id="abc") == "https://s.shopee.vn/test"
         assert sale_relay.resolve_shopee_link("https://s.shopee.vn/test", affiliate_id=None) == "https://s.shopee.vn/test"

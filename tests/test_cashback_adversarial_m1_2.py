@@ -374,7 +374,7 @@ class TestSubscriberQueueAndAffiliateUnwrap:
         mock_resp.headers = {}
 
         with patch("cashback_bot.sale_relay.is_safe_shopee_url", return_value=True), \
-             patch("requests.head", return_value=mock_resp):
+             patch("cashback_bot.sale_relay._head", return_value=mock_resp):
             resolved = resolve_shopee_link(initial_wrapped, affiliate_id="999888")
 
         parsed = urlparse(resolved)
