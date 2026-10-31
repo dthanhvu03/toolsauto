@@ -168,6 +168,31 @@ def separate(audio_wav: str, vocals_wav: str, background_wav: str, *, duration: 
 
 # ─── 2. Dịch ───
 
+END_PUNCT = tuple(".?!…。？！")
+MERGE_GAP_SEC = 0.6  # hai đoạn Whisper sát nhau, đoạn trước chưa hết câu → cùng một câu
+MAX_UNIT_SEC = 10.0  # câu gộp dài tối đa (giữ khớp thời gian; tiếng không có dấu câu thì dừng ở đây)
+
+
+def merge_sentences(segments: list[dict]) -> list[dict]:
+    """
+    Gộp đoạn Whisper thành câu (PLAN-119): Whisper cắt theo hơi / thời gian nên một câu hay vắt qua 2 đoạn — dịch từng
+    đoạn thì câu Việt bị chẻ đôi («…thành lập từ năm 1880,» / «lâu nhất Wilkshire…»). Gộp khi đoạn trước chưa có dấu
+    kết câu, cách đoạn sau ≤ ``MERGE_GAP_SEC`` và câu gộp ≤ ``MAX_UNIT_SEC``.
+    """
+    units: list[dict] = []
+    for seg in segments:
+        text = str(seg.get("text") or "").strip()
+        if not text:
+            continue
+        start, end = float(seg["start"]), float(seg["end"])
+        if units:
+            u = units[-1]
+            if not u["text"].endswith(END_PUNCT) and start - u["end"] <= MERGE_GAP_SEC and end - u["start"] <= MAX_UNIT_SEC:
+                u["text"], u["end"] = f"{u['text']} {text}", end
+                continue
+        units.append({"start": start, "end": end, "text": text})
+    return units
+
 
 def slot_ends(segments: list[dict], duration: float) -> list[float]:
     """Mỗi câu được nói tới đầu câu sau (hoặc hết video) — rộng hơn ``end`` của Whisper."""
@@ -178,22 +203,38 @@ def slot_ends(segments: list[dict], duration: float) -> list[float]:
     return ends
 
 
+_SAY_EXAMPLES = {
+    "vi": ' Examples for "say": "tee box" → "khu phát bóng", "green" → "khu gạt bóng", "5:30" → "năm giờ rưỡi", '
+          '"£250" → "hai trăm năm mươi bảng", "episode 91" → "tập chín mươi mốt", '
+          '"since 1880" → "từ năm một nghìn tám trăm tám mươi" (years are read as full numbers).',
+}
+
+
 def build_translate_prompt(lines: list[dict], source_lang: str, target_lang: str) -> str:
     src = LANGUAGES.get(source_lang, (source_lang or "the original language",))[0]
     dst = LANGUAGES[target_lang][0]
     return (
-        f"Translate each line of this short video's dialogue from {src} to {dst}.\n"
-        "Write natural spoken language for a voice-over, keep names, keep the meaning.\n"
-        "Each translation is read aloud inside a fixed time slot, so it MUST stay within "
-        "its max_chars characters — shorten freely to fit.\n"
-        f"Return ONLY a JSON array of exactly {len(lines)} strings in the same order. No notes, no markdown.\n"
+        f"Translate each line of this short video's dialogue from {src} to {dst} for a voice-over.\n"
+        "The lines come from automatic speech recognition and may contain mis-heard words or names — "
+        "fix obvious mistakes from context (e.g. a misspelled place name) before translating.\n"
+        'For each line return an object {"sub": ..., "say": ...} with the same meaning:\n'
+        f'- "sub": natural written {dst} for on-screen subtitles; proper names and brands may keep their original spelling.\n'
+        f'- "say": the text a {dst} text-to-speech voice reads aloud. Avoid words of other languages: translate terms '
+        f"into {dst}, write numbers, times, units and currency as {dst} words, keep unavoidable foreign names short and "
+        f"spelled the way a {dst} speaker pronounces them.{_SAY_EXAMPLES.get(target_lang, '')}\n"
+        "Both are read inside a fixed time slot, so each MUST stay within the line's max_chars characters — "
+        "shorten freely to fit.\n"
+        f"Return ONLY a JSON array of exactly {len(lines)} objects in the same order. No notes, no markdown.\n"
         "Lines:\n"
         + json.dumps(lines, ensure_ascii=False)
     )
 
 
-def parse_translation(text: Optional[str], expected: int) -> Optional[list[str]]:
-    """Lấy mảng JSON đầu tiên trong câu trả lời; sai số phần tử → None."""
+def parse_translation(text: Optional[str], expected: int) -> Optional[list[tuple[str, str]]]:
+    """
+    Lấy mảng JSON đầu tiên trong câu trả lời → ``[(phụ đề, câu đọc)]``; sai số phần tử → None. Phần tử là chuỗi
+    (AI trả kiểu cũ) thì phụ đề = câu đọc.
+    """
     if not text:
         return None
     match = re.search(r"\[.*\]", text, re.DOTALL)
@@ -205,16 +246,26 @@ def parse_translation(text: Optional[str], expected: int) -> Optional[list[str]]
         return None
     if not isinstance(data, list) or len(data) != expected:
         return None
-    out = [re.sub(r"\s+", " ", str(x or "")).strip() for x in data]
-    return out if any(out) else None
+
+    def clean(x) -> str:
+        return re.sub(r"\s+", " ", str(x or "")).strip()
+
+    out = []
+    for item in data:
+        if isinstance(item, dict):
+            sub, say = clean(item.get("sub")), clean(item.get("say"))
+            out.append((sub or say, say or sub))
+        else:
+            out.append((clean(item), clean(item)))
+    return out if any(a or b for a, b in out) else None
 
 
 def translate_segments(
     segments: list[dict], ends: list[float], source_lang: str, target_lang: str, translate: TranslateFn,
-) -> Optional[list[str]]:
-    """Dịch theo lô ``TRANSLATE_BATCH`` câu. Lô nào hỏng (AI lỗi / sai số câu) → None cả lớp."""
+) -> Optional[list[tuple[str, str]]]:
+    """Dịch theo lô ``TRANSLATE_BATCH`` câu → ``[(phụ đề, câu đọc)]``. Lô nào hỏng (AI lỗi / sai số câu) → None cả lớp."""
     cps = LANGUAGES[target_lang][3]
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for i in range(0, len(segments), TRANSLATE_BATCH):
         batch = [
             {
@@ -342,6 +393,10 @@ def make_tracks(
             result.reason = "đã đúng ngôn ngữ đích"
             return result
 
+        segments = merge_sentences(segments)  # dịch / đọc theo câu, không theo đoạn Whisper cắt (PLAN-119)
+        if not segments:
+            result.reason = "không có lời thoại"
+            return result
         ends = slot_ends(segments, duration)
         lines = translate_segments(segments, ends, source_lang or "", target_lang, translate)
         if lines is None:
@@ -354,11 +409,11 @@ def make_tracks(
         video_end = duration or ends[-1]
         spoken: list[dict] = []
         cursor = 0.0
-        for i, (seg, text) in enumerate(zip(segments, lines)):
-            if not text:
+        for i, (seg, (text, say)) in enumerate(zip(segments, lines)):
+            if not (text or say):
                 continue
             mp3 = os.path.join(workdir, f"line_{i:03d}.mp3")
-            if not synthesize(text, mp3, voice):
+            if not synthesize(say or text, mp3, voice):  # giọng đọc câu «say» (đã Việt hoá), phụ đề giữ câu «sub»
                 continue
             clip = _decode(mp3, TRIM_SILENCE)
             if clip is None or clip.shape[1] == 0:

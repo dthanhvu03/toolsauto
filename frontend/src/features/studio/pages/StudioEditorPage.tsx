@@ -150,6 +150,17 @@ export function StudioEditorPage() {
                 ) : null}
               </div>
             ) : null}
+            {d.dub?.dubbed && d.dub.can_redub ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                <span className="min-w-0 flex-1">
+                  Đã lồng tiếng {LANG[d.dub.speech_lang ?? ""] ?? d.dub.speech_lang} → Việt. Bản dịch / giọng chưa ưng thì dịch & lồng lại
+                  (ra dự án mới, dự án này chuyển «Đã bỏ»).
+                </span>
+                <button type="button" className={ghostBtnClass} disabled={redub.busy} onClick={() => redub.run(undefined)}>
+                  {redub.busy ? "Đang gửi…" : "Dịch & lồng lại"}
+                </button>
+              </div>
+            ) : null}
             {!d.project.editable && !manual ? (
               <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
                 Video đã sang Buffer (material #{d.project.viral_material_id}) — chỉ xem. Đổi giờ / huỷ lịch qua Telegram.

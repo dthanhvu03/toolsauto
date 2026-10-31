@@ -187,3 +187,19 @@ def test_lam_lai_bi_chan_khi_video_tieng_viet(db, media, monkeypatch):  # noqa: 
     assert editor.detail(db, p.id)["dub"]["can_redub"] is False
     with pytest.raises(editor.EditError, match="tiếng Việt"):
         editor.redub(db, p.id)
+
+
+def test_long_lai_dich_moi_du_da_long_thanh_cong(db, media, zh, monkeypatch):  # noqa: F811
+    from app.core.database.models import StudioProject
+    from app.features.studio import dub, editor, pipeline
+    from tests.test_studio_pipeline import _drain, _fake_tracks
+
+    calls: list = []
+    monkeypatch.setattr(dub.engine, "make_tracks", _fake_tracks(calls))
+    pipeline.start(db, "upload", payload={"path": str(media["clip"]), "origin": "reup", "params": {"dub": True}})
+    _drain(db)
+    old = db.query(StudioProject).one()
+    assert calls == ["vi"] and editor.detail(db, old.id)["dub"]["dubbed"] is True
+    editor.redub(db, old.id)  # đã lồng ok vẫn dịch + đọc lại (PLAN-119: cách dịch mới)
+    _drain(db)
+    assert calls == ["vi", "vi"] and db.query(StudioProject).count() == 2

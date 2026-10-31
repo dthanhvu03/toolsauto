@@ -231,7 +231,7 @@ def redub(db: Session, project_id: int) -> StudioTask:
     project.error = "thay bằng bản lồng tiếng lại"
     db.commit()
     payload = {"channel_id": project.channel_id, "template_id": project.template_id, "params": params,
-               "caption": project.caption, "hashtags": project.hashtags}
+               "caption": project.caption, "hashtags": project.hashtags, "force_dub": True}
     return pipeline.start(db, "redub", asset_id=asset.id, payload=payload)
 
 

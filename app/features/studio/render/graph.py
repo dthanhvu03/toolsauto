@@ -118,6 +118,7 @@ def build(
     n_in = 0
 
     # ── clip: hình + tiếng gốc ──
+    sound = bool(spec.audio.tracks)  # bài có tiếng thật không — toàn im lặng thì loudnorm ra NaN, aac hỏng (PLAN-119)
     for i, (asset_id, start, end) in enumerate(ranges):
         m = media[asset_id]
         dur = end - start
@@ -129,6 +130,7 @@ def build(
         own_audio = m.has_audio and m.kind == "video" and spec.audio.original > 0
         n_in += 1
         subs = spec.clips[i].audio
+        sound = sound or bool(subs) or own_audio
         if subs:
             parts = []
             for j, ca in enumerate(subs):
@@ -218,10 +220,14 @@ def build(
         )
         mix.append(f"[t{k}]")
         n_in += 1
+    normalize = spec.audio.loudness is not None and sound
+    mixed = "[apre]" if normalize else "[aout]"
     if len(mix) > 1:
-        graph.append(f"{''.join(mix)}amix=inputs={len(mix)}:duration=first:dropout_transition=0:normalize=0[aout]")
+        graph.append(f"{''.join(mix)}amix=inputs={len(mix)}:duration=first:dropout_transition=0:normalize=0{mixed}")
     else:
-        graph.append("[acat]anull[aout]")
+        graph.append(f"[acat]anull{mixed}")
+    if normalize:  # loudnorm ra 192 kHz → đưa về lại tần số chung
+        graph.append(f"[apre]loudnorm=I={_num(spec.audio.loudness)}:TP=-1.5:LRA=11,aresample={_SR}[aout]")
 
     argv = [
         ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error", "-y",

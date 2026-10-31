@@ -92,7 +92,8 @@ def run(db: Session, task: StudioTask) -> StageResult:
         return StageResult(asset_id=asset.id, note="không có tiếng để lồng")
     transcript = store.analysis(db, asset.id, "transcript") or {}
     cached = store.analysis(db, asset.id, "dub")
-    if cached is not None and _final(cached, transcript):
+    force = bool((task.payload or {}).get("force_dub"))  # nút «Lồng tiếng lại»: luôn dịch + đọc lại (PLAN-119)
+    if cached is not None and not force and _final(cached, transcript):
         return StageResult(asset_id=asset.id, note="đã lồng tiếng trước đó")
 
     target = str(params.get("dub_lang") or "vi")

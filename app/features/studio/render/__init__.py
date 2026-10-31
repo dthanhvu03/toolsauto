@@ -45,6 +45,15 @@ def _validate(path: Path, expect_sec: float) -> float:
     return duration
 
 
+_GPU_ERRORS = ("nvenc", "cuda", "openencodesession", "no capable devices", "nvcuvid", "nvidia")
+
+
+def _gpu_error(stderr: str | None) -> bool:
+    """Lỗi do GPU / NVENC thật — lỗi khác (vd tiếng NaN) không được tắt NVENC cho cả worker (PLAN-119)."""
+    text = (stderr or "").lower()
+    return any(k in text for k in _GPU_ERRORS)
+
+
 def run(db: Session, task: StudioTask) -> StageResult:
     project = db.get(StudioProject, task.project_id) if task.project_id else None
     if project is None:
@@ -100,7 +109,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
         nice = ["nice", "-n", "19"] if shutil.which("nice") else []
         timeout = max(600, int(plan.duration * 20))
         proc = subprocess.run(nice + plan.argv, capture_output=True, text=True, timeout=timeout)
-        if proc.returncode != 0 and used == encoder.NVENC:  # GPU hỏng giữa chừng → làm lại bằng CPU ngay
+        if proc.returncode != 0 and used == encoder.NVENC and _gpu_error(proc.stderr):  # GPU hỏng → làm lại bằng CPU
             logger.warning("[STUDIO] NVENC lỗi ở dự án #%s, render lại bằng CPU: %s", project.id, (proc.stderr or "")[-300:])
             encoder.mark_failed()
             used = encoder.X264
