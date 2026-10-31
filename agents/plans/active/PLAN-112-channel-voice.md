@@ -66,3 +66,7 @@ $ tsc --noEmit ok; npm run build ok
 ```
 **Để chạy trên máy thật:** `venv/bin/python manage.py db backup --keep 14` → `venv/bin/alembic upgrade head` →
 `pm2 restart Web_Dashboard Studio_Heavy Studio_Light`. Chưa chạy migration thì ĐỪNG restart các app này (model đã có cột mới).
+
+- ✅ **Chạy trên máy thật 31/10 08:43 (anh chạy lệnh):** `alembic current` → `x1f8a9b0c1d2 (head)`; backup
+  `storage/db/backups/toolsauto_db_20261031_084335.sql`; 3 app restart, worker heavy / light «bắt đầu», log lỗi không có dòng mới;
+  `tts.vieneu_voices()` → 25 giọng. DB thật chưa có kênh Studio nào → ô giọng hiện khi anh thêm kênh.

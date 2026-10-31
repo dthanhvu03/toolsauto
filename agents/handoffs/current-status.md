@@ -55,7 +55,8 @@
     127.0.0.1:8790, offline) + engine `vieneu` đầu `auto` trong `app/core/media/tts.py`; tắt server thì tự về edge → piper.
     127 test qua, chạy thật 2 câu qua HTTP. Chưa lồng trọn một video thật — anh thử bằng video tiếng nước ngoài, mẫu `reup_dub`.
     Mẫu nghe ở `C:\Users\Admin\Downloads\toolsauto-test\`.
-  - **31/10 — PLAN-112 chọn giọng VieNeu theo kênh (code xong, commit cục bộ, CHỜ ANH CHẠY MIGRATION):** ô «Giọng lồng tiếng»
+  - **31/10 — PLAN-112 chọn giọng VieNeu theo kênh — ĐÃ CHẠY 08:43 (anh chạy; kiểm: alembic head `x1f8a9b0c1d2`, backup
+    `toolsauto_db_20261031_084335.sql`, Web_Dashboard / Studio_Heavy / Studio_Light lên, không lỗi mới; DB thật chưa có kênh Studio nào):** ô «Giọng lồng tiếng»
     + «Nghe thử» ở mỗi kênh trang «Kênh & mẫu»; cột mới `studio_channels.dub_voice`. 134 test, trình duyệt thật trên web tạm.
     Backup + migration bị chặn quyền → anh chạy: `venv/bin/python manage.py db backup --keep 14 && venv/bin/alembic upgrade head
     && pm2 restart Web_Dashboard Studio_Heavy Studio_Light`. **Trước khi chạy: không restart 3 app đó** (code mới đọc cột chưa có).
