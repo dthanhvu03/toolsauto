@@ -412,9 +412,31 @@ def test_post_html_an_link_trung_nut_boc_link_con_lai():
         "link đã có nút: bỏ khỏi chữ"
     out = sale_relay.post_html(f"Mã A <b>: {wrapped}\nMã B: {other}.\nNhóm: https://t.me/x", buttons)
     assert "%3A%2F%2F" not in out.replace(f'href="{other.replace("&", "&amp;")}"', ""), "không in URL dài trong chữ"
-    assert f'<a href="{other.replace("&", "&amp;")}">🔗 Lưu mã</a>.' in out and '<a href="https://t.me/x">🔗 Link</a>' in out
+    assert f'<a href="{other.replace("&", "&amp;")}">🔗 Lưu mã</a>.' in out
+    assert "t.me" not in out and "Nhóm" not in out, "link không phải Shopee: bỏ cả dòng"
     assert "Mã A &lt;b&gt;:" in out, "chữ thường vẫn escape"
     assert sale_relay.post_html(f"Deal áo {other}", []) == f'Deal áo <a href="{other.replace("&", "&amp;")}">🔗 Mua ngay</a>'
+
+
+def test_post_html_chi_giu_link_shopee_bo_cum_chi_co_link_ngoai():
+    vip = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fm%2Fvip&affiliate_id=1&sub_id=AUTOSALE"
+    video = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fvideo&affiliate_id=1&sub_id=AUTOSALE"
+    text = (
+        "🔥 🔥 SĂN MÃ SHOPEE LÚC 15H\n———\n.\n"
+        "🔥 Săn deal Shopee flash sale 1K 9K nhomsansale.com/flashsale\n.\n"
+        f"🔥 Mã Shopee Vip {vip}\n► 15h: Mã 25% tối đa 200k từ 0đ\n.\n"
+        "🔥 Tạo link dùng mã FB nhomsansale.com/fb\n► Fb 25% tối đa 500k\n.\n"
+        f"🔥 Shopee Video {video}\n► Gửi link để gắn tag video tại https://t.me/gantag\n"
+        "► Xem các sản phẩm đã gắn tag video https://nhomsansale.com\n► Kênh tổng hợp shopee.vn/m/kenh"
+    )
+    out = sale_relay.post_html(text, [])
+    assert "nhomsansale" not in out and "t.me" not in out and "🔗 Link" not in out
+    assert "flash sale 1K 9K" not in out and "Fb 25% tối đa 500k" not in out, "cụm chỉ có link ngoài: bỏ cả cụm"
+    assert "gắn tag video" not in out, "dòng chỉ có link ngoài: bỏ dòng"
+    assert out.startswith("🔥 🔥 SĂN MÃ SHOPEE LÚC 15H\n———\n.\n🔥 Mã Shopee Vip <a href="), "đầu bài không link: giữ"
+    assert "► 15h: Mã 25% tối đa 200k từ 0đ" in out and "🔥 Shopee Video <a href=" in out
+    assert "► Kênh tổng hợp shopee.vn/m/kenh" in out, "tên miền trần Shopee: giữ nguyên chữ"
+    assert "\n.\n.\n" not in out and not out.endswith(".")
 
 
 def test_gui_kenh_va_khach_dung_html_gon(tmp_path):

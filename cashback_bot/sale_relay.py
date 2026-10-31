@@ -262,6 +262,13 @@ _POST_TEXT = re.compile(r"tgme_widget_message_text[^>]*>(.*?)</div>", re.DOTALL)
 _BR = re.compile(r"<br\s*/?>")
 _TAG = re.compile(r"<[^>]+>")
 _LINK = re.compile(r"https?://[^\s<>\"']+")
+# Link đầy đủ hoặc tên miền trần («nhomsansale.com/fb», «t.me/x»). Chỉ đuôi tên miền hay gặp, để «ok.Fb» không khớp.
+_ANY_LINK = re.compile(
+    r"https?://[^\s<>\"']+"
+    r"|(?<![\w@/.])(?:[a-z0-9-]+\.)+(?:com|net|org|vn|me|io|co|info|biz|xyz|link|shop|site|store|online|top|click"
+    r"|app|ly|gl|cc|to|tv|gg)\b(?:/[^\s<>\"']*)?",
+    re.IGNORECASE,
+)
 
 
 def parse_channel_html(html_text: str) -> list[dict[str, Any]]:
@@ -409,26 +416,66 @@ def process_post_content(post: dict[str, Any], affiliate_id: str) -> tuple[str, 
 
 
 def post_html(text: str, buttons: list[list[dict]] | None) -> str:
-    """Bài relay → HTML Telegram gọn: không in URL an_redir dài giữa bài.
+    """Bài relay → HTML Telegram gọn: không in URL an_redir dài giữa bài, chỉ giữ link Shopee.
 
-    Link trùng nút bấm thì bỏ khỏi chữ (nút đã mở link đó); link khác thành <a href>«🔗 Lưu mã» / «🔗 Mua ngay»</a>.
-    Chữ còn lại escape như cũ.
+    Link trùng nút bấm thì bỏ khỏi chữ (nút đã mở link đó); link Shopee khác thành <a href>«🔗 Lưu mã» /
+    «🔗 Mua ngay»</a>. Link không phải Shopee (kể cả tên miền trần «nhomsansale.com/fb») bị bỏ cùng dòng chứa nó;
+    cụm (ngăn bởi dòng trống / «.») có link mà không còn link Shopee nào thì bỏ cả cụm. Chữ còn lại escape như cũ.
     """
     button_urls = {b.get("url") for row in buttons or [] for b in row if isinstance(b, dict) and b.get("url")}
     label = "🔗 Lưu mã" if any(k in text.lower() for k in _LABEL_WORDS) else "🔗 Mua ngay"
+    separators = ("", ".")
+    groups: list[list[str]] = [[]]  # các cụm dòng; mỗi dòng ngăn cụm đứng riêng một cụm
+    for raw in text.split("\n"):
+        line = re.sub(r"[ \t]{2,}", " ", raw).strip()
+        if line in separators:
+            groups += [[line], []]
+        else:
+            groups[-1].append(line)
+    out: list[str] = []
+    for group in groups:
+        if group and group[0] in separators:
+            if out and out[-1] not in separators:
+                out.append(group[0])
+            continue
+        kept: list[str] = []
+        linked = has_shopee = False
+        for line in group:
+            rendered, shopee, other = _render_line(line, button_urls, label)
+            linked = linked or shopee or other
+            has_shopee = has_shopee or shopee
+            if other and not shopee:
+                continue
+            kept.append(re.sub(r"[ \t]{2,}", " ", rendered).strip())
+        if has_shopee or not linked:
+            out.extend(kept)
+    while out and out[-1] in separators:
+        out.pop()
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+
+
+def _render_line(line: str, button_urls: set, label: str) -> tuple[str, bool, bool]:
+    """(HTML của dòng, có link Shopee, có link khác). Link Shopee trùng nút thì bỏ khỏi chữ nhưng vẫn tính là Shopee."""
     parts: list[str] = []
+    shopee = other = False
     last = 0
-    for found in _LINK.finditer(text):
-        url = found.group().rstrip(".,)")
-        parts.append(html.escape(text[last:found.start()]))
-        if url not in button_urls:
-            shown = label if _is_shopee_url_candidate(url) else "🔗 Link"
-            parts.append(f'<a href="{html.escape(url, quote=True)}">{shown}</a>')
-        parts.append(html.escape(found.group()[len(url):]))
+    for found in _ANY_LINK.finditer(line):
+        token = found.group()
+        url = token.rstrip(".,)")
+        parts.append(html.escape(line[last:found.start()]))
+        full = url if url.lower().startswith(("http://", "https://")) else "https://" + url
+        if _is_shopee_url_candidate(full):
+            shopee = True
+            if full != url:
+                parts.append(html.escape(url))  # tên miền trần Shopee: để nguyên chữ như trước (chưa bọc affiliate)
+            elif url not in button_urls:
+                parts.append(f'<a href="{html.escape(url, quote=True)}">{label}</a>')
+        else:
+            other = True
+        parts.append(html.escape(token[len(url):]))
         last = found.end()
-    parts.append(html.escape(text[last:]))
-    lines = [re.sub(r"[ \t]{2,}", " ", line).strip() for line in "".join(parts).split("\n")]
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    parts.append(html.escape(line[last:]))
+    return "".join(parts), shopee, other
 
 
 def _download_safe_photo(photo_url: str) -> bytes | None:
