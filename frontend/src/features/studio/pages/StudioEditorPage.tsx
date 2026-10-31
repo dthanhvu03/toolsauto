@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ActionMsg } from "@/shared/ui/ActionMsg";
+import { Toast } from "@/shared/ui/Toast";
 import { dangerBtnClass, ghostBtnClass, primaryBtnClass, selectClass } from "@/shared/ui/controls";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
@@ -78,13 +78,27 @@ export function StudioEditorPage() {
     refresh
   );
 
-  const variants = useAction((n: number) => api.makeVariants(id, n), "Đang dựng biến thể — sẽ hiện trong Studio «Đang làm».", refresh);
+  const variants = useAction(
+    (n: number) => api.makeVariants(id, n),
+    (r) => `Đã xếp ${r.task_ids.length} biến thể — render lần lượt từng bản, xem ở Studio «Đang làm» / «Chờ duyệt».`,
+    refresh
+  );
   // Chỉ đoạn cắt (đầu / cuối) làm lệch số câu phụ đề — lật gương / âm lượng thì không.
   const cuts = (clips: ProjectSpec["clips"]) => JSON.stringify(clips.map((c) => [c.asset, c.start, c.end]));
   const clipsDirty = useMemo(() => !!d && !!spec && cuts(spec.clips) !== cuts(d.spec.clips), [d, spec]);
   const specDirty = useMemo(() => !!d && !!spec && JSON.stringify(spec) !== JSON.stringify(d.spec), [d, spec]);
   const durations = Object.fromEntries((d?.assets ?? []).map((a) => [a.id, a.duration ?? 0]));
-  const msg = save.msg || meta.msg || approve.msg || reject.msg || remake.msg || variants.msg;
+  // Câu của nút vừa bấm gần nhất (seq lớn nhất) — hiện nổi, không phụ thuộc vị trí cuộn.
+  const last = [save, meta, approve, reject, remake, variants].reduce((a, b) => (b.seq > a.seq ? b : a));
+  const approveBlock = !d
+    ? ""
+    : !d.channel && !channelId
+      ? "Cần gắn kênh (ô kênh ở «Caption & kênh») rồi Lưu"
+      : specDirty
+        ? "Lưu & render lại trước khi duyệt"
+        : !caption.trim()
+          ? "Cần caption"
+          : "";
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -107,7 +121,7 @@ export function StudioEditorPage() {
                 Video đã sang Buffer (material #{d.project.viral_material_id}) — chỉ xem. Đổi giờ / huỷ lịch qua Telegram.
               </p>
             ) : null}
-            <ActionMsg text={msg} />
+            <Toast text={last.msg} seq={last.seq} />
 
             <div className="mt-4 grid gap-4 lg:grid-cols-[340px_1fr]">
               <div className="lg:sticky lg:top-20 lg:self-start">
@@ -127,24 +141,24 @@ export function StudioEditorPage() {
                 {d.project.editable ? (
                   <div className="mt-3 flex flex-col gap-2">
                     <button type="button" className={primaryBtnClass} disabled={!specDirty || save.busy} onClick={() => save.run(spec)}>
-                      {save.busy ? "Đang lưu…" : `Lưu & render lại${specDirty ? ` (${mmss(keptSeconds(spec.clips, durations))})` : ""}`}
+                      {save.busy ? "Đang lưu…" : specDirty ? `Lưu & render lại (${mmss(keptSeconds(spec.clips, durations))})` : "Chưa có thay đổi"}
                     </button>
                     {d.project.status === "REVIEW" ? (
                       <div className="flex gap-2">
                         <button
                           type="button"
                           className={`${ghostBtnClass} h-9 flex-1 border-emerald-300 text-sm text-emerald-800`}
-                          disabled={approve.busy || specDirty || !caption.trim()}
-                          title={specDirty ? "Lưu & render trước khi duyệt" : !caption.trim() ? "Cần caption" : ""}
+                          disabled={approve.busy || !!approveBlock}
                           onClick={() => approve.run(undefined)}
                         >
-                          Duyệt → Buffer
+                          {approve.busy ? "Đang duyệt…" : "Duyệt → Buffer"}
                         </button>
                         <button type="button" className={`${dangerBtnClass} h-9 text-sm`} disabled={reject.busy} onClick={() => reject.run(undefined)}>
                           Bỏ
                         </button>
                       </div>
                     ) : null}
+                    {d.project.status === "REVIEW" && approveBlock ? <p className="text-xs text-amber-700">Chưa duyệt được: {approveBlock}.</p> : null}
                   </div>
                 ) : null}
               </div>
@@ -175,7 +189,7 @@ export function StudioEditorPage() {
                       ))}
                     </select>
                     <button type="button" className={ghostBtnClass} disabled={!d.project.editable || meta.busy} onClick={() => meta.run(undefined)}>
-                      Lưu caption / kênh
+                      {meta.busy ? "Đang lưu…" : "Lưu caption / kênh"}
                     </button>
                   </div>
                 </Section>
@@ -218,7 +232,7 @@ export function StudioEditorPage() {
                         ))}
                       </select>
                       <button type="button" className={ghostBtnClass} disabled={variants.busy} onClick={() => variants.run(variantCount)}>
-                        Dựng biến thể
+                        {variants.busy ? "Đang tạo…" : "Dựng biến thể"}
                       </button>
                     </div>
                     <p className="mt-1 text-[11px] text-slate-400">

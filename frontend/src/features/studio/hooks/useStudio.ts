@@ -19,17 +19,29 @@ export function useAssets(kind = "") {
   return useQuery({ queryKey: ["studio-assets", kind], queryFn: () => api.fetchAssets(kind) });
 }
 
-/** Mutation + một dòng thông báo + làm mới các danh sách liên quan. */
-export function useAction<A>(fn: (arg: A) => Promise<unknown>, done: string, keys: string[][] = [["studio-projects"]]) {
+/**
+ * Mutation + một câu thông báo + làm mới các danh sách liên quan. ``done`` có thể là hàm để ghi kết quả
+ * (vd số biến thể). ``seq`` tăng mỗi lần báo — đưa vào ``<Toast>`` để bấm lại vẫn hiện.
+ */
+export function useAction<A, R = unknown>(
+  fn: (arg: A) => Promise<R>,
+  done: string | ((r: R) => string),
+  keys: string[][] = [["studio-projects"]]
+) {
   const qc = useQueryClient();
-  const [msg, setMsg] = useState("");
+  const [msg, setMsgText] = useState("");
+  const [seq, setSeq] = useState(0);
+  const setMsg = (text: string) => {
+    setMsgText(text);
+    setSeq((n) => n + 1);
+  };
   const m = useMutation({
     mutationFn: fn,
-    onSuccess: () => {
-      setMsg(done);
+    onSuccess: (r) => {
+      setMsg(typeof done === "function" ? done(r) : done);
       keys.forEach((k) => qc.invalidateQueries({ queryKey: k }));
     },
     onError: (e: Error) => setMsg(`Lỗi: ${e.message}`),
   });
-  return { run: m.mutate, busy: m.isPending, msg, setMsg };
+  return { run: m.mutate, busy: m.isPending, msg, seq, setMsg };
 }

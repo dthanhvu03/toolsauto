@@ -2,7 +2,7 @@ import { useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { QueryBody } from "@/shared/ui/QueryBody";
-import { ActionMsg } from "@/shared/ui/ActionMsg";
+import { Toast } from "@/shared/ui/Toast";
 import { approveProject, rejectProject } from "../api/studioApi";
 import { ProjectCard } from "../components/ProjectCard";
 import { UploadBox } from "../components/UploadBox";
@@ -29,7 +29,7 @@ export function StudioBoardPage() {
       <div className="mt-4">
         <UploadBox channels={setup.data?.channels ?? []} />
       </div>
-      <ActionMsg text={approve.msg || reject.msg} />
+      <Toast text={approve.seq >= reject.seq ? approve.msg : reject.msg} seq={approve.seq + reject.seq} />
       {d?.tasks_pending ? (
         <p className="mt-3 flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
           <span className="size-2 animate-pulse rounded-full bg-sky-500" />
