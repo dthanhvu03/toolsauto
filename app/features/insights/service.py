@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 from app.core.database.core import get_db
 from app.core.database import models
-from app.main_templates import templates
 from app import config
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
@@ -37,22 +36,6 @@ def _set_cached(key: str, data):
 def _validate_days(days: int) -> int:
     """Ensure days is one of the allowed values."""
     return days if days in (7, 30, 90) else 7
-
-
-# ── Page route (HTML) ─────────────────────────────────────────────────────
-def view_insights_dashboard(request: Request, db: Session = Depends(get_db)):
-    """Render the main insights dashboard HTML page."""
-    pages = db.query(models.PageInsight.page_url, models.PageInsight.page_name).distinct().all()
-    page_options = [{"url": p.page_url, "name": p.page_name or p.page_url} for p in pages]
-
-    return templates.TemplateResponse(
-        "pages/insights.html",
-        {
-            "request": request,
-            "pages": page_options,
-            "title": "Page Insights Dashboard"
-        }
-    )
 
 
 # ── /api/growth ───────────────────────────────────────────────────────────

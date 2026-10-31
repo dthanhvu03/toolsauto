@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database.core import get_db
-from app.main_templates import templates
 from app.core.workflow_registry import invalidate
 from app.config import MCP_PROXY_PORT
 from app.constants import WorkflowAction
@@ -94,14 +93,6 @@ def stop_mcp_inspector():
     import subprocess
     subprocess.run(["tmux", "kill-session", "-t", "n8n_mcp_inspector_ux"], capture_output=True)
     return JSONResponse({"success": True, "message": "Đã ngừng Inspector"})
-
-
-# ─── Page ────────────────────────────────────────────────────────
-
-def platform_config_page(request: Request):
-    return templates.TemplateResponse(
-        "pages/platform_config.html", {"request": request}
-    )
 
 
 # ─── Cache Invalidation ──────────────────────────────────────────

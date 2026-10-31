@@ -3,7 +3,6 @@ import type {
   ComplianceAnalytics,
   ComplianceCategory,
   ComplianceKeyword,
-  ViolationsResponse,
 } from "../types/compliance.types";
 
 function qs(params: Record<string, string | number | undefined>) {
@@ -28,9 +27,6 @@ export function fetchCategories() {
   return getJson<ComplianceCategory[]>("/compliance/categories");
 }
 
-export function fetchViolations(params: { days?: number; action?: string; page?: number; limit?: number }) {
-  return getJson<ViolationsResponse>(`/compliance/violations${qs(params)}`);
-}
 
 export function addKeyword(body: { keyword: string; category?: string; severity?: string }) {
   return sendJson("/compliance/keywords", "POST", body);

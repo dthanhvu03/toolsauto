@@ -1,25 +1,11 @@
-import { getJson, sendForm, sendJson, type OkMessage } from "@/shared/api/http";
-import type { JobAction, JobsResponse } from "../types/jobs.types";
+import { getJson } from "@/shared/api/http";
+import type { JobsResponse } from "../types/jobs.types";
 
-export function fetchJobs(params: {
-  status?: string;
-  page?: number;
-  q?: string;
-  platform?: string;
-}) {
-  const sp = new URLSearchParams();
+/** Job Buffer — mỗi dòng là một lần đưa video lên Buffer (DONE = Buffer đã nhận và hẹn giờ). */
+export function fetchJobs(params: { status?: string; page?: number; q?: string }) {
+  const sp = new URLSearchParams({ platform: "buffer" });
   if (params.status) sp.set("status", params.status);
   if (params.page) sp.set("page", String(params.page));
   if (params.q) sp.set("q", params.q);
-  if (params.platform) sp.set("platform", params.platform);
   return getJson<JobsResponse>(`/api/admin/jobs?${sp}`);
 }
-
-export function postJobAction(id: number, action: JobAction) {
-  return sendJson<OkMessage>(`/api/admin/jobs/${id}/${action}`, "POST");
-}
-
-export function createManualJob(form: FormData) {
-  return sendForm<OkMessage>("/api/admin/jobs/manual", form);
-}
-

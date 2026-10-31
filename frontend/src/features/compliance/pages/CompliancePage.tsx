@@ -3,11 +3,8 @@ import { Pagination } from "@/shared/ui/Pagination";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { StatCard } from "@/features/overview/components/StatCard";
-import { cn } from "@/shared/lib/cn";
 import { ComplianceKeywordFilters } from "../components/ComplianceKeywordFilters";
 import { ComplianceKeywordTable } from "../components/ComplianceKeywordTable";
-import { ComplianceViolationFilters } from "../components/ComplianceViolationFilters";
-import { ComplianceViolationTable } from "../components/ComplianceViolationTable";
 import { useComplianceController } from "../hooks/useComplianceController";
 import { ActionMsg } from "@/shared/ui/ActionMsg";
 import { inputClass, primaryBtnClass, selectClass } from "@/shared/ui/controls";
@@ -19,28 +16,16 @@ export function CompliancePage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
-        title="Vi phạm Facebook"
-        subtitle="Từ khóa + tester native — allowlist / import CSV vẫn Classic"
+        title="Từ khoá cấm"
+        subtitle="AI được dặn tránh các từ này khi viết caption (cả caption Studio). Allowlist / import CSV ở bản cũ."
         classicHref="/compliance/"
       />
       <ActionMsg text={ctl.msg} />
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Từ khóa active"
+          label="Từ khoá đang bật"
           value={ctl.analytics.isLoading || ctl.analytics.isError ? "—" : String(stats?.total_keywords ?? 0)}
-        />
-        <StatCard
-          label="VIOLATION (30 ngày)"
-          value={ctl.analytics.isLoading || ctl.analytics.isError ? "—" : String(stats?.total_violations ?? 0)}
-        />
-        <StatCard
-          label="Chặn hôm nay (UTC)"
-          value={ctl.analytics.isLoading || ctl.analytics.isError ? "—" : String(stats?.blocked_today ?? 0)}
-        />
-        <StatCard
-          label="Có bản rewrite (30d)"
-          value={ctl.analytics.isLoading || ctl.analytics.isError ? "—" : String(stats?.rewritten_count ?? 0)}
         />
       </div>
 
@@ -50,31 +35,7 @@ export function CompliancePage() {
         </div>
       ) : null}
 
-      <div className="mt-6 inline-flex rounded-xl border border-slate-200 bg-white p-1 text-sm">
-        <button
-          type="button"
-          className={cn(
-            "rounded-lg px-3 py-1.5 font-medium",
-            ctl.tab === "keywords" ? "bg-indigo-50 text-indigo-800" : "text-slate-600"
-          )}
-          onClick={() => ctl.setTab("keywords")}
-        >
-          Từ khóa
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "rounded-lg px-3 py-1.5 font-medium",
-            ctl.tab === "violations" ? "bg-indigo-50 text-indigo-800" : "text-slate-600"
-          )}
-          onClick={() => ctl.setTab("violations")}
-        >
-          Lịch sử
-        </button>
-      </div>
-
-      {ctl.tab === "keywords" ? (
-        <>
+      <>
           <form
             className="mt-4 flex flex-wrap gap-2"
             onSubmit={(e) => {
@@ -139,37 +100,7 @@ export function CompliancePage() {
             <span className="text-xs text-slate-400">{ctl.kwTotal} từ khóa</span>
             <Pagination page={ctl.kwPage} totalPages={ctl.kwTotalPages} onPageChange={ctl.setKwPage} />
           </div>
-        </>
-      ) : (
-        <>
-          <Panel className="mt-4">
-            <ComplianceViolationFilters
-              days={ctl.violDays}
-              action={ctl.violAction}
-              onDaysChange={ctl.changeViolDays}
-              onActionChange={ctl.changeViolAction}
-            />
-            <QueryBody
-              isLoading={ctl.violations.isLoading}
-              isError={ctl.violations.isError}
-              loadingText="Đang tải…"
-              errorText="Lỗi tải lịch sử vi phạm"
-            >
-              <ComplianceViolationTable rows={ctl.violations.data?.violations ?? []} />
-            </QueryBody>
-          </Panel>
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-xs text-slate-400">
-              {ctl.violations.data?.total ?? 0} bản ghi
-            </span>
-            <Pagination
-              page={ctl.violPage}
-              totalPages={ctl.violations.data?.total_pages ?? 1}
-              onPageChange={ctl.setViolPage}
-            />
-          </div>
-        </>
-      )}
+      </>
     </div>
   );
 }

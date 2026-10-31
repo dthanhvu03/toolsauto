@@ -16,15 +16,17 @@ src/
   shared/
     api/http.ts
     lib/cn.ts
-    ui/                    # PageHeader, ClassicFrame, Pagination…
-  features/
-    overview | jobs | accounts | viral | settings | affiliates | viral-sources
-    tiktok-links | insights | fb-pro-tasks | compliance | threads | logs
-    control-plane | ai-studio | platform-config | syspanel | database  # React native lists
-    # Classic: CRUD / tester / SQL / PM2 / save prompt
+    lib/time.ts            # formatTs — giờ Việt Nam
+    ui/                    # PageHeader, Pagination, QueryBody…
+  features/                # PLAN-108: chỉ module đang chạy, nhóm theo sidebar (app/nav.ts)
+    overview                 # Tổng quan: kênh Buffer còn bài, kho chờ, lỗi
+    viral | viral-sources    # Video
+    jobs                     # Buffer — Lịch đăng (chỉ xem)
+    ai-studio | compliance   # Nội dung & AI (compliance = từ khoá cấm cho caption)
+    logs | settings | syspanel | database | telegram   # Hệ thống
 ```
 
-Quy ước: **1 feature = 1 thư mục**. Native có `api` / `hooks` / `components`. Module Jinja còn lại: `pages/` + iframe `?embed=1` (ẩn sidebar classic).
+Quy ước: **1 feature = 1 thư mục** (`api` / `hooks` / `components` / `pages` / `types`). Thêm trang = thêm feature + 1 dòng trong `app/nav.ts` + 1 `Route` trong `app/App.tsx`. Sidebar Jinja (`app/templates/layouts/app.html`) dùng cùng nhóm.
 
 ## Production
 

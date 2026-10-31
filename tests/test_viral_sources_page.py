@@ -88,7 +88,7 @@ def test_viral_page_still_links_to_the_sources_page():
     assert '/app/viral/sources' in _source("pages/app_viral.html")
 
 
-@pytest.mark.parametrize("name", ["layouts/app.html", "pages/app_tiktok_links.html"])
+@pytest.mark.parametrize("name", ["layouts/app.html"])
 def test_no_dead_anchor_left_anywhere(name):
     assert "viral-sources-panel" not in _source(name)
 

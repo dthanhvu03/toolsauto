@@ -203,10 +203,3 @@ def test_dispatcher_routes_feed_before_reels_flow():
     # Gate video-only phải bỏ qua FEED — nay đọc từ một nguồn sự thật duy nhất
     assert "not in JobService.NON_REELS_JOB_TYPES" in src
     assert "FEED" in JobService.NON_REELS_JOB_TYPES
-
-
-def test_form_offers_both_job_types():
-    src = (ROOT / "app" / "templates" / "fragments" / "manual_job_form.html").read_text(encoding="utf-8")
-    assert 'name="job_type" value="POST"' in src
-    assert 'name="job_type" value="FEED"' in src
-    assert "syncManualJobType" in src
