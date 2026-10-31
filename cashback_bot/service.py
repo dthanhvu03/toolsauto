@@ -16,7 +16,7 @@ from cashback_bot.admin_policy import AdminPanel
 from cashback_bot.affiliate import build_an_redir, build_food_redir, new_sub_id
 from cashback_bot.config import Settings
 from cashback_bot.customer_desk import CustomerDesk
-from cashback_bot import deals, order_notify, payouts, policy_snapshot, voucher, watchlist
+from cashback_bot import deals, order_notify, payouts, policy_snapshot, shop_voucher, voucher, watchlist
 from cashback_bot.pricing import EstimatePolicy, PolicyResolution, cashback_for, estimate_cashback, quote_displayed_vnd
 from cashback_bot.db import FOOD_PLATFORM, LinkRow, TrackingRepository, enqueue_event
 from cashback_bot.messages import (
@@ -237,7 +237,7 @@ class CashbackService:
         # Bấm một món trong tin deal: thẻ link là tin mới, không sửa đè danh sách deal (khách còn bấm món khác).
         # 🖼 Tạo ảnh: ảnh và bài viết là tin mới, màn chỉnh mục hiển thị ở lại để tạo tiếp.
         # 🔔 Báo khi giảm giá: màn theo dõi là tin mới, thẻ link ở lại để khách còn bấm mua.
-        keep = data.startswith(("u:dl:", watchlist.ADD)) or data == "c:pb:go"
+        keep = data.startswith(("u:dl:", watchlist.ADD, shop_voucher.VOUCHER_CALLBACK_PREFIX)) or data == "c:pb:go"
         return user_id, replace(
             reply,
             callback_query_id=query_id,
@@ -253,6 +253,9 @@ class CashbackService:
             return BotReply("", toast=CLOSED_ALERT, show_alert=True)
         if not data.startswith("u:w:bk:"):
             self._set_bank_waiting(user_id, None)
+        if data.startswith(shop_voucher.VOUCHER_CALLBACK_PREFIX):
+            self.desk.clear(user_id)
+            return shop_voucher.action(self.repo, user_id, data, getattr(self.settings, "affiliate_id", None))
         if data.startswith("u:pw:"):
             self.desk.clear(user_id)
             return watchlist.action(self.repo, user_id, data, datetime.now(timezone.utc))
@@ -658,6 +661,8 @@ class CashbackService:
         card = render(quote.name, quote.price_vnd, cashback, affiliate_url, extra_vnd=extra, capped=bool(quote.is_capped))
         if watchlist.enabled(self.repo):
             card = replace(card, inline_keyboard=watchlist.card_row(sub_id) + (card.inline_keyboard or ()))
+        if shop_voucher.enabled(self.repo) and quote.shop_id:
+            card = replace(card, inline_keyboard=(card.inline_keyboard or ()) + shop_voucher.card_row(quote.shop_id, self.settings.affiliate_id))
         if deals.enabled(self.repo) and not deals.user_categories(self.repo, telegram_user_id) and \
                 self._first_link(telegram_user_id):
             # Link đầu tiên: mời chọn danh mục deal hời một lần (khách chưa chọn).
@@ -961,6 +966,8 @@ class CashbackService:
             )
             if row.platform == "shopee" and watchlist.enabled(self.repo):
                 card = replace(card, inline_keyboard=watchlist.card_row(row.sub_id) + (card.inline_keyboard or ()))
+            if row.platform == "shopee" and shop_voucher.enabled(self.repo) and getattr(row, "shop_id", None):
+                card = replace(card, inline_keyboard=(card.inline_keyboard or ()) + shop_voucher.card_row(row.shop_id, self.settings.affiliate_id))
             return card
         if row.reject_reason in _NOT_FOUND_CODES:
             return BotReply(NOT_FOUND)

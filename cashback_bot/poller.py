@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import json
 import logging
 import queue
@@ -34,7 +37,7 @@ from cashback_bot.messages import (
 from cashback_bot.product_data import ProductDataClient
 from cashback_bot.redact import RedactingFormatter, error_brief
 from cashback_bot.service import CashbackService
-from cashback_bot import ops_watch, reconciliation
+from cashback_bot import ops_watch, reconciliation, sale_relay
 from cashback_bot.sync_scheduler import SyncCoordinator, SyncWorker
 from cashback_bot.telegram_api import TelegramApi, TelegramDeliveryError, classify_delivery_error
 
@@ -256,11 +259,12 @@ def flush_outbound(service, telegram, repo, admin_notifier, limit: int = 3, now:
 
 def _acquire_single_process_lock(path: str):
     handle = open(path, "w", encoding="utf-8")
-    try:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        handle.close()
-        return None
+    if fcntl is not None:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.close()
+            return None
     handle.write(str(time.time()))
     handle.flush()
     return handle
@@ -609,6 +613,18 @@ def _check_backup(
     repo.set_state("backup_last_ok", str(moment))
 
 
+def _check_sale_relay(
+    repo: TrackingRepository,
+    telegram: TelegramApi,
+    affiliate_id: str | None,
+) -> None:
+    """Gọi định kỳ sale_relay, bắt trọn ngoại lệ để không bao giờ làm đơ vòng lặp poller."""
+    try:
+        sale_relay.tick(repo, telegram, affiliate_id)
+    except Exception as exc:
+        logger.warning("[Cashback] sale_relay tick error: %s", exc)
+
+
 def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingRepository, admin_notifier: AdminNotifier,
           coordinator: SyncCoordinator) -> None:
     alt_orders = addlivetag_orders.AltOrdersClient(service.settings.api_key)
@@ -638,6 +654,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
                 ("alt_crosscheck", lambda: addlivetag_orders.maybe_start(repo, alt_orders, admin_notifier)),
                 ("alt_fallback", lambda: addlivetag_orders.maybe_fallback(repo, alt_orders, alt_cfg, admin_notifier)),
                 ("deals", lambda: deals.tick(repo, service, admin_notifier)),
+                ("sale_relay", lambda: _check_sale_relay(repo, telegram, service.settings.affiliate_id)),
                 ("price_watch_list", lambda: watchlist.tick(repo, service)),
                 ("backup", lambda: _check_backup(service, repo, admin_notifier)),
             ):

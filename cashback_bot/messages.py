@@ -207,7 +207,7 @@ TIKTOK_CONVERSION_PREFIX = "tt:"
 
 def source_text(text: str, conversion_id: str | None) -> str:
     """Tin về một đơn chỉ nhắc «Shopee» với nghĩa nơi ghi nhận đơn; đơn TikTok Shop thì đổi thành «TikTok»."""
-    return text.replace("Shopee", "TikTok") if (conversion_id or "").startswith(TIKTOK_CONVERSION_PREFIX) else text
+    return text.replace("Shopee", "TikTok") if str(conversion_id or "").startswith(TIKTOK_CONVERSION_PREFIX) else text
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
@@ -302,11 +302,33 @@ class BotReply:
 
     def markup(self) -> dict | None:
         rows: list[list[dict]] = []
-        if self.button_url:
-            rows.append([{"text": self.button_label or BUY_BUTTON, "url": self.button_url}])
+        if self.button_url and _is_safe_button_url(self.button_url):
+            rows.append([{"text": self.button_label or BUY_BUTTON, "url": self.button_url.strip()}])
         for row in self.inline_keyboard or ():
-            rows.append([{"text": label, "callback_data": data} for label, data in row])
+            btn_row = []
+            for label, data in row:
+                if _is_safe_button_url(data):
+                    btn_row.append({"text": label, "url": data.strip()})
+                else:
+                    btn_row.append({"text": label, "callback_data": data})
+            rows.append(btn_row)
         return {"inline_keyboard": rows} if rows else None
+
+
+def _is_safe_button_url(url: str | None) -> bool:
+    """Kiểm tra URL nút bấm hợp lệ cho Telegram inline keyboard.
+
+    Chỉ chấp nhận các scheme an toàn: https://, http://, tg://.
+    Từ chối các scheme nguy hiểm (javascript:, data:) và khoảng trắng/newline.
+    """
+    if not url or not isinstance(url, str):
+        return False
+    url_stripped = url.strip()
+    if not url_stripped:
+        return False
+    if any(c in url_stripped for c in (" ", "\t", "\r", "\n")):
+        return False
+    return url_stripped.startswith(("https://", "http://", "tg://"))
 
 
 def rate_limited_reply(cooldown_sec: int) -> BotReply:
@@ -974,7 +996,7 @@ def order_new_notice(order: str, cashback: int | None, order_status: str | None,
         "📦 <b>Có đơn mới qua link của bạn</b>\n\n"
         + (f"{FIRST_ORDER}\n" if first and not ineligible else "")
         + "Shopee vừa ghi nhận một đơn mua qua link bạn đã tạo.\n\n"
-        f"Mã đơn: {order}\n"
+        f"Mã đơn: {html.escape(str(order))}\n"
         f"Tình trạng đơn: {order_status_label(order_status)}\n"
         f"{amount}\n"
         f"{commission_label(validation, order_status)}.\n\n"
@@ -1004,7 +1026,7 @@ def order_update_notice(order: str, *, statuses: list[str], ineligible: bool, ap
     else:
         title = "📦 <b>Cập nhật đơn hàng</b>"
         body = COMMISSION_WAITING + "."
-    lines = [title, "", f"Mã đơn: {order}"]
+    lines = [title, "", f"Mã đơn: {html.escape(str(order))}"]
     lines += [f"• {order_status_label(s)}" for s in statuses]
     if new_cashback is not None and old_cashback is not None and not (ineligible or cancelled):
         lines.append(f"• Hoàn tạm tính: {format_vnd(old_cashback)} → <b>{format_vnd(new_cashback)}</b>")
@@ -1137,7 +1159,7 @@ def order_detail_reply(row: dict) -> BotReply:
         note = "Số tạm tính có thể đổi nếu Shopee điều chỉnh hoa hồng, hoặc đơn bị huỷ, trả hàng."
     lines = [
         f"📦 <b>{html.escape(_order_title(row, 80))}</b>",
-        f"Mã đơn {row['order']} · mua {row['date']}",
+        f"Mã đơn {html.escape(str(row['order']))} · mua {html.escape(str(row['date']))}",
         "",
         money,
         "",

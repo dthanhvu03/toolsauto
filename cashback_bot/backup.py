@@ -155,6 +155,9 @@ def _copy_consistent(source: Path, dest: Path) -> None:
         dst = sqlite3.connect(dest)
         try:
             src.backup(dst)
+            # DB chính chạy WAL (db.py): bản sao mang cờ WAL, mở chỉ đọc để kiểm tra sẽ để lại -wal/-shm cạnh file.
+            # Backup phải là một file độc lập.
+            dst.execute("PRAGMA journal_mode = DELETE")
         finally:
             dst.close()
     finally:

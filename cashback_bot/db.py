@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import hashlib
 import logging
 import sqlite3
@@ -924,6 +927,7 @@ class LinkRow:
     reject_reason: str | None
     estimate_policy: str | None = None
     platform: str = "shopee"
+    shop_id: int | None = None
 
 
 def insert_snapshot(conn: sqlite3.Connection, link_id: int, snapshot: dict) -> None:
@@ -1070,18 +1074,27 @@ class TrackingRepository:
         conn = sqlite3.connect(self.path, timeout=15)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            conn.execute("PRAGMA busy_timeout = 15000")
+        except Exception as exc:
+            logger.debug("[DB] Failed to set WAL/busy_timeout pragma: %s", exc)
         return conn
 
     def migrate(self) -> None:
         # Hai bot khởi động cùng lúc cùng chạy migrate: khoá file để ALTER TABLE không chạy chồng (rà soát 2026-10-26).
         lock_path = Path(f"{self.path}.migrate.lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(lock_path, "a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            try:
-                self._migrate()
-            finally:
-                fcntl.flock(lock, fcntl.LOCK_UN)
+        if fcntl is not None:
+            with open(lock_path, "a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                try:
+                    self._migrate()
+                finally:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
+        else:
+            self._migrate()
 
     def _migrate(self) -> None:
         with self.connect() as conn:
@@ -2030,4 +2043,5 @@ def _row(row: sqlite3.Row) -> LinkRow:
         reject_reason=row["reject_reason"],
         estimate_policy=row["estimate_policy"] if "estimate_policy" in row.keys() else None,
         platform=(row["platform"] if "platform" in row.keys() else None) or "shopee",
+        shop_id=row["shop_id"] if "shop_id" in row.keys() else None,
     )
