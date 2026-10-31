@@ -147,7 +147,7 @@ Trạng thái dự án: `DRAFT → RENDERING → RENDERED → REVIEW → APPROVE
 
 **P1 — Khung + các bước lõi**
 - Models + migration (chỉ thêm bảng, **chưa chạy trên DB thật**).
-- `contracts`, `spec`, `paths`, `queue`, `pipeline`, `worker`.
+- `contracts`, `spec`, `paths`, `taskqueue` (tên cũ `queue` — đổi 31/10 vì che module chuẩn khi PM2 chạy worker.py), `pipeline`, `worker`.
 - Bước `intake` (từ file), `analyze`, `compose` (mẫu `basic`), `render`, `review`.
 - Luật import-linter. Process PM2 `Studio_Heavy` / `Studio_Light` có trong `ecosystem.config.js`, **chưa bật**.
 

@@ -14,7 +14,7 @@ asset    cache      tiếng   spec      mp4      chữ AI    cổng duyệt   d�
 | | `spec.py` | `ProjectSpec` — bản mô tả một video ra |
 | | `store.py` | đọc cache phân tích, mẫu đang áp, đưa file vào kho (`add_asset`) |
 | | `paths.py` | `storage/media/studio/{assets,renders,work,inbox}` |
-| | `queue.py` | xếp / nhận (`SKIP LOCKED`) / xong / lỗi / trả việc treo; `parent_id` nối các bước |
+| | `taskqueue.py` | xếp / nhận (`SKIP LOCKED`) / xong / lỗi / trả việc treo; `parent_id` nối các bước |
 | | `pipeline.py` | `FLOWS`, `STAGES` — chỗ duy nhất biết thứ tự |
 | | `worker.py` | PM2 `Studio_Heavy` (`--lanes heavy`), `Studio_Light` (`--lanes light`, quét hộp thư Drive) |
 | Cửa vào | `entry.py` | `take_reup` (hook từ hệ cũ), `accept_file` (upload web), `scan_inbox` (Drive) |
@@ -53,7 +53,7 @@ liệu (logo, intro, nhạc). File phải đứng yên 2 phút (Drive đồng b�
 Code port từ hệ cũ (xoá bản cũ ở PLAN-106 P6): `app/core/media/speech.py` ← `subtitle_layer`,
 `app/core/media/tts.py` ← `audio_layer`, `dub/engine.py` ← `dub_layer`, `dub/separate.py` ← `demucs_separate`.
 
-Luật (import-linter): các bước không import nhau, không import `pipeline` / `queue` / `worker`;
+Luật (import-linter): các bước không import nhau, không import `pipeline` / `taskqueue` / `worker`;
 studio không import feature khác — nối qua `feature_hooks`.
 
 Chạy tay toàn bộ việc đang có: `PYTHONPATH=. venv/bin/python app/features/studio/worker.py --once`.

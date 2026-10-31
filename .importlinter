@@ -56,7 +56,7 @@ modules =
     app.features.studio.publish
 
 [importlinter:contract:studio-stages-below-pipeline]
-name = Studio stages do not reach up to pipeline / queue / worker
+name = Studio stages do not reach up to pipeline / taskqueue / worker
 type = forbidden
 source_modules =
     app.features.studio.intake
@@ -69,7 +69,7 @@ source_modules =
     app.features.studio.publish
 forbidden_modules =
     app.features.studio.pipeline
-    app.features.studio.queue
+    app.features.studio.taskqueue
     app.features.studio.worker
     app.features.studio.entry
     app.features.studio.editor

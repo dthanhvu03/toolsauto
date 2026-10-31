@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -30,7 +31,7 @@ from app.core.database.models import (
 )
 from app.core.media.ffmpeg_path import ffmpeg_available
 from app.core.notifier.service import NotifierService
-from app.features.studio import analyze, caption, dub, entry, paths, pipeline, queue, worker
+from app.features.studio import analyze, caption, dub, entry, paths, pipeline, taskqueue, worker
 from app.features.studio.contracts import Lane, ProjectStatus, StageError, TaskStatus
 from app.features.studio.dub.engine import DubTracks
 from app.features.studio.publish import status as publish_status
@@ -101,7 +102,7 @@ def db(tmp_path, monkeypatch):
 def _drain(db, lanes=(Lane.HEAVY, Lane.LIGHT), limit=50) -> int:
     n = 0
     while n < limit:
-        task = queue.claim(db, lanes=list(lanes), worker_id="test")
+        task = taskqueue.claim(db, lanes=list(lanes), worker_id="test")
         if task is None:
             return n
         pipeline.run_task(db, task)
@@ -259,17 +260,17 @@ def test_loi_bat_ngo_thu_lai_co_gian_cach_roi_moi_failed(db, monkeypatch):
 
 def test_lam_heavy_khong_nhan_viec_light_va_nguoc_lai(db):
     pipeline.start(db, "upload", payload={"path": "x"})
-    assert queue.claim(db, lanes=[Lane.HEAVY], worker_id="h") is None
-    assert queue.claim(db, lanes=[Lane.LIGHT], worker_id="l").stage == "intake"
+    assert taskqueue.claim(db, lanes=[Lane.HEAVY], worker_id="h") is None
+    assert taskqueue.claim(db, lanes=[Lane.LIGHT], worker_id="l").stage == "intake"
 
 
 def test_viec_treo_tra_ve_hang(db):
     task = pipeline.start(db, "upload", payload={"path": "x"})
-    queue.claim(db, lanes=[Lane.LIGHT], worker_id="chet")
+    taskqueue.claim(db, lanes=[Lane.LIGHT], worker_id="chet")
     task = db.get(StudioTask, task.id)
     task.claimed_at = int(time.time()) - 3600
     db.commit()
-    assert queue.requeue_stale(db) == 1
+    assert taskqueue.requeue_stale(db) == 1
     db.refresh(task)
     assert task.status == TaskStatus.QUEUED and task.claimed_by is None
 
@@ -595,3 +596,20 @@ def test_render_lai_thay_file_cu_nhung_khong_dong_vao_bai_da_hen(db, media):
     last = db.query(StudioTask).order_by(StudioTask.id.desc()).first()
     assert last.status == TaskStatus.FAILED and "đã có lịch Buffer" in last.error
 
+
+
+def test_worker_chay_duoc_nhu_pm2_bang_duong_dan_script():
+    """
+    PM2 chạy ``app/features/studio/worker.py`` như script → thư mục studio đứng đầu sys.path. Module nào trong
+    studio trùng tên module chuẩn (``queue`` từng trùng) sẽ che nó và worker sập ngay khi import (31/10).
+    """
+    root = Path(__file__).resolve().parents[1]
+    proc = subprocess.run(
+        [sys.executable, "app/features/studio/worker.py", "--help"], cwd=root, capture_output=True, text=True,
+        timeout=120, env={**os.environ, "PYTHONPATH": str(root)},
+    )
+    assert proc.returncode == 0, proc.stderr[-800:]
+    assert "--lanes" in proc.stdout
+    studio = root / "app" / "features" / "studio"
+    clash = {p.stem for p in studio.glob("*.py")} & set(sys.stdlib_module_names)
+    assert not clash, f"module studio trùng tên module chuẩn: {clash}"

@@ -14,7 +14,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from app.core.database.models import StudioProject, StudioTask
-from app.features.studio import analyze, caption, compose, dub, intake, publish, queue, render, review
+from app.features.studio import analyze, caption, compose, dub, intake, publish, render, review, taskqueue
 from app.features.studio.contracts import ProjectStatus, Stage, StageError, StageResult
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def start(
 ) -> StudioTask:
     if flow not in FLOWS:
         raise ValueError(f"không có flow {flow!r}")
-    return queue.enqueue(db, flow=flow, stage=FLOWS[flow][0], asset_id=asset_id, project_id=project_id, payload=payload)
+    return taskqueue.enqueue(db, flow=flow, stage=FLOWS[flow][0], asset_id=asset_id, project_id=project_id, payload=payload)
 
 
 def next_stage(flow: str, stage: Stage | str) -> Stage | None:
@@ -74,7 +74,7 @@ def advance(db: Session, task: StudioTask, result: StageResult) -> StudioTask | 
     nxt = next_stage(task.flow, task.stage)
     if nxt is None:
         return None
-    return queue.enqueue(
+    return taskqueue.enqueue(
         db,
         flow=task.flow,
         stage=nxt,
@@ -106,16 +106,16 @@ def run_task(db: Session, task: StudioTask) -> StageResult | None:
     except StageError as exc:
         db.rollback()
         logger.warning("[STUDIO] việc #%s (%s) lỗi: %s", task_id, stage, exc)
-        if queue.fail(db, task_id, str(exc), retryable=exc.retryable):
+        if taskqueue.fail(db, task_id, str(exc), retryable=exc.retryable):
             _mark_project_failed(db, project_id, str(exc))
         return None
     except Exception as exc:  # lỗi không lường trước: vẫn cho thử lại theo max_attempts
         db.rollback()
         logger.exception("[STUDIO] việc #%s (%s) hỏng bất ngờ", task_id, stage)
         error = f"{type(exc).__name__}: {exc}"
-        if queue.fail(db, task_id, error):
+        if taskqueue.fail(db, task_id, error):
             _mark_project_failed(db, project_id, error)
         return None
-    queue.done(db, task_id, result.note)
+    taskqueue.done(db, task_id, result.note)
     advance(db, db.get(StudioTask, task_id), result)
     return result

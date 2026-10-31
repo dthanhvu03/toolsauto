@@ -23,7 +23,7 @@ from app.core.database.core import SessionLocal
 from app.core.notifier.service import NotifierService
 from app.core.notifier.telegram import TelegramNotifier
 from app.core.settings import load_runtime_settings_into_process
-from app.features.studio import entry, pipeline, queue
+from app.features.studio import entry, pipeline, taskqueue
 from app.features.studio.publish import status as publish_status
 from app.features.studio.contracts import Lane
 from app.utils.logger import setup_shared_logger
@@ -47,7 +47,7 @@ def run_once(lanes: list[Lane], worker_id: str) -> bool:
     """Nhận và chạy một việc. ``False`` khi hàng trống."""
     db = SessionLocal()
     try:
-        task = queue.claim(db, lanes=lanes, worker_id=worker_id)
+        task = taskqueue.claim(db, lanes=lanes, worker_id=worker_id)
         if task is None:
             return False
         logger.info("[STUDIO] việc #%s %s/%s (lần %s)", task.id, task.flow, task.stage, task.attempts)
@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
     last_stale_check = last_inbox_scan = last_publish_sync = 0.0
     while _running:
         if time.time() - last_stale_check >= STALE_CHECK_EVERY_SEC:
-            n = _periodic(queue.requeue_stale, "trả việc treo")
+            n = _periodic(taskqueue.requeue_stale, "trả việc treo")
             if n:
                 logger.warning("[STUDIO] trả %s việc treo về hàng", n)
             last_stale_check = time.time()
