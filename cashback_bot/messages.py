@@ -36,13 +36,13 @@ TIP_KEYBOARD: Keyboard = ((("🛡️ Lưu ý trước khi mua", "u:tip"),),)
 GUIDE_KEYBOARD: Keyboard = ((("📖 Cách dùng", "u:p:guide"),),)
 # Trang mẹo «Để được ghi nhận» luôn mở được, kể cả khi /dieukien đã chuyển sang điều khoản theo phiên bản.
 TIPS_KEYBOARD: Keyboard = ((("📋 Điều khoản", "u:p:rules"),), (("◀️ Trang chủ", "u:p:home"),))
-# Popup answerCallbackQuery tối đa 200 ký tự.
+# Popup answerCallbackQuery tối đa 200 ký tự. PLAN-107 B2: các điều kiện rời thẻ link (chỉ còn giỏ + mua thẳng) về đây.
 TIP_ALERT = (
-    "Trước khi đặt hàng:\n"
-    "1. Món đã có trong giỏ thì xoá đi.\n"
-    "2. Mở đúng link bot vừa gửi.\n"
-    "3. Không bấm sang quảng cáo, livestream hay link khác.\n"
-    "Không bảo đảm sàn sẽ ghi nhận đơn."
+    "Để được hoàn:\n"
+    "• Mua đúng món này, qua link bot.\n"
+    "• Không bấm sang quảng cáo, livestream, link khác.\n"
+    "• Mỗi lần mua, lấy link mới từ bot.\n"
+    "Bot không thu tiền. Sàn báo đơn cho bot sau khoảng 1 ngày."
 )
 CLOSED_ALERT = "Tài khoản này chưa được mở. Bot đang mở thử cho một số tài khoản."
 STALE_BUTTON = "Nút này không còn hiệu lực."
@@ -85,8 +85,9 @@ CLOSED = (
 )
 HUONGDAN = (
     "📖 <b>Cách dùng</b>\n\n"
-    "1. Mở sản phẩm trên Shopee, bấm Chia sẻ rồi Sao chép liên kết.\n"
-    "2. Dán link vào đây.\n"
+    "1. Mở sản phẩm trên Shopee, bấm Chia sẻ.\n"
+    "2. Chọn Telegram rồi chọn bot này là gửi xong, khỏi sao chép. "
+    "Không thấy Telegram thì bấm Sao chép liên kết rồi dán vào đây.\n"
     "3. Bot gửi lại số tiền hoàn dự kiến và nút <b>🛒 Mua trên Shopee</b>.\n"
     "4. Bấm nút đó để mở sản phẩm và đặt hàng như bình thường.\n\n"
     "Bot không thu phí sử dụng. Bạn thanh toán trực tiếp trên Shopee.\n\n"
@@ -210,24 +211,19 @@ def source_text(text: str, conversion_id: str | None) -> str:
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
-# Thẻ link 2026-10-27: gom điều kiện thành khối «Để được hoàn», mỗi ý một dòng (đơn thật: khách sang shop khác mua, mất XTRA).
-# Voucher nằm trong khối này chứ không ở chữ nhỏ: khách ít đọc chữ nhỏ, nhận số thấp hơn thì tưởng bị bớt.
-_BUY_RULES = (
-    "⚠️ <b>Để được hoàn</b>\n"
-    "• Mua qua link của bot. Mua thẳng trong app sẽ không được hoàn.\n"
-    "• Mua đúng món này. Mua món khác thì số hoàn sẽ khác.\n"
-    "• Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot.\n"
-)
-BUY_WARNING = _BUY_RULES + "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo."
-TIKTOK_BUY_WARNING = _BUY_RULES + "• Dùng voucher hoặc mua lúc giảm giá thì số hoàn giảm theo."
+# Thẻ link PLAN-107 B2 (chủ bot 2026-10-31): khách chỉ đọc số hoàn và nút mua. Trên thẻ còn hai lỗi mất hoàn hay gặp
+# nhất (mua thẳng trong app, món có sẵn trong giỏ) và voucher; các điều kiện khác ở popup 🛡️ Lưu ý (TIP_ALERT).
+BUY_RULE = "⚠️ Mua thẳng trong app sẽ không được hoàn."
+TIKTOK_BUY_RULE = "⚠️ Mua thẳng trong app TikTok sẽ không được hoàn."
+CART_RULE = "🛒 Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
+# Voucher ở trên thẻ chứ không ở popup: nhận số thấp hơn mà không biết vì sao thì khách tưởng bị bớt (2026-10-27).
+VOUCHER_RULE = "🎟 Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo."
+TIKTOK_VOUCHER_RULE = "🎟 Dùng voucher hoặc mua lúc giảm giá thì số hoàn giảm theo."
 # AddLiveTag gắn cờ isCapped: phần Shopee trả đã chạm trần mỗi lần thanh toán (tài khoản chủ bot: checkout_cap 40.000đ
 # trong dữ liệu đơn). Gộp món khác / mua 2 cái cùng lần thanh toán thì phần Shopee không tăng. Không ghi số: trần đổi
 # theo tài khoản và thời gian (chủ bot duyệt 2026-10-27).
-CAPPED_RULE = ("• <b>Món giá cao:</b> Shopee giới hạn phần hoàn mỗi lần thanh toán. Nên <b>thanh toán riêng món này, "
-               "mỗi lần 1 cái</b>, đừng gộp chung với món khác.")
-# Câu trấn an «link này có lừa không» (khách quen của chủ bot từng sợ lừa đảo).
-TRUST_LINE = "🔒 Link mở thẳng Shopee. Bạn thanh toán trên Shopee như bình thường, bot không thu tiền gì."
-TIKTOK_TRUST_LINE = "🔒 Link mở thẳng TikTok Shop. Bạn thanh toán trên TikTok như bình thường, bot không thu tiền gì."
+CAPPED_RULE = ("💎 <b>Món giá cao:</b> Shopee giới hạn phần hoàn mỗi lần thanh toán. "
+               "<b>Thanh toán riêng món này, mỗi lần 1 cái.</b>")
 _NOTE_V11 = (
     "Số hoàn tính theo giá tham khảo. "
     "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
@@ -337,32 +333,26 @@ def buyer_name(name: str) -> str:
     return (cut or text[:51]).rstrip(" ,.-") + "…"
 
 
-# Đối chiếu AMS 2026-10-27: Shopee Comm AddLiveTag báo trên 2,5% không phải đơn nào cũng được.
-# Không ghi số tiền: «thêm tới Xđ» làm khách cộng lại và lấy tổng làm mốc (tâm lý neo số, chủ bot duyệt 2026-10-27).
-# «Thận trọng» chứ không «chắc chắn»: bot chỉ thận trọng ở mức hoa hồng; số tiền cuối còn theo voucher (gạch đầu dòng
-# ở khối Để được hoàn). Khách đặt cạnh bot khác báo mức tối đa thì hiểu vì sao số nhỏ hơn.
-EXTRA_LINE = "➕ Bot báo theo mức <b>thận trọng</b>, không phải mức tối đa. Shopee trả cao hơn thì bạn được thêm."
+# Đối chiếu AMS 2026-10-27: Shopee Comm AddLiveTag báo trên 2,5% không phải đơn nào cũng được. Bot báo mức thận trọng;
+# không ghi số «thêm tới Xđ» vì khách cộng lại và lấy tổng làm mốc (tâm lý neo số, chủ bot duyệt 2026-10-27).
+EXTRA_NOTE = " · <i>có thể cao hơn</i>"
 
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str,
                  tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    """Thẻ link: sản phẩm → số hoàn (đậm) → câu trấn an → điều kiện để được hoàn → chữ nhỏ → lời bấm nút ngay trên nút."""
+    """Thẻ link: sản phẩm → số hoàn (đậm) → ba dòng điều kiện → chữ nhỏ → lời bấm nút ngay trên nút."""
     safe_name = html.escape(buyer_name(name))
     title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
     lines = [
         title + (" · 🎵 TikTok Shop" if tiktok else ""),
         f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}",
         "",
-        f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>",
+        f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>" + (EXTRA_NOTE if extra_vnd > 0 else ""),
     ]
-    if extra_vnd > 0:
-        lines.append(EXTRA_LINE)
-    lines += ["", TIKTOK_TRUST_LINE if tiktok else TRUST_LINE]
     if cashback_vnd > 0:
-        lines += ["", TIKTOK_BUY_WARNING if tiktok else BUY_WARNING]
-        if capped:
-            lines.append(CAPPED_RULE)
-    lines += ["", f"ⓘ <i>{note}</i>", "", TIKTOK_BUY_HINT if tiktok else BUY_HINT]
+        lines += [TIKTOK_BUY_RULE if tiktok else BUY_RULE, CART_RULE, TIKTOK_VOUCHER_RULE if tiktok else VOUCHER_RULE]
+        lines += [CAPPED_RULE] if capped else []
+    lines += ["", f"ⓘ <i>{note}</i>", TIKTOK_BUY_HINT if tiktok else BUY_HINT]
     return BotReply(text="\n".join(lines), button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD,
                     button_label=TIKTOK_BUY_BUTTON if tiktok else None)
 
@@ -830,7 +820,8 @@ ORDERS_EMPTY = (
     "📦 <b>Đơn hàng của tôi</b>\n\n"
     "Chưa có đơn nào mua qua link bạn đã tạo.\n\n"
     "• Gửi link sản phẩm Shopee vào đây để nhận link hoàn tiền, rồi mua qua link đó.\n"
-    "• Đơn mới có thể mất vài giờ hoặc lâu hơn mới hiện ở đây.\n\n"
+    "• Đơn mới thường hiện ở đây sau khoảng 1 ngày, vì Shopee báo đơn chậm. "
+    "Đặt rồi thì bạn cứ yên tâm, bot sẽ báo khi thấy đơn.\n\n"
     "Đã mua qua link mà chưa thấy đơn? Gõ /hotro để gửi yêu cầu kiểm tra."
 )
 # Danh sách /donhang: nhãn ngắn cho một dòng trên điện thoại.
@@ -1041,18 +1032,30 @@ def _ineligible(row: dict) -> bool:
     return (row["order_status"] or "").upper() in ("CANCELLED", "CANCELED") or row["validation_status"] in ("REJECTED", "FRAUD")
 
 
+def order_progress(row: dict) -> str:
+    """PLAN-107 B4: thanh tiến trình một dòng. ✅ bước dữ liệu sàn đã có, ⏳ bước đang chờ, ⚪ bước sau."""
+    done = ((row["order_status"] or "").upper() == "COMPLETED", row["validation_status"] == "APPROVED",
+            row.get("entry_status") == "available")
+    marks, waiting = ["✅"], True
+    for ok in done:
+        marks.append("✅" if ok else "⏳" if waiting else "⚪")
+        waiting = waiting and ok
+    names = ("Đã mua", "Hoàn thành", "Sàn duyệt", "Vào ví")
+    return " › ".join(f"{mark} {name}" for mark, name in zip(marks, names))
+
+
 def _order_list_entry(number: int, row: dict) -> list[str]:
     status = ORDER_STATUS_SHORT.get((row["order_status"] or "").upper(), "Chưa rõ tình trạng")
     if _ineligible(row):
         money = "❌ Không đủ điều kiện hoa hồng"
     else:
         amount = "chưa xác định" if row["cashback"] is None else f"<b>{format_vnd(row['cashback'])}</b>"
-        stage = "✅ Shopee đã duyệt" if row["validation_status"] == "APPROVED" else "⏳ chờ Shopee xác minh"
-        money = f"💰 Hoàn tạm tính {amount} · {stage}"
+        money = f"💰 Hoàn tạm tính {amount}"
     return [
         f"<b>{number}. {html.escape(_order_title(row))}</b>",
         f"🛒 Mua {row['date']} · {status}",
         source_text(money, row.get("conversion_id")),
+        *([] if _ineligible(row) else [order_progress(row)]),
     ]
 
 
@@ -1078,6 +1081,7 @@ def orders_summary_reply(stats: dict, rows, page: int, pages: int, start: int = 
         "",
         "ⓘ Số tạm tính, có thể thay đổi. "
         + ("Chưa có khoản nào vào ví." if not stats.get("available") else "")
+        + "\nĐơn mới thường hiện sau khoảng 1 ngày."
         + "\nBấm vào đơn để xem tiến trình.",
     ]
     keyboard: list[tuple[tuple[str, str], ...]] = []

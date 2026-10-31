@@ -254,7 +254,7 @@ def test_dong_bo_don_tiktok_ghi_so_nhu_shopee(tmp_path):
         notice = conn.execute("SELECT message_html FROM admin_notifications WHERE event_type = 'ORDER_ORDER_NEW'").fetchone()
     assert notice is not None and "TikTok vừa ghi nhận" in notice[0] and "Shopee" not in notice[0]
     page = bot.desk.orders_page(ADMIN)
-    assert "chờ TikTok xác minh" in page.text and "Đã ghi nhận <b>1</b> đơn" in page.text
+    assert "✅ Đã mua › ⏳ Hoàn thành" in page.text and "Đã ghi nhận <b>1</b> đơn" in page.text
 
 
 def test_don_tiktok_chot_va_huy(tmp_path):

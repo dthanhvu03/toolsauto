@@ -14,6 +14,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 from cashback_bot.affiliate import build_voucher_redir
 from cashback_bot.db import TrackingRepository, enqueue_event
@@ -35,6 +36,15 @@ ON = "u:vc:on"
 OFF = "u:vc:off"
 LIVE_FOR = timedelta(hours=24)
 LIST_MAX = 8
+# PLAN-107 B1 (chủ bot 2026-10-31, thay «không giới hạn» ngày 30/10): khách không nhận tin 22h–8h giờ VN, mã đến gần
+# nhau gộp một tin, một mã không gửi lại trong 24 giờ, tối đa 2 tin mã mỗi ngày. Admin vẫn nhận ngay để kiểm tra.
+ICT = ZoneInfo("Asia/Ho_Chi_Minh")
+QUIET_FROM, QUIET_TO = 22, 8
+GROUP_WAIT = timedelta(minutes=2)  # chờ thêm mã đến sau; mã đầu đợi tối đa GROUP_MAX_WAIT
+GROUP_MAX_WAIT = timedelta(minutes=10)
+DAILY_MAX = 2
+BATCH_MAX = 5
+QUEUED = -1  # voucher_posts.sent: đang chờ lượt gửi khách (tick)
 _SHOPEE_HOSTS = ("shp.ee", "shope.ee")
 
 # Mẫu mặc định AddLiveTag: «{icon} {gio}: {ten} {ma} đã dùng {dadung}% - Giảm {giam}% - Tối đa {toida} - Đơn tối thiểu
@@ -218,12 +228,14 @@ def handle_post(repo: TrackingRepository, post: dict, edited: bool, now: datetim
             "used_percent, url, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (chat_id, message_id, voucher.code, voucher.name, voucher.discount, voucher.max_discount,
              voucher.min_spend, voucher.used, url, status, stamp, stamp))
-        # Có mã là gửi ngay, mọi giờ (chủ bot 2026-10-30). Tin AddLiveTag sửa lại (% đã dùng) thì không gửi lại.
+        # Tin AddLiveTag sửa lại (% đã dùng) thì không gửi lại. Gửi khách: xếp hàng cho tick (giờ yên lặng, gộp, trần).
         if edited or voucher.out or not enabled(repo):
             return 0
-        if to_customers(repo):
-            return _send(conn, cursor.lastrowid, voucher, url, now, subscribers(conn, now))
-        return _send(conn, cursor.lastrowid, voucher, url, now, sorted(admins), test=True)
+        if not to_customers(repo):
+            return _send(conn, cursor.lastrowid, voucher, url, now, sorted(admins), test=True)
+        sent = _send(conn, cursor.lastrowid, voucher, url, now, sorted(admins))
+        conn.execute("UPDATE voucher_posts SET sent = ? WHERE id = ?", (QUEUED, cursor.lastrowid))
+        return sent
 
 
 def _send(conn: sqlite3.Connection, post_id: int, voucher: Voucher, url: str | None, now: datetime,
@@ -242,12 +254,78 @@ def _send(conn: sqlite3.Connection, post_id: int, voucher: Voucher, url: str | N
     return sent
 
 
+def quiet(now: datetime) -> bool:
+    hour = now.astimezone(ICT).hour
+    return hour >= QUIET_FROM or hour < QUIET_TO
+
+
+def _when(stamp: str) -> datetime:
+    return datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def _recent_codes(conn: sqlite3.Connection, user: int, now: datetime) -> set[str]:
+    ids: set[int] = set()
+    for (ref,) in conn.execute("SELECT source_ref FROM admin_notifications WHERE event_type = ? AND chat_id = ? "
+                               "AND created_at >= ?", (EVENT_TYPE, user, _stamp(now - LIVE_FOR))):
+        ids |= {int(part) for part in (ref or "").removeprefix("voucher:").split(",") if part.isdigit()}
+    if not ids:
+        return set()
+    marks = ",".join("?" * len(ids))
+    return {r[0] for r in conn.execute(f"SELECT code FROM voucher_posts WHERE id IN ({marks})", tuple(ids))}
+
+
+def tick(repo: TrackingRepository, now: datetime | None = None) -> int:
+    """Gửi khách các mã đang chờ (vòng lặp poller). Trả số tin đã xếp hàng."""
+    now = now or datetime.now(timezone.utc)
+    if not ready(repo) or not to_customers(repo) or quiet(now):
+        return 0
+    with repo.connect() as conn:
+        rows = conn.execute("SELECT * FROM voucher_posts WHERE sent = ? ORDER BY id", (QUEUED,)).fetchall()
+        if not rows or (now - _when(rows[-1]["created_at"]) < GROUP_WAIT
+                        and now - _when(rows[0]["created_at"]) < GROUP_MAX_WAIT):
+            return 0
+        latest: dict[str, sqlite3.Row] = {}
+        for row in rows:
+            if row["status"] == "live" and _when(row["created_at"]) >= now - LIVE_FOR:
+                latest[row["code"]] = row
+        batch = sorted(latest.values(), key=lambda r: r["id"], reverse=True)[:BATCH_MAX]
+        counts = {row["id"]: 0 for row in rows}
+        today = _stamp(now.astimezone(ICT).replace(hour=0, minute=0, second=0, microsecond=0))
+        total = 0
+        for user in subscribers(conn, now) if batch else []:
+            seen = _recent_codes(conn, user, now)
+            picks = [row for row in batch if row["code"] not in seen]
+            if not picks or conn.execute("SELECT COUNT(*) FROM admin_notifications WHERE event_type = ? AND chat_id = ? "
+                                         "AND created_at >= ?", (EVENT_TYPE, user, today)).fetchone()[0] >= DAILY_MAX:
+                continue
+            first = conn.execute("SELECT 1 FROM admin_notifications WHERE event_type = ? AND chat_id = ? LIMIT 1",
+                                 (EVENT_TYPE, user)).fetchone() is None
+            text, keyboard = alert_many(picks, first)
+            ids = [str(row["id"]) for row in picks]
+            if enqueue_event(conn, event_key=f"voucher:{'-'.join(ids)}:{user}", event_type=EVENT_TYPE, chat_id=user,
+                             message_html=text, audience="customer", category=CATEGORY,
+                             source_ref=f"voucher:{','.join(ids)}",
+                             reply_markup_json=json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False),
+                             now=_stamp(now)):
+                total += 1
+                for row in picks:
+                    counts[row["id"]] += 1
+        conn.executemany("UPDATE voucher_posts SET sent = ? WHERE id = ?", [(n, i) for i, n in counts.items()])
+    return total
+
+
+def queued(conn: sqlite3.Connection) -> int:
+    return int(conn.execute("SELECT COUNT(*) FROM voucher_posts WHERE sent = ?", (QUEUED,)).fetchone()[0])
+
+
 # --- Chữ cho khách ----------------------------------------------------------------------------------------------
 
 BUY_HINT = "👉 Lưu mã xong, dán link món vào bot để mua có hoàn tiền nha."
 DISCOUNT_NOTE = "ⓘ Dùng mã thì số hoàn tính trên giá sau giảm."
 NO_LINK = "Nhập mã này ở mục Shopee Voucher lúc thanh toán."
 OFF_TEXT = "Báo mã giảm giá đang tạm tắt."
+FIRST_NOTE = "ⓘ Không muốn nhận? Bấm 🔕 Tắt báo mã bên dưới."
+RULES_NOTE = "Bot nhắn tối đa 2 tin mã mỗi ngày và không nhắn từ 22h đến 8h."
 
 
 def _terms(voucher) -> str:
@@ -280,6 +358,28 @@ def alert(voucher: Voucher, url: str | None) -> tuple[str, list]:
     return "\n".join(lines), keyboard
 
 
+def alert_many(rows: list, first: bool = False) -> tuple[str, list]:
+    """Tin gộp các mã chờ gửi (hàng voucher_posts). Nút lưu mã đầu; mã sau có link «Lưu mã» trong chữ (Zalo một nút)."""
+    if len(rows) == 1:
+        row = rows[0]
+        text, keyboard = alert(Voucher(code=row["code"], name=row["name"] or "", discount=row["discount"] or "",
+                                       max_discount=row["max_discount"] or "", min_spend=row["min_spend"] or "",
+                                       used=row["used_percent"]), row["url"])
+        return (f"{text}\n{FIRST_NOTE}" if first else text), keyboard
+    lines = [f"🎟 <b>Có {len(rows)} mã giảm giá Shopee nè!</b>", ""]
+    for number, row in enumerate(rows, 1):
+        name = f"<b>{html.escape(row['name'])}</b>: " if row["name"] else ""
+        terms = _terms(row)
+        used = f" · đã dùng {row['used_percent']}%" if row["used_percent"] is not None else ""
+        save = f' · <a href="{html.escape(row["url"])}">Lưu mã</a>' if row["url"] and number > 1 else ""
+        lines.append(f"{number}. {name}<code>{html.escape(row['code'])}</code>"
+                     + (f" ({terms})" if terms else "") + used + save)
+    lines += ["", BUY_HINT, DISCOUNT_NOTE] + ([FIRST_NOTE] if first else [])
+    keyboard = ([[{"text": f"🎟 Lưu mã {rows[0]['code']}", "url": rows[0]["url"]}]] if rows[0]["url"] else [])
+    keyboard.append([{"text": "🔕 Tắt báo mã", "callback_data": OFF}, {"text": "📋 Mã đang còn", "callback_data": LIST}])
+    return "\n".join(lines), keyboard
+
+
 def live(conn: sqlite3.Connection, now: datetime) -> list[sqlite3.Row]:
     """Mã còn: tin mới nhất mỗi mã trong 24 giờ, chưa hết."""
     return conn.execute(
@@ -305,8 +405,8 @@ def list_reply(repo: TrackingRepository, user: int, now: datetime, notice: str =
                          + (f" ({terms})" if terms else "") + used + save)
         lines += ["", BUY_HINT, DISCOUNT_NOTE]
     else:
-        lines.append("Chưa có mã nào đang còn. Bật báo mã để bot nhắn liền khi có mã mới nha.")
-    lines += ["", f"Báo mã mới: {'🟢 Đang bật' if on else '⚪ Đang tắt'}"]
+        lines.append("Chưa có mã nào đang còn. Bật báo mã để bot nhắn khi có mã mới nha.")
+    lines += ["", f"Báo mã mới: {'🟢 Đang bật' if on else '⚪ Đang tắt'}", f"<i>{RULES_NOTE}</i>"]
     toggle = ("🔕 Tắt báo mã", OFF) if on else ("🔔 Bật báo mã mới", ON)
     first = rows[0] if rows and rows[0]["url"] else None
     return BotReply("\n".join(lines), button_url=first["url"] if first else None,
@@ -320,7 +420,7 @@ def action(repo: TrackingRepository, user: int, data: str, now: datetime) -> Bot
         return BotReply("", toast=OFF_TEXT, show_alert=True)
     if data == ON:
         repo.set_state(f"{ON_PREFIX}{user}", "1")
-        return list_reply(repo, user, now, "🔔 Đã bật. Có mã mới là bot nhắn bạn liền nha!")
+        return list_reply(repo, user, now, "🔔 Đã bật. Có mã mới bot sẽ nhắn bạn nha!")
     if data == OFF:
         repo.set_state(f"{ON_PREFIX}{user}", "0")
         return list_reply(repo, user, now, "🔕 Đã tắt báo mã. Muốn bật lại thì gõ /magiam nha.")

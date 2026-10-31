@@ -16,7 +16,7 @@ import requests
 
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_policy import AdminSafetyError
-from cashback_bot import addlivetag_orders, deals, engagement, price_watch, tiktok_sync, watchlist
+from cashback_bot import addlivetag_orders, deals, engagement, price_watch, tiktok_sync, voucher, watchlist
 from cashback_bot.backup import run_scheduled_backup
 from cashback_bot.calculator import CalculationError, ReconciliationRequired
 from cashback_bot.config import ConfigError, load_settings
@@ -633,6 +633,7 @@ def _loop(service: CashbackService, telegram: TelegramApi, repo: TrackingReposit
                 ("nightly_brief", lambda: ops_watch.check_nightly_brief(repo, admin_notifier, interval)),
                 ("tiktok_sync", lambda: tiktok_sync.maybe_start(repo, service.riohub, admin_notifier)),
                 ("sale_reminders", lambda: engagement.tick(repo, admin_notifier, datetime.now(timezone.utc))),
+                ("vouchers", lambda: voucher.tick(repo)),
                 ("price_drop", lambda: price_watch.maybe_start(repo, service.price_history, admin_notifier)),
                 ("alt_crosscheck", lambda: addlivetag_orders.maybe_start(repo, alt_orders, admin_notifier)),
                 ("alt_fallback", lambda: addlivetag_orders.maybe_fallback(repo, alt_orders, alt_cfg, admin_notifier)),

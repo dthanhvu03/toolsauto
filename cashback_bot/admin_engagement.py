@@ -192,7 +192,7 @@ class EngagementAdmin:
             self.repo.set_state(voucher.AUDIENCE_KEY, "all" if live else "test")
             self._log(admin_id, {"voucher_audience": "test" if live else "all"},
                       {"voucher_audience": "all" if live else "test"}, now)
-            notice = ("📣 Đã bật gửi khách: có mã là bot nhắn mọi khách đã tạo link." if live else
+            notice = ("📣 Đã bật gửi khách: bot nhắn mọi khách đã tạo link, theo giờ yên lặng và trần mỗi ngày." if live else
                       "🧪 Đã về chế độ thử: tin báo mã chỉ gửi admin.")
         elif data == "c:eg:vc:unbind":
             old = voucher.channel(self.repo)
@@ -203,6 +203,7 @@ class EngagementAdmin:
         live = voucher.to_customers(self.repo)
         with self.repo.connect() as conn:
             numbers = voucher.stats(conn, now)
+            waiting = voucher.queued(conn)
         skipped = self.repo.get_state(voucher.SKIPPED_KEY) or "0"
         lines = ["🎟 <b>Báo mã giảm giá</b>", ""]
         if notice:
@@ -215,10 +216,14 @@ class EngagementAdmin:
             f"Kênh: {'đã gắn (' + str(bound) + ')' if bound else '⚪ chưa gắn'}",
             f"7 ngày qua: {numbers['posts']} tin mã · {numbers['sent']} tin gửi khách · tin không đọc được: {skipped}",
             f"Mã gần nhất: {html.escape(last[0])} lúc {_clock(last[1])}" if last else "Chưa nhận mã nào.",
+            *([f"Đang chờ gửi khách: {waiting} mã"] if live else []),
             "",
-            "AddLiveTag Theo dõi Voucher gửi tin vào kênh Telegram riêng tư bằng <b>bot chuyển tin</b> (bot riêng, không",
-            "dùng token bot hoàn tiền). Bot hoàn tiền là quản trị kênh, đọc tin rồi gửi ngay mọi giờ, không giới hạn số tin,",
-            "cho mọi khách đã tạo link. Khách không muốn nhận thì bấm 🔕 Tắt báo mã hoặc vào /magiam.",
+            "AddLiveTag Theo dõi Voucher gửi tin vào kênh Telegram riêng tư bằng <b>bot chuyển tin</b> (bot riêng, "
+            "không dùng token bot hoàn tiền). Bot hoàn tiền là quản trị kênh, đọc tin rồi gửi cho mọi khách đã tạo link.",
+            f"⏰ Khách không nhận tin {voucher.QUIET_FROM}h–{voucher.QUIET_TO}h (8h sáng gửi gộp các mã còn). Mã đến gần "
+            f"nhau gộp một tin, một mã không gửi lại trong 24 giờ, tối đa {voucher.DAILY_MAX} tin mỗi ngày. "
+            "Admin nhận ngay mọi giờ.",
+            "Khách không muốn nhận thì bấm 🔕 Tắt báo mã hoặc vào /magiam.",
         ]
         rows = []
         if seen and seen["id"] != bound:
