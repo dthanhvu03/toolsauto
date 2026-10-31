@@ -74,6 +74,8 @@ class StudioChannel(Base):
     active = Column(Boolean, nullable=False, default=True)
     # Bật thì video reup hệ cũ tải cho kênh này đi vào Studio thay vì ReupProcessor (PLAN-106 P2).
     take_reup = Column(Boolean, nullable=False, default=False)
+    # Giọng VieNeu khi lồng tiếng video của kênh (PLAN-112). NULL = theo ``dub_voice`` (female / male) của mẫu.
+    dub_voice = Column(String(64), nullable=True)
     created_at = Column(Integer, nullable=False, default=now_ts)
 
 

@@ -1,4 +1,4 @@
-import { getJson, sendForm, sendJson } from "@/shared/api/http";
+import { getJson, postJsonBlob, sendForm, sendJson } from "@/shared/api/http";
 import type {
   Asset,
   Channel,
@@ -7,6 +7,7 @@ import type {
   ProjectsResponse,
   SetupResponse,
   Template,
+  VoicesResponse,
 } from "../types/studio.types";
 
 const BASE = "/studio/api";
@@ -50,6 +51,8 @@ export function uploadFile(
 export const fetchSetup = () => getJson<SetupResponse>(`${BASE}/setup`);
 export const createChannel = (body: Partial<Channel>) => sendJson<Channel>(`${BASE}/channels`, "POST", body);
 export const updateChannel = (id: number, body: Partial<Channel>) => sendJson<Channel>(`${BASE}/channels/${id}`, "PATCH", body);
+export const fetchVoices = () => getJson<VoicesResponse>(`${BASE}/voices`);
+export const fetchVoicePreview = (voice: string) => postJsonBlob(`${BASE}/voices/preview`, { voice });
 export const createTemplate = (body: Omit<Template, "id">) => sendJson<Template>(`${BASE}/templates`, "POST", body);
 export const updateTemplate = (id: number, body: Omit<Template, "id">) =>
   sendJson<Template>(`${BASE}/templates/${id}`, "PUT", body);

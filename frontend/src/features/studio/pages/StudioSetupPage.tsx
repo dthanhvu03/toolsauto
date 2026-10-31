@@ -5,6 +5,7 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import * as api from "../api/studioApi";
+import { VoicePicker } from "../components/VoicePicker";
 import { useAction, useAssets, useSetup } from "../hooks/useStudio";
 import type { Asset, Channel, Template } from "../types/studio.types";
 
@@ -64,6 +65,9 @@ function ChannelRow({ c, templates, assets }: { c: Channel; templates: Template[
             </select>
           </label>
         ))}
+      </div>
+      <div className="mt-3">
+        <VoicePicker value={c.dub_voice} disabled={act.busy} onChange={(v) => act.run({ dub_voice: v })} onError={act.setMsg} />
       </div>
       <ActionMsg text={act.msg} />
     </Panel>

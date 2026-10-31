@@ -50,6 +50,22 @@ export async function sendJson<T = OkMessage>(
   return r.json() as Promise<T>;
 }
 
+/** POST JSON, nhận lại file (audio / ảnh…) dạng Blob. */
+export async function postJsonBlob(url: string, body: unknown): Promise<Blob> {
+  const r = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (r.status === 401) {
+    redirectToLoginIfUnauthorized(401);
+    throw new Error(`${url} → 401`);
+  }
+  if (!r.ok) throw new Error(await errorMessage(r, url));
+  return r.blob();
+}
+
 export async function sendForm<T = OkMessage>(url: string, form: FormData): Promise<T> {
   const r = await fetch(url, { method: "POST", credentials: "same-origin", body: form });
   if (r.status === 401) {

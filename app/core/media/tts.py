@@ -50,6 +50,7 @@ FFMPEG_TIMEOUT_SEC = 300
 MIN_OUTPUT_BYTES = 1024
 DEFAULT_VIENEU_URL = "http://127.0.0.1:8790"
 VIENEU_TIMEOUT_SEC = 120
+VIENEU_HEALTH_TIMEOUT_SEC = 3
 # giọng edge tiếng Việt → giọng VieNeu cùng giới (bước dub chọn giọng theo tên edge)
 VIENEU_FEMALE = "Ngọc Huyền"
 VIENEU_MALE = "Hải Đăng"
@@ -152,9 +153,23 @@ def _vieneu_voice(voice: str) -> Optional[str]:
     return voice
 
 
-def _synth_vieneu(text: str, out_path: str, voice: str) -> bool:
+def vieneu_voices() -> list[dict]:
+    """Giọng server VieNeu đang có (``name``, ``gender``, ``region``, ``description``). Server tắt → ``[]``."""
     base = _vieneu_url()
-    vn_voice = _vieneu_voice(voice)
+    if not base:
+        return []
+    try:
+        with urllib.request.urlopen(base + "/health", timeout=VIENEU_HEALTH_TIMEOUT_SEC) as resp:
+            data = json.loads(resp.read())
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        logger.info("[tts] vieneu health: %s", getattr(e, "reason", e))
+        return []
+    return [v for v in data.get("voices") or [] if isinstance(v, dict) and v.get("name")]
+
+
+def _synth_vieneu(text: str, out_path: str, voice: str, vieneu_voice: Optional[str] = None) -> bool:
+    base = _vieneu_url()
+    vn_voice = vieneu_voice or _vieneu_voice(voice)
     if not base or vn_voice is None:
         return False
     req = urllib.request.Request(
@@ -246,11 +261,13 @@ def synthesize(
     voice: str = DEFAULT_VOICE,
     rate: str = "+0%",
     engine: str = "auto",
+    vieneu_voice: Optional[str] = None,
 ) -> bool:
     """
     Đọc ``text`` thành file audio tại ``out_path`` (mp3/m4a/wav theo đuôi).
 
-    ``engine``: ``auto`` (vieneu → edge → piper), ``vieneu``, ``edge``, ``piper``. Không raise;
+    ``engine``: ``auto`` (vieneu → edge → piper), ``vieneu``, ``edge``, ``piper``. ``vieneu_voice``: giọng VieNeu
+    cụ thể; bỏ trống thì quy từ ``voice`` (edge) theo giới. Không raise;
     trả False + warning khi mọi engine đều hỏng.
     """
     try:
@@ -263,8 +280,8 @@ def synthesize(
             engine_key = "auto"
 
         if engine_key in ("auto", "vieneu"):
-            if _try_engine("vieneu", _synth_vieneu, cleaned, out_path, voice):
-                logger.info("[tts] voice via vieneu (%s)", _vieneu_voice(voice))
+            if _try_engine("vieneu", _synth_vieneu, cleaned, out_path, voice, vieneu_voice):
+                logger.info("[tts] voice via vieneu (%s)", vieneu_voice or _vieneu_voice(voice))
                 return True
             if engine_key == "vieneu":
                 return False

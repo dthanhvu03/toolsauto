@@ -55,6 +55,11 @@
     127.0.0.1:8790, offline) + engine `vieneu` đầu `auto` trong `app/core/media/tts.py`; tắt server thì tự về edge → piper.
     127 test qua, chạy thật 2 câu qua HTTP. Chưa lồng trọn một video thật — anh thử bằng video tiếng nước ngoài, mẫu `reup_dub`.
     Mẫu nghe ở `C:\Users\Admin\Downloads\toolsauto-test\`.
+  - **31/10 — PLAN-112 chọn giọng VieNeu theo kênh (code xong, commit cục bộ, CHỜ ANH CHẠY MIGRATION):** ô «Giọng lồng tiếng»
+    + «Nghe thử» ở mỗi kênh trang «Kênh & mẫu»; cột mới `studio_channels.dub_voice`. 134 test, trình duyệt thật trên web tạm.
+    Backup + migration bị chặn quyền → anh chạy: `venv/bin/python manage.py db backup --keep 14 && venv/bin/alembic upgrade head
+    && pm2 restart Web_Dashboard Studio_Heavy Studio_Light`. **Trước khi chạy: không restart 3 app đó** (code mới đọc cột chưa có).
+    Bản SPA mới đã build — tới khi restart web, ô giọng hiện «server tắt» (API cũ chưa có `/voices`), không hỏng gì.
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 

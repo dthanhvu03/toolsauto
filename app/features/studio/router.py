@@ -14,13 +14,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database.core import get_db
 from app.core.database.models import StudioAsset, StudioChannel, StudioProject, StudioTask, StudioTemplate
+from app.core.media import tts
 from app.features.studio import editor, entry, setup, store
 
 router = APIRouter(prefix="/studio/api", tags=["studio"])
@@ -287,6 +288,20 @@ def update_channel(channel_id: int, body: dict, db: Session = Depends(get_db)) -
     try:
         return setup.channel_row(setup.save_channel(db, body, channel_id))
     except (setup.SetupError, ValueError, TypeError) as exc:
+        raise _bad(exc) from exc
+
+
+@router.get("/voices")
+def voices() -> dict:
+    found = tts.vieneu_voices()
+    return {"online": bool(found), "voices": found}
+
+
+@router.post("/voices/preview")
+def voice_preview(body: dict) -> Response:
+    try:
+        return Response(content=setup.preview_voice(str(body.get("voice") or "")), media_type="audio/wav")
+    except setup.SetupError as exc:
         raise _bad(exc) from exc
 
 

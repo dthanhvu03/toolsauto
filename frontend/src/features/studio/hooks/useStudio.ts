@@ -15,6 +15,10 @@ export function useSetup() {
   return useQuery({ queryKey: ["studio-setup"], queryFn: api.fetchSetup, staleTime: 60_000 });
 }
 
+export function useVoices() {
+  return useQuery({ queryKey: ["studio-voices"], queryFn: api.fetchVoices, staleTime: 5 * 60_000 });
+}
+
 export function useAssets(kind = "") {
   return useQuery({ queryKey: ["studio-assets", kind], queryFn: () => api.fetchAssets(kind) });
 }

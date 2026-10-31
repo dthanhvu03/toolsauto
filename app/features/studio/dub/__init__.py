@@ -34,14 +34,24 @@ def _translate(prompt: str) -> str | None:
     return text
 
 
-def _synthesizer(target_lang: str):
-    # piper dự phòng chỉ có giọng Việt — ngôn ngữ khác chỉ dùng edge-tts.
+def _synthesizer(target_lang: str, vieneu_voice: str | None = None):
+    # VieNeu và piper dự phòng chỉ có giọng Việt — ngôn ngữ khác chỉ dùng edge-tts.
     engine_name = "auto" if target_lang == "vi" else "edge"
+    vieneu_voice = vieneu_voice if target_lang == "vi" else None
 
     def synthesize(text: str, out_path: str, voice: str) -> bool:
-        return tts.synthesize(text, out_path, voice=voice, engine=engine_name)
+        return tts.synthesize(text, out_path, voice=voice, engine=engine_name, vieneu_voice=vieneu_voice)
 
     return synthesize
+
+
+def _voice(channel, params: dict) -> tuple[str | None, str]:
+    """(giọng VieNeu của kênh hoặc None, giới cho giọng edge dự phòng). Giọng kênh quyết định giới khi biết được."""
+    gender = str(params.get("dub_voice") or "female")
+    vn_voice = getattr(channel, "dub_voice", None) or None
+    if vn_voice:
+        gender = next((v["gender"] for v in tts.vieneu_voices() if v["name"] == vn_voice and v.get("gender")), gender)
+    return vn_voice, gender
 
 
 def _to_flac(wav: str) -> Path:
@@ -60,7 +70,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
     asset = db.get(StudioAsset, task.asset_id) if task.asset_id else None
     if asset is None:
         raise StageError(f"không có asset #{task.asset_id}", retryable=False)
-    kind, params, _template, _channel = store.template_for(db, task.payload)
+    kind, params, _template, channel = store.template_for(db, task.payload)
     if not params.get("dub", kind == "reup_dub"):
         return StageResult(asset_id=asset.id, note="mẫu không lồng tiếng")
     if asset.kind != "video" or not asset.has_audio:
@@ -77,9 +87,10 @@ def run(db: Session, task: StudioTask) -> StageResult:
         work = paths.work_dir() / f"dub{asset.id}-{uuid.uuid4().hex[:8]}"
         work.mkdir(parents=True)
         try:
+            vn_voice, gender = _voice(channel, params)
             res = engine.make_tracks(
                 asset.path, str(work), target_lang=target, translate=_translate,
-                synthesize=_synthesizer(target), voice_gender=str(params.get("dub_voice") or "female"),
+                synthesize=_synthesizer(target, vn_voice), voice_gender=gender,
             )
             data.update(reason=res.reason, source_lang=res.source_lang)
             if not res.ok and res.reason.startswith(_RETRY_REASONS) and task.attempts < task.max_attempts:

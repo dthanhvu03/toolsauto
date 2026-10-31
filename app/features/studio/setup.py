@@ -6,10 +6,15 @@ không import feature buffer). Mẫu là ``kind`` trong ``compose/templates.TEMP
 """
 from __future__ import annotations
 
+import unicodedata
+import uuid
+
 from sqlalchemy.orm import Session
 
 from app.core import settings as runtime_settings
 from app.core.database.models import StudioAsset, StudioChannel, StudioTemplate
+from app.core.media import tts
+from app.features.studio import paths
 from app.features.studio.compose.templates import TEMPLATES
 
 CHANNEL_FLAGS = ("auto_approve", "show_credit", "take_reup", "active")
@@ -44,6 +49,7 @@ def channel_row(c: StudioChannel) -> dict:
         "id": c.id, "buffer_channel_id": c.buffer_channel_id, "name": c.name, "template_id": c.template_id,
         **{f: bool(getattr(c, f)) for f in CHANNEL_FLAGS},
         **{f: getattr(c, f) for f in CHANNEL_ASSETS},
+        "dub_voice": c.dub_voice,
     }
 
 
@@ -100,8 +106,41 @@ def save_channel(db: Session, data: dict, channel_id: int | None = None) -> Stud
                 if asset is None or asset.kind != kind:
                     raise SetupError(f"{field}: asset #{aid} phải là {kind}")
             setattr(channel, field, aid)
+    if "dub_voice" in data:
+        channel.dub_voice = _check_voice(data["dub_voice"])
     db.commit()
     return channel
+
+
+PREVIEW_TEXT = "Xin chào, mình là giọng đọc lồng tiếng cho kênh này. Video hôm nay có nhiều điều thú vị lắm."
+_previews: dict[str, bytes] = {}  # giọng → WAV nghe thử (25 giọng × ~0,5 MB), nạp khi bấm lần đầu
+
+
+def preview_voice(voice: str) -> bytes:
+    """WAV một câu mẫu bằng giọng VieNeu ``voice``. Server tắt / giọng lạ → ``SetupError``."""
+    voice = unicodedata.normalize("NFC", str(voice or "")).strip()
+    if voice not in _previews:
+        if voice not in {v["name"] for v in tts.vieneu_voices()}:
+            raise SetupError("server giọng VieNeu chưa chạy hoặc không có giọng này")
+        out = paths.work_dir() / f"voice-preview-{uuid.uuid4().hex[:8]}.wav"
+        try:
+            if not tts.synthesize(PREVIEW_TEXT, str(out), engine="vieneu", vieneu_voice=voice):
+                raise SetupError("đọc thử hỏng — xem log VieNeu_TTS")
+            _previews[voice] = out.read_bytes()
+        finally:
+            out.unlink(missing_ok=True)
+    return _previews[voice]
+
+
+def _check_voice(value) -> str | None:
+    """Rỗng = theo mẫu. Server VieNeu đang chạy thì giọng phải có thật; server tắt vẫn cho lưu tên."""
+    voice = unicodedata.normalize("NFC", str(value or "")).strip()[:64]
+    if not voice:
+        return None
+    names = {v["name"] for v in tts.vieneu_voices()}
+    if names and voice not in names:
+        raise SetupError(f"không có giọng «{voice}»")
+    return voice
 
 
 def save_template(db: Session, data: dict, template_id: int | None = None) -> StudioTemplate:

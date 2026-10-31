@@ -4,7 +4,7 @@ Server đọc chữ VieNeu-TTS cho bước ``dub`` (PLAN-111) — chạy bằng 
 Model nạp một lần rồi giữ trên GPU (nạp mất 1–1,5 phút; đọc một câu < 1 giây). Chỉ nghe 127.0.0.1, một luồng
 (model không đọc song song). Client: ``app.core.media.tts`` engine ``vieneu``.
 
-- ``GET /health`` → ``{"ok": true, "voices": [...]}``
+- ``GET /health`` → ``{"ok": true, "voices": [{"name", "gender", "region", "description"}, ...]}``
 - ``POST /tts`` ``{"text": "...", "voice": "Ngọc Huyền"}`` → ``audio/wav``
 
 Chạy: ``/home/vu/venv-vieneu/bin/python app/features/studio/dub/vieneu_server.py --port 8790`` (PM2 ``VieNeu_TTS``).
@@ -31,9 +31,10 @@ MAX_BODY_BYTES = 64 * 1024
 class Engine:
     """Bọc model: đọc một câu ra WAV. Tách riêng để test thay bằng model giả."""
 
-    def __init__(self, tts, voices: list[str]):
+    def __init__(self, tts, catalog: list[dict]):
         self.tts = tts
-        self.voices = voices
+        self.catalog = catalog
+        self.voices = {v["name"] for v in catalog}
 
     def wav(self, text: str, voice: str) -> bytes:
         return to_wav(self.tts.infer(text, voice=voice), self.tts.sample_rate)
@@ -88,7 +89,7 @@ def make_handler(engine: Engine):
         def do_GET(self):  # noqa: N802 - tên do http.server đặt
             if self.path != "/health":
                 return self._send(404, "application/json", b'{"error":"not found"}')
-            data = json.dumps({"ok": True, "voices": engine.voices}, ensure_ascii=False).encode()
+            data = json.dumps({"ok": True, "voices": engine.catalog}, ensure_ascii=False).encode()
             self._send(200, "application/json", data)
 
         def do_POST(self):  # noqa: N802
@@ -108,6 +109,19 @@ def make_handler(engine: Engine):
     return Handler
 
 
+def voice_catalog(tts) -> list[dict]:
+    """Giọng có sẵn theo thứ tự model gợi ý, kèm giới tính / vùng để web nhóm."""
+    presets = getattr(tts, "_preset_voices", None) or {}
+    out = []
+    for _label, name in tts.list_preset_voices():
+        meta = presets.get(name) or {}
+        desc = str(meta.get("description") or "")
+        parts = desc.split(" · ")  # «Nam · Bắc · Phong cách…» — model nạp xong không giữ trường region
+        region = str(meta.get("region") or (parts[1] if len(parts) > 1 else ""))
+        out.append({"name": name, "gender": str(meta.get("gender") or ""), "region": region, "description": desc})
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8790)
@@ -119,10 +133,9 @@ def main() -> None:
 
     t = time.time()
     tts = Vieneu(device=args.device)
-    voices = [vid for _label, vid in tts.list_preset_voices()]
-    engine = Engine(tts, voices)
-    engine.wav("Xin chào.", voices[0])  # làm ấm — câu đầu tiên chậm gấp mấy lần
-    logger.info("nạp xong %.0fs trên %s, %d giọng, nghe 127.0.0.1:%d", time.time() - t, args.device, len(voices), args.port)
+    engine = Engine(tts, voice_catalog(tts))
+    engine.wav("Xin chào.", engine.catalog[0]["name"])  # làm ấm — câu đầu tiên chậm gấp mấy lần
+    logger.info("nạp xong %.0fs trên %s, %d giọng, nghe 127.0.0.1:%d", time.time() - t, args.device, len(engine.catalog), args.port)
     HTTPServer(("127.0.0.1", args.port), make_handler(engine)).serve_forever()
 
 

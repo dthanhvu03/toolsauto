@@ -117,7 +117,12 @@ export type Channel = {
   logo_asset_id: number | null;
   intro_asset_id: number | null;
   outro_asset_id: number | null;
+  /** Giọng VieNeu khi lồng tiếng; null = theo mẫu (nữ / nam). */
+  dub_voice: string | null;
 };
+
+export type Voice = { name: string; gender: "female" | "male" | ""; region: string; description: string };
+export type VoicesResponse = { online: boolean; voices: Voice[] };
 
 export type Template = { id: number; name: string; kind: string; params: Record<string, unknown> };
 
