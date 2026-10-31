@@ -39,7 +39,13 @@
 - **31/10 12:45 — PLAN-109 DocType kiểu Frappe (code xong, commit cục bộ, CHƯA lên máy thật):** anh chọn «Kiểu DocType như Frappe». Định nghĩa loại dữ liệu trên web (trường, kiểu, link, bảng con) → danh sách + form + API, không cần code / migration cho từng loại. 25 test, trình duyệt thật trên SQLite tạm. Lệnh backup + migration `w0e7f8a9b0c1` + restart web bị chặn quyền → anh tự chạy (xem PLAN-109). Bản build SPA đã hiện mục «Dữ liệu (DocType)» nhưng API chưa có tới khi restart web.
 - **31/10 06:30 — P4.3 (anh giao 4 bước):** bước 1 anh đã tự chạy (kiểm bằng lệnh đọc: ổn); bước 2 tạo `storage/media/luts|bgm`; bước 3 NVENC tự dò + quay về CPU (GTX 1650, driver 516.40 quá cũ cho ffmpeg 6.1 — cần ≥ 522; CPU 18,9 s / video 19,6 s); bước 4 cài VieNeu bị chặn quyền. 128 test (Studio + DocType) qua. Commit cục bộ.
 - **Next:**
-  - Anh cập nhật driver NVIDIA bên Windows (≥ 522) → `pm2 restart Studio_Heavy` → Studio tự dùng NVENC (log render ghi «GPU»).
+  - Driver NVIDIA (31/10 07:xx, anh: «làm giúp anh»): tải bản laptop 621.01 (21/10/2026, WHQL, link `us.download.nvidia.com`,
+    chữ ký NVIDIA Corporation hợp lệ) về `C:\Users\Admin\Downloads`, cài im lặng `-s -noreboot` qua UAC → exit 0, Windows báo
+    32.0.16.2101. **WSL chưa khởi động lại** nên `nvidia-smi` trong WSL đang lỗi ld.so (thư viện driver cũ còn mount) — không
+    ảnh hưởng gì đang chạy (Studio render CPU). Anh chạy `wsl --shutdown` (PowerShell) hoặc khởi động lại máy lúc rảnh; PM2
+    (`pm2-root.service`, dump có 6 app) và bot cashback (systemd) tự lên.
+  - Sau khi WSL lên lại: kiểm `nvidia-smi`, encode thử `h264_nvenc`, `pm2 restart Studio_Heavy`, đo lại render (mốc CPU 18,9 s / 19,6 s);
+    rồi thử VieNeu GPU (cài torch CUDA vào `/home/vu/venv-vieneu`).
   - VieNeu (31/10 06:40, anh: «chạy giúp anh»): đã cài `/home/vu/venv-vieneu` (vieneu 3.8.3, onnxruntime 1.31.1, 916 MB) + mẫu
     `/home/vu/vieneu-samples/mau_*.wav`. onnxruntime 1.31 chặn file .data qua symlink cache HF → đổi symlink 2 model trong cache
     thành file thật. Đo CPU fp32 (i5-10300H, 4 nhân WSL, máy rảnh): nạp 58 s; RTF ≈ 4–6 (12 s tiếng mất 45–72 s) → quá chậm
