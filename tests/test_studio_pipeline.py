@@ -34,6 +34,7 @@ from app.core.notifier.service import NotifierService
 from app.features.studio import analyze, caption, dub, entry, paths, pipeline, taskqueue, worker
 from app.features.studio.contracts import Lane, ProjectStatus, StageError, TaskStatus
 from app.features.studio.dub.engine import DubTracks
+from app.features.studio.render import encoder
 from app.features.studio.publish import status as publish_status
 from app.features.viral_intake.service import ViralService
 
@@ -616,3 +617,27 @@ def test_worker_chay_duoc_nhu_pm2_bang_duong_dan_script():
     studio = root / "app" / "features" / "studio"
     clash = {p.stem for p in studio.glob("*.py")} & set(sys.stdlib_module_names)
     assert not clash, f"module studio trùng tên module chuẩn: {clash}"
+
+
+def test_ep_nvenc_ma_gpu_khong_dung_duoc_thi_render_lai_bang_cpu(db, media, monkeypatch):
+    """Máy test không có NVENC dùng được (hoặc driver cũ) → lệnh GPU lỗi, render tự làm lại bằng libx264."""
+    monkeypatch.setattr(encoder, "_cache", {})
+    monkeypatch.setenv("STUDIO_ENCODER", "nvenc")
+    real_run = subprocess.run
+    seen = []
+
+    def spy(cmd, *a, **kw):
+        if "-c:v" in cmd:
+            seen.append(cmd[cmd.index("-c:v") + 1])
+            if cmd[cmd.index("-c:v") + 1] == "h264_nvenc":  # giả GPU hỏng cho chắc, kể cả máy có NVENC thật
+                return subprocess.CompletedProcess(cmd, 1, "", "nvenc: OpenEncodeSessionEx failed")
+        return real_run(cmd, *a, **kw)
+
+    monkeypatch.setattr("app.features.studio.render.subprocess.run", spy)
+    pipeline.start(db, "upload", payload={"path": str(media["mute"])})
+    _drain(db)
+    project = db.query(StudioProject).one()
+    assert project.status == ProjectStatus.REVIEW and _probe_duration(project.output_path) == pytest.approx(3.0, abs=0.15)
+    assert seen == ["h264_nvenc", "libx264"]
+    render = db.query(StudioTask).filter_by(stage="render").one()
+    assert render.error.endswith("CPU") and encoder._cache["nvenc"] is False

@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.features.studio.render.encoder import video_args
 from app.features.studio.render.subtitles import apply_edits, build_ass, shift_lines
 from app.features.studio.spec import ProjectSpec
 
@@ -106,6 +107,7 @@ def build(
     ffmpeg: str = "ffmpeg",
     crf: int = 21,
     preset: str = "veryfast",
+    encoder: str = "libx264",  # hoặc h264_nvenc — runner chọn qua render/encoder.py
 ) -> RenderPlan:
     ranges = clip_ranges(spec, media)
     total = sum(end - start for _, start, end in ranges)
@@ -226,7 +228,7 @@ def build(
         *inputs,
         "-filter_complex", ";".join(graph),
         "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-pix_fmt", "yuv420p",
+        *video_args(encoder, crf=crf, preset=preset),
         "-c:a", "aac", "-b:a", "160k", "-ar", str(_SR),
         "-t", _num(total), "-movflags", "+faststart",
         output,

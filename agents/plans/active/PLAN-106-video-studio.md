@@ -185,6 +185,17 @@ Trạng thái dự án: `DRAFT → RENDERING → RENDERED → REVIEW → APPROVE
   luật ADR-061 mục 11); «Video đã có chữ sẵn» → tắt phụ đề.
 - Dọn: dự án #3–#8 (biến thể thừa) → REJECTED. Giữ #1 (gốc) và #2 (bản lật).
 
+**P4.3 — Bật máy thật + NVENC + VieNeu (31/10, anh giao):**
+- Bước 1 (backup / migration / restart / worker): anh đã tự chạy trước khi giao (DB ở `w0e7f8a9b0c1`, backup 06:09, web restart 06:1x).
+  Em chạy lại thì bị chặn quyền «Production Deploy» → chỉ kiểm bằng lệnh đọc: 2 worker online ~60 phút, restart không tăng,
+  log lỗi Studio không ghi mới, `/api/doctypes` 200.
+- Bước 2: tạo `storage/media/luts/`, `storage/media/bgm/` (git bỏ qua storage/). `bgm/` **chưa có code đọc** — nhạc Studio đi qua
+  Nguyên liệu (`music_asset_id`).
+- Bước 3: `render/encoder.py` — dò NVENC bằng 1 lần encode thật (nhớ trong tiến trình), lỗi giữa chừng → làm lại bằng libx264;
+  ép bằng `STUDIO_ENCODER` = auto / nvenc / x264. Máy: GTX 1650, driver Windows 516.40 → NVENC API 11.1 < 12.1 ffmpeg 6.1 cần
+  → **chưa dùng được, cần cập nhật driver ≥ 522**. Đo trên video thật #3 (19,6 s, 1088×1936): libx264 18,9 s; NVENC lỗi 0,4 s.
+- Bước 4: tạo `/home/vu/venv-vieneu` + `pip install vieneu` bị chặn quyền → anh tự chạy (lệnh trong current-status).
+
 **P5 — Video AI:** `script` → `voice` (edge-tts, piper dự phòng) → `visuals` (D3) → compose `ai_faceless` → render.
 
 **P6 — Chuyển kênh + dọn:**

@@ -37,8 +37,10 @@
   - Kiểm: `/login`, `/app/go/studio`, `/studio/api/projects|setup`, `/api/admin/overview` đều 200 (cookie ký nội bộ, chỉ đọc); 2 worker online, đã đăng ký Telegram.
 - **31/10 05:20 — P4.2 rà soát BA / SA + sửa (anh: «làm cho anh… chỉ tập trung Studio»):** 8 dự án gần trùng do bấm biến thể 2 lần, chưa có LUT, mỗi bản gọi AI caption riêng, không gom nhóm. Đã sửa (gom nhóm, chung caption, mỗi bản một kiểu thật, chặn lô trùng, duyệt 1 bản → bản khác tự bỏ, 1 tin Telegram / lô, hàng việc làm xong từng dự án, form upload: kênh bắt buộc + sưu tầm/ghi nguồn + «đã có chữ sẵn»). Migration `v9d6e7f8a9b0` đã chạy (backup trước), 4 process restart. Dữ liệu: giữ #1 (lật) + #3 (không lật), còn lại REJECTED. 98 test Studio qua.
 - **31/10 12:45 — PLAN-109 DocType kiểu Frappe (code xong, commit cục bộ, CHƯA lên máy thật):** anh chọn «Kiểu DocType như Frappe». Định nghĩa loại dữ liệu trên web (trường, kiểu, link, bảng con) → danh sách + form + API, không cần code / migration cho từng loại. 25 test, trình duyệt thật trên SQLite tạm. Lệnh backup + migration `w0e7f8a9b0c1` + restart web bị chặn quyền → anh tự chạy (xem PLAN-109). Bản build SPA đã hiện mục «Dữ liệu (DocType)» nhưng API chưa có tới khi restart web.
+- **31/10 06:30 — P4.3 (anh giao 4 bước):** bước 1 anh đã tự chạy (kiểm bằng lệnh đọc: ổn); bước 2 tạo `storage/media/luts|bgm`; bước 3 NVENC tự dò + quay về CPU (GTX 1650, driver 516.40 quá cũ cho ffmpeg 6.1 — cần ≥ 522; CPU 18,9 s / video 19,6 s); bước 4 cài VieNeu bị chặn quyền. 128 test (Studio + DocType) qua. Commit cục bộ.
 - **Next:**
-  - Anh chạy: `python manage.py db backup --keep 14` → `venv/bin/alembic upgrade head` → `pm2 restart Web_Dashboard` (PLAN-109).
+  - Anh cập nhật driver NVIDIA bên Windows (≥ 522) → `pm2 restart Studio_Heavy` → Studio tự dùng NVENC (log render ghi «GPU»).
+  - Anh chạy cài VieNeu: `python3 -m venv /home/vu/venv-vieneu && /home/vu/venv-vieneu/bin/pip install vieneu` rồi báo em đo tốc độ.
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 

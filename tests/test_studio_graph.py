@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.features.studio.compose.templates import ComposeInput, basic, own_footage, reup_dub, speech_ranges
+from app.features.studio.render import encoder
 from app.features.studio.render.graph import Media, SpecError, build, clip_ranges
 from app.features.studio.render.subtitles import apply_edits, build_ass, shift_lines
 from app.features.studio.spec import ProjectSpec
@@ -254,3 +255,32 @@ def test_own_footage_cat_khoang_lang_bo_ghi_nguon_va_ap_max_len_sau_khi_cat():
 def test_own_footage_khong_co_khoang_lang_thi_giu_nguyen():
     spec = own_footage(_inp(silences=[], params={"cut_silence": True}))
     assert [(c.start, c.end) for c in spec.clips] == [(0.0, None)] and spec.credit is None
+
+
+# ── bộ mã hoá: NVENC khi có GPU, libx264 khi không ──
+
+
+def test_lenh_ffmpeg_theo_bo_ma_hoa():
+    nv = _build({"clips": [{"asset": 1}]}, encoder="h264_nvenc").argv
+    assert nv[nv.index("-c:v") + 1] == "h264_nvenc" and "-cq" in nv and "-crf" not in nv
+    cpu = _build({"clips": [{"asset": 1}]}).argv
+    assert cpu[cpu.index("-c:v") + 1] == "libx264" and cpu[cpu.index("-crf") + 1] == "21"
+
+
+def test_chon_bo_ma_hoa_theo_bien_moi_truong_va_nho_ket_qua_do(monkeypatch):
+    monkeypatch.setattr(encoder, "_cache", {})
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        return type("P", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(encoder.subprocess, "run", fake_run)
+    monkeypatch.delenv("STUDIO_ENCODER", raising=False)
+    assert encoder.pick("ffmpeg") == "h264_nvenc" and encoder.pick("ffmpeg") == "h264_nvenc"
+    assert len(calls) == 1, "dò GPU một lần mỗi tiến trình"
+    encoder.mark_failed()
+    assert encoder.pick("ffmpeg") == "libx264", "NVENC hỏng giữa chừng → CPU từ đó"
+    monkeypatch.setenv("STUDIO_ENCODER", "x264")
+    monkeypatch.setattr(encoder, "_cache", {"nvenc": True})
+    assert encoder.pick("ffmpeg") == "libx264"

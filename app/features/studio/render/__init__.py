@@ -6,6 +6,7 @@ Ghi ra file tạm rồi mới đổi tên, nên không bao giờ có file dở d
 """
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import time
@@ -19,10 +20,12 @@ from app.core.database.models import StudioAsset, StudioProject, StudioTask
 from app.core.media import ffmpeg_path
 from app.features.studio import paths, store
 from app.features.studio.contracts import ProjectStatus, StageError, StageResult
+from app.features.studio.render import encoder
 from app.features.studio.render.graph import Media, SpecError, build
 from app.features.studio.spec import ProjectSpec
 
 FONT_FILE = "BeVietnamPro-Bold.ttf"
+logger = logging.getLogger(__name__)
 
 
 def _validate(path: Path, expect_sec: float) -> float:
@@ -78,21 +81,30 @@ def run(db: Session, task: StudioTask) -> StageResult:
     tmp = final.with_suffix(".tmp.mp4")
     work = paths.work_dir() / f"p{project.id}-{uuid.uuid4().hex[:8]}"
     work.mkdir(parents=True)
+    ffmpeg = ffmpeg_path.ffmpeg_bin()
+    used = encoder.pick(ffmpeg)
     try:
-        try:
-            plan = build(
-                spec, media, output=str(tmp), workdir=str(work),
-                font_file=str(paths.fonts_dir() / FONT_FILE), fonts_dir=str(paths.fonts_dir()),
-                transcripts=transcripts, lut_file=lut_file, ffmpeg=ffmpeg_path.ffmpeg_bin(),
-            )
-        except SpecError as exc:
-            raise StageError(str(exc), retryable=False) from exc
+        def plan_for(enc: str):
+            try:
+                return build(
+                    spec, media, output=str(tmp), workdir=str(work),
+                    font_file=str(paths.fonts_dir() / FONT_FILE), fonts_dir=str(paths.fonts_dir()),
+                    transcripts=transcripts, lut_file=lut_file, ffmpeg=ffmpeg, encoder=enc,
+                )
+            except SpecError as exc:
+                raise StageError(str(exc), retryable=False) from exc
+
+        plan = plan_for(used)
         for file_path, content in plan.files.items():
             Path(file_path).write_text(content, encoding="utf-8")
         nice = ["nice", "-n", "19"] if shutil.which("nice") else []
-        proc = subprocess.run(
-            nice + plan.argv, capture_output=True, text=True, timeout=max(600, int(plan.duration * 20)),
-        )
+        timeout = max(600, int(plan.duration * 20))
+        proc = subprocess.run(nice + plan.argv, capture_output=True, text=True, timeout=timeout)
+        if proc.returncode != 0 and used == encoder.NVENC:  # GPU hỏng giữa chừng → làm lại bằng CPU ngay
+            logger.warning("[STUDIO] NVENC lỗi ở dự án #%s, render lại bằng CPU: %s", project.id, (proc.stderr or "")[-300:])
+            encoder.mark_failed()
+            used = encoder.X264
+            proc = subprocess.run(nice + plan_for(used).argv, capture_output=True, text=True, timeout=timeout)
         if proc.returncode != 0:
             raise StageError(f"ffmpeg lỗi {proc.returncode}: {(proc.stderr or '').strip()[-1500:]}")
         duration = _validate(tmp, plan.duration)
@@ -106,7 +118,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
     project.rendered_at = int(time.time())
     project.status = ProjectStatus.RENDERED
     db.commit()
-    note = f"{duration:.1f}s"
+    note = f"{duration:.1f}s · {'GPU' if used == encoder.NVENC else 'CPU'}"
     if spec.canvas.lut and not lut_file:
         note += f" · không thấy LUT {spec.canvas.lut}, bỏ qua"
     return StageResult(project_id=project.id, note=note)
