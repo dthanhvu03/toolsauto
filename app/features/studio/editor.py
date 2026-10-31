@@ -96,7 +96,7 @@ def detail(db: Session, project_id: int) -> dict:
         "template": {"id": template.id, "name": template.name, "kind": template.kind} if template else None,
         "subtitle_lines": subtitle_lines(db, spec),
         "luts": paths.lut_names(),
-        "variants_allowed": bool(asset) and asset.origin != "reup",
+        "variants_allowed": bool(asset),
         "group": _group_rows(db, project),
         "tasks": [{"id": t.id, "stage": t.stage, "status": t.status, "error": t.error} for t in tasks],
     }
@@ -129,9 +129,6 @@ def save_spec(db: Session, project_id: int, raw: dict) -> StudioTask:
     missing = spec.asset_ids() - {a for (a,) in db.query(StudioAsset.id).filter(StudioAsset.id.in_(spec.asset_ids()))}
     if missing:
         raise EditError(f"spec trỏ tới asset không có: {sorted(missing)}")
-    reup = {a for (a,) in db.query(StudioAsset.id).filter(StudioAsset.id.in_(spec.asset_ids()), StudioAsset.origin == "reup")}
-    if any(c.hflip and c.asset in reup for c in spec.clips):
-        raise EditError("không lật gương video reup (ADR-061 mục 11) — chỉ video tự quay / của mình")
     old = ProjectSpec.model_validate(project.spec)
     if _cuts(old) != _cuts(spec) and spec.subtitles.edits == old.subtitles.edits:
         spec.subtitles.edits = {}
@@ -204,8 +201,6 @@ def make_variants(db: Session, project_id: int, n: int) -> tuple[list[StudioTask
     asset = db.get(StudioAsset, root.asset_id) if root.asset_id else None
     if asset is None:
         raise EditError("dự án không có asset gốc")
-    if asset.origin == "reup":
-        raise EditError("không tạo biến thể từ video reup / sưu tầm (ADR-061 mục 11) — chỉ video của anh")
     busy = [f"#{m.id}" for m in members if m.status in IN_PROGRESS]
     queued = store.pending_variants(db, root)
     if busy or queued:

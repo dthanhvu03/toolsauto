@@ -206,9 +206,9 @@ def test_technique_params_nhan_dung_kieu_va_chan_lat_lut_cho_video_suu_tam(db, m
         "subtitles": True, "dub": True, "dub_lang": "vi", "vieneu_voice": "Thái Sơn", "hook": "Xem hết",
         "music_asset_id": music.id, "music_volume": 1.0,
     }
-    assert entry.technique_params(db, {"mirror": True, "lut": "am_ap"}, collected=False) == {"mirror": "on", "lut": "am_ap"}
+    assert entry.technique_params(db, {"mirror": True, "lut": "am_ap"}, collected=True) == {"mirror": "on", "lut": "am_ap"}
     assert entry.technique_params(db, None, collected=True) == {}
-    for bad, why in [({"mirror": True}, "sưu tầm"), ({"lut": "am_ap"}, "sưu tầm"), ({"music_asset_id": clip.id}, "nhạc"),
+    for bad, why in [({"music_asset_id": clip.id}, "nhạc"),
                      ({"music_asset_id": 999}, "nhạc"), ({"music_asset_id": raw.id}, "chưa phân tích")]:
         with pytest.raises(ValueError, match=why):
             entry.technique_params(db, bad, collected=True)

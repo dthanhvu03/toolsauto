@@ -82,9 +82,9 @@ def test_intro_outro_khong_bi_lat():
     assert [c.hflip for c in spec.clips] == [False, True, False]
 
 
-def test_reup_khong_lat_khong_lut_ngau_nhien_nhung_giu_lut_co_dinh():
+def test_reup_co_the_lat_va_dung_lut_ngau_nhien():
     spec = basic(_inp(origin="reup", params={"mirror": "on", "lut": "random"}))
-    assert spec.clips[0].hflip is False and spec.canvas.lut is None
+    assert spec.clips[0].hflip is True and spec.canvas.lut in ["Lanh.cube", "Am.cube"]
     assert basic(_inp(origin="reup", params={"lut": "Lanh.cube"})).canvas.lut == "Lanh.cube"
 
 
@@ -109,8 +109,7 @@ def test_ab_montage_giu_hook_xao_doan_giua_theo_seed_va_cat_theo_max_len():
     assert total == pytest.approx(10.0) and all(c.end > c.start for c in short.clips)
 
 
-def test_ab_montage_reup_hoac_it_canh_thi_nhu_basic():
-    assert [(c.start, c.end) for c in ab_montage(_inp(origin="reup")).clips] == [(0.0, None)]
+def test_ab_montage_it_canh_thi_nhu_basic():
     assert [(c.start, c.end) for c in ab_montage(_inp(scenes=[10.0])).clips] == [(0.0, None)]
 
 
@@ -234,7 +233,7 @@ def test_duyet_mot_ban_thi_cac_ban_khac_tu_bo_va_chan_bien_the_moi(db, media, ap
     assert no.status_code == 400 and "sang Buffer" in no.json()["detail"]
 
 
-def test_bien_the_tu_video_cua_minh_va_chan_reup(db, media, api):  # noqa: F811
+def test_bien_the_cho_ca_video_reup(db, media, api):  # noqa: F811
     ch = _channel(db)
     pipeline.start(db, "upload", payload={"path": str(media["mute"]), "channel_id": ch.id})
     _drain(db)
@@ -244,15 +243,13 @@ def test_bien_the_tu_video_cua_minh_va_chan_reup(db, media, api):  # noqa: F811
 
     db.get(StudioAsset, own.asset_id).origin = "reup"
     db.commit()
-    assert api.get(f"/studio/api/projects/{own.id}").json()["variants_allowed"] is False
-    no = api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 2})
-    assert no.status_code == 400 and "reup" in no.json()["detail"]
+    assert api.get(f"/studio/api/projects/{own.id}").json()["variants_allowed"] is True
+    ok = api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 2})
+    assert ok.status_code == 200
     spec = dict(own.spec)
     spec["clips"] = [{**spec["clips"][0], "hflip": True}]
     flip = api.put(f"/studio/api/projects/{own.id}/spec", json={"spec": spec})
-    assert flip.status_code == 400 and "lật gương" in flip.json()["detail"]
-    with pytest.raises(editor.EditError):
-        editor.make_variants(db, own.id, 1)
+    assert flip.status_code == 200
 
 
 def test_chi_lat_guong_thi_giu_sua_tay_phu_de(db, media, api):  # noqa: F811
@@ -341,7 +338,7 @@ def test_upload_su_tam_ghi_nguon_co_chu_san_va_khong_kenh_la_dang_tay(db, media,
     asset = db.get(StudioAsset, project.asset_id)
     assert (asset.origin, asset.credit) == ("reup", "@goc")
     assert project.spec["credit"] == "Nguồn: @goc" and project.spec["subtitles"]["enabled"] is False
-    assert api.get(f"/studio/api/projects/{project.id}").json()["variants_allowed"] is False
+    assert api.get(f"/studio/api/projects/{project.id}").json()["variants_allowed"] is True
 
 
 def test_file_da_khai_cua_minh_upload_lai_dang_su_tam_thi_sit_lai(db, media, api):  # noqa: F811

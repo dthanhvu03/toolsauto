@@ -161,8 +161,6 @@ def technique_params(db: Session, raw: dict | None, *, collected: bool) -> dict:
         params["music_volume"] = min(1.0, max(0.0, float(raw.get("music_volume") or 0.12)))
     mirror = raw.get("mirror") in (True, "on")
     lut = str(raw.get("lut") or "").strip()
-    if collected and (mirror or lut):
-        raise ValueError("video sưu tầm không dùng lật gương / tông màu LUT (chỉ cho video anh tự quay)")
     if mirror:
         params["mirror"] = "on"
     if lut:

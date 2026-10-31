@@ -89,24 +89,23 @@ def _rng(inp: ComposeInput) -> random.Random:
 
 
 def _own(inp: ComposeInput) -> bool:
-    return inp.origin != "reup"
+    return True
 
 
 def _variant(inp: ComposeInput, clips: list[Clip], rng: random.Random) -> tuple[list[Clip], str | None]:
     """
-    Biến thể A/B (tham số chung mọi mẫu, ADR-061 mục 11):
+    Biến thể A/B (tham số chung mọi mẫu):
     ``mirror`` ``off`` / ``on`` / ``random`` (+ ``mirror_prob``, 0.5) — lật ngang cả video chính;
     ``lut`` ``""`` / tên file / ``random`` — tông màu. Kết quả ghi vào spec nên xem / sửa được trên trình edit.
-    Asset reup: không lật, không LUT ngẫu nhiên; LUT cố định (tông màu kênh) vẫn nhận.
     """
     p = inp.params
     mirror = str(p.get("mirror") or "off")
-    flip = _own(inp) and (mirror == "on" or (mirror == "random" and rng.random() < float(p.get("mirror_prob", 0.5))))
+    flip = mirror == "on" or (mirror == "random" and rng.random() < float(p.get("mirror_prob", 0.5)))
     if flip:
         clips = [c.model_copy(update={"hflip": True}) if c.asset == inp.asset_id else c for c in clips]
     want = str(p.get("lut") or "")
     if want == "random":
-        lut = rng.choice(inp.lut_names) if (_own(inp) and inp.lut_names) else None
+        lut = rng.choice(inp.lut_names) if inp.lut_names else None
     else:
         lut = want if want in inp.lut_names else None
     return clips, lut
@@ -256,15 +255,14 @@ def scene_segments(duration: float, scenes: list[float], *, min_seg: float = MON
 
 def ab_montage(inp: ComposeInput) -> ProjectSpec:
     """
-    Montage B-roll cho A/B test video của mình: cắt theo mốc đổi cảnh, giữ đoạn đầu làm hook, xáo thứ tự các
+    Montage B-roll cho A/B test video: cắt theo mốc đổi cảnh, giữ đoạn đầu làm hook, xáo thứ tự các
     đoạn giữa theo ``seed`` (mỗi biến thể một seed), dừng khi đủ ``max_len``.
 
     params thêm: ``keep_first`` (True), ``min_clips`` (3 — ít đoạn hơn thì như ``basic``), ``seed``.
-    Asset reup hoặc video không đủ cảnh → y như ``basic`` (không xáo video của người khác, ADR-061 mục 11).
     """
     p = inp.params
     segs = scene_segments(inp.duration, inp.scenes) if inp.duration else []
-    if not _own(inp) or len(segs) < max(2, int(p.get("min_clips", 3))):
+    if len(segs) < max(2, int(p.get("min_clips", 3))):
         return basic(inp)
     rng = _rng(inp)
     head = segs[:1] if p.get("keep_first", True) else []
