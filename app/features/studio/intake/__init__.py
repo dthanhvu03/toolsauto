@@ -49,6 +49,11 @@ def run(db: Session, task: StudioTask) -> StageResult:
         raise StageError(str(exc)) from exc
     if created:
         return StageResult(asset_id=asset.id)
+    if origin == "reup" and asset.origin != "reup":
+        # Cùng file nay được khai là sưu tầm → siết lại (không bao giờ nới ngược sang «của mình»).
+        asset.origin = "reup"
+        asset.credit = asset.credit or p.get("credit")
+        db.commit()
     if origin == "reup":
         seen = db.query(StudioProject.id).filter(
             StudioProject.asset_id == asset.id, StudioProject.channel_id == p.get("channel_id"),

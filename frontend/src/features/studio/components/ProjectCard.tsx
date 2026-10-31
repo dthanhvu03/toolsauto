@@ -45,6 +45,9 @@ export function ProjectCard({
           <span className="font-semibold text-slate-800">{p.channel ?? "Chưa gắn kênh"}</span>
           <span className="font-mono text-slate-400">#{p.id}</span>
         </div>
+        {p.parent_project_id ? (
+          <span className="w-fit rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700">Biến thể của #{p.parent_project_id}</span>
+        ) : null}
         <p className="line-clamp-3 text-xs text-slate-600">
           {p.status === "FAILED" ? <span className="text-red-700">{p.error}</span> : p.caption || <i className="text-slate-400">Chưa có caption</i>}
         </p>

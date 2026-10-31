@@ -14,12 +14,13 @@ from pydantic import ValidationError
 
 from app.core.database.core import get_db
 from app.core.database.models import StudioAsset, StudioProject, StudioTask
-from app.features.studio import editor, paths, pipeline
+from app.core.notifier.service import NotifierService
+from app.features.studio import editor, notify, paths, pipeline, taskqueue
 from app.features.studio.compose.templates import ComposeInput, ab_montage, basic, scene_segments
 from app.features.studio.render.graph import Media, build
 from app.features.studio.router import router
 from app.features.studio.spec import Canvas, ProjectSpec
-from tests.test_studio_pipeline import _channel, _drain, _ff, db, media  # noqa: F401 — fixture
+from tests.test_studio_pipeline import _FakeCaptioner, _channel, _drain, _ff, db, media  # noqa: F401 — fixture
 
 MEDIA = {1: Media(path="/v/a.mp4", kind="video", duration=30.0, has_audio=True)}
 SCENES = [3.0, 6.5, 7.0, 11.0, 15.0, 20.0, 24.0]  # 7.0 cách 6.5 chỉ 0,5 s → gộp
@@ -166,7 +167,7 @@ def api(db):  # noqa: F811
     return TestClient(app)
 
 
-def test_bien_the_lan_luot_tung_lut(db, media, api, tmp_path, monkeypatch):  # noqa: F811
+def test_bien_the_moi_ban_mot_kieu_khac_that(db, media, api, tmp_path, monkeypatch):  # noqa: F811
     luts = tmp_path / "luts"
     luts.mkdir()
     for name in ("A.cube", "B.cube"):
@@ -175,10 +176,62 @@ def test_bien_the_lan_luot_tung_lut(db, media, api, tmp_path, monkeypatch):  # n
     pipeline.start(db, "upload", payload={"path": str(media["mute"])})
     _drain(db)
     own = db.query(StudioProject).one()
-    editor.make_variants(db, own.id, 3)
+    _tasks, note = editor.make_variants(db, own.id, 3)
+    assert "3 biến thể" in note
     _drain(db)
     variants = db.query(StudioProject).filter(StudioProject.id != own.id).order_by(StudioProject.id).all()
-    assert [p.spec["canvas"]["lut"] for p in variants] == ["A.cube", "B.cube", "A.cube"]
+    looks = [(p.spec["clips"][0]["hflip"], p.spec["canvas"]["lut"]) for p in variants]
+    assert looks == [(False, "A.cube"), (False, "B.cube"), (True, None)], "không trùng bản gốc (không lật, màu gốc)"
+    _tasks, note = editor.make_variants(db, own.id, 5)  # còn (lật, A), (lật, B)
+    assert "2 biến thể" in note and "chỉ còn 2" in note
+    _drain(db)
+    with pytest.raises(editor.EditError, match="tối đa 5"):
+        editor.make_variants(db, own.id, 1)
+
+
+def test_bien_the_dung_chung_caption_khong_goi_ai_va_gan_nhom(db, media, api):  # noqa: F811
+    ch = _channel(db)
+    pipeline.start(db, "upload", payload={"path": str(media["mute"]), "channel_id": ch.id})
+    _drain(db)
+    own = db.query(StudioProject).one()
+    calls = len(_FakeCaptioner.calls)
+    r = api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 3})
+    assert r.status_code == 200 and len(r.json()["task_ids"]) == 1, "không LUT, mẫu basic: chỉ còn kiểu «lật»"
+    assert "chưa có file LUT" in r.json()["note"]
+    busy = api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 1})
+    assert busy.status_code == 400 and "đang dựng" in busy.json()["detail"], "bấm 2 lần không ra 2 lô"
+    _drain(db)
+    variant = db.query(StudioProject).filter(StudioProject.id != own.id).one()
+    assert variant.parent_project_id == own.id and variant.caption == own.caption and variant.hashtags == own.hashtags
+    assert len(_FakeCaptioner.calls) == calls, "biến thể không gọi AI viết caption"
+    assert variant.channel_id == ch.id and variant.spec["clips"][0]["hflip"] is True
+    done = api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 1})
+    assert done.status_code == 400 and "hết kiểu" in done.json()["detail"]
+    group = api.get(f"/studio/api/projects/{variant.id}").json()["group"]
+    assert group["root_id"] == own.id and [m["id"] for m in group["members"]] == [own.id, variant.id]
+    assert api.get("/studio/api/projects").json()["projects"][0]["parent_project_id"] == own.id
+
+
+def test_duyet_mot_ban_thi_cac_ban_khac_tu_bo_va_chan_bien_the_moi(db, media, api, tmp_path, monkeypatch):  # noqa: F811
+    luts = tmp_path / "luts"
+    luts.mkdir()
+    _red_lut(luts / "A.cube")
+    monkeypatch.setattr(paths, "luts_dir", lambda: luts)
+    ch = _channel(db)
+    pipeline.start(db, "upload", payload={"path": str(media["mute"]), "channel_id": ch.id})
+    _drain(db)
+    own = db.query(StudioProject).one()
+    editor.make_variants(db, own.id, 2)
+    _drain(db)
+    a, b = db.query(StudioProject).filter(StudioProject.id != own.id).order_by(StudioProject.id).all()
+    assert api.post(f"/studio/api/projects/{b.id}/approve", json={}).status_code == 200
+    _drain(db)
+    for p in (own, a, b):
+        db.refresh(p)
+    assert (own.status, a.status) == ("REJECTED", "REJECTED") and own.error == f"đã chọn bản #{b.id}"
+    assert b.status == "APPROVED" and b.viral_material_id, "bản được chọn sang Buffer"
+    no = api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 1})
+    assert no.status_code == 400 and "sang Buffer" in no.json()["detail"]
 
 
 def test_bien_the_tu_video_cua_minh_va_chan_reup(db, media, api):  # noqa: F811
@@ -187,16 +240,6 @@ def test_bien_the_tu_video_cua_minh_va_chan_reup(db, media, api):  # noqa: F811
     _drain(db)
     own = db.query(StudioProject).one()
     assert api.get(f"/studio/api/projects/{own.id}").json()["variants_allowed"] is True
-    r = api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 3})
-    assert r.status_code == 200 and len(r.json()["task_ids"]) == 3
-    _drain(db)
-    projects = db.query(StudioProject).order_by(StudioProject.id).all()
-    assert len(projects) == 4 and {p.asset_id for p in projects} == {own.asset_id}
-    assert projects[0].status == "REVIEW", "dự án gốc giữ nguyên"
-    tasks = db.query(StudioTask).filter_by(flow="recompose", stage="compose").order_by(StudioTask.id).all()
-    assert [t.payload["params"]["mirror"] for t in tasks] == ["on", "off", "on"], "mẫu chưa đặt → chia đều lật / không"
-    assert len({t.payload["params"]["seed"] for t in tasks}) == 3
-    assert [p.spec["clips"][0]["hflip"] for p in projects[1:]] == [True, False, True]
     assert api.post(f"/studio/api/projects/{own.id}/variants", json={"n": 9}).status_code == 400
 
     db.get(StudioAsset, own.asset_id).origin = "reup"
@@ -224,3 +267,87 @@ def test_chi_lat_guong_thi_giu_sua_tay_phu_de(db, media, api):  # noqa: F811
     assert api.put(f"/studio/api/projects/{project.id}/spec", json={"spec": spec}).status_code == 200
     db.refresh(project)
     assert project.spec["subtitles"]["edits"] == {"0": "Chào"} and project.spec["clips"][0]["hflip"] is True
+
+
+# ── P4.2: hàng việc, dự án đã bỏ, Telegram theo lô, form upload ──
+
+
+def test_hang_viec_lam_xong_tung_du_an_truoc(db, media):  # noqa: F811
+    for _ in range(2):
+        pipeline.start(db, "upload", payload={"path": str(media["mute"])})
+    order = []
+    while (t := taskqueue.claim(db, lanes=["heavy", "light"], worker_id="t")):
+        order.append((t.stage, t.payload.get("path") is not None and t.asset_id))
+        pipeline.run_task(db, t)
+    stages = [s for s, _ in order]
+    first_review = stages.index("review")
+    assert stages[:first_review].count("intake") >= 1 and "review" in stages[first_review:]
+    assert stages.index("review") < len(stages) - 1, "dự án đầu xong (review) trước khi dự án sau xong hết"
+    assert db.query(StudioProject).filter_by(status="REVIEW").count() == 2
+
+
+def test_du_an_da_bo_luc_con_trong_hang_khong_render_khong_bi_de_trang_thai(db, media):  # noqa: F811
+    pipeline.start(db, "upload", payload={"path": str(media["mute"])})
+    _drain(db)
+    project = db.query(StudioProject).one()
+    pipeline.start(db, "rerender", project_id=project.id)
+    project.status = "REJECTED"
+    db.commit()
+    _drain(db)
+    db.refresh(project)
+    assert project.status == "REJECTED"
+    render = db.query(StudioTask).filter_by(flow="rerender", stage="render").one()
+    assert render.status == "DONE" and "đã bỏ" in render.error
+
+
+def test_telegram_mot_tin_cho_ca_lo_bien_the(db, media, api, monkeypatch, tmp_path):  # noqa: F811
+    luts = tmp_path / "luts"
+    luts.mkdir()
+    _red_lut(luts / "Am.cube")
+    monkeypatch.setattr(paths, "luts_dir", lambda: luts)
+    videos, texts = [], []
+    monkeypatch.setattr(NotifierService, "_broadcast_video", classmethod(lambda cls, *a: videos.append(a)))
+    monkeypatch.setattr(NotifierService, "_broadcast_with_buttons", classmethod(lambda cls, msg, buttons: texts.append((msg, buttons))))
+    monkeypatch.setattr(notify.runtime_settings, "get_str", lambda key, default="", db=None: "https://x.example")
+    ch = _channel(db)
+    pipeline.start(db, "upload", payload={"path": str(media["mute"]), "channel_id": ch.id})
+    _drain(db)
+    own = db.query(StudioProject).one()
+    assert len(videos) == 1 and texts == []
+    editor.make_variants(db, own.id, 3)
+    _drain(db)
+    assert len(videos) == 1, "biến thể không gửi video từng bản"
+    assert len(texts) == 1, "một tin cho cả lô"
+    msg, buttons = texts[0]
+    ids = [p.id for p in db.query(StudioProject).order_by(StudioProject.id)]
+    assert f"Studio #{own.id}" in msg and "4 bản để chọn" in msg and "lật" in msg and "Am" in msg
+    assert [b["callback_data"] for row in buttons[:-1] for b in row] == [f"sok:{i}" for i in ids]
+    assert buttons[-1][0]["url"].endswith(f"/app/go/studio/{own.id}")
+
+
+def test_upload_su_tam_ghi_nguon_co_chu_san_va_bat_buoc_kenh(db, media, api):  # noqa: F811
+    ch = _channel(db)
+    with media["mute"].open("rb") as f:
+        no = api.post("/studio/api/upload", files={"file": ("v.mp4", f, "video/mp4")})
+    assert no.status_code == 400 and "chọn kênh" in no.json()["detail"]
+    with media["clip"].open("rb") as f:
+        r = api.post("/studio/api/upload", files={"file": ("v.mp4", f, "video/mp4")},
+                     data={"channel_id": ch.id, "collected": "true", "credit": "@goc", "has_text": "true"})
+    assert r.status_code == 200
+    _drain(db)
+    project = db.query(StudioProject).one()
+    asset = db.get(StudioAsset, project.asset_id)
+    assert (asset.origin, asset.credit) == ("reup", "@goc")
+    assert project.spec["credit"] == "Nguồn: @goc" and project.spec["subtitles"]["enabled"] is False
+    assert api.get(f"/studio/api/projects/{project.id}").json()["variants_allowed"] is False
+
+
+def test_file_da_khai_cua_minh_upload_lai_dang_su_tam_thi_sit_lai(db, media, api):  # noqa: F811
+    ch = _channel(db)
+    for collected in ("false", "true"):
+        with media["mute"].open("rb") as f:
+            api.post("/studio/api/upload", files={"file": ("v.mp4", f, "video/mp4")},
+                     data={"channel_id": ch.id, "collected": collected, "credit": "@goc"})
+        _drain(db)
+    asset = db.query(StudioAsset).one()
+    assert (asset.origin, asset.credit) == ("reup", "@goc")

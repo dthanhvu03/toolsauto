@@ -175,6 +175,16 @@ Trạng thái dự án: `DRAFT → RENDERING → RENDERED → REVIEW → APPROVE
   spec lật đoạn reup bị từ chối, API biến thể từ chối. LUT cố định (tông màu kênh) dùng cho mọi nguồn.
 - Không đụng `viral_intake` / `ReupProcessor`.
 
+**P4.2 — Sửa sau khi chạy thật (31/10, anh duyệt «làm cho anh», chỉ Studio):** rà soát BA / SA trên 8 dự án gần trùng.
+- Biến thể: cột `studio_projects.parent_project_id` (migration chỉ thêm cột); biến thể dùng chung caption của bản gốc
+  (không gọi AI); số bản ≤ số kiểu khác nhau thật (lật × LUT, `ab_montage` thì theo thứ tự đoạn); chặn lô mới khi lô trước
+  chưa xong; duyệt 1 bản → các bản cùng nhóm chưa sang Buffer thành REJECTED; Telegram 1 tin cho cả lô (nút ✅ từng bản).
+- Dự án REJECTED: render / caption / review dừng nhẹ, không đè trạng thái.
+- Hàng việc làm xong từng dự án: nhận việc ưu tiên bước sau (`STAGE_RANK`), rồi tới id.
+- Form upload: bắt buộc chọn kênh (1 kênh thì tự chọn); «Video của tôi / Video sưu tầm + ghi nguồn» (sưu tầm = origin reup →
+  luật ADR-061 mục 11); «Video đã có chữ sẵn» → tắt phụ đề.
+- Dọn: dự án #3–#8 (biến thể thừa) → REJECTED. Giữ #1 (gốc) và #2 (bản lật).
+
 **P5 — Video AI:** `script` → `voice` (edge-tts, piper dự phòng) → `visuals` (D3) → compose `ai_faceless` → render.
 
 **P6 — Chuyển kênh + dọn:**
@@ -375,4 +385,24 @@ $ unshare -n pytest tests/test_studio_*.py -q
 $ ruff / lint-imports (2 luật Studio KEPT) / tsc / npm run build → ok
 # Trình duyệt (demo SQLite, 1 LUT mẫu): tích «Lật gương» + chọn LUT → PUT 200 (lut + hflip trong spec) → render có LUT;
 # «Dựng biến thể» → POST 200, 4 dự án mới; lật gương không còn khoá phụ đề.
+```
+
+- ✅ **P4.2 (31/10) — sửa sau rà soát BA / SA, đã chạy trên máy thật.** Nguyên nhân 8 dự án gần trùng: bấm «Dựng biến thể» 2 lần
+  (lúc đó chưa có thông báo nổi), chưa có LUT nên chỉ có 2 kiểu (lật / không), mỗi bản gọi AI viết caption riêng, bảng không gom nhóm,
+  mỗi bản gửi 1 video Telegram. Video gốc là video sưu tầm đã có chữ sẵn (khai «tự quay») → 2 lớp phụ đề, lọt luật ADR-061 mục 11.
+  - Đã làm đúng mục P4.2 ở trên + 2 lỗi test bắt được khi làm: (1) hàng việc làm xong từng dự án nên bản đầu tới «chờ duyệt» khi bản sau
+    chưa thành dự án → tin Telegram gửi nhiều lần và chặn «lô đang dựng» bị lọt — đếm thêm việc compose còn trong hàng
+    (`store.pending_variants`); (2) file đã khai «của tôi» upload lại dạng sưu tầm → siết origin sang reup (không bao giờ nới ngược).
+  - Máy thật: backup `toolsauto_db_20261031_051849.sql` → migration `v9d6e7f8a9b0` (ADD COLUMN + INDEX) → restart Web_Dashboard,
+    Maintenance, Studio_Heavy / Light (hàng việc trống lúc restart). Dữ liệu: #2–#8 gắn nhóm #1; giữ #1 (lật — anh tự bật) + #3
+    (không lật), #2 / #4–#8 → REJECTED (đổi trạng thái, không xoá dòng).
+
+**Verification Proof (P4.2)**:
+```
+$ unshare -n pytest tests/test_studio_*.py -q → 98 passed (8 test mới: mỗi bản một kiểu thật + báo «chỉ còn N», chung caption không
+  gọi AI + chặn bấm 2 lần + hết kiểu, duyệt 1 bản → các bản khác REJECTED + chặn biến thể khi đã sang Buffer, hàng việc làm xong từng
+  dự án, dự án bỏ giữa hàng không render / không đè trạng thái, 1 tin Telegram cho cả lô, upload sưu tầm + có chữ sẵn + bắt buộc kênh,
+  siết origin)
+$ ruff / lint-imports (2 luật Studio KEPT) / tsc / npm run build → ok
+$ GET /studio/api/projects/1 (máy thật) → group root 1, 8 bản, #1 + #3 REVIEW
 ```

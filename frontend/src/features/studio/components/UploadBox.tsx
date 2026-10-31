@@ -1,52 +1,93 @@
 import { Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { primaryBtnClass, selectClass } from "@/shared/ui/controls";
 import { uploadFile } from "../api/studioApi";
 import { useAction } from "../hooks/useStudio";
 
-/** Upload video tự quay (→ dự án) hoặc nguyên liệu (``brand``: logo / intro / nhạc → chỉ vào kho). */
+/**
+ * Upload video (→ dự án) hoặc nguyên liệu (``brand``: logo / intro / nhạc → chỉ vào kho).
+ * Video bắt buộc có kênh (1 kênh thì tự chọn). «Sưu tầm» = video của người khác → ghi nguồn, không lật / biến thể.
+ * «Đã có chữ sẵn» → không đốt thêm phụ đề (tránh 2 lớp chữ).
+ */
 export function UploadBox({ channels, brand = false }: { channels: { id: number; name: string }[]; brand?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   const [channelId, setChannelId] = useState<number | "">("");
   const [name, setName] = useState("");
+  const [collected, setCollected] = useState(false);
+  const [credit, setCredit] = useState("");
+  const [hasText, setHasText] = useState(false);
+  useEffect(() => {
+    if (channels.length === 1 && channelId === "") setChannelId(channels[0].id);
+  }, [channels, channelId]);
   const act = useAction(
-    (file: File) => uploadFile(file, { channelId: channelId || null, brand }),
+    (file: File) => uploadFile(file, { channelId: channelId || null, brand, collected, credit, hasText }),
     brand ? "Đã đưa vào kho nguyên liệu." : "Đã nhận — Studio đang dựng, thẻ sẽ hiện ở «Đang làm».",
     [["studio-projects"], ["studio-assets"]]
   );
+  const needChannel = !brand && !channelId;
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-white p-3">
-      <input
-        ref={input}
-        type="file"
-        accept={brand ? "video/*,audio/*,image/*" : "video/*"}
-        className="hidden"
-        onChange={(e) => setName(e.target.files?.[0]?.name ?? "")}
-      />
-      <button type="button" className="h-9 rounded-lg border border-slate-200 px-3 text-sm" onClick={() => input.current?.click()}>
-        {name || (brand ? "Chọn logo / intro / nhạc…" : "Chọn video tự quay…")}
-      </button>
+    <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-slate-300 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={input}
+          type="file"
+          accept={brand ? "video/*,audio/*,image/*" : "video/*"}
+          className="hidden"
+          onChange={(e) => setName(e.target.files?.[0]?.name ?? "")}
+        />
+        <button type="button" className="h-9 max-w-xs truncate rounded-lg border border-slate-200 px-3 text-sm" onClick={() => input.current?.click()}>
+          {name || (brand ? "Chọn logo / intro / nhạc…" : "Chọn video…")}
+        </button>
+        {!brand ? (
+          <select className={selectClass} value={channelId} onChange={(e) => setChannelId(e.target.value ? Number(e.target.value) : "")}>
+            <option value="">— chọn kênh —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <button
+          type="button"
+          className={`${primaryBtnClass} inline-flex items-center gap-1.5`}
+          disabled={!name || needChannel || act.busy}
+          onClick={() => {
+            const f = input.current?.files?.[0];
+            if (f) act.run(f);
+          }}
+        >
+          <Upload className="size-4" /> {act.busy ? "Đang gửi…" : "Đưa vào Studio"}
+        </button>
+      </div>
       {!brand ? (
-        <select className={selectClass} value={channelId} onChange={(e) => setChannelId(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">Chưa gắn kênh</option>
-          {channels.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-700">
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={!collected} onChange={() => setCollected(false)} /> Video của tôi
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input type="radio" checked={collected} onChange={() => setCollected(true)} /> Video sưu tầm
+          </label>
+          {collected ? (
+            <input
+              className="h-8 w-44 rounded-lg border border-slate-200 px-2 text-sm"
+              placeholder="Nguồn: @kênh gốc"
+              value={credit}
+              onChange={(e) => setCredit(e.target.value)}
+            />
+          ) : null}
+          <label className="flex items-center gap-1.5" title="Video gốc đã có phụ đề / chữ — không đốt thêm lớp phụ đề">
+            <input type="checkbox" checked={hasText} onChange={(e) => setHasText(e.target.checked)} /> Đã có chữ / phụ đề sẵn
+          </label>
+        </div>
       ) : null}
-      <button
-        type="button"
-        className={`${primaryBtnClass} inline-flex items-center gap-1.5`}
-        disabled={!name || act.busy}
-        onClick={() => {
-          const f = input.current?.files?.[0];
-          if (f) act.run(f);
-        }}
-      >
-        <Upload className="size-4" /> {act.busy ? "Đang gửi…" : "Đưa vào Studio"}
-      </button>
+      {needChannel && channels.length === 0 ? (
+        <p className="text-xs text-amber-700">
+          Chưa có kênh nào — thêm ở <Link to="/app/go/studio-setup" className="underline">Kênh &amp; mẫu</Link> trước.
+        </p>
+      ) : null}
+      {collected ? <p className="text-xs text-slate-500">Video sưu tầm: ghi nguồn trên video, không lật gương / không tạo biến thể.</p> : null}
       {act.msg ? <span className={`text-xs ${act.msg.startsWith("Lỗi") ? "text-red-700" : "text-emerald-700"}`}>{act.msg}</span> : null}
     </div>
   );

@@ -51,12 +51,19 @@ def upload(
     channel_id: int | None = Form(None),
     template_id: int | None = Form(None),
     brand: bool = Form(False),
+    collected: bool = Form(False),
+    credit: str = Form(""),
+    has_text: bool = Form(False),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Video tự quay → flow ``upload`` (thành dự án). ``brand=true``: logo / intro / nhạc → chỉ vào kho."""
+    """
+    Video → flow ``upload`` (thành dự án). ``brand=true``: logo / intro / nhạc → chỉ vào kho.
+    ``collected``: video sưu tầm (ghi nguồn ``credit``); ``has_text``: đã có chữ sẵn → không đốt phụ đề.
+    """
     try:
         task = entry.accept_file(
             db, file.file, file.filename or "", channel_id=channel_id, template_id=template_id, brand=brand,
+            collected=collected, credit=credit, has_text=has_text,
         )
     except ValueError as exc:
         raise _bad(exc) from exc
@@ -92,7 +99,7 @@ def _project_row(p: StudioProject, channels: dict[int, str]) -> dict:
         "id": p.id, "status": p.status, "channel": channels.get(p.channel_id or 0), "channel_id": p.channel_id,
         "caption": p.caption, "hashtags": p.hashtags or [], "duration": p.duration, "error": p.error,
         "viral_material_id": p.viral_material_id, "created_at": p.created_at, "rendered_at": p.rendered_at,
-        "approved_at": p.approved_at, "has_video": bool(p.output_path),
+        "approved_at": p.approved_at, "has_video": bool(p.output_path), "parent_project_id": p.parent_project_id,
     }
 
 
@@ -173,10 +180,10 @@ class VariantsBody(BaseModel):
 @router.post("/projects/{project_id}/variants")
 def make_variants(project_id: int, body: VariantsBody, db: Session = Depends(get_db)) -> dict:
     try:
-        tasks = editor.make_variants(db, project_id, body.n)
+        tasks, note = editor.make_variants(db, project_id, body.n)
     except editor.EditError as exc:
         raise _bad(exc) from exc
-    return {"ok": True, "task_ids": [t.id for t in tasks]}
+    return {"ok": True, "task_ids": [t.id for t in tasks], "note": note}
 
 
 class ApproveBody(BaseModel):

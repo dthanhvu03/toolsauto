@@ -100,6 +100,8 @@ class StudioProject(Base):
     approved_at = Column(Integer, nullable=True)
     # PLAN-106 P3: dòng viral_materials READY mà Buffer đọc (cầu nối, bỏ ở P6).
     viral_material_id = Column(Integer, nullable=True, index=True)
+    # P4.2: biến thể A/B → dự án gốc (nhóm). Gốc thì NULL.
+    parent_project_id = Column(Integer, nullable=True, index=True)
 
 
 class StudioTask(Base):

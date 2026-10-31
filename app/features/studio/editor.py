@@ -95,6 +95,7 @@ def detail(db: Session, project_id: int) -> dict:
         "subtitle_lines": subtitle_lines(db, spec),
         "luts": paths.lut_names(),
         "variants_allowed": bool(asset) and asset.origin != "reup",
+        "group": _group_rows(db, project),
         "tasks": [{"id": t.id, "stage": t.stage, "status": t.status, "error": t.error} for t in tasks],
     }
 
@@ -102,6 +103,17 @@ def detail(db: Session, project_id: int) -> dict:
 def _cuts(spec: ProjectSpec) -> list[tuple]:
     """Chỉ đầu / cuối đoạn làm lệch số câu phụ đề — lật gương, tiếng lồng thì không."""
     return [(c.asset, c.start, c.end) for c in spec.clips]
+
+
+def _group_rows(db: Session, project: StudioProject) -> dict:
+    root, members = store.group_of(db, project)
+    return {
+        "root_id": root.id,
+        "members": [
+            {"id": m.id, "status": m.status, "look": store.look(m.spec, m.asset_id or 0), "is_root": m.id == root.id}
+            for m in members
+        ],
+    }
 
 
 def save_spec(db: Session, project_id: int, raw: dict) -> StudioTask:
@@ -160,37 +172,75 @@ def recompose(db: Session, project_id: int, *, template_id: int | None, channel_
     return pipeline.start(db, "recompose", asset_id=project.asset_id, payload=payload)
 
 
-def make_variants(db: Session, project_id: int, n: int) -> list[StudioTask]:
+IN_PROGRESS = {ProjectStatus.DRAFT, ProjectStatus.RENDERING, ProjectStatus.RENDERED}
+SENT = {ProjectStatus.APPROVED, ProjectStatus.SCHEDULED, ProjectStatus.POSTED}
+
+
+def _options(params: dict, key: str, auto: list, luts: list[str]) -> list:
+    if key not in params:
+        return auto
+    value = str(params.get(key) or "")
+    if key == "mirror":
+        return [False, True] if value == "random" else [value == "on"]
+    if value == "random":
+        return list(luts) or [None]
+    return [value] if value in luts else [None]
+
+
+def make_variants(db: Session, project_id: int, n: int) -> tuple[list[StudioTask], str]:
     """
-    n dự án mới từ cùng asset + cùng mẫu / kênh, mỗi bản một ``seed`` → lật / LUT / thứ tự đoạn khác nhau theo
-    tham số ``mirror`` / ``lut`` / mẫu ``ab_montage``. Mẫu chưa đặt ``mirror`` / ``lut`` thì chia đều cho A/B: bản 1, 3…
-    lật, bản 2, 4… không; LUT lần lượt từng file đang có. Mẫu đặt rõ (vd ``mirror: off``) thì giữ. ``seed`` ngẫu nhiên
-    (thứ tự đoạn ``ab_montage``). Dự án gốc giữ nguyên. Asset reup bị từ chối.
+    Biến thể A/B từ cùng asset, gắn vào dự án gốc (``parent_project_id``), dùng chung caption của gốc (không gọi AI).
+
+    Mỗi bản một kiểu **khác nhau thật**: (lật, LUT) chưa có trong nhóm. Mẫu chưa đặt ``mirror`` / ``lut`` thì thử cả
+    lật / không và từng LUT đang có; mẫu đặt rõ thì giữ. Hết kiểu thì báo lý do (vd chưa có file LUT nào). Mẫu
+    ``ab_montage`` khác nhau ở thứ tự đoạn nên không giới hạn theo kiểu. Chặn khi lô trước còn đang dựng, khi nhóm đã có
+    bản sang Buffer, khi asset là reup (ADR-061 mục 11). Nhóm tối đa ``MAX_VARIANTS`` biến thể. Trả (việc, câu báo).
     """
-    project = _project(db, project_id)
-    asset = db.get(StudioAsset, project.asset_id) if project.asset_id else None
+    root, members = store.group_of(db, _project(db, project_id))
+    asset = db.get(StudioAsset, root.asset_id) if root.asset_id else None
     if asset is None:
         raise EditError("dự án không có asset gốc")
     if asset.origin == "reup":
-        raise EditError("không tạo biến thể từ video reup (ADR-061 mục 11) — chỉ video tự quay / của mình")
-    if not 1 <= n <= MAX_VARIANTS:
-        raise EditError(f"số biến thể 1–{MAX_VARIANTS}")
-    _kind, params, _template, _channel = store.template_for(
-        db, {"channel_id": project.channel_id, "template_id": project.template_id},
+        raise EditError("không tạo biến thể từ video reup / sưu tầm (ADR-061 mục 11) — chỉ video của anh")
+    busy = [f"#{m.id}" for m in members if m.status in IN_PROGRESS]
+    queued = store.pending_variants(db, root)
+    if busy or queued:
+        what = ", ".join(busy + ([f"{queued} bản chưa dựng"] if queued else []))
+        raise EditError(f"lô trước còn đang dựng ({what}) — chờ xong rồi tạo thêm")
+    sent = [m.id for m in members if m.status in SENT]
+    if sent:
+        raise EditError(f"nhóm đã có bản sang Buffer (#{sent[0]}) — tạo biến thể nữa là đăng trùng")
+    alive = [m for m in members if m.status != ProjectStatus.REJECTED]
+    room = MAX_VARIANTS - (len(alive) - 1)
+    if not 1 <= n <= MAX_VARIANTS or room <= 0:
+        raise EditError(f"mỗi nhóm tối đa {MAX_VARIANTS} biến thể (đang có {len(alive) - 1})")
+
+    kind, params, _template, _channel = store.template_for(
+        db, {"channel_id": root.channel_id, "template_id": root.template_id},
     )
     luts = paths.lut_names()
+    combos = [(f, lut) for f in _options(params, "mirror", [False, True], luts)
+              for lut in _options(params, "lut", [None, *luts], luts)]
+    taken = {store.look(m.spec, asset.id) for m in alive}
+    montage = kind == "ab_montage"
+    fresh = combos if montage else [c for c in combos if c not in taken]
+    if not fresh:
+        hint = "" if luts else " — bỏ file .cube vào storage/media/luts/ để có thêm tông màu, hoặc dùng mẫu ab_montage"
+        raise EditError(f"hết kiểu khác nhau để thử: nhóm đã có đủ {len(combos)} kiểu (lật × tông màu){hint}")
+    want = min(n, room) if montage else min(n, room, len(fresh))
     seeds = random.SystemRandom()
     tasks = []
-    for k in range(n):
-        extra: dict = {"seed": seeds.randrange(1, 10**6)}
-        if "mirror" not in params:
-            extra["mirror"] = "on" if k % 2 == 0 else "off"
-        if "lut" not in params and luts:
-            extra["lut"] = luts[k % len(luts)]
+    for k in range(want):
+        flip, lut = fresh[k % len(fresh)]
         tasks.append(pipeline.start(db, "recompose", asset_id=asset.id, payload={
-            "channel_id": project.channel_id, "template_id": project.template_id, "params": extra,
+            "channel_id": root.channel_id, "template_id": root.template_id,
+            "parent_project_id": root.id, "caption": root.caption, "hashtags": root.hashtags,
+            "params": {"mirror": "on" if flip else "off", "lut": lut or "", "seed": seeds.randrange(1, 10**6)},
         }))
-    return tasks
+    note = f"Đã xếp {want} biến thể cho #{root.id}"
+    if want < n:
+        note += f" (chỉ còn {want} kiểu khác nhau{'' if luts else ' — chưa có file LUT nào'})"
+    return tasks, note + " — dùng chung caption của bản gốc, chọn 1 bản để duyệt."
 
 
 def _ffmpeg(args: list[str], out: Path) -> Path:

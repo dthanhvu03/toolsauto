@@ -465,12 +465,15 @@ def test_hop_thu_drive_nhan_file_dung_yen_theo_ten_kenh(db, media, tmp_path):
 
 
 def test_upload_web_ghi_vao_hop_thu_va_tu_choi_duoi_la(db, media):
+    with media["mute"].open("rb") as f, pytest.raises(ValueError, match="chọn kênh"):
+        entry.accept_file(db, f, "Clip của anh.MP4", channel_id=None)
+    ch = _channel(db)
     with media["mute"].open("rb") as f:
-        task = entry.accept_file(db, f, "Clip của anh.MP4", channel_id=None)
+        task = entry.accept_file(db, f, "Clip của anh.MP4", channel_id=ch.id)
     assert task.flow == "upload" and task.payload["move"] and task.payload["title"] == "Clip của anh"
     assert Path(task.payload["path"]).parent == paths.inbox_dir()
     with pytest.raises(ValueError):
-        entry.accept_file(db, io.BytesIO(b"x"), "virus.exe")
+        entry.accept_file(db, io.BytesIO(b"x"), "virus.exe", channel_id=ch.id)
     with media["logo"].open("rb") as f:
         assert entry.accept_file(db, f, "logo.png", brand=True).flow == "brand"
 

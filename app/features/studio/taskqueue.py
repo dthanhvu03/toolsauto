@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import time
 
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
 from app.core.database.models import StudioTask
-from app.features.studio.contracts import Lane, Stage, TaskStatus, lane_for
+from app.features.studio.contracts import STAGE_RANK, Lane, Stage, TaskStatus, lane_for
 
 STALE_AFTER_SEC = 30 * 60
 _BACKOFF_BASE_SEC = 60
@@ -57,7 +58,7 @@ def claim(db: Session, *, lanes: list[Lane | str], worker_id: str) -> StudioTask
             StudioTask.lane.in_([str(x) for x in lanes]),
             StudioTask.run_after <= now,
         )
-        .order_by(StudioTask.id)
+        .order_by(case(STAGE_RANK, value=StudioTask.stage, else_=0).desc(), StudioTask.id)
         .with_for_update(skip_locked=True)
         .first()
     )

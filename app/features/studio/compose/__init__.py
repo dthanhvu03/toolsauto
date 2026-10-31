@@ -2,7 +2,8 @@
 Bước ``compose`` — đúng một việc: asset + kênh + mẫu → ``StudioProject`` (DRAFT) có spec.
 
 payload: ``channel_id``, ``template_id`` (thiếu thì lấy mẫu mặc định của kênh, rồi tới ``basic``),
-``params`` (ghi đè tham số mẫu cho riêng dự án này).
+``params`` (ghi đè tham số mẫu cho riêng dự án này). Biến thể A/B: ``parent_project_id`` + ``caption`` / ``hashtags``
+của bản gốc (bước caption thấy đã có caption thì không gọi AI).
 """
 from __future__ import annotations
 
@@ -47,12 +48,16 @@ def run(db: Session, task: StudioTask) -> StageResult:
             show_credit=channel.show_credit if channel else True,
         )
     )
+    p = task.payload or {}
     project = StudioProject(
         channel_id=channel.id if channel else None,
         template_id=template.id if template else None,
         asset_id=asset.id,
         spec=spec.model_dump(mode="json"),
         status=ProjectStatus.DRAFT,
+        parent_project_id=p.get("parent_project_id"),
+        caption=p.get("caption"),
+        hashtags=p.get("hashtags"),
     )
     db.add(project)
     db.commit()

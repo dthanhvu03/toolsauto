@@ -19,6 +19,8 @@ def run(db: Session, task: StudioTask) -> StageResult:
     project = db.get(StudioProject, task.project_id) if task.project_id else None
     if project is None:
         raise StageError(f"không có dự án #{task.project_id}", retryable=False)
+    if project.status == ProjectStatus.REJECTED:
+        return StageResult(project_id=project.id, stop=True, note="dự án đã bỏ")
     if project.status == ProjectStatus.REVIEW and project.output_path:
         # Lưu spec 2 lần liền → 2 lượt rerender; lượt trước đã đưa vào chờ duyệt (và đã báo Telegram).
         return StageResult(project_id=project.id, stop=True, note="đã ở chờ duyệt")

@@ -36,6 +36,8 @@ Mẫu (`studio_templates.kind` + `params`):
 - `reup_dub`: như basic + tiếng lồng Việt và phụ đề câu đã dịch; không lồng được thì y như basic.
 - `own_footage`: video tự quay — cắt khoảng lặng ≥ `min_silence` (jump cut), không ghi nguồn.
 - `ab_montage`: A/B cho video của mình — cắt theo cảnh, giữ hook, xáo đoạn giữa theo `seed`.
+- Biến thể (`editor.make_variants`): gắn dự án gốc (`parent_project_id`), chung caption gốc, mỗi bản một kiểu (lật × LUT) chưa có
+  trong nhóm, chặn khi lô trước chưa xong; duyệt 1 bản → bản khác REJECTED; Telegram 1 tin cho cả lô.
 - Mọi mẫu: `mirror` (`off` / `on` / `random`), `lut` (tên file trong `storage/media/luts/` hoặc `random`), `seed`. Video reup
   không nhận lật / LUT ngẫu nhiên / xáo / biến thể (ADR-061 mục 11).
 

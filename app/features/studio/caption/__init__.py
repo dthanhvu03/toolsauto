@@ -20,7 +20,7 @@ from app.core import settings as runtime_settings
 from app.core.database.models import StudioAsset, StudioProject, StudioTask
 from app.core.orchestrator import ContentOrchestrator
 from app.features.studio import store
-from app.features.studio.contracts import StageError, StageResult
+from app.features.studio.contracts import ProjectStatus, StageError, StageResult
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,9 @@ def run(db: Session, task: StudioTask) -> StageResult:
     project = db.get(StudioProject, task.project_id) if task.project_id else None
     if project is None:
         raise StageError(f"không có dự án #{task.project_id}", retryable=False)
-    if (project.caption or "").strip():
+    if project.status == ProjectStatus.REJECTED:
+        return StageResult(project_id=project.id, stop=True, note="dự án đã bỏ")
+    if (project.caption or "").strip():  # biến thể nhận caption của bản gốc lúc compose
         return StageResult(project_id=project.id, note="đã có caption")
     _kind, params, _template, channel = store.template_for(
         db, {"channel_id": project.channel_id, "template_id": project.template_id},

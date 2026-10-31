@@ -23,6 +23,8 @@ export type ProjectRow = {
   rendered_at: number | null;
   approved_at: number | null;
   has_video: boolean;
+  /** biến thể A/B → dự án gốc */
+  parent_project_id: number | null;
 };
 
 export type ProjectsResponse = {
@@ -93,6 +95,10 @@ export type ProjectDetail = {
   luts: string[];
   /** false với video reup — không lật gương / không biến thể (ADR-061 mục 11) */
   variants_allowed: boolean;
+  group: {
+    root_id: number;
+    members: { id: number; status: ProjectStatus; look: [boolean, string | null]; is_root: boolean }[];
+  };
   tasks: { id: number; stage: string; status: string; error: string | null }[];
 };
 

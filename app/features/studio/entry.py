@@ -6,7 +6,8 @@ Cửa vào Studio (ADR-061): file từ bên ngoài → ``inbox/`` → bắt đ�
 - ``accept_file``: upload web.
 - ``scan_inbox``: hộp thư Drive ``<DRIVE_ROOT_DIR>/Studio/Inbox/<tên kênh>/`` — worker làn light
   quét định kỳ. Thư mục ``_Kho`` = nguyên liệu (logo, intro, nhạc), không thành dự án.
-- ``approve`` / ``reject``: cổng duyệt tay (web, về sau Telegram). Duyệt → flow ``publish`` → Buffer.
+- ``approve`` / ``reject``: cổng duyệt tay (web, Telegram). Duyệt → flow ``publish`` → Buffer; các bản cùng nhóm
+  biến thể chưa sang Buffer thành REJECTED.
 
 File luôn được **chuyển** vào ``inbox/`` trước khi xếp việc: lần quét sau không thấy lại nó, và
 intake (``move``) dọn nó sau khi đưa vào kho.
@@ -26,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database.models import StudioChannel, StudioProject, StudioTask
 from app.core.storage import offsite
-from app.features.studio import paths, pipeline
+from app.features.studio import paths, pipeline, store
 from app.features.studio.contracts import ProjectStatus
 from app.features.studio.intake import kind_for
 
@@ -95,18 +96,33 @@ def accept_file(
     channel_id: int | None = None,
     template_id: int | None = None,
     brand: bool = False,
+    collected: bool = False,
+    credit: str = "",
+    has_text: bool = False,
 ) -> StudioTask:
-    """Upload web: ghi luồng vào ``inbox/`` rồi bắt đầu flow ``upload`` (hoặc ``brand``)."""
+    """
+    Upload web: ghi luồng vào ``inbox/`` rồi bắt đầu flow ``upload`` (hoặc ``brand``).
+
+    ``collected``: video sưu tầm (của người khác) → origin ``reup``: ghi nguồn ``credit``, không lật / biến thể
+    (ADR-061 mục 11). ``has_text``: video đã có chữ / phụ đề sẵn → không đốt thêm phụ đề. Dự án bắt buộc có kênh
+    (không thì không duyệt được).
+    """
     suffix = Path(filename or "").suffix.lower()
     if kind_for(Path(f"x{suffix}")) is None:
         raise ValueError(f"không nhận loại file {suffix or '(không đuôi)'}")
+    if not brand and not channel_id:
+        raise ValueError("chọn kênh trước khi đưa video vào (chưa có kênh: thêm ở «Kênh & mẫu»)")
     dest = paths.inbox_dir() / f"upload-{uuid.uuid4().hex[:10]}{suffix}"
     with dest.open("wb") as out:
         shutil.copyfileobj(stream, out, length=1024 * 1024)
-    payload: dict = {"path": str(dest), "origin": "brand" if brand else "upload", "move": True,
-                     "title": Path(filename).stem[:200]}
+    origin = "brand" if brand else ("reup" if collected else "upload")
+    payload: dict = {"path": str(dest), "origin": origin, "move": True, "title": Path(filename).stem[:200]}
     if not brand:
         payload.update(channel_id=channel_id, template_id=template_id)
+        if credit.strip():
+            payload["credit"] = credit.strip()[:120]
+        if has_text:
+            payload["params"] = {"subtitles": False}
     return pipeline.start(db, "brand" if brand else "upload", payload=payload)
 
 
@@ -201,6 +217,12 @@ def approve(
         raise ReviewError("dự án chưa gắn kênh")
     project.status = ProjectStatus.APPROVED
     project.approved_at = int(time.time())
+    # A/B: chọn 1 bản là xong nhóm — bản khác chưa sang Buffer thành REJECTED (không đăng trùng lên kênh).
+    _root, members = store.group_of(db, project)
+    for other in members:
+        if other.id != project.id and other.status not in (ProjectStatus.APPROVED, ProjectStatus.SCHEDULED, ProjectStatus.POSTED):
+            other.status = ProjectStatus.REJECTED
+            other.error = f"đã chọn bản #{project.id}"
     db.commit()
     return pipeline.start(db, "publish", project_id=project.id)
 

@@ -4,6 +4,7 @@ Dữ liệu dùng chung giữa các bước. Bước nào cũng được import 
 - ``analysis`` / ``lines_for``: đọc cache phân tích.
 - ``template_for``: mẫu + tham số đang áp cho một quy trình (compose, dub, caption cùng đọc).
 - ``add_asset``: đưa một file vào kho (intake, dub, và về sau voice / visuals).
+- ``group_of`` / ``look``: nhóm biến thể A/B (gốc + các bản ``parent_project_id``) và thứ phân biệt chúng.
 """
 from __future__ import annotations
 
@@ -13,7 +14,14 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.core.database.models import StudioAnalysis, StudioAsset, StudioChannel, StudioTemplate
+from app.core.database.models import (
+    StudioAnalysis,
+    StudioAsset,
+    StudioChannel,
+    StudioProject,
+    StudioTask,
+    StudioTemplate,
+)
 from app.core.media.content_hash import sha256_file
 from app.features.studio import paths
 
@@ -79,3 +87,34 @@ def add_asset(db: Session, src: Path, *, kind: str, origin: str, move: bool = Fa
     db.add(asset)
     db.commit()
     return asset, True
+
+
+def group_of(db: Session, project: StudioProject) -> tuple[StudioProject, list[StudioProject]]:
+    """(dự án gốc, mọi bản trong nhóm gồm cả gốc). Dự án không có biến thể → nhóm 1 phần tử."""
+    root = (db.get(StudioProject, project.parent_project_id) if project.parent_project_id else None) or project
+    variants = db.query(StudioProject).filter(StudioProject.parent_project_id == root.id).order_by(StudioProject.id).all()
+    return root, [root, *variants]
+
+
+def look(spec: dict, asset_id: int) -> tuple[bool, str | None]:
+    """(lật, LUT) của một bản — thứ phân biệt các biến thể."""
+    flip = any(c.get("hflip") for c in spec.get("clips", []) if c.get("asset") == asset_id)
+    return flip, (spec.get("canvas") or {}).get("lut")
+
+
+def pending_variants(db: Session, root: StudioProject) -> int:
+    """
+    Biến thể đã xếp nhưng **chưa thành dự án** (việc compose của flow ``recompose`` còn trong hàng). Hàng việc làm xong
+    từng dự án nên bản đầu có thể tới «chờ duyệt» khi bản sau còn chưa được tạo — phải đếm cả những bản này.
+    """
+    return (
+        db.query(StudioTask)
+        .filter(
+            StudioTask.flow == "recompose",
+            StudioTask.asset_id == root.asset_id,
+            StudioTask.project_id.is_(None),
+            StudioTask.status.in_(["QUEUED", "RUNNING"]),
+        )
+        .count()
+    )
+

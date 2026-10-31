@@ -46,6 +46,8 @@ def run(db: Session, task: StudioTask) -> StageResult:
     project = db.get(StudioProject, task.project_id) if task.project_id else None
     if project is None:
         raise StageError(f"không có dự án #{task.project_id}", retryable=False)
+    if project.status == ProjectStatus.REJECTED:  # anh bỏ lúc còn trong hàng: không render, không đè trạng thái
+        return StageResult(project_id=project.id, stop=True, note="dự án đã bỏ")
     try:
         spec = ProjectSpec.model_validate(project.spec)
     except ValidationError as exc:

@@ -78,11 +78,7 @@ export function StudioEditorPage() {
     refresh
   );
 
-  const variants = useAction(
-    (n: number) => api.makeVariants(id, n),
-    (r) => `Đã xếp ${r.task_ids.length} biến thể — render lần lượt từng bản, xem ở Studio «Đang làm» / «Chờ duyệt».`,
-    refresh
-  );
+  const variants = useAction((n: number) => api.makeVariants(id, n), (r) => r.note, refresh);
   // Chỉ đoạn cắt (đầu / cuối) làm lệch số câu phụ đề — lật gương / âm lượng thì không.
   const cuts = (clips: ProjectSpec["clips"]) => JSON.stringify(clips.map((c) => [c.asset, c.start, c.end]));
   const clipsDirty = useMemo(() => !!d && !!spec && cuts(spec.clips) !== cuts(d.spec.clips), [d, spec]);
@@ -223,9 +219,24 @@ export function StudioEditorPage() {
 
                 {d.variants_allowed ? (
                   <Section title="Biến thể A/B">
+                    {d.group.members.length > 1 ? (
+                      <ul className="mb-3 flex flex-wrap gap-1.5">
+                        {d.group.members.map((m) => (
+                          <li key={m.id}>
+                            <Link
+                              to={`/app/go/studio/${m.id}`}
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${m.id === d.project.id ? "border-indigo-300 bg-indigo-50" : "border-slate-200 bg-white"}`}
+                            >
+                              #{m.id} {m.is_root ? "gốc" : [m.look[0] ? "lật" : "", m.look[1]?.replace(/\.cube$/, "") ?? ""].filter(Boolean).join(" + ") || "không lật"}
+                              <span className={`rounded px-1 text-[10px] ${STATUS_STYLE[m.status]}`}>{STATUS_LABEL[m.status]}</span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                     <div className="flex flex-wrap items-center gap-2">
                       <select className={selectClass} value={variantCount} onChange={(e) => setVariantCount(Number(e.target.value))}>
-                        {[2, 3, 4, 5].map((n) => (
+                        {[1, 2, 3, 4, 5].map((n) => (
                           <option key={n} value={n}>
                             {n} biến thể
                           </option>
@@ -236,7 +247,7 @@ export function StudioEditorPage() {
                       </button>
                     </div>
                     <p className="mt-1 text-[11px] text-slate-400">
-                      Cùng video gốc, mỗi bản ngẫu nhiên khác nhau theo tham số mẫu (mirror / lut; mẫu ab_montage xáo thứ tự đoạn). Dự án này giữ nguyên.
+                      Mỗi bản một kiểu khác thật (lật / tông màu; mẫu ab_montage: thứ tự đoạn), dùng chung caption của bản gốc. Duyệt 1 bản → các bản còn lại tự bỏ.
                     </p>
                   </Section>
                 ) : null}

@@ -26,18 +26,24 @@ export const updateMeta = (id: number, body: { caption?: string; hashtags?: stri
 export const recompose = (id: number, body: { template_id: number | null; channel_id?: number | null }) =>
   sendJson<Ok>(`${BASE}/projects/${id}/recompose`, "POST", body);
 export const makeVariants = (id: number, n: number) =>
-  sendJson<{ ok: boolean; task_ids: number[] }>(`${BASE}/projects/${id}/variants`, "POST", { n });
+  sendJson<{ ok: boolean; task_ids: number[]; note: string }>(`${BASE}/projects/${id}/variants`, "POST", { n });
 export const approveProject = (id: number, body: { caption?: string; hashtags?: string[] } = {}) =>
   sendJson<Ok>(`${BASE}/projects/${id}/approve`, "POST", body);
 export const rejectProject = (id: number, reason = "") =>
   sendJson<Ok>(`${BASE}/projects/${id}/reject`, "POST", { reason });
 
 export const fetchAssets = (kind = "") => getJson<{ assets: Asset[] }>(`${BASE}/assets${kind ? `?kind=${kind}` : ""}`);
-export function uploadFile(file: File, opts: { channelId?: number | null; brand?: boolean }) {
+export function uploadFile(
+  file: File,
+  opts: { channelId?: number | null; brand?: boolean; collected?: boolean; credit?: string; hasText?: boolean }
+) {
   const form = new FormData();
   form.append("file", file);
   if (opts.channelId) form.append("channel_id", String(opts.channelId));
   if (opts.brand) form.append("brand", "true");
+  if (opts.collected) form.append("collected", "true");
+  if (opts.credit) form.append("credit", opts.credit);
+  if (opts.hasText) form.append("has_text", "true");
   return sendForm<Ok & { flow: string }>(`${BASE}/upload`, form);
 }
 
