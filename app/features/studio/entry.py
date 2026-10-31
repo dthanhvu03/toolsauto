@@ -101,16 +101,21 @@ def accept_file(
     collected: bool = False,
     credit: str = "",
     has_text: bool = False,
+    techniques: dict | None = None,
 ) -> StudioTask:
     """
     Upload web: ghi luồng vào ``inbox/`` rồi bắt đầu flow ``upload`` (hoặc ``brand``).
 
     ``collected``: video sưu tầm (của người khác) → origin ``reup``: ghi nguồn ``credit``, không lật / biến thể
     (ADR-061 mục 11). ``has_text``: video đã có chữ / phụ đề sẵn → không đốt thêm phụ đề. Không có kênh = đăng tay.
+    ``techniques``: ô tick kỹ thuật (PLAN-116) — xem ``technique_params``.
     """
     suffix = Path(filename or "").suffix.lower()
     if kind_for(Path(f"x{suffix}")) is None:
         raise ValueError(f"không nhận loại file {suffix or '(không đuôi)'}")
+    params = technique_params(db, techniques, collected=collected) if not brand else {}
+    if has_text:
+        params["subtitles"] = False
     dest = paths.inbox_dir() / f"upload-{uuid.uuid4().hex[:10]}{suffix}"
     with dest.open("wb") as out:
         shutil.copyfileobj(stream, out, length=1024 * 1024)
@@ -120,12 +125,51 @@ def accept_file(
         payload.update(channel_id=channel_id, template_id=template_id)
         if credit.strip():
             payload["credit"] = credit.strip()[:120]
-        if has_text:
-            payload["params"] = {"subtitles": False}
+        if params:
+            payload["params"] = params
     return pipeline.start(db, "brand" if brand else "upload", payload=payload)
 
 
 MAX_LINKS = source.MAX_SCAN
+
+
+def technique_params(db: Session, raw: dict | None, *, collected: bool) -> dict:
+    """
+    Ô tick kỹ thuật trên web (PLAN-116) → ``params`` ghi đè mẫu. Chỉ nhận khoá đã biết, đúng kiểu:
+    ``subtitles``, ``dub`` (lồng tiếng Việt), ``vieneu_voice``, ``hook``, ``music_asset_id`` (+ ``music_volume``),
+    ``mirror``, ``lut``. Video sưu tầm (``collected``): không nhận lật / LUT (ADR-061 mục 11).
+    """
+    raw = raw or {}
+    params: dict = {}
+    if "subtitles" in raw:
+        params["subtitles"] = bool(raw["subtitles"])
+    if raw.get("dub"):
+        params.update(dub=True, dub_lang="vi")
+        voice = unicodedata.normalize("NFC", str(raw.get("vieneu_voice") or "")).strip()[:64]
+        if voice:
+            params["vieneu_voice"] = voice
+    hook = str(raw.get("hook") or "").strip()[:120]
+    if hook:
+        params["hook"] = hook
+    if raw.get("music_asset_id"):
+        music = db.get(StudioAsset, int(raw["music_asset_id"]))
+        if music is None or music.kind != "audio":
+            raise ValueError(f"nhạc nền #{raw['music_asset_id']} không phải file nhạc trong kho")
+        if not music.has_audio:
+            raise ValueError(f"nhạc nền #{music.id} chưa phân tích xong (hoặc không có tiếng) — chờ chút rồi gửi lại")
+        params["music_asset_id"] = music.id
+        params["music_volume"] = min(1.0, max(0.0, float(raw.get("music_volume") or 0.12)))
+    mirror = raw.get("mirror") in (True, "on")
+    lut = str(raw.get("lut") or "").strip()
+    if collected and (mirror or lut):
+        raise ValueError("video sưu tầm không dùng lật gương / tông màu LUT (chỉ cho video anh tự quay)")
+    if mirror:
+        params["mirror"] = "on"
+    if lut:
+        if lut not in paths.lut_names():
+            raise ValueError(f"không có tông màu «{lut}» trong storage/media/luts")
+        params["lut"] = lut
+    return params
 
 
 def take_links(
@@ -134,14 +178,12 @@ def take_links(
     *,
     channel_id: int | None = None,
     template_id: int | None = None,
-    has_text: bool = False,
-    hook: str = "",
-    voice: str = "",
+    techniques: dict | None = None,
 ) -> list[StudioTask]:
     """
     Video chọn từ trang «Lấy từ TikTok» → mỗi video một flow ``link``. Là video sưu tầm (origin ``reup``, ghi nguồn
     ``@kênh`` từ link) → không lật / LUT / biến thể (ADR-061 mục 11). ``channel_id`` None = đăng tay.
-    Tuỳ chọn chung cả lô: ``has_text`` (tắt phụ đề), ``hook`` (câu mở đầu), ``voice`` (giọng VieNeu khi mẫu lồng tiếng).
+    ``techniques``: ô tick kỹ thuật chung cả lô (``technique_params``).
     """
     if channel_id is not None and db.get(StudioChannel, channel_id) is None:
         raise ValueError(f"không có kênh #{channel_id}")
@@ -156,13 +198,7 @@ def take_links(
         raise ValueError("chưa chọn video TikTok nào")
     if len(picked) > MAX_LINKS:
         raise ValueError(f"tối đa {MAX_LINKS} video mỗi lần")
-    params: dict = {}
-    if has_text:
-        params["subtitles"] = False
-    if hook.strip():
-        params["hook"] = hook.strip()[:120]
-    if voice.strip():
-        params["vieneu_voice"] = unicodedata.normalize("NFC", voice.strip())[:64]
+    params = technique_params(db, techniques, collected=True)
     tasks = []
     for url, title in picked.items():
         payload = {"url": url, "origin": "reup", "credit": credit_from_url(url), "title": title or None,

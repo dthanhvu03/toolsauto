@@ -104,10 +104,10 @@ def test_fetch_loi_video_rieng_tu_khong_thu_lai_mang_loi_thi_thu_lai(db, fake_do
 def test_lay_link_dang_tay_het_quy_trinh(db, fake_download):  # noqa: F811
     tasks = entry.take_links(
         db, [{"url": LINK, "title": "Mẹo gấp áo"}, {"url": LINK}, {"url": "https://youtube.com/watch?v=1"}],
-        has_text=True, hook="Xem hết nha", voice="Thái Sơn",
+        techniques={"subtitles": False, "hook": "Xem hết nha", "dub": False},
     )
     assert len(tasks) == 1 and tasks[0].flow == "link" and tasks[0].stage == "fetch"
-    assert tasks[0].payload["params"] == {"subtitles": False, "hook": "Xem hết nha", "vieneu_voice": "Thái Sơn"}
+    assert tasks[0].payload["params"] == {"subtitles": False, "hook": "Xem hết nha"}
     assert entry.taken_urls(db, [LINK, "https://x"]) == {LINK}  # đang chờ tải
 
     assert _drain(db) == 8  # fetch → intake → analyze → dub → compose → render → caption → review
@@ -188,3 +188,46 @@ def test_api_quet_lay_tai_ve_va_da_dang(api, db, media, monkeypatch):  # noqa: F
     assert "attachment" in r.headers["content-disposition"]
     assert api.post(f"/studio/api/projects/{p.id}/posted").json() == {"ok": True}
     assert api.post(f"/studio/api/projects/{p.id}/posted").status_code == 400
+
+
+# ── PLAN-116: ô tick kỹ thuật ───────────────────────────────────────────────
+
+
+def test_technique_params_nhan_dung_kieu_va_chan_lat_lut_cho_video_suu_tam(db, media, monkeypatch):  # noqa: F811
+    from app.features.studio import paths, store
+
+    music, _ = store.add_asset(db, media["music"], kind="audio", origin="brand", has_audio=True)
+    raw, _ = store.add_asset(db, media["mute"], kind="audio", origin="brand")  # chưa phân tích: has_audio trống
+    clip, _ = store.add_asset(db, media["clip"], kind="video", origin="upload")
+    monkeypatch.setattr(paths, "lut_names", lambda: ["am_ap"])
+    full = {"subtitles": True, "dub": True, "vieneu_voice": " Thái Sơn ", "hook": " Xem hết ", "music_asset_id": music.id,
+            "music_volume": 5, "la": "bị bỏ"}
+    assert entry.technique_params(db, full, collected=True) == {
+        "subtitles": True, "dub": True, "dub_lang": "vi", "vieneu_voice": "Thái Sơn", "hook": "Xem hết",
+        "music_asset_id": music.id, "music_volume": 1.0,
+    }
+    assert entry.technique_params(db, {"mirror": True, "lut": "am_ap"}, collected=False) == {"mirror": "on", "lut": "am_ap"}
+    assert entry.technique_params(db, None, collected=True) == {}
+    for bad, why in [({"mirror": True}, "sưu tầm"), ({"lut": "am_ap"}, "sưu tầm"), ({"music_asset_id": clip.id}, "nhạc"),
+                     ({"music_asset_id": 999}, "nhạc"), ({"music_asset_id": raw.id}, "chưa phân tích")]:
+        with pytest.raises(ValueError, match=why):
+            entry.technique_params(db, bad, collected=True)
+    with pytest.raises(ValueError, match="tông màu"):
+        entry.technique_params(db, {"lut": "khong_co"}, collected=False)
+
+
+def test_lo_tiktok_tick_long_tieng_mau_basic_van_long(db, fake_download, monkeypatch):  # noqa: F811
+    from app.features.studio import analyze, dub
+    from tests.test_studio_pipeline import _fake_tracks
+
+    monkeypatch.setattr(analyze.speech, "transcribe", lambda path, **kw: ([{"start": 1, "end": 3, "text": "你好"}], "zh"))
+    calls = []
+    monkeypatch.setattr(dub.engine, "make_tracks", _fake_tracks(calls))
+    entry.take_links(db, [{"url": LINK}], techniques={"subtitles": True, "dub": True})
+    _drain(db)
+    project = db.query(StudioProject).one()
+    assert calls == ["vi"] and project.status == ProjectStatus.REVIEW
+    assert len(project.spec["clips"][0]["audio"]) == 2  # giọng lồng + nền đã tách giọng gốc
+    assert project.spec["subtitles"] == {**project.spec["subtitles"], "source": "dub", "enabled": True}
+    dub_task = db.query(StudioTask).filter_by(stage="dub").one()
+    assert dub_task.error == "zh→vi, 1/1 câu"  # không còn «mẫu không lồng tiếng»

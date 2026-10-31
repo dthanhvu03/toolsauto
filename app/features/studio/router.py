@@ -12,6 +12,7 @@ API Studio (ADR-061) cho SPA ``/app/go/studio*`` (PLAN-106 P4).
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
@@ -56,17 +57,18 @@ def upload(
     collected: bool = Form(False),
     credit: str = Form(""),
     has_text: bool = Form(False),
+    techniques: str = Form(""),
     db: Session = Depends(get_db),
 ) -> dict:
     """
     Video → flow ``upload`` (thành dự án). ``brand=true``: logo / intro / nhạc → chỉ vào kho.
     ``collected``: video sưu tầm (ghi nguồn ``credit``); ``has_text``: đã có chữ sẵn → không đốt phụ đề.
-    Không ``channel_id`` = đăng tay (không sang Buffer).
+    Không ``channel_id`` = đăng tay (không sang Buffer). ``techniques``: JSON ô tick kỹ thuật (PLAN-116).
     """
     try:
         task = entry.accept_file(
             db, file.file, file.filename or "", channel_id=channel_id, template_id=template_id, brand=brand,
-            collected=collected, credit=credit, has_text=has_text,
+            collected=collected, credit=credit, has_text=has_text, techniques=json.loads(techniques) if techniques else None,
         )
     except ValueError as exc:
         raise _bad(exc) from exc
@@ -87,9 +89,7 @@ class TakeBody(BaseModel):
     items: list[TakeItem]
     channel_id: int | None = None
     template_id: int | None = None
-    has_text: bool = False
-    hook: str = ""
-    voice: str = ""
+    techniques: dict = {}
 
 
 @router.post("/tiktok/scan")
@@ -108,7 +108,7 @@ def tiktok_take(body: TakeBody, db: Session = Depends(get_db)) -> dict:
     try:
         tasks = entry.take_links(
             db, [i.model_dump() for i in body.items], channel_id=body.channel_id, template_id=body.template_id,
-            has_text=body.has_text, hook=body.hook, voice=body.voice,
+            techniques=body.techniques,
         )
     except ValueError as exc:
         raise _bad(exc) from exc

@@ -151,7 +151,14 @@ def reup_dub(inp: ComposeInput) -> ProjectSpec:
     params thêm: ``dub_lang`` (vi), ``dub_voice`` (female/male), ``voice_volume`` (1.0),
     ``background_volume`` (nhân với mức bước dub gợi ý: 1.0 khi tách được giọng, 0.15 khi không).
     """
-    spec = basic(inp)
+    return with_dub(inp, basic(inp))
+
+
+def with_dub(inp: ComposeInput, spec: ProjectSpec) -> ProjectSpec:
+    """
+    Gắn tiếng lồng (giọng + nền) + phụ đề câu đã dịch lên spec của mẫu bất kỳ (PLAN-116: ``params.dub``).
+    Bước dub chưa lồng được (đã đúng tiếng, không có lời…) → giữ nguyên spec.
+    """
     dub = inp.dub or {}
     if not dub.get("ok"):
         return spec

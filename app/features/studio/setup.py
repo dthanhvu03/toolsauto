@@ -69,6 +69,7 @@ def overview(db: Session) -> dict:
         "buffer_channels": [b for b in buffer if b["id"] not in taken],
         "templates": [template_row(t) for t in db.query(StudioTemplate).order_by(StudioTemplate.name)],
         "template_kinds": [{"kind": k, "defaults": TEMPLATE_DEFAULTS.get(k, {})} for k in TEMPLATES],
+        "luts": paths.lut_names(),  # ô chọn tông màu khi đưa video tự quay vào (PLAN-116)
     }
 
 

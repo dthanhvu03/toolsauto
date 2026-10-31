@@ -125,7 +125,7 @@ export type Channel = {
 export type JobStep = {
   stage: string;
   label: string;
-  status: "pending" | "queued" | "running" | "retry" | "done" | "skipped" | "failed" | "waiting";
+  status: "pending" | "queued" | "running" | "retry" | "done" | "skipped" | "failed" | "waiting" | "cancelled";
   note: string | null;
   started_at: number | null;
   finished_at: number | null;
@@ -168,9 +168,7 @@ export type TakeBody = {
   /** null = đăng tay (không qua Buffer) */
   channel_id: number | null;
   template_id: number | null;
-  has_text: boolean;
-  hook: string;
-  voice: string;
+  techniques: Techniques;
 };
 
 export type Voice = { name: string; gender: "female" | "male" | ""; region: string; description: string };
@@ -183,4 +181,17 @@ export type SetupResponse = {
   buffer_channels: { id: string; name: string }[];
   templates: Template[];
   template_kinds: { kind: string; defaults: Record<string, unknown> }[];
+  /** tên file .cube trong storage/media/luts */
+  luts: string[];
+};
+
+/** PLAN-116 — ô tick kỹ thuật khi đưa video vào (gửi lên server dạng ``techniques``). */
+export type Techniques = {
+  subtitles: boolean;
+  dub: boolean;
+  vieneu_voice: string;
+  hook: string;
+  music_asset_id: number | null;
+  mirror: boolean;
+  lut: string;
 };

@@ -90,6 +90,10 @@ def _job(root: StudioTask, chain: list[StudioTask], projects: dict[int, StudioPr
         for s in steps:
             if s["stage"] == "review":
                 s["status"] = "waiting"
+    if project is not None and project.status == ProjectStatus.REJECTED:  # anh đã bỏ — «Duyệt» không phải ✓
+        for s in steps:
+            if s["stage"] == "review" and s["status"] in ("done", "waiting"):
+                s.update(status="cancelled", note="đã bỏ")
     p = root.payload or {}
     return {
         "id": root.id, "flow": root.flow, "source": SOURCE.get(root.flow, root.flow),

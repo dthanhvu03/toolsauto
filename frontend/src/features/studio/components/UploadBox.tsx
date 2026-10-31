@@ -4,12 +4,14 @@ import { Link } from "react-router-dom";
 import { primaryBtnClass, selectClass } from "@/shared/ui/controls";
 import { uploadFile } from "../api/studioApi";
 import { useAction } from "../hooks/useStudio";
+import type { Techniques } from "../types/studio.types";
+import { DEFAULT_TECHNIQUES, TechniquePicker } from "./TechniquePicker";
 
 /**
  * Upload video (→ dự án) hoặc nguyên liệu (``brand``: logo / intro / nhạc → chỉ vào kho).
  * Video chọn kênh Buffer (1 kênh thì tự chọn) hoặc «Đăng tay» (duyệt xong tải về tự đăng, PLAN-113).
  * «Sưu tầm» = video của người khác → ghi nguồn, không lật / biến thể.
- * «Đã có chữ sẵn» → không đốt thêm phụ đề (tránh 2 lớp chữ).
+ * Kỹ thuật chọn bằng ô tick (PLAN-116, mặc định bật hết); bỏ tick «Phụ đề» khi video đã có chữ sẵn.
  */
 export function UploadBox({ channels, brand = false }: { channels: { id: number; name: string }[]; brand?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
@@ -17,12 +19,19 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
   const [name, setName] = useState("");
   const [collected, setCollected] = useState(false);
   const [credit, setCredit] = useState("");
-  const [hasText, setHasText] = useState(false);
+  const [techniques, setTechniques] = useState<Techniques>(DEFAULT_TECHNIQUES);
   useEffect(() => {
     if (channels.length === 1 && channelId === "") setChannelId(channels[0].id);
   }, [channels, channelId]);
   const act = useAction(
-    (file: File) => uploadFile(file, { channelId: typeof channelId === "number" ? channelId : null, brand, collected, credit, hasText }),
+    (file: File) =>
+      uploadFile(file, {
+        channelId: typeof channelId === "number" ? channelId : null,
+        brand,
+        collected,
+        credit,
+        techniques: brand ? undefined : techniques,
+      }),
     brand
       ? "Đã đưa vào kho nguyên liệu."
       : channelId === "manual"
@@ -87,11 +96,9 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
               onChange={(e) => setCredit(e.target.value)}
             />
           ) : null}
-          <label className="flex items-center gap-1.5" title="Video gốc đã có phụ đề / chữ — không đốt thêm lớp phụ đề">
-            <input type="checkbox" checked={hasText} onChange={(e) => setHasText(e.target.checked)} /> Đã có chữ / phụ đề sẵn
-          </label>
         </div>
       ) : null}
+      {!brand ? <TechniquePicker value={techniques} onChange={setTechniques} collected={collected} /> : null}
       {needChannel && channels.length === 0 ? (
         <p className="text-xs text-amber-700">
           Chưa có kênh Buffer nào — chọn «Đăng tay», hoặc thêm kênh ở{" "}
@@ -101,7 +108,6 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
       {channelId === "manual" ? (
         <p className="text-xs text-slate-500">Đăng tay: duyệt xong không gửi Buffer — tải video + chép caption ở cột «Đã duyệt», đăng xong bấm «Đã đăng».</p>
       ) : null}
-      {collected ? <p className="text-xs text-slate-500">Video sưu tầm: ghi nguồn trên video, không lật gương / không tạo biến thể.</p> : null}
       {act.msg ? <span className={`text-xs ${act.msg.startsWith("Lỗi") ? "text-red-700" : "text-emerald-700"}`}>{act.msg}</span> : null}
     </div>
   );

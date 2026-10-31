@@ -110,3 +110,16 @@ def test_api_jobs(api, db):  # noqa: F811
     r = api.get(f"/studio/api/jobs?ids={root.id},abc").json()
     assert [j["id"] for j in r["jobs"]] == [root.id] and r["active"] == 1 and "now" in r
     assert api.get("/studio/api/jobs").status_code == 200
+
+
+def test_du_an_da_bo_buoc_duyet_la_da_bo(db, media):  # noqa: F811
+    from app.features.studio import entry
+
+    pipeline.start(db, "upload", payload={"path": str(media["clip"])})
+    _drain(db)
+    job = progress.jobs(db)["jobs"][0]
+    entry.reject(db, job["project_id"])
+    job = progress.jobs(db)["jobs"][0]
+    review = next(s for s in job["steps"] if s["stage"] == "review")
+    assert job["state"] == "stopped" and job["project_status"] == "REJECTED"
+    assert (review["status"], review["note"]) == ("cancelled", "đã bỏ")

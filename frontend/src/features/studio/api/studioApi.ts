@@ -8,6 +8,7 @@ import type {
   ProjectsResponse,
   SetupResponse,
   TakeBody,
+  Techniques,
   Template,
   TikTokItem,
   VoicesResponse,
@@ -47,7 +48,14 @@ export const rejectProject = (id: number, reason = "") =>
 export const fetchAssets = (kind = "") => getJson<{ assets: Asset[] }>(`${BASE}/assets${kind ? `?kind=${kind}` : ""}`);
 export function uploadFile(
   file: File,
-  opts: { channelId?: number | null; brand?: boolean; collected?: boolean; credit?: string; hasText?: boolean }
+  opts: {
+    channelId?: number | null;
+    brand?: boolean;
+    collected?: boolean;
+    credit?: string;
+    hasText?: boolean;
+    techniques?: Techniques;
+  }
 ) {
   const form = new FormData();
   form.append("file", file);
@@ -56,6 +64,7 @@ export function uploadFile(
   if (opts.collected) form.append("collected", "true");
   if (opts.credit) form.append("credit", opts.credit);
   if (opts.hasText) form.append("has_text", "true");
+  if (opts.techniques) form.append("techniques", JSON.stringify(opts.techniques));
   return sendForm<Ok & { flow: string }>(`${BASE}/upload`, form);
 }
 

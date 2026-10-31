@@ -1,5 +1,5 @@
 import { Check, Clock, Eye, Film, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/shared/lib/cn";
 import { ghostBtnClass, inputClass, primaryBtnClass, selectClass } from "@/shared/ui/controls";
@@ -8,10 +8,10 @@ import { Panel } from "@/shared/ui/Panel";
 import { Toast } from "@/shared/ui/Toast";
 import * as api from "../api/studioApi";
 import { JobsPanel } from "../components/JobsPanel";
-import { VoicePicker } from "../components/VoicePicker";
+import { DEFAULT_TECHNIQUES, TechniquePicker } from "../components/TechniquePicker";
 import { useAction, useSetup } from "../hooks/useStudio";
 import { mmss } from "../lib/status";
-import type { Template, TikTokItem } from "../types/studio.types";
+import type { Techniques, TikTokItem } from "../types/studio.types";
 
 const TRACK_KEY = "studio-tiktok-tracked";
 
@@ -35,8 +35,17 @@ function saveTracked(ids: number[]) {
 
 const views = new Intl.NumberFormat("vi-VN", { notation: "compact", maximumFractionDigits: 1 });
 
-/** Mẫu có lồng tiếng → hiện ô chọn giọng. */
-const dubs = (t?: Template) => !!t && (t.kind === "reup_dub" || t.params?.dub === true);
+/** Một dòng tóm tắt kỹ thuật đang bật (thanh dưới cùng). */
+function techSummary(t: Techniques): string {
+  const on = [
+    t.subtitles && "Phụ đề",
+    t.dub && `Lồng tiếng${t.vieneu_voice ? ` (${t.vieneu_voice})` : ""}`,
+    t.hook.trim() && "Hook",
+    t.music_asset_id && "Nhạc nền",
+    "Ghi nguồn",
+  ].filter(Boolean);
+  return on.join(" · ");
+}
 
 function ItemCard({ it, on, toggle }: { it: TikTokItem; on: boolean; toggle: () => void }) {
   const [broken, setBroken] = useState(false);
@@ -103,9 +112,7 @@ export function StudioTiktokPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [channel, setChannel] = useState<number | "" | "manual">("");
   const [templateId, setTemplateId] = useState<number | "">("");
-  const [hasText, setHasText] = useState(false);
-  const [hook, setHook] = useState("");
-  const [voice, setVoice] = useState<string | null>(null);
+  const [techniques, setTechniques] = useState<Techniques>(DEFAULT_TECHNIQUES);
   const [toast, setToast] = useState({ text: "", seq: 0 });
   const [tracked, setTracked] = useState<number[]>(loadTracked);
   const say = (text: string) => setToast((t) => ({ text, seq: t.seq + 1 }));
@@ -125,9 +132,7 @@ export function StudioTiktokPage() {
         items: items.filter((i) => picked.has(i.url)).map((i) => ({ url: i.url, title: i.title })),
         channel_id: typeof channel === "number" ? channel : null,
         template_id: templateId === "" ? null : templateId,
-        has_text: hasText,
-        hook,
-        voice: voice ?? "",
+        techniques,
       }),
     (r) => {
       setItems((xs) => xs.map((i) => (picked.has(i.url) ? { ...i, taken: true } : i)));
@@ -146,11 +151,6 @@ export function StudioTiktokPage() {
   useEffect(() => void (take.msg && say(take.msg)), [take.seq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fresh = items.filter((i) => !i.taken);
-  const effective = useMemo(() => {
-    if (templateId !== "") return templates.find((t) => t.id === templateId);
-    const ch = channels.find((c) => c.id === channel);
-    return templates.find((t) => t.id === ch?.template_id);
-  }, [templateId, channel, channels, templates]);
   const toggle = (u: string) =>
     setPicked((s) => {
       const n = new Set(s);
@@ -217,6 +217,13 @@ export function StudioTiktokPage() {
       ) : null}
 
       {items.length ? (
+        <Panel className="mt-4 p-4">
+          <h2 className="mb-2 text-sm font-semibold text-slate-700">Kỹ thuật cho video sẽ dựng (áp cho cả lô)</h2>
+          <TechniquePicker value={techniques} onChange={setTechniques} collected />
+        </Panel>
+      ) : null}
+
+      {items.length ? (
         <>
           <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
             <span className="text-slate-600">
@@ -273,13 +280,10 @@ export function StudioTiktokPage() {
                   ))}
                 </select>
               </label>
-              <label className="text-xs text-slate-500">
-                Câu hook mở đầu
-                <input className={`${inputClass} mt-1 block w-52`} placeholder="(không bắt buộc)" value={hook} onChange={(e) => setHook(e.target.value)} />
-              </label>
-              <label className="flex h-9 items-center gap-1.5 text-sm text-slate-700" title="Video gốc đã có chữ / phụ đề — không đốt thêm lớp phụ đề">
-                <input type="checkbox" checked={hasText} onChange={(e) => setHasText(e.target.checked)} /> Đã có chữ sẵn
-              </label>
+              <div className="min-w-0 self-center text-xs text-slate-600">
+                <span className="font-semibold text-slate-700">Kỹ thuật: </span>
+                {techSummary(techniques)}
+              </div>
               <button
                 type="button"
                 className={`${primaryBtnClass} ml-auto h-9`}
@@ -290,9 +294,8 @@ export function StudioTiktokPage() {
                 {take.busy ? "Đang gửi…" : `Tải & dựng (${picked.size})`}
               </button>
             </div>
-            {dubs(effective) ? <VoicePicker value={voice} onChange={setVoice} onError={say} /> : null}
             <p className="text-xs text-slate-500">
-              Video lấy từ TikTok là video sưu tầm: tự ghi nguồn <b>@kênh</b>; không lật gương / đổi tông màu / tạo biến thể.
+              Video lấy từ TikTok là video sưu tầm: tự ghi nguồn <b>@kênh</b>; lật gương / đổi tông màu / biến thể chỉ cho video tự quay.
               {channel === "manual" ? " Đăng tay: duyệt xong tải video ở Studio → «Đã duyệt»." : ""}{" "}
               <Link to="/app/go/studio" className="underline">
                 Mở Studio

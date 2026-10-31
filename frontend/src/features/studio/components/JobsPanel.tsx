@@ -25,13 +25,14 @@ const CHIP: Record<JobStep["status"], string> = {
   failed: "border-red-300 bg-red-50 text-red-800 font-semibold",
   waiting: "border-dashed border-emerald-300 bg-white text-emerald-700",
   pending: "border-dashed border-slate-200 bg-white text-slate-400",
+  cancelled: "border-slate-300 bg-slate-100 text-slate-500",
 };
 
 function StepIcon({ s }: { s: JobStep["status"] }) {
   const c = "size-3.5 shrink-0";
   if (s === "done") return <Check className={c} />;
   if (s === "running") return <Loader2 className={`${c} animate-spin`} />;
-  if (s === "failed") return <X className={c} />;
+  if (s === "failed" || s === "cancelled") return <X className={c} />;
   if (s === "retry") return <RotateCw className={c} />;
   if (s === "skipped") return <Minus className={c} />;
   if (s === "queued") return <Clock className={c} />;
@@ -113,7 +114,7 @@ function JobRow({ job, now }: { job: Job; now: number }) {
 /**
  * PLAN-114 — tiến trình từng video: bước nào xong / đang chạy (kèm đồng hồ) / chờ / lỗi gì. ``ids``: chỉ các việc này
  * (trang «Lấy từ TikTok» theo dõi lô vừa gửi); bỏ trống: mọi việc đang chạy + xong / lỗi 2 giờ qua.
- * ``hideDone``: ẩn việc đã xong / chờ duyệt (bảng Studio — các video đó đã có thẻ ngay bên dưới).
+ * ``hideDone``: ẩn việc đã xong / chờ duyệt / dự án anh đã bỏ (bảng Studio — các video đó đã có thẻ ngay bên dưới).
  */
 export function JobsPanel({
   ids,
@@ -134,7 +135,9 @@ export function JobsPanel({
     if (d?.now) setSkew(d.now - Date.now() / 1000);
   }, [d?.now, q.dataUpdatedAt]);
   const now = useClock((d?.active ?? 0) > 0, skew);
-  const list = (d?.jobs ?? []).filter((j) => !hideDone || (j.state !== "done" && j.state !== "review"));
+  const list = (d?.jobs ?? []).filter(
+    (j) => !hideDone || (j.state !== "done" && j.state !== "review" && j.project_status !== "REJECTED")
+  );
   if (!d || list.length === 0) return null;
   const shown = all ? list : list.slice(0, max);
   return (

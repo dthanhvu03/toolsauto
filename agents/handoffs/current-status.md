@@ -78,6 +78,10 @@
   - **31/10 — PLAN-115 bảng tiến trình PM2 trên web (anh: «sao em không cấu hình bật tắt… hiển thị trên web»; code xong, commit
     cục bộ):** Panel hệ thống có RAM / CPU / GPU + bảng app (Tắt / Bật / Khởi động lại, giữ qua khởi động máy). Danh sách app
     điều khiển được trước đây thiếu Studio / VieNeu / DB_Backup — đã thêm. Cần anh: `pm2 restart Web_Dashboard`.
+  - **31/10 — PLAN-116 ô tick kỹ thuật (anh: «bật hết… checkbox… sao bỏ qua lồng tiếng… #10 mà hiện #9»; code xong, commit cục bộ):**
+    lồng tiếng dùng được ở mọi mẫu; khung Kỹ thuật mặc định bật hết ở «Lấy từ TikTok» + ô tải lên; lật / LUT chỉ video tự quay
+    (ADR-061 mục 11, giữ nguyên); bảng Studio không còn hiện việc của dự án đã bỏ. Cần restart Web_Dashboard + Studio_Heavy +
+    Studio_Light (Panel hệ thống hoặc `pm2 restart …`).
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 
