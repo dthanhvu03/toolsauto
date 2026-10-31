@@ -260,13 +260,22 @@ TIKTOK_NO_INFO = (
 
 
 _TAG = re.compile(r"<(/?)(b|i|u|s|code|pre)>")
+_ANY_TAG = re.compile(r"<[^>]+>")
+
+
+def visible_len(text: str) -> int:
+    """Độ dài Telegram tính cho giới hạn tin: chữ hiện ra sau khi bỏ thẻ (URL trong <a href> không tính), UTF-16."""
+    return len(html.unescape(_ANY_TAG.sub("", text)).encode("utf-16-le")) // 2
 
 
 def fit_html(text: str, limit: int = 4000) -> str:
-    """Cắt tin HTML Telegram cho vừa giới hạn: cắt ở cuối dòng, đóng thẻ còn mở (cắt thô làm Telegram từ chối tin)."""
-    if len(text) <= limit:
+    """Cắt tin HTML Telegram cho vừa giới hạn: cắt ở cuối dòng, đóng thẻ còn mở (cắt thô làm Telegram từ chối tin).
+
+    Đo theo visible_len (chủ bot 2026-10-31: bài relay 21 link an_redir bị cắt mất mục cuối dù chữ chỉ ~2.300 ký tự).
+    """
+    if visible_len(text) <= limit:
         return text
-    cut = text[: limit - 2]
+    cut = text
     while True:
         cut = cut[: cut.rfind("\n")] if "\n" in cut else cut[: max(0, len(cut) - 40)]
         cut = cut[: cut.rfind("<")] if cut.rfind("<") > cut.rfind(">") else cut
@@ -277,7 +286,7 @@ def fit_html(text: str, limit: int = 4000) -> str:
             elif not closing:
                 opened.append(tag)
         result = cut + "".join(f"</{tag}>" for tag in reversed(opened)) + "\n…"
-        if len(result) <= limit or not cut:
+        if visible_len(result) <= limit or not cut:
             return result
 
 @dataclass(frozen=True)

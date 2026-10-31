@@ -433,10 +433,11 @@ def test_post_html_chi_giu_link_shopee_bo_cum_chi_co_link_ngoai():
     assert "nhomsansale" not in out and "t.me" not in out and "🔗 Link" not in out
     assert "flash sale 1K 9K" not in out and "Fb 25% tối đa 500k" not in out, "cụm chỉ có link ngoài: bỏ cả cụm"
     assert "gắn tag video" not in out, "dòng chỉ có link ngoài: bỏ dòng"
-    assert out.startswith("🔥 🔥 SĂN MÃ SHOPEE LÚC 15H\n———\n.\n🔥 Mã Shopee Vip <a href="), "đầu bài không link: giữ"
+    assert out.startswith("🔥 🔥 SĂN MÃ SHOPEE LÚC 15H\n———\n\n🔥 Mã Shopee Vip <a href="), \
+        "đầu bài không link: giữ; dòng «.» thành dòng trống"
     assert "► 15h: Mã 25% tối đa 200k từ 0đ" in out and "🔥 Shopee Video <a href=" in out
     assert "► Kênh tổng hợp shopee.vn/m/kenh" in out, "tên miền trần Shopee: giữ nguyên chữ"
-    assert "\n.\n.\n" not in out and not out.endswith(".")
+    assert "\n.\n" not in out and "\n\n\n" not in out and not out.endswith("\n")
 
 
 def test_gui_kenh_va_khach_dung_html_gon(tmp_path):
@@ -503,3 +504,58 @@ def test_check_trung_giua_hai_kenh(tmp_path):
     is_dup_later, _ = sale_relay.is_duplicate_deal(repo, keys2, now=now + timedelta(hours=13))
     assert not is_dup_later, "Sau 12 giờ thì cho phép đăng lại đợt mới"
 
+
+
+def _full_ma_post() -> str:
+    """Bài «FULL MÃ SHOPEE» (relay:65102, 2026-10-31) dạng post_html, link rút gọn cho dễ đọc."""
+    a = lambda n: f'<a href="https://s.shopee.vn/m{n}">🔗 Lưu mã</a>'  # noqa: E731
+    return "\n".join([
+        "FULL MÃ SHOPEE - LAZADA 18H - 21H", "",
+        "📌 VOUCHER EXTRA", f"◼️ 18H: Back X2 mã 25% tối đa 100K/100K tại: {a(1)}", "",
+        "📌 SHOPEE VIP", f"◼️ 18H,20H: Back mã giảm 25% tối đa 200K/0Đ lưu tại : {a(2)}",
+        f"◼️ Cào xu thời trang hoàn 10% tối đa 100K/150K: {a(2)}", "",
+        "📌 BÁCH HOÁ", f"◼️ 18H: Back X5 mã bách hoá giảm 30% tối đa 100K/300K lưu tại: {a(3)}", f"◼️ Áp list: {a(4)}", "",
+        "📌 MÃ ĐỘC QUYỀN MXH", f"◼️ 20H: Back mã MXH 50%, 30% tối đa 50K tại: {a(5)}", "",
+        "📌 ÁP TOÀN SÀN (LỌC USER)", f"◼️ Mã 80K/0Đ: {a(6)} + {a(7)} + {a(8)}", f"◼️ Mã giảm 50K/0Đ: {a(9)}", "",
+        "📌 ÁP ĐA SỐ", f"◼️ AFFV266 giảm 35K/129K áp list: {a(10)}", f"◼️ AFFANAN giảm 40K/159K áp list: {a(11)}", "",
+        "📌 CÁC MÃ KHÁC", f"◼️ X10 mã Xử lý giảm 35% tối đa 25K/20K sẵn ví áp list: {a(12)} (Mã ngày 29/10)",
+        f"◼️ X10 mã quốc tế giảm 15K/20K sẵn ví áp list: {a(13)}", "",
+        "📌 GAME", f"◼️ 21H: Chơi game nông trại săn mã thời trang 500K/0Đ: {a(14)}",
+        f"◼️ Mở quà nhận 50K, 100K xu: {a(15)} ( Không lọc acc )", "◼️ Vào Shopee pay - quét QR chuyển 10K", "",
+        f"📌 LƯU SỚM MÃ SPAYLATER GIẢM 11TR/5TR DÙNG SALE 11/11: {a(16)}",
+    ])
+
+
+def test_zalo_digest_giu_toi_da_6_link_chat_luong():
+    from datetime import datetime, timezone
+
+    out = sale_relay.zalo_digest(_full_ma_post(), now=datetime(2026, 10, 31, 10, 43, tzinfo=timezone.utc))
+    kept = sale_relay._A_HREF.findall(out)
+    assert [u.rsplit("/", 1)[1] for u in kept] == ["m1", "m2", "m3", "m5", "m10", "m11"], "giữ thứ tự bài gốc"
+    assert out.startswith("FULL MÃ SHOPEE - LAZADA 18H - 21H\n\n📌 VOUCHER EXTRA\n"), "giữ tên bài + tiêu đề cụm"
+    assert "LỌC USER" not in out and "GAME" not in out and "Shopee pay" not in out and "SPAYLATER" not in out
+    assert "Mã ngày 29/10" not in out and "Cào xu" not in out and "Áp list" not in out
+    assert out.endswith("bot chọn 6/16 link dễ dùng nhất, bỏ mã lọc tài khoản, game, mã cũ.</i>")
+    few = '◼️ Mã A <a href="https://s.shopee.vn/a">🔗 Lưu mã</a>\n◼️ Game <a href="https://s.shopee.vn/b">🔗 Lưu mã</a>'
+    assert sale_relay.zalo_digest(few) == few, "bài ít link: giữ nguyên"
+
+
+def test_zalo_digest_khong_muc_nao_dat_van_lay_muc_tot_nhat():
+    from datetime import datetime, timezone
+
+    post = "\n".join(f'◼️ Chơi game {n}: <a href="https://s.shopee.vn/g{n}">🔗 Lưu mã</a>' for n in range(8))
+    out = sale_relay.zalo_digest(post, now=datetime(2026, 10, 31, tzinfo=timezone.utc))
+    assert len(sale_relay._A_HREF.findall(out)) == 6 and "6/8" in out
+
+
+def test_khach_zalo_nhan_ban_gon_telegram_nhan_du(tmp_path):
+    from cashback_bot.db import TrackingRepository
+
+    repo = TrackingRepository(str(tmp_path / "c.sqlite"))
+    repo.migrate()
+    with patch.object(sale_relay, "post_html", return_value=_full_ma_post()):
+        assert sale_relay.enqueue_for_subscribers(repo, 7, "x", [], [111, -5]) == 2
+    with repo.connect() as conn:
+        rows = dict(conn.execute("SELECT chat_id, message_html FROM admin_notifications"))
+    assert rows[111] == _full_ma_post()
+    assert len(sale_relay._A_HREF.findall(rows[-5])) == 6 and "Bản gọn" in rows[-5]

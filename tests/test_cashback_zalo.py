@@ -517,4 +517,27 @@ def test_tin_nhieu_link_zalo_danh_so_va_gom_url_cuoi_tin():
     assert (start_u16 := len(message.text[:start].encode("utf-16-le")) // 2) and any(
         s[0] == start_u16 and s[2] == "b" for s in message.styles), "dòng tiêu đề link in đậm"
     (single,), _ = render(BotReply(f'Mã <a href="{b}">🔗 Lưu mã</a>'))
-    assert single.text == "Mã 🔗 Lưu mã: https://s.shopee.vn/an_redir?origin_link=b", "một link: giữ kiểu cũ"
+    assert single.text == "Mã 🔗 https://s.shopee.vn/an_redir?origin_link=b", "một link: để cạnh dòng, nhãn chung thành 🔗"
+
+
+def test_tin_dai_cat_o_het_doan_khong_xe_doi_danh_sach_link():
+    urls = [f"https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fm%2Fma{n:02d}&amp;sub_id=X"
+            for n in range(20)]
+    sections = [f"📌 MỤC {n}\n◼️ Mã giảm {n}0K cho đơn từ 0Đ, áp toàn sàn: <a href=\"{url}\">🔗 Lưu mã</a>"
+                for n, url in enumerate(urls)]
+    messages, _ = render(BotReply("\n\n".join(sections)))
+    assert len(messages) == 2 and all(len(m.text) <= 2000 for m in messages)
+    assert messages[0].text.endswith("Lưu mã [20]"), "hết phần chữ mới sang tin sau"
+    assert messages[1].text.startswith("🔗 Bấm link theo số:\n[1] ") and messages[1].text.endswith("ma19&sub_id=X")
+    assert messages[1].styles[0][:2] == (0, len("🔗 Bấm link theo số:".encode("utf-16-le")) // 2), "tiêu đề vẫn đậm"
+
+
+def test_link_ngan_it_link_de_canh_dong_link_dai_gom_cuoi_tin():
+    a, b = "https://s.shopee.vn/4LKZbH6EWM", "https://s.shopee.vn/gRHEXKBxg"
+    body = f'◼️ Mã 25% tại: <a href="{a}">🔗 Lưu mã</a>\n◼️ AFFV266 áp list: <a href="{b}">🔗 Lưu mã</a> (đa số)'
+    (message,), _ = render(BotReply(body))
+    assert message.text == f"◼️ Mã 25% tại: 🔗 {a}\n◼️ AFFV266 áp list: 🔗 {b} (đa số)", "link ngắn: để cạnh dòng"
+    seven = "\n".join(f'Mã {n} <a href="https://s.shopee.vn/m{n}">🔗 Lưu mã</a>' for n in range(7))
+    assert "🔗 Bấm link theo số:" in render(BotReply(seven))[0][0].text, "quá 6 link: gom cuối tin"
+    mixed = f'Mã A <a href="{a}">🔗 Lưu mã</a>\nMã B <a href="https://s.shopee.vn/an_redir?origin_link=x">🔗 Lưu mã</a>'
+    assert "Mã A 🔗 Lưu mã [1]" in render(BotReply(mixed))[0][0].text, "còn link an_redir dài: gom cuối tin"

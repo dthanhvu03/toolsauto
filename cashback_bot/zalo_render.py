@@ -3,8 +3,9 @@
 Zalo không có nút và bỏ link trong thẻ <a> (đã thử thật 2026-10-24), nên:
 - chữ gửi dạng thuần kèm `text_styles` (đậm / nghiêng / gạch chân / gạch ngang), không gửi HTML: tên sản phẩm có
   ký tự & < > không bị hiểu nhầm;
-- <a href="URL">nhãn</a> thành «nhãn: URL»; tin từ 2 link trở lên thành «nhãn [1]» và URL gom cuối tin (chủ bot
-  2026-10-31: URL an_redir dài chen giữa bài khó coi); nút Mua (nút link) thành dòng dẫn + URL trần ở cuối cùng tin
+- <a href="URL">nhãn</a> thành «nhãn: URL» ngay cạnh dòng; tin quá 6 link, hoặc có link vẫn dài sau khi rút gọn
+  (an_redir), thành «nhãn [1]» và URL gom cuối tin (chủ bot 2026-10-31: URL an_redir dài chen giữa bài khó coi;
+  link ngắn s.shopee.vn/… thì để cạnh luôn); nút Mua (nút link) thành dòng dẫn + URL trần ở cuối cùng tin
   (chủ bot 2026-10-31: một tin, không tách đôi);
 - nút u:* thành danh sách «1 · …»; khách gõ số thì tiến trình Zalo chạy đúng nút đó;
 - câu chữ dùng chung với Telegram: «/hotro», «bấm nút…» đổi sang lệnh gõ tắt của Zalo (PLAN-083);
@@ -13,16 +14,22 @@ Zalo không có nút và bỏ link trong thẻ <a> (đã thử thật 2026-10-24
 
 from __future__ import annotations
 
+import html
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
 from cashback_bot.messages import BUY_BUTTON, FOOD_BUTTON, HUONGDAN, TIKTOK_BUY_BUTTON, BotReply, with_tiktok
+from cashback_bot.shopee_shortener import shorten_if_an_redir
 
 MAX_LEN = 2000
 STYLE_CODES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "ins": "u", "s": "s", "del": "s", "strike": "s"}
 MENU_TITLE = "Gõ số để chọn:"
 LINKS_TITLE = "🔗 Bấm link theo số:"
+INLINE_LINKS = 6  # tối đa số link để ngay cạnh dòng (bản gọn Zalo của tin mã: sale_relay.ZALO_MAX_LINKS)
+SHORT_URL = 40  # «https://s.shopee.vn/4LKZbH6EWM» = 30 ký tự; an_redir ~130
+# Nhãn chung của bài relay (sale_relay.post_html): link để cạnh dòng thì in «🔗 URL», không «🔗 Lưu mã: URL».
+BARE_LABELS = frozenset({"🔗 Lưu mã", "🔗 Mua ngay"})
 
 WELCOME = (
     "👋 <b>Chào bạn! Đây là bot tự động hoàn tiền mua sắm</b>, không phải người trả lời.\n"
@@ -130,6 +137,7 @@ class _Flatten(HTMLParser):
         self.styles: list[Style] = []
         self.href: str | None = None
         self.link_text: list[str] = []
+        self.link_at = (0, 0)  # (số phần, vị trí) lúc mở thẻ <a>: xoá nhãn chung khi in URL cạnh dòng
 
     def emit(self, text: str) -> None:
         self.parts.append(text)
@@ -142,6 +150,7 @@ class _Flatten(HTMLParser):
             href = dict(attrs).get("href") or ""
             self.href = href if href.startswith(("http://", "https://")) else None
             self.link_text = []
+            self.link_at = (len(self.parts), self.pos)
         elif tag == "br":
             self.emit("\n")
 
@@ -158,14 +167,12 @@ class _Flatten(HTMLParser):
                 if self.href not in self.notes:
                     self.notes.append(self.href)
                 self.emit(f" [{self.notes.index(self.href) + 1}]")
-            elif "".join(self.link_text).strip() != self.href:
-                target_url = self.href
-                try:
-                    from cashback_bot.shopee_shortener import shorten_if_an_redir
-                    target_url = shorten_if_an_redir(target_url)
-                except Exception:
-                    pass
-                self.emit(f": {target_url}")
+            elif (label := "".join(self.link_text).strip()) in BARE_LABELS:
+                del self.parts[self.link_at[0]:]
+                self.pos = self.link_at[1]
+                self.emit(f"🔗 {shorten_if_an_redir(self.href)}")
+            elif label != self.href:
+                self.emit(f": {shorten_if_an_redir(self.href)}")
             self.href = None
 
     def handle_data(self, data: str) -> None:
@@ -209,12 +216,7 @@ def flatten(html_text: str, footnotes: bool = False) -> tuple[str, list[Style]]:
         parser.styles.append((parser.pos, _u16(LINKS_TITLE), "b"))
         parser.emit(LINKS_TITLE)
         for number, url in enumerate(parser.notes, start=1):
-            try:
-                from cashback_bot.shopee_shortener import shorten_if_an_redir
-                url = shorten_if_an_redir(url)
-            except Exception:
-                pass
-            parser.emit(f"\n[{number}] {url}")
+            parser.emit(f"\n[{number}] {shorten_if_an_redir(url)}")
     return "".join(parser.parts), sorted(parser.styles)
 
 
@@ -241,16 +243,23 @@ def _pieces(line: str) -> list[str]:
 
 
 def split(text: str, styles: list[Style]) -> list[ZaloMessage]:
-    """Cắt theo dòng thành các tin ≤ MAX_LEN; style cắt và dời theo từng tin."""
+    """Cắt theo dòng thành các tin ≤ MAX_LEN; style cắt và dời theo từng tin.
+
+    Ưu tiên cắt ở dòng trống gần nhất (hết đoạn) nếu phần trước đó dài ít nhất nửa tin: danh sách «[n] URL» và
+    «Gõ số để chọn» không bị xé đôi giữa hai tin (chủ bot 2026-10-31).
+    """
     chunks: list[tuple[int, str]] = []
-    start, current = 0, ""
+    start, current, cut = 0, "", 0  # cut: độ dài current tính tới hết dòng trống gần nhất
     for line in text.splitlines(keepends=True):
         for piece in _pieces(line):
-            if current and _u16(current + piece) > MAX_LEN:
-                chunks.append((start, current))
-                start += _u16(current)
-                current = ""
+            while current and _u16(current + piece) > MAX_LEN:
+                head = current[:cut] if _u16(current[:cut]) >= MAX_LEN // 2 else current
+                chunks.append((start, head))
+                start += _u16(head)
+                current, cut = current[len(head):], 0
             current += piece
+            if not piece.strip():
+                cut = len(current)
     if current:
         chunks.append((start, current))
     messages = []
@@ -265,6 +274,12 @@ def split(text: str, styles: list[Style]) -> list[ZaloMessage]:
 def menu_choices(reply: BotReply) -> list[tuple[str, str]]:
     """(nhãn, callback) của các nút thành danh sách số, theo đúng thứ tự số 1..n."""
     return [(label, data) for row in reply.inline_keyboard or () for label, data in row if data.startswith("u:")]
+
+
+def _footnotes(body: str) -> bool:
+    """Gom URL cuối tin khi có từ 2 link trở lên và: quá INLINE_LINKS link, hoặc có link vẫn dài sau khi rút gọn."""
+    urls = {shorten_if_an_redir(html.unescape(url)) for url in set(_HREF.findall(body))}
+    return len(urls) >= 2 and (len(urls) > INLINE_LINKS or any(len(url) > SHORT_URL for url in urls))
 
 
 def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
@@ -282,8 +297,7 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         body = GUIDE
     elif body == with_tiktok(HUONGDAN):
         body = with_tiktok(GUIDE)  # TikTok đã mở cho khách: hướng dẫn Zalo cũng nhắc cả hai sàn
-    many_links = len(set(_HREF.findall(body))) >= 2
-    text, styles = flatten(re.sub(r"\n{3,}", "\n\n", zalo_wording(body)).strip(), footnotes=many_links)
+    text, styles = flatten(re.sub(r"\n{3,}", "\n\n", zalo_wording(body)).strip(), footnotes=_footnotes(body))
 
     def add(piece: str, bold: bool = False) -> None:
         nonlocal text
@@ -298,13 +312,7 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         if text:
             add("\n\n")
         add(lead, bold=True)
-        btn_url = reply.button_url
-        try:
-            from cashback_bot.shopee_shortener import shorten_if_an_redir
-            btn_url = shorten_if_an_redir(btn_url)
-        except Exception:
-            pass
-        add(f"\n{btn_url}")
+        add(f"\n{shorten_if_an_redir(reply.button_url)}")
     choices = menu_choices(reply)
     if choices:
         add("\n\n")

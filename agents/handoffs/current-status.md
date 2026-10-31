@@ -87,6 +87,49 @@
 
 ---
 
+## Phiên 2026-10-31 (zalo-voucher-ux) — Tin «FULL MÃ SHOPEE» trên Zalo: link chưa bọc, dấu «.», tin xé đôi (chưa commit)
+
+- Anh gửi ảnh tin relay `relay:65102` (10:43 UTC) trên Zalo. Đọc DB chỉ đọc (`admin_notifications` id 494–498):
+  - **[10]–[20] là link rút gọn của kênh nguồn, chưa bọc affiliate** — `process_post_content` chỉ xử lý 10 link đầu (`old_links[:10]`).
+    → `MAX_LINKS_PER_POST = 30` trong `cashback_bot/sale_relay.py`.
+  - **[1]–[9] là an_redir dài** — bridge rút gọn không trả kịp (timeout 1,5 s → breaker 30 s → cả bài rơi về an_redir). Lúc kiểm
+    (TCP tới 192.168.112.1:9224) cổng bridge đang mở; chưa biết lúc 10:43 bridge tắt hay chậm (log mức debug). Relay chạy nền nên
+    chờ bridge `SHORTEN_TIMEOUT = 6.0` s.
+  - Dòng «.» ngăn cụm của kênh nguồn → dòng trống (`post_html`, cả Telegram lẫn Zalo).
+  - `zalo_render.split`: tin > 2000 ký tự cắt ở dòng trống gần nhất (nếu phần trước ≥ 1000) → danh sách «[n] URL» nằm trọn tin sau,
+    không còn xé đôi giữa [3] và [4].
+- Proof: dựng lại đúng tin trong ảnh → tin 1 = 1475 ký tự (chữ, tới «Lưu mã [20]»), tin 2 = 1662 ký tự («🔗 Bấm link theo số:» + [1]–[20]).
+  Test cắt mạng: `test_cashback_zalo` + `test_cashback_sale_relay` + `test_cashback_shopee_shortener` 64 qua, 2 hỏng do cần DNS
+  (`test_is_safe_shopee_url_blocks_ssrf`, `test_is_safe_photo_url_whitelist`). Ruff sạch. Test mới: `test_tin_dai_cat_o_het_doan_khong_xe_doi_danh_sach_link`.
+- Tin đã gửi không sửa lại được. Có hiệu lực từ bài relay sau khi anh chạy: `systemctl restart cashback-bot cashback-zalo`.
+- **Bản gọn cho Zalo** (anh: «rút gọn thông báo mã bên Zalo, giới hạn số link, link chất lượng»): `sale_relay.zalo_digest` —
+  bài > 6 link thì khách Zalo (ID âm) chỉ nhận ≤ `ZALO_MAX_LINKS = 6` link điểm cao nhất; Telegram vẫn nhận đủ.
+  Chấm điểm (`_QUALITY`): có % / «35K/129K» +2, toàn sàn / đa số / không lọc +2, /0Đ +1, sẵn ví +1, Xtra / VIP +1;
+  lọc user / lọc acc −4, game / quét QR / xu −3, lưu sớm −2, áp list −1; «Mã ngày dd/mm» đã qua thì bỏ. Ngưỡng `MIN_QUALITY = 2`.
+  Cuối tin có dòng «ⓘ Bản gọn: bot chọn 6/20 link…». Bài trong ảnh → 1 tin 1236 ký tự (Xtra, VIP, Bách hoá, MXH, AFFV266, AFFANAN),
+  kể cả khi bridge không rút gọn. 78 test qua (cắt mạng) + 2 test cần DNS như trên.
+- **Link để cạnh dòng trên Zalo** (anh: «sao không để link ngay bên cạnh, còn 6 link thì ngắn mà»): `zalo_render._footnotes` —
+  chỉ gom «[n] URL» cuối tin khi > `INLINE_LINKS = 6` link hoặc còn link dài hơn `SHORT_URL = 40` ký tự sau khi rút gọn
+  (bridge hụt → an_redir). Nhãn chung của relay («🔗 Lưu mã» / «🔗 Mua ngay») in gọn «🔗 URL». Bài trong ảnh khi bridge
+  rút gọn được: 1 tin 790 ký tự, link cạnh từng dòng; bridge hụt: 1 tin 1236 ký tự, kiểu đánh số như trước.
+  Import `shorten_if_an_redir` đưa lên đầu file (bỏ 3 chỗ import trong hàm).
+- Cả bộ `tests/test_cashback_*.py` cắt mạng: 1062 qua; hỏng: 3 test cần DNS (`is_safe_*`, `test_resolve_shopee_link_bounds_redirect_hops`)
+  + `test_b9_doi_tai_khoan_cho_7_ngay_admin_xac_minh_thi_rut_ngay` (màn ví admin thiếu dòng «Vừa đổi tài khoản» — ngoài phạm vi phiên này,
+  file `admin/handlers/wallet.py` không sửa; nghi từ PLAN-110, cần phiên admin xem).
+- **Đủ thời gian rút gọn chưa?** (anh hỏi) Chưa đo được: bridge chạy trên Windows, log cũ chỉ ghi lỗi ở mức debug, gọi thử = gọi Shopee
+  (chưa được duyệt). Bài 17:43: cả 9 link đã bọc đều rơi về an_redir — khớp với 1,5 s không đủ + breaker 30 s. Rủi ro còn lại với
+  6 s: relay mở link 4 luồng cùng lúc, bridge xếp hàng thì link thứ 4 chờ cả 3 link trước. Sửa `shopee_shortener.py`: gọi bridge lần
+  lượt (`_BRIDGE_LOCK`, thời gian chờ khoá không tính vào timeout) + log INFO «[ShopeeShortener] OK x.xs» / WARNING khi lỗi →
+  `logs/cashback_bot.log`. Bài relay sau restart sẽ cho số đo thật; nếu thấy gần 6 s thì nâng `SHORTEN_TIMEOUT`.
+- **Chạy thử thật bài anh dán (anh cho phép gọi Shopee + bridge, không gửi khách, DB tạm trong scratchpad):** 21/21 link đổi sang link
+  của anh, 21/21 rút gọn được, mỗi link 2,1–2,5 s, cả bài 44 s. HEAD 1 link (`s.shopee.vn/7KyBDwhyi2`) → `shopee.vn/m/VoucherXtra`,
+  `utm_source=an_17315920094`, `utm_content=AUTOSALE` (Shopee có thể ghi 1 click). Zalo: 1 tin 741 ký tự, 6 link cạnh dòng.
+  Telegram: đủ 21 link, không bị cắt. → Mặc định `shopee_shortener.DEFAULT_TIMEOUT` 1,5 → 3,0 s (đường Zalo thử rút lại).
+- **`messages.fit_html` đo theo chữ hiện ra** (`visible_len`: bỏ thẻ, URL trong href không tính, UTF-16) — trước đây đếm cả HTML nên
+  bài 21 link an_redir bị cắt mất 2 mục cuối dù chữ chỉ ~2.300. Test `test_cat_tin_khong_tinh_url_trong_link`. Cả bộ cashback cắt mạng:
+  1064 qua, chỉ hỏng `test_b9_…` (màn ví admin, có từ trước) + 3 test cần DNS.
+- Tất cả CHƯA commit. Anh restart: `systemctl restart cashback-bot cashback-zalo`.
+
 ## Phiên 2026-10-31 (relay-shopee-only) — Bài săn sale chỉ giữ link Shopee
 
 - Chủ bot (ảnh bài «SĂN MÃ SHOPEE LÚC 15H»): «lọc shopee thôi, mấy cái không phải link shopee em loại hết».

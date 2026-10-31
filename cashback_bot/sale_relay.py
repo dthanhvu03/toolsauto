@@ -41,6 +41,12 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10 MB
 HEAD_TIMEOUT = (2.0, 3.0)
 MAX_HOPS = 3
 CODES_PER_POST = 20  # voucher_posts.message_id = post_id * 100 + thứ tự mã
+# Bài tổng hợp mã có ~20 link. Giới hạn cũ 10 làm link thứ 11 trở đi giữ nguyên link rút gọn của kênh nguồn
+# (chủ bot 2026-10-31: «FULL MÃ SHOPEE» relay:65102, [10]–[20] chưa bọc affiliate).
+MAX_LINKS_PER_POST = 30
+# Luồng nền nên chờ bridge rút gọn lâu hơn mặc định: hụt một lượt là breaker 30 s, cả bài rơi về an_redir dài.
+# Đo thật 2026-10-31: 2,1–2,5 s / link, 21 link hết 44 s (lượt quét cách nhau 90 s).
+SHORTEN_TIMEOUT = 6.0
 CODE_FRESH_FOR = timedelta(hours=24)  # mã đã có trong voucher_posts trong khoảng này thì không ghi lại
 DEDUP_WINDOW = timedelta(hours=12)  # Khoảng thời gian chống trùng deal giữa các kênh relay (12 giờ)
 
@@ -228,7 +234,7 @@ def resolve_shopee_link(url: str, affiliate_id: str, sub_id: str = SUB_ID) -> st
     clean = _clean_shopee_url(current_url)
     try:
         from cashback_bot.shopee_shortener import shorten_shopee_url
-        short = shorten_shopee_url(clean, sub_id=sub_id)
+        short = shorten_shopee_url(clean, sub_id=sub_id, timeout=SHORTEN_TIMEOUT)
         if short:
             return short
     except Exception as exc:
@@ -402,7 +408,7 @@ def process_post_content(post: dict[str, Any], affiliate_id: str) -> tuple[str, 
     if not old_links:
         return text, None, []
 
-    bounded_links = old_links[:10]
+    bounded_links = old_links[:MAX_LINKS_PER_POST]
 
     if len(bounded_links) == 1:
         link_map = {bounded_links[0]: _resolve(bounded_links[0], affiliate_id)}
@@ -431,6 +437,7 @@ def post_html(text: str, buttons: list[list[dict]] | None) -> str:
     Link trùng nút bấm thì bỏ khỏi chữ (nút đã mở link đó); link Shopee khác thành <a href>«🔗 Lưu mã» /
     «🔗 Mua ngay»</a>. Link không phải Shopee (kể cả tên miền trần «nhomsansale.com/fb») bị bỏ cùng dòng chứa nó;
     cụm (ngăn bởi dòng trống / «.») có link mà không còn link Shopee nào thì bỏ cả cụm. Chữ còn lại escape như cũ.
+    Dòng «.» ngăn cụm của kênh nguồn thành dòng trống (chủ bot 2026-10-31: Zalo hiện dấu chấm lẻ trơ trọi).
     """
     button_urls = {b.get("url") for row in buttons or [] for b in row if isinstance(b, dict) and b.get("url")}
     label = "🔗 Lưu mã" if any(k in text.lower() for k in _LABEL_WORDS) else "🔗 Mua ngay"
@@ -446,7 +453,7 @@ def post_html(text: str, buttons: list[list[dict]] | None) -> str:
     for group in groups:
         if group and group[0] in separators:
             if out and out[-1] not in separators:
-                out.append(group[0])
+                out.append("")
             continue
         kept: list[str] = []
         linked = has_shopee = False
@@ -462,6 +469,105 @@ def post_html(text: str, buttons: list[list[dict]] | None) -> str:
     while out and out[-1] in separators:
         out.pop()
     return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+
+
+# --- Bản gọn cho khách Zalo ---------------------------------------------------------------------------------------
+
+# Chủ bot 2026-10-31: tin mã trên Zalo quá dài, chỉ giữ ít link chất lượng. 6 link an_redir dài (bridge rút gọn hụt)
+# vẫn vừa một tin Zalo 2000 ký tự.
+ZALO_MAX_LINKS = 6
+MIN_QUALITY = 2
+_VN = timezone(timedelta(hours=7))
+_A_HREF = re.compile(r'<a href="([^"]+)"')
+_DEAL = re.compile(r"\d+\s*%|\d+\s*(?:k|tr)\s*/\s*\d+\s*(?:k|tr|đ)", re.I)  # «25%», «35K/129K», «80K/0Đ»
+_DAY = re.compile(r"mã ngày (\d{1,2})/(\d{1,2})", re.I)
+# (mẫu, điểm). Áp cho cả dòng tiêu đề cụm (📌 ÁP TOÀN SÀN (LỌC USER)…) lẫn dòng mã.
+_QUALITY = (
+    (re.compile(r"toàn sàn|đa số|không lọc"), 2),  # ai cũng dùng được
+    (re.compile(r"/\s*0\s*đ"), 1),  # đơn từ 0Đ
+    (re.compile(r"sẵn ví"), 1),  # không phải bấm lưu
+    (re.compile(r"xtra|vip"), 1),
+    (re.compile(r"lọc (?:user|acc)"), -4),  # đa số tài khoản không nhận được
+    (re.compile(r"game|quét qr|\bxu\b"), -3),  # phải chơi / chuyển tiền, hoặc chỉ là xu
+    (re.compile(r"lưu sớm"), -2),  # chưa dùng được bây giờ
+    (re.compile(r"áp list"), -1),  # chỉ áp vài sản phẩm
+)
+
+
+def _quality(text: str, today) -> int | None:
+    """Điểm một mục mã (càng cao càng dễ dùng); None: mã đã quá ngày («Mã ngày 29/10»)."""
+    plain = html.unescape(_TAG.sub("", text)).lower()
+    for day, month in _DAY.findall(plain):
+        try:
+            date = today.replace(month=int(month), day=int(day))
+        except ValueError:
+            continue
+        if date > today + timedelta(days=180):  # «Mã ngày 31/12» đọc vào tháng 1: năm trước
+            date = date.replace(year=date.year - 1)
+        if date < today:
+            return None
+    plain = plain.replace("không lọc", "không lọc ok")  # «( Không lọc acc )» không bị trừ như «lọc acc»
+    score = 2 if _DEAL.search(plain) else 0
+    for pattern, points in _QUALITY:
+        if pattern.search(plain.replace("không lọc ok", "") if points < 0 else plain):
+            score += points
+    return score
+
+
+def zalo_digest(message_html: str, now: datetime | None = None, limit: int = ZALO_MAX_LINKS) -> str:
+    """Bài nhiều link (HTML của post_html) → bản gọn cho khách Zalo: chỉ giữ tối đa `limit` link chất lượng nhất.
+
+    Cụm = các dòng giữa hai dòng trống; mục = dòng có link + các dòng không link ngay sau nó. Mục chấm theo _quality
+    (cùng chữ của tiêu đề cụm), chọn điểm cao trước tới khi đủ `limit` link, rồi in lại theo thứ tự cũ. Mục điểm dưới
+    MIN_QUALITY bỏ (nếu không mục nào đạt thì lấy mục điểm cao nhất), mã quá ngày luôn bỏ. Cụm đầu không link (tên bài)
+    giữ. Bài ít link giữ nguyên.
+    """
+    total = len(set(_A_HREF.findall(message_html)))
+    if total <= limit:
+        return message_html
+    today = (now or datetime.now(timezone.utc)).astimezone(_VN).date()
+    sections: list[tuple[list[str], list[list[str]]]] = []
+    for block in message_html.split("\n\n"):
+        head: list[str] = []
+        items: list[list[str]] = []
+        for line in block.split("\n"):
+            if _A_HREF.search(line):
+                items.append([line])
+            elif items:
+                items[-1].append(line)
+            else:
+                head.append(line)
+        sections.append((head, items))
+    ranked = []
+    for s_index, (head, items) in enumerate(sections):
+        for i_index, item in enumerate(items):
+            score = _quality("\n".join(head + item), today)
+            if score is not None:
+                ranked.append((-score, s_index, i_index, set(_A_HREF.findall("\n".join(item)))))
+    ranked.sort(key=lambda row: row[:3])
+
+    def pick(min_score: float) -> tuple[set, set]:
+        chosen: set[tuple[int, int]] = set()
+        links: set[str] = set()
+        for neg_score, s_index, i_index, urls in ranked:
+            if -neg_score < min_score:
+                break
+            if urls <= links or len(links | urls) > limit:
+                continue
+            chosen.add((s_index, i_index))
+            links |= urls
+        return chosen, links
+
+    chosen, links = pick(MIN_QUALITY)
+    if not chosen:
+        chosen, links = pick(float("-inf"))
+    out = []
+    for s_index, (head, items) in enumerate(sections):
+        kept = [line for i_index, item in enumerate(items) if (s_index, i_index) in chosen for line in item]
+        if kept or (s_index == 0 and not items):
+            out.append("\n".join(head + kept))
+    out.append(f"<i>ⓘ Bản gọn: bot chọn {len(links)}/{total} link dễ dùng nhất, bỏ mã lọc tài khoản, game, mã cũ.</i>")
+    return "\n\n".join(out)
 
 
 def _render_line(line: str, button_urls: set, label: str) -> tuple[str, bool, bool]:
@@ -583,10 +689,12 @@ def enqueue_for_subscribers(
     buttons: list[list[dict]],
     subscribers: list[int],
 ) -> int:
-    """Xếp hàng tin nhắn gửi riêng cho từng khách."""
+    """Xếp hàng tin nhắn gửi riêng cho từng khách. Khách Zalo nhận bản gọn (zalo_digest), Telegram nhận đủ."""
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     markup_json = json.dumps({"inline_keyboard": buttons}, ensure_ascii=False) if buttons else None
-    message_html = fit_html(post_html(text, buttons), 4000)
+    full_html = post_html(text, buttons)
+    message_html = fit_html(full_html, 4000)
+    zalo_html = fit_html(zalo_digest(full_html), 4000)  # khách Zalo (ID âm): bản gọn
     queued = 0
 
     with repo.connect() as conn:
@@ -597,7 +705,7 @@ def enqueue_for_subscribers(
                 event_key=event_key,
                 event_type="VOUCHER",
                 chat_id=user_id,
-                message_html=message_html,
+                message_html=zalo_html if user_id < 0 else message_html,
                 audience="customer",
                 category="voucher",
                 reply_markup_json=markup_json,

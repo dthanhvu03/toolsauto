@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from cashback_bot import support
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_ui import MENU_KEYBOARD
-from cashback_bot.messages import fit_html
+from cashback_bot.messages import fit_html, visible_len
 from tests.test_cashback_wallet import ADMIN, _bot, _callback
 
 # Mọi màn có trước đợt 4 phải còn đường vào từ trang chủ (tối đa 2 lần bấm).
@@ -54,9 +54,16 @@ def test_tin_thay_doi_don_dung_chu_khong_dung_ma(tmp_path):
 def test_cat_tin_khong_lam_hong_the_html():
     text = "<b>Tiêu đề</b>\n" + "\n".join(f"<code>dòng {n}</code> <b>đậm" for n in range(400))
     cut = fit_html(text, 1000)
-    assert len(cut) <= 1000 and cut.endswith("…")
+    assert visible_len(cut) <= 1000 and cut.endswith("…")
     assert cut.count("<b>") == cut.count("</b>") and cut.count("<code>") == cut.count("</code>")
     assert fit_html("ngắn") == "ngắn"
+
+
+def test_cat_tin_khong_tinh_url_trong_link():
+    url = "https://s.shopee.vn/an_redir?origin_link=" + "x" * 120
+    text = "\n".join(f'◼️ Mã {n}: <a href="{url}{n}">🔗 Lưu mã</a>' for n in range(21))
+    assert len(text) > 3000 and fit_html(text, 1000) == text, "chữ hiện ra ngắn: không cắt dù HTML dài"
+    assert visible_len("<b>a &amp; b</b> 😀") == 8, "bỏ thẻ, giải &amp;, emoji tính 2"
 
 
 

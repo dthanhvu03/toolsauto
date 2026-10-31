@@ -1,6 +1,8 @@
 from unittest.mock import MagicMock, patch
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from cashback_bot import shopee_shortener
@@ -80,3 +82,25 @@ def test_shorten_if_an_redir():
 
         # Link bình thường không phải an_redir -> giữ nguyên
         assert shopee_shortener.shorten_if_an_redir("https://google.com") == "https://google.com"
+
+
+def test_goi_bridge_lan_luot_moi_link_du_timeout(monkeypatch):
+    shopee_shortener._CACHE.clear()
+    shopee_shortener._LAST_BRIDGE_FAIL = 0.0
+    monkeypatch.setenv("SHOPEE_SHORTENER_LIVE", "1")
+    active, peak, lock = [0], [0], threading.Lock()
+
+    def slow_bridge(url, sub_id, timeout):
+        with lock:
+            active[0] += 1
+            peak[0] = max(peak[0], active[0])
+        time.sleep(0.05)
+        with lock:
+            active[0] -= 1
+        return f"https://s.shopee.vn/{url[-1]}"
+
+    monkeypatch.setattr(shopee_shortener, "_call_bridge", slow_bridge)
+    with ThreadPoolExecutor(4) as pool:
+        out = list(pool.map(lambda n: shopee_shortener.shorten_shopee_url(f"https://shopee.vn/p{n}"), range(8)))
+    assert out == [f"https://s.shopee.vn/{n}" for n in range(8)]
+    assert peak[0] == 1, "bridge chỉ nhận một yêu cầu một lúc"
