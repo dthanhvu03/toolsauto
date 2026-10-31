@@ -501,3 +501,20 @@ def test_khoi_dong_gui_not_tin_ket_va_nhan_khach_gui_lai(tmp_path):
         status = dict(conn.execute("SELECT message_id, status FROM zalo_inbox WHERE message_id IN ('a', 'b', 'c')"))
     assert status == {"a": "replied", "b": "replied", "c": "failed"}, "tin quá 6 giờ thì bỏ, không nhắn"
     assert channel.recover_inbox(NOW) == (0, 0)
+
+
+def test_tin_nhieu_link_zalo_danh_so_va_gom_url_cuoi_tin():
+    a, b = "https://s.shopee.vn/an_redir?origin_link=a&amp;x=1", "https://s.shopee.vn/an_redir?origin_link=b"
+    body = (f'🔴 Mã FB <a href="{a}">🔗 Lưu mã</a>\n► Canh mã 30%\n'
+            f'🔥 Vip <a href="{b}">🔗 Lưu mã</a>\n🔥 Lại FB <a href="{a}">🔗 Lưu mã</a>')
+    (message,), _ = render(BotReply(body))
+    assert message.text == (
+        "🔴 Mã FB 🔗 Lưu mã [1]\n► Canh mã 30%\n🔥 Vip 🔗 Lưu mã [2]\n🔥 Lại FB 🔗 Lưu mã [1]\n\n"
+        "🔗 Bấm link theo số:\n[1] https://s.shopee.vn/an_redir?origin_link=a&x=1\n"
+        "[2] https://s.shopee.vn/an_redir?origin_link=b"
+    ), "URL trùng dùng chung số, gom cuối tin"
+    start = message.text.index("🔗 Bấm link theo số:")
+    assert (start_u16 := len(message.text[:start].encode("utf-16-le")) // 2) and any(
+        s[0] == start_u16 and s[2] == "b" for s in message.styles), "dòng tiêu đề link in đậm"
+    (single,), _ = render(BotReply(f'Mã <a href="{b}">🔗 Lưu mã</a>'))
+    assert single.text == "Mã 🔗 Lưu mã: https://s.shopee.vn/an_redir?origin_link=b", "một link: giữ kiểu cũ"

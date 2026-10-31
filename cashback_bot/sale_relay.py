@@ -225,6 +225,14 @@ def resolve_shopee_link(url: str, affiliate_id: str, sub_id: str = SUB_ID) -> st
 
     clean = _clean_shopee_url(current_url)
     try:
+        from cashback_bot.shopee_shortener import shorten_shopee_url
+        short = shorten_shopee_url(clean, sub_id=sub_id)
+        if short:
+            return short
+    except Exception as exc:
+        logger.debug("[SaleRelay] Shorten bridge error on %s: %s", clean, exc)
+
+    try:
         query = urlencode({"origin_link": clean, "affiliate_id": affiliate_id, "sub_id": sub_id})
         return f"https://s.shopee.vn/an_redir?{query}"
     except Exception:

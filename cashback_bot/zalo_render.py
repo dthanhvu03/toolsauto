@@ -3,7 +3,8 @@
 Zalo không có nút và bỏ link trong thẻ <a> (đã thử thật 2026-10-24), nên:
 - chữ gửi dạng thuần kèm `text_styles` (đậm / nghiêng / gạch chân / gạch ngang), không gửi HTML: tên sản phẩm có
   ký tự & < > không bị hiểu nhầm;
-- <a href="URL">nhãn</a> thành «nhãn: URL»; nút Mua (nút link) thành dòng dẫn + URL trần ở cuối cùng tin
+- <a href="URL">nhãn</a> thành «nhãn: URL»; tin từ 2 link trở lên thành «nhãn [1]» và URL gom cuối tin (chủ bot
+  2026-10-31: URL an_redir dài chen giữa bài khó coi); nút Mua (nút link) thành dòng dẫn + URL trần ở cuối cùng tin
   (chủ bot 2026-10-31: một tin, không tách đôi);
 - nút u:* thành danh sách «1 · …»; khách gõ số thì tiến trình Zalo chạy đúng nút đó;
 - câu chữ dùng chung với Telegram: «/hotro», «bấm nút…» đổi sang lệnh gõ tắt của Zalo (PLAN-083);
@@ -21,6 +22,7 @@ from cashback_bot.messages import BUY_BUTTON, FOOD_BUTTON, HUONGDAN, TIKTOK_BUY_
 MAX_LEN = 2000
 STYLE_CODES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "ins": "u", "s": "s", "del": "s", "strike": "s"}
 MENU_TITLE = "Gõ số để chọn:"
+LINKS_TITLE = "🔗 Bấm link theo số:"
 
 WELCOME = (
     "👋 <b>Chào bạn! Đây là bot tự động hoàn tiền mua sắm</b>, không phải người trả lời.\n"
@@ -117,8 +119,11 @@ class ZaloMessage:
 
 
 class _Flatten(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, footnotes: bool = False) -> None:
         super().__init__(convert_charrefs=True)
+        # footnotes: link thành «nhãn [n]», URL gom vào self.notes (theo thứ tự, URL trùng dùng chung số).
+        self.footnotes = footnotes
+        self.notes: list[str] = []
         self.parts: list[str] = []
         self.pos = 0
         self.open: list[tuple[str, int]] = []
@@ -149,8 +154,18 @@ class _Flatten(HTMLParser):
                         self.styles.append((start, self.pos - start, STYLE_CODES[tag]))
                     break
         elif tag == "a" and self.href:
-            if "".join(self.link_text).strip() != self.href:
-                self.emit(f": {self.href}")
+            if self.footnotes:
+                if self.href not in self.notes:
+                    self.notes.append(self.href)
+                self.emit(f" [{self.notes.index(self.href) + 1}]")
+            elif "".join(self.link_text).strip() != self.href:
+                target_url = self.href
+                try:
+                    from cashback_bot.shopee_shortener import shorten_if_an_redir
+                    target_url = shorten_if_an_redir(target_url)
+                except Exception:
+                    pass
+                self.emit(f": {target_url}")
             self.href = None
 
     def handle_data(self, data: str) -> None:
@@ -171,6 +186,7 @@ def zalo_wording(html_text: str) -> str:
 
 
 _ORDINAL = re.compile(r"^\d{1,3}\.\s+")
+_HREF = re.compile(r"<a\s[^>]*href=\"(https?://[^\"]+)\"")
 
 
 def _label(label: str) -> str:
@@ -180,11 +196,25 @@ def _label(label: str) -> str:
     return _ORDINAL.sub("", label.strip())
 
 
-def flatten(html_text: str) -> tuple[str, list[Style]]:
-    """HTML Telegram → (chữ thuần, style). Thẻ khác (code, pre, blockquote…) bỏ thẻ, giữ chữ."""
-    parser = _Flatten()
+def flatten(html_text: str, footnotes: bool = False) -> tuple[str, list[Style]]:
+    """HTML Telegram → (chữ thuần, style). Thẻ khác (code, pre, blockquote…) bỏ thẻ, giữ chữ.
+
+    footnotes: link thành «nhãn [n]», cuối tin thêm «🔗 Bấm link theo số:» và «[n] URL» mỗi dòng.
+    """
+    parser = _Flatten(footnotes)
     parser.feed(html_text or "")
     parser.close()
+    if parser.notes:
+        parser.emit("\n\n")
+        parser.styles.append((parser.pos, _u16(LINKS_TITLE), "b"))
+        parser.emit(LINKS_TITLE)
+        for number, url in enumerate(parser.notes, start=1):
+            try:
+                from cashback_bot.shopee_shortener import shorten_if_an_redir
+                url = shorten_if_an_redir(url)
+            except Exception:
+                pass
+            parser.emit(f"\n[{number}] {url}")
     return "".join(parser.parts), sorted(parser.styles)
 
 
@@ -252,7 +282,8 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         body = GUIDE
     elif body == with_tiktok(HUONGDAN):
         body = with_tiktok(GUIDE)  # TikTok đã mở cho khách: hướng dẫn Zalo cũng nhắc cả hai sàn
-    text, styles = flatten(re.sub(r"\n{3,}", "\n\n", zalo_wording(body)).strip())
+    many_links = len(set(_HREF.findall(body))) >= 2
+    text, styles = flatten(re.sub(r"\n{3,}", "\n\n", zalo_wording(body)).strip(), footnotes=many_links)
 
     def add(piece: str, bold: bool = False) -> None:
         nonlocal text
@@ -267,7 +298,13 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         if text:
             add("\n\n")
         add(lead, bold=True)
-        add(f"\n{reply.button_url}")
+        btn_url = reply.button_url
+        try:
+            from cashback_bot.shopee_shortener import shorten_if_an_redir
+            btn_url = shorten_if_an_redir(btn_url)
+        except Exception:
+            pass
+        add(f"\n{btn_url}")
     choices = menu_choices(reply)
     if choices:
         add("\n\n")
