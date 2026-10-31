@@ -30,6 +30,13 @@ export function StudioBoardPage() {
         <UploadBox channels={setup.data?.channels ?? []} />
       </div>
       <ActionMsg text={approve.msg || reject.msg} />
+      {d?.tasks_pending ? (
+        <p className="mt-3 flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          <span className="size-2 animate-pulse rounded-full bg-sky-500" />
+          Đang xử lý {d.tasks_pending} bước (nhận file → phân tích lời thoại / cảnh → dựng → render → caption). Video hiện ở
+          «Chờ duyệt» khi xong, thường 1–3 phút mỗi video — trang tự cập nhật.
+        </p>
+      ) : null}
 
       <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
         {BOARD_COLUMNS.map((c) => (
