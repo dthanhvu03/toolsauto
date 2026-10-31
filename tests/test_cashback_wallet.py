@@ -16,7 +16,7 @@ from cashback_bot import payouts
 from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.admin_stats import collect
 from cashback_bot.admin_ui import stats_detail_text, stats_text
-from cashback_bot.messages import entry_notice
+from cashback_bot.messages import entry_notice, tip_reply
 from cashback_bot.money import format_vnd
 from cashback_bot.config import AutoSyncConfig
 from cashback_bot.poller import _check_wallet_refresh, drain_sync_results, process_updates
@@ -391,7 +391,7 @@ class TestLedger:
             text = conn.execute("SELECT message_html FROM admin_notifications ORDER BY id DESC").fetchone()[0]
         keep = 17_368 - 12_157 - shopee.bot_fee_vnd - shopee.bot_tax_vnd
         costs = format_vnd(shopee.bot_fee_vnd + shopee.bot_tax_vnd).removesuffix("đ")
-        row = f"1 231.570 17.368 12.157 {costs:>5} {format_vnd(keep).removesuffix('đ'):>5} ⏳"
+        row = f"1 231.570 17.368 {costs:>5} 12.157 {format_vnd(keep).removesuffix('đ'):>5} ⏳"
         assert row in text
 
 
@@ -668,7 +668,8 @@ class TestPaidBasisWording:
     def test_link_card_explains_paid_basis(self, tmp_path):
         reply = _bot(tmp_path).handle_text(USER, "buyer", "https://shopee.vn/product/9/8", update_id=901, now=NOW)
         assert "💰 <b>Hoàn dự kiến: khoảng</b> <b>" in reply.text
-        assert "🎟 Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo." in reply.text
+        tip = tip_reply(reply.inline_keyboard[-1][0][1]).text
+        assert "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo." in tip
         assert "%" not in reply.text
 
     def test_cachtinh_explains_paid_basis(self, tmp_path):

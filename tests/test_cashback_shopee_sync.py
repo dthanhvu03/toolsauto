@@ -564,12 +564,12 @@ class TestShopeeReviewFixes:
             html_text = conn.execute("SELECT message_html FROM admin_notifications").fetchone()[0]
         table = html_text.split("<pre>")[1].split("</pre>")[0].split("\n")
         # Cột thẳng hàng: mọi dòng bảng (trừ dòng kẻ) dài bằng nhau tới trước cột TT.
-        assert table[0] == "#     Trả     HH Khách Phí+T Admin TT"
-        assert table[1] == "1 231.570 17.368     -     -     - ⏳"  # đơn mới lên đầu; chưa có sổ thì "-"
-        assert table[2] == "2  54.900  1.372     -     -     - ⏳"
-        assert table[3] == "3       -  5.000     -     -     - ✅"
-        assert table[4] == "4  99.000      0     -     -     - ❌"
-        assert table[6] == "Σ 286.470 23.740     0     0     0"  # không tính đơn huỷ
+        assert table[0] == "#     Giá     HH Phí/T Khách Biên TT"
+        assert table[1] == "1 231.570 17.368     -     -    - ⏳"  # đơn mới lên đầu; chưa có sổ thì "-"
+        assert table[2] == "2  54.900  1.372     -     -    - ⏳"
+        assert table[3] == "3       -  5.000     -     -    - ✅"
+        assert table[4] == "4  99.000      0     -     -    - ❌"
+        assert table[6] == "Σ 286.470 23.740     0     0    0"  # không tính đơn huỷ
         after = html_text.split("</pre>\n")[1].split("\n")
         # Tên dài bị cắt, ký tự HTML được escape.
         assert after[0].startswith("1. 🆕 Kem &lt;b&gt;nền&lt;/b&gt; ")

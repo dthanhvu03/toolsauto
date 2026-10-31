@@ -50,7 +50,7 @@ def test_truong_them_thieu_hay_sai_van_bao_gia():
 def test_link_moi_luu_truong_them(tmp_path):
     bot = service(tmp_path, FakeClient(payload(**EXTRA)))
     reply = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=1, now=NOW)
-    assert "Đã tạo link hoàn tiền" in reply.text
+    assert "Hoàn dự kiến" in reply.text
     row = sqlite3.connect(tmp_path / "cashback.sqlite").execute(
         """
         SELECT cat_name, shop_name, seller_commission_vnd, shopee_commission_vnd,

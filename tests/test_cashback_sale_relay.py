@@ -402,3 +402,45 @@ def test_scan_channel_luu_ma_ca_bai_khong_co_link():
         sale_relay._scan_channel("nhomsansale", repo, MagicMock(), "17315920094", -1004496405998)
     store.assert_called_once_with(repo, "nhomsansale", 100, "Mã ABCD99 giảm 10% đơn từ 0đ", None)
     repo.set_state.assert_called_with("relay_seen:nhomsansale", "100")
+
+
+def test_post_html_an_link_trung_nut_boc_link_con_lai():
+    wrapped = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fm%2Fvip&affiliate_id=1&sub_id=AUTOSALE"
+    other = "https://s.shopee.vn/an_redir?origin_link=https%3A%2F%2Fshopee.vn%2Fp&affiliate_id=1&sub_id=AUTOSALE"
+    buttons = [[{"text": "🎟 Lưu mã trên Shopee ↗", "url": wrapped}]]
+    assert sale_relay.post_html(f"Mã 25% Shopee vip   {wrapped}", buttons) == "Mã 25% Shopee vip", \
+        "link đã có nút: bỏ khỏi chữ"
+    out = sale_relay.post_html(f"Mã A <b>: {wrapped}\nMã B: {other}.\nNhóm: https://t.me/x", buttons)
+    assert "%3A%2F%2F" not in out.replace(f'href="{other.replace("&", "&amp;")}"', ""), "không in URL dài trong chữ"
+    assert f'<a href="{other.replace("&", "&amp;")}">🔗 Lưu mã</a>.' in out and '<a href="https://t.me/x">🔗 Link</a>' in out
+    assert "Mã A &lt;b&gt;:" in out, "chữ thường vẫn escape"
+    assert sale_relay.post_html(f"Deal áo {other}", []) == f'Deal áo <a href="{other.replace("&", "&amp;")}">🔗 Mua ngay</a>'
+
+
+def test_gui_kenh_va_khach_dung_html_gon(tmp_path):
+    from cashback_bot.db import TrackingRepository
+
+    wrapped = "https://s.shopee.vn/an_redir?origin_link=x&affiliate_id=1&sub_id=AUTOSALE"
+    buttons = [[{"text": "🎟 Lưu mã trên Shopee ↗", "url": wrapped}]]
+    telegram = MagicMock()
+    sale_relay.send_to_channel(telegram, -100123, f"Mã hot {wrapped}", None, buttons)
+    assert telegram.send_message.call_args[0][1] == "Mã hot"
+    repo = TrackingRepository(str(tmp_path / "c.sqlite"))
+    repo.migrate()
+    assert sale_relay.enqueue_for_subscribers(repo, 7, f"Mã hot {wrapped}", buttons, [111]) == 1
+    with repo.connect() as conn:
+        assert conn.execute("SELECT message_html FROM admin_notifications").fetchone()[0] == "Mã hot"
+
+
+def test_zalo_tin_ma_dan_link_bang_nhan_nut_mot_tin():
+    from cashback_bot.zalo_bot import ZaloSender
+
+    api, store = MagicMock(), MagicMock()
+    store.external_id.return_value = "zalo-1"
+    markup = {"inline_keyboard": [[{"text": "🎟 Lưu mã trên Shopee ↗", "url": "https://s.shopee.vn/an_redir?x=1"}],
+                                  [{"text": "🔕 Tắt báo mã", "callback_data": "u:vc:off"}]]}
+    ZaloSender(api, store).send_message(-5, "Mã hot", markup)
+    [call] = api.send_message.call_args_list
+    text = call[0][1]
+    assert text.startswith("Mã hot\n\n👉 🎟 Lưu mã trên Shopee:\nhttps://s.shopee.vn/an_redir?x=1"), text
+    assert "Bấm link này để mua" not in text and "1 · 🔕 Tắt báo mã" in text

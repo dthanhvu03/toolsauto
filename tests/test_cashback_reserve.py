@@ -149,7 +149,7 @@ def test_admin_dan_link_giua_wizard_van_tao_link(tmp_path):
     start = panel.handle_callback(ADMIN, "c:rs:new", "private", NOW)
     panel.handle_callback(ADMIN, _data(start, "k:P"), "private", NOW)
     reply = bot.handle_text(ADMIN, "owner", LINK, update_id=5, now=NOW)
-    assert "Đã tạo link hoàn tiền" in reply.text or "chưa được mở" in reply.text
+    assert "Hoàn dự kiến" in reply.text or "chưa được mở" in reply.text
 
 
 def test_ngay_sai_va_gioi_han(tmp_path):

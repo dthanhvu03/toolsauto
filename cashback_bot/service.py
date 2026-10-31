@@ -36,7 +36,7 @@ from cashback_bot.messages import (
     DEALS_OFF_NOTICE,
     deal_categories_reply,
     with_tiktok,
-    TIP_ALERT,
+    TIP,
     TIPS_KEYBOARD,
     WALLET_CLOSED_ALERT,
     BotReply,
@@ -52,6 +52,7 @@ from cashback_bot.messages import (
     rate_limited_reply,
     render_success,
     render_success_v12,
+    tip_reply,
     wallet_reply,
     withdraw_confirm_reply,
     withdraw_done_reply,
@@ -237,7 +238,9 @@ class CashbackService:
         # Bấm một món trong tin deal: thẻ link là tin mới, không sửa đè danh sách deal (khách còn bấm món khác).
         # 🖼 Tạo ảnh: ảnh và bài viết là tin mới, màn chỉnh mục hiển thị ở lại để tạo tiếp.
         # 🔔 Báo khi giảm giá: màn theo dõi là tin mới, thẻ link ở lại để khách còn bấm mua.
-        keep = data.startswith(("u:dl:", watchlist.ADD, shop_voucher.VOUCHER_CALLBACK_PREFIX)) or data == "c:pb:go"
+        # 🛡️ Lưu ý: trang lưu ý là tin mới, thẻ link ở lại để khách bấm mua.
+        keep = data.startswith(("u:dl:", watchlist.ADD, shop_voucher.VOUCHER_CALLBACK_PREFIX, TIP + ":")) \
+            or data in ("c:pb:go", TIP)
         return user_id, replace(
             reply,
             callback_query_id=query_id,
@@ -267,8 +270,8 @@ class CashbackService:
         if desk is not None:
             return desk
         self.desk.clear(user_id)
-        if data == "u:tip":
-            return BotReply("", toast=TIP_ALERT, show_alert=True)
+        if data == TIP or data.startswith(TIP + ":"):
+            return tip_reply(data)
         if data.startswith(("u:dc:", "u:dl:", deals.FEED)):
             return self._deal_action(user_id, data)
         if data.startswith("u:w:"):

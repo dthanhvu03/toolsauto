@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 
 from cashback_bot import admin_stats, admin_tiktok, insights, reconciliation, tiktok_sync
 from cashback_bot.admin_notify import AdminNotifier
-from cashback_bot.messages import TIKTOK_BUY_BUTTON, TIKTOK_OPEN_PHRASES, TIKTOK_WORKING, BotReply
+from cashback_bot.messages import TIKTOK_BUY_BUTTON, TIKTOK_OPEN_PHRASES, TIKTOK_WORKING, BotReply, tip_reply
 from cashback_bot.riohub_client import ProductLink, RioHubError
 from cashback_bot.tiktok_url import parse_tiktok_target
 from cashback_bot.zalo_render import TIKTOK_BUY_LEAD, render
@@ -102,7 +102,8 @@ def test_admin_tao_link_tiktok_va_bao_gia(tmp_path):
     bot = _bot(tmp_path)
     reply = _ask(bot, ADMIN, LINK, 1)
     assert "🎵 TikTok Shop" in reply.text and "Máy mài chân KY Y5" in reply.text and "300.000đ" in reply.text
-    assert "TikTok xác nhận đơn hợp lệ" in reply.text and "Shopee" not in reply.text
+    tip = tip_reply(reply.inline_keyboard[-1][0][1]).text
+    assert "TikTok xác nhận đơn hợp lệ" in tip and "Shopee" not in tip and "Shopee" not in reply.text
     assert reply.markup()["inline_keyboard"][0][0] == {"text": TIKTOK_BUY_BUTTON, "url": "https://www.tiktok.com/t/ZSgCQR9y3/"}
     (row,) = _links(bot)
     assert (row["platform"], row["link_status"], row["item_id"], row["price_vnd"]) == ("tiktok", "created", 1732000000000000001, 300_000)
@@ -113,8 +114,8 @@ def test_admin_tao_link_tiktok_va_bao_gia(tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM link_policy_snapshots").fetchone()[0] == 1, "cùng snapshot như Shopee"
     replay = bot.handle_text(ADMIN, "admin", LINK, update_id=1, now=NOW)
     assert replay.text == reply.text and replay.button_label == TIKTOK_BUY_BUTTON, "Telegram gửi lại cùng update"
-    zalo = render(reply)[0]
-    assert zalo[-1].text.startswith(TIKTOK_BUY_LEAD) and "Bấm link ở tin dưới" in zalo[0].text
+    [zalo] = render(reply)[0]
+    assert f"\n\n{TIKTOK_BUY_LEAD}\n" in zalo.text and "Bấm 🛒" not in zalo.text, "Zalo: thẻ và link chung một tin"
 
 
 def test_tao_link_tiktok_khong_chan_vong_nhan_tin(tmp_path):
@@ -348,7 +349,7 @@ def test_bam_man_khac_thi_thoi_cho_go(tmp_path):
         panel.handle_callback(ADMIN, "c:menu:home", "private", NOW)
         assert panel.consume_text(ADMIN, "12", NOW) is None, start
     reply = bot.handle_text(ADMIN, "admin", "https://shopee.vn/product/9/8", update_id=50, now=NOW)
-    assert "Đã tạo link" in reply.text, "link Shopee không bị nuốt thành từ khoá tìm"
+    assert "Giá tham khảo" in reply.text, "link Shopee không bị nuốt thành từ khoá tìm"
 
 
 # --- Rà soát 2026-10-26, đợt 2: TikTok đúng nền tảng -------------------------------------------------

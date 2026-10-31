@@ -76,11 +76,12 @@ def test_gui_link_tao_link_affiliate_gan_id_am(tmp_path):
     assert link["telegram_user_id"] == -1 and link["telegram_update_id"] < 0 and link["sub_id"]
     text = _texts(zalo)
     assert "Chào bạn" in text and "bot tự động" in text, "tin đầu tiên báo đây là bot tự động"
-    card, buy = zalo.sent[-2][1], zalo.sent[-1][1]
-    assert "Đã tạo link hoàn tiền" in card and "sub_id=" not in card
-    assert "Bấm link ở tin dưới" in card and "bên dưới" not in card, "Zalo không có nút: chỉ sang tin chứa link"
-    assert buy.startswith(BUY_LEAD + "\nhttps://") and f"sub_id={link['sub_id']}" in buy, "link mua là tin riêng cuối"
-    assert "Gõ số để chọn:" in buy, "danh sách số nằm cuối cùng"
+    buy = zalo.sent[-1][1]
+    card = buy.split(BUY_LEAD)[0]
+    assert "Hoàn dự kiến" in card and "sub_id=" not in card and "Chào bạn" not in buy
+    assert "bên dưới" not in card and "Bấm 🛒" not in card, "Zalo không có nút: bỏ câu bấm nút của Telegram"
+    assert f"\n\n{BUY_LEAD}\nhttps://" in buy and f"sub_id={link['sub_id']}" in buy, "thẻ và link mua chung một tin"
+    assert buy.index("Gõ số để chọn:") > buy.index("https://"), "danh sách số nằm cuối cùng"
     assert "<b>" not in text and "&amp;" not in text
     assert all(chat == ZALO_ID for chat, _t, _s in zalo.sent) and zalo.typing == 1
     with bot.repo.connect() as conn:
@@ -90,9 +91,10 @@ def test_gui_link_tao_link_affiliate_gan_id_am(tmp_path):
 def test_zalo_link_shopeefood_bao_sap_co_va_gui_link_dat_mon(tmp_path):
     bot, channel, zalo = _channel(tmp_path)
     channel.handle(_update("https://spf.shopee.vn/906KKy82bs"), now=NOW)
-    card, buy = zalo.sent[-2][1], zalo.sent[-1][1]
-    assert "Hoàn tiền ShopeeFood sắp có" in card and "link ở tin dưới" in card and "nút" not in card
-    assert buy.startswith(FOOD_LEAD + "\nhttps://s.shopee.vn/an_redir?") and "&sub_id=" in buy
+    buy = zalo.sent[-1][1]
+    card = buy.split(FOOD_LEAD)[0]
+    assert "Hoàn tiền ShopeeFood sắp có" in card and "link bên dưới" in card and "nút" not in card
+    assert f"{FOOD_LEAD}\nhttps://s.shopee.vn/an_redir?" in buy and "&sub_id=" in buy, "một tin"
     assert BUY_LEAD not in buy, "không ghi «sẽ không được hoàn» như link có hoàn"
 
 
@@ -440,12 +442,12 @@ def test_tin_deal_go_so_lay_nhieu_mon_va_doc_muon_van_dung_duoc(tmp_path):
     zalo.sent.clear()
     channel.handle(_update("1", "m1"), now=datetime.now(timezone.utc))
     buy = zalo.sent[-1][1]
-    assert "Đã tạo link hoàn tiền" in _texts(zalo) and "1 · 🛒 Kem A" in buy and "2 · 🛒 Kem B" in buy
+    assert "Hoàn dự kiến" in _texts(zalo) and "1 · 🛒 Kem A" in buy and "2 · 🛒 Kem B" in buy
     assert channel.store.menu(-1, datetime.now(timezone.utc))[:3] == deal_menu, "giữ nguyên số của tin deal"
     assert len(channel.store.menu(-1, datetime.now(timezone.utc))) > 3, "nút riêng của tin link xếp sau"
     zalo.sent.clear()
     channel.handle(_update("2", "m2"), now=datetime.now(timezone.utc))
-    assert "Đã tạo link hoàn tiền" in _texts(zalo) and "hết hạn" not in _texts(zalo)
+    assert "Hoàn dự kiến" in _texts(zalo) and "hết hạn" not in _texts(zalo)
     with bot.repo.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM link_requests WHERE link_status = 'created'").fetchone()[0] == 2
 

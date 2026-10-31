@@ -62,4 +62,4 @@ def test_khach_mo_deal_hom_nay_tu_trang_chu_lenh_va_bam_mon(tmp_path):
     update = {"callback_query": {"id": "q-feed", "from": {"id": USER}, "data": "u:dl:9:8",
                                  "message": {"message_id": 6, "chat": {"id": USER, "type": "private"}}}}
     _chat, card = bot.handle_update(update)
-    assert "Đã tạo link hoàn tiền" in card.text and card.edit_message_id is None, "thẻ link là tin mới, giữ danh sách"
+    assert "Hoàn dự kiến" in card.text and card.edit_message_id is None, "thẻ link là tin mới, giữ danh sách"

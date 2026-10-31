@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 import requests
 
 from cashback_bot.db import TrackingRepository, enqueue_event
+from cashback_bot.messages import fit_html
 from cashback_bot.money import format_vnd
 from cashback_bot.telegram_api import TelegramApi
 
@@ -407,6 +408,29 @@ def process_post_content(post: dict[str, Any], affiliate_id: str) -> tuple[str, 
     return text, first_link, buttons
 
 
+def post_html(text: str, buttons: list[list[dict]] | None) -> str:
+    """Bài relay → HTML Telegram gọn: không in URL an_redir dài giữa bài.
+
+    Link trùng nút bấm thì bỏ khỏi chữ (nút đã mở link đó); link khác thành <a href>«🔗 Lưu mã» / «🔗 Mua ngay»</a>.
+    Chữ còn lại escape như cũ.
+    """
+    button_urls = {b.get("url") for row in buttons or [] for b in row if isinstance(b, dict) and b.get("url")}
+    label = "🔗 Lưu mã" if any(k in text.lower() for k in _LABEL_WORDS) else "🔗 Mua ngay"
+    parts: list[str] = []
+    last = 0
+    for found in _LINK.finditer(text):
+        url = found.group().rstrip(".,)")
+        parts.append(html.escape(text[last:found.start()]))
+        if url not in button_urls:
+            shown = label if _is_shopee_url_candidate(url) else "🔗 Link"
+            parts.append(f'<a href="{html.escape(url, quote=True)}">{shown}</a>')
+        parts.append(html.escape(found.group()[len(url):]))
+        last = found.end()
+    parts.append(html.escape(text[last:]))
+    lines = [re.sub(r"[ \t]{2,}", " ", line).strip() for line in "".join(parts).split("\n")]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
 def _download_safe_photo(photo_url: str) -> bytes | None:
     """Tải ảnh an toàn bằng streaming, kiểm soát Content-Length và chống OOM/DoS."""
     if not is_safe_photo_url(photo_url):
@@ -445,12 +469,12 @@ def send_to_channel(
 ) -> bool:
     """Gửi bài vào kênh Telegram trung gian (kèm ảnh và nút nếu có)."""
     markup = {"inline_keyboard": buttons} if buttons else None
-    safe_text = html.escape(text)
+    safe_text = post_html(text, buttons)
 
     # Nếu bài dài hơn 1000 ký tự (bài tổng hợp khung giờ), ưu tiên gửi tin nhắn chữ đầy đủ (tối đa 4000 ký tự)
-    if len(text) > 1000:
+    if len(safe_text) > 1000:
         try:
-            telegram.send_message(channel_id, safe_text[:4000], reply_markup=markup)
+            telegram.send_message(channel_id, fit_html(safe_text, 4000), reply_markup=markup)
             return True
         except Exception as exc:
             logger.warning("[SaleRelay] sendMessage long text error: %s", exc)
@@ -462,7 +486,7 @@ def send_to_channel(
             try:
                 data = {
                     "chat_id": channel_id,
-                    "caption": safe_text[:1000],
+                    "caption": fit_html(safe_text, 1000),
                     "parse_mode": "HTML",
                 }
                 if markup:
@@ -481,7 +505,7 @@ def send_to_channel(
 
     # Fallback gửi tin nhắn chữ
     try:
-        telegram.send_message(channel_id, safe_text[:4000], reply_markup=markup)
+        telegram.send_message(channel_id, fit_html(safe_text, 4000), reply_markup=markup)
         return True
     except Exception as exc:
         logger.warning("[SaleRelay] sendMessage error: %s", exc)
@@ -505,7 +529,7 @@ def enqueue_for_subscribers(
     """Xếp hàng tin nhắn gửi riêng cho từng khách."""
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     markup_json = json.dumps({"inline_keyboard": buttons}, ensure_ascii=False) if buttons else None
-    message_html = html.escape(text)
+    message_html = fit_html(post_html(text, buttons), 4000)
     queued = 0
 
     with repo.connect() as conn:

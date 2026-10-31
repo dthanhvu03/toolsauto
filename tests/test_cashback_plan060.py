@@ -14,7 +14,7 @@ from cashback_bot.messages import (
     DESCRIPTION,
     DIEUKIEN,
     SHORT_DESCRIPTION,
-    TIP_ALERT,
+    tip_reply,
 )
 from cashback_bot.poller import _register_profile, flush_outbound, process_updates
 from cashback_bot.telegram_api import TelegramDeliveryError
@@ -129,14 +129,13 @@ def test_the_ket_qua_co_nut_mua_va_nut_luu_y_popup(tmp_path):
     assert rows[0][0]["text"] == "🛒 Mua trên Shopee"
     assert rows[0][0]["url"].startswith("https://s.shopee.vn/an_redir?")
     assert rows[1][0]["callback_data"].startswith("u:pw:a:"), "🔔 Báo khi giảm giá (PLAN-103)"
-    assert rows[2][0]["callback_data"] == "u:tip"
+    tip = rows[2][0]["callback_data"]
+    assert tip.startswith("u:tip")
 
-    process_updates(bot, tg, bot.repo, [_callback(31, "u:tip")], Admin())
-    assert tg.answers[-1] == ("q31", TIP_ALERT, True)
-    assert tg.edited == [], "popup không được đè thẻ kết quả"
-    assert len(tg.sent) == 1
-    assert len(TIP_ALERT) <= 200
-    assert bot.repo.get_outbound(31) is None
+    process_updates(bot, tg, bot.repo, [_callback(31, tip)], Admin())
+    assert tg.edited == [], "trang Lưu ý không được đè thẻ kết quả"
+    assert len(tg.sent) == 2 and "Lưu ý trước khi mua" in tg.sent[-1]["html"], "Lưu ý là tin mới, đủ nội dung"
+    assert "Mua thẳng trong app" in tg.sent[-1]["html"] and "Chưa phải tiền có thể rút." in tg.sent[-1]["html"]
     assert bot.repo.get_offset() == 32
 
 
@@ -348,7 +347,7 @@ def test_bat_v12_moi_man_khop_cach_tinh(tmp_path):
 
     card = bot.handle_text(111, "buyer", "https://shopee.vn/product/9/8", update_id=1)
     assert "<b>12.462đ</b>" in card.text
-    assert "sau dự phòng phí và thuế" in card.text
+    assert "sau dự phòng phí và thuế" in tip_reply(card.inline_keyboard[-1][0][1]).text, "chữ nhỏ V1.2 ở trang 🛡️ Lưu ý"
     calc = bot.handle_text(111, "buyer", "/cachtinh", update_id=2)
     assert "đã trừ trước dự phòng phí và thuế" in calc.text
     assert "không phải số thuế bạn phải nộp" in calc.text

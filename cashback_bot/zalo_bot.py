@@ -403,13 +403,15 @@ class ZaloSender:
         external = self.store.external_id(int(chat_id))
         if external is None:
             raise TelegramDeliveryError("permanent")
-        keyboard, button_url = [], None
+        keyboard, link = [], None
         for row in (reply_markup or {}).get("inline_keyboard") or []:
             buttons = tuple((b["text"], b["callback_data"]) for b in row if b.get("callback_data"))
-            button_url = button_url or next((b["url"] for b in row if b.get("url")), None)
+            link = link or next((b for b in row if b.get("url")), None)
             if buttons:
                 keyboard.append(buttons)
-        reply = BotReply(html_text, button_url=button_url, inline_keyboard=tuple(keyboard) or None)
+        # Nhãn nút link đi theo để Zalo dẫn link đúng nghĩa («🎟 Lưu mã…» không phải «Bấm link này để mua»).
+        reply = BotReply(html_text, button_url=link["url"] if link else None,
+                         button_label=link.get("text") if link else None, inline_keyboard=tuple(keyboard) or None)
         messages, menu = render(reply)
         for index, message in enumerate(messages):
             try:

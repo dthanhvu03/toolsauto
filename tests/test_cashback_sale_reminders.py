@@ -203,4 +203,6 @@ def test_man_admin_bat_nhac_link_va_zalo_gui_link_rieng(tmp_path):
     assert engagement.nudge_enabled(bot.repo)
     assert "Nhắc link chưa dùng: bật" in _callback(bot, ADMIN, "c:menu:hist").text
     messages, _menu = render(BotReply(link_nudge("Áo Polo Nam"), button_url="https://s.shopee.vn/x"))
-    assert "Bấm link ở tin dưới rồi đặt hàng" in messages[0].text and "https://s.shopee.vn/x" in messages[1].text
+    [message] = messages
+    assert "Áo Polo Nam" in message.text and "Bấm link này để mua" in message.text, "Zalo: thẻ và link chung một tin"
+    assert message.text.index("Bấm link này để mua") < message.text.index("https://s.shopee.vn/x")

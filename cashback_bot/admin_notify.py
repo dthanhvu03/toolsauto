@@ -130,28 +130,36 @@ def link_split_lines(link: sqlite3.Row, found: "policy_snapshot.LinkPolicy | Non
     capped = split and int(seller) + int(shopee) > quote.commission_vnd
     if capped and link["price_vnd"]:
         rate = quote.commission_vnd * 10_000 // int(link["price_vnd"])
-    rows: list[tuple[str, int, bool]] = [(f"HH ước tính{' ' + _pct(rate) if rate else ''}", quote.commission_vnd, False)]
-    if split:
-        rows.append(("· từ shop", int(seller), False))
-        rows.append((f"· từ Shopee{' Xtra' if link['is_xtra'] else ''}", quote.commission_vnd - int(seller), False))
     v12 = policy.pricing_version == V12
-    rows.append((f"Dự phòng phí {_pct(policy.fee_bps)}", quote.fee_reserve_vnd, True))
-    rows.append((f"Dự phòng thuế {_pct(policy.tax_reserve_bps)}", quote.tax_reserve_vnd, True))
+    # Bảng chữ đều theo thứ tự chủ bot đọc (2026-10-31): Giá → Hoa hồng → Phí/Thuế → Khách nhận → Biên lãi.
+    # None: dòng kẻ ngăn nhóm.
+    rows: list[tuple[str, int, bool] | None] = []
+    if link["price_vnd"]:
+        rows += [("Giá tham khảo", int(link["price_vnd"]), False), None]
+    rows.append((f"Hoa hồng{' ' + _pct(rate) if rate else ''}", quote.commission_vnd, False))
+    if split:
+        rows.append(("  · từ shop", int(seller), False))
+        rows.append((f"  · từ Shopee{' Xtra' if link['is_xtra'] else ''}", quote.commission_vnd - int(seller), False))
+    rows.append((f"Phí {_pct(policy.fee_bps)}", quote.fee_reserve_vnd, True))
+    rows.append((f"Thuế {_pct(policy.tax_reserve_bps)}", quote.tax_reserve_vnd, True))
     if quote.other_reserve_vnd:
         rows.append(("Dự phòng khác", quote.other_reserve_vnd, True))
+    rows.append(None)
     if v12 and quote.distributable_vnd is not None:
         rows.append(("Quỹ chia", quote.distributable_vnd, False))
-    rows.append((f"Phần khách {_pct(policy.share_bps)}{' quỹ' if v12 else ' HH'}", quote.cashback_vnd, False))
-    rows.append(("Biên", quote.remainder_vnd, False))
-    cells = [("-" if minus and value else "") + f"{value:,}".replace(",", ".") for _label, value, minus in rows]
-    label_w = max(len(label) for label, _v, _m in rows)
-    num_w = max(len(cell) for cell in cells)
-    table = [f"{label.ljust(label_w)} {cell.rjust(num_w)}" for (label, _v, _m), cell in zip(rows, cells)]
+    rows.append((f"Khách nhận {_pct(policy.share_bps)}{' quỹ' if v12 else ' HH'}", quote.cashback_vnd, False))
+    rows.append(("Biên lãi", quote.remainder_vnd, False))
+    filled = [row for row in rows if row is not None]
+    cells = {id(row): ("-" if row[2] and row[1] else "") + f"{row[1]:,}".replace(",", ".") for row in filled}
+    label_w = max(len(row[0]) for row in filled)
+    num_w = max(len(cell) for cell in cells.values())
+    table = ["─" * (label_w + 1 + num_w) if row is None else f"{row[0].ljust(label_w)} {cells[id(row)].rjust(num_w)}"
+             for row in rows]
     basis = "V1.2: chia trên quỹ sau dự phòng" if v12 else "V1.1: phần khách tính trên HH gốc, biên chịu dự phòng"
     lines = [
         "<pre>" + html.escape("\n".join(table)) + "</pre>",
-        f"<i>{basis}. Ước tính theo giá tham khảo, chốt theo chính sách của link. "
-        "Biên = HH − phần khách − dự phòng.</i>",
+        f"<i>Đơn vị: đồng. {basis}. Phí, thuế là dự phòng bot tự đặt. Ước tính theo giá tham khảo, chốt theo "
+        "chính sách của link. Biên lãi = hoa hồng − khách nhận − dự phòng.</i>",
     ]
     if capped:
         lines.append(f"<i>AddLiveTag báo Shopee Comm {format_vnd(int(shopee))}; bot chỉ tính tối đa "
@@ -216,7 +224,8 @@ def _orders_table(orders, splits: dict) -> list[str]:
 
     splits: dòng cashback_entries theo conversion_id; chưa có sổ thì cột chia tiền để "-".
     """
-    headers = ("#", "Trả", "HH", "Khách", "Phí+T", "Admin")
+    # Cùng thứ tự với bảng link (2026-10-31): Giá (khách trả) → Hoa hồng → Phí/Thuế → Khách nhận → Biên lãi.
+    headers = ("#", "Giá", "HH", "Phí/T", "Khách", "Biên")
     rows: list[tuple[str, ...]] = []
     icons: list[str] = []
     names: list[str] = []
@@ -231,7 +240,7 @@ def _orders_table(orders, splits: dict) -> list[str]:
             cashback = int(split["cashback_vnd"])
             costs = int(split["fee_vnd"]) + int(split["tax_vnd"])
             keep = int(order.commission_vnd) - cashback - costs
-        values = (order.gmv_vnd, order.commission_vnd, cashback, costs, keep)
+        values = (order.gmv_vnd, order.commission_vnd, costs, cashback, keep)
         if not cancelled:
             total = [t + (v or 0) for t, v in zip(total, values)]
         rows.append((str(index), *(_num(v) for v in values)))
@@ -250,7 +259,8 @@ def _orders_table(orders, splits: dict) -> list[str]:
     table = [fmt(headers) + " TT"] + [fmt(row) + " " + icon for row, icon in zip(rows, icons)]
     if footer:
         table += ["─" * len(fmt(footer)), fmt(footer)]
-    return ["<pre>" + html.escape("\n".join(table)) + "</pre>", *names, "<i>Đơn vị: đồng · Phí+T = phí + dự phòng thuế · Σ không tính đơn huỷ</i>"]
+    return ["<pre>" + html.escape("\n".join(table)) + "</pre>", *names, "<i>Đơn vị: đồng · Giá = khách trả · HH = hoa hồng · Phí/T = dự phòng phí + thuế · "
+            "Biên = biên lãi · Σ không tính đơn huỷ</i>"]
 
 
 @dataclass

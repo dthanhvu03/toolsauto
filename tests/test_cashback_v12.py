@@ -21,6 +21,7 @@ from cashback_bot.calculator import (
     resolve_gross,
     sub_id_matches,
 )
+from cashback_bot.messages import tip_reply
 from cashback_bot.money import estimated_cashback
 from cashback_bot.service import CashbackService
 from tests.test_cashback_bot import NOW, FakeClient, payload, repo, service, settings
@@ -228,7 +229,7 @@ def test_policy_v12_chi_bat_khi_co_cot(tmp_path):
     reply = CashbackService(turned_on, store, FakeClient(payload())).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=2, now=NOW
     )
-    assert "sau dự phòng phí và thuế" in reply.text
+    assert "sau dự phòng phí và thuế" in tip_reply(reply.inline_keyboard[-1][0][1]).text
     assert "<b>12.462đ</b>" in reply.text
     assert "chắc chắn" not in reply.text.lower()
     assert "số dư" not in reply.text.lower()

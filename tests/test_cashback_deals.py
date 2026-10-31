@@ -115,7 +115,7 @@ def test_khach_chon_danh_muc_va_bam_mon_thi_ra_the_link(tmp_path):
     update = {"callback_query": {"id": "q-deal", "from": {"id": USER}, "data": "u:dl:9:8",
                                  "message": {"message_id": 5, "chat": {"id": USER, "type": "private"}}}}
     _chat, card = bot.handle_update(update)
-    assert "Đã tạo link hoàn tiền" in card.text and card.button_url and card.edit_message_id is None, \
+    assert "Hoàn dự kiến" in card.text and card.button_url and card.edit_message_id is None, \
         "thẻ link là tin mới, không sửa đè danh sách deal"
 
 

@@ -32,18 +32,13 @@ HOME_WALLET = (
 START_MESSAGE = HOME
 HELP = HOME
 PAGE_KEYBOARD: Keyboard = ((("◀️ Trang chủ", "u:p:home"),),)
-TIP_KEYBOARD: Keyboard = ((("🛡️ Lưu ý trước khi mua", "u:tip"),),)
+# Nút Lưu ý trên thẻ link: u:tip:<cờ> (2 = V1.2, t = TikTok, c = món giá cao) để trang Lưu ý nói đúng link đó.
+TIP_LABEL = "🛡️ Lưu ý trước khi mua"
+TIP = "u:tip"
+TIP_KEYBOARD: Keyboard = (((TIP_LABEL, TIP),),)
 GUIDE_KEYBOARD: Keyboard = ((("📖 Cách dùng", "u:p:guide"),),)
 # Trang mẹo «Để được ghi nhận» luôn mở được, kể cả khi /dieukien đã chuyển sang điều khoản theo phiên bản.
 TIPS_KEYBOARD: Keyboard = ((("📋 Điều khoản", "u:p:rules"),), (("◀️ Trang chủ", "u:p:home"),))
-# Popup answerCallbackQuery tối đa 200 ký tự. PLAN-107 B2: các điều kiện rời thẻ link (chỉ còn giỏ + mua thẳng) về đây.
-TIP_ALERT = (
-    "Để được hoàn:\n"
-    "• Mua đúng món này, qua link bot.\n"
-    "• Không bấm sang quảng cáo, livestream, link khác.\n"
-    "• Mỗi lần mua, lấy link mới từ bot.\n"
-    "Bot không thu tiền. Sàn báo đơn cho bot sau khoảng 1 ngày."
-)
 CLOSED_ALERT = "Tài khoản này chưa được mở. Bot đang mở thử cho một số tài khoản."
 STALE_BUTTON = "Nút này không còn hiệu lực."
 # Hiện ở màn "What can this bot do?" trước khi bấm Start. Tối đa 512 và 120 ký tự.
@@ -211,19 +206,23 @@ def source_text(text: str, conversion_id: str | None) -> str:
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
-# Thẻ link PLAN-107 B2 (chủ bot 2026-10-31): khách chỉ đọc số hoàn và nút mua. Trên thẻ còn hai lỗi mất hoàn hay gặp
-# nhất (mua thẳng trong app, món có sẵn trong giỏ) và voucher; các điều kiện khác ở popup 🛡️ Lưu ý (TIP_ALERT).
-BUY_RULE = "⚠️ Mua thẳng trong app sẽ không được hoàn."
-TIKTOK_BUY_RULE = "⚠️ Mua thẳng trong app TikTok sẽ không được hoàn."
-CART_RULE = "🛒 Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
-# Voucher ở trên thẻ chứ không ở popup: nhận số thấp hơn mà không biết vì sao thì khách tưởng bị bớt (2026-10-27).
-VOUCHER_RULE = "🎟 Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo."
-TIKTOK_VOUCHER_RULE = "🎟 Dùng voucher hoặc mua lúc giảm giá thì số hoàn giảm theo."
+# Trang 🛡️ Lưu ý (chủ bot 2026-10-31: thẻ link chỉ còn tên, giá, số hoàn, nút mua; mọi lưu ý gom về đây). Gửi thành tin
+# riêng, không đè thẻ link: popup Telegram tối đa 200 ký tự, không đủ chỗ.
+BUY_RULE = "• Bấm nút <b>🛒 Mua</b> của bot rồi đặt hàng. Mua thẳng trong app sẽ không được hoàn."
+CART_RULE = "• Món đã có trong giỏ: xoá đi rồi mở lại bằng link của bot."
+ITEM_RULE = "• Mua đúng món trong link. Không bấm sang quảng cáo, livestream hay link khác trước khi đặt."
+# Voucher: nhận số thấp hơn mà không biết vì sao thì khách tưởng bị bớt (2026-10-27).
+VOUCHER_RULE = "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo."
+TIKTOK_VOUCHER_RULE = "• Dùng voucher hoặc mua lúc giảm giá thì số hoàn giảm theo."
 # AddLiveTag gắn cờ isCapped: phần Shopee trả đã chạm trần mỗi lần thanh toán (tài khoản chủ bot: checkout_cap 40.000đ
 # trong dữ liệu đơn). Gộp món khác / mua 2 cái cùng lần thanh toán thì phần Shopee không tăng. Không ghi số: trần đổi
 # theo tài khoản và thời gian (chủ bot duyệt 2026-10-27).
-CAPPED_RULE = ("💎 <b>Món giá cao:</b> Shopee giới hạn phần hoàn mỗi lần thanh toán. "
+CAPPED_RULE = ("• <b>Món giá cao:</b> Shopee giới hạn phần hoàn mỗi lần thanh toán. "
                "<b>Thanh toán riêng món này, mỗi lần 1 cái.</b>")
+ORDER_DELAY_RULE = "• Sàn báo đơn cho bot sau khoảng 1 ngày. Bot nhắn bạn khi thấy đơn."
+# Câu trấn an «link này có lừa không» (khách quen của chủ bot từng sợ lừa đảo).
+TRUST_LINE = "🔒 Link mở thẳng Shopee. Bạn thanh toán trên Shopee như bình thường, bot không thu tiền gì."
+TIKTOK_TRUST_LINE = "🔒 Link mở thẳng TikTok Shop. Bạn thanh toán trên TikTok như bình thường, bot không thu tiền gì."
 _NOTE_V11 = (
     "Số hoàn tính theo giá tham khảo. "
     "Chỉ được hoàn khi Shopee xác nhận đơn hợp lệ. Chưa phải tiền có thể rút."
@@ -360,23 +359,38 @@ def buyer_name(name: str) -> str:
 EXTRA_NOTE = " · <i>có thể cao hơn</i>"
 
 
-def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, note: str,
+def _tip_data(v12: bool, tiktok: bool, capped: bool) -> str:
+    flags = ("2" if v12 else "") + ("t" if tiktok else "") + ("c" if capped else "")
+    return f"{TIP}:{flags}" if flags else TIP
+
+
+def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, v12: bool = False,
                  tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    """Thẻ link: sản phẩm → số hoàn (đậm) → ba dòng điều kiện → chữ nhỏ → lời bấm nút ngay trên nút."""
+    """Thẻ link 4 dòng: tên, giá tham khảo, số hoàn, lời bấm nút ngay trên nút. Lưu ý ở nút 🛡️ (tip_reply)."""
     safe_name = html.escape(buyer_name(name))
-    title = "✅ <b>Đã tạo link hoàn tiền</b>" if cashback_vnd > 0 else "✅ <b>Đã tạo link mua</b>"
+    amount = (f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>" + (EXTRA_NOTE if extra_vnd > 0 else "")
+              if cashback_vnd > 0 else "💰 Món này hiện không có tiền hoàn.")
     lines = [
-        title + (" · 🎵 TikTok Shop" if tiktok else ""),
-        f"🛍️ {safe_name} · giá tham khảo {format_vnd(price_vnd)}",
-        "",
-        f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>" + (EXTRA_NOTE if extra_vnd > 0 else ""),
+        f"🛍️ <b>{safe_name}</b>" + (" · 🎵 TikTok Shop" if tiktok else ""),
+        f"🏷️ Giá tham khảo: {format_vnd(price_vnd)}",
+        amount,
+        TIKTOK_BUY_HINT if tiktok else BUY_HINT,
     ]
-    if cashback_vnd > 0:
-        lines += [TIKTOK_BUY_RULE if tiktok else BUY_RULE, CART_RULE, TIKTOK_VOUCHER_RULE if tiktok else VOUCHER_RULE]
-        lines += [CAPPED_RULE] if capped else []
-    lines += ["", f"ⓘ <i>{note}</i>", TIKTOK_BUY_HINT if tiktok else BUY_HINT]
-    return BotReply(text="\n".join(lines), button_url=affiliate_url, inline_keyboard=TIP_KEYBOARD,
+    keyboard = (((TIP_LABEL, _tip_data(v12, tiktok, capped and cashback_vnd > 0)),),) if cashback_vnd > 0 else None
+    return BotReply(text="\n".join(lines), button_url=affiliate_url, inline_keyboard=keyboard,
                     button_label=TIKTOK_BUY_BUTTON if tiktok else None)
+
+
+def tip_reply(data: str) -> BotReply:
+    """Trang 🛡️ Lưu ý của một thẻ link (cờ trong callback u:tip:<cờ>). Thẻ cũ «u:tip» không cờ: bản Shopee V1.1."""
+    flags = data.removeprefix(TIP).removeprefix(":")
+    tiktok = "t" in flags
+    note = (_NOTE_TIKTOK_V12 if tiktok else _NOTE_V12) if "2" in flags else (_NOTE_TIKTOK_V11 if tiktok else _NOTE_V11)
+    lines = ["🛡️ <b>Lưu ý trước khi mua</b>", "", BUY_RULE, CART_RULE, ITEM_RULE,
+             TIKTOK_VOUCHER_RULE if tiktok else VOUCHER_RULE]
+    lines += [CAPPED_RULE] if "c" in flags else []
+    lines += [ORDER_DELAY_RULE, "", TIKTOK_TRUST_LINE if tiktok else TRUST_LINE, "", f"ⓘ <i>{note}</i>"]
+    return BotReply("\n".join(lines))
 
 
 # Khi admin mở TikTok Shop cho khách (🎵 chế độ «all»), các trang chung nhắc cả hai sàn. Chưa mở thì giữ nguyên chữ
@@ -430,14 +444,12 @@ def food_link_reply(affiliate_url: str | None = None) -> BotReply:
 
 def render_success(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, tiktok: bool = False,
                    extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V11 if tiktok else _NOTE_V11, tiktok,
-                        extra_vnd, capped)
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, False, tiktok, extra_vnd, capped)
 
 
 def render_success_v12(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str,
                        tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, _NOTE_TIKTOK_V12 if tiktok else _NOTE_V12, tiktok,
-                        extra_vnd, capped)
+    return _render_card(name, price_vnd, cashback_vnd, affiliate_url, True, tiktok, extra_vnd, capped)
 
 
 # --- Ví hoàn tiền (PLAN-066) -------------------------------------------------

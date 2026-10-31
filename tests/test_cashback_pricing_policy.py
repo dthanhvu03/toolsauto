@@ -13,7 +13,7 @@ import pytest
 from cashback_bot import admin_policy, order_notify, service as service_module
 from cashback_bot.admin_reserve import effective_from, resolve_policy, stamp
 from cashback_bot.calculator import CalculationError
-from cashback_bot.messages import DIEUKIEN, HOME, HUONGDAN, TIP_ALERT, how_to_calc, order_new_notice
+from cashback_bot.messages import DIEUKIEN, HOME, HUONGDAN, how_to_calc, order_new_notice, tip_reply
 from cashback_bot.pricing import V11, V12, PolicyResolution, cashback_for, quote_displayed_vnd
 from cashback_bot.ranks import MEMBERSHIP_CUTOVER
 from cashback_bot.wallet import PayoutBlocked
@@ -738,7 +738,7 @@ def test_mo_phong_cho_nhap_het_han_hoac_bam_nut_khac(tmp_path):
     assert panel.consume_text(ADMIN, "150000", NOW) is None
     panel.handle_callback(ADMIN, "c:sim:input", "private", NOW)
     card = bot.handle_text(ADMIN, "owner", LINK, update_id=12, now=NOW)
-    assert "Đã tạo link" in card.text, "dán link Shopee lúc đang chờ: tạo link như thường"
+    assert "Giá tham khảo" in card.text, "dán link Shopee lúc đang chờ: tạo link như thường"
     assert panel.consume_text(ADMIN, "150000", NOW) is None
     assert panel.consume_text(BUYER, "150000", NOW) is None
 
@@ -865,11 +865,16 @@ def test_bao_admin_link_v12_co_bang_chia_dung_snapshot(tmp_path):
     head, details = html.split("<blockquote expandable>")
     flat = " ".join(head.split())
     assert "💰 Giá 339.000đ · Hoàn <b>15.842đ</b>" in head
-    for line in ("HH ước tính 7,5% 25.425", "· từ shop 16.950", "· từ Shopee Xtra 8.475",
-        "Dự phòng phí 0,98% -250", "Dự phòng thuế 10% -2.543", "Quỹ chia 22.632",
-        "Phần khách 70% quỹ 15.842", "Biên 6.790",
+    for line in ("Giá tham khảo 339.000", "Hoa hồng 7,5% 25.425", "· từ shop 16.950", "· từ Shopee Xtra 8.475",
+        "Phí 0,98% -250", "Thuế 10% -2.543", "Quỹ chia 22.632",
+        "Khách nhận 70% quỹ 15.842", "Biên lãi 6.790",
     ):
         assert line in flat, line
+    # Bảng chữ đều: mọi dòng cùng độ rộng, số căn phải, dòng kẻ ngăn nhóm.
+    table = head.split("<pre>")[1].split("</pre>")[0].split("\n")
+    assert len({len(row) for row in table}) == 1 and table[1] == "─" * len(table[0]), table
+    labels = [row.split("  ")[0] for row in table if not row.startswith("─")]
+    assert labels[0] == "Giá tham khảo" and labels[-2:] == ["Khách nhận 70% quỹ", "Biên lãi"]
     assert "V1.2: chia trên quỹ sau dự phòng" in head
     assert "Chính sách <code>v1.2-reserve-2026-10-23</code>" in details
 
@@ -878,9 +883,9 @@ def test_bao_admin_link_v11_admin_chiu_du_phong(tmp_path):
     bot = _bot(tmp_path, v12=False)
     bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
     flat = " ".join(_link_notice(tmp_path, bot, 1).split())
-    assert "HH ước tính" in flat and "Phần khách 70% HH 14.000" in flat
-    assert "Dự phòng phí 0,98% -196" in flat and "Dự phòng thuế 10% -2.000" in flat
-    assert "Biên 3.804" in flat
+    assert "Hoa hồng" in flat and "Khách nhận 70% HH 14.000" in flat
+    assert "Phí 0,98% -196" in flat and "Thuế 10% -2.000" in flat
+    assert "Biên lãi 3.804" in flat
     assert "V1.1: phần khách tính trên HH gốc, biên chịu dự phòng" in flat
     assert "Quỹ chia" not in flat
 
@@ -908,13 +913,12 @@ def test_shopee_comm_tren_2_5_chi_ghi_co_the_duoc_them(tmp_path):
     expected = cashback_for(11_875, policy).cashback_vnd
     assert f"<b>{expected:,}đ</b> · <i>có thể cao hơn</i>".replace(",", ".") in card.text
     assert _rows(tmp_path, "SELECT estimated_commission, shopee_commission_vnd FROM link_requests")[0] == (11_875, 38_000)
-    # Bố cục thẻ (PLAN-107 B2): số hoàn «có thể cao hơn» → ba dòng điều kiện → chữ nhỏ → lời bấm nút cuối, sát nút.
-    order = ["Hoàn dự kiến", "có thể cao hơn", "⚠️ Mua thẳng", "🛒 Món đã có trong giỏ", "🎟 Dùng voucher", "ⓘ <i>",
-             "👉 Bấm"]
+    # Thẻ 4 dòng (chủ bot 2026-10-31): tên → giá → số hoàn «có thể cao hơn» → lời bấm nút cuối, sát nút.
+    order = ["🛍️", "Giá tham khảo", "Hoàn dự kiến", "có thể cao hơn", "👉 Bấm"]
     positions = [card.text.index(part) for part in order]
     assert positions == sorted(positions) and card.text.endswith("rồi đặt hàng.")
     flat = " ".join(_link_notice(tmp_path, bot, 1).split())
-    assert "HH ước tính 2,5% 11.875" in flat and "· từ Shopee 11.875" in flat
+    assert "Hoa hồng 2,5% 11.875" in flat and "· từ Shopee 11.875" in flat
     assert "AddLiveTag báo Shopee Comm 38.000đ; bot chỉ tính tối đa 2,5%" in flat
 
 
@@ -930,19 +934,19 @@ def test_xtra_va_shopee_2_5_giu_nguyen(tmp_path):
     assert "AddLiveTag báo" not in _link_notice(tmp_path, bot, 1)
 
 
-def test_the_link_gon_voucher_tren_the_dieu_kien_khac_o_luu_y(tmp_path):
+def test_the_link_4_dong_dieu_kien_o_trang_luu_y(tmp_path):
     bot = _bot(tmp_path)
     bot.client.payload["productInfo"].update(
         price=475_000, commission=38_000, sellerComFinal=0, shopeeComFinal=38_000, totalRatePercent="8", isXtra=False
     )
-    card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text
+    reply = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    card = reply.text
     assert "có thể cao hơn" in card and "thêm tới" not in card and "chắc chắn" not in card
-    assert "🎟 Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo." in card
-    assert card.count("voucher") == 1, "voucher chỉ nói một lần"
-    assert "Để được hoàn" not in card and "livestream" not in card, "điều kiện khác ở popup 🛡️ Lưu ý"
-    text_lines = [line for line in card.split("\n") if line]
-    assert len(text_lines) <= 8, text_lines
-    assert "livestream" in TIP_ALERT and "khoảng 1 ngày" in TIP_ALERT and len(TIP_ALERT) <= 200
+    assert "voucher" not in card and "livestream" not in card and "ⓘ" not in card, "lưu ý ở trang 🛡️"
+    assert len(card.split("\n")) == 4
+    tip = tip_reply(reply.inline_keyboard[-1][0][1]).text
+    assert "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo." in tip and tip.count("voucher") == 1
+    assert "livestream" in tip and "khoảng 1 ngày" in tip and "bot không thu tiền gì" in tip
 
 
 def _order_values(link_id: int, *, item_id: int, paid: int) -> dict:
@@ -985,8 +989,9 @@ def test_mon_bi_shopee_gioi_han_moi_lan_thanh_toan_co_dong_tach_don(tmp_path):
         price=5_090_000, commission=141_800, sellerComFinal=101_800, shopeeComFinal=40_000, totalRatePercent="4.5",
         isXtra=True, isCapped=True,
     )
-    card = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text
-    assert "<b>Món giá cao:</b> Shopee giới hạn phần hoàn mỗi lần thanh toán" in card and "40.000" not in card
-    assert card.index("Món giá cao") > card.index("Dùng voucher") and card.index("Món giá cao") < card.index("ⓘ <i>")
-    plain = _bot(tmp_path / "b")
-    assert "Món giá cao" not in plain.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW).text
+    reply = bot.handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    tip = tip_reply(reply.inline_keyboard[-1][0][1]).text
+    assert "<b>Món giá cao:</b> Shopee giới hạn phần hoàn mỗi lần thanh toán" in tip and "40.000" not in tip
+    assert tip.index("Món giá cao") > tip.index("Dùng voucher") and tip.index("Món giá cao") < tip.index("ⓘ <i>")
+    plain = _bot(tmp_path / "b").handle_text(BUYER, "buyer", LINK, update_id=1, now=NOW)
+    assert "Món giá cao" not in tip_reply(plain.inline_keyboard[-1][0][1]).text

@@ -3,7 +3,8 @@
 Zalo không có nút và bỏ link trong thẻ <a> (đã thử thật 2026-10-24), nên:
 - chữ gửi dạng thuần kèm `text_styles` (đậm / nghiêng / gạch chân / gạch ngang), không gửi HTML: tên sản phẩm có
   ký tự & < > không bị hiểu nhầm;
-- <a href="URL">nhãn</a> thành «nhãn: URL»; nút Mua thành một tin riêng ngay sau thẻ báo giá (URL trần, bấm được);
+- <a href="URL">nhãn</a> thành «nhãn: URL»; nút Mua (nút link) thành dòng dẫn + URL trần ở cuối cùng tin
+  (chủ bot 2026-10-31: một tin, không tách đôi);
 - nút u:* thành danh sách «1 · …»; khách gõ số thì tiến trình Zalo chạy đúng nút đó;
 - câu chữ dùng chung với Telegram: «/hotro», «bấm nút…» đổi sang lệnh gõ tắt của Zalo (PLAN-083);
 - tin dài cắt theo dòng, mỗi tin tối đa 2000 ký tự.
@@ -15,7 +16,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-from cashback_bot.messages import FOOD_BUTTON, HUONGDAN, TIKTOK_BUY_BUTTON, BotReply, with_tiktok
+from cashback_bot.messages import BUY_BUTTON, FOOD_BUTTON, HUONGDAN, TIKTOK_BUY_BUTTON, BotReply, with_tiktok
 
 MAX_LEN = 2000
 STYLE_CODES = {"b": "b", "strong": "b", "i": "i", "em": "i", "u": "u", "ins": "u", "s": "s", "del": "s", "strike": "s"}
@@ -50,16 +51,17 @@ TIKTOK_BUY_LEAD = "👉 Bấm link này để mua. Mua thẳng trong app TikTok 
 FOOD_LEAD = "👉 Link đặt món ShopeeFood (đơn Food chưa được hoàn tiền):"
 # Câu chữ dùng chung với Telegram nhắc tới nút bấm. Test canh câu gốc còn nằm trong messages.py.
 PHRASES = (
-    ("👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng.", "👉 Bấm link ở tin dưới rồi đặt hàng."),
+    # Dòng dẫn + URL đã ở cuối cùng tin: bỏ câu bấm nút của Telegram.
+    ("👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng.", ""),
     # Rà soát 2026-10-26: câu «bấm» của Telegram còn lọt sang Zalo.
     ("Bấm vào đơn để xem tiến trình.", "Gõ số của đơn để xem tiến trình."),
     ("Nếu bạn thấy chưa đúng, bấm 📩 Yêu cầu kiểm tra.", "Nếu bạn thấy chưa đúng, chọn 📩 Yêu cầu kiểm tra."),
     ("Nút này không còn hiệu lực.", "Lựa chọn này đã hết hạn. Gõ menu để mở trang chủ."),
-    ("👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng.", "👉 Bấm link ở tin dưới rồi đặt hàng."),
+    ("👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng.", ""),
     ("Bấm nút dưới hoặc gõ /huongdan", "Gõ /huongdan"),
     ("nút <b>🛒 Mua trên Shopee</b>", "link <b>🛒 Mua trên Shopee</b>"),
     ("Bấm nút đó", "Bấm link đó"),
-    ("Bạn vẫn có thể đặt món qua nút dưới nếu muốn.", "Bạn vẫn có thể đặt món qua link ở tin dưới nếu muốn."),
+    ("Bạn vẫn có thể đặt món qua nút dưới nếu muốn.", "Bạn vẫn có thể đặt món qua link bên dưới nếu muốn."),
     ("Bấm chọn ngân hàng của bạn.", "Gõ số để chọn ngân hàng của bạn."),
     ("Bạn bấm chọn ngân hàng trước", "Bạn chọn ngân hàng trước"),
     ("Bấm Tài khoản nhận tiền để khai", "Chọn Tài khoản nhận tiền để khai"),
@@ -250,11 +252,7 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         body = GUIDE
     elif body == with_tiktok(HUONGDAN):
         body = with_tiktok(GUIDE)  # TikTok đã mở cho khách: hướng dẫn Zalo cũng nhắc cả hai sàn
-    card_text, card_styles = flatten(zalo_wording(body))
-    if reply.button_url:
-        text, styles = "", []
-    else:
-        text, styles = card_text, card_styles
+    text, styles = flatten(re.sub(r"\n{3,}", "\n\n", zalo_wording(body)).strip())
 
     def add(piece: str, bold: bool = False) -> None:
         nonlocal text
@@ -263,8 +261,12 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
         text += piece
 
     if reply.button_url:
-        leads = {TIKTOK_BUY_BUTTON: TIKTOK_BUY_LEAD, FOOD_BUTTON: FOOD_LEAD}
-        add(leads.get(reply.button_label, BUY_LEAD), bold=True)
+        leads = {None: BUY_LEAD, BUY_BUTTON: BUY_LEAD, TIKTOK_BUY_BUTTON: TIKTOK_BUY_LEAD, FOOD_BUTTON: FOOD_LEAD}
+        # Nút link khác (🎟 Lưu mã…, tin báo mã / săn sale qua hàng đợi): dẫn bằng chính nhãn nút.
+        lead = leads.get(reply.button_label) or f"👉 {reply.button_label.rstrip(' ↗')}:"
+        if text:
+            add("\n\n")
+        add(lead, bold=True)
         add(f"\n{reply.button_url}")
     choices = menu_choices(reply)
     if choices:
@@ -286,7 +288,4 @@ def render(reply: BotReply) -> tuple[list[ZaloMessage], tuple[str, ...]]:
                 add(f"{name.removeprefix('✅ ')} ✅", bold=True)
             else:
                 add(f"\n{number} · {name.removeprefix('⬜ ')}")
-    messages = split(text, sorted(styles))
-    if reply.button_url:
-        messages = split(card_text, sorted(card_styles)) + messages
-    return messages, tuple(data for _name, data in choices)
+    return split(text, sorted(styles)), tuple(data for _name, data in choices)

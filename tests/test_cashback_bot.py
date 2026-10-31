@@ -16,7 +16,7 @@ from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.affiliate import build_an_redir, build_food_redir, is_valid_sub_id
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import FOOD_BUTTON, STALE
+from cashback_bot.messages import FOOD_BUTTON, STALE, tip_reply
 from cashback_bot.money import estimated_cashback
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.service import CashbackService
@@ -133,16 +133,17 @@ def test_ac01_link_hop_le_va_cashback_70(tmp_path):
         111, "buyer", "mua https://shopee.vn/product/9/8 nhe", update_id=1, now=NOW
     )
     assert "Áo Polo Nam" in reply.text
-    assert "giá tham khảo 250.000đ" in reply.text
-    assert "Mua thẳng trong app" in reply.text and "xoá đi rồi mở lại" in reply.text, "nhắc mua qua link của bot"
+    assert "Giá tham khảo: 250.000đ" in reply.text
+    tip = tip_reply(reply.inline_keyboard[-1][0][1]).text
+    assert "Mua thẳng trong app" in tip and "xoá đi rồi mở lại" in tip, "nhắc mua qua link của bot (trang 🛡️ Lưu ý)"
     assert "20.000đ" not in reply.text
-    assert "✅ <b>Đã tạo link hoàn tiền</b>" in reply.text
+    assert "💰 <b>Hoàn dự kiến: khoảng</b>" in reply.text
     assert "💰 <b>Hoàn dự kiến:" in reply.text
     assert "<b>14.000đ</b>" in reply.text
     assert "70%" not in reply.text
     assert "an_redir" not in reply.text
-    assert "Shopee xác nhận đơn hợp lệ" in reply.text
-    assert "Chưa phải tiền có thể rút." in reply.text
+    assert "Shopee xác nhận đơn hợp lệ" in tip
+    assert "Chưa phải tiền có thể rút." in tip
     assert reply.markup()["inline_keyboard"][0][0]["text"] == "🛒 Mua trên Shopee"
     query = parse_qs(urlparse(reply.button_url).query)
     sub_id = query["sub_id"][0]
@@ -254,10 +255,10 @@ def test_cashback_bang_0_hien_thi_trung_thuc(tmp_path):
     reply = service(tmp_path, FakeClient(no_commission)).handle_text(
         111, "buyer", "https://shopee.vn/product/9/8", update_id=12, now=NOW
     )
-    assert "💰 <b>Hoàn dự kiến:" in reply.text
-    assert "<b>0đ</b>" in reply.text
-    assert "Chưa phải tiền có thể rút." in reply.text
+    assert "💰 Món này hiện không có tiền hoàn." in reply.text
     assert reply.button_url is not None
+    assert not any(data.startswith("u:tip") for row in reply.inline_keyboard or () for _l, data in row), \
+        "không có hoàn: không có trang lưu ý"
 
 
 def test_thieu_cau_hinh_khong_lo_secret():
@@ -625,7 +626,7 @@ def test_gui_tin_that_bai_khong_danh_dau_da_giao(tmp_path, caplog):
             if self.attempts == 1:
                 raise requests.ConnectionError("down")
             assert "an_redir" not in html
-            assert "Đã tạo link hoàn tiền" in html
+            assert "Hoàn dự kiến" in html
             assert reply_markup["inline_keyboard"][0][0]["url"].startswith("https://s.shopee.vn/an_redir?")
             assert chat_id == 111
 
@@ -814,10 +815,12 @@ def test_khuon_chu_khach_plan_060(tmp_path):
         assert text.count("<b>") == text.count("</b>")
     for text in cards:
         assert "hoa hồng" not in text
-        assert "Chưa phải tiền có thể rút." in text
+        assert len(text.split("\n")) == 4, "thẻ link 4 dòng (chủ bot 2026-10-31)"
+    for flags in ("u:tip", "u:tip:2"):
+        assert "Chưa phải tiền có thể rút." in tip_reply(flags).text
     zero = render_success("Áo Polo Nam", 250_000, 0, "https://s.shopee.vn/x").text
-    assert "Đã tạo link mua" in zero
-    assert "Đã tạo link hoàn tiền" not in zero
+    assert "không có tiền hoàn" in zero
+    assert "Hoàn dự kiến" not in zero
     assert "Mua thẳng trong app" not in zero, "không có hoàn thì không doạ mất hoàn"
 
 
@@ -866,7 +869,7 @@ def test_dan_lai_link_bot_da_gui_thi_doc_san_pham_goc(tmp_path):
     client = FakeClient(payload())
     bot = service(tmp_path, client)
     reply = bot.handle_text(111, "u", sent, update_id=9201, now=NOW)
-    assert "Đã tạo link hoàn tiền" in reply.text and client.targets[-1].item_id == 8
+    assert "Hoàn dự kiến" in reply.text and client.targets[-1].item_id == 8
     assert "sub_id=Ab12Cd34" not in reply.button_url, "link mới, sub_id mới"
 
 

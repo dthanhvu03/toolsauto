@@ -169,18 +169,18 @@ def test_08_15_xem_khong_phai_dong_y_va_khong_ghi_thay(tmp_path):
 def test_09_18_nguoi_dung_cu_khong_bi_ep_dong_y(tmp_path):
     bot = _bot(tmp_path)
     old = bot.handle_text(BUYER, "b", LINK, update_id=1, now=NOW)
-    assert "Đã tạo link" in old.text
+    assert "Giá tham khảo" in old.text
     _publish_v1(bot)
     assert bot.settings.terms_required is False
     new = bot.handle_text(BUYER, "b", LINK, update_id=2, now=NOW)
-    assert "Đã tạo link" in new.text, "cờ bắt buộc mặc định tắt"
+    assert "Giá tham khảo" in new.text, "cờ bắt buộc mặc định tắt"
     assert "Hỗ trợ" in bot.handle_text(BUYER, "b", "/hotro", update_id=3, now=NOW).text
     assert _rows(tmp_path, "SELECT COUNT(*) FROM customer_terms_acceptances") == [(0,)]
 
 
 def test_18_co_bat_buoc_chi_chan_tao_link_moi(tmp_path):
     bot = _bot(tmp_path, terms_required=True)
-    assert "Đã tạo link" in bot.handle_text(BUYER, "b", LINK, update_id=1, now=NOW).text, "chưa có bản công bố thì không chặn"
+    assert "Giá tham khảo" in bot.handle_text(BUYER, "b", LINK, update_id=1, now=NOW).text, "chưa có bản công bố thì không chặn"
     v1 = _publish_v1(bot)
     blocked = bot.handle_text(BUYER, "b", LINK, update_id=2, now=NOW)
     assert "Cần xác nhận điều khoản" in blocked.text
@@ -188,7 +188,7 @@ def test_18_co_bat_buoc_chi_chan_tao_link_moi(tmp_path):
     assert _rows(tmp_path, "SELECT COUNT(*) FROM link_requests WHERE link_status = 'created'") == [(1,)]
     assert "Hỗ trợ" in bot.handle_text(BUYER, "b", "/hotro", update_id=3, now=NOW).text
     _press(bot, BUYER, f"u:t:ok:{v1}")
-    assert "Đã tạo link" in bot.handle_text(BUYER, "b", LINK, update_id=4, now=NOW).text
+    assert "Giá tham khảo" in bot.handle_text(BUYER, "b", LINK, update_id=4, now=NOW).text
 
 
 def test_10_11_link_moi_ghi_phien_ban_dieu_khoan(tmp_path):
@@ -280,7 +280,7 @@ def test_20_21_24_mo_ticket_khong_can_don_va_khong_trung_khi_retry(tmp_path):
     assert "Đã nhận yêu cầu</b> #1" in created.text
     again = bot.handle_text(BUYER, "buyer", "Mua áo hôm 20/10 không thấy đơn", update_id=50, now=NOW)
     assert _rows(tmp_path, "SELECT COUNT(*) FROM support_tickets") == [(1,)]
-    assert "Đã tạo link" not in again.text
+    assert "Giá tham khảo" not in again.text
     ticket = _rows(tmp_path, "SELECT telegram_user_id, category, link_id, conversion_id, status FROM support_tickets")[0]
     assert ticket == (BUYER, "missing", None, None, "OPEN")
     notices = _rows(tmp_path, "SELECT chat_id, message_html FROM admin_notifications WHERE event_type = 'SUPPORT_TICKET'")
@@ -385,7 +385,7 @@ def test_cho_ho_tro_khong_chan_link_thuan_va_het_han(tmp_path):
     bot = _bot(tmp_path)
     _press(bot, BUYER, "u:h:c:other")
     card = bot.handle_text(BUYER, "b", LINK, update_id=90, now=NOW)
-    assert "Đã tạo link" in card.text, "chỉ dán link: tạo link như thường"
+    assert "Giá tham khảo" in card.text, "chỉ dán link: tạo link như thường"
     _press(bot, BUYER, "u:h:c:other")
     later = bot.handle_text(BUYER, "b", "câu hỏi", update_id=91, now=datetime.now(timezone.utc) + timedelta(minutes=16))
     assert "Mình là bot tự động" in later.text, "hết hạn chờ: tin chữ không thành ticket"
