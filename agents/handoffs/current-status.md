@@ -56,6 +56,15 @@
 
 ---
 
+## Phiên 2026-10-31 (relay-shopee-only) — Bài săn sale chỉ giữ link Shopee
+
+- Chủ bot (ảnh bài «SĂN MÃ SHOPEE LÚC 15H»): «lọc shopee thôi, mấy cái không phải link shopee em loại hết».
+- `sale_relay.post_html`: link không phải Shopee (cả `https://…` lẫn tên miền trần `nhomsansale.com/…`, `t.me/…`) bị bỏ cùng dòng; cụm (ngăn bởi dòng trống / «.») có link mà không còn link Shopee thì bỏ cả cụm; không còn «🔗 Link». Tên miền trần Shopee để nguyên chữ. Áp cho kênh + tin khách (Telegram, Zalo).
+- Kiểm tra: chạy lại bài thật id 474 (đọc DB mode=ro) ra đúng mong muốn; test mới theo mẫu bài; toàn bộ test cashback (chặn TCP) 1124 qua + 1 hỏng sẵn `test_b9`; ruff sạch.
+- **Next:** chủ bot restart (`systemctl restart cashback-bot cashback-zalo`); bài đã đăng không đổi.
+
+---
+
 ## Phiên 2026-10-31 (admin-router) — PLAN-110: tách UI admin, nối AdminRouter, panel.py 1.725 → 477 dòng (đã commit)
 
 - Chủ bot: «em làm bước 2 và bước 3 cho anh luôn nha». PLAN-110 (`agents/plans/active/`) ghi phạm vi + proof.
