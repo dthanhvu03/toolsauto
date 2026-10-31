@@ -25,6 +25,8 @@ export type ProjectRow = {
   has_video: boolean;
   /** biến thể A/B → dự án gốc */
   parent_project_id: number | null;
+  /** kỹ thuật đang dùng: nguồn, mẫu, lật, màu, cắt, phụ đề, lồng tiếng, hook, nhạc, logo… */
+  tags: string[];
 };
 
 export type ProjectsResponse = {
@@ -85,6 +87,7 @@ export type ProjectDetail = {
     approved_at: number | null;
     viral_material_id: number | null;
     editable: boolean;
+    tags: string[];
   };
   spec: ProjectSpec;
   asset: Asset | null;

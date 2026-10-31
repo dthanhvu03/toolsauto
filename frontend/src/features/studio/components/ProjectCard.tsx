@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { dangerBtnClass, ghostBtnClass } from "@/shared/ui/controls";
 import { projectPosterUrl } from "../api/studioApi";
 import { mmss, STATUS_LABEL, STATUS_STYLE } from "../lib/status";
+import { TechTags } from "./TechTags";
 import type { ProjectRow } from "../types/studio.types";
 
 export function ProjectCard({
@@ -48,6 +49,7 @@ export function ProjectCard({
         {p.parent_project_id ? (
           <span className="w-fit rounded bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700">Biến thể của #{p.parent_project_id}</span>
         ) : null}
+        <TechTags tags={p.tags ?? []} />
         <p className="line-clamp-3 text-xs text-slate-600">
           {p.status === "FAILED" ? <span className="text-red-700">{p.error}</span> : p.caption || <i className="text-slate-400">Chưa có caption</i>}
         </p>

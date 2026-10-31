@@ -86,6 +86,8 @@ def detail(db: Session, project_id: int) -> dict:
             "hashtags": project.hashtags or [], "duration": project.duration, "error": project.error,
             "rendered_at": project.rendered_at, "approved_at": project.approved_at,
             "viral_material_id": project.viral_material_id, "editable": project.status in EDITABLE,
+            "tags": store.techniques(project.spec, project.asset_id, origin=asset.origin if asset else None,
+                                     template=template.name if template else None),
         },
         "spec": spec.model_dump(mode="json"),
         "asset": asset_row(asset) if asset else None,

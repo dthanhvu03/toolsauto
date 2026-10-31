@@ -5,6 +5,7 @@ Dữ liệu dùng chung giữa các bước. Bước nào cũng được import 
 - ``template_for``: mẫu + tham số đang áp cho một quy trình (compose, dub, caption cùng đọc).
 - ``add_asset``: đưa một file vào kho (intake, dub, và về sau voice / visuals).
 - ``group_of`` / ``look``: nhóm biến thể A/B (gốc + các bản ``parent_project_id``) và thứ phân biệt chúng.
+- ``techniques``: nhãn các kỹ thuật một dự án đang dùng — đọc từ spec nên luôn khớp bản render.
 """
 from __future__ import annotations
 
@@ -117,4 +118,46 @@ def pending_variants(db: Session, root: StudioProject) -> int:
         )
         .count()
     )
+
+
+TEMPLATE_LABEL = {"basic": "Mẫu cơ bản", "reup_dub": "Mẫu lồng tiếng", "own_footage": "Mẫu tự quay", "ab_montage": "Mẫu montage"}
+
+
+def techniques(spec: dict, asset_id: int | None, *, origin: str | None = None, template: str | None = None) -> list[str]:
+    """
+    Nhãn ngắn cho thẻ / trình edit: nguồn, mẫu, rồi từng kỹ thuật có trong spec. Thứ tự cố định để các thẻ so được nhau.
+    ``template``: tên mẫu anh đặt (hoặc kind) — None = mẫu cơ bản.
+    """
+    clips = spec.get("clips") or []
+    main = [c for c in clips if c.get("asset") == asset_id]
+    others = [i for i, c in enumerate(clips) if c.get("asset") != asset_id]
+    first_main = next((i for i, c in enumerate(clips) if c.get("asset") == asset_id), 0)
+    tags = ["Sưu tầm" if origin == "reup" else "Của tôi", template or TEMPLATE_LABEL["basic"]]
+    if len(main) > 1:
+        tags.append(f"Cắt {len(main)} đoạn")
+    elif main and (float(main[0].get("start") or 0) > 0 or main[0].get("end") is not None):
+        tags.append("Cắt đầu / cuối")
+    flip, lut = look(spec, asset_id or 0)
+    if flip:
+        tags.append("Lật gương")
+    if lut:
+        tags.append(f"Màu {lut.removesuffix('.cube')}")
+    if any(c.get("audio") for c in main):
+        tags.append("Lồng tiếng")
+    sub = spec.get("subtitles") or {}
+    if sub.get("enabled"):
+        tags.append("Phụ đề dịch" if sub.get("source") == "dub" else "Phụ đề")
+    if spec.get("texts"):
+        tags.append("Hook")
+    if (spec.get("audio") or {}).get("tracks"):
+        tags.append("Nhạc nền")
+    if any(i < first_main for i in others):
+        tags.append("Intro")
+    if any(i > first_main for i in others):
+        tags.append("Outro")
+    if spec.get("logo"):
+        tags.append("Logo")
+    if spec.get("credit"):
+        tags.append("Ghi nguồn")
+    return tags
 

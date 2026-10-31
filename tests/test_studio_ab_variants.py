@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app.core.database.core import get_db
 from app.core.database.models import StudioAsset, StudioProject, StudioTask
 from app.core.notifier.service import NotifierService
-from app.features.studio import editor, notify, paths, pipeline, taskqueue
+from app.features.studio import editor, notify, paths, pipeline, store, taskqueue
 from app.features.studio.compose.templates import ComposeInput, ab_montage, basic, scene_segments
 from app.features.studio.render.graph import Media, build
 from app.features.studio.router import router
@@ -351,3 +351,35 @@ def test_file_da_khai_cua_minh_upload_lai_dang_su_tam_thi_sit_lai(db, media, api
         _drain(db)
     asset = db.query(StudioAsset).one()
     assert (asset.origin, asset.credit) == ("reup", "@goc")
+
+
+# ── nhãn kỹ thuật trên thẻ / trình edit ──
+
+
+def test_nhan_ky_thuat_doc_tu_spec():
+    spec = {
+        "clips": [{"asset": 9}, {"asset": 1, "start": 1, "end": 4, "hflip": True, "audio": [{"asset": 5}]},
+                  {"asset": 1, "start": 6, "hflip": True}, {"asset": 8}],
+        "canvas": {"lut": "Am cinematic.cube"}, "subtitles": {"enabled": True, "source": "dub"},
+        "texts": [{"text": "hook"}], "audio": {"tracks": [{"asset": 4}]}, "logo": {"asset": 3}, "credit": "Nguồn: @a",
+    }
+    assert store.techniques(spec, 1, origin="reup", template="Mẹo") == [
+        "Sưu tầm", "Mẹo", "Cắt 2 đoạn", "Lật gương", "Màu Am cinematic", "Lồng tiếng", "Phụ đề dịch", "Hook",
+        "Nhạc nền", "Intro", "Outro", "Logo", "Ghi nguồn",
+    ]
+    plain = {"clips": [{"asset": 1}], "canvas": {}, "subtitles": {"enabled": False}}
+    assert store.techniques(plain, 1, origin="upload") == ["Của tôi", "Mẫu cơ bản"]
+    trimmed = {"clips": [{"asset": 1, "start": 0.5, "end": 9}], "subtitles": {"enabled": True, "source": "transcript"}}
+    assert store.techniques(trimmed, 1) == ["Của tôi", "Mẫu cơ bản", "Cắt đầu / cuối", "Phụ đề"]
+
+
+def test_api_tra_nhan_ky_thuat_cho_the_va_trinh_edit(db, media, api):  # noqa: F811
+    ch = _channel(db)
+    with media["mute"].open("rb") as f:
+        api.post("/studio/api/upload", files={"file": ("v.mp4", f, "video/mp4")},
+                 data={"channel_id": ch.id, "collected": "true", "credit": "@goc"})
+    _drain(db)
+    row = api.get("/studio/api/projects").json()["projects"][0]
+    assert row["tags"][:2] == ["Sưu tầm", "Mẫu cơ bản"] and "Ghi nguồn" in row["tags"]
+    detail = api.get(f"/studio/api/projects/{row['id']}").json()
+    assert detail["project"]["tags"] == row["tags"]

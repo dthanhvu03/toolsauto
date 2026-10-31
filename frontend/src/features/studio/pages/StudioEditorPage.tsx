@@ -9,6 +9,7 @@ import { QueryBody } from "@/shared/ui/QueryBody";
 import * as api from "../api/studioApi";
 import { ClipEditor } from "../components/ClipEditor";
 import { SubtitleEditor } from "../components/SubtitleEditor";
+import { TechTags } from "../components/TechTags";
 import { TextAudioPanel } from "../components/TextAudioPanel";
 import { useAction, useSetup } from "../hooks/useStudio";
 import { keptSeconds } from "../lib/clips";
@@ -111,6 +112,7 @@ export function StudioEditorPage() {
                 {d.channel?.name ?? "chưa gắn kênh"} · mẫu {d.template?.name ?? "basic"} · {mmss(d.project.duration)}
               </span>
             </div>
+            <TechTags tags={d.project.tags ?? []} className="mt-2" />
             {d.project.error ? <p className="mt-2 text-sm text-red-700">{d.project.error}</p> : null}
             {!d.project.editable ? (
               <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">

@@ -20,8 +20,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database.core import get_db
-from app.core.database.models import StudioAsset, StudioChannel, StudioProject, StudioTask
-from app.features.studio import editor, entry, setup
+from app.core.database.models import StudioAsset, StudioChannel, StudioProject, StudioTask, StudioTemplate
+from app.features.studio import editor, entry, setup, store
 
 router = APIRouter(prefix="/studio/api", tags=["studio"])
 
@@ -94,12 +94,14 @@ def task_status(task_id: int, db: Session = Depends(get_db)) -> dict:
 # ── Dự án ────────────────────────────────────────────────────────────────────
 
 
-def _project_row(p: StudioProject, channels: dict[int, str]) -> dict:
+def _project_row(p: StudioProject, channels: dict[int, str], ctx: tuple[dict, dict] = ({}, {})) -> dict:
+    origins, templates = ctx
     return {
         "id": p.id, "status": p.status, "channel": channels.get(p.channel_id or 0), "channel_id": p.channel_id,
         "caption": p.caption, "hashtags": p.hashtags or [], "duration": p.duration, "error": p.error,
         "viral_material_id": p.viral_material_id, "created_at": p.created_at, "rendered_at": p.rendered_at,
         "approved_at": p.approved_at, "has_video": bool(p.output_path), "parent_project_id": p.parent_project_id,
+        "tags": store.techniques(p.spec, p.asset_id, origin=origins.get(p.asset_id), template=templates.get(p.template_id)),
     }
 
 
@@ -114,10 +116,13 @@ def projects(
     if wanted:
         q = q.filter(StudioProject.status.in_(wanted))
     channels = {c.id: c.name for c in db.query(StudioChannel)}
+    rows = q.order_by(StudioProject.id.desc()).limit(limit).all()
+    origins = dict(db.query(StudioAsset.id, StudioAsset.origin).filter(StudioAsset.id.in_({p.asset_id for p in rows})).all())
+    templates = {t.id: t.name for t in db.query(StudioTemplate).filter(StudioTemplate.id.in_({p.template_id for p in rows}))}
     counts = dict(db.query(StudioProject.status, func.count(StudioProject.id)).group_by(StudioProject.status).all())
     queued = db.query(func.count(StudioTask.id)).filter(StudioTask.status.in_(["QUEUED", "RUNNING"])).scalar() or 0
     return {
-        "projects": [_project_row(p, channels) for p in q.order_by(StudioProject.id.desc()).limit(limit)],
+        "projects": [_project_row(p, channels, (origins, templates)) for p in rows],
         "counts": {str(k): int(v) for k, v in counts.items()},
         "tasks_pending": int(queued),
     }
