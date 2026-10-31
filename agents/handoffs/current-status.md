@@ -1,3 +1,17 @@
+## Phiên 2026-10-31 (ux107) — PLAN-107: báo mã có giờ yên lặng, thẻ link gọn, tiến trình đơn
+
+- Chủ bot gửi bài «5 điểm bất tiện của End-User», duyệt plan «theo em đề xuất». Commit fa30fd7 trên origin/main (nhánh `feat/cashback-ux-107`, worktree `/home/vu/toolsauto-ux107`).
+- Đối chiếu dữ liệu thật: bot thấy đơn sau 7,8–34,5 giờ (trung bình 21,6) chứ không phải 15–30 phút; rút tối thiểu 10.000đ, không phải 50k; tối 30/10 có 3 tin mã gửi 17 khách lúc 23:20–00:02 giờ VN.
+- **Báo mã (voucher.py):** chế độ «mọi khách» xếp hàng `voucher_posts.sent = -1`, `voucher.tick` (vòng poller) gửi ngoài 22h–8h, gộp mã đến gần nhau (chờ 2 phút, tối đa 10), ≤5 mã/tin, không lặp mã 24 giờ, tối đa 2 tin/ngày/khách. Admin nhận ngay. Chế độ thử giữ nguyên. Màn admin 🎟 ghi luật mới + số mã đang chờ.
+- **Thẻ link 17 → 10 dòng:** còn số hoàn (+ «có thể cao hơn»), ⚠️ mua thẳng app, 🛒 món trong giỏ, 🎟 voucher, 💎 món giá cao, ⓘ V1.2, 👉 nút. Popup 🛡️ Lưu ý 193/200 ký tự. Câu ⓘ V1.2 và dòng voucher giữ trên thẻ (công bố + quyết định 27/10).
+- **/donhang:** thanh `✅ Đã mua › ⏳ Hoàn thành › ⚪ Sàn duyệt › ⚪ Vào ví`; câu «Đơn mới thường hiện sau khoảng 1 ngày». **/huongdan Telegram:** chia sẻ thẳng sang bot.
+- Gộp vào main: tạm stash phần chưa commit của phiên khác trong `messages.py`, `poller.py` → ff → pop sạch, không xung đột; phần đó vẫn chưa commit, giữ nguyên.
+- Kiểm tra: ruff sạch; worktree 945 passed + 2 test canh chữ đã sửa (180 passed); còn `test_b9` lỗi có sẵn.
+- **Chưa restart.** Production đang chạy cả code chưa commit của phiên shop_voucher (PLAN-105, `shop_voucher_enabled=1`).
+- **Next:** chủ bot chạy `systemctl restart cashback-bot cashback-zalo`; sau restart kiểm tra tin mã đầu tiên ngoài 22h–8h. Đo lại 14 ngày (mốc trước: 91 link / 17 khách → 6 link có đơn, ~6,6%). PLAN-107 còn ở active tới khi đo xong.
+
+---
+
 ## Phiên 2026-10-30 (buffer-chk2) — Báo cáo Buffer: Maintenance tắt từ 14:53 (chỉ đọc log + DB)
 
 - **WSL tắt 07:53Z (14:53 VN), khởi động lại 07:54Z và 08:00Z.** Bot cashback và store_bot (systemd) tự lên lại. PM2 không có `pm2 startup` nên Maintenance, Web_Dashboard, 9Router_Gateway và DB_Backup **không chạy lại**; không còn xếp lịch Buffer mới. Danh sách tiến trình cũ còn trong `~/.pm2/dump.pm2` (đã chép ra `dump.pm2.before-20261030-reboot`). Lúc 08:50Z một lệnh `pm2 jlist` khi kiểm tra đã bật daemon PM2 rỗng.
