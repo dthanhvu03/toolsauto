@@ -168,7 +168,7 @@ def build(
             ass_path = str(work / "subs.ass")
             files[ass_path] = build_ass(
                 lines, width=spec.canvas.w, height=spec.canvas.h,
-                font_size=sub.font_size, margin_v=sub.margin_v, max_chars=sub.max_chars,
+                font_size=sub.font_size, margin_v=sub.margin_v, max_chars=sub.max_chars, font_file=font_file,
             )
             post.append(f"ass={_q(ass_path)}:fontsdir={_q(fonts_dir)}")
 
