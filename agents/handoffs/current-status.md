@@ -1,3 +1,14 @@
+## Phiên 2026-10-31 (relay-perf) — sale_relay chạy nền, bớt HEAD/DNS, lưu mã vào voucher_posts
+
+- Commit da06502 trên origin/main (chủ bot yêu cầu sửa mục 1–4 + gắn extract_voucher_codes).
+- `tick` chỉ khởi động lượt quét trong luồng nền (khoá `_running`, không chạy chồng); `run_once` là lượt quét đồng bộ.
+- `resolve_shopee_link`: an_redir lấy origin_link không gọi mạng; chỉ HEAD link rút gọn (s.shopee.vn, shp.ee, vn.shp.ee, shope.ee), tới trang shopee.vn thì dừng; `requests.Session` theo từng luồng; cache DNS + link chỉ trong một lượt quét (`_RUN`). Pool chung 4 luồng; thay link một lượt `re.sub`.
+- `extract_voucher_codes` + `store_codes`: mỗi bài mới ghi mã vào `voucher_posts` (channel_id = `source_channel_id('nhomsansale')`, message_id = post_id*100+thứ tự, sent=0 nên voucher.tick không gửi lại; mã đã có trong 24 giờ thì bỏ). Bài một link: url = link đó; nhiều link: url trống. /magiam hiện các mã này.
+- Test patch `requests.head` đổi sang `cashback_bot.sale_relay._head`. Kiểm tra: ruff sạch; toàn bộ `tests/test_cashback_*.py` (chặn TCP ra ngoài) 1098 passed, 1 failed `test_b9` có sẵn.
+- **Next:** chủ bot restart (`systemctl restart cashback-bot cashback-zalo`) để chạy bản mới.
+
+---
+
 ## Phiên 2026-10-31 (cb-review) — Review và commit phần cashback chưa commit của phiên khác
 
 - Chủ bot yêu cầu «review lại cashback rồi commit và push». Commit 5b1a912 trên origin/main: shop_voucher (PLAN-105), sale_relay, WAL cho DB, escape HTML, URL nút an toàn, fcntl dự phòng, service.py CRLF → LF.
