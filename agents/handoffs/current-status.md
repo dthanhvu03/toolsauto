@@ -1,3 +1,17 @@
+## Phiên 2026-10-31 (cb-review) — Review và commit phần cashback chưa commit của phiên khác
+
+- Chủ bot yêu cầu «review lại cashback rồi commit và push». Commit 5b1a912 trên origin/main: shop_voucher (PLAN-105), sale_relay, WAL cho DB, escape HTML, URL nút an toàn, fcntl dự phòng, service.py CRLF → LF.
+- Đã báo chủ bot trước khi commit, chủ bot chọn **giữ nguyên** cả hai:
+  - `sale_relay`: mỗi 90 giây đọc t.me/s/nhomsansale, gọi HEAD s.shopee.vn để mở link rút gọn, thay affiliate của nhóm đó bằng affiliate chủ bot (sub_id `AUTOSALE`), đăng kênh ZT báo mã và gửi mọi khách nhận báo mã. Bỏ qua chế độ thử, giờ yên lặng, trần ngày của PLAN-107; không có cờ tắt; không có PLAN (docstring ghi PLAN-106 nhưng PLAN-106 là video studio). 31/10 02:00Z đã gửi 17 khách «Mã 25% Shopee vip». Đơn qua sub_id AUTOSALE không gán được cho khách.
+  - `shop_voucher` (`shop_voucher_enabled=1` trên production): nút shop dùng sub_id `VOUCHERS`, khách mua ngay trong shop thì đơn không gán được cho khách. Đoạn gọi bridge 9224 (cào Shopee qua CloakBrowser theo PLAN-105) không còn nút nào gọi tới.
+  - Tin relay dùng event_type VOUCHER nên tính vào trần 2 tin/ngày của PLAN-107: ngày có relay thì mã AddLiveTag có thể không tới khách.
+- Lỗi do WAL tìm thấy khi review: bản backup mang cờ WAL, kiểm tra chỉ đọc để lại `-wal`/`-shm` cạnh file (test_cashback_offsite hỏng). Đã sửa `backup._copy_consistent`: bản sao về `journal_mode = DELETE`.
+- Kiểm tra: ruff sạch; toàn bộ `tests/test_cashback_*.py` (chặn TCP ra ngoài) 1088 passed, 2 failed: offsite (đã sửa, chạy lại qua cùng 81 test backup) và `test_b9` có sẵn. DB production đã ở WAL từ lần restart 31/10 02:19Z.
+- Chưa commit (ngoài phạm vi cashback): app/, PLAN-106, PLAN-108, test admin/media/facebook, PROJECT.md, ecosystem.config.js, .importlinter.
+- **Next:** chủ bot restart để chạy bản backup đã sửa (`systemctl restart cashback-bot cashback-zalo`). Nếu muốn khách không mất hoàn: đổi sub_id nút shop và relay sang sub_id của khách / tách event_type relay khỏi trần (cần chủ bot duyệt).
+
+---
+
 ## Phiên 2026-10-31 (ux107) — PLAN-107: báo mã có giờ yên lặng, thẻ link gọn, tiến trình đơn
 
 - Chủ bot gửi bài «5 điểm bất tiện của End-User», duyệt plan «theo em đề xuất». Commit fa30fd7 trên origin/main (nhánh `feat/cashback-ux-107`, worktree `/home/vu/toolsauto-ux107`).
