@@ -121,6 +121,27 @@ export type Channel = {
   dub_voice: string | null;
 };
 
+/** Một video quét từ link TikTok (PLAN-113). ``taken`` = đã có trong Studio / đang tải. */
+export type TikTokItem = {
+  id: string;
+  url: string;
+  title: string;
+  views: number | null;
+  duration: number | null;
+  thumbnail: string | null;
+  taken: boolean;
+};
+
+export type TakeBody = {
+  items: { url: string; title: string }[];
+  /** null = đăng tay (không qua Buffer) */
+  channel_id: number | null;
+  template_id: number | null;
+  has_text: boolean;
+  hook: string;
+  voice: string;
+};
+
 export type Voice = { name: string; gender: "female" | "male" | ""; region: string; description: string };
 export type VoicesResponse = { online: boolean; voices: Voice[] };
 

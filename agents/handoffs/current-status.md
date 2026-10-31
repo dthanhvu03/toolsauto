@@ -61,6 +61,12 @@
     Backup + migration bị chặn quyền → anh chạy: `venv/bin/python manage.py db backup --keep 14 && venv/bin/alembic upgrade head
     && pm2 restart Web_Dashboard Studio_Heavy Studio_Light`. **Trước khi chạy: không restart 3 app đó** (code mới đọc cột chưa có).
     Bản SPA mới đã build — tới khi restart web, ô giọng hiện «server tắt» (API cũ chưa có `/voices`), không hỏng gì.
+  - **31/10 — PLAN-113 đăng tay + «Lấy từ TikTok» (code xong, commit cục bộ, CHỜ ANH RESTART):** upload / lấy link không chọn
+    kênh = đăng tay (duyệt xong không sang Buffer; thẻ có Tải video / Chép caption / Đã đăng). Trang «Lấy từ TikTok»: dán link
+    kênh / video → quét (≤ 30, chỉ đọc) → tick chọn → kênh hoặc Đăng tay, mẫu, hook, đã có chữ, giọng → «Tải & dựng» (bước mới
+    `fetch`, flow `link`). Video lấy về = sưu tầm (không lật / LUT / biến thể). 151 test, trình duyệt thật trên web tạm.
+    `pm2 restart` bị chặn quyền → anh chạy: `pm2 restart Web_Dashboard Studio_Heavy Studio_Light && pm2 save`. Không migration.
+    Chưa quét TikTok thật (chờ anh cho phép).
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 

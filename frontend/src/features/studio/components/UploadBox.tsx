@@ -7,12 +7,13 @@ import { useAction } from "../hooks/useStudio";
 
 /**
  * Upload video (→ dự án) hoặc nguyên liệu (``brand``: logo / intro / nhạc → chỉ vào kho).
- * Video bắt buộc có kênh (1 kênh thì tự chọn). «Sưu tầm» = video của người khác → ghi nguồn, không lật / biến thể.
+ * Video chọn kênh Buffer (1 kênh thì tự chọn) hoặc «Đăng tay» (duyệt xong tải về tự đăng, PLAN-113).
+ * «Sưu tầm» = video của người khác → ghi nguồn, không lật / biến thể.
  * «Đã có chữ sẵn» → không đốt thêm phụ đề (tránh 2 lớp chữ).
  */
 export function UploadBox({ channels, brand = false }: { channels: { id: number; name: string }[]; brand?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
-  const [channelId, setChannelId] = useState<number | "">("");
+  const [channelId, setChannelId] = useState<number | "" | "manual">("");
   const [name, setName] = useState("");
   const [collected, setCollected] = useState(false);
   const [credit, setCredit] = useState("");
@@ -21,8 +22,12 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
     if (channels.length === 1 && channelId === "") setChannelId(channels[0].id);
   }, [channels, channelId]);
   const act = useAction(
-    (file: File) => uploadFile(file, { channelId: channelId || null, brand, collected, credit, hasText }),
-    brand ? "Đã đưa vào kho nguyên liệu." : "Đã nhận — Studio đang dựng, thẻ sẽ hiện ở «Đang làm».",
+    (file: File) => uploadFile(file, { channelId: typeof channelId === "number" ? channelId : null, brand, collected, credit, hasText }),
+    brand
+      ? "Đã đưa vào kho nguyên liệu."
+      : channelId === "manual"
+        ? "Đã nhận — duyệt xong tải video ở cột «Đã duyệt» để đăng tay."
+        : "Đã nhận — Studio đang dựng, thẻ sẽ hiện ở «Đang làm».",
     [["studio-projects"], ["studio-assets"]]
   );
   const needChannel = !brand && !channelId;
@@ -40,8 +45,13 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
           {name || (brand ? "Chọn logo / intro / nhạc…" : "Chọn video…")}
         </button>
         {!brand ? (
-          <select className={selectClass} value={channelId} onChange={(e) => setChannelId(e.target.value ? Number(e.target.value) : "")}>
+          <select
+            className={selectClass}
+            value={channelId}
+            onChange={(e) => setChannelId(e.target.value === "manual" ? "manual" : e.target.value ? Number(e.target.value) : "")}
+          >
             <option value="">— chọn kênh —</option>
+            <option value="manual">Đăng tay (không qua Buffer)</option>
             {channels.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -84,8 +94,12 @@ export function UploadBox({ channels, brand = false }: { channels: { id: number;
       ) : null}
       {needChannel && channels.length === 0 ? (
         <p className="text-xs text-amber-700">
-          Chưa có kênh nào — thêm ở <Link to="/app/go/studio-setup" className="underline">Kênh &amp; mẫu</Link> trước.
+          Chưa có kênh Buffer nào — chọn «Đăng tay», hoặc thêm kênh ở{" "}
+          <Link to="/app/go/studio-setup" className="underline">Kênh &amp; mẫu</Link>.
         </p>
+      ) : null}
+      {channelId === "manual" ? (
+        <p className="text-xs text-slate-500">Đăng tay: duyệt xong không gửi Buffer — tải video + chép caption ở cột «Đã duyệt», đăng xong bấm «Đã đăng».</p>
       ) : null}
       {collected ? <p className="text-xs text-slate-500">Video sưu tầm: ghi nguồn trên video, không lật gương / không tạo biến thể.</p> : null}
       {act.msg ? <span className={`text-xs ${act.msg.startsWith("Lỗi") ? "text-red-700" : "text-emerald-700"}`}>{act.msg}</span> : null}

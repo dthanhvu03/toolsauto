@@ -6,7 +6,9 @@ import type {
   ProjectSpec,
   ProjectsResponse,
   SetupResponse,
+  TakeBody,
   Template,
+  TikTokItem,
   VoicesResponse,
 } from "../types/studio.types";
 
@@ -14,6 +16,8 @@ const BASE = "/studio/api";
 type Ok = { ok: boolean; task_id?: number };
 
 export const projectVideoUrl = (id: number, v?: number | null) => `${BASE}/projects/${id}/video?v=${v ?? 0}`;
+/** Tải bản render về máy (đăng tay). */
+export const projectDownloadUrl = (id: number) => `${BASE}/projects/${id}/video?download=1`;
 export const projectPosterUrl = (id: number, v?: number | null) => `${BASE}/projects/${id}/poster.jpg?v=${v ?? 0}`;
 export const assetFileUrl = (id: number) => `${BASE}/assets/${id}/file`;
 export const assetStripUrl = (id: number) => `${BASE}/assets/${id}/strip.jpg`;
@@ -30,6 +34,11 @@ export const makeVariants = (id: number, n: number) =>
   sendJson<{ ok: boolean; task_ids: number[]; note: string }>(`${BASE}/projects/${id}/variants`, "POST", { n });
 export const approveProject = (id: number, body: { caption?: string; hashtags?: string[] } = {}) =>
   sendJson<Ok>(`${BASE}/projects/${id}/approve`, "POST", body);
+export const markPosted = (id: number) => sendJson<Ok>(`${BASE}/projects/${id}/posted`, "POST", {});
+export const scanTiktok = (url: string, limit: number) =>
+  sendJson<{ items: TikTokItem[] }>(`${BASE}/tiktok/scan`, "POST", { url, limit });
+export const takeTiktok = (body: TakeBody) =>
+  sendJson<{ ok: boolean; count: number; task_ids: number[] }>(`${BASE}/tiktok/take`, "POST", body);
 export const rejectProject = (id: number, reason = "") =>
   sendJson<Ok>(`${BASE}/projects/${id}/reject`, "POST", { reason });
 

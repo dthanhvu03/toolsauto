@@ -1,20 +1,34 @@
-import { useState } from "react";
+import { Link2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { cn } from "@/shared/lib/cn";
+import { ghostBtnClass } from "@/shared/ui/controls";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { Toast } from "@/shared/ui/Toast";
-import { approveProject, rejectProject } from "../api/studioApi";
+import { approveProject, markPosted, rejectProject } from "../api/studioApi";
 import { ProjectCard } from "../components/ProjectCard";
 import { UploadBox } from "../components/UploadBox";
 import { useAction, useProjects, useSetup } from "../hooks/useStudio";
 import { BOARD_COLUMNS } from "../lib/status";
+import type { ProjectRow } from "../types/studio.types";
 
 export function StudioBoardPage() {
   const q = useProjects();
   const setup = useSetup();
   const [col, setCol] = useState("review");
-  const approve = useAction((id: number) => approveProject(id), "Đã duyệt — đang chuyển sang Buffer.");
+  const approve = useAction(
+    (p: ProjectRow) => approveProject(p.id).then(() => p.channel_id == null),
+    (manual) => (manual ? "Đã duyệt — tải video ở cột «Đã duyệt» để đăng tay." : "Đã duyệt — đang chuyển sang Buffer.")
+  );
   const reject = useAction((id: number) => rejectProject(id), "Đã bỏ.");
+  const posted = useAction((id: number) => markPosted(id), "Đã đánh dấu đã đăng.");
+  // Một chỗ báo chung cho mọi nút trên bảng (duyệt / bỏ / đã đăng / chép caption).
+  const [toast, setToast] = useState({ text: "", seq: 0 });
+  const say = (text: string) => setToast((t) => ({ text, seq: t.seq + 1 }));
+  useEffect(() => void (approve.msg && say(approve.msg)), [approve.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => void (reject.msg && say(reject.msg)), [reject.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => void (posted.msg && say(posted.msg)), [posted.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   const d = q.data;
   const column = BOARD_COLUMNS.find((c) => c.key === col) ?? BOARD_COLUMNS[1];
   const items = (d?.projects ?? []).filter((p) => column.statuses.includes(p.status));
@@ -26,10 +40,13 @@ export function StudioBoardPage() {
         title="Studio"
         subtitle={d ? `${count(["REVIEW"])} video chờ duyệt${d.tasks_pending ? ` · ${d.tasks_pending} việc đang chạy` : ""}` : "—"}
       />
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-2">
         <UploadBox channels={setup.data?.channels ?? []} />
+        <Link to="/app/go/studio-tiktok" className={`${ghostBtnClass} inline-flex w-fit items-center gap-1.5`}>
+          <Link2 className="size-4" /> Lấy video từ link TikTok…
+        </Link>
       </div>
-      <Toast text={approve.seq >= reject.seq ? approve.msg : reject.msg} seq={approve.seq + reject.seq} />
+      <Toast text={toast.text} seq={toast.seq} />
       {d?.tasks_pending ? (
         <p className="mt-3 flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
           <span className="size-2 animate-pulse rounded-full bg-sky-500" />
@@ -63,9 +80,11 @@ export function StudioBoardPage() {
               <ProjectCard
                 key={p.id}
                 p={p}
-                busy={approve.busy || reject.busy}
-                onApprove={(id) => approve.run(id)}
+                busy={approve.busy || reject.busy || posted.busy}
+                onApprove={(proj) => approve.run(proj)}
                 onReject={(id) => reject.run(id)}
+                onPosted={(id) => posted.run(id)}
+                onNotice={say}
               />
             ))}
           </div>

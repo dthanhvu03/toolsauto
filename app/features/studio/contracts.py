@@ -12,6 +12,7 @@ from enum import StrEnum
 
 
 class Stage(StrEnum):
+    FETCH = "fetch"  # tải video từ link (PLAN-113) — đứng đầu nên hạng thấp nhất: dự án đang dở làm xong trước
     INTAKE = "intake"
     ANALYZE = "analyze"
     DUB = "dub"

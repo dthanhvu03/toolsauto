@@ -6,6 +6,7 @@ API Studio (ADR-061) cho SPA ``/app/go/studio*`` (PLAN-106 P4).
 - Nguyên liệu: danh sách asset, upload (``brand``), file + dải khung hình.
 - Kênh & mẫu: ``setup.py``.
 - Việc: theo dõi một lần upload theo ``parent_id``.
+- Lấy từ TikTok (PLAN-113): quét link → chọn → tải & dựng; dự án đăng tay: tải video, «Đã đăng».
 
 Đăng nhập: middleware cookie chung của app chặn trước khi tới đây (cả file video / ảnh).
 """
@@ -22,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 from app.core.database.models import StudioAsset, StudioChannel, StudioProject, StudioTask, StudioTemplate
 from app.core.media import tts
-from app.features.studio import editor, entry, setup, store
+from app.features.studio import editor, entry, setup, source, store
 
 router = APIRouter(prefix="/studio/api", tags=["studio"])
 
@@ -60,6 +61,7 @@ def upload(
     """
     Video → flow ``upload`` (thành dự án). ``brand=true``: logo / intro / nhạc → chỉ vào kho.
     ``collected``: video sưu tầm (ghi nguồn ``credit``); ``has_text``: đã có chữ sẵn → không đốt phụ đề.
+    Không ``channel_id`` = đăng tay (không sang Buffer).
     """
     try:
         task = entry.accept_file(
@@ -69,6 +71,48 @@ def upload(
     except ValueError as exc:
         raise _bad(exc) from exc
     return {"ok": True, "task_id": task.id, "flow": task.flow}
+
+
+class ScanBody(BaseModel):
+    url: str
+    limit: int = 10
+
+
+class TakeItem(BaseModel):
+    url: str
+    title: str = ""
+
+
+class TakeBody(BaseModel):
+    items: list[TakeItem]
+    channel_id: int | None = None
+    template_id: int | None = None
+    has_text: bool = False
+    hook: str = ""
+    voice: str = ""
+
+
+@router.post("/tiktok/scan")
+def tiktok_scan(body: ScanBody, db: Session = Depends(get_db)) -> dict:
+    """Chỉ đọc danh sách video (không tải). ``taken``: video đã có trong Studio / đang tải."""
+    try:
+        items = source.scan(body.url, body.limit)
+    except source.SourceError as exc:
+        raise _bad(exc) from exc
+    taken = entry.taken_urls(db, [i["url"] for i in items])
+    return {"items": [{**i, "taken": i["url"] in taken} for i in items]}
+
+
+@router.post("/tiktok/take")
+def tiktok_take(body: TakeBody, db: Session = Depends(get_db)) -> dict:
+    try:
+        tasks = entry.take_links(
+            db, [i.model_dump() for i in body.items], channel_id=body.channel_id, template_id=body.template_id,
+            has_text=body.has_text, hook=body.hook, voice=body.voice,
+        )
+    except ValueError as exc:
+        raise _bad(exc) from exc
+    return {"ok": True, "count": len(tasks), "task_ids": [t.id for t in tasks]}
 
 
 @router.get("/tasks/{task_id}")
@@ -210,6 +254,15 @@ def approve(project_id: int, body: ApproveBody, db: Session = Depends(get_db)) -
     return {"ok": True, "task_id": task.id}
 
 
+@router.post("/projects/{project_id}/posted")
+def mark_posted(project_id: int, db: Session = Depends(get_db)) -> dict:
+    try:
+        entry.mark_posted(db, project_id)
+    except entry.ReviewError as exc:
+        raise _bad(exc) from exc
+    return {"ok": True}
+
+
 @router.post("/projects/{project_id}/reject")
 def reject(project_id: int, body: RejectBody, db: Session = Depends(get_db)) -> dict:
     try:
@@ -220,10 +273,13 @@ def reject(project_id: int, body: RejectBody, db: Session = Depends(get_db)) -> 
 
 
 @router.api_route("/projects/{project_id}/video", methods=["GET", "HEAD"])
-def project_video(project_id: int, db: Session = Depends(get_db)) -> FileResponse:
+def project_video(project_id: int, download: bool = Query(False), db: Session = Depends(get_db)) -> FileResponse:
+    """``download=1``: tải về máy (đăng tay) với tên ``studio_<id>.mp4``."""
     project = db.get(StudioProject, project_id)
     if project is None or not project.output_path:
         raise HTTPException(status_code=404, detail="chưa có bản render")
+    if download and Path(project.output_path).is_file():
+        return FileResponse(project.output_path, media_type="video/mp4", filename=f"studio_{project_id}.mp4")
     return _file(project.output_path)
 
 

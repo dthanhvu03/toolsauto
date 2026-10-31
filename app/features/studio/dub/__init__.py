@@ -46,9 +46,12 @@ def _synthesizer(target_lang: str, vieneu_voice: str | None = None):
 
 
 def _voice(channel, params: dict) -> tuple[str | None, str]:
-    """(giọng VieNeu của kênh hoặc None, giới cho giọng edge dự phòng). Giọng kênh quyết định giới khi biết được."""
+    """
+    (giọng VieNeu hoặc None, giới cho giọng edge dự phòng). Giọng chọn cho lô (``params.vieneu_voice``, trang «Lấy từ
+    TikTok») → giọng kênh → theo mẫu. Giọng VieNeu quyết định giới khi biết được.
+    """
     gender = str(params.get("dub_voice") or "female")
-    vn_voice = getattr(channel, "dub_voice", None) or None
+    vn_voice = params.get("vieneu_voice") or getattr(channel, "dub_voice", None) or None
     if vn_voice:
         gender = next((v["gender"] for v in tts.vieneu_voices() if v["name"] == vn_voice and v.get("gender")), gender)
     return vn_voice, gender

@@ -34,7 +34,7 @@ def _mmss(sec: float | None) -> str:
 
 
 def review_message(project: StudioProject, channel_name: str | None) -> str:
-    head = f"🎬 <b>Studio #{project.id}</b> · {html.escape(channel_name or 'chưa gắn kênh')} · {_mmss(project.duration)}"
+    head = f"🎬 <b>Studio #{project.id}</b> · {html.escape(channel_name or 'đăng tay')} · {_mmss(project.duration)}"
     caption = (project.caption or "").strip()
     tags = " ".join(project.hashtags or [])
     body = html.escape(caption) if caption else "<i>Chưa có caption — viết trên web rồi duyệt.</i>"
@@ -66,7 +66,7 @@ def describe(spec: dict, asset_id: int | None) -> str:
 def variants_message(root: StudioProject, ready: list[StudioProject], channel_name: str | None) -> str:
     rows = "\n".join(f"• #{p.id}: {html.escape(describe(p.spec, p.asset_id))}" for p in ready)
     return (
-        f"🎬 <b>Studio #{root.id}</b> · {html.escape(channel_name or 'chưa gắn kênh')} — {len(ready)} bản để chọn "
+        f"🎬 <b>Studio #{root.id}</b> · {html.escape(channel_name or 'đăng tay')} — {len(ready)} bản để chọn "
         f"(cùng caption):\n{rows}\n\nDuyệt 1 bản → các bản còn lại tự bỏ."
     )
 

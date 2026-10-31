@@ -4,7 +4,7 @@ Hệ edit video thay cho tool đăng bài cũ (ADR-061, PLAN-106). Mỗi bước
 `pipeline.py` nối các bước bằng hàng việc `studio_tasks`.
 
 ```
-intake → analyze → dub → compose → render → caption → review → publish ──→ (luồng Buffer sẵn có)
+(fetch →) intake → analyze → dub → compose → render → caption → review → publish ──→ (luồng Buffer sẵn có)
 asset    cache      tiếng   spec      mp4      chữ AI    cổng duyệt   dòng viral_materials READY
 ```
 
@@ -17,19 +17,21 @@ asset    cache      tiếng   spec      mp4      chữ AI    cổng duyệt   d�
 | | `taskqueue.py` | xếp / nhận (`SKIP LOCKED`) / xong / lỗi / trả việc treo; `parent_id` nối các bước |
 | | `pipeline.py` | `FLOWS`, `STAGES` — chỗ duy nhất biết thứ tự |
 | | `worker.py` | PM2 `Studio_Heavy` (`--lanes heavy`), `Studio_Light` (`--lanes light`, quét hộp thư Drive) |
-| Cửa vào | `entry.py` | `take_reup` (hook từ hệ cũ), `accept_file` (upload web), `scan_inbox` (Drive) |
+| Cửa vào | `entry.py` | `take_reup` (hook từ hệ cũ), `accept_file` (upload web; không kênh = đăng tay), `take_links` (trang «Lấy từ TikTok»), `scan_inbox` (Drive), `approve` / `reject` / `mark_posted` (đăng tay xong) |
+| | `source.py` | quét link TikTok (kênh / 1 video) bằng yt-dlp — chỉ đọc danh sách, không tải (PLAN-113) |
 | | `router.py` | API cho SPA: upload, việc, dự án (bảng / chi tiết / spec / caption / đổi mẫu / duyệt / bỏ / video / ảnh bìa), asset, kênh, mẫu |
 | Giao diện | `editor.py` | trình edit: chi tiết, lưu spec → render lại, đổi mẫu, dải khung hình, ảnh bìa |
 | | `setup.py` | kênh (gắn kênh Buffer) + mẫu |
 | | `notify.py` | chờ duyệt → Telegram (video + ✅ `sok:` / 🗑 `sno:` / ✏️ web) |
-| Bước | `intake/` | file → `StudioAsset` (sha256; reup trùng cùng kênh thì dừng) |
+| Bước | `fetch/` | tải 1 video từ link vào `inbox/` (flow `link`, làn light); video riêng tư / bị xoá thì không thử lại |
+| | `intake/` | file → `StudioAsset` (sha256; reup trùng cùng kênh thì dừng) |
 | | `analyze/` | probe, transcript (`{"lang","lines"}`), khoảng lặng, cảnh — 1 lần mỗi asset |
 | | `dub/` | lồng tiếng → 2 asset audio (giọng + nền Demucs), phân tích `dub`. Giọng Việt: VieNeu trên GPU (`dub/vieneu_server.py`, PM2 `VieNeu_TTS`, venv riêng `/home/vu/venv-vieneu`, PLAN-111) → edge-tts → piper |
 | | `compose/` | asset + kênh + mẫu → `StudioProject` (mẫu `basic`, `reup_dub`, `own_footage`) |
 | | `render/` | spec → 1 lệnh ffmpeg (`render/graph.py`, hàm thuần) → mp4 |
 | | `caption/` | AI viết caption + hashtag (đã có thì bỏ qua) |
 | | `review/` | tự duyệt theo kênh (khi đã có caption), không thì dừng ở REVIEW |
-| | `publish/` | APPROVED → `viral_materials` READY + file `REUP_DIR/studio/viral_<id>_p<dự án>_reup.mp4`; `status.py` đồng bộ SCHEDULED / POSTED |
+| | `publish/` | không kênh (đăng tay) → giữ APPROVED, không sang Buffer. Có kênh: APPROVED → `viral_materials` READY + file `REUP_DIR/studio/viral_<id>_p<dự án>_reup.mp4`; `status.py` đồng bộ SCHEDULED / POSTED |
 
 Mẫu (`studio_templates.kind` + `params`):
 - `basic`: cắt đầu / độ dài, phụ đề (chỉ khi lời thoại đúng `subtitle_lang`, mặc định vi), hook, nhạc.

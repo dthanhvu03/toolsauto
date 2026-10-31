@@ -127,6 +127,7 @@
           'server': 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01',
           'db': 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4',
           'clap': 'M4 11v8a1 1 0 001 1h14a1 1 0 001-1v-8M4 11h16M4 11l1.5-6.5 13 3L17 11M8 5.2l2 4.3M13 6.3l2 4.2',
+          'download': 'M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3',
           'layers': 'M12 3l9 5-9 5-9-5 9-5zm-9 9l9 5 9-5M3 16l9 5 9-5',
           'sliders': 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M16 4v4M10 10v4M18 16v4',
           'coin': 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
@@ -135,6 +136,7 @@
           ('', [('Tổng quan', '/app', 'home', p == '/app' or p == '/')]),
           ('Video', [
             ('Studio', '/app/go/studio', 'clap', False),
+            ('Lấy từ TikTok', '/app/go/studio-tiktok', 'download', False),
             ('Nguyên liệu', '/app/go/studio-assets', 'layers', False),
             ('Kênh & mẫu', '/app/go/studio-setup', 'sliders', False),
             ('Kho video', '/app/viral', 'video', p.startswith('/app/viral') and not p.startswith('/app/viral/sources')),

@@ -11,6 +11,9 @@ Maintenance (``sweep_unscheduled_ready``) thấy dòng READY đủ ba thứ thì
 
 Video reup do hệ cũ chuyển sang (material đang ``STUDIO``) thì dùng lại chính dòng đó; nguồn khác thì tạo
 dòng mới ``platform="studio"``. Dòng đã có lịch trên Buffer thì không đổi file / caption nữa.
+
+Dự án không có kênh = **đăng tay** (PLAN-113): không tạo dòng nào, giữ APPROVED — anh tải video về đăng rồi bấm
+«Đã đăng».
 """
 from __future__ import annotations
 
@@ -80,7 +83,9 @@ def run(db: Session, task: StudioTask) -> StageResult:
         raise StageError(f"không có dự án #{task.project_id}", retryable=False)
     if project.status not in (ProjectStatus.APPROVED, ProjectStatus.SCHEDULED):
         raise StageError(f"dự án #{project.id} chưa duyệt ({project.status})", retryable=False)
-    channel = db.get(StudioChannel, project.channel_id) if project.channel_id else None
+    if not project.channel_id:
+        return StageResult(project_id=project.id, note="đăng tay — không gửi Buffer")
+    channel = db.get(StudioChannel, project.channel_id)
     if channel is None:
         raise StageError(f"dự án #{project.id} chưa có kênh", retryable=False)
     caption = (project.caption or "").strip()

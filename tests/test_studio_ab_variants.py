@@ -325,11 +325,13 @@ def test_telegram_mot_tin_cho_ca_lo_bien_the(db, media, api, monkeypatch, tmp_pa
     assert buttons[-1][0]["url"].endswith(f"/app/go/studio/{own.id}")
 
 
-def test_upload_su_tam_ghi_nguon_co_chu_san_va_bat_buoc_kenh(db, media, api):  # noqa: F811
+def test_upload_su_tam_ghi_nguon_co_chu_san_va_khong_kenh_la_dang_tay(db, media, api):  # noqa: F811
     ch = _channel(db)
     with media["mute"].open("rb") as f:
-        no = api.post("/studio/api/upload", files={"file": ("v.mp4", f, "video/mp4")})
-    assert no.status_code == 400 and "chọn kênh" in no.json()["detail"]
+        manual = api.post("/studio/api/upload", files={"file": ("v.mp4", f, "video/mp4")})
+    assert manual.status_code == 200  # PLAN-113: không kênh = đăng tay (trước đây bắt buộc kênh)
+    db.query(StudioTask).delete()
+    db.commit()
     with media["clip"].open("rb") as f:
         r = api.post("/studio/api/upload", files={"file": ("v.mp4", f, "video/mp4")},
                      data={"channel_id": ch.id, "collected": "true", "credit": "@goc", "has_text": "true"})

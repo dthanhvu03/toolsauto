@@ -14,7 +14,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from app.core.database.models import StudioProject, StudioTask
-from app.features.studio import analyze, caption, compose, dub, intake, publish, render, review, taskqueue
+from app.features.studio import analyze, caption, compose, dub, fetch, intake, publish, render, review, taskqueue
 from app.features.studio.contracts import ProjectStatus, Stage, StageError, StageResult
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 StageFn = Callable[[Session, StudioTask], StageResult]
 
 STAGES: dict[Stage, StageFn] = {
+    Stage.FETCH: fetch.run,
     Stage.INTAKE: intake.run,
     Stage.ANALYZE: analyze.run,
     Stage.DUB: dub.run,
@@ -38,6 +39,7 @@ _EDIT = [Stage.INTAKE, Stage.ANALYZE, Stage.DUB, Stage.COMPOSE, Stage.RENDER, St
 FLOWS: dict[str, list[Stage]] = {
     "reup": _EDIT,  # video hệ cũ tải + chống trùng xong, kênh đã chuyển sang Studio (entry.take_reup)
     "upload": _EDIT,  # video anh tự quay: web / hộp thư Drive (entry)
+    "link": [Stage.FETCH, *_EDIT],  # video chọn từ link TikTok trên trang «Lấy từ TikTok» (PLAN-113)
     "brand": [Stage.INTAKE, Stage.ANALYZE],  # intro / outro / logo / nhạc: chỉ vào kho, không thành dự án
     "rerender": [Stage.RENDER, Stage.CAPTION, Stage.REVIEW, Stage.PUBLISH],  # sau khi sửa spec trên trình edit
     "publish": [Stage.PUBLISH],

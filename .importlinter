@@ -46,6 +46,7 @@ ignore_imports =
 name = Studio stages are independent
 type = independence
 modules =
+    app.features.studio.fetch
     app.features.studio.intake
     app.features.studio.analyze
     app.features.studio.dub
@@ -59,6 +60,7 @@ modules =
 name = Studio stages do not reach up to pipeline / taskqueue / worker
 type = forbidden
 source_modules =
+    app.features.studio.fetch
     app.features.studio.intake
     app.features.studio.analyze
     app.features.studio.dub

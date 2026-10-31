@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Database,
   Clapperboard,
+  Download,
   Film,
   Home,
   Layers,
@@ -45,6 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Video",
     items: [
       { to: "/app/go/studio", label: "Studio", icon: Clapperboard },
+      { to: "/app/go/studio-tiktok", label: "Lấy từ TikTok", icon: Download },
       { to: "/app/go/studio-assets", label: "Nguyên liệu", icon: Layers },
       { to: "/app/go/studio-setup", label: "Kênh & mẫu", icon: SlidersHorizontal },
       { to: "/app/go/viral", label: "Kho video", icon: Film },
