@@ -8,6 +8,7 @@ import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import * as api from "../api/studioApi";
 import { ClipEditor } from "../components/ClipEditor";
+import { ManualPostActions } from "../components/ManualPostActions";
 import { SubtitleEditor } from "../components/SubtitleEditor";
 import { TechTags } from "../components/TechTags";
 import { TextAudioPanel } from "../components/TextAudioPanel";
@@ -63,15 +64,19 @@ export function StudioEditorPage() {
   };
   const save = useAction((s: ProjectSpec) => api.saveSpec(id, s).then(invalidate), "Đã lưu — đang render lại…", refresh);
   const meta = useAction(
-    () => api.updateMeta(id, { caption, hashtags: tags.split(/\s+/).filter(Boolean), channel_id: channelId || undefined }).then(invalidate),
+    // channel_id 0 = đăng tay (bỏ kênh)
+    () => api.updateMeta(id, { caption, hashtags: tags.split(/\s+/).filter(Boolean), channel_id: channelId || 0 }).then(invalidate),
     "Đã lưu caption / kênh.",
     refresh
   );
+  const manual = !d?.channel;
   const approve = useAction(
     () => api.approveProject(id, { caption, hashtags: tags.split(/\s+/).filter(Boolean) }).then(invalidate),
-    "Đã duyệt — đang chuyển sang Buffer.",
+    manual ? "Đã duyệt — tải video + chép caption bên dưới để đăng tay." : "Đã duyệt — đang chuyển sang Buffer.",
     refresh
   );
+  const posted = useAction(() => api.markPosted(id).then(invalidate), "Đã đánh dấu đã đăng.", refresh);
+  const [notice, setNotice] = useState({ text: "", seq: 0 });
   const reject = useAction(() => api.rejectProject(id).then(invalidate), "Đã bỏ.", refresh);
   const remake = useAction(
     () => api.recompose(id, { template_id: templateId || null, channel_id: channelId || null }),
@@ -86,11 +91,13 @@ export function StudioEditorPage() {
   const specDirty = useMemo(() => !!d && !!spec && JSON.stringify(spec) !== JSON.stringify(d.spec), [d, spec]);
   const durations = Object.fromEntries((d?.assets ?? []).map((a) => [a.id, a.duration ?? 0]));
   // Câu của nút vừa bấm gần nhất (seq lớn nhất) — hiện nổi, không phụ thuộc vị trí cuộn.
-  const last = [save, meta, approve, reject, remake, variants].reduce((a, b) => (b.seq > a.seq ? b : a));
+  const last = [save, meta, approve, reject, remake, variants, posted, notice].reduce((a, b) => (b.seq > a.seq ? b : a));
+  const lastText = "msg" in last ? last.msg : last.text;
+  const channelDirty = !!d && (d.channel?.id ?? "") !== channelId;
   const approveBlock = !d
     ? ""
-    : !d.channel && !channelId
-      ? "Cần gắn kênh (ô kênh ở «Caption & kênh») rồi Lưu"
+    : channelDirty
+      ? "Bấm «Lưu caption / kênh» trước khi duyệt"
       : specDirty
         ? "Lưu & render lại trước khi duyệt"
         : !caption.trim()
@@ -109,17 +116,22 @@ export function StudioEditorPage() {
               <h1 className="text-2xl font-semibold">Dự án #{d.project.id}</h1>
               <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[d.project.status]}`}>{STATUS_LABEL[d.project.status]}</span>
               <span className="text-sm text-slate-500">
-                {d.channel?.name ?? "chưa gắn kênh"} · mẫu {d.template?.name ?? "basic"} · {mmss(d.project.duration)}
+                {d.channel?.name ?? "Đăng tay"} · mẫu {d.template?.name ?? "basic"} · {mmss(d.project.duration)}
               </span>
             </div>
             <TechTags tags={d.project.tags ?? []} className="mt-2" />
             {d.project.error ? <p className="mt-2 text-sm text-red-700">{d.project.error}</p> : null}
-            {!d.project.editable ? (
+            {!d.project.editable && !manual ? (
               <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
                 Video đã sang Buffer (material #{d.project.viral_material_id}) — chỉ xem. Đổi giờ / huỷ lịch qua Telegram.
               </p>
             ) : null}
-            <Toast text={last.msg} seq={last.seq} />
+            {!d.project.editable && manual ? (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {d.project.status === "POSTED" ? "Đăng tay — đã đăng." : "Đăng tay — đã duyệt: tải video + chép caption, đăng xong bấm «Đã đăng»."}
+              </p>
+            ) : null}
+            <Toast text={lastText} seq={last.seq} />
 
             <div className="mt-4 grid gap-4 lg:grid-cols-[340px_1fr]">
               <div className="lg:sticky lg:top-20 lg:self-start">
@@ -149,7 +161,7 @@ export function StudioEditorPage() {
                           disabled={approve.busy || !!approveBlock}
                           onClick={() => approve.run(undefined)}
                         >
-                          {approve.busy ? "Đang duyệt…" : "Duyệt → Buffer"}
+                          {approve.busy ? "Đang duyệt…" : manual ? "Duyệt (đăng tay)" : "Duyệt → Buffer"}
                         </button>
                         <button type="button" className={`${dangerBtnClass} h-9 text-sm`} disabled={reject.busy} onClick={() => reject.run(undefined)}>
                           Bỏ
@@ -157,6 +169,18 @@ export function StudioEditorPage() {
                       </div>
                     ) : null}
                     {d.project.status === "REVIEW" && approveBlock ? <p className="text-xs text-amber-700">Chưa duyệt được: {approveBlock}.</p> : null}
+                  </div>
+                ) : null}
+                {manual && d.project.status === "APPROVED" ? (
+                  <div className="mt-3">
+                    <ManualPostActions
+                      id={d.project.id}
+                      caption={d.project.caption}
+                      hashtags={d.project.hashtags ?? []}
+                      busy={posted.busy}
+                      onPosted={() => posted.run(undefined)}
+                      onNotice={(text) => setNotice((n) => ({ text, seq: Math.max(n.seq, last.seq) + 1 }))}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -179,7 +203,7 @@ export function StudioEditorPage() {
                   />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select className={selectClass} value={channelId} disabled={!d.project.editable} onChange={(e) => setChannelId(e.target.value ? Number(e.target.value) : "")}>
-                      <option value="">Chưa gắn kênh</option>
+                      <option value="">Đăng tay (không qua Buffer)</option>
                       {(setup.data?.channels ?? []).map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}

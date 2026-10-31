@@ -121,6 +121,37 @@ export type Channel = {
   dub_voice: string | null;
 };
 
+/** Tiến trình (PLAN-114): một bước của một việc. */
+export type JobStep = {
+  stage: string;
+  label: string;
+  status: "pending" | "queued" | "running" | "retry" | "done" | "skipped" | "failed" | "waiting";
+  note: string | null;
+  started_at: number | null;
+  finished_at: number | null;
+  attempts: number;
+  run_after: number | null;
+};
+
+/** Một việc = một video đi qua chuỗi bước (tải → … → duyệt → đăng). */
+export type Job = {
+  id: number;
+  flow: string;
+  source: string;
+  title: string;
+  url: string | null;
+  project_id: number | null;
+  project_status: ProjectStatus | null;
+  created_at: number;
+  updated_at: number;
+  state: "running" | "queued" | "retry" | "failed" | "review" | "done" | "stopped";
+  summary: string;
+  current: string;
+  steps: JobStep[];
+};
+
+export type JobsResponse = { jobs: Job[]; active: number; now: number };
+
 /** Một video quét từ link TikTok (PLAN-113). ``taken`` = đã có trong Studio / đang tải. */
 export type TikTokItem = {
   id: string;

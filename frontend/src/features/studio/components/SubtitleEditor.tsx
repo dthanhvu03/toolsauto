@@ -24,6 +24,10 @@ export function SubtitleEditor({
     else edits[String(i)] = text;
     onChange({ ...sub, edits });
   };
+  // Không có câu nào thì ô «Đốt phụ đề» vô nghĩa (bật cũng không có chữ) — chỉ báo lý do.
+  if (!locked && lines.length === 0) {
+    return <p className="text-sm text-slate-500">Video không có lời thoại (Whisper không nghe ra câu nào) — không có phụ đề.</p>;
+  }
   return (
     <div>
       <label className="flex items-center gap-2 text-sm">
@@ -32,8 +36,6 @@ export function SubtitleEditor({
       </label>
       {locked ? (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">Đoạn cắt vừa đổi — lưu & render trước rồi sửa phụ đề.</p>
-      ) : lines.length === 0 ? (
-        <p className="mt-2 text-xs text-slate-400">Video không có lời thoại.</p>
       ) : (
         <ol className="mt-2 flex max-h-80 flex-col gap-1 overflow-y-auto pr-1">
           {lines.map((line, i) => {

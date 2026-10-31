@@ -7,10 +7,31 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { Toast } from "@/shared/ui/Toast";
 import * as api from "../api/studioApi";
+import { JobsPanel } from "../components/JobsPanel";
 import { VoicePicker } from "../components/VoicePicker";
 import { useAction, useSetup } from "../hooks/useStudio";
 import { mmss } from "../lib/status";
 import type { Template, TikTokItem } from "../types/studio.types";
+
+const TRACK_KEY = "studio-tiktok-tracked";
+
+/** Việc vừa gửi ở trang này — nhớ trong trình duyệt để tải lại trang vẫn theo dõi được (không có cũng không sao). */
+function loadTracked(): number[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(TRACK_KEY) || "[]");
+    return Array.isArray(v) ? v.filter((x) => Number.isInteger(x)).slice(0, 100) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTracked(ids: number[]) {
+  try {
+    localStorage.setItem(TRACK_KEY, JSON.stringify(ids));
+  } catch {
+    /* chế độ ẩn danh / chặn lưu: chỉ mất phần nhớ khi tải lại */
+  }
+}
 
 const views = new Intl.NumberFormat("vi-VN", { notation: "compact", maximumFractionDigits: 1 });
 
@@ -86,6 +107,7 @@ export function StudioTiktokPage() {
   const [hook, setHook] = useState("");
   const [voice, setVoice] = useState<string | null>(null);
   const [toast, setToast] = useState({ text: "", seq: 0 });
+  const [tracked, setTracked] = useState<number[]>(loadTracked);
   const say = (text: string) => setToast((t) => ({ text, seq: t.seq + 1 }));
 
   const scan = useAction(
@@ -110,7 +132,12 @@ export function StudioTiktokPage() {
     (r) => {
       setItems((xs) => xs.map((i) => (picked.has(i.url) ? { ...i, taken: true } : i)));
       setPicked(new Set());
-      return `Đã nhận ${r.count} video — Studio đang tải và dựng, xem ở trang Studio.`;
+      setTracked((t) => {
+        const next = [...r.task_ids, ...t].slice(0, 100);
+        saveTracked(next);
+        return next;
+      });
+      return `Đã nhận ${r.count} video — tiến trình từng video hiện ngay bên dưới ô quét.`;
     },
     [["studio-projects"]]
   );
@@ -172,6 +199,22 @@ export function StudioTiktokPage() {
           tạm.
         </p>
       </Panel>
+
+      {tracked.length ? (
+        <div>
+          <JobsPanel ids={tracked} title="Video đã gửi dựng" />
+          <button
+            type="button"
+            className="mt-1 text-xs text-slate-400 hover:text-slate-700"
+            onClick={() => {
+              setTracked([]);
+              saveTracked([]);
+            }}
+          >
+            Ẩn danh sách này
+          </button>
+        </div>
+      ) : null}
 
       {items.length ? (
         <>

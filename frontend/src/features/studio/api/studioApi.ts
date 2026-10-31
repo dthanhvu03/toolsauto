@@ -2,6 +2,7 @@ import { getJson, postJsonBlob, sendForm, sendJson } from "@/shared/api/http";
 import type {
   Asset,
   Channel,
+  JobsResponse,
   ProjectDetail,
   ProjectSpec,
   ProjectsResponse,
@@ -34,6 +35,7 @@ export const makeVariants = (id: number, n: number) =>
   sendJson<{ ok: boolean; task_ids: number[]; note: string }>(`${BASE}/projects/${id}/variants`, "POST", { n });
 export const approveProject = (id: number, body: { caption?: string; hashtags?: string[] } = {}) =>
   sendJson<Ok>(`${BASE}/projects/${id}/approve`, "POST", body);
+export const fetchJobs = (ids: number[] = []) => getJson<JobsResponse>(`${BASE}/jobs${ids.length ? `?ids=${ids.join(",")}` : ""}`);
 export const markPosted = (id: number) => sendJson<Ok>(`${BASE}/projects/${id}/posted`, "POST", {});
 export const scanTiktok = (url: string, limit: number) =>
   sendJson<{ items: TikTokItem[] }>(`${BASE}/tiktok/scan`, "POST", { url, limit });

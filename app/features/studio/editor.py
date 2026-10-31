@@ -153,7 +153,9 @@ def update_meta(
         project.caption = caption.strip()
     if hashtags is not None:
         project.hashtags = [t if t.startswith("#") else f"#{t}" for t in (x.strip() for x in hashtags) if t]
-    if channel_id is not None:
+    if channel_id == 0:  # 0 = bỏ kênh → đăng tay (PLAN-113)
+        project.channel_id = None
+    elif channel_id is not None:
         if db.get(StudioChannel, channel_id) is None:
             raise EditError(f"không có kênh #{channel_id}")
         project.channel_id = channel_id

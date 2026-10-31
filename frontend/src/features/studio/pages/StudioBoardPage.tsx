@@ -7,6 +7,7 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { Toast } from "@/shared/ui/Toast";
 import { approveProject, markPosted, rejectProject } from "../api/studioApi";
+import { JobsPanel } from "../components/JobsPanel";
 import { ProjectCard } from "../components/ProjectCard";
 import { UploadBox } from "../components/UploadBox";
 import { useAction, useProjects, useSetup } from "../hooks/useStudio";
@@ -47,13 +48,7 @@ export function StudioBoardPage() {
         </Link>
       </div>
       <Toast text={toast.text} seq={toast.seq} />
-      {d?.tasks_pending ? (
-        <p className="mt-3 flex items-center gap-2 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-900">
-          <span className="size-2 animate-pulse rounded-full bg-sky-500" />
-          Đang xử lý {d.tasks_pending} bước (nhận file → phân tích lời thoại / cảnh → dựng → render → caption). Video hiện ở
-          «Chờ duyệt» khi xong, thường 1–3 phút mỗi video — trang tự cập nhật.
-        </p>
-      ) : null}
+      <JobsPanel hideDone />
 
       <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
         {BOARD_COLUMNS.map((c) => (

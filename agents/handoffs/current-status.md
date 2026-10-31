@@ -67,6 +67,12 @@
     `fetch`, flow `link`). Video lấy về = sưu tầm (không lật / LUT / biến thể). 151 test, trình duyệt thật trên web tạm.
     `pm2 restart` bị chặn quyền → anh chạy: `pm2 restart Web_Dashboard Studio_Heavy Studio_Light && pm2 save`. Không migration.
     Chưa quét TikTok thật (chờ anh cho phép).
+  - **31/10 — PLAN-113 đã chạy thật (anh restart, lấy 1 video @mello_ai6):** tải 7.6 MB → render 103 s GPU → caption AI → REVIEW.
+    Phát hiện: bước review gửi video 24 MB qua Telegram mất ~20 phút (mạng đẩy 16 KB/s) và chặn cả làn light. Đề xuất (CHƯA làm,
+    chờ anh duyệt): video > ~8 MB gửi ảnh bìa + caption + nút Duyệt / Bỏ thay vì cả video.
+  - **31/10 — PLAN-114 tiến trình từng video (anh: «ui ux… không tiến trình»; code xong, commit cục bộ, CHỜ ANH RESTART):**
+    `GET /studio/api/jobs` + `JobsPanel` ở bảng Studio và trang «Lấy từ TikTok»; lỗi tải đọc được; sửa trình edit đăng tay
+    (lỗi PLAN-113). Lệnh: `pm2 restart Web_Dashboard Studio_Heavy Studio_Light && pm2 save`.
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 

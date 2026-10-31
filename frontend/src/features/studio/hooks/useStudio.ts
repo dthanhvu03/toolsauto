@@ -15,6 +15,17 @@ export function useSetup() {
   return useQuery({ queryKey: ["studio-setup"], queryFn: api.fetchSetup, staleTime: 60_000 });
 }
 
+/** Tiến trình (PLAN-114). Còn việc chạy thì hỏi lại mỗi 3 giây; không thì 30 giây (bảng) / thôi (lô đã xong). */
+export function useJobs(ids?: number[]) {
+  const watching = ids !== undefined;
+  return useQuery({
+    queryKey: ["studio-jobs", ids ?? "all"],
+    queryFn: () => api.fetchJobs(ids ?? []),
+    enabled: !watching || ids.length > 0,
+    refetchInterval: (q) => ((q.state.data?.active ?? 0) > 0 ? 3_000 : watching ? false : 30_000),
+  });
+}
+
 export function useVoices() {
   return useQuery({ queryKey: ["studio-voices"], queryFn: api.fetchVoices, staleTime: 5 * 60_000 });
 }

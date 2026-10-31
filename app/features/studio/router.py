@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.core.database.core import get_db
 from app.core.database.models import StudioAsset, StudioChannel, StudioProject, StudioTask, StudioTemplate
 from app.core.media import tts
-from app.features.studio import editor, entry, setup, source, store
+from app.features.studio import editor, entry, progress, setup, source, store
 
 router = APIRouter(prefix="/studio/api", tags=["studio"])
 
@@ -113,6 +113,13 @@ def tiktok_take(body: TakeBody, db: Session = Depends(get_db)) -> dict:
     except ValueError as exc:
         raise _bad(exc) from exc
     return {"ok": True, "count": len(tasks), "task_ids": [t.id for t in tasks]}
+
+
+@router.get("/jobs")
+def jobs(ids: str = Query(""), db: Session = Depends(get_db)) -> dict:
+    """Tiến trình từng video (PLAN-114). ``ids=1,2``: chỉ các việc gốc này; trống: đang chạy + xong / lỗi 2 giờ qua."""
+    wanted = [int(x) for x in ids.split(",") if x.strip().isdigit()][:100]
+    return progress.jobs(db, ids=wanted or None)
 
 
 @router.get("/tasks/{task_id}")
