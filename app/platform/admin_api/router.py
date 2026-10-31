@@ -473,5 +473,7 @@ def admin_database():
 
 
 from app.platform.admin_api.mutations import router as mutations_router
+from app.platform.admin_api.processes import router as processes_router
 
 router.include_router(mutations_router)
+router.include_router(processes_router)

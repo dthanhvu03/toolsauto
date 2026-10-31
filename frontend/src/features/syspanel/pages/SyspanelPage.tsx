@@ -2,6 +2,7 @@ import { PageHeader } from "@/shared/ui/PageHeader";
 import { Panel } from "@/shared/ui/Panel";
 import { QueryBody } from "@/shared/ui/QueryBody";
 import { StatCard } from "@/features/overview/components/StatCard";
+import { ProcessTable } from "../components/ProcessTable";
 import { useSyspanelController } from "../hooks/useSyspanelController";
 
 import { ActionMsg } from "@/shared/ui/ActionMsg";
@@ -14,9 +15,11 @@ export function SyspanelPage() {
     <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Panel hệ thống"
-        subtitle="Metrics + lệnh worker native — PM2 / cookie Gemini vẫn Classic"
+        subtitle="Tiến trình đang chạy (bật / tắt), RAM / CPU / GPU, ổ đĩa — cookie Gemini vẫn ở Classic"
         classicHref="/syspanel"
       />
+      <ProcessTable />
+      <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-400">Ổ đĩa & hàng đợi job đăng bài (hệ cũ)</h2>
       <ActionMsg text={msg} />
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className={primaryBtnClass} disabled={busy} onClick={retryFailed}>
@@ -43,13 +46,7 @@ export function SyspanelPage() {
       >
         {data ? (
           <>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatCard label="CPU" value={`${Math.round(data.cpu)}%`} />
-              <StatCard
-                label="RAM"
-                value={`${Math.round(data.mem_pct)}%`}
-                hint={`${data.mem_used_gb} / ${data.mem_total_gb} GB`}
-              />
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <StatCard
                 label="Disk"
                 value={`${Math.round(data.disk_pct)}%`}

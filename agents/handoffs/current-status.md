@@ -73,6 +73,11 @@
   - **31/10 — PLAN-114 tiến trình từng video (anh: «ui ux… không tiến trình»; code xong, commit cục bộ, CHỜ ANH RESTART):**
     `GET /studio/api/jobs` + `JobsPanel` ở bảng Studio và trang «Lấy từ TikTok»; lỗi tải đọc được; sửa trình edit đăng tay
     (lỗi PLAN-113). Lệnh: `pm2 restart Web_Dashboard Studio_Heavy Studio_Light && pm2 save`.
+  - **31/10 — Máy lag:** RAM 7,8 GB còn trống 0,7 GB (Windows nén 2 GB); `.wslconfig` đang `memory=8GB swap=0` (WSL được lấy hết RAM).
+    Đề xuất (CHƯA làm, chờ anh): `memory=5GB swap=4GB` + `wsl --shutdown`; tắt VieNeu_TTS khi không lồng tiếng (1,4 GB); lâu dài 16 GB RAM.
+  - **31/10 — PLAN-115 bảng tiến trình PM2 trên web (anh: «sao em không cấu hình bật tắt… hiển thị trên web»; code xong, commit
+    cục bộ):** Panel hệ thống có RAM / CPU / GPU + bảng app (Tắt / Bật / Khởi động lại, giữ qua khởi động máy). Danh sách app
+    điều khiển được trước đây thiếu Studio / VieNeu / DB_Backup — đã thêm. Cần anh: `pm2 restart Web_Dashboard`.
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 
