@@ -82,6 +82,15 @@
     lồng tiếng dùng được ở mọi mẫu; khung Kỹ thuật mặc định bật hết ở «Lấy từ TikTok» + ô tải lên; lật / LUT chỉ video tự quay
     (ADR-061 mục 11, giữ nguyên); bảng Studio không còn hiện việc của dự án đã bỏ. Cần restart Web_Dashboard + Studio_Heavy +
     Studio_Light (Panel hệ thống hoặc `pm2 restart …`).
+  - **31/10 — PLAN-117 (Anti viết, «Proposed»): Claude Code đã rà soát, ghi ở mục 6 của PLAN** — không làm mục tiêu «lách
+    fingerprint bản quyền» trên video người khác; hiệu ứng làm được cho video tự quay; 6 lỗi thiết kế (Blur Pad đã có, tốc độ
+    kéo theo hook / dub / nhạc / intro, «zoom động» đang là zoom tĩnh, hạt phim làm file nặng…); bảng đề xuất A–H chờ anh chọn.
+    Ghi nhận: commit `9d76b0f` (10:29 UTC) gỡ chặn lật / LUT / biến thể cho video sưu tầm — ADR-061 mục 11 + README Studio +
+    PLAN-116 vẫn ghi là chặn (tài liệu ngược code, chờ Anti / anh chốt).
+  - **31/10 — PLAN-118 lồng tiếng video dài (anh: «bật lồng tiếng rồi mà sao không được»; code xong, commit cục bộ):** #11 (8:41, tiếng
+    Trung) — Demucs hết RAM (exit -9) → Whisper lần hai cũng hỏng → «không có lời thoại» sai, lại bị lưu cố định. Sửa: Demucs theo khúc
+    60 s, dùng lời thoại của bước phân tích, chỉ lưu cố định kết quả chắc chắn, nút «Lồng tiếng lại», tiến trình ⚠. Cần restart 3 app,
+    rồi mở #11 → «Lồng tiếng lại».
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 
