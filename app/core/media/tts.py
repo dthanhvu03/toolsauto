@@ -1,19 +1,26 @@
 """
-Đọc chữ thành giọng: ``edge-tts`` trước, ``piper-tts`` offline dự phòng (chỉ giọng Việt).
+Đọc chữ thành giọng: VieNeu-TTS (server cục bộ trên GPU, PLAN-111) → ``edge-tts`` → ``piper-tts`` offline
+(VieNeu và piper chỉ giọng Việt).
 
 Port từ ``viral_intake.audio_layer`` (ADR-016) để Studio dùng chung — lồng tiếng (``studio/dub``)
 và giọng đọc AI (P5). Bản cũ giữ nguyên tới PLAN-106 P6.
 
 edge-tts dùng endpoint của Microsoft Edge, không có ToS chính thức, có thể bị chặn bất cứ lúc
 nào — vì vậy luôn có piper. Model piper ở ``storage/media/tts_models/<tên>.onnx``.
+
+VieNeu chạy ở venv riêng (``studio/dub/vieneu_server.py``, PM2 ``VieNeu_TTS``); ở đây chỉ gọi HTTP
+``VIENEU_TTS_URL`` (mặc định ``http://127.0.0.1:8790``, rỗng = tắt). Server tắt thì rơi xuống edge ngay.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import subprocess
 import unicodedata
+import urllib.error
+import urllib.request
 import wave
 from pathlib import Path
 from typing import Optional
@@ -41,6 +48,12 @@ MAX_TEXT_CHARS = 1500
 EDGE_TIMEOUT_SEC = 60
 FFMPEG_TIMEOUT_SEC = 300
 MIN_OUTPUT_BYTES = 1024
+DEFAULT_VIENEU_URL = "http://127.0.0.1:8790"
+VIENEU_TIMEOUT_SEC = 120
+# giọng edge tiếng Việt → giọng VieNeu cùng giới (bước dub chọn giọng theo tên edge)
+VIENEU_FEMALE = "Ngọc Huyền"
+VIENEU_MALE = "Hải Đăng"
+_EDGE_VI_MALE = {"vi-VN-NamMinhNeural"}
 
 
 def _ffmpeg_bin() -> str:
@@ -123,6 +136,67 @@ def _synth_edge(text: str, out_path: str, voice: str, rate: str) -> bool:
     return True
 
 
+def _vieneu_url() -> str:
+    return (os.environ.get("VIENEU_TTS_URL", DEFAULT_VIENEU_URL) or "").strip().rstrip("/")
+
+
+def _vieneu_voice(voice: str) -> Optional[str]:
+    """Tên giọng edge tiếng Việt → giọng VieNeu; giọng edge ngôn ngữ khác → None; tên khác coi là giọng VieNeu."""
+    voice = unicodedata.normalize("NFC", str(voice or "")).strip()
+    if not voice:
+        return VIENEU_FEMALE
+    if voice.endswith("Neural"):
+        if not voice.startswith("vi-"):
+            return None
+        return VIENEU_MALE if voice in _EDGE_VI_MALE else VIENEU_FEMALE
+    return voice
+
+
+def _synth_vieneu(text: str, out_path: str, voice: str) -> bool:
+    base = _vieneu_url()
+    vn_voice = _vieneu_voice(voice)
+    if not base or vn_voice is None:
+        return False
+    req = urllib.request.Request(
+        base + "/tts",
+        data=json.dumps({"text": text, "voice": vn_voice}, ensure_ascii=False).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=VIENEU_TIMEOUT_SEC) as resp:
+            data = resp.read()
+    except urllib.error.HTTPError as e:
+        logger.warning("[tts] vieneu HTTP %s: %s", e.code, e.read()[:200].decode(errors="replace"))
+        return False
+    except (urllib.error.URLError, OSError) as e:  # server tắt / timeout
+        logger.warning("[tts] vieneu unreachable: %s", getattr(e, "reason", e))
+        return False
+    if len(data) < MIN_OUTPUT_BYTES:
+        logger.warning("[tts] vieneu returned empty audio")
+        return False
+    wav_tmp = out_path + ".vieneu.tmp.wav"
+    with open(wav_tmp, "wb") as f:
+        f.write(data)
+    return _wav_to_output(wav_tmp, out_path, "vieneu")
+
+
+def _wav_to_output(wav_tmp: str, out_path: str, what: str) -> bool:
+    """WAV tạm → ``out_path`` (đổi tên nếu đuôi .wav, không thì ffmpeg đổi định dạng). Luôn xoá file tạm."""
+    if out_path.lower().endswith(".wav"):
+        try:
+            os.replace(wav_tmp, out_path)
+            return True
+        except OSError as e:
+            logger.warning("[tts] %s cannot move wav: %s", what, e)
+            _remove_quiet(wav_tmp)
+            return False
+
+    cmd = [_ffmpeg_bin(), "-y", "-i", wav_tmp, "-b:a", "128k", out_path]
+    ok = _run_ffmpeg(cmd, out_path, f"{what} wav→audio")
+    _remove_quiet(wav_tmp)
+    return ok
+
+
 def _synth_piper(
     text: str,
     out_path: str,
@@ -153,19 +227,7 @@ def _synth_piper(
         _remove_quiet(wav_tmp)
         return False
 
-    if out_path.lower().endswith(".wav"):
-        try:
-            os.replace(wav_tmp, out_path)
-            return True
-        except OSError as e:
-            logger.warning("[tts] piper cannot move wav: %s", e)
-            _remove_quiet(wav_tmp)
-            return False
-
-    cmd = [_ffmpeg_bin(), "-y", "-i", wav_tmp, "-b:a", "128k", out_path]
-    ok = _run_ffmpeg(cmd, out_path, "piper wav→audio")
-    _remove_quiet(wav_tmp)
-    return ok
+    return _wav_to_output(wav_tmp, out_path, "piper")
 
 
 def _try_engine(name: str, fn, *args) -> bool:
@@ -188,7 +250,7 @@ def synthesize(
     """
     Đọc ``text`` thành file audio tại ``out_path`` (mp3/m4a/wav theo đuôi).
 
-    ``engine``: ``auto`` (edge → piper), ``edge``, ``piper``. Không raise;
+    ``engine``: ``auto`` (vieneu → edge → piper), ``vieneu``, ``edge``, ``piper``. Không raise;
     trả False + warning khi mọi engine đều hỏng.
     """
     try:
@@ -197,8 +259,15 @@ def synthesize(
             logger.warning("[tts] synthesize: empty text")
             return False
         engine_key = (engine or "auto").strip().lower()
-        if engine_key not in ("auto", "edge", "piper"):
+        if engine_key not in ("auto", "vieneu", "edge", "piper"):
             engine_key = "auto"
+
+        if engine_key in ("auto", "vieneu"):
+            if _try_engine("vieneu", _synth_vieneu, cleaned, out_path, voice):
+                logger.info("[tts] voice via vieneu (%s)", _vieneu_voice(voice))
+                return True
+            if engine_key == "vieneu":
+                return False
 
         if engine_key in ("auto", "edge"):
             if _try_engine("edge-tts", _synth_edge, cleaned, out_path, voice, rate):

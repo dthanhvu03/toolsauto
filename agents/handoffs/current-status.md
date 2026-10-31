@@ -51,6 +51,10 @@
       `viral_materials` READY → FAILED «Không còn file video» (226 tiktok, 35 facebook). Buffer vẫn gọi `/buffer-media/`
       của vài id trong số này (1449, 1450, 1505, 1506) → 404 → bài đó trên Buffer sẽ lỗi. Vì sao file mất chưa rõ — việc
       của phía Buffer / Anti.
+  - **31/10 08:xx — PLAN-111 VieNeu vào bước dub (anh: «nối vào cho anh»):** server `VieNeu_TTS` (PM2, venv riêng, GPU,
+    127.0.0.1:8790, offline) + engine `vieneu` đầu `auto` trong `app/core/media/tts.py`; tắt server thì tự về edge → piper.
+    127 test qua, chạy thật 2 câu qua HTTP. Chưa lồng trọn một video thật — anh thử bằng video tiếng nước ngoài, mẫu `reup_dub`.
+    Mẫu nghe ở `C:\Users\Admin\Downloads\toolsauto-test\`.
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 

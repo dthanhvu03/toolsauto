@@ -191,5 +191,21 @@ module.exports = {
       max_memory_restart: "512M",
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
+    // PLAN-111 — giọng đọc VieNeu trên GPU cho bước dub. Venv riêng (torch CUDA); tắt thì dub tự về edge-tts.
+    {
+      name: "VieNeu_TTS",
+      script: "app/features/studio/dub/vieneu_server.py",
+      args: "--port 8790",
+      interpreter: "/home/vu/venv-vieneu/bin/python",
+      cwd: PROJECT_ROOT,
+      kill_timeout: 10000,
+      max_restarts: 5,
+      min_uptime: 180000,            // nạp model mất 1–1,5 phút
+      restart_delay: 30000,
+      autorestart: true,
+      max_memory_restart: "4G",
+      // chỉ dùng model + code đã có trong cache HF — không tự tải bản mới (transformers trust_remote_code)
+      env: { PYTHONUNBUFFERED: "1", HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1" },
+    },
   ],
 };

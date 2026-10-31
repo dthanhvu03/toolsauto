@@ -24,7 +24,7 @@ asset    cache      tiếng   spec      mp4      chữ AI    cổng duyệt   d�
 | | `notify.py` | chờ duyệt → Telegram (video + ✅ `sok:` / 🗑 `sno:` / ✏️ web) |
 | Bước | `intake/` | file → `StudioAsset` (sha256; reup trùng cùng kênh thì dừng) |
 | | `analyze/` | probe, transcript (`{"lang","lines"}`), khoảng lặng, cảnh — 1 lần mỗi asset |
-| | `dub/` | lồng tiếng → 2 asset audio (giọng + nền Demucs), phân tích `dub` |
+| | `dub/` | lồng tiếng → 2 asset audio (giọng + nền Demucs), phân tích `dub`. Giọng Việt: VieNeu trên GPU (`dub/vieneu_server.py`, PM2 `VieNeu_TTS`, venv riêng `/home/vu/venv-vieneu`, PLAN-111) → edge-tts → piper |
 | | `compose/` | asset + kênh + mẫu → `StudioProject` (mẫu `basic`, `reup_dub`, `own_footage`) |
 | | `render/` | spec → 1 lệnh ffmpeg (`render/graph.py`, hàm thuần) → mp4 |
 | | `caption/` | AI viết caption + hashtag (đã có thì bỏ qua) |
