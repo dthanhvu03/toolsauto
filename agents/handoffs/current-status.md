@@ -55,6 +55,18 @@
 
 ---
 
+## Phiên 2026-10-31 (admin-pkg) — Gom admin_*.py vào package cashback_bot/admin (Bước 1)
+
+- Commit b60296b trên origin/main (chủ bot: «em commit và push Bước 1»). Bản tái cấu trúc do phiên khác làm; phiên này review + kiểm lại.
+- 20 file `admin_*.py` chuyển nguyên vào `cashback_bot/admin/` (`panel` = admin_policy cũ, `ui`, `notify/`, `handlers/`), chỉ đổi import + đường dẫn migration. File cũ là shim `sys.modules[__name__] = <module mới>` (giữ tên `_private`, `mock.patch` trên đường cũ vẫn tác dụng).
+- `AdminRouter` / `BaseAdminHandler` / `AdminContext` mới là khung, **chưa nối vào `panel.py`** — hành vi bot không đổi.
+- Kiểm tra: toàn bộ `tests/test_cashback_*.py` (chặn TCP) 1102 qua, 1 hỏng sẵn `test_b9`; ruff `cashback_bot` sạch; import `service` / `poller` / `zalo_bot` chạy.
+- **Next:**
+  - Chủ bot restart (`systemctl restart cashback-bot cashback-zalo`).
+  - Bước 2 (tách `admin/ui/__init__.py` 1.193 dòng thành keyboards / views / glossary) và Bước 3 (nối Router, tách `panel.py` 1.725 dòng) cần PLAN của Anti. Bước 3 phải giữ: luật dọn trạng thái chờ hẹp hơn prefix (ví `c:wl:mv:` / `c:wl:vb:`; insights `c:in:cost`, `c:in:f`, `c:in:t:*`), thứ tự `consume_text` (`/tim` → cookie → mô phỏng → hỗ trợ → ví → giữ chân → insights → dự phòng → chia → số chính sách), adapter cho `ReconciliationAdmin.route(data)` / `AutoSyncAdmin.route(data, now, notice)`.
+
+---
+
 ## Phiên 2026-10-31 (ux-4line) — Thẻ link 4 dòng, Zalo một tin, relay gọn link, bảng hoa hồng admin
 
 - Commit ee9a1d6 trên origin/main (chủ bot yêu cầu).
