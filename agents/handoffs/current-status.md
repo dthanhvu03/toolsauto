@@ -1,3 +1,15 @@
+## Phiên 2026-10-31 (ux-4line) — Thẻ link 4 dòng, Zalo một tin, relay gọn link, bảng hoa hồng admin
+
+- Commit ee9a1d6 trên origin/main (chủ bot yêu cầu).
+- **Thẻ link:** 🛍️ tên · 🏷️ giá tham khảo · 💰 hoàn dự kiến (+ «có thể cao hơn») · 👉 bấm Mua. Món 0đ: «Món này hiện không có tiền hoàn», không có nút Lưu ý. Nút `🛡️ Lưu ý trước khi mua` = `u:tip:<cờ>` (2 = V1.2, t = TikTok, c = giá cao); `tip_reply` gửi **tin mới** (service `keep`), có: mua qua nút, món trong giỏ, đúng món, voucher, giá cao (nếu c), sàn báo đơn ~1 ngày, câu 🔒, chữ nhỏ V1.1/V1.2. Thẻ cũ `u:tip` vẫn mở được. Bỏ popup `TIP_ALERT`.
+- **Zalo:** `render` gộp thẻ + dòng dẫn + URL vào một tin; bỏ câu «Bấm 🛒 Mua… bên dưới». `ZaloSender` truyền nhãn nút link: nút khác Mua/TikTok/Food dẫn bằng chính nhãn (vd «👉 🎟 Lưu mã trên Shopee:»).
+- **sale_relay:** `post_html` bỏ link trùng nút khỏi chữ, link còn lại thành `<a>` «🔗 Lưu mã» / «🔗 Mua ngay» / «🔗 Link»; cắt bằng `fit_html`. Dùng cho kênh và tin khách.
+- **Admin:** bảng link `<pre>`: Giá tham khảo ─ Hoa hồng (· từ shop / Shopee) · Phí · Thuế ─ Quỹ chia · Khách nhận · Biên lãi. Bảng đồng bộ cột `# Giá HH Phí/T Khách Biên TT`.
+- Kiểm tra: toàn bộ `tests/test_cashback_*.py` (chặn TCP ra ngoài) qua hết trừ `test_b9` có sẵn; ruff `cashback_bot` sạch (3 lỗi lint test có sẵn từ HEAD: test_cashback_admin, admin_ui_ux, wallet).
+- **Next:** chủ bot restart (`systemctl restart cashback-bot cashback-zalo`).
+
+---
+
 ## Phiên 2026-10-31 (relay-perf) — sale_relay chạy nền, bớt HEAD/DNS, lưu mã vào voucher_posts
 
 - Commit da06502 trên origin/main (chủ bot yêu cầu sửa mục 1–4 + gắn extract_voucher_codes).
