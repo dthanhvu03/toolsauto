@@ -32,10 +32,46 @@ modules =
     app.features.system_panel
     app.features.accounts
     app.features.jobs
+    app.features.studio
 ignore_imports =
     # HUP HOP LE (ADR-008): di qua dispatcher la cach chinh thuc de mot feature
     # cham toi nen tang khac.
     app.adapters.dispatcher -> app.features.**
     # NO KY THUAT THAT — can vá, dung them cai moi vao day:
     app.core.observability.metrics_checker -> app.features.facebook.pages.reels
-    app.features.insights.router -> app.features.viral_intake.reup_variants
+
+# ADR-061: moi buoc Studio lam dung 1 viec — khong buoc nao import buoc khac.
+# Chi app.features.studio.pipeline biet thu tu cac buoc.
+[importlinter:contract:studio-stages-independent]
+name = Studio stages are independent
+type = independence
+modules =
+    app.features.studio.intake
+    app.features.studio.analyze
+    app.features.studio.dub
+    app.features.studio.compose
+    app.features.studio.render
+    app.features.studio.caption
+    app.features.studio.review
+    app.features.studio.publish
+
+[importlinter:contract:studio-stages-below-pipeline]
+name = Studio stages do not reach up to pipeline / queue / worker
+type = forbidden
+source_modules =
+    app.features.studio.intake
+    app.features.studio.analyze
+    app.features.studio.dub
+    app.features.studio.compose
+    app.features.studio.render
+    app.features.studio.caption
+    app.features.studio.review
+    app.features.studio.publish
+forbidden_modules =
+    app.features.studio.pipeline
+    app.features.studio.queue
+    app.features.studio.worker
+    app.features.studio.entry
+    app.features.studio.editor
+    app.features.studio.setup
+    app.features.studio.router

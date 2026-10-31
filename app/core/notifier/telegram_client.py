@@ -10,8 +10,10 @@ Dùng:
     client.send_message("Hello!")
     client.send_photo("/path/to/img.jpg", "Caption here")
 """
-import httpx
+import os
 import time
+
+import httpx
 import logging
 from typing import Optional
 
@@ -147,6 +149,36 @@ class TelegramClient:
         else:
             data["reply_markup"] = json_mod.dumps({"inline_keyboard": []})
         return self._request("editMessageReplyMarkup", data=data)
+
+    MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024  # Bot API không cho bot tải file lớn hơn
+
+    def download_file(self, file_id: str, dest_path: str) -> Optional[str]:
+        """
+        Tải file người dùng gửi vào chat (PLAN-106 P4: video tự quay → Studio) về ``dest_path``.
+        ``None`` khi Telegram từ chối (quá 20 MB, file_id hỏng) hoặc tải hỏng — không để file dở.
+        """
+        info = self._request("getFile", data={"file_id": file_id})
+        file_path = (info or {}).get("file_path")
+        if not file_path:
+            return None
+        url = f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
+        tmp = dest_path + ".part"
+        try:
+            with httpx.stream("GET", url, timeout=120) as resp:
+                if resp.status_code != 200:
+                    logger.warning("Telegram download %s: HTTP %s", file_path, resp.status_code)
+                    return None
+                with open(tmp, "wb") as fh:
+                    for chunk in resp.iter_bytes(1024 * 1024):
+                        fh.write(chunk)
+            os.replace(tmp, dest_path)
+            return dest_path
+        except Exception as e:
+            logger.warning("Telegram download %s failed: %s", file_path, e)
+            return None
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
 
     def get_updates(self, offset: int = 0, timeout: int = 30) -> list:
         """

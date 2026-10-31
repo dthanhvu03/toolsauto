@@ -18,6 +18,7 @@ import app.config as config
 from app.constants import AccountStatus, JobStatus, ViralStatus
 from app.core.media.content_hash import sha256_file
 from app.core.media.video_protector import VideoProtector
+from app.core import feature_hooks
 from app.core import settings as runtime_settings
 from app.features.viral_intake.dedup import find_duplicate
 from app.features.viral_intake.service import ViralService, _clean_title_for_context
@@ -1053,6 +1054,19 @@ def _process_viral_materials(db: Session, only_material_id: int | None = None) -
                     pass
                 db.commit()
                 logger.info("[VIRAL] Material #%s DUPLICATE — %s (bo qua reup)", mat.id, reason)
+                continue
+
+            # ADR-061: kênh đích đã chuyển sang Studio thì Studio edit (file chuyển sang hộp thư Studio).
+            # Phần con (ADR-041) vẫn đi đường cũ: Studio chưa có chia phần.
+            if not is_part and feature_hooks.call_optional(
+                "studio.take_reup", db,
+                channel_ids=mat.target_pages_list, path=media_path, url=mat.url,
+                title=_clean_title_for_context(mat.title), material_id=mat.id, default=False,
+            ):
+                mat.status = ViralStatus.STUDIO
+                mat.last_error = None
+                db.commit()
+                logger.info("[VIRAL] Material #%s chuyển sang Studio", mat.id)
                 continue
 
             # Chọn account sớm để resolve anti-dupe preset theo page/niche

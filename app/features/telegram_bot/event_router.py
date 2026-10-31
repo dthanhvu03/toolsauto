@@ -1,5 +1,7 @@
 import logging
+import os
 import re
+import tempfile
 import threading
 
 from app.constants import JobStatus
@@ -21,6 +23,10 @@ class TelegramEventRouter:
             self._handle_callback_query(update["callback_query"])
 
     def _handle_message(self, message: dict):
+        media = message.get("video") or message.get("document")
+        if media:
+            self._handle_studio_file(media, message.get("caption") or "")
+            return
         text = message.get("text", "")
         if text.startswith("/"):
             parts = text.split()
@@ -89,6 +95,52 @@ class TelegramEventRouter:
 
         threading.Thread(target=_run, name=f"tg-process-{material_id}", daemon=True).start()
 
+    # ── PLAN-106 P4: Studio ─────────────────────────────────────────────────
+
+    def _handle_studio_file(self, media: dict, caption: str):
+        """
+        File video gửi vào chat → dự án Studio (flow ``upload``). Chữ kèm theo = tên kênh (khớp thì gắn).
+        Tải về thư mục tạm rồi giao cho hook ``studio.accept_local_file`` — hook chuyển file vào hộp thư
+        Studio (``move``), nên file tạm không ở lại. Không bao giờ ném.
+        """
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        name = media.get("file_name") or f"telegram_{media.get('file_unique_id', 'video')}.mp4"
+        mime = str(media.get("mime_type") or "")
+        if not (mime.startswith("video/") or name.lower().endswith((".mp4", ".mov", ".mkv", ".webm", ".m4v"))):
+            return
+        if int(media.get("file_size") or 0) > self.client.MAX_DOWNLOAD_BYTES:
+            self.client.send_message("⚠️ File quá 20 MB — Telegram không cho bot tải. Gửi qua web hoặc thư mục Drive Studio/Inbox.")
+            return
+        fd, tmp = tempfile.mkstemp(prefix="tg_studio_", suffix=os.path.splitext(name)[1] or ".mp4")
+        os.close(fd)
+        try:
+            if not self.client.download_file(media["file_id"], tmp):
+                self.client.send_message("❌ Không tải được file từ Telegram.")
+                return
+            with SessionLocal() as db:
+                res = feature_hooks.call("studio.accept_local_file", db, tmp, name, channel_hint=caption) or {}
+            self.client.send_message(f"🎬 Đã nhận vào Studio (việc #{res.get('task_id')}){res.get('note', '')}. Xong sẽ gửi bản dựng để duyệt.")
+        except Exception as exc:
+            logger.exception("[Telegram] studio file failed")
+            self.client.send_message(f"❌ Studio không nhận được file: {str(exc)[:150]}")
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+
+    def _handle_studio_review(self, callback_id: str, action: str, project_id: int, message_id):
+        from app.core import feature_hooks
+        from app.core.database.core import SessionLocal
+
+        hook = "studio.approve" if action == "sok" else "studio.reject"
+        with SessionLocal() as db:
+            ok, msg = feature_hooks.call(hook, db, project_id)
+        self.client.answer_callback_query(callback_id, msg[:180], show_alert=not ok)
+        if ok and message_id:
+            self.client.edit_message_reply_markup(message_id)
+            self.client.send_message(f"{'✅' if action == 'sok' else '🗑'} Studio #{project_id}: {msg}")
+
     def _handle_callback_query(self, query: dict):
         callback_id = query.get("id")
         data = query.get("data", "")
@@ -156,6 +208,8 @@ class TelegramEventRouter:
                 self._handle_buffer_post(callback_id, action, target_id)
             elif action == "donrac":
                 self._handle_donrac_callback(callback_id, target_id)
+            elif action in ("sok", "sno"):
+                self._handle_studio_review(callback_id, action, int(target_id), message_id)
         except Exception as e:
             logger.exception("[Telegram] Callback failed")
             self.client.answer_callback_query(callback_id, f"❌ Lỗi: {e}")

@@ -162,5 +162,34 @@ module.exports = {
       max_memory_restart: "1G",
       env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
     },
+    // ADR-061 Studio — chưa bật. Bật: pm2 start ecosystem.config.js --only Studio_Heavy,Studio_Light
+    {
+      name: "Studio_Heavy",
+      script: "app/features/studio/worker.py",
+      args: "--lanes heavy",         // analyze + render: ffmpeg / Whisper, 1 việc mỗi lần
+      interpreter: VENV_PYTHON,
+      cwd: PROJECT_ROOT,
+      kill_timeout: 900000,          // 15 phút — để render đang chạy xong
+      max_restarts: 10,
+      min_uptime: 30000,
+      restart_delay: 5000,
+      autorestart: true,
+      max_memory_restart: "3G",
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
+    },
+    {
+      name: "Studio_Light",
+      script: "app/features/studio/worker.py",
+      args: "--lanes light",
+      interpreter: VENV_PYTHON,
+      cwd: PROJECT_ROOT,
+      kill_timeout: 60000,
+      max_restarts: 10,
+      min_uptime: 30000,
+      restart_delay: 5000,
+      autorestart: true,
+      max_memory_restart: "512M",
+      env: { PYTHONUNBUFFERED: "1", PYTHONPATH: "." },
+    },
   ],
 };

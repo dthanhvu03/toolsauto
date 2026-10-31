@@ -19,6 +19,7 @@ def register_feature_hooks() -> None:
     from app.features.viral_intake.sources import SourceService
     from app.features.viral_intake.service import ViralService
     from app.features.telegram_bot.poller import TelegramPoller
+    from app.features.studio import entry as studio_entry
 
     def viral_process_all(db: Session):
         return ViralProcessorService().process_all(db)
@@ -260,3 +261,24 @@ def register_feature_hooks() -> None:
     feature_hooks.register("viral.discover_keyword", viral_discover_keyword)
     feature_hooks.register("telegram.make_poller", telegram_make_poller)
     feature_hooks.register("facebook.strategic_boost", facebook_strategic_boost)
+    def studio_approve(db: Session, project_id: int) -> tuple[bool, str]:
+        """Nút ✅ trên Telegram. Trả (ok, câu cho người bấm) — không ném."""
+        try:
+            studio_entry.approve(db, project_id)
+        except studio_entry.ReviewError as exc:
+            return False, str(exc)
+        return True, "đã duyệt, đang chuyển sang Buffer"
+
+    def studio_reject(db: Session, project_id: int) -> tuple[bool, str]:
+        try:
+            studio_entry.reject(db, project_id, reason="bỏ trên Telegram")
+        except studio_entry.ReviewError as exc:
+            return False, str(exc)
+        return True, "đã bỏ"
+
+    # ADR-061 / PLAN-106 P2: kênh đã chuyển sang Studio thì Studio edit video reup thay ReupProcessor.
+    feature_hooks.register("studio.take_reup", studio_entry.take_reup)
+    # PLAN-106 P4: duyệt / bỏ bằng nút Telegram, file video gửi vào chat → dự án Studio.
+    feature_hooks.register("studio.approve", studio_approve)
+    feature_hooks.register("studio.reject", studio_reject)
+    feature_hooks.register("studio.accept_local_file", studio_entry.accept_local_file)

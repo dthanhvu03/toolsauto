@@ -25,6 +25,7 @@ class ViralStatus(StrEnum):
     READY = "READY"  # tai + reup xong, chua co job — dang tay (ADR-018)
     DUPLICATE = "DUPLICATE"  # trung noi dung voi material da co — khong reup, khong tao job (ADR-024)
     POSTED = "POSTED"  # Owner bam "Da dang" sau khi dang tay (ADR-042) — chong trung van soi
+    STUDIO = "STUDIO"  # kenh da chuyen sang Studio — Studio edit, khong qua ReupProcessor (ADR-061)
     FAILED = "FAILED"
 
 class JobType(StrEnum):

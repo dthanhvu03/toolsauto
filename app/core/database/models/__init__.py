@@ -43,6 +43,14 @@ from app.core.database.models.compliance import (
     KeywordBlacklist,
     ViolationLog,
 )
+from app.core.database.models.studio import (
+    StudioAnalysis,
+    StudioAsset,
+    StudioChannel,
+    StudioProject,
+    StudioTask,
+    StudioTemplate,
+)
 
 __all__ = [
     "Base",
@@ -80,4 +88,11 @@ __all__ = [
     "ComplianceAllowlist",
     "ComplianceRegexRule",
     "ViolationLog",
+    # studio (ADR-061)
+    "StudioAsset",
+    "StudioAnalysis",
+    "StudioTemplate",
+    "StudioChannel",
+    "StudioProject",
+    "StudioTask",
 ]
