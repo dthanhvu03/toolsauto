@@ -56,14 +56,14 @@
 
 ---
 
-## Phiên 2026-10-31 (admin-router) — PLAN-110: tách UI admin, nối AdminRouter, panel.py 1.725 → 477 dòng (chưa commit)
+## Phiên 2026-10-31 (admin-router) — PLAN-110: tách UI admin, nối AdminRouter, panel.py 1.725 → 477 dòng (đã commit)
 
 - Chủ bot: «em làm bước 2 và bước 3 cho anh luôn nha». PLAN-110 (`agents/plans/active/`) ghi phạm vi + proof.
 - **Bước 2:** `admin/ui/` = `keyboards.py` + `views.py` + `glossary.py`, `__init__` re-export (đường import cũ không đổi).
 - **Bước 3:** `admin/routes.py` đăng ký 20 handler vào `AdminRouter`; tách khỏi panel: `handlers/shopee.py`, `simulation.py`, `policy.py`, `history.py`, `admin/common.py`. Luật giữ trạng thái chờ và thứ tự gõ chữ giữ y cũ (khai báo `keeps_state` từng handler).
 - Kiểm tra: so bản cũ / mới cùng 196 nút + 12 lượt gõ → 220 phản hồi giống hệt; toàn bộ test cashback (chặn TCP) 1123 qua + 1 hỏng sẵn `test_b9`; ruff sạch.
 - Không đụng: `app/features/studio/render/encoder.py`, `PROJECT.md` (phiên khác).
-- **Next:** chủ bot duyệt commit + push; sau đó restart `systemctl restart cashback-bot cashback-zalo`; archive PLAN-110 khi đã chạy thật.
+- **Next:** restart `systemctl restart cashback-bot cashback-zalo`; archive PLAN-110 khi đã chạy thật.
 
 ---
 
