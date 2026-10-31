@@ -1,3 +1,41 @@
+## Phiên 2026-10-30 → 31 (studio) — PLAN-106 Studio P1–P4 + PLAN-108 dọn giao diện (đã merge main)
+
+- Anh: mọi bài đã đăng qua Buffer, UI đăng bài cũ không cần nữa, «đập đi xây lại 1 hệ sinh thái edit video». Anh chốt: edit tự động theo mẫu + duyệt / chỉnh tay; 3 nguồn (reup, tự quay, AI); điều khiển bằng web + Telegram; **xây song song**, Buffer vẫn đăng bình thường.
+- Khảo sát (chỉ đọc code + 1 truy vấn DB chỉ đọc): 0 tài khoản FB active, 0 job FB treo, nên luồng READY → Buffer không bị chặn. Vật liệu: READY 306, FAILED 210, POSTED 151, BOOST_PENDING 31, DUPLICATE 9; READY mới nhất 25/10. Code chết khoảng 25k dòng (FB / Threads / IG / TikTok upload / engagement…), khoảng 15 trang UI, khoảng 50 file test.
+- `agents/plans/active/PLAN-106-video-studio.md`: module `app/features/studio/`, dự án = spec JSON, render 1 lượt, cache Whisper, worker `Studio_Render` riêng, cầu nối Buffer qua dòng `viral_materials` READY (không sửa code Buffer), 6 bước P0–P6, xoá code chết ở bước cuối.
+- Anh: «tách hết ra để mỗi module làm 1 việc và nối lại quy trình… em quyết toàn bộ đi». Em chốt D1–D5:
+  - D1: bỏ cắt watermark + lọc né trùng, giữ ghi nguồn;
+  - D2: thí điểm phải duyệt;
+  - D3: Pexels + thư viện của anh;
+  - D4: kênh Uyển Nhi;
+  - D5: Claude Code làm cả backend.
+  Ghi ở **ADR-061** (`agents/decisions/ADR-061-video-studio-pipeline.md`); PLAN-106 chuyển Approved.
+- **P1 xong (chưa commit):**
+  - `app/features/studio/`: mỗi bước 1 package (intake / analyze / compose / render / review), nối bằng hàng việc `studio_tasks` + `pipeline.py`; worker theo làn heavy / light.
+  - Models + migration `u8c5d6e7f8a9` (chỉ thêm 6 bảng), `.importlinter` 2 luật mới, PM2 `Studio_Heavy` / `Studio_Light` (chưa bật).
+  - Proof trong PLAN-106: 30 test Studio qua, ruff sạch, luật import mới KEPT, migration lên / xuống / check sạch trên SQLite tạm, test cũ liên quan 386 qua + 2 hỏng ngoài Studio (1 cần Postgres thật, 1 hỏng sẵn trên HEAD).
+- Không đụng: Buffer, Maintenance, viral_intake, cashback (working tree có thay đổi cashback của phiên khác — `cashback_bot/*`, PLAN-105 — em không sửa).
+- **31/10 — P2 xong (chưa commit, chưa chạy trên máy thật).** Anh: «em làm tiếp đi».
+  - Bước mới `dub` (lồng tiếng → 2 asset audio giọng + nền, spec `Clip.audio`) và `caption` (AI sau render). Mẫu `reup_dub`, `own_footage` (cắt khoảng lặng). `basic` không đốt phụ đề tiếng khác.
+  - Cửa vào `studio/entry.py`: hook `studio.take_reup` từ `viral_intake/processor.py` (+14 dòng, ngay sau chống trùng; chỉ khi đúng 1 kênh đích bật `studio_channels.take_reup`, material → `STUDIO`), `POST /studio/api/upload`, hộp thư Drive `Studio/Inbox/<tên kênh>/` + `_Kho/`.
+  - Port không sửa code cũ: `app/core/media/speech.py`, `tts.py`, `studio/dub/engine.py`, `separate.py` (bản cũ xoá ở P6). ADR-061 thêm mục 7–10.
+  - Migration `u8c5d6e7f8a9` sửa thẳng (chưa chạy ở đâu): thêm `studio_channels.take_reup`, `studio_tasks.parent_id`.
+  - Proof trong PLAN-106: 57 test Studio qua; ruff sạch; luật import Studio KEPT; migration lên / check / xuống sạch; cả bộ test cắt mạng 73/74 test hỏng y hệt worktree HEAD sạch, test còn lại do `app/services/__pycache__` cũ (gitignore) ở thư mục làm việc, 6 test cashback của phiên khác cần DNS.
+  - Không có kênh nào bật `take_reup` (bảng chưa có trên DB thật) nên hệ cũ chạy y như trước.
+- **31/10 (chiều) — PLAN-108 dọn giao diện + P3 cầu nối Buffer xong (chưa commit).** Anh: «dọn dẹp các ui ux… tổ chức lại theo module… rồi làm bước 3».
+  - PLAN-108: gỡ 8 module chết (tài khoản FB, affiliate, kho kênh cũ, insights, nhiệm vụ FB, Threads, hub cấu hình, cấu hình nền tảng) ở cả SPA, API admin, router, Jinja; sidebar SPA + Jinja cùng 5 module (Tổng quan · Video · Buffer · Nội dung & AI · Hệ thống); Tổng quan viết lại theo kênh Buffer; Lịch đăng chỉ xem. 129 file, −14.255 dòng. Build lại `app/static/admin`.
+  - P3: bước `publish` → dòng `viral_materials` READY + file nối cứng trong `REUP_DIR/studio/`, Maintenance tự hẹn lên Buffer; duyệt / bỏ qua API; đồng bộ SCHEDULED / POSTED. Không sửa code Buffer.
+  - Proof trong PLAN-108 / PLAN-106: 115 test Studio + giao diện qua; ruff sạch; luật import Studio KEPT; migration sạch; chụp trình duyệt thật 1440 / 390 px; cả bộ test cắt mạng: test hỏng còn lại đều hỏng sẵn (so với lần chạy P2 + worktree HEAD).
+  - **SPA mới đang hiện trên web thật** (file tĩnh), API vẫn là process cũ: anh cần `pm2 restart Web_Dashboard`.
+- **31/10 (tối) — P4 xong (chưa commit):** SPA Studio (bảng duyệt, trình edit cắt đoạn / sửa phụ đề / hook / âm lượng / caption / đổi mẫu, Nguyên liệu, Kênh & mẫu) + Telegram (video chờ duyệt kèm nút ✅ / 🗑 / ✏️, gửi file video vào bot → dự án). 75 test Studio qua; chụp trình duyệt thật trên môi trường demo SQLite. Proof ở PLAN-106.
+- **31/10 — đã commit (anh: «em commit cho anh luôn»):** nhánh `studio/plan-106-108` (từ main e4993eb), làm trong worktree `/home/vu/toolsauto-studio` để không đổi nhánh của thư mục chung (phiên cashback đang làm ở đây). `f4713b0` feat(studio) P1–P4 (67 file), `8154fca` refactor(ui) PLAN-108 (125 file). Không có file cashback / PROJECT.md. Chạy thử trong worktree: 60 test qua + 1 hỏng sẵn (cần Postgres). Anh: «cashback xong rồi, tới phần em» → đã bỏ bản chưa commit (192 file, so sha khớp nhánh) và **merge vào main** (merge commit, xung đột duy nhất ở file này, giữ cả hai phần). Chưa push.
+- **VieNeu-TTS (anh hỏi):** Apache-2.0, v3 Turbo 0.1B, 25 giọng Việt có sẵn (Bắc / Trung / Nam, dùng thương mại được), clone giọng từ 3–8 giây, chạy CPU bằng ONNX (không cần torch), `pip install vieneu`. Máy i5-10300H không có VNNI → chỉ dùng fp32. Hợp làm engine giọng chính cho bước `dub` / P5 thay edge-tts (endpoint không chính thức). Cài thử bị chặn quyền — cần anh cho phép cài vào venv riêng để nghe thử + đo tốc độ.
+- **Next:**
+  - Anh bật thử Studio (theo thứ tự): `pg_dump` → `venv/bin/alembic upgrade head` → `pm2 restart Web_Dashboard Maintenance` → `pm2 start ecosystem.config.js --only Studio_Heavy,Studio_Light && pm2 save`. Rồi vào «Kênh & mẫu» thêm Uyển Nhi (D4).
+  - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
+
+---
+
 ## Phiên 2026-10-31 (ux-4line) — Thẻ link 4 dòng, Zalo một tin, relay gọn link, bảng hoa hồng admin
 
 - Commit ee9a1d6 trên origin/main (chủ bot yêu cầu).

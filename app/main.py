@@ -25,23 +25,16 @@ from app.core.ai import router as ai
 
 # Feature Routers
 from app.features.jobs import router as jobs
-from app.features.accounts import router as accounts
-from app.features.threads import router as threads
-from app.features.affiliates import router as affiliates
 from app.features.cashback_insights import router as cashback_insights
 from app.features.system_panel import router as system_panel
 from app.features.system_panel import worker_router as worker
-from app.features.system_panel import config_router as platform_config
 from app.features.system_panel import ai_studio_router as ai_studio
-from app.features.facebook import pages_router as pages
-from app.features.facebook import manual_job_router as manual_job
-from app.features.insights import router as insights
-from app.features.fb_pro_tasks import router as fb_pro_tasks
 from app.features.telegram_bot import router as telegram
 from app.features.buffer import router as buffer_media
 from app.features.buffer.cluster_router import router as buffer_cluster
 from app.features.viral_intake import router as viral
 from app.features.viral_intake import intro_router as viral_intros
+from app.features.studio import router as studio
 from app.core.notifier.service import NotifierService, TelegramNotifier
 import app.config as config
 from app.bootstrap_hooks import register_feature_hooks
@@ -78,27 +71,20 @@ app.include_router(dashboard.router)
 app.include_router(settings_api.router)
 app.include_router(admin_api.router)
 app.include_router(jobs.router)
-app.include_router(accounts.router)
 app.include_router(worker.router)
 app.include_router(health.router)
 app.include_router(telegram.router)
 app.include_router(viral_intros.router)
 app.include_router(viral.router)
+app.include_router(studio.router)
 app.include_router(buffer_media.router)
 app.include_router(buffer_cluster)
-app.include_router(insights.router)
-app.include_router(fb_pro_tasks.router)
 app.include_router(system_panel.router)
-app.include_router(pages.router)
-app.include_router(manual_job.router)
 app.include_router(cashback_insights.router)
-app.include_router(affiliates.router)
 app.include_router(compliance.router)
 app.include_router(database.router)
-app.include_router(platform_config.router)
 app.include_router(ai.router)
 app.include_router(ai_studio.router)
-app.include_router(threads.router)
 
 # Static assets (SaaS UI CSS, etc.)
 app.mount("/static", StaticFiles(directory=str(config.BASE_DIR / "app" / "static")), name="static")

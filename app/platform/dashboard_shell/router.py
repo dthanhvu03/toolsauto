@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from pathlib import Path
 from sqlalchemy.orm import Session
-import time
 from app.core.database.core import get_db
-from app.core.account import AccountService
 from app.core.observability.log_query_facade import LogQueryFacade
 from app.platform.dashboard_service import DashboardService
 from app.utils.htmx import htmx_toast_response
@@ -35,74 +33,34 @@ def _serve_spa() -> FileResponse | None:
 
 
 @router.get("/", response_class=HTMLResponse)
-def index(request: Request, db: Session = Depends(get_db)):
-    """SaaS Beta (single UI): same as /app — legacy dashboard.html is retired."""
-    return app_overview(request, db)
+def index(request: Request):
+    """Cùng trang với /app."""
+    return app_overview(request)
 
 @router.get("/app", response_class=HTMLResponse)
-def app_overview(request: Request, db: Session = Depends(get_db)):
-    """React admin SPA when built; else classic Jinja overview."""
-    spa = _serve_spa()
-    if spa is not None:
-        return spa
-    overview = DashboardService.get_overview_data(db)
-    return templates.TemplateResponse(
-        "pages/app_overview.html",
-        {
-            "request": request,
-            **overview,
-            "now": int(time.time()),
-        }
-    )
+def app_overview(request: Request):
+    """Giao diện duy nhất là SPA React (PLAN-108). Bản build nằm trong git — thiếu là deploy hỏng."""
+    return _serve_spa() or _spa_missing()
 
 
-@router.get("/app/classic", response_class=HTMLResponse)
-def app_overview_classic(request: Request, db: Session = Depends(get_db)):
-    """Jinja overview fallback."""
-    overview = DashboardService.get_overview_data(db)
-    return templates.TemplateResponse(
-        "pages/app_overview.html",
-        {
-            "request": request,
-            **overview,
-            "now": int(time.time()),
-        }
+def _spa_missing() -> HTMLResponse:
+    return HTMLResponse(
+        "<p>Giao diện chưa được build. Chạy <code>npm run build:admin</code> ở thư mục gốc.</p>",
+        status_code=503,
     )
 
 
 @router.get("/app/go/{rest:path}", response_class=HTMLResponse)
 def app_spa_go(rest: str, request: Request):
     """React Router bridge pages — always serve SPA shell."""
-    spa = _serve_spa()
-    if spa is not None:
-        return spa
-    return RedirectResponse(url="/app/classic", status_code=302)
+    return _serve_spa() or _spa_missing()
 
 
 @router.get("/app/dashboard", response_class=HTMLResponse)
-def app_overview_legacy(request: Request, db: Session = Depends(get_db)):
+def app_overview_legacy(request: Request):
     """Backward-compatible alias for legacy dashboard path."""
-    return app_overview(request, db)
+    return app_overview(request)
 
-
-@router.get("/app/overview/page-posting-stats", response_class=HTMLResponse)
-def app_overview_page_posting_stats(request: Request, db: Session = Depends(get_db)):
-    """HTMX fragment: show today's per-page posting usage (DONE) + remaining vs cap."""
-    stats_data = DashboardService.get_page_posting_stats(db)
-    return templates.TemplateResponse(
-        "fragments/page_posting_stats.html",
-        {"request": request, **stats_data},
-    )
-
-
-@router.get("/app/overview/page-reup-stats", response_class=HTMLResponse)
-def app_overview_page_reup_stats(request: Request, db: Session = Depends(get_db)):
-    """HTMX fragment: show today's per-page REUP intake usage + remaining vs cap."""
-    stats_data = DashboardService.get_page_reup_stats(db)
-    return templates.TemplateResponse(
-        "fragments/page_reup_stats.html",
-        {"request": request, **stats_data},
-    )
 
 @router.get("/app/jobs", response_class=HTMLResponse)
 def app_jobs(request: Request, db: Session = Depends(get_db), platform: str | None = None):
@@ -143,23 +101,6 @@ def app_viral_sources(request: Request):
     đường dẫn chỉ khác nhau tiền tố `/app`; sửa nhầm file là bẫy có thật.
     """
     return templates.TemplateResponse("pages/app_viral_sources.html", {"request": request})
-
-@router.get("/app/accounts", response_class=HTMLResponse)
-def app_accounts(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI: Accounts page (Now using Split View by default)."""
-    accounts = AccountService.list_accounts(db)
-    first_account = accounts[0] if accounts else None
-    return templates.TemplateResponse(
-        "pages/app_accounts_split.html", 
-        {"request": request, "accounts": accounts, "first_account": first_account, "now": int(time.time())}
-    )
-
-
-@router.get("/app/pages")
-def app_pages(request: Request):
-    """Legacy UI redirect: Target Pages CRUD moved to /app/accounts split view."""
-    return RedirectResponse(url="/app/accounts")
-
 
 @router.get("/app/logs", response_class=HTMLResponse)
 def app_logs(request: Request):
@@ -335,17 +276,6 @@ def app_logs_incident_ack(
     )
 
 
-@router.get("/app/control-plane", response_class=HTMLResponse)
-def app_control_plane(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI: Admin Control Plane Hub."""
-    return templates.TemplateResponse(
-        "pages/app_control_plane.html",
-        {
-            "request": request,
-        }
-    )
-
-
 @router.get("/app/settings", response_class=HTMLResponse)
 def app_settings(request: Request, db: Session = Depends(get_db)):
     """React Settings (SPA) when built; else classic Jinja."""
@@ -432,64 +362,3 @@ def app_viral_table(
         "fragments/app_viral_table.html",
         {"request": request, **table_data},
     )
-
-@router.get("/queue/panel", response_class=HTMLResponse)
-def queue_panel(request: Request, db: Session = Depends(get_db)):
-    """Small dashboard panel: queue/backlog summary by status + viral NEW/FAILED."""
-    stats = DashboardService.get_queue_stats(db)
-    return templates.TemplateResponse(
-        "fragments/queue_panel.html",
-        {"request": request, **stats},
-    )
-
-@router.get("/tiktok-links", response_class=HTMLResponse)
-def tiktok_links(request: Request):
-    """Legacy URL → SaaS Nguồn TikTok (competitors inventory)."""
-    q = request.url.query
-    dest = "/app/tiktok-links" + (f"?{q}" if q else "")
-    return RedirectResponse(url=dest, status_code=302)
-
-
-@router.get("/app/tiktok-links", response_class=HTMLResponse)
-def app_tiktok_links(request: Request, db: Session = Depends(get_db)):
-    """SaaS UI: TikTok competitor source inventory (viral list → /app/viral)."""
-    ctx = AccountService.build_tiktok_links_context_data(db, request.query_params)
-    return templates.TemplateResponse("pages/app_tiktok_links.html", {"request": request, **ctx})
-
-@router.get("/discovery/panel", response_class=HTMLResponse)
-def get_discovery_panel(request: Request, db: Session = Depends(get_db)):
-    channels = DashboardService.get_discovery_channels(db)
-    return templates.TemplateResponse(
-        "fragments/discovery_panel.html",
-        {"request": request, "channels": channels}
-    )
-
-@router.post("/discovery/{channel_id}/approve", response_class=HTMLResponse)
-def approve_discovered_channel(channel_id: int, request: Request, target_page: str = Form(""), db: Session = Depends(get_db)):
-    channels = DashboardService.approve_discovery(db, channel_id, target_page)
-    return templates.TemplateResponse(
-        "fragments/discovery_panel.html",
-        {"request": request, "channels": channels}
-    )
-
-@router.post("/discovery/{channel_id}/reject", response_class=HTMLResponse)
-def reject_discovered_channel(channel_id: int, request: Request, db: Session = Depends(get_db)):
-    channels = DashboardService.reject_discovery(db, channel_id)
-    return templates.TemplateResponse(
-        "fragments/discovery_panel.html",
-        {"request": request, "channels": channels}
-    )
-
-@router.post("/discovery/force-scan", response_class=HTMLResponse)
-def force_discovery_scan(request: Request, db: Session = Depends(get_db)):
-    """Manually trigger competitor discovery scan."""
-    channels, scan_log, total_found = DashboardService.run_force_discovery(db)
-    return templates.TemplateResponse(
-        "fragments/discovery_panel.html",
-        {"request": request, "channels": channels, "scan_log": scan_log, "total_found": total_found}
-    )
-
-@router.get("/app/overview/chart-data")
-def app_overview_chart_data(db: Session = Depends(get_db)):
-    """JSON endpoint for ApexCharts performance data."""
-    return DashboardService.get_chart_data(db)

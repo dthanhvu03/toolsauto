@@ -2,9 +2,9 @@
 {% from 'fragments/silo_breadcrumb.html' import silo_breadcrumb %}
 
 {% block title %}Nguồn video • Auto Publisher{% endblock %}
-{% block page_breadcrumb %}{{ silo_breadcrumb('Facebook', 'Nguồn video') }}{% endblock %}
+{% block page_breadcrumb %}{{ silo_breadcrumb('Video', 'Nguồn video') }}{% endblock %}
 {% block page_title %}Nguồn video{% endblock %}
-{% block page_subtitle %}Kênh TikTok / YouTube Shorts, tự quét mỗi giờ. Video tìm được chảy sang Nội dung viral.{% endblock %}
+{% block page_subtitle %}Kênh TikTok / YouTube Shorts, tự quét mỗi giờ. Video tìm được chảy sang Kho video.{% endblock %}
 
 {% block content %}
   {# ADR-025: khối này trước là <details> gấp/mở trong /app/viral. Tách ra trang riêng vì
@@ -82,8 +82,7 @@
   </div>
 
   <p class="mt-3 text-[11px] text-[var(--color-mist)]">
-    Video quét được nằm ở <a class="underline text-[var(--color-torch)]" href="/app/viral">Nội dung viral</a>
-    · Kho kênh cũ: <a class="underline text-[var(--color-torch)]" href="/app/tiktok-links">Nguồn TikTok</a>
-    · Job: <a class="underline text-[var(--color-torch)]" href="/app/jobs">Hàng đợi</a>
+    Video quét được nằm ở <a class="underline text-[var(--color-torch)]" href="/app/viral">Kho video</a>
+    · Lịch đăng Buffer: <a class="underline text-[var(--color-torch)]" href="/app/go/jobs">Lịch đăng</a>
   </p>
 {% endblock %}

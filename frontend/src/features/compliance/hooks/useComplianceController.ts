@@ -6,23 +6,16 @@ import {
   fetchAnalytics,
   fetchCategories,
   fetchKeywords,
-  fetchViolations,
   testCheck,
   toggleKeyword,
 } from "../api/complianceApi";
 
-export type ComplianceTab = "keywords" | "violations";
-
 export function useComplianceController() {
-  const [tab, setTab] = useState<ComplianceTab>("keywords");
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [severity, setSeverity] = useState("");
   const [category, setCategory] = useState("");
   const [kwPage, setKwPage] = useState(1);
-  const [violDays, setViolDays] = useState(30);
-  const [violAction, setViolAction] = useState("");
-  const [violPage, setViolPage] = useState(1);
   const [testText, setTestText] = useState("");
   const [testResult, setTestResult] = useState("");
   const [msg, setMsg] = useState("");
@@ -41,14 +34,6 @@ export function useComplianceController() {
     queryFn: () => fetchKeywords({ search, severity, category }),
     placeholderData: keepPreviousData,
   });
-  const violations = useQuery({
-    queryKey: ["compliance-violations", violDays, violAction, violPage],
-    queryFn: () =>
-      fetchViolations({ days: violDays, action: violAction, page: violPage, limit: 20 }),
-    placeholderData: keepPreviousData,
-    enabled: tab === "violations",
-  });
-
   const kwPageSize = 20;
   const kwRows = keywords.data ?? [];
   const kwTotalPages = Math.max(1, Math.ceil(kwRows.length / kwPageSize));
@@ -69,15 +54,6 @@ export function useComplianceController() {
     setKwPage(1);
     setCategory(value);
   };
-  const changeViolDays = (value: number) => {
-    setViolPage(1);
-    setViolDays(value);
-  };
-  const changeViolAction = (value: string) => {
-    setViolPage(1);
-    setViolAction(value);
-  };
-
   const invalidateKw = () => {
     qc.invalidateQueries({ queryKey: ["compliance-keywords"] });
     qc.invalidateQueries({ queryKey: ["compliance-analytics"] });
@@ -107,8 +83,6 @@ export function useComplianceController() {
   });
 
   return {
-    tab,
-    setTab,
     searchDraft,
     setSearchDraft,
     applySearch,
@@ -124,13 +98,6 @@ export function useComplianceController() {
     keywords,
     categories: categories.data ?? [],
     analytics,
-    violDays,
-    violAction,
-    violPage,
-    setViolPage,
-    changeViolDays,
-    changeViolAction,
-    violations,
     msg,
     testText,
     setTestText,

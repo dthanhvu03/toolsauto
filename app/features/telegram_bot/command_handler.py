@@ -137,6 +137,7 @@ class TelegramCommandHandler:
             if rows:
                 parts.append(f"\n<b>{html_mod.escape(title)}</b>\n" + "\n".join(rows))
         parts.append("\nHoặc dán thẳng link TikTok/YouTube/Facebook vào đây — tool tự làm video.")
+        parts.append("Gửi file video (≤ 20 MB) vào đây → Studio dựng thành dự án; ghi tên kênh kèm file để tự gắn kênh.")
         self.client.send_message("\n".join(parts))
 
     # ── ADR-037: điều khiển luồng video ─────────────────────────────────────

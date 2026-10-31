@@ -5,6 +5,6 @@ export function useOverview() {
   return useQuery({
     queryKey: ["admin-overview"],
     queryFn: fetchOverview,
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
 }

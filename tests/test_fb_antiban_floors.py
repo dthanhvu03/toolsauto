@@ -4,7 +4,6 @@ from __future__ import annotations
 import inspect
 
 import pytest
-from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -17,7 +16,6 @@ from app.core import settings as runtime_settings
 from app.core.account import AccountService
 from app.core.database.models import Account, Base
 from app.core.queue.queue import QueueService
-from app.platform.admin_api.mutations import AccountCreateBody
 
 
 @pytest.fixture()
@@ -74,11 +72,6 @@ def test_account_create_rejects_cooldown_0(db, tmp_path, monkeypatch):
     monkeypatch.setattr(AccountService, "ensure_base_dir", classmethod(lambda cls: None))
     with pytest.raises(ValueError, match="1800"):
         AccountService.create_account(db, platform="facebook", name="no-zero", cooldown_seconds=0)
-
-
-def test_account_api_body_rejects_cooldown_0():
-    with pytest.raises(ValidationError):
-        AccountCreateBody(name="x", cooldown_seconds=0)
 
 
 def test_assert_cooldown_accepts_1800():

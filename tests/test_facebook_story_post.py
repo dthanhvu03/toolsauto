@@ -175,13 +175,3 @@ def test_dispatcher_tra_lai_media_path_goc_sau_khi_dang_tin():
 
 def test_adapter_co_publish_story():
     assert hasattr(FacebookAdapter, "publish_story")
-
-
-def test_form_co_lua_chon_tin():
-    src = (ROOT / "app" / "templates" / "fragments" / "manual_job_form.html").read_text(encoding="utf-8")
-    assert 'name="job_type" value="STORY"' in src
-
-
-def test_router_bao_dung_loai_bai():
-    src = (ROOT / "app" / "features" / "facebook" / "manual_job_router.py").read_text(encoding="utf-8")
-    assert '"STORY": "Tin"' in src

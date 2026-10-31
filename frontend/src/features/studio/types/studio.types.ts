@@ -1,0 +1,117 @@
+export type ProjectStatus =
+  | "DRAFT"
+  | "RENDERING"
+  | "RENDERED"
+  | "REVIEW"
+  | "APPROVED"
+  | "SCHEDULED"
+  | "POSTED"
+  | "FAILED"
+  | "REJECTED";
+
+export type ProjectRow = {
+  id: number;
+  status: ProjectStatus;
+  channel: string | null;
+  channel_id: number | null;
+  caption: string | null;
+  hashtags: string[];
+  duration: number | null;
+  error: string | null;
+  viral_material_id: number | null;
+  created_at: number;
+  rendered_at: number | null;
+  approved_at: number | null;
+  has_video: boolean;
+};
+
+export type ProjectsResponse = {
+  projects: ProjectRow[];
+  counts: Partial<Record<ProjectStatus, number>>;
+  tasks_pending: number;
+};
+
+export type ClipAudio = { asset: number; volume: number };
+export type Clip = { asset: number; start: number; end: number | null; audio: ClipAudio[] };
+export type SubLine = { start: number; end: number; text: string };
+export type TextOverlay = { text: string; start: number; end: number | null; pos: "top" | "center" | "bottom"; size: number };
+export type AudioTrack = { asset: number; volume: number; start: number; loop: boolean };
+
+/** Đúng hình `app/features/studio/spec.py` — server từ chối trường lạ (extra="forbid"). */
+export type ProjectSpec = {
+  v: 1;
+  canvas: { w: number; h: number; fps: number; fit: "blur_pad" | "crop" | "pad" };
+  clips: Clip[];
+  subtitles: {
+    enabled: boolean;
+    source: "transcript" | "dub" | "lines";
+    lines: SubLine[];
+    edits: Record<string, string>;
+    font_size: number;
+    margin_v: number;
+    max_chars: number;
+  };
+  texts: TextOverlay[];
+  audio: { original: number; tracks: AudioTrack[] };
+  logo: { asset: number; pos: "tl" | "tr" | "bl" | "br"; width: number } | null;
+  credit: string | null;
+};
+
+export type Asset = {
+  id: number;
+  kind: "video" | "audio" | "image";
+  origin: string;
+  title: string | null;
+  credit: string | null;
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  has_audio: boolean | null;
+  source_url: string | null;
+  created_at: number;
+};
+
+export type ProjectDetail = {
+  project: {
+    id: number;
+    status: ProjectStatus;
+    caption: string | null;
+    hashtags: string[];
+    duration: number | null;
+    error: string | null;
+    rendered_at: number | null;
+    approved_at: number | null;
+    viral_material_id: number | null;
+    editable: boolean;
+  };
+  spec: ProjectSpec;
+  asset: Asset | null;
+  assets: Asset[];
+  channel: { id: number; name: string } | null;
+  template: { id: number; name: string; kind: string } | null;
+  subtitle_lines: SubLine[];
+  tasks: { id: number; stage: string; status: string; error: string | null }[];
+};
+
+export type Channel = {
+  id: number;
+  buffer_channel_id: string;
+  name: string;
+  template_id: number | null;
+  auto_approve: boolean;
+  show_credit: boolean;
+  take_reup: boolean;
+  active: boolean;
+  logo_asset_id: number | null;
+  intro_asset_id: number | null;
+  outro_asset_id: number | null;
+};
+
+export type Template = { id: number; name: string; kind: string; params: Record<string, unknown> };
+
+export type SetupResponse = {
+  channels: Channel[];
+  buffer_channels: { id: string; name: string }[];
+  templates: Template[];
+  template_kinds: { kind: string; defaults: Record<string, unknown> }[];
+};

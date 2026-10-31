@@ -5,12 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.constants import JobStatus
-from app.core.account import AccountService
 from app.core.database.core import SessionLocal, get_db
 from app.core.database.models import Job, ViralMaterial, ViralSource
 from app.core.queue.job import JobService
@@ -114,38 +113,6 @@ def admin_job_force_run(job_id: int, db: Session = Depends(get_db)):
     return _ok(f"Job #{job_id} chạy ngay", id=job_id)
 
 
-@router.post("/jobs/manual")
-async def admin_job_manual(
-    account_id: int = Form(...),
-    target_page: str = Form(""),
-    caption: str = Form(""),
-    job_type: str = Form("POST"),
-    media: UploadFile = File(None),
-    db: Session = Depends(get_db),
-):
-    caption_text = (caption or "").strip()
-    if caption_text:
-        from app.core.compliance.facebook_compliance import Severity, compliance_checker
-
-        result = compliance_checker.check(caption_text)
-        if result.status == Severity.VIOLATION:
-            evidence = ", ".join([v.evidence for v in result.violations])
-            _fail(400, f"Caption vi phạm Facebook ({evidence})")
-    try:
-        job = JobService.create_manual_job_with_file(
-            db,
-            account_id,
-            (target_page or "").strip(),
-            caption_text,
-            media,
-            job_type=job_type,
-        )
-    except Exception as e:
-        logger.exception("[ADMIN][jobs] manual create")
-        _fail(400, str(e))
-    return _ok(f"Đã tạo job #{job.id}", id=job.id, status=job.status)
-
-
 # ── Viral ───────────────────────────────────────────────────────────────────
 
 
@@ -228,108 +195,6 @@ def admin_viral_delete(material_id: int, db: Session = Depends(get_db)):
     return _ok(f"Đã xoá material #{material_id}", id=material_id)
 
 
-# ── Accounts ────────────────────────────────────────────────────────────────
-
-
-class AccountCreateBody(BaseModel):
-    name: str
-    platform: str = "facebook"
-    daily_limit: int = 3
-    cooldown_seconds: int = Field(default=1800, ge=1800, le=86400)
-
-
-class AccountRenameBody(BaseModel):
-    name: str
-
-
-@router.post("/accounts")
-def admin_account_create(body: AccountCreateBody, db: Session = Depends(get_db)):
-    name = (body.name or "").strip()
-    if not name:
-        _fail(400, "Tên tài khoản trống")
-    platform = (body.platform or "facebook").strip().lower()
-    if platform not in ("facebook", "instagram", "threads", "tiktok"):
-        platform = "facebook"
-    try:
-        acc = AccountService.create_account(
-            db,
-            platform=platform,
-            name=name,
-            daily_limit=body.daily_limit,
-            cooldown_seconds=body.cooldown_seconds,
-        )
-    except Exception as e:
-        logger.exception("[ADMIN][accounts] create")
-        _fail(400, str(e))
-    return _ok(f"Đã tạo account #{acc.id}", id=acc.id, name=acc.name)
-
-
-@router.post("/accounts/{account_id}/toggle")
-def admin_account_toggle(account_id: int, db: Session = Depends(get_db)):
-    try:
-        acc = AccountService.toggle_account(db, account_id)
-    except ValueError as e:
-        _fail(400, str(e))
-    if not acc:
-        _fail(404, f"Không thấy account #{account_id}")
-    return _ok(
-        f"{acc.name} → {'ACTIVE' if acc.is_active else 'OFF'}",
-        id=acc.id,
-        is_active=bool(acc.is_active),
-    )
-
-
-@router.post("/accounts/{account_id}/rename")
-def admin_account_rename(account_id: int, body: AccountRenameBody, db: Session = Depends(get_db)):
-    acc = AccountService.rename_account(db, account_id, (body.name or "").strip())
-    if not acc:
-        _fail(404, f"Không thấy account #{account_id}")
-    return _ok(f"Đã đổi tên #{account_id}", id=acc.id, name=acc.name)
-
-
-@router.post("/accounts/{account_id}/delete")
-def admin_account_delete(account_id: int, db: Session = Depends(get_db)):
-    AccountService.delete_account(db, account_id)
-    return _ok(f"Đã xoá account #{account_id}", id=account_id)
-
-
-# ── Affiliates ──────────────────────────────────────────────────────────────
-
-
-class AffiliateSaveBody(BaseModel):
-    id: int = 0
-    keyword: str
-    url: str
-    comment_template: str = ""
-    commission_rate: Optional[float] = None
-
-
-@router.post("/affiliates")
-def admin_affiliate_save(body: AffiliateSaveBody, db: Session = Depends(get_db)):
-    from app.features.affiliates.service import AffiliateService
-
-    success, error_data = AffiliateService.save_link(
-        db,
-        body.id,
-        body.keyword,
-        body.url,
-        body.comment_template,
-        commission_rate=body.commission_rate,
-    )
-    if not success:
-        _fail(int((error_data or {}).get("status_code") or 400), str((error_data or {}).get("error") or error_data))
-    return _ok("Đã lưu affiliate")
-
-
-@router.delete("/affiliates/{link_id}")
-def admin_affiliate_delete(link_id: int, db: Session = Depends(get_db)):
-    from app.features.affiliates.service import AffiliateService
-
-    if not AffiliateService.delete_link(db, link_id):
-        _fail(404, "Không tìm thấy link")
-    return _ok(f"Đã xoá affiliate #{link_id}", id=link_id)
-
-
 # ── Viral sources ───────────────────────────────────────────────────────────
 
 
@@ -410,7 +275,7 @@ def admin_source_delete(source_id: int, db: Session = Depends(get_db)):
     return _ok(f"Đã xoá nguồn #{source_id}", id=source_id)
 
 
-# ── AI Studio / FB tasks / Threads / Syspanel / Database ────────────────────
+# ── AI / Syspanel / Database ────────────────────────────────────────────────
 
 
 class AiStudioSaveBody(BaseModel):
@@ -428,84 +293,6 @@ def admin_ai_studio_save(body: AiStudioSaveBody, request: Request, db: Session =
     except ValueError as e:
         _fail(400, str(e))
     return _ok(f"Đã lưu {body.key}")
-
-
-class FbProSaveBody(BaseModel):
-    scope_key: str = ""
-    notes: str = ""
-    posts_override: str = ""
-    reels_override: str = ""
-    target_posts: Optional[int] = None
-    target_reels: Optional[int] = None
-    target_interactions: Optional[int] = None
-    interactions: Optional[int] = None
-
-
-@router.post("/fb-pro-tasks/save")
-def admin_fb_pro_save(body: FbProSaveBody, db: Session = Depends(get_db)):
-    from app.features.fb_pro_tasks import service as fb_pro_tasks
-
-    payload: dict[str, Any] = {
-        "scope_key": body.scope_key or None,
-        "notes": body.notes,
-        "posts_override": body.posts_override,
-        "reels_override": body.reels_override,
-    }
-    if body.interactions is not None:
-        payload["interactions"] = body.interactions
-    if body.target_posts is not None:
-        payload["target_posts"] = body.target_posts
-    if body.target_reels is not None:
-        payload["target_reels"] = body.target_reels
-    if body.target_interactions is not None:
-        payload["target_interactions"] = body.target_interactions
-    fb_pro_tasks.update_from_form(payload, db)
-    return _ok("Đã lưu nhiệm vụ tuần")
-
-
-@router.post("/fb-pro-tasks/reset-week")
-def admin_fb_pro_reset(body: FbProSaveBody | None = None, db: Session = Depends(get_db)):
-    from app.features.fb_pro_tasks import service as fb_pro_tasks
-
-    key = (body.scope_key if body else "") or None
-    fb_pro_tasks.reset_week_now(db, key=key)
-    return _ok("Đã reset tuần")
-
-
-@router.post("/threads/toggle-auto")
-def admin_threads_toggle_auto(db: Session = Depends(get_db)):
-    from app.features.threads.dashboard import ThreadsService
-
-    ThreadsService.toggle_auto_mode(db)
-    return _ok("Đã đảo auto Threads")
-
-
-@router.post("/threads/trigger-scrape")
-def admin_threads_scrape(db: Session = Depends(get_db)):
-    from app.features.threads.dashboard import ThreadsService
-
-    ThreadsService.trigger_news_scrape(db)
-    return _ok("Đã kích hoạt scrape tin Threads")
-
-
-class ThreadsAccountBody(BaseModel):
-    account_id: int
-
-
-@router.post("/threads/link")
-def admin_threads_link(body: ThreadsAccountBody, db: Session = Depends(get_db)):
-    from app.features.threads.dashboard import ThreadsService
-
-    ThreadsService.link_account(db, body.account_id)
-    return _ok(f"Đã nối account #{body.account_id}")
-
-
-@router.post("/threads/unlink")
-def admin_threads_unlink(body: ThreadsAccountBody, db: Session = Depends(get_db)):
-    from app.features.threads.dashboard import ThreadsService
-
-    ThreadsService.unlink_account(db, body.account_id)
-    return _ok(f"Đã gỡ account #{body.account_id}")
 
 
 @router.post("/syspanel/retry-failed")

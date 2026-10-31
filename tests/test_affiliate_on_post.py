@@ -173,40 +173,6 @@ def test_jobs_api_shows_posted_comment_ok_affiliate():
         engine.dispose()
 
 
-def test_overview_counts_affiliate_comment_leak():
-    engine, factory = _memory_session()
-    try:
-        with factory() as db:
-            acc = Account(name="Acc", platform="facebook")
-            db.add(acc)
-            db.commit()
-            db.refresh(acc)
-            db.add(
-                Job(
-                    account_id=acc.id,
-                    platform="facebook",
-                    job_type=JobType.POST,
-                    status=JobStatus.DONE,
-                    caption="leak",
-                    post_url="https://www.facebook.com/reel/7",
-                    affiliate_url="https://shp.ee/leak",
-                    auto_comment_text="Mua https://shp.ee/leak",
-                    finished_at=1700000000,
-                    schedule_ts=1,
-                )
-            )
-            db.commit()
-        c = _client(factory)
-        r = c.get("/api/admin/overview")
-        assert r.status_code == 200, r.text
-        leak = r.json()["ops"]["affiliate_leak"]
-        assert leak["count"] == 1
-        assert leak["latest"][0]["comment_ok"] == "fail"
-        assert leak["latest"][0]["posted"] is True
-    finally:
-        engine.dispose()
-
-
 def test_telegram_comment_fail_says_video_still_up():
     msg = job_failed_message(
         _FakeJob(job_type=JobType.COMMENT, parent_job_id=12, affiliate_url="https://shp.ee/x"),

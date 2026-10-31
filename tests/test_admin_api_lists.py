@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -9,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.constants import JobStatus
 from app.core.database.core import get_db
-from app.core.database.models import Account, AffiliateLink, Base, Job, ViralMaterial, ViralSource
+from app.core.database.models import Account, Base, Job, ViralMaterial, ViralSource
 from app.platform.admin_api.router import router
 
 
@@ -29,29 +28,6 @@ def _client(tmp_path):
     app.include_router(router)
     app.dependency_overrides[get_db] = _db
     return engine, factory, TestClient(app)
-
-
-def test_admin_affiliates_lists_keyword(tmp_path):
-    engine, factory, c = _client(tmp_path)
-    try:
-        with factory() as db:
-            db.add(
-                AffiliateLink(
-                    keyword="giày sneaker",
-                    url="https://shope.ee/abc",
-                    comment_template="Mua ở đây",
-                    commission_rate=12.5,
-                )
-            )
-            db.commit()
-        r = c.get("/api/admin/affiliates")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["total"] == 1
-        assert body["links"][0]["keyword"] == "giày sneaker"
-        assert body["links"][0]["url"] == "https://shope.ee/abc"
-    finally:
-        engine.dispose()
 
 
 def test_admin_viral_sources_lists_channel(tmp_path):
@@ -74,72 +50,6 @@ def test_admin_viral_sources_lists_channel(tmp_path):
         assert body["total"] == 1
         assert body["items"][0]["handle"] == "kenh"
         assert body["items"][0]["platform"] == "tiktok"
-    finally:
-        engine.dispose()
-
-
-def test_admin_tiktok_links_flattens_competitor_urls(tmp_path):
-    engine, factory, c = _client(tmp_path)
-    try:
-        with factory() as db:
-            db.add(
-                Account(
-                    name="Page A",
-                    platform="facebook",
-                    competitor_urls=json.dumps(
-                        [{"url": "https://www.tiktok.com/@doi-thu", "target_page": None}]
-                    ),
-                )
-            )
-            db.commit()
-        r = c.get("/api/admin/tiktok-links")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["total"] >= 1
-        assert any("@doi-thu" in (it.get("url") or "") for it in body["items"])
-    finally:
-        engine.dispose()
-
-
-def test_admin_fb_pro_tasks_lists_scope(tmp_path, monkeypatch):
-    from app.features.fb_pro_tasks import service as fb_pro
-
-    monkeypatch.setattr(fb_pro, "CONFIG_PATH", tmp_path / "fb_pro_weekly_tasks.json")
-    engine, factory, c = _client(tmp_path)
-    try:
-        with factory() as db:
-            db.add(
-                Account(
-                    name="FB Pro Page",
-                    platform="facebook",
-                    target_page="https://www.facebook.com/kids0810",
-                )
-            )
-            db.commit()
-        r = c.get("/api/admin/fb-pro-tasks")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["scope_key"]
-        assert len(body["tasks"]) == 3
-        assert {t["key"] for t in body["tasks"]} == {"posts", "reels", "interactions"}
-        assert any("kids0810" in (o.get("label") or "") for o in body["scope_options"])
-        assert body["overall_pct"] >= 0
-    finally:
-        engine.dispose()
-
-
-def test_admin_threads_dashboard_stats(tmp_path):
-    engine, factory, c = _client(tmp_path)
-    try:
-        with factory() as db:
-            db.add(Account(name="Threads Acc", platform="facebook"))
-            db.commit()
-        r = c.get("/api/admin/threads")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["stats"]["pending"] == 0
-        assert isinstance(body["articles"], list)
-        assert isinstance(body["linked_accounts"], list)
     finally:
         engine.dispose()
 
@@ -191,47 +101,6 @@ def test_admin_job_cancel_pending(tmp_path):
         engine.dispose()
 
 
-def test_admin_account_create_and_toggle(tmp_path):
-    engine, factory, c = _client(tmp_path)
-    try:
-        r = c.post(
-            "/api/admin/accounts",
-            json={"name": "Page Native", "platform": "facebook", "daily_limit": 2},
-        )
-        assert r.status_code == 200, r.text
-        aid = r.json()["id"]
-        r2 = c.post(f"/api/admin/accounts/{aid}/toggle")
-        assert r2.status_code == 200, r2.text
-        with factory() as db:
-            acc = db.get(Account, aid)
-            assert acc is not None
-            assert acc.is_active is False
-    finally:
-        engine.dispose()
-
-
-def test_admin_affiliate_save(tmp_path):
-    engine, factory, c = _client(tmp_path)
-    try:
-        r = c.post(
-            "/api/admin/affiliates",
-            json={
-                "keyword": "giày",
-                "url": "https://shope.ee/xyz",
-                "comment_template": "Mua ở đây nha",
-            },
-        )
-        assert r.status_code == 200, r.text
-        listed = c.get("/api/admin/affiliates").json()
-        assert listed["total"] == 1
-        lid = listed["links"][0]["id"]
-        d = c.delete(f"/api/admin/affiliates/{lid}")
-        assert d.status_code == 200
-        assert c.get("/api/admin/affiliates").json()["total"] == 0
-    finally:
-        engine.dispose()
-
-
 def test_admin_viral_add_link(tmp_path):
     engine, factory, c = _client(tmp_path)
     try:
@@ -249,83 +118,6 @@ def test_admin_viral_add_link(tmp_path):
         engine.dispose()
 
 
-def test_admin_overview_cockpit(tmp_path):
-    engine, factory, c = _client(tmp_path)
-    try:
-        with factory() as db:
-            acc = Account(
-                name="FB Acc",
-                platform="facebook",
-                login_error="Checkpoint detected during idle engagement",
-            )
-            db.add(acc)
-            db.commit()
-            db.refresh(acc)
-            db.add(
-                Job(
-                    account_id=acc.id,
-                    platform="facebook",
-                    status="FAILED",
-                    caption="fail 1",
-                    last_error="publish timeout",
-                    finished_at=1700000000,
-                )
-            )
-            db.add(
-                Job(
-                    account_id=acc.id,
-                    platform="facebook",
-                    status="FAILED",
-                    caption="fail 2",
-                    last_error="Checkpoint URL unusual login",
-                    finished_at=1700000100,
-                )
-            )
-            db.commit()
-        r = c.get("/api/admin/overview")
-        assert r.status_code == 200, r.text
-        ops = r.json()["ops"]
-        assert ops["worker"]["status"] in ("RUNNING", "PAUSE", "SAFE")
-        assert "free_gb" in ops["disk"]
-        assert ops["disk"]["pause_below_gb"] == 2
-        assert "open" in ops["gemini_circuit"]
-        assert ops["failed_jobs"]["count"] == 2
-        assert len(ops["failed_jobs"]["latest"]) == 2
-        assert ops["failed_jobs"]["latest"][0]["error"]
-        assert ops["checkpoint"]["count"] >= 1
-        assert ops["checkpoint"]["accounts"] >= 1
-    finally:
-        engine.dispose()
-
-
-def test_admin_overview_counts_jobstatus_checkpoint(tmp_path):
-    engine, factory, c = _client(tmp_path)
-    try:
-        with factory() as db:
-            acc = Account(name="CP Acc", platform="facebook")
-            db.add(acc)
-            db.commit()
-            db.refresh(acc)
-            db.add(
-                Job(
-                    account_id=acc.id,
-                    platform="facebook",
-                    status=JobStatus.CHECKPOINT,
-                    caption="checkpoint job",
-                    last_error="CHECKPOINT detected. Aborted.",
-                    finished_at=1700000200,
-                )
-            )
-            db.commit()
-        r = c.get("/api/admin/overview")
-        assert r.status_code == 200, r.text
-        ops = r.json()["ops"]
-        assert ops["checkpoint"]["jobs"] >= 1
-        assert ops["checkpoint"]["count"] >= 1
-    finally:
-        engine.dispose()
-
-
 def test_admin_sql_select(tmp_path, monkeypatch):
     engine, factory, c = _client(tmp_path)
     try:
@@ -336,5 +128,42 @@ def test_admin_sql_select(tmp_path, monkeypatch):
         assert r.status_code == 200, r.text
         body = r.json()
         assert body.get("status") in ("success", "error", "require_confirm")
+    finally:
+        engine.dispose()
+
+
+def test_admin_overview_theo_kenh_buffer(tmp_path, monkeypatch):
+    """PLAN-108: tổng quan đếm theo kênh Buffer, chỉ đọc DB."""
+    import time
+
+    from app.features.buffer import queue_job
+
+    monkeypatch.setattr(queue_job, "_channels", lambda: [{"id": "ch1", "name": "Uyển Nhi"}, {"id": "ch2", "name": "Sống Nhẹ"}])
+    now = int(time.time())
+    engine, factory, c = _client(tmp_path)
+    try:
+        with factory() as db:
+            mats = [ViralMaterial(url=f"https://t/{i}", status="READY", target_page="ch2") for i in range(3)]
+            db.add_all(mats)
+            db.commit()
+            db.add_all([
+                # video 0 đã lên Buffer, hẹn ngày mai → không còn "chờ"
+                Job(platform="buffer", status=JobStatus.DONE, viral_material_id=mats[0].id, target_page="ch2",
+                    schedule_ts=now + 86400, caption="a"),
+                Job(platform="buffer", status=JobStatus.DONE, target_page="ch1", schedule_ts=now - 3600, caption="b"),
+                Job(platform="buffer", status=JobStatus.FAILED, target_page="ch1", last_error="limit 10/10",
+                    finished_at=now - 60, caption="c"),
+            ])
+            db.commit()
+        r = c.get("/api/admin/overview")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        by = {ch["id"]: ch for ch in d["channels"]}
+        assert by["ch2"] == {"id": "ch2", "name": "Sống Nhẹ", "ready_waiting": 2, "scheduled": 1,
+                             "next_at": now + 86400, "posted_7d": 0}
+        assert by["ch1"]["posted_7d"] == 1 and by["ch1"]["scheduled"] == 0
+        assert d["jobs_24h"] == {"DONE": 2, "FAILED": 1}
+        assert d["failed_jobs"]["latest"][0]["channel"] == "Uyển Nhi"
+        assert d["materials_7d"]["READY"] == 3 and d["disk"]["pause_below_gb"] == 2
     finally:
         engine.dispose()

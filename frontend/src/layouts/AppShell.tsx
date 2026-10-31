@@ -1,13 +1,11 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import { Menu, X, LogOut } from "lucide-react";
 import { useState } from "react";
-import { NAV_GROUPS, NATIVE_APP_PATHS } from "@/app/nav";
+import { NAV_GROUPS } from "@/app/nav";
 import { cn } from "@/shared/lib/cn";
 
 export function AppShell() {
   const [open, setOpen] = useState(false);
-  const { pathname } = useLocation();
-  const native = NATIVE_APP_PATHS.has(pathname);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -34,13 +32,28 @@ export function AppShell() {
         </div>
         <nav className="flex-1 overflow-y-auto p-3 text-sm">
           {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="mb-3">
-              <p className="px-3 pb-1.5 pt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                {group.label}
-              </p>
+            <div key={group.label || "home"} className="mb-3">
+              {group.label ? (
+                <p className="px-3 pb-1.5 pt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  {group.label}
+                </p>
+              ) : null}
               <ul className="flex flex-col gap-0.5">
                 {group.items.map((item) => {
                   const Icon = item.icon;
+                  if (item.external) {
+                    return (
+                      <li key={item.to}>
+                        <a
+                          href={item.to}
+                          className="flex items-center gap-3 rounded-lg px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                        >
+                          <Icon className="size-5 shrink-0 opacity-80" />
+                          <span className="truncate">{item.label}</span>
+                        </a>
+                      </li>
+                    );
+                  }
                   return (
                     <li key={item.to}>
                       <NavLink
@@ -84,7 +97,7 @@ export function AppShell() {
           </button>
           <div className="text-sm font-medium text-slate-500">Admin</div>
         </header>
-        <main className={cn("min-h-[calc(100vh-3.5rem)]", native ? "p-4 md:p-6" : "p-0")}>
+        <main className="min-h-[calc(100vh-3.5rem)] p-4 md:p-6">
           <Outlet />
         </main>
       </div>

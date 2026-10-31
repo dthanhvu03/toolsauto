@@ -1,32 +1,19 @@
-"""Thin JSON API for React admin SPA — wraps existing DashboardService / JobService."""
+"""JSON API cho SPA `/app` — bọc DashboardService / JobService. PLAN-108: chỉ còn module đang chạy."""
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.account import AccountService
 from app.core.database.core import get_db
 from app.core.queue.job import JobService
 from app.platform.dashboard_service import DashboardService
 
 router = APIRouter(prefix="/api/admin", tags=["admin-api"])
-
-
-def _account_row(a) -> dict[str, Any]:
-    return {
-        "id": a.id,
-        "name": a.name,
-        "platform": a.platform,
-        "is_active": bool(a.is_active),
-        "login_status": a.login_status,
-        "daily_limit": a.daily_limit,
-        "cooldown_seconds": a.cooldown_seconds,
-        "target_page": a.target_page,
-        "consecutive_failures": getattr(a, "consecutive_failures", 0) or 0,
-    }
+logger = logging.getLogger(__name__)
 
 
 def _comment_ok_label(job, child=None) -> str:
@@ -76,7 +63,7 @@ def _comment_children_by_parent(db: Session, jobs: list) -> dict[int, Any]:
     return by_parent
 
 
-def _job_row(j, comment_child=None) -> dict[str, Any]:
+def _job_row(j, comment_child=None, names: dict[str, str] | None = None) -> dict[str, Any]:
     acc = getattr(j, "account", None)
     aff = (getattr(j, "affiliate_url", None) or "").strip()
     post_url = getattr(j, "post_url", None)
@@ -90,6 +77,8 @@ def _job_row(j, comment_child=None) -> dict[str, Any]:
         "account_id": j.account_id,
         "account_name": acc.name if acc else None,
         "target_page": j.target_page,
+        "channel": (names or {}).get(j.target_page or "", j.target_page),
+        "material_id": getattr(j, "viral_material_id", None),
         "caption": (j.caption or "")[:160],
         "post_url": post_url,
         "posted": posted,
@@ -124,31 +113,6 @@ def _viral_item_row(row: dict[str, Any]) -> dict[str, Any]:
 DISK_PAUSE_GB = 2.0
 
 
-def _worker_ops(state) -> dict[str, Any]:
-    import time
-
-    raw = str(getattr(state, "worker_status", "") or "").upper()
-    safe = bool(getattr(state, "safe_mode", False))
-    if safe:
-        status = "SAFE"
-    elif raw in ("PAUSED", "PAUSE"):
-        status = "PAUSE"
-    elif raw:
-        status = raw
-    else:
-        status = "UNKNOWN"
-    hb = getattr(state, "heartbeat_at", None)
-    age = int(time.time() - hb) if hb else None
-    return {
-        "status": status,
-        "raw_status": raw or None,
-        "safe_mode": safe,
-        "heartbeat_at": hb,
-        "heartbeat_age_seconds": age,
-        "current_job_id": getattr(state, "current_job_id", None),
-    }
-
-
 def _disk_ops() -> dict[str, Any]:
     from pathlib import Path
 
@@ -174,39 +138,19 @@ def _disk_ops() -> dict[str, Any]:
     }
 
 
-def _gemini_circuit_ops() -> dict[str, Any]:
-    try:
-        from app.features.viral_intake.workers import ai_generator as ai_gen
-
-        reset = getattr(ai_gen, "GEMINI_CIRCUIT_RESET_TIME", 0) or 0
-        return {
-            "open": bool(getattr(ai_gen, "GEMINI_CIRCUIT_OPEN", False)),
-            "reset_at": float(reset) if reset else None,
-        }
-    except Exception:
-        return {"open": False, "reset_at": None}
-
-
-def _failed_jobs_ops(db: Session) -> dict[str, Any]:
-    from sqlalchemy.orm import selectinload
-
+def _failed_jobs_ops(db: Session, names: dict[str, str]) -> dict[str, Any]:
     from app.constants import JobStatus
     from app.core.database.models import Job
 
     q = db.query(Job).filter(Job.status == JobStatus.FAILED)
-    latest = (
-        q.options(selectinload(Job.account))
-        .order_by(Job.finished_at.desc(), Job.id.desc())
-        .limit(3)
-        .all()
-    )
+    latest = q.order_by(Job.finished_at.desc(), Job.id.desc()).limit(5).all()
     return {
         "count": q.count(),
         "latest": [
             {
                 "id": j.id,
                 "status": j.status,
-                "account_name": j.account.name if j.account else None,
+                "channel": names.get(j.target_page or "", j.target_page),
                 "error": (j.last_error or "")[:200],
                 "finished_at": j.finished_at,
             }
@@ -215,140 +159,83 @@ def _failed_jobs_ops(db: Session) -> dict[str, Any]:
     }
 
 
-def _affiliate_leak_ops(db: Session) -> dict[str, Any]:
-    """DONE Reels/feed có affiliate nhưng comment chưa OK — rò tiền, không crash."""
-    from sqlalchemy import or_
-    from sqlalchemy.orm import selectinload
+def _buffer_channels_ops(db: Session, names: dict[str, str], now: int) -> list[dict[str, Any]]:
+    """
+    Mỗi kênh Buffer: video READY chưa đưa lên Buffer, bài đã hẹn chưa tới giờ, giờ lên gần nhất,
+    bài đã tới giờ 7 ngày qua. Chỉ đọc DB — không gọi Buffer API (tốn suất).
+    """
+    from sqlalchemy import and_, func
 
-    from app.constants import JobStatus, JobType
-    from app.core.database.models import Job
+    from app.constants import JobStatus, ViralStatus
+    from app.core.database.models import Job, ViralMaterial
 
-    commentable = (JobType.POST, JobType.FEED)
-    parents = (
-        db.query(Job)
-        .options(selectinload(Job.account))
+    sent = (
+        db.query(Job.id)
         .filter(
+            Job.platform == "buffer",
             Job.status == JobStatus.DONE,
-            Job.job_type.in_(commentable),
-            or_(
-                Job.affiliate_url.isnot(None),
-                Job.auto_comment_text.isnot(None),
-            ),
+            Job.viral_material_id == ViralMaterial.id,
+            Job.target_page == ViralMaterial.target_page,
         )
-        .order_by(Job.finished_at.desc(), Job.id.desc())
-        .limit(40)
+        .exists()
+    )
+    waiting = dict(
+        db.query(ViralMaterial.target_page, func.count(ViralMaterial.id))
+        .filter(ViralMaterial.status == ViralStatus.READY, ViralMaterial.target_page.isnot(None), ~sent)
+        .group_by(ViralMaterial.target_page)
         .all()
     )
-    children = _comment_children_by_parent(db, parents)
-    leaks = []
-    for j in parents:
-        aff = (j.affiliate_url or "").strip()
-        if not aff and not (j.auto_comment_text or "").strip():
-            continue
-        label = _comment_ok_label(j, children.get(j.id))
-        if label == "ok" or label == "pending":
-            continue
-        leaks.append(
-            {
-                "id": j.id,
-                "status": j.status,
-                "account_name": j.account.name if j.account else None,
-                "affiliate_url": aff[:160] if aff else None,
-                "comment_ok": label,
-                "posted": bool(j.post_url),
-                "error": (j.last_error or "")[:200],
-                "finished_at": j.finished_at,
-            }
-        )
-    return {"count": len(leaks), "latest": leaks[:3]}
-
-
-def _checkpoint_ops(db: Session) -> dict[str, Any]:
-    from sqlalchemy import or_
-    from sqlalchemy.orm import selectinload
-
-    from app.constants import JobStatus
-    from app.core.database.models import Account, EngagementSession, Job
-
-    job_f = or_(Job.status == JobStatus.CHECKPOINT, Job.last_error.ilike("%checkpoint%"))
-    acc_f = Account.login_error.ilike("%checkpoint%")
-    job_count = db.query(Job).filter(job_f).count()
-    acc_count = db.query(Account).filter(acc_f).count()
-    sess_count = (
-        db.query(EngagementSession).filter(EngagementSession.checkpointed.is_(True)).count()
-    )
-    latest_jobs = (
-        db.query(Job)
-        .options(selectinload(Job.account))
-        .filter(job_f)
-        .order_by(Job.finished_at.desc(), Job.id.desc())
-        .limit(3)
+    buffer_done = and_(Job.platform == "buffer", Job.status == JobStatus.DONE)
+    upcoming = {
+        page: (n, nxt)
+        for page, n, nxt in db.query(Job.target_page, func.count(Job.id), func.min(Job.schedule_ts))
+        .filter(buffer_done, Job.schedule_ts > now)
+        .group_by(Job.target_page)
         .all()
-    )
-    latest: list[dict[str, Any]] = [
-        {
-            "id": j.id,
-            "kind": "job",
-            "account_name": j.account.name if j.account else None,
-            "detail": (j.last_error or j.status or "")[:200],
-            "at": j.finished_at,
-        }
-        for j in latest_jobs
-    ]
-    if len(latest) < 3:
-        for a in (
-            db.query(Account)
-            .filter(acc_f)
-            .order_by(Account.updated_at.desc())
-            .limit(3 - len(latest))
-            .all()
-        ):
-            latest.append(
-                {
-                    "id": a.id,
-                    "kind": "account",
-                    "account_name": a.name,
-                    "detail": (a.login_error or a.login_status or "")[:200],
-                    "at": a.updated_at,
-                }
-            )
-    return {
-        "count": job_count + acc_count + sess_count,
-        "jobs": job_count,
-        "accounts": acc_count,
-        "sessions": sess_count,
-        "latest": latest[:3],
     }
+    posted_7d = dict(
+        db.query(Job.target_page, func.count(Job.id))
+        .filter(buffer_done, Job.schedule_ts > now - 7 * 86400, Job.schedule_ts <= now)
+        .group_by(Job.target_page)
+        .all()
+    )
+    ids = list(names) + sorted({*waiting, *upcoming} - set(names) - {"", None})
+    return [
+        {
+            "id": cid,
+            "name": names.get(cid, cid),
+            "ready_waiting": int(waiting.get(cid, 0)),
+            "scheduled": int(upcoming.get(cid, (0, None))[0]),
+            "next_at": upcoming.get(cid, (0, None))[1],
+            "posted_7d": int(posted_7d.get(cid, 0)),
+        }
+        for cid in ids
+    ]
+
+
+def _count_by_status(db: Session, model, *filters) -> dict[str, int]:
+    from sqlalchemy import func
+
+    rows = db.query(model.status, func.count(model.id)).filter(*filters).group_by(model.status).all()
+    return {str(status): int(n) for status, n in rows}
 
 
 @router.get("/overview")
 def admin_overview(db: Session = Depends(get_db)):
-    data = DashboardService.get_overview_data(db)
-    state = data["state"]
-    queue = DashboardService.get_queue_stats(db)
-    chart = DashboardService.get_chart_data(db)
-    accounts = [_account_row(a) for a in data["accounts"]]
+    """PLAN-108: tổng quan theo luồng thật — video → Buffer. Chỉ đọc DB."""
+    import time
+
+    from app.core.database.models import Job, ViralMaterial
+
+    now = int(time.time())
+    names = _channel_names()
     return {
-        "accounts": accounts,
-        "accounts_count": len(accounts),
-        "accounts_active": sum(1 for a in accounts if a["is_active"]),
-        "state": {
-            "worker_status": state.worker_status,
-            "heartbeat_at": state.heartbeat_at,
-            "current_job_id": state.current_job_id,
-            "safe_mode": bool(getattr(state, "safe_mode", False)),
-            "engagement_status": getattr(state, "engagement_status", None),
-        },
-        "queue": queue,
-        "chart": chart,
-        "ops": {
-            "worker": _worker_ops(state),
-            "disk": _disk_ops(),
-            "gemini_circuit": _gemini_circuit_ops(),
-            "checkpoint": _checkpoint_ops(db),
-            "failed_jobs": _failed_jobs_ops(db),
-            "affiliate_leak": _affiliate_leak_ops(db),
-        },
+        "generated_at": now,
+        "channels": _buffer_channels_ops(db, names, now),
+        "jobs_24h": _count_by_status(db, Job, Job.platform == "buffer", Job.created_at > now - 86400),
+        "materials_7d": _count_by_status(db, ViralMaterial, ViralMaterial.created_at > now - 7 * 86400),
+        "failed_jobs": _failed_jobs_ops(db, names),
+        "disk": _disk_ops(),
     }
 
 
@@ -365,8 +252,9 @@ def admin_jobs(
         db, status=status, page=page, per_page=per_page, q=q, platform=platform
     )
     children = _comment_children_by_parent(db, raw["jobs"])
+    names = _channel_names()
     return {
-        "jobs": [_job_row(j, comment_child=children.get(j.id)) for j in raw["jobs"]],
+        "jobs": [_job_row(j, comment_child=children.get(j.id), names=names) for j in raw["jobs"]],
         "total": raw["total"],
         "total_pages": raw["total_pages"],
         "page": raw["page"],
@@ -374,25 +262,6 @@ def admin_jobs(
         "platform": platform,
         "q": q,
     }
-
-
-@router.get("/accounts")
-def admin_accounts(
-    db: Session = Depends(get_db),
-    q: str = Query(""),
-    platform: str = Query(""),
-):
-    accounts = AccountService.list_accounts(db, skip=0, limit=200)
-    qn = (q or "").strip().lower()
-    pf = (platform or "").strip().lower()
-    rows = []
-    for a in accounts:
-        if pf and pf != "all" and (a.platform or "").lower() != pf:
-            continue
-        if qn and qn not in (a.name or "").lower() and qn not in (a.platform or "").lower():
-            continue
-        rows.append(_account_row(a))
-    return {"accounts": rows, "total": len(rows)}
 
 
 @router.get("/viral")
@@ -424,17 +293,6 @@ def admin_viral(
         "new_count": raw.get("new_count"),
         "failed_count": raw.get("failed_count"),
         "ready_count": raw.get("ready_count"),
-    }
-
-
-def _affiliate_row(link) -> dict[str, Any]:
-    return {
-        "id": link.id,
-        "keyword": link.keyword,
-        "url": link.url,
-        "comment_template": (link.comment_template or "")[:200],
-        "commission_rate": link.commission_rate,
-        "ai_status": link.ai_status,
     }
 
 
@@ -471,41 +329,13 @@ def _buffer_page_choices() -> list[dict[str, str]]:
     return rows
 
 
-def _flatten_tiktok_groups(ctx: dict[str, Any]) -> list[dict[str, Any]]:
-    page_index = ctx.get("page_index") or {}
-    rows: list[dict[str, Any]] = []
-    for tp, by_acc in (ctx.get("competitor_groups") or {}).items():
-        meta = page_index.get(tp) or {}
-        name = meta.get("name") if tp != "_unassigned" else None
-        for acc_name, urls in (by_acc or {}).items():
-            for url in urls:
-                rows.append(
-                    {
-                        "account_name": acc_name,
-                        "target_page": None if tp == "_unassigned" else tp,
-                        "target_name": name,
-                        "url": url,
-                    }
-                )
-    return rows
-
-
-@router.get("/affiliates")
-def admin_affiliates(
-    db: Session = Depends(get_db),
-    q: str = Query(""),
-    page: int = Query(1, ge=1),
-):
-    from app.features.affiliates.service import AffiliateService
-
-    raw = AffiliateService.get_links_paged(db, q=q, page=page)
-    return {
-        "links": [_affiliate_row(x) for x in raw["links"]],
-        "total": raw["total"],
-        "page": raw["page"],
-        "total_pages": raw["total_pages"],
-        "q": q,
-    }
+def _channel_names() -> dict[str, str]:
+    """id kênh Buffer → tên. Đọc cài đặt hỏng thì trả rỗng: bảng vẫn hiện id, không sập cả trang."""
+    try:
+        return {c["id"]: c["name"] for c in _buffer_page_choices()}
+    except Exception:
+        logger.warning("[ADMIN] không đọc được BUFFER_CHANNELS", exc_info=True)
+        return {}
 
 
 @router.get("/viral-sources")
@@ -520,124 +350,6 @@ def admin_viral_sources(db: Session = Depends(get_db)):
         "items": [_viral_source_row(s) for s in sources],
         "total": len(sources),
         "pages": _buffer_page_choices(),
-    }
-
-
-@router.get("/tiktok-links")
-def admin_tiktok_links(
-    db: Session = Depends(get_db),
-    q: str = Query(""),
-):
-    ctx = AccountService.build_tiktok_links_context_data(db, {"q": q})
-    items = _flatten_tiktok_groups(ctx)
-    return {
-        "items": items,
-        "total": ctx.get("competitor_total") or len(items),
-        "q": q,
-    }
-
-
-def _fb_pro_task_row(t: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "key": t.get("key"),
-        "label": t.get("label"),
-        "current": t.get("current") or 0,
-        "target": t.get("target") or 0,
-        "source": t.get("source") or "auto",
-        "auto": t.get("auto"),
-        "pct": t.get("pct") or 0,
-        "remaining": t.get("remaining") or 0,
-    }
-
-
-def _fb_pro_hint_row(j: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": j.get("id"),
-        "status": j.get("status"),
-        "target_page": j.get("target_page") or "",
-        "caption": j.get("caption") or "",
-        "media_name": j.get("media_name") or "",
-        "is_video": bool(j.get("is_video")),
-    }
-
-
-def _fb_pro_option_row(o: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "key": o.get("key") or "",
-        "label": o.get("label") or o.get("key") or "",
-        "account_id": o.get("account_id"),
-        "target_page": o.get("target_page") or "",
-    }
-
-
-@router.get("/fb-pro-tasks")
-def admin_fb_pro_tasks(
-    db: Session = Depends(get_db),
-    key: str = Query(""),
-    account_id: str = Query(""),
-    target_page: str = Query(""),
-):
-    from app.features.fb_pro_tasks import service as fb_pro_tasks
-
-    acc: int | None = None
-    if (account_id or "").strip():
-        try:
-            acc = int(account_id)
-        except ValueError:
-            acc = None
-    dash = fb_pro_tasks.build_dashboard(
-        db,
-        account_id=acc,
-        target_page=(target_page or "").strip() or None,
-        key=(key or "").strip() or None,
-    )
-    cfg = dash.get("config") or {}
-    return {
-        "scope_key": dash.get("scope_key") or "",
-        "scope_label": dash.get("scope_label") or "",
-        "account_id": dash.get("account_id"),
-        "account_name": dash.get("account_name") or "",
-        "target_page": dash.get("target_page") or "",
-        "page_slug": dash.get("page_slug") or "",
-        "scope_options": [_fb_pro_option_row(o) for o in (dash.get("scope_options") or [])],
-        "week_start": dash.get("week_start") or "",
-        "week_end": dash.get("week_end") or "",
-        "week_label": dash.get("week_label") or "",
-        "days_left": dash.get("days_left") or 0,
-        "overall_pct": dash.get("overall_pct") or 0,
-        "tasks": [_fb_pro_task_row(t) for t in (dash.get("tasks") or [])],
-        "auto": dash.get("auto") or {"posts": 0, "reels": 0},
-        "meta_url": dash.get("meta_url") or "",
-        "queue_hints": [_fb_pro_hint_row(j) for j in (dash.get("queue_hints") or [])],
-        "notes": (cfg.get("notes") or "")[:500],
-        "updated_at": dash.get("updated_at") or 0,
-    }
-
-
-def _threads_article_row(a) -> dict[str, Any]:
-    return {
-        "id": a.id,
-        "title": a.title,
-        "source_name": a.source_name,
-        "status": a.status,
-        "published_at": a.published_at,
-    }
-
-
-@router.get("/threads")
-def admin_threads(db: Session = Depends(get_db)):
-    from app.features.threads.dashboard import ThreadsService
-
-    raw = ThreadsService.get_dashboard_data(db)
-    failed = raw.get("failed_verifications") or {}
-    return {
-        "stats": raw.get("stats") or {"pending": 0, "success": 0, "failed": 0},
-        "articles": [_threads_article_row(a) for a in (raw.get("articles") or [])],
-        "jobs": [_job_row(j) for j in (raw.get("jobs") or [])],
-        "linked_accounts": [_account_row(a) for a in (raw.get("linked_accounts") or [])],
-        "verifying_accounts": [_account_row(a) for a in (raw.get("verifying_accounts") or [])],
-        "available_accounts": [_account_row(a) for a in (raw.get("available_accounts") or [])],
-        "failed_verifications": {str(k): v for k, v in failed.items()},
     }
 
 
