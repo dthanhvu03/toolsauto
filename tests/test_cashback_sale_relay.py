@@ -466,3 +466,40 @@ def test_zalo_tin_ma_dan_link_bang_nhan_nut_mot_tin():
     text = call[0][1]
     assert text.startswith("Mã hot\n\n👉 🎟 Lưu mã trên Shopee:\nhttps://s.shopee.vn/an_redir?x=1"), text
     assert "Bấm link này để mua" not in text and "1 · 🔕 Tắt báo mã" in text
+
+
+def test_default_channels_chua_ca_hai_kenh():
+    assert "nhomsansale" in sale_relay.DEFAULT_CHANNELS
+    assert "sansaletele" in sale_relay.DEFAULT_CHANNELS
+    assert len(sale_relay.DEFAULT_CHANNELS) >= 2
+
+
+def test_check_trung_giua_hai_kenh(tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from cashback_bot.db import TrackingRepository
+    repo = TrackingRepository(str(tmp_path / "dedup.sqlite"))
+    repo.migrate()
+
+    now = datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc)
+    # Kênh 1 đăng deal với link sản phẩm và mã voucher
+    keys1 = sale_relay.extract_dedup_keys("Mã VIP100K giảm 100k tai nghe Sony", ["https://shopee.vn/product/123/456?sp_atk=1"])
+    assert "code:VIP100K" in keys1
+    assert "url:shopee.vn/product/123/456" in keys1
+
+    # Lúc đầu chưa đăng: không trùng
+    is_dup, _ = sale_relay.is_duplicate_deal(repo, keys1, now=now)
+    assert not is_dup
+
+    # Kênh nhomsansale đăng thành công:
+    sale_relay.mark_deal_posted(repo, keys1, "nhomsansale", 101, now=now)
+
+    # 15 phút sau, kênh sansaletele đăng cùng sản phẩm (dù URL có query tracking khác hoặc affiliate khác):
+    keys2 = sale_relay.extract_dedup_keys("Tai nghe Sony siêu sale kèm mã VIP100K", ["https://shopee.vn/product/123/456?utm_source=other"])
+    is_dup2, dup_info2 = sale_relay.is_duplicate_deal(repo, keys2, now=now + timedelta(minutes=15))
+    assert is_dup2, "Phải phát hiện bài trùng từ kênh 2"
+    assert "nhomsansale #101" in dup_info2
+
+    # 13 giờ sau (> DEDUP_WINDOW 12h), cùng sản phẩm đó được đăng đợt flash sale mới -> không coi là trùng nữa:
+    is_dup_later, _ = sale_relay.is_duplicate_deal(repo, keys2, now=now + timedelta(hours=13))
+    assert not is_dup_later, "Sau 12 giờ thì cho phép đăng lại đợt mới"
+

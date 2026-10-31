@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import html
+import hashlib
 import ipaddress
 import json
 import logging
@@ -32,7 +33,7 @@ from cashback_bot.telegram_api import TelegramApi
 
 logger = logging.getLogger("cashback_bot")
 
-DEFAULT_CHANNELS = ["nhomsansale"]
+DEFAULT_CHANNELS = ["nhomsansale", "sansaletele"]
 POLL_INTERVAL_SEC = 90  # 1.5 phút quét một lần
 REQUEST_TIMEOUT = (3.0, 5.0)
 SUB_ID = "AUTOSALE"
@@ -41,6 +42,7 @@ HEAD_TIMEOUT = (2.0, 3.0)
 MAX_HOPS = 3
 CODES_PER_POST = 20  # voucher_posts.message_id = post_id * 100 + thứ tự mã
 CODE_FRESH_FOR = timedelta(hours=24)  # mã đã có trong voucher_posts trong khoảng này thì không ghi lại
+DEDUP_WINDOW = timedelta(hours=12)  # Khoảng thời gian chống trùng deal giữa các kênh relay (12 giờ)
 
 _ALLOWED_SHOPEE_HOSTS = frozenset({
     "shopee.vn",
@@ -689,6 +691,95 @@ def store_codes(repo: TrackingRepository, channel_name: str, post_id: int, text:
     return saved
 
 
+def extract_dedup_keys(text: str, links: list[str]) -> list[str]:
+    """Trích xuất các khóa định danh duy nhất (dedup keys) cho bài viết để chống đăng trùng giữa các kênh.
+
+    Bao gồm:
+    - Mã voucher (ví dụ: code:VIP25)
+    - Link Shopee sạch (ví dụ: url:shopee.vn/m/goi-shopeevip hoặc url:shopee.vn/product/123/456)
+    - Content hash của 120 ký tự chữ đầu tiên (loại bỏ dấu câu/khoảng trắng)
+    """
+    keys: list[str] = []
+
+    # 1. Mã voucher
+    for item in extract_voucher_codes(text):
+        code = item.get("code")
+        if code:
+            keys.append(f"code:{code.upper()}")
+
+    # 2. Link Shopee sạch
+    for link in links:
+        if not link:
+            continue
+        clean = _clean_shopee_url(link)
+        try:
+            parsed = urlparse(clean)
+            host = (parsed.hostname or "").lower()
+            if host in _ALLOWED_SHOPEE_HOSTS:
+                path = parsed.path.rstrip("/")
+                if path and path not in {"", "/"}:
+                    keys.append(f"url:{host}{path}")
+        except Exception:
+            pass
+
+    # 3. Content hash (bỏ ký tự đặc biệt, khoảng trắng, emoji)
+    cleaned_text = re.sub(r"[\s\W_]+", "", text.lower())[:120]
+    if len(cleaned_text) >= 25:
+        keys.append(f"text:{hashlib.sha256(cleaned_text.encode('utf-8')).hexdigest()[:16]}")
+
+    return list(dict.fromkeys(keys))
+
+
+def is_duplicate_deal(repo: TrackingRepository, keys: list[str], now: datetime | None = None) -> tuple[bool, str | None]:
+    """Kiểm tra xem bất kỳ khóa nào của bài viết đã được đăng trong vòng DEDUP_WINDOW chưa."""
+    if not keys:
+        return False, None
+    moment = now or datetime.now(timezone.utc)
+    since = (moment - DEDUP_WINDOW).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with repo.connect() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relay_dedup (
+                key TEXT PRIMARY KEY,
+                channel_name TEXT NOT NULL,
+                post_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        placeholders = ",".join("?" for _ in keys)
+        row = conn.execute(
+            f"SELECT key, channel_name, post_id FROM relay_dedup WHERE key IN ({placeholders}) AND created_at >= ? LIMIT 1",
+            (*keys, since),
+        ).fetchone()
+        if row:
+            return True, f"{row[0]} (đã đăng từ {row[1]} #{row[2]})"
+    return False, None
+
+
+def mark_deal_posted(repo: TrackingRepository, keys: list[str], channel_name: str, post_id: int, now: datetime | None = None) -> None:
+    """Lưu các khóa định danh vào DB sau khi đăng thành công và dọn dẹp các khóa quá 48 giờ."""
+    if not keys:
+        return
+    moment = now or datetime.now(timezone.utc)
+    stamp = moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+    expire_cutoff = (moment - timedelta(hours=48)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with repo.connect() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relay_dedup (
+                key TEXT PRIMARY KEY,
+                channel_name TEXT NOT NULL,
+                post_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("DELETE FROM relay_dedup WHERE created_at < ?", (expire_cutoff,))
+        rows = [(k, channel_name, post_id, stamp) for k in keys]
+        conn.executemany("INSERT OR REPLACE INTO relay_dedup (key, channel_name, post_id, created_at) VALUES (?, ?, ?, ?)", rows)
+
+
 def _scan_channel(
     channel_name: str,
     repo: TrackingRepository,
@@ -734,7 +825,17 @@ def _scan_channel(
                         first_link if len(post.get("shopee_links") or []) == 1 else None)
         except Exception as exc:
             logger.warning("[SaleRelay] store_codes error for post %s: %s", post["id"], exc)
+
         if not first_link:
+            repo.set_state(state_key, str(post["id"]))
+            continue
+
+        # Check trùng deal giữa các kênh relay (bỏ qua nếu link/mã/nội dung đã phát gần đây)
+        all_links = [first_link] + (post.get("shopee_links") or [])
+        dedup_keys = extract_dedup_keys(post["text"], all_links)
+        is_dup, dup_info = is_duplicate_deal(repo, dedup_keys)
+        if is_dup:
+            logger.info("[SaleRelay] Bỏ qua bài trùng %s từ %s: %s", post["id"], channel_name, dup_info)
             repo.set_state(state_key, str(post["id"]))
             continue
 
@@ -744,6 +845,12 @@ def _scan_channel(
             sent_ok = send_to_channel(telegram, target_channel_id, text, post["photo_url"], buttons)
         except Exception as exc:
             logger.warning("[SaleRelay] send_to_channel error for post %s: %s", post["id"], exc)
+
+        if sent_ok:
+            try:
+                mark_deal_posted(repo, dedup_keys, channel_name, post["id"])
+            except Exception as exc:
+                logger.debug("[SaleRelay] mark_deal_posted error: %s", exc)
 
         # 2. Nếu là tin mã giảm giá / voucher hot -> xếp hàng gửi riêng cho khách
         lowered = text.lower()
