@@ -13,6 +13,10 @@ import { SyspanelPage } from "@/features/syspanel/pages/SyspanelPage";
 import { DatabasePage } from "@/features/database/pages/DatabasePage";
 import { TelegramUxPage } from "@/features/telegram/pages/TelegramUxPage";
 import { StudioBoardPage } from "@/features/studio/pages/StudioBoardPage";
+import { DoctypeListPage } from "@/features/doctype/pages/DoctypeListPage";
+import { DoctypeBuilderPage } from "@/features/doctype/pages/DoctypeBuilderPage";
+import { RecordListPage } from "@/features/doctype/pages/RecordListPage";
+import { RecordFormPage } from "@/features/doctype/pages/RecordFormPage";
 import { StudioEditorPage } from "@/features/studio/pages/StudioEditorPage";
 import { StudioAssetsPage } from "@/features/studio/pages/StudioAssetsPage";
 import { StudioSetupPage } from "@/features/studio/pages/StudioSetupPage";
@@ -44,6 +48,10 @@ export default function App() {
             <Route path="go/syspanel" element={<SyspanelPage />} />
             <Route path="go/database" element={<DatabasePage />} />
             <Route path="go/telegram" element={<TelegramUxPage />} />
+            <Route path="go/doctype" element={<DoctypeListPage />} />
+            <Route path="go/doctype/:name" element={<DoctypeBuilderPage />} />
+            <Route path="go/doc/:doctype" element={<RecordListPage />} />
+            <Route path="go/doc/:doctype/:name" element={<RecordFormPage />} />
             <Route path="*" element={<Navigate to="/app" replace />} />
           </Route>
           <Route path="/" element={<Navigate to="/app" replace />} />

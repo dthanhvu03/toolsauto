@@ -18,6 +18,7 @@ from app.platform.auth import router as auth
 from app.platform.dashboard_shell import router as dashboard
 from app.platform import settings_api
 from app.platform import admin_api
+from app.platform.doctype_api import router as doctype_api
 from app.platform.health import router as health
 from app.core.db_admin import router as database
 from app.core.compliance import router as compliance
@@ -77,6 +78,7 @@ app.include_router(telegram.router)
 app.include_router(viral_intros.router)
 app.include_router(viral.router)
 app.include_router(studio.router)
+app.include_router(doctype_api.router)
 app.include_router(buffer_media.router)
 app.include_router(buffer_cluster)
 app.include_router(system_panel.router)

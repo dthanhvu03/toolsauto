@@ -43,6 +43,7 @@ from app.core.database.models.compliance import (
     KeywordBlacklist,
     ViolationLog,
 )
+from app.core.database.models.doctype import DocRecord, DocType
 from app.core.database.models.studio import (
     StudioAnalysis,
     StudioAsset,
@@ -88,6 +89,9 @@ __all__ = [
     "ComplianceAllowlist",
     "ComplianceRegexRule",
     "ViolationLog",
+    # doctype (PLAN-109)
+    "DocType",
+    "DocRecord",
     # studio (ADR-061)
     "StudioAsset",
     "StudioAnalysis",
