@@ -351,7 +351,8 @@ def test_dub_bo_qua_khi_da_la_tieng_viet_khong_chay_demucs(db, media, monkeypatc
     project = db.query(StudioProject).one()
     assert calls == []
     data = db.query(StudioAnalysis).filter_by(asset_id=project.asset_id, kind="dub").one().data
-    assert data == {"ok": False, "target_lang": "vi", "reason": "đã đúng ngôn ngữ đích", "source_lang": "vi"}
+    assert data == {"ok": False, "target_lang": "vi", "reason": "đã đúng ngôn ngữ đích", "source_lang": "vi",
+                    "retry": False}  # kết quả chắc chắn → lưu cố định (PLAN-118)
     assert project.spec["clips"][0]["audio"] == [] and project.spec["subtitles"]["source"] == "transcript"
 
 

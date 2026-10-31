@@ -30,8 +30,11 @@ DOING = {
 }
 SOURCE = {
     "link": "TikTok", "upload": "Tải lên", "reup": "Reup", "rerender": "Render lại", "recompose": "Đổi mẫu",
+    "redub": "Lồng tiếng lại",
     "publish": "Gửi đăng",
 }
+# bước chạy xong nhưng không làm được việc (lồng tiếng hỏng → giữ tiếng gốc) — hiện ⚠, không phải ✓ (PLAN-118)
+_WARN = ("lồng tiếng: ",)
 # ghi chú của bước tự bỏ qua — hiện «bỏ qua», không phải «xong»
 _SKIP = ("mẫu không lồng tiếng", "không có tiếng để lồng", "đã lồng tiếng trước đó", "đã có caption", "tắt caption",
          "đã có sẵn", "đã ở chờ duyệt")
@@ -44,7 +47,7 @@ def _step(stage: str, task: StudioTask | None) -> dict:
         return step
     note = task.error or None
     status = {
-        TaskStatus.DONE: "skipped" if (note or "").startswith(_SKIP) else "done",
+        TaskStatus.DONE: "skipped" if (note or "").startswith(_SKIP) else "warn" if (note or "").startswith(_WARN) else "done",
         TaskStatus.RUNNING: "running",
         TaskStatus.FAILED: "failed",
     }.get(task.status, "retry" if task.attempts else "queued")
@@ -90,6 +93,9 @@ def _job(root: StudioTask, chain: list[StudioTask], projects: dict[int, StudioPr
         for s in steps:
             if s["stage"] == "review":
                 s["status"] = "waiting"
+    warn = next((s for s in steps if s["status"] == "warn"), None)
+    if warn and state in ("review", "done"):
+        summary += f" — ⚠ {warn['label']}: {warn['note'].split(': ', 1)[-1]}"
     if project is not None and project.status == ProjectStatus.REJECTED:  # anh đã bỏ — «Duyệt» không phải ✓
         for s in steps:
             if s["stage"] == "review" and s["status"] in ("done", "waiting"):

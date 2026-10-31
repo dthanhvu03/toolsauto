@@ -27,6 +27,18 @@ from app.features.studio.contracts import StageError, StageResult
 from app.features.studio.dub import engine
 
 _RETRY_REASONS = ("dịch hỏng", "đọc hỏng")
+# kết quả chắc chắn → lưu cố định; lỗi khác (Demucs / Whisper hỏng vì hết RAM…) lần sau chạy lại (PLAN-118)
+_FINAL_REASONS = ("đã đúng ngôn ngữ đích", "không có tiếng", "không hỗ trợ")
+
+
+def _final(data: dict, transcript: dict) -> bool:
+    """Bản lưu ``dub`` đủ chắc để khỏi chạy lại không."""
+    if data.get("ok") or str(data.get("reason") or "").startswith(_FINAL_REASONS):
+        return True
+    if "retry" in data:
+        return not data["retry"]
+    # bản lưu trước PLAN-118: «không có lời thoại» trong khi bước phân tích nghe ra lời → kết luận sai, cho chạy lại
+    return not transcript.get("lines")
 
 
 def _translate(prompt: str) -> str | None:
@@ -78,12 +90,13 @@ def run(db: Session, task: StudioTask) -> StageResult:
         return StageResult(asset_id=asset.id, note="mẫu không lồng tiếng")
     if asset.kind != "video" or not asset.has_audio:
         return StageResult(asset_id=asset.id, note="không có tiếng để lồng")
-    if store.analysis(db, asset.id, "dub") is not None:
+    transcript = store.analysis(db, asset.id, "transcript") or {}
+    cached = store.analysis(db, asset.id, "dub")
+    if cached is not None and _final(cached, transcript):
         return StageResult(asset_id=asset.id, note="đã lồng tiếng trước đó")
 
     target = str(params.get("dub_lang") or "vi")
     data: dict = {"ok": False, "target_lang": target}
-    transcript = store.analysis(db, asset.id, "transcript") or {}
     if transcript.get("lang") == target:  # khỏi chạy Demucs + Whisper lần hai
         data.update(reason="đã đúng ngôn ngữ đích", source_lang=target)
     else:
@@ -94,6 +107,7 @@ def run(db: Session, task: StudioTask) -> StageResult:
             res = engine.make_tracks(
                 asset.path, str(work), target_lang=target, translate=_translate,
                 synthesize=_synthesizer(target, vn_voice), voice_gender=gender,
+                hint_segments=transcript.get("lines"), hint_lang=transcript.get("lang"),
             )
             data.update(reason=res.reason, source_lang=res.source_lang)
             if not res.ok and res.reason.startswith(_RETRY_REASONS) and task.attempts < task.max_attempts:
@@ -109,6 +123,11 @@ def run(db: Session, task: StudioTask) -> StageResult:
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
-    db.add(StudioAnalysis(asset_id=asset.id, kind="dub", data=data))
+    data["retry"] = not data["ok"] and not str(data.get("reason") or "").startswith(_FINAL_REASONS)
+    row = db.query(StudioAnalysis).filter_by(asset_id=asset.id, kind="dub").first()  # mỗi asset một dòng dub
+    if row is None:
+        db.add(StudioAnalysis(asset_id=asset.id, kind="dub", data=data))
+    else:
+        row.data = data
     db.commit()
     return StageResult(asset_id=asset.id, note=f"lồng tiếng: {data['reason']}" if not data["ok"] else data["reason"])

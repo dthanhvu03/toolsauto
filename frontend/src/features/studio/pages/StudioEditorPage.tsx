@@ -17,6 +17,11 @@ import { keptSeconds } from "../lib/clips";
 import { mmss, STATUS_LABEL, STATUS_STYLE } from "../lib/status";
 import type { ProjectSpec } from "../types/studio.types";
 
+const LANG: Record<string, string> = {
+  zh: "Trung", en: "Anh", ja: "Nhật", ko: "Hàn", th: "Thái", id: "Indonesia", es: "Tây Ban Nha", fr: "Pháp", de: "Đức",
+  ru: "Nga", pt: "Bồ Đào Nha", hi: "Hindi",
+};
+
 const BUSY = new Set(["DRAFT", "RENDERING", "RENDERED"]);
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -76,6 +81,11 @@ export function StudioEditorPage() {
     refresh
   );
   const posted = useAction(() => api.markPosted(id).then(invalidate), "Đã đánh dấu đã đăng.", refresh);
+  const redub = useAction(
+    () => api.redubProject(id).then(invalidate),
+    "Đang lồng tiếng lại — dự án mới hiện ở trang Studio (xem tiến trình), dự án này chuyển sang «Đã bỏ».",
+    refresh
+  );
   const [notice, setNotice] = useState({ text: "", seq: 0 });
   const reject = useAction(() => api.rejectProject(id).then(invalidate), "Đã bỏ.", refresh);
   const remake = useAction(
@@ -91,7 +101,7 @@ export function StudioEditorPage() {
   const specDirty = useMemo(() => !!d && !!spec && JSON.stringify(spec) !== JSON.stringify(d.spec), [d, spec]);
   const durations = Object.fromEntries((d?.assets ?? []).map((a) => [a.id, a.duration ?? 0]));
   // Câu của nút vừa bấm gần nhất (seq lớn nhất) — hiện nổi, không phụ thuộc vị trí cuộn.
-  const last = [save, meta, approve, reject, remake, variants, posted, notice].reduce((a, b) => (b.seq > a.seq ? b : a));
+  const last = [save, meta, approve, reject, remake, variants, posted, redub, notice].reduce((a, b) => (b.seq > a.seq ? b : a));
   const lastText = "msg" in last ? last.msg : last.text;
   const channelDirty = !!d && (d.channel?.id ?? "") !== channelId;
   const approveBlock = !d
@@ -121,6 +131,25 @@ export function StudioEditorPage() {
             </div>
             <TechTags tags={d.project.tags ?? []} className="mt-2" />
             {d.project.error ? <p className="mt-2 text-sm text-red-700">{d.project.error}</p> : null}
+            {d.dub?.has_speech && d.dub.speech_lang && d.dub.speech_lang !== "vi" && !d.dub.dubbed ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <span className="min-w-0 flex-1">
+                  ⚠ Video nói tiếng {LANG[d.dub.speech_lang] ?? d.dub.speech_lang} nhưng <b>chưa lồng tiếng Việt</b>
+                  {d.dub.reason ? ` (lần trước: ${d.dub.reason})` : " (lúc đưa vào chưa tick «Lồng tiếng Việt»)"}.
+                </span>
+                {d.dub.can_redub ? (
+                  <button
+                    type="button"
+                    className={`${ghostBtnClass} border-amber-300 bg-white text-amber-900`}
+                    disabled={redub.busy}
+                    onClick={() => redub.run(undefined)}
+                    title="Dịch + lồng tiếng Việt rồi dựng dự án mới (giữ caption, kỹ thuật); dự án này chuyển sang «Đã bỏ»"
+                  >
+                    {redub.busy ? "Đang gửi…" : "Lồng tiếng lại"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {!d.project.editable && !manual ? (
               <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
                 Video đã sang Buffer (material #{d.project.viral_material_id}) — chỉ xem. Đổi giờ / huỷ lịch qua Telegram.

@@ -97,6 +97,7 @@ def detail(db: Session, project_id: int) -> dict:
         "subtitle_lines": subtitle_lines(db, spec),
         "luts": paths.lut_names(),
         "variants_allowed": bool(asset),
+        "dub": _dub_state(db, project, asset),
         "group": _group_rows(db, project),
         "tasks": [{"id": t.id, "stage": t.stage, "status": t.status, "error": t.error} for t in tasks],
     }
@@ -171,6 +172,67 @@ def recompose(db: Session, project_id: int, *, template_id: int | None, channel_
     db.commit()
     payload = {"channel_id": channel_id or project.channel_id, "template_id": template_id}
     return pipeline.start(db, "recompose", asset_id=project.asset_id, payload=payload)
+
+
+def _dub_state(db: Session, project: StudioProject, asset: StudioAsset | None) -> dict:
+    """Trình edit: video có lời tiếng nước ngoài không, đã lồng được chưa, vì sao — để hiện nút «Lồng tiếng lại»."""
+    transcript = (store.analysis(db, asset.id, "transcript") or {}) if asset else {}
+    data = (store.analysis(db, asset.id, "dub") or {}) if asset else {}
+    lang = transcript.get("lang")
+    spec = ProjectSpec.model_validate(project.spec)
+    dubbed = any(c.audio for c in spec.clips)
+    return {
+        "speech_lang": lang, "has_speech": bool(transcript.get("lines")), "dubbed": dubbed,
+        "reason": None if dubbed else data.get("reason"),
+        "can_redub": bool(transcript.get("lines")) and lang not in (None, "vi") and project.status in EDITABLE,
+    }
+
+
+def _old_params(db: Session, project: StudioProject) -> dict:
+    """
+    Kỹ thuật dự án cũ đã chọn — dự án lồng lại giữ y vậy. Lấy đúng ``params`` trong payload các việc của dự án (đi suốt
+    flow); dự án cũ không còn việc nào thì đoán từ spec.
+    """
+    task = db.query(StudioTask).filter(StudioTask.project_id == project.id).order_by(StudioTask.id).first()
+    if task is not None and isinstance((task.payload or {}).get("params"), dict):
+        return dict(task.payload["params"])
+    return _params_from_spec(ProjectSpec.model_validate(project.spec))
+
+
+def _params_from_spec(spec: ProjectSpec) -> dict:
+    """Đoán kỹ thuật từ spec (hook, nhạc nền, lật, LUT). Phụ đề bật — câu đã dịch thay câu gốc."""
+    params: dict = {"subtitles": True}
+    hook = next((t.text for t in spec.texts if t.pos == "top" and t.start == 0), "")
+    if hook:
+        params["hook"] = hook
+    music = next((t for t in spec.audio.tracks if t.loop), None)
+    if music is not None:
+        params.update(music_asset_id=music.asset, music_volume=music.volume)
+    if any(c.hflip for c in spec.clips):
+        params["mirror"] = "on"
+    if spec.canvas.lut:
+        params["lut"] = spec.canvas.lut
+    return params
+
+
+def redub(db: Session, project_id: int) -> StudioTask:
+    """
+    Nút «Lồng tiếng lại» (PLAN-118): lồng lại tiếng Việt từ asset đã có rồi dựng dự án mới (giữ kênh, mẫu, caption,
+    kỹ thuật); dự án này thành REJECTED. Bước dub tự bỏ bản lưu hỏng (``retry``).
+    """
+    project = _project(db, project_id)
+    asset = db.get(StudioAsset, project.asset_id) if project.asset_id else None
+    state = _dub_state(db, project, asset)
+    if not state["can_redub"]:
+        why = "video đã là tiếng Việt" if state["speech_lang"] == "vi" else "video không có lời thoại / không sửa được nữa"
+        raise EditError(f"không lồng lại được: {why}")
+    params = {**_old_params(db, project), "dub": True, "dub_lang": "vi"}
+    project.status = ProjectStatus.REJECTED
+    project.error = "thay bằng bản lồng tiếng lại"
+    db.commit()
+    payload = {"channel_id": project.channel_id, "template_id": project.template_id, "params": params,
+               "caption": project.caption, "hashtags": project.hashtags}
+    return pipeline.start(db, "redub", asset_id=asset.id, payload=payload)
 
 
 IN_PROGRESS = {ProjectStatus.DRAFT, ProjectStatus.RENDERING, ProjectStatus.RENDERED}

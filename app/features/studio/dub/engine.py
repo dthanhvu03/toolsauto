@@ -294,12 +294,18 @@ def make_tracks(
     synthesize: SynthesizeFn,
     voice_gender: str = "female",
     model: Any = None,
+    hint_segments: list[dict] | None = None,
+    hint_lang: str | None = None,
 ) -> DubTracks:
     """
     Ghi ``voice.wav`` + ``background.wav`` vào ``workdir`` (dài đúng bằng video gốc).
 
     ``ok=False`` khi không cần / không làm được (không tiếng, không lời, trùng ngôn ngữ, dịch
     hay đọc hỏng) — ``reason`` nói vì sao; người gọi giữ tiếng gốc.
+
+    ``hint_segments`` / ``hint_lang``: lời thoại bước ``analyze`` đã nghe (PLAN-118). Demucs hỏng → dùng luôn, khỏi
+    chạy Whisper lần hai trên tiếng gốc (máy vừa cạn RAM thì lần nghe đó cũng hỏng, ra «không có lời thoại» sai).
+    Demucs được → vẫn nghe lại trên giọng đã tách (mốc giờ sạch hơn); ra rỗng thì cũng lùi về gợi ý.
     """
     if target_lang not in LANGUAGES:
         return DubTracks(False, f"không hỗ trợ ngôn ngữ đích {target_lang}")
@@ -313,14 +319,21 @@ def make_tracks(
 
         vocals = os.path.join(workdir, "vocals.wav")
         background = os.path.join(workdir, "background.wav")
+        hint = [s for s in (hint_segments or []) if str(s.get("text") or "").strip()]
         if separate(audio, vocals, background, duration=duration):
-            speech_src, result.background_volume = vocals, 1.0
+            result.background_volume = 1.0
+            segments, source_lang = speech.transcribe(vocals, model=model, language=None)
+            if not segments and hint:
+                logger.warning("[studio.dub] nghe lại giọng đã tách ra rỗng — dùng lời thoại của bước phân tích")
+                segments, source_lang = hint, hint_lang
         else:
             logger.warning("[studio.dub] không tách được giọng, nền là tiếng gốc hạ nhỏ")
             os.replace(audio, background)
-            speech_src, result.background_volume = background, FALLBACK_BACKGROUND_VOLUME
-
-        segments, source_lang = speech.transcribe(speech_src, model=model, language=None)
+            result.background_volume = FALLBACK_BACKGROUND_VOLUME
+            if hint:
+                segments, source_lang = hint, hint_lang
+            else:
+                segments, source_lang = speech.transcribe(background, model=model, language=None)
         result.source_lang = source_lang
         if not segments:
             result.reason = "không có lời thoại"

@@ -44,6 +44,8 @@ FLOWS: dict[str, list[Stage]] = {
     "rerender": [Stage.RENDER, Stage.CAPTION, Stage.REVIEW, Stage.PUBLISH],  # sau khi sửa spec trên trình edit
     "publish": [Stage.PUBLISH],
     # đổi mẫu trên trình edit: dựng lại spec từ asset đã có (không intake / phân tích lại)
+    # nút «Lồng tiếng lại» (PLAN-118): lồng lại rồi dựng dự án mới từ asset đã có
+    "redub": [Stage.DUB, Stage.COMPOSE, Stage.RENDER, Stage.CAPTION, Stage.REVIEW, Stage.PUBLISH],
     "recompose": [Stage.COMPOSE, Stage.RENDER, Stage.CAPTION, Stage.REVIEW, Stage.PUBLISH],  # duyệt tay xong → sang Buffer (P3, cầu nối viral_materials)
 }
 

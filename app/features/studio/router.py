@@ -221,6 +221,16 @@ class RecomposeBody(BaseModel):
     channel_id: int | None = None
 
 
+@router.post("/projects/{project_id}/redub")
+def redub(project_id: int, db: Session = Depends(get_db)) -> dict:
+    """«Lồng tiếng lại» (PLAN-118): dự án mới có tiếng Việt, dự án này thành REJECTED."""
+    try:
+        task = editor.redub(db, project_id)
+    except editor.EditError as exc:
+        raise _bad(exc) from exc
+    return {"ok": True, "task_id": task.id}
+
+
 @router.post("/projects/{project_id}/recompose")
 def recompose(project_id: int, body: RecomposeBody, db: Session = Depends(get_db)) -> dict:
     try:

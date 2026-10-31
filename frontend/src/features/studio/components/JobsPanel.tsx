@@ -26,6 +26,7 @@ const CHIP: Record<JobStep["status"], string> = {
   waiting: "border-dashed border-emerald-300 bg-white text-emerald-700",
   pending: "border-dashed border-slate-200 bg-white text-slate-400",
   cancelled: "border-slate-300 bg-slate-100 text-slate-500",
+  warn: "border-amber-300 bg-amber-50 text-amber-900 font-semibold",
 };
 
 function StepIcon({ s }: { s: JobStep["status"] }) {
@@ -33,6 +34,7 @@ function StepIcon({ s }: { s: JobStep["status"] }) {
   if (s === "done") return <Check className={c} />;
   if (s === "running") return <Loader2 className={`${c} animate-spin`} />;
   if (s === "failed" || s === "cancelled") return <X className={c} />;
+  if (s === "warn") return <AlertTriangle className={c} />;
   if (s === "retry") return <RotateCw className={c} />;
   if (s === "skipped") return <Minus className={c} />;
   if (s === "queued") return <Clock className={c} />;

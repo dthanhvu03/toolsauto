@@ -75,6 +75,15 @@ export type Asset = {
   created_at: number;
 };
 
+/** PLAN-118 — video có lời tiếng nước ngoài không, đã lồng được chưa. */
+export type DubState = {
+  speech_lang: string | null;
+  has_speech: boolean;
+  dubbed: boolean;
+  reason: string | null;
+  can_redub: boolean;
+};
+
 export type ProjectDetail = {
   project: {
     id: number;
@@ -103,6 +112,7 @@ export type ProjectDetail = {
     members: { id: number; status: ProjectStatus; look: [boolean, string | null]; is_root: boolean }[];
   };
   tasks: { id: number; stage: string; status: string; error: string | null }[];
+  dub?: DubState;
 };
 
 export type Channel = {
@@ -125,7 +135,7 @@ export type Channel = {
 export type JobStep = {
   stage: string;
   label: string;
-  status: "pending" | "queued" | "running" | "retry" | "done" | "skipped" | "failed" | "waiting" | "cancelled";
+  status: "pending" | "queued" | "running" | "retry" | "done" | "skipped" | "failed" | "waiting" | "cancelled" | "warn";
   note: string | null;
   started_at: number | null;
   finished_at: number | null;

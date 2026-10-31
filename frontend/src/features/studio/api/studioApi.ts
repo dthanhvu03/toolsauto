@@ -30,6 +30,7 @@ export const fetchProject = (id: number) => getJson<ProjectDetail>(`${BASE}/proj
 export const saveSpec = (id: number, spec: ProjectSpec) => sendJson<Ok>(`${BASE}/projects/${id}/spec`, "PUT", { spec });
 export const updateMeta = (id: number, body: { caption?: string; hashtags?: string[]; channel_id?: number }) =>
   sendJson<Ok>(`${BASE}/projects/${id}`, "PATCH", body);
+export const redubProject = (id: number) => sendJson<Ok>(`${BASE}/projects/${id}/redub`, "POST", {});
 export const recompose = (id: number, body: { template_id: number | null; channel_id?: number | null }) =>
   sendJson<Ok>(`${BASE}/projects/${id}/recompose`, "POST", body);
 export const makeVariants = (id: number, n: number) =>
