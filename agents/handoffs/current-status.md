@@ -40,7 +40,10 @@
 - **31/10 06:30 — P4.3 (anh giao 4 bước):** bước 1 anh đã tự chạy (kiểm bằng lệnh đọc: ổn); bước 2 tạo `storage/media/luts|bgm`; bước 3 NVENC tự dò + quay về CPU (GTX 1650, driver 516.40 quá cũ cho ffmpeg 6.1 — cần ≥ 522; CPU 18,9 s / video 19,6 s); bước 4 cài VieNeu bị chặn quyền. 128 test (Studio + DocType) qua. Commit cục bộ.
 - **Next:**
   - Anh cập nhật driver NVIDIA bên Windows (≥ 522) → `pm2 restart Studio_Heavy` → Studio tự dùng NVENC (log render ghi «GPU»).
-  - Anh chạy cài VieNeu: `python3 -m venv /home/vu/venv-vieneu && /home/vu/venv-vieneu/bin/pip install vieneu` rồi báo em đo tốc độ.
+  - VieNeu (31/10 06:40, anh: «chạy giúp anh»): đã cài `/home/vu/venv-vieneu` (vieneu 3.8.3, onnxruntime 1.31.1, 916 MB) + mẫu
+    `/home/vu/vieneu-samples/mau_*.wav`. onnxruntime 1.31 chặn file .data qua symlink cache HF → đổi symlink 2 model trong cache
+    thành file thật. Đo CPU fp32 (i5-10300H, 4 nhân WSL, máy rảnh): nạp 58 s; RTF ≈ 4–6 (12 s tiếng mất 45–72 s) → quá chậm
+    để lồng tiếng sản xuất trên CPU. Đường nhanh: GPU (PyTorch + CUDA) — cần driver mới (cùng việc NVENC). Chưa nối vào Studio.
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 
