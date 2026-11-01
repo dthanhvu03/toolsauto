@@ -12,6 +12,7 @@ import {
   bench, blossomTree, floor, kumquatPot, LanternString, luggage, patternTexture, plasticStools, plasticTable, SIGN_BLUE,
   SIGN_RED, SignBoard, Steam, teaGlasses, tiledRoof,
 } from "./props";
+import { banhChungStack, blossomPot, cayNeu, chrysanthemumPot, DAO, flag, greetingBanner, MAI, watermelon } from "./tet";
 import type { Region } from "./types";
 
 export interface StageSet {
@@ -76,6 +77,15 @@ export class BenSet implements StageSet {
       g.add(at(luggage(color, kind), -10.4 + (i % 3) * 0.7, 0.05, -11.6 + Math.floor(i / 3) * 0.6));
     });
     for (const x of [-13.5, 12.5]) g.add(at(kumquatPot(), x, 0.05, -14));
+    // đồ Tết (PLAN-129): băng rôn trên tường nhà chờ, chậu đào / mai hai đầu, cúc vàng chân cột, cờ hai góc mái
+    g.add(at(greetingBanner(12, 0.65, 0), 0, 3.2, -17.62));
+    g.add(at(blossomPot(DAO), -14.2, 0.05, -12.4), at(blossomPot(MAI), 13.8, 0.05, -11.6));
+    for (const x of [-10.6, -9.4, 9.4, 10.6]) g.add(at(chrysanthemumPot(), x, 0.05, -13.2));
+    for (const side of [-1, 1]) {
+      const pole = at(flag(1.8), side * 11.3, 4.6, -13.5);
+      pole.rotation.set(0.35, side < 0 ? Math.PI : 0, -0.45);
+      g.add(pole);
+    }
 
     this.lanterns = new LanternString(new THREE.Vector3(-10, 3.9, -13.6), new THREE.Vector3(10, 3.9, -13.6), 9, 0.3);
     g.add(this.lanterns.group);
@@ -182,6 +192,8 @@ export class RestSet implements StageSet {
     g.add(at(new SignBoard("WC", 1.6, 0.7, { bg: "#1e6fd9", fg: "#ffffff", rim: "#ffffff" }).mesh, 10, 3.4, -13.98));
 
     g.add(at(kumquatPot(), -10.5, 0.05, -14.2), at(kumquatPot(), 1.2, 0.05, -14.4));
+    g.add(at(blossomPot(MAI), 13.6, 0.05, -13.2));
+    for (const x of [2.4, 7.4]) g.add(at(chrysanthemumPot(), x, 0.05, -14.1));
     this.lanterns = new LanternString(new THREE.Vector3(-8.5, 3.2, -12.6), new THREE.Vector3(2.5, 3.2, -12.6), 6, 0.3);
     g.add(this.lanterns.group);
     shadowed(g);
@@ -299,6 +311,14 @@ export class HomeSet implements StageSet {
     g.add(this.steam.points);
 
     g.add(at(this.tree, -6.5, 0, -13.5), at(kumquatPot(), 5.5, 0.05, HOUSE_Z + 2.8));
+    // sân Tết (PLAN-129): cây nêu, dưa hấu bổ đôi, chồng bánh chưng cạnh nồi, cúc hai bên cửa, cờ trên trụ cổng
+    g.add(at(cayNeu(), 4.3, 0.05, -11.2));  // bên phải lối vào: bên trái là chỗ bong bóng lơ xe
+    g.add(at(watermelon(), -3.3, 0.05, HOUSE_Z + 3.1), at(watermelon(), -2.7, 0.05, HOUSE_Z + 3.3));
+    g.add(at(banhChungStack(), potX + 1.6, 0.05, potZ - 1.0));
+    for (const x of [-0.6, 3.6]) g.add(at(chrysanthemumPot(), x, 0.06, HOUSE_Z + 2.3));
+    const pole = at(flag(1.6), 2.15, 3.0, GATE_Z);
+    pole.rotation.z = -0.5;
+    g.add(pole);
 
     // gia đình đứng trước cổng, bên trái lối vào (đứng trong sân thì mái cổng che mất)
     for (const [i, hue] of [[0, 20], [1, 200], [2, 330]] as const) {

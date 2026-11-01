@@ -1,115 +1,119 @@
-"""Câu nói của Anh Tư lơ xe (PLAN-128): nói như phụ xe khách thật — giọng miền Nam, chữ đời thường, không như máy đọc.
+"""Câu nói của Anh Tư lơ xe (PLAN-128): nói như lơ xe khách ngoài bến thật — chợ búa, cộc, lẹ, la ó, giọng miền Nam.
 
+- Lơ xe không nói chuẩn mực: «lên lẹ lên cha nội», «hổng chờ à nghen», «nhích vô trong coi», «mấy ông mấy bà».
+  Không chửi thề (TikTok khoá live), còn lại cứ đời như ngoài bến.
 - Mỗi tình huống vài câu, bốc ngẫu nhiên: nghe lại không lặp y chang (lặp nguyên câu là thấy «máy» liền).
-- Không đọc số km như báo cáo: phụ xe nói giờ đi («chừng 26 tiếng là tới»), tên bến, tên tỉnh.
-- Chữ của nghề: lên xe lẹ, còn giường chót, kín giường, nhớ biển số xe, coi lại đồ đạc, anh tài ơi chạy.
+- Không đọc số km như báo cáo: lơ xe nói giờ đi («chừng 26 tiếng»), tên bến, tên tỉnh.
 Sửa câu chỉ cần sửa bảng LINES; {tên} trong câu là chỗ điền.
 """
 
 import random
+import re
 
 LINES: dict[str, tuple[str, ...]] = {
     # ---- ở bến -------------------------------------------------------------------------------
     "boarding": (
-        "Xe đi {dest} vô bến rồi nè! Ai về quê gõ tên tỉnh, Anh Tư xếp giường liền.",
-        "{dest}, {dest} đây bà con ơi! Về quê ăn Tết thì gõ tên tỉnh lên xe nha.",
-        "Xe Tết đi {dest} đây! Nhà ở đâu gõ tên tỉnh, giường nằm có sẵn hết rồi.",
-        "Ai về hướng {dest} hông? Gõ tên tỉnh đi, lên xe lẹ còn kịp chuyến nè.",
+        "{dest} đây! {dest} đây! Đi hông đi? Gõ tên tỉnh lẹ lên, xe sắp chạy rồi!",
+        "Ê ê, ai về {dest} hông? Đứng đó ngó hoài, gõ tên tỉnh rồi lên xe cái coi!",
+        "Xe Tết đi {dest} nè mấy ông mấy bà ơi! Lên lên lên, giường còn trống trơn nè!",
+        "Đi đâu đi đâu? {dest} hả? Gõ tên tỉnh đi cha nội, Anh Tư xếp giường cho!",
     ),
     "seats_left": (
-        "Còn {n} giường thôi nha, ai đi thì lẹ lẹ lên!",
-        "Còn {n} chỗ nữa thôi bà con ơi, chậm là đi chuyến sau á.",
-        "{n} giường chót nè, gõ tên tỉnh lẹ lên!",
+        "Còn có {n} giường à nghen! Ai đi thì lẹ cái chân lên!",
+        "{n} giường nữa thôi đó! Chậm là ở lại ăn Tết với nhà xe nha!",
+        "Còn {n} chỗ! Gõ lẹ lên, Anh Tư hổng chờ đâu à!",
     ),
     "last_seat": (
-        "Còn đúng một giường chót nè, ai nhanh tay thì được!",
-        "Một chỗ cuối cùng! Ai về quê gõ lẹ đi!",
+        "Còn đúng một giường chót! Ai lẹ tay người đó được, hổng giành nha!",
+        "Một chỗ cuối nè! Gõ lẹ đi, chậm là đứng ngoài ngó xe chạy đó!",
     ),
     "full": (
-        "Kín giường rồi nha! Anh tài ơi, chạy!",
-        "Đủ khách rồi, bà con nằm yên, xe chạy liền nè.",
-        "Đủ rồi đủ rồi, đóng cửa, xe chạy nha!",
+        "Kín giường rồi! Đóng cửa! Anh tài ơi chạy!",
+        "Đủ rồi đủ rồi, hết chỗ rồi! Ai chưa lên thì ráng chờ chuyến sau nha!",
+        "Chật ních rồi bà con ơi! Nằm sát vô, chạy nè!",
     ),
     "switch_lane": (
-        "Xe này đổi qua đi {dest} nha, ai chờ hướng đó lên luôn!",
-        "Hướng {dest} có người chờ nè, xe này chạy {dest} luôn nha!",
+        "Thôi đổi tuyến, xe này chạy {dest}! Ai chờ {dest} lên lẹ, lẹ!",
+        "Bên {dest} đông quá, quay đầu chạy {dest} luôn! Lên lên!",
     ),
     "departure": (
-        "Nhà xe dời qua {station} rồi nha! Ai về quê gõ tên tỉnh để xếp giường.",
+        "Nhà xe dọn qua {station} rồi nha! Ai về quê gõ tên tỉnh, lẹ lên kẻo hết giường!",
     ),
     # ---- trên đường ---------------------------------------------------------------------------
     "depart": (
-        "Xe chạy nha bà con! Đi {dest} {hours} là tới, ai mệt thì làm một giấc.",
-        "Anh tài cho xe lăn bánh rồi! Đường {dest} {hours}, ai còn thức thì thả tim cho anh tài chạy lẹ.",
-        "Xuất bến! Đồ đạc để gọn, giày dép bỏ bọc, nằm nghỉ cho khỏe nha. {hours} là về tới {dest}.",
+        "Xe chạy nè! Ngồi yên đó, đừng có đi tới đi lui! {hours} là tới {dest}.",
+        "Xuất bến! Giày dép bỏ bọc, đồ đạc nhét gầm giường, nằm im cho Anh Tư nhờ! {hours} tới {dest}.",
+        "Anh tài ơi đạp ga! Đường {dest} {hours}, ai còn thức thả tim cho ổng chạy lẹ!",
     ),
     "rest": (
-        "Xe ghé {place} nghỉ mười lăm phút nha! Ai ăn uống, đi vệ sinh thì xuống, nhớ biển số xe.",
-        "Tới trạm {place} rồi, nghỉ chân chút! Ở đây có {specialty}, ai mua làm quà thì mua lẹ.",
-        "Dừng ăn cơm ở {place} nha bà con! Ăn lẹ lẹ, mười lăm phút xe chạy à.",
+        "Ghé {place} nghỉ mười lăm phút! Ai đi vệ sinh thì đi lẹ, nhớ biển số xe, lạc là ráng chịu nha!",
+        "Tới {place} rồi! Ở đây có {specialty}, ai mua quà thì mua lẹ, đừng có trả giá lâu!",
+        "Dừng ăn cơm {place} nè! Ăn lẹ lẹ, mười lăm phút xe chạy, hổng chờ ai đâu à!",
     ),
     "honk": (
-        "Bíp bíp! Lên xe đi bà con, xe chạy rồi nè!",
-        "Ai còn ở dưới lên lẹ nha, đếm đủ người là chạy!",
-        "Lên xe lên xe! Còn ai trong nhà vệ sinh hông?",
+        "Bíp bíp! Lên xe! Lên xe! Còn ai ở dưới hông?",
+        "Ê, lên lẹ cái coi! Đếm đủ đầu là chạy à nghen!",
+        "Trời đất, còn ai trong nhà vệ sinh hông? Ra lẹ, xe chạy bỏ đó!",
     ),
     "dropoff_bubble": (
-        "Tới {prov} rồi bà con ơi! Ai xuống {prov} chuẩn bị đồ đạc nha!",
+        "{prov}! {prov}! Ai xuống {prov} ôm đồ ra cửa lẹ nha!",
     ),
     "finish": (
-        "Trả khách xong rồi, xe quay đầu về bến đón chuyến mới nha!",
-        "Hết khách rồi! Ai chưa đi thì gõ tên tỉnh chờ xe sau, Anh Tư về liền.",
+        "Hết khách! Anh tài ơi quay đầu, về bến rước chuyến mới!",
+        "Xong một chuyến! Ai chưa đi gõ tên tỉnh chờ đó, Anh Tư về liền!",
     ),
     "likes": (
-        "{total} tim rồi! Anh tài đạp ga nè!",
-        "Tim nhiều quá, anh tài chạy hăng luôn! {total} tim rồi đó.",
+        "{total} tim rồi! Anh tài phê quá đạp ga luôn nè!",
+        "Trời ơi tim gì nhiều dữ! {total} tim rồi, thả nữa đi bà con!",
     ),
     # ---- xe tăng cường ---------------------------------------------------------------------------
     "relief_auto": (
-        "Đông khách quá, nhà xe kêu thêm xe đi {dest}, bà con chờ hướng đó lên luôn nha!",
-        "Kêu thêm xe rồi nè! Xe đi {dest} chạy liền, khỏi chờ.",
+        "Đông quá trời đông! Nhà xe kêu thêm xe đi {dest}, ai chờ hướng đó lên luôn!",
+        "Thêm xe nè! Xe đi {dest} chạy liền, khỏi đứng chờ mỏi giò!",
     ),
     "relief_gift": (
-        "{name} bao nguyên chiếc xe cho bà con đi {dest}! Cảm ơn {name} nha, xe chạy liền!",
-        "Có {name} bao xe nè, bà con hướng {dest} lên xe đi luôn!",
+        "Chịu chơi! {name} bao nguyên chiếc xe cho bà con đi {dest}! Lên lẹ đi!",
+        "{name} bao xe rồi! Ai về {dest} lên ngồi miễn phí nè, cảm ơn {name} cái coi!",
     ),
     "relief_admin": (
-        "Nhà xe cho thêm xe đi {dest} nè, ai chờ hướng đó lên xe nha!",
+        "Nhà xe cho thêm chuyến đi {dest}! Ai chờ hướng đó lên lẹ lên!",
     ),
     # ---- người xem ---------------------------------------------------------------------------------
     "home": (
-        "{name} ở ngay {prov} rồi mà, đi bộ về nhà cho khỏe!",
-        "Ủa {name} ở {prov} luôn hả, khỏi đi xe, về nhà ăn Tết thôi!",
+        "Trời đất {name}, ở ngay {prov} mà đòi đi xe? Đi bộ về đi cha nội!",
+        "{name} ở {prov} luôn hả? Khỏi lên, về nhà ăn bánh tét đi!",
     ),
     "treat": (
-        "{name} bao cả xe trà đá nè! Cảm ơn nhiều nha!",
-        "Có {name} khao trà đá cả xe, quý hóa quá!",
+        "{name} bao trà đá cả xe! Chịu chơi dữ!",
+        "Có {name} khao trà đá nè, uống lẹ đi bà con!",
     ),
     "board": (
-        "{names} lên xe về {prov} nè!",
-        "Có {names} về {prov}, lên xe đi!",
-        "{names} lên xe rồi, về {prov} ăn Tết!",
+        "{names} về {prov}! Lên lên, nhích vô trong!",
+        "{names} đi {prov} hả? Lên lẹ, nằm giường trong cho Anh Tư!",
+        "Rồi, {names} về {prov}, lên xe! Người sau lẹ lên!",
     ),
     "board_mixed": (
-        "{names} lên xe rồi nha!",
-        "Có thêm {names} lên xe nè!",
+        "{names} lên rồi! Dồn vô trong cho người sau lên!",
+        "Lên lẹ lên, {names}! Đừng đứng chắn cửa!",
     ),
     "dropoff": (
-        "Tới {prov} rồi! {names} xuống xe nha, nhớ coi lại đồ đạc.",
-        "{prov} đây bà con ơi! {names} chuẩn bị xuống, ăn Tết vui vẻ nha!",
-        "Ai xuống {prov} nè? {names}, tới nhà rồi đó!",
+        "{prov}! {prov}! {names} xuống lẹ, coi lại đồ đạc, quên ráng chịu nha!",
+        "Tới {prov} rồi! {names} ôm đồ xuống lẹ, xe còn chạy nữa!",
+        "{names} ơi, {prov} tới rồi, còn ngủ hả? Dậy xuống xe lẹ!",
     ),
     "gift": (
-        "Cảm ơn {name} nha, quý hóa quá!",
-        "{name} tặng quà cho cả xe nè, cảm ơn nha!",
-        "Cảm ơn {name} nhiều nha, Tết này phát tài!",
+        "Ui, {name} tặng quà! Chịu chơi quá, năm nay phát tài nha!",
+        "{name} chơi lớn dữ! Cảm ơn nha, Tết này hốt bạc!",
+        "Cảm ơn {name} nghen! Có quà là Anh Tư la to hơn nè!",
     ),
 }
 
 
 def line(kind: str, rng: random.Random | None = None, **fields) -> str:
     """Một câu cho tình huống `kind` (bốc ngẫu nhiên trong các câu cùng loại), điền {tên} từ `fields`."""
-    return (rng or random).choice(LINES[kind]).format(**fields)
+    text = (rng or random).choice(LINES[kind]).format(**fields)
+    # chỗ điền đứng đầu câu («… nhờ! {hours} tới …» → «chừng 6 tiếng») thì viết hoa lại
+    return re.sub(r"(^|[.!?]\s+)(\w)", lambda m: m.group(1) + m.group(2).upper(), text)
 
 
 def hours_phrase(hours: float) -> str:

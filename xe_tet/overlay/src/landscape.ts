@@ -3,12 +3,14 @@
 //   giữa (z -21…-45 và phía camera z +8…+15): ruộng bậc thang / đồi cà phê / ruộng nước / cát + phi lao, cây
 //   xa   (z -60…-150): núi nhiều tầng, biển + thuyền thúng — trôi rất chậm
 // Mỗi vùng dựng một lần rồi giữ lại, đổi vùng chỉ bật / tắt: không dựng lại, không rò bộ nhớ GPU suốt buổi live.
+// Ngày Tết (PLAN-129): nhà treo cờ + đèn lồng, chậu mai / đào trước hiên, băng rôn chúc Tết, mai vàng xen cây ven đường.
 
 import * as THREE from "three";
 import { at, GEO, mat, noiseTexture, post, rounded, slab, soft } from "./art";
 import { strip } from "./bend";
-import { blossomTree, makeTree, SignBoard } from "./props";
+import { blossomTree, kumquatPot, lantern, makeTree, SignBoard } from "./props";
 import { Conveyor, WRAP } from "./road";
+import { blossomPot, DAO, flag, greetingBanner, MAI } from "./tet";
 import type { Region } from "./types";
 
 const GROUND: Record<Region, number> = { bac: 0x6f9b52, trung: 0xa9b26a, taynguyen: 0xa8603c, nam: 0x5fa04e };
@@ -28,8 +30,9 @@ function rand(seed: number): () => number {
 
 // ---- nhà ven đường -------------------------------------------------------------------------
 
-/** Nhà ống mặt tiền nhiều màu, ban công, bồn nước inox trên nóc; vài căn có biển tạp hoá. */
-function tubeHouse(color: number, floors: number, windows: THREE.Material, shop: string | null): THREE.Group {
+/** Nhà ống mặt tiền nhiều màu, ban công, bồn nước inox trên nóc; vài căn có biển tạp hoá. Ngày Tết: cờ chĩa ra đường,
+ * đôi đèn lồng trước cửa, chậu mai / đào / quất (`pot`) đặt ngoài hiên. */
+function tubeHouse(color: number, floors: number, windows: THREE.Material, shop: string | null, pot: THREE.Object3D | null): THREE.Group {
   const g = new THREE.Group();
   const h = floors * 2.2;
   g.add(at(rounded(3, h, 4, 0.08, soft(color, 0.85)), 0, h / 2, 0));
@@ -42,6 +45,11 @@ function tubeHouse(color: number, floors: number, windows: THREE.Material, shop:
   tank.rotation.z = Math.PI / 2;
   g.add(tank);
   if (shop) g.add(at(new SignBoard(shop, 2.8, 0.55, { bg: "#1e6fd9", fg: "#ffffff", rim: "#ffd23f" }).mesh, 0, 2.35, 2.05));
+  const pole = at(flag(1.5), 1.35, h - 0.9, 2.05);
+  pole.rotation.x = 0.6;
+  g.add(pole);
+  for (const x of [-1.1, 1.1]) g.add(at(lantern(0.7), x, 2.15, 2.3));
+  if (pot) g.add(at(pot, -1.0, 0, 2.7));
   g.traverse((o) => { o.castShadow = true; });
   return g;
 }
@@ -130,8 +138,12 @@ function ridge(rnd: () => number, color: number, count: number, height: number, 
 
 // ---- chọn theo vùng --------------------------------------------------------------------------------
 
+/** Hoa Tết của vùng: đào miền Bắc, mai vàng từ miền Trung trở vào. */
+const blossomOf = (region: Region) => (region === "bac" ? DAO : MAI);
+
 function regionTree(region: Region, rnd: () => number): THREE.Group {
-  if (region === "bac") return rnd() < 0.4 ? blossomTree(0xff8fb1) : makeTree(rnd() < 0.6 ? "pine" : "round");
+  if (region === "bac") return rnd() < 0.45 ? blossomTree(DAO) : makeTree(rnd() < 0.6 ? "pine" : "round");
+  if (rnd() < 0.25) return blossomTree(MAI);
   if (region === "trung") return casuarina();
   if (region === "nam") return makeTree(rnd() < 0.7 ? "palm" : "bush");
   return makeTree(rnd() < 0.6 ? "round" : "pine");
@@ -240,13 +252,16 @@ export class Landscape {
     for (let x = -WRAP; x < WRAP; x += 16, block++) {
       if (block % 2 === 0) {
         for (const item of regionField(region, rnd)) near.add(belt.add(at(item.obj, x + item.x, 0, item.z)));
+        if (block % 4 === 0) near.add(belt.add(at(greetingBanner(), x, 0, -8.6)));  // băng rôn chúc Tết đầu làng
         continue;
       }
       const houses = 1 + Math.floor(rnd() * 2);
       for (let h = 0; h < houses; h++) {
         const sign = rnd() < 0.5 ? shops[Math.floor(rnd() * shops.length)] : null;
+        const roll = rnd();
+        const pot = roll < 0.4 ? blossomPot(blossomOf(region)) : roll < 0.65 ? kumquatPot() : null;
         const house = region === "nam" && rnd() < 0.4 ? stiltHouse()
-          : tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 1 + Math.floor(rnd() * 3), this.windows, sign);
+          : tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 1 + Math.floor(rnd() * 3), this.windows, sign, pot);
         near.add(belt.add(at(house, x - 4 + h * 4.5, 0, -10.5 - rnd() * 1.5)));
       }
       near.add(belt.add(at(regionTree(region, rnd), x + 5, 0, -16 - rnd() * 3)));

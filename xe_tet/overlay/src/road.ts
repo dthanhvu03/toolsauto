@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { at, type Bump, GEO, post, rounded, slab, soft, type WheelSpot } from "./art";
 import { strip } from "./bend";
+import { flag } from "./tet";
 
 /** Vật cuộn trong dải x ∈ [-WRAP, WRAP) rồi quay vòng — đủ rộng để mép quay vòng nằm ngoài khung hình. */
 export const WRAP = 80;
@@ -158,6 +159,9 @@ function utilityPole(lampMat: THREE.Material): THREE.Group {
   arm.rotation.x = -0.25;
   const lamp = at(rounded(0.32, 0.12, 0.55, 0.05, lampMat), 0, 6.35, 1.6);
   g.add(arm, lamp);
+  const banner = at(flag(1.6), 0, 4.2, 0.12);  // cờ Tết cắm trụ điện, chĩa ra mặt đường
+  banner.rotation.x = 0.55;
+  g.add(banner);
 
   const wires: THREE.BufferGeometry[] = [];
   const span = (from: THREE.Vector3, sag: number, radius: number) => {

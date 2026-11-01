@@ -245,6 +245,23 @@ export function kumquatPot(): THREE.Group {
 
 // ---- đèn lồng --------------------------------------------------------------------
 
+const LANTERN_BODY = soft(0xd32f2f, 0.5);
+const LANTERN_CAP = soft(0xf4c04e, 0.4, 0.4);
+
+/** Một đèn lồng đỏ (gốc ở móc treo) — dây đèn lồng, hiên nhà ống, cây nêu. */
+export function lantern(scale = 1): THREE.Group {
+  const l = new THREE.Group();
+  const shell = at(new THREE.Mesh(GEO.sphere, LANTERN_BODY), 0, -0.42, 0);
+  shell.scale.set(0.3, 0.36, 0.3);
+  const top = at(new THREE.Mesh(GEO.cylSmooth, LANTERN_CAP), 0, -0.08, 0);
+  top.scale.set(0.16, 0.08, 0.16);
+  const tassel = at(new THREE.Mesh(GEO.cyl, LANTERN_CAP), 0, -0.88, 0);
+  tassel.scale.set(0.03, 0.22, 0.03);
+  l.add(shell, top, tassel);
+  l.scale.setScalar(scale);
+  return l;
+}
+
 /** Dây đèn lồng đỏ võng giữa hai điểm; `update(t)` cho đèn đung đưa nhẹ. */
 export class LanternString {
   group = new THREE.Group();
@@ -253,19 +270,9 @@ export class LanternString {
   constructor(from: THREE.Vector3, to: THREE.Vector3, count: number, sag = 0.6) {
     const curve = new THREE.QuadraticBezierCurve3(from, from.clone().lerp(to, 0.5).add(new THREE.Vector3(0, -sag * 2, 0)), to);
     this.group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.025, 4), soft(0x3a2a20, 0.9)));
-    const body = soft(0xd32f2f, 0.5);
-    const cap = soft(0xf4c04e, 0.4, 0.4);
     for (let i = 1; i <= count; i++) {
-      const p = curve.getPoint(i / (count + 1));
-      const l = new THREE.Group();
-      const shell = at(new THREE.Mesh(GEO.sphere, body), 0, -0.42, 0);
-      shell.scale.set(0.3, 0.36, 0.3);
-      const top = at(new THREE.Mesh(GEO.cylSmooth, cap), 0, -0.08, 0);
-      top.scale.set(0.16, 0.08, 0.16);
-      const tassel = at(new THREE.Mesh(GEO.cyl, cap), 0, -0.88, 0);
-      tassel.scale.set(0.03, 0.22, 0.03);
-      l.add(shell, top, tassel);
-      l.position.copy(p);
+      const l = lantern();
+      l.position.copy(curve.getPoint(i / (count + 1)));
       this.lanterns.push(l);
       this.group.add(l);
     }
