@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Điều khiển Xe Tết</title>
+<style>
+  :root { --bg:#fbf6ee; --card:#fff; --ink:#3a2418; --muted:#8a6f5e; --red:#b3261e; --gold:#e8b04a; --line:#ecdcc8; --soft:#fff7ea; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, "Segoe UI", sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:16px; display:grid; gap:14px; }
+  h1 { margin:4px 0 0; font-size:20px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; }
+  h2 { margin:0 0 10px; font-size:15px; color:var(--muted); font-weight:600; }
+  h3 { margin:12px 0 6px; font-size:13px; color:var(--muted); font-weight:600; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  input[type=text], input[type=number] { flex:1; min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
+  input[type=number] { flex:0 0 96px; }
+  button { padding:9px 13px; border:1px solid var(--line); border-radius:10px; background:var(--soft); font:inherit; cursor:pointer; color:inherit; }
+  button:hover { border-color:var(--gold); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  a { text-decoration:none; }
+  button.primary { background:var(--red); color:#fff; border-color:var(--red); }
+  button.on { background:var(--gold); border-color:var(--gold); font-weight:600; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px; }
+  .stat { background:var(--soft); border-radius:10px; padding:8px 10px; }
+  .stat b { display:block; font-size:18px; white-space:nowrap; }
+  .stat span { color:var(--muted); font-size:12px; }
+  .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
+  .bus { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 0; border-top:1px solid var(--line); }
+  .bus:first-child { border-top:0; }
+  .bus .info { flex:1 1 220px; min-width:0; }
+  .bus .info small { display:block; color:var(--muted); }
+  label.toggle { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; background:var(--soft); cursor:pointer; }
+  label.toggle input { width:18px; height:18px; accent-color:var(--red); }
+  .zoom { display:flex; align-items:center; gap:8px; }
+  .zoom output { min-width:48px; text-align:center; font-weight:600; }
+  #log, #tt-log { font:12px/1.5 ui-monospace, monospace; color:var(--muted); max-height:120px; overflow:auto; margin:8px 0 0; white-space:pre-wrap; }
+  .paused { color:var(--red); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🚌 Điều khiển Xe Tết Sum Vầy</h1>
+
+  <section>
+    <h2>Trạng thái</h2>
+    <div class="stats">
+      <div class="stat"><b id="s-phase">–</b><span id="s-left">Pha</span></div>
+      <div class="stat"><b id="s-bus">–</b><span>Xe / khách</span></div>
+      <div class="stat"><b id="s-next">–</b><span>Đặt xe sau</span></div>
+      <div class="stat"><b id="s-likes">–</b><span>Tim chuyến này</span></div>
+      <div class="stat"><b id="s-done">–</b><span>Đã đưa về quê</span></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <a href="/" target="_blank"><button>Mở màn hình live</button></a>
+    </div>
+  </section>
+
+  <section>
+    <h2>📡 Kết nối TikTok LIVE</h2>
+    <div class="row">
+      <input type="text" id="tt-user" placeholder="@username hoặc link tiktok.com/@…/live" aria-label="Tài khoản TikTok">
+      <button class="primary" id="tt-connect">Kết nối</button>
+      <button id="tt-disconnect">Ngắt</button>
+    </div>
+    <p class="hint" id="tt-status">Chưa kết nối</p>
+    <div id="tt-log"></div>
+    <p class="hint">Chỉ đọc sự kiện công khai của phòng live, không cần mật khẩu TikTok. Nối trước khi lên live cũng được:
+      tài khoản chưa live thì tự chờ và vào khi live bắt đầu. Rớt mạng thì tự nối lại.</p>
+  </section>
+
+  <section>
+    <h2>🎥 Camera</h2>
+    <div class="row">
+      <button data-set="view" data-val="outside">Ngoài xe</button>
+      <button data-set="view" data-val="inside">Trong xe (24 giường)</button>
+    </div>
+    <h3>Góc máy ngoài xe</h3>
+    <div class="row">
+      <button data-set="cam" data-val="wide">Toàn cảnh</button>
+      <button data-set="cam" data-val="high">Từ trên cao</button>
+      <button data-set="cam" data-val="side">Ngang xe</button>
+      <button data-set="cam" data-val="close">Cận xe</button>
+    </div>
+    <h3>Khoảng cách</h3>
+    <div class="zoom">
+      <button id="zoom-in" aria-label="Lại gần">➖ Gần</button>
+      <output id="zoom-now">1.0</output>
+      <button id="zoom-out" aria-label="Ra xa">➕ Xa</button>
+      <button id="zoom-reset">Mặc định</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="toggle"><input type="checkbox" data-show="fade" data-default="off"> Hiệu ứng chuyển cảnh (mờ nhẹ)</label>
+    </div>
+    <h3>Chất lượng hình</h3>
+    <div class="row">
+      <button data-set="quality" data-val="high">Cao</button>
+      <button data-set="quality" data-val="low">Thấp (máy nóng / LIVE Studio giật)</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>🚌 Các chuyến xe</h2>
+    <div id="buses"></div>
+    <h3>Gọi thêm xe tăng cường cho làn</h3>
+    <div id="relief-lanes" class="row"></div>
+    <div class="row" style="margin-top:10px">
+      <label class="toggle"><input type="checkbox" data-show="relief_auto"> Tự gọi xe tăng cường khi một làn đủ 24 người chờ</label>
+    </div>
+    <p class="hint">«📺 Chiếu» = màn hình live theo xe đó (góc máy chọn ở phần Camera). Xe tăng cường tới bến cuối thì màn hình tự
+      về xe chính. Tạm dừng / +30 giây / qua pha ở phần «Chuyến xe» áp cho xe chính; tạm dừng dừng cả xe tăng cường.</p>
+  </section>
+
+  <section>
+    <h2>🚏 Bến đi</h2>
+    <div class="row">
+      <select id="departure" aria-label="Bến đi" style="flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff"></select>
+      <button id="departure-set">Đổi bến</button>
+    </div>
+    <p class="hint" id="lanes-now"></p>
+    <p class="hint">Chỉ đổi được khi xe đang đón, chưa ai lên xe và không ai giữ chỗ (tránh vé sai hướng).</p>
+  </section>
+
+  <section>
+    <h2>🚦 Chuyến xe</h2>
+    <div class="row">
+      <button id="pause" class="primary">⏸ Tạm dừng</button>
+      <button data-extend="30">+30 giây</button>
+      <button data-extend="-30">−30 giây</button>
+      <button id="skip">⏭ Qua pha tiếp</button>
+      <button id="reset">↺ Làm lại từ đầu</button>
+    </div>
+    <h3>Thời gian (giây) — áp dụng từ pha sau</h3>
+    <div class="row">
+      <span>Đón khách</span><input type="number" id="board-seconds" min="20" max="900" step="10" aria-label="Thời gian đón khách">
+      <span>Nghỉ trạm</span><input type="number" id="rest-seconds" min="20" max="300" step="10" aria-label="Thời gian nghỉ trạm">
+      <button id="save-times">Lưu</button>
+    </div>
+    <p class="hint">«+30 giây» chỉ áp cho lúc đón khách, nghỉ trạm, thả khách. Lúc đang chạy, tốc độ do tim quyết định.</p>
+  </section>
+
+  <section>
+    <h2>🖥 Màn hình</h2>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" data-show="show_route"> Bảng tuyến đường</label>
+      <label class="toggle"><input type="checkbox" data-show="show_loxe"> Lơ xe</label>
+      <label class="toggle"><input type="checkbox" data-show="show_toasts"> Thông báo vé / quà</label>
+      <label class="toggle"><input type="checkbox" data-show="show_board"> Bảng tỉnh</label>
+      <label class="toggle"><input type="checkbox" data-show="auto_loxe"> Lơ xe tự nói</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>📢 Lơ xe nói & băng rôn</h2>
+    <div class="row">
+      <input type="text" id="say" maxlength="120" placeholder="Câu cho lơ xe nói, ví dụ: Chào bà con tối nay!" aria-label="Câu lơ xe nói">
+      <button class="primary" id="say-send">Lơ xe nói</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="ann-title" maxlength="60" placeholder="Tiêu đề băng rôn" aria-label="Tiêu đề băng rôn">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="ann-text" maxlength="160" placeholder="Dòng phụ (không bắt buộc)" aria-label="Dòng phụ băng rôn">
+      <input type="number" id="ann-seconds" value="8" min="3" max="30" aria-label="Số giây hiện băng rôn">
+      <button class="primary" id="ann-send">Hiện băng rôn</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Gửi sự kiện thử</h2>
+    <div class="row"><input type="text" id="name" value="Minh Anh" aria-label="Tên người xem"></div>
+    <div class="row" style="margin-top:8px">
+      <input type="text" id="text" placeholder="Comment: nghệ an, 37, không về, phở, wc…" aria-label="Nội dung comment">
+      <button class="primary" id="send">Gửi comment</button>
+    </div>
+    <div class="row" style="margin-top:8px" id="quick"></div>
+    <div class="row" style="margin-top:8px">
+      <button data-like="10">❤ 10 tim</button>
+      <button data-like="200">❤ 200 tim</button>
+      <button data-gift="1">🌹 Hoa hồng (1)</button>
+      <button data-gift="20">🏮 Đèn lồng (20)</button>
+      <button data-gift="199">🧧 Lì xì (199)</button>
+      <button data-gift="1000">🚌 Xe Tết (1000)</button>
+      <button data-type="follow">➕ Follow</button>
+      <button data-type="share">↗ Chia sẻ</button>
+      <button data-type="join">👋 Vào phòng</button>
+    </div>
+    <p class="hint">Mỗi tên là một người xem. Đổi tên để thử nhiều người.</p>
+  </section>
+
+  <section>
+    <h2>Giả lập phòng đông</h2>
+    <div class="row">
+      <button data-sim="0">Tắt</button>
+      <button data-sim="2">Vắng (2/giây)</button>
+      <button data-sim="6">Vừa (6/giây)</button>
+      <button data-sim="15">Đông (15/giây)</button>
+    </div>
+    <p class="hint paused">⚠ Chỉ dùng khi thử. Không bật khi đang live thật: TikTok coi tương tác giả là gian lận.</p>
+    <div id="log"></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const PHASES = { BOARDING: "Đón khách", DRIVING: "Đang chạy", REST: "Trạm dừng", DROPOFF: "Thả khách", FINISH: "Hết chuyến", SPECIAL: "Chúc Tết" };
+const QUICK = ["Nghệ An", "Thanh Hóa", "Hà Nội", "37", "huế", "sg", "Cà Mau", "không về", "phở", "trà đá", "wc", "mua quà", "nhớ nhà quá"];
+let control = {};
+let paused = false;
+// Mã điều khiển (nếu server đặt XE_TET_TOKEN): mở trang bằng /control?token=…
+// Đọc xong thì xoá khỏi thanh địa chỉ (không lọt vào lịch sử / ảnh chụp màn hình), giữ trong phiên tab này.
+const TOKEN = new URLSearchParams(location.search).get("token") || sessionStorageGet("xe_tet_token");
+if (new URLSearchParams(location.search).has("token")) {
+  sessionStorageSet("xe_tet_token", TOKEN);
+  history.replaceState(null, "", location.pathname);
+}
+function sessionStorageGet(k) { try { return sessionStorage.getItem(k) || ""; } catch { return ""; } }
+function sessionStorageSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
+const HEADERS = TOKEN ? { "X-Token": TOKEN } : {};
+const TT_STATES = {
+  idle: () => "Chưa kết nối",
+  connecting: (t) => `⏳ Đang kết nối @${t.username}…`,
+  connected: (t) => `🟢 Đang nhận từ @${t.username} · ${t.viewers.toLocaleString("vi-VN")} người xem · ${t.events.toLocaleString("vi-VN")} sự kiện`,
+  reconnecting: (t) => `🟠 ${t.error} — tự nối lại sau ${t.retry_in} giây`,
+  offline: (t) => `⚪ @${t.username} chưa live — tự vào khi live bắt đầu (kiểm lại mỗi ${t.retry_in} giây)`,
+  ended: (t) => `⏹ Live của @${t.username} đã kết thúc`,
+  error: (t) => `🔴 ${t.error}`,
+};
+
+function log(line) {
+  const el = $("log");
+  el.textContent = `${new Date().toLocaleTimeString("vi-VN")}  ${line}\n` + el.textContent.slice(0, 2000);
+}
+async function post(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...HEADERS }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+  if (!data.ok) log(`⚠ ${data.error || "lỗi"}`);
+  refresh();
+  return data;
+}
+const admin = (body) => post("/api/admin", body);
+const setControl = (changes) => admin({ action: "settings", changes });
+
+function send(event) {
+  const name = $("name").value.trim() || "Khách";
+  post("/api/event", { name, ...event });
+  log(`${name}: ${event.type}${event.text ? " «" + event.text + "»" : ""}${event.count ? " ×" + event.count : ""}${event.diamonds ? " " + event.diamonds + " xu" : ""}`);
+}
+
+// ---- TikTok ----
+$("tt-connect").onclick = () => {
+  const username = $("tt-user").value.trim();
+  if (!username) { $("tt-user").focus(); return; }
+  admin({ action: "tiktok_connect", username });
+};
+$("tt-user").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tt-connect").click(); });
+$("tt-disconnect").onclick = () => admin({ action: "tiktok_disconnect" });
+
+// ---- bến đi ----
+$("departure-set").onclick = () => admin({ action: "departure", key: $("departure").value });
+
+// ---- camera ----
+document.querySelectorAll("[data-set]").forEach((b) => b.onclick = () => setControl({ [b.dataset.set]: b.dataset.val }));
+$("zoom-in").onclick = () => setControl({ zoom: Math.round(((control.zoom ?? 1) - 0.1) * 10) / 10 });
+$("zoom-out").onclick = () => setControl({ zoom: Math.round(((control.zoom ?? 1) + 0.1) * 10) / 10 });
+$("zoom-reset").onclick = () => setControl({ zoom: 1 });
+
+// ---- các chuyến xe: chiếu xe nào, xe tăng cường tới điểm kế, gọi thêm xe ----
+// Danh sách vẽ lại mỗi giây → bắt bấm ở khung ngoài (nút mới vẽ vẫn bấm được ngay).
+$("buses").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.feature != null) admin({ action: "feature", bus_no: +b.dataset.feature });
+  if (b.dataset.next != null) admin({ action: "relief_next", bus_no: +b.dataset.next });
+};
+$("relief-lanes").onclick = (e) => {
+  const b = e.target.closest("button[data-lane]");
+  if (b) admin({ action: "relief", lane: b.dataset.lane });
+};
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function setIfChanged(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
+function renderBuses(s) {
+  const m = s.main || { no: s.bus.no, phase: s.phase, riders: s.bus.riders, lane: s.bus.lane, arrow: s.bus.arrow };
+  const seats = s.bus.seats.length;
+  const rows = [`<div class="bus"><div class="info"><b>Xe số ${m.no} · xe chính</b>
+      <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}</small></div>
+    <button data-feature="0" class="${s.featured == null ? "on" : ""}">📺 Chiếu</button></div>`];
+  for (const r of s.reliefs || []) {
+    rows.push(`<div class="bus"><div class="info"><b>Xe số ${r.no} · tăng cường ${r.arrow} ${esc(r.label)}</b>
+      <small>${r.riders} khách · tới ${esc(r.next)} · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}</small></div>
+      <button data-feature="${r.no}" class="${r.featured ? "on" : ""}">📺 Chiếu</button>
+      <button data-next="${r.no}">⏭ Tới điểm kế</button></div>`);
+  }
+  setIfChanged($("buses"), rows.join(""));
+  const lanes = (s.lanes || []).filter((l) => l.waiting);
+  setIfChanged($("relief-lanes"), lanes.length
+    ? lanes.map((l) => `<button data-lane="${esc(l.key)}">${l.arrow} ${esc(l.label)} (${l.waiting} chờ)</button>`).join("")
+    : `<span class="hint" style="margin:0">Chưa làn nào có người chờ</span>`);
+}
+
+// ---- chuyến xe ----
+$("pause").onclick = () => admin({ action: "pause", paused: !paused });
+document.querySelectorAll("[data-extend]").forEach((b) => b.onclick = () => admin({ action: "extend", seconds: +b.dataset.extend }));
+$("skip").onclick = () => admin({ action: "skip" });
+$("reset").onclick = () => { if (confirm("Làm lại từ đầu? Mọi vé và bảng tỉnh sẽ mất.")) admin({ action: "reset" }); };
+$("save-times").onclick = () => {
+  setControl({ board_seconds: +$("board-seconds").value, rest_seconds: +$("rest-seconds").value });
+  log("Đã lưu thời gian đón khách / nghỉ trạm");
+};
+
+// ---- màn hình ----
+// Công tắc vừa bấm: ghi nhớ lúc bấm để vòng làm mới 1 s không kịp đè giá trị cũ của server lên (công tắc «tự bật lại»).
+document.querySelectorAll("[data-show]").forEach((c) => c.onchange = () => {
+  c.dataset.touched = String(Date.now());
+  setControl({ [c.dataset.show]: c.checked });
+});
+
+// ---- lơ xe & băng rôn ----
+$("say-send").onclick = () => { const text = $("say").value.trim(); if (text) { admin({ action: "say", text }); log(`Lơ xe: «${text}»`); $("say").value = ""; } };
+$("say").addEventListener("keydown", (e) => { if (e.key === "Enter") $("say-send").click(); });
+$("ann-send").onclick = () => {
+  const title = $("ann-title").value.trim();
+  if (!title) { $("ann-title").focus(); return; }
+  admin({ action: "announce", title, text: $("ann-text").value.trim(), seconds: +$("ann-seconds").value });
+  log(`Băng rôn: «${title}»`);
+};
+
+// ---- sự kiện thử ----
+QUICK.forEach((text) => {
+  const b = document.createElement("button");
+  b.textContent = text;
+  b.onclick = () => send({ type: "comment", text });
+  $("quick").append(b);
+});
+$("send").onclick = () => { const text = $("text").value.trim(); if (text) { send({ type: "comment", text }); $("text").value = ""; } };
+$("text").addEventListener("keydown", (e) => { if (e.key === "Enter") $("send").click(); });
+document.querySelectorAll("[data-like]").forEach((b) => b.onclick = () => send({ type: "like", count: +b.dataset.like }));
+document.querySelectorAll("[data-gift]").forEach((b) => b.onclick = () => send({ type: "gift", diamonds: +b.dataset.gift, gift: b.textContent.slice(3).replace(/\s*\(.*/, "") }));
+document.querySelectorAll("[data-type]").forEach((b) => b.onclick = () => send({ type: b.dataset.type }));
+document.querySelectorAll("[data-sim]").forEach((b) => b.onclick = () => admin({ action: "sim", rate: +b.dataset.sim }));
+
+let timesLoaded = false;
+async function refresh() {
+  try {
+    const res = await fetch("/api/state", { headers: HEADERS });
+    if (res.status === 401) { $("s-phase").textContent = "Cần mã điều khiển"; return; }
+    const s = await res.json();
+    const tt = s.tiktok || { state: "idle" };
+    $("tt-status").textContent = (TT_STATES[tt.state] || TT_STATES.idle)(tt);
+    $("tt-log").textContent = (tt.logs || []).slice().reverse().join("\n");
+    const live = !["idle", "error", "ended"].includes(tt.state);
+    document.querySelectorAll("[data-sim]").forEach((b) => { b.disabled = live && b.dataset.sim !== "0"; });
+    control = s.control || {};
+    paused = !!s.paused;
+    const main = s.main || { no: s.bus.no, phase: s.phase, phase_left: s.phase_left, riders: s.bus.riders };  // xe chính
+    $("s-phase").textContent = paused ? "⏸ Tạm dừng" : (PHASES[main.phase] || main.phase);
+    $("s-left").textContent = main.phase_left != null ? `Pha · còn ${Math.ceil(main.phase_left)} giây` : "Pha";
+    $("s-phase").classList.toggle("paused", paused);
+    $("s-bus").textContent = `Số ${main.no} · ${main.riders}/${s.bus.seats.length}`;
+    renderBuses(s);
+    $("s-next").textContent = s.waiting;
+    $("s-likes").textContent = s.trip_likes.toLocaleString("vi-VN");
+    $("s-done").textContent = s.delivered;
+    $("pause").textContent = paused ? "▶ Chạy tiếp" : "⏸ Tạm dừng";
+    document.querySelectorAll("[data-set]").forEach((b) => b.classList.toggle("on", control[b.dataset.set] === b.dataset.val));
+    document.querySelectorAll("[data-sim]").forEach((b) => b.classList.toggle("on", +b.dataset.sim === s.sim_rate));
+    document.querySelectorAll("[data-show]").forEach((c) => {
+      if (Date.now() - Number(c.dataset.touched || 0) < 3000) return;
+      c.checked = c.dataset.default === "off" ? control[c.dataset.show] === true : control[c.dataset.show] !== false;
+    });
+    $("zoom-now").textContent = (control.zoom ?? 1).toFixed(1);
+    const sel = $("departure");
+    if (!sel.options.length) {
+      for (const d of s.departures || []) sel.append(new Option(d.name, d.key));
+    }
+    if (document.activeElement !== sel) sel.value = s.departure?.key || "";
+    $("lanes-now").textContent = (s.lanes || []).map((l) => `${l.arrow} ${l.label}: ${l.current ? "đang đón" : `${l.waiting} chờ`}`).join(" · ");
+    if (!timesLoaded) {  // không ghi đè khi admin đang gõ
+      $("tt-user").value = control.tiktok_user ? "@" + control.tiktok_user : "";
+      $("board-seconds").value = control.board_seconds ?? 180;
+      $("rest-seconds").value = control.rest_seconds ?? 90;
+      timesLoaded = true;
+    }
+  } catch (e) { $("s-phase").textContent = "Mất kết nối"; }
+}
+setInterval(refresh, 1000);
+refresh();
+</script>
+</body>
+</html>
