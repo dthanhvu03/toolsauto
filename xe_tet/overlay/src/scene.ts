@@ -100,8 +100,9 @@ const LOOKS: Record<"dawn" | "day" | "dusk" | "night", Look> = {
   dawn: { top: 0x6d8fd0, horizon: 0xffb27a, hemiSky: 0xffe2c4, hemiGround: 0x6a6a48, hemi: 1.15, sunColor: 0xffc890, sun: 1.9, exposure: 1.08 },
   day: { top: 0x4f9fdc, horizon: 0xfde7c6, hemiSky: 0xfff4e0, hemiGround: 0x6a7a48, hemi: 1.25, sunColor: 0xfff0d6, sun: 2.4, exposure: 1.05 },
   dusk: { top: 0x3d4f8f, horizon: 0xff8f5e, hemiSky: 0xffd2b4, hemiGround: 0x5a5048, hemi: 1.1, sunColor: 0xffa66a, sun: 1.8, exposure: 1.1 },
-  // đêm: ánh trăng xanh lạnh, tối hẳn để cửa sổ / đèn đường / đèn xe nổi lên
-  night: { top: 0x0b1430, horizon: 0x1c2748, hemiSky: 0x6f80b8, hemiGround: 0x141820, hemi: 0.45, sunColor: 0x9fb4ff, sun: 0.4, exposure: 0.8 },
+  // đêm Tết: trời xanh thẫm + ánh trăng đủ sáng để nhìn rõ xe / người trên điện thoại (anh live buổi tối, ở bến trời theo
+  // giờ thật: bản cũ tối hẳn, cảnh còn 27/255 độ sáng — gần như đen); cửa sổ / đèn đường / đèn xe vẫn nổi lên
+  night: { top: 0x1d3a78, horizon: 0x4a5f9a, hemiSky: 0xa9b8e8, hemiGround: 0x4a4458, hemi: 1.0, sunColor: 0xc6d2ff, sun: 1.1, exposure: 1.0 },
 };
 
 // mốc giờ → cảnh trời; giữa hai mốc pha màu dần (đồng hồ xe chạy nhanh: không đổi trời giật cục)
