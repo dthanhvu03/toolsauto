@@ -31,6 +31,7 @@ export interface Control {
   auto_feature?: "off" | "events" | "rotate";
   rotate_seconds?: number;
   mix?: "balanced" | "music" | "voice";  // trộn tiếng
+  hud_scale?: number;  // cỡ chữ trên live 0,6 – 1,2 (PLAN-133)
 }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }

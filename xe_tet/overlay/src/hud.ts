@@ -24,6 +24,7 @@ const PILL: Record<State["phase"], string> = {
   FINISH: "Về bến", SPECIAL: "Chúc Tết",
 };
 const MAX_TOASTS = 3;
+const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
 const CTA_ROTATE_MS = 4000;
 const BOARD_ROTATE_MS = 8000;
 const CALLOUT_MS = 1700;
@@ -84,6 +85,8 @@ export class Hud {
     this.seats = seatsOf(s);
     const c = s.control;
     const hud = $("hud");
+    const scale = String(c?.hud_scale ?? HUD_SCALE);
+    if (hud.style.getPropertyValue("--z") !== scale) hud.style.setProperty("--z", scale);  // cỡ chữ trên live (admin chỉnh)
     hud.classList.toggle("hide-route", c?.show_route === false);
     hud.classList.toggle("hide-loxe", c?.show_loxe === false);
     hud.classList.toggle("hide-toasts", c?.show_toasts === false);

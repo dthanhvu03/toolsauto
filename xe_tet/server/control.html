@@ -262,6 +262,12 @@
       <label class="toggle"><input type="checkbox" data-show="show_board"> Bảng tỉnh</label>
       <label class="toggle"><input type="checkbox" data-show="auto_loxe"> Lơ xe tự nói</label>
     </div>
+    <div class="row" style="margin-top:8px">
+      <span style="min-width:96px">Cỡ chữ trên live</span>
+      <input type="range" min="0.6" max="1.2" step="0.05" data-volume="hud_scale" aria-label="Cỡ chữ trên live" style="flex:1">
+      <output id="vol-hud_scale">0.80</output>
+    </div>
+    <p class="hint">Nhỏ lại thì chữ + khung trên live gọn hơn, nhường chỗ cho cảnh; cụm trên cùng tự dồn lên sát thanh TikTok.</p>
   </section>
 
   <section>
@@ -664,7 +670,7 @@ async function refresh() {
     if (document.activeElement !== $("rotate-seconds")) $("rotate-seconds").value = control.rotate_seconds ?? 60;
     document.querySelectorAll("[data-volume]").forEach((r) => {
       if (Date.now() - Number(r.dataset.touched || 0) < 3000) return;
-      const v = control[r.dataset.volume] ?? { music_volume: 0.5, sfx_volume: 0.6, voice_volume: 0.9, voice_rate: 1.15 }[r.dataset.volume];
+      const v = control[r.dataset.volume] ?? { music_volume: 0.5, sfx_volume: 0.6, voice_volume: 0.9, voice_rate: 1.15, hud_scale: 0.8 }[r.dataset.volume];
       r.value = v;
       $(`vol-${r.dataset.volume}`).textContent = (+v).toFixed(2);
     });

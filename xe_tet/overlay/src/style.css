@@ -61,8 +61,10 @@ html, body {
 #title {
   position: absolute;
   top: 150px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
   text-align: center;
   padding: 10px 44px;
   background: linear-gradient(180deg, var(--red) 0%, var(--red-deep) 100%);
@@ -208,8 +210,9 @@ html, body {
 #callout {
   position: absolute;
   top: 960px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin: 0 auto;
   width: 940px;
   padding: 18px 28px;
   text-align: center;
@@ -220,7 +223,7 @@ html, body {
 }
 #callout .big { font-family: var(--display); font-size: 50px; font-weight: 800; color: var(--red-deep); line-height: 1.2; }
 #callout .small { font-size: 32px; font-weight: 600; color: #6b4a33; margin-top: 4px; }
-#callout.show { animation: callout 0.35s ease; }
+#callout.show { animation: pop 0.35s ease; }
 
 /* ---- tim bay lên thanh tốc độ: tim của người xem làm xe chạy ---- */
 #hearts { position: absolute; inset: 0; overflow: hidden; }
@@ -286,8 +289,9 @@ html, body {
 
 #offline {
   position: absolute;
-  bottom: 200px; left: 50%;
-  transform: translateX(-50%);
+  bottom: 200px; left: 0; right: 0;
+  margin: 0 auto;
+  width: fit-content;
   background: rgba(0, 0, 0, 0.7);
   color: #fff;
   padding: 12px 28px;
@@ -350,11 +354,6 @@ html, body {
   70% { transform: scale(1.05); opacity: 1; }
   100% { transform: scale(1); }
 }
-@keyframes callout {
-  0% { transform: translateX(-50%) scale(0.6); opacity: 0; }
-  70% { transform: translateX(-50%) scale(1.06); opacity: 1; }
-  100% { transform: translateX(-50%) scale(1); }
-}
 @keyframes slide {
   from { transform: translateX(60px); opacity: 0; }
   to { transform: none; opacity: 1; }
@@ -368,3 +367,23 @@ html, body {
   15% { opacity: 1; }
   100% { transform: translate(var(--dx), var(--dy)) scale(1.1); opacity: 0; }
 }
+
+/*
+ * Cỡ chữ trên live (admin chỉnh trên /control, mặc định 80 %): co từng khung bằng `zoom`. Chrome co cả vị trí neo theo
+ * zoom, nên vị trí được chia lại cho --z để giữ mép cũ. Cụm trên (tiêu đề → thẻ tuyến → lời kêu gọi → lơ xe, thông báo)
+ * co dồn về mốc 150 px (dưới thanh TikTok) — khung nhỏ lại thì cụm cũng ngắn lại, nhường chỗ cho cảnh.
+ * Vị trí cụm trên: mốc + (vị trí gốc − mốc) × --z.
+ */
+#hud { --z: 0.8; }
+#title, #route, #cta, #loxe, #toasts, #banner, #callout, #flash, .side, #offline { zoom: var(--z); }
+#title { top: calc(150px / var(--z)); }
+#route { top: calc((150px + 140px * var(--z)) / var(--z)); left: calc(32px / var(--z)); right: calc(32px / var(--z)); }
+#cta { top: calc((150px + 320px * var(--z)) / var(--z)); left: calc(32px / var(--z)); right: calc(32px / var(--z)); }
+#loxe { top: calc((150px + 490px * var(--z)) / var(--z)); left: calc(32px / var(--z)); }
+#toasts { top: calc((150px + 490px * var(--z)) / var(--z)); right: calc(24px / var(--z)); }
+#banner { top: calc((150px + 140px * var(--z)) / var(--z)); left: calc(40px / var(--z)); right: calc(40px / var(--z)); }
+#callout { top: calc(960px / var(--z)); }
+#flash { top: calc(860px / var(--z)); }
+.side { right: calc(20px / var(--z)); }
+#board, #rest-card { top: calc(1290px / var(--z)); }
+#offline { bottom: calc(200px / var(--z)); }

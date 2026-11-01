@@ -235,6 +235,7 @@ def test_trip_director_and_mix_settings_clamped_and_applied(client):
                                  "talk_style": "genz"})
     assert out["trip_minutes"] == 15 and out["auto_feature"] == "events" and out["rotate_seconds"] == 20
     assert out["talk_style"] == "genz" and settings_module.clean({"talk_style": "xx"})["talk_style"] == "mix"
+    assert settings_module.clean({"hud_scale": 3})["hud_scale"] == 1.2 and settings_module.DEFAULTS["hud_scale"] == 0.8
     assert out["mix"] == "voice"
     assert client.post("/api/admin", json={"action": "settings", "changes": {"trip_minutes": 5}}).json()["ok"]
     state = client.get("/api/state").json()

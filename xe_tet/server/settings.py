@@ -48,6 +48,7 @@ DEFAULTS: dict = {
     "auto_feature": "events",  # tự chiếu xe: off | events (theo chuyện hay) | rotate (xoay vòng)
     "rotate_seconds": 60,
     "mix": "balanced",  # trộn tiếng: balanced | music (nhạc nổi) | voice (lơ xe nổi)
+    "hud_scale": 0.8,  # cỡ chữ + khung trên live (PLAN-133): 0,6 nhỏ → 1,2 to
     "talk_style": "mix",  # kiểu nói lơ xe (PLAN-131): mix | ben (bến xe) | genz | geny
 }
 
@@ -55,6 +56,7 @@ BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
 REST_RANGE = (20, 300)
 VOICE_RATE = (0.8, 1.6)
 TRIP_RANGE = (3, 15)  # phút
+HUD_SCALE = (0.6, 1.2)
 ROTATE_RANGE = (20, 300)  # giây
 MIXES = ("balanced", "music", "voice")
 log = logging.getLogger("xe_tet")
@@ -90,6 +92,8 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = round(min(VOICE_RATE[1], max(VOICE_RATE[0], float(value))), 2)
         elif key in ("music_volume", "sfx_volume", "voice_volume"):
             out[key] = round(min(1.0, max(0.0, float(value))), 2)
+        elif key == "hud_scale":
+            out[key] = round(min(HUD_SCALE[1], max(HUD_SCALE[0], float(value))), 2)
         elif key == "zoom":
             out[key] = round(min(1.6, max(0.6, float(value))), 2)
         elif key == "board_seconds":

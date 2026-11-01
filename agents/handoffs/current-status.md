@@ -130,6 +130,9 @@
 - **PLAN-132 tối ưu (anh yêu cầu + /code-review):** 12 điểm (màn hình live đứng hình không tự nối lại, game khựng mỗi phút
   vì hỏi VieNeu, ffprobe trong vòng game, font tiếng Việt trên biển, rò bộ nhớ âm thanh, /control bấm trượt, người chibi
   23 → 11 lần vẽ, dựng sẵn vùng…). 115 test, e2e 28/28 trên 8811. Đã khởi động lại 8810 (anh cho phép).
+- **Chữ trên live to quá (anh báo):** cỡ chữ + khung co bằng `zoom` (mặc định 80 %), vị trí neo giữ nguyên, cụm trên dồn
+  lên mốc 150 px; thanh «Cỡ chữ trên live» 0,6–1,2 trên /control (`hud_scale`). Ảnh 100 / 80 / 65 % trên 8811. Thanh kéo
+  cần khởi động lại 8810; mặc định 80 % có ngay khi F5.
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
