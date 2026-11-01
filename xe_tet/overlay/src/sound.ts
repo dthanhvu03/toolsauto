@@ -32,7 +32,8 @@ const MIXES: Record<Mix, { music: number; voice: number; sfx: number; duck: numb
 interface Playing { id: string; stop(): void }
 
 export class Sound {
-  private ctx = new AudioContext();
+  // bộ đệm lớn (chế độ phát nhạc): live không cần tiếng tức thì, đổi lại ít hụt tiếng (lẹt xẹt) khi máy bận
+  private ctx = new AudioContext({ latencyHint: "playback" });
   private master = this.ctx.createGain();
   private music = this.ctx.createGain();
   private sfx = this.ctx.createGain();

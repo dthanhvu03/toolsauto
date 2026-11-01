@@ -25,7 +25,10 @@ export const PRESETS: Preset[] = [
 
 const STEPS_PER_PHRASE = 16;  // 2 ô nhịp 4/4, mỗi bước một móc đơn
 const PHRASES = 8;  // A A' B A'' × 2 đoạn (đoạn sau lên quãng tám) ≈ 30–55 giây rồi lặp lại
-const LOOKAHEAD = 0.35;  // giây lên lịch trước (đồng hồ JS không đều, đồng hồ âm thanh thì đều)
+// Lên lịch trước 1 giây (đồng hồ JS không đều, đồng hồ âm thanh thì đều): luồng chính khựng vì vẽ 3D nặng, hay Chrome
+// giãn đồng hồ khi cửa sổ không nằm trên cùng (cửa sổ quay cho LIVE Studio) mà không hụt nốt.
+const LOOKAHEAD = 1.0;
+const TICK_MS = 250;
 
 function rand(seed: number): () => number {
   let a = seed;
@@ -96,7 +99,7 @@ export class Song {
   start(offset = 0): void {
     this.index = Math.floor(offset / this.stepSec) % this.total;
     this.next = this.ctx.currentTime + 0.1;
-    this.timer = window.setInterval(() => this.schedule(), 100);
+    this.timer = window.setInterval(() => this.schedule(), TICK_MS);
     this.schedule();
   }
 
@@ -106,6 +109,14 @@ export class Song {
 
   /** Lên lịch nốt tới `ahead` giây phía trước (dựng offline để kiểm tra thì truyền cả độ dài bài). */
   schedule(ahead = LOOKAHEAD): void {
+    // khựng lâu hơn LOOKAHEAD: các bước đã lỡ bỏ qua luôn (giữ đúng chỗ trong bài) — lên lịch bù thì cả chục nốt phát
+    // dồn cùng một lúc, nghe lẹt xẹt
+    const late = this.ctx.currentTime + 0.05 - this.next;
+    if (late > 0) {
+      const skip = Math.ceil(late / this.stepSec);
+      this.index += skip;
+      this.next += skip * this.stepSec;
+    }
     while (this.next < this.ctx.currentTime + ahead) {
       const step = this.index % this.total;
       const t = this.next;
