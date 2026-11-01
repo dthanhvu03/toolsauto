@@ -16,7 +16,7 @@ def normalize(text: str) -> str:
 
 @dataclass(frozen=True)
 class Command:
-    kind: str  # province | stay | food | wc | gift_shop | chat
+    kind: str  # province | stay | food | wc | gift_shop | where | chat
     province: Province | None = None
     item: str = ""
 
@@ -60,6 +60,14 @@ _WC = ("wc", "ve sinh", "toilet", "di tieu", "di ve sinh")
 _SHOP = ("mua qua", "dac san", "mua do")
 
 
+# Hỏi xe / vé của mình (PLAN-134 B — người xem không biết mình ở xe nào, xe tới đâu). «vé» bỏ dấu trùng «về» (câu đặt vé
+# «về Huế») → chỉ nhận chữ «vé» có dấu hoặc câu hỏi rõ nghĩa, không nhận «ve» trơn.
+_WHERE = ("xe nao", "xe so may", "o xe nao", "toi o dau", "minh o dau", "em o dau", "toi dau roi", "den dau roi",
+          "toi noi chua", "tra ve", "check ve", "kiem tra ve", "con bao lau", "bao lau nua", "bao gio toi", "may gio toi",
+          "khi nao toi", "bao gio den", "khi nao den")
+_TICKET_WORD = re.compile(r"(?<!\w)vé(?!\w)")
+
+
 def _has(text: str, phrase: str) -> bool:
     return f" {phrase} " in f" {text} "
 
@@ -101,6 +109,8 @@ def parse(text: str, at_rest_stop: bool = False) -> Command:
         for phrase, label in _FOOD_PHRASES:
             if _has(norm, phrase):
                 return Command("food", item=label)
+    if norm == "xe" or any(_has(norm, w) for w in _WHERE) or (not found and _TICKET_WORD.search(text.lower())):
+        return Command("where")
     if norm in _EXACT:
         return Command("province", _EXACT[norm])
     if found and _only_filler(_rest_words(norm, found[0]), _BOOK_FILLER):

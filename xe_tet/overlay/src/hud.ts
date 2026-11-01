@@ -28,6 +28,7 @@ const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết 
 const CTA_ROTATE_MS = 4000;
 const BOARD_ROTATE_MS = 8000;
 const CALLOUT_MS = 1700;
+const NAMED_KEEP = 500;  // nhớ lần gọi tên của 500 người gần nhất (có trần, không phình suốt buổi)
 const CALLOUT_MERGE = 3; // chờ quá 3 người thì gộp tên vào một thẻ
 const MAX_HEARTS = 30;
 const SPECIAL_TIER = 4; // bậc quà «cả xe chúc Tết»: hiện băng rôn lớn thay vì thông báo nhỏ
@@ -50,7 +51,42 @@ const drive = (hours: number) => (hours < 1 ? `${Math.max(5, Math.round((hours *
 
 interface Ticket {
   name: string; province: string; seat: number | null; next: boolean; eta?: number;
-  lane: string; arrow: string; km: number; departure: string;
+  lane: string; arrow: string; km: number; departure: string; bus: number;
+}
+
+// Trạng thái từng xe trên bảng «Xe khác» (PLAN-134 B: người xem không biết chuyến nào đang đón / chạy / sắp về).
+const FLEET_PHASE: Record<string, (b: { next: string | null }) => string> = {
+  BOARDING: () => "🟢 đang đón",
+  DRIVING: (b) => (b.next ? `→ ${esc(b.next)}` : "🏁 về bến"),
+  REST: (b) => `☕ nghỉ ${esc(b.next ?? "")}`,
+  DROPOFF: (b) => `📍 thả khách ${esc(b.next ?? "")}`,
+  FINISH: () => "🏁 về bến",
+};
+
+/** Trả lời «xe nào / tới đâu rồi» cho đúng người hỏi (PLAN-134 B). */
+function whereText(e: GameEvent): [string, string] {
+  const name = esc(e.name ?? "");
+  const province = esc(e.province ?? "");
+  const eta = e.in_s != null ? ` · ~${clock(e.in_s)}` : "";
+  switch (e.status) {
+    case "seat": {
+      const head = `🎫 ${name} · xe số ${e.bus_no} · giường ${(e.seat ?? 0) + 1}`;
+      if (e.phase === "BOARDING") return [head, `Đang đón khách · xuất bến sau ${clock(e.depart_in ?? 0)} · về ${province}`];
+      if (e.phase === "FINISH") return [head, `Xe đang về bến`];
+      if (!e.stops_before && e.in_s === 0) return [head, `Đang thả khách ở ${province}`];
+      return [head, `${e.stops_before ? `Còn ${e.stops_before} điểm nữa tới ${province}` : `Điểm kế là ${province}`}${eta}`];
+    }
+    case "relief":
+      return [`🎫 ${name} · xe tăng cường số ${e.bus_no}`,
+        `${e.stops_before ? `Còn ${e.stops_before} điểm nữa tới ${province}` : `Điểm kế là ${province}`}${eta}`];
+    case "queue":
+      return [`⏳ ${name} giữ chỗ xe số ${e.bus_no} ${e.arrow ?? ""} ${esc(e.lane ?? "")}`,
+        `Thứ ${e.position} trong hàng · lên xe sau ~${e.eta_min} phút · về ${province}`];
+    case "home":
+      return [`🏠 ${name} đã về tới quê`, "Chúc cả nhà năm mới an khang"];
+    default:
+      return [`🎫 ${name} chưa có vé`, "Gõ TÊN TỈNH để lên xe"];
+  }
 }
 
 export class Hud {
@@ -66,6 +102,7 @@ export class Hud {
   private ctaTick = 0;
   private boardTick = 0;
   private tickets: Ticket[] = [];
+  private namedAt = new Map<string, number>();  // lần cuối tên được hiện trên thẻ lớn (chọn tên khi dồn vé)
   private notes: { big: string; small: string }[] = [];
   private reliefArrivals: { name: string; vip: boolean; province: string }[] = [];
   private reliefTimer = 0;
@@ -91,7 +128,11 @@ export class Hud {
     hud.classList.toggle("hide-loxe", c?.show_loxe === false);
     hud.classList.toggle("hide-toasts", c?.show_toasts === false);
     hud.classList.toggle("hide-board", c?.show_board === false);
-    setText("countdown", s.days_to_tet > 0 ? `Còn ${s.days_to_tet} ngày nữa là Tết` : "Chúc Mừng Năm Mới!");
+    // tháng Chạp → mùng 10: ghi ngày âm lịch («26 Chạp · còn 4 ngày nữa là Tết», «Giao thừa», «Mùng 2 Tết») — PLAN-134 C
+    const lunar = s.season?.lunar;
+    setText("countdown", s.days_to_tet > 1
+      ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
+      : lunar ?? "Chúc Mừng Năm Mới!");
     setText("phase-pill", s.paused ? "Tạm dừng" : PILL[s.phase]);
     // phần đầu được cắt «…» khi hẹp; phần đuôi (km còn lại, đếm ngược) không bao giờ bị cắt
     const [head, tail] = this.statusText(s);
@@ -155,12 +196,15 @@ export class Hud {
   private renderMarks(s: State): void {
     const route = this.trip(s);
     const at = (k: number) => `${Math.min(100, (k / (route?.total || 1)) * 100).toFixed(1)}%`;
-    const key = route ? `${route.total}|${route.stops.map((p) => `${p.kind}${p.km}${p.done ? 1 : 0}`).join(",")}` : "";
+    const key = route ? `${route.total}|${route.stops.map((p) => `${p.kind}${p.km}${p.done ? 1 : 0}`).join(",")}|`
+      + (route.via ?? []).filter((v) => v.done).length : "";
     if (key !== this.marksKey) {
       this.marksKey = key;
       const el = $("marks");
+      // tỉnh đi qua (không ai xuống): chấm nhỏ, vẽ trước để chấm điểm dừng đè lên
       el.innerHTML = route
-        ? route.stops.map((p) => `<b class="mk ${p.kind}${p.done ? " done" : ""}" style="left:${at(p.km)}"></b>`).join("")
+        ? (route.via ?? []).map((v) => `<b class="mk via${v.done ? " done" : ""}" style="left:${at(v.km)}"></b>`).join("")
+          + route.stops.map((p) => `<b class="mk ${p.kind}${p.done ? " done" : ""}" style="left:${at(p.km)}"></b>`).join("")
           + `<i class="bus-dot">🚌</i>`
         : "";
       this.busDot = el.querySelector(".bus-dot");
@@ -174,15 +218,19 @@ export class Hud {
   private nextStops(s: State): string {
     // xe tăng cường khác đang chạy: chỉ một huy hiệu nhỏ (chi tiết ở bảng góc phải) — card tuyến không cao thêm
     const others = (s.reliefs ?? []).filter((r) => !r.featured).length;
-    const rush = (s.rush ? `<span class="rush">⚡ Cao điểm</span>` : "") + (others ? `<span class="rush">🚌+${others}</span>` : "");
+    const rush = (s.rush ? `<span class="rush">⚡ Cao điểm</span>` : "") + (others ? `<span class="rush">🚌+${others}</span>` : "")
+      + (s.bus.parcels ? `<span class="rush">📦 ${s.bus.parcels}</span>` : "");
     if (s.phase === "BOARDING" || !s.legs.length) {
       // bến nhiều làn: làn đang đón + làn có người giữ chỗ (đủ mọi làn đã có trên biển ở bến — BRD-tuyen-xe)
       const lanes = s.lanes.filter((l) => l.current || l.waiting)
         .map((l) => `${l.arrow} ${esc(l.label.replace("Hướng ", ""))} ${l.current ? `${s.bus.riders}/${seatsOf(s)}` : `⏳${l.waiting}`}`);
       return `${rush}${lanes.join(" · ")}`;
     }
-    const pass = s.terrain?.pass ? `<span class="rush">${s.terrain.tunnel ? "🚇" : "⛰"} ${esc(s.terrain.pass)}</span>` : "";
     const route = this.trip(s);
+    // đang qua địa phận tỉnh không ai xuống: vẫn gọi tên tỉnh đó (bà con quê đó đang xem thấy xe qua quê mình)
+    const via = s.phase === "DRIVING" && route?.via?.some((v) => v.name === s.place)
+      ? `<span class="rush">🛣 Qua ${esc(s.place)}</span>` : "";
+    const pass = s.terrain?.pass ? `<span class="rush">${s.terrain.tunnel ? "🚇" : "⛰"} ${esc(s.terrain.pass)}</span>` : via;
     if (!route) return `${rush}${pass}🏁 Sắp về bến`;
     // đồng hồ trên xe + điểm kế (còn bao lâu thật) + điểm sau nữa, mỗi điểm kèm giờ tới theo đồng hồ xe
     const clockText = `<span class="clock">🕐 ${route.clock.day ? `Ngày ${route.clock.day + 1} · ` : ""}${route.clock.time}</span>`;
@@ -203,7 +251,8 @@ export class Hud {
     let tips: string[];
     if (s.phase === "REST") {
       main = "💬 Gõ <b>PHỞ</b> · <b>TRÀ ĐÁ</b> · <b>WC</b>";
-      tips = [`🎁 Gõ MUA QUÀ: ${esc(s.specialty)}`, "🧊 Tặng quà = bao cả xe trà đá", "🍜 Còn có BÁNH MÌ · CƠM · CÀ PHÊ"];
+      tips = [`🎁 Gõ MUA QUÀ: ${esc(s.specialty)}`, "🧊 Tặng quà = bao cả xe trà đá · chỉ dành cho người từ 18 tuổi",
+        "🍜 Còn có BÁNH MÌ · CƠM · CÀ PHÊ"];
     } else {
       main = "💬 Gõ <b>TÊN TỈNH</b> để lên xe";
       tips = ["Ví dụ: Nghệ An · 37 · Sài Gòn", "Năm nay ở lại? Gõ KHÔNG VỀ", "❤ Thả tim cho xe chạy nhanh hơn"];
@@ -239,7 +288,7 @@ export class Hud {
     } else if (mode === "fleet") {  // các xe khác đang ở đâu, bao lâu nữa tới điểm kế (PLAN-130)
       setText("board-title", "🚌 Xe khác");
       setHTML("board-list", others.slice(0, QUEUE_ROWS).map((b) => {
-        const where = b.next ? `→ ${esc(b.next)}` : b.phase === "BOARDING" ? "đang đón" : "về bến";
+        const where = FLEET_PHASE[b.phase]?.(b) ?? (b.next ? `→ ${esc(b.next)}` : "🏁 về bến");
         return `<li><span>${b.in_s ? clock(b.in_s) : ""}</span>${b.arrow} số ${b.no} <small>${where}</small></li>`;
       }).join(""));
     } else if (mode === "riders") {
@@ -266,12 +315,21 @@ export class Hud {
         } else {
           this.tickets.push({ name: e.name ?? "", province: e.province ?? "", seat: e.seat ?? null,
             next: !!e.next, eta: e.eta_min, lane: e.lane ?? "", arrow: e.arrow ?? "",
-            km: e.km ?? 0, departure: e.departure ?? "" });
+            km: e.km ?? 0, departure: e.departure ?? "", bus: e.bus_no ?? 0 });
           this.pumpCallout();
         }
         break;
       case "likes":
         this.hearts(e.count ?? 1);
+        break;
+      case "where":
+        this.note(...whereText(e));
+        break;
+      case "welcome":  // khách buổi trước quay lại (PLAN-134 D)
+        this.toast(`🎉 ${name} quay lại`, e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`);
+        break;
+      case "via":  // xe chạy qua tỉnh không ai xuống: gọi bà con tỉnh đó (PLAN-134)
+        this.toast(`🛣 Xe số ${e.bus_no} đang qua ${esc(e.province ?? "")}`, `Bà con ${esc(e.province ?? "")} thả tim chào xe ❤`);
         break;
       case "stay":
         this.toast(`🏠 ${name} ở lại`, esc(e.text ?? ""), "stay");
@@ -282,7 +340,8 @@ export class Hud {
       case "gift":
         if ((e.tier ?? 0) < SPECIAL_TIER) {
           const hint = e.next_tier ? `<br>🎯 ${esc(e.next_tier)}` : "";
-          this.toast(`🎁 ${name} · ${e.total ?? e.diamonds} xu`, `${esc(e.perk ?? "")}${hint}`, "gift", `gift:${e.name}`);
+          const parcel = e.parcel ? "<br>📦 Thùng quà Tết lên gầm xe, tới quê giao tận cổng" : "";
+          this.toast(`🎁 ${name} · ${e.total ?? e.diamonds} xu`, `${esc(e.perk ?? "")}${parcel}${hint}`, "gift", `gift:${e.name}`);
         }
         break;
       case "follow":
@@ -401,17 +460,22 @@ export class Hud {
       ({ big, small } = note);
     } else if (this.tickets.length > CALLOUT_MERGE) {
       const batch = this.tickets.splice(0, this.tickets.length);
-      const names = batch.slice(0, 3).map((t) => esc(t.name)).join(", ");
+      // dồn nhiều vé một thẻ: hiện tên người lâu chưa được gọi nhất trước, không phải luôn 3 người đầu (PLAN-134 D)
+      const shown = [...batch].sort((a, b) => (this.namedAt.get(a.name) ?? 0) - (this.namedAt.get(b.name) ?? 0)).slice(0, 3);
+      const now = performance.now();
+      for (const t of shown) this.namedAt.set(t.name, now);
+      if (this.namedAt.size > NAMED_KEEP) this.namedAt.delete(this.namedAt.keys().next().value!);
+      const names = shown.map((t) => esc(t.name)).join(", ");
       big = `🎫 ${names} +${batch.length - 3} người lên xe!`;
       small = [...new Set(batch.map((t) => t.province))].slice(0, 4).map(esc).join(" · ");
     } else {
       const t = this.tickets.shift()!;
       const route = `${esc(t.departure)} → ${esc(t.province)} · ${km(t.km)} km`;
       if (t.next) {
-        big = `🎫 ${esc(t.name)} giữ chỗ xe ${t.arrow} ${esc(t.lane)}`;
+        big = `🎫 ${esc(t.name)} giữ chỗ xe số ${t.bus} ${t.arrow} ${esc(t.lane)}`;
         small = `${route}${t.eta ? ` · lên xe sau ~${t.eta} phút` : ""}`;
       } else {
-        big = `🎫 ${esc(t.name)} lên xe về ${esc(t.province)}!`;
+        big = `🎫 ${esc(t.name)} lên xe số ${t.bus} về ${esc(t.province)}!`;
         small = `${route} · giường ${(t.seat ?? 0) + 1} ${floorName(t.seat ?? 0, this.seats)}`;
       }
     }

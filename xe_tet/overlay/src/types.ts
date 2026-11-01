@@ -58,7 +58,7 @@ export interface State {
   phase_left: number | null;
   phase_total: number | null;  // độ dài pha hiện tại (thanh tiến độ trạm nghỉ, kể cả khi cao điểm rút ngắn)
   bus: {
-    no: number; seats: (Seat | null)[]; banner: string | null; riders: number;
+    no: number; seats: (Seat | null)[]; banner: string | null; riders: number; parcels?: number;
     lane: string; arrow: string; to: string; km: number | null;  // làn, tỉnh đặt tên làn, km xe chạy cả chuyến
   };
   departure: { key: string; name: string; short: string };
@@ -89,6 +89,7 @@ export interface State {
   trip_likes: number;
   delivered: number;
   days_to_tet: number;
+  season?: { phase: string; lunar: string | null; days_to_tet: number };  // lịch mùa Tết (PLAN-134 C)
   rush?: boolean; // giờ cao điểm: hàng chờ ≥ 1 xe, chuyến tự ngắn lại
   route?: Route;  // bảng chặng của xe đang chiếu (PLAN-130)
   fleet?: FleetBus[];  // mọi xe đang chạy
@@ -101,6 +102,7 @@ export interface BusClock { hour: number; time: string; day: number }
 export interface Route {
   stops: { kind: "rest" | "stop"; name: string; km: number; done: boolean; in_s: number | null; at: string | null;
     day: number | null }[];
+  via?: { name: string; km: number; done: boolean }[];  // tỉnh xe đi qua mà không ai xuống (PLAN-134)
   odo: number;
   total: number;
   clock: BusClock;
@@ -117,6 +119,7 @@ interface Person {
   hue: number;
   vip: boolean;
   wish: string;
+  parcels?: number;  // thùng quà Tết ôm vào cổng (PLAN-134 C)
 }
 
 // Sự kiện rời rạc; mỗi loại chỉ dùng vài trường.
@@ -159,6 +162,17 @@ export interface GameEvent {
   sponsor?: string | null;  // xe tăng cường do ai tặng quà gọi
   url?: string;  // speak: file giọng lơ xe đọc sẵn
   eta_min?: number; // vé xe sau: ước số phút tới lúc được lên xe
+  // tra vé «xe nào / tới đâu rồi» (PLAN-134 B)
+  status?: "seat" | "relief" | "queue" | "home" | "none";
+  parcel?: boolean;  // quà vừa tặng thành thùng quà trên gầm xe (PLAN-134 C)
+  trips?: number;  // khách quay lại: số chuyến đã về quê (PLAN-134 D)
+  home?: string | null;
+  days?: number;
+  phase?: string;
+  in_s?: number | null;
+  stops_before?: number;
+  depart_in?: number | null;
+  position?: number;
   next_tier?: string; // quà: «thêm X xu → …»
   diamonds?: number; // quà: xu của lần tặng này (total = cộng dồn trong chuyến)
 }

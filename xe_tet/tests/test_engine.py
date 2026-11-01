@@ -1,9 +1,10 @@
+import itertools
 from datetime import date
 
 from xe_tet.server.game.engine import (BOARD_SECONDS, FULL_BUS_SECONDS, NOTICE_COOLDOWN, REST_MIN_KM, SEATS,
                                        SPECIAL_SECONDS, Engine)
 from xe_tet.server.game.parser import normalize, parse
-from xe_tet.server.game.provinces import PROVINCES
+from xe_tet.server.game.provinces import BY_KEY, PROVINCES
 
 
 def types(events):
@@ -281,7 +282,8 @@ def test_bad_numbers_do_not_crash():
 
 def test_countdown_uses_vietnam_date():
     from datetime import datetime
-    from xe_tet.server.game.engine import TET_DAY, VN
+    from xe_tet.server.game.engine import VN
+    from xe_tet.server.game.season import TET_DAY
     assert Engine(0.0).snapshot()["days_to_tet"] == (TET_DAY - datetime.now(VN).date()).days
 
 
@@ -624,21 +626,24 @@ def test_eta_in_finish_includes_boarding_and_counts_phase():
     assert e._eta_minutes(1) == 1 and e._eta_minutes(2) >= 2
 
 
-def test_trip_plan_counts_branch_detour():
-    from xe_tet.server.game import network as network_module
+def test_trip_follows_road_graph_not_back_to_fork(real_routes):
+    """Xe số 2 ngày 01/11 (ảnh anh): 16 tỉnh hướng Hà Nội, mô hình cây cũ vòng 4.441 km (Cao Bằng → quay về chỗ rẽ trước
+    Hà Nội → Hòa Bình … Lào Cai → Vĩnh Phúc). Đồ thị đường bộ: không chạy ngược, có tỉnh «đi qua», đoạn nối liền."""
     from xe_tet.server.game.network import Network
-    base = network_module._read()  # mạng giả lập của conftest
-    data = {**base, "departures": {**base["departures"]}}
-    block = data["departures"]["hcm_miendong"]
-    lane = next(ln for ln in block["lanes"] if ln["key"] == "north")
-    lane = {**lane, "shared": {**lane["shared"], "nghean|hanoi": 300, "hanoi|nghean": 300}}
-    data["departures"]["hcm_miendong"] = {**block, "lanes": [lane if ln["key"] == "north" else ln for ln in block["lanes"]]}
-    net = Network(data, "hcm_miendong")
-    trip = net.plan(["nghean", "hanoi"])
-    first, second = trip.stops
-    detour = (net.km(first[0]) - 300) + (net.km(second[0]) - 300)
-    assert round(second[1] - first[1]) == round(detour)
-    assert trip.at(first[1] + 1)[0] == first[0]  # vừa rời tỉnh đầu: đang quay ra theo đường của tỉnh đó
+    from xe_tet.server.game.provinces import BY_KEY
+    net = Network(real_routes, "hcm_miendong")
+    key = {p.name: k for k, p in BY_KEY.items()}
+    names = ["Lâm Đồng", "Ninh Thuận", "Phú Yên", "Bình Định", "Quảng Trị", "Ninh Bình", "Hà Nam", "Hưng Yên", "Hà Nội",
+             "Hải Dương", "Cao Bằng", "Hòa Bình", "Tuyên Quang", "Yên Bái", "Lào Cai", "Vĩnh Phúc"]
+    trip = net.plan([key[n] for n in names])
+    order = [BY_KEY[k].name for k, _ in trip.stops]
+    assert sorted(order) == sorted(names) and trip.total < 3500  # thật ~2.800–2.900 km; mô hình cây cũ 4.441
+    assert order.index("Vĩnh Phúc") < order.index("Lào Cai") and order.index("Hà Nội") < order.index("Cao Bằng")
+    via = [k for k, _ in trip.via]
+    assert "thanhhoa" in via and "nghean" in via and not set(via) & {k for k, _ in trip.stops} and len(via) == len(set(via))
+    assert all(abs(a.odo1 - b.odo0) < 1e-6 for a, b in itertools.pairwise(trip.segments))
+    assert net.plan(["hanoi"]).total == net.km("hanoi")  # một tỉnh: đúng tuyến OSRM, khớp km trên vé
+    assert trip.at(trip.total - 1)[0] in net.profiles  # khúc cuối nằm trên một tuyến thật (đèo / hầm / cảnh vùng đúng)
 
 
 def test_every_province_has_a_specialty():
@@ -894,3 +899,150 @@ def test_manual_feature_pauses_director_and_rotate_mode_cycles():
     _, seen = drive_with_director(e, "rotate", 3 + MANUAL_HOLD, 3 + MANUAL_HOLD + 40, rotate=10)
     assert {no for no, _ in seen} == {None, relief.no}  # hết giờ nhường admin: xoay vòng mỗi 10 giây
     e.auto_feature("off", 10)
+
+
+# ---- PLAN-134 B: người xem biết mình ở xe nào --------------------------------
+
+def test_where_question_is_not_a_booking():
+    """«vé» bỏ dấu trùng «về»: «về Huế» / «vé Huế» vẫn là đặt vé; «vé», «xe nào», «tới đâu rồi» là hỏi vé."""
+    from xe_tet.server.game.parser import parse
+    for text in ("xe nào", "Xe số mấy vậy", "vé", "vé của tôi", "tới đâu rồi", "bao giờ tới Huế", "còn bao lâu nữa", "xe"):
+        assert parse(text).kind == "where", text
+    for text in ("về Huế", "ve Hue", "Huế", "vé Huế"):
+        assert parse(text).kind == "province", text
+    assert parse("xe đẹp quá").kind == "chat" and parse("không về").kind == "stay"
+
+
+def test_where_answers_seat_queue_and_none():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Bình", "Cà Mau", 2)  # khác hướng: giữ chỗ xe sau
+    e.drain()
+    comment(e, "An", "xe nào", 3)
+    comment(e, "Bình", "tới đâu rồi", 3)
+    comment(e, "Chi", "vé", 3)
+    answers = {ev["name"]: ev for ev in e.drain() if ev["type"] == "where"}
+    assert answers["An"]["status"] == "seat" and answers["An"]["bus_no"] == e.bus.no and answers["An"]["phase"] == "BOARDING"
+    assert answers["An"]["depart_in"] > 0 and answers["An"]["province"] == "Hà Nội"
+    assert answers["Bình"]["status"] == "queue" and answers["Bình"]["position"] == 1 and answers["Bình"]["eta_min"] >= 1
+    assert answers["Bình"]["bus_no"] > e.bus.no
+    assert answers["Chi"]["status"] == "none"
+    comment(e, "An", "xe nào", 10)  # hỏi lại trong 15 giây: không chiếm thêm thẻ trên màn hình
+    assert not [ev for ev in e.drain() if ev["type"] == "where"]
+    t = run_until(e, "DRIVING", 10)
+    comment(e, "An", "còn bao lâu", t + 1)
+    ans = next(ev for ev in e.drain() if ev["type"] == "where")
+    assert ans["status"] == "seat" and ans["in_s"] > 0 and ans["stops_before"] >= 0
+
+
+def test_bus_greets_provinces_it_passes(real_routes):
+    """Xe chạy qua tỉnh không ai xuống: lơ xe gọi bà con tỉnh đó, cách nhau ≥ VIA_TALK_GAP giây (PLAN-134)."""
+    from xe_tet.server.game.engine import VIA_TALK_GAP
+    from xe_tet.server.game.network import Network
+    e = Engine(0.0, network=Network(real_routes, "hcm_miendong"))
+    comment(e, "An", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 1)
+    seen = []
+    while e.phase == "DRIVING" and t < 3000:
+        t += 0.5
+        e.tick(t)
+        seen += [(t, ev) for ev in e.drain() if ev["type"] == "via"]
+    via = {BY_KEY[k].name for k, _ in e.trip.via}
+    assert len(seen) >= 2 and all(ev["province"] in via for _, ev in seen)
+    assert all(b - a >= VIA_TALK_GAP for (a, _), (b, _) in itertools.pairwise(seen))
+
+
+def test_bus_picks_up_provinces_on_its_way(real_routes):
+    """PLAN-134 C: khách Huế (làn «Hướng Đà Nẵng») lên được xe «Hướng Hà Nội» còn giường — xe đi ngang Huế; người đã giữ chỗ
+    làn khác mà xe đi ngang quê họ cũng được xếp lên; tỉnh ngược đường (Cà Mau) vẫn chờ xe làn mình."""
+    from xe_tet.server.game.network import Network
+    net = Network(real_routes, "hcm_miendong")
+    assert net.lane_of("hue") != net.lane_of("hanoi") and "hue" in net.serves(net.lane_of("hanoi"))
+    assert "camau" not in net.serves(net.lane_of("hanoi"))
+    e = Engine(0.0, network=net)
+    comment(e, "Cà", "Cà Mau", 1)  # xe quay đầu hướng Cà Mau
+    comment(e, "Huệ", "Huế", 2)  # khác đường: giữ chỗ
+    assert e.lane_of_uid("huệ") == net.lane_of("hue")
+    e.bus.lane = net.lane_of("hanoi")  # chuyến sau chạy hướng Hà Nội: người Huế đang giữ chỗ được xếp lên luôn
+    e._fill_from_queue()
+    assert e.bus.seat_of("huệ") is not None and e.lane_of_uid("huệ") is None
+    e2 = Engine(0.0, network=net)
+    comment(e2, "An", "Hà Nội", 1)
+    comment(e2, "Huệ", "Huế", 2)
+    comment(e2, "Út", "Cà Mau", 3)
+    seated = {e2.viewers[u].province for u in e2.bus.riders()}
+    assert seated == {"hanoi", "hue"} and e2.lane_of_uid("út") == net.lane_of("camau")
+    ticket = next(ev for ev in e2.drain() if ev["type"] == "ticket" and ev["province"] == "Huế")
+    assert ticket["lane"] == "Hướng Hà Nội" and not ticket["next"]
+
+
+def test_season_calendar_2027():
+    """Tết Đinh Mùi: mùng 1 = 6/2/2027, tháng Chạp thiếu (giao thừa 29 Chạp = 5/2); cao điểm 23–28 Chạp; chiều ra mùng 4–10."""
+    from xe_tet.server.game import season
+    assert season.lunar_label(date(2027, 2, 5)) == "Giao thừa" and season.phase(date(2027, 2, 5)) == season.EVE
+    assert season.lunar_label(date(2027, 2, 1)) == "25 Chạp" and season.phase(date(2027, 2, 1)) == season.PEAK
+    assert season.chap(23) == date(2027, 1, 30) and season.phase(date(2027, 1, 29)) == season.EARLY
+    assert season.lunar_label(date(2027, 2, 7)) == "Mùng 2 Tết" and season.phase(date(2027, 2, 9)) == season.RETURN
+    assert season.lunar_label(date(2026, 12, 15)) is None and season.phase(date(2027, 2, 16)) == season.AFTER
+    e = Engine(0.0, today=date(2027, 2, 1))
+    assert e.snapshot()["season"] == {"phase": "peak", "lunar": "25 Chạp", "days_to_tet": 5}
+    e.drain()
+    e._enter_boarding(1.0)
+    assert any("25 Chạp" in ev.get("text", "") or "Cao điểm" in ev.get("text", "") or "Bến đông" in ev.get("text", "")
+               for ev in e.drain() if ev["type"] == "loxe")
+
+
+def test_gift_parcels_ride_with_ticket_and_reach_the_gate():
+    """PLAN-134 C: tặng quà lúc có vé → thùng quà mang tên lên gầm xe (tối đa PARCELS_MAX), tới quê ôm vào cổng + lơ xe gọi
+    tên; chưa có vé thì không có thùng (quyền lợi quà cũ giữ nguyên)."""
+    from xe_tet.server.game.engine import PARCELS_MAX
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    for i in range(PARCELS_MAX + 2):
+        e.handle({"type": "gift", "name": "An", "diamonds": 1}, 2 + i)
+    e.handle({"type": "gift", "name": "Khách", "diamonds": 1}, 9)
+    gifts = [ev for ev in e.drain() if ev["type"] == "gift"]
+    assert [g["parcel"] for g in gifts] == [True] * PARCELS_MAX + [False, False, False]
+    assert e.snapshot()["bus"]["parcels"] == PARCELS_MAX
+    run_until(e, "DROPOFF", 10)
+    events = e.drain()
+    drop = next(ev for ev in events if ev["type"] == "dropoff")
+    assert drop["people"][0]["parcels"] == PARCELS_MAX and e.viewers["an"].parcels == 0
+    assert any(ev["type"] == "loxe" and "An" in ev["text"] for ev in events)
+
+
+def test_returning_viewer_is_remembered_and_greeted(tmp_path):
+    """PLAN-134 D: hồ sơ ghi SQLite theo lô; buổi sau gặp lại → lơ xe chào «đã về … N chuyến» (một lần, cách WELCOME_GAP)."""
+    from xe_tet.server.store import ViewerStore
+    db = ViewerStore(tmp_path / "x.db")
+    e = Engine(0.0, today=date(2026, 12, 20))
+    e.recall = db.load
+    comment(e, "An", "Hà Nội", 1)
+    e.handle({"type": "like", "name": "An", "count": 7}, 2)
+    run_until(e, "DROPOFF", 2)
+    db.save_many(e.take_dirty())
+    assert e.take_dirty() == []
+    row = db.load("an")
+    assert row["home"] == "hanoi" and row["trips"] == 1 and row["likes"] == 7 and row["comments"] == 1 and row["days"] == 1
+    later = Engine(0.0, today=date(2026, 12, 22))  # buổi live khác
+    later.recall = db.load
+    later.handle({"type": "join", "name": "An"}, 1)  # vào phòng chưa tính
+    assert not [ev for ev in later.drain() if ev["type"] == "welcome"]
+    later.handle({"type": "like", "name": "An", "count": 1}, 2)
+    later.handle({"type": "like", "name": "An", "count": 1}, 3)
+    events = later.drain()
+    welcome = [ev for ev in events if ev["type"] == "welcome"]
+    assert len(welcome) == 1 and welcome[0]["trips"] == 1 and welcome[0]["home"] == "Hà Nội" and welcome[0]["days"] == 2
+    assert any(ev["type"] == "loxe" and "An" in ev["text"] for ev in events)
+    db.save_many(later.take_dirty())
+    assert db.load("an")["likes"] == 9 and db.load("an")["days"] == 2
+
+
+def test_same_hometown_riders_are_paired():
+    e = Engine(0.0)
+    comment(e, "An", "Nghệ An", 1)
+    e.drain()
+    comment(e, "Bình", "Nghệ An", 2)
+    assert any(ev["type"] == "loxe" and "An" in ev["text"] and "Bình" in ev["text"] for ev in e.drain())
+    comment(e, "Chi", "Nghệ An", 3)  # trong SAME_HOME_GAP: không ghép tiếp (lơ xe không nói liên tục)
+    assert not any(ev["type"] == "loxe" and "Chi" in ev["text"] for ev in e.drain())

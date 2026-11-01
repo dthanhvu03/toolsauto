@@ -19,6 +19,34 @@ TALK_STYLES = ("mix", *STYLES)
 LINES: dict[str, dict[str, tuple[str, ...]]] = {
     # ---- lơ xe bến xe ------------------------------------------------------------------------------
     "ben": {
+        "same_home": (  # lên xe gặp người cùng tỉnh (PLAN-134 D)
+            "{name} với {other} cùng về {prov} kìa, đồng hương nằm gần nhau cho vui.",
+            "Lại thêm một người {prov}, {name} ơi có {other} cùng quê trên xe đó.",
+        ),
+        "welcome_trips": (  # khách buổi trước quay lại, đã về quê rồi (PLAN-134 D)
+            "Ủa {name} quay lại bến nữa hả, đã về {prov} {n} chuyến rồi mà còn ghé, quý quá.",
+            "{name} đây rồi, khách quen về {prov}, nay đi tiếp chuyến nữa hông.",
+        ),
+        "welcome_back": (
+            "{name} ghé bến lần nữa nè, bữa trước chưa lên xe, nay gõ tên tỉnh đi.",
+            "Thấy {name} quen quen, ghé lại hả, nay về quê thì gõ tên tỉnh lẹ.",
+        ),
+        "parcels": (  # thùng quà Tết người tặng quà gửi theo xe, tới quê giao tận cổng (PLAN-134 C)
+            "Bốc thùng quà của {names} xuống, Anh Tư bê tận cổng cho, khỏi lo.",
+            "Thùng quà Tết của {names} tới nơi rồi, ra cổng nhận đi.",
+        ),
+        "boarding_peak": (  # 23 → 28 Chạp: cao điểm chiều về (PLAN-134 C)
+            "{lunar} rồi bà con, bến chật cứng, xe {dest} đây, gõ tên tỉnh lẹ kẻo hết giường.",
+            "Cao điểm về quê rồi, {lunar}, ai về {dest} gõ tên tỉnh, Anh Tư xếp giường liền.",
+        ),
+        "boarding_eve": (
+            "Giao thừa rồi, chuyến chót năm nay đi {dest}, ai chưa về thì lên lẹ cho kịp cúng ông bà.",
+            "Chuyến cuối năm đây, {dest} đây, lên lẹ còn kịp đón giao thừa với má.",
+        ),
+        "boarding_tet": (
+            "Năm mới an khang, xe {dest} vẫn chạy, ai đi chúc Tết thì gõ tên tỉnh.",
+            "{lunar} rồi, xe {dest} vẫn chạy, ai đi thăm họ hàng thì lên xe.",
+        ),
         "boarding": (
             "{dest} đây, {dest} đây, đi hông đi, gõ tên tỉnh lẹ lên.",
             "Ai về {dest} hông, đứng đó ngó hoài, gõ tên tỉnh rồi lên xe cái coi.",
@@ -55,6 +83,11 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Ghé {place} nghỉ mười lăm phút, ai đi vệ sinh thì đi lẹ, nhớ biển số xe, lạc ráng chịu.",
             "Tới {place} rồi, ở đây có {specialty}, ai mua quà thì mua lẹ, đừng trả giá lâu.",
             "Dừng ăn cơm ở {place}, ăn lẹ lẹ, mười lăm phút xe chạy, hổng chờ ai đâu.",
+        ),
+        "via": (  # xe chạy qua tỉnh không ai xuống (PLAN-134): vẫn gọi bà con quê đó
+            "Xe đang chạy ngang {place}, bà con {place} có ai đang coi thì thả tim chào xe cái coi.",
+            "Tới địa phận {place} rồi, ai quê {place} thì thả tim cho Anh Tư biết mặt.",
+            "Ngang qua {place} nè, quê ai ở {place} gõ tên tỉnh, chuyến sau Anh Tư ghé tận nơi.",
         ),
         "honk": (
             "Bíp bíp, lên xe lên xe, còn ai ở dưới hông.",
@@ -113,6 +146,34 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     # ---- gen Z -----------------------------------------------------------------------------------------
     "genz": {
+        "same_home": (
+            "{name} với {other} cùng team {prov}, đồng hương gặp nhau trên xe, xịn xò.",
+            "Hội {prov} có thêm {name}, {other} có bạn rồi nè.",
+        ),
+        "welcome_trips": (
+            "{name} comeback rồi nè, đã về {prov} {n} chuyến, khách ruột uy tín.",
+            "Khách quen {name} của tuyến {prov} điểm danh, đỉnh nóc kịch trần.",
+        ),
+        "welcome_back": (
+            "{name} quay lại rồi kìa, lần này lên xe luôn đi, khum là toang.",
+            "Ơ {name} ghé lại nè, gõ tên tỉnh cái là có giường liền.",
+        ),
+        "parcels": (
+            "Ship tận cổng thùng quà của {names}, uy tín luôn.",
+            "Thùng quà của {names} hạ cánh an toàn, chuẩn đét.",
+        ),
+        "boarding_peak": (
+            "{lunar} rồi mấy bồ, bến đông muốn xỉu, xe {dest} còn giường, gét gô.",
+            "Cao điểm về quê nè, ai đi {dest} gõ tên tỉnh lẹ, chậm là toang.",
+        ),
+        "boarding_eve": (
+            "Giao thừa rồi, chuyến chót đi {dest}, lên lẹ cho kịp coi pháo hoa với nhà.",
+            "Chuyến cuối năm đi {dest}, ai còn kẹt ở thành phố thì quay xe về quê liền.",
+        ),
+        "boarding_tet": (
+            "Năm mới đỉnh nóc kịch trần, xe {dest} vẫn chạy, ai đi chúc Tết gõ tên tỉnh.",
+            "{lunar} rồi, đi chơi Tết {dest} thì lên xe, uy tín.",
+        ),
         "boarding": (
             "Ai về {dest} điểm danh, gõ tên tỉnh vô, lên xe gét gô.",
             "Xe đi {dest} tới công chuyện rồi, gõ tên tỉnh là có giường, khum lằng nhằng.",
@@ -149,6 +210,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Tới {place} rồi, nghỉ mười lăm phút, đi vệ sinh, chụp hình sống ảo lẹ lẹ.",
             "Trạm {place} có {specialty}, ai mua làm quà thì mua, đừng để mẹ chê keo.",
             "Ghé {place} ăn lẹ mười lăm phút, ăn xong lên xe liền, đừng bắt cả xe chờ, kỳ lắm.",
+        ),
+        "via": (
+            "Đang lướt qua {place}, team {place} điểm danh cái, thả tim cho uy tín.",
+            "Qua {place} rồi đó, người {place} đâu hết rồi, thả tim cái cho xe có động lực.",
         ),
         "honk": (
             "Ê mọi người, lên xe, anh tài sắp chạy rồi đó.",
@@ -207,6 +272,34 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     # ---- gen Y -----------------------------------------------------------------------------------------
     "geny": {
+        "same_home": (
+            "{name} với {other} cùng về {prov}, đồng hương chuẩn không cần chỉnh.",
+            "Thêm {name} về {prov}, có {other} đi cùng cho đỡ buồn.",
+        ),
+        "welcome_trips": (
+            "Chào {name} quay lại, đã về {prov} {n} chuyến rồi, khách quen chuẩn không cần chỉnh.",
+            "{name} lại ghé bến, tuyến {prov} nhớ mặt rồi, chúc chuyến này cũng thuận buồm.",
+        ),
+        "welcome_back": (
+            "{name} ghé lại bến rồi, lần này gõ tên tỉnh lên xe luôn cho chất.",
+            "Chào {name} quay lại, quê ở đâu thì gõ tên tỉnh, Anh Tư xếp giường cho.",
+        ),
+        "parcels": (
+            "Giao tận cổng thùng quà Tết của {names}, chuẩn không cần chỉnh.",
+            "Quà Tết của {names} về tới nhà rồi, cả nhà mở quà thôi.",
+        ),
+        "boarding_peak": (
+            "{lunar} rồi, cao điểm về quê, xe {dest} còn chỗ, gõ tên tỉnh chuẩn không cần chỉnh.",
+            "Bến đông như hội, ai về {dest} thì gõ tên tỉnh lẹ lên.",
+        ),
+        "boarding_eve": (
+            "Giao thừa rồi, chuyến cuối năm đi {dest}, lên xe về kịp cúng giao thừa.",
+            "Chuyến chót năm nay đi {dest}, ai chưa về thì quẩy lên xe liền.",
+        ),
+        "boarding_tet": (
+            "Năm mới vạn sự như ý, xe {dest} vẫn chạy, ai đi chúc Tết thì gõ tên tỉnh.",
+            "{lunar} rồi, xe {dest} chạy đều, ai đi thăm họ hàng thì lên xe.",
+        ),
         "boarding": (
             "Ai về {dest} thì gõ tên tỉnh, lên xe, chuẩn không cần chỉnh.",
             "Xe đi {dest} đây, ngon lành cành đào, gõ tên tỉnh là có giường.",
@@ -243,6 +336,10 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Ghé {place} nghỉ mười lăm phút, ăn uống vệ sinh cho xong, nhớ biển số xe.",
             "Trạm {place} có {specialty}, mua về biếu ông bà là chuẩn cơm mẹ nấu.",
             "Dừng ăn cơm ở {place}, ăn nhanh còn đi, đừng ngồi tám chuyện.",
+        ),
+        "via": (
+            "Xe đang qua {place}, bà con {place} thả tim chào xe một cái, chuẩn không cần chỉnh.",
+            "Ngang {place} rồi, ai quê {place} điểm danh, chuyến sau ghé tận cổng.",
         ),
         "honk": (
             "Lên xe lên xe, ai còn ở dưới thì nhanh, xe chạy rồi.",

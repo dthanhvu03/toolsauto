@@ -142,7 +142,16 @@
   biên dịch shader giữa trận 25 → 0 / 150 giây, luồng chính bận 42 → 8 %, pytest 117, e2e 28/28 + UX 0 lỗi, ảnh pháo hoa.
   Anh duyệt → đã build + khởi động lại 8810 (lúc đó TikTok idle, xe trống), trang live 0 lỗi; đã commit. Bước 7 (Lambert,
   gộp khối…) chờ số `/?fps=1` trên GPU thật. 8810 đang để chất lượng «Thấp» (anh đặt).
-- **Next:** anh mở `/?fps=1` trên Chrome Windows (Cao / Vừa / Thấp, ngoài giờ live) gửi số → PLAN-133 bước 7; anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+- **PLAN-133 bước 7 (anh đo Cao: đường 30 khung/s, trạm 40 người 22):** người không đổ bóng thật, chỗ trạm cấp theo danh
+  sách chỗ trống, đẩy nhãn tên — đã nạp 8810 (commit 85f7567). Rò bộ nhớ: không (overlay hình 367 rồi đứng; server 6 giờ
+  15.000 người xem 8,7 MB).
+- **PLAN-134 (anh duyệt 4 đợt + chốt 4 điểm):** A tuyến đường thật (đồ thị tỉnh + Floyd–Warshall ghép với mô hình cây, xe số 2
+  4.441 → 2.999 km, tỉnh «đi qua» trên HUD / /control), B người xem biết mình ở xe nào («xe nào / tới đâu rồi», số xe trên vé,
+  trạng thái từng xe, lơ xe gọi tỉnh đi qua), C luật làn dọc đường + lịch mùa 2027 + thùng quà Tết, D nhớ khách SQLite
+  `storage/db/xe_tet.db` + chào khách quay lại + ghép cùng quê + gọi tên công bằng + ghi chú 18+. Proof: pytest 125, fuzz
+  290 chuyến × 5 bến 0 vi phạm, e2e 28/28 + UX 0 lỗi trên 8811, ảnh. Đã commit; **chưa nạp 8810**. Còn: C3 chiều ra (bước
+  riêng, trước 9/2/2027); anh cân nhắc bỏ gợi ý «🎯 thêm N xu → …».
+- **Next:** anh cho nạp PLAN-134 vào 8810 (build overlay + khởi động lại) → anh F5 cửa sổ live; sau đó C3 chiều ra; anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
 

@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import music, settings, simulator, voice
+from . import music, settings, simulator, store, voice
 from .game.engine import LIKE_MAX, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
@@ -79,6 +79,8 @@ class Outbox:
 class Hub:
     def __init__(self) -> None:
         self.settings = settings.load()
+        self.store = store.ViewerStore()  # nhớ khách qua các buổi live (PLAN-134 D)
+        self.last_flush = 0.0
         self.engine = self.new_engine()
         self.clients: dict[WebSocket, Outbox] = {}
         self.sim_rate = 0.0  # sự kiện giả / giây, 0 = tắt
@@ -95,7 +97,17 @@ class Hub:
         engine.relief_auto = self.settings["relief_auto"]
         engine.trip_minutes = self.settings["trip_minutes"]
         engine.talk_style = self.settings["talk_style"]
+        engine.recall = self.store.load
         return engine
+
+    async def flush(self) -> None:
+        """Ghi hồ sơ người xem đã đổi xuống SQLite ở luồng riêng (vòng game không chờ ổ đĩa); lỗi ghi không làm đứng game."""
+        rows = self.engine.take_dirty()
+        if rows:
+            try:
+                await asyncio.to_thread(self.store.save_many, rows)
+            except Exception:
+                log.exception("ghi hồ sơ người xem lỗi (%d người)", len(rows))
 
     def handle(self, event: dict) -> None:
         accepted = self.engine.handle(event, time.monotonic())
@@ -171,6 +183,9 @@ class Hub:
             if now - last_state >= STATE_EVERY:
                 last_state = now
                 await self.broadcast(self.state_message())
+            if now - self.last_flush >= store.FLUSH_SECONDS:
+                self.last_flush = now
+                await self.flush()
             await asyncio.sleep(TICK)
 
 
@@ -192,6 +207,7 @@ async def lifespan(_app: FastAPI):
         await hub.bridge.connect(hub.settings["tiktok_user"])
     yield
     await hub.bridge.disconnect()
+    await hub.flush()
     for t in (task, reader, voices):
         t.cancel()
 
@@ -271,6 +287,7 @@ async def _admin(body: dict) -> dict:
     if action == "skip":
         engine.skip()
     elif action == "reset":
+        await hub.flush()  # ghi nốt hồ sơ khách của ván cũ
         hub.engine = hub.new_engine()
     elif action == "pause":
         engine.paused = bool(body.get("paused"))

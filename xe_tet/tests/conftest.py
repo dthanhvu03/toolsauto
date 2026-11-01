@@ -6,12 +6,14 @@ Kết quả test không phụ thuộc dữ liệu OSRM (data/routes.json); test 
 
 import asyncio
 import math
+import os
+import tempfile
 
 import pytest
 
 from xe_tet.server import voice as voice_module
 from xe_tet.server.game import network as network_module
-from xe_tet.server.game.geo import CAPITALS, DEPARTURES
+from xe_tet.server.game.geo import CAPITALS, DEFAULT_DEPARTURE, DEPARTURES
 
 
 def _km(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -30,9 +32,15 @@ def synthetic_routes() -> dict:
             km = round(_km((dep.lat, dep.lon), at))
             lane = "north" if at[0] >= dep.lat else "south"
             passes = {"hanoi": [[max(1, km - 120), "Đèo Thử", "deo"]], "nghean": [[max(1, km - 60), "Hầm Thử", "ham"]]}
-            places = [[0, dep.province], [max(10, km - 50) // 10 * 10, key]]
             routes[key] = {"km": km, "lane": lane, "wind": [12.0 if i % 3 == 0 else 2.0 for i in range(km // 10 + 1)],
-                           "passes": passes.get(key, []), "places": places}
+                           "passes": passes.get(key, [])}
+        for key, r in routes.items():
+            # bến mặc định: đi qua mọi tỉnh cùng làn gần bến hơn (một trục) → đồ thị đường bộ thẳng, thứ tự ghé = thứ tự km;
+            # bến khác: nối thẳng bến → tỉnh (trục giả của nhiều bến ghép lại sẽ tạo đường tắt không có thật)
+            # (địa phận mỗi tỉnh bắt đầu ở giữa tỉnh lỵ trước và tỉnh lỵ của nó — như dữ liệu thật chia theo tỉnh lỵ gần nhất)
+            before = sorted((o["km"], k) for k, o in routes.items() if o["lane"] == r["lane"] and o["km"] < r["km"])
+            line = ([*before, (r["km"], key)] if dep.key == DEFAULT_DEPARTURE else [(r["km"], key)])
+            r["places"] = [[0, dep.province], *[[(prev + km) / 2, k] for prev, (km, k) in zip([0, *(km for km, _ in line)], line)]]
         lanes = []
         for lane, label, arrow in (("north", "Hướng Bắc", "⬆"), ("south", "Hướng Nam", "⬇")):
             members = sorted((k for k, r in routes.items() if r["lane"] == lane), key=lambda k: routes[k]["km"])
@@ -45,6 +53,9 @@ def synthetic_routes() -> dict:
 
 
 SYNTHETIC = synthetic_routes()
+
+# Hồ sơ khách (PLAN-134 D): test không ghi vào storage/db/xe_tet.db thật (store.py đọc biến này lúc app nạp)
+os.environ["XE_TET_DB"] = os.path.join(tempfile.mkdtemp(prefix="xe_tet_test_"), "xe_tet.db")
 
 # Thay ngay khi nạp conftest (trước khi import test): app.py dựng `hub` (và Engine) lúc import.
 REAL_READ = network_module._read

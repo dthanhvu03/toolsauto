@@ -117,6 +117,7 @@ html, body {
   background: var(--red); border: 4px solid #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
 .mk.rest { background: #2e7d6b; }
 .mk.done { opacity: 0.45; }
+.mk.via { width: 12px; height: 12px; margin: -6px 0 0 -6px; background: #fff; border: 3px solid #b39a74; box-shadow: none; }
 .bus-dot { position: absolute; top: 50%; font-size: 44px; font-style: normal; line-height: 1;
   transform: translate(-50%, -62%) scaleX(-1); transition: left 0.25s linear; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), var(--red)); transition: width 0.25s linear; }

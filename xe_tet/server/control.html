@@ -59,6 +59,7 @@
   .stops .stop { font-size:13px; padding:3px 8px; border-radius:999px; background:var(--soft); border:1px solid var(--line); white-space:nowrap; }
   .stops .stop.done { opacity:.5; text-decoration:line-through; }
   .stops .stop.next { background:#fff1d6; border-color:var(--gold); font-weight:600; }
+  .stops .stop.via { font-size:12px; background:transparent; border-style:dashed; color:var(--muted, #8a7a66); }
   label.toggle { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; background:var(--soft); cursor:pointer; }
   label.toggle input { width:18px; height:18px; accent-color:var(--red); }
   .zoom { display:flex; align-items:center; gap:8px; }
@@ -533,9 +534,11 @@ function stopsOf(b) {
     if (next) first = false;
     const wait = next && p.in_s != null ? ` · còn ${mmss(p.in_s)}` : "";
     const day = p.day ? ` (ngày ${p.day + 1})` : "";
-    return `<span class="stop${p.done ? " done" : ""}${next ? " next" : ""}">${icon} ${esc(p.name)}${p.at ? ` ${p.at}${day}` : ""}${wait}</span>`;
+    return [p.km, `<span class="stop${p.done ? " done" : ""}${next ? " next" : ""}">${icon} ${esc(p.name)}${p.at ? ` ${p.at}${day}` : ""}${wait}</span>`];
   });
-  return `<div class="stops">${chips.join("")}</div>`;
+  // tỉnh xe chạy qua mà không ai xuống: chip nhạt chen giữa các điểm dừng theo km
+  const via = (b.via || []).map((v) => [v.km, `<span class="stop via${v.done ? " done" : ""}">qua ${esc(v.name)}</span>`]);
+  return `<div class="stops">${[...chips, ...via].sort((x, y) => x[0] - y[0]).map((c) => c[1]).join("")}</div>`;
 }
 // Mỗi xe một khung giữ nguyên giữa các lần làm mới; chỉ phần chữ đổi mới được ghi lại (setIfChanged từng phần).
 function busRow(no) {

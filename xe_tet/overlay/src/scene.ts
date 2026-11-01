@@ -527,6 +527,10 @@ export class World {
   private dropoff(e: GameEvent): void {
     (e.people ?? []).forEach((person, i) => {
       const p = makePerson(person.hue, person.name, person.vip);
+      if (person.parcels) {  // thùng quà Tết đi theo xe: đội trên đầu vào cổng — camera nhìn từ trên cao thấy rõ (PLAN-134 C)
+        p.add(at(box(0.66, 0.42, 0.56, 0xc62828), 0, 1.86, 0), at(box(0.68, 0.07, 0.16, 0xffd23f), 0, 2.08, 0),
+          at(box(0.16, 0.07, 0.58, 0xffd23f), 0, 2.08, 0));
+      }
       p.position.copy(this.bus.doorSpot).add(new THREE.Vector3(0, 0.1, 0));
       const gate = this.home.gate.clone().add(new THREE.Vector3(-0.6 + (i % 4) * 0.4, 0, 0));
       this.addWalker(p, [new THREE.Vector3(0, 0.1, -6), gate, this.home.door.clone()], 2.6, undefined, i * 0.8);
