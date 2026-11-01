@@ -3,7 +3,7 @@
 // bật tắt trên /control. Trình duyệt chặn tự phát tiếng tới khi có một cú bấm → báo ra ngoài để hiện 🔇.
 //
 //   bài nhạc ─► music ─► duck (nhỏ lại khi lơ xe nói) ─► tunnel (lọc «bịt» khi trong hầm) ─┐
-//   tiếng máy + lốp / gió (theo tốc độ) ─► vehicle ─► vehicleDuck ─► sfx ────────────────────┤
+//   tiếng máy + lốp / gió (chỉ khi xe chạy, theo tốc độ) ─► vehicleDuck ─► sfx ────────────────────┤
 //   còi, pháo hoa, «ting» ─► sfx ─────────────────────────────────────────────────────────────┤
 //   giọng Anh Tư lơ xe (file server đọc sẵn, PLAN-128) ─► voice ─────────────────────────────┴─► master ─► nén ─► loa
 //
@@ -15,13 +15,12 @@ import type { GameEvent, State } from "./types";
 
 const FADE = 1.2;  // đổi bài: bài cũ nhỏ dần, bài mới to dần (giây)
 const TING_GAP = 0.6;  // vé dồn dập: «ting» cách nhau tối thiểu 0,6 giây
-const ENGINE_LEVEL = 0.07;
+const ENGINE_LEVEL = 0.05;
 const OPEN_AIR = 18000;  // tần số cắt bộ lọc ngoài trời / trong hầm
 const IN_TUNNEL = 700;
 const DUCK = 0.3;  // lơ xe nói: nhạc còn 30 %
 const VEHICLE_DUCK = 0.45;  // … tiếng máy / lốp còn 45 %
-const ROAD_LEVEL = 0.05;  // tiếng lốp + gió ở tốc độ thường
-const IDLE_LEVEL = 0.035;  // xe nổ máy chờ ở bến / trạm
+const ROAD_LEVEL = 0.03;  // tiếng lốp + gió ở tốc độ thường (nhỏ, trầm — chỉ làm nền)
 type Mix = "balanced" | "music" | "voice";
 /** Hệ số từng nhóm theo chế độ trộn (nhân với âm lượng admin chỉnh) + mức nhạc khi lơ xe nói. */
 const MIXES: Record<Mix, { music: number; voice: number; sfx: number; duck: number }> = {
@@ -72,15 +71,15 @@ export class Sound {
     rumble.loop = true;
     const roadFilter = this.ctx.createBiquadFilter();
     roadFilter.type = "lowpass";
-    roadFilter.frequency.value = 520;
+    roadFilter.frequency.value = 320;
     this.road.gain.value = 0;
     rumble.connect(roadFilter).connect(this.road).connect(this.vehicleDuck);
     rumble.start();
-    // tiếng máy: răng cưa trầm qua lọc thấp, to nhỏ / cao thấp theo tốc độ
+    // tiếng máy: sóng tam giác trầm qua lọc thấp (răng cưa nghe rè rè), to nhỏ / cao thấp theo tốc độ
     const engineFilter = this.ctx.createBiquadFilter();
     engineFilter.type = "lowpass";
-    engineFilter.frequency.value = 260;
-    this.engine.type = "sawtooth";
+    engineFilter.frequency.value = 160;
+    this.engine.type = "triangle";
     this.engine.frequency.value = 42;
     this.engineGain.gain.value = 0;
     this.engine.connect(engineFilter).connect(this.engineGain).connect(this.vehicleDuck);
@@ -100,10 +99,9 @@ export class Sound {
     this.voice.gain.setTargetAtTime(c?.voice_on === false ? 0 : (c?.voice_volume ?? 0.9) * mix.voice, now, 0.2);
     this.rate = c?.voice_rate ?? 1;
     const moving = s.phase === "DRIVING" && !s.paused;
-    const idling = !s.paused && (s.phase === "BOARDING" || s.phase === "REST");  // xe nổ máy chờ khách
     const speed = s.speed ?? 1;
-    this.engineGain.gain.setTargetAtTime(moving ? ENGINE_LEVEL : idling ? IDLE_LEVEL : 0, now, 0.6);
-    this.engine.frequency.setTargetAtTime(moving ? 38 + 10 * speed : 30, now, 0.5);
+    this.engineGain.gain.setTargetAtTime(moving ? ENGINE_LEVEL : 0, now, 0.6);  // đứng ở bến / trạm: tắt máy, im hẳn
+    this.engine.frequency.setTargetAtTime(38 + 10 * speed, now, 0.5);
     this.road.gain.setTargetAtTime(moving ? ROAD_LEVEL * Math.min(1.6, speed) * (s.terrain?.tunnel ? 1.6 : 1) : 0, now, 0.5);
     this.tunnel.frequency.setTargetAtTime(moving && s.terrain?.tunnel ? IN_TUNNEL : OPEN_AIR, now, 0.4);
     // bài của xe đang chiếu; tắt nhạc (chung hoặc riêng xe) thì im
@@ -268,7 +266,8 @@ export class Sound {
 
   private noiseBuffer: AudioBuffer | null = null;
 
-  /** Tiếng ồn nâu 4 giây (trầm, như lốp lăn trên nhựa + gió), lặp vòng. */
+  /** Tiếng ồn nâu 4 giây (trầm, như lốp lăn trên nhựa + gió), lặp vòng liền mạch: kéo cuối đoạn về khớp đầu đoạn
+   * (lệch là nghe «tách» mỗi lần lặp) và bỏ độ lệch trung bình. */
   private brownNoise(): AudioBuffer {
     const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 4, this.ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -277,6 +276,14 @@ export class Sound {
       last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
       data[i] = last * 3.5;
     }
+    const n = data.length;
+    const gap = data[n - 1] - data[0];
+    let mean = 0;
+    for (let i = 0; i < n; i++) {
+      data[i] -= (gap * i) / (n - 1);
+      mean += data[i] / n;
+    }
+    for (let i = 0; i < n; i++) data[i] -= mean;
     return buf;
   }
 
