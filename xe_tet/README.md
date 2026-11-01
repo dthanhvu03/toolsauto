@@ -36,8 +36,8 @@ cd xe_tet/overlay && npm install && npm run build && cd ../..   # chỉ cần kh
   - **Bến đi** (Miền Đông mới / Giáp Bát / Liên tỉnh Đà Lạt / Đà Nẵng / Cần Thơ) — chỉ đổi được khi bến trống.
   - **Nhạc & âm thanh (PLAN-127):** mỗi xe một bài (⏭ Bài / 🔇 ở «Các chuyến xe»), tiếng theo xe đang chiếu; âm lượng
     nhạc / hiệu ứng (còi, pháo hoa, tiếng máy, «ting» khi có vé; vào hầm nhạc bị «bịt»). Nhạc có sẵn do máy tự sáng tác
-    (ngũ cung, đàn tranh / sáo / trống / mõ) — không vướng bản quyền. Nhạc của anh: chép mp3 / ogg / m4a / wav vào
-    `storage/media/xe_tet/music/`. Trình duyệt chặn tự phát tiếng: bấm vào màn hình live một lần (🔇 sẽ mất), hoặc mở cửa
+    (ngũ cung, đàn tranh / sáo / trống / mõ) — không vướng bản quyền. Nhạc của anh: tải lên ngay trên `/control`
+    (mp3 / ogg / m4a / wav, ≤ 40 MB) hoặc chép vào `storage/media/xe_tet/music/`. Trình duyệt chặn tự phát tiếng: bấm vào màn hình live một lần (🔇 sẽ mất), hoặc mở cửa
     sổ live bằng Chrome với cờ `--autoplay-policy=no-user-gesture-required`.
   - **Các chuyến xe:** xe chính + xe tăng cường đang chạy — «📺 Chiếu» cho màn hình live theo xe đó (góc máy ở phần Camera),
     «⏭ Tới điểm kế», gọi thêm xe tăng cường cho làn có người chờ, công tắc tự gọi khi làn đủ 24 người.

@@ -11,7 +11,8 @@ Overlay chưa có âm thanh nào. TikTok LIVE tắt tiếng / báo vi phạm khi
 
 1. **Nhạc có sẵn — tự sinh bằng code** (Web Audio): giai điệu ngũ cung, tiếng đàn tranh / sáo / trống / mõ, mỗi bài một
    hạt giống + nhịp + điệu khác nhau. Là nhạc của mình nên không vướng bản quyền, không phải tải file của ai.
-2. **Nhạc của anh:** thả file (mp3 / ogg / m4a / wav) vào `storage/media/xe_tet/music/` → server tự đưa vào danh sách.
+2. **Nhạc của anh:** tải lên ngay trên `/control` (anh đề xuất 01/11; mp3 / ogg / m4a / wav, ≤ 40 MB / bài, 🗑 xoá) hoặc
+   chép vào `storage/media/xe_tet/music/` → server tự đưa vào danh sách.
 3. **Mỗi xe một đài:** xe chính và từng xe tăng cường có bài riêng; tiếng phát theo xe đang chiếu. Admin (`/control`):
    bật / tắt nhạc, qua bài từng xe; âm lượng nhạc / hiệu ứng chung (lưu ở `storage/db/config/xe_tet.json`).
 4. **Tiếng hiệu ứng (tự sinh):** còi xe khi xuất bến / sắp chạy ở trạm, pháo hoa, tiếng máy theo tốc độ, vào hầm nhạc bị
@@ -31,4 +32,7 @@ câm / không vỡ tiếng; e2e; ảnh bảng điều khiển.
 - Trang live: 🔇 hiện tới khi bấm một lần rồi ẩn; /control đổi bài + tắt nhạc xe chính + kéo âm lượng: state đổi đúng, 0 lỗi.
 - `pytest` 93 passed (thêm: mỗi xe một đài + tiếng theo xe đang chiếu; danh sách bài = bài tự sinh + file nhạc, bỏ file
   không phải nhạc; API qua bài / tắt nhạc / âm lượng kẹp 0–1). E2E bảng điều khiển 28/28. `ruff` + `tsc` + build sạch.
+- Tải lên trên /control (Chromium thật): tải «Nhạc thử của anh.wav» → hiện trong danh sách → ⏭ Bài cho xe chính →
+  màn hình live tải /music/… (206) → 🗑 xoá; 0 lỗi. Test: trùng tên không ghi đè, `../` không thoát thư mục, sai đuôi /
+  rỗng → 400, quá cỡ → 413 (không để lại file dở). 94 test, e2e 28/28.
 - Không kiểm được bằng tai trên máy chủ (không loa) — anh nghe thử trên máy anh.

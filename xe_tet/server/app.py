@@ -12,7 +12,7 @@ import random
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -253,6 +253,42 @@ async def state() -> dict:
     message = hub.state_message()
     message.pop("kind")
     return message
+
+
+@app.post("/api/music")
+async def upload_music(request: Request, name: str = "") -> dict:
+    """Tải một bài nhạc lên (thân request là nội dung file, `?name=` là tên file) — bảng điều khiển gửi từng file."""
+    try:
+        target = music.upload_target(name)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    part = target.with_name(target.name + ".part")  # ghi xong mới đổi tên: danh sách không thấy file dở dang
+    size = 0
+    try:
+        with part.open("wb") as fh:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > music.MAX_BYTES:
+                    raise ValueError(f"File quá lớn (tối đa {music.MAX_BYTES // 1024 // 1024} MB)")
+                fh.write(chunk)
+        if not size:
+            raise ValueError("File rỗng")
+        part.rename(target)
+    except ValueError as exc:
+        part.unlink(missing_ok=True)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=413 if size else 400)
+    await hub.broadcast(hub.state_message())
+    return {"ok": True, "name": target.name}
+
+
+@app.delete("/api/music/{name}")
+async def delete_music(name: str) -> dict:
+    try:
+        music.remove(name)
+    except FileNotFoundError:
+        return JSONResponse({"ok": False, "error": "Không có bài này"}, status_code=404)
+    await hub.broadcast(hub.state_message())
+    return {"ok": True}
 
 
 @app.get("/control")

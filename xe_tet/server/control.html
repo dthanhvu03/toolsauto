@@ -23,6 +23,10 @@
     padding:10px 14px; border-radius:10px; background:#b3261e; color:#fff; font-size:14px; display:none;
     box-shadow:0 6px 18px rgba(0,0,0,.18); }
   #notice.show { display:block; }
+  #notice.ok { background:#2e7d32; }
+  .files { list-style:none; margin:6px 0 0; padding:0; }
+  .files li { display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line); }
+  .files li span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   main { max-width:760px; margin:0 auto; padding:16px; display:grid; gap:14px; }
   h1 { margin:4px 0 0; font-size:20px; }
   section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; }
@@ -138,10 +142,16 @@
       <input type="range" min="0" max="1" step="0.05" data-volume="sfx_volume" aria-label="Âm lượng hiệu ứng" style="flex:1">
       <output id="vol-sfx_volume">0.6</output>
     </div>
+    <h3>Nhạc của anh</h3>
+    <div class="row">
+      <input type="file" id="music-file" accept=".mp3,.ogg,.m4a,.wav,audio/*" multiple aria-label="Chọn file nhạc" style="flex:1;min-width:0">
+      <button id="music-upload" class="primary">⬆ Tải lên</button>
+    </div>
+    <ul id="music-files" class="files"></ul>
     <p class="hint">Mỗi xe một bài riêng (đổi ở «Các chuyến xe»); tiếng theo xe đang chiếu. Nhạc có sẵn do máy tự sáng tác
-      (ngũ cung, đàn tranh, sáo, trống) — không vướng bản quyền TikTok. Thêm nhạc của anh: chép file mp3 / ogg / m4a vào
-      <code>storage/media/xe_tet/music/</code> (anh tự chịu trách nhiệm quyền dùng bài). Màn hình live phải được bấm vào
-      một lần mới phát tiếng (trình duyệt chặn tự phát).</p>
+      (ngũ cung, đàn tranh, sáo, trống) — không vướng bản quyền TikTok. Bài anh tải lên (mp3 / ogg / m4a / wav, tối đa
+      40 MB / bài) vào danh sách ngay — anh tự chịu trách nhiệm quyền dùng bài: nhạc có bản quyền có thể bị TikTok tắt
+      tiếng. Màn hình live phải được bấm vào một lần mới phát tiếng (trình duyệt chặn tự phát).</p>
   </section>
 
   <section>
@@ -309,9 +319,10 @@ $("zoom-in").onclick = () => setControl({ zoom: Math.round(((control.zoom ?? 1) 
 $("zoom-out").onclick = () => setControl({ zoom: Math.round(((control.zoom ?? 1) + 0.1) * 10) / 10 });
 $("zoom-reset").onclick = () => setControl({ zoom: 1 });
 
-function notice(text) {
+function notice(text, ok = false) {
   const el = $("notice");
   el.textContent = text;
+  el.classList.toggle("ok", ok);
   el.classList.add("show");
   clearTimeout(notice.timer);
   notice.timer = setTimeout(() => el.classList.remove("show"), 5000);
@@ -340,6 +351,43 @@ document.querySelectorAll("[data-volume]").forEach((r) => {
   r.oninput = () => { r.dataset.touched = String(Date.now()); $(`vol-${r.dataset.volume}`).textContent = (+r.value).toFixed(2); };
   r.onchange = () => setControl({ [r.dataset.volume]: +r.value });
 });
+// ---- tải nhạc lên: gửi từng file (thân request = nội dung file), xong thì danh sách tự có bài mới ----
+$("music-upload").onclick = async () => {
+  const files = [...$("music-file").files];
+  if (!files.length) { $("music-file").click(); return; }
+  const btn = $("music-upload");
+  btn.disabled = true;
+  let done = 0;
+  for (const f of files) {
+    btn.textContent = `Đang tải ${done + 1}/${files.length}…`;
+    try {
+      const res = await fetch(`/api/music?name=${encodeURIComponent(f.name)}`, { method: "POST", headers: HEADERS, body: f });
+      const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+      if (!data.ok) { notice(`${f.name}: ${data.error}`); continue; }
+      done++;
+      log(`Đã tải lên «${data.name}»`);
+    } catch { notice(`${f.name}: mất kết nối khi tải`); }
+  }
+  btn.disabled = false;
+  btn.textContent = "⬆ Tải lên";
+  $("music-file").value = "";
+  if (done) notice(`Đã tải lên ${done} bài — chọn ở nút «⏭ Bài» của từng xe`, true);
+  refresh();
+};
+$("music-files").onclick = async (e) => {
+  const b = e.target.closest("button[data-del]");
+  if (!b || !confirm(`Xoá bài «${b.dataset.del}»?`)) return;
+  const res = await fetch(`/api/music/${encodeURIComponent(b.dataset.del)}`, { method: "DELETE", headers: HEADERS });
+  const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+  if (!data.ok) notice(data.error || "Không xoá được");
+  refresh();
+};
+function renderFiles(s) {
+  const files = (s.music_tracks || []).filter((t) => t.id.startsWith("file:"));
+  setIfChanged($("music-files"), files.length
+    ? files.map((t) => `<li><span>🎵 ${esc(t.title)}</span><button data-del="${esc(t.id.slice(5))}">🗑</button></li>`).join("")
+    : `<li><span class="hint" style="margin:0">Chưa có bài nào — đang dùng 6 bài máy tự sáng tác</span></li>`);
+}
 function songLine(s, music) {
   const tracks = s.music_tracks || [];
   if (!tracks.length || !music) return "";
@@ -436,6 +484,7 @@ async function refresh() {
     $("s-phase").classList.toggle("paused", paused);
     $("s-bus").textContent = `Số ${main.no} · ${main.riders}/${s.bus.seats.length}`;
     renderBuses(s);
+    renderFiles(s);
     $("s-next").textContent = s.waiting;
     $("s-likes").textContent = s.trip_likes.toLocaleString("vi-VN");
     $("s-done").textContent = s.delivered;

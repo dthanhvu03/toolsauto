@@ -179,3 +179,24 @@ def test_music_tracks_and_admin_controls(client, tmp_path, monkeypatch):
     control = client.get("/api/state").json()["control"]
     assert control["music_volume"] == 1.0 and control["sfx_volume"] == 0.25
     client.post("/api/admin", json={"action": "settings", "changes": {"music_volume": 0.5, "sfx_volume": 0.6}})
+
+
+def test_music_upload_and_delete_from_control(client, tmp_path, monkeypatch):
+    from xe_tet.server import music
+    monkeypatch.setattr(music, "MUSIC_DIR", tmp_path)
+    monkeypatch.setattr(music, "_cache", (-1.0, []))
+    r = client.post("/api/music", params={"name": "Xuân quê tôi.mp3"}, content=b"ID3 fake mp3")
+    assert r.json() == {"ok": True, "name": "Xuân quê tôi.mp3"}
+    r = client.post("/api/music", params={"name": "Xuân quê tôi.mp3"}, content=b"lan 2")  # trùng tên: không ghi đè
+    assert r.json()["name"] == "Xuân quê tôi (2).mp3"
+    r = client.post("/api/music", params={"name": "../../etc/hack.mp3"}, content=b"x")  # không thoát khỏi thư mục
+    assert r.json()["name"] == "hack.mp3" and (tmp_path / "hack.mp3").exists()
+    assert client.post("/api/music", params={"name": "virus.exe"}, content=b"x").status_code == 400
+    assert client.post("/api/music", params={"name": "rong.mp3"}, content=b"").status_code == 400
+    monkeypatch.setattr(music, "MAX_BYTES", 10)
+    assert client.post("/api/music", params={"name": "to.mp3"}, content=b"x" * 50).status_code == 413
+    assert not (tmp_path / "to.mp3").exists() and not list(tmp_path.glob("*.part"))
+    titles = [t["title"] for t in client.get("/api/state").json()["music_tracks"]]
+    assert "Xuân quê tôi" in titles and "Xuân quê tôi (2)" in titles
+    assert client.delete("/api/music/hack.mp3").json()["ok"] and not (tmp_path / "hack.mp3").exists()
+    assert client.delete("/api/music/khong-co.mp3").status_code == 404

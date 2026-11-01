@@ -2,15 +2,18 @@
 
 - Bài tự sinh («gen:N»): overlay tự chơi bằng Web Audio (ngũ cung, đàn tranh / sáo / trống / mõ) — nhạc của mình, không
   vướng bản quyền khi phát trên TikTok LIVE.
-- File của anh: mp3 / ogg / m4a / wav trong `storage/media/xe_tet/music/` (anh tự chịu trách nhiệm quyền dùng). Thả file
-  vào là có trong danh sách, không cần khởi động lại server.
+- File của anh: mp3 / ogg / m4a / wav trong `storage/media/xe_tet/music/` (anh tự chịu trách nhiệm quyền dùng). Tải lên
+  ngay trên /control (hoặc chép thẳng vào thư mục) là có trong danh sách, không cần khởi động lại server.
 """
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MUSIC_DIR = ROOT / "storage" / "media" / "xe_tet" / "music"
 EXTS = {".mp3", ".ogg", ".m4a", ".wav"}
+MAX_BYTES = 40 * 1024 * 1024  # một bài tối đa 40 MB (mp3 5 phút ~ 5–10 MB)
+_UNSAFE = re.compile(r"[^\w\-. ()]+")  # giữ chữ (kể cả tiếng Việt), số, - . khoảng trắng, ngoặc
 
 # Thứ tự = số bài trong overlay (src/music.ts → PRESETS); thêm bài thì thêm cả hai chỗ.
 GENERATED = (
@@ -23,6 +26,27 @@ GENERATED = (
 )
 
 _cache: tuple[float, list[dict]] = (-1.0, [])
+
+
+def upload_target(raw: str) -> Path:
+    """Chỗ lưu bài tải lên: bỏ đường dẫn / ký tự lạ (không thoát khỏi thư mục), đuôi phải là nhạc, trùng tên thì thêm (2)."""
+    name = Path(raw.replace("\\", "/")).name
+    ext = Path(name).suffix.lower()
+    if ext not in EXTS:
+        raise ValueError(f"Chỉ nhận file nhạc {', '.join(sorted(EXTS))}")
+    stem = _UNSAFE.sub("", Path(name).stem).strip(" .")[:80] or "bai-nhac"
+    target, n = MUSIC_DIR / f"{stem}{ext}", 2
+    while target.exists():
+        target, n = MUSIC_DIR / f"{stem} ({n}){ext}", n + 1
+    return target
+
+
+def remove(name: str) -> None:
+    """Xoá một bài của anh (chỉ file nhạc nằm ngay trong thư mục nhạc)."""
+    path = MUSIC_DIR / Path(name).name
+    if path.suffix.lower() not in EXTS or not path.is_file():
+        raise FileNotFoundError(name)
+    path.unlink()
 
 
 def tracks() -> list[dict]:
