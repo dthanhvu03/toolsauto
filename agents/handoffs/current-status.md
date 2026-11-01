@@ -149,9 +149,10 @@
   4.441 → 2.999 km, tỉnh «đi qua» trên HUD / /control), B người xem biết mình ở xe nào («xe nào / tới đâu rồi», số xe trên vé,
   trạng thái từng xe, lơ xe gọi tỉnh đi qua), C luật làn dọc đường + lịch mùa 2027 + thùng quà Tết, D nhớ khách SQLite
   `storage/db/xe_tet.db` + chào khách quay lại + ghép cùng quê + gọi tên công bằng + ghi chú 18+. Proof: pytest 125, fuzz
-  290 chuyến × 5 bến 0 vi phạm, e2e 28/28 + UX 0 lỗi trên 8811, ảnh. Đã commit; **chưa nạp 8810**. Còn: C3 chiều ra (bước
+  290 chuyến × 5 bến 0 vi phạm, e2e 28/28 + UX 0 lỗi trên 8811, ảnh. Đã commit; **đã nạp 8810** (anh duyệt 01/11,
+  `index-cKzjP-kB.js`, trang live 0 lỗi, log 0 lỗi, tạo `storage/db/xe_tet.db`). Còn: C3 chiều ra (bước
   riêng, trước 9/2/2027); anh cân nhắc bỏ gợi ý «🎯 thêm N xu → …».
-- **Next:** anh cho nạp PLAN-134 vào 8810 (build overlay + khởi động lại) → anh F5 cửa sổ live; sau đó C3 chiều ra; anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+- **Next:** anh F5 cửa sổ Chrome live + thử «xe nào» / tặng quà; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
 

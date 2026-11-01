@@ -1,6 +1,6 @@
 # PLAN-134 — Xe Tết: tuyến đường thật, người xem biết mình ở xe nào, mùa Tết thật, đọc vị từng người xem
 
-- Status: A, B, C (trừ chiều ra), D xong trong code + test (chưa nạp 8810). Chiều ra (C3) làm bước riêng trước 9/2/2027.
+- Status: A, B, C (trừ chiều ra), D xong + đã nạp 8810 (01/11). Chiều ra (C3) làm bước riêng trước 9/2/2027.
 - Executor: Claude Code (anh yêu cầu 01/11: «không đi qua tỉnh không có người nhưng vẫn đi qua địa phận», «user không biết
   ở xe nào, chuyến nào bắt đầu / kết thúc / chuẩn bị / đang chạy», «tìm hiểu quy trình về quê, mua vé, giành vé», «học lại
   các tỉnh thành», «thuật toán kích thích user, đọc vị tâm lí từng user»)
