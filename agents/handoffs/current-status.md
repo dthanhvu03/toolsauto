@@ -129,7 +129,7 @@
   quá tải → thêm chất lượng «Vừa» (75 % độ phân giải, bóng cách khung) — anh xác nhận «Thấp» hết rè.
 - **PLAN-132 tối ưu (anh yêu cầu + /code-review):** 12 điểm (màn hình live đứng hình không tự nối lại, game khựng mỗi phút
   vì hỏi VieNeu, ffprobe trong vòng game, font tiếng Việt trên biển, rò bộ nhớ âm thanh, /control bấm trượt, người chibi
-  23 → 11 lần vẽ, dựng sẵn vùng…). 115 test, e2e 28/28 trên 8811. Chờ anh cho khởi động lại 8810.
+  23 → 11 lần vẽ, dựng sẵn vùng…). 115 test, e2e 28/28 trên 8811. Đã khởi động lại 8810 (anh cho phép).
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.

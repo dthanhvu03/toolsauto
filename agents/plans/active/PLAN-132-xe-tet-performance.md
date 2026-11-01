@@ -1,6 +1,6 @@
 # PLAN-132 — Xe Tết: tối ưu hiệu suất, bộ nhớ, cách tải giao diện (theo /code-review)
 
-- Status: Done (chờ anh cho khởi động lại 8810 để nạp phần server)
+- Status: Done (đã nạp 8810)
 - Executor: Claude Code (anh yêu cầu 01/11: «senior tối ưu lại toàn bộ game, hiệu suất, ram, cách load ui ux» + /code-review)
 
 ## Sửa (theo thứ tự nặng nhẹ khi live)
