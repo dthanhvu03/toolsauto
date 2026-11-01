@@ -21,7 +21,7 @@ def texts(a):
 
 
 def test_text_is_made_speakable():
-    assert speakable("Xe số 3 xuất bến, 1676 km!") == "Xe số 3 xuất bến, 1676 ki-lô-mét!"
+    assert speakable("Xe số 3 xuất bến, 1676 km!") == "Xe số 3 xuất bến, 1676 ki-lô-mét."
     assert speakable("TP.HCM → Hà Nội") == "Thành phố Hồ Chí Minh → Hà Nội"
     assert spoken_name("🌸Bé Na🌸 ✨") == "Bé Na" and spoken_name("✨✨") == "bạn"
     assert names_phrase(["An"]) == "An"
@@ -78,7 +78,7 @@ def test_queue_keeps_important_lines_and_admin_first():
         a.offer(f"câu lơ xe {i}", voice.LOXE)
     a.offer("tên lên xe", BOARD)  # hàng đã dồn 3 câu: bỏ
     a.offer("Chào bà con!", ADMIN)  # admin luôn vào, đọc trước
-    assert texts(a)[0] == "Chào bà con!" and "tên lên xe" not in texts(a)
+    assert texts(a)[0] == "Chào bà con." and "tên lên xe" not in texts(a)
     off = announcer({"voice_on": False})
     off.offer("không đọc", ADMIN)
     assert not off.queue
@@ -172,14 +172,22 @@ def test_microsoft_voice_choice_and_rate_pacing(tmp_path, monkeypatch):
 
 
 def test_every_talk_line_fills_its_fields():
-    """Mọi câu trong bảng talk.LINES điền đủ chỗ trống (gõ sai {tên} là lỗi giữa live)."""
+    """Mọi câu ở mọi kiểu nói điền đủ chỗ trống (gõ sai {tên} là lỗi giữa live); đọc đều: không «!», không đuôi «nha»."""
     import random
-    from xe_tet.server.game.talk import LINES, hours_phrase, line
+    import re
+    from xe_tet.server.game.talk import LINES, STYLES, TALK_STYLES, hours_phrase, line, options
     fields = dict(dest="Hà Nội", n=5, hours=hours_phrase(26.4), place="Phú Yên", specialty="cá ngừ, bánh hỏi",
                   prov="Nghệ An", station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình")
-    for kind, options in LINES.items():
-        assert len(options) >= 1
-        for i in range(len(options)):
-            text = line(kind, random.Random(i), **fields)
-            assert "{" not in text and text.strip(), kind
+    kinds = set(LINES[STYLES[0]])
+    assert all(set(LINES[style]) == kinds for style in STYLES)  # kiểu nào cũng đủ mọi tình huống
+    for style in TALK_STYLES:
+        for kind in kinds:
+            texts = options(kind, style)
+            assert texts
+            for i in range(len(texts)):
+                text = line(kind, random.Random(i), style, **fields)
+                assert "{" not in text and text.strip() and "!" not in text, (style, kind, text)
+                assert not re.search(r"\bnha\b", text, re.IGNORECASE), (style, kind, text)
+    assert len(options("boarding", "mix")) == sum(len(LINES[s]["boarding"]) for s in STYLES)
     assert hours_phrase(26.4) == "chừng 26 tiếng" and hours_phrase(0.4) == "chừng 20 phút"
+    assert speakable("Chào bà con tối nay!!") == "Chào bà con tối nay."  # câu admin gõ cũng đọc đều

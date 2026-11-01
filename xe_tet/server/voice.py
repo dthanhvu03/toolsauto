@@ -47,12 +47,15 @@ NAMES_READ = 3  # đọc tối đa 3 tên, còn lại «và N người nữa»
 
 # chữ viết tắt / ký hiệu đọc sai → chữ đọc được
 SAY_AS = (("TP.HCM", "Thành phố Hồ Chí Minh"), ("km", "ki-lô-mét"), ("BR-VT", "Bà Rịa Vũng Tàu"))
+# đọc đều, không nhấn nhá (anh dặn 01/11): «!» đọc như dấu chấm, kể cả câu admin gõ
+_EXCLAIM = re.compile(r"!+")
 _NOT_NAME = re.compile(r"[^\w\s'-]", re.UNICODE)  # tên TikTok: bỏ emoji / ký tự trang trí
 
 
 def speakable(text: str) -> str:
     for short, full in SAY_AS:
         text = re.sub(rf"\b{re.escape(short)}\b", full, text)
+    text = _EXCLAIM.sub(".", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
@@ -95,7 +98,8 @@ class Announcer:
         elif kind == "dropoff" or (kind == "relief_dropoff" and event.get("bus_no") == featured):
             names = [p["name"] for p in event.get("people", [])]
             if names:
-                self.offer(line("dropoff", prov=event["province"], names=names_phrase(names)), DROPOFF)
+                self.offer(line("dropoff", style=self.style(), prov=event["province"], names=names_phrase(names)),
+                           DROPOFF)
         elif kind == "ticket" and not event.get("changed"):
             if not self.boarding:
                 self.board_started = now
@@ -104,7 +108,7 @@ class Announcer:
             name = event.get("name", "")
             if now - self.thanked.get(name, -1e9) >= GIFT_COOLDOWN:  # quà bao xe tăng cường: lơ xe đã nói rồi
                 self.thanked[name] = now
-                self.offer(line("gift", name=spoken_name(name)), GIFT)
+                self.offer(line("gift", style=self.style(), name=spoken_name(name)), GIFT)
 
     def tick(self, now: float) -> None:
         """Gom xong tên người lên xe (sau BOARD_WINDOW giây) thì soạn một câu."""
@@ -116,8 +120,11 @@ class Announcer:
         self.last_board = now
         provinces = {p for _, p in people}
         names = names_phrase([n for n, _ in people])
-        self.offer(line("board", prov=provinces.pop(), names=names) if len(provinces) == 1
-                   else line("board_mixed", names=names), BOARD)
+        self.offer(line("board", style=self.style(), prov=provinces.pop(), names=names) if len(provinces) == 1
+                   else line("board_mixed", style=self.style(), names=names), BOARD)
+
+    def style(self) -> str:
+        return self.settings().get("talk_style") or "mix"
 
     def offer(self, text: str, priority: int) -> None:
         text = speakable(text)

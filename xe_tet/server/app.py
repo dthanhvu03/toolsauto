@@ -54,6 +54,7 @@ class Hub:
                         rest_seconds=self.settings["rest_seconds"], network=Network.load(self.settings["departure"]))
         engine.relief_auto = self.settings["relief_auto"]
         engine.trip_minutes = self.settings["trip_minutes"]
+        engine.talk_style = self.settings["talk_style"]
         return engine
 
     def handle(self, event: dict) -> None:
@@ -72,6 +73,7 @@ class Hub:
         self.engine.rest_seconds = self.settings["rest_seconds"]
         self.engine.relief_auto = self.settings["relief_auto"]
         self.engine.trip_minutes = self.settings["trip_minutes"]
+        self.engine.talk_style = self.settings["talk_style"]
         settings.save(self.settings)
 
     async def broadcast(self, message: dict) -> None:

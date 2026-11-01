@@ -224,6 +224,7 @@ class Engine:
         self.relief_auto = True  # admin tắt được: chỉ gọi xe tăng cường bằng tay / bằng quà
         self.featured: int | None = None  # xe tăng cường đang lên màn hình (None: xe chính)
         self.trip_minutes = TRIP_MINUTES  # chuyến dài nhất chạy đường bao nhiêu phút (admin chỉnh)
+        self.talk_style = "mix"  # kiểu nói của lơ xe (talk.TALK_STYLES, admin chọn)
         self.clock0: datetime | None = None  # giờ VN lúc xe chính xuất bến
         self.featured_since = now
         self.manual_until = -1e9
@@ -261,7 +262,7 @@ class Engine:
 
     def talk(self, kind: str, speak: bool = True, **fields) -> None:
         """Anh Tư lơ xe nói một câu loại `kind` (bảng câu đời thường trong talk.py)."""
-        self.loxe(line(kind, self.rng, **fields), speak)
+        self.loxe(line(kind, self.rng, self.talk_style, **fields), speak)
 
     def _dest(self, lane: str) -> str:
         return BY_KEY[self.network.lane_by_key[lane].to].name

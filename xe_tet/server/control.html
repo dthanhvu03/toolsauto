@@ -159,6 +159,13 @@
       <output id="vol-sfx_volume">0.6</output>
     </div>
     <h3>🗣 Giọng Anh Tư lơ xe</h3>
+    <div class="row" style="margin-bottom:8px">
+      <span style="min-width:96px">Kiểu nói</span>
+      <button data-set="talk_style" data-val="mix">Trộn</button>
+      <button data-set="talk_style" data-val="ben">Bến xe</button>
+      <button data-set="talk_style" data-val="genz">Gen Z</button>
+      <button data-set="talk_style" data-val="geny">Gen Y</button>
+    </div>
     <div class="row">
       <label class="toggle"><input type="checkbox" data-show="voice_on"> Lơ xe đọc</label>
       <select id="voice-name" aria-label="Giọng lơ xe" style="flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff"></select>
@@ -259,7 +266,7 @@
   <section>
     <h2>📢 Lơ xe nói & băng rôn</h2>
     <div class="row">
-      <input type="text" id="say" maxlength="120" placeholder="Câu cho lơ xe nói, ví dụ: Chào bà con tối nay!" aria-label="Câu lơ xe nói">
+      <input type="text" id="say" maxlength="120" placeholder="Câu cho lơ xe nói, ví dụ: Chào bà con tối nay" aria-label="Câu lơ xe nói">
       <button class="primary" id="say-send">Lơ xe nói</button>
     </div>
     <div class="row" style="margin-top:8px">
@@ -419,7 +426,7 @@ $("voice-name").onchange = () => {
   setControl({ voice_name: $("voice-name").value });
   $("voice-name").blur();
 };
-$("voice-test").onclick = () => admin({ action: "say", text: "A lô a lô, Anh Tư lơ xe đây! Ai về quê ăn Tết thì gõ tên tỉnh, lên xe lẹ nè!" });
+$("voice-test").onclick = () => admin({ action: "say", text: "A lô a lô, Anh Tư lơ xe đây, ai về quê ăn Tết thì gõ tên tỉnh, lên xe lẹ nè." });
 function renderVoices(s) {
   const sel = $("voice-name");
   const voices = s.voices || [];

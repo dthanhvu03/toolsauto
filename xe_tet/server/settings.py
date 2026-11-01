@@ -9,6 +9,7 @@ from pathlib import Path
 from .game.engine import BOARD_SECONDS, FEATURE_MODES, REST_SECONDS, TRIP_MINUTES
 from .game.geo import DEFAULT_DEPARTURE
 from .game.network import available
+from .game.talk import TALK_STYLES
 
 ROOT = Path(__file__).resolve().parents[2]
 # XE_TET_SETTINGS: máy chủ thử (e2e, cổng 8811) dùng file thiết lập riêng — bấm thử không đổi thiết lập của server thật.
@@ -47,6 +48,7 @@ DEFAULTS: dict = {
     "auto_feature": "events",  # tự chiếu xe: off | events (theo chuyện hay) | rotate (xoay vòng)
     "rotate_seconds": 60,
     "mix": "balanced",  # trộn tiếng: balanced | music (nhạc nổi) | voice (lơ xe nổi)
+    "talk_style": "mix",  # kiểu nói lơ xe (PLAN-131): mix | ben (bến xe) | genz | geny
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
@@ -73,6 +75,8 @@ def clean(changes: dict, current: dict | None = None) -> dict:
         elif key == "departure" and value in available():  # theo dữ liệu tuyến đã dựng, không chỉ bảng code
             out[key] = value
         elif key == "auto_feature" and value in FEATURE_MODES:
+            out[key] = value
+        elif key == "talk_style" and value in TALK_STYLES:
             out[key] = value
         elif key == "mix" and value in MIXES:
             out[key] = value
