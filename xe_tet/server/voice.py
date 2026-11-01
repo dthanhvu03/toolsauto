@@ -20,6 +20,8 @@ from pathlib import Path
 import edge_tts
 import httpx
 
+from .game.talk import line
+
 log = logging.getLogger("xe_tet")
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -93,7 +95,7 @@ class Announcer:
         elif kind == "dropoff" or (kind == "relief_dropoff" and event.get("bus_no") == featured):
             names = [p["name"] for p in event.get("people", [])]
             if names:
-                self.offer(f"Về tới {event['province']} rồi! {names_phrase(names)} xuống xe nha!", DROPOFF)
+                self.offer(line("dropoff", prov=event["province"], names=names_phrase(names)), DROPOFF)
         elif kind == "ticket" and not event.get("changed"):
             if not self.boarding:
                 self.board_started = now
@@ -102,7 +104,7 @@ class Announcer:
             name = event.get("name", "")
             if now - self.thanked.get(name, -1e9) >= GIFT_COOLDOWN:  # quà bao xe tăng cường: lơ xe đã nói rồi
                 self.thanked[name] = now
-                self.offer(f"Cảm ơn {spoken_name(name)} đã tặng quà cho cả xe nha!", GIFT)
+                self.offer(line("gift", name=spoken_name(name)), GIFT)
 
     def tick(self, now: float) -> None:
         """Gom xong tên người lên xe (sau BOARD_WINDOW giây) thì soạn một câu."""
@@ -113,8 +115,9 @@ class Announcer:
             return  # phòng đông: bỏ lượt này, thẻ trên màn hình vẫn hiện tên
         self.last_board = now
         provinces = {p for _, p in people}
-        where = f" về {provinces.pop()}" if len(provinces) == 1 else " về quê"
-        self.offer(f"{names_phrase([n for n, _ in people])} lên xe{where}!", BOARD)
+        names = names_phrase([n for n, _ in people])
+        self.offer(line("board", prov=provinces.pop(), names=names) if len(provinces) == 1
+                   else line("board_mixed", names=names), BOARD)
 
     def offer(self, text: str, priority: int) -> None:
         text = speakable(text)

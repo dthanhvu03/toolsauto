@@ -384,8 +384,12 @@ document.querySelectorAll("[data-volume]").forEach((r) => {
   r.onchange = () => setControl({ [r.dataset.volume]: +r.value });
 });
 // ---- giọng lơ xe ----
-$("voice-name").onchange = () => { setControl({ voice_name: $("voice-name").value }); $("voice-name").blur(); };
-$("voice-test").onclick = () => admin({ action: "say", text: "Xin chào bà con! Anh Tư lơ xe đây, xe sắp chạy rồi, lên xe lẹ nha!" });
+$("voice-name").onchange = () => {
+  $("voice-name").dataset.touched = String(Date.now());  // vòng làm mới 1 giây không kéo ô về giọng cũ trong lúc chờ lưu
+  setControl({ voice_name: $("voice-name").value });
+  $("voice-name").blur();
+};
+$("voice-test").onclick = () => admin({ action: "say", text: "A lô a lô, Anh Tư lơ xe đây! Ai về quê ăn Tết thì gõ tên tỉnh, lên xe lẹ nè!" });
 function renderVoices(s) {
   const sel = $("voice-name");
   const voices = s.voices || [];
@@ -396,7 +400,7 @@ function renderVoices(s) {
       `<option value="${esc(v.name)}">${esc(v.label || v.name)} · ${v.gender === "male" ? "nam" : "nữ"} · ${
         v.region === "Microsoft" ? "Microsoft (online)" : esc(v.region || "")}</option>`).join("")
     : `<option value="${esc(control.voice_name || "Adam")}">${esc(control.voice_name || "Adam")} (VieNeu đang tắt)</option>`;
-  if (document.activeElement !== sel) {
+  if (document.activeElement !== sel && Date.now() - Number(sel.dataset.touched || 0) > 3000) {
     setIfChanged(sel, html);
     sel.value = control.voice_name || "Adam";
   }

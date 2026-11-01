@@ -33,7 +33,8 @@ def test_dropoff_reads_names_and_engine_line_is_silent():
     a = announcer()
     a.observe({"type": "loxe", "text": "Nghệ An tới rồi bà con ơi!", "speak": False}, 0)
     a.observe({"type": "dropoff", "province": "Nghệ An", "people": [{"name": "Minh Anh"}, {"name": "Thu Hà"}]}, 0)
-    assert texts(a) == ["Về tới Nghệ An rồi! Minh Anh và Thu Hà xuống xe nha!"]
+    (said,) = texts(a)
+    assert "Nghệ An" in said and "Minh Anh và Thu Hà" in said  # câu bốc ngẫu nhiên, đủ tỉnh + tên
 
 
 def test_relief_dropoff_read_only_when_on_screen():
@@ -42,7 +43,8 @@ def test_relief_dropoff_read_only_when_on_screen():
     a.observe(event, 0, featured=None)
     assert not a.queue
     a.observe(event, 0, featured=5)
-    assert texts(a) == ["Về tới Cà Mau rồi! Út xuống xe nha!"]
+    (said,) = texts(a)
+    assert "Cà Mau" in said and "Út" in said
 
 
 def test_boarding_names_are_batched_and_rate_limited():
@@ -52,7 +54,8 @@ def test_boarding_names_are_batched_and_rate_limited():
     a.tick(1)
     assert not a.queue  # còn đang gom
     a.tick(3.5)
-    assert texts(a) == ["An, Bình, Chi và 1 người nữa lên xe về Huế!"]
+    (said,) = texts(a)
+    assert "An, Bình, Chi và 1 người nữa" in said and "Huế" in said
     a.queue.clear()
     a.observe({"type": "ticket", "name": "Em", "province": "Huế"}, 5)
     a.tick(9)  # chưa đủ 8 giây từ câu trước
@@ -65,7 +68,8 @@ def test_gift_thanks_once_per_cooldown_and_not_for_relief_gift():
     a.observe(gift, 0)
     a.observe(gift, 10)
     a.observe({**gift, "name": "Út", "perk": "🚌 xe tăng cường chạy ngay cho bà con…"}, 0)
-    assert texts(a) == ["Cảm ơn Ba đã tặng quà cho cả xe nha!"]
+    (said,) = texts(a)
+    assert "Ba" in said  # cảm ơn đúng một lần, quà gọi xe tăng cường không cảm ơn trùng
 
 
 def test_queue_keeps_important_lines_and_admin_first():
@@ -164,3 +168,18 @@ def test_microsoft_voice_choice_and_rate_pacing(tmp_path, monkeypatch):
     from xe_tet.server import settings as settings_module
     assert settings_module.clean({"voice_rate": 9})["voice_rate"] == 1.6
     assert settings_module.clean({"voice_rate": "0.1"})["voice_rate"] == 0.8
+
+
+
+def test_every_talk_line_fills_its_fields():
+    """Mọi câu trong bảng talk.LINES điền đủ chỗ trống (gõ sai {tên} là lỗi giữa live)."""
+    import random
+    from xe_tet.server.game.talk import LINES, hours_phrase, line
+    fields = dict(dest="Hà Nội", n=5, hours=hours_phrase(26.4), place="Phú Yên", specialty="cá ngừ, bánh hỏi",
+                  prov="Nghệ An", station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình")
+    for kind, options in LINES.items():
+        assert len(options) >= 1
+        for i in range(len(options)):
+            text = line(kind, random.Random(i), **fields)
+            assert "{" not in text and text.strip(), kind
+    assert hours_phrase(26.4) == "chừng 26 tiếng" and hours_phrase(0.4) == "chừng 20 phút"

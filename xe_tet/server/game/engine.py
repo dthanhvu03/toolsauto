@@ -11,6 +11,7 @@ Mọi thứ overlay cần vẽ đi qua `snapshot()` và `outbox` (sự kiện r�
 
 import hashlib
 import math
+import random
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -20,6 +21,7 @@ from .moderation import allow_chat, clean_name
 from .network import PASS_SPAN_KM, TUNNEL_SPAN_KM, Network, Trip
 from .parser import FOOD_EMOJI, parse
 from .provinces import BY_KEY, specialty_of
+from .talk import hours_phrase, line, spoken_list
 
 SEATS = 24
 BOARD_SECONDS = 180.0
@@ -194,6 +196,7 @@ class Engine:
         self.board_seconds = board_seconds
         self.rest_seconds = rest_seconds
         self.paused = False
+        self.rng = random.Random()  # bốc câu lơ xe (test truyền hạt giống cố định nếu cần)
         self.viewers: dict[str, Viewer] = {}
         self.outbox: list[dict] = []
         self.queues: dict[str, list[str]] = {ln.key: [] for ln in self.network.lanes}  # vé chờ theo làn
@@ -238,6 +241,13 @@ class Engine:
 
     def emit(self, type_: str, **data) -> None:
         self.outbox.append({"type": type_, **data})
+
+    def talk(self, kind: str, speak: bool = True, **fields) -> None:
+        """Anh Tư lơ xe nói một câu loại `kind` (bảng câu đời thường trong talk.py)."""
+        self.loxe(line(kind, self.rng, **fields), speak)
+
+    def _dest(self, lane: str) -> str:
+        return BY_KEY[self.network.lane_by_key[lane].to].name
 
     def loxe(self, text: str, speak: bool = True) -> None:
         """Bong bóng lơ xe; speak=False khi giọng đọc đã có câu riêng đầy đủ hơn (thả khách đọc cả tên)."""
@@ -325,8 +335,7 @@ class Engine:
             v.switched = False
         self._fill_from_queue()
         self._set_phase("BOARDING", now, self._board_time())
-        lane = self.network.lane_by_key[self.bus.lane]
-        self.loxe(f"Xe số {self.bus.no} {lane.label.lower()} vào bến! Comment tên tỉnh để lên xe nha bà con!")
+        self.talk("boarding", dest=self._dest(self.bus.lane))
 
     def _board_time(self) -> float:
         """Giờ đón tỉ lệ số giường còn trống: xe đã kín người chờ lên sẵn thì không bắt cả bến đợi đủ 3 phút."""
@@ -378,7 +387,7 @@ class Engine:
         lane = net.lane_by_key[self.bus.lane]
         self.emit("depart", bus_no=self.bus.no, riders=len(self.bus.riders()), lane=lane.label,
                   stops=[BY_KEY[k].name for k in stops], km=round(total))
-        self.loxe(f"Xe số {self.bus.no} xuất bến {lane.label.lower()}, {round(total)} km! Thả tim cho bác tài nhấn ga nào!")
+        self.talk("depart", dest=self._dest(self.bus.lane), hours=hours_phrase(Network.hours(total)))
         self._enter_driving(now)
 
     def _leg_start_km(self) -> float:
@@ -425,7 +434,7 @@ class Engine:
             self._set_phase("REST", now, min(self.rest_seconds, RUSH_REST_SECONDS) if self.rush() else self.rest_seconds)
             place = BY_KEY[leg.target]
             self.emit("rest", region=place.region, specialty=specialty_of(place.key), place=place.name)
-            self.loxe(f"Tới trạm dừng chân {place.name}! Xe nghỉ 15 phút, bà con xuống ăn uống, vệ sinh nha!")
+            self.talk("rest", place=place.name, specialty=spoken_list(specialty_of(place.key)))
             return
         prov = BY_KEY[leg.target]
         uids = [uid for uid in self.bus.riders() if self.viewers[uid].province == leg.target]
@@ -435,7 +444,7 @@ class Engine:
         pages = max(1, math.ceil(len(uids) / NAMES_PER_PAGE))
         self._set_phase("DROPOFF", now, DROPOFF_BASE + PAGE_SECONDS * pages)
         self.emit("dropoff", **info)
-        self.loxe(f"{prov.name} tới rồi bà con ơi! Ai xuống {prov.name} chuẩn bị nha!", speak=False)
+        self.talk("dropoff_bubble", speak=False, prov=prov.name)  # giọng đọc có câu riêng kèm tên người xuống
 
     def _deliver(self, uids: list[str], province: str, bus_no: int) -> dict:
         """Thả khách về tới tỉnh (xe chính / xe tăng cường): cập nhật thống kê, trả nội dung băng rôn đọc tên."""
@@ -480,12 +489,11 @@ class Engine:
         names = [self.viewers[uid].name for uid in riders]
         self.emit("relief_depart", bus_no=relief.no, lane=ln.label, arrow=ln.arrow, sponsor=relief.sponsor,
                   names=names[:3], count=len(names), km=round(trip.total))
+        dest = self._dest(lane)
         if sponsor:
-            self.loxe(f"{sponsor.name} bao nguyên xe tăng cường cho bà con {ln.label.lower()}! Xe chạy liền!")
-        elif admin:
-            self.loxe(f"Nhà xe cho thêm xe tăng cường số {relief.no} {ln.label.lower()}, bà con chờ lên xe nha!")
+            self.talk("relief_gift", name=sponsor.name, dest=dest)
         else:
-            self.loxe(f"Bà con {ln.label.lower()} đông quá, nhà xe cho thêm xe tăng cường số {relief.no} chạy liền!")
+            self.talk("relief_admin" if admin else "relief_auto", dest=dest)
         return relief
 
     def _run_reliefs(self, dt: float) -> None:
@@ -597,7 +605,7 @@ class Engine:
         self._set_phase("FINISH", now, FINISH_SECONDS)
         self.emit("finish", bus_no=self.bus.no, board=self._board_top(),
                   top_liker=top_liker, delivered=self.delivered, delivered_km=self.delivered_km)
-        self.loxe(f"Xe số {self.bus.no} về hết bến! Cảm ơn bà con đã đi cùng nhà xe!")
+        self.talk("finish")
 
     def _board_top(self, n: int = 5) -> list[dict]:
         return [{"province": BY_KEY[k].name, "count": c} for k, c in self.board.most_common(n) if c > 0]
@@ -627,8 +635,7 @@ class Engine:
                     self._fill_from_queue()
                     self.phase_until = now + EMPTY_BOARD_RETRY
                     if self.bus.riders():
-                        lane = self.network.lane_by_key[self.bus.lane]
-                        self.loxe(f"Xe số {self.bus.no} chuyển sang {lane.label.lower()}, bà con chờ hướng này lên xe nha!")
+                        self.talk("switch_lane", dest=self._dest(self.bus.lane))
         elif self.phase == "DRIVING":
             self.progress += (dt * self.speed() / self.leg_seconds
                               * self._pace(self.trip, self.trip_km(), self._kmps(self.trip.total)))
@@ -643,7 +650,7 @@ class Engine:
             if not self.honked and now >= self.phase_until - HONK_BEFORE_END:
                 self.honked = True
                 self.emit("honk")
-                self.loxe("Bíp bíp! Lên xe bà con ơi, xe chạy rồi!")
+                self.talk("honk")
             if now >= self.phase_until:
                 self._next_leg(now)
         elif self.phase == "DROPOFF":
@@ -671,7 +678,7 @@ class Engine:
         self.queues = {ln.key: [] for ln in self.network.lanes}
         self.queued_at = {}
         self.bus.lane = self.network.lanes[0].key
-        self.loxe(f"Nhà xe chuyển về {self.network.departure.name}! Comment tên tỉnh để lên xe nha!")
+        self.talk("departure", station=self.network.departure.name)
 
     def extend(self, seconds: float) -> None:
         """Cộng / trừ thời gian pha đang chạy (đón khách, trạm dừng…); không áp cho lúc đang chạy đường.
@@ -784,9 +791,11 @@ class Engine:
                     self.resume = ("BOARDING", min(self.resume[1], FULL_BUS_SECONDS))
                 else:
                     self.phase_until = min(self.phase_until, self.last_now + FULL_BUS_SECONDS)
-                self.loxe(f"Xe đủ {SEATS} khách rồi! Chuẩn bị xuất bến!")
-            elif left in (5, 1):
-                self.loxe(f"Còn {left} chỗ, còn {left} chỗ! Lên lẹ đi bà con!")
+                self.talk("full")
+            elif left == 5:
+                self.talk("seats_left", n=left)
+            elif left == 1:
+                self.talk("last_seat")
         else:
             self.queues[lane].append(v.uid)
             self.queued_at[v.uid] = v.last_seen
@@ -811,7 +820,7 @@ class Engine:
         if self._noticed(v):
             name = BY_KEY[key].name
             self.emit("home", name=v.name, hue=v.hue, province=name)
-            self.loxe(f"{v.name} ở ngay {name} rồi, đi bộ về nhà nha!")
+            self.talk("home", name=v.name, prov=name)
 
     def _noticed(self, v: Viewer) -> bool:
         """Thẻ + lơ xe cho «không về» / «đã ở quê»: lặp lại trong NOTICE_COOLDOWN thì im (chống spam)."""
@@ -838,7 +847,7 @@ class Engine:
         for mark in LIKE_MILESTONES:
             if before < mark <= self.trip_likes:
                 self.emit("like_milestone", total=mark)
-                self.loxe(f"{mark:,} tim rồi! Bác tài nhấn ga nào!".replace(",", "."))
+                self.talk("likes", total=f"{mark:,}".replace(",", "."))
 
     def _queue_eta(self, lane: str, position: int) -> tuple[int, int]:
         """(số xe, số phút tới lúc được lên xe) cho người thứ `position` trong hàng chờ làn `lane`.
@@ -914,7 +923,7 @@ class Engine:
         if self.phase == "REST" and v.uid not in self.treated:  # combo 30 hoa hồng chỉ «bao cả xe» một lần
             self.treated.add(v.uid)
             self.emit("treat", name=v.name)
-            self.loxe(f"{v.name} bao cả xe trà đá! Cảm ơn nha!")
+            self.talk("treat", name=v.name)
 
     @staticmethod
     def _next_tier_hint(total: int, queued: bool = False) -> str:
