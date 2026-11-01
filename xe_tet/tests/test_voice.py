@@ -132,3 +132,35 @@ def test_render_falls_back_to_edge_when_vieneu_down(tmp_path, monkeypatch):
 
     name, seconds = asyncio.run(scenario())
     assert name.endswith(".mp3") and seconds == 2.0
+
+
+
+def test_microsoft_voice_choice_and_rate_pacing(tmp_path, monkeypatch):
+    monkeypatch.setattr(voice, "VOICE_DIR", tmp_path)
+    used = []
+
+    class FakeEdge:
+        def __init__(self, text, voice_name):
+            used.append(voice_name)
+
+        async def save(self, path):
+            open(path, "wb").write(b"\0" * 12000)  # ≈ 2 giây
+
+    monkeypatch.setattr(voice.edge_tts, "Communicate", FakeEdge)
+    sent = []
+
+    async def emit(msg):
+        sent.append(msg)
+
+    async def scenario():
+        a = Announcer(emit=emit, settings=lambda: {"voice_on": True, "voice_name": "ms:vi-VN-HoaiMyNeural", "voice_rate": 1.25})
+        a.client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+        name, seconds = await a.render("Chào bà con")
+        await a.client.aclose()
+        return name, seconds
+
+    name, seconds = asyncio.run(scenario())
+    assert used == ["vi-VN-HoaiMyNeural"] and name.endswith(".mp3")  # chọn giọng Microsoft: không hỏi VieNeu
+    from xe_tet.server import settings as settings_module
+    assert settings_module.clean({"voice_rate": 9})["voice_rate"] == 1.6
+    assert settings_module.clean({"voice_rate": "0.1"})["voice_rate"] == 0.8

@@ -262,3 +262,29 @@ def test_server_start_resumes_live_connection(tmp_path, monkeypatch):
     with TestClient(app_module.app):
         pass
     assert calls == ["xe_tet"]
+
+
+def test_connect_pressed_many_times_runs_one_loop():
+    """Bấm «Kết nối» dồn dập: chỉ còn đúng một vòng nối (trước đây mỗi lần bấm thêm một vòng → hỏi TikTok dồn dập)."""
+    class JSONDecodeError(Exception):
+        pass
+
+    async def scenario():
+        bridge, _, sleeps, clients = make_bridge([JSONDecodeError("trống")] * 50)
+        waits = []
+
+        async def slow_sleep(s):
+            waits.append(s)
+            await asyncio.sleep(0.01)
+
+        bridge._sleep = slow_sleep
+        await asyncio.gather(*(bridge.connect("@xe_tet") for _ in range(4)))
+        await asyncio.sleep(0.05)
+        running = [t for t in asyncio.all_tasks() if t.get_coro().__name__ == "_run" and not t.done()]
+        status = dict(bridge.status)
+        await bridge.disconnect()
+        return running, status, waits
+
+    running, status, waits = asyncio.run(scenario())
+    assert len(running) == 1
+    assert status["state"] == "offline" and status["error"].startswith("TikTok chưa trả") and set(waits) == {90}

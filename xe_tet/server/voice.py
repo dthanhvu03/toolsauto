@@ -27,6 +27,10 @@ VOICE_DIR = Path(os.getenv("XE_TET_VOICE_DIR") or ROOT / "storage" / "media" / "
 VIENEU_URL = os.getenv("XE_TET_VIENEU", "http://127.0.0.1:8790")
 VIENEU_TIMEOUT = 15.0
 EDGE_VOICE = "vi-VN-NamMinhNeural"  # dự phòng: giọng nam Microsoft
+# Giọng Microsoft chọn được trên /control (tiền tố «ms:»): neural, thường tự nhiên hơn — cần Internet, câu (có tên người xem)
+# gửi lên Microsoft. Giọng VieNeu là tên trơn.
+MS_VOICES = ({"name": "ms:vi-VN-NamMinhNeural", "label": "Nam Minh", "gender": "male", "region": "Microsoft"},
+             {"name": "ms:vi-VN-HoaiMyNeural", "label": "Hoài My", "gender": "female", "region": "Microsoft"})
 CACHE_KEEP = 600  # giữ 600 câu gần nhất (~ vài chục MB)
 VOICES_REFRESH = 60.0
 
@@ -140,9 +144,10 @@ class Announcer:
                 except Exception:
                     log.exception("lơ xe đọc lỗi: %s", text)
                     continue
+                rate = float(self.settings().get("voice_rate") or 1.0)  # overlay phát nhanh / chậm theo tốc độ này
                 await self.emit({"kind": "event", "type": "speak", "url": f"/voice/{name}", "text": text,
-                                 "seconds": round(seconds, 2)})
-                await asyncio.sleep(seconds + 0.4)  # đọc hết câu mới sang câu sau
+                                 "seconds": round(seconds / rate, 2)})
+                await asyncio.sleep(seconds / rate + 0.3)  # đọc hết câu mới sang câu sau
 
     async def render(self, text: str) -> tuple[str, float]:
         voice = self.settings().get("voice_name") or "Adam"
@@ -152,6 +157,11 @@ class Announcer:
             if path.exists():
                 path.touch()
                 return path.name, duration(path)
+        if voice.startswith("ms:"):  # anh chọn giọng Microsoft
+            path = VOICE_DIR / f"{key}.mp3"
+            await edge_tts.Communicate(text, voice[3:]).save(str(path))
+            self.prune()
+            return path.name, duration(path)
         try:
             res = await self.client.post(f"{VIENEU_URL}/tts", json={"text": text, "voice": voice})
             res.raise_for_status()
@@ -178,9 +188,10 @@ class Announcer:
         try:
             async with httpx.AsyncClient(timeout=3) as client:
                 res = await client.get(f"{VIENEU_URL}/health")
-            self.voice_list = [{k: v.get(k) for k in ("name", "gender", "region")} for v in res.json().get("voices", [])]
+            vieneu = [{k: v.get(k) for k in ("name", "gender", "region")} for v in res.json().get("voices", [])]
         except Exception:
-            self.voice_list = []
+            vieneu = []
+        self.voice_list = vieneu + list(MS_VOICES)
 
 
 def duration(path: Path) -> float:

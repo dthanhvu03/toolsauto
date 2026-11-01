@@ -25,6 +25,7 @@ export interface Control {
   sfx_volume?: number;
   voice_on?: boolean;  // giọng Anh Tư lơ xe (PLAN-128)
   voice_volume?: number;
+  voice_rate?: number;  // tốc độ đọc 0,8 – 1,6
 }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }

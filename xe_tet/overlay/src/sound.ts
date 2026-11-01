@@ -26,6 +26,7 @@ export class Sound {
   private voice = this.ctx.createGain();
   private duck = this.ctx.createGain();
   private speaking = 0;  // số câu đang phát (server đã giãn cách, phòng hờ chồng nhau)
+  private rate = 1;  // tốc độ đọc (admin chỉnh), phát nhanh hơn mà giữ cao độ
   private tunnel = this.ctx.createBiquadFilter();
   private engine = this.ctx.createOscillator();
   private engineGain = this.ctx.createGain();
@@ -61,6 +62,7 @@ export class Sound {
     this.music.gain.setTargetAtTime(c?.music_volume ?? 0.5, now, 0.2);
     this.sfx.gain.setTargetAtTime(c?.sfx_volume ?? 0.6, now, 0.2);
     this.voice.gain.setTargetAtTime(c?.voice_on === false ? 0 : c?.voice_volume ?? 0.9, now, 0.2);
+    this.rate = c?.voice_rate ?? 1;
     const moving = s.phase === "DRIVING" && !s.paused;
     this.engineGain.gain.setTargetAtTime(moving ? ENGINE_LEVEL : 0, now, 0.6);
     this.engine.frequency.setTargetAtTime(38 + 10 * (s.speed ?? 1), now, 0.5);
@@ -137,6 +139,8 @@ export class Sound {
   /** Anh Tư lơ xe nói: phát file giọng đã đọc sẵn, nhạc nhỏ lại tới khi nói xong. */
   private speak(url: string): void {
     const audio = new Audio(url);
+    audio.preservesPitch = true;  // nhanh lên mà không thành giọng «chuột chũi»
+    audio.playbackRate = this.rate;
     this.ctx.createMediaElementSource(audio).connect(this.voice);
     const now = this.ctx.currentTime;
     this.speaking++;

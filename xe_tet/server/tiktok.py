@@ -23,6 +23,9 @@ log = logging.getLogger("xe_tet")
 
 BACKOFF = (5, 10, 20, 40, 60)
 OFFLINE_RETRY = 30  # tài khoản chưa live: hỏi lại mỗi 30 s
+BLOCKED_RETRY = 90  # TikTok trả trang trống / chặn tạm: hỏi thưa hẳn, hỏi dồn chỉ làm bị chặn lâu hơn
+# Lỗi TikTok không trả thông tin phòng (chưa bấm Phát LIVE, hoặc chặn tạm vì hỏi quá dày) — chờ lâu, nói rõ cho admin.
+BLOCKED_ERRORS = {"JSONDecodeError", "FailedParseRoomIdError", "FailedFetchRoomInfoError"}
 STABLE_SECONDS = 60  # kết nối giữ được ≥ 60 s mới đưa bậc chờ về đầu (vào-rớt liên tục không được đốt lượt ký Euler)
 GONE_AFTER = 10 * 60  # đã từng vào live rồi «chưa live» suốt 10 phút → coi như live đã kết thúc (lỡ mất LiveEndEvent)
 COMBO_MEMORY = 500
@@ -128,6 +131,9 @@ class TikTokBridge:
         self._client: Any = None
         self._stop = False
         self._ended = False
+        # bấm «Kết nối» nhiều lần liền: lần sau đợi lần trước xong (trước đây chạy song song → nhiều vòng nối cùng lúc,
+        # hỏi TikTok dồn dập tới mức bị chặn)
+        self._lock = asyncio.Lock()
         self.combos = GiftCombos()
         self.logs: deque[str] = deque(maxlen=40)
         self.status: dict = {"state": "idle", "username": "", "room_id": None, "viewers": 0,
@@ -155,7 +161,11 @@ class TikTokBridge:
         username = parse_username(raw)
         if not username:
             raise ValueError("cần @username hoặc link tiktok.com/@…")
-        await self.disconnect()
+        async with self._lock:
+            await self._disconnect()
+            return self._start(username)
+
+    def _start(self, username: str) -> str:
         self._stop = False
         self._ended = False
         self.combos = GiftCombos()
@@ -165,6 +175,10 @@ class TikTokBridge:
         return username
 
     async def disconnect(self) -> None:
+        async with self._lock:
+            await self._disconnect()
+
+    async def _disconnect(self) -> None:
         self._stop = True
         client, self._client = self._client, None
         if client is not None:
@@ -214,7 +228,8 @@ class TikTokBridge:
         attempt = 0
         was_live = False
         offline_since: float | None = None
-        while not self._stop:
+        me = asyncio.current_task()
+        while not self._stop and self._task is me:  # chỉ vòng mới nhất được chạy; vòng cũ sót lại thì tự thoát
             client = self._factory(username)
             self._client = client
             self._wire(client)
@@ -244,6 +259,8 @@ class TikTokBridge:
                     return
                 reason = {"UserOfflineError": "chưa live",
                           "SignatureRateLimitError": "Euler giới hạn lượt ký (gói miễn phí)"}.get(name, f"{name}: {exc}")
+                if name in BLOCKED_ERRORS:
+                    reason = "TikTok chưa trả thông tin phòng (chưa bấm Phát LIVE, hoặc TikTok chặn tạm vì hỏi dày)"
             finally:
                 try:
                     await client.disconnect()
@@ -262,6 +279,8 @@ class TikTokBridge:
                     return
             if reason == "chưa live":
                 delay, state = OFFLINE_RETRY, "offline"
+            elif reason.startswith("TikTok chưa trả"):
+                delay, state = BLOCKED_RETRY, "offline"
             else:
                 delay, state = BACKOFF[min(attempt, len(BACKOFF) - 1)], "reconnecting"
                 attempt += 1

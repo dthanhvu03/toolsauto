@@ -154,6 +154,11 @@
       <input type="range" min="0" max="1" step="0.05" data-volume="voice_volume" aria-label="Âm lượng giọng" style="flex:1">
       <output id="vol-voice_volume">0.9</output>
     </div>
+    <div class="row">
+      <span style="min-width:96px">Tốc độ đọc</span>
+      <input type="range" min="0.8" max="1.6" step="0.05" data-volume="voice_rate" aria-label="Tốc độ đọc" style="flex:1">
+      <output id="vol-voice_rate">1.15</output>
+    </div>
     <p class="hint" id="voice-hint">Đọc câu lơ xe, tên người lên xe / xuống xe, cảm ơn quà. Đông người thì bỏ bớt câu đọc tên
       lên xe (trên màn hình vẫn hiện tên), câu anh gõ ở «Lơ xe nói» luôn được đọc trước. Nhạc tự nhỏ lại khi lơ xe nói.</p>
 
@@ -292,7 +297,9 @@ const TT_STATES = {
   connecting: (t) => `⏳ Đang kết nối @${t.username}…`,
   connected: (t) => `🟢 Đang nhận từ @${t.username} · ${t.viewers.toLocaleString("vi-VN")} người xem · ${t.events.toLocaleString("vi-VN")} sự kiện`,
   reconnecting: (t) => `🟠 ${t.error} — tự nối lại sau ${t.retry_in} giây`,
-  offline: (t) => `⚪ @${t.username} chưa live — tự vào khi live bắt đầu (kiểm lại mỗi ${t.retry_in} giây)`,
+  offline: (t) => t.error && t.error !== "chưa live"
+    ? `⚪ ${t.error} — tự thử lại sau ${t.retry_in} giây (đừng bấm Kết nối liên tục)`
+    : `⚪ @${t.username} chưa live — tự vào khi live bắt đầu (kiểm lại mỗi ${t.retry_in} giây)`,
   ended: (t) => `⏹ Live của @${t.username} đã kết thúc`,
   error: (t) => `🔴 ${t.error}`,
 };
@@ -318,10 +325,20 @@ function send(event) {
 }
 
 // ---- TikTok ----
-$("tt-connect").onclick = () => {
+$("tt-connect").onclick = async () => {
   const username = $("tt-user").value.trim();
   if (!username) { $("tt-user").focus(); return; }
-  admin({ action: "tiktok_connect", username });
+  // ngắt kết nối cũ có thể mất vài giây: khoá nút + báo đang làm, tránh bấm dồn
+  const btn = $("tt-connect");
+  btn.disabled = true;
+  btn.textContent = "Đang kết nối…";
+  try {
+    const data = await admin({ action: "tiktok_connect", username });
+    if (data.ok) notice(`Đang nối @${data.username || username.replace(/^@/, "")} — xem trạng thái ngay dưới ô nhập`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Kết nối";
+  }
 };
 $("tt-user").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tt-connect").click(); });
 $("tt-disconnect").onclick = () => admin({ action: "tiktok_disconnect" });
@@ -372,11 +389,12 @@ $("voice-test").onclick = () => admin({ action: "say", text: "Xin chào bà con!
 function renderVoices(s) {
   const sel = $("voice-name");
   const voices = s.voices || [];
-  // giọng nam miền Nam lên đầu (Anh Tư là người miền Nam), rồi nam, rồi nữ
-  const rank = (v) => (v.gender === "male" ? 0 : 2) + (v.region === "Nam" ? 0 : 1);
+  // giọng nam miền Nam lên đầu (Anh Tư là người miền Nam), rồi nam, rồi nữ; giọng Microsoft (online) để cuối
+  const rank = (v) => (v.region === "Microsoft" ? 10 : 0) + (v.gender === "male" ? 0 : 2) + (v.region === "Nam" ? 0 : 1);
   const html = voices.length
     ? [...voices].sort((a, b) => rank(a) - rank(b)).map((v) =>
-      `<option value="${esc(v.name)}">${esc(v.name)} · ${v.gender === "male" ? "nam" : "nữ"} · ${esc(v.region || "")}</option>`).join("")
+      `<option value="${esc(v.name)}">${esc(v.label || v.name)} · ${v.gender === "male" ? "nam" : "nữ"} · ${
+        v.region === "Microsoft" ? "Microsoft (online)" : esc(v.region || "")}</option>`).join("")
     : `<option value="${esc(control.voice_name || "Adam")}">${esc(control.voice_name || "Adam")} (VieNeu đang tắt)</option>`;
   if (document.activeElement !== sel) {
     setIfChanged(sel, html);
@@ -384,7 +402,8 @@ function renderVoices(s) {
   }
   const hint = $("voice-hint");
   hint.dataset.normal ??= hint.textContent;
-  hint.textContent = voices.length ? hint.dataset.normal
+  const vieneu = voices.some((v) => v.region !== "Microsoft");
+  hint.textContent = vieneu ? hint.dataset.normal
     : "VieNeu đang tắt: lơ xe đọc bằng giọng Microsoft dự phòng (cần Internet). Bật lại: pm2 start VieNeu_TTS.";
 }
 
@@ -553,7 +572,7 @@ async function refresh() {
     $("zoom-now").textContent = (control.zoom ?? 1).toFixed(1);
     document.querySelectorAll("[data-volume]").forEach((r) => {
       if (Date.now() - Number(r.dataset.touched || 0) < 3000) return;
-      const v = control[r.dataset.volume] ?? { music_volume: 0.5, sfx_volume: 0.6, voice_volume: 0.9 }[r.dataset.volume];
+      const v = control[r.dataset.volume] ?? { music_volume: 0.5, sfx_volume: 0.6, voice_volume: 0.9, voice_rate: 1.15 }[r.dataset.volume];
       r.value = v;
       $(`vol-${r.dataset.volume}`).textContent = (+v).toFixed(2);
     });

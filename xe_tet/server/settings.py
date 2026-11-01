@@ -41,11 +41,13 @@ DEFAULTS: dict = {
     "sfx_volume": 0.6,  # còi, pháo hoa, tiếng máy
     "voice_on": True,  # Anh Tư lơ xe đọc (PLAN-128)
     "voice_name": "Adam",  # giọng VieNeu (nam, miền Nam, tự nhiên)
-    "voice_volume": 0.9,  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
+    "voice_volume": 0.9,
+    "voice_rate": 1.15,  # tốc độ đọc (phát nhanh hơn, giữ cao độ): 0,8 chậm → 1,6 nhanh  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
 REST_RANGE = (20, 300)
+VOICE_RATE = (0.8, 1.6)
 log = logging.getLogger("xe_tet")
 
 
@@ -65,6 +67,8 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = value
         elif key == "voice_name":
             out[key] = str(value or "")[:40] or out[key]
+        elif key == "voice_rate":
+            out[key] = round(min(VOICE_RATE[1], max(VOICE_RATE[0], float(value))), 2)
         elif key in ("music_volume", "sfx_volume", "voice_volume"):
             out[key] = round(min(1.0, max(0.0, float(value))), 2)
         elif key == "zoom":
