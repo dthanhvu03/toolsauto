@@ -32,7 +32,10 @@ DEFAULTS: dict = {
     "tiktok_user": "",  # @username nối lần trước, để admin bấm nối lại nhanh
     "tiktok_auto": False,  # đang nối khi server tắt → bật lên tự nối lại (PM2 khởi động lại giữa live)
     "departure": DEFAULT_DEPARTURE,  # bến đi (BRD-tuyen-xe BR-8)
-    "relief_auto": True,  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
+    "relief_auto": True,
+    "music_on": True,  # nhạc trong xe (PLAN-127); tắt = chỉ còn tiếng hiệu ứng
+    "music_volume": 0.5,
+    "sfx_volume": 0.6,  # còi, pháo hoa, tiếng máy  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
@@ -54,6 +57,8 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = value
         elif key == "departure" and value in available():  # theo dữ liệu tuyến đã dựng, không chỉ bảng code
             out[key] = value
+        elif key in ("music_volume", "sfx_volume"):
+            out[key] = round(min(1.0, max(0.0, float(value))), 2)
         elif key == "zoom":
             out[key] = round(min(1.6, max(0.6, float(value))), 2)
         elif key == "board_seconds":

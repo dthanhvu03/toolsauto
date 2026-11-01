@@ -94,6 +94,9 @@ html, body {
   font-weight: 800;
   white-space: nowrap;
 }
+/* trình duyệt chặn tiếng tới khi có cú bấm: nhắc nhỏ góc trên trái (ngoài vùng TikTok che), bấm là mất */
+#sound-lock { position: absolute; left: 24px; top: 24px; padding: 8px 14px; border-radius: 12px; font-size: 26px;
+  background: rgba(0, 0, 0, 0.6); color: #fff; z-index: 5; }
 #phase-text { flex: 1; min-width: 0; display: flex; gap: 0.35em; white-space: nowrap; }
 #phase-text .head { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #phase-text .tail { flex: none; }

@@ -207,6 +207,8 @@ class Engine:
         self.reliefs: list[Relief] = []
         self.relief_auto = True  # admin tắt được: chỉ gọi xe tăng cường bằng tay / bằng quà
         self.featured: int | None = None  # xe tăng cường đang lên màn hình (None: xe chính)
+        # nhạc trong xe (PLAN-127): mỗi xe một đài — "main" cho xe chính, số xe cho xe tăng cường; index → music_tracks
+        self.music: dict[str, dict] = {}
         self.legs: list[Leg] = []
         self.leg_index = 0
         self.progress = 0.0
@@ -506,6 +508,7 @@ class Engine:
                 self.reliefs.remove(relief)
                 if self.featured == relief.no:  # xe đang chiếu tới bến cuối → màn hình quay về xe chính
                     self.featured = None
+                self.music.pop(str(relief.no), None)
 
     # ---- admin: mọi chuyến xe -------------------------------------------
 
@@ -518,6 +521,23 @@ class Engine:
     def feature(self, no: int | None) -> None:
         """Admin chọn xe nào lên màn hình: None / số xe chính = xe chính; số xe tăng cường = màn hình theo xe đó."""
         self.featured = None if not no or no == self.bus.no else self._relief(int(no)).no
+
+    def _music_key(self, no: int | None) -> str:
+        if not no or no == self.bus.no:
+            return "main"
+        return str(self._relief(int(no)).no)
+
+    def music_of(self, key: str) -> dict:
+        """Đài của một xe: xe tăng cường mặc định lệch bài theo số xe (mỗi xe một bài khác nhau)."""
+        return self.music.setdefault(key, {"index": 0 if key == "main" else int(key), "on": True})
+
+    def music_step(self, no: int | None, step: int = 1) -> None:
+        """Admin qua bài (step = 1) / lùi bài (−1) cho một xe; overlay lấy index theo vòng danh sách bài."""
+        self.music_of(self._music_key(no))["index"] += step
+
+    def music_toggle(self, no: int | None) -> None:
+        state = self.music_of(self._music_key(no))
+        state["on"] = not state["on"]
 
     def add_relief(self, lane: str) -> Relief:
         """Admin gọi thêm xe tăng cường cho một làn (không cần đủ 24 người chờ)."""
@@ -922,7 +942,7 @@ class Engine:
         nxt = relief.trip.stops[min(relief.done, len(relief.trip.stops) - 1)][0]
         return {"no": relief.no, "arrow": ln.arrow, "label": ln.label, "sponsor": relief.sponsor,
                 "riders": len(relief.riders), "next": BY_KEY[nxt].name, "featured": relief.no == self.featured,
-                "left_km": round(relief.trip.total - relief.odo)}
+                "left_km": round(relief.trip.total - relief.odo), "music": self.music_of(str(relief.no))}
 
     def _seats_view(self, uids: list[str | None]) -> list[dict | None]:
         out = []
@@ -1003,8 +1023,9 @@ class Engine:
             "main": {"no": self.bus.no, "phase": self.phase, "riders": len(self.bus.riders()), "lane": bus_lane.label,
                      "arrow": bus_lane.arrow, "phase_left": max(0.0, self.phase_until - self.last_now)
                      if self.phase != "DRIVING" else None, "trip_km": round(self.trip_km()),
-                     "km": round(self.trip.total) if self.trip else None},
+                     "km": round(self.trip.total) if self.trip else None, "music": self.music_of("main")},
             "featured": self.featured,
+            "music": self.music_of(str(self.featured) if self.featured else "main"),  # đài của xe đang chiếu
             "relief_auto": self.relief_auto,
         }
         relief = next((r for r in self.reliefs if r.no == self.featured), None)

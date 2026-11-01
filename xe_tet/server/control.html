@@ -124,6 +124,27 @@
   </section>
 
   <section>
+    <h2>🎵 Nhạc & âm thanh</h2>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" data-show="music_on"> Nhạc trong xe</label>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span style="min-width:96px">Âm lượng nhạc</span>
+      <input type="range" min="0" max="1" step="0.05" data-volume="music_volume" aria-label="Âm lượng nhạc" style="flex:1">
+      <output id="vol-music_volume">0.5</output>
+    </div>
+    <div class="row">
+      <span style="min-width:96px">Còi, pháo, máy</span>
+      <input type="range" min="0" max="1" step="0.05" data-volume="sfx_volume" aria-label="Âm lượng hiệu ứng" style="flex:1">
+      <output id="vol-sfx_volume">0.6</output>
+    </div>
+    <p class="hint">Mỗi xe một bài riêng (đổi ở «Các chuyến xe»); tiếng theo xe đang chiếu. Nhạc có sẵn do máy tự sáng tác
+      (ngũ cung, đàn tranh, sáo, trống) — không vướng bản quyền TikTok. Thêm nhạc của anh: chép file mp3 / ogg / m4a vào
+      <code>storage/media/xe_tet/music/</code> (anh tự chịu trách nhiệm quyền dùng bài). Màn hình live phải được bấm vào
+      một lần mới phát tiếng (trình duyệt chặn tự phát).</p>
+  </section>
+
+  <section>
     <h2 id="buses-title">🚌 Các chuyến xe</h2>
     <div id="buses"></div>
     <h3>Gọi thêm xe tăng cường cho làn</h3>
@@ -311,7 +332,23 @@ $("buses").onclick = (e) => {
   if (!b) return;
   if (b.dataset.feature != null) admin({ action: "feature", bus_no: +b.dataset.feature });
   if (b.dataset.next != null) admin({ action: "relief_next", bus_no: +b.dataset.next });
+  if (b.dataset.song != null) admin({ action: "music_next", bus_no: +b.dataset.song });
+  if (b.dataset.mute != null) admin({ action: "music_toggle", bus_no: +b.dataset.mute });
 };
+// âm lượng: gửi khi thả tay (không gửi liên tục lúc kéo); vòng làm mới không đè lên thanh đang kéo
+document.querySelectorAll("[data-volume]").forEach((r) => {
+  r.oninput = () => { r.dataset.touched = String(Date.now()); $(`vol-${r.dataset.volume}`).textContent = (+r.value).toFixed(2); };
+  r.onchange = () => setControl({ [r.dataset.volume]: +r.value });
+});
+function songLine(s, music) {
+  const tracks = s.music_tracks || [];
+  if (!tracks.length || !music) return "";
+  const t = tracks[((music.index % tracks.length) + tracks.length) % tracks.length];
+  return `🎵 ${esc(t.title)}${music.on ? "" : " (tắt)"}`;
+}
+function musicButtons(no, music) {
+  return `<button data-song="${no}">⏭ Bài</button><button data-mute="${no}">${music && !music.on ? "🔊 Bật" : "🔇 Tắt"}</button>`;
+}
 $("relief-lanes").onclick = (e) => {
   const b = e.target.closest("button[data-lane]");
   if (b) admin({ action: "relief", lane: b.dataset.lane });
@@ -322,13 +359,15 @@ function renderBuses(s) {
   const m = s.main || { no: s.bus.no, phase: s.phase, riders: s.bus.riders, lane: s.bus.lane, arrow: s.bus.arrow };
   const seats = s.bus.seats.length;
   const rows = [`<div class="bus"><div class="info"><b>Xe số ${m.no} · xe chính</b>
-      <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}</small></div>
-    <button data-feature="0" class="${s.featured == null ? "on" : ""}">📺 Chiếu</button></div>`];
+      <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}</small>
+      <small>${songLine(s, m.music)}</small></div>
+    <button data-feature="0" class="${s.featured == null ? "on" : ""}">📺 Chiếu</button>${musicButtons(0, m.music)}</div>`];
   for (const r of s.reliefs || []) {
     rows.push(`<div class="bus"><div class="info"><b>Xe số ${r.no} · tăng cường ${r.arrow} ${esc(r.label)}</b>
-      <small>${r.riders} khách · tới ${esc(r.next)} · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}</small></div>
+      <small>${r.riders} khách · tới ${esc(r.next)} · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}</small>
+      <small>${songLine(s, r.music)}</small></div>
       <button data-feature="${r.no}" class="${r.featured ? "on" : ""}">📺 Chiếu</button>
-      <button data-next="${r.no}">⏭ Tới điểm kế</button></div>`);
+      <button data-next="${r.no}">⏭ Tới điểm kế</button>${musicButtons(r.no, r.music)}</div>`);
   }
   setIfChanged($("buses"), rows.join(""));
   const lanes = (s.lanes || []).filter((l) => l.waiting);
@@ -410,6 +449,12 @@ async function refresh() {
       c.checked = c.dataset.default === "off" ? control[c.dataset.show] === true : control[c.dataset.show] !== false;
     });
     $("zoom-now").textContent = (control.zoom ?? 1).toFixed(1);
+    document.querySelectorAll("[data-volume]").forEach((r) => {
+      if (Date.now() - Number(r.dataset.touched || 0) < 3000) return;
+      const v = control[r.dataset.volume] ?? (r.dataset.volume === "music_volume" ? 0.5 : 0.6);
+      r.value = v;
+      $(`vol-${r.dataset.volume}`).textContent = (+v).toFixed(2);
+    });
     const sel = $("departure");
     if (!sel.options.length) {
       for (const d of s.departures || []) sel.append(new Option(d.name, d.key));

@@ -1,6 +1,7 @@
 import "./style.css";
 import { Hud } from "./hud";
 import { H, W, World } from "./scene";
+import { Sound } from "./sound";
 import type { GameEvent, State } from "./types";
 
 const stage = document.getElementById("stage") as HTMLElement;
@@ -32,6 +33,8 @@ function start(): void {
     document.getElementById("fade") as HTMLElement,
   );
   const hud = new Hud();
+  const sound = new Sound();
+  sound.onLock = (locked) => document.getElementById("sound-lock")!.classList.toggle("hidden", !locked);
   // Trong xe: tên đã nằm trên giường → ẩn thông báo + bảng tỉnh để không che tầng trên.
   world.onView = (view) => document.getElementById("hud")!.classList.toggle("inside", view === "inside");
 
@@ -46,15 +49,17 @@ function start(): void {
       } catch {
         return;  // khung hỏng: bỏ, khung sau (5 lần / giây) tới ngay
       }
-      // cảnh 3D và chữ chạy độc lập: một bên lỗi không kéo bên kia đứng theo
-      const both = (a: () => void, b: () => void) => {
-        try { a(); } catch (err) { console.error(err); }
-        try { b(); } catch (err) { console.error(err); }
+      // cảnh 3D, chữ, âm thanh chạy độc lập: một phần lỗi không kéo phần khác đứng theo
+      const each = (...steps: (() => void)[]) => {
+        for (const step of steps) {
+          try { step(); } catch (err) { console.error(err); }
+        }
       };
       if (data.kind === "state") {
-        both(() => world.update(data as State), () => hud.update(data as State));
+        each(() => world.update(data as State), () => hud.update(data as State), () => sound.update(data as State));
       } else if (data.kind === "event") {
-        both(() => world.onEvent(data as GameEvent), () => hud.onEvent(data as GameEvent));
+        each(() => world.onEvent(data as GameEvent), () => hud.onEvent(data as GameEvent),
+          () => sound.onEvent(data as GameEvent));
       }
     };
     ws.onclose = () => {

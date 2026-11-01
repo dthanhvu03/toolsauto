@@ -19,6 +19,9 @@ export interface Control {
   show_board?: boolean;
   board_seconds?: number;
   rest_seconds?: number;
+  music_on?: boolean;  // nhạc trong xe (PLAN-127)
+  music_volume?: number;
+  sfx_volume?: number;
 }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }
@@ -55,7 +58,9 @@ export interface State {
   terrain: { wind: number; pass: string | null; tunnel: boolean; climb: number };
   waiting: number;
   reliefs: Relief[];
-  featured: number | null;  // xe tăng cường admin đang chiếu (các trường bus / legs / terrain… là của xe đó)
+  featured: number | null;
+  music: { index: number; on: boolean };  // đài của xe đang chiếu: bài thứ index (vòng) trong music_tracks
+  music_tracks?: { id: string; title: string; url?: string }[];  // xe tăng cường admin đang chiếu (các trường bus / legs / terrain… là của xe đó)
   next_lane: { label: string; arrow: string; bus_no: number; eta_min: number } | null;
   queue: Waiting[];
   legs: { kind: "rest" | "stop"; label: string; km: number }[];

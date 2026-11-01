@@ -157,3 +157,25 @@ def test_admin_controls_every_bus(client):
     r = client.post("/api/admin", json={"action": "settings", "changes": {"relief_auto": False}})
     assert r.json()["ok"] and app_module.hub.engine.relief_auto is False
     client.post("/api/admin", json={"action": "settings", "changes": {"relief_auto": True}})
+
+
+def test_music_tracks_and_admin_controls(client, tmp_path, monkeypatch):
+    from xe_tet.server import music
+    monkeypatch.setattr(music, "MUSIC_DIR", tmp_path)
+    monkeypatch.setattr(music, "_cache", (-1.0, []))
+    (tmp_path / "Xuan_que_toi.mp3").write_bytes(b"x")
+    (tmp_path / "ghi chu.txt").write_text("không phải nhạc")
+    client.post("/api/admin", json={"action": "reset"})
+    state = client.get("/api/state").json()
+    ids = [t["id"] for t in state["music_tracks"]]
+    assert ids[:len(music.GENERATED)] == [f"gen:{i}" for i in range(len(music.GENERATED))]
+    assert ids[-1] == "file:Xuan_que_toi.mp3" and state["music_tracks"][-1]["url"] == "/music/Xuan_que_toi.mp3"
+    assert len(ids) == len(music.GENERATED) + 1  # file .txt không vào danh sách
+    assert client.post("/api/admin", json={"action": "music_next", "bus_no": 0}).json()["ok"]
+    assert client.post("/api/admin", json={"action": "music_toggle", "bus_no": 0}).json()["ok"]
+    assert client.get("/api/state").json()["music"] == {"index": 1, "on": False}
+    r = client.post("/api/admin", json={"action": "settings", "changes": {"music_volume": 3, "sfx_volume": "0.25"}})
+    assert r.json()["ok"]
+    control = client.get("/api/state").json()["control"]
+    assert control["music_volume"] == 1.0 and control["sfx_volume"] == 0.25
+    client.post("/api/admin", json={"action": "settings", "changes": {"music_volume": 0.5, "sfx_volume": 0.6}})

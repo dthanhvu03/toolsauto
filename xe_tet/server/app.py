@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import settings, simulator
+from . import music, settings, simulator
 from .game.engine import LIKE_MAX, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
@@ -61,7 +61,7 @@ class Hub:
 
     def state_message(self) -> dict:
         return {"kind": "state", **self.engine.snapshot(), "control": self.settings, "sim_rate": self.sim_rate,
-                "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST}
+                "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST, "music_tracks": music.tracks()}
 
     def update_settings(self, changes: dict) -> None:
         self.settings = settings.clean(changes, self.settings)
@@ -214,6 +214,10 @@ async def _admin(body: dict) -> dict:
         engine.feature(as_int(body.get("bus_no"), 0))
     elif action == "relief":  # gọi thêm xe tăng cường cho một làn
         engine.add_relief(str(body.get("lane") or ""))
+    elif action == "music_next":  # qua / lùi bài nhạc của một xe (0 = xe chính)
+        engine.music_step(as_int(body.get("bus_no"), 0), 1 if as_int(body.get("step"), 1) >= 0 else -1)
+    elif action == "music_toggle":
+        engine.music_toggle(as_int(body.get("bus_no"), 0))
     elif action == "relief_next":  # xe tăng cường tới ngay điểm thả khách kế tiếp
         engine.relief_next_stop(as_int(body.get("bus_no"), 0))
     elif action == "departure":
@@ -256,5 +260,7 @@ async def control() -> FileResponse:
     return FileResponse(HERE / "control.html")
 
 
+music.MUSIC_DIR.mkdir(parents=True, exist_ok=True)  # thư mục nhạc của anh (thả file vào là có trong danh sách)
+app.mount("/music", StaticFiles(directory=music.MUSIC_DIR), name="music")
 if OVERLAY_DIST.exists():
     app.mount("/", StaticFiles(directory=OVERLAY_DIST, html=True), name="overlay")

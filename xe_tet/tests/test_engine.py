@@ -760,3 +760,19 @@ def test_featured_relief_drives_screen_then_returns_to_main():
         t += 1
         e.tick(t)
     assert e.featured is None and e.snapshot()["bus"]["no"] == e.bus.no
+
+
+# ---- nhạc trong xe (PLAN-127) ----------------------------------------------
+
+def test_each_bus_has_its_own_music_and_screen_follows_featured():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    relief = e.add_relief("south")
+    assert e.snapshot()["music"] == {"index": 0, "on": True}  # đang chiếu xe chính
+    e.music_step(0)
+    e.music_toggle(relief.no)
+    e.feature(relief.no)
+    snap = e.snapshot()
+    assert snap["music"] == {"index": relief.no, "on": False}  # tiếng theo xe đang chiếu
+    assert snap["main"]["music"]["index"] == 1 and snap["reliefs"][0]["music"]["on"] is False

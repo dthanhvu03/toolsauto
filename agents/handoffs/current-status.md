@@ -89,6 +89,14 @@
   chính / Góc kế / Các xe, vừa 360 px), lời báo bị từ chối hiện đầu màn hình (trước nằm cuối trang), lời báo viết rõ (409,
   không còn «giá trị không hợp lệ»). E2E 28/28, 91 test. Chưa thử: nối TikTok thật bằng tài khoản anh, FPS trên GPU thật,
   chạy dưới PM2 (máy khởi động lại là server tắt), lưu trạng thái (server khởi động lại là mất vé).
+- **01/11 ~08:00 — DỪNG STUDIO để anh test live TikTok (anh duyệt):** máy lag (RAM trống ~1,5 / 7,7 GB, tải 3,2 / 4 nhân)
+  do job lồng tiếng `dub8-5a5bb2f6` (Demucs tách giọng, chạy 18 phút) + VieNeu TTS 1,5 GB. Đã `pm2 stop Studio_Heavy
+  Studio_Light VieNeu_TTS` → RAM trống ~4,8 GB. **Job dub8 bị ngắt giữa chừng — phải bấm lồng tiếng lại.** Test xong:
+  `pm2 start Studio_Heavy Studio_Light VieNeu_TTS`.
+- **PLAN-127 nhạc + tiếng hiệu ứng xong (anh chốt «cả hai» nguồn nhạc, nhạc từng xe + hiệu ứng):** 6 bài tự sinh (ngũ
+  cung, không bản quyền) + thư mục `storage/media/xe_tet/music/` cho file của anh; mỗi xe một đài, tiếng theo xe đang
+  chiếu; /control qua bài / tắt / âm lượng. 93 test, e2e 28/28. Trả lại thiết lập «Chất lượng Cao» (lần tổng duyệt bấm
+  ngẫu nhiên để lại «Thấp»). Studio vẫn đang DỪNG chờ anh test live xong.
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
