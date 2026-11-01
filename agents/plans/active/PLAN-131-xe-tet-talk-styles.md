@@ -1,6 +1,6 @@
 # PLAN-131 — Xe Tết: lơ xe nói chợ búa theo kiểu Bến xe / Gen Z / Gen Y, đọc đều
 
-- Status: Done (chờ anh cho khởi động lại 8810 để nạp)
+- Status: Done (đã nạp 8810)
 - Executor: Claude Code (anh yêu cầu 01/11: «nhiều phong cách chợ búa gen z, gen y, bỏ từ nha với !, nói không nhấn nhá»)
 
 ## Làm

@@ -123,7 +123,7 @@
   - 113 test. **Đã khởi động lại 8810 (anh cho phép 01/11 ~17:39)**: chạy code mới, giữ thiết lập của anh (giọng Quang Sơn,
     tốc độ đọc 1,25), tự chiếu «Theo chuyện hay», chuyến xa nhất 8 phút. TikTok đang chưa nối — anh bấm Kết nối một lần.
 - **PLAN-131 kiểu nói lơ xe (anh yêu cầu):** Bến xe / Gen Z / Gen Y / Trộn (mặc định), 147 câu, không «!» / «nha», «!»
-  đọc như dấu chấm. 114 test. Chờ anh cho khởi động lại 8810.
+  đọc như dấu chấm. 114 test. Đã khởi động lại 8810 (anh cho phép), kiểu nói mặc định «Trộn».
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
