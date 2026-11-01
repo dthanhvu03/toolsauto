@@ -1,12 +1,14 @@
 """Đo nhấp nháy: đếm màn đen (#fade), băng rôn / chữ lớn bật tắt, đổi cảnh trong N giây. Chạy: venv/bin/python -I xe_tet/e2e/flicker.py [giây]"""
 import json
+import os
 import sys
 import time
 import urllib.request
 
 from playwright.sync_api import sync_playwright
 
-B = "http://127.0.0.1:8810"
+# Máy chủ THỬ riêng (cổng 8811, thiết lập riêng) — không bao giờ bấm vào server anh đang dùng / đang live (8810).
+B = os.getenv("XE_TET_URL", "http://127.0.0.1:8811")
 SECONDS = int(sys.argv[1]) if len(sys.argv) > 1 else 90
 
 

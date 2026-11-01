@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -10,7 +11,8 @@ from .game.geo import DEFAULT_DEPARTURE
 from .game.network import available
 
 ROOT = Path(__file__).resolve().parents[2]
-PATH = ROOT / "storage" / "db" / "config" / "xe_tet.json"
+# XE_TET_SETTINGS: máy chủ thử (e2e, cổng 8811) dùng file thiết lập riêng — bấm thử không đổi thiết lập của server thật.
+PATH = Path(os.getenv("XE_TET_SETTINGS") or ROOT / "storage" / "db" / "config" / "xe_tet.json")
 
 VIEWS = ("outside", "inside")
 CAMS = ("wide", "high", "side", "close")

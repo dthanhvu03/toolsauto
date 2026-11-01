@@ -97,6 +97,12 @@
   cung, không bản quyền) + thư mục `storage/media/xe_tet/music/` cho file của anh; mỗi xe một đài, tiếng theo xe đang
   chiếu; /control qua bài / tắt / âm lượng. 93 test, e2e 28/28. Trả lại thiết lập «Chất lượng Cao» (lần tổng duyệt bấm
   ngẫu nhiên để lại «Thấp»). Studio vẫn đang DỪNG chờ anh test live xong.
+- **01/11 — sự cố trong lúc anh test (lỗi của em):** anh bấm «Tạm dừng» rồi game tự chạy tiếp, xe số 2 về số 1. Nguyên
+  nhân: em khởi động lại server 8810 (nạp tính năng tải nhạc) và chạy e2e `control_panel` (bấm dừng / chạy tiếp / làm lại)
+  vào đúng server anh đang test. Game không tự bỏ tạm dừng (chỉ nút ⏸ / làm lại / khởi động lại đổi được). Sửa quy trình: e2e
+  mặc định chạy máy chủ thử cổng 8811 + file thiết lập riêng (`XE_TET_SETTINGS`); đã chạy thử 28/28 trên 8811, server 8810
+  không đổi gì. **Quy tắc: không bấm thử / khởi động lại 8810 khi anh đang dùng.**
+- **Tải nhạc lên trên /control (anh đề xuất):** xong, 94 test.
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.

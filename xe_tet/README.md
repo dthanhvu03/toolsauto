@@ -43,7 +43,9 @@ cd xe_tet/overlay && npm install && npm run build && cd ../..   # chỉ cần kh
     «⏭ Tới điểm kế», gọi thêm xe tăng cường cho làn có người chờ, công tắc tự gọi khi làn đủ 24 người.
   - Thiết lập lưu ở `storage/db/config/xe_tet.json` (giữ qua restart / deploy), mọi màn hình live đổi theo ngay.
 - Sửa overlay có hot reload: `cd xe_tet/overlay && npm run dev` → http://127.0.0.1:5173 (server Python vẫn phải chạy).
-- Test: `/home/vu/venv-xetet/bin/python -m pytest xe_tet/tests -q` (không gọi mạng, TikTok dùng client giả). Test trên trình duyệt thật (server phải đang chạy, sẽ reset game):
+- Test: `/home/vu/venv-xetet/bin/python -m pytest xe_tet/tests -q` (không gọi mạng, TikTok dùng client giả). Test trên trình
+  duyệt thật chạy trên **máy chủ thử riêng cổng 8811** (script bấm tạm dừng / làm lại / giả lập — không bao giờ chạy vào
+  server 8810 đang dùng): `XE_TET_PORT=8811 XE_TET_SETTINGS=/tmp/xe_tet_test.json /home/vu/venv-xetet/bin/python -m xe_tet.server`, rồi:
   `xe_tet/e2e/ux_scenarios.py` (11 tình huống + vùng TikTok che), `control_panel.py` (bảng điều khiển → overlay),
   `flicker.py` (đếm màn đen / đổi cảnh).
 - Rà soát BA / BRD / thuật toán / SA: `xe_tet/REVIEW.md`.

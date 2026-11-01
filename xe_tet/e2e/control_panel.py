@@ -1,5 +1,6 @@
 """Bấm bảng điều khiển → kiểm overlay đổi theo. Chạy (server đang chạy): venv/bin/python -I xe_tet/e2e/control_panel.py <thư mục ảnh>"""
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -7,7 +8,8 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-B = "http://127.0.0.1:8810"
+# Máy chủ THỬ riêng (cổng 8811, thiết lập riêng) — không bao giờ bấm vào server anh đang dùng / đang live (8810).
+B = os.getenv("XE_TET_URL", "http://127.0.0.1:8811")
 OUT = Path(sys.argv[1])
 OUT.mkdir(parents=True, exist_ok=True)
 fails, passes = [], []
