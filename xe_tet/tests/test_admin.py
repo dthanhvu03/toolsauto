@@ -274,3 +274,21 @@ def test_track_list_never_runs_ffprobe_on_game_loop(tmp_path, monkeypatch):
         time.sleep(0.01)
     assert [t["seconds"] for t in music.tracks() if t["id"] == "file:moi.mp3"] == [95.0]
     assert threads == [False]  # đo đúng một lần, không phải ở luồng chính
+
+
+def test_outbox_keeps_only_latest_state_in_place():
+    box = app_module.Outbox(ws=None)
+    assert box.put("s1", state=True)
+    assert box.put("e1", state=False)
+    assert box.put("s2", state=True)  # màn hình chưa nhận kịp s1: ghi đè ngay chỗ s1, không xếp thêm
+    assert [slot[0] for slot in box.queue] == ["s2", "e1"]
+    box.queue.popleft()
+    box.pending_state = None  # như pump vừa lấy state ra gửi
+    assert box.put("s3", state=True)
+    assert [slot[0] for slot in box.queue] == ["e1", "s3"]
+
+
+def test_outbox_overflow_reports_slow_screen():
+    box = app_module.Outbox(ws=None)
+    assert all(box.put(f"e{i}", state=False) for i in range(app_module.OUTBOX_MAX))
+    assert not box.put("one more", state=False)

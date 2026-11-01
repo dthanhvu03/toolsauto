@@ -235,7 +235,9 @@ export class HomeSet implements StageSet {
   readonly family: THREE.Group[] = [];
   private plaque = new SignBoard("CHÀO MỪNG VỀ QUÊ", 4.4, 0.9);
   private tree = new THREE.Group();
-  private trees = new Map<number, THREE.Group>();  // đào (Bắc) / mai (nơi khác): dựng một lần, đổi thì bật / tắt
+  // đào (Bắc) / mai (nơi khác): dựng sẵn cả hai lúc khởi động, đổi thì bật / tắt — dựng lúc thả khách là cây chưa uốn
+  // theo đường + biên dịch shader ngay lúc người xem đang nhìn (PLAN-133)
+  private trees = new Map<number, THREE.Group>([DAO, MAI].map((c) => [c, blossomTree(c)]));
   private steam: Steam;
   private fire: THREE.MeshStandardMaterial;
   private lanterns: LanternString;
@@ -310,6 +312,8 @@ export class HomeSet implements StageSet {
     this.steam = new Steam(new THREE.Vector3(potX, 1.5, potZ), 16, 2.8);
     g.add(this.steam.points);
 
+    this.trees.forEach((tree) => { tree.visible = false; });  // chưa có khách về: setPlace bật đúng cây
+    this.tree.add(...this.trees.values());
     g.add(at(this.tree, -6.5, 0, -13.5), at(kumquatPot(), 5.5, 0.05, HOUSE_Z + 2.8));
     // sân Tết (PLAN-129): cây nêu, dưa hấu bổ đôi, chồng bánh chưng cạnh nồi, cúc hai bên cửa, cờ trên trụ cổng
     g.add(at(cayNeu(), 4.3, 0.05, -11.2));  // bên phải lối vào: bên trái là chỗ bong bóng lơ xe
@@ -333,13 +337,7 @@ export class HomeSet implements StageSet {
   /** Biển cổng làng ghi tên tỉnh người vừa về; cây đào miền Bắc, mai nơi khác. */
   setPlace(province: string, region: Region): void {
     this.plaque.set(`CHÀO MỪNG VỀ ${province.toUpperCase()}`);
-    const color = region === "bac" ? 0xff8fb1 : 0xffd23f;
-    if (!this.trees.has(color)) {
-      const tree = blossomTree(color);
-      shadowed(tree);
-      this.trees.set(color, tree);
-      this.tree.add(tree);
-    }
+    const color = region === "bac" ? DAO : MAI;
     this.trees.forEach((tree, c) => { tree.visible = c === color; });
   }
 

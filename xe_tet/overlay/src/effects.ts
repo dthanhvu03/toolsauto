@@ -34,6 +34,17 @@ const PUFF = (() => {
 const GRAVITY = 5;
 const SHELL_LIFE = 1.9;
 const ROCKET_TIME = 0.85;
+const SPARKS = 80;
+const SPARKS_LOW = 36;
+const MAX_FLYING = 10;  // quả đang bay + chùm đang nổ cùng lúc (chất lượng thấp: 4)
+const MAX_FLYING_LOW = 4;
+
+/*
+ * Pháo hoa dùng bể đối tượng: quả + chùm cấp sẵn một lần, bắn xong thì ẩn đi chờ lần sau. Trước đây mỗi chùm tạo vật liệu
+ * mới rồi dispose() → three xoá luôn chương trình shader (không còn vật liệu nào dùng) → chùm sau biên dịch lại từ đầu,
+ * hình khựng đúng lúc có quà (đo 01/11: 30 % luồng chính là biên dịch shader). Cấp sẵn thì shader biên dịch một lần lúc
+ * khởi động, được uốn theo đường cùng lượt bendTree đầu tiên.
+ */
 
 /**
  * Một chùm tia sau khi nổ. Mỗi tia vẽ thành một nét từ vị trí hiện tại lùi theo vận tốc → có đuôi
@@ -42,15 +53,40 @@ const ROCKET_TIME = 0.85;
 class Shell {
   readonly lines: THREE.LineSegments;
   readonly heads: THREE.Points;
-  private pos: Float32Array;
-  private vel: Float32Array;
-  private life = SHELL_LIFE;
+  private pos = new Float32Array(SPARKS * 3);
+  private vel = new Float32Array(SPARKS * 3);
+  private segColor = new THREE.BufferAttribute(new Float32Array(SPARKS * 6), 3);
+  private headColor = new THREE.BufferAttribute(new Float32Array(SPARKS * 3), 3);
+  private life = 0;
+  private n = 0;
 
-  constructor(origin: THREE.Vector3, colors: number[], private n: number) {
-    this.pos = new Float32Array(n * 3);
-    this.vel = new Float32Array(n * 3);
-    const segColor = new Float32Array(n * 6);
-    const headColor = new Float32Array(n * 3);
+  constructor() {
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(SPARKS * 6), 3));
+    lineGeo.setAttribute("color", this.segColor);
+    this.lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({
+      vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    const headGeo = new THREE.BufferGeometry();
+    headGeo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3));
+    headGeo.setAttribute("color", this.headColor);
+    this.heads = new THREE.Points(headGeo, new THREE.PointsMaterial({
+      size: 0.7, map: DOT, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    for (const o of [this.lines, this.heads]) {
+      o.frustumCulled = false;
+      o.visible = false;
+    }
+  }
+
+  get active(): boolean {
+    return this.life > 0;
+  }
+
+  /** Nổ `n` tia tại `origin`. */
+  fire(origin: THREE.Vector3, colors: number[], n: number): void {
+    this.n = n;
+    this.life = SHELL_LIFE;
+    const seg = this.segColor.array as Float32Array;
+    const head = this.headColor.array as Float32Array;
     const c = new THREE.Color();
     const dir = new THREE.Vector3();
     for (let i = 0; i < n; i++) {
@@ -58,24 +94,23 @@ class Shell {
       dir.randomDirection().multiplyScalar(6.5 + Math.random() * 2.5);
       this.vel.set([dir.x, dir.y, dir.z], i * 3);
       c.setHex(colors[i % colors.length]);
-      segColor.set([c.r, c.g, c.b, c.r * 0.15, c.g * 0.15, c.b * 0.15], i * 6);  // đầu sáng, đuôi tối dần
-      headColor.set([c.r, c.g, c.b], i * 3);
+      seg.set([c.r, c.g, c.b, c.r * 0.15, c.g * 0.15, c.b * 0.15], i * 6);  // đầu sáng, đuôi tối dần
+      head.set([c.r, c.g, c.b], i * 3);
     }
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(n * 6), 3));
-    lineGeo.setAttribute("color", new THREE.BufferAttribute(segColor, 3));
-    this.lines = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({
-      vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-    const headGeo = new THREE.BufferGeometry();
-    headGeo.setAttribute("position", new THREE.BufferAttribute(this.pos, 3));
-    headGeo.setAttribute("color", new THREE.BufferAttribute(headColor, 3));
-    this.heads = new THREE.Points(headGeo, new THREE.PointsMaterial({
-      size: 0.7, map: DOT, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-    for (const o of [this.lines, this.heads]) o.frustumCulled = false;
+    this.segColor.needsUpdate = this.headColor.needsUpdate = true;
+    this.lines.geometry.setDrawRange(0, n * 2);
+    this.heads.geometry.setDrawRange(0, n);
+    this.lines.visible = this.heads.visible = true;
+    this.update(0);
   }
 
-  update(dt: number): boolean {
+  update(dt: number): void {
+    if (!this.active) return;
     this.life -= dt;
+    if (!this.active) {
+      this.lines.visible = this.heads.visible = false;
+      return;
+    }
     const drag = Math.pow(0.35, dt);
     const seg = (this.lines.geometry.getAttribute("position") as THREE.BufferAttribute).array as Float32Array;
     for (let i = 0; i < this.n; i++) {
@@ -93,62 +128,78 @@ class Shell {
     const fade = Math.max(0, this.life / SHELL_LIFE);
     (this.lines.material as THREE.LineBasicMaterial).opacity = fade;
     (this.heads.material as THREE.PointsMaterial).opacity = fade * (0.7 + Math.random() * 0.3);  // lấp lánh
-    return this.life > 0;
-  }
-
-  dispose(): void {
-    for (const o of [this.lines, this.heads]) {
-      o.removeFromParent();
-      o.geometry.dispose();
-      (o.material as THREE.Material).dispose();
-    }
   }
 }
 
 const TRAIL_POINTS = 8;
+const _p = new THREE.Vector3();
 
 /** Quả pháo bay vụt lên (có vệt sáng) rồi nổ ở độ cao đích. */
 class Rocket {
   readonly trail: THREE.Line;
+  readonly to = new THREE.Vector3();
+  colors: number[] = [];
+  private from = new THREE.Vector3();
   private t = 0;
-  private points: THREE.Vector3[] = [];
-  // vệt dài cố định 8 điểm: cấp sẵn bộ đệm, mỗi khung chỉ chép toạ độ + đổi số điểm vẽ
-  // (setFromPoints lên hình đã có sẵn bộ đệm 1 điểm sẽ không nới ra được → vệt không hiện)
+  private count = 0;
+  // vệt = cửa sổ trượt 8 điểm gần nhất trên bộ đệm cấp sẵn: điểm mới ghi vào cuối, đầy thì dời cả dải lùi một điểm
+  // (copyWithin, không cấp phát gì mỗi khung)
   private positions = new THREE.BufferAttribute(new Float32Array(TRAIL_POINTS * 3), 3);
 
-  constructor(private from: THREE.Vector3, readonly to: THREE.Vector3, readonly colors: number[]) {
+  constructor() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", this.positions);
     geometry.setDrawRange(0, 0);
     this.trail = new THREE.Line(geometry, new THREE.LineBasicMaterial({
       color: 0xffe0a0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     this.trail.frustumCulled = false;
+    this.trail.visible = false;
   }
 
-  /** Trả về true khi tới điểm nổ. */
+  get active(): boolean {
+    return this.trail.visible;
+  }
+
+  fire(from: THREE.Vector3, to: THREE.Vector3, colors: number[]): void {
+    this.from.copy(from);
+    this.to.copy(to);
+    this.colors = colors;
+    this.t = 0;
+    this.count = 0;
+    this.trail.geometry.setDrawRange(0, 0);
+    this.trail.visible = true;
+  }
+
+  /** Trả về true khi tới điểm nổ (quả ẩn đi, trả về bể). */
   update(dt: number): boolean {
     this.t = Math.min(1, this.t + dt / ROCKET_TIME);
     const ease = 1 - Math.pow(1 - this.t, 2);  // chậm dần khi lên cao
-    this.points.push(this.from.clone().lerp(this.to, ease));
-    if (this.points.length > TRAIL_POINTS) this.points.shift();
-    this.points.forEach((p, i) => this.positions.setXYZ(i, p.x, p.y, p.z));
+    _p.copy(this.from).lerp(this.to, ease);
+    const a = this.positions.array as Float32Array;
+    if (this.count === TRAIL_POINTS) a.copyWithin(0, 3);
+    else this.count++;
+    const o = (this.count - 1) * 3;
+    a[o] = _p.x;
+    a[o + 1] = _p.y;
+    a[o + 2] = _p.z;
     this.positions.needsUpdate = true;
-    this.trail.geometry.setDrawRange(0, this.points.length);
-    return this.t >= 1;
-  }
-
-  dispose(): void {
-    this.trail.removeFromParent();
-    this.trail.geometry.dispose();
-    (this.trail.material as THREE.Material).dispose();
+    this.trail.geometry.setDrawRange(0, this.count);
+    if (this.t < 1) return false;
+    this.trail.visible = false;
+    return true;
   }
 }
 
 export class Fireworks {
   readonly group = new THREE.Group();
-  private rockets: Rocket[] = [];
-  private shells: Shell[] = [];
+  private rockets = Array.from({ length: MAX_FLYING }, () => new Rocket());
+  private shells = Array.from({ length: MAX_FLYING }, () => new Shell());
   private low = false;
+
+  constructor() {
+    for (const r of this.rockets) this.group.add(r.trail);
+    for (const s of this.shells) this.group.add(s.lines, s.heads);
+  }
 
   setQuality(low: boolean): void {
     this.low = low;
@@ -156,31 +207,23 @@ export class Fireworks {
 
   /** Bắn `count` quả từ mặt đất quanh (at.x, at.z) lên nổ ở độ cao at.y (rải ngang ±3). */
   launch(at: THREE.Vector3, count = 1, colors = TET_COLORS): void {
-    const max = this.low ? 4 : 10;
-    for (let i = 0; i < count && this.rockets.length + this.shells.length < max; i++) {
+    const max = this.low ? MAX_FLYING_LOW : MAX_FLYING;
+    let flying = this.rockets.filter((r) => r.active).length + this.shells.filter((s) => s.active).length;
+    for (let i = 0; i < count && flying < max; i++, flying++) {
+      const r = this.rockets.find((x) => !x.active);
+      if (!r) return;
       const to = at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 2, 0));
       const from = new THREE.Vector3(to.x + (Math.random() - 0.5) * 1.5, 0.5, to.z);
-      const pair = [colors[Math.floor(Math.random() * colors.length)], colors[Math.floor(Math.random() * colors.length)]];
-      const r = new Rocket(from, to, pair);
-      this.rockets.push(r);
-      this.group.add(r.trail);
+      r.fire(from, to, [colors[Math.floor(Math.random() * colors.length)], colors[Math.floor(Math.random() * colors.length)]]);
     }
   }
 
   update(dt: number): void {
-    this.rockets = this.rockets.filter((r) => {
-      if (!r.update(dt)) return true;
-      const shell = new Shell(r.to, r.colors, this.low ? 36 : 80);
-      this.shells.push(shell);
-      this.group.add(shell.lines, shell.heads);
-      r.dispose();
-      return false;
-    });
-    this.shells = this.shells.filter((s) => {
-      if (s.update(dt)) return true;
-      s.dispose();
-      return false;
-    });
+    for (const r of this.rockets) {
+      if (!r.active || !r.update(dt)) continue;
+      this.shells.find((s) => !s.active)?.fire(r.to, r.colors, this.low ? SPARKS_LOW : SPARKS);
+    }
+    for (const s of this.shells) s.update(dt);
   }
 }
 

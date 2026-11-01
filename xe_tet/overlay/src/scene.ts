@@ -209,7 +209,9 @@ export class World {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // three 0.187 bỏ PCFSoft, tự đổi sang PCF ở lượt vẽ bóng đầu tiên — để PCFSoft thì warmUp biên dịch sẵn nhầm biến thể
+    // (bóng «basic»), vật ngoài khung hình (hơi nồi đầu ngõ) vẫn biên dịch lại giữa trận. Hình y như trước.
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.labels = new CSS2DRenderer({ element: labelsEl });
     this.labels.setSize(W, H);
 
@@ -442,6 +444,7 @@ export class World {
 
   private addWalker(obj: THREE.Object3D, path: THREE.Vector3[], speed: number, onDone?: () => void, wait = 0): Walker {
     const w: Walker = { obj, path, speed, wait, phase: Math.random() * 6, hold: false, onDone };
+    bendTree(obj);  // uốn ngay: vẽ bản chưa uốn rồi lượt quét mới uốn là biên dịch shader hai lần giữa trận
     this.scene.add(obj);
     this.walkers.push(w);
     if (this.walkers.length > 60) this.removeWalker(this.walkers[0]);
@@ -500,6 +503,7 @@ export class World {
       const w = this.addWalker(p, [this.rest.shop.clone()], 4);
       w.onDone = () => {
         p.add(at(box(0.5, 0.5, 0.3, 0xd32f2f), 0.45, 0.7, 0)); // túi quà
+        bendTree(p);
         w.path = [this.bus.doorSpot.clone()];
         w.wait = 2;
         w.onDone = undefined;
@@ -651,6 +655,30 @@ export class World {
     this.prebuildWait = PREBUILD_GAP;
     const next = this.land.missing()[0];
     if (next) this.land.prebuild(next);
+  }
+
+  /**
+   * Biên dịch sẵn mọi shader trước khi hiện cảnh (PLAN-133): vật đang ẩn (pháo hoa, bối cảnh khác, trong xe, hầm) mà để
+   * tới lúc hiện mới biên dịch thì khựng hình đúng lúc đó. compileAsync dùng KHR_parallel_shader_compile — biên dịch song
+   * song, không chặn luồng chính; một lượt vẽ với mọi vật hiện ra để biên dịch nốt shader bóng đổ (vật liệu độ sâu).
+   */
+  async warmUp(): Promise<void> {
+    const hidden: THREE.Object3D[] = [];
+    this.scene.traverse((o) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+    });
+    try {
+      await this.renderer.compileAsync(this.scene, this.camOut);
+      // máy không có KHR_parallel_shader_compile: shader chỉ thật sự dựng ở lần dùng đầu → ép dựng xong ngay bây giờ
+      for (const program of this.renderer.info.programs ?? []) program.getUniforms();
+      this.renderer.render(this.scene, this.camOut);
+    } finally {
+      for (const o of hidden) o.visible = false;
+    }
+    this.renderer.render(this.scene, this.camOut);  // cùng một lượt: trình duyệt chỉ hiện khung đúng này
   }
 
   /** Số liệu vẽ của khung vừa rồi — cho đồng hồ ?fps=1. */

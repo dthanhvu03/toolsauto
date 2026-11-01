@@ -30,12 +30,14 @@ function fontsReady(): Promise<unknown> {
   ]).catch(() => undefined);
 }
 
-function start(): void {
+async function start(): Promise<void> {
   const world = new World(
     document.getElementById("gl") as HTMLCanvasElement,
     document.getElementById("labels") as HTMLElement,
     document.getElementById("fade") as HTMLElement,
   );
+  // biên dịch sẵn shader trước khi nhận state (state đổi ẩn / hiện bối cảnh) và trước vòng vẽ; lỗi thì vẫn chạy như cũ
+  await world.warmUp().catch((err) => console.error(err));
   const hud = new Hud();
   const sound = new Sound();
   sound.onLock = (locked) => document.getElementById("sound-lock")!.classList.toggle("hidden", !locked);
@@ -82,9 +84,14 @@ function start(): void {
   let frames = 0;
   let meterAt = performance.now();
   let last = performance.now();
+  // Vẽ theo lịch mỗi 33,3 ms (không phải «cách khung trước ≥ 31 ms»): màn 75 Hz theo ngưỡng chỉ ra 25 khung / giây
+  // (3 nhịp màn = 40 ms), theo lịch thì xen 2 – 3 nhịp, đủ 30. Trễ hẳn (tab bị treo) thì đặt lại lịch, không vẽ dồn.
+  let due = last;
   function loop(now: number): void {
     requestAnimationFrame(loop);
-    if (now - last < FRAME_MS - 2) return;
+    if (now < due - 2) return;
+    due += FRAME_MS;
+    if (now - due > FRAME_MS) due = now + FRAME_MS;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     world.frame(dt);
@@ -100,4 +107,4 @@ function start(): void {
   requestAnimationFrame(loop);
 }
 
-void fontsReady().then(start);
+void fontsReady().then(start).catch((err) => console.error(err));

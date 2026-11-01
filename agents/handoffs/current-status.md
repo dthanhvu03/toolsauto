@@ -133,7 +133,16 @@
 - **Chữ trên live to quá (anh báo):** cỡ chữ + khung co bằng `zoom` (mặc định 80 %), vị trí neo giữ nguyên, cụm trên dồn
   lên mốc 150 px; thanh «Cỡ chữ trên live» 0,6–1,2 trên /control (`hud_scale`). Ảnh 100 / 80 / 65 % trên 8811. Đã khởi động lại
   toàn bộ phần game (anh cho phép): 8810 + PM2 `VieNeu_TTS`; Studio_Heavy / Light vẫn tắt; bot cashback / store không đụng.
-- **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+- **Phản biện 10 vai giật lag / thuật toán (anh yêu cầu, chưa sửa code):** đo trên 8811 (đã tắt) — 30 % luồng chính là biên
+  dịch shader, thủ phạm pháo hoa (vật liệu mới mỗi chùm, `dispose` xoá chương trình → biên dịch lại; `bendTree` đổi vật
+  liệu đang bay sang bản uốn). Server không phải nguồn giật (tick 11 µs, snapshot 0,5 ms). Thứ tự ghé tham lam: +3,1 % km
+  nhưng chờ chỉ +0,84 % so tối ưu → giữ. Kế hoạch 7 bước: `agents/plans/active/PLAN-133-xe-tet-stutter.md`.
+- **PLAN-133 bước 1–6 xong (anh duyệt «triển khai đi»):** pháo hoa bể đối tượng, biên dịch sẵn shader (`warmUp`, PCF),
+  nhạc tự sinh dựng sẵn offline, nhịp khung theo lịch, server `Outbox` mỗi màn hình. Proof trên 8811 (bản sao build riêng):
+  biên dịch shader giữa trận 25 → 0 / 150 giây, luồng chính bận 42 → 8 %, pytest 117, e2e 28/28 + UX 0 lỗi, ảnh pháo hoa.
+  Anh duyệt → đã build + khởi động lại 8810 (lúc đó TikTok idle, xe trống), trang live 0 lỗi; đã commit. Bước 7 (Lambert,
+  gộp khối…) chờ số `/?fps=1` trên GPU thật. 8810 đang để chất lượng «Thấp» (anh đặt).
+- **Next:** anh mở `/?fps=1` trên Chrome Windows (Cao / Vừa / Thấp, ngoài giờ live) gửi số → PLAN-133 bước 7; anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
 

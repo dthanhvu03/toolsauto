@@ -6,10 +6,12 @@ Chạy: `python -m xe_tet.server` từ thư mục gốc toolsauto → http://127
 import asyncio
 import contextlib
 import hmac
+import json
 import logging
 import os
 import random
 import time
+from collections import deque
 from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -29,18 +31,56 @@ TICK = 0.1
 STATE_EVERY = 0.2
 JOIN_FLUSH = 2.0
 LIKES_FLUSH = 0.5  # gom tim mỗi nửa giây → overlay cho tim bay lên thanh tốc độ
-SEND_TIMEOUT = 1.0  # màn hình nào nhận chậm hơn thì bỏ, không để kéo cả vòng game đứng theo
+SEND_TIMEOUT = 1.0  # một khung gửi lâu hơn thì coi màn hình đã chết: đóng, overlay tự nối lại
+OUTBOX_MAX = 64  # khung chờ gửi tối đa / màn hình; dồn quá (màn hình nhận không kịp) thì đóng kết nối
 
 log = logging.getLogger("xe_tet")
 DEPARTURE_LIST = [{"key": d.key, "name": d.name} for d in DEPARTURES if d.key in available()]
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "testserver")
 
 
+class Outbox:
+    """Hàng gửi riêng một màn hình (PLAN-133): vòng game chỉ bỏ khung vào rồi đi tiếp, `pump` gửi dần — một màn hình
+    nhận chậm (điện thoại wifi yếu mở /control) không kéo vòng game và các màn hình khác đứng theo.
+
+    State chỉ cần bản mới nhất: còn bản cũ chưa gửi thì ghi đè ngay tại chỗ của nó trong hàng (giữ thứ tự với sự kiện).
+    Sự kiện giữ đủ; dồn quá OUTBOX_MAX khung thì `put` trả False để Hub đóng kết nối."""
+
+    def __init__(self, ws: WebSocket) -> None:
+        self.ws = ws
+        self.queue: deque[list[str]] = deque()
+        self.pending_state: list[str] | None = None  # ô của state đang chờ trong hàng (ghi đè được)
+        self.wake = asyncio.Event()
+
+    def put(self, text: str, state: bool) -> bool:
+        if state and self.pending_state is not None:
+            self.pending_state[0] = text
+            return True
+        if len(self.queue) >= OUTBOX_MAX:
+            return False
+        slot = [text]
+        if state:
+            self.pending_state = slot
+        self.queue.append(slot)
+        self.wake.set()
+        return True
+
+    async def pump(self) -> None:
+        while True:
+            await self.wake.wait()
+            self.wake.clear()
+            while self.queue:
+                slot = self.queue.popleft()
+                if slot is self.pending_state:
+                    self.pending_state = None
+                await asyncio.wait_for(self.ws.send_text(slot[0]), SEND_TIMEOUT)
+
+
 class Hub:
     def __init__(self) -> None:
         self.settings = settings.load()
         self.engine = self.new_engine()
-        self.clients: set[WebSocket] = set()
+        self.clients: dict[WebSocket, Outbox] = {}
         self.sim_rate = 0.0  # sự kiện giả / giây, 0 = tắt
         self.pending_joins: list[str] = []
         self.last_join_flush = 0.0
@@ -77,17 +117,15 @@ class Hub:
         settings.save(self.settings)
 
     async def broadcast(self, message: dict) -> None:
-        dead = []
-        for ws in list(self.clients):  # màn hình có thể ngắt giữa chừng trong lúc await
-            try:
-                await asyncio.wait_for(ws.send_json(message), SEND_TIMEOUT)
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            # bỏ khỏi danh sách thôi thì màn hình vẫn giữ kết nối «chết» (không nhận gì nữa, cũng không tự nối lại):
-            # đóng hẳn để overlay thấy rớt mạng và tự nối lại sau 1,5 giây
-            self.clients.discard(ws)
-            asyncio.create_task(_close_quietly(ws))
+        # mã hoá một lần cho mọi màn hình (send_json mã hoá lại cho từng màn hình), cùng kiểu với send_json
+        text = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
+        state = message.get("kind") == "state"
+        for ws, box in list(self.clients.items()):
+            if not box.put(text, state):
+                # bỏ khỏi danh sách thôi thì màn hình vẫn giữ kết nối «chết» (không nhận gì nữa, cũng không tự nối lại):
+                # đóng hẳn để overlay thấy rớt mạng và tự nối lại sau 1,5 giây
+                self.clients.pop(ws, None)
+                asyncio.create_task(_close_quietly(ws))
 
     async def run(self) -> None:
         while True:
@@ -184,15 +222,28 @@ async def require_token(request, call_next):
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()
-    hub.clients.add(ws)
+    box = Outbox(ws)
+    hub.clients[ws] = box
+    pump = asyncio.create_task(_pump(ws, box))
     try:
-        await ws.send_json(hub.state_message())
+        box.put(json.dumps(hub.state_message(), ensure_ascii=False, separators=(",", ":")), state=True)
         while True:
             await ws.receive_text()  # overlay không gửi gì; giữ kết nối
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, RuntimeError):  # RuntimeError: đã bị đóng do gửi không kịp
         pass
     finally:
-        hub.clients.discard(ws)
+        hub.clients.pop(ws, None)
+        pump.cancel()
+
+
+async def _pump(ws: WebSocket, box: Outbox) -> None:
+    try:
+        await box.pump()
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # gửi quá SEND_TIMEOUT / kết nối đã đứt: đóng hẳn để overlay tự nối lại
+        hub.clients.pop(ws, None)
+        await _close_quietly(ws)
 
 
 @app.post("/api/event")

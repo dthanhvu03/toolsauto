@@ -75,7 +75,15 @@ function compose(p: Preset): Note[][] {
   return [...section, ...section.map((ph) => ph.map((n) => ({ ...n, midi: n.midi + (ph === b ? 0 : 12) })))].slice(0, PHRASES);
 }
 
-/** Một bài đang chơi: lên lịch nốt trước LOOKAHEAD giây, lặp vô hạn tới khi stop(). */
+// Bài dựng sẵn (PLAN-133): cả bài vẽ ra một AudioBuffer bằng OfflineAudioContext (luồng âm thanh, không phải luồng chính)
+// rồi phát lặp — luồng chính có khựng bao lâu nhạc cũng không lỡ nốt. Nốt cuối bài còn ngân (nền trầm 8 bước ở 70 bpm
+// ≈ 3,6 giây) → dựng dư TAIL giây rồi cộng phần dư vào đầu bài: lặp lại liền mạch, không cụt tiếng.
+const TAIL = 5;
+// Giữ 2 bài gần nhất (bài dài ~55 giây ≈ 10 MB): đổi qua lại giữa hai xe không phải dựng lại.
+const KEEP = 2;
+const rendered = new Map<number, Promise<AudioBuffer>>();
+
+/** Một bài đang chơi: phát bản dựng sẵn lặp vô hạn tới khi stop(); dựng lỗi thì lên lịch nốt trước LOOKAHEAD giây. */
 export class Song {
   private timer = 0;
   private next = 0;  // thời điểm (đồng hồ âm thanh) của bước kế tiếp
@@ -83,8 +91,10 @@ export class Song {
   private notes: Map<number, Note[]>;
   private total: number;
   private stepSec: number;
+  private source: AudioBufferSourceNode | null = null;
+  private stopped = false;
 
-  constructor(private ctx: AudioContext, private out: AudioNode, private p: Preset) {
+  constructor(private ctx: BaseAudioContext, private out: AudioNode, private p: Preset) {
     this.stepSec = 60 / p.bpm / 2;
     const phrases = compose(p);
     this.total = phrases.length * STEPS_PER_PHRASE;
@@ -95,20 +105,72 @@ export class Song {
     }));
   }
 
+  /** Độ dài một vòng bài (giây). */
+  get seconds(): number {
+    return this.total * this.stepSec;
+  }
+
   /** Bắt đầu phát; `offset` giây: vào giữa bài (đài của xe đang phát tới đâu thì nghe từ đó). */
   start(offset = 0): void {
+    const started = this.ctx.currentTime;
+    this.prerendered().then((buffer) => {
+      if (this.stopped) return;
+      const src = this.source = new AudioBufferSourceNode(this.ctx, { buffer, loop: true });
+      src.connect(this.out);
+      // chờ dựng mất bao lâu thì bài cũng đã trôi chừng ấy (giữ khớp với đài của xe)
+      src.start(this.ctx.currentTime + 0.05, (offset + this.ctx.currentTime - started) % buffer.duration);
+    }).catch((err) => {
+      console.error(err);
+      if (!this.stopped) this.live(offset);
+    });
+  }
+
+  stop(): void {
+    this.stopped = true;
+    window.clearInterval(this.timer);
+    this.source?.stop();
+    this.source?.disconnect();
+  }
+
+  /** Bản dựng sẵn của bài (dùng lại nếu đã dựng: Map giữ thứ tự, dùng tới thì đưa xuống cuối — bỏ bài lâu nhất chưa nghe). */
+  private prerendered(): Promise<AudioBuffer> {
+    const key = this.p.seed;
+    let job = rendered.get(key);
+    if (job) {
+      rendered.delete(key);
+    } else {
+      job = this.render();
+      job.catch(() => rendered.delete(key));
+    }
+    rendered.set(key, job);
+    while (rendered.size > KEEP) rendered.delete(rendered.keys().next().value!);
+    return job;
+  }
+
+  private async render(): Promise<AudioBuffer> {
+    const rate = this.ctx.sampleRate;
+    const loop = Math.round(this.seconds * rate);
+    const off = new OfflineAudioContext(1, loop + TAIL * rate, rate);
+    const song = new Song(off, off.destination, this.p);
+    for (let step = 0; step < song.total; step++) song.play(step, step * song.stepSec);
+    const full = await off.startRendering();
+    const data = full.getChannelData(0);
+    for (let i = loop; i < data.length; i++) data[i - loop] += data[i];  // đuôi cuối bài ngân sang đầu vòng sau
+    const buffer = new AudioBuffer({ length: loop, sampleRate: rate, numberOfChannels: 1 });
+    buffer.copyToChannel(data.subarray(0, loop), 0);
+    return buffer;
+  }
+
+  /** Dự phòng: lên lịch nốt từng đợt bằng đồng hồ JS. */
+  private live(offset: number): void {
     this.index = Math.floor(offset / this.stepSec) % this.total;
     this.next = this.ctx.currentTime + 0.1;
     this.timer = window.setInterval(() => this.schedule(), TICK_MS);
     this.schedule();
   }
 
-  stop(): void {
-    window.clearInterval(this.timer);
-  }
-
-  /** Lên lịch nốt tới `ahead` giây phía trước (dựng offline để kiểm tra thì truyền cả độ dài bài). */
-  schedule(ahead = LOOKAHEAD): void {
+  /** Lên lịch nốt tới `ahead` giây phía trước. */
+  private schedule(ahead = LOOKAHEAD): void {
     // khựng lâu hơn LOOKAHEAD: các bước đã lỡ bỏ qua luôn (giữ đúng chỗ trong bài) — lên lịch bù thì cả chục nốt phát
     // dồn cùng một lúc, nghe lẹt xẹt
     const late = this.ctx.currentTime + 0.05 - this.next;
@@ -118,26 +180,29 @@ export class Song {
       this.next += skip * this.stepSec;
     }
     while (this.next < this.ctx.currentTime + ahead) {
-      const step = this.index % this.total;
-      const t = this.next;
-      for (const n of this.notes.get(step) ?? []) {
-        if (this.p.lead === "sao") sao(this.ctx, this.out, t, hz(n.midi), n.len * this.stepSec, 0.13);  // sáo ngân dài: nhỏ hơn đàn cho đều tai
-        else tranh(this.ctx, this.out, t, hz(n.midi), 0.28);
-      }
-      const beat = step % 4 === 0;
-      if (step % 8 === 0) bass(this.ctx, this.out, t, hz(this.p.root - 12 + (step % 32 === 16 ? 7 : 0)), this.stepSec * 8);
-      const roll = rand(this.p.seed * 1000 + step)();
-      if (beat && roll < this.p.drums) trong(this.ctx, this.out, t, step % 16 === 0 ? 0.5 : 0.3);
-      if (!beat && step % 2 === 1 && roll < this.p.drums * 0.7) mo(this.ctx, this.out, t, 0.12);
+      this.play(this.index % this.total, this.next);
       this.next += this.stepSec;
       this.index++;
     }
+  }
+
+  /** Các nốt của bước `step` trong bài, phát lúc `t` (đồng hồ âm thanh). */
+  private play(step: number, t: number): void {
+    for (const n of this.notes.get(step) ?? []) {
+      if (this.p.lead === "sao") sao(this.ctx, this.out, t, hz(n.midi), n.len * this.stepSec, 0.13);  // sáo ngân dài: nhỏ hơn đàn cho đều tai
+      else tranh(this.ctx, this.out, t, hz(n.midi), 0.28);
+    }
+    const beat = step % 4 === 0;
+    if (step % 8 === 0) bass(this.ctx, this.out, t, hz(this.p.root - 12 + (step % 32 === 16 ? 7 : 0)), this.stepSec * 8);
+    const roll = rand(this.p.seed * 1000 + step)();
+    if (beat && roll < this.p.drums) trong(this.ctx, this.out, t, step % 16 === 0 ? 0.5 : 0.3);
+    if (!beat && step % 2 === 1 && roll < this.p.drums * 0.7) mo(this.ctx, this.out, t, 0.12);
   }
 }
 
 // ---- nhạc cụ ------------------------------------------------------------------------------------
 
-function env(ctx: AudioContext, t: number, attack: number, peak: number, decay: number): GainNode {
+function env(ctx: BaseAudioContext, t: number, attack: number, peak: number, decay: number): GainNode {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(peak, t + attack);
@@ -146,7 +211,7 @@ function env(ctx: AudioContext, t: number, attack: number, peak: number, decay: 
 }
 
 /** Đàn tranh: gảy dây — tắt nhanh, nhấn nhá (cao lên chút rồi trả về). */
-function tranh(ctx: AudioContext, out: AudioNode, t: number, freq: number, vel: number): void {
+function tranh(ctx: BaseAudioContext, out: AudioNode, t: number, freq: number, vel: number): void {
   const g = env(ctx, t, 0.005, vel, 1.3);
   for (const [mult, type, level] of [[1, "triangle", 1], [2, "sine", 0.35], [3, "sine", 0.12]] as const) {
     const osc = ctx.createOscillator();
@@ -163,7 +228,7 @@ function tranh(ctx: AudioContext, out: AudioNode, t: number, freq: number, vel: 
 }
 
 /** Sáo trúc: vào hơi chậm, ngân, rung (vibrato) sau một nhịp thở. */
-function sao(ctx: AudioContext, out: AudioNode, t: number, freq: number, dur: number, vel: number): void {
+function sao(ctx: BaseAudioContext, out: AudioNode, t: number, freq: number, dur: number, vel: number): void {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(vel, t + 0.08);
@@ -186,7 +251,7 @@ function sao(ctx: AudioContext, out: AudioNode, t: number, freq: number, dur: nu
 }
 
 /** Nền trầm: một nốt gốc / quãng năm ngân dài (như dây đàn bầu nền). */
-function bass(ctx: AudioContext, out: AudioNode, t: number, freq: number, dur: number): void {
+function bass(ctx: BaseAudioContext, out: AudioNode, t: number, freq: number, dur: number): void {
   const g = env(ctx, t, 0.04, 0.12, dur);
   const osc = ctx.createOscillator();
   osc.type = "sine";
@@ -197,7 +262,7 @@ function bass(ctx: AudioContext, out: AudioNode, t: number, freq: number, dur: n
 }
 
 /** Trống: tiếng «thùng» trầm, cao độ tụt nhanh. */
-function trong(ctx: AudioContext, out: AudioNode, t: number, vel: number): void {
+function trong(ctx: BaseAudioContext, out: AudioNode, t: number, vel: number): void {
   const g = env(ctx, t, 0.003, vel, 0.35);
   const osc = ctx.createOscillator();
   osc.frequency.setValueAtTime(110, t);
@@ -208,7 +273,7 @@ function trong(ctx: AudioContext, out: AudioNode, t: number, vel: number): void 
 }
 
 /** Mõ: tiếng «cốc» gỗ ngắn. */
-function mo(ctx: AudioContext, out: AudioNode, t: number, vel: number): void {
+function mo(ctx: BaseAudioContext, out: AudioNode, t: number, vel: number): void {
   const g = env(ctx, t, 0.002, vel, 0.06);
   const osc = ctx.createOscillator();
   osc.frequency.value = 1150;
