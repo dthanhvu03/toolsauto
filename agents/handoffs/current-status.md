@@ -120,8 +120,8 @@
   - Font tự chứa `overlay/public/fonts` (Be Vietnam Pro + Baloo 2 cho tiêu đề / băng rôn), /control 16 px, hai cột trên máy tính.
   - Trộn tiếng: nén chung, tiếng lốp / gió theo tốc độ, máy nổ chờ ở bến, lơ xe nói thì nhạc + tiếng xe cùng nhỏ; chế độ
     Cân bằng / Nhạc nổi / Lơ xe nổi.
-  - 113 test. **Server 8810 chưa nạp** (talk.py, giờ chạy, tự chiếu) — chờ anh cho khởi động lại; phần overlay đã build
-    (F5 trang live là thấy font / đồ Tết, nhưng bảng chặng cần server mới).
+  - 113 test. **Đã khởi động lại 8810 (anh cho phép 01/11 ~17:39)**: chạy code mới, giữ thiết lập của anh (giọng Quang Sơn,
+    tốc độ đọc 1,25), tự chiếu «Theo chuyện hay», chuyến xa nhất 8 phút. TikTok đang chưa nối — anh bấm Kết nối một lần.
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
