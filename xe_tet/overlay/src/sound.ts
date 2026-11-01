@@ -57,6 +57,7 @@ export class Sound {
   private duckLevel = DUCK;
   private playing: Playing | null = null;
   private lastTing = 0;
+  private screen: number | null = null;  // số màn này do server cấp (tin «hello»)
   /** Gọi khi trình duyệt cho / chưa cho phát tiếng (overlay hiện / ẩn biểu tượng 🔇). */
   onLock?: (locked: boolean) => void;
 
@@ -98,9 +99,17 @@ export class Sound {
     window.setTimeout(() => this.onLock?.(this.ctx.state !== "running"), 500);
   }
 
+  setScreen(screen: number | null): void {
+    this.screen = screen;
+  }
+
   update(s: State): void {
     const c = s.control;
     const now = this.ctx.currentTime;
+    // mở trùng màn hình game (khung xem trước LIVE Studio, cửa sổ Chrome…): chỉ màn server chọn phát tiếng, màn khác im —
+    // hai màn cùng phát + thu cả tiếng máy là ra tiếng vang trên live (anh báo 01/11)
+    const silent = this.screen != null && s.audio_screen != null && s.audio_screen !== this.screen;
+    this.master.gain.setTargetAtTime(silent ? 0 : 1, now, 0.05);
     const mix = MIXES[c?.mix ?? "balanced"] ?? MIXES.balanced;
     this.duckLevel = mix.duck;
     this.music.gain.setTargetAtTime((c?.music_volume ?? 0.5) * mix.music, now, 0.2);

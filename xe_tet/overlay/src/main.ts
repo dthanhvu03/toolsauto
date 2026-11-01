@@ -61,7 +61,9 @@ async function start(): Promise<void> {
           try { step(); } catch (err) { console.error(err); }
         }
       };
-      if (data.kind === "state") {
+      if (data.kind === "hello") {  // server báo số của màn này (chỉ một màn game phát tiếng)
+        sound.setScreen((data as { screen?: number }).screen ?? null);
+      } else if (data.kind === "state") {
         each(() => world.update(data as State), () => hud.update(data as State), () => sound.update(data as State));
       } else if (data.kind === "event") {
         each(() => world.onEvent(data as GameEvent), () => hud.onEvent(data as GameEvent),

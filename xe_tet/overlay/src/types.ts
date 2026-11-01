@@ -90,6 +90,7 @@ export interface State {
   delivered: number;
   days_to_tet: number;
   season?: { phase: string; lunar: string | null; days_to_tet: number };  // lịch mùa Tết (PLAN-134 C)
+  audio_screen?: number | null;  // số màn hình game được phát tiếng (các màn khác im)
   rush?: boolean; // giờ cao điểm: hàng chờ ≥ 1 xe, chuyến tự ngắn lại
   route?: Route;  // bảng chặng của xe đang chiếu (PLAN-130)
   fleet?: FleetBus[];  // mọi xe đang chạy

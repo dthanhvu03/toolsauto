@@ -184,7 +184,7 @@ def test_token_protects_control_but_not_overlay(client, monkeypatch):
     assert client.get("/api/state", headers={"x-token": "bi-mat"}).status_code == 200
     assert client.get("/control?token=bi-mat").status_code == 200
     with client.websocket_connect("/ws") as ws:  # màn hình live vẫn xem được
-        assert ws.receive_json()["kind"] == "state"
+        assert ws.receive_json()["kind"] == "hello" and ws.receive_json()["kind"] == "state"
 
 
 class Clock:

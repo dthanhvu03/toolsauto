@@ -12,6 +12,7 @@ import os
 import random
 import time
 from collections import deque
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -20,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import music, settings, simulator, store, voice
-from .game.engine import LIKE_MAX, Engine, Refused, as_int
+from .game.engine import LIKE_MAX, VN, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
 from .tiktok import TikTokBridge
@@ -85,6 +86,11 @@ class Hub:
         self.last_flush = 0.0
         self.engine = self.new_engine()
         self.clients: dict[WebSocket, Outbox] = {}
+        # Màn hình game đang mở (overlay) — chỉ MỘT màn phát tiếng, các màn khác tự im: mở trùng (khung xem trước của LIVE
+        # Studio, cửa sổ Chrome, nguồn thứ hai) + thu cả tiếng máy là ra tiếng vang trên live (anh báo 01/11)
+        self.screens: dict[WebSocket, dict] = {}
+        self.screen_seq = 0
+        self.audio_choice: int | None = None  # admin chọn trên /control; None hoặc màn đã đóng → màn mở sau cùng
         self.sim_rate = 0.0  # sự kiện giả / giây, 0 = tắt
         self.pending_joins: list[str] = []
         self.last_join_flush = 0.0
@@ -116,8 +122,13 @@ class Hub:
         if accepted and event.get("type") == "like":
             self.pending_likes += max(1, min(LIKE_MAX, as_int(event.get("count"))))
 
+    def audio_screen(self) -> int | None:
+        ids = [sc["id"] for sc in self.screens.values()]
+        return self.audio_choice if self.audio_choice in ids else max(ids, default=None)
+
     def state_message(self) -> dict:
         return {"kind": "state", **self.engine.snapshot(), "control": self.settings, "sim_rate": self.sim_rate,
+                "screens": sorted(self.screens.values(), key=lambda sc: sc["id"]), "audio_screen": self.audio_screen(),
                 "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST, "music_tracks": music.tracks(),
                 "voices": self.voice.voice_list}
 
@@ -242,16 +253,34 @@ async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()
     box = Outbox(ws)
     hub.clients[ws] = box
+    hub.screen_seq += 1
+    hub.screens[ws] = {"id": hub.screen_seq, "app": _app_of(ws.headers.get("user-agent", "")),
+                       "since": datetime.now(VN).strftime("%H:%M:%S")}
     pump = asyncio.create_task(_pump(ws, box))
     try:
-        box.put(json.dumps(hub.state_message(), ensure_ascii=False, separators=(",", ":")), state=True)
+        box.put(json.dumps({"kind": "hello", "screen": hub.screen_seq}), state=False)  # màn này biết số của mình
+        await hub.broadcast(hub.state_message())  # màn mở sau cùng thành màn phát tiếng: màn cũ tự im ngay
         while True:
             await ws.receive_text()  # overlay không gửi gì; giữ kết nối
     except (WebSocketDisconnect, RuntimeError):  # RuntimeError: đã bị đóng do gửi không kịp
         pass
     finally:
         hub.clients.pop(ws, None)
+        hub.screens.pop(ws, None)
         pump.cancel()
+        await hub.broadcast(hub.state_message())  # màn phát tiếng vừa đóng: màn còn lại nhận tiếng
+
+
+def _app_of(user_agent: str) -> str:
+    """Tên app mở màn hình game, để anh nhận ra trên /control màn nào là nguồn live."""
+    ua = user_agent.lower()
+    if "tiktok" in ua or "livestudio" in ua or "electron" in ua:
+        return "TikTok LIVE Studio"
+    if "edg/" in ua:
+        return "Edge"
+    if "headless" in ua:
+        return "Trình duyệt thử"
+    return "Chrome" if "chrome" in ua else "Trình duyệt khác"
 
 
 async def _pump(ws: WebSocket, box: Outbox) -> None:
@@ -288,6 +317,8 @@ async def _admin(body: dict) -> dict:
     engine = hub.engine
     if action == "skip":
         engine.skip()
+    elif action == "audio_screen":  # chọn màn hình game phát tiếng (các màn khác im)
+        hub.audio_choice = as_int(body.get("screen")) or None
     elif action == "reset":
         await hub.flush()  # ghi nốt hồ sơ khách của ván cũ
         hub.engine = hub.new_engine()

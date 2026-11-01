@@ -140,6 +140,11 @@
 
   <section>
     <h2>🎵 Nhạc & âm thanh</h2>
+    <div class="row" style="flex-wrap:wrap; gap:6px; margin-bottom:8px">
+      <span style="min-width:96px">Phát tiếng ở</span>
+      <span id="screens" style="display:flex; flex-wrap:wrap; gap:6px; flex:1"></span>
+    </div>
+    <p class="hint" id="screens-hint" style="margin:0 0 8px"></p>
     <div class="row">
       <label class="toggle"><input type="checkbox" data-show="music_on"> Nhạc trong xe</label>
       <label class="toggle"><input type="checkbox" data-show="music_auto"> Hết bài tự qua bài</label>
@@ -387,6 +392,10 @@ $("tt-connect").onclick = async () => {
 };
 $("tt-user").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tt-connect").click(); });
 $("tt-disconnect").onclick = () => admin({ action: "tiktok_disconnect" });
+$("screens").onclick = (ev) => {
+  const btn = ev.target.closest("[data-screen]");
+  if (btn) admin({ action: "audio_screen", screen: Number(btn.dataset.screen) });
+};
 
 // ---- bến đi ----
 $("departure-set").onclick = () => admin({ action: "departure", key: $("departure").value });
@@ -522,6 +531,15 @@ $("relief-lanes").onclick = (e) => {
 };
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 function setIfChanged(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
+// Màn hình game đang mở: chỉ một màn phát tiếng (mở trùng + thu tiếng máy = vang trên live). Mặc định màn mở sau cùng;
+// bấm để chọn màn khác — chọn màn «TikTok LIVE Studio» khi đang live.
+function renderScreens(s) {
+  const list = s.screens || [];
+  setIfChanged($("screens"), list.length ? list.map((sc) => `<button data-screen="${sc.id}" class="${sc.id === s.audio_screen ? "primary" : ""}">`
+    + `${sc.id === s.audio_screen ? "🔊" : "🔇"} ${esc(sc.app)} · mở ${esc(sc.since)}</button>`).join("") : "<span>Chưa có màn hình game nào mở</span>");
+  $("screens-hint").textContent = list.length > 1
+    ? `Đang mở ${list.length} màn hình game — chỉ màn 🔊 phát tiếng. Đang live thì chọn màn «TikTok LIVE Studio».` : "";
+}
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 const clockOf = (b) => (b && b.clock ? ` · 🕐 ${b.clock.day ? `ngày ${b.clock.day + 1} ` : ""}${b.clock.time} trên xe` : "");
 // từng chặng của một xe: đã qua (mờ) → điểm kế (đậm, còn bao lâu) → các điểm sau; giờ tới theo đồng hồ trên xe
@@ -654,6 +672,7 @@ async function refresh() {
     $("s-phase").classList.toggle("paused", paused);
     $("s-bus").textContent = `Số ${main.no} · ${main.riders}/${s.bus.seats.length}`;
     renderBuses(s);
+    renderScreens(s);
     renderFiles(s);
     renderVoices(s);
     $("s-next").textContent = s.waiting;

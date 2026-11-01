@@ -292,3 +292,20 @@ def test_outbox_overflow_reports_slow_screen():
     box = app_module.Outbox(ws=None)
     assert all(box.put(f"e{i}", state=False) for i in range(app_module.OUTBOX_MAX))
     assert not box.put("one more", state=False)
+
+
+def test_only_one_screen_plays_sound(client):
+    """Mở trùng màn hình game (khung xem trước LIVE Studio, cửa sổ Chrome…) → chỉ một màn phát tiếng, tránh vang trên live:
+    mặc định màn mở sau cùng; anh chọn màn khác trên /control; màn phát tiếng đóng thì màn còn lại nhận tiếng."""
+    with client.websocket_connect("/ws") as a:
+        first = a.receive_json()["screen"]
+        with client.websocket_connect("/ws") as b:
+            second = b.receive_json()["screen"]
+            s = client.get("/api/state").json()
+            assert [sc["id"] for sc in s["screens"]] == [first, second] and s["audio_screen"] == second
+            assert s["screens"][0]["app"] and s["screens"][0]["since"]
+            client.post("/api/admin", json={"action": "audio_screen", "screen": first})
+            assert client.get("/api/state").json()["audio_screen"] == first
+        s = client.get("/api/state").json()
+        assert [sc["id"] for sc in s["screens"]] == [first] and s["audio_screen"] == first
+    client.post("/api/admin", json={"action": "audio_screen", "screen": 0})
