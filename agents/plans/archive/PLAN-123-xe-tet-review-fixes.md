@@ -1,6 +1,6 @@
 # PLAN-123 — Xe Tết: sửa sau rà soát 01/11 (lỗi → chuyên môn → tâm lý người xem)
 
-- Status: Done — anh duyệt 01/11, commit `b3d0636` (nhánh `feat/xe-tet-sum-vay`)
+- Status: Done — anh duyệt 01/11, commit `01d3bed` (nhánh `feat/xe-tet`, PR vào `main`)
 - Executor: Claude Code (anh duyệt 01/11: «vá hết theo thứ tự ưu tiên, vừa vá vừa research»)
 - Nguồn: rà soát 01/11 (2 reviewer độc lập server + overlay, đo trên routes.json thật) — tóm tắt trong current-status.md
 

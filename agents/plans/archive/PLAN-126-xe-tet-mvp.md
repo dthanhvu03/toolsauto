@@ -2,7 +2,7 @@
 
 > Đổi số 01/11: tạo ngày 31/10 với số 120 trùng PLAN-120 ngắt dòng phụ đề (Studio) — số không được dùng lại nên chuyển sang 126.
 
-- Status: Done — anh duyệt 01/11, commit `b3d0636` (nhánh `feat/xe-tet-sum-vay`)
+- Status: Done — anh duyệt 01/11, commit `01d3bed` (nhánh `feat/xe-tet`, PR vào `main`)
 - Executor: Claude Code (anh giao trực tiếp 31/10: «triển khai luôn cho nóng đi em, mvp trước»)
 - Thiết kế: `xe_tet/README.md`
 

@@ -81,10 +81,10 @@
 - **PLAN-125 xe tăng cường + admin mọi chuyến xong (anh chốt «tự động + quà 100 xu», thêm «admin control tất cả chuyến,
   góc cam»):** xe chạy ngầm theo tuyến thật, đọc tên khi tới; `/control` «Các chuyến xe» chiếu xe nào / tới điểm kế / gọi
   thêm / tắt tự gọi. Phòng 1 comment / 6 s: lên xe trong 30 phút 40 % → 98 %. 91 test, fuzz sạch.
-- **01/11 — commit + duyệt:** commit `b3d0636` đẩy lên nhánh `feat/xe-tet-sum-vay` (chưa merge `main`). Sửa `.gitignore`:
+- **01/11 — commit + duyệt:** commit `01d3bed` trên nhánh `feat/xe-tet` (đặt lại trên `origin/main` để PR không kéo theo 2 commit Studio chưa push; nhánh cũ `feat/xe-tet-sum-vay` bỏ). Sửa `.gitignore`:
   luật gốc `data/` làm `xe_tet/server/game/data/routes.json` bị bỏ qua (deploy sẽ lỗi) → thêm ngoại lệ. Anh duyệt ảnh →
   archive PLAN-121…126; MVP đổi số 120 → 126 (trùng PLAN-120 ngắt dòng phụ đề của Studio).
-- **Next:** anh quyết merge `feat/xe-tet-sum-vay` vào `main` (hoặc mở PR); deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+- **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
 

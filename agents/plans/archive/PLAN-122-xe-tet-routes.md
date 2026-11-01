@@ -1,6 +1,6 @@
 # PLAN-122 — Xe Tết: tuyến xe thật (bến đi, làn theo hướng, km thật, đường quanh co)
 
-- Status: Done — anh duyệt 01/11, commit `b3d0636` (nhánh `feat/xe-tet-sum-vay`)
+- Status: Done — anh duyệt 01/11, commit `01d3bed` (nhánh `feat/xe-tet`, PR vào `main`)
 - Executor: Claude Code (anh duyệt 31/10: bến đi mặc định Miền Đông mới, phương án B bến nhiều làn, cho gọi OSRM)
 - BRD: `xe_tet/docs/BRD-tuyen-xe.md`
 

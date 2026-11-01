@@ -1,6 +1,6 @@
 # PLAN-125 — Xe Tết: xe tăng cường (chạy ngầm, tự động + bằng quà)
 
-- Status: Done — anh duyệt 01/11, commit `b3d0636` (nhánh `feat/xe-tet-sum-vay`)
+- Status: Done — anh duyệt 01/11, commit `01d3bed` (nhánh `feat/xe-tet`, PR vào `main`)
 - Executor: Claude Code (anh chốt 01/11: «Tự động + bằng quà», mốc «100 xu, gộp bậc băng rôn»; thêm giữa chừng:
   «Admin control được tất cả các chuyến xe, góc cam chuyến xe»)
 
