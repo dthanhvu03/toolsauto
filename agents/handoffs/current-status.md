@@ -152,7 +152,13 @@
   290 chuyến × 5 bến 0 vi phạm, e2e 28/28 + UX 0 lỗi trên 8811, ảnh. Đã commit; **đã nạp 8810** (anh duyệt 01/11,
   `index-cKzjP-kB.js`, trang live 0 lỗi, log 0 lỗi, tạo `storage/db/xe_tet.db`). Còn: C3 chiều ra (bước
   riêng, trước 9/2/2027); anh cân nhắc bỏ gợi ý «🎯 thêm N xu → …».
-- **Next:** anh F5 cửa sổ Chrome live + thử «xe nào» / tặng quà; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+- **01/11 tối — setup live thật:** nguồn «Liên kết» LIVE Studio `http://127.0.0.1.nip.io:8810/` (ô không nhận IP / localhost;
+  server nhận thêm tên này), 1080×1920; đêm Tết sáng hơn (27 → 83/255); chống vang: chỉ một màn game phát tiếng, chọn
+  trên /control (commit 17f79c3). Anh live thử báo vang + mờ: vang do thu cả tiếng máy (em bảo bật loa — sai), mờ do
+  LIVE Studio 720p **60 FPS** 4600 kbps → khuyên 30 FPS. **Anh bảo tắt server game: 8810 đã tắt** (tắt êm, đã ghi hồ sơ
+  khách); VieNeu_TTS (PM2) vẫn chạy.
+- **Next:** bật lại khi live: `cd /home/vu/toolsauto && /home/vu/venv-xetet/bin/python -m xe_tet.server`; đổi FPS 30 trong
+  LIVE Studio; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
 
