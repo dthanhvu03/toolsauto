@@ -22,6 +22,8 @@ export interface Control {
   music_on?: boolean;  // nhạc trong xe (PLAN-127)
   music_volume?: number;
   sfx_volume?: number;
+  voice_on?: boolean;  // giọng Anh Tư lơ xe (PLAN-128)
+  voice_volume?: number;
 }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }
@@ -126,6 +128,7 @@ export interface GameEvent {
   departure?: string;  // tên ngắn bến đi: «TP.HCM»
   delivered_km?: number;
   sponsor?: string | null;  // xe tăng cường do ai tặng quà gọi
+  url?: string;  // speak: file giọng lơ xe đọc sẵn
   eta_min?: number; // vé xe sau: ước số phút tới lúc được lên xe
   next_tier?: string; // quà: «thêm X xu → …»
   diamonds?: number; // quà: xu của lần tặng này (total = cộng dồn trong chuyến)

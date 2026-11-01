@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import music, settings, simulator
+from . import music, settings, simulator, voice
 from .game.engine import LIKE_MAX, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
@@ -47,6 +47,7 @@ class Hub:
         self.pending_likes = 0
         self.last_likes_flush = 0.0
         self.bridge = TikTokBridge(emit=self.handle)
+        self.voice = voice.Announcer(emit=self.broadcast, settings=lambda: self.settings)
 
     def new_engine(self) -> Engine:
         engine = Engine(time.monotonic(), board_seconds=self.settings["board_seconds"],
@@ -61,7 +62,8 @@ class Hub:
 
     def state_message(self) -> dict:
         return {"kind": "state", **self.engine.snapshot(), "control": self.settings, "sim_rate": self.sim_rate,
-                "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST, "music_tracks": music.tracks()}
+                "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST, "music_tracks": music.tracks(),
+                "voices": self.voice.voice_list}
 
     def update_settings(self, changes: dict) -> None:
         self.settings = settings.clean(changes, self.settings)
@@ -104,6 +106,7 @@ class Hub:
             for event in self.engine.drain():
                 if event["type"] == "loxe" and not self.settings["auto_loxe"]:
                     continue
+                self.voice.observe(event, now, featured=self.engine.featured)
                 if event["type"] == "join":
                     self.pending_joins.append(event["name"])
                 else:
@@ -117,6 +120,8 @@ class Hub:
                 count, self.pending_likes = self.pending_likes, 0
                 self.last_likes_flush = now
                 await self.broadcast({"kind": "event", "type": "likes", "count": count})
+            self.voice.tick(now)
+            await self.voice.refresh_voices()
             if now - last_state >= STATE_EVERY:
                 last_state = now
                 await self.broadcast(self.state_message())
@@ -129,12 +134,14 @@ hub = Hub()
 @contextlib.asynccontextmanager
 async def lifespan(_app: FastAPI):
     task = asyncio.create_task(hub.run())
+    reader = asyncio.create_task(hub.voice.run())  # giọng lơ xe đọc lần lượt, không chặn vòng game
     if hub.settings["tiktok_auto"] and hub.settings["tiktok_user"]:
         log.warning("server khởi động lại giữa live → tự nối lại @%s", hub.settings["tiktok_user"])
         await hub.bridge.connect(hub.settings["tiktok_user"])
     yield
     await hub.bridge.disconnect()
     task.cancel()
+    reader.cancel()
 
 
 app = FastAPI(title="Xe Tết Sum Vầy", lifespan=lifespan)
@@ -238,6 +245,7 @@ async def _admin(body: dict) -> dict:
         text = str(body.get("text") or "").strip()[:120]
         if text:
             await hub.broadcast({"kind": "event", "type": "loxe", "text": text})
+            hub.voice.offer(text, voice.ADMIN)  # câu admin gõ: luôn đọc, đọc trước
     elif action == "announce":
         title = str(body.get("title") or "").strip()[:60]
         if title:
@@ -300,5 +308,7 @@ async def control() -> FileResponse:
 
 music.MUSIC_DIR.mkdir(parents=True, exist_ok=True)  # thư mục nhạc của anh (thả file vào là có trong danh sách)
 app.mount("/music", StaticFiles(directory=music.MUSIC_DIR), name="music")
+voice.VOICE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/voice", StaticFiles(directory=voice.VOICE_DIR), name="voice")
 if OVERLAY_DIST.exists():
     app.mount("/", StaticFiles(directory=OVERLAY_DIST, html=True), name="overlay")

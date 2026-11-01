@@ -2,8 +2,9 @@
 // Tiếng theo xe đang chiếu: server gửi `music` (đài của xe đó) + `music_tracks` (danh sách bài); admin chỉnh âm lượng /
 // bật tắt trên /control. Trình duyệt chặn tự phát tiếng tới khi có một cú bấm → báo ra ngoài để hiện 🔇.
 //
-//   bài nhạc ─► music ─► tunnel (lọc «bịt» khi trong hầm) ─┐
-//   còi, pháo hoa, tiếng máy ─► sfx ────────────────────────┴─► master ─► loa
+//   bài nhạc ─► music ─► duck (nhỏ lại khi lơ xe nói) ─► tunnel (lọc «bịt» khi trong hầm) ─┐
+//   còi, pháo hoa, tiếng máy ─► sfx ──────────────────────────────────────────────────────────┤
+//   giọng Anh Tư lơ xe (file server đọc sẵn, PLAN-128) ─► voice ─────────────────────────────┴─► master ─► loa
 
 import { PRESETS, Song } from "./music";
 import type { GameEvent, State } from "./types";
@@ -13,6 +14,7 @@ const TING_GAP = 0.6;  // vé dồn dập: «ting» cách nhau tối thiểu 0,6
 const ENGINE_LEVEL = 0.07;
 const OPEN_AIR = 18000;  // tần số cắt bộ lọc ngoài trời / trong hầm
 const IN_TUNNEL = 700;
+const DUCK = 0.3;  // lơ xe nói: nhạc còn 30 %
 
 interface Playing { id: string; stop(): void }
 
@@ -21,6 +23,9 @@ export class Sound {
   private master = this.ctx.createGain();
   private music = this.ctx.createGain();
   private sfx = this.ctx.createGain();
+  private voice = this.ctx.createGain();
+  private duck = this.ctx.createGain();
+  private speaking = 0;  // số câu đang phát (server đã giãn cách, phòng hờ chồng nhau)
   private tunnel = this.ctx.createBiquadFilter();
   private engine = this.ctx.createOscillator();
   private engineGain = this.ctx.createGain();
@@ -32,8 +37,9 @@ export class Sound {
   constructor() {
     this.tunnel.type = "lowpass";
     this.tunnel.frequency.value = OPEN_AIR;
-    this.music.connect(this.tunnel).connect(this.master);
+    this.music.connect(this.duck).connect(this.tunnel).connect(this.master);
     this.sfx.connect(this.master);
+    this.voice.connect(this.master);
     this.master.connect(this.ctx.destination);
     // tiếng máy: răng cưa trầm qua lọc thấp, to nhỏ / cao thấp theo tốc độ
     const engineFilter = this.ctx.createBiquadFilter();
@@ -54,6 +60,7 @@ export class Sound {
     const now = this.ctx.currentTime;
     this.music.gain.setTargetAtTime(c?.music_volume ?? 0.5, now, 0.2);
     this.sfx.gain.setTargetAtTime(c?.sfx_volume ?? 0.6, now, 0.2);
+    this.voice.gain.setTargetAtTime(c?.voice_on === false ? 0 : c?.voice_volume ?? 0.9, now, 0.2);
     const moving = s.phase === "DRIVING" && !s.paused;
     this.engineGain.gain.setTargetAtTime(moving ? ENGINE_LEVEL : 0, now, 0.6);
     this.engine.frequency.setTargetAtTime(38 + 10 * (s.speed ?? 1), now, 0.5);
@@ -87,6 +94,9 @@ export class Sound {
       case "ticket":
         this.ting();
         break;
+      case "speak":
+        if (e.url) this.speak(e.url);
+        break;
     }
   }
 
@@ -116,6 +126,22 @@ export class Sound {
     const song = new Song(this.ctx, g, preset);
     song.start();
     return { id, stop: () => { fadeOut(); window.setTimeout(() => song.stop(), FADE * 1000); } };
+  }
+
+  /** Anh Tư lơ xe nói: phát file giọng đã đọc sẵn, nhạc nhỏ lại tới khi nói xong. */
+  private speak(url: string): void {
+    const audio = new Audio(url);
+    this.ctx.createMediaElementSource(audio).connect(this.voice);
+    const now = this.ctx.currentTime;
+    this.speaking++;
+    this.duck.gain.setTargetAtTime(DUCK, now, 0.15);
+    const done = () => {
+      this.speaking = Math.max(0, this.speaking - 1);
+      if (!this.speaking) this.duck.gain.setTargetAtTime(1, this.ctx.currentTime, 0.4);
+    };
+    audio.onended = done;
+    audio.onerror = done;
+    void audio.play().catch(done);  // chưa được phép phát (chưa bấm mở tiếng) thì thôi, nhạc trả lại như cũ
   }
 
   // ---- tiếng hiệu ứng ----------------------------------------------------------------------------

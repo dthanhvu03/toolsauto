@@ -239,8 +239,9 @@ class Engine:
     def emit(self, type_: str, **data) -> None:
         self.outbox.append({"type": type_, **data})
 
-    def loxe(self, text: str) -> None:
-        self.emit("loxe", text=text)
+    def loxe(self, text: str, speak: bool = True) -> None:
+        """Bong bóng lơ xe; speak=False khi giọng đọc đã có câu riêng đầy đủ hơn (thả khách đọc cả tên)."""
+        self.emit("loxe", text=text, speak=speak)
 
     def drain(self) -> list[dict]:
         out, self.outbox = self.outbox, []
@@ -434,7 +435,7 @@ class Engine:
         pages = max(1, math.ceil(len(uids) / NAMES_PER_PAGE))
         self._set_phase("DROPOFF", now, DROPOFF_BASE + PAGE_SECONDS * pages)
         self.emit("dropoff", **info)
-        self.loxe(f"{prov.name} tới rồi bà con ơi! Ai xuống {prov.name} chuẩn bị nha!")
+        self.loxe(f"{prov.name} tới rồi bà con ơi! Ai xuống {prov.name} chuẩn bị nha!", speak=False)
 
     def _deliver(self, uids: list[str], province: str, bus_no: int) -> dict:
         """Thả khách về tới tỉnh (xe chính / xe tăng cường): cập nhật thống kê, trả nội dung băng rôn đọc tên."""

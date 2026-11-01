@@ -37,7 +37,10 @@ DEFAULTS: dict = {
     "relief_auto": True,
     "music_on": True,  # nhạc trong xe (PLAN-127); tắt = chỉ còn tiếng hiệu ứng
     "music_volume": 0.5,
-    "sfx_volume": 0.6,  # còi, pháo hoa, tiếng máy  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
+    "sfx_volume": 0.6,  # còi, pháo hoa, tiếng máy
+    "voice_on": True,  # Anh Tư lơ xe đọc (PLAN-128)
+    "voice_name": "Adam",  # giọng VieNeu (nam, miền Nam, tự nhiên)
+    "voice_volume": 0.9,  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
@@ -59,7 +62,9 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = value
         elif key == "departure" and value in available():  # theo dữ liệu tuyến đã dựng, không chỉ bảng code
             out[key] = value
-        elif key in ("music_volume", "sfx_volume"):
+        elif key == "voice_name":
+            out[key] = str(value or "")[:40] or out[key]
+        elif key in ("music_volume", "sfx_volume", "voice_volume"):
             out[key] = round(min(1.0, max(0.0, float(value))), 2)
         elif key == "zoom":
             out[key] = round(min(1.6, max(0.6, float(value))), 2)

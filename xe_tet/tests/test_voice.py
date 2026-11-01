@@ -1,0 +1,134 @@
+"""Giọng lơ xe (PLAN-128): soạn câu từ sự kiện, gom tên lên xe, hàng đợi ưu tiên, đọc + lưu sẵn (không gọi mạng thật)."""
+
+import asyncio
+import io
+import wave
+
+import httpx
+
+from xe_tet.server import voice
+from xe_tet.server.voice import ADMIN, BOARD, Announcer, names_phrase, speakable, spoken_name
+
+
+def announcer(settings=None):
+    async def emit(_msg):
+        return None
+    return Announcer(emit=emit, settings=lambda: settings or {"voice_on": True, "voice_name": "Adam"})
+
+
+def texts(a):
+    return [t for _, _, t in a.queue]
+
+
+def test_text_is_made_speakable():
+    assert speakable("Xe số 3 xuất bến, 1676 km!") == "Xe số 3 xuất bến, 1676 ki-lô-mét!"
+    assert speakable("TP.HCM → Hà Nội") == "Thành phố Hồ Chí Minh → Hà Nội"
+    assert spoken_name("🌸Bé Na🌸 ✨") == "Bé Na" and spoken_name("✨✨") == "bạn"
+    assert names_phrase(["An"]) == "An"
+    assert names_phrase(["An", "Bình"]) == "An và Bình"
+    assert names_phrase(["A", "B", "C", "D", "E"]) == "A, B, C và 2 người nữa"
+
+
+def test_dropoff_reads_names_and_engine_line_is_silent():
+    a = announcer()
+    a.observe({"type": "loxe", "text": "Nghệ An tới rồi bà con ơi!", "speak": False}, 0)
+    a.observe({"type": "dropoff", "province": "Nghệ An", "people": [{"name": "Minh Anh"}, {"name": "Thu Hà"}]}, 0)
+    assert texts(a) == ["Về tới Nghệ An rồi! Minh Anh và Thu Hà xuống xe nha!"]
+
+
+def test_relief_dropoff_read_only_when_on_screen():
+    a = announcer()
+    event = {"type": "relief_dropoff", "bus_no": 5, "province": "Cà Mau", "people": [{"name": "Út"}]}
+    a.observe(event, 0, featured=None)
+    assert not a.queue
+    a.observe(event, 0, featured=5)
+    assert texts(a) == ["Về tới Cà Mau rồi! Út xuống xe nha!"]
+
+
+def test_boarding_names_are_batched_and_rate_limited():
+    a = announcer()
+    for name in ("An", "Bình", "Chi", "Dũng"):
+        a.observe({"type": "ticket", "name": name, "province": "Huế"}, 0)
+    a.tick(1)
+    assert not a.queue  # còn đang gom
+    a.tick(3.5)
+    assert texts(a) == ["An, Bình, Chi và 1 người nữa lên xe về Huế!"]
+    a.queue.clear()
+    a.observe({"type": "ticket", "name": "Em", "province": "Huế"}, 5)
+    a.tick(9)  # chưa đủ 8 giây từ câu trước
+    assert not a.queue
+
+
+def test_gift_thanks_once_per_cooldown_and_not_for_relief_gift():
+    a = announcer()
+    gift = {"type": "gift", "name": "Ba", "tier_up": True, "perk": "pháo hoa ngay"}
+    a.observe(gift, 0)
+    a.observe(gift, 10)
+    a.observe({**gift, "name": "Út", "perk": "🚌 xe tăng cường chạy ngay cho bà con…"}, 0)
+    assert texts(a) == ["Cảm ơn Ba đã tặng quà cho cả xe nha!"]
+
+
+def test_queue_keeps_important_lines_and_admin_first():
+    a = announcer()
+    for i in range(3):
+        a.offer(f"câu lơ xe {i}", voice.LOXE)
+    a.offer("tên lên xe", BOARD)  # hàng đã dồn 3 câu: bỏ
+    a.offer("Chào bà con!", ADMIN)  # admin luôn vào, đọc trước
+    assert texts(a)[0] == "Chào bà con!" and "tên lên xe" not in texts(a)
+    off = announcer({"voice_on": False})
+    off.offer("không đọc", ADMIN)
+    assert not off.queue
+
+
+def wav_bytes(seconds=1.0, rate=16000):
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\0\0" * int(seconds * rate))
+    return buf.getvalue()
+
+
+def test_render_uses_vieneu_then_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(voice, "VOICE_DIR", tmp_path)
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, content=wav_bytes(2.0))
+
+    async def scenario():
+        a = announcer()
+        a.client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        first = await a.render("Xin chào bà con")
+        second = await a.render("Xin chào bà con")
+        await a.client.aclose()
+        return first, second
+
+    first, second = asyncio.run(scenario())
+    assert first == second and first[0].endswith(".wav") and abs(first[1] - 2.0) < 0.01
+    assert len(calls) == 1  # lần hai lấy từ file đã lưu
+
+
+def test_render_falls_back_to_edge_when_vieneu_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(voice, "VOICE_DIR", tmp_path)
+
+    class FakeEdge:
+        def __init__(self, text, voice_name):
+            self.voice = voice_name
+
+        async def save(self, path):
+            open(path, "wb").write(b"\0" * 12000)
+
+    monkeypatch.setattr(voice.edge_tts, "Communicate", FakeEdge)
+
+    async def scenario():
+        a = announcer()
+        a.client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+        result = await a.render("Xe chạy rồi")
+        await a.client.aclose()
+        return result
+
+    name, seconds = asyncio.run(scenario())
+    assert name.endswith(".mp3") and seconds == 2.0

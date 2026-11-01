@@ -4,10 +4,12 @@ làn nằm trên một trục (km chung đường = km tỉnh gần hơn) nên t
 Kết quả test không phụ thuộc dữ liệu OSRM (data/routes.json); test cần dữ liệu thật dùng fixture `real_routes`.
 """
 
+import asyncio
 import math
 
 import pytest
 
+from xe_tet.server import voice as voice_module
 from xe_tet.server.game import network as network_module
 from xe_tet.server.game.geo import CAPITALS, DEPARTURES
 
@@ -47,6 +49,19 @@ SYNTHETIC = synthetic_routes()
 # Thay ngay khi nạp conftest (trước khi import test): app.py dựng `hub` (và Engine) lúc import.
 REAL_READ = network_module._read
 network_module._read = lambda: SYNTHETIC
+
+
+# Giọng lơ xe: test không gọi VieNeu / Microsoft thật — bộ đọc nền im lặng (test_voice.py thử render bằng máy giả).
+async def _silent(_self) -> None:
+    await asyncio.Event().wait()
+
+
+async def _no_voices(_self) -> None:
+    return None
+
+
+voice_module.Announcer.run = _silent
+voice_module.Announcer.refresh_voices = _no_voices
 
 
 @pytest.fixture

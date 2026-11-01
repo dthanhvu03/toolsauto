@@ -142,6 +142,20 @@
       <input type="range" min="0" max="1" step="0.05" data-volume="sfx_volume" aria-label="Âm lượng hiệu ứng" style="flex:1">
       <output id="vol-sfx_volume">0.6</output>
     </div>
+    <h3>🗣 Giọng Anh Tư lơ xe</h3>
+    <div class="row">
+      <label class="toggle"><input type="checkbox" data-show="voice_on"> Lơ xe đọc</label>
+      <select id="voice-name" aria-label="Giọng lơ xe" style="flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff"></select>
+      <button id="voice-test">▶ Nghe thử</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span style="min-width:96px">Âm lượng giọng</span>
+      <input type="range" min="0" max="1" step="0.05" data-volume="voice_volume" aria-label="Âm lượng giọng" style="flex:1">
+      <output id="vol-voice_volume">0.9</output>
+    </div>
+    <p class="hint" id="voice-hint">Đọc câu lơ xe, tên người lên xe / xuống xe, cảm ơn quà. Đông người thì bỏ bớt câu đọc tên
+      lên xe (trên màn hình vẫn hiện tên), câu anh gõ ở «Lơ xe nói» luôn được đọc trước. Nhạc tự nhỏ lại khi lơ xe nói.</p>
+
     <h3>Nhạc của anh</h3>
     <div class="row">
       <input type="file" id="music-file" accept=".mp3,.ogg,.m4a,.wav,audio/*" multiple aria-label="Chọn file nhạc" style="flex:1;min-width:0">
@@ -350,6 +364,28 @@ document.querySelectorAll("[data-volume]").forEach((r) => {
   r.oninput = () => { r.dataset.touched = String(Date.now()); $(`vol-${r.dataset.volume}`).textContent = (+r.value).toFixed(2); };
   r.onchange = () => setControl({ [r.dataset.volume]: +r.value });
 });
+// ---- giọng lơ xe ----
+$("voice-name").onchange = () => { setControl({ voice_name: $("voice-name").value }); $("voice-name").blur(); };
+$("voice-test").onclick = () => admin({ action: "say", text: "Xin chào bà con! Anh Tư lơ xe đây, xe sắp chạy rồi, lên xe lẹ nha!" });
+function renderVoices(s) {
+  const sel = $("voice-name");
+  const voices = s.voices || [];
+  // giọng nam miền Nam lên đầu (Anh Tư là người miền Nam), rồi nam, rồi nữ
+  const rank = (v) => (v.gender === "male" ? 0 : 2) + (v.region === "Nam" ? 0 : 1);
+  const html = voices.length
+    ? [...voices].sort((a, b) => rank(a) - rank(b)).map((v) =>
+      `<option value="${esc(v.name)}">${esc(v.name)} · ${v.gender === "male" ? "nam" : "nữ"} · ${esc(v.region || "")}</option>`).join("")
+    : `<option value="${esc(control.voice_name || "Adam")}">${esc(control.voice_name || "Adam")} (VieNeu đang tắt)</option>`;
+  if (document.activeElement !== sel) {
+    setIfChanged(sel, html);
+    sel.value = control.voice_name || "Adam";
+  }
+  const hint = $("voice-hint");
+  hint.dataset.normal ??= hint.textContent;
+  hint.textContent = voices.length ? hint.dataset.normal
+    : "VieNeu đang tắt: lơ xe đọc bằng giọng Microsoft dự phòng (cần Internet). Bật lại: pm2 start VieNeu_TTS.";
+}
+
 // ---- tải nhạc lên: gửi từng file (thân request = nội dung file), xong thì danh sách tự có bài mới ----
 $("music-upload").onclick = async () => {
   const files = [...$("music-file").files];
@@ -493,6 +529,7 @@ async function refresh() {
     $("s-bus").textContent = `Số ${main.no} · ${main.riders}/${s.bus.seats.length}`;
     renderBuses(s);
     renderFiles(s);
+    renderVoices(s);
     $("s-next").textContent = s.waiting;
     $("s-likes").textContent = s.trip_likes.toLocaleString("vi-VN");
     $("s-done").textContent = s.delivered;
@@ -508,7 +545,7 @@ async function refresh() {
     $("zoom-now").textContent = (control.zoom ?? 1).toFixed(1);
     document.querySelectorAll("[data-volume]").forEach((r) => {
       if (Date.now() - Number(r.dataset.touched || 0) < 3000) return;
-      const v = control[r.dataset.volume] ?? (r.dataset.volume === "music_volume" ? 0.5 : 0.6);
+      const v = control[r.dataset.volume] ?? { music_volume: 0.5, sfx_volume: 0.6, voice_volume: 0.9 }[r.dataset.volume];
       r.value = v;
       $(`vol-${r.dataset.volume}`).textContent = (+v).toFixed(2);
     });

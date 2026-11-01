@@ -39,6 +39,8 @@ cd xe_tet/overlay && npm install && npm run build && cd ../..   # chỉ cần kh
     (ngũ cung, đàn tranh / sáo / trống / mõ) — không vướng bản quyền. Nhạc của anh: tải lên ngay trên `/control`
     (mp3 / ogg / m4a / wav, ≤ 200 MB) hoặc chép vào `storage/media/xe_tet/music/`. Trình duyệt chặn tự phát tiếng: bấm vào màn hình live một lần (🔇 sẽ mất), hoặc mở cửa
     sổ live bằng Chrome với cờ `--autoplay-policy=no-user-gesture-required`.
+  - **Giọng Anh Tư lơ xe (PLAN-128):** đọc câu lơ xe, tên lên / xuống xe, cảm ơn quà bằng VieNeu (PM2 `VieNeu_TTS`, chọn
+    giọng trên /control, mặc định Adam), VieNeu tắt thì dùng edge-tts (cần Internet). Nhạc tự nhỏ lại khi lơ xe nói.
   - **Các chuyến xe:** xe chính + xe tăng cường đang chạy — «📺 Chiếu» cho màn hình live theo xe đó (góc máy ở phần Camera),
     «⏭ Tới điểm kế», gọi thêm xe tăng cường cho làn có người chờ, công tắc tự gọi khi làn đủ 24 người.
   - Thiết lập lưu ở `storage/db/config/xe_tet.json` (giữ qua restart / deploy), mọi màn hình live đổi theo ngay.
