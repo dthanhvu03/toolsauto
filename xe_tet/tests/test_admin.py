@@ -129,7 +129,8 @@ def test_departure_switch_via_admin(client):
     assert r.json()["ok"] and client.get("/api/state").json()["departure"]["short"] == "Đà Lạt"
     assert settings.load()["departure"] == "dalat"
     client.post("/api/event", json={"type": "comment", "name": "An", "text": "Huế"})
-    assert client.post("/api/admin", json={"action": "departure", "key": "hcm_miendong"}).status_code == 400
+    r = client.post("/api/admin", json={"action": "departure", "key": "hcm_miendong"})
+    assert r.status_code == 409 and r.json()["error"].startswith("Chỉ đổi bến khi")  # lời báo nguyên văn cho admin
 
 
 def test_admin_controls_every_bus(client):
@@ -148,8 +149,11 @@ def test_admin_controls_every_bus(client):
     assert client.post("/api/admin", json={"action": "relief_next", "bus_no": no}).json()["ok"]
     assert client.post("/api/admin", json={"action": "feature", "bus_no": 0}).json()["ok"]
     assert client.get("/api/state").json()["featured"] is None
-    assert client.post("/api/admin", json={"action": "feature", "bus_no": 999}).status_code == 400
-    assert client.post("/api/admin", json={"action": "relief", "lane": "nope"}).status_code == 400
+    assert client.post("/api/admin", json={"action": "feature", "bus_no": 999}).status_code == 409
+    assert client.post("/api/admin", json={"action": "relief", "lane": "nope"}).status_code == 409
+    empty = next(ln["key"] for ln in client.get("/api/state").json()["lanes"] if not ln["waiting"])
+    r = client.post("/api/admin", json={"action": "relief", "lane": empty})
+    assert r.status_code == 409 and "không có ai chờ" in r.json()["error"]
     r = client.post("/api/admin", json={"action": "settings", "changes": {"relief_auto": False}})
     assert r.json()["ok"] and app_module.hub.engine.relief_auto is False
     client.post("/api/admin", json={"action": "settings", "changes": {"relief_auto": True}})

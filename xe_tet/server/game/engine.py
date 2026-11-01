@@ -123,6 +123,10 @@ def pick(options: tuple[str, ...], seed: str) -> str:
     return options[int(hashlib.md5(seed.encode()).hexdigest()[:6], 16) % len(options)]
 
 
+class Refused(ValueError):
+    """Admin yêu cầu việc luật chơi không cho lúc này — lời báo viết sẵn để hiện nguyên văn cho admin."""
+
+
 @dataclass
 class Viewer:
     uid: str
@@ -508,7 +512,7 @@ class Engine:
     def _relief(self, no: int) -> Relief:
         relief = next((r for r in self.reliefs if r.no == no), None)
         if relief is None:
-            raise ValueError(f"không có xe tăng cường số {no} đang chạy")
+            raise Refused(f"Xe tăng cường số {no} đã tới bến cuối (không còn chạy).")
         return relief
 
     def feature(self, no: int | None) -> None:
@@ -518,10 +522,12 @@ class Engine:
     def add_relief(self, lane: str) -> Relief:
         """Admin gọi thêm xe tăng cường cho một làn (không cần đủ 24 người chờ)."""
         if lane not in self.queues:
-            raise ValueError(f"không có làn «{lane}»")
+            raise Refused(f"Bến này không có làn «{lane}».")
+        if not self.queues[lane]:
+            raise Refused("Làn này hiện không có ai chờ — chưa cần xe tăng cường.")
         relief = self._dispatch_relief(lane, admin=True)
         if relief is None:
-            raise ValueError("làn này không có ai chờ hoặc đã đủ số xe tăng cường")
+            raise Refused(f"Đang chạy đủ {RELIEF_MAX_GIFT} xe tăng cường — đợi một xe về bến rồi gọi thêm.")
         return relief
 
     def relief_next_stop(self, no: int) -> None:
@@ -611,7 +617,7 @@ class Engine:
     def set_departure(self, key: str) -> None:
         """BR-8: chỉ đổi bến đi khi bến đang đón mà chưa ai lên xe và không ai giữ chỗ (tránh vé sai hướng)."""
         if not self.boarding_open() or self.bus.riders() or self.waiting() or self.reliefs:
-            raise ValueError("chỉ đổi bến đi khi xe đang đón, chưa ai lên xe, không ai giữ chỗ và hết xe tăng cường")
+            raise Refused("Chỉ đổi bến khi xe đang đón, chưa ai lên xe, không ai giữ chỗ và không còn xe tăng cường chạy.")
         self.network = self.network.switch(key)
         self.queues = {ln.key: [] for ln in self.network.lanes}
         self.queued_at = {}

@@ -25,6 +25,8 @@ cd xe_tet/overlay && npm install && npm run build && cd ../..   # chỉ cần kh
   hoặc `?cam=x,y,z,lx,ly,lz` trên URL để ghi đè lựa chọn của admin; `?fps=1` hiện khung hình / số lần vẽ (đo trên GPU thật);
   `?res=0.5` vẽ nửa độ phân giải (máy yếu, máy không GPU); `?hour=10` ép giờ trong ngày (chụp ảnh ngày / đêm khi thử).
 - Bảng điều khiển: http://127.0.0.1:8810/control — admin điều khiển mọi thứ, **không có gì tự đổi góc**:
+  - Thanh ghim đáy màn hình (điện thoại): ⏸ Dừng · ⏭ Qua pha · 📺 Xe chính · 🎥 Góc kế · 🚌 Các xe. Bị từ chối (đổi bến
+    khi còn khách, gọi xe cho làn trống…) thì lời báo hiện ngay đầu màn hình.
   - Camera: ngoài xe / trong xe (24 giường), 4 góc máy (toàn cảnh, từ trên cao, ngang xe, cận xe), gần / xa;
     **chất lượng hình Cao / Thấp** (thấp: ~60 % độ phân giải, tắt bóng đổ, bớt hạt — khi máy nóng / LIVE Studio giật).
   - Chuyến xe: tạm dừng / chạy tiếp, ±30 giây, qua pha tiếp, làm lại; thời gian đón khách / nghỉ trạm.

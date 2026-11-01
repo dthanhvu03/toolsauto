@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import settings, simulator
-from .game.engine import LIKE_MAX, Engine, as_int
+from .game.engine import LIKE_MAX, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
 from .tiktok import TikTokBridge
@@ -187,6 +187,8 @@ async def post_event(event: dict) -> dict:
 async def admin(body: dict) -> dict:
     try:
         return await _admin(body)
+    except Refused as exc:  # luật chơi không cho lúc này: báo nguyên văn, không gọi là «giá trị sai»
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
     except (TypeError, ValueError) as exc:
         return JSONResponse({"ok": False, "error": f"giá trị không hợp lệ: {exc}"}, status_code=400)
 

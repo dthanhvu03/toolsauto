@@ -84,6 +84,11 @@
 - **01/11 — commit + duyệt:** commit `01d3bed` trên nhánh `feat/xe-tet` (đặt lại trên `origin/main` để PR không kéo theo 2 commit Studio chưa push; nhánh cũ `feat/xe-tet-sum-vay` bỏ). Sửa `.gitignore`:
   luật gốc `data/` làm `xe_tet/server/game/data/routes.json` bị bỏ qua (deploy sẽ lỗi) → thêm ngoại lệ. Anh duyệt ảnh →
   archive PLAN-121…126; MVP đổi số 120 → 126 (trùng PLAN-120 ngắt dòng phụ đề của Studio).
+- **01/11 — tổng duyệt admin trước live (anh hỏi):** phòng giả lập 15 sự kiện / giây × 4 phút, 90 thao tác admin ngẫu
+  nhiên trên khổ điện thoại: 0 lỗi JS, 0 lỗi server. Sửa 3 điểm dùng trên điện thoại: thanh ghim đáy (Dừng / Qua pha / Xe
+  chính / Góc kế / Các xe, vừa 360 px), lời báo bị từ chối hiện đầu màn hình (trước nằm cuối trang), lời báo viết rõ (409,
+  không còn «giá trị không hợp lệ»). E2E 28/28, 91 test. Chưa thử: nối TikTok thật bằng tài khoản anh, FPS trên GPU thật,
+  chạy dưới PM2 (máy khởi động lại là server tắt), lưu trạng thái (server khởi động lại là mất vé).
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
