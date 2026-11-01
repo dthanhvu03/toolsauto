@@ -1,0 +1,7 @@
+# venv riêng /home/vu/venv-xetet (TikTokLive kéo websockets 17, khác venv chung toolsauto):
+#   python3 -m venv /home/vu/venv-xetet && /home/vu/venv-xetet/bin/pip install -r xe_tet/requirements.txt
+TikTokLive==7.0.1
+fastapi==0.125.0
+uvicorn[standard]==0.41.0
+pytest
+httpx

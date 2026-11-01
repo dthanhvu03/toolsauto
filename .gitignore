@@ -114,3 +114,6 @@ logs/
 /design/toolsauto-cave/.design-sync/.cache/
 /design/toolsauto-cave/.design-sync/learnings/
 /design/toolsauto-cave/.design-sync/node_modules/
+/xe_tet/tools/osrm_cache.json.gz
+# Xe Tết: bảng tuyến thật (routes.json, dựng từ OSRM) là dữ liệu game cần để chạy — luật «data/» ở trên không áp
+!/xe_tet/server/game/data/

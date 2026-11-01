@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xe Tết Sum Vầy LIVE 9:16</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <div id="labels"></div>
+    <div id="hud">
+      <header id="title">
+        <div class="brand">XE TẾT SUM VẦY</div>
+        <div class="sub"><span id="countdown">Còn – ngày nữa là Tết</span></div>
+      </header>
+
+      <section id="route" class="card">
+        <div class="route-top">
+          <span id="phase-pill" class="pill">Đón khách</span>
+          <span id="phase-text"></span>
+          <span id="seats" class="seats"></span>
+        </div>
+        <div class="bar"><i id="bar-fill"></i></div>
+        <div id="next-stops" class="next-stops"></div>
+      </section>
+
+      <!-- Lời kêu gọi: người mới vào phòng phải hiểu cần làm gì trong 3 giây -->
+      <section id="cta">
+        <div id="cta-main" class="cta-main"></div>
+        <div id="cta-sub" class="cta-sub"></div>
+      </section>
+
+      <div id="loxe"><div class="face">🧢</div><div class="bubble"><b>Anh Tư lơ xe</b><span id="loxe-text">Lên xe về quê ăn Tết nào!</span></div></div>
+      <div id="toasts"></div>
+      <div id="callout" class="hidden"></div>
+      <div id="hearts"></div>
+
+      <section id="rest-card" class="card side hidden">
+        <h3>☕ Trạm dừng chân</h3>
+        <div id="rest-orders"></div>
+        <div id="rest-wc"></div>
+      </section>
+
+      <section id="board" class="card side">
+        <h3 id="board-title">🏆 Tỉnh dẫn đầu</h3>
+        <ol id="board-list"></ol>
+        <div id="stay"></div>
+      </section>
+
+      <div id="banner" class="hidden"></div>
+      <div id="flash" class="hidden"></div>
+      <div id="offline" class="hidden">Đang kết nối lại máy chủ…</div>
+    </div>
+    <div id="fade"></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

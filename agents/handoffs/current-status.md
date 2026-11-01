@@ -1,3 +1,90 @@
+## Phiên 2026-10-31 (live TikTok) — dự án mới `xe_tet/` (P1 MVP chạy được)
+
+- Anh bỏ ngách «viếng chùa online» (đã bão hoà: ≥ 6 phòng cùng mẫu, video top là reaction). Chọn ngách
+  **Xe Tết Sum Vầy** (anh đổi từ tàu sang xe khách 24 chỗ + trạm dừng chân, dùng Three.js): comment tên tỉnh lên xe,
+  tim cho xe chạy, trạm dừng ăn / WC / mua quà, thả khách đọc tên; mùa 15/12 → mùng 10 Tết (6/2/2027).
+- Tạo `xe_tet/README.md`: công nghệ (TikTokLive Python + FastAPI + SQLite + VieNeu TTS; overlay Vite 5 + TS + Three.js 0.187),
+  vòng chuyến xe, bảng tương tác, trạm dừng chân, lịch mùa, các bước P1–P3. Không đụng code khác.
+- **P1 MVP xong (PLAN-120, chưa commit):** `xe_tet/server` (FastAPI + WebSocket, luật chơi thuần, giả lập phòng đông,
+  `/control`), `xe_tet/overlay` (Vite 5 + TS + Three.js 0.187, CSS2D cho chữ). 15 test qua, ruff + tsc sạch, chụp Chromium thật
+  5 cảnh. Server đang chạy nền cổng 8810 (`venv/bin/python -m xe_tet.server`), không PM2.
+- **Test UI/UX xong (anh yêu cầu):** 11 tình huống + bảng điều khiển 2 cỡ màn; sửa 1 lỗi thật (sự kiện trạm dừng bị overlay
+  bỏ qua do trường `kind` trùng), bố cục né vùng TikTok che, băng rôn không che cảnh. 16 test qua. Chi tiết trong PLAN-120.
+- **Admin điều khiển mọi thứ (anh yêu cầu):** bỏ tự đổi góc; `/control` có camera (ngoài / trong, 4 góc, gần / xa), tạm dừng,
+  ±30 s, thời gian, bật / tắt từng phần, lơ xe nói + băng rôn tuỳ ý. Lưu `storage/db/config/xe_tet.json`. 23 test + 26/26 bấm thật.
+- **Nhấp nháy (anh báo):** do màn đen 0,3 s mỗi lần đổi cảnh (14 lần / 2 phút) → mặc định cắt thẳng + công tắc mờ nhẹ tuỳ chọn;
+  HUD thôi ghi DOM thừa. Đo lại: 0 lần màn đen. Nếu anh vẫn thấy nháy → hỏi nháy trên Chrome hay chỉ trong LIVE Studio.
+- **Rà soát BA / BRD / thuật toán / SA (anh yêu cầu):** `xe_tet/REVIEW.md`. Sửa 11 điểm (gọi tên tất cả, quà không mất,
+  lọc nội dung, tán gẫu không huỷ vé…), 33 test. **Chờ anh quyết 3 việc** (năng lực chở, cộng dồn quà, mật khẩu `/control`).
+- **Học 2 repo cùng ngách (anh gửi):** cùng dùng `tiktok-live-connector`; áp dụng kiểm Host + giới hạn 30 khung/giây;
+  bài học P2 ghi ở `xe_tet/README.md` mục 5b (tự nối lại, quà combo, userId, ảnh đại diện…). 34 test.
+- **Làm theo đề xuất + nối TikTok (anh duyệt):** giờ cao điểm + giờ chờ trên vé, cộng dồn quà, mã `/control` tuỳ chọn,
+  cầu nối TikTokLive 7 (venv riêng `/home/vu/venv-xetet`, tự nối lại). Thử thật vào phòng anh gửi: 145 sự kiện / 40 s, 0 lỗi.
+  48 test. **Next:** anh live thử bằng tài khoản của anh (`/control` → Kết nối) để xem vùng TikTok che + FPS trên GPU thật;
+  sau đó PM2 + SQLite (vé khứ hồi) + giọng VieNeu. Chưa commit.
+- **Rà soát BA / SA lần 2 (anh yêu cầu):** sửa 8 điểm lộ ra khi có dữ liệu live thật (combo quà spam, vé ma, nối lại vào-rớt,
+  tự nối lại sau khởi động, mã lọt log…). 55 test. Cao điểm đo được 178 khách/giờ. **Chờ anh quyết:** đưa vào PM2.
+- **Trải nghiệm người xem (anh ưu tiên):** HUD làm lại cho màn điện thoại (chữ ≥ 30–38 px), lời kêu gọi to, thẻ lớn khi lên xe,
+  tim bay + ⚡ tốc độ, bảng «Trên xe số N», thả khách 4 tên / trang. 56 test, e2e sạch. Next đề xuất: âm thanh + giọng đọc tên,
+  làm đẹp hình 3D, ảnh đại diện.
+- **PLAN-121 làm đẹp 3D — V1 xong (anh duyệt kế hoạch):** `overlay/src/art.ts`: ánh sáng điện ảnh + bóng đổ, trời chuyển màu,
+  xe khách mới (bo tròn, kính + rèm, LED «VỀ QUÊ ĂN TẾT», câu đối, cành đào…), người chibi có dáng đi, cánh hoa đào / mai.
+  384 lần vẽ / 59k tam giác. **Chờ anh:** duyệt ảnh trước / sau + mở `/?fps=1` trên Chrome Windows báo số khung/giây → làm V2.
+- **PLAN-121 V2 xong:** tách `props.ts` + `sets.ts` (3 bối cảnh có điểm mốc, scene hết toạ độ cứng); bến xe, trạm dừng chân
+  (ghế nhựa đỏ xanh, nồi phở bốc hơi…), đầu ngõ (cổng làng ghi tên tỉnh, mái ngói, bánh chưng…). 512 lần vẽ / 116k tam giác.
+  **Chờ anh:** duyệt ảnh + số khung/giây (`/?fps=1`) → V3 (đường 4 vùng).
+- **PLAN-121 V3 xong (anh duyệt + «đường gồ ghề, ổ gà, trụ điện»):** `road.ts` (nhựa vá / nứt / ổ gà, trụ điện dây võng
+  chằng chịt, cột cây số), `landscape.ts` (4 vùng: ruộng bậc thang / cát phi lao / đồi cà phê đất đỏ / ruộng nước; nhà ống bồn
+  inox), `weather.ts` (mưa phùn Bắc), giảm xóc xe (sập ổ gà chúi / ngóc / lắc), bảng trời 4 thời điểm, đêm ánh trăng.
+  209–290 lần vẽ khi chạy. **Chờ anh:** duyệt ảnh + đo `/?fps=1` → V4 (hiệu ứng + nút chất lượng thấp / cao). Chưa commit.
+- **PLAN-121 V4 xong:** `effects.ts` — pháo hoa bay lên có vệt sáng + nổ thành tia có đuôi, bụi bánh xe + khói ống xả,
+  bụi tung khi sập ổ gà; nút **Chất lượng Cao / Thấp** trên `/control` (thấp ≈ nửa số lần vẽ). Sửa lỗi có từ trước: pháo hoa nổ
+  dưới băng rôn (người xem không thấy) → điểm nổ chung `SHOW_SKY` tính theo 4 góc máy. 57 test, e2e 11 tình huống + 28/28.
+  **Chờ anh:** đo `/?fps=1` trên Chrome Windows (Cao và Thấp) + quyết commit. Toàn bộ `xe_tet/` vẫn chưa commit.
+- **BRD tuyến xe thật (anh hỏi: bến đi thật, km thật, xe hướng Bắc mà có người comment Cà Mau, đường quanh co / đồi núi):**
+  `xe_tet/docs/BRD-tuyen-xe.md`. Đề xuất phương án B: bến nhiều làn theo hướng, mỗi lần một xe xuất bến, hướng chọn theo nhu
+  cầu (BR-1…BR-9); km thật từ OSRM (đã thử: Đà Lạt → Cà Mau 592 km, → Hà Nội 1.401 km) tính một lần lưu repo; đường quanh
+  co / đèo bằng «thế giới uốn cong» theo hồ sơ địa hình. **Chờ anh quyết:** bến đi mặc định, phương án B, cho gọi OSRM.
+- **PLAN-122 tuyến xe thật xong R1–R4 (anh chốt: mặc định Miền Đông mới, phương án B, cho gọi OSRM):**
+  - Dữ liệu `server/game/data/routes.json` (5 bến đi × 62 tỉnh, `tools/build_routes.py`): km đường bộ, độ quanh co / 10 km,
+    đèo đi qua, làn theo trục đường. **Phát hiện:** OSRM cho 79 / 310 tuyến Nam ↔ Bắc vòng qua Campuchia – Lào (Cần Thơ →
+    Điện Biên qua cả Thái Lan) → tuyến nào có điểm xa mọi tỉnh lỵ > 130 km thì dẫn lại qua QL1 (Cam Ranh, Quảng Ngãi, Đông Hà,
+    Vinh); còn 0 tuyến ra nước ngoài. TP.HCM → Hà Nội 1.676 km qua Cổ Mã, Cả, Cù Mông, Hải Vân, Ngang, Tam Điệp. Tổng
+    ≈ 700 lượt OSRM (2 lần dựng lại do lỗi thuật toán của em + 79 lượt dẫn lại), nay có cache `tools/osrm_cache.json.gz`
+    (gitignore) → chỉnh thuật toán không phải gọi mạng nữa.
+  - Luật chơi: hàng chờ theo làn, xe trống quay đầu theo khách đầu, làn bị bỏ 2 chuyến bắt buộc chạy, dừng theo km thật,
+    tỉnh trùng bến đi = «đã ở quê», đổi bến đi chỉ khi bến trống. Màn hình: «Đi Hà Nội · chạy sau», làn có người chờ, vé ghi
+    «Đà Lạt → Hà Tĩnh · 1.059 km», thả khách ghi km + giờ xe (dưới 1 giờ tính phút), LED đầu xe, biển bến + bảng từng làn.
+  - Đường: `overlay/src/bend.ts` uốn cua / dốc theo độ quanh co thật (đồng bằng 10–16 °/km → thẳng; Pha Đin, Khau Phạ
+    130–220 → cua gắt), xe nghiêng theo cua. Sửa lỗi lộ ra khi chụp: mặt đất / đường chỉ có đỉnh ở 2 đầu nên bị nhấc che xe →
+    `strip()` chia đỉnh mỗi 2,5 đơn vị.
+  - Proof: 66 test (có test dữ liệu thật), fuzz 2 giờ live × 5 bến 0 vi phạm, e2e 11 tình huống + 28/28 bảng điều khiển,
+    ảnh Đà Lạt + Cà Mau / đèo / đồng bằng. Server 8810 đã chạy code mới. Toàn bộ `xe_tet/` + PLAN-120…122 **chưa commit**.
+- **Rà soát sau PLAN-122 (anh hỏi 01/11: hardcode, rác code, lỗi logic / nghiệp vụ, chuyên môn, tâm lý, dữ liệu đường mới):**
+  2 reviewer độc lập (server + overlay) + em đo trên dữ liệu thật. Đã xác minh trong code: km đứng 0 cả chuyến nếu quà lớn
+  lúc đón khách (`resume` không reset); đổi tỉnh sang làn khác bỏ trống giường; xe trống không đổi sang làn có người chờ;
+  comment tỉnh bến đi khi đang ngồi vẫn giữ giường; chuyến 12 km vẫn có trạm nghỉ; cảnh vùng lấy theo điểm dừng kế (TP.HCM →
+  Hà Nội vẽ cảnh miền Bắc suốt 1.676 km); qua Hải Vân / Cả / Cù Mông / Tam Điệp thực tế đi hầm (độ quanh co 10–38) mà màn hình
+  ghi «đèo»; biển bến chỉ 3 bảng làn (bến có 4–5 làn); biển trên overlay rò bộ nhớ khi đổi vùng / người đi bộ; vệt pháo hoa
+  không vẽ. Mô phỏng chờ: phòng vắng (1 comment / 45 s) người khác làn chờ trung vị 10–15 phút; phòng đông chỉ 7–22 % người
+  hướng Hà Nội được lên xe. Dữ liệu đường: OSRM cập nhật OSM ~2 ngày; cao tốc Bắc – Nam thông toàn tuyến cuối 4/2026;
+  34 tỉnh từ 1/7/2025 (game giữ 63 tên quê cũ). **Chờ anh duyệt kế hoạch sửa 3 đợt** (chưa sửa gì).
+- **PLAN-123 xong (anh duyệt 01/11 «vá hết theo thứ tự ưu tiên, vừa vá vừa research»):** đợt 1 lỗi (12 lỗi server + rò bộ nhớ
+  / pháo hoa / biển làn / chữ HUD), đợt 2 chuyên môn (hầm vs đèo đo bằng độ quanh co, cảnh + trạm nghỉ theo tỉnh xe đang đi qua,
+  đặc sản 63 tỉnh, làn theo hành lang + km rẽ nhánh), đợt 3 tâm lý (chuyến chạy đường ≤ ~4 phút, «ai chờ trước đi trước» chọn
+  bằng mô phỏng 5 luật, bảng «⏳ Chờ xe sau» + «Xe kế tiếp»). Dọn: số giường 1 hằng, hằng lặp, bảng món ăn 1 bảng, 12 export
+  thừa, `Province.lat`, `avatar`, `roundtrip` → `followed`. Proof trong PLAN-123: 82 test, fuzz 0 vi phạm, e2e 28/28 + UX 0 lỗi,
+  ảnh. Server 8810 chạy code mới. **Chưa commit** (toàn bộ `xe_tet/` + PLAN-120…123).
+- **PLAN-124 đường đèo thật xong (anh duyệt 01/11):** bóng đổ uốn cùng đường → cua theo bán kính thật (đồng bằng thẳng,
+  Bảo Lộc ~170 m, Pha Đin 40 m), dốc đèo 8 % lên trước đỉnh / xuống sau đỉnh, đèo ≥ 16 s / hầm ≥ 8 s trên màn hình, hầm có
+  vách gạch men + đèn + đá núi (cảnh tối, xe bật đèn), xe nghiêng theo v² / R. Rò bộ nhớ đổi vùng hết (261 → 263 hình).
+- **PLAN-125 xe tăng cường + admin mọi chuyến xong (anh chốt «tự động + quà 100 xu», thêm «admin control tất cả chuyến,
+  góc cam»):** xe chạy ngầm theo tuyến thật, đọc tên khi tới; `/control` «Các chuyến xe» chiếu xe nào / tới điểm kế / gọi
+  thêm / tắt tự gọi. Phòng 1 comment / 6 s: lên xe trong 30 phút 40 % → 98 %. 91 test, fuzz sạch. **Chưa commit.**
+- **Next:** anh xem ảnh PLAN-123 / 124 / 125 + quyết commit; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+  Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
+  (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
+
 ## Phiên 2026-10-30 → 31 (studio) — PLAN-106 Studio P1–P4 + PLAN-108 dọn giao diện (đã merge main)
 
 - Anh: mọi bài đã đăng qua Buffer, UI đăng bài cũ không cần nữa, «đập đi xây lại 1 hệ sinh thái edit video». Anh chốt: edit tự động theo mẫu + duyệt / chỉnh tay; 3 nguồn (reup, tự quay, AI); điều khiển bằng web + Telegram; **xây song song**, Buffer vẫn đăng bình thường.
@@ -91,6 +178,12 @@
     Trung) — Demucs hết RAM (exit -9) → Whisper lần hai cũng hỏng → «không có lời thoại» sai, lại bị lưu cố định. Sửa: Demucs theo khúc
     60 s, dùng lời thoại của bước phân tích, chỉ lưu cố định kết quả chắc chắn, nút «Lồng tiếng lại», tiến trình ⚠. Cần restart 3 app,
     rồi mở #11 → «Lồng tiếng lại».
+  - **31/10 — PLAN-119 chất lượng lồng tiếng (anh: «vá giúp anh»; code xong, commit cục bộ):** dịch theo câu, câu đọc Việt hoá
+    (sub / say), sửa chữ Whisper nghe nhầm, chuẩn −14 LUFS, trần bitrate 3M; nút «Dịch & lồng lại»; lỗi tiếng không còn tắt NVENC.
+    Cần restart 3 app, rồi mở #12 → «Dịch & lồng lại». Ghi nhận: cổng 9Router trả auth 404, AI tự chuyển Gemini (không thuộc Studio).
+  - **31/10 — PLAN-120 ngắt dòng phụ đề (anh: «cách ngắt dòng chưa chuẩn»; commit `171e023` cục bộ):** mỗi câu một lượt, ≤ 2 dòng
+    cân theo cụm từ / dấu câu, không tách tên riêng, không chữ lẻ, đo bằng font thật (× 0,65 libass, chặn 32 ký tự), thời gian theo độ dài.
+    Áp khi restart Studio_Heavy; video cũ đổi khi render / lồng lại. Ngoài tầm: từ ghép không dấu hiệu («mùa ⏎ hè»).
   - Anh vào «Kênh & mẫu» thêm Uyển Nhi (D4), chọn mẫu; bật «Nhận reup» khi muốn video reup của kênh đi qua Studio.
   - P5: video AI (script → voice → visuals, cần key Pexels). P6: thí điểm Uyển Nhi 7 ngày rồi chuyển kênh + dọn code cũ. Giờ đăng theo `studio_channels.slot_hours` để P6.
 
@@ -138,6 +231,13 @@
   bài 21 link an_redir bị cắt mất 2 mục cuối dù chữ chỉ ~2.300. Test `test_cat_tin_khong_tinh_url_trong_link`. Cả bộ cashback cắt mạng:
   1064 qua, chỉ hỏng `test_b9_…` (màn ví admin, có từ trước) + 3 test cần DNS.
 - Tất cả CHƯA commit. Anh restart: `systemctl restart cashback-bot cashback-zalo`.
+- **Kiểm log thật sau khi đã commit `94f0c76`/`0c5af03` và restart (11:36 UTC):** bài 99329 (12:55): bridge rút gọn 7/7 link,
+  2,2–3,2 s mỗi link (timeout 6 s), gọi lần lượt. 9 khách Telegram nhận đủ 7 link, 8 khách Zalo nhận bản gọn 3/7 link. Cả 17 tin
+  gửi được ở lần đầu, không lỗi. Từ 11:00 không có WARNING/ERROR. Bản gọn bỏ 4 mục «Deal VIP 29K/99K/119K–299K/399K» (chỉ +1 vip,
+  không có %, dưới `MIN_QUALITY`), nhưng câu chú thích vẫn ghi «bỏ mã lọc tài khoản, game, mã cũ», chưa đúng với trường hợp này. Chưa
+  sửa, chờ anh quyết. Bài 99328 (11:21) chỉ đăng kênh, không gửi khách: không có từ khoá mã (`_SEND_WORDS`), đúng thiết kế.
+- **HEAD 7/7 link bài 99329 (anh cho phép, có thể tính click):** cả 7 link trả 200, đều có `utm_source=an_17315920094`,
+  `utm_medium=affiliates`, `utm_content=AUTOSALE----` (sub_id1 = AUTOSALE, sub_id2–5 trống).
 
 ## Phiên 2026-10-31 (relay-shopee-only) — Bài săn sale chỉ giữ link Shopee
 
