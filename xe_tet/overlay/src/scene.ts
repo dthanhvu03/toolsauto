@@ -66,6 +66,13 @@ function radiusFor(wind: number): number {
 const MAX_BUBBLES = 6;
 const BUBBLE_MS = 5000;
 const EXHAUST = 0x6f6f72;
+const LABEL_GAP = 4;  // px giữa hai nhãn tên bị đẩy
+const MAX_NUDGE = 140;  // px: đẩy xa hơn thì nhãn rời khỏi người của nó
+const NUDGE_EASE = 0.3;  // nhãn trượt tới chỗ mới (không nhảy giật khi người đi ngang nhau)
+const _vp = new THREE.Matrix4();
+const _lp = new THREE.Vector3();
+
+interface LabelBox { el: HTMLElement; x0: number; x1: number; y0: number; y1: number }
 
 type SetName = "ben" | "road" | "rest" | "home";
 type View = "outside" | "inside";
@@ -136,6 +143,7 @@ interface Walker {
   phase: number;
   hold: boolean; // hết đường thì đứng yên (hàng WC) thay vì biến mất
   onDone?: () => void;
+  onRemove?: () => void;  // rời cảnh (về tới xe, đổi cảnh, quá trần): trả chỗ ăn
 }
 
 // ---- thế giới ---------------------------------------------------------------
@@ -199,6 +207,8 @@ export class World {
   private camLook = new THREE.Vector3();
   private camPosTo = new THREE.Vector3();
   private camLookTo = new THREE.Vector3();
+  private labelSize = new WeakMap<HTMLElement, { w: number; h: number }>();  // đo một lần: tên không đổi chữ
+  private labelNudge = new WeakMap<HTMLElement, number>();  // độ đẩy đang hiển thị (px, âm = lên)
 
   constructor(canvas: HTMLCanvasElement, labelsEl: HTMLElement, fade: HTMLElement) {
     this.fade = fade;
@@ -452,6 +462,8 @@ export class World {
   }
 
   private removeWalker(w: Walker): void {
+    w.onRemove?.();
+    w.onRemove = undefined;
     dropLabels(w.obj);
     this.scene.remove(w.obj);
     this.walkers = this.walkers.filter((x) => x !== w);
@@ -485,8 +497,9 @@ export class World {
     p.position.copy(this.bus.doorSpot).add(new THREE.Vector3(Math.random() - 0.5, 0.1, -0.3));
     if (e.action === "food") {
       const turn = this.seatTurn++;
-      const seat = this.rest.seats[turn % this.rest.seats.length];
-      const w = this.addWalker(p, [this.rest.counterSpot(turn), seat.clone()], 3.6, undefined);
+      const spot = this.rest.takeSpot();  // chỗ riêng, không ngồi đè người khác
+      const w = this.addWalker(p, [this.rest.counterSpot(turn), this.rest.eatSpot(spot)], 3.6, undefined);
+      w.onRemove = () => this.rest.freeSpot(spot);
       const icon = label(e.emoji ?? "🍜", "lbl emoji");
       icon.position.y = 3;
       p.add(icon);
@@ -681,6 +694,54 @@ export class World {
     this.renderer.render(this.scene, this.camOut);  // cùng một lượt: trình duyệt chỉ hiện khung đúng này
   }
 
+  /**
+   * Nhãn tên người đi bộ chạm nhau thì đẩy lệch lên (PLAN-133; trạm đông người tên đè lên nhau, khách không đọc được tên
+   * mình). Tham lam: xét từ nhãn thấp nhất màn hình lên, nhãn chạm nhãn đã đặt thì dời lên ngay trên nhãn đó, lặp tới khi
+   * không chạm (tối đa MAX_NUDGE). Tối đa 60 người → so từng cặp là đủ nhanh. Vị trí tính bằng đúng phép chiếu của
+   * CSS2DRenderer (không đọc vị trí DOM: đọc là bắt trình duyệt dựng lại bố cục mỗi khung); CSS2DRenderer ghi lại transform
+   * mỗi khung nên chỉ cần nối thêm translateY.
+   */
+  private declutter(cam: THREE.Camera): void {
+    _vp.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    const boxes: LabelBox[] = [];
+    for (const w of this.walkers) {
+      for (const o of w.obj.children) {
+        if (!(o instanceof CSS2DObject) || o.element.style.display === "none") continue;
+        const el = o.element;
+        let size = this.labelSize.get(el);
+        if (!size) {
+          size = { w: el.offsetWidth, h: el.offsetHeight };
+          if (!size.w) continue;  // chưa vào DOM: khung sau
+          this.labelSize.set(el, size);
+        }
+        _lp.setFromMatrixPosition(o.matrixWorld).applyMatrix4(_vp);
+        const x = (_lp.x + 1) * W / 2;
+        const y = (1 - _lp.y) * H / 2;
+        boxes.push({ el, x0: x - size.w / 2, x1: x + size.w / 2, y0: y - size.h / 2, y1: y + size.h / 2 });
+      }
+    }
+    boxes.sort((a, b) => b.y1 - a.y1);
+    const placed: LabelBox[] = [];
+    for (const b of boxes) {
+      let dy = 0;
+      for (let moved = true; moved && -dy < MAX_NUDGE;) {
+        moved = false;
+        for (const p of placed) {
+          if (b.x1 + LABEL_GAP <= p.x0 || b.x0 >= p.x1 + LABEL_GAP) continue;
+          if (b.y1 + dy + LABEL_GAP <= p.y0 || b.y0 + dy >= p.y1 + LABEL_GAP) continue;
+          dy = p.y0 - LABEL_GAP - b.y1;  // nằm ngay trên nhãn đã đặt
+          moved = true;
+        }
+      }
+      dy = Math.max(dy, -MAX_NUDGE);
+      placed.push({ ...b, y0: b.y0 + dy, y1: b.y1 + dy });
+      const shown = this.labelNudge.get(b.el) ?? 0;
+      const next = Math.abs(dy - shown) < 0.5 ? dy : shown + (dy - shown) * NUDGE_EASE;
+      this.labelNudge.set(b.el, next);
+      if (next) b.el.style.transform += ` translateY(${next.toFixed(1)}px)`;
+    }
+  }
+
   /** Số liệu vẽ của khung vừa rồi — cho đồng hồ ?fps=1. */
   stats(): { calls: number; triangles: number; geometries: number; textures: number } {
     const { render, memory } = this.renderer.info;
@@ -802,6 +863,7 @@ export class World {
     this.scene.matrixWorldAutoUpdate = false;
     this.labels.render(this.scene, cam);
     this.scene.matrixWorldAutoUpdate = true;
+    this.declutter(cam);
     this.prebuildIdle(dt);
   }
 }

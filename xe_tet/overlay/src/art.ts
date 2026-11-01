@@ -260,7 +260,6 @@ function limb(radius: number, length: number, material: THREE.Material, pivotY: 
   const m = new THREE.Mesh(GEO.capsule, material);
   m.scale.set(radius, length / 2, radius);
   m.position.y = -length / 2 - radius * 0.3;
-  m.castShadow = true;
   pivot.add(m);
   pivot.position.set(x, pivotY, 0);
   return pivot;
@@ -273,9 +272,8 @@ export function makePerson(hue: number, name?: string, vip = false, size = PERSO
   const g = new THREE.Group();
   g.scale.setScalar(size);
   const body = new THREE.Mesh(personBody(hue, headOnly), PERSON_MAT);
-  body.castShadow = true;
   g.add(body);
-  if (headOnly) return g;
+  if (headOnly) return noShadow(g);
   const shirt = soft(hueColor(Math.round(hue / HUE_STEP) * HUE_STEP, 0.52), 0.7);
   const pants = soft(PANTS[hue % PANTS.length], 0.8);
   const legL = limb(0.1, 0.32, pants, 0.5, -0.12);
@@ -285,6 +283,15 @@ export function makePerson(hue: number, name?: string, vip = false, size = PERSO
   g.add(legL, legR, armL, armR, blob(0.9));
   g.userData.limbs = { legL, legR, armL, armR } satisfies Limbs;
   if (name) g.add(at(label(name, vip ? "lbl vip" : "lbl"), 0, 2.3, 0));
+  return noShadow(g);
+}
+
+/**
+ * Người không đổ bóng thật (PLAN-133): đã có vệt bóng giả dưới chân (`blob`), bóng thật thêm 5 lần vẽ / người — trạm dừng
+ * 40 người là 200 lần vẽ, tụt còn 22 khung/s trên máy anh. Đánh dấu để `shadowed()` của bối cảnh cũng bỏ qua.
+ */
+function noShadow(g: THREE.Group): THREE.Group {
+  g.traverse((o) => { o.userData.noShadow = true; });
   return g;
 }
 

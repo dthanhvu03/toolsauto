@@ -1,6 +1,6 @@
 # PLAN-133 — Xe Tết: hết khựng khi bắn pháo hoa, nhẹ GPU, nhạc không phụ thuộc luồng chính
 
-- Status: Bước 1–6 xong, đã nạp 8810 (anh duyệt 01/11). Bước 7 chờ anh đo `/?fps=1` trên GPU thật.
+- Status: Done — bước 1–7 đã nạp 8810 (anh duyệt 01/11).
 - Executor: Claude Code (anh yêu cầu 01/11: «10 vai phản biện, giảm giật lag, tối ưu code, thuật toán» → «triển khai đi»)
 
 ## Đo trước khi sửa (01/11, máy thử 8811, Chromium SwiftShader, `?res=0.5`, chất lượng Cao, giả lập 6 sự kiện / giây)
@@ -41,6 +41,19 @@
 - Ghi chú: 1 / 31 lần chạy pytest đỏ `test_music_upload_and_delete_from_control` (bộ nhớ đệm theo mtime thư mục nhạc) —
   có sẵn từ trước, 15 / 15 lần trên code gốc và 15 / 15 lần code mới đều xanh; không liên quan PLAN này.
 
-## Chưa làm — bước 7 (cần anh đo `/?fps=1` trên Chrome Windows trước)
-- Vật liệu Lambert cho đồ low-poly, gộp khối nhà ven đường, bụi 72 sprite → 1 `Points`, đèn hầm `InstancedMesh`,
-  mặc định «Vừa» khi live. (Bóng PCF thường: three 0.187 vốn đã dùng PCF.)
+## Bước 7 — theo số đo thật của anh (01/11, Chrome Windows, chất lượng Cao)
+- Đường 30 khung/s (362–367 lần vẽ), trạm dừng ~25 người 30 khung/s (609), trạm dừng ~40 người + «bao cả xe» **22 khung/s**
+  (772 lần vẽ, 235k tam giác). Nhà ven đường / Lambert không phải chỗ nghẽn → bỏ; nghẽn là đám đông ở trạm.
+- Mỗi người đi bộ ~11 lần vẽ (thân + 4 tay chân + vệt bóng giả, thêm 5 ở lượt bóng thật). Tên đè nhau do xếp chỗ trùng:
+  16 ghế xếp xoay vòng (`turn % 16`), hàng WC từ người thứ 10 đứng chồng một điểm (`Math.min(i, 8)`).
+- Anh chọn (01/11): **bỏ bóng thật của người** (đã có vệt bóng giả dưới chân) + **xếp chỗ không trùng + đẩy nhãn**.
+  1. Người không đổ bóng thật (cả người chờ ở bến, gia đình đầu ngõ): 11 → 6 lần vẽ / người.
+  2. Trạm: cấp chỗ bằng danh sách chỗ trống (ghế trống trước, hết ghế thì đứng quanh bàn), về xe thì trả chỗ; hàng WC
+     xuống dòng mỗi 9 người.
+  3. Nhãn tên người đi bộ còn chạm nhau thì đẩy lệch lên (xếp từ dưới màn hình lên, kích thước nhãn đo một lần).
+- Không làm: Lambert, gộp khối nhà, mặc định «Vừa» (Cao đủ 30 khung/s ngoài trạm đông).
+- Proof bước 7 (8811, bản sao build riêng): trạm 0 người 328 lần vẽ → 45 người 598 (~6 / người, trước ~11); ảnh 10 / 16 /
+  22 giây sau đợt comment: tên ở sân đứng ăn + hàng WC tách được, góc quầy / 16 ghế sát nhau vẫn chật khi 45 người tới
+  trong 7 giây (nhãn đẩy tối đa 140 px). pytest 117, ruff + tsc sạch, e2e control_panel 28/28, ux_scenarios 0 lỗi.
+- Bộ nhớ: overlay 12 phút / 8 chuyến — hình 208 → 367 rồi đứng (dựng vùng một lần), ảnh 59, heap 26 MB → không rò.
+  Server 6 giờ giả lập 15.000 người xem → 8,7 MB (~300 B / người xem).

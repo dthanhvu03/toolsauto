@@ -26,7 +26,7 @@ const WALK_Y = 0.1;
 const v = (x: number, z: number) => new THREE.Vector3(x, WALK_Y, z);
 
 function shadowed(g: THREE.Object3D): void {
-  g.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.traverse((o) => { if ((o as THREE.Mesh).isMesh && !o.userData.noShadow) { o.castShadow = true; o.receiveShadow = true; } });
 }
 
 // ---- bến xe -----------------------------------------------------------------------
@@ -126,12 +126,17 @@ export class BenSet implements StageSet {
 // ---- trạm dừng chân ------------------------------------------------------------------
 
 const TABLES: [number, number][] = [[-9.2, -9.4], [-6.2, -9.4], [-9.2, -6.6], [-6.2, -6.6]];
+const STAND_COLS = 5;  // hết ghế: đứng ăn 5 người / hàng ở sân trống cạnh bàn (x −4,2 → 0,6, chừa chỗ hàng WC)
+const WC_ROW = 9;  // hàng chờ WC: 9 người / hàng
 
 export class RestSet implements StageSet {
   group = new THREE.Group();
   /** Chỗ người ngồi ăn (ghế nhựa quanh bàn) — người gọi món đi tới quầy rồi ngồi một ghế. */
   readonly seats: THREE.Vector3[] = [];
   readonly shop = v(5, -13.4);
+  // Chỗ ăn đang có người (PLAN-133). Trước đây xếp xoay vòng theo lượt (`lượt % 16`): người thứ 17 ngồi đè lên người đang
+  // ngồi, tên chồng khít lên nhau; hàng WC từ người thứ 10 cũng đứng chung một điểm.
+  private taken = new Set<number>();
   private shopSign = new SignBoard("ĐẶC SẢN", 4.4, 0.75);
   private steam: Steam;
   private lanterns: LanternString;
@@ -204,9 +209,28 @@ export class RestSet implements StageSet {
     return v(-5 + (i % 5) * 1.0, -12.5);
   }
 
-  /** Vị trí thứ i trong hàng chờ WC (xếp từ cửa ra phía trái). */
+  /** Lấy chỗ ăn trống có số nhỏ nhất (ghế trước, hết ghế thì chỗ đứng); người rời cảnh thì `freeSpot`. */
+  takeSpot(): number {
+    let i = 0;
+    while (this.taken.has(i)) i++;
+    this.taken.add(i);
+    return i;
+  }
+
+  freeSpot(i: number): void {
+    this.taken.delete(i);
+  }
+
+  /** Toạ độ chỗ ăn thứ i: 16 ghế, rồi đứng ăn ở sân trống cạnh bàn (STAND_COLS người / hàng, từ quầy ra phía xe). */
+  eatSpot(i: number): THREE.Vector3 {
+    if (i < this.seats.length) return this.seats[i].clone();
+    const k = i - this.seats.length;
+    return v(-4.2 + (k % STAND_COLS) * 1.2, -10.6 + Math.floor(k / STAND_COLS) * 1.3);
+  }
+
+  /** Vị trí thứ i trong hàng chờ WC (xếp từ cửa ra phía trái, đủ WC_ROW người thì xuống hàng). */
   wcQueue(i: number): THREE.Vector3 {
-    return v(10 - 1.1 * Math.min(i, 8), -13.1 + (i > 8 ? 1.1 : 0));
+    return v(10 - 1.1 * (i % WC_ROW), -13.1 + 1.1 * Math.floor(i / WC_ROW));
   }
 
   setSpecialty(text: string): void {
