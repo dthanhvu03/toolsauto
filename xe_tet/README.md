@@ -21,7 +21,8 @@ cd xe_tet/overlay && npm install && npm run build && cd ../..   # chỉ cần kh
 - **Mật khẩu (tuỳ chọn):** `XE_TET_TOKEN=…` → mở `/control?token=…`. Màn hình live (`/`) vẫn mở để LIVE Studio quay.
   Muốn điều khiển từ điện thoại trong mạng: thêm IP máy vào `XE_TET_ALLOWED_HOSTS` **và** đặt `XE_TET_TOKEN`.
 
-- Màn hình live: http://127.0.0.1:8810/ (khung 1080×1920, tự co theo cửa sổ). Khi thử có thể thêm `?view=inside|outside`
+- Màn hình live: http://127.0.0.1:8810/ (khung 1080×1920, tự co theo cửa sổ). **TikTok LIVE Studio → Thêm nguồn → Liên kết:**
+  `http://127.0.0.1.nip.io:8810/` (ô này không nhận IP trần / localhost), bật âm thanh, độ phân giải tuỳ chỉnh 1080 × 1920. Khi thử có thể thêm `?view=inside|outside`
   hoặc `?cam=x,y,z,lx,ly,lz` trên URL để ghi đè lựa chọn của admin; `?fps=1` hiện khung hình / số lần vẽ (đo trên GPU thật);
   `?res=0.5` vẽ nửa độ phân giải (máy yếu, máy không GPU); `?hour=10` ép giờ trong ngày (chụp ảnh ngày / đêm khi thử).
 - Bảng điều khiển: http://127.0.0.1:8810/control — admin điều khiển mọi thứ, **không có gì tự đổi góc**:

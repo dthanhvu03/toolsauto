@@ -36,7 +36,9 @@ OUTBOX_MAX = 64  # khung chờ gửi tối đa / màn hình; dồn quá (màn h�
 
 log = logging.getLogger("xe_tet")
 DEPARTURE_LIST = [{"key": d.key, "name": d.name} for d in DEPARTURES if d.key in available()]
-LOCAL_HOSTS = ("127.0.0.1", "localhost", "testserver")
+# 127.0.0.1.nip.io: tên miền công khai luôn trỏ về 127.0.0.1 — ô «Liên kết» của TikTok LIVE Studio không nhận IP trần /
+# localhost, nhận tên này (01/11). Chỉ trỏ về chính máy này nên không mở cửa cho trang web lạ (chống DNS rebinding vẫn giữ).
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "testserver", "127.0.0.1.nip.io")
 
 
 class Outbox:
