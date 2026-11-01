@@ -26,6 +26,10 @@ export interface Control {
   voice_on?: boolean;  // giọng Anh Tư lơ xe (PLAN-128)
   voice_volume?: number;
   voice_rate?: number;  // tốc độ đọc 0,8 – 1,6
+  trip_minutes?: number;  // chuyến xa nhất chạy bao nhiêu phút (PLAN-130)
+  auto_feature?: "off" | "events" | "rotate";
+  rotate_seconds?: number;
+  mix?: "balanced" | "music" | "voice";  // trộn tiếng
 }
 
 interface Lane { key: string; label: string; arrow: string; waiting: number; current: boolean }
@@ -84,6 +88,26 @@ export interface State {
   delivered: number;
   days_to_tet: number;
   rush?: boolean; // giờ cao điểm: hàng chờ ≥ 1 xe, chuyến tự ngắn lại
+  route?: Route;  // bảng chặng của xe đang chiếu (PLAN-130)
+  fleet?: FleetBus[];  // mọi xe đang chạy
+  trip_minutes?: number;
+}
+
+/** Đồng hồ trên xe: giờ VN lúc xuất bến + giờ xe chạy (giờ trong ngày, «HH:MM», ngày thứ mấy từ hôm xuất bến). */
+export interface BusClock { hour: number; time: string; day: number }
+
+export interface Route {
+  stops: { kind: "rest" | "stop"; name: string; km: number; done: boolean; in_s: number | null; at: string | null;
+    day: number | null }[];
+  odo: number;
+  total: number;
+  clock: BusClock;
+}
+
+export interface FleetBus {
+  no: number; main: boolean; featured: boolean; arrow: string; label: string; phase: Phase; riders: number;
+  left_km: number | null; next: string | null; in_s: number | null; clock: BusClock | null; sponsor?: string | null;
+  stops: Route["stops"];
 }
 
 interface Person {

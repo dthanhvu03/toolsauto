@@ -27,7 +27,8 @@ const CAMS: Record<CamName, [number, number, number, number, number, number]> = 
 };
 const URL_PARAMS = new URLSearchParams(location.search);
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
-// ?hour=10: ép giờ trong ngày khi thử (chụp ảnh ban ngày lúc nửa đêm); bỏ trống thì theo đồng hồ thật.
+// ?hour=10: ép giờ trong ngày khi thử (chụp ảnh ban ngày lúc nửa đêm); bỏ trống thì theo đồng hồ trên xe (PLAN-130:
+// giờ xuất bến + giờ xe chạy — chuyến 26 tiếng thì trời qua một ngày một đêm), ở bến theo đồng hồ thật.
 const FORCE_HOUR = URL_PARAMS.has("hour") ? Number(URL_PARAMS.get("hour")) : null;
 const BASE_RES = Math.min(1, Math.max(0.25, Number(URL_PARAMS.get("res")) || 1));
 const LOW_RES = 0.6;
@@ -77,7 +78,7 @@ function dropLabels(obj: THREE.Object3D): void {
   obj.traverse((o) => { if (o instanceof CSS2DObject) o.element.remove(); });
 }
 
-// ---- trời theo giờ thật -------------------------------------------------------
+// ---- trời theo đồng hồ trên xe ---------------------------------------------------
 
 interface Look {
   top: number; horizon: number;  // đỉnh trời, chân trời (= màu sương)
@@ -94,12 +95,34 @@ const LOOKS: Record<"dawn" | "day" | "dusk" | "night", Look> = {
   night: { top: 0x0b1430, horizon: 0x1c2748, hemiSky: 0x6f80b8, hemiGround: 0x141820, hemi: 0.45, sunColor: 0x9fb4ff, sun: 0.4, exposure: 0.8 },
 };
 
-function timeOfDay(hour: number): keyof typeof LOOKS {
-  if (hour >= 5 && hour < 7) return "dawn";
-  if (hour >= 7 && hour < 17) return "day";
-  if (hour >= 17 && hour < 19) return "dusk";
-  return "night";
+// mốc giờ → cảnh trời; giữa hai mốc pha màu dần (đồng hồ xe chạy nhanh: không đổi trời giật cục)
+const SKY_KEYS: [number, keyof typeof LOOKS][] = [
+  [0, "night"], [4.6, "night"], [5.8, "dawn"], [7.2, "day"], [16.6, "day"], [17.8, "dusk"], [19, "night"], [24, "night"],
+];
+const SKY_CATCH_UP = 1.5;  // giờ / giây: đồng hồ nhảy (xe về bến → giờ thật) thì trời chuyển dần, không cắt
+const tmpA = new THREE.Color();
+const tmpB = new THREE.Color();
+const mixHex = (a: number, b: number, f: number) => tmpA.setHex(a).lerp(tmpB.setHex(b), f).getHex();
+
+function lookAt(hour: number): Look {
+  const h = ((hour % 24) + 24) % 24;
+  const i = SKY_KEYS.findIndex(([at], k) => h >= at && h < SKY_KEYS[k + 1][0]);
+  const [h0, a] = SKY_KEYS[i];
+  const [h1, b] = SKY_KEYS[i + 1];
+  const f = (h - h0) / (h1 - h0);
+  const from = LOOKS[a];
+  const to = LOOKS[b];
+  if (from === to) return from;
+  return {
+    top: mixHex(from.top, to.top, f), horizon: mixHex(from.horizon, to.horizon, f),
+    hemiSky: mixHex(from.hemiSky, to.hemiSky, f), hemiGround: mixHex(from.hemiGround, to.hemiGround, f),
+    hemi: from.hemi + (to.hemi - from.hemi) * f, sunColor: mixHex(from.sunColor, to.sunColor, f),
+    sun: from.sun + (to.sun - from.sun) * f, exposure: from.exposure + (to.exposure - from.exposure) * f,
+  };
 }
+
+const isNight = (hour: number) => { const h = ((hour % 24) + 24) % 24; return h < 5.4 || h >= 18.4; };
+const realHour = () => { const d = new Date(); return d.getHours() + d.getMinutes() / 60; };
 
 // ---- người đi bộ -------------------------------------------------------------
 
@@ -162,7 +185,8 @@ export class World {
   private speed = 0;
   private t = 0;
   private night = false;
-  private skyCheck = -1;
+  private skyHour: number | null = null;  // giờ trời đang vẽ (đuổi theo đồng hồ trên xe)
+  private skyCheck = 0;
   private switching = false;
   private wcTimer = 0;
   private early: GameEvent[] = []; // sự kiện trạm / thả khách tới trước khi cảnh kịp đổi
@@ -571,11 +595,18 @@ export class World {
   // ---- vòng vẽ ----------------------------------------------------------
 
   private updateSky(force = false): void {
-    const minute = Math.floor(this.t / 30);
-    if (!force && minute === this.skyCheck) return;
-    this.skyCheck = minute;
-    const look = this.look = LOOKS[timeOfDay(FORCE_HOUR ?? new Date().getHours() + new Date().getMinutes() / 60)];
-    this.night = look === LOOKS.night;
+    if (!force && this.t - this.skyCheck < 0.25) return;  // 4 lần / giây là đủ mượt
+    const dt = this.t - this.skyCheck;
+    this.skyCheck = this.t;
+    const target = FORCE_HOUR ?? this.state?.route?.clock.hour ?? realHour();
+    if (this.skyHour === null || force) {
+      this.skyHour = target;
+    } else {
+      const diff = ((target - this.skyHour + 36) % 24) - 12;  // đi đường ngắn quanh vòng 24 giờ
+      this.skyHour += Math.sign(diff) * Math.min(Math.abs(diff), SKY_CATCH_UP * dt);
+    }
+    const look = this.look = lookAt(this.skyHour);
+    this.night = isNight(this.skyHour);
     this.sky.set(look.top, look.horizon);
     this.scene.background = null;
     (this.scene.fog as THREE.Fog).color.setHex(look.horizon);

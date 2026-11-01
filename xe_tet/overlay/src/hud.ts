@@ -2,7 +2,7 @@
 // ít chữ, chữ to, mỗi người tương tác đều thấy mình trên màn hình.
 
 import { BERTHS } from "./art";
-import type { GameEvent, State } from "./types";
+import type { FleetBus, GameEvent, Route, State } from "./types";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -92,6 +92,7 @@ export class Hud {
     const [head, tail] = this.statusText(s);
     setHTML("phase-text", `<span class="head">${esc(head)}</span>${tail ? `<span class="tail">${esc(tail)}</span>` : ""}`);
     ($("bar-fill") as HTMLElement).style.width = `${Math.round(this.progress(s) * 100)}%`;
+    setHTML("marks", this.marks(s));
     setText("seats", `🚌 ${s.bus.riders}/${seatsOf(s)}` + (s.waiting ? ` · ⏳${s.waiting}` : ""));
     setHTML("next-stops", this.nextStops(s));
     const pass = s.terrain?.pass ?? null;
@@ -132,11 +133,25 @@ export class Hud {
     }
   }
 
+  /** Ở bến: giường đã kín bao nhiêu; trên đường: cả chuyến đã đi bao nhiêu (chấm điểm dừng nằm trên cùng thanh). */
   private progress(s: State): number {
     if (s.phase === "BOARDING") return s.bus.riders / seatsOf(s);
-    if (s.phase === "DRIVING") return s.progress;
-    if (s.phase === "REST") return 1 - (s.phase_left ?? 0) / Math.max(1, s.phase_total ?? 1);
-    return 1;
+    const route = this.trip(s);
+    return route ? Math.min(1, route.odo / route.total) : 1;
+  }
+
+  private trip(s: State): Route | null {
+    const route = s.route;
+    return route && route.total > 0 && route.stops.length && s.phase !== "BOARDING" ? route : null;
+  }
+
+  /** Chấm điểm dừng trên thanh cả chuyến + chiếc xe ở chỗ đang chạy. */
+  private marks(s: State): string {
+    const route = this.trip(s);
+    if (!route) return "";
+    const at = (k: number) => `${Math.min(100, (k / route.total) * 100).toFixed(1)}%`;
+    const dots = route.stops.map((p) => `<b class="mk ${p.kind}${p.done ? " done" : ""}" style="left:${at(p.km)}"></b>`);
+    return `${dots.join("")}<i class="bus-dot" style="left:${at(route.odo)}">🚌</i>`;
   }
 
   private nextStops(s: State): string {
@@ -150,10 +165,16 @@ export class Hud {
       return `${rush}${lanes.join(" · ")}`;
     }
     const pass = s.terrain?.pass ? `<span class="rush">${s.terrain.tunnel ? "🚇" : "⛰"} ${esc(s.terrain.pass)}</span>` : "";
-    const from = s.phase === "DRIVING" || s.phase === "SPECIAL" ? s.leg_index : s.leg_index + 1;
-    const ahead = s.legs.slice(from, from + 3)
-      .map((l) => (l.kind === "rest" ? `☕ ${esc(l.label)}` : `📍 ${esc(l.label)} ${km(l.km)} km`));
-    return `${rush}${pass}${ahead.length ? `Tiếp: ${ahead.join(" → ")}` : "🏁 Sắp về bến"}`;
+    const route = this.trip(s);
+    if (!route) return `${rush}${pass}🏁 Sắp về bến`;
+    // đồng hồ trên xe + điểm kế (còn bao lâu thật) + điểm sau nữa, mỗi điểm kèm giờ tới theo đồng hồ xe
+    const clockText = `<span class="clock">🕐 ${route.clock.day ? `Ngày ${route.clock.day + 1} · ` : ""}${route.clock.time}</span>`;
+    const ahead = route.stops.filter((p) => !p.done).slice(0, 2).map((p, i) => {
+      const icon = p.kind === "rest" ? "☕" : "📍";
+      const wait = i === 0 && p.in_s ? ` <small>(còn ${clock(p.in_s)})</small>` : "";
+      return `${icon} ${esc(p.name)} ${p.at ?? ""}${wait}`;
+    });
+    return `${rush}${pass}${clockText}${ahead.length ? ahead.join(" → ") : "🏁 Sắp về bến"}`;
   }
 
   // ---- lời kêu gọi: dòng chính đứng yên, dòng phụ xoay vòng gợi ý ----
@@ -185,10 +206,10 @@ export class Hud {
     const s = this.state;
     if (!s) return;
     const riders = s.bus.seats.filter((x): x is NonNullable<typeof x> => !!x);
-    const reliefs = (s.reliefs ?? []).filter((r) => !r.featured);
+    const others: FleetBus[] = (s.fleet ?? []).filter((b) => !b.featured);
     const modes = [
       ...(s.queue?.length ? ["queue", "queue"] : []),
-      ...(reliefs.length ? ["reliefs"] : []),
+      ...((s.fleet?.length ?? 0) > 1 ? ["fleet"] : []),
       ...(riders.length ? ["riders"] : []),
       "top",
     ];
@@ -198,10 +219,12 @@ export class Hud {
       setHTML("board-list", s.queue.slice(0, QUEUE_ROWS).map((w) =>
         // số thứ tự đặt trước (float phải) để nằm cùng dòng; tên dài bị cắt «…», dòng không xuống hàng
         `<li><span>#${w.pos}</span>${w.arrow} ${esc(w.name)} <small>· ${esc(w.province)}</small></li>`).join(""));
-    } else if (mode === "reliefs") {
-      setText("board-title", "🚌 Xe tăng cường");
-      setHTML("board-list", reliefs.slice(0, QUEUE_ROWS).map((r) =>
-        `<li><span>${km(r.left_km)} km</span>${r.arrow} số ${r.no} <small>· tới ${esc(r.next)} · ${r.riders} khách</small></li>`).join(""));
+    } else if (mode === "fleet") {  // các xe khác đang ở đâu, bao lâu nữa tới điểm kế (PLAN-130)
+      setText("board-title", "🚌 Xe khác");
+      setHTML("board-list", others.slice(0, QUEUE_ROWS).map((b) => {
+        const where = b.next ? `→ ${esc(b.next)}` : b.phase === "BOARDING" ? "đang đón" : "về bến";
+        return `<li><span>${b.in_s ? clock(b.in_s) : ""}</span>${b.arrow} số ${b.no} <small>${where}</small></li>`;
+      }).join(""));
     } else if (mode === "riders") {
       setText("board-title", `🚌 Trên xe số ${s.bus.no}`);
       setHTML("board-list", riders.slice(-6).reverse()

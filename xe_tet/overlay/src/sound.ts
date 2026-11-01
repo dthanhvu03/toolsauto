@@ -3,8 +3,12 @@
 // bật tắt trên /control. Trình duyệt chặn tự phát tiếng tới khi có một cú bấm → báo ra ngoài để hiện 🔇.
 //
 //   bài nhạc ─► music ─► duck (nhỏ lại khi lơ xe nói) ─► tunnel (lọc «bịt» khi trong hầm) ─┐
-//   còi, pháo hoa, tiếng máy ─► sfx ──────────────────────────────────────────────────────────┤
-//   giọng Anh Tư lơ xe (file server đọc sẵn, PLAN-128) ─► voice ─────────────────────────────┴─► master ─► loa
+//   tiếng máy + lốp / gió (theo tốc độ) ─► vehicle ─► vehicleDuck ─► sfx ────────────────────┤
+//   còi, pháo hoa, «ting» ─► sfx ─────────────────────────────────────────────────────────────┤
+//   giọng Anh Tư lơ xe (file server đọc sẵn, PLAN-128) ─► voice ─────────────────────────────┴─► master ─► nén ─► loa
+//
+// Trộn (PLAN-130): một bộ nén chung giữ to nhỏ đều (bài anh tải lên to nhỏ khác nhau, pháo hoa không chói); lơ xe nói thì
+// nhạc lẫn tiếng xe cùng nhỏ lại; «chế độ trộn» trên /control nhân thêm hệ số cho từng nhóm.
 
 import { PRESETS, Song } from "./music";
 import type { GameEvent, State } from "./types";
@@ -15,6 +19,16 @@ const ENGINE_LEVEL = 0.07;
 const OPEN_AIR = 18000;  // tần số cắt bộ lọc ngoài trời / trong hầm
 const IN_TUNNEL = 700;
 const DUCK = 0.3;  // lơ xe nói: nhạc còn 30 %
+const VEHICLE_DUCK = 0.45;  // … tiếng máy / lốp còn 45 %
+const ROAD_LEVEL = 0.05;  // tiếng lốp + gió ở tốc độ thường
+const IDLE_LEVEL = 0.035;  // xe nổ máy chờ ở bến / trạm
+type Mix = "balanced" | "music" | "voice";
+/** Hệ số từng nhóm theo chế độ trộn (nhân với âm lượng admin chỉnh) + mức nhạc khi lơ xe nói. */
+const MIXES: Record<Mix, { music: number; voice: number; sfx: number; duck: number }> = {
+  balanced: { music: 1, voice: 1, sfx: 1, duck: DUCK },
+  music: { music: 1.3, voice: 0.85, sfx: 0.8, duck: 0.5 },
+  voice: { music: 0.6, voice: 1.15, sfx: 0.75, duck: 0.18 },
+};
 
 interface Playing { id: string; stop(): void }
 
@@ -30,6 +44,9 @@ export class Sound {
   private tunnel = this.ctx.createBiquadFilter();
   private engine = this.ctx.createOscillator();
   private engineGain = this.ctx.createGain();
+  private road = this.ctx.createGain();
+  private vehicleDuck = this.ctx.createGain();
+  private duckLevel = DUCK;
   private playing: Playing | null = null;
   private lastTing = 0;
   /** Gọi khi trình duyệt cho / chưa cho phát tiếng (overlay hiện / ẩn biểu tượng 🔇). */
@@ -38,10 +55,27 @@ export class Sound {
   constructor() {
     this.tunnel.type = "lowpass";
     this.tunnel.frequency.value = OPEN_AIR;
+    const glue = this.ctx.createDynamicsCompressor();  // nén chung: to nhỏ đều, đỉnh pháo hoa không chói
+    glue.threshold.value = -18;
+    glue.knee.value = 12;
+    glue.ratio.value = 3;
+    glue.attack.value = 0.01;
+    glue.release.value = 0.25;
     this.music.connect(this.duck).connect(this.tunnel).connect(this.master);
+    this.vehicleDuck.connect(this.sfx);
     this.sfx.connect(this.master);
     this.voice.connect(this.master);
-    this.master.connect(this.ctx.destination);
+    this.master.connect(glue).connect(this.ctx.destination);
+    // lốp + gió: tiếng ồn nâu lặp vòng qua lọc thấp, to theo tốc độ
+    const rumble = this.ctx.createBufferSource();
+    rumble.buffer = this.brownNoise();
+    rumble.loop = true;
+    const roadFilter = this.ctx.createBiquadFilter();
+    roadFilter.type = "lowpass";
+    roadFilter.frequency.value = 520;
+    this.road.gain.value = 0;
+    rumble.connect(roadFilter).connect(this.road).connect(this.vehicleDuck);
+    rumble.start();
     // tiếng máy: răng cưa trầm qua lọc thấp, to nhỏ / cao thấp theo tốc độ
     const engineFilter = this.ctx.createBiquadFilter();
     engineFilter.type = "lowpass";
@@ -49,7 +83,7 @@ export class Sound {
     this.engine.type = "sawtooth";
     this.engine.frequency.value = 42;
     this.engineGain.gain.value = 0;
-    this.engine.connect(engineFilter).connect(this.engineGain).connect(this.sfx);
+    this.engine.connect(engineFilter).connect(this.engineGain).connect(this.vehicleDuck);
     this.engine.start();
     const unlock = () => void this.ctx.resume().then(() => this.onLock?.(false));
     for (const ev of ["pointerdown", "keydown"]) window.addEventListener(ev, unlock);
@@ -59,13 +93,18 @@ export class Sound {
   update(s: State): void {
     const c = s.control;
     const now = this.ctx.currentTime;
-    this.music.gain.setTargetAtTime(c?.music_volume ?? 0.5, now, 0.2);
-    this.sfx.gain.setTargetAtTime(c?.sfx_volume ?? 0.6, now, 0.2);
-    this.voice.gain.setTargetAtTime(c?.voice_on === false ? 0 : c?.voice_volume ?? 0.9, now, 0.2);
+    const mix = MIXES[c?.mix ?? "balanced"] ?? MIXES.balanced;
+    this.duckLevel = mix.duck;
+    this.music.gain.setTargetAtTime((c?.music_volume ?? 0.5) * mix.music, now, 0.2);
+    this.sfx.gain.setTargetAtTime((c?.sfx_volume ?? 0.6) * mix.sfx, now, 0.2);
+    this.voice.gain.setTargetAtTime(c?.voice_on === false ? 0 : (c?.voice_volume ?? 0.9) * mix.voice, now, 0.2);
     this.rate = c?.voice_rate ?? 1;
     const moving = s.phase === "DRIVING" && !s.paused;
-    this.engineGain.gain.setTargetAtTime(moving ? ENGINE_LEVEL : 0, now, 0.6);
-    this.engine.frequency.setTargetAtTime(38 + 10 * (s.speed ?? 1), now, 0.5);
+    const idling = !s.paused && (s.phase === "BOARDING" || s.phase === "REST");  // xe nổ máy chờ khách
+    const speed = s.speed ?? 1;
+    this.engineGain.gain.setTargetAtTime(moving ? ENGINE_LEVEL : idling ? IDLE_LEVEL : 0, now, 0.6);
+    this.engine.frequency.setTargetAtTime(moving ? 38 + 10 * speed : 30, now, 0.5);
+    this.road.gain.setTargetAtTime(moving ? ROAD_LEVEL * Math.min(1.6, speed) * (s.terrain?.tunnel ? 1.6 : 1) : 0, now, 0.5);
     this.tunnel.frequency.setTargetAtTime(moving && s.terrain?.tunnel ? IN_TUNNEL : OPEN_AIR, now, 0.4);
     // bài của xe đang chiếu; tắt nhạc (chung hoặc riêng xe) thì im
     const tracks = s.music_tracks ?? [];
@@ -144,10 +183,13 @@ export class Sound {
     this.ctx.createMediaElementSource(audio).connect(this.voice);
     const now = this.ctx.currentTime;
     this.speaking++;
-    this.duck.gain.setTargetAtTime(DUCK, now, 0.15);
+    this.duck.gain.setTargetAtTime(this.duckLevel, now, 0.15);
+    this.vehicleDuck.gain.setTargetAtTime(VEHICLE_DUCK, now, 0.15);
     const done = () => {
       this.speaking = Math.max(0, this.speaking - 1);
-      if (!this.speaking) this.duck.gain.setTargetAtTime(1, this.ctx.currentTime, 0.4);
+      if (this.speaking) return;
+      this.duck.gain.setTargetAtTime(1, this.ctx.currentTime, 0.4);
+      this.vehicleDuck.gain.setTargetAtTime(1, this.ctx.currentTime, 0.4);
     };
     audio.onended = done;
     audio.onerror = done;
@@ -225,6 +267,18 @@ export class Sound {
   }
 
   private noiseBuffer: AudioBuffer | null = null;
+
+  /** Tiếng ồn nâu 4 giây (trầm, như lốp lăn trên nhựa + gió), lặp vòng. */
+  private brownNoise(): AudioBuffer {
+    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 4, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < data.length; i++) {
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      data[i] = last * 3.5;
+    }
+    return buf;
+  }
 
   private noise(): AudioBuffer {
     if (!this.noiseBuffer) {

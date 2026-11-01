@@ -53,6 +53,7 @@ class Hub:
         engine = Engine(time.monotonic(), board_seconds=self.settings["board_seconds"],
                         rest_seconds=self.settings["rest_seconds"], network=Network.load(self.settings["departure"]))
         engine.relief_auto = self.settings["relief_auto"]
+        engine.trip_minutes = self.settings["trip_minutes"]
         return engine
 
     def handle(self, event: dict) -> None:
@@ -70,6 +71,7 @@ class Hub:
         self.engine.board_seconds = self.settings["board_seconds"]
         self.engine.rest_seconds = self.settings["rest_seconds"]
         self.engine.relief_auto = self.settings["relief_auto"]
+        self.engine.trip_minutes = self.settings["trip_minutes"]
         settings.save(self.settings)
 
     async def broadcast(self, message: dict) -> None:
@@ -101,6 +103,7 @@ class Hub:
                 self.handle(simulator.next_event(self.engine.phase))
                 next_sim = now + random.expovariate(self.sim_rate)
             self.engine.tick(now)
+            self.engine.auto_feature(self.settings["auto_feature"], self.settings["rotate_seconds"])
             if self.settings["tiktok_auto"] and self.bridge.status["state"] in ("ended", "error"):
                 self.update_settings({"tiktok_auto": False})  # live đã hết / sai tài khoản: lần bật sau không tự nối
             for event in self.engine.drain():

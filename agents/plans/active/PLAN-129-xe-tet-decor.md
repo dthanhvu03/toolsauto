@@ -1,6 +1,6 @@
 # PLAN-129 — Xe Tết: hoa mai, hoa đào và đồ Tết dọc đường
 
-- Status: In progress
+- Status: Done
 - Executor: Claude Code (anh yêu cầu 01/11: «thiếu hoa mai, hoa đào, và các chi tiết liên quan đến Tết»)
 - Phạm vi: chỉ overlay (`xe_tet/overlay/src/`), không đổi server → không cần khởi động lại 8810, F5 trang là thấy.
 
@@ -20,3 +20,8 @@ nồi bánh chưng, một cây đào / mai ở sân nhà. Dọc đường thì g
 ## Verify
 - `npx tsc --noEmit`, `npm run build`.
 - Chụp màn hình trên máy chủ thử 8811 (không đụng 8810): đường các vùng, bến, trạm, nhà; `?fps=1` so số draw call trước / sau.
+
+## Proof (01/11, máy thử 8811)
+- tsc + build sạch; ảnh bến / đường Nam / Trung / Bắc / trạm / nhà: cờ trên trụ điện, nhà ống treo cờ + đèn lồng + chậu,
+  đào miền Bắc, mai vàng miền Nam, băng rôn, cây nêu (dời sang phải lối vào — bên trái bị bong bóng lơ xe che).
+- Lần vẽ: bến 477 → 516, Nam 296 → 367, Trung 242 → 333, Bắc 259 → 323, trạm 297 → 329, nhà 389 → 452.

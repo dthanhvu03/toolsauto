@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Điều khiển Xe Tết</title>
+<link rel="stylesheet" href="/fonts/fonts.css">
 <style>
   :root { --bg:#fbf6ee; --card:#fff; --ink:#3a2418; --muted:#8a6f5e; --red:#b3261e; --gold:#e8b04a; --line:#ecdcc8; --soft:#fff7ea; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, "Segoe UI", sans-serif; padding-bottom:84px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 "Be Vietnam Pro", system-ui, "Segoe UI", sans-serif; padding-bottom:84px; }
   /* cuộn tới nút nào cũng chừa chỗ cho thanh ghim đáy — nút không bị thanh che mất */
   html { scroll-padding-bottom:96px; }
   /* thanh điều khiển nhanh ghim đáy màn hình: lúc live không phải cuộn tìm nút */
@@ -28,6 +29,9 @@
   .files li { display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--line); }
   .files li span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   main { max-width:760px; margin:0 auto; padding:16px; display:grid; gap:14px; }
+  /* màn hình máy tính (mở cạnh LIVE Studio): hai cột, đỡ phải cuộn */
+  @media (min-width: 1100px) { main { max-width:1280px; grid-template-columns:1fr 1fr; align-items:start; } main > h1 { grid-column:1 / -1; } }
+  @media (max-width: 420px) { main { padding:10px; gap:10px; } section { padding:12px; } button { padding:9px 11px; } }
   h1 { margin:4px 0 0; font-size:20px; }
   section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; }
   h2 { margin:0 0 10px; font-size:15px; color:var(--muted); font-weight:600; }
@@ -50,6 +54,11 @@
   .bus:first-child { border-top:0; }
   .bus .info { flex:1 1 220px; min-width:0; }
   .bus .info small { display:block; color:var(--muted); }
+  /* bảng chặng từng xe (PLAN-130) */
+  .stops { width:100%; display:flex; flex-wrap:wrap; gap:4px 6px; }
+  .stops .stop { font-size:13px; padding:3px 8px; border-radius:999px; background:var(--soft); border:1px solid var(--line); white-space:nowrap; }
+  .stops .stop.done { opacity:.5; text-decoration:line-through; }
+  .stops .stop.next { background:#fff1d6; border-color:var(--gold); font-weight:600; }
   label.toggle { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--line); border-radius:10px; background:var(--soft); cursor:pointer; }
   label.toggle input { width:18px; height:18px; accent-color:var(--red); }
   .zoom { display:flex; align-items:center; gap:8px; }
@@ -138,6 +147,12 @@
       <input type="range" min="0" max="1" step="0.05" data-volume="music_volume" aria-label="Âm lượng nhạc" style="flex:1">
       <output id="vol-music_volume">0.5</output>
     </div>
+    <div class="row" style="margin-bottom:8px">
+      <span style="min-width:96px">Trộn tiếng</span>
+      <button data-set="mix" data-val="balanced">Cân bằng</button>
+      <button data-set="mix" data-val="music">Nhạc nổi</button>
+      <button data-set="mix" data-val="voice">Lơ xe nổi</button>
+    </div>
     <div class="row">
       <span style="min-width:96px">Còi, pháo, máy</span>
       <input type="range" min="0" max="1" step="0.05" data-volume="sfx_volume" aria-label="Âm lượng hiệu ứng" style="flex:1">
@@ -176,6 +191,16 @@
 
   <section>
     <h2 id="buses-title">🚌 Các chuyến xe</h2>
+    <div class="row">
+      <span>Tự chiếu xe</span>
+      <button data-set="auto_feature" data-val="events">Theo chuyện hay</button>
+      <button data-set="auto_feature" data-val="rotate">Xoay vòng</button>
+      <button data-set="auto_feature" data-val="off">Tắt (bấm tay)</button>
+      <span id="rotate-box" class="row"><span>mỗi</span><input type="number" id="rotate-seconds" min="20" max="300" step="10"
+        aria-label="Giây mỗi xe khi xoay vòng"><span>giây</span></span>
+    </div>
+    <p class="hint">Theo chuyện hay: cảnh của xe chính (đón khách, trạm, thả khách) luôn lên màn hình; lúc xe chính chỉ đang
+      chạy thì tự nhảy sang xe tăng cường sắp thả khách, thả xong quay về. Anh bấm «Chiếu» tay thì tự chiếu nhường anh 2 phút.</p>
     <div id="buses"></div>
     <h3>Gọi thêm xe tăng cường cho làn</h3>
     <div id="relief-lanes" class="row"></div>
@@ -210,8 +235,13 @@
     <div class="row">
       <span>Đón khách</span><input type="number" id="board-seconds" min="20" max="900" step="10" aria-label="Thời gian đón khách">
       <span>Nghỉ trạm</span><input type="number" id="rest-seconds" min="20" max="300" step="10" aria-label="Thời gian nghỉ trạm">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span>Chuyến xa nhất chạy</span><input type="number" id="trip-minutes" min="3" max="15" step="0.5" aria-label="Phút chạy đường của chuyến xa nhất"><span>phút</span>
       <button id="save-times">Lưu</button>
     </div>
+    <p class="hint" id="trip-hint">Chuyến gần ngắn hơn theo km (không tỉ lệ thẳng). Lơ xe nói «chừng 26 tiếng» thì đồng hồ trên xe
+      chạy đủ 26 tiếng trong mấy phút đó — trời sáng / tối theo đồng hồ xe.</p>
     <p class="hint">«+30 giây» chỉ áp cho lúc đón khách, nghỉ trạm, thả khách. Lúc đang chạy, tốc độ do tim quyết định.</p>
   </section>
 
@@ -472,22 +502,39 @@ $("relief-lanes").onclick = (e) => {
 };
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 function setIfChanged(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
+const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+const clockOf = (b) => (b && b.clock ? ` · 🕐 ${b.clock.day ? `ngày ${b.clock.day + 1} ` : ""}${b.clock.time} trên xe` : "");
+// từng chặng của một xe: đã qua (mờ) → điểm kế (đậm, còn bao lâu) → các điểm sau; giờ tới theo đồng hồ trên xe
+function stopsOf(b) {
+  if (!b || !(b.stops || []).length) return "";
+  let first = true;
+  const chips = b.stops.map((p) => {
+    const icon = p.kind === "rest" ? "☕" : "📍";
+    const next = !p.done && first;
+    if (next) first = false;
+    const wait = next && p.in_s != null ? ` · còn ${mmss(p.in_s)}` : "";
+    const day = p.day ? ` (ngày ${p.day + 1})` : "";
+    return `<span class="stop${p.done ? " done" : ""}${next ? " next" : ""}">${icon} ${esc(p.name)}${p.at ? ` ${p.at}${day}` : ""}${wait}</span>`;
+  });
+  return `<div class="stops">${chips.join("")}</div>`;
+}
 function renderBuses(s) {
   const m = s.main || { no: s.bus.no, phase: s.phase, riders: s.bus.riders, lane: s.bus.lane, arrow: s.bus.arrow };
   const seats = s.bus.seats.length;
   // «Chiếu» chỉ có ý nghĩa khi có từ 2 xe: chọn xe nào lên màn hình live (cảnh 3D, HUD, nhạc theo xe đó)
   const many = (s.reliefs || []).length > 0;
   const feature = (no, on) => `<button data-feature="${no}" class="${on ? "on" : ""}">${on ? "📺 Đang chiếu" : "📺 Chiếu xe này"}</button>`;
+  const fleet = Object.fromEntries((s.fleet || []).map((b) => [b.no, b]));
   const rows = [`<div class="bus"><div class="info"><b>Xe số ${m.no} · xe chính</b>
-      <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}</small>
+      <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}${clockOf(fleet[m.no])}</small>
       </div>
-    ${many ? feature(0, s.featured == null) : ""}${musicPicker(s, 0, m.music)}</div>`];
+    ${many ? feature(0, s.featured == null) : ""}${stopsOf(fleet[m.no])}${musicPicker(s, 0, m.music)}</div>`];
   for (const r of s.reliefs || []) {
     rows.push(`<div class="bus"><div class="info"><b>Xe số ${r.no} · tăng cường ${r.arrow} ${esc(r.label)}</b>
-      <small>${r.riders} khách · tới ${esc(r.next)} · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}</small>
+      <small>${r.riders} khách · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}${clockOf(fleet[r.no])}</small>
       </div>
       ${feature(r.no, r.featured)}
-      <button data-next="${r.no}">⏭ Tới điểm kế</button>${musicPicker(s, r.no, r.music)}</div>`);
+      <button data-next="${r.no}">⏭ Tới điểm kế</button>${stopsOf(fleet[r.no])}${musicPicker(s, r.no, r.music)}</div>`);
   }
   // đang mở danh sách chọn bài thì không vẽ lại (vẽ lại sẽ đóng danh sách giữa chừng)
   if (!$("buses").contains(document.activeElement) || document.activeElement.tagName !== "SELECT") {
@@ -505,9 +552,11 @@ document.querySelectorAll("[data-extend]").forEach((b) => b.onclick = () => admi
 $("skip").onclick = () => admin({ action: "skip" });
 $("reset").onclick = () => { if (confirm("Làm lại từ đầu? Mọi vé và bảng tỉnh sẽ mất.")) admin({ action: "reset" }); };
 $("save-times").onclick = () => {
-  setControl({ board_seconds: +$("board-seconds").value, rest_seconds: +$("rest-seconds").value });
-  log("Đã lưu thời gian đón khách / nghỉ trạm");
+  setControl({ board_seconds: +$("board-seconds").value, rest_seconds: +$("rest-seconds").value,
+    trip_minutes: +$("trip-minutes").value });
+  log("Đã lưu thời gian đón khách / nghỉ trạm / chạy xe");
 };
+$("rotate-seconds").onchange = () => setControl({ rotate_seconds: +$("rotate-seconds").value });
 
 // ---- màn hình ----
 // Công tắc vừa bấm: ghi nhớ lúc bấm để vòng làm mới 1 s không kịp đè giá trị cũ của server lên (công tắc «tự bật lại»).
@@ -574,6 +623,8 @@ async function refresh() {
       c.checked = c.dataset.default === "off" ? control[c.dataset.show] === true : control[c.dataset.show] !== false;
     });
     $("zoom-now").textContent = (control.zoom ?? 1).toFixed(1);
+    $("rotate-box").style.display = control.auto_feature === "rotate" ? "" : "none";
+    if (document.activeElement !== $("rotate-seconds")) $("rotate-seconds").value = control.rotate_seconds ?? 60;
     document.querySelectorAll("[data-volume]").forEach((r) => {
       if (Date.now() - Number(r.dataset.touched || 0) < 3000) return;
       const v = control[r.dataset.volume] ?? { music_volume: 0.5, sfx_volume: 0.6, voice_volume: 0.9, voice_rate: 1.15 }[r.dataset.volume];
@@ -590,6 +641,7 @@ async function refresh() {
       $("tt-user").value = control.tiktok_user ? "@" + control.tiktok_user : "";
       $("board-seconds").value = control.board_seconds ?? 180;
       $("rest-seconds").value = control.rest_seconds ?? 90;
+      $("trip-minutes").value = control.trip_minutes ?? 8;
       timesLoaded = true;
     }
   } catch (e) { $("s-phase").textContent = "Mất kết nối"; }

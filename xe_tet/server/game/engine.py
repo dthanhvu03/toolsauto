@@ -14,7 +14,7 @@ import math
 import random
 from collections import Counter
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .moderation import allow_chat, clean_name
@@ -32,11 +32,18 @@ FINISH_SECONDS = 12.0
 SPECIAL_SECONDS = 20.0
 DROPOFF_BASE = 3.0  # giây mở màn thả khách, cộng thêm mỗi trang tên
 EMPTY_BOARD_RETRY = 30.0  # hết giờ đón mà xe trống: đổi sang làn có người chờ / chờ thêm
-# Nén thời gian (BR-7, sửa 01/11): km vẫn thật nhưng phần chạy đường của một chuyến tối đa ~4 phút (cao điểm 2,5 phút),
-# tối thiểu 3 km / giây. Người xem TikTok ở lại vài phút — chuyến 12–18 phút làm người chờ xe sau bỏ đi trước khi lên xe.
-KM_PER_SECOND = 3.0
-TRIP_DRIVE_SECONDS = 240.0
+# Thời gian chạy (BR-7, sửa PLAN-130): km thật, giờ nén — xa thì lâu hơn rõ rệt nhưng không tỉ lệ thẳng (người chờ xe
+# sau không phải đợi gấp 6 lần): giây chạy đường = dài nhất × (km / LONGEST_KM)^DRIVE_CURVE, tối thiểu DRIVE_MIN.
+# «Dài nhất» admin chỉnh (`trip_minutes`, mặc định 8 phút): 300 km ≈ 2:10, 900 km ≈ 4:50, 1.700 km ≈ 7:55.
+LONGEST_KM = 1750.0
+DRIVE_CURVE = 0.75
+DRIVE_MIN_SECONDS = 45.0
+TRIP_MINUTES = 8.0
+RUSH_DRIVE_FACTOR = 0.6  # cao điểm: phần chạy đường còn 60 %
 LEG_SECONDS_MIN = 6.0
+# Đồng hồ trên xe (PLAN-130): giờ VN lúc xuất bến + km / BUS_KMH, mỗi trạm dừng thêm 30 phút — lơ xe nói «chừng 26
+# tiếng» thì đồng hồ trên xe chạy đủ 26 tiếng, trời sáng / tối theo đồng hồ đó.
+REST_HOURS = 0.5
 REST_MIN_KM = 150  # chuyến ngắn hơn không ghé trạm (xe khách thật nghỉ sau ~4 giờ lái — Luật TTATGT 2024)
 TWO_RESTS_KM = 900  # chuyến dài hơn → nghỉ 2 trạm, nhưng chỉ khi không ai chờ xe sau (trạm là cảnh vui, không bắt chờ)
 # Qua đèo / hầm chạy chậm lại để người xem kịp thấy (nén 3–7 km / giây thì đèo 16 km lướt qua trong 2–5 giây);
@@ -45,14 +52,12 @@ PASS_SECONDS = 16.0
 TUNNEL_SECONDS = 8.0
 # Giờ cao điểm (BR-9: theo từng hướng): làn của xe đang chạy còn một xe khách chờ → chạy nhanh hơn, 1 trạm ngắn.
 RUSH_QUEUE = 24
-RUSH_KM_PER_SECOND = 5.0
-RUSH_TRIP_DRIVE_SECONDS = 150.0
 RUSH_REST_SECONDS = 45.0
 # Chọn làn xuất bến (BR-4, sửa 01/11): người chờ lâu nhất đi trước — xe chạy làn của vé chờ cũ nhất. Mô phỏng 4 giờ
 # (bến TP.HCM, 1 comment / 20 s): 82 % người được lên xe trong 30 phút, làn thiệt nhất 78 % — hơn hẳn chọn theo số
 # người chờ (làn nhỏ bị bỏ đói còn 24–46 %). Dễ giải thích với người xem: «ai chờ trước đi trước».
 BOARD_AVG_START = 120.0  # ước lượng giờ đón / giờ chạy một chuyến trước khi đo được chuyến thật (ước giờ chờ trên vé)
-RUN_AVG_START = 420.0
+RUN_AVG_START = 600.0
 AVG_WEIGHT = 0.4  # trung bình trượt: chuyến mới đo chiếm 40 %
 TICKET_IDLE = 30 * 60.0  # người trong hàng chờ im lặng quá lâu (đã rời phòng) → bỏ vé, nhường chỗ người đang xem
 QUEUE_SHOW = 6  # số người chờ hiện tên trên màn hình
@@ -77,8 +82,14 @@ PAGE_SECONDS = 3.5
 LIKE_MILESTONES = (1000, 5000, 10000)
 TET_DAY = date(2027, 2, 6)
 VN = ZoneInfo("Asia/Ho_Chi_Minh")  # máy chủ chạy UTC; đếm ngược Tết phải theo ngày Việt Nam
-SPECIAL_FROM = ("BOARDING", "DRIVING", "REST")
-FLAT = {"wind": 0.0, "pass": None, "tunnel": False, "climb": 0}  # đứng ở bến / trạm: đường thẳng, phẳng  # quà lớn chen ngay ở các pha này, xong quay lại đúng chỗ
+SPECIAL_FROM = ("BOARDING", "DRIVING", "REST")  # quà lớn chen ngay ở các pha này, xong quay lại đúng chỗ
+FLAT = {"wind": 0.0, "pass": None, "tunnel": False, "climb": 0}  # đứng ở bến / trạm: đường thẳng, phẳng
+# Tự chiếu xe (PLAN-130): «events» theo chuyện hay, «rotate» xoay vòng đều
+FEATURE_MODES = ("off", "events", "rotate")
+FEATURE_MIN_SECONDS = 20.0  # xe chính lên màn hình ít nhất chừng này mới nhảy sang xe tăng cường
+FEATURE_LEAD = 25.0  # chuyển sang xe tăng cường khi còn ~25 giây là tới điểm thả khách (kịp thấy xe chạy tới)
+FEATURE_AFTER_DROP = 8.0  # thả khách xong ở lại xem thêm chút rồi về xe chính
+MANUAL_HOLD = 120.0  # admin bấm «Chiếu» tay → tạm ngưng tự chuyển 2 phút
 
 WISHES = (
     "Năm mới an khang, cả nhà sum vầy!",
@@ -176,8 +187,10 @@ class Relief:
     sponsor: str | None  # người tặng quà gọi xe (None: xe tự động)
     trip: Trip
     kmps: float
+    clock0: datetime  # giờ VN lúc xuất bến (đồng hồ trên xe)
     odo: float = 0.0  # km xe đã chạy
     done: int = 0  # số điểm đã thả khách
+    dropped_at: float | None = None  # lúc vừa thả khách (tự chiếu: ở lại xem thêm chút)
 
 
 @dataclass
@@ -210,6 +223,10 @@ class Engine:
         self.reliefs: list[Relief] = []
         self.relief_auto = True  # admin tắt được: chỉ gọi xe tăng cường bằng tay / bằng quà
         self.featured: int | None = None  # xe tăng cường đang lên màn hình (None: xe chính)
+        self.trip_minutes = TRIP_MINUTES  # chuyến dài nhất chạy đường bao nhiêu phút (admin chỉnh)
+        self.clock0: datetime | None = None  # giờ VN lúc xe chính xuất bến
+        self.featured_since = now
+        self.manual_until = -1e9
         # nhạc trong xe (PLAN-127): mỗi xe một đài — "main" cho xe chính, số xe cho xe tăng cường; index → music_tracks
         self.music: dict[str, dict] = {}
         self.legs: list[Leg] = []
@@ -350,11 +367,14 @@ class Engine:
             return self.bus.lane or self.network.lanes[0].key
         return min(waiting, key=lambda lane: self.queued_at.get(self.queues[lane][0], self.last_now))
 
+    def drive_seconds(self, total_km: float, rush: bool = False) -> float:
+        """Giây chạy đường của cả chuyến `total_km` (BR-7): xa lâu hơn, nhưng cong (mũ DRIVE_CURVE) chứ không tỉ lệ thẳng."""
+        seconds = max(DRIVE_MIN_SECONDS, self.trip_minutes * 60 * (total_km / LONGEST_KM) ** DRIVE_CURVE)
+        return seconds * (RUSH_DRIVE_FACTOR if rush else 1.0)
+
     def _kmps(self, total_km: float) -> float:
-        """Tốc độ nén cho cả chuyến: chuyến dài chạy nhanh hơn để phần chạy đường không quá ~4 phút (BR-7)."""
-        if self.rush():
-            return max(RUSH_KM_PER_SECOND, total_km / RUSH_TRIP_DRIVE_SECONDS)
-        return max(KM_PER_SECOND, total_km / TRIP_DRIVE_SECONDS)
+        """Tốc độ nén (km / giây) cho cả chuyến xe chính."""
+        return max(1e-3, total_km) / self.drive_seconds(total_km, self.rush())
 
     def _fill_from_queue(self) -> None:
         queue = self.queues[self.bus.lane]
@@ -384,6 +404,7 @@ class Engine:
         if self.boarding_started is not None:
             self.board_avg += AVG_WEIGHT * (now - self.boarding_started - self.board_avg)
         self.trip_started = now
+        self.clock0 = datetime.now(VN)
         lane = net.lane_by_key[self.bus.lane]
         self.emit("depart", bus_no=self.bus.no, riders=len(self.bus.riders()), lane=lane.label,
                   stops=[BY_KEY[k].name for k in stops], km=round(total))
@@ -483,7 +504,7 @@ class Engine:
         trip = self.network.plan(sorted({self.viewers[uid].province for uid in riders}))
         self.bus_counter += 1
         relief = Relief(self.bus_counter, lane, riders, sponsor.name if sponsor else None, trip,
-                        max(KM_PER_SECOND, trip.total / TRIP_DRIVE_SECONDS))
+                        max(1e-3, trip.total) / self.drive_seconds(trip.total), datetime.now(VN))
         self.reliefs.append(relief)
         ln = self.network.lane_by_key[lane]
         names = [self.viewers[uid].name for uid in riders]
@@ -512,6 +533,7 @@ class Engine:
                 relief.done += 1
                 uids = [uid for uid in relief.riders if self.viewers[uid].province == province]
                 relief.riders = [uid for uid in relief.riders if uid not in uids]
+                relief.dropped_at = self.last_now
                 self.emit("relief_dropoff", **self._deliver(uids, province, relief.no), sponsor=relief.sponsor)
             if relief.done >= len(relief.trip.stops):
                 self.reliefs.remove(relief)
@@ -527,9 +549,46 @@ class Engine:
             raise Refused(f"Xe tăng cường số {no} đã tới bến cuối (không còn chạy).")
         return relief
 
-    def feature(self, no: int | None) -> None:
-        """Admin chọn xe nào lên màn hình: None / số xe chính = xe chính; số xe tăng cường = màn hình theo xe đó."""
-        self.featured = None if not no or no == self.bus.no else self._relief(int(no)).no
+    def feature(self, no: int | None, manual: bool = True) -> None:
+        """Chọn xe nào lên màn hình: None / số xe chính = xe chính; số xe tăng cường = màn hình theo xe đó.
+        Admin bấm tay (`manual`) thì tự chiếu nhường admin MANUAL_HOLD giây."""
+        featured = None if not no or no == self.bus.no else self._relief(int(no)).no
+        if featured != self.featured:
+            self.featured_since = self.last_now
+        self.featured = featured
+        if manual:
+            self.manual_until = self.last_now + MANUAL_HOLD
+
+    def auto_feature(self, mode: str, rotate_seconds: float) -> None:
+        """Tự chiếu xe (PLAN-130), gọi mỗi nhịp. «events»: cảnh của xe chính (xuất bến, trạm, thả khách, về bến, chúc Tết)
+        luôn được chiếu; lúc xe chính chỉ đang chạy thì nhảy sang xe tăng cường sắp thả khách, thả xong quay về.
+        «rotate»: lần lượt xe chính → các xe tăng cường, mỗi xe `rotate_seconds` giây."""
+        if mode not in FEATURE_MODES[1:] or self.paused or self.last_now < self.manual_until:
+            return
+        now = self.last_now
+        held = now - self.featured_since
+        if mode == "rotate":
+            order = [None] + [r.no for r in self.reliefs]
+            if len(order) > 1 and held >= rotate_seconds:
+                at = order.index(self.featured) if self.featured in order else 0
+                self.feature(order[(at + 1) % len(order)], manual=False)
+            return
+        arrive = self._arrivals()[0][self.leg_index] if self.leg_index < len(self.legs) else None
+        main_scene = self._phase_now() != "DRIVING" or self.phase == "SPECIAL" or (
+            arrive is not None and arrive < FEATURE_LEAD)
+        current = next((r for r in self.reliefs if r.no == self.featured), None)
+        if current is not None:  # đang chiếu xe tăng cường: thả khách xong (hoặc xe chính có cảnh) thì về
+            if main_scene or (current.dropped_at is not None and now - current.dropped_at >= FEATURE_AFTER_DROP):
+                self.feature(None, manual=False)
+            return
+        if main_scene or held < FEATURE_MIN_SECONDS:
+            return
+        soon = [(self._relief_arrivals(r)[r.done], r) for r in self.reliefs if r.done < len(r.trip.stops)]
+        soon = [(t, r) for t, r in soon if t is not None and t < FEATURE_LEAD]
+        if soon:
+            relief = min(soon, key=lambda x: x[0])[1]
+            relief.dropped_at = None
+            self.feature(relief.no, manual=False)
 
     def _music_key(self, no: int | None) -> str:
         if not no or no == self.bus.no:
@@ -873,22 +932,117 @@ class Engine:
         elif phase == "FINISH":
             left = phase_left
         else:
-            left = special
-            kmps = self._kmps(self.trip.total) if self.trip else KM_PER_SECOND
-            for i in range(self.leg_index, len(self.legs)):
-                leg, current = self.legs[i], i == self.leg_index
-                if not current or phase == "DRIVING":
-                    leg_km = leg.km - (self.legs[i - 1].km if i > 0 else 0.0)
-                    left += ((1 - self.progress) if current else 1.0) * max(LEG_SECONDS_MIN, leg_km / kmps)
-                if current and phase in ("REST", "DROPOFF"):
-                    left += phase_left
-                elif leg.kind == "rest":
-                    left += RUSH_REST_SECONDS if self.rush() else self.rest_seconds
-                else:
-                    left += DROPOFF_BASE + PAGE_SECONDS
-            left += FINISH_SECONDS
+            left = self._arrivals()[1] + FINISH_SECONDS
         left += max(0, trips_ahead - 1) * (self.board_avg + self.run_avg)
         return max(1, math.ceil(left / 60))
+
+    def _arrivals(self) -> tuple[list[float | None], float]:
+        """Giây thật tới lúc xe chính tới từng điểm dừng (None: đã qua; 0: đang dừng ở đó) + giây tới lúc xong điểm cuối.
+        Không tính đèo / hầm chậm lại và tim đẩy nhanh — sai số vài giây, đủ cho bảng chặng."""
+        out: list[float | None] = [None] * len(self.legs)
+        phase = self._phase_now()
+        if not self.trip or phase not in ("DRIVING", "REST", "DROPOFF"):
+            return out, 0.0
+        t = max(0.0, self.phase_until - self.last_now) if self.phase == "SPECIAL" else 0.0
+        phase_left = self.resume[1] if self.phase == "SPECIAL" else max(0.0, self.phase_until - self.last_now)
+        kmps = self._kmps(self.trip.total)
+        for i in range(self.leg_index, len(self.legs)):
+            leg, current = self.legs[i], i == self.leg_index
+            if not current or phase == "DRIVING":
+                leg_km = leg.km - (self.legs[i - 1].km if i > 0 else 0.0)
+                t += ((1 - self.progress) if current else 1.0) * max(LEG_SECONDS_MIN, leg_km / kmps)
+            out[i] = t
+            if current and phase in ("REST", "DROPOFF"):
+                t += phase_left
+            elif leg.kind == "rest":
+                t += RUSH_REST_SECONDS if self.rush() else self.rest_seconds
+            else:
+                t += DROPOFF_BASE + PAGE_SECONDS
+        return out, t
+
+    @staticmethod
+    def _relief_arrivals(relief: Relief) -> list[float | None]:
+        return [None if i < relief.done else max(0.0, odo - relief.odo) / relief.kmps
+                for i, (_, odo) in enumerate(relief.trip.stops)]
+
+    # ---- đồng hồ trên xe ---------------------------------------------------
+
+    def _main_hours(self) -> float:
+        """Số giờ (đồng hồ trên xe) xe chính đã đi: km / BUS_KMH + REST_HOURS mỗi trạm đã ghé (đang nghỉ thì tính dần)."""
+        if self.clock0 is None or not self.legs:
+            return 0.0
+        rests = sum(1 for leg in self.legs[:self.leg_index] if leg.kind == "rest")
+        if self.leg_index >= len(self.legs):  # về bến
+            return Network.hours(self.trip.total) + REST_HOURS * rests
+        if self._phase_now() == "REST":
+            left = self.resume[1] if self.phase == "SPECIAL" else max(0.0, self.phase_until - self.last_now)
+            rests += 1 - min(1.0, left / max(1.0, RUSH_REST_SECONDS if self.rush() else self.rest_seconds))
+        return Network.hours(self.trip_km()) + REST_HOURS * rests
+
+    @staticmethod
+    def _clock(clock0: datetime, hours: float) -> dict:
+        """Đồng hồ trên xe: giờ trong ngày (trời sáng / tối theo giờ này), «HH:MM», ngày thứ mấy kể từ hôm xuất bến."""
+        at = clock0 + timedelta(hours=hours)
+        return {"hour": round(at.hour + at.minute / 60, 3), "time": at.strftime("%H:%M"),
+                "day": (at.date() - clock0.date()).days}
+
+    def _route_view(self, stops: list[tuple[str, str, float]], arrivals: list[float | None], clock0: datetime | None,
+                    hours_before: list[float]) -> list[dict]:
+        """Các điểm dừng cho bảng chặng: (loại, tên, km) + giờ tới theo đồng hồ xe + còn bao nhiêu giây thật."""
+        out = []
+        for (kind, name, km), left, hours in zip(stops, arrivals, hours_before):
+            clock = self._clock(clock0, hours) if clock0 else None
+            out.append({"kind": kind, "name": name, "km": round(km), "done": left is None,
+                        "in_s": None if left is None else round(left), "at": clock and clock["time"],
+                        "day": clock and clock["day"]})
+        return out
+
+    def _main_route(self) -> dict:
+        legs = self.legs
+        stops = [(leg.kind, f"Trạm {BY_KEY[leg.target].name}" if leg.kind == "rest" else BY_KEY[leg.target].name, leg.km)
+                 for leg in legs]
+        hours, rests = [], 0
+        for leg in legs:
+            hours.append(Network.hours(leg.km) + REST_HOURS * rests)
+            rests += leg.kind == "rest"
+        clock = self._clock(self.clock0, self._main_hours()) if self.clock0 and legs else self._clock(datetime.now(VN), 0)
+        return {"stops": self._route_view(stops, self._arrivals()[0], self.clock0 if legs else None, hours),
+                "odo": round(self.trip_km(), 1), "total": round(self.trip.total) if self.trip else 0, "clock": clock}
+
+    def _relief_route(self, relief: Relief) -> dict:
+        stops = [("stop", BY_KEY[key].name, odo) for key, odo in relief.trip.stops]
+        return {"stops": self._route_view(stops, self._relief_arrivals(relief), relief.clock0,
+                                          [Network.hours(odo) for _, _, odo in stops]),
+                "odo": round(relief.odo, 1), "total": round(relief.trip.total),
+                "clock": self._clock(relief.clock0, Network.hours(relief.odo))}
+
+    def _fleet(self) -> list[dict]:
+        """Mọi xe đang chạy cho bảng chặng (/control + overlay): đang ở đâu, điểm kế, còn bao lâu, đồng hồ trên xe."""
+        lane = self.network.lane_by_key[self.bus.lane]
+        phase = self._phase_now()
+        arrivals = self._arrivals()[0]
+        nxt = next((i for i, t in enumerate(arrivals) if t is not None), None)
+        main = {"no": self.bus.no, "main": True, "featured": self.featured is None, "arrow": lane.arrow,
+                "label": lane.label, "phase": phase, "riders": len(self.bus.riders()),
+                "left_km": round(self.trip.total - self.trip_km()) if self.trip else None,
+                "next": None, "in_s": None, "clock": None, "stops": self._main_route()["stops"]}
+        if nxt is not None:
+            leg = self.legs[nxt]
+            main.update(next=f"Trạm {BY_KEY[leg.target].name}" if leg.kind == "rest" else BY_KEY[leg.target].name,
+                        in_s=round(arrivals[nxt]), clock=self._clock(self.clock0, self._main_hours()))
+        elif phase in ("BOARDING", "FINISH"):
+            main["in_s"] = round(max(0.0, self.phase_until - self.last_now))
+        out = [main]
+        for r in self.reliefs:
+            ln = self.network.lane_by_key[r.lane]
+            idx = min(r.done, len(r.trip.stops) - 1)
+            out.append({"no": r.no, "main": False, "featured": r.no == self.featured, "arrow": ln.arrow,
+                        "label": ln.label, "phase": "DRIVING", "riders": len(r.riders),
+                        "left_km": round(r.trip.total - r.odo), "next": BY_KEY[r.trip.stops[idx][0]].name,
+                        "in_s": round(self._relief_arrivals(r)[idx] or 0),
+                        "clock": self._clock(r.clock0, Network.hours(r.odo)), "sponsor": r.sponsor,
+                        "stops": self._relief_route(r)["stops"]})
+        return out
 
     def _on_gift(self, v: Viewer, diamonds: int, gift: str) -> None:
         # Cộng dồn trong chuyến: 10 hoa hồng = 10 xu → lên bậc pháo hoa (REVIEW BA-9)
@@ -1007,7 +1161,7 @@ class Engine:
             "legs": [{"kind": "stop", "km": round(odo), "label": BY_KEY[key].name} for key, odo in stops],
             "leg_index": idx, "progress": round((relief.odo - start) / max(1e-6, stops[idx][1] - start), 4),
             "trip_km": round(relief.odo, 1), "terrain": terrain, "region": region, "place": BY_KEY[place].name,
-            "specialty": specialty_of(place), "rush": False,
+            "specialty": specialty_of(place), "rush": False, "route": self._relief_route(relief),
         }
 
     def snapshot(self) -> dict:
@@ -1065,6 +1219,9 @@ class Engine:
             "featured": self.featured,
             "music": self._music_view(str(self.featured) if self.featured else "main"),  # đài của xe đang chiếu
             "relief_auto": self.relief_auto,
+            "route": self._main_route(),  # bảng chặng của xe đang chiếu (PLAN-130)
+            "fleet": self._fleet(),
+            "trip_minutes": self.trip_minutes,
         }
         relief = next((r for r in self.reliefs if r.no == self.featured), None)
         if relief:

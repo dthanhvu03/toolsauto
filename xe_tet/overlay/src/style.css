@@ -13,6 +13,9 @@
   --card: rgba(255, 248, 236, 0.94);
   --card-line: rgba(196, 140, 60, 0.55);
   --shadow: 0 10px 30px rgba(40, 10, 0, 0.35);
+  /* chữ thường: Be Vietnam Pro; tiêu đề / lời kêu gọi / băng rôn: Baloo 2 (tròn, đậm, đọc rõ khi co về màn điện thoại) */
+  --font: "Be Vietnam Pro", system-ui, sans-serif;
+  --display: "Baloo 2", "Be Vietnam Pro", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -22,7 +25,7 @@ html, body {
   height: 100%;
   background: #120c0a;
   overflow: hidden;
-  font-family: "Be Vietnam Pro", system-ui, sans-serif;
+  font-family: var(--font);
   color: var(--ink);
 }
 
@@ -68,7 +71,7 @@ html, body {
   box-shadow: var(--shadow);
   color: var(--gold-soft);
 }
-#title .brand { font-size: 54px; white-space: nowrap; font-weight: 800; letter-spacing: 3px; line-height: 1.05; }
+#title .brand { font-family: var(--display); font-size: 60px; white-space: nowrap; font-weight: 800; letter-spacing: 2px; line-height: 1; padding-top: 6px; }
 #title .sub { margin-top: 2px; font-size: 32px; font-weight: 600; color: #fff; white-space: nowrap; }
 
 /* ---- thẻ chung ---- */
@@ -93,6 +96,8 @@ html, body {
   font-size: 32px;
   font-weight: 800;
   white-space: nowrap;
+  font-family: var(--display);
+  line-height: 1.25;
 }
 /* trình duyệt chặn tiếng tới khi có cú bấm: nhắc nhỏ góc trên trái (ngoài vùng TikTok che), bấm là mất */
 #sound-lock { position: absolute; left: 24px; top: 24px; padding: 8px 14px; border-radius: 12px; font-size: 26px;
@@ -102,9 +107,20 @@ html, body {
 #phase-text .tail { flex: none; }
 #phase-text .tail::before { content: "· "; }
 .seats { font-size: 34px; font-weight: 800; color: var(--red-deep); white-space: nowrap; }
-.bar { margin: 12px 0 10px; height: 20px; background: #ecd9bd; border-radius: 999px; overflow: hidden; }
+.track { position: relative; margin: 14px 0 12px; }
+.bar { height: 20px; background: #ecd9bd; border-radius: 999px; overflow: hidden; }
+/* chấm điểm dừng trên thanh cả chuyến: ☕ trạm (xanh), 📍 thả khách (đỏ); đã qua thì mờ */
+#marks { position: absolute; inset: 0; pointer-events: none; }
+.mk { position: absolute; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
+  background: var(--red); border: 4px solid #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
+.mk.rest { background: #2e7d6b; }
+.mk.done { opacity: 0.45; }
+.bus-dot { position: absolute; top: 50%; font-size: 44px; font-style: normal; line-height: 1;
+  transform: translate(-50%, -62%) scaleX(-1); transition: left 0.25s linear; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
 .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), var(--red)); transition: width 0.25s linear; }
 .next-stops { font-size: 32px; font-weight: 600; color: #6b4a33; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.next-stops .clock { color: var(--red-deep); font-weight: 800; margin-right: 10px; }
+.next-stops small { font-size: 28px; color: #8a6a4f; }
 .next-stops .rush { background: #ffb300; color: var(--ink); padding: 0 12px; border-radius: 999px; font-weight: 800; margin-right: 8px; }
 
 /* ---- lời kêu gọi ---- */
@@ -120,7 +136,7 @@ html, body {
   border-radius: 24px;
   box-shadow: var(--shadow);
 }
-.cta-main { font-size: 48px; font-weight: 800; color: var(--red-deep); line-height: 1.2; white-space: nowrap; }
+.cta-main { font-family: var(--display); font-size: 52px; font-weight: 800; color: var(--red-deep); line-height: 1.2; white-space: nowrap; }
 .cta-main b { color: #fff; background: var(--red); padding: 0 14px; border-radius: 12px; }
 .cta-sub { font-size: 34px; font-weight: 600; color: var(--ink); margin-top: 4px; white-space: nowrap; animation: fadein 0.5s ease; }
 
@@ -132,7 +148,7 @@ html, body {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  max-width: 560px;
+  max-width: 660px;
 }
 #loxe .face {
   flex: none;
@@ -155,6 +171,8 @@ html, body {
   box-shadow: var(--shadow);
 }
 #loxe .bubble b { display: block; font-size: 28px; color: var(--red); }
+/* câu lơ xe dài (giọng đọc đủ câu): bong bóng tối đa 4 dòng, không phủ kín cảnh */
+#loxe-text { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 #loxe.pop .bubble { animation: pop 0.35s ease; }
 
 /* ---- thông báo nhỏ (quà, follow, chia sẻ, ở lại) ---- */
@@ -200,7 +218,7 @@ html, body {
   border-radius: 28px;
   box-shadow: var(--shadow);
 }
-#callout .big { font-size: 46px; font-weight: 800; color: var(--red-deep); line-height: 1.2; }
+#callout .big { font-family: var(--display); font-size: 50px; font-weight: 800; color: var(--red-deep); line-height: 1.2; }
 #callout .small { font-size: 32px; font-weight: 600; color: #6b4a33; margin-top: 4px; }
 #callout.show { animation: callout 0.35s ease; }
 
@@ -246,7 +264,7 @@ html, body {
   box-shadow: var(--shadow);
   animation: pop 0.4s ease;
 }
-#banner h2 { margin: 0; font-size: 56px; font-weight: 800; color: var(--gold-soft); line-height: 1.15; }
+#banner h2 { margin: 0; font-family: var(--display); font-size: 60px; font-weight: 800; color: var(--gold-soft); line-height: 1.15; }
 #banner p { margin: 10px 0 0; font-size: 34px; }
 #banner ul { list-style: none; margin: 14px 0 0; padding: 0; text-align: left; }
 #banner li { font-size: 34px; line-height: 1.3; padding: 8px 0; border-top: 1px solid rgba(255, 231, 168, 0.3); }
@@ -258,7 +276,8 @@ html, body {
   left: 0; right: 0;
   top: 860px;
   text-align: center;
-  font-size: 68px;
+  font-family: var(--display);
+  font-size: 72px;
   font-weight: 800;
   color: #fff;
   text-shadow: 0 4px 0 var(--red-deep), 0 0 30px rgba(255, 180, 60, 0.9);
@@ -278,7 +297,7 @@ html, body {
 
 /* ---- nhãn 3D (CSS2D) ---- */
 .lbl {
-  font-family: "Be Vietnam Pro", system-ui, sans-serif;
+  font-family: var(--font);
   font-weight: 700;
   font-size: 30px;
   color: #fff;

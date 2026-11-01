@@ -1,7 +1,7 @@
 from datetime import date
 
 from xe_tet.server.game.engine import (BOARD_SECONDS, FULL_BUS_SECONDS, NOTICE_COOLDOWN, REST_MIN_KM, SEATS,
-                                       SPECIAL_SECONDS, TRIP_DRIVE_SECONDS, Engine)
+                                       SPECIAL_SECONDS, Engine)
 from xe_tet.server.game.parser import normalize, parse
 from xe_tet.server.game.provinces import PROVINCES
 
@@ -290,7 +290,7 @@ def test_countdown_uses_vietnam_date():
 def test_rush_hour_shortens_trip_when_queue_is_long(monkeypatch):
     """Cao điểm là phương án cuối: chỉ khi xe tăng cường đã chạy hết số cho phép mà làn vẫn còn ≥ 1 xe người chờ."""
     from xe_tet.server.game import engine as engine_module
-    from xe_tet.server.game.engine import LEG_SECONDS_MIN, RUSH_KM_PER_SECOND, RUSH_REST_SECONDS
+    from xe_tet.server.game.engine import LEG_SECONDS_MIN, RUSH_DRIVE_FACTOR, RUSH_REST_SECONDS
     monkeypatch.setattr(engine_module, "RELIEF_MAX", 0)
     calm = Engine(0.0)
     busy = Engine(0.0)
@@ -302,7 +302,8 @@ def test_rush_hour_shortens_trip_when_queue_is_long(monkeypatch):
         run_until(e, "DRIVING", 1)
     assert not calm.rush() and busy.rush()
     first_km = busy.legs[0].km
-    assert busy._kmps(busy.trip.total) >= RUSH_KM_PER_SECOND  # chạy nhanh hơn
+    assert abs(busy.trip.total / busy._kmps(busy.trip.total)
+               - busy.drive_seconds(busy.trip.total) * RUSH_DRIVE_FACTOR) < 1e-6  # chạy nhanh hơn
     assert busy.leg_seconds == max(LEG_SECONDS_MIN, first_km / busy._kmps(busy.trip.total))
     assert busy._kmps(busy.trip.total) > calm._kmps(calm.trip.total)
     assert sum(leg.kind == "rest" for leg in busy.legs) == 1 < sum(leg.kind == "rest" for leg in calm.legs)
@@ -565,8 +566,19 @@ def test_long_trip_drive_is_compressed_but_km_real():
     run_until(e, "DRIVING", 1)
     drive = sum(max(6.0, (leg.km - (e.legs[i - 1].km if i else 0)) / e._kmps(e.trip.total))
                 for i, leg in enumerate(e.legs))
-    assert drive <= TRIP_DRIVE_SECONDS + 6 * len(e.legs)
+    assert drive <= e.trip_minutes * 60 + 6 * len(e.legs)
     assert e.snapshot()["bus"]["km"] == e.network.km("hanoi")
+
+
+def test_far_trips_take_clearly_longer_and_minutes_are_adjustable():
+    """PLAN-130: xa lâu hơn rõ rệt (không còn trần 4 phút chung), «dài nhất» admin chỉnh được."""
+    e = Engine(0.0)
+    near, mid, far = (e.drive_seconds(km) for km in (300, 900, 1700))
+    assert 110 < near < 150 and 260 < mid < 320 and 440 < far <= 480
+    assert far / near > 3
+    assert e.drive_seconds(20) == 45.0
+    e.trip_minutes = 4
+    assert e.drive_seconds(1700) < far / 1.9
 
 
 def test_rush_is_per_direction():
@@ -800,3 +812,85 @@ def test_each_bus_radio_advances_when_song_ends():
     e.tick(40)
     e.advance_music(lengths, auto=False)
     assert e.music_of("main")["index"] == 1  # tắt tự qua bài: đứng yên (bài lặp lại)
+
+
+# ---- đồng hồ trên xe, bảng chặng, tự chiếu xe (PLAN-130) ----------------------
+
+def test_bus_clock_runs_the_hours_the_loxe_says():
+    from datetime import timedelta
+    from xe_tet.server.game.engine import REST_HOURS
+    from xe_tet.server.game.network import Network
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Bình", "Nghệ An", 1)
+    t = run_until(e, "DRIVING", 1)
+    route = e.snapshot()["route"]
+    stops = route["stops"]
+    assert [s["done"] for s in stops] == [False] * len(stops)
+    waits = [s["in_s"] for s in stops]
+    assert waits == sorted(waits) and waits[0] > 0
+    rests = 0
+    for stop, leg in zip(stops, e.legs):  # giờ tới mỗi điểm = giờ xuất bến + km / 52 km/h + 30 phút mỗi trạm trước đó
+        at = e.clock0 + timedelta(hours=Network.hours(leg.km) + REST_HOURS * rests)
+        assert stop["at"] == at.strftime("%H:%M") and stop["day"] == (at.date() - e.clock0.date()).days
+        rests += leg.kind == "rest"
+    start = route["clock"]["hour"]
+    run_until(e, "FINISH", t)
+    hours = Network.hours(e.trip.total) + REST_HOURS * sum(leg.kind == "rest" for leg in e.legs)
+    end = e.snapshot()["route"]["clock"]
+    assert abs((end["hour"] + 24 * end["day"] - start) - hours) < 0.05  # đồng hồ chạy đủ số giờ của chuyến
+
+
+def test_fleet_lists_every_bus_with_next_stop():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    relief = e.add_relief("south")
+    fleet = e.snapshot()["fleet"]
+    assert [b["no"] for b in fleet] == [e.bus.no, relief.no]
+    assert fleet[0]["phase"] == "BOARDING" and fleet[0]["in_s"] > 0
+    assert fleet[1]["next"] == "Cà Mau" and fleet[1]["in_s"] > 0 and fleet[1]["clock"]
+    e.feature(relief.no)
+    snap = e.snapshot()
+    assert snap["route"]["stops"][-1]["name"] == "Cà Mau" and snap["fleet"][1]["featured"]
+
+
+def drive_with_director(e, mode, t, until, rotate=60.0):
+    seen = []
+    while t < until:
+        t += 1
+        e.tick(t)
+        e.auto_feature(mode, rotate)
+        seen.append((e.featured, e._phase_now()))
+    return t, seen
+
+
+def test_auto_feature_follows_relief_dropoff_then_returns_to_main():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    e.skip()
+    e.tick(3)
+    assert e.phase == "DRIVING"
+    relief = e.add_relief("south")
+    _, seen = drive_with_director(e, "events", 3, 2000)
+    shown = [phase for no, phase in seen if no == relief.no]
+    assert shown and set(shown) == {"DRIVING"}  # chỉ chiếu xe tăng cường lúc xe chính đang chạy (không có cảnh riêng)
+    assert seen[-1][0] is None  # xong thì về xe chính
+    rest_or_drop = [no for no, phase in seen if phase in ("REST", "DROPOFF", "BOARDING")]
+    assert set(rest_or_drop) <= {None}  # cảnh của xe chính luôn là xe chính
+
+
+def test_manual_feature_pauses_director_and_rotate_mode_cycles():
+    from xe_tet.server.game.engine import MANUAL_HOLD
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    relief = e.add_relief("south")
+    e.tick(3)
+    e.feature(relief.no)  # admin bấm tay
+    _, seen = drive_with_director(e, "rotate", 3, 3 + MANUAL_HOLD - 5, rotate=10)
+    assert {no for no, _ in seen} == {relief.no}
+    _, seen = drive_with_director(e, "rotate", 3 + MANUAL_HOLD, 3 + MANUAL_HOLD + 40, rotate=10)
+    assert {no for no, _ in seen} == {None, relief.no}  # hết giờ nhường admin: xoay vòng mỗi 10 giây
+    e.auto_feature("off", 10)

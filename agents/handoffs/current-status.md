@@ -106,6 +106,22 @@
 - **PLAN-128 giọng Anh Tư lơ xe xong (anh chốt VieNeu + dự phòng edge-tts; đọc câu lơ xe, tên lên / xuống xe, cảm ơn
   quà):** thử đủ trên 8811, 102 test. Đã bật lại riêng `VieNeu_TTS` (Studio_Heavy / Light vẫn tắt). Chưa nạp vào 8810 — chờ
   anh cho khởi động lại.
+- **01/11 chiều — lơ xe nói chợ búa + đồ Tết (PLAN-129) + giờ chạy / bảng chặng / tự chiếu / font / trộn tiếng (PLAN-130):**
+  - `talk.py`: câu lơ xe cộc, lẹ, đời như ngoài bến (không chửi thề — TikTok khoá live); viết hoa lại chỗ điền đầu câu.
+  - Đồ Tết (`overlay/src/tet.ts`): cờ trên trụ điện + nhà ống, đèn lồng, chậu mai / đào / quất trước hiên, băng rôn «CHÚC
+    MỪNG NĂM MỚI · XUÂN ĐINH MÙI 2027» (tự tính can chi), cây nêu, dưa hấu, bánh chưng, cúc vàng; mai vàng xen cây miền
+    Trung / Nam. Lần vẽ tăng ~70 / cảnh (bến 477 → 516, đường 242–296 → 323–367).
+  - Thời gian chạy: giây chạy = `trip_minutes` (mặc định 8, chỉnh 3–15 trên /control) × (km / 1.750)^0,75, tối thiểu 45 giây
+    → 300 km ≈ 2:10, 900 km ≈ 4:50, 1.700 km ≈ 8:00. Đồng hồ trên xe = giờ xuất bến + km / 52 km/h + 30 phút / trạm; trời
+    sáng / tối theo đồng hồ đó (pha màu dần). Bảng chặng: thanh cả chuyến có chấm điểm dừng + 🚌, «🕐 giờ trên xe · 📍 điểm kế
+    giờ tới (còn m:ss)»; /control: từng xe đủ các điểm dừng.
+  - Tự chiếu xe (`auto_feature`: theo chuyện hay / xoay vòng / tắt). Thử 8811: nhảy sang xe tăng cường ở giây 42, về 76,
+    lại 112 → 137 (3 điểm thả). Admin bấm tay → nhường 2 phút.
+  - Font tự chứa `overlay/public/fonts` (Be Vietnam Pro + Baloo 2 cho tiêu đề / băng rôn), /control 16 px, hai cột trên máy tính.
+  - Trộn tiếng: nén chung, tiếng lốp / gió theo tốc độ, máy nổ chờ ở bến, lơ xe nói thì nhạc + tiếng xe cùng nhỏ; chế độ
+    Cân bằng / Nhạc nổi / Lơ xe nổi.
+  - 113 test. **Server 8810 chưa nạp** (talk.py, giờ chạy, tự chiếu) — chờ anh cho khởi động lại; phần overlay đã build
+    (F5 trang live là thấy font / đồ Tết, nhưng bảng chặng cần server mới).
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.

@@ -226,3 +226,13 @@ def test_song_length_measured_once_and_falls_back(tmp_path, monkeypatch):
     assert music.length_of(good) == 212.5 and music.length_of(good) == 212.5
     assert music.length_of(bad) == music.UNKNOWN_SECONDS
     assert calls.count(str(good)) == 1  # đo một lần
+
+
+def test_trip_director_and_mix_settings_clamped_and_applied(client):
+    from xe_tet.server import settings as settings_module
+    out = settings_module.clean({"trip_minutes": 99, "auto_feature": "nope", "rotate_seconds": 1, "mix": "voice"})
+    assert out["trip_minutes"] == 15 and out["auto_feature"] == "events" and out["rotate_seconds"] == 20
+    assert out["mix"] == "voice"
+    assert client.post("/api/admin", json={"action": "settings", "changes": {"trip_minutes": 5}}).json()["ok"]
+    state = client.get("/api/state").json()
+    assert state["trip_minutes"] == 5 and state["control"]["trip_minutes"] == 5 and state["fleet"][0]["main"]

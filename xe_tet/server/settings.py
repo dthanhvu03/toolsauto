@@ -6,7 +6,7 @@ import os
 import re
 from pathlib import Path
 
-from .game.engine import BOARD_SECONDS, REST_SECONDS
+from .game.engine import BOARD_SECONDS, FEATURE_MODES, REST_SECONDS, TRIP_MINUTES
 from .game.geo import DEFAULT_DEPARTURE
 from .game.network import available
 
@@ -34,7 +34,7 @@ DEFAULTS: dict = {
     "tiktok_user": "",  # @username nối lần trước, để admin bấm nối lại nhanh
     "tiktok_auto": False,  # đang nối khi server tắt → bật lên tự nối lại (PM2 khởi động lại giữa live)
     "departure": DEFAULT_DEPARTURE,  # bến đi (BRD-tuyen-xe BR-8)
-    "relief_auto": True,
+    "relief_auto": True,  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
     "music_on": True,  # nhạc trong xe (PLAN-127); tắt = chỉ còn tiếng hiệu ứng
     "music_auto": True,  # hết bài tự qua bài kế (mỗi xe một đài chạy liên tục)
     "music_volume": 0.5,
@@ -42,12 +42,19 @@ DEFAULTS: dict = {
     "voice_on": True,  # Anh Tư lơ xe đọc (PLAN-128)
     "voice_name": "Adam",  # giọng VieNeu (nam, miền Nam, tự nhiên)
     "voice_volume": 0.9,
-    "voice_rate": 1.15,  # tốc độ đọc (phát nhanh hơn, giữ cao độ): 0,8 chậm → 1,6 nhanh  # làn đủ một xe người chờ thì tự gọi xe tăng cường (PLAN-125); tắt: chỉ gọi bằng tay / quà
+    "voice_rate": 1.15,  # tốc độ đọc (phát nhanh hơn, giữ cao độ): 0,8 chậm → 1,6 nhanh
+    "trip_minutes": TRIP_MINUTES,  # chuyến xa nhất chạy đường bao nhiêu phút (PLAN-130); chuyến gần ngắn hơn theo km
+    "auto_feature": "events",  # tự chiếu xe: off | events (theo chuyện hay) | rotate (xoay vòng)
+    "rotate_seconds": 60,
+    "mix": "balanced",  # trộn tiếng: balanced | music (nhạc nổi) | voice (lơ xe nổi)
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
 REST_RANGE = (20, 300)
 VOICE_RATE = (0.8, 1.6)
+TRIP_RANGE = (3, 15)  # phút
+ROTATE_RANGE = (20, 300)  # giây
+MIXES = ("balanced", "music", "voice")
 log = logging.getLogger("xe_tet")
 
 
@@ -65,6 +72,14 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = value
         elif key == "departure" and value in available():  # theo dữ liệu tuyến đã dựng, không chỉ bảng code
             out[key] = value
+        elif key == "auto_feature" and value in FEATURE_MODES:
+            out[key] = value
+        elif key == "mix" and value in MIXES:
+            out[key] = value
+        elif key == "trip_minutes":
+            out[key] = round(min(TRIP_RANGE[1], max(TRIP_RANGE[0], float(value))), 1)
+        elif key == "rotate_seconds":
+            out[key] = int(min(ROTATE_RANGE[1], max(ROTATE_RANGE[0], float(value))))
         elif key == "voice_name":
             out[key] = str(value or "")[:40] or out[key]
         elif key == "voice_rate":

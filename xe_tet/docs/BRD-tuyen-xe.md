@@ -60,9 +60,10 @@ và thấy ngay điều đó trên màn hình:
   bảng tỉnh). Không mất lượt đổi tỉnh.
 - **BR-6 Km hiển thị:** vé («Đà Lạt → Cà Mau · 592 km»), bảng tuyến («Tới Cần Thơ · còn 41 km»), cột cây số
   («CÀ MAU 592»), băng rôn thả khách («Đã đi 592 km về tới Cà Mau!»), tổng km nhà xe đã chở trong phiên.
-- **BR-7 Nén thời gian (sửa 01/11):** phần chạy đường của một chuyến tối đa ~4 phút (cao điểm 2,5 phút), tối thiểu 3 km / giây;
-  km hiển thị vẫn thật, thả khách ghi «~26 giờ xe» cho chân thật. Giờ đón tỉ lệ số giường còn trống (xe đã kín người chờ lên
-  sẵn thì không bắt đợi đủ 3 phút). Lý do: một xe 24 giường chở ~110 khách / giờ, người xem TikTok ở lại vài phút.
+- **BR-7 Nén thời gian (sửa PLAN-130):** giây chạy đường = «chuyến xa nhất» (admin chỉnh, mặc định 8 phút) ×
+  (km / 1.750)^0,75, tối thiểu 45 giây — xa lâu hơn rõ rệt (300 km ≈ 2:10, 1.700 km ≈ 8:00) nhưng không tỉ lệ thẳng; cao điểm
+  × 0,6. Km thật; đồng hồ trên xe = giờ xuất bến + km / 52 km/h + 30 phút mỗi trạm, nên «chừng 26 tiếng» lơ xe nói khớp
+  đồng hồ, mỗi điểm dừng có giờ tới. Giờ đón tỉ lệ số giường còn trống. Người chờ lâu đã có xe tăng cường (BR-10).
 - **BR-8 Đổi bến đi:** admin chọn trên `/control`; chỉ đổi được khi không có chuyến đang chạy và không ai đang giữ chỗ
   (tránh vé sai hướng).
 - **BR-9 Giờ cao điểm, cộng dồn quà, vé hết hạn:** giữ nguyên, tính **theo từng hướng** (cao điểm = làn của xe còn ≥ 24

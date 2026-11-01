@@ -4,9 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Xe Tết Sum Vầy LIVE 9:16</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap" rel="stylesheet">
+  <!-- font tự chứa (public/fonts): mở trong LIVE Studio không phải chờ mạng tải font -->
+  <link rel="stylesheet" href="/fonts/fonts.css">
 </head>
 <body>
   <div id="stage">
@@ -24,7 +23,8 @@
           <span id="phase-text"></span>
           <span id="seats" class="seats"></span>
         </div>
-        <div class="bar"><i id="bar-fill"></i></div>
+        <!-- cả chuyến: chấm điểm dừng (☕ trạm, 📍 thả khách), xe đang ở đâu (PLAN-130) -->
+        <div class="track"><div class="bar"><i id="bar-fill"></i></div><div id="marks"></div></div>
         <div id="next-stops" class="next-stops"></div>
       </section>
 
