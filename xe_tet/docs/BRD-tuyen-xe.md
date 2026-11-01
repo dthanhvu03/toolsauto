@@ -4,7 +4,7 @@ Ngày 31/10/2026 · Người viết: Claude Code · Trạng thái: **anh đã qu
 
 ## 1. Vấn đề
 
-Luật chơi hiện tại (PLAN-120) dùng mô hình đơn giản, lộ ra 3 chỗ sai so với thực tế:
+Luật chơi hiện tại (PLAN-126, MVP) dùng mô hình đơn giản, lộ ra 3 chỗ sai so với thực tế:
 
 | # | Hiện tại | Vì sao sai |
 |---|---|---|

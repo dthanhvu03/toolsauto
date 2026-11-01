@@ -1,8 +1,8 @@
 # PLAN-121 — Xe Tết Sum Vầy: làm đẹp hình 3D
 
-- Status: V1–V4 xong — chờ anh duyệt ảnh, đo khung hình trên GPU thật
+- Status: Done — anh duyệt 01/11, commit `b3d0636` (nhánh `feat/xe-tet-sum-vay`)
 - Executor: Claude Code (anh duyệt 31/10: «Anh duyệt em triển khai nhé»)
-- Liên quan: PLAN-120 (MVP), `xe_tet/README.md`
+- Liên quan: PLAN-126 (MVP, trước đây đánh số nhầm 120), `xe_tet/README.md`
 
 ## Mục tiêu
 

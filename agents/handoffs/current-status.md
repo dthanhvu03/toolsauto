@@ -5,11 +5,11 @@
   tim cho xe chạy, trạm dừng ăn / WC / mua quà, thả khách đọc tên; mùa 15/12 → mùng 10 Tết (6/2/2027).
 - Tạo `xe_tet/README.md`: công nghệ (TikTokLive Python + FastAPI + SQLite + VieNeu TTS; overlay Vite 5 + TS + Three.js 0.187),
   vòng chuyến xe, bảng tương tác, trạm dừng chân, lịch mùa, các bước P1–P3. Không đụng code khác.
-- **P1 MVP xong (PLAN-120, chưa commit):** `xe_tet/server` (FastAPI + WebSocket, luật chơi thuần, giả lập phòng đông,
+- **P1 MVP xong (PLAN-126 — đánh số nhầm 120 lúc tạo, đã đổi 01/11):** `xe_tet/server` (FastAPI + WebSocket, luật chơi thuần, giả lập phòng đông,
   `/control`), `xe_tet/overlay` (Vite 5 + TS + Three.js 0.187, CSS2D cho chữ). 15 test qua, ruff + tsc sạch, chụp Chromium thật
   5 cảnh. Server đang chạy nền cổng 8810 (`venv/bin/python -m xe_tet.server`), không PM2.
 - **Test UI/UX xong (anh yêu cầu):** 11 tình huống + bảng điều khiển 2 cỡ màn; sửa 1 lỗi thật (sự kiện trạm dừng bị overlay
-  bỏ qua do trường `kind` trùng), bố cục né vùng TikTok che, băng rôn không che cảnh. 16 test qua. Chi tiết trong PLAN-120.
+  bỏ qua do trường `kind` trùng), bố cục né vùng TikTok che, băng rôn không che cảnh. 16 test qua. Chi tiết trong PLAN-126.
 - **Admin điều khiển mọi thứ (anh yêu cầu):** bỏ tự đổi góc; `/control` có camera (ngoài / trong, 4 góc, gần / xa), tạm dừng,
   ±30 s, thời gian, bật / tắt từng phần, lơ xe nói + băng rôn tuỳ ý. Lưu `storage/db/config/xe_tet.json`. 23 test + 26/26 bấm thật.
 - **Nhấp nháy (anh báo):** do màn đen 0,3 s mỗi lần đổi cảnh (14 lần / 2 phút) → mặc định cắt thẳng + công tắc mờ nhẹ tuỳ chọn;
@@ -59,7 +59,7 @@
     130–220 → cua gắt), xe nghiêng theo cua. Sửa lỗi lộ ra khi chụp: mặt đất / đường chỉ có đỉnh ở 2 đầu nên bị nhấc che xe →
     `strip()` chia đỉnh mỗi 2,5 đơn vị.
   - Proof: 66 test (có test dữ liệu thật), fuzz 2 giờ live × 5 bến 0 vi phạm, e2e 11 tình huống + 28/28 bảng điều khiển,
-    ảnh Đà Lạt + Cà Mau / đèo / đồng bằng. Server 8810 đã chạy code mới. Toàn bộ `xe_tet/` + PLAN-120…122 **chưa commit**.
+    ảnh Đà Lạt + Cà Mau / đèo / đồng bằng. Server 8810 đã chạy code mới. (Đã commit 01/11, xem dưới.)
 - **Rà soát sau PLAN-122 (anh hỏi 01/11: hardcode, rác code, lỗi logic / nghiệp vụ, chuyên môn, tâm lý, dữ liệu đường mới):**
   2 reviewer độc lập (server + overlay) + em đo trên dữ liệu thật. Đã xác minh trong code: km đứng 0 cả chuyến nếu quà lớn
   lúc đón khách (`resume` không reset); đổi tỉnh sang làn khác bỏ trống giường; xe trống không đổi sang làn có người chờ;
@@ -74,14 +74,17 @@
   đặc sản 63 tỉnh, làn theo hành lang + km rẽ nhánh), đợt 3 tâm lý (chuyến chạy đường ≤ ~4 phút, «ai chờ trước đi trước» chọn
   bằng mô phỏng 5 luật, bảng «⏳ Chờ xe sau» + «Xe kế tiếp»). Dọn: số giường 1 hằng, hằng lặp, bảng món ăn 1 bảng, 12 export
   thừa, `Province.lat`, `avatar`, `roundtrip` → `followed`. Proof trong PLAN-123: 82 test, fuzz 0 vi phạm, e2e 28/28 + UX 0 lỗi,
-  ảnh. Server 8810 chạy code mới. **Chưa commit** (toàn bộ `xe_tet/` + PLAN-120…123).
+  ảnh. Server 8810 chạy code mới. (Đã commit 01/11, xem dưới.)
 - **PLAN-124 đường đèo thật xong (anh duyệt 01/11):** bóng đổ uốn cùng đường → cua theo bán kính thật (đồng bằng thẳng,
   Bảo Lộc ~170 m, Pha Đin 40 m), dốc đèo 8 % lên trước đỉnh / xuống sau đỉnh, đèo ≥ 16 s / hầm ≥ 8 s trên màn hình, hầm có
   vách gạch men + đèn + đá núi (cảnh tối, xe bật đèn), xe nghiêng theo v² / R. Rò bộ nhớ đổi vùng hết (261 → 263 hình).
 - **PLAN-125 xe tăng cường + admin mọi chuyến xong (anh chốt «tự động + quà 100 xu», thêm «admin control tất cả chuyến,
   góc cam»):** xe chạy ngầm theo tuyến thật, đọc tên khi tới; `/control` «Các chuyến xe» chiếu xe nào / tới điểm kế / gọi
-  thêm / tắt tự gọi. Phòng 1 comment / 6 s: lên xe trong 30 phút 40 % → 98 %. 91 test, fuzz sạch. **Chưa commit.**
-- **Next:** anh xem ảnh PLAN-123 / 124 / 125 + quyết commit; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
+  thêm / tắt tự gọi. Phòng 1 comment / 6 s: lên xe trong 30 phút 40 % → 98 %. 91 test, fuzz sạch.
+- **01/11 — commit + duyệt:** commit `b3d0636` đẩy lên nhánh `feat/xe-tet-sum-vay` (chưa merge `main`). Sửa `.gitignore`:
+  luật gốc `data/` làm `xe_tet/server/game/data/routes.json` bị bỏ qua (deploy sẽ lỗi) → thêm ngoại lệ. Anh duyệt ảnh →
+  archive PLAN-121…126; MVP đổi số 120 → 126 (trùng PLAN-120 ngắt dòng phụ đề của Studio).
+- **Next:** anh quyết merge `feat/xe-tet-sum-vay` vào `main` (hoặc mở PR); deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.
 

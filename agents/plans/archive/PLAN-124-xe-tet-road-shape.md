@@ -1,6 +1,6 @@
 # PLAN-124 — Xe Tết: đường đèo thật (cua, dốc nhìn thấy được, bóng đổ uốn theo)
 
-- Status: Done (chờ anh xem ảnh)
+- Status: Done — anh duyệt 01/11, commit `b3d0636` (nhánh `feat/xe-tet-sum-vay`)
 - Executor: Claude Code (anh duyệt 01/11 sau khi em báo cua / dốc hiện tại gần như không thấy)
 
 ## Vấn đề (đo 01/11)

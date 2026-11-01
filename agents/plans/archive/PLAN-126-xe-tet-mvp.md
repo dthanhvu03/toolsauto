@@ -1,6 +1,8 @@
-# PLAN-120 — Xe Tết Sum Vầy: MVP live tương tác (P1)
+# PLAN-126 — Xe Tết Sum Vầy: MVP live tương tác (P1)
 
-- Status: P1 Done (chờ anh xem thử)
+> Đổi số 01/11: tạo ngày 31/10 với số 120 trùng PLAN-120 ngắt dòng phụ đề (Studio) — số không được dùng lại nên chuyển sang 126.
+
+- Status: Done — anh duyệt 01/11, commit `b3d0636` (nhánh `feat/xe-tet-sum-vay`)
 - Executor: Claude Code (anh giao trực tiếp 31/10: «triển khai luôn cho nóng đi em, mvp trước»)
 - Thiết kế: `xe_tet/README.md`
 
