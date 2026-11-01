@@ -121,7 +121,8 @@ def test_likes_are_batched_for_hearts(client):
 
 def test_quality_setting_validated():
     assert settings.clean({"quality": "low"})["quality"] == "low"
-    assert settings.clean({"quality": "ultra"})["quality"] == "high"
+    assert settings.clean({"quality": "ultra"})["quality"] == "medium"  # mặc định «Vừa»
+    assert settings.clean({"quality": "medium"})["quality"] == "medium"
 
 
 def test_departure_switch_via_admin(client):

@@ -17,14 +17,14 @@ PATH = Path(os.getenv("XE_TET_SETTINGS") or ROOT / "storage" / "db" / "config" /
 
 VIEWS = ("outside", "inside")
 CAMS = ("wide", "high", "side", "close")
-QUALITIES = ("high", "low")
+QUALITIES = ("high", "medium", "low")
 
 DEFAULTS: dict = {
     "view": "outside",  # outside | inside
     "cam": "wide",  # góc máy ngoài xe
     "zoom": 1.0,  # 0.6 (gần) … 1.6 (xa)
     "fade": False,  # mờ nhẹ khi đổi cảnh; tắt = cắt thẳng (tránh nhấp nháy)
-    "quality": "high",  # low: ~60 % độ phân giải, tắt bóng đổ, bớt hạt (máy yếu / LIVE Studio giật)
+    "quality": "medium",  # high | medium (75 % độ phân giải, bóng cách khung — khi live) | low (~60 %, tắt bóng)
     "auto_loxe": True,  # lơ xe tự nói theo tình huống
     "show_route": True,
     "show_loxe": True,

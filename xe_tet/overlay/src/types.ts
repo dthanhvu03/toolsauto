@@ -4,6 +4,7 @@ export type Phase = "BOARDING" | "DRIVING" | "REST" | "DROPOFF" | "FINISH" | "SP
 export type Region = "bac" | "trung" | "taynguyen" | "nam";
 
 export type CamName = "wide" | "high" | "side" | "close";
+export type Quality = "high" | "medium" | "low";
 
 // Thiết lập admin (xe_tet/server/settings.py)
 export interface Control {
@@ -11,7 +12,7 @@ export interface Control {
   cam: CamName;
   zoom: number;
   fade?: boolean; // hiệu ứng chuyển cảnh mờ nhẹ (mặc định tắt: cắt thẳng)
-  quality?: "high" | "low"; // chất lượng hình (thấp: máy yếu / LIVE Studio giật)
+  quality?: Quality; // chất lượng hình (vừa: khuyên dùng khi live; thấp: máy yếu)
   auto_loxe?: boolean;
   show_route?: boolean;
   show_loxe?: boolean;

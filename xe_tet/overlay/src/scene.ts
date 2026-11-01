@@ -11,7 +11,7 @@ import { Fireworks, Puffs } from "./effects";
 import { BenSet, HomeSet, RestSet, type StageSet } from "./sets";
 import { Tunnel } from "./tunnel";
 import { Weather } from "./weather";
-import type { CamName, Control, GameEvent, Phase, Region, Seat, State } from "./types";
+import type { CamName, Control, GameEvent, Phase, Quality, Region, Seat, State } from "./types";
 
 export const W = 1080;
 export const H = 1920;
@@ -32,6 +32,7 @@ const URL_PARAMS = new URLSearchParams(location.search);
 const FORCE_HOUR = URL_PARAMS.has("hour") ? Number(URL_PARAMS.get("hour")) : null;
 const BASE_RES = Math.min(1, Math.max(0.25, Number(URL_PARAMS.get("res")) || 1));
 const LOW_RES = 0.6;
+const MEDIUM_RES = 0.75;  // «Vừa»: ~56 % số điểm ảnh — TikTok nén hình về ~720p, trên điện thoại gần như không khác «Cao»
 /**
  * Chỗ pháo hoa nổ: giữa cảnh, cao 5, sau xe 6 — tính theo cả 4 góc máy rơi vào khoảng trống giữa màn hình
  * (dưới bảng chữ / băng rôn ở trên, trên thân xe). Đặt cao hơn thì băng rôn che mất.
@@ -169,7 +170,8 @@ export class World {
   private fx = new Fireworks();
   private dust = new Puffs(72);
   private dustTimer = 0;
-  private quality: "high" | "low" = "high";
+  private quality: Quality = "high";
+  private frameNo = 0;
   private shape = { curve: 0, grade: 0, crest: 0 };  // độ uốn đường đang hiển thị (đổi mượt)
   private curvePhase = 0;
   private hillPhase = 0;
@@ -308,7 +310,7 @@ export class World {
       this.aimCamera(false);
     }
     if (c) this.control.fade = !!c.fade;
-    const quality = c?.quality === "low" ? "low" : "high";
+    const quality: Quality = c?.quality === "low" || c?.quality === "medium" ? c.quality : "high";
     if (quality !== this.quality) this.applyQuality(quality);
     // Chúc Tết (quà lớn) chen vào giữa bến / đường / trạm: giữ nguyên cảnh đang có, không nhảy cảnh.
     const want = state.phase === "SPECIAL" ? this.set : SET_OF[state.phase];
@@ -523,15 +525,18 @@ export class World {
   }
 
   /**
-   * Chất lượng thấp (máy yếu / LIVE Studio giật): vẽ ~60 % độ phân giải, tắt bóng đổ, bớt cánh hoa / mưa /
-   * hạt pháo hoa / bụi. Bật tắt bóng bằng castShadow (three tự dựng lại shader), không phải tải lại trang.
+   * Chất lượng: «Cao» đủ 1080×1920 + bóng đổ mỗi khung; «Vừa» 75 % độ phân giải, bóng vẽ lại cách khung (máy bận vẽ thì
+   * Chrome hụt tiếng — anh nghe lẹt xẹt ở «Cao»); «Thấp» ~60 %, tắt bóng, bớt cánh hoa / mưa / hạt pháo hoa / bụi.
+   * Bật tắt bóng bằng castShadow (three tự dựng lại shader), không phải tải lại trang.
    */
-  private applyQuality(quality: "high" | "low"): void {
+  private applyQuality(quality: Quality): void {
     this.quality = quality;
     const low = quality === "low";
-    this.renderer.setPixelRatio(low ? Math.min(BASE_RES, LOW_RES) : BASE_RES);
+    const res = low ? LOW_RES : quality === "medium" ? MEDIUM_RES : 1;
+    this.renderer.setPixelRatio(Math.min(BASE_RES, res));
     this.sun.castShadow = !low;
-    this.petals.setDensity(low ? 0.35 : 1);
+    this.renderer.shadowMap.autoUpdate = quality === "high";
+    this.petals.setDensity(low ? 0.35 : quality === "medium" ? 0.7 : 1);
     this.weather.setDensity(low ? 0.4 : 1);
     this.fx.setQuality(low);
     this.dust.setQuality(low);
@@ -748,6 +753,7 @@ export class World {
     this.sky.mesh.position.copy(cam.position);
     this.petals.points.visible = this.view === "outside";
     this.petals.update(dt, this.t, moving ? this.speed * 0.12 : 0.25);
+    if (this.quality === "medium") this.renderer.shadowMap.needsUpdate = this.frameNo++ % 2 === 0;  // bóng 15 khung/giây
     this.renderer.render(this.scene, cam);
     this.labels.render(this.scene, cam);
   }
