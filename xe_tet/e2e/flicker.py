@@ -37,31 +37,34 @@ WATCH = """() => {
 
 
 def _refuse_during_live() -> None:
-    """Script này reset game + bật giả lập: chạy lúc đang live thật là xoá vé của khán giả."""
-    import json as _json
-    import urllib.request as _url
-    state = _json.load(_url.urlopen("http://127.0.0.1:8810/api/state"))
+    """Script này reset game + bật giả lập trên máy chủ B: B đang nối TikTok thật thì dừng (chạy là xoá vé khán giả)."""
+    try:
+        state = json.load(urllib.request.urlopen(f"{B}/api/state", timeout=5))
+    except OSError as exc:
+        raise SystemExit(f"Không mở được máy chủ thử {B} ({exc}) — bật máy chủ thử trước (README: Test).") from exc
     if state.get("tiktok", {}).get("state", "idle") not in ("idle", "error", "ended"):
-        raise SystemExit("Đang nối TikTok thật — không chạy test (sẽ xoá vé khán giả). Ngắt kết nối trước.")
+        raise SystemExit(f"{B} đang nối TikTok thật — không chạy test (sẽ xoá vé khán giả). Ngắt kết nối trước.")
 
 
 _refuse_during_live()
 
 with sync_playwright() as p:
     br = p.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
-    pg = br.new_page(viewport={"width": 360, "height": 640})
-    pg.set_default_timeout(120000)
-    admin({"action": "reset"})
-    admin({"action": "settings", "changes": {"board_seconds": 20, "rest_seconds": 20}})
-    admin({"action": "sim", "rate": 6})
-    pg.goto(B + "/?res=0.5", wait_until="domcontentloaded")
-    time.sleep(2)
-    pg.evaluate(WATCH)
-    time.sleep(SECONDS)
-    log = pg.evaluate("window.__log")
-    admin({"action": "sim", "rate": 0})
-    admin({"action": "settings", "changes": {"board_seconds": 180, "rest_seconds": 90}})
-    br.close()
+    try:
+        pg = br.new_page(viewport={"width": 360, "height": 640})
+        pg.set_default_timeout(120000)
+        admin({"action": "reset"})
+        admin({"action": "settings", "changes": {"board_seconds": 20, "rest_seconds": 20}})
+        admin({"action": "sim", "rate": 6})
+        pg.goto(B + "/?res=0.5", wait_until="domcontentloaded")
+        time.sleep(2)
+        pg.evaluate(WATCH)
+        time.sleep(SECONDS)
+        log = pg.evaluate("window.__log")
+        admin({"action": "sim", "rate": 0})
+        admin({"action": "settings", "changes": {"board_seconds": 180, "rest_seconds": 90}})
+    finally:
+        br.close()
 
 fades = [t for t, w in log if w == "fade:on"]
 print(f"{SECONDS}s: màn đen {len(fades)} lần, đổi pha {sum(1 for _, w in log if w.startswith('phase:'))} lần, "

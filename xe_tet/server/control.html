@@ -487,18 +487,23 @@ function renderFiles(s) {
     : `<li><span class="hint" style="margin:0">Chưa có bài nào — đang dùng 6 bài máy tự sáng tác</span></li>`);
 }
 // mỗi xe một danh sách thả xuống: chọn đúng bài (máy sáng tác 🎼 / bài anh tải lên 🎵) + nút tắt / bật nhạc xe đó
+// Danh sách bài (chỉ đổi khi đổi bài / thêm bài) tách khỏi đồng hồ «còn m:ss» (đổi mỗi giây): vẽ lại cả khối mỗi giây là
+// thay mất nút / ô chọn dưới tay anh → bấm trượt.
 function musicPicker(s, no, music) {
   const tracks = s.music_tracks || [];
   if (!tracks.length || !music) return "";
   const now = ((music.index % tracks.length) + tracks.length) % tracks.length;
   const options = tracks.map((t, i) =>
     `<option value="${i}"${i === now ? " selected" : ""}>${t.id.startsWith("file:") ? "🎵" : "🎼"} ${esc(t.title)}</option>`).join("");
-  const left = Math.max(0, Math.round((tracks[now].seconds || 0) - (music.pos || 0)));
-  const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
-  return `<div class="row" style="width:100%"><select data-pick="${no}" aria-label="Bài nhạc xe ${no || "chính"}"
+  return `<select data-pick="${no}" aria-label="Bài nhạc xe ${no || "chính"}"
       style="flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff">${options}</select>
-    <button data-mute="${no}">${music.on ? "🔇 Tắt" : "🔊 Bật"}</button>
-    ${music.on && control.music_auto !== false ? `<small class="hint" style="margin:0">còn ${clock}</small>` : ""}</div>`;
+    <button data-mute="${no}">${music.on ? "🔇 Tắt" : "🔊 Bật"}</button>`;
+}
+function musicLeft(s, music) {
+  const tracks = s.music_tracks || [];
+  if (!tracks.length || !music || !music.on || control.music_auto === false) return "";
+  const now = ((music.index % tracks.length) + tracks.length) % tracks.length;
+  return `còn ${mmss(Math.max(0, Math.round((tracks[now].seconds || 0) - (music.pos || 0))))}`;
 }
 $("buses").onchange = (e) => {
   const sel = e.target.closest("select[data-pick]");
@@ -526,6 +531,20 @@ function stopsOf(b) {
   });
   return `<div class="stops">${chips.join("")}</div>`;
 }
+// Mỗi xe một khung giữ nguyên giữa các lần làm mới; chỉ phần chữ đổi mới được ghi lại (setIfChanged từng phần).
+function busRow(no) {
+  let row = $("buses").querySelector(`.bus[data-no="${no}"]`);
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "bus";
+    row.dataset.no = no;
+    row.innerHTML = `<div class="info"></div><span class="btns"></span><div class="stops-box" style="width:100%"></div>
+      <div class="row music" style="width:100%"><span class="pick" style="display:contents"></span>
+      <small class="hint left" style="margin:0"></small></div>`;
+    $("buses").append(row);
+  }
+  return row;
+}
 function renderBuses(s) {
   const m = s.main || { no: s.bus.no, phase: s.phase, riders: s.bus.riders, lane: s.bus.lane, arrow: s.bus.arrow };
   const seats = s.bus.seats.length;
@@ -533,20 +552,30 @@ function renderBuses(s) {
   const many = (s.reliefs || []).length > 0;
   const feature = (no, on) => `<button data-feature="${no}" class="${on ? "on" : ""}">${on ? "📺 Đang chiếu" : "📺 Chiếu xe này"}</button>`;
   const fleet = Object.fromEntries((s.fleet || []).map((b) => [b.no, b]));
-  const rows = [`<div class="bus"><div class="info"><b>Xe số ${m.no} · xe chính</b>
-      <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}${clockOf(fleet[m.no])}</small>
-      </div>
-    ${many ? feature(0, s.featured == null) : ""}${stopsOf(fleet[m.no])}${musicPicker(s, 0, m.music)}</div>`];
-  for (const r of s.reliefs || []) {
-    rows.push(`<div class="bus"><div class="info"><b>Xe số ${r.no} · tăng cường ${r.arrow} ${esc(r.label)}</b>
-      <small>${r.riders} khách · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}${clockOf(fleet[r.no])}</small>
-      </div>
-      ${feature(r.no, r.featured)}
-      <button data-next="${r.no}">⏭ Tới điểm kế</button>${stopsOf(fleet[r.no])}${musicPicker(s, r.no, r.music)}</div>`);
-  }
-  // đang mở danh sách chọn bài thì không vẽ lại (vẽ lại sẽ đóng danh sách giữa chừng)
-  if (!$("buses").contains(document.activeElement) || document.activeElement.tagName !== "SELECT") {
-    setIfChanged($("buses"), rows.join(""));
+  const buses = [{
+    key: "main", no: 0, music: m.music, stops: stopsOf(fleet[m.no]),
+    info: `<b>Xe số ${m.no} · xe chính</b><small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${
+      m.km ? ` · ${m.trip_km}/${m.km} km` : ""}${clockOf(fleet[m.no])}</small>`,
+    btns: many ? feature(0, s.featured == null) : "",
+  }, ...(s.reliefs || []).map((r) => ({
+    key: String(r.no), no: r.no, music: r.music, stops: stopsOf(fleet[r.no]),
+    info: `<b>Xe số ${r.no} · tăng cường ${r.arrow} ${esc(r.label)}</b><small>${r.riders} khách · còn ${r.left_km} km${
+      r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}${clockOf(fleet[r.no])}</small>`,
+    btns: `${feature(r.no, r.featured)}<button data-next="${r.no}">⏭ Tới điểm kế</button>`,
+  }))];
+  const keep = new Set(buses.map((b) => b.key));
+  $("buses").querySelectorAll(".bus").forEach((row) => { if (!keep.has(row.dataset.no)) row.remove(); });
+  for (const b of buses) {
+    const row = busRow(b.key);
+    setIfChanged(row.querySelector(".info"), b.info);
+    setIfChanged(row.querySelector(".btns"), b.btns);
+    setIfChanged(row.querySelector(".stops-box"), b.stops);
+    // đang mở danh sách chọn bài thì không vẽ lại ô chọn (vẽ lại sẽ đóng danh sách giữa chừng)
+    const pick = row.querySelector(".pick");
+    if (!pick.contains(document.activeElement)) setIfChanged(pick, musicPicker(s, b.no, b.music));
+    const left = row.querySelector(".left");
+    const text = musicLeft(s, b.music);
+    if (left.textContent !== text) left.textContent = text;
   }
   const lanes = (s.lanes || []).filter((l) => l.waiting);
   setIfChanged($("relief-lanes"), lanes.length

@@ -245,3 +245,31 @@ def test_talk_style_reaches_engine(client):
     from xe_tet.server.app import hub
     assert client.post("/api/admin", json={"action": "settings", "changes": {"talk_style": "geny"}}).json()["ok"]
     assert hub.engine.talk_style == "geny" and hub.voice.style() == "geny"
+
+
+def test_track_list_never_runs_ffprobe_on_game_loop(tmp_path, monkeypatch):
+    """tracks() gọi mỗi nhịp game: bài mới đo ở luồng riêng (tạm 3 phút), đo xong tự có độ dài thật."""
+    import threading
+    import time
+    from xe_tet.server import music
+    threads = []
+
+    class Done:
+        stdout = "95.0\n"
+
+    def fake_run(cmd, **_kw):
+        threads.append(threading.current_thread() is threading.main_thread())
+        return Done()
+
+    monkeypatch.setattr(music.subprocess, "run", fake_run)
+    monkeypatch.setattr(music, "MUSIC_DIR", tmp_path)
+    monkeypatch.setattr(music, "_cache", (-1.0, []))
+    (tmp_path / "moi.mp3").write_bytes(b"x")
+    first = [t["seconds"] for t in music.tracks() if t["id"] == "file:moi.mp3"]
+    assert first in ([music.UNKNOWN_SECONDS], [95.0])  # chưa đo xong thì tạm 3 phút (luồng đo có thể xong rất nhanh)
+    for _ in range(100):
+        if [t["seconds"] for t in music.tracks() if t["id"] == "file:moi.mp3"] == [95.0]:
+            break
+        time.sleep(0.01)
+    assert [t["seconds"] for t in music.tracks() if t["id"] == "file:moi.mp3"] == [95.0]
+    assert threads == [False]  # đo đúng một lần, không phải ở luồng chính

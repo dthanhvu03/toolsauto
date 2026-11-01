@@ -13,15 +13,19 @@ function fit(): void {
 window.addEventListener("resize", fit);
 fit();
 
-// Chữ vẽ lên canvas (biển bến, bảng LED, cột cây số) chỉ vẽ một lần: chờ font Be Vietnam Pro tải xong rồi mới dựng cảnh,
-// không thì biển giữ font dự phòng suốt buổi live. Mạng chậm / mất mạng thì sau 2,5 giây dựng luôn.
+// Chữ vẽ lên canvas (biển bến, bảng LED, cột cây số) chỉ vẽ một lần: chờ font tải xong rồi mới dựng cảnh, không thì biển
+// giữ font dự phòng suốt buổi live. Font chia bộ chữ theo unicode-range (latin / latin-ext / vietnamese): phải đưa chữ mẫu
+// có dấu thì trình duyệt mới tải bộ tiếng Việt (không đưa thì chỉ tải bộ latin → «Ế Ầ Ừ» vẽ bằng font dự phòng).
+// Font nằm sẵn trên máy (public/fonts) nên thường xong ngay; lỗi thì sau 2,5 giây dựng luôn.
 const FONT_WAIT_MS = 2500;
 // Vẽ tối đa 30 khung / giây — bằng tốc độ phát live, card đồ hoạ đỡ một nửa việc (học từ zane-tv/tiktok-live-temple-rpc).
 const FRAME_MS = 1000 / 30;
+const FONT_SAMPLE = "Aa ẾẠỪẦĐĂƠƯỚỘ ếạừầđăơướộ 0123";
+const FONT_FACES = ['800 40px "Be Vietnam Pro"', '600 40px "Be Vietnam Pro"', '800 40px "Baloo 2"'];
 
 function fontsReady(): Promise<unknown> {
   return Promise.race([
-    Promise.all(["800 40px", "600 40px"].map((w) => document.fonts.load(`${w} "Be Vietnam Pro"`))),
+    Promise.all(FONT_FACES.map((face) => document.fonts.load(face, FONT_SAMPLE))),
     new Promise((ok) => window.setTimeout(ok, FONT_WAIT_MS)),
   ]).catch(() => undefined);
 }

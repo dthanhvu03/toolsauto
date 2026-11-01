@@ -2,7 +2,9 @@
 //   gần  (z -7…-14): nhà ống, tạp hoá, cây — ẩn khi đang ở bến / trạm / đầu ngõ (trùng chỗ bối cảnh)
 //   giữa (z -21…-45 và phía camera z +8…+15): ruộng bậc thang / đồi cà phê / ruộng nước / cát + phi lao, cây
 //   xa   (z -60…-150): núi nhiều tầng, biển + thuyền thúng — trôi rất chậm
-// Mỗi vùng dựng một lần rồi giữ lại, đổi vùng chỉ bật / tắt: không dựng lại, không rò bộ nhớ GPU suốt buổi live.
+// Mỗi vùng dựng một lần rồi giữ lại, đổi vùng chỉ gắn / gỡ khỏi cảnh: không dựng lại, không rò bộ nhớ GPU suốt buổi live.
+// Vùng chưa tới được dựng sẵn lúc rảnh (`prebuild`, khi xe đang đón khách ở bến) — dựng giữa đường là khựng hình.
+// Vùng không hiện thì gỡ hẳn khỏi cây cảnh (không chỉ ẩn): mỗi khung hình three / nhãn chữ khỏi duyệt hàng nghìn vật thừa.
 // Ngày Tết (PLAN-129): nhà treo cờ + đèn lồng, chậu mai / đào trước hiên, băng rôn chúc Tết, mai vàng xen cây ven đường.
 
 import * as THREE from "three";
@@ -200,13 +202,24 @@ export class Landscape {
     this.region = region;
     (this.ground.material as THREE.MeshStandardMaterial).color.setHex(GROUND[region]);
     if (this.current) this.show(this.current, false);
+    const layer = this.prebuild(region);
+    this.show(layer, true);
+    this.current = layer;
+  }
+
+  /** Dựng sẵn cảnh một vùng (chưa gắn vào cảnh); dựng rồi thì thôi. */
+  prebuild(region: Region): RegionLayer {
     let layer = this.layers.get(region);
     if (!layer) {
       layer = this.build(region);
       this.layers.set(region, layer);
     }
-    this.show(layer, true);
-    this.current = layer;
+    return layer;
+  }
+
+  /** Các vùng chưa dựng (scene dựng dần lúc rảnh). */
+  missing(): Region[] {
+    return REGIONS.filter((r) => !this.layers.has(r));
   }
 
   /** Trong hầm: ẩn cây, núi, ruộng hai bên (lớp sát đường do scene bật / tắt vì còn phụ thuộc bối cảnh). */
@@ -224,7 +237,10 @@ export class Landscape {
   }
 
   private show(layer: RegionLayer, on: boolean): void {
-    layer.near.visible = layer.mid.visible = layer.far.visible = on;
+    for (const [parent, group] of [[this.near, layer.near], [this.mid, layer.mid], [this.far, layer.far]] as const) {
+      if (on) parent.add(group);
+      else parent.remove(group);
+    }
   }
 
   private build(region: Region): RegionLayer {
@@ -236,9 +252,9 @@ export class Landscape {
     this.buildNear(region, rnd, layer);
     this.buildMid(region, rnd, layer);
     this.buildFar(region, rnd, layer);
-    this.near.add(layer.near);
-    this.mid.add(layer.mid);
-    this.far.add(layer.far);
+    for (const group of [layer.near, layer.mid, layer.far]) {  // cảnh tĩnh: chỉ băng chuyền dời vị trí, không xoay / co
+      group.traverse((o) => { if (o !== group && o.parent !== group) { o.matrixAutoUpdate = false; o.updateMatrix(); } });
+    }
     return layer;
   }
 

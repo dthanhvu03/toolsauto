@@ -6,9 +6,11 @@
   ngay trên /control (hoặc chép thẳng vào thư mục) là có trong danh sách, không cần khởi động lại server.
 """
 
+import contextlib
 import os
 import re
 import subprocess
+import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,11 +35,26 @@ UNKNOWN_SECONDS = 180.0  # file không đo được độ dài (ffprobe lỗi): 
 
 _cache: tuple[float, list[dict]] = (-1.0, [])
 _lengths: dict[tuple[str, float], float] = {}  # (tên file, mtime) → giây — đo một lần
+_measuring: set[str] = set()  # file đang đo ở luồng riêng
+
+
+def _key(path: Path) -> tuple[str, float]:
+    return path.name, path.stat().st_mtime
+
+
+def _measure(paths: list[Path]) -> None:
+    """Đo độ dài ở luồng riêng (ffprobe tới 20 giây / file — chạy trong vòng game là đứng cả game), xong thì quét lại."""
+    global _cache
+    for path in paths:
+        with contextlib.suppress(OSError):
+            length_of(path)
+        _measuring.discard(path.name)
+    _cache = (-1.0, _cache[1])
 
 
 def length_of(path: Path) -> float:
     """Độ dài bài (giây) bằng ffprobe; đo một lần / file, lỗi thì coi như UNKNOWN_SECONDS."""
-    key = (path.name, path.stat().st_mtime)
+    key = _key(path)
     if key not in _lengths:
         try:
             out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
@@ -70,7 +87,8 @@ def remove(name: str) -> None:
 
 
 def tracks() -> list[dict]:
-    """[{id, title, seconds, url?}] — bài tự sinh trước, rồi file theo tên. Quét lại thư mục khi nó đổi (so mtime)."""
+    """[{id, title, seconds, url?}] — bài tự sinh trước, rồi file theo tên. Quét lại thư mục khi nó đổi (so mtime).
+    Không bao giờ chạy ffprobe ở đây (gọi mỗi nhịp game): bài chưa đo tạm tính UNKNOWN_SECONDS, đo xong tự cập nhật."""
     global _cache
     try:
         stamp = MUSIC_DIR.stat().st_mtime
@@ -78,7 +96,11 @@ def tracks() -> list[dict]:
         stamp = 0.0
     if stamp != _cache[0]:
         files = sorted(p for p in MUSIC_DIR.iterdir() if p.suffix.lower() in EXTS) if stamp else []
+        todo = [p for p in files if _key(p) not in _lengths and p.name not in _measuring]
+        if todo:
+            _measuring.update(p.name for p in todo)
+            threading.Thread(target=_measure, args=(todo,), daemon=True).start()
         _cache = (stamp, [{"id": f"gen:{i}", "title": title, "seconds": GENERATED_SECONDS} for i, title in enumerate(GENERATED)]
                   + [{"id": f"file:{p.name}", "title": p.stem.replace("_", " "), "url": f"/music/{p.name}",
-                      "seconds": round(length_of(p), 1)} for p in files])
+                      "seconds": round(_lengths.get(_key(p), UNKNOWN_SECONDS), 1)} for p in files])
     return _cache[1]

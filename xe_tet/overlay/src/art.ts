@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 // ---- vật liệu --------------------------------------------------------------
 
@@ -193,12 +194,66 @@ export class SkyDome {
 
 /** Ngoài trời nhân vật to hơn để còn thấy rõ trên màn điện thoại; trong xe (đầu trên gối) giữ cỡ gốc. */
 export const PERSON_SCALE = 1.35;
-const SKIN = soft(0xf3c9a2, 0.7);
-const HAIR = soft(0x2b1d14, 0.8);
-const EYE = soft(0x1a1210, 0.4);
-const CHEEK = soft(0xf29a9a, 0.8);
-const STRAW = soft(0xe8cf8a, 0.9);
 const PANTS = [0x3b4a6b, 0x4a3b32, 0x2f3b2f, 0x5a5a66];
+// Phần đứng yên của một người (đầu, tóc, mắt, má, mũ, thân, ba lô) gộp thành MỘT khối tô màu theo đỉnh: trước đây 13–15 khối
+// riêng = 13–15 lần vẽ (+ ~9 lần vẽ bóng) mỗi người, lúc thả 24 khách / bến đông là thêm vài trăm lần vẽ. Tay chân giữ riêng
+// (đung đưa khi đi). Khối gộp dùng chung theo «kiểu người» (màu áo làm tròn 15°, mũ, ba lô) — có trần, không rò bộ nhớ dù
+// người đi bộ tạo / xoá liên tục suốt buổi live.
+const PERSON_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72 });
+const SKIN = 0xf3c9a2;
+const HAIR = 0x2b1d14;
+const EYE = 0x1a1210;
+const CHEEK = 0xf29a9a;
+const STRAW = 0xe8cf8a;
+const HUE_STEP = 15;
+const personGeo = new Map<string, THREE.BufferGeometry>();
+const _m4 = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _c = new THREE.Color();
+
+/** Một mảnh của khối gộp: hình gốc dời / co tới chỗ, tô một màu. */
+function piece(geo: THREE.BufferGeometry, color: number, pos: [number, number, number],
+  scale: [number, number, number]): THREE.BufferGeometry {
+  const g = (geo.index ? geo.toNonIndexed() : geo.clone());
+  for (const name of Object.keys(g.attributes)) if (name !== "position" && name !== "normal") g.deleteAttribute(name);
+  g.applyMatrix4(_m4.compose(new THREE.Vector3(...pos), _q, new THREE.Vector3(...scale)));
+  _c.setHex(color).convertSRGBToLinear();
+  const colors = new Float32Array(g.attributes.position.count * 3);
+  for (let i = 0; i < colors.length; i += 3) colors.set([_c.r, _c.g, _c.b], i);
+  g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  return g;
+}
+
+/** Khối gộp phần đứng yên theo kiểu người (dựng một lần, dùng chung). */
+function personBody(hue: number, headOnly: boolean): THREE.BufferGeometry {
+  const tone = Math.round(hue / HUE_STEP) * HUE_STEP;
+  const hat = hue % 4;  // mũ theo người (cố định theo màu áo): nón lá, mũ len, hoặc không
+  const pack = !headOnly && hue % 3 === 0;  // người đi Tết: ba lô
+  const key = `${tone}|${hat}|${pack}|${headOnly}`;
+  let geo = personGeo.get(key);
+  if (geo) return geo;
+  const parts = [
+    piece(GEO.sphere, SKIN, [0, 1.36, 0], [0.38, 0.38, 0.38]),
+    piece(GEO.half, HAIR, [0, 1.4, -0.02], [0.4, 0.36, 0.4]),
+  ];
+  for (const x of [-0.13, 0.13]) {
+    parts.push(piece(GEO.ball, EYE, [x, 1.37, 0.34], [0.045, 0.045, 0.045]),
+      piece(GEO.ball, CHEEK, [x * 1.5, 1.27, 0.3], [0.06, 0.035, 0.03]));
+  }
+  if (hat === 1) parts.push(piece(GEO.cone, STRAW, [0, 1.78, 0], [0.62, 0.3, 0.62]));
+  if (hat === 2) {
+    parts.push(piece(GEO.half, hueColor((tone + 180) % 360, 0.45), [0, 1.5, 0], [0.41, 0.34, 0.41]),
+      piece(GEO.ball, 0xffffff, [0, 1.86, 0], [0.09, 0.09, 0.09]));
+  }
+  if (!headOnly) {
+    parts.push(piece(GEO.capsule, hueColor(tone, 0.52), [0, 0.72, 0], [0.27, 0.17, 0.22]));
+    if (pack) parts.push(piece(GEO.backpack, hueColor((tone + 90) % 360, 0.4), [0, 0.78, -0.27], [1, 1, 1]));
+  }
+  geo = mergeGeometries(parts)!;
+  for (const part of parts) part.dispose();
+  personGeo.set(key, geo);
+  return geo;
+}
 
 function limb(radius: number, length: number, material: THREE.Material, pivotY: number, x: number): THREE.Group {
   const pivot = new THREE.Group();
@@ -211,58 +266,23 @@ function limb(radius: number, length: number, material: THREE.Material, pivotY: 
   return pivot;
 }
 
-function addHead(g: THREE.Group, hue: number): void {
-  const head = at(new THREE.Mesh(GEO.sphere, SKIN), 0, 1.36, 0);
-  head.scale.setScalar(0.38);
-  head.castShadow = true;
-  const hair = at(new THREE.Mesh(GEO.half, HAIR), 0, 1.4, -0.02);
-  hair.scale.set(0.4, 0.36, 0.4);
-  g.add(head, hair);
-  for (const x of [-0.13, 0.13]) {
-    const eye = at(new THREE.Mesh(GEO.sphere, EYE), x, 1.37, 0.34);
-    eye.scale.setScalar(0.045);
-    const cheek = at(new THREE.Mesh(GEO.sphere, CHEEK), x * 1.5, 1.27, 0.3);
-    cheek.scale.set(0.06, 0.035, 0.03);
-    g.add(eye, cheek);
-  }
-  // mũ theo người (cố định theo màu áo): nón lá, mũ len, hoặc không
-  const kind = hue % 4;
-  if (kind === 1) {
-    const hat = at(new THREE.Mesh(GEO.cone, STRAW), 0, 1.78, 0);
-    hat.scale.set(0.62, 0.3, 0.62);
-    hat.castShadow = true;
-    g.add(hat);
-  } else if (kind === 2) {
-    const beanie = at(new THREE.Mesh(GEO.half, soft(hueColor((hue + 180) % 360, 0.45), 0.9)), 0, 1.5, 0);
-    beanie.scale.set(0.41, 0.34, 0.41);
-    const pom = at(new THREE.Mesh(GEO.sphere, soft(0xffffff, 0.9)), 0, 1.86, 0);
-    pom.scale.setScalar(0.09);
-    g.add(beanie, pom);
-  }
-}
-
 interface Limbs { legL: THREE.Group; legR: THREE.Group; armL: THREE.Group; armR: THREE.Group }
 
 /** Người chibi: đầu to, tay chân đung đưa khi đi; `headOnly` cho đầu trên gối trong xe. */
 export function makePerson(hue: number, name?: string, vip = false, size = PERSON_SCALE, headOnly = false): THREE.Group {
   const g = new THREE.Group();
   g.scale.setScalar(size);
-  addHead(g, hue);
-  if (headOnly) return g;
-  const shirt = soft(hueColor(hue, 0.52), 0.7);
-  const pants = soft(PANTS[hue % PANTS.length], 0.8);
-  const body = at(new THREE.Mesh(GEO.capsule, shirt), 0, 0.72, 0);
-  body.scale.set(0.27, 0.17, 0.22);
+  const body = new THREE.Mesh(personBody(hue, headOnly), PERSON_MAT);
   body.castShadow = true;
+  g.add(body);
+  if (headOnly) return g;
+  const shirt = soft(hueColor(Math.round(hue / HUE_STEP) * HUE_STEP, 0.52), 0.7);
+  const pants = soft(PANTS[hue % PANTS.length], 0.8);
   const legL = limb(0.1, 0.32, pants, 0.5, -0.12);
   const legR = limb(0.1, 0.32, pants, 0.5, 0.12);
   const armL = limb(0.08, 0.32, shirt, 0.92, -0.33);
   const armR = limb(0.08, 0.32, shirt, 0.92, 0.33);
-  g.add(body, legL, legR, armL, armR, blob(0.9));
-  if (hue % 3 === 0) {  // người đi Tết: ba lô
-    const pack = at(new THREE.Mesh(GEO.backpack, soft(hueColor((hue + 90) % 360, 0.4), 0.8)), 0, 0.78, -0.27);
-    g.add(pack);
-  }
+  g.add(legL, legR, armL, armR, blob(0.9));
   g.userData.limbs = { legL, legR, armL, armR } satisfies Limbs;
   if (name) g.add(at(label(name, vip ? "lbl vip" : "lbl"), 0, 2.3, 0));
   return g;

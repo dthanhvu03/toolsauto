@@ -124,6 +124,12 @@
     tốc độ đọc 1,25), tự chiếu «Theo chuyện hay», chuyến xa nhất 8 phút. TikTok đang chưa nối — anh bấm Kết nối một lần.
 - **PLAN-131 kiểu nói lơ xe (anh yêu cầu):** Bến xe / Gen Z / Gen Y / Trộn (mặc định), 147 câu, không «!» / «nha», «!»
   đọc như dấu chấm. 114 test. Đã khởi động lại 8810 (anh cho phép), kiểu nói mặc định «Trộn».
+- **Tiếng rè rè (anh báo):** (1) máy nổ chờ ở bến sóng răng cưa + tiếng lốp lặp có «tách» → bỏ / làm êm; (2) nhạc tự sinh
+  bị trễ thì phát dồn mọi nốt lỡ cùng lúc → bỏ nốt lỡ, lên lịch trước 1 giây, AudioContext bộ đệm lớn; (3) «Cao» làm máy
+  quá tải → thêm chất lượng «Vừa» (75 % độ phân giải, bóng cách khung) — anh xác nhận «Thấp» hết rè.
+- **PLAN-132 tối ưu (anh yêu cầu + /code-review):** 12 điểm (màn hình live đứng hình không tự nối lại, game khựng mỗi phút
+  vì hỏi VieNeu, ffprobe trong vòng game, font tiếng Việt trên biển, rò bộ nhớ âm thanh, /control bấm trượt, người chibi
+  23 → 11 lần vẽ, dựng sẵn vùng…). 115 test, e2e 28/28 trên 8811. Chờ anh cho khởi động lại 8810.
 - **Next:** anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
   (`customDepthMaterial`). Sau đó P2: SQLite vé khứ hồi, giọng VieNeu, PM2.

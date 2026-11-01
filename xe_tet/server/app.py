@@ -84,7 +84,10 @@ class Hub:
             except Exception:
                 dead.append(ws)
         for ws in dead:
+            # bỏ khỏi danh sách thôi thì màn hình vẫn giữ kết nối «chết» (không nhận gì nữa, cũng không tự nối lại):
+            # đóng hẳn để overlay thấy rớt mạng và tự nối lại sau 1,5 giây
             self.clients.discard(ws)
+            asyncio.create_task(_close_quietly(ws))
 
     async def run(self) -> None:
         while True:
@@ -127,11 +130,15 @@ class Hub:
                 await self.broadcast({"kind": "event", "type": "likes", "count": count})
             self.voice.tick(now)
             self.engine.advance_music([t["seconds"] for t in music.tracks()], self.settings["music_auto"])
-            await self.voice.refresh_voices()
             if now - last_state >= STATE_EVERY:
                 last_state = now
                 await self.broadcast(self.state_message())
             await asyncio.sleep(TICK)
+
+
+async def _close_quietly(ws: WebSocket) -> None:
+    with contextlib.suppress(Exception):
+        await asyncio.wait_for(ws.close(), SEND_TIMEOUT)
 
 
 hub = Hub()
@@ -141,13 +148,14 @@ hub = Hub()
 async def lifespan(_app: FastAPI):
     task = asyncio.create_task(hub.run())
     reader = asyncio.create_task(hub.voice.run())  # giọng lơ xe đọc lần lượt, không chặn vòng game
+    voices = asyncio.create_task(hub.voice.watch_voices())  # hỏi VieNeu danh sách giọng: chạy riêng, VieNeu chậm không đứng game
     if hub.settings["tiktok_auto"] and hub.settings["tiktok_user"]:
         log.warning("server khởi động lại giữa live → tự nối lại @%s", hub.settings["tiktok_user"])
         await hub.bridge.connect(hub.settings["tiktok_user"])
     yield
     await hub.bridge.disconnect()
-    task.cancel()
-    reader.cancel()
+    for t in (task, reader, voices):
+        t.cancel()
 
 
 app = FastAPI(title="Xe Tết Sum Vầy", lifespan=lifespan)

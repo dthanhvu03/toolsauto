@@ -9,7 +9,7 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 // State tới 5 lần / giây: chỉ ghi DOM khi nội dung đổi, tránh vẽ lại chữ liên tục (nháy chữ trên vài máy).
 function setHTML(id: string, html: string): void {
   const el = $(id);
-  if (el.innerHTML !== html && el.dataset.html !== html) {
+  if (el.dataset.html !== html) {  // so với bản đã ghi (đọc innerHTML là bắt trình duyệt dựng lại chuỗi HTML mỗi lần)
     el.innerHTML = html;
     el.dataset.html = html;
   }
@@ -71,6 +71,8 @@ export class Hud {
   private calloutBusy = false;
   private lastPass: string | null = null;
   private seats = BERTHS;  // cập nhật theo state; dùng cho thẻ vé (giường thuộc tầng nào)
+  private marksKey = "";
+  private busDot: HTMLElement | null = null;
 
   constructor() {
     window.setInterval(() => { this.ctaTick++; this.renderCta(); }, CTA_ROTATE_MS);
@@ -92,7 +94,7 @@ export class Hud {
     const [head, tail] = this.statusText(s);
     setHTML("phase-text", `<span class="head">${esc(head)}</span>${tail ? `<span class="tail">${esc(tail)}</span>` : ""}`);
     ($("bar-fill") as HTMLElement).style.width = `${Math.round(this.progress(s) * 100)}%`;
-    setHTML("marks", this.marks(s));
+    this.renderMarks(s);
     setText("seats", `🚌 ${s.bus.riders}/${seatsOf(s)}` + (s.waiting ? ` · ⏳${s.waiting}` : ""));
     setHTML("next-stops", this.nextStops(s));
     const pass = s.terrain?.pass ?? null;
@@ -145,13 +147,25 @@ export class Hud {
     return route && route.total > 0 && route.stops.length && s.phase !== "BOARDING" ? route : null;
   }
 
-  /** Chấm điểm dừng trên thanh cả chuyến + chiếc xe ở chỗ đang chạy. */
-  private marks(s: State): string {
+  /** Chấm điểm dừng trên thanh cả chuyến (dựng lại chỉ khi chuyến / điểm đã qua đổi) + chiếc xe: chỉ dời vị trí, để
+   * hiệu ứng trượt CSS chạy mượt và không vẽ lại cả dải 5 lần / giây. */
+  private renderMarks(s: State): void {
     const route = this.trip(s);
-    if (!route) return "";
-    const at = (k: number) => `${Math.min(100, (k / route.total) * 100).toFixed(1)}%`;
-    const dots = route.stops.map((p) => `<b class="mk ${p.kind}${p.done ? " done" : ""}" style="left:${at(p.km)}"></b>`);
-    return `${dots.join("")}<i class="bus-dot" style="left:${at(route.odo)}">🚌</i>`;
+    const at = (k: number) => `${Math.min(100, (k / (route?.total || 1)) * 100).toFixed(1)}%`;
+    const key = route ? `${route.total}|${route.stops.map((p) => `${p.kind}${p.km}${p.done ? 1 : 0}`).join(",")}` : "";
+    if (key !== this.marksKey) {
+      this.marksKey = key;
+      const el = $("marks");
+      el.innerHTML = route
+        ? route.stops.map((p) => `<b class="mk ${p.kind}${p.done ? " done" : ""}" style="left:${at(p.km)}"></b>`).join("")
+          + `<i class="bus-dot">🚌</i>`
+        : "";
+      this.busDot = el.querySelector(".bus-dot");
+    }
+    if (route && this.busDot) {
+      const left = at(route.odo);
+      if (this.busDot.style.left !== left) this.busDot.style.left = left;
+    }
   }
 
   private nextStops(s: State): string {

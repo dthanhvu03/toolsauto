@@ -190,6 +190,12 @@ class Announcer:
         for old in files[CACHE_KEEP:]:
             old.unlink(missing_ok=True)
 
+    async def watch_voices(self) -> None:
+        """Chạy nền suốt buổi: hỏi lại danh sách giọng mỗi phút (tách khỏi vòng game — VieNeu đang bận đọc thì /health chậm)."""
+        while True:
+            await self.refresh_voices()
+            await asyncio.sleep(VOICES_REFRESH)
+
     async def refresh_voices(self) -> None:
         """Hỏi VieNeu danh sách giọng (tên, nam / nữ, miền) cho /control — mỗi phút một lần; VieNeu tắt thì danh sách rỗng."""
         if time.monotonic() - self._voices_at < VOICES_REFRESH:

@@ -107,142 +107,145 @@ def check(page, name, mask=True):
 
 
 def _refuse_during_live() -> None:
-    """Script này reset game + bật giả lập: chạy lúc đang live thật là xoá vé của khán giả."""
-    import json as _json
-    import urllib.request as _url
-    state = _json.load(_url.urlopen("http://127.0.0.1:8810/api/state"))
+    """Script này reset game + bật giả lập trên máy chủ B: B đang nối TikTok thật thì dừng (chạy là xoá vé khán giả)."""
+    try:
+        state = json.load(urllib.request.urlopen(f"{B}/api/state", timeout=5))
+    except OSError as exc:
+        raise SystemExit(f"Không mở được máy chủ thử {B} ({exc}) — bật máy chủ thử trước (README: Test).") from exc
     if state.get("tiktok", {}).get("state", "idle") not in ("idle", "error", "ended"):
-        raise SystemExit("Đang nối TikTok thật — không chạy test (sẽ xoá vé khán giả). Ngắt kết nối trước.")
+        raise SystemExit(f"{B} đang nối TikTok thật — không chạy test (sẽ xoá vé khán giả). Ngắt kết nối trước.")
 
 
 _refuse_during_live()
 
 with sync_playwright() as p:
     br = p.chromium.launch(args=["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
-    errors = []
+    try:
+        errors = []
 
-    # ---- 1. bảng điều khiển: điện thoại + máy tính, bấm nút có thật sự gửi ----
-    post("/api/admin", {"action": "reset"})
-    post("/api/admin", {"action": "sim", "rate": 0})
-    for label, vp in (("control-mobile", {"width": 390, "height": 844}), ("control-desktop", {"width": 1280, "height": 900})):
-        c = br.new_page(viewport=vp)
-        c.on("pageerror", lambda e: errors.append(f"control: {e}"))
+        # ---- 1. bảng điều khiển: điện thoại + máy tính, bấm nút có thật sự gửi ----
+        post("/api/admin", {"action": "reset"})
+        post("/api/admin", {"action": "sim", "rate": 0})
+        for label, vp in (("control-mobile", {"width": 390, "height": 844}), ("control-desktop", {"width": 1280, "height": 900})):
+            c = br.new_page(viewport=vp)
+            c.on("pageerror", lambda e: errors.append(f"control: {e}"))
+            c.goto(B + "/control", wait_until="domcontentloaded")
+            c.wait_for_timeout(1200)
+            sw = c.evaluate("document.documentElement.scrollWidth")
+            if sw > vp["width"]:
+                notes.append(f"[{label}] cuộn ngang: {sw}px > {vp['width']}px")
+            c.screenshot(path=OUT / f"{label}.png", full_page=True)
+            c.close()
+        c = br.new_page(viewport={"width": 390, "height": 844})
+        c.set_default_timeout(120000)
         c.goto(B + "/control", wait_until="domcontentloaded")
-        c.wait_for_timeout(1200)
-        sw = c.evaluate("document.documentElement.scrollWidth")
-        if sw > vp["width"]:
-            notes.append(f"[{label}] cuộn ngang: {sw}px > {vp['width']}px")
-        c.screenshot(path=OUT / f"{label}.png", full_page=True)
+        c.fill("#name", "Test Bấm Nút")
+        c.click("text=Nghệ An")
+        c.wait_for_timeout(500)
+        seats = [s for s in st()["bus"]["seats"] if s]
+        if not any(s["name"] == "Test Bấm Nút" for s in seats):
+            notes.append("[control] bấm «Nghệ An» không lên xe")
+        c.fill("#text", "về huế")
+        c.press("#text", "Enter")
+        c.wait_for_timeout(500)
+        c.click("text=❤ 200 tim")
+        c.wait_for_timeout(400)
+        if st()["trip_likes"] < 200:
+            notes.append("[control] nút 200 tim không tính")
+        c.click("text=Vắng (2/giây)")
+        c.wait_for_timeout(1500)
+        if st()["sim_rate"] != 2:
+            notes.append("[control] nút giả lập không bật")
+        post("/api/admin", {"action": "sim", "rate": 0})
         c.close()
-    c = br.new_page(viewport={"width": 390, "height": 844})
-    c.set_default_timeout(120000)
-    c.goto(B + "/control", wait_until="domcontentloaded")
-    c.fill("#name", "Test Bấm Nút")
-    c.click("text=Nghệ An")
-    c.wait_for_timeout(500)
-    seats = [s for s in st()["bus"]["seats"] if s]
-    if not any(s["name"] == "Test Bấm Nút" for s in seats):
-        notes.append("[control] bấm «Nghệ An» không lên xe")
-    c.fill("#text", "về huế")
-    c.press("#text", "Enter")
-    c.wait_for_timeout(500)
-    c.click("text=❤ 200 tim")
-    c.wait_for_timeout(400)
-    if st()["trip_likes"] < 200:
-        notes.append("[control] nút 200 tim không tính")
-    c.click("text=Vắng (2/giây)")
-    c.wait_for_timeout(1500)
-    if st()["sim_rate"] != 2:
-        notes.append("[control] nút giả lập không bật")
-    post("/api/admin", {"action": "sim", "rate": 0})
-    c.close()
 
-    # ---- 2. overlay ----
-    post("/api/admin", {"action": "reset"})
-    o = br.new_page(viewport={"width": 540, "height": 960})
-    o.set_default_timeout(120000)
-    o.on("pageerror", lambda e: errors.append(f"overlay: {e}"))
-    o.on("console", lambda m: m.type == "error" and errors.append(f"overlay console: {m.text}"))
-    o.goto(B + "/?view=outside&res=0.5", wait_until="domcontentloaded")
-    o.wait_for_timeout(3000)
-    check(o, "01-empty")
+        # ---- 2. overlay ----
+        post("/api/admin", {"action": "reset"})
+        o = br.new_page(viewport={"width": 540, "height": 960})
+        o.set_default_timeout(120000)
+        o.on("pageerror", lambda e: errors.append(f"overlay: {e}"))
+        o.on("console", lambda m: m.type == "error" and errors.append(f"overlay console: {m.text}"))
+        o.goto(B + "/?view=outside&res=0.5", wait_until="domcontentloaded")
+        o.wait_for_timeout(3000)
+        check(o, "01-empty")
 
-    # tên dài / emoji / mã HTML
-    ev(type="comment", name="Nguyễn Thị Phương Thảo Bảo Ngọc Anh", text="Thừa Thiên Huế")
-    ev(type="comment", name="🌸Bé Na🌸 ✨", text="37")
-    ev(type="comment", name="<b>hack</b><img src=x onerror=alert(1)>", text="sg")
-    ev(type="gift", name="🌸Bé Na🌸 ✨", diamonds=1, gift="Hoa hồng")
-    ev(type="comment", name="Nguyễn Thị Phương Thảo Bảo Ngọc Anh", text="nhớ nhà quá trời ơi năm nay nhất định phải về ăn Tết với mẹ")
-    o.wait_for_timeout(2500)
-    check(o, "02-long-names")
-    if o.evaluate("document.querySelectorAll('#hud img, #labels img').length"):
-        notes.append("[02] tên chứa HTML bị chèn thành thẻ thật")
+        # tên dài / emoji / mã HTML
+        ev(type="comment", name="Nguyễn Thị Phương Thảo Bảo Ngọc Anh", text="Thừa Thiên Huế")
+        ev(type="comment", name="🌸Bé Na🌸 ✨", text="37")
+        ev(type="comment", name="<b>hack</b><img src=x onerror=alert(1)>", text="sg")
+        ev(type="gift", name="🌸Bé Na🌸 ✨", diamonds=1, gift="Hoa hồng")
+        ev(type="comment", name="Nguyễn Thị Phương Thảo Bảo Ngọc Anh", text="nhớ nhà quá trời ơi năm nay nhất định phải về ăn Tết với mẹ")
+        o.wait_for_timeout(2500)
+        check(o, "02-long-names")
+        if o.evaluate("document.querySelectorAll('#hud img, #labels img').length"):
+            notes.append("[02] tên chứa HTML bị chèn thành thẻ thật")
 
-    # thông báo dồn dập
-    post("/api/admin", {"action": "sim", "rate": 15})
-    o.wait_for_timeout(6000)
-    check(o, "03-flood")
-    post("/api/admin", {"action": "sim", "rate": 0})
+        # thông báo dồn dập
+        post("/api/admin", {"action": "sim", "rate": 15})
+        o.wait_for_timeout(6000)
+        check(o, "03-flood")
+        post("/api/admin", {"action": "sim", "rate": 0})
 
-    # trong xe đầy
-    o2 = br.new_page(viewport={"width": 540, "height": 960})
-    o2.set_default_timeout(120000)
-    o2.goto(B + "/?view=inside&res=0.5", wait_until="domcontentloaded")
-    for i in range(24):
-        ev(type="comment", name=f"Khách số {i + 1} {'Nguyễn Văn Dài' if i % 5 == 0 else ''}", text="Nghệ An")
-    o2.wait_for_timeout(3500)
-    check(o2, "04-inside-full")
-    o2.close()
+        # trong xe đầy
+        o2 = br.new_page(viewport={"width": 540, "height": 960})
+        o2.set_default_timeout(120000)
+        o2.goto(B + "/?view=inside&res=0.5", wait_until="domcontentloaded")
+        for i in range(24):
+            ev(type="comment", name=f"Khách số {i + 1} {'Nguyễn Văn Dài' if i % 5 == 0 else ''}", text="Nghệ An")
+        o2.wait_for_timeout(3500)
+        check(o2, "04-inside-full")
+        o2.close()
 
-    # đang chạy + quà lớn
-    skip_to("DRIVING")
-    o.wait_for_timeout(2500)
-    check(o, "05-driving")
-    ev(type="gift", name="Đại Gia Phố Núi", diamonds=1000, gift="Xe Tết")
-    o.wait_for_timeout(3000)
-    check(o, "06-special")
+        # đang chạy + quà lớn
+        skip_to("DRIVING")
+        o.wait_for_timeout(2500)
+        check(o, "05-driving")
+        ev(type="gift", name="Đại Gia Phố Núi", diamonds=1000, gift="Xe Tết")
+        o.wait_for_timeout(3000)
+        check(o, "06-special")
 
-    # trạm dừng chân: nhiều người gọi món + WC
-    post("/api/admin", {"action": "reset"})
-    for i, prov in enumerate(["Cà Mau", "Huế", "Hà Nội"]):
-        ev(type="comment", name=f"Đi Xe {i}", text=prov)
-    skip_to("REST")
-    for i in range(14):
-        ev(type="comment", name=f"Khách Trạm {i}", text=["phở", "wc", "trà đá", "mua quà", "bánh mì", "wc", "cà phê"][i % 7])
-    o.wait_for_timeout(6000)
-    check(o, "07-rest")
-    o.wait_for_timeout(1000)
-    post("/api/admin", {"action": "skip"})  # → còi giục lên xe (hết giờ)
+        # trạm dừng chân: nhiều người gọi món + WC
+        post("/api/admin", {"action": "reset"})
+        for i, prov in enumerate(["Cà Mau", "Huế", "Hà Nội"]):
+            ev(type="comment", name=f"Đi Xe {i}", text=prov)
+        skip_to("REST")
+        for i in range(14):
+            ev(type="comment", name=f"Khách Trạm {i}", text=["phở", "wc", "trà đá", "mua quà", "bánh mì", "wc", "cà phê"][i % 7])
+        o.wait_for_timeout(6000)
+        check(o, "07-rest")
+        o.wait_for_timeout(1000)
+        post("/api/admin", {"action": "skip"})  # → còi giục lên xe (hết giờ)
 
-    # thả khách 10 người cùng tỉnh
-    post("/api/admin", {"action": "reset"})
-    for i in range(10):
-        ev(type="comment", name=f"Người Nghệ {i + 1}", text="Nghệ An")
-    ev(type="gift", name="Người Nghệ 1", diamonds=20, gift="Đèn lồng")
-    skip_to("DROPOFF")
-    o.wait_for_timeout(2500)
-    check(o, "08-dropoff-10")
+        # thả khách 10 người cùng tỉnh
+        post("/api/admin", {"action": "reset"})
+        for i in range(10):
+            ev(type="comment", name=f"Người Nghệ {i + 1}", text="Nghệ An")
+        ev(type="gift", name="Người Nghệ 1", diamonds=20, gift="Đèn lồng")
+        skip_to("DROPOFF")
+        o.wait_for_timeout(2500)
+        check(o, "08-dropoff-10")
 
-    skip_to("FINISH")
-    o.wait_for_timeout(1500)
-    check(o, "09-finish")
+        skip_to("FINISH")
+        o.wait_for_timeout(1500)
+        check(o, "09-finish")
 
-    # KHÔNG VỀ nhiều người
-    skip_to("BOARDING")
-    for i in range(5):
-        ev(type="comment", name=f"Ở Lại {i}", text="không về")
-    o.wait_for_timeout(2000)
-    check(o, "10-stay")
+        # KHÔNG VỀ nhiều người
+        skip_to("BOARDING")
+        for i in range(5):
+            ev(type="comment", name=f"Ở Lại {i}", text="không về")
+        o.wait_for_timeout(2000)
+        check(o, "10-stay")
 
-    # cửa sổ ngang 16:9 (LIVE Studio có thể mở cửa sổ kiểu này)
-    w = br.new_page(viewport={"width": 1280, "height": 720})
-    w.set_default_timeout(120000)
-    w.goto(B + "/?view=outside&res=0.5", wait_until="domcontentloaded")
-    w.wait_for_timeout(2500)
-    w.screenshot(path=OUT / "11-window-16x9.png")
-    w.close()
+        # cửa sổ ngang 16:9 (LIVE Studio có thể mở cửa sổ kiểu này)
+        w = br.new_page(viewport={"width": 1280, "height": 720})
+        w.set_default_timeout(120000)
+        w.goto(B + "/?view=outside&res=0.5", wait_until="domcontentloaded")
+        w.wait_for_timeout(2500)
+        w.screenshot(path=OUT / "11-window-16x9.png")
+        w.close()
 
-    print("ERRORS:", errors)
-    print("NOTES:")
-    print("\n".join(notes) or "(không có)")
-    br.close()
+        print("ERRORS:", errors)
+        print("NOTES:")
+        print("\n".join(notes) or "(không có)")
+    finally:
+        br.close()

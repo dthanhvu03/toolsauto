@@ -31,6 +31,14 @@ const MIXES: Record<Mix, { music: number; voice: number; sfx: number; duck: numb
 
 interface Playing { id: string; stop(): void }
 
+/** Nhả một file đã phát xong: ngắt khỏi đồ thị âm thanh, bỏ nguồn để trình duyệt thu hồi bộ nhớ đã giải mã. */
+function release(audio: HTMLAudioElement, source: AudioNode): void {
+  audio.pause();
+  source.disconnect();
+  audio.removeAttribute("src");
+  audio.load();
+}
+
 export class Sound {
   // bộ đệm lớn (chế độ phát nhạc): live không cần tiếng tức thì, đổi lại ít hụt tiếng (lẹt xẹt) khi máy bận
   private ctx = new AudioContext({ latencyHint: "playback" });
@@ -164,9 +172,10 @@ export class Sound {
       audio.addEventListener("loadedmetadata", () => {
         if (offset > 0 && offset < audio.duration) audio.currentTime = offset;
       }, { once: true });
-      this.ctx.createMediaElementSource(audio).connect(g);
+      const source = this.ctx.createMediaElementSource(audio);
+      source.connect(g);
       void audio.play().catch(() => undefined);  // chưa được phép phát: tự phát khi bấm mở khoá (ctx.resume)
-      return { id, stop: () => { fadeOut(); window.setTimeout(() => audio.pause(), FADE * 1000); } };
+      return { id, stop: () => { fadeOut(); window.setTimeout(() => release(audio, source), FADE * 1000); } };
     }
     const preset = PRESETS[Number(id.split(":")[1].split("|")[0]) % PRESETS.length];
     const song = new Song(this.ctx, g, preset);
@@ -179,12 +188,17 @@ export class Sound {
     const audio = new Audio(url);
     audio.preservesPitch = true;  // nhanh lên mà không thành giọng «chuột chũi»
     audio.playbackRate = this.rate;
-    this.ctx.createMediaElementSource(audio).connect(this.voice);
+    const source = this.ctx.createMediaElementSource(audio);
+    source.connect(this.voice);
     const now = this.ctx.currentTime;
     this.speaking++;
     this.duck.gain.setTargetAtTime(this.duckLevel, now, 0.15);
     this.vehicleDuck.gain.setTargetAtTime(VEHICLE_DUCK, now, 0.15);
+    let finished = false;
     const done = () => {
+      if (finished) return;
+      finished = true;
+      release(audio, source);  // buổi live đọc cả nghìn câu: không nhả thì mỗi câu giữ lại một nút âm thanh + file đã giải mã
       this.speaking = Math.max(0, this.speaking - 1);
       if (this.speaking) return;
       this.duck.gain.setTargetAtTime(1, this.ctx.currentTime, 0.4);

@@ -32,6 +32,7 @@ const URL_PARAMS = new URLSearchParams(location.search);
 const FORCE_HOUR = URL_PARAMS.has("hour") ? Number(URL_PARAMS.get("hour")) : null;
 const BASE_RES = Math.min(1, Math.max(0.25, Number(URL_PARAMS.get("res")) || 1));
 const LOW_RES = 0.6;
+const PREBUILD_GAP = 3;  // giây giữa hai lần dựng sẵn một vùng (rải ra, không khựng một lúc)
 const MEDIUM_RES = 0.75;  // «Vừa»: ~56 % số điểm ảnh — TikTok nén hình về ~720p, trên điện thoại gần như không khác «Cao»
 /**
  * Chỗ pháo hoa nổ: giữa cảnh, cao 5, sau xe 6 — tính theo cả 4 góc máy rơi vào khoảng trống giữa màn hình
@@ -172,6 +173,7 @@ export class World {
   private dustTimer = 0;
   private quality: Quality = "high";
   private frameNo = 0;
+  private prebuildWait = PREBUILD_GAP;
   private shape = { curve: 0, grade: 0, crest: 0 };  // độ uốn đường đang hiển thị (đổi mượt)
   private curvePhase = 0;
   private hillPhase = 0;
@@ -535,7 +537,6 @@ export class World {
     const res = low ? LOW_RES : quality === "medium" ? MEDIUM_RES : 1;
     this.renderer.setPixelRatio(Math.min(BASE_RES, res));
     this.sun.castShadow = !low;
-    this.renderer.shadowMap.autoUpdate = quality === "high";
     this.petals.setDensity(low ? 0.35 : quality === "medium" ? 0.7 : 1);
     this.weather.setDensity(low ? 0.4 : 1);
     this.fx.setQuality(low);
@@ -639,6 +640,17 @@ export class World {
     this.inTunnel = deep;
     this.land.setSides(!deep);
     this.road.roadside.visible = this.land.near.visible = !deep && this.set === "road";
+  }
+
+  /** Dựng sẵn từng vùng chưa tới khi xe đang đứng đón khách ở bến (lúc rảnh, cảnh không trôi): xe qua vùng mới giữa đường
+   * thì chỉ gắn vào cảnh, không dựng hàng trăm vật + vẽ chữ biển hiệu ngay lúc người xem đang nhìn. */
+  private prebuildIdle(dt: number): void {
+    if (this.state?.phase !== "BOARDING") return;
+    this.prebuildWait -= dt;
+    if (this.prebuildWait > 0) return;
+    this.prebuildWait = PREBUILD_GAP;
+    const next = this.land.missing()[0];
+    if (next) this.land.prebuild(next);
   }
 
   /** Số liệu vẽ của khung vừa rồi — cho đồng hồ ?fps=1. */
@@ -753,9 +765,16 @@ export class World {
     this.sky.mesh.position.copy(cam.position);
     this.petals.points.visible = this.view === "outside";
     this.petals.update(dt, this.t, moving ? this.speed * 0.12 : 0.25);
-    if (this.quality === "medium") this.renderer.shadowMap.needsUpdate = this.frameNo++ % 2 === 0;  // bóng 15 khung/giây
+    // bóng đổ: «Cao» mỗi khung, «Vừa» 15 khung/giây; cảnh trong xe không thấy bóng ngoài trời → khỏi vẽ bóng
+    const shadows = this.view === "outside" && this.quality !== "low";
+    this.renderer.shadowMap.autoUpdate = shadows && this.quality === "high";
+    if (shadows && this.quality === "medium") this.renderer.shadowMap.needsUpdate = this.frameNo++ % 2 === 0;
     this.renderer.render(this.scene, cam);
+    // nhãn chữ: ma trận vừa được WebGL tính xong ở lượt vẽ trên, khỏi tính lại cả cây cảnh lần hai
+    this.scene.matrixWorldAutoUpdate = false;
     this.labels.render(this.scene, cam);
+    this.scene.matrixWorldAutoUpdate = true;
+    this.prebuildIdle(dt);
   }
 }
 

@@ -34,12 +34,13 @@ def until(page, js: str, timeout_s: float = 20) -> bool:
 
 
 def _refuse_during_live() -> None:
-    """Script này reset game + bật giả lập: chạy lúc đang live thật là xoá vé của khán giả."""
-    import json as _json
-    import urllib.request as _url
-    state = _json.load(_url.urlopen("http://127.0.0.1:8810/api/state"))
+    """Script này reset game + bật giả lập trên máy chủ B: B đang nối TikTok thật thì dừng (chạy là xoá vé khán giả)."""
+    try:
+        state = json.load(urllib.request.urlopen(f"{B}/api/state", timeout=5))
+    except OSError as exc:
+        raise SystemExit(f"Không mở được máy chủ thử {B} ({exc}) — bật máy chủ thử trước (README: Test).") from exc
     if state.get("tiktok", {}).get("state", "idle") not in ("idle", "error", "ended"):
-        raise SystemExit("Đang nối TikTok thật — không chạy test (sẽ xoá vé khán giả). Ngắt kết nối trước.")
+        raise SystemExit(f"{B} đang nối TikTok thật — không chạy test (sẽ xoá vé khán giả). Ngắt kết nối trước.")
 
 
 _refuse_during_live()
@@ -143,7 +144,7 @@ try:
         live.screenshot(path=OUT / "announce.png")
 
         # chất lượng hình: thấp → overlay đổi (ghi lên khung #stage), cao → trở lại
-        ctl.click("text=Thấp (máy nóng / LIVE Studio giật)")
+        ctl.click("text=Thấp (máy yếu)")
         ok(until(live, "document.getElementById('stage').dataset.quality === 'low'"), "chất lượng thấp áp dụng")
         ctl.click("[data-set=quality][data-val=high]")
         ok(until(live, "document.getElementById('stage').dataset.quality === 'high'"), "chất lượng cao trở lại")
