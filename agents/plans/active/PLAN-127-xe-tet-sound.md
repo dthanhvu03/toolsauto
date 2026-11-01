@@ -11,7 +11,7 @@ Overlay chưa có âm thanh nào. TikTok LIVE tắt tiếng / báo vi phạm khi
 
 1. **Nhạc có sẵn — tự sinh bằng code** (Web Audio): giai điệu ngũ cung, tiếng đàn tranh / sáo / trống / mõ, mỗi bài một
    hạt giống + nhịp + điệu khác nhau. Là nhạc của mình nên không vướng bản quyền, không phải tải file của ai.
-2. **Nhạc của anh:** tải lên ngay trên `/control` (anh đề xuất 01/11; mp3 / ogg / m4a / wav, ≤ 40 MB / bài, 🗑 xoá) hoặc
+2. **Nhạc của anh:** tải lên ngay trên `/control` (anh đề xuất 01/11; mp3 / ogg / m4a / wav, ≤ 200 MB / file, 🗑 xoá, chọn bài cho từng xe bằng danh sách thả xuống) hoặc
    chép vào `storage/media/xe_tet/music/` → server tự đưa vào danh sách.
 3. **Mỗi xe một đài:** xe chính và từng xe tăng cường có bài riêng; tiếng phát theo xe đang chiếu. Admin (`/control`):
    bật / tắt nhạc, qua bài từng xe; âm lượng nhạc / hiệu ứng chung (lưu ở `storage/db/config/xe_tet.json`).

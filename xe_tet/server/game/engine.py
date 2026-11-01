@@ -535,6 +535,12 @@ class Engine:
         """Admin qua bài (step = 1) / lùi bài (−1) cho một xe; overlay lấy index theo vòng danh sách bài."""
         self.music_of(self._music_key(no))["index"] += step
 
+    def music_set(self, no: int | None, index: int) -> None:
+        """Admin chọn đúng bài thứ `index` (trong music_tracks) cho một xe."""
+        if index < 0:
+            raise Refused("Không có bài này.")
+        self.music_of(self._music_key(no))["index"] = index
+
     def music_toggle(self, no: int | None) -> None:
         state = self.music_of(self._music_key(no))
         state["on"] = not state["on"]

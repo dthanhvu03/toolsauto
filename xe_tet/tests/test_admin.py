@@ -174,6 +174,9 @@ def test_music_tracks_and_admin_controls(client, tmp_path, monkeypatch):
     assert client.post("/api/admin", json={"action": "music_next", "bus_no": 0}).json()["ok"]
     assert client.post("/api/admin", json={"action": "music_toggle", "bus_no": 0}).json()["ok"]
     assert client.get("/api/state").json()["music"] == {"index": 1, "on": False}
+    assert client.post("/api/admin", json={"action": "music_set", "bus_no": 0, "index": len(ids) - 1}).json()["ok"]
+    assert client.get("/api/state").json()["music"]["index"] == len(ids) - 1  # chọn đúng bài vừa tải lên
+    assert client.post("/api/admin", json={"action": "music_set", "bus_no": 0, "index": -3}).status_code == 409
     r = client.post("/api/admin", json={"action": "settings", "changes": {"music_volume": 3, "sfx_volume": "0.25"}})
     assert r.json()["ok"]
     control = client.get("/api/state").json()["control"]

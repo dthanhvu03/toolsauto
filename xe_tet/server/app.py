@@ -216,6 +216,8 @@ async def _admin(body: dict) -> dict:
         engine.add_relief(str(body.get("lane") or ""))
     elif action == "music_next":  # qua / lùi bài nhạc của một xe (0 = xe chính)
         engine.music_step(as_int(body.get("bus_no"), 0), 1 if as_int(body.get("step"), 1) >= 0 else -1)
+    elif action == "music_set":  # chọn đúng một bài cho một xe (danh sách thả xuống trên /control)
+        engine.music_set(as_int(body.get("bus_no"), 0), as_int(body.get("index"), -1))
     elif action == "music_toggle":
         engine.music_toggle(as_int(body.get("bus_no"), 0))
     elif action == "relief_next":  # xe tăng cường tới ngay điểm thả khách kế tiếp

@@ -6,13 +6,15 @@
   ngay trên /control (hoặc chép thẳng vào thư mục) là có trong danh sách, không cần khởi động lại server.
 """
 
+import os
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-MUSIC_DIR = ROOT / "storage" / "media" / "xe_tet" / "music"
+# XE_TET_MUSIC_DIR: máy chủ thử (8811) dùng thư mục riêng — tải lên / xoá thử không đụng nhạc của anh
+MUSIC_DIR = Path(os.getenv("XE_TET_MUSIC_DIR") or ROOT / "storage" / "media" / "xe_tet" / "music")
 EXTS = {".mp3", ".ogg", ".m4a", ".wav"}
-MAX_BYTES = 40 * 1024 * 1024  # một bài tối đa 40 MB (mp3 5 phút ~ 5–10 MB)
+MAX_BYTES = 200 * 1024 * 1024  # một file tối đa 200 MB: đủ cho mix nhạc dài / WAV (ghi thẳng xuống đĩa, không giữ RAM)
 _UNSAFE = re.compile(r"[^\w\-. ()]+")  # giữ chữ (kể cả tiếng Việt), số, - . khoảng trắng, ngoặc
 
 # Thứ tự = số bài trong overlay (src/music.ts → PRESETS); thêm bài thì thêm cả hai chỗ.

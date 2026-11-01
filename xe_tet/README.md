@@ -34,10 +34,10 @@ cd xe_tet/overlay && npm install && npm run build && cd ../..   # chỉ cần kh
   - Lơ xe nói câu admin gõ; băng rôn tuỳ ý (tiêu đề + dòng phụ + số giây).
   - Gửi sự kiện thử, giả lập phòng đông.
   - **Bến đi** (Miền Đông mới / Giáp Bát / Liên tỉnh Đà Lạt / Đà Nẵng / Cần Thơ) — chỉ đổi được khi bến trống.
-  - **Nhạc & âm thanh (PLAN-127):** mỗi xe một bài (⏭ Bài / 🔇 ở «Các chuyến xe»), tiếng theo xe đang chiếu; âm lượng
+  - **Nhạc & âm thanh (PLAN-127):** mỗi xe một bài (chọn trong danh sách thả xuống + 🔇 ở «Các chuyến xe»), tiếng theo xe đang chiếu; âm lượng
     nhạc / hiệu ứng (còi, pháo hoa, tiếng máy, «ting» khi có vé; vào hầm nhạc bị «bịt»). Nhạc có sẵn do máy tự sáng tác
     (ngũ cung, đàn tranh / sáo / trống / mõ) — không vướng bản quyền. Nhạc của anh: tải lên ngay trên `/control`
-    (mp3 / ogg / m4a / wav, ≤ 40 MB) hoặc chép vào `storage/media/xe_tet/music/`. Trình duyệt chặn tự phát tiếng: bấm vào màn hình live một lần (🔇 sẽ mất), hoặc mở cửa
+    (mp3 / ogg / m4a / wav, ≤ 200 MB) hoặc chép vào `storage/media/xe_tet/music/`. Trình duyệt chặn tự phát tiếng: bấm vào màn hình live một lần (🔇 sẽ mất), hoặc mở cửa
     sổ live bằng Chrome với cờ `--autoplay-policy=no-user-gesture-required`.
   - **Các chuyến xe:** xe chính + xe tăng cường đang chạy — «📺 Chiếu» cho màn hình live theo xe đó (góc máy ở phần Camera),
     «⏭ Tới điểm kế», gọi thêm xe tăng cường cho làn có người chờ, công tắc tự gọi khi làn đủ 24 người.
@@ -45,7 +45,7 @@ cd xe_tet/overlay && npm install && npm run build && cd ../..   # chỉ cần kh
 - Sửa overlay có hot reload: `cd xe_tet/overlay && npm run dev` → http://127.0.0.1:5173 (server Python vẫn phải chạy).
 - Test: `/home/vu/venv-xetet/bin/python -m pytest xe_tet/tests -q` (không gọi mạng, TikTok dùng client giả). Test trên trình
   duyệt thật chạy trên **máy chủ thử riêng cổng 8811** (script bấm tạm dừng / làm lại / giả lập — không bao giờ chạy vào
-  server 8810 đang dùng): `XE_TET_PORT=8811 XE_TET_SETTINGS=/tmp/xe_tet_test.json /home/vu/venv-xetet/bin/python -m xe_tet.server`, rồi:
+  server 8810 đang dùng): `XE_TET_PORT=8811 XE_TET_SETTINGS=/tmp/xe_tet_test.json XE_TET_MUSIC_DIR=/tmp/xe_tet_music /home/vu/venv-xetet/bin/python -m xe_tet.server`, rồi:
   `xe_tet/e2e/ux_scenarios.py` (11 tình huống + vùng TikTok che), `control_panel.py` (bảng điều khiển → overlay),
   `flicker.py` (đếm màn đen / đổi cảnh).
 - Rà soát BA / BRD / thuật toán / SA: `xe_tet/REVIEW.md`.

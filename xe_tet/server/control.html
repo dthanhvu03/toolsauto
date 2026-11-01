@@ -148,9 +148,9 @@
       <button id="music-upload" class="primary">⬆ Tải lên</button>
     </div>
     <ul id="music-files" class="files"></ul>
-    <p class="hint">Mỗi xe một bài riêng (đổi ở «Các chuyến xe»); tiếng theo xe đang chiếu. Nhạc có sẵn do máy tự sáng tác
+    <p class="hint">Mỗi xe một bài riêng (chọn trong danh sách ở «Các chuyến xe»); tiếng theo xe đang chiếu. Nhạc có sẵn do máy tự sáng tác
       (ngũ cung, đàn tranh, sáo, trống) — không vướng bản quyền TikTok. Bài anh tải lên (mp3 / ogg / m4a / wav, tối đa
-      40 MB / bài) vào danh sách ngay — anh tự chịu trách nhiệm quyền dùng bài: nhạc có bản quyền có thể bị TikTok tắt
+      200 MB / file) vào danh sách ngay — anh tự chịu trách nhiệm quyền dùng bài: nhạc có bản quyền có thể bị TikTok tắt
       tiếng. Màn hình live phải được bấm vào một lần mới phát tiếng (trình duyệt chặn tự phát).</p>
   </section>
 
@@ -343,7 +343,6 @@ $("buses").onclick = (e) => {
   if (!b) return;
   if (b.dataset.feature != null) admin({ action: "feature", bus_no: +b.dataset.feature });
   if (b.dataset.next != null) admin({ action: "relief_next", bus_no: +b.dataset.next });
-  if (b.dataset.song != null) admin({ action: "music_next", bus_no: +b.dataset.song });
   if (b.dataset.mute != null) admin({ action: "music_toggle", bus_no: +b.dataset.mute });
 };
 // âm lượng: gửi khi thả tay (không gửi liên tục lúc kéo); vòng làm mới không đè lên thanh đang kéo
@@ -371,7 +370,7 @@ $("music-upload").onclick = async () => {
   btn.disabled = false;
   btn.textContent = "⬆ Tải lên";
   $("music-file").value = "";
-  if (done) notice(`Đã tải lên ${done} bài — chọn ở nút «⏭ Bài» của từng xe`, true);
+  if (done) notice(`Đã tải lên ${done} bài — chọn bài cho từng xe ở «🚌 Các chuyến xe»`, true);
   refresh();
 };
 $("music-files").onclick = async (e) => {
@@ -388,15 +387,21 @@ function renderFiles(s) {
     ? files.map((t) => `<li><span>🎵 ${esc(t.title)}</span><button data-del="${esc(t.id.slice(5))}">🗑</button></li>`).join("")
     : `<li><span class="hint" style="margin:0">Chưa có bài nào — đang dùng 6 bài máy tự sáng tác</span></li>`);
 }
-function songLine(s, music) {
+// mỗi xe một danh sách thả xuống: chọn đúng bài (máy sáng tác 🎼 / bài anh tải lên 🎵) + nút tắt / bật nhạc xe đó
+function musicPicker(s, no, music) {
   const tracks = s.music_tracks || [];
   if (!tracks.length || !music) return "";
-  const t = tracks[((music.index % tracks.length) + tracks.length) % tracks.length];
-  return `🎵 ${esc(t.title)}${music.on ? "" : " (tắt)"}`;
+  const now = ((music.index % tracks.length) + tracks.length) % tracks.length;
+  const options = tracks.map((t, i) =>
+    `<option value="${i}"${i === now ? " selected" : ""}>${t.id.startsWith("file:") ? "🎵" : "🎼"} ${esc(t.title)}</option>`).join("");
+  return `<div class="row" style="width:100%"><select data-pick="${no}" aria-label="Bài nhạc xe ${no || "chính"}"
+      style="flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff">${options}</select>
+    <button data-mute="${no}">${music.on ? "🔇 Tắt" : "🔊 Bật"}</button></div>`;
 }
-function musicButtons(no, music) {
-  return `<button data-song="${no}">⏭ Bài</button><button data-mute="${no}">${music && !music.on ? "🔊 Bật" : "🔇 Tắt"}</button>`;
-}
+$("buses").onchange = (e) => {
+  const sel = e.target.closest("select[data-pick]");
+  if (sel) { admin({ action: "music_set", bus_no: +sel.dataset.pick, index: +sel.value }); sel.blur(); }
+};
 $("relief-lanes").onclick = (e) => {
   const b = e.target.closest("button[data-lane]");
   if (b) admin({ action: "relief", lane: b.dataset.lane });
@@ -408,16 +413,19 @@ function renderBuses(s) {
   const seats = s.bus.seats.length;
   const rows = [`<div class="bus"><div class="info"><b>Xe số ${m.no} · xe chính</b>
       <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}</small>
-      <small>${songLine(s, m.music)}</small></div>
-    <button data-feature="0" class="${s.featured == null ? "on" : ""}">📺 Chiếu</button>${musicButtons(0, m.music)}</div>`];
+      </div>
+    <button data-feature="0" class="${s.featured == null ? "on" : ""}">📺 Chiếu</button>${musicPicker(s, 0, m.music)}</div>`];
   for (const r of s.reliefs || []) {
     rows.push(`<div class="bus"><div class="info"><b>Xe số ${r.no} · tăng cường ${r.arrow} ${esc(r.label)}</b>
       <small>${r.riders} khách · tới ${esc(r.next)} · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}</small>
-      <small>${songLine(s, r.music)}</small></div>
+      </div>
       <button data-feature="${r.no}" class="${r.featured ? "on" : ""}">📺 Chiếu</button>
-      <button data-next="${r.no}">⏭ Tới điểm kế</button>${musicButtons(r.no, r.music)}</div>`);
+      <button data-next="${r.no}">⏭ Tới điểm kế</button>${musicPicker(s, r.no, r.music)}</div>`);
   }
-  setIfChanged($("buses"), rows.join(""));
+  // đang mở danh sách chọn bài thì không vẽ lại (vẽ lại sẽ đóng danh sách giữa chừng)
+  if (!$("buses").contains(document.activeElement) || document.activeElement.tagName !== "SELECT") {
+    setIfChanged($("buses"), rows.join(""));
+  }
   const lanes = (s.lanes || []).filter((l) => l.waiting);
   setIfChanged($("relief-lanes"), lanes.length
     ? lanes.map((l) => `<button data-lane="${esc(l.key)}">${l.arrow} ${esc(l.label)} (${l.waiting} chờ)</button>`).join("")
