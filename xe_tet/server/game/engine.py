@@ -529,22 +529,44 @@ class Engine:
         return str(self._relief(int(no)).no)
 
     def music_of(self, key: str) -> dict:
-        """Đài của một xe: xe tăng cường mặc định lệch bài theo số xe (mỗi xe một bài khác nhau)."""
-        return self.music.setdefault(key, {"index": 0 if key == "main" else int(key), "on": True})
+        """Đài của một xe: bài thứ `index`, bắt đầu lúc `since` (đồng hồ game). Xe tăng cường mặc định lệch bài theo số xe.
+        Mỗi xe như một đài radio chạy liên tục kể cả khi không lên màn hình — chuyển sang xe nào là nghe đúng đoạn đang phát."""
+        return self.music.setdefault(key, {"index": 0 if key == "main" else int(key), "on": True, "since": self.last_now})
+
+    def advance_music(self, lengths: list[float], auto: bool) -> None:
+        """Tự qua bài: đài nào phát hết bài (theo độ dài từng bài) thì sang bài kế, bắt đầu đúng lúc bài trước hết."""
+        if not auto or not lengths:
+            return
+        for state in self.music.values():
+            length = lengths[state["index"] % len(lengths)]
+            if state["on"] and self.last_now - state["since"] >= length:
+                state["index"] += 1
+                state["since"] += length
+                if self.last_now - state["since"] > length:  # tạm dừng lâu / đổi danh sách: bắt đầu lại bài mới
+                    state["since"] = self.last_now
+
+    def _music_view(self, key: str) -> dict:
+        state = self.music_of(key)
+        return {**state, "pos": round(self.last_now - state["since"], 1)}
 
     def music_step(self, no: int | None, step: int = 1) -> None:
         """Admin qua bài (step = 1) / lùi bài (−1) cho một xe; overlay lấy index theo vòng danh sách bài."""
-        self.music_of(self._music_key(no))["index"] += step
+        state = self.music_of(self._music_key(no))
+        state["index"] += step
+        state["since"] = self.last_now
 
     def music_set(self, no: int | None, index: int) -> None:
         """Admin chọn đúng bài thứ `index` (trong music_tracks) cho một xe."""
         if index < 0:
             raise Refused("Không có bài này.")
-        self.music_of(self._music_key(no))["index"] = index
+        state = self.music_of(self._music_key(no))
+        state["index"] = index
+        state["since"] = self.last_now
 
     def music_toggle(self, no: int | None) -> None:
         state = self.music_of(self._music_key(no))
         state["on"] = not state["on"]
+        state["since"] = self.last_now  # bật lại: phát bài từ đầu
 
     def add_relief(self, lane: str) -> Relief:
         """Admin gọi thêm xe tăng cường cho một làn (không cần đủ 24 người chờ)."""
@@ -949,7 +971,7 @@ class Engine:
         nxt = relief.trip.stops[min(relief.done, len(relief.trip.stops) - 1)][0]
         return {"no": relief.no, "arrow": ln.arrow, "label": ln.label, "sponsor": relief.sponsor,
                 "riders": len(relief.riders), "next": BY_KEY[nxt].name, "featured": relief.no == self.featured,
-                "left_km": round(relief.trip.total - relief.odo), "music": self.music_of(str(relief.no))}
+                "left_km": round(relief.trip.total - relief.odo), "music": self._music_view(str(relief.no))}
 
     def _seats_view(self, uids: list[str | None]) -> list[dict | None]:
         out = []
@@ -1030,9 +1052,9 @@ class Engine:
             "main": {"no": self.bus.no, "phase": self.phase, "riders": len(self.bus.riders()), "lane": bus_lane.label,
                      "arrow": bus_lane.arrow, "phase_left": max(0.0, self.phase_until - self.last_now)
                      if self.phase != "DRIVING" else None, "trip_km": round(self.trip_km()),
-                     "km": round(self.trip.total) if self.trip else None, "music": self.music_of("main")},
+                     "km": round(self.trip.total) if self.trip else None, "music": self._music_view("main")},
             "featured": self.featured,
-            "music": self.music_of(str(self.featured) if self.featured else "main"),  # đài của xe đang chiếu
+            "music": self._music_view(str(self.featured) if self.featured else "main"),  # đài của xe đang chiếu
             "relief_auto": self.relief_auto,
         }
         relief = next((r for r in self.reliefs if r.no == self.featured), None)

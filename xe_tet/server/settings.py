@@ -36,6 +36,7 @@ DEFAULTS: dict = {
     "departure": DEFAULT_DEPARTURE,  # bến đi (BRD-tuyen-xe BR-8)
     "relief_auto": True,
     "music_on": True,  # nhạc trong xe (PLAN-127); tắt = chỉ còn tiếng hiệu ứng
+    "music_auto": True,  # hết bài tự qua bài kế (mỗi xe một đài chạy liên tục)
     "music_volume": 0.5,
     "sfx_volume": 0.6,  # còi, pháo hoa, tiếng máy
     "voice_on": True,  # Anh Tư lơ xe đọc (PLAN-128)

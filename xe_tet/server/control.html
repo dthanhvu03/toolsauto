@@ -131,6 +131,7 @@
     <h2>🎵 Nhạc & âm thanh</h2>
     <div class="row">
       <label class="toggle"><input type="checkbox" data-show="music_on"> Nhạc trong xe</label>
+      <label class="toggle"><input type="checkbox" data-show="music_auto"> Hết bài tự qua bài</label>
     </div>
     <div class="row" style="margin-top:8px">
       <span style="min-width:96px">Âm lượng nhạc</span>
@@ -176,8 +177,9 @@
     <div class="row" style="margin-top:10px">
       <label class="toggle"><input type="checkbox" data-show="relief_auto"> Tự gọi xe tăng cường khi một làn đủ 24 người chờ</label>
     </div>
-    <p class="hint">«📺 Chiếu» = màn hình live theo xe đó (góc máy chọn ở phần Camera). Xe tăng cường tới bến cuối thì màn hình tự
-      về xe chính. Tạm dừng / +30 giây / qua pha ở phần «Chuyến xe» áp cho xe chính; tạm dừng dừng cả xe tăng cường.</p>
+    <p class="hint">Khi có xe tăng cường: «📺 Chiếu xe này» = màn hình live theo xe đó (cảnh, đèo / hầm, tên trên xe, nhạc của
+      xe đó; góc máy chọn ở phần Camera). Mỗi xe một đài nhạc chạy liên tục — chuyển xe là nghe đúng đoạn xe đó đang phát.
+      Xe tăng cường tới bến cuối thì màn hình tự về xe chính. Tạm dừng / +30 giây / qua pha ở phần «Chuyến xe» áp cho xe chính; tạm dừng dừng cả xe tăng cường.</p>
   </section>
 
   <section>
@@ -430,9 +432,12 @@ function musicPicker(s, no, music) {
   const now = ((music.index % tracks.length) + tracks.length) % tracks.length;
   const options = tracks.map((t, i) =>
     `<option value="${i}"${i === now ? " selected" : ""}>${t.id.startsWith("file:") ? "🎵" : "🎼"} ${esc(t.title)}</option>`).join("");
+  const left = Math.max(0, Math.round((tracks[now].seconds || 0) - (music.pos || 0)));
+  const clock = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
   return `<div class="row" style="width:100%"><select data-pick="${no}" aria-label="Bài nhạc xe ${no || "chính"}"
       style="flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:10px;font:inherit;background:#fff">${options}</select>
-    <button data-mute="${no}">${music.on ? "🔇 Tắt" : "🔊 Bật"}</button></div>`;
+    <button data-mute="${no}">${music.on ? "🔇 Tắt" : "🔊 Bật"}</button>
+    ${music.on && control.music_auto !== false ? `<small class="hint" style="margin:0">còn ${clock}</small>` : ""}</div>`;
 }
 $("buses").onchange = (e) => {
   const sel = e.target.closest("select[data-pick]");
@@ -447,15 +452,18 @@ function setIfChanged(el, html) { if (el.dataset.html !== html) { el.innerHTML =
 function renderBuses(s) {
   const m = s.main || { no: s.bus.no, phase: s.phase, riders: s.bus.riders, lane: s.bus.lane, arrow: s.bus.arrow };
   const seats = s.bus.seats.length;
+  // «Chiếu» chỉ có ý nghĩa khi có từ 2 xe: chọn xe nào lên màn hình live (cảnh 3D, HUD, nhạc theo xe đó)
+  const many = (s.reliefs || []).length > 0;
+  const feature = (no, on) => `<button data-feature="${no}" class="${on ? "on" : ""}">${on ? "📺 Đang chiếu" : "📺 Chiếu xe này"}</button>`;
   const rows = [`<div class="bus"><div class="info"><b>Xe số ${m.no} · xe chính</b>
       <small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${m.km ? ` · ${m.trip_km}/${m.km} km` : ""}</small>
       </div>
-    <button data-feature="0" class="${s.featured == null ? "on" : ""}">📺 Chiếu</button>${musicPicker(s, 0, m.music)}</div>`];
+    ${many ? feature(0, s.featured == null) : ""}${musicPicker(s, 0, m.music)}</div>`];
   for (const r of s.reliefs || []) {
     rows.push(`<div class="bus"><div class="info"><b>Xe số ${r.no} · tăng cường ${r.arrow} ${esc(r.label)}</b>
       <small>${r.riders} khách · tới ${esc(r.next)} · còn ${r.left_km} km${r.sponsor ? ` · ${esc(r.sponsor)} bao xe` : ""}</small>
       </div>
-      <button data-feature="${r.no}" class="${r.featured ? "on" : ""}">📺 Chiếu</button>
+      ${feature(r.no, r.featured)}
       <button data-next="${r.no}">⏭ Tới điểm kế</button>${musicPicker(s, r.no, r.music)}</div>`);
   }
   // đang mở danh sách chọn bài thì không vẽ lại (vẽ lại sẽ đóng danh sách giữa chừng)

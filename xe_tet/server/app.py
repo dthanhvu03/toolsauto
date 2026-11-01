@@ -121,6 +121,7 @@ class Hub:
                 self.last_likes_flush = now
                 await self.broadcast({"kind": "event", "type": "likes", "count": count})
             self.voice.tick(now)
+            self.engine.advance_music([t["seconds"] for t in music.tracks()], self.settings["music_auto"])
             await self.voice.refresh_voices()
             if now - last_state >= STATE_EVERY:
                 last_state = now

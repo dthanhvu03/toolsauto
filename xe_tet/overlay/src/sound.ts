@@ -69,9 +69,11 @@ export class Sound {
     const tracks = s.music_tracks ?? [];
     const on = c?.music_on !== false && s.music?.on !== false && tracks.length > 0;
     const track = on ? tracks[((s.music.index % tracks.length) + tracks.length) % tracks.length] : null;
-    if ((track?.id ?? null) === (this.playing?.id ?? null)) return;
+    // khoá = bài + lúc bắt đầu: server tự qua bài (kể cả quay lại đúng bài cũ) hay đổi xe chiếu đều nhận ra
+    const key = track ? `${track.id}|${s.music.since}` : null;
+    if (key === (this.playing?.id ?? null)) return;
     this.playing?.stop();
-    this.playing = track ? this.play(track.id, track.url) : null;
+    this.playing = track && key ? this.play(key, s.music.pos ?? 0, c?.music_auto !== false, track.url) : null;
   }
 
   onEvent(e: GameEvent): void {
@@ -102,7 +104,8 @@ export class Sound {
 
   // ---- nhạc ------------------------------------------------------------------------------------
 
-  private play(id: string, url?: string): Playing {
+  /** Phát bài từ giây `offset`; auto = server tự qua bài nên file không lặp (tắt tự qua bài thì lặp). */
+  private play(id: string, offset: number, auto: boolean, url?: string): Playing {
     const g = this.ctx.createGain();
     const now = this.ctx.currentTime;
     g.gain.setValueAtTime(0.0001, now);
@@ -115,16 +118,19 @@ export class Sound {
       g.gain.exponentialRampToValueAtTime(0.0001, t + FADE);
       window.setTimeout(() => g.disconnect(), FADE * 1000 + 100);
     };
-    if (url) {  // file của anh: phát lặp
+    if (url) {  // file của anh
       const audio = new Audio(url);
-      audio.loop = true;
+      audio.loop = !auto;
+      audio.addEventListener("loadedmetadata", () => {
+        if (offset > 0 && offset < audio.duration) audio.currentTime = offset;
+      }, { once: true });
       this.ctx.createMediaElementSource(audio).connect(g);
       void audio.play().catch(() => undefined);  // chưa được phép phát: tự phát khi bấm mở khoá (ctx.resume)
       return { id, stop: () => { fadeOut(); window.setTimeout(() => audio.pause(), FADE * 1000); } };
     }
-    const preset = PRESETS[Number(id.split(":")[1]) % PRESETS.length];
+    const preset = PRESETS[Number(id.split(":")[1].split("|")[0]) % PRESETS.length];
     const song = new Song(this.ctx, g, preset);
-    song.start();
+    song.start(offset);
     return { id, stop: () => { fadeOut(); window.setTimeout(() => song.stop(), FADE * 1000); } };
   }
 

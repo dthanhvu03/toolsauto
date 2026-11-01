@@ -92,7 +92,9 @@ export class Song {
     }));
   }
 
-  start(): void {
+  /** Bắt đầu phát; `offset` giây: vào giữa bài (đài của xe đang phát tới đâu thì nghe từ đó). */
+  start(offset = 0): void {
+    this.index = Math.floor(offset / this.stepSec) % this.total;
     this.next = this.ctx.currentTime + 0.1;
     this.timer = window.setInterval(() => this.schedule(), 100);
     this.schedule();

@@ -8,6 +8,7 @@
 
 import os
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,7 +28,24 @@ GENERATED = (
     "Giao thừa bên bếp lửa",
 )
 
+GENERATED_SECONDS = 150.0  # bài tự sinh lặp vô hạn: coi 2,5 phút là hết bài để tự qua bài
+UNKNOWN_SECONDS = 180.0  # file không đo được độ dài (ffprobe lỗi): coi như 3 phút
+
 _cache: tuple[float, list[dict]] = (-1.0, [])
+_lengths: dict[tuple[str, float], float] = {}  # (tên file, mtime) → giây — đo một lần
+
+
+def length_of(path: Path) -> float:
+    """Độ dài bài (giây) bằng ffprobe; đo một lần / file, lỗi thì coi như UNKNOWN_SECONDS."""
+    key = (path.name, path.stat().st_mtime)
+    if key not in _lengths:
+        try:
+            out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                  str(path)], capture_output=True, text=True, timeout=20).stdout.strip()
+            _lengths[key] = float(out) if out and float(out) > 1 else UNKNOWN_SECONDS
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            _lengths[key] = UNKNOWN_SECONDS
+    return _lengths[key]
 
 
 def upload_target(raw: str) -> Path:
@@ -52,7 +70,7 @@ def remove(name: str) -> None:
 
 
 def tracks() -> list[dict]:
-    """[{id, title, url?}] — bài tự sinh trước, rồi file theo tên. Quét lại thư mục khi nó đổi (so mtime)."""
+    """[{id, title, seconds, url?}] — bài tự sinh trước, rồi file theo tên. Quét lại thư mục khi nó đổi (so mtime)."""
     global _cache
     try:
         stamp = MUSIC_DIR.stat().st_mtime
@@ -60,6 +78,7 @@ def tracks() -> list[dict]:
         stamp = 0.0
     if stamp != _cache[0]:
         files = sorted(p for p in MUSIC_DIR.iterdir() if p.suffix.lower() in EXTS) if stamp else []
-        _cache = (stamp, [{"id": f"gen:{i}", "title": title} for i, title in enumerate(GENERATED)]
-                  + [{"id": f"file:{p.name}", "title": p.stem.replace("_", " "), "url": f"/music/{p.name}"} for p in files])
+        _cache = (stamp, [{"id": f"gen:{i}", "title": title, "seconds": GENERATED_SECONDS} for i, title in enumerate(GENERATED)]
+                  + [{"id": f"file:{p.name}", "title": p.stem.replace("_", " "), "url": f"/music/{p.name}",
+                      "seconds": round(length_of(p), 1)} for p in files])
     return _cache[1]

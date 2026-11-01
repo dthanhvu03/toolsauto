@@ -173,7 +173,8 @@ def test_music_tracks_and_admin_controls(client, tmp_path, monkeypatch):
     assert len(ids) == len(music.GENERATED) + 1  # file .txt không vào danh sách
     assert client.post("/api/admin", json={"action": "music_next", "bus_no": 0}).json()["ok"]
     assert client.post("/api/admin", json={"action": "music_toggle", "bus_no": 0}).json()["ok"]
-    assert client.get("/api/state").json()["music"] == {"index": 1, "on": False}
+    music_now = client.get("/api/state").json()["music"]
+    assert (music_now["index"], music_now["on"]) == (1, False)
     assert client.post("/api/admin", json={"action": "music_set", "bus_no": 0, "index": len(ids) - 1}).json()["ok"]
     assert client.get("/api/state").json()["music"]["index"] == len(ids) - 1  # chọn đúng bài vừa tải lên
     assert client.post("/api/admin", json={"action": "music_set", "bus_no": 0, "index": -3}).status_code == 409
@@ -203,3 +204,25 @@ def test_music_upload_and_delete_from_control(client, tmp_path, monkeypatch):
     assert "Xuân quê tôi" in titles and "Xuân quê tôi (2)" in titles
     assert client.delete("/api/music/hack.mp3").json()["ok"] and not (tmp_path / "hack.mp3").exists()
     assert client.delete("/api/music/khong-co.mp3").status_code == 404
+
+
+
+def test_song_length_measured_once_and_falls_back(tmp_path, monkeypatch):
+    from xe_tet.server import music
+    calls = []
+
+    class Done:
+        def __init__(self, out):
+            self.stdout = out
+
+    def fake_run(cmd, **_kw):
+        calls.append(cmd[-1])
+        return Done("" if cmd[-1].endswith("hong.mp3") else "212.5\n")
+
+    monkeypatch.setattr(music.subprocess, "run", fake_run)
+    good, bad = tmp_path / "bai.mp3", tmp_path / "hong.mp3"
+    good.write_bytes(b"x")
+    bad.write_bytes(b"x")
+    assert music.length_of(good) == 212.5 and music.length_of(good) == 212.5
+    assert music.length_of(bad) == music.UNKNOWN_SECONDS
+    assert calls.count(str(good)) == 1  # đo một lần

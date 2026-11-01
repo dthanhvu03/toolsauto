@@ -769,10 +769,34 @@ def test_each_bus_has_its_own_music_and_screen_follows_featured():
     comment(e, "An", "Hà Nội", 1)
     comment(e, "Út", "Cà Mau", 2)
     relief = e.add_relief("south")
-    assert e.snapshot()["music"] == {"index": 0, "on": True}  # đang chiếu xe chính
+    pick = lambda m: {k: m[k] for k in ("index", "on")}  # noqa: E731
+    assert pick(e.snapshot()["music"]) == {"index": 0, "on": True}  # đang chiếu xe chính
     e.music_step(0)
     e.music_toggle(relief.no)
     e.feature(relief.no)
     snap = e.snapshot()
-    assert snap["music"] == {"index": relief.no, "on": False}  # tiếng theo xe đang chiếu
+    assert pick(snap["music"]) == {"index": relief.no, "on": False}  # tiếng theo xe đang chiếu
     assert snap["main"]["music"]["index"] == 1 and snap["reliefs"][0]["music"]["on"] is False
+
+
+
+def test_each_bus_radio_advances_when_song_ends():
+    """Mỗi xe một đài chạy liên tục: hết bài thì tự sang bài kế, kể cả xe không lên màn hình; tắt tự qua bài thì đứng."""
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 2)
+    relief = e.add_relief("south")
+    e.music_set(0, 0)
+    e.music_set(relief.no, 1)
+    lengths = [10.0, 20.0, 30.0]
+    e.tick(5)
+    e.advance_music(lengths, auto=True)
+    assert e.music_of("main")["index"] == 0 and e.snapshot()["music"]["pos"] == 5
+    e.tick(12)
+    e.advance_music(lengths, auto=True)
+    main, other = e.music_of("main"), e.music_of(str(relief.no))
+    assert main["index"] == 1 and main["since"] == 10  # bài 2 bắt đầu đúng lúc bài 1 hết
+    assert other["index"] == 1  # bài 20 giây của xe tăng cường chưa hết
+    e.tick(40)
+    e.advance_music(lengths, auto=False)
+    assert e.music_of("main")["index"] == 1  # tắt tự qua bài: đứng yên (bài lặp lại)

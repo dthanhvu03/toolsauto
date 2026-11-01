@@ -35,4 +35,8 @@ câm / không vỡ tiếng; e2e; ảnh bảng điều khiển.
 - Tải lên trên /control (Chromium thật): tải «Nhạc thử của anh.wav» → hiện trong danh sách → ⏭ Bài cho xe chính →
   màn hình live tải /music/… (206) → 🗑 xoá; 0 lỗi. Test: trùng tên không ghi đè, `../` không thoát thư mục, sai đuôi /
   rỗng → 400, quá cỡ → 413 (không để lại file dở). 94 test, e2e 28/28.
+- **Tự qua bài (anh hỏi 01/11):** mỗi xe một đài chạy liên tục (bài + lúc bắt đầu do server giữ); hết bài (file đo bằng
+  ffprobe, bài tự sinh 2,5 phút) thì sang bài kế; chuyển xe chiếu là nghe đúng đoạn xe đó đang phát. Thử trên 8811: bài 20
+  giây hết → tự sang bài kế, bài mới bắt đầu đúng lúc bài cũ hết. Nút «Chiếu» chỉ hiện khi có từ 2 xe («Đang chiếu» / «Chiếu
+  xe này»). 104 test.
 - Không kiểm được bằng tai trên máy chủ (không loa) — anh nghe thử trên máy anh.

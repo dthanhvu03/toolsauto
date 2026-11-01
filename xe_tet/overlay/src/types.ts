@@ -20,6 +20,7 @@ export interface Control {
   board_seconds?: number;
   rest_seconds?: number;
   music_on?: boolean;  // nhạc trong xe (PLAN-127)
+  music_auto?: boolean;  // hết bài tự qua bài (server đổi bài, overlay chỉ phát)
   music_volume?: number;
   sfx_volume?: number;
   voice_on?: boolean;  // giọng Anh Tư lơ xe (PLAN-128)
@@ -61,8 +62,9 @@ export interface State {
   waiting: number;
   reliefs: Relief[];
   featured: number | null;
-  music: { index: number; on: boolean };  // đài của xe đang chiếu: bài thứ index (vòng) trong music_tracks
-  music_tracks?: { id: string; title: string; url?: string }[];  // xe tăng cường admin đang chiếu (các trường bus / legs / terrain… là của xe đó)
+  // đài của xe đang chiếu: bài thứ index (vòng) trong music_tracks, bắt đầu lúc since, đã phát được pos giây
+  music: { index: number; on: boolean; since: number; pos: number };
+  music_tracks?: { id: string; title: string; url?: string; seconds: number }[];  // xe tăng cường admin đang chiếu (các trường bus / legs / terrain… là của xe đó)
   next_lane: { label: string; arrow: string; bus_no: number; eta_min: number } | null;
   queue: Waiting[];
   legs: { kind: "rest" | "stop"; label: string; km: number }[];
