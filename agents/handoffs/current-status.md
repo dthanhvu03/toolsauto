@@ -187,6 +187,10 @@
   vùng (đá vôi / Trường Sơn / cao nguyên / hàng dừa), cọc tiêu, biển 60, quán cóc, xe máy chở mai đào; giữ ổn định: tự dựng lại
   khi mất ngữ cảnh WebGL (mất hẳn → tải lại sau ~10 giây), nới nhịp 30 khung, bỏ sắp nhãn mỗi khung. e2e 28/28 + UX 0 lỗi
   trên 8811. Chưa nạp 8810.
+- **02/11 ~05:15 — ĐÃ NẠP 8810 (anh «bật bản mới đi em»):** `/home/vu/venv-xetet/bin/python -m xe_tet.server` (nohup, log
+  scratchpad `xe_tet_server_8810.log`), trang phục vụ `index-DJD67wBG.js` = PLAN-135 → 140. Lúc bật: TikTok idle (chưa nhập
+  username trên /control), không dừng, AI có khoá (`ai.key=true`) nhưng công tắc «AI trả lời» vẫn tắt (mặc định). Chưa mở trang
+  nào vào 8810 (tránh giành màn phát tiếng).
 - **Next:** bật lại khi live: `cd /home/vu/toolsauto && /home/vu/venv-xetet/bin/python -m xe_tet.server`; đổi FPS 30 trong
   LIVE Studio; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
