@@ -3,7 +3,7 @@
 
 import * as THREE from "three";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { animatePerson, at, BERTHS, BERTHS_PER_FLOOR, box, Bus, hueColor, label, makePerson, mat, Petals, SkyDome } from "./art";
+import { animatePerson, at, BERTHS, BERTHS_PER_FLOOR, box, Bus, CROWD, hueColor, label, makePerson, mat, Petals, SkyDome } from "./art";
 import { Landscape } from "./landscape";
 import { Roadway } from "./road";
 import { bendTree, setBend } from "./bend";
@@ -247,6 +247,8 @@ export class World {
     for (const stage of Object.values(this.stages)) this.scene.add(stage.group);
     this.buildInside();
     this.scene.add(this.inside);
+    this.scene.add(CROWD.mesh, CROWD.blobs);  // mọi người đi bộ / đứng: một lượt vẽ (PLAN-139)
+    bendTree(CROWD.blobs);
     this.setRegion("nam");
     this.applySet("ben");
     this.updateSky(true);
@@ -880,9 +882,11 @@ export class World {
     const shadows = this.view === "outside" && this.quality !== "low";
     this.renderer.shadowMap.autoUpdate = shadows && this.quality === "high";
     if (shadows && this.quality === "medium") this.renderer.shadowMap.needsUpdate = this.frameNo++ % 2 === 0;
-    this.renderer.render(this.scene, cam);
-    // nhãn chữ: ma trận vừa được WebGL tính xong ở lượt vẽ trên, khỏi tính lại cả cây cảnh lần hai
+    // ma trận cả cây cảnh tính một lần: đám đông chép vị trí người, rồi lượt vẽ WebGL và nhãn chữ dùng lại
+    this.scene.updateMatrixWorld();
+    CROWD.sync(this.scene);
     this.scene.matrixWorldAutoUpdate = false;
+    this.renderer.render(this.scene, cam);
     this.labels.render(this.scene, cam);
     this.scene.matrixWorldAutoUpdate = true;
     this.declutter(cam);

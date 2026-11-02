@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { bendShader } from "./bend";
 
 // ---- vật liệu --------------------------------------------------------------
 
@@ -255,33 +256,193 @@ function personBody(hue: number, headOnly: boolean): THREE.BufferGeometry {
   return geo;
 }
 
-function limb(radius: number, length: number, material: THREE.Material, pivotY: number, x: number): THREE.Group {
-  const pivot = new THREE.Group();
-  const m = new THREE.Mesh(GEO.capsule, material);
-  m.scale.set(radius, length / 2, radius);
-  m.position.y = -length / 2 - radius * 0.3;
-  pivot.add(m);
-  pivot.position.set(x, pivotY, 0);
-  return pivot;
+// ---- đám đông: mọi người đi bộ / đứng vẽ chung MỘT lượt (PLAN-139) -----------------------------------------------------
+// Trước đây mỗi người = khối thân + 4 tay chân + vệt bóng = 6 lượt vẽ; trạm dừng 40 người ~240 lượt, tụt 22 khung/s. Giờ một
+// khối người mẫu đủ mọi phần (cả nón lá, mũ len, ba lô), vẽ lặp (instancing) cho tất cả: màu áo / quần / mũ / ba lô và độ vung
+// tay chân là số riêng từng người, shader tô màu, xoay tay chân quanh vai / hông, co phần người đó không có về 0. Vẫn là
+// người 3D thật (camera nhìn từ trên cao vẫn đúng), cả đám đông 1 lượt vẽ + vệt bóng 1 lượt. `makePerson` trả về một nhóm
+// rỗng làm «mỏ neo» (vị trí, nhãn tên, thùng quà đội đầu vẫn gắn vào nhóm như cũ); vào cảnh thì có mặt trong đám đông.
+const CROWD_MAX = 160;  // tối đa 60 người đi bộ + người cảnh nền ở bến / cổng nhà
+// aPart: 0 màu cố định (da, tóc, mắt, má, nón lá, quả bông), 1 thân áo, 2 mũ len, 3 ba lô, 4 / 5 chân trái / phải,
+// 6 / 7 tay trái / phải. aOpt: 1 nón lá, 2 mũ len, 3 ba lô — người không có thì co về 0.
+function tagged(g: THREE.BufferGeometry, part: number, opt = 0): THREE.BufferGeometry {
+  const n = g.attributes.position.count;
+  g.setAttribute("aPart", new THREE.BufferAttribute(new Float32Array(n).fill(part), 1));
+  g.setAttribute("aOpt", new THREE.BufferAttribute(new Float32Array(n).fill(opt), 1));
+  return g;
 }
 
-interface Limbs { legL: THREE.Group; legR: THREE.Group; armL: THREE.Group; armR: THREE.Group }
+/** Tay / chân ở tư thế đứng thẳng (khớp ở vai / hông, shader xoay quanh khớp). */
+function limbPiece(radius: number, length: number, pivotY: number, x: number, part: number): THREE.BufferGeometry {
+  return tagged(piece(GEO.capsule, 0xffffff, [x, pivotY - length / 2 - radius * 0.3, 0], [radius, length / 2, radius]), part);
+}
+
+function crowdGeometry(): THREE.BufferGeometry {
+  const parts = [
+    tagged(piece(GEO.sphere, SKIN, [0, 1.36, 0], [0.38, 0.38, 0.38]), 0),
+    tagged(piece(GEO.half, HAIR, [0, 1.4, -0.02], [0.4, 0.36, 0.4]), 0),
+    tagged(piece(GEO.cone, STRAW, [0, 1.78, 0], [0.62, 0.3, 0.62]), 0, 1),
+    tagged(piece(GEO.half, 0xffffff, [0, 1.5, 0], [0.41, 0.34, 0.41]), 2, 2),
+    tagged(piece(GEO.ball, 0xffffff, [0, 1.86, 0], [0.09, 0.09, 0.09]), 0, 2),
+    tagged(piece(GEO.capsule, 0xffffff, [0, 0.72, 0], [0.27, 0.17, 0.22]), 1),
+    tagged(piece(GEO.backpack, 0xffffff, [0, 0.78, -0.27], [1, 1, 1]), 3, 3),
+    limbPiece(0.1, 0.32, 0.5, -0.12, 4), limbPiece(0.1, 0.32, 0.5, 0.12, 5),
+    limbPiece(0.08, 0.32, 0.92, -0.33, 6), limbPiece(0.08, 0.32, 0.92, 0.33, 7),
+  ];
+  for (const x of [-0.13, 0.13]) {
+    parts.push(tagged(piece(GEO.ball, EYE, [x, 1.37, 0.34], [0.045, 0.045, 0.045]), 0),
+      tagged(piece(GEO.ball, CHEEK, [x * 1.5, 1.27, 0.3], [0.06, 0.035, 0.03]), 0));
+  }
+  const geo = mergeGeometries(parts)!;
+  for (const part of parts) part.dispose();
+  return geo;
+}
+
+const CROWD_HEAD = /* glsl */ `
+attribute float aPart;
+attribute float aOpt;
+attribute vec3 iShirt;
+attribute vec3 iPants;
+attribute vec3 iHat;
+attribute vec3 iPack;
+attribute vec4 iPose;  // x: độ vung tay chân, y: tay phải giơ lên vẫy, z: kiểu mũ (1 nón lá, 2 mũ len), w: có ba lô
+`;
+const CROWD_POSE = /* glsl */ `
+int crowdPart = int(aPart + 0.5);
+int crowdOpt = int(aOpt + 0.5);
+float crowdKeep = 1.0;
+if ((crowdOpt == 1 && iPose.z != 1.0) || (crowdOpt == 2 && iPose.z != 2.0) || (crowdOpt == 3 && iPose.w < 0.5)) crowdKeep = 0.0;
+vec3 crowdTint = vec3(1.0);
+if (crowdPart == 1 || crowdPart >= 6) crowdTint = iShirt;
+else if (crowdPart == 2) crowdTint = iHat;
+else if (crowdPart == 3) crowdTint = iPack;
+else if (crowdPart >= 4) crowdTint = iPants;
+mat3 crowdRot = mat3(1.0);
+vec3 crowdPivot = vec3(0.0);
+if (crowdPart >= 4) {
+  float swing = crowdPart == 4 ? iPose.x : crowdPart == 5 ? -iPose.x : crowdPart == 6 ? -0.8 * iPose.x : 0.8 * iPose.x;
+  float c = cos(swing), s = sin(swing);
+  crowdRot = mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c);
+  if (crowdPart == 7) {
+    float cz = cos(iPose.y), sz = sin(iPose.y);
+    crowdRot = crowdRot * mat3(cz, sz, 0.0, -sz, cz, 0.0, 0.0, 0.0, 1.0);
+  }
+  crowdPivot = crowdPart <= 5 ? vec3(crowdPart == 4 ? -0.12 : 0.12, 0.5, 0.0) : vec3(crowdPart == 6 ? -0.33 : 0.33, 0.92, 0.0);
+}
+#include <color_vertex>
+vColor.rgb *= crowdTint;
+`;
+
+const CROWD_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72 });
+CROWD_MAT.userData.bent = true;  // tự uốn trong onBeforeCompile; lượt quét bendTree bỏ qua
+CROWD_MAT.onBeforeCompile = (shader) => {
+  shader.vertexShader = CROWD_HEAD + shader.vertexShader
+    .replace("#include <color_vertex>", CROWD_POSE)
+    .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nobjectNormal = crowdRot * objectNormal;")
+    .replace("#include <begin_vertex>",
+      "#include <begin_vertex>\ntransformed = crowdKeep * (crowdRot * (transformed - crowdPivot) + crowdPivot);");
+  bendShader(shader);
+};
+
+interface Look { shirt: THREE.Color; pants: THREE.Color; hat: THREE.Color; pack: THREE.Color; hatType: number; backpack: number }
+interface Pose { swing: number; wave: number }
+const looks = new Map<number, Look>();
+
+/** Màu / mũ / ba lô theo màu áo (như khối gộp cũ): tối đa 360 kiểu, dùng chung. */
+function lookOf(hue: number): Look {
+  let look = looks.get(hue);
+  if (!look) {
+    const tone = Math.round(hue / HUE_STEP) * HUE_STEP;
+    look = {
+      shirt: new THREE.Color(hueColor(tone, 0.52)), pants: new THREE.Color(PANTS[hue % PANTS.length]),
+      hat: new THREE.Color(hueColor((tone + 180) % 360, 0.45)), pack: new THREE.Color(hueColor((tone + 90) % 360, 0.4)),
+      hatType: hue % 4, backpack: hue % 3 === 0 ? 1 : 0,
+    };
+    looks.set(hue, look);
+  }
+  return look;
+}
+
+const BLOB_LOCAL = new THREE.Matrix4().compose(new THREE.Vector3(0, 0.04, 0),
+  new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2), new THREE.Vector3(0.9, 0.9, 1));
+const _blobM = new THREE.Matrix4();
+
+/** Còn trong cảnh và không bị ẩn (bối cảnh khác đang tắt, người đã rời đi). */
+function shown(o: THREE.Object3D, scene: THREE.Scene): boolean {
+  for (let x: THREE.Object3D | null = o; x; x = x.parent) {
+    if (!x.visible) return false;
+    if (x === scene) return true;
+  }
+  return false;
+}
+
+class Crowd {
+  readonly mesh: THREE.InstancedMesh;
+  readonly blobs: THREE.InstancedMesh;
+  readonly people = new Set<THREE.Object3D>();
+  private shirt = new THREE.InstancedBufferAttribute(new Float32Array(CROWD_MAX * 3), 3);
+  private pants = new THREE.InstancedBufferAttribute(new Float32Array(CROWD_MAX * 3), 3);
+  private hat = new THREE.InstancedBufferAttribute(new Float32Array(CROWD_MAX * 3), 3);
+  private pack = new THREE.InstancedBufferAttribute(new Float32Array(CROWD_MAX * 3), 3);
+  private pose = new THREE.InstancedBufferAttribute(new Float32Array(CROWD_MAX * 4), 4);
+
+  constructor() {
+    const geo = crowdGeometry();
+    geo.setAttribute("iShirt", this.shirt);
+    geo.setAttribute("iPants", this.pants);
+    geo.setAttribute("iHat", this.hat);
+    geo.setAttribute("iPack", this.pack);
+    geo.setAttribute("iPose", this.pose);
+    this.mesh = new THREE.InstancedMesh(geo, CROWD_MAT, CROWD_MAX);
+    this.blobs = new THREE.InstancedMesh(BLOB_GEO, BLOB_MAT, CROWD_MAX);
+    this.blobs.renderOrder = -1;
+    for (const m of [this.mesh, this.blobs]) {
+      m.count = 0;
+      m.frustumCulled = false;  // vị trí đổi mỗi khung, khỏi tính lại khối bao
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    }
+  }
+
+  /** Chép vị trí / màu / tư thế của mọi người đang hiện vào bản vẽ lặp (gọi sau updateMatrixWorld, trước khi vẽ). */
+  sync(scene: THREE.Scene): void {
+    let n = 0;
+    for (const p of this.people) {
+      if (n >= CROWD_MAX) break;
+      if (!shown(p, scene)) continue;
+      const look = p.userData.look as Look;
+      const pose = p.userData.pose as Pose;
+      this.mesh.setMatrixAt(n, p.matrixWorld);
+      this.blobs.setMatrixAt(n, _blobM.multiplyMatrices(p.matrixWorld, BLOB_LOCAL));
+      look.shirt.toArray(this.shirt.array, n * 3);
+      look.pants.toArray(this.pants.array, n * 3);
+      look.hat.toArray(this.hat.array, n * 3);
+      look.pack.toArray(this.pack.array, n * 3);
+      this.pose.setXYZW(n, pose.swing, pose.wave, look.hatType, look.backpack);
+      n++;
+    }
+    this.mesh.count = this.blobs.count = n;
+    for (const a of [this.mesh.instanceMatrix, this.blobs.instanceMatrix, this.shirt, this.pants, this.hat, this.pack, this.pose]) {
+      a.clearUpdateRanges();
+      a.addUpdateRange(0, n * a.itemSize);
+      a.needsUpdate = true;
+    }
+  }
+}
+
+export const CROWD = new Crowd();
 
 /** Người chibi: đầu to, tay chân đung đưa khi đi; `headOnly` cho đầu trên gối trong xe. */
 export function makePerson(hue: number, name?: string, vip = false, size = PERSON_SCALE, headOnly = false): THREE.Group {
   const g = new THREE.Group();
   g.scale.setScalar(size);
-  const body = new THREE.Mesh(personBody(hue, headOnly), PERSON_MAT);
-  g.add(body);
-  if (headOnly) return noShadow(g);
-  const shirt = soft(hueColor(Math.round(hue / HUE_STEP) * HUE_STEP, 0.52), 0.7);
-  const pants = soft(PANTS[hue % PANTS.length], 0.8);
-  const legL = limb(0.1, 0.32, pants, 0.5, -0.12);
-  const legR = limb(0.1, 0.32, pants, 0.5, 0.12);
-  const armL = limb(0.08, 0.32, shirt, 0.92, -0.33);
-  const armR = limb(0.08, 0.32, shirt, 0.92, 0.33);
-  g.add(legL, legR, armL, armR, blob(0.9));
-  g.userData.limbs = { legL, legR, armL, armR } satisfies Limbs;
+  if (headOnly) {
+    g.add(new THREE.Mesh(personBody(hue, headOnly), PERSON_MAT));
+    return noShadow(g);
+  }
+  g.userData.look = lookOf(hue);
+  g.userData.pose = { swing: 0, wave: 0 } satisfies Pose;
+  g.addEventListener("added", () => CROWD.people.add(g));
+  g.addEventListener("removed", () => CROWD.people.delete(g));
   if (name) g.add(at(label(name, vip ? "lbl vip" : "lbl"), 0, 2.3, 0));
   return noShadow(g);
 }
@@ -297,19 +458,10 @@ function noShadow(g: THREE.Group): THREE.Group {
 
 /** Đi: chân tay vung ngược nhau; đứng: thả lỏng; vẫy: tay phải giơ lên lắc. */
 export function animatePerson(g: THREE.Object3D, mode: "walk" | "idle" | "wave", phase: number): void {
-  const l = g.userData.limbs as Limbs | undefined;
-  if (!l) return;
-  const swing = mode === "walk" ? Math.sin(phase) * 0.7 : 0;
-  l.legL.rotation.x = swing;
-  l.legR.rotation.x = -swing;
-  l.armL.rotation.x = -swing * 0.8;
-  l.armR.rotation.x = swing * 0.8;
-  if (mode === "wave") {
-    l.armR.rotation.x = 0;
-    l.armR.rotation.z = 2.6 + Math.sin(phase * 1.6) * 0.35;
-  } else {
-    l.armR.rotation.z = 0;
-  }
+  const pose = g.userData.pose as Pose | undefined;
+  if (!pose) return;
+  pose.swing = mode === "walk" ? Math.sin(phase) * 0.7 : 0;
+  pose.wave = mode === "wave" ? 2.6 + Math.sin(phase * 1.6) * 0.35 : 0;
 }
 
 // ---- xe khách giường nằm --------------------------------------------------------

@@ -31,15 +31,18 @@ vec4 mvPosition = viewMatrix * bentPos;
 gl_Position = projectionMatrix * mvPosition;
 `;
 
+/** Gắn phép uốn vào shader (vật liệu tự viết onBeforeCompile riêng — như đám đông — gọi thẳng hàm này). */
+export function bendShader(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.uniforms.uBendCurve = BEND.curve;
+  shader.uniforms.uBendGrade = BEND.grade;
+  shader.uniforms.uBendCrest = BEND.crest;
+  shader.vertexShader = HEADER + shader.vertexShader.replace("#include <project_vertex>", BENT_PROJECT);
+}
+
 function bendMaterial(material: THREE.Material): void {
   if (material.userData.bent || material instanceof THREE.ShaderMaterial) return;
   material.userData.bent = true;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uBendCurve = BEND.curve;
-    shader.uniforms.uBendGrade = BEND.grade;
-    shader.uniforms.uBendCrest = BEND.crest;
-    shader.vertexShader = HEADER + shader.vertexShader.replace("#include <project_vertex>", BENT_PROJECT);
-  };
+  material.onBeforeCompile = bendShader;
   material.needsUpdate = true;
 }
 
