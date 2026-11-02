@@ -91,6 +91,7 @@
     </div>
     <div class="row" style="margin-top:10px">
       <a href="/" target="_blank"><button>Mở màn hình live</button></a>
+      <a id="report-link" href="/report" target="_blank"><button>📊 Báo cáo buổi live</button></a>
     </div>
   </section>
 
@@ -337,6 +338,7 @@ let paused = false;
 // Mã điều khiển (nếu server đặt XE_TET_TOKEN): mở trang bằng /control?token=…
 // Đọc xong thì xoá khỏi thanh địa chỉ (không lọt vào lịch sử / ảnh chụp màn hình), giữ trong phiên tab này.
 const TOKEN = new URLSearchParams(location.search).get("token") || sessionStorageGet("xe_tet_token");
+if (TOKEN) document.getElementById("report-link").href = "/report?token=" + encodeURIComponent(TOKEN);  // báo cáo cùng mã
 if (new URLSearchParams(location.search).has("token")) {
   sessionStorageSet("xe_tet_token", TOKEN);
   history.replaceState(null, "", location.pathname);

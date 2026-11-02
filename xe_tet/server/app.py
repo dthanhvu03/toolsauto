@@ -17,11 +17,11 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import ai_reply, music, settings, simulator, store, voice
+from . import ai_reply, live_log, music, report, settings, simulator, store, voice
 from .game.engine import LIKE_MAX, VN, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
@@ -110,7 +110,10 @@ class Hub:
         self.last_join_flush = 0.0
         self.pending_likes = 0
         self.last_likes_flush = 0.0
-        self.bridge = TikTokBridge(emit=self.handle)
+        # báo cáo sau mỗi buổi live (PLAN-143): chỉ đếm sự kiện đi qua cầu nối TikTok
+        self.live = live_log.LiveLog()
+        self.live_store = live_log.LiveStore()
+        self.bridge = TikTokBridge(emit=self.handle_tiktok)
         self.voice = voice.Announcer(emit=self.broadcast, settings=lambda: self.settings)
 
     def new_engine(self) -> Engine:
@@ -173,6 +176,12 @@ class Hub:
 
     async def flush(self) -> None:
         """Ghi hồ sơ người xem đã đổi xuống SQLite ở luồng riêng (vòng game không chờ ổ đĩa); lỗi ghi không làm đứng game."""
+        live = self.live.take()
+        if live:
+            try:
+                self.live.saved(await asyncio.to_thread(self.live_store.save, *live))
+            except Exception:
+                log.exception("ghi số liệu báo cáo buổi live lỗi")
         rows = self.engine.take_dirty()
         if rows:
             try:
@@ -180,10 +189,20 @@ class Hub:
             except Exception:
                 log.exception("ghi hồ sơ người xem lỗi (%d người)", len(rows))
 
-    def handle(self, event: dict) -> None:
+    def handle(self, event: dict) -> bool:
         accepted = self.engine.handle(event, time.monotonic())
         if accepted and event.get("type") == "like":
             self.pending_likes += max(1, min(LIKE_MAX, as_int(event.get("count"))))
+        return accepted
+
+    def handle_tiktok(self, event: dict) -> None:
+        """Sự kiện thật từ TikTok: vào game như mọi sự kiện + ghi số liệu báo cáo (người đã gặp buổi trước = khách quen)."""
+        if not self.handle(event):
+            return
+        uid = str(event.get("uid") or str(event.get("name") or "").strip().lower())
+        v = self.engine.viewers.get(uid)
+        returning = bool(v.first_day and v.first_day < self.engine._today().isoformat()) if v else None
+        self.live.raw(event, time.time(), returning)
 
     def audio_screen(self) -> int | None:
         ids = [sc["id"] for sc in self.screens.values()]
@@ -243,7 +262,12 @@ class Hub:
             self.engine.auto_feature(self.settings["auto_feature"], self.settings["rotate_seconds"])
             if self.settings["tiktok_auto"] and self.bridge.status["state"] in ("ended", "error"):
                 self.update_settings({"tiktok_auto": False})  # live đã hết / sai tài khoản: lần bật sau không tự nối
+            wall = time.time()
+            status = self.bridge.status
+            self.live.update(status["state"] == "connected", status.get("username") or "", wall, self.engine.phase,
+                             as_int(status.get("viewers"), 0))
             for event in self.engine.drain():
+                self.live.game(event, wall)
                 if event["type"] == "loxe" and not self.settings["auto_loxe"]:
                     continue
                 self.voice.observe(event, now, featured=self.engine.featured)
@@ -304,7 +328,7 @@ app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 # Mã điều khiển (tuỳ chọn): đặt XE_TET_TOKEN thì /control và /api/* phải kèm ?token=… hoặc header X-Token.
 # Màn hình live (/) và /ws chỉ đọc nên vẫn mở để LIVE Studio quay được.
 TOKEN = os.getenv("XE_TET_TOKEN", "")
-PROTECTED = ("/api/", "/control")
+PROTECTED = ("/api/", "/control", "/report")
 if not TOKEN and any(h not in LOCAL_HOSTS for h in ALLOWED_HOSTS):
     log.warning("XE_TET_ALLOWED_HOSTS mở ra ngoài máy nhưng chưa đặt XE_TET_TOKEN: ai trong mạng cũng điều khiển được")
 
@@ -489,6 +513,12 @@ async def delete_music(name: str) -> dict:
 @app.get("/control")
 async def control() -> FileResponse:
     return FileResponse(HERE / "control.html")
+
+
+@app.get("/report")
+async def live_report(id: int | None = None, token: str = "") -> HTMLResponse:
+    """Báo cáo các buổi live (PLAN-143)."""
+    return HTMLResponse(await asyncio.to_thread(report.render, hub.live_store, id, token))
 
 
 music.MUSIC_DIR.mkdir(parents=True, exist_ok=True)  # thư mục nhạc của anh (thả file vào là có trong danh sách)
