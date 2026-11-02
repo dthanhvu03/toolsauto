@@ -22,6 +22,7 @@ PM2_SAFE_NAMES: frozenset[str] = frozenset({
     "Studio_Light",
     "VieNeu_TTS",
     "DB_Backup",
+    "shopee-mcp",
     # Legacy (pre _1/_2 scaling)
     "FB_Publisher",
     "AI_Generator",
@@ -42,6 +43,7 @@ PM2_LOG_MAP: dict[str, dict[str, str]] = {
     "Studio_Light": {"out": "Studio-Light-out.log", "error": "Studio-Light-error.log"},
     "VieNeu_TTS": {"out": "VieNeu-TTS-out.log", "error": "VieNeu-TTS-error.log"},
     "9Router_Gateway": {"out": "9Router-Gateway-out.log", "error": "9Router-Gateway-error.log"},
+    "shopee-mcp": {"out": "shopee-mcp-out.log", "error": "shopee-mcp-error.log"},
     # Legacy aliases → primary instance logs
     "FB_Publisher": {"out": "FB-Publisher-1-out.log", "error": "FB-Publisher-1-error.log"},
     "AI_Generator": {"out": "AI-Generator-1-out.log", "error": "AI-Generator-1-error.log"},
