@@ -909,6 +909,48 @@ def test_manual_feature_pauses_director_and_rotate_mode_cycles():
     e.auto_feature("off", 10)
 
 
+def test_on_air_by_stage_score_gifter_bus_shown_longer_and_others_get_turns():
+    """PLAN-141: xe chính chỉ đang chạy → chiếu xe tăng cường nhiều điểm (quà 3 / xu, bình luận 1, tim 50 = 1) trước và lâu hơn
+    (15 giây + điểm, tối đa SHOW_MAX), về xe chính ≥ FEATURE_MIN_SECONDS, rồi xe ít điểm cũng tới lượt; cảnh xe chính vẫn ưu tiên."""
+    from xe_tet.server.game.engine import FEATURE_MIN_SECONDS, SHOW_BASE, SHOW_MAX
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 1)
+    rich = e.add_relief("south")
+    comment(e, "Bình", "Cà Mau", 2)  # cùng điểm xa: xe ít điểm còn chạy tới lượt mình
+    poor = e.add_relief("south")
+    e.handle({"type": "gift", "name": "Út", "diamonds": 100}, 2)
+    assert e.stage_of(rich) > e.stage_of(poor)
+    e.skip()
+    e.tick(3)
+    e.drain()
+    t, seen = drive_with_director(e, "events", 3, 260)
+    events = e.drain()
+    runs = []  # (xe, số giây liền)
+    for no, _ in seen:
+        if runs and runs[-1][0] == no:
+            runs[-1][1] += 1
+        else:
+            runs.append([no, 1])
+    shown = [r for r in runs if r[0] is not None]
+    assert shown[0][0] == rich.no and shown[0][1] >= SHOW_MAX - 2  # xe có quà lên trước, đủ lượt dài nhất
+    assert any(no == poor.no and n <= SHOW_BASE + 2 for no, n in shown)  # xe ít điểm vẫn có lượt ngắn
+    mains = [n for no, n in runs[1:-1] if no is None]
+    assert all(n >= FEATURE_MIN_SECONDS for n in mains)  # giữa hai lượt, xe chính ít nhất 20 giây
+    air = [ev for ev in events if ev["type"] == "on_air"]
+    assert air and air[0]["bus_no"] == rich.no and air[0]["names"][0] == "Út"
+    assert {no for no, phase in seen if phase != "DRIVING"} <= {None}  # cảnh của xe chính luôn là xe chính
+
+
+def test_stage_score_caps_comment_spam():
+    from xe_tet.server.game.engine import STAGE_COMMENTS_MAX
+    e = Engine(0.0)
+    for i in range(STAGE_COMMENTS_MAX + 20):
+        e.handle({"type": "comment", "name": "Spam", "text": f"hello {i}"}, 1 + i)
+    e.handle({"type": "like", "name": "Spam", "count": 100}, 100)
+    assert e.viewers["spam"].stage == STAGE_COMMENTS_MAX + 2
+
+
 # ---- PLAN-134 B: người xem biết mình ở xe nào --------------------------------
 
 def test_where_question_is_not_a_booking():

@@ -122,6 +122,16 @@ FEATURE_MODES = ("off", "events", "rotate")
 FEATURE_MIN_SECONDS = 20.0  # xe chính lên màn hình ít nhất chừng này mới nhảy sang xe tăng cường
 FEATURE_LEAD = 25.0  # chuyển sang xe tăng cường khi còn ~25 giây là tới điểm thả khách (kịp thấy xe chạy tới)
 FEATURE_AFTER_DROP = 8.0  # thả khách xong ở lại xem thêm chút rồi về xe chính
+# Lên sóng theo điểm (PLAN-141, anh chọn 02/11): khách trên xe tăng cường tặng quà / bình luận / thả tim nhiều → xe được chiếu
+# lâu hơn lúc xe chính chỉ đang chạy đường trơn. Điểm trong buổi: 1 xu = 3, 1 bình luận = 1 (tối đa 30 / người), 50 tim = 1.
+STAGE_PER_XU = 3.0
+STAGE_COMMENTS_MAX = 30
+STAGE_LIKES_PER_POINT = 50.0
+SHOW_BASE = 15.0  # giây chiếu tối thiểu một lượt
+SHOW_PER_POINT = 0.2  # +1 giây mỗi 5 điểm
+SHOW_MAX = 60.0  # tối đa một lượt (anh chọn 60)
+SHOW_AGAIN = 90.0  # xe vừa lên sóng thì 90 giây sau mới tới lượt lại — xe khác (ít điểm) cũng có lượt
+ON_AIR_NAMES = 3
 MANUAL_HOLD = 120.0  # admin bấm «Chiếu» tay → tạm ngưng tự chuyển 2 phút
 
 WISHES = (
@@ -207,6 +217,8 @@ class Viewer:
     last_share: float = -1e9
     last_notice: float = -1e9
     invited: bool = False  # buổi này lơ xe đã mời lên xe (thả tim nhiều mà chưa có vé)
+    stage: float = 0.0  # điểm lên sóng trong buổi (quà / bình luận / tim) — xe tăng cường của người này được chiếu lâu hơn
+    stage_comments: int = 0
 
 
 @dataclass
@@ -239,6 +251,7 @@ class Relief:
     odo: float = 0.0  # km xe đã chạy
     done: int = 0  # số điểm đã thả khách
     dropped_at: float | None = None  # lúc vừa thả khách (tự chiếu: ở lại xem thêm chút)
+    shown_at: float = -1e9  # lần cuối lên sóng theo điểm
 
 
 @dataclass
@@ -271,6 +284,7 @@ class Engine:
         self.reliefs: list[Relief] = []
         self.relief_auto = True  # admin tắt được: chỉ gọi xe tăng cường bằng tay / bằng quà
         self.featured: int | None = None  # xe tăng cường đang lên màn hình (None: xe chính)
+        self.show_until: float | None = None  # xe tăng cường đang lên sóng theo điểm tới lúc này thì về xe chính
         self.trip_minutes = TRIP_MINUTES  # chuyến dài nhất chạy đường bao nhiêu phút (admin chỉnh)
         self.talk_style = "mix"  # kiểu nói của lơ xe (talk.TALK_STYLES, admin chọn)
         self.clock0: datetime | None = None  # giờ VN lúc xe chính xuất bến
@@ -756,6 +770,24 @@ class Engine:
         self.featured = featured
         if manual:
             self.manual_until = self.last_now + MANUAL_HOLD
+            self.show_until = None
+
+    def stage_of(self, relief: Relief) -> float:
+        """Điểm lên sóng của một xe tăng cường = tổng điểm trong buổi của khách trên xe."""
+        return sum(self.viewers[u].stage for u in relief.riders if u in self.viewers)
+
+    def _on_air(self, relief: Relief, now: float) -> None:
+        """Chiếu một xe tăng cường theo điểm: 15 giây + theo điểm, tối đa SHOW_MAX; báo tên người làm xe lên sóng."""
+        score = self.stage_of(relief)
+        seconds = min(SHOW_MAX, SHOW_BASE + score * SHOW_PER_POINT)
+        relief.shown_at = now
+        relief.dropped_at = None
+        self.show_until = now + seconds
+        self.feature(relief.no, manual=False)
+        top = sorted((self.viewers[u] for u in relief.riders if u in self.viewers and self.viewers[u].stage > 0),
+                     key=lambda v: (v.name != relief.sponsor, -v.stage))[:ON_AIR_NAMES]
+        self.emit("on_air", bus_no=relief.no, names=[v.name for v in top], sponsor=relief.sponsor,
+                  count=len(relief.riders), seconds=round(seconds), lane=self.network.lane_by_key[relief.lane].label)
 
     def auto_feature(self, mode: str, rotate_seconds: float) -> None:
         """Tự chiếu xe (PLAN-130), gọi mỗi nhịp. «events»: cảnh của xe chính (xuất bến, trạm, thả khách, về bến, chúc Tết)
@@ -775,8 +807,12 @@ class Engine:
         main_scene = self._phase_now() != "DRIVING" or self.phase == "SPECIAL" or (
             arrive is not None and arrive < FEATURE_LEAD)
         current = next((r for r in self.reliefs if r.no == self.featured), None)
-        if current is not None:  # đang chiếu xe tăng cường: thả khách xong (hoặc xe chính có cảnh) thì về
-            if main_scene or (current.dropped_at is not None and now - current.dropped_at >= FEATURE_AFTER_DROP):
+        if current is not None:  # đang chiếu xe tăng cường: thả khách xong / hết lượt lên sóng (hoặc xe chính có cảnh) thì về
+            arrive_in = self._relief_arrivals(current)[current.done] if current.done < len(current.trip.stops) else None
+            near = arrive_in is not None and arrive_in < FEATURE_LEAD
+            ended = self.show_until is not None and now >= self.show_until and current.dropped_at is None and not near
+            if main_scene or ended or (current.dropped_at is not None and now - current.dropped_at >= FEATURE_AFTER_DROP):
+                self.show_until = None
                 self.feature(None, manual=False)
             return
         if main_scene or held < FEATURE_MIN_SECONDS:
@@ -786,7 +822,12 @@ class Engine:
         if soon:
             relief = min(soon, key=lambda x: x[0])[1]
             relief.dropped_at = None
+            self.show_until = None
             self.feature(relief.no, manual=False)
+            return
+        pool = [r for r in self.reliefs if r.done < len(r.trip.stops) and now - r.shown_at >= SHOW_AGAIN]
+        if pool:  # lên sóng theo điểm: xe nhiều điểm nhất trong các xe chưa vừa được chiếu
+            self._on_air(max(pool, key=self.stage_of), now)
 
     def _music_key(self, no: int | None) -> str:
         if not no or no == self.bus.no:
@@ -980,14 +1021,19 @@ class Engine:
             self._seen_today(v, now)
         if kind == "comment":
             v.comments += 1
+            if v.stage_comments < STAGE_COMMENTS_MAX:
+                v.stage_comments += 1
+                v.stage += 1
             self._on_comment(v, str(event.get("text") or ""), now)
         elif kind == "like":
             count = max(1, min(LIKE_MAX, as_int(event.get("count"))))
             v.likes += count
+            v.stage += count / STAGE_LIKES_PER_POINT
             self._on_like(v, count)
         elif kind == "gift":
             diamonds = max(1, as_int(event.get("diamonds")))
             v.gifts += diamonds
+            v.stage += diamonds * STAGE_PER_XU
             self._on_gift(v, diamonds, str(event.get("gift") or "quà")[:24])
         elif kind == "follow":
             if not v.followed:  # follow / bỏ follow liên tục để được hiện tên → chỉ cảm ơn lần đầu

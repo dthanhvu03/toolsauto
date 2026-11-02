@@ -351,6 +351,12 @@ export class Hud {
       case "pickup":  // xe tấp vô điểm đón rước người bắt xe dọc đường (PLAN-136)
         this.toast(`🚏 Xe số ${e.bus_no} đón ${name} ở ${esc(e.place ?? "")}`, e.province ? `Về ${esc(e.province)}` : "");
         break;
+      case "on_air": {  // xe tăng cường lên sóng theo điểm quà / bình luận / tim của khách trên xe (PLAN-141)
+        const owner = e.sponsor ? ` của ${esc(e.sponsor)}` : "";
+        const who = (e.names ?? []).map(esc).join(", ");
+        this.toast(`📺 Xe số ${e.bus_no}${owner} đang lên sóng`, who ? `Cảm ơn ${who} · ${esc(e.lane ?? "")}` : esc(e.lane ?? ""));
+        break;
+      }
       case "welcome":  // khách buổi trước quay lại (PLAN-134 D)
         this.toast(`🎉 ${name} quay lại`, e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`);
         break;
