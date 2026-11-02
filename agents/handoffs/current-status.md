@@ -191,6 +191,12 @@
   scratchpad `xe_tet_server_8810.log`), trang phục vụ `index-DJD67wBG.js` = PLAN-135 → 140. Lúc bật: TikTok idle (chưa nhập
   username trên /control), không dừng, AI có khoá (`ai.key=true`) nhưng công tắc «AI trả lời» vẫn tắt (mặc định). Chưa mở trang
   nào vào 8810 (tránh giành màn phát tiếng).
+- **02/11 — PLAN-141 (anh chọn quà + bình luận + tim, tối đa 60 giây):** xe tăng cường lên sóng theo điểm khách trên xe;
+  pytest 146, e2e 28/28 + UX 0 lỗi trên 8811. Server 8810 CHƯA khởi động lại (đang chạy PLAN-140); `dist` đã build bản có thông
+  báo «đang lên sóng» (trang 8810 tải lại sẽ lấy, vô hại khi server cũ).
+- **02/11 ~05:50 — ĐÃ KHỞI ĐỘNG LẠI 8810 (anh «khởi động lại đi em»):** tắt êm (SIGTERM, ghi hồ sơ khách), chạy PLAN-141,
+  trang `index-Dd74jmbr.js`, log 0 lỗi. Thiết lập anh đặt trên /control lúc 05:35: tự chiếu «rotate» 60 giây (luật lên sóng theo
+  điểm chỉ chạy ở chế độ «events»), AI trả lời BẬT, chất lượng Cao.
 - **Next:** bật lại khi live: `cd /home/vu/toolsauto && /home/vu/venv-xetet/bin/python -m xe_tet.server`; đổi FPS 30 trong
   LIVE Studio; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
