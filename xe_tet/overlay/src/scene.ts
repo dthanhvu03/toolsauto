@@ -7,7 +7,7 @@ import { animatePerson, at, BERTHS, BERTHS_PER_FLOOR, box, Bus, CROWD, hueColor,
 import { Landscape } from "./landscape";
 import { Roadway } from "./road";
 import { bendTree, setBend } from "./bend";
-import { Fireworks, Puffs } from "./effects";
+import { BLOSSOM_TEX, Fireworks, Floaters, LANTERN_TEX, LIXI_TEX, Puffs } from "./effects";
 import { BenSet, HomeSet, RestSet, type StageSet } from "./sets";
 import { DAO, MAI } from "./tet";
 import { Tunnel } from "./tunnel";
@@ -20,11 +20,12 @@ const BASE_SPEED = 14; // đơn vị / giây khi speed = 1
 const INSIDE_X = 500; // khoang trong xe đặt riêng một chỗ, camera riêng
 
 // Góc máy ngoài xe admin chọn: [vị trí camera x, y, z, điểm nhìn x, y, z]
+// P1 — Hạ góc nhìn xuống vừa phải + nhìn chếch theo hành trình để thấy rõ bầu trời, dãy núi, mái nhà, tán cây và dáng xe 3D
 const CAMS: Record<CamName, [number, number, number, number, number, number]> = {
-  wide: [6, 40, 30, 0, -2, -12], // toàn cảnh: xe + bến / trạm / nhà
-  high: [0, 62, 10, 0, 0, -9], // từ trên cao
-  side: [14, 12, 34, 0, 3, -6], // ngang xe
-  close: [9, 15, 17, 0, 2, -4], // cận xe
+  wide: [8.5, 23.5, 33.5, 0.8, 1.8, -10.5], // toàn cảnh: thấy cả xe, đường quê, nhà mái ngói và chân trời/núi xa
+  high: [0, 54, 14, 0, 0.5, -9], // từ trên cao
+  side: [4.5, 8.0, 27.5, 0.0, 2.3, -4.5], // ngang xe: góc thấp điện ảnh thấy trọn thân xe + nhà ngói 3 gian + núi xa
+  close: [14.2, 8.4, 21.5, 0.4, 2.1, -1.5], // cận xe (góc trước 3/4 nhìn trọn đầu xe + thân xe + 2 bánh xe + cảnh quê)
 };
 const URL_PARAMS = new URLSearchParams(location.search);
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
@@ -74,7 +75,15 @@ const _vp = new THREE.Matrix4();
 const _lp = new THREE.Vector3();
 const _step = new THREE.Vector3();  // hướng đi của người đi bộ: dùng lại mỗi khung, không tạo vật mới (đỡ dọn rác bộ nhớ)
 
-interface LabelBox { el: HTMLElement; x0: number; x1: number; y0: number; y1: number }
+interface LabelBox {
+  el: HTMLElement;
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  prio: number;
+  distSq: number;
+}
 
 type SetName = "ben" | "road" | "rest" | "home";
 type View = "outside" | "inside";
@@ -99,12 +108,11 @@ interface Look {
 }
 
 const LOOKS: Record<"dawn" | "day" | "dusk" | "night", Look> = {
-  dawn: { top: 0x6d8fd0, horizon: 0xffb27a, hemiSky: 0xffe2c4, hemiGround: 0x6a6a48, hemi: 1.15, sunColor: 0xffc890, sun: 1.9, exposure: 1.08 },
-  day: { top: 0x4f9fdc, horizon: 0xfde7c6, hemiSky: 0xfff4e0, hemiGround: 0x6a7a48, hemi: 1.25, sunColor: 0xfff0d6, sun: 2.4, exposure: 1.05 },
-  dusk: { top: 0x3d4f8f, horizon: 0xff8f5e, hemiSky: 0xffd2b4, hemiGround: 0x5a5048, hemi: 1.1, sunColor: 0xffa66a, sun: 1.8, exposure: 1.1 },
-  // đêm Tết: trời xanh thẫm + ánh trăng đủ sáng để nhìn rõ xe / người trên điện thoại (anh live buổi tối, ở bến trời theo
-  // giờ thật: bản cũ tối hẳn, cảnh còn 27/255 độ sáng — gần như đen); cửa sổ / đèn đường / đèn xe vẫn nổi lên
-  night: { top: 0x1d3a78, horizon: 0x4a5f9a, hemiSky: 0xa9b8e8, hemiGround: 0x4a4458, hemi: 1.0, sunColor: 0xc6d2ff, sun: 1.1, exposure: 1.0 },
+  dawn: { top: 0x567ec2, horizon: 0xffb47e, hemiSky: 0xffe2c2, hemiGround: 0x5c4f3b, hemi: 1.05, sunColor: 0xffc282, sun: 2.35, exposure: 1.04 },
+  day: { top: 0x3586d0, horizon: 0xffe2b5, hemiSky: 0xfff0d4, hemiGround: 0x5a623c, hemi: 1.08, sunColor: 0xffe8c2, sun: 2.75, exposure: 1.03 },
+  dusk: { top: 0x364886, horizon: 0xff8e56, hemiSky: 0xffcca6, hemiGround: 0x4f4339, hemi: 1.02, sunColor: 0xff9a58, sun: 2.25, exposure: 1.06 },
+  // đêm Tết: trời xanh thẫm + ánh trăng đủ sáng để nhìn rõ xe / người trên điện thoại
+  night: { top: 0x1b3672, horizon: 0x465d98, hemiSky: 0xaab9ea, hemiGround: 0x484256, hemi: 1.0, sunColor: 0xc8d4ff, sun: 1.15, exposure: 1.0 },
 };
 
 // mốc giờ → cảnh trời; giữa hai mốc pha màu dần (đồng hồ xe chạy nhanh: không đổi trời giật cục)
@@ -194,6 +202,11 @@ export class World {
   private wcLine: Walker[] = [];
   private fx = new Fireworks();
   private dust = new Puffs(72);
+  // hiệu ứng quà (PLAN-142): mỗi món một kiểu — sprite gom sẵn, có trần
+  private lixi = new Floaters(LIXI_TEX, 24, { scale: 0.9, rise: 2.4, sway: 0.8, life: 4 });
+  private skyLanterns = new Floaters(LANTERN_TEX, 12, { scale: 1.4, rise: 1.5, sway: 0.5, life: 7 });
+  private blossoms = new Floaters(BLOSSOM_TEX, 40, { scale: 0.7, rise: -1.6, sway: 1.2, life: 6 });
+  private blossomColor = 0xffd23f;
   private dustTimer = 0;
   private quality: Quality = "high";
   private frameNo = 0;
@@ -247,19 +260,42 @@ export class World {
     this.camIn.position.set(INSIDE_X, 66, 1);
     this.camIn.lookAt(INSIDE_X, 0, -8.5);
 
-    this.scene.fog = new THREE.Fog(0xfde7c6, 60, 260);
-    this.sun.position.set(22, 38, 26);
+    this.scene.fog = new THREE.Fog(0xffe5bd, 42, 220);
+    // Tạo môi trường phản chiếu Stylized (bầu trời ấm + nắng chiều + mặt đất) để kính xe, sơn xe và inox có ánh bóng tự nhiên
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    const envScene = new THREE.Scene();
+    const envSky = new THREE.Mesh(
+      new THREE.SphereGeometry(20, 16, 12),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        vertexShader: `varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+        fragmentShader: `varying vec3 vP; void main(){
+          vec3 sky = mix(vec3(1.0, 0.88, 0.72), vec3(0.28, 0.58, 0.88), clamp(vP.y * 1.4, 0.0, 1.0));
+          vec3 gnd = vec3(0.32, 0.36, 0.25);
+          vec3 col = vP.y >= 0.0 ? sky : mix(vec3(0.85, 0.75, 0.62), gnd, clamp(-vP.y * 2.5, 0.0, 1.0));
+          float sunDot = max(0.0, dot(vP, normalize(vec3(0.55, 0.65, 0.52))));
+          col += vec3(1.0, 0.92, 0.75) * pow(sunDot, 24.0) * 2.2;
+          gl_FragColor = vec4(col, 1.0);
+        }`,
+      }),
+    );
+    envScene.add(envSky);
+    this.scene.environment = pmrem.fromScene(envScene, 0.03).texture;
+    this.scene.environmentIntensity = 0.65;
+    pmrem.dispose();
+
+    this.sun.position.set(26, 34, 24);
     this.sun.target.position.set(0, 0, -6);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
+    this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -24, right: 24, top: 22, bottom: -22, near: 1, far: 120 });
-    this.sun.shadow.bias = -0.0005;
-    this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.025;
     this.scene.add(this.hemi, this.sun, this.sun.target, this.sky.mesh, this.petals.points);
 
     this.stars = this.buildStars();
     this.scene.add(this.land.group, this.road.group, this.tunnel.group, this.weather.lines, this.bus.group, this.fx.group,
-      this.dust.group);
+      this.dust.group, this.lixi.group, this.skyLanterns.group, this.blossoms.group);
 
     for (const stage of Object.values(this.stages)) this.scene.add(stage.group);
     this.buildInside();
@@ -297,6 +333,7 @@ export class World {
     this.weather.set(rain ? "drizzle" : "clear");
     this.road.setWet(rain);
     this.petals.setColor(region === "bac" ? 0xffa6c4 : 0xffd23f); // đào hồng miền Bắc, mai vàng nơi khác
+    this.blossomColor = region === "bac" ? 0xffa6c4 : 0xffd23f;
     this.road.setBlossom(region === "bac" ? DAO : MAI);
   }
 
@@ -466,6 +503,7 @@ export class World {
         break;
       case "gift":
         if (e.tier_up && (e.tier ?? 0) >= 2) this.fireworks(SHOW_SKY, 2); // chỉ khi lên bậc
+        this.giftFx(e.fx, e.fx_n ?? 1);
         break;
       case "special":
         for (let i = 0; i < 6; i++) {
@@ -564,6 +602,16 @@ export class World {
         w.onDone = undefined;
       };
     }
+  }
+
+  /** Hiệu ứng riêng của món quà (server chọn theo tên / giá món): lì xì bay, đèn lồng thả trời, mưa hoa, pháo nhỏ. Tim bay và
+   * còi xe do HUD / âm thanh lo. Nhiều món một lượt thì nhiều hơn, có trần. */
+  private giftFx(fx: string | undefined, n: number): void {
+    const more = Math.min(n, 6);
+    if (fx === "lixi") this.lixi.emit(new THREE.Vector3(0, 4.8, 0), 6 + more * 2, 5);
+    else if (fx === "lantern") this.skyLanterns.emit(new THREE.Vector3(0, 5, -3), 4 + more, 7);
+    else if (fx === "petals") this.blossoms.emit(new THREE.Vector3(0, 13, -2), 10 + more * 4, 9, this.blossomColor);
+    else if (fx === "firework") this.fireworks(SHOW_SKY, Math.min(3, n));
   }
 
   private dropoff(e: GameEvent): void {
@@ -685,6 +733,7 @@ export class World {
     this.hemi.intensity = look.hemi;
     this.sun.color.setHex(look.sunColor);
     this.sun.intensity = look.sun;
+    this.scene.environmentIntensity = this.night ? 0.25 : 0.65;
     this.renderer.toneMappingExposure = look.exposure;
     this.stars.visible = this.night;
     this.road.setNight(this.night);
@@ -741,46 +790,97 @@ export class World {
   }
 
   /**
-   * Nhãn tên người đi bộ chạm nhau thì đẩy lệch lên (PLAN-133; trạm đông người tên đè lên nhau, khách không đọc được tên
-   * mình). Tham lam: xét từ nhãn thấp nhất màn hình lên, nhãn chạm nhãn đã đặt thì dời lên ngay trên nhãn đó, lặp tới khi
-   * không chạm (tối đa MAX_NUDGE). Tối đa 60 người → so từng cặp là đủ nhanh. Vị trí tính bằng đúng phép chiếu của
-   * CSS2DRenderer (không đọc vị trí DOM: đọc là bắt trình duyệt dựng lại bố cục mỗi khung); CSS2DRenderer ghi lại transform
-   * mỗi khung nên chỉ cần nối thêm translateY.
+   * Quản lý nhãn tên hành khách thông minh tại bến/trạm đông người (V2):
+   * 1) Đặt ưu tiên hiển thị: Khách VIP (⭐) > Người đang di chuyển (mới lên xe/gọi món) > Người đứng yên chờ, kết hợp gần camera hơn.
+   * 2) Che khuất theo khoảng cách (Distance Culling): quá xa camera hoặc sát rìa khung hình thì ẩn.
+   * 3) Không bao giờ cho nhãn đè lên vùng HUD thông tin quan trọng (Bảng tuyến/CTA ở y < 700, Bảng phải/TikTok feed ở y > 1320).
+   * 4) Giới hạn tối đa 14 nhãn hiển thị rõ ràng cùng lúc và triệt tiêu hoàn toàn chồng lấn (nếu hết chỗ đẩy thì ẩn nhãn ưu tiên thấp).
    */
   private declutter(cam: THREE.Camera): void {
     _vp.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
-    const boxes: LabelBox[] = [];
-    for (const w of this.walkers) {
+    const camPos = cam.position;
+    const candidates: LabelBox[] = [];
+
+    for (let wi = 0; wi < this.walkers.length; wi++) {
+      const w = this.walkers[wi];
+      const moving = w.path.length > 0 && w.wait <= 0;
+      const distSq = w.obj.position.distanceToSquared(camPos);
+
+      // Ẩn icon món ăn (emoji) cho những người đã ngồi yên trên bàn ăn hoặc ở xa để tránh 30 icon chồng thành đám mây ở trạm dừng
       for (const o of w.obj.children) {
-        if (!(o instanceof CSS2DObject) || o.element.style.display === "none") continue;
+        if (!(o instanceof CSS2DObject)) continue;
         const el = o.element;
+        if (el.classList.contains("emoji")) {
+          el.style.opacity = moving && distSq < 1800 ? "0.95" : "0";
+          continue;
+        }
         let size = this.labelSize.get(el);
         if (!size) {
-          size = { w: el.offsetWidth, h: el.offsetHeight };
-          if (!size.w) continue;  // chưa vào DOM: khung sau
-          this.labelSize.set(el, size);
+          const wPx = el.offsetWidth || 110;
+          const hPx = el.offsetHeight || 32;
+          size = { w: wPx, h: hPx };
+          if (el.offsetWidth > 0) this.labelSize.set(el, size);
         }
         _lp.setFromMatrixPosition(o.matrixWorld).applyMatrix4(_vp);
+        // Ngoài tầm nhìn hoặc quá xa camera (> 46m) -> ẩn ngay
+        if (_lp.z > 1 || _lp.z < -1 || distSq > 2100) {
+          el.style.opacity = "0";
+          continue;
+        }
         const x = (_lp.x + 1) * W / 2;
         const y = (1 - _lp.y) * H / 2;
-        boxes.push({ el, x0: x - size.w / 2, x1: x + size.w / 2, y0: y - size.h / 2, y1: y + size.h / 2 });
+        // Chặn vùng cấm HUD quan trọng (trên y < 680 là Header/Tuyến/CTA/Lơ xe; dưới y > 1340 là Bảng tỉnh/Trạm dừng/TikTok chat)
+        // đồng thời tránh vùng bong bóng Lơ xe bên trái (x < 420 && y < 860)
+        if (y < 680 || y > 1340 || x < 75 || x > W - 75 || (x < 430 && y < 860)) {
+          el.style.opacity = "0";
+          continue;
+        }
+        const isVip = el.classList.contains("vip");
+        const prio = (isVip ? 1000 : 0) + (moving ? 300 : 0) + wi * 4 - distSq * 0.08;
+        candidates.push({
+          el,
+          x0: x - size.w / 2,
+          x1: x + size.w / 2,
+          y0: y - size.h / 2,
+          y1: y + size.h / 2,
+          prio,
+          distSq,
+        });
       }
     }
-    boxes.sort((a, b) => b.y1 - a.y1);
+
+    // Sắp xếp theo độ ưu tiên giảm dần, chỉ hiện tối đa 10 nhãn rõ nhất trên màn hình
+    candidates.sort((a, b) => b.prio - a.prio);
+    const MAX_VISIBLE_LABELS = 10;
     const placed: LabelBox[] = [];
-    for (const b of boxes) {
-      let dy = 0;
-      for (let moved = true; moved && -dy < MAX_NUDGE;) {
-        moved = false;
-        for (const p of placed) {
-          if (b.x1 + LABEL_GAP <= p.x0 || b.x0 >= p.x1 + LABEL_GAP) continue;
-          if (b.y1 + dy + LABEL_GAP <= p.y0 || b.y0 + dy >= p.y1 + LABEL_GAP) continue;
-          dy = p.y0 - LABEL_GAP - b.y1;  // nằm ngay trên nhãn đã đặt
-          moved = true;
-        }
+
+    for (let i = 0; i < candidates.length; i++) {
+      const b = candidates[i];
+      if (i >= MAX_VISIBLE_LABELS) {
+        b.el.style.opacity = "0";
+        continue;
       }
-      dy = Math.max(dy, -MAX_NUDGE);
+      let dy = 0;
+      let overlapped = false;
+      for (let step = 0; step < 5; step++) {
+        overlapped = false;
+        for (const p of placed) {
+          if (b.x1 + LABEL_GAP + 6 <= p.x0 || b.x0 >= p.x1 + LABEL_GAP + 6) continue;
+          if (b.y1 + dy + LABEL_GAP + 4 <= p.y0 || b.y0 + dy >= p.y1 + LABEL_GAP + 4) continue;
+          dy = p.y0 - (LABEL_GAP + 4) - b.y1;
+          overlapped = true;
+          break;
+        }
+        if (!overlapped) break;
+      }
+      // Nếu đẩy quá 64px (tránh nhãn bay lơ lửng xa đầu nhân vật) hoặc chạm vùng HUD trên -> ẩn luôn
+      if (overlapped || -dy > 64 || b.y0 + dy < 680 || -dy > MAX_NUDGE) {
+        b.el.style.opacity = "0";
+        continue;
+      }
       placed.push({ ...b, y0: b.y0 + dy, y1: b.y1 + dy });
+      const distAlpha = THREE.MathUtils.clamp(1.18 - Math.sqrt(b.distSq) / 46, 0.72, 1.0);
+      b.el.style.opacity = distAlpha.toFixed(2);
       const shown = this.labelNudge.get(b.el) ?? 0;
       const next = Math.abs(dy - shown) < 0.5 ? dy : shown + (dy - shown) * NUDGE_EASE;
       this.labelNudge.set(b.el, next);
@@ -873,6 +973,9 @@ export class World {
     }
     this.fx.update(dt);
     this.dust.update(dt);
+    this.lixi.update(dt);
+    this.skyLanterns.update(dt);
+    this.blossoms.update(dt);
 
     // góc nhìn do admin chọn (?view= trên URL ghi đè khi thử); camera trượt mượt tới góc mới
     const view: View = (URL_PARAMS.get("view") as View | null) ?? this.control.view;

@@ -149,6 +149,7 @@ export class Sound {
         break;
       case "gift":
         if (e.tier_up && (e.tier ?? 0) >= 2) this.firework(this.ctx.currentTime);
+        if (e.fx === "honk") this.horn();  // món TikTok: xe bóp còi (PLAN-142)
         break;
       case "ticket":
         this.ting();

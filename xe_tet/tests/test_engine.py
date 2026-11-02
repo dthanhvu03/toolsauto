@@ -951,6 +951,73 @@ def test_stage_score_caps_comment_spam():
     assert e.viewers["spam"].stage == STAGE_COMMENTS_MAX + 2
 
 
+def test_loxe_follows_the_bus_on_screen(monkeypatch):
+    """PLAN-142 (anh báo 02/11): chiếu xe tăng cường thì lơ xe không đọc chỗ của xe chính — câu nhỏ (qua tỉnh, bóp còi) bỏ,
+    câu khác ghi rõ «Xe số N.»; chuyển xe thì giới thiệu xe đang chiếu, quay về thì báo về xe chính."""
+    import xe_tet.server.game.engine as eng
+    monkeypatch.setattr(eng, "line", lambda kind, rng=None, style="mix", **fields: kind)
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 1)
+    relief = e.add_relief("south")
+    e.skip()
+    e.tick(3)
+    e.drain()
+    e.feature(relief.no)
+    said = []
+    t = 3
+    while t < 400 and e.featured == relief.no:
+        t += 1
+        e.tick(t)
+        said += [ev["text"] for ev in e.drain() if ev["type"] == "loxe"]
+    e.feature(None)
+    said_back = [ev["text"] for ev in e.drain() if ev["type"] == "loxe"]
+    assert "via" not in said and "honk" not in said  # câu nhỏ của xe chính: không nói khi không lên hình
+    main_kinds = {"rest", "depart", "finish", "parcels", "pickup", "pickup_wait", "passed"}  # (thả khách: xe đang chiếu)
+    assert not [x for x in said if x in main_kinds]  # câu của xe chính đều có «Xe số N.» ở đầu
+    assert "screen_main" in said + said_back  # xe tăng cường tới bến cuối hoặc admin chuyển về: lơ xe báo về xe chính
+
+
+def test_loxe_introduces_featured_relief():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Út", "Cà Mau", 1)
+    relief = e.add_relief("south")
+    e.tick(2)
+    e.drain()
+    e.feature(relief.no)
+    text = next(ev["text"] for ev in e.drain() if ev["type"] == "loxe")
+    assert f"{relief.no}" in text and "Cà Mau" in text
+
+
+def test_rules_reminder_every_three_minutes_or_after_newcomers():
+    from xe_tet.server.game.engine import RULES_GAP, RULES_MIN_GAP, RULES_JOINS
+    e = Engine(0.0)
+    for i in range(RULES_JOINS):
+        e.handle({"type": "join", "name": f"Mới {i}"}, 1)
+    e.tick(RULES_MIN_GAP - 1)
+    e.drain()
+    e.tick(RULES_MIN_GAP + 1)
+    assert e.last_rules == RULES_MIN_GAP + 1  # đủ người mới + qua 1 phút: đọc luật
+    e.tick(RULES_MIN_GAP + 100)
+    assert e.last_rules == RULES_MIN_GAP + 1  # không có người mới: chờ đủ 3 phút
+    e.tick(RULES_MIN_GAP + 1 + RULES_GAP)
+    assert e.last_rules == RULES_MIN_GAP + 1 + RULES_GAP
+
+
+def test_each_gift_has_its_own_effect():
+    """PLAN-142: hiệu ứng theo tên món, không khớp thì theo giá một món; món đắt không bao giờ hiệu ứng nhỏ; sự kiện quà mang fx."""
+    from xe_tet.server.game.engine import gift_fx
+    assert gift_fx("Rose", 1) == ("petals", 1) and gift_fx("Rose ×5", 5) == ("petals", 5)
+    assert gift_fx("TikTok", 1)[0] == "honk" and gift_fx("Finger Heart", 5)[0] == "hearts"
+    assert gift_fx("Hoa hồng", 1)[0] == "petals" and gift_fx("Ultimate", 10)[0] == "firework"  # «tim» trong chữ khác không tính
+    assert gift_fx("Doughnut", 30)[0] == "lixi" and gift_fx("Hand Hearts", 100)[0] == "lantern"
+    e = Engine(0.0)
+    e.handle({"type": "gift", "name": "An", "diamonds": 3, "gift": "Rose ×3"}, 1)
+    ev = next(x for x in e.drain() if x["type"] == "gift")
+    assert ev["fx"] == "petals" and ev["fx_n"] == 3
+
+
 # ---- PLAN-134 B: người xem biết mình ở xe nào --------------------------------
 
 def test_where_question_is_not_a_booking():
@@ -1291,7 +1358,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
         assert is_bad(text), text
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
-                  need=3, others="Cà Mau, Đồng Tháp")
+                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120")
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",

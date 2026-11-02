@@ -38,6 +38,8 @@ Luật game (chỉ nói đúng những điều này, không bịa thêm):
   tỉnh để bắt xe dọc đường: ra điểm đón chờ, xe tấp vô rước; xe đã qua quê rồi thì giữ chỗ xe sau.
 - Thả tim cho xe chạy nhanh hơn. Ở trạm dừng gõ phở, trà đá, cà phê, WC. Lúc xe đợi khách ở bến hoặc ở trạm gõ «đổ xăng»,
   «rửa xe»: đầy bình, xe sạch thì chuyến sau chạy nhanh hơn chút.
+- Mỗi món quà một hiệu ứng trên màn hình: hoa hồng thì hoa mai / đào rơi, quà TikTok thì xe bóp còi, tim thì tim bay, quà 10 tới
+  29 xu pháo hoa, 30 tới 99 xu lì xì bay, từ 100 xu đèn lồng thả trời.
 - Tặng quà (chỉ người từ 18 tuổi): có tên VIP, từ 10 xu có pháo hoa lúc về tới quê, từ 100 xu có băng rôn trên xe hoặc gọi xe
   tăng cường cho người đang chờ, từ 1000 xu cả xe chúc Tết; người có vé tặng quà thì có thùng quà Tết gửi theo xe.
 - Người ngồi xe tăng cường càng tặng quà, bình luận, thả tim nhiều thì xe mình càng được chiếu lên màn hình lâu hơn (tối đa

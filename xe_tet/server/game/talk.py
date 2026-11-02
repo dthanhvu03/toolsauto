@@ -75,6 +75,19 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} thả tim quá trời, năm nay về {prov} nữa hông, gõ {prov} là Anh Tư xếp giường.",
             "Ủa {name} khách quen tuyến {prov} mà, gõ {prov} lên xe luôn cho rồi.",
         ),
+        "screen_relief": (  # màn hình chuyển sang xe tăng cường (PLAN-142): lơ xe theo xe đang chiếu
+            "Qua xe số {no} nè bà con, xe đi {dest} chở {n} người, còn {km} ki lô mét tới {next}.",
+            "Ngó xe số {no} chút, chạy hướng {dest}, {n} khách, sắp tới {next} rồi.",
+        ),
+        "screen_main": (
+            "Về lại xe số {no} đi {dest}, {n} khách đang nằm ngủ ngon lành.",
+            "Quay về xe số {no} hướng {dest} nghe bà con, {n} người trên xe.",
+        ),
+        "rules": (  # đọc luật chơi định kỳ / khi có người mới vô (PLAN-142)
+            "Mới vô thì nghe nè, gõ tên tỉnh quê mình là có giường về quê, thả tim cho xe chạy nhanh, gõ xe nào để coi vé.",
+            "Luật dễ ẹc bà con, gõ tên tỉnh là lên xe, hổng về thì gõ không về, tặng quà là có hiệu ứng trên xe.",
+            "Ai chưa biết chơi, gõ tên tỉnh quê vô bình luận, Anh Tư xếp giường, xe chạy tới quê là thả xuống đầu ngõ.",
+        ),
         "parcels": (  # thùng quà Tết người tặng quà gửi theo xe, tới quê giao tận cổng (PLAN-134 C)
             "Bốc thùng quà của {names} xuống, Anh Tư bê tận cổng cho, khỏi lo.",
             "Thùng quà Tết của {names} tới nơi rồi, ra cổng nhận đi.",
@@ -187,6 +200,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} chơi lớn dữ, cảm ơn, Tết này hốt bạc.",
             "Cảm ơn {name}, có quà là Anh Tư la to hơn nè.",
         ),
+        "gift_prov": (
+            "Cảm ơn {name} quê {prov} tiếp lửa cho cả xe, chúc bà con {prov} năm mới phát tài.",
+            "{name} ở {prov} tặng quà tiếp xăng cho xe chạy lẹ, quý quá trời.",
+        ),
+        "first_gift": (
+            "{name} mở hàng chuyến xe số {n}, đỏ cả chuyến rồi, cảm ơn {name} nhiều.",
+            "Có {name} mở hàng xe số {n} rồi bà con, nổ pháo hoa lấy hên đầu chuyến.",
+        ),
     },
     # ---- gen Z -----------------------------------------------------------------------------------------
     "genz": {
@@ -245,6 +266,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "invite_home": (
             "{name} thả tim xịn xò, năm nay về {prov} khum, gõ {prov} là có giường.",
             "Team {prov} thiếu {name} nè, gõ {prov} lên xe liền, uy tín.",
+        ),
+        "screen_relief": (
+            "Chuyển cảnh qua xe số {no} nè, đi {dest}, {n} người, còn {km} ki lô mét tới {next}.",
+            "Xe số {no} lên sóng, team {dest} {n} người, sắp tới {next}, uy tín.",
+        ),
+        "screen_main": (
+            "Quay về xe số {no} đi {dest}, {n} người đang chill trên xe.",
+            "Back về xe số {no} hướng {dest} rồi mấy bồ, {n} người trên xe.",
+        ),
+        "rules": (
+            "Người mới vô gõ tên tỉnh quê là có giường, thả tim cho xe chạy nhanh, gõ xe nào để check vé, dễ ợt.",
+            "Chơi sao hả, gõ tên tỉnh là lên xe, tặng quà là có hiệu ứng, gõ không về là ở lại, gét gô.",
         ),
         "parcels": (
             "Ship tận cổng thùng quà của {names}, uy tín luôn.",
@@ -357,6 +390,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Cảm ơn {name}, đỉnh nóc kịch trần.",
             "{name} chơi lớn quá, Tết này nhận lì xì mỏi tay.",
         ),
+        "gift_prov": (
+            "{name} team {prov} tặng quà tiếp lửa cho cả xe, uy tín luôn.",
+            "Cảm ơn {name} quê {prov} bơm xăng cho xe phóng vèo vèo, đỉnh nóc.",
+        ),
+        "first_gift": (
+            "{name} mở bát chuyến xe số {n}, nổ pháo hoa khai xuân, uy tín luôn.",
+            "Chuyến số {n} có {name} mở hàng rồi, vía tốt cả xe chạy mượt.",
+        ),
     },
     # ---- gen Y -----------------------------------------------------------------------------------------
     "geny": {
@@ -415,6 +456,18 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "invite_home": (
             "{name} thả tim nhiều quá, năm nay về {prov} nữa không, gõ {prov} là có giường.",
             "Khách quen {prov} {name} đây rồi, gõ {prov} lên xe cho chất.",
+        ),
+        "screen_relief": (
+            "Giờ mời bà con xem xe số {no} đi {dest}, chở {n} người, còn {km} ki lô mét tới {next}.",
+            "Xe số {no} hướng {dest} lên sóng, {n} khách, sắp tới {next}.",
+        ),
+        "screen_main": (
+            "Quay lại xe số {no} đi {dest}, {n} khách trên xe.",
+            "Trở về xe số {no} hướng {dest}, {n} người đang về quê.",
+        ),
+        "rules": (
+            "Ai mới vào thì gõ tên tỉnh quê mình là lên xe, thả tim cho xe chạy nhanh, gõ xe nào để xem vé của mình.",
+            "Luật đơn giản thôi, gõ tên tỉnh là có giường, tặng quà là có hiệu ứng, gõ không về nếu ở lại, chuẩn không cần chỉnh.",
         ),
         "parcels": (
             "Giao tận cổng thùng quà Tết của {names}, chuẩn không cần chỉnh.",
@@ -526,6 +579,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Cảm ơn {name}, quý hóa quá, năm mới phát tài.",
             "{name} tặng quà, chất như nước cất, cảm ơn nhiều.",
             "Cảm ơn {name}, chúc năm mới an khang, tiền vô như nước.",
+        ),
+        "gift_prov": (
+            "Cảm ơn {name} quê {prov} tiếp lửa cho chuyến xe, chuẩn không cần chỉnh.",
+            "{name} ở {prov} tặng quà tiếp sức cho bác tài, chất như nước cất.",
+        ),
+        "first_gift": (
+            "{name} mở hàng chuyến xe số {n}, đầu xuôi đuôi lọt, cảm ơn {name}.",
+            "Chuyến xe số {n} được {name} mở hàng may mắn, chúc cả xe thượng lộ bình an.",
         ),
     },
 }

@@ -283,3 +283,128 @@ export class Puffs {
     });
   }
 }
+
+// ---- lì xì / đèn lồng / mưa hoa khi tặng quà (PLAN-142) -------------------------------------------------------------
+// Mỗi món quà một hiệu ứng: hình vẽ canvas một lần, sprite gom sẵn (không tạo mới giữa trận); bay lên (lì xì, đèn lồng)
+// hoặc rơi xuống (hoa), đung đưa, mờ dần cuối đời. Số sprite có trần — quà dồn dập không làm tụt khung.
+
+function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  draw(c.getContext("2d")!);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Phong bao lì xì: đỏ, viền vàng, đồng xu vàng giữa. */
+export const LIXI_TEX = canvasTex(64, 96, (g) => {
+  g.fillStyle = "#d61f1f";
+  g.beginPath();
+  g.roundRect(4, 4, 56, 88, 8);
+  g.fill();
+  g.strokeStyle = "#ffd23f";
+  g.lineWidth = 4;
+  g.stroke();
+  g.fillStyle = "#ffd23f";
+  g.fillRect(4, 30, 56, 6);
+  g.beginPath();
+  g.arc(32, 56, 13, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#d61f1f";
+  g.fillRect(28, 52, 8, 8);
+});
+
+/** Đèn lồng đỏ thả trời: thân bầu, nắp vàng, lõi sáng. */
+export const LANTERN_TEX = canvasTex(64, 96, (g) => {
+  const glow = g.createRadialGradient(32, 50, 4, 32, 50, 30);
+  glow.addColorStop(0, "#ffe9a0");
+  glow.addColorStop(0.35, "#ff6a3a");
+  glow.addColorStop(1, "#c41a1a");
+  g.fillStyle = glow;
+  g.beginPath();
+  g.ellipse(32, 50, 26, 32, 0, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = "rgba(120,0,0,0.5)";
+  g.lineWidth = 2;
+  for (const dx of [-12, 0, 12]) {
+    g.beginPath();
+    g.ellipse(32, 50, Math.abs(dx) + 2, 31, 0, 0, Math.PI * 2);
+    g.stroke();
+  }
+  g.fillStyle = "#ffd23f";
+  g.fillRect(20, 14, 24, 7);
+  g.fillRect(20, 80, 24, 7);
+});
+
+/** Cánh hoa (tô màu theo vùng: đào hồng / mai vàng). */
+export const BLOSSOM_TEX = canvasTex(32, 32, (g) => {
+  g.fillStyle = "#ffffff";
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    g.beginPath();
+    g.ellipse(16 + Math.cos(a) * 7, 16 + Math.sin(a) * 7, 6, 4, a, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = "#e0a000";
+  g.beginPath();
+  g.arc(16, 16, 3, 0, Math.PI * 2);
+  g.fill();
+});
+
+interface FloaterOpts { scale: number; rise: number; sway: number; life: number }
+interface Floater { sprite: THREE.Sprite; vel: THREE.Vector3; life: number; max: number; phase: number }
+
+export class Floaters {
+  readonly group = new THREE.Group();
+  private free: Floater[] = [];
+  private live: Floater[] = [];
+  private t = 0;
+
+  constructor(map: THREE.Texture, size: number, private opts: FloaterOpts) {
+    for (let i = 0; i < size; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, opacity: 0 }));
+      sprite.visible = false;
+      this.group.add(sprite);
+      this.free.push({ sprite, vel: new THREE.Vector3(), life: 0, max: 1, phase: 0 });
+    }
+  }
+
+  /** `count` cái quanh `at` (trải ±spread theo x); hết sprite rảnh thì thôi. */
+  emit(at: THREE.Vector3, count: number, spread = 5, color = 0xffffff): void {
+    const { scale, rise, life } = this.opts;
+    for (let i = 0; i < count; i++) {
+      const f = this.free.pop();
+      if (!f) return;
+      f.sprite.position.set(at.x + (Math.random() - 0.5) * 2 * spread, at.y + (Math.random() - 0.5) * 2, at.z + (Math.random() - 0.5) * 3);
+      f.sprite.scale.set(scale * 0.66, scale, 1);
+      f.sprite.material.color.setHex(color);
+      f.sprite.material.opacity = 0;
+      f.sprite.visible = true;
+      f.vel.set((Math.random() - 0.5) * 0.8, rise * (0.7 + Math.random() * 0.6), (Math.random() - 0.5) * 0.4);
+      f.max = f.life = life * (0.8 + Math.random() * 0.4);
+      f.phase = Math.random() * 6;
+      this.live.push(f);
+    }
+  }
+
+  update(dt: number): void {
+    this.t += dt;
+    for (let i = this.live.length - 1; i >= 0; i--) {
+      const f = this.live[i];
+      f.life -= dt;
+      if (f.life <= 0) {
+        f.sprite.visible = false;
+        this.free.push(f);
+        this.live.splice(i, 1);
+        continue;
+      }
+      f.sprite.position.addScaledVector(f.vel, dt);
+      f.sprite.position.x += Math.sin(this.t * 2 + f.phase) * this.opts.sway * dt;
+      const age = f.max - f.life;
+      f.sprite.material.opacity = Math.min(1, age / 0.3, f.life / 0.8);  // hiện nhanh, mờ dần lúc cuối
+      f.sprite.material.rotation = Math.sin(this.t * 3 + f.phase) * 0.3;
+    }
+  }
+}

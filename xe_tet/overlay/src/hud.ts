@@ -26,6 +26,13 @@ const PILL: Record<State["phase"], string> = {
 const MAX_TOASTS = 3;
 const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết lập)
 const CTA_ROTATE_MS = 4000;
+const GUIDE_MS = 10_000;  // màn «Cách chơi» lớn mỗi lần xe vào bến đón khách
+// Bảng quà → hiệu ứng (PLAN-142), khớp `GIFT_FX_*` ở server/game/engine.py
+const GIFT_TIPS = [
+  "🎁 🌹 Hoa hồng → hoa mai, đào rơi · 🎵 TikTok → xe bóp còi",
+  "🎁 💗 Tim → tim bay · 🎆 10–29 xu → pháo hoa",
+  "🎁 🧧 30–99 xu → lì xì bay · 🏮 Từ 100 xu → đèn lồng · từ 18 tuổi",
+];
 const BOARD_ROTATE_MS = 8000;
 const CALLOUT_MS = 1700;
 const NAMED_KEEP = 500;  // nhớ lần gọi tên của 500 người gần nhất (có trần, không phình suốt buổi)
@@ -103,6 +110,8 @@ export class Hud {
   private flashTimer = 0;
   private state: State | null = null;
   private ctaTick = 0;
+  private guideShown = false;
+  private guideTimer = 0;
   private boardTick = 0;
   private tickets: Ticket[] = [];
   private namedAt = new Map<string, number>();  // lần cuối tên được hiện trên thẻ lớn (chọn tên khi dồn vé)
@@ -121,7 +130,10 @@ export class Hud {
   }
 
   update(s: State): void {
+    const prevPhase = this.state?.phase;
     this.state = s;
+    // màn «Cách chơi» lớn 10 giây: lúc mở trang và mỗi lần xe chính vào bến đón khách (PLAN-142)
+    if (s.phase === "BOARDING" && prevPhase !== "BOARDING" && (prevPhase !== "SPECIAL" || !this.guideShown)) this.showGuide();
     this.seats = seatsOf(s);
     const c = s.control;
     const hud = $("hud");
@@ -249,6 +261,14 @@ export class Hud {
 
   // ---- lời kêu gọi: dòng chính đứng yên, dòng phụ xoay vòng gợi ý ----
 
+  private showGuide(): void {
+    this.guideShown = true;
+    const g = $("guide");
+    g.classList.remove("hidden");
+    window.clearTimeout(this.guideTimer);
+    this.guideTimer = window.setTimeout(() => g.classList.add("hidden"), GUIDE_MS);
+  }
+
   private renderCta(): void {
     const s = this.state;
     if (!s) return;
@@ -271,6 +291,7 @@ export class Hud {
       }
       if (s.rush) tips.push("⚡ Cao điểm: xe chạy nhanh, lên lẹ!");
     }
+    tips.push(...GIFT_TIPS);  // bảng quà → hiệu ứng (PLAN-142)
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
   }
@@ -370,6 +391,8 @@ export class Hud {
         this.toast(`🏠 ${name} ở ngay ${esc(e.province ?? "")}`, "Đi bộ về nhà nha!", "stay");
         break;
       case "gift":
+        if (e.fx === "hearts") this.hearts(Math.min(40, 8 * (e.fx_n ?? 1)));
+        if (e.fx === "honk") this.flash(`📢 ${name} bóp còi xe!`);
         if ((e.tier ?? 0) < SPECIAL_TIER) {
           const hint = e.next_tier ? `<br>🎯 ${esc(e.next_tier)}` : "";
           const parcel = e.parcel ? "<br>📦 Thùng quà Tết lên gầm xe, tới quê giao tận cổng" : "";

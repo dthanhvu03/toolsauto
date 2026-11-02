@@ -22,7 +22,7 @@ from .moderation import allow_chat, clean_name
 from . import season
 from .answers import faq, is_question
 from .network import PASS_SPAN_KM, TUNNEL_SPAN_KM, Network, Trip
-from .parser import FOOD_EMOJI, parse
+from .parser import FOOD_EMOJI, normalize, parse
 from .provinces import BY_KEY, specialty_of
 from .talk import hours_phrase, line, spoken_list
 
@@ -132,6 +132,10 @@ SHOW_PER_POINT = 0.2  # +1 giây mỗi 5 điểm
 SHOW_MAX = 60.0  # tối đa một lượt (anh chọn 60)
 SHOW_AGAIN = 90.0  # xe vừa lên sóng thì 90 giây sau mới tới lượt lại — xe khác (ít điểm) cũng có lượt
 ON_AIR_NAMES = 3
+OFFSCREEN_SKIP = {"via", "honk"}
+RULES_GAP = 180.0  # lơ xe đọc luật chơi mỗi 3 phút (anh báo 02/11: người xem chưa hiểu luật)
+RULES_MIN_GAP = 60.0  # có RULES_JOINS người mới vào phòng thì đọc sớm hơn, nhưng không dưới 1 phút
+RULES_JOINS = 3  # câu nhỏ của xe chính: xe chính không lên màn hình thì lơ xe khỏi nói
 MANUAL_HOLD = 120.0  # admin bấm «Chiếu» tay → tạm ngưng tự chuyển 2 phút
 
 WISHES = (
@@ -162,6 +166,36 @@ GIFT_LABELS = {
     3: ("băng rôn «Xe Tết của bạn»", "băng rôn «Xe Tết của bạn»"),
     4: ("cả xe dừng lại chúc Tết", "cả xe dừng lại chúc Tết"),
 }
+
+
+# Mỗi món quà một hiệu ứng (PLAN-142, anh chọn 02/11). TikTok gửi tên món (thường tiếng Anh, có khi tiếng Việt) kèm giá xu: khớp
+# tên trước, không khớp thì theo giá một món. Hiệu ứng chỉ là hình / tiếng trên màn hình — mốc xu cũ (VIP, pháo hoa, băng rôn,
+# xe tăng cường, chúc Tết) giữ nguyên.
+GIFT_FX_NAMES = (
+    (("rose", "hoa hong", "flower", "bong hoa"), "petals"),
+    (("tiktok",), "honk"),
+    (("heart", "hearts", "tim", "love"), "hearts"),
+    (("lantern", "den long"), "lantern"),
+    (("li xi", "red envelope", "envelope", "money", "lucky"), "lixi"),
+    (("firework", "fireworks", "phao hoa", "confetti"), "firework"),
+)
+GIFT_FX_RANK = ("petals", "honk", "hearts", "firework", "lixi", "lantern")  # nhỏ → lớn
+GIFT_FX_PRICE = ((1, "petals"), (9, "hearts"), (29, "firework"), (99, "lixi"))  # (giá một món ≤, hiệu ứng); trên nữa: lantern
+GIFT_FX_LABELS = {  # bảng quà trên màn hình (hud.ts dùng cùng thứ tự)
+    "petals": "🌹 Hoa hồng → hoa mai / đào rơi", "honk": "🎵 TikTok → xe bóp còi", "hearts": "💗 Tim → tim bay",
+    "firework": "🎆 10–29 xu → pháo hoa", "lixi": "🧧 30–99 xu → lì xì bay", "lantern": "🏮 Từ 100 xu → đèn lồng thả trời",
+}
+
+
+def gift_fx(gift: str, diamonds: int) -> tuple[str, int]:
+    """(hiệu ứng, số món) của một lượt tặng: «Rose ×5», 5 xu → ("petals", 5)."""
+    name, _, times = gift.partition(" ×")
+    count = max(1, as_int(times)) if times else 1
+    unit = diamonds / count
+    by_price = next((fx for top, fx in GIFT_FX_PRICE if unit <= top), "lantern")
+    words = f" {normalize(name)} "
+    by_name = next((fx for keys, fx in GIFT_FX_NAMES if any(f" {k} " in words for k in keys)), by_price)
+    return max(by_name, by_price, key=GIFT_FX_RANK.index), count  # món đắt mà tên «nhỏ» (Hand Hearts 100 xu) vẫn hiệu ứng lớn
 
 
 def as_int(value, default: int = 1) -> int:
@@ -252,6 +286,7 @@ class Relief:
     done: int = 0  # số điểm đã thả khách
     dropped_at: float | None = None  # lúc vừa thả khách (tự chiếu: ở lại xem thêm chút)
     shown_at: float = -1e9  # lần cuối lên sóng theo điểm
+    place_now: str | None = None  # tỉnh xe đang qua (đang chiếu thì lơ xe gọi bà con tỉnh đó)
 
 
 @dataclass
@@ -278,6 +313,7 @@ class Engine:
         self.staying: list[str] = []
         self.board: Counter[str] = Counter()  # vé theo tỉnh trong phiên
         self.trip_likes = 0
+        self.trip_gifted = False  # chuyến này đã có người mở hàng tặng quà chưa
         self.boost = 0.0
         self.bus_counter = 0
         self.trip: Trip | None = None
@@ -323,6 +359,8 @@ class Engine:
         self.questions: list[dict] = []  # câu hỏi chờ AI trả lời (Hub lấy qua next_question)
         self.place_now: str | None = None  # tỉnh xe chính đang đi qua (đổi tỉnh mới gọi bà con tỉnh đó)
         self.last_via_talk = -1e9
+        self.last_rules = now  # mới mở game: để cảnh đầu tiên chạy, đọc luật sau RULES_MIN_GAP nếu có người vào
+        self.joins_since_rules = 0
         self.specials: list[str] = []
         self.resume: tuple[str, float] = ("DRIVING", 0.0)  # pha + giây còn lại để quay về sau SPECIAL
         self.next_banner: str | None = None  # quà băng rôn lúc hết chuyến → dán cho xe sau
@@ -346,9 +384,16 @@ class Engine:
     def emit(self, type_: str, **data) -> None:
         self.outbox.append({"type": type_, **data})
 
-    def talk(self, kind: str, speak: bool = True, **fields) -> None:
-        """Anh Tư lơ xe nói một câu loại `kind` (bảng câu đời thường trong talk.py)."""
-        self.loxe(line(kind, self.rng, self.talk_style, **fields), speak)
+    def talk(self, kind: str, speak: bool = True, main: bool = False, **fields) -> None:
+        """Anh Tư lơ xe nói một câu loại `kind` (bảng câu đời thường trong talk.py). `main`: câu về chỗ / cảnh của xe chính —
+        màn hình đang chiếu xe tăng cường thì câu nhỏ (qua tỉnh, bóp còi) bỏ, câu khác ghi rõ «Xe số N.» (anh báo 02/11: chiếu
+        xe khác mà lơ xe vẫn đọc chỗ khác)."""
+        text = line(kind, self.rng, self.talk_style, **fields)
+        if main and self.featured is not None:
+            if kind in OFFSCREEN_SKIP:
+                return
+            text = f"Xe số {self.bus.no}. {text}"
+        self.loxe(text, speak)
 
     def _dest(self, lane: str) -> str:
         return BY_KEY[self.network.lane_by_key[lane].to].name
@@ -402,9 +447,11 @@ class Engine:
         if key == "via":
             return f"{name} ơi, xe đón dọc đường đó, quê còn ở phía trước thì gõ tên tỉnh, ra điểm đón chờ Anh Tư tấp vô rước."
         if key == "how":
-            return f"{name} gõ tên tỉnh quê mình là có giường, thả tim cho xe chạy nhanh hơn."
+            return (f"{name} gõ tên tỉnh quê mình là có giường, thả tim cho xe chạy nhanh hơn, gõ xe nào để coi vé, "
+                    "hổng về thì gõ không về.")
         if key == "gift":
-            return f"{name} hỏi quà hả, tặng quà là có tên VIP, pháo hoa, thùng quà Tết gửi theo xe, chỉ người từ 18 tuổi tặng."
+            return (f"{name} hỏi quà hả, mỗi món một kiểu, hoa hồng thì hoa rơi, TikTok thì xe bóp còi, tim thì tim bay, "
+                    "quà lớn có lì xì, đèn lồng, pháo hoa, chỉ người từ 18 tuổi tặng.")
         if key == "station":
             return f"{name} muốn xe ra bến khác thì gõ từ Hà Nội hay bến Đà Nẵng, đủ {STATION_VOTES} người gọi là xe ra."
         if key == "newname":
@@ -534,6 +581,7 @@ class Engine:
         self.trip, self.legs, self.leg_index, self.progress = None, [], 0, 0.0
         self.pickups = {}
         self.trip_likes = 0
+        self.trip_gifted = False
         for v in self.viewers.values():
             v.likes_trip = 0
             v.gift_trip = 0
@@ -543,7 +591,7 @@ class Engine:
         today = self._today()  # câu mời lên xe theo mùa: cao điểm 23–28 Chạp, giao thừa, ngày Tết (PLAN-134 C)
         kind = {season.PEAK: "boarding_peak", season.EVE: "boarding_eve", season.TET: "boarding_tet"}.get(
             season.phase(today), "boarding")
-        self.talk(kind, dest=self._dest(self.bus.lane), lunar=season.lunar_label(today) or "")
+        self.talk(kind, dest=self._dest(self.bus.lane), lunar=season.lunar_label(today) or "", main=True)
 
     def _board_time(self) -> float:
         """Giờ đón tỉ lệ số giường còn trống: xe đã kín người chờ lên sẵn thì không bắt cả bến đợi đủ 3 phút."""
@@ -610,7 +658,7 @@ class Engine:
         lane = net.lane_by_key[self.bus.lane]
         self.emit("depart", bus_no=self.bus.no, riders=len(self.bus.riders()), lane=lane.label,
                   stops=[BY_KEY[k].name for k in stops], km=round(total))
-        self.talk("depart", dest=self._dest(self.bus.lane), hours=hours_phrase(Network.hours(total)))
+        self.talk("depart", dest=self._dest(self.bus.lane), hours=hours_phrase(Network.hours(total)), main=True)
         self._enter_driving(now)
 
     def _leg_start_km(self) -> float:
@@ -658,7 +706,7 @@ class Engine:
             self._set_phase("REST", now, min(self.rest_seconds, RUSH_REST_SECONDS) if self.rush() else self.rest_seconds)
             place = BY_KEY[leg.target]
             self.emit("rest", region=place.region, specialty=specialty_of(place.key), place=place.name)
-            self.talk("rest", place=place.name, specialty=spoken_list(specialty_of(place.key)))
+            self.talk("rest", place=place.name, specialty=spoken_list(specialty_of(place.key)), main=True)
             return
         prov = BY_KEY[leg.target]
         uids = [uid for uid in self.bus.riders() if self.viewers[uid].province == leg.target]
@@ -671,8 +719,8 @@ class Engine:
         givers = [p["name"] for p in info["people"] if p["parcels"]]
         if givers:  # thùng quà Tết của ai thì giao tận cổng, gọi tên (PLAN-134 C)
             more = len(givers) - 3
-            self.talk("parcels", names=", ".join(givers[:3]) + (f" và {more} người nữa" if more > 0 else ""))
-        self.talk("dropoff_bubble", speak=False, prov=prov.name)  # giọng đọc có câu riêng kèm tên người xuống
+            self.talk("parcels", names=", ".join(givers[:3]) + (f" và {more} người nữa" if more > 0 else ""), main=True)
+        self.talk("dropoff_bubble", speak=False, prov=prov.name, main=True)  # giọng đọc có câu riêng kèm tên người xuống
 
     def _deliver(self, uids: list[str], province: str, bus_no: int) -> dict:
         """Thả khách về tới tỉnh (xe chính / xe tăng cường): cập nhật thống kê, trả nội dung băng rôn đọc tên."""
@@ -747,10 +795,15 @@ class Engine:
                 relief.riders = [uid for uid in relief.riders if uid not in uids]
                 relief.dropped_at = self.last_now
                 self.emit("relief_dropoff", **self._deliver(uids, province, relief.no), sponsor=relief.sponsor)
+                if relief.no == self.featured:  # giọng đọc có câu riêng kèm tên; bong bóng cho người đang xem xe này
+                    self.talk("dropoff_bubble", speak=False, prov=BY_KEY[province].name)
+            if relief.no == self.featured:
+                self._watch_relief(relief)
             if relief.done >= len(relief.trip.stops):
                 self.reliefs.remove(relief)
                 if self.featured == relief.no:  # xe đang chiếu tới bến cuối → màn hình quay về xe chính
                     self.featured = None
+                    self._introduce(None)
                 self.music.pop(str(relief.no), None)
 
     # ---- admin: mọi chuyến xe -------------------------------------------
@@ -765,9 +818,12 @@ class Engine:
         """Chọn xe nào lên màn hình: None / số xe chính = xe chính; số xe tăng cường = màn hình theo xe đó.
         Admin bấm tay (`manual`) thì tự chiếu nhường admin MANUAL_HOLD giây."""
         featured = None if not no or no == self.bus.no else self._relief(int(no)).no
-        if featured != self.featured:
+        changed = featured != self.featured
+        if changed:
             self.featured_since = self.last_now
         self.featured = featured
+        if changed:
+            self._introduce(featured)
         if manual:
             self.manual_until = self.last_now + MANUAL_HOLD
             self.show_until = None
@@ -903,7 +959,7 @@ class Engine:
         self._set_phase("FINISH", now, FINISH_SECONDS)
         self.emit("finish", bus_no=self.bus.no, board=self._board_top(),
                   top_liker=top_liker, delivered=self.delivered, delivered_km=self.delivered_km)
-        self.talk("finish")
+        self.talk("finish", main=True)
 
     def _board_top(self, n: int = 5) -> list[dict]:
         return [{"province": BY_KEY[k].name, "count": c} for k, c in self.board.most_common(n) if c > 0]
@@ -918,7 +974,7 @@ class Engine:
         self.last_other_talk = now
         names = ", ".join(self.other_dirs[-3:])
         self.other_dirs = []
-        self.talk("this_trip", dest=self._dest(self.bus.lane), others=names)
+        self.talk("this_trip", dest=self._dest(self.bus.lane), others=names, main=True)
 
     def tick(self, now: float) -> None:
         dt = max(0.0, now - self.last_now)
@@ -929,6 +985,7 @@ class Engine:
             return
         self._run_reliefs(dt)
         self._remind_direction(now)
+        self._remind_rules(now)
         if self.specials and self.phase in SPECIAL_FROM:
             self.resume = (self.phase, max(0.0, self.phase_until - now))
             self._set_phase("SPECIAL", now, SPECIAL_SECONDS)
@@ -945,7 +1002,7 @@ class Engine:
                     self._fill_from_queue()
                     self.phase_until = now + EMPTY_BOARD_RETRY
                     if self.bus.riders():
-                        self.talk("switch_lane", dest=self._dest(self.bus.lane))
+                        self.talk("switch_lane", dest=self._dest(self.bus.lane), main=True)
         elif self.phase == "DRIVING":
             km_before = self.trip_km()
             self.progress += (dt * self.speed() / self.leg_seconds
@@ -966,7 +1023,7 @@ class Engine:
             if not self.honked and now >= self.phase_until - HONK_BEFORE_END:
                 self.honked = True
                 self.emit("honk")
-                self.talk("honk")
+                self.talk("honk", main=True)
             if now >= self.phase_until:
                 self._next_leg(now)
         elif self.phase == "DROPOFF":
@@ -994,7 +1051,7 @@ class Engine:
         self.queues = {ln.key: [] for ln in self.network.lanes}
         self.queued_at = {}
         self.bus.lane = self.network.lanes[0].key
-        self.talk("departure", station=self.network.departure.name)
+        self.talk("departure", station=self.network.departure.name, main=True)
 
     def extend(self, seconds: float) -> None:
         """Cộng / trừ thời gian pha đang chạy (đón khách, trạm dừng…); không áp cho lúc đang chạy đường.
@@ -1046,6 +1103,7 @@ class Engine:
                 self.emit("share", name=v.name, province=prov)
         elif kind == "join":
             self.emit("join", name=v.name)
+            self.joins_since_rules += 1
         return True
 
     def _on_comment(self, v: Viewer, text: str, now: float) -> None:
@@ -1102,7 +1160,7 @@ class Engine:
             return False
         if self.last_now - self.last_lock_talk >= 10:
             self.last_lock_talk = self.last_now
-            self.talk("board_lock", name=v.name)
+            self.talk("board_lock", name=v.name, main=True)
         return True
 
     def _book(self, v: Viewer, key: str) -> None:
@@ -1151,11 +1209,11 @@ class Engine:
                     self.resume = ("BOARDING", min(self.resume[1], FULL_BUS_SECONDS))
                 else:
                     self.phase_until = min(self.phase_until, self.last_now + FULL_BUS_SECONDS)
-                self.talk("full")
+                self.talk("full", main=True)
             elif left == 5:
-                self.talk("seats_left", n=left)
+                self.talk("seats_left", n=left, main=True)
             elif left == 1:
-                self.talk("last_seat")
+                self.talk("last_seat", main=True)
         else:
             passed = self._roadside(v, changed)
             if passed is True:
@@ -1178,7 +1236,7 @@ class Engine:
         self.emit(kind, name=v.name, hue=v.hue, level=round(level, 2))
         if now - self.last_care_talk >= CARE_TALK_GAP:
             self.last_care_talk = now
-            self.talk("fuel" if kind == "fuel" else "wash", name=v.name, n=round(level * 100))
+            self.talk("fuel" if kind == "fuel" else "wash", name=v.name, n=round(level * 100), main=True)
 
     def _wear(self, km: float) -> None:
         """Xe chính chạy `km`: hết xăng + bẩn dần (mưa phùn miền Bắc / đèo bẩn nhanh hơn)."""
@@ -1261,7 +1319,7 @@ class Engine:
         self._ticket(v, free, changed, pickup=BY_KEY[place].name, pickup_in=round(wait or 0))
         if phase == "DRIVING" and self.last_now - self.last_pickup_talk >= PICKUP_TALK_GAP:
             self.last_pickup_talk = self.last_now
-            self.talk("pickup_wait", name=v.name, place=BY_KEY[place].name)
+            self.talk("pickup_wait", name=v.name, place=BY_KEY[place].name, main=True)
         if phase != "DRIVING":
             self._check_pickups()  # xe đang dừng ở trạm / đầu ngõ: lên luôn
         return True
@@ -1280,7 +1338,7 @@ class Engine:
                       province=BY_KEY[v.province].name if v.province else None)
             if self.last_now - self.last_pickup_talk >= PICKUP_TALK_GAP:
                 self.last_pickup_talk = self.last_now
-                self.talk("pickup", name=v.name, place=BY_KEY[place].name)
+                self.talk("pickup", name=v.name, place=BY_KEY[place].name, main=True)
 
     def _odo_of(self, province: str | None) -> float | None:
         """Odometer xe chính tới tỉnh này trên chuyến đang chạy: điểm trả chưa tới, hoặc tỉnh xe đi qua; None: ngoài đường."""
@@ -1354,7 +1412,7 @@ class Engine:
             self.other_dirs = [*(p for p in self.other_dirs if p != info["province"]), info["province"]][-5:]
         if extra.get("passed") and self.last_now - self.last_pickup_talk >= PICKUP_TALK_GAP:
             self.last_pickup_talk = self.last_now
-            self.talk("passed", name=v.name, prov=extra["passed"])
+            self.talk("passed", name=v.name, prov=extra["passed"], main=True)
 
     def _already_home(self, v: Viewer, key: str) -> None:
         """BR-5: comment đúng tỉnh của bến đi → không lên xe, vẫn được tính là đã về quê (một lần)."""
@@ -1418,7 +1476,39 @@ class Engine:
             self.last_via_talk = now
             name = BY_KEY[place].name
             self.emit("via", province=name, bus_no=self.bus.no)
+            self.talk("via", place=name, main=True)
+
+    def _remind_rules(self, now: float) -> None:
+        """Lơ xe đọc luật chơi: đủ RULES_GAP giây, hoặc ≥ RULES_JOINS người mới vào và đã qua RULES_MIN_GAP."""
+        since = now - self.last_rules
+        if since >= RULES_GAP or (self.joins_since_rules >= RULES_JOINS and since >= RULES_MIN_GAP):
+            self.last_rules = now
+            self.joins_since_rules = 0
+            self.talk("rules")
+
+    def _watch_relief(self, relief: Relief) -> None:
+        """Xe tăng cường đang lên màn hình vào tỉnh nó chỉ đi qua: lơ xe gọi bà con tỉnh đó (như xe chính)."""
+        place = self._road_at(relief.trip, relief.odo)[0]
+        if place == relief.place_now:
+            return
+        relief.place_now = place
+        if self.last_now - self.last_via_talk >= VIA_TALK_GAP and any(k == place for k, _ in relief.trip.via):
+            self.last_via_talk = self.last_now
+            name = BY_KEY[place].name
+            self.emit("via", province=name, bus_no=relief.no)
             self.talk("via", place=name)
+
+    def _introduce(self, no: int | None) -> None:
+        """Màn hình vừa chuyển xe: lơ xe nói xe nào đang lên sóng, đi đâu, chở bao nhiêu, điểm kế."""
+        if no is None:
+            self.talk("screen_main", no=self.bus.no, dest=self._dest(self.bus.lane), n=len(self.bus.riders()))
+            return
+        relief = next((r for r in self.reliefs if r.no == no), None)
+        if relief is None or relief.done >= len(relief.trip.stops):
+            return
+        nxt, odo = relief.trip.stops[relief.done]
+        self.talk("screen_relief", no=relief.no, dest=self._dest(relief.lane), n=len(relief.riders),
+                  next=BY_KEY[nxt].name, km=f"{max(1, round(odo - relief.odo)):,}".replace(",", "."))
 
     def ticket_of(self, v: Viewer) -> dict:
         """Vé của một người xem lúc này, trả lời khi họ hỏi «xe nào / tới đâu rồi» (PLAN-134 B): xe số mấy, giường, còn mấy
@@ -1641,12 +1731,13 @@ class Engine:
         # quà Tết lên gầm xe: người có vé (đang ngồi / giữ chỗ / xe tăng cường) tặng quà → thêm một thùng mang tên mình
         parcel = (ticketed or any(v.uid in r.riders for r in self.reliefs)) and v.parcels < PARCELS_MAX
         v.parcels += int(parcel)
+        fx, fx_n = gift_fx(gift, diamonds)
         perk = GIFT_LABELS[tier][0 if ticketed else 1]
         if relief:
             perk = f"🚌 xe tăng cường chạy ngay cho bà con {self.network.lane_by_key[relief.lane].label.lower()}"
         self.emit("gift", name=v.name, hue=v.hue, tier=tier, tier_up=tier > tier_before, gift=gift,
                   diamonds=diamonds, total=total, perk=perk, next_tier=self._next_tier_hint(total, queued is not None),
-                  parcel=parcel, parcels=v.parcels)
+                  parcel=parcel, parcels=v.parcels, fx=fx, fx_n=fx_n)
         if self.phase == "REST" and v.uid not in self.treated:  # combo 30 hoa hồng chỉ «bao cả xe» một lần
             self.treated.add(v.uid)
             self.emit("treat", name=v.name)
