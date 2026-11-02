@@ -67,6 +67,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} ghé bến lần nữa nè, bữa trước chưa lên xe, nay gõ tên tỉnh đi.",
             "Thấy {name} quen quen, ghé lại hả, nay về quê thì gõ tên tỉnh lẹ.",
         ),
+        "invite": (  # thả tim nhiều mà chưa có vé: gọi tên mời lên xe, mỗi người một lần mỗi buổi
+            "{name} thả tim nãy giờ mà chưa lên xe, quê đâu gõ tên tỉnh đi, Anh Tư chừa giường cho.",
+            "Ê {name}, tim nhiều vậy mà đứng ngoài hoài, gõ tên tỉnh quê là có giường liền.",
+        ),
+        "invite_home": (
+            "{name} thả tim quá trời, năm nay về {prov} nữa hông, gõ {prov} là Anh Tư xếp giường.",
+            "Ủa {name} khách quen tuyến {prov} mà, gõ {prov} lên xe luôn cho rồi.",
+        ),
         "parcels": (  # thùng quà Tết người tặng quà gửi theo xe, tới quê giao tận cổng (PLAN-134 C)
             "Bốc thùng quà của {names} xuống, Anh Tư bê tận cổng cho, khỏi lo.",
             "Thùng quà Tết của {names} tới nơi rồi, ra cổng nhận đi.",
@@ -230,6 +238,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} quay lại rồi kìa, lần này lên xe luôn đi, khum là toang.",
             "Ơ {name} ghé lại nè, gõ tên tỉnh cái là có giường liền.",
         ),
+        "invite": (
+            "{name} thả tim đỉnh nóc mà chưa lên xe, gõ tên tỉnh cái là có giường liền.",
+            "Ơ {name} tim nhiều thế mà đứng ngoài, gõ tên tỉnh quê lên xe đi, gét gô.",
+        ),
+        "invite_home": (
+            "{name} thả tim xịn xò, năm nay về {prov} khum, gõ {prov} là có giường.",
+            "Team {prov} thiếu {name} nè, gõ {prov} lên xe liền, uy tín.",
+        ),
         "parcels": (
             "Ship tận cổng thùng quà của {names}, uy tín luôn.",
             "Thùng quà của {names} hạ cánh an toàn, chuẩn đét.",
@@ -391,6 +407,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "welcome_back": (
             "{name} ghé lại bến rồi, lần này gõ tên tỉnh lên xe luôn cho chất.",
             "Chào {name} quay lại, quê ở đâu thì gõ tên tỉnh, Anh Tư xếp giường cho.",
+        ),
+        "invite": (
+            "{name} thả tim nãy giờ mà chưa lên xe, quê ở đâu thì gõ tên tỉnh, Anh Tư giữ giường cho.",
+            "Cảm ơn {name} thả tim, gõ tên tỉnh quê là lên xe luôn, chuẩn không cần chỉnh.",
+        ),
+        "invite_home": (
+            "{name} thả tim nhiều quá, năm nay về {prov} nữa không, gõ {prov} là có giường.",
+            "Khách quen {prov} {name} đây rồi, gõ {prov} lên xe cho chất.",
         ),
         "parcels": (
             "Giao tận cổng thùng quà Tết của {names}, chuẩn không cần chỉnh.",

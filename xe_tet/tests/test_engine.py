@@ -1056,6 +1056,40 @@ def test_same_hometown_riders_are_paired():
     assert not any(ev["type"] == "loxe" and "Chi" in ev["text"] for ev in e.drain())
 
 
+def test_silent_liker_is_invited_once():
+    """Thả tim đều mà chưa có vé → lơ xe gọi tên mời một lần mỗi buổi; người có vé / chọn «không về» không bị mời; biết quê
+    từ buổi trước thì mời đúng tỉnh."""
+    from xe_tet.server.game.engine import INVITE_GAP, INVITE_LIKES
+    e = Engine(0.0)
+    e.last_now = 1
+    comment(e, "An", "Hà Nội", 1)
+    e.drain()
+    e.handle({"type": "like", "name": "Bình", "count": INVITE_LIKES - 1}, 1)
+    e.handle({"type": "like", "name": "An", "count": INVITE_LIKES}, 1)
+    assert not any(ev["type"] == "loxe" for ev in e.drain())  # Bình chưa đủ tim, An có vé rồi
+    e.handle({"type": "like", "name": "Bình", "count": 1}, 2)
+    assert [ev for ev in e.drain() if ev["type"] == "loxe" and "Bình" in ev["text"]]
+    e.last_now = 2 + INVITE_GAP
+    e.handle({"type": "like", "name": "Bình", "count": 5}, e.last_now)
+    assert not any(ev["type"] == "loxe" for ev in e.drain())  # mỗi người một lần
+    e.viewer("chi", "Chi").home = "nghean"
+    e.handle({"type": "like", "name": "Chi", "count": INVITE_LIKES}, e.last_now)
+    assert any(ev["type"] == "loxe" and "Nghệ An" in ev["text"] for ev in e.drain())
+    e.last_now += INVITE_GAP
+    comment(e, "Dũng", "không về", e.last_now)
+    e.drain()
+    e.handle({"type": "like", "name": "Dũng", "count": INVITE_LIKES}, e.last_now)
+    assert not any(ev["type"] == "loxe" and "Dũng" in ev["text"] for ev in e.drain())
+
+
+def test_no_gift_hint_past_top_tier():
+    """Đã tới 1000 xu thì không gợi ý «tặng thêm N xu» nữa (không mở vòng tặng không đáy)."""
+    e = Engine(0.0)
+    e.handle({"type": "gift", "name": "An", "diamonds": 1200}, 1)
+    gift = next(ev for ev in e.drain() if ev["type"] == "gift")
+    assert gift["next_tier"] == ""
+
+
 # ---- PLAN-136: bắt xe dọc đường ------------------------------------------------
 
 def _driving_to_hanoi():

@@ -107,6 +107,8 @@ ASK_PER_VIEWER = 30.0  # mỗi người hỏi tối đa 30 giây một lần (h�
 QUESTIONS_KEEP = 10  # hàng câu hỏi chờ AI: giữ 10 câu mới nhất
 SAME_HOME_GAP = 30.0  # giây giữa hai lần lơ xe ghép đôi người cùng quê
 WELCOME_GAP = 20.0  # giây giữa hai lần lơ xe chào khách quay lại (đầu buổi nhiều người cũ vào cùng lúc)
+INVITE_LIKES = 15  # tim trong chuyến của một người chưa có vé → lơ xe gọi tên mời lên xe (người xem lặng lẽ, chưa comment)
+INVITE_GAP = 45.0  # giây giữa hai lần mời; mỗi người được mời một lần mỗi buổi
 PARCELS_MAX = 3  # thùng quà Tết mỗi người mỗi chuyến (quà combo dồn dập không chất kín gầm xe một người)  # tra vé: mỗi người 15 giây một lần (spam «xe nào» không chiếm hết thẻ trên màn hình)
 REST_ACTION_COOLDOWN = 3.0
 NAMES_PER_PAGE = 4  # thả khách: đọc tên tất cả, mỗi trang 4 người (chữ to đọc được trên điện thoại)
@@ -204,6 +206,7 @@ class Viewer:
     last_seen: float = 0.0  # lần cuối có bất kỳ tương tác nào (TikTok không báo ai rời phòng)
     last_share: float = -1e9
     last_notice: float = -1e9
+    invited: bool = False  # buổi này lơ xe đã mời lên xe (thả tim nhiều mà chưa có vé)
 
 
 @dataclass
@@ -286,6 +289,7 @@ class Engine:
         self.dirty: set[str] = set()  # người xem có hồ sơ đổi, chờ ghi
         self.last_welcome = -1e9
         self.last_same_home = -1e9
+        self.last_invite = -1e9
         self.fuel = 1.0  # bình xăng 0 → 1 (PLAN-137)
         self.dirt = 0.0  # độ bẩn 0 (sạch) → 1
         self.trip_bonus = 1.0  # thưởng tốc độ chuyến này theo xăng / độ sạch lúc xuất bến
@@ -1342,6 +1346,20 @@ class Engine:
             if before < mark <= self.trip_likes:
                 self.emit("like_milestone", total=mark)
                 self.talk("likes", total=f"{mark:,}".replace(",", "."))
+        self._invite(v)
+
+    def _invite(self, v: Viewer) -> None:
+        """Người thả tim đều mà chưa có vé (chưa gõ tỉnh, chưa chọn «không về», buổi này chưa về quê): lơ xe gọi tên mời
+        một lần — người xem lặng lẽ thường chỉ cần được gọi tên là comment. Biết quê từ buổi trước thì mời đúng tỉnh."""
+        if (v.invited or v.stay or v.home_now or v.province or v.likes_trip < INVITE_LIKES
+                or self.last_now - self.last_invite < INVITE_GAP):
+            return
+        v.invited = True
+        self.last_invite = self.last_now
+        if v.home in BY_KEY:
+            self.talk("invite_home", name=v.name, prov=BY_KEY[v.home].name)
+        else:
+            self.talk("invite", name=v.name)
 
     def _watch_place(self, now: float) -> None:
         """Xe chính vào địa phận tỉnh không ai xuống (PLAN-134): lơ xe gọi bà con tỉnh đó — quê họ cũng là một phần chuyến
@@ -1590,10 +1608,10 @@ class Engine:
 
     @staticmethod
     def _next_tier_hint(total: int, queued: bool = False) -> str:
-        """«Tặng thêm 6 xu → pháo hoa…»: mục tiêu gần trước mắt thì người ta tặng tiếp."""
+        """«Tặng thêm 6 xu → pháo hoa…»: mục tiêu gần trước mắt thì người ta tặng tiếp. Đã tới bậc cao nhất (1000 xu) thì
+        thôi gợi ý: không mở vòng «thêm N xu → chúc Tết lần nữa» không đáy cho người đã tặng nhiều."""
         if total >= 1000:
-            need = 1000 - total % 1000
-            return f"thêm {need} xu → cả xe chúc Tết thêm lần nữa"
+            return ""
         floor, tier = min(((f, t) for f, t in GIFT_TIERS if f > total), key=lambda ft: ft[0])
         if tier == RELIEF_GIFT_TIER and queued:  # đang chờ xe sau: mốc kế tiếp là gọi được xe cho cả làn mình
             return f"thêm {floor - total} xu → xe tăng cường chạy ngay cho cả làn của bạn"
