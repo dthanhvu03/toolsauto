@@ -15,12 +15,13 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import music, settings, simulator, store, voice
+from . import ai_reply, music, settings, simulator, store, voice
 from .game.engine import LIKE_MAX, VN, Engine, Refused, as_int
 from .game.geo import DEPARTURES
 from .game.network import Network, available
@@ -33,6 +34,9 @@ STATE_EVERY = 0.2
 JOIN_FLUSH = 2.0
 LIKES_FLUSH = 0.5  # gom tim mỗi nửa giây → overlay cho tim bay lên thanh tốc độ
 SEND_TIMEOUT = 1.0  # một khung gửi lâu hơn thì coi màn hình đã chết: đóng, overlay tự nối lại
+AI_GAP = 25.0  # giây giữa hai câu AI trả lời (PLAN-135)
+AI_MAX_AGE = 40.0  # câu hỏi chờ quá lâu thì bỏ
+AI_PER_HOUR = 120  # trần số câu AI mỗi giờ (chi phí)
 OUTBOX_MAX = 64  # khung chờ gửi tối đa / màn hình; dồn quá (màn hình nhận không kịp) thì đóng kết nối
 
 log = logging.getLogger("xe_tet")
@@ -91,6 +95,14 @@ class Hub:
         self.screens: dict[WebSocket, dict] = {}
         self.screen_seq = 0
         self.audio_choice: int | None = None  # admin chọn trên /control; None hoặc màn đã đóng → màn mở sau cùng
+        # lơ xe trả lời câu hỏi bằng AI (PLAN-135): một câu đang hỏi tại một lúc, giãn cách, trần mỗi giờ
+        self.ai_busy = False
+        self.ai_last = 0.0
+        self.ai_times: deque[float] = deque()
+        self.ai_answered = 0
+        self.ai_error: str | None = None
+        self.ai_key = bool(ai_reply.api_key())
+        self.ai_client: httpx.AsyncClient | None = None
         self.sim_rate = 0.0  # sự kiện giả / giây, 0 = tắt
         self.pending_joins: list[str] = []
         self.last_join_flush = 0.0
@@ -105,8 +117,45 @@ class Hub:
         engine.relief_auto = self.settings["relief_auto"]
         engine.trip_minutes = self.settings["trip_minutes"]
         engine.talk_style = self.settings["talk_style"]
+        engine.ai_reply = self.settings["ai_reply"]
         engine.recall = self.store.load
         return engine
+
+    def maybe_answer(self, now: float) -> None:
+        """Lấy một câu hỏi chờ cho AI trả lời ở tác vụ nền (vòng game không chờ mạng)."""
+        if not self.settings["ai_reply"] or self.ai_busy or now - self.ai_last < AI_GAP:
+            return
+        while self.ai_times and now - self.ai_times[0] > 3600:
+            self.ai_times.popleft()
+        if len(self.ai_times) >= AI_PER_HOUR:
+            return
+        question = self.engine.next_question(now, AI_MAX_AGE)
+        if question:
+            self.ai_busy = True
+            asyncio.create_task(self._answer(question))
+
+    async def _answer(self, q: dict) -> None:
+        try:
+            key = ai_reply.api_key()
+            self.ai_key = bool(key)
+            if not key:
+                self.ai_error = "chưa có GEMINI_API_KEY trong /home/vu/toolsauto/.env"
+                return
+            self.ai_client = self.ai_client or httpx.AsyncClient()
+            text = await ai_reply.ask(self.ai_client, key, q["name"], q["text"], self.engine.ai_context(q["uid"]))
+            if text:
+                self.engine.loxe(text)
+                self.ai_answered += 1
+                self.ai_error = None
+            else:
+                self.ai_error = "AI không trả lời được câu vừa rồi (mạng / hạn mức / bị lọc) — bỏ qua"
+        except Exception:
+            log.exception("AI trả lời câu hỏi lỗi")
+            self.ai_error = "AI lỗi — bỏ qua câu đó"
+        finally:
+            self.ai_times.append(time.monotonic())
+            self.ai_last = time.monotonic()
+            self.ai_busy = False
 
     async def flush(self) -> None:
         """Ghi hồ sơ người xem đã đổi xuống SQLite ở luồng riêng (vòng game không chờ ổ đĩa); lỗi ghi không làm đứng game."""
@@ -129,6 +178,8 @@ class Hub:
     def state_message(self) -> dict:
         return {"kind": "state", **self.engine.snapshot(), "control": self.settings, "sim_rate": self.sim_rate,
                 "screens": sorted(self.screens.values(), key=lambda sc: sc["id"]), "audio_screen": self.audio_screen(),
+                "ai": {"key": self.ai_key, "answered": self.ai_answered, "error": self.ai_error,
+                       "waiting": len(self.engine.questions)},
                 "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST, "music_tracks": music.tracks(),
                 "voices": self.voice.voice_list}
 
@@ -139,6 +190,8 @@ class Hub:
         self.engine.relief_auto = self.settings["relief_auto"]
         self.engine.trip_minutes = self.settings["trip_minutes"]
         self.engine.talk_style = self.settings["talk_style"]
+        self.engine.ai_reply = self.settings["ai_reply"]
+        self.ai_key = bool(ai_reply.api_key())  # anh vừa thêm khoá vào .env: bật lại công tắc là nhận
         settings.save(self.settings)
 
     async def broadcast(self, message: dict) -> None:
@@ -192,6 +245,7 @@ class Hub:
                 self.last_likes_flush = now
                 await self.broadcast({"kind": "event", "type": "likes", "count": count})
             self.voice.tick(now)
+            self.maybe_answer(now)
             self.engine.advance_music([t["seconds"] for t in music.tracks()], self.settings["music_auto"])
             if now - last_state >= STATE_EVERY:
                 last_state = now

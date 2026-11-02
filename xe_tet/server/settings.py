@@ -26,6 +26,7 @@ DEFAULTS: dict = {
     "fade": False,  # mờ nhẹ khi đổi cảnh; tắt = cắt thẳng (tránh nhấp nháy)
     "quality": "medium",  # high | medium (75 % độ phân giải, bóng cách khung — khi live) | low (~60 %, tắt bóng)
     "auto_loxe": True,  # lơ xe tự nói theo tình huống
+    "ai_reply": False,  # lơ xe trả lời câu hỏi trong comment bằng AI Gemini (PLAN-135; câu hay gặp luôn trả lời sẵn)
     "show_route": True,
     "show_loxe": True,
     "show_toasts": True,

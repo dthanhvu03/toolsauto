@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 from .moderation import allow_chat, clean_name
 from . import season
+from .answers import faq, is_question
 from .network import PASS_SPAN_KM, TUNNEL_SPAN_KM, Network, Trip
 from .parser import FOOD_EMOJI, parse
 from .provinces import BY_KEY, specialty_of
@@ -80,6 +81,9 @@ BOOST_HALF_LIFE = 6.0
 CHAT_COOLDOWN = 5.0
 VIA_TALK_GAP = 40.0  # giây: chuyến nén ~4 phút qua cả chục tỉnh — gọi tỉnh nào cũng gọi thì lơ xe nói liên tục
 WHERE_COOLDOWN = 15.0
+ASK_GAP = 12.0  # giây giữa hai câu lơ xe trả lời câu hỏi có sẵn (PLAN-135)
+ASK_PER_VIEWER = 30.0  # mỗi người hỏi tối đa 30 giây một lần (hỏi dồn không chiếm hết lời lơ xe)
+QUESTIONS_KEEP = 10  # hàng câu hỏi chờ AI: giữ 10 câu mới nhất
 SAME_HOME_GAP = 30.0  # giây giữa hai lần lơ xe ghép đôi người cùng quê
 WELCOME_GAP = 20.0  # giây giữa hai lần lơ xe chào khách quay lại (đầu buổi nhiều người cũ vào cùng lúc)
 PARCELS_MAX = 3  # thùng quà Tết mỗi người mỗi chuyến (quà combo dồn dập không chất kín gầm xe một người)  # tra vé: mỗi người 15 giây một lần (spam «xe nào» không chiếm hết thẻ trên màn hình)
@@ -162,6 +166,7 @@ class Viewer:
     last_chat: float = -1e9
     last_rest: float = -1e9
     last_where: float = -1e9
+    last_ask: float = -1e9
     parcels: int = 0  # thùng quà Tết đi theo vé (PLAN-134 C): tặng quà lúc có vé → lên gầm xe, tới quê ôm vào cổng
     # hồ sơ nhớ qua các buổi live (PLAN-134 D, store.py): quê đã về, tổng tim / xu / comment, ngày đầu / cuối gặp, số ngày ghé
     home: str | None = None
@@ -258,6 +263,9 @@ class Engine:
         self.dirty: set[str] = set()  # người xem có hồ sơ đổi, chờ ghi
         self.last_welcome = -1e9
         self.last_same_home = -1e9
+        self.last_answer = -1e9
+        self.ai_reply = False  # admin bật «lơ xe trả lời bằng AI» (Hub đặt theo thiết lập)
+        self.questions: list[dict] = []  # câu hỏi chờ AI trả lời (Hub lấy qua next_question)
         self.place_now: str | None = None  # tỉnh xe chính đang đi qua (đổi tỉnh mới gọi bà con tỉnh đó)
         self.last_via_talk = -1e9
         self.specials: list[str] = []
@@ -311,6 +319,60 @@ class Engine:
         elif name:
             v.name = name
         return v
+
+    def _question(self, v: Viewer, text: str, now: float) -> None:
+        """Câu hỏi trong comment (PLAN-135): câu hay gặp → lơ xe trả lời sẵn (gọi tên người hỏi); câu khác → xếp hàng cho AI
+        nếu admin bật. Giãn cách: cả phòng ASK_GAP giây / câu trả lời sẵn, mỗi người ASK_PER_VIEWER giây / câu hỏi."""
+        if now - v.last_ask < ASK_PER_VIEWER or not allow_chat(text):
+            return
+        key = faq(text)
+        if key:
+            if now - self.last_answer < ASK_GAP:
+                return
+            v.last_ask = self.last_answer = now
+            self.loxe(self._faq_answer(key, v))
+        elif self.ai_reply:
+            v.last_ask = now
+            self.questions = [*self.questions, {"uid": v.uid, "name": v.name, "text": text.strip()[:200], "at": now}][
+                -QUESTIONS_KEEP:]
+
+    def next_question(self, now: float, max_age: float) -> dict | None:
+        """Câu hỏi cũ nhất còn mới (chờ quá `max_age` giây thì bỏ: trả lời lạc nhịp còn tệ hơn không trả lời)."""
+        self.questions = [q for q in self.questions if now - q["at"] <= max_age]
+        return self.questions.pop(0) if self.questions else None
+
+    def _faq_answer(self, key: str, v: Viewer) -> str:
+        """Câu trả lời sẵn theo tình hình thật lúc này (giọng lơ xe: không «!», không «nha»)."""
+        name = v.name
+        if key == "via":
+            return f"{name} ơi, xe ghé dọc đường đó, gõ tên tỉnh là Anh Tư ghé tận nơi."
+        if key == "how":
+            return f"{name} gõ tên tỉnh quê mình là có giường, thả tim cho xe chạy nhanh hơn."
+        if key == "gift":
+            return f"{name} hỏi quà hả, tặng quà là có tên VIP, pháo hoa, thùng quà Tết gửi theo xe, chỉ người từ 18 tuổi tặng."
+        if key == "newname":
+            return f"Tên tỉnh cũ hay mới đều được {name} ơi, quê sáp nhập thì gõ tên tỉnh cũ cho Anh Tư ghé đúng cổng."
+        phase = self._phase_now()  # «depart»: khi nào xe chạy
+        if phase == "BOARDING":
+            left = max(0, round(self.phase_until - self.last_now))
+            when = f"{left // 60} phút {left % 60} giây" if left >= 60 else f"{left} giây"
+            return f"{name} ơi, xe số {self.bus.no} xuất bến sau {when}, ai chưa lên gõ tên tỉnh lẹ."
+        if phase == "REST":
+            return f"Xe đang nghỉ trạm {name} ơi, chút xíu là chạy tiếp."
+        if phase == "DROPOFF":
+            return f"Đang thả khách {name} ơi, xong là chạy tiếp liền."
+        if phase == "FINISH":
+            return f"Xe về bến rồi {name} ơi, chuyến sau sắp đón, gõ tên tỉnh trước đi."
+        return f"Xe số {self.bus.no} đang chạy rồi {name} ơi, gõ tên tỉnh là giữ chỗ xe sau."
+
+    def ai_context(self, uid: str) -> dict:
+        """Tình hình thật cho AI trả lời đúng (không bịa): pha, xe, điểm kế, vé của người hỏi, mùa."""
+        snap_leg = self.current_leg()
+        nxt = (f"Trạm {BY_KEY[snap_leg.target].name}" if snap_leg.kind == "rest" else BY_KEY[snap_leg.target].name) if snap_leg else None
+        return {"phase": self._phase_now(), "bus_no": self.bus.no, "lane": self.network.lane_by_key[self.bus.lane].label,
+                "departure": self.network.departure.name, "riders": len(self.bus.riders()), "next": nxt,
+                "waiting": self.waiting(), "days_to_tet": max(0, (season.TET_DAY - self._today()).days),
+                "ticket": self.ticket_of(self.viewers[uid]) if uid in self.viewers else {"status": "none"}}
 
     def _same_home(self, v: Viewer) -> None:
         """Lên xe mà trên xe đã có người cùng tỉnh: lơ xe ghép đôi (PLAN-134 D — người xem thích được nhận ra, có «hội
@@ -901,6 +963,8 @@ class Engine:
             else:
                 self.emit("rest_action", name=v.name, hue=v.hue, action="shop")
         else:
+            if faq(text) or is_question(text):
+                self._question(v, text, now)
             seat = self.bus.seat_of(v.uid)
             if seat is None or now - v.last_chat < CHAT_COOLDOWN or not text.strip() or not allow_chat(text):
                 return

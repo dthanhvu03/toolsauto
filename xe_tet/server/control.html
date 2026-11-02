@@ -267,7 +267,9 @@
       <label class="toggle"><input type="checkbox" data-show="show_toasts"> Thông báo vé / quà</label>
       <label class="toggle"><input type="checkbox" data-show="show_board"> Bảng tỉnh</label>
       <label class="toggle"><input type="checkbox" data-show="auto_loxe"> Lơ xe tự nói</label>
+      <label class="toggle"><input type="checkbox" data-show="ai_reply"> Lơ xe trả lời câu hỏi bằng AI (Gemini)</label>
     </div>
+    <p class="hint" id="ai-status"></p>
     <div class="row" style="margin-top:8px">
       <span style="min-width:96px">Cỡ chữ trên live</span>
       <input type="range" min="0.6" max="1.2" step="0.05" data-volume="hud_scale" aria-label="Cỡ chữ trên live" style="flex:1">
@@ -533,6 +535,14 @@ const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 function setIfChanged(el, html) { if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; } }
 // Màn hình game đang mở: chỉ một màn phát tiếng (mở trùng + thu tiếng máy = vang trên live). Mặc định màn mở sau cùng;
 // bấm để chọn màn khác — chọn màn «TikTok LIVE Studio» khi đang live.
+// Lơ xe trả lời câu hỏi (PLAN-135): câu hay gặp luôn trả lời sẵn; AI Gemini cho câu khác khi bật công tắc
+function renderAi(s) {
+  const ai = s.ai || {};
+  const on = !!(s.control || {}).ai_reply;
+  $("ai-status").textContent = !on ? "Câu hỏi hay gặp (ghé dọc đường, lên xe sao, khi nào chạy, quà, tỉnh mới) lơ xe luôn trả lời sẵn; bật AI để trả lời câu khác."
+    : !ai.key ? "⚠️ Chưa có khoá: thêm dòng GEMINI_API_KEY=… vào /home/vu/toolsauto/.env rồi tắt / bật lại công tắc."
+    : `🤖 AI đã trả lời ${ai.answered} câu · đang chờ ${ai.waiting}${ai.error ? ` · ${ai.error}` : ""}`;
+}
 function renderScreens(s) {
   const list = s.screens || [];
   setIfChanged($("screens"), list.length ? list.map((sc) => `<button data-screen="${sc.id}" class="${sc.id === s.audio_screen ? "primary" : ""}">`
@@ -673,6 +683,7 @@ async function refresh() {
     $("s-bus").textContent = `Số ${main.no} · ${main.riders}/${s.bus.seats.length}`;
     renderBuses(s);
     renderScreens(s);
+    renderAi(s);
     renderFiles(s);
     renderVoices(s);
     $("s-next").textContent = s.waiting;
