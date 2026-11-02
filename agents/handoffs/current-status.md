@@ -197,6 +197,20 @@
 - **02/11 ~05:50 — ĐÃ KHỞI ĐỘNG LẠI 8810 (anh «khởi động lại đi em»):** tắt êm (SIGTERM, ghi hồ sơ khách), chạy PLAN-141,
   trang `index-Dd74jmbr.js`, log 0 lỗi. Thiết lập anh đặt trên /control lúc 05:35: tự chiếu «rotate» 60 giây (luật lên sóng theo
   điểm chỉ chạy ở chế độ «events»), AI trả lời BẬT, chất lượng Cao.
+- **02/11 chiều — PLAN-142 (anh chọn: mỗi món quà một hiệu ứng; thẻ cách chơi + màn hướng dẫn):** sửa lơ xe nói chỗ xe chính
+  khi đang chiếu xe khác; lơ xe đọc luật mỗi 3 phút / khi có người mới; quà theo món (hoa rơi, còi, tim, pháo, lì xì, đèn lồng).
+  pytest 150, e2e 28/28 trên 8811. Chưa nạp 8810 (anh đã tự khởi động lại 8810 nghe 0.0.0.0; lúc kiểm tra TikTok «ended»
+  twot283, không màn nào mở).
+- **02/11 ~19:20 — Nâng cấp đồ họa Stylized 3D V2 + Blender 4.0 GLB (anh duyệt «oke em update và cập nhật cho anh đi em»):**
+  - Dựng 3 model `.glb` bằng Blender 4.0 (`public/models/{bus_coach,bus_wheel,village_house}.glb`) nạp sẵn qua `models.ts`:
+    thân xe khí động học có khoét hốc bánh xe Boolean, bánh xe đúc 6 chấu đúng trục Z ngang xe, nhà cổ 3 gian mái ngói âm dương
+    võng đầu đao + cột gỗ lim + cây rơm (hiện cả trên đường quê lẫn bối cảnh Đầu ngõ `HomeSet`).
+  - Gộp hình học tĩnh (`mergeGeometries` + Vertex Colors) cho cây cối, chậu hoa, đèn lồng, trụ điện, nhà cửa; thay địa hình bằng
+    2D Value-Noise (hết vệt sọc lặp); bỏ cây cao tiền cảnh che xe; lọc nhãn tên thông minh ở trạm đông (tối đa 10 nhãn, ưu tiên
+    VIP + người đang bước đi, không đè HUD).
+  - Đo trên GTX 1650 (720×1280 @ 30 FPS + mã hoá NVENC H.265 đồng thời): Draw calls giảm 340 → 207 (chạy đường) và 327 → 240
+    (trạm 40 người), GPU P95 7.7–12.6 ms (≤ 20 ms), VRAM toàn máy 1.67–1.74 GB (≤ 2.5 GB), pytest 146/146. Đã build `dist`
+    (`index-CCXV7aY4.js`) phục vụ trực tiếp trên 8810.
 - **Next:** bật lại khi live: `cd /home/vu/toolsauto && /home/vu/venv-xetet/bin/python -m xe_tet.server`; đổi FPS 30 trong
   LIVE Studio; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
