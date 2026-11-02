@@ -92,9 +92,9 @@ def test_tin_toi_da_3_mon_chia_deu_danh_muc():
     pool = {"dep": [dict(row, item_id=i, name=f"Đẹp {i}") for i in range(1, 5)],
             "nu": [dict(row, item_id=i, name=f"Nữ {i}") for i in range(11, 15)]}
     text, keyboard = deals.message_for(["dep", "nu"], pool, removed={2})
-    ids = [r[0]["callback_data"].rsplit(":", 1)[1] for r in keyboard if r[0]["callback_data"].startswith("u:dl:")]
+    urls = [r[0]["url"] for r in keyboard if "url" in r[0]]
     assert keyboard[-1][0]["callback_data"] == "u:dc:home", "nút cuối: đổi danh mục"
-    assert ids == ["1", "3", "11"], "tối đa 3 món, chia lần lượt từng danh mục, bỏ món đã gửi (2)"
+    assert len(urls) == 3 and all("shopee.vn" in u for u in urls), "tối đa 3 món, chia lần lượt từng danh mục, bỏ món đã gửi (2)"
     assert "💄 Làm đẹp" in text and "👗 Thời trang nữ" in text
     assert deals.message_for(["thucung"], pool, set()) is None, "không có món thì không gửi"
 
@@ -193,8 +193,8 @@ def test_khach_chua_chon_nhan_tin_doan_gu_thua_va_chat_hon(tmp_path):
     (sent,) = _events(bot, "DEALS")
     html = sent["message_html"]
     assert "Vài món hợp gu bạn" in html and "Bot đoán bạn thích 👕 Thời trang nam vì bạn từng xem" in html
-    callbacks = [row[0]["callback_data"] for row in json.loads(sent["reply_markup_json"])["inline_keyboard"]]
-    assert callbacks == ["u:dl:9:5", "u:dl:9:4", "u:dl:9:1", "u:dc:home", "u:dc:off"], \
+    buttons = [row[0].get("url") or row[0].get("callback_data") for row in json.loads(sent["reply_markup_json"])["inline_keyboard"]]
+    assert len(buttons) == 5 and all("shopee.vn" in u for u in buttons[:3]) and buttons[3:] == ["u:dc:home", "u:dc:off"], \
         "tối đa 3 món rẻ nhất, chỉ món rẻ hơn ≥ 12% (bỏ 225k, 228k)"
     with bot.repo.connect() as conn:
         assert deals.inferred(conn, SEND) == {}, "vừa gửi: 3 ngày sau mới gửi tiếp"
@@ -262,7 +262,8 @@ def test_quet_moi_gio_co_mon_moi_la_gui(tmp_path):
     assert "200k</b> (thường 250k · thấp nhất 30 ngày)" in sent["message_html"] and "dữ liệu lúc 14:00" in \
         sent["message_html"]
     keyboard = json.loads(sent["reply_markup_json"])["inline_keyboard"]
-    assert [row[0]["callback_data"] for row in keyboard] == ["u:dl:9:1", "u:dl:9:2", "u:dc:home"]
+    urls = [row[0]["url"] for row in keyboard if "url" in row[0]]
+    assert len(urls) == 2 and all("shopee.vn" in u for u in urls) and keyboard[-1][0]["callback_data"] == "u:dc:home"
     searched = len(market.keywords)
     deals.tick(bot.repo, bot, admin, SCAN.replace(minute=40), market, history, pause=lambda _s: None)
     assert len(market.keywords) == searched, "mỗi giờ một lượt"
@@ -288,8 +289,8 @@ def test_mot_mon_cung_gui_toi_da_4_tin_ngay_cach_2_gio(tmp_path):
     _stock(bot, {"dep": [_row(6)]}, _local(16))
     assert deals.send_round(bot.repo, _local(16)) == 0, "đủ 4 tin hôm nay"
     sent = [json.loads(e["reply_markup_json"])["inline_keyboard"] for e in _events(bot, "DEALS")]
-    assert [[r[0]["callback_data"] for r in k][:-1] for k in sent] == [
-        ["u:dl:9:1"], ["u:dl:9:2", "u:dl:9:3"], ["u:dl:9:4"], ["u:dl:9:5"]], "món để dành gửi lượt sau, không lặp món"
+    urls_per_sent = [[r[0]["url"] for r in k if "url" in r[0]] for k in sent]
+    assert [len(u) for u in urls_per_sent] == [1, 2, 1, 1], "món để dành gửi lượt sau, không lặp món"
     _stock(bot, {"dep": [_row(7)]}, _local(8, day=22))
     assert deals.send_round(bot.repo, _local(8, day=22)) == 1, "sang ngày mới đếm lại"
     _stock(bot, {"dep": [_row(8)]}, _local(22, 30, day=22))

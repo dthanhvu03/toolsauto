@@ -426,7 +426,7 @@ def test_man_bat_tat_tren_zalo_khong_co_o_xam_khong_lap():
 
 
 def test_tin_deal_go_so_lay_nhieu_mon_va_doc_muon_van_dung_duoc(tmp_path):
-    """Chủ bot 2026-10-28: gõ 1 lấy link xong, gõ 2 bị báo hết hạn; tin deal 20:08 đọc muộn cũng hết hạn sau 30 phút."""
+    """Chủ bot 2026-11-02: deal gắn link thẳng (1 click mua ngay, không cần gõ số lấy link); menu số chỉ còn nút cài đặt."""
     bot, channel, zalo = _channel(tmp_path)
     channel.handle(_update("hd", "m0"), now=NOW)
     bot.client.payload["productInfo"]["lastUpdate"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -437,19 +437,11 @@ def test_tin_deal_go_so_lay_nhieu_mon_va_doc_muon_van_dung_duoc(tmp_path):
         enqueue_event(conn, event_key="deals:x:-1", event_type="DEALS", chat_id=-1, message_html=text,
                       audience="customer", category="deal", reply_markup_json=json.dumps({"inline_keyboard": keyboard}))
     Dispatcher(bot.repo, ZaloSender(zalo, channel.store), False, None, False, channel="zalo").flush()
+    deal_text = zalo.sent[-1][1]
+    assert "Kem A" in deal_text and "Kem B" in deal_text
+    assert "https://s.shopee.vn/" in deal_text, "link affiliate gắn trực tiếp vào tin Zalo"
     deal_menu = channel.store.menu(-1, datetime.now(timezone.utc) + timedelta(hours=10))
-    assert deal_menu == ("u:dl:9:8", "u:dl:9:7", "u:dc:home"), "tin bot tự gửi: danh sách số giữ một ngày"
-    zalo.sent.clear()
-    channel.handle(_update("1", "m1"), now=datetime.now(timezone.utc))
-    buy = zalo.sent[-1][1]
-    assert "Hoàn dự kiến" in _texts(zalo) and "1 · 🛒 Kem A" in buy and "2 · 🛒 Kem B" in buy
-    assert channel.store.menu(-1, datetime.now(timezone.utc))[:3] == deal_menu, "giữ nguyên số của tin deal"
-    assert len(channel.store.menu(-1, datetime.now(timezone.utc))) > 3, "nút riêng của tin link xếp sau"
-    zalo.sent.clear()
-    channel.handle(_update("2", "m2"), now=datetime.now(timezone.utc))
-    assert "Hoàn dự kiến" in _texts(zalo) and "hết hạn" not in _texts(zalo)
-    with bot.repo.connect() as conn:
-        assert conn.execute("SELECT COUNT(*) FROM link_requests WHERE link_status = 'created'").fetchone()[0] == 2
+    assert deal_menu == ("u:dc:home",), "link deal gắn thẳng, menu số chỉ còn đổi danh mục"
 
 
 def test_ra_soat_zalo_chat_go_nham_so_va_trang_chu(tmp_path):

@@ -1241,7 +1241,7 @@ WATCH_ANNOUNCE = (
     "Phiền thì gõ /thongbao tắt nha 🫶"
 )
 WATCH_ANNOUNCE_KEYBOARD: Keyboard = ((("🔥 Deal hôm nay", "u:dh"),), (("📋 Món đang theo dõi", "u:pw:l"),))
-DEALS_PICK_HINT = "Bấm món muốn mua, bot gửi link hoàn tiền liền 😎"
+DEALS_PICK_HINT = "👉 Bấm link hoặc nút bên dưới để mở Shopee mua ngay:"
 DEALS_CHANGE_HINT = "Đổi danh mục hay tắt deal: bấm ⚙️ Đổi danh mục bên dưới nha 🫶"
 DEALS_INFER_HINT = "Chọn danh mục để bot gửi đúng gu hơn, hoặc tắt nếu không cần nha 🫶"
 DEALS_OFF_NOTICE = "🔕 Đã tắt deal hời. Muốn nhận lại thì chọn danh mục bên dưới nha."

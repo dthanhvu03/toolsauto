@@ -25,8 +25,8 @@ FAIL_COOLDOWN_SEC = 30.0  # Circuit breaker: nếu bridge lỗi/tắt, không ch
 # Gọi bridge lần lượt: relay mở link bằng 4 luồng, bridge (một phiên trình duyệt) phải xếp hàng thì link thứ 4 chờ cả
 # 3 link trước, hết timeout dù bridge không lỗi. Thời gian chờ khoá không tính vào timeout.
 _BRIDGE_LOCK = threading.Lock()
-# Đo thật 2026-10-31 (21 link): bridge trả mỗi link 2,1–2,5 s, mức cũ 1,5 s lần nào cũng hụt.
-DEFAULT_TIMEOUT = 3.0
+# Đo thật 2026-10-31: bridge trả mỗi link 2,1–4,5 s tuỳ tải, nâng lên 6.0s để không timeout hụt
+DEFAULT_TIMEOUT = 6.0
 
 
 def get_bridge_host() -> str:

@@ -1,3 +1,21 @@
+## Phiên 2026-11-02 (buffer-chk3) — Báo cáo Buffer: 3/4 kênh đăng bài mất file từ 31/10 (chỉ đọc log + DB)
+
+- PM2: Maintenance, Web_Dashboard, 9Router_Gateway online từ 31/10 14:21Z (WSL khởi động lại, `pm2 resurrect` tự lên). Không gọi API Buffer.
+- Job Buffer (DONE/FAILED): 30/10 12/4, 31/10 5/0, 01/11 5/0, 02/11 1/0 (tới 09:00). 4 lỗi 30/10 vẫn là «Scheduled posts limit reached 10/10» (14:01, 19:01). Từ 31/10 chỉ còn Sống Nhẹ Tuổi 40 được xếp lịch.
+- **Sự cố chính:** 31/10 08:52 VN, 261 `viral_materials` READY → FAILED «Không còn file video» (Hoa Lệ Đây 210, trnvp89 35, Uyển Nhi 14, Sống Nhẹ 2). Không có dòng log nào ghi việc xoá file, chưa rõ vì sao mất.
+  - Hệ quả: 30 bài đến giờ đăng từ 31/10 08:52 tới 02/11 09:00, có **20 bài Buffer lấy video bị 404** (Web_Dashboard log): Hoa Lệ Đây 7 (1449–1460), trnvp89 7 (1505–1511), Uyển Nhi 6 (1633–1683). Gần như chắc các bài này lỗi trên Buffer; 10 bài của Sống Nhẹ lấy video bình thường.
+  - Còn 7 bài đã hẹn mà file đã mất, sẽ lỗi tiếp: Hoa Lệ Đây 1462/1463/1464 và trnvp89 1512/1513/1514 (02/11 14:00, 19:00, 03/11 09:00), Uyển Nhi 1709 (02/11 15:30).
+  - Sau 03/11 09:00, 3 kênh này không còn bài hẹn và kho READY bằng 0. Kho READY chỉ còn Sống Nhẹ 45 bài; hàng chờ Sống Nhẹ 10/10, xa nhất 04/11 07:30. Không có video mới vào `viral_materials` từ 28/10.
+- Suất 30 ngày còn: f8pL 1364/2000, RZX2 455/2000, ZVsP 70/1000 (khoảng 3–4 request/ngày). Sync «đã đăng» vẫn tắt, lần xác nhận POSTED cuối 28/10 22:29.
+- Chủ bot quên email đăng nhập: đã gọi `account { email }` 1 lần mỗi key (purpose=channel_bootstrap, tổng 3 request). Email không ghi vào repo.
+- **Cấp video mới (chủ bot yêu cầu):** bật lại nguồn `hoalexx2` (id 6 → Hoa Lệ Đây) và `nhung_1410tn` (id 3 → Uyển Nhi) bằng `SourceService.set_enabled` (cả hai tắt từ 23/10 21:37). Quét ngay vòng sau: Uyển Nhi 41 video mới, Hoa Lệ Đây 16; đã lên READY 2 video, phần còn lại đang tải và xử lý, Maintenance tự hẹn lên Buffer. trnvp89 (nguồn id 7) vẫn tắt.
+- Chủ bot đã tự xoá trên web Buffer 3 bài hẹn mất file của trnvp89 (job 1254, 1259, 1265). DB vẫn ghi DONE, không sửa vì kênh không có nguồn nên không ảnh hưởng xếp lịch. Còn chờ xoá: Hoa Lệ Đây 1253/1258/1264, Uyển Nhi 1252.
+- Bật thêm nguồn id 7 (reels FB `61595147031656` → trnvp89, chủ bot duyệt): quét ra 4 video mới (46 đã có), đang chờ tải. Kết quả tới lúc ghi: Uyển Nhi 19 READY, đã hẹn 9 bài từ 02/11 19:30, hàng chờ kín 10/10; Hoa Lệ Đây 6 READY, đã hẹn 6 bài từ 03/11 14:00.
+- `buffer_cooldown.json` có 1 mục tới 07/11 — khoá tạm ngưng first comment 7 ngày (gói Free, PLAN-070), bình thường.
+- **Next (chủ bot chọn):** (1) xem tab Error trên web Buffer để xác nhận 20 bài lỗi; có thể xoá 7 bài hẹn còn lại trên web để khỏi lỗi tiếp; (2) cấp video mới cho Hoa Lệ Đây, trnvp89, Uyển Nhi; (3) cần PLAN backend tìm vì sao file reup mất ngày 31/10, và cho job không hẹn bài khi file có thể bị dọn trước giờ đăng.
+
+---
+
 ## Phiên 2026-10-31 (live TikTok) — dự án mới `xe_tet/` (P1 MVP chạy được)
 
 - Anh bỏ ngách «viếng chùa online» (đã bão hoà: ≥ 6 phòng cùng mẫu, video top là reaction). Chọn ngách
@@ -157,6 +175,18 @@
   trên /control (commit 17f79c3). Anh live thử báo vang + mờ: vang do thu cả tiếng máy (em bảo bật loa — sai), mờ do
   LIVE Studio 720p **60 FPS** 4600 kbps → khuyên 30 FPS. **Anh bảo tắt server game: 8810 đã tắt** (tắt êm, đã ghi hồ sơ
   khách); VieNeu_TTS (PM2) vẫn chạy.
+- **02/11 — PLAN-135 → 138 (đã commit, CHƯA nạp 8810, 8810 đang tắt):** lơ xe trả lời câu hỏi (câu sẵn + Gemini, mặc định
+  tắt, chờ anh thêm `GEMINI_API_KEY` vào `.env`), bắt xe dọc đường, gọi xe ra bến khác, địa chỉ chi tiết, đủ 63 tỉnh, khoá 10
+  giây cuối, LED đầu xe đúng chuyến, lọc từ tục / tên bậy / miệt thị vùng miền, AI nhớ câu trả lời, đổ xăng / rửa xe, mời người
+  chỉ thả tim chưa lên xe, thôi gợi ý quà sau 1000 xu. Proof: pytest 144, e2e 28/28 + UX 0 lỗi trên 8811, fuzz 395 chuyến OK;
+  overlay đã build lại (`dist` mới). Bật 8810 là chạy toàn bộ bản mới — anh duyệt trước.
+- **02/11 — PLAN-139 (anh duyệt «làm bước 1»):** cả đám đông vẽ một lượt (instancing người 3D, không đổi hình): trạm dừng
+  40 người 433 → 196 lượt vẽ, bến 24 người 395 → 229. e2e 28/28 + UX 0 lỗi trên 8811. Chưa nạp 8810. Bước 2 (phông nền ảnh
+  vẽ nhiều lớp) chờ anh chọn nguồn ảnh.
+- **02/11 — PLAN-140 (anh duyệt «triển khai đi»):** biển chào tỉnh + biển chỉ đường (km thật), phông núi vẽ bằng code theo
+  vùng (đá vôi / Trường Sơn / cao nguyên / hàng dừa), cọc tiêu, biển 60, quán cóc, xe máy chở mai đào; giữ ổn định: tự dựng lại
+  khi mất ngữ cảnh WebGL (mất hẳn → tải lại sau ~10 giây), nới nhịp 30 khung, bỏ sắp nhãn mỗi khung. e2e 28/28 + UX 0 lỗi
+  trên 8811. Chưa nạp 8810.
 - **Next:** bật lại khi live: `cd /home/vu/toolsauto && /home/vu/venv-xetet/bin/python -m xe_tet.server`; đổi FPS 30 trong
   LIVE Studio; sau đó C3 chiều ra (bước riêng); anh mở PR `feat/xe-tet` → `main` (máy không có gh: dùng link compare) rồi merge; deploy cần `npm install && npm run build` trong `xe_tet/overlay`; mở http://127.0.0.1:8810/?fps=1 trên Chrome Windows đo FPS (Cao / Thấp).
   Cua trên khung dọc 9:16 còn nhẹ (chỉ thấy ±15 đơn vị đường) — nếu anh muốn rõ hơn thì tăng `MAX_CURVE` và uốn cả bóng đổ
