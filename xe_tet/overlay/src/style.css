@@ -270,6 +270,7 @@ html, body {
 #board li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
 #board li span { float: right; color: var(--red); margin-left: 8px; }
 #board li small { color: #6b4a33; font-weight: 500; }
+#board.gifts ol { font-size: 26px; }  /* bảng quà: tên quà + hiệu ứng trọn một dòng */
 #stay { margin-top: 8px; font-size: 26px; color: #4c6a8a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #rest-card { top: 1290px; }
 #rest-orders div { font-size: 32px; font-weight: 700; }

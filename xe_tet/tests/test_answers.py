@@ -119,3 +119,28 @@ def test_same_question_reuses_answer_without_calling_ai(monkeypatch):
     asyncio.run(hub._answer({"uid": "an", "name": "An", "text": "xe này xe số mấy", "at": 0.0}))
     asyncio.run(hub._answer({"uid": "dung", "name": "Dũng", "text": "xe này xe số mấy", "at": 0.0}))
     assert len(calls) == 3  # có số: hỏi lại AI
+
+
+def test_gemini_request_uses_thinking_level_and_retries_without_it():
+    """02/11: Gemini 3 trả 400 «invalid argument» cho thinkingBudget=0 (AI im lặng cả buổi live) → gửi thinkingLevel; vẫn 400
+    thì gửi lại không kèm thinkingConfig; model dự phòng không còn là 2.5-flash (đã ngừng)."""
+    import asyncio
+
+    class Res:
+        def __init__(self, code, text=""):
+            self.status_code, self.text = code, text
+
+        def json(self):
+            return {"candidates": [{"content": {"parts": [{"text": "Xe có wifi đó Lan"}]}}]}
+
+    sent = []
+
+    class Client:
+        async def post(self, url, json, headers, timeout):
+            sent.append(json["generationConfig"])
+            return Res(400, '{"error": {"message": "Request contains an invalid argument."}}') if len(sent) == 1 else Res(200)
+
+    out = asyncio.run(ai_reply.ask(Client(), "khoa", "Lan", "xe có wifi không", {}))
+    assert out == "Xe có wifi đó Lan"
+    assert sent[0]["thinkingConfig"] == {"thinkingLevel": "minimal"} and "thinkingConfig" not in sent[1]
+    assert "gemini-2.5-flash" not in ai_reply.MODELS

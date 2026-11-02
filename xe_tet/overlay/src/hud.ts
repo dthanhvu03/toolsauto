@@ -28,6 +28,12 @@ const HUD_SCALE = 0.8;  // cỡ chữ mặc định (server chưa gửi thiết 
 const CTA_ROTATE_MS = 4000;
 const GUIDE_MS = 10_000;  // màn «Cách chơi» lớn mỗi lần xe vào bến đón khách
 // Bảng quà → hiệu ứng (PLAN-142), khớp `GIFT_FX_*` ở server/game/engine.py
+const SEATS_DEFAULT = 24;
+// bảng góc phải hẹp (340 px, ~15 chữ / dòng): tên quà bên trái, hiệu ứng in đỏ bên phải
+const GIFT_BOARD: [string, string][] = [
+  ["🌹 Hoa hồng", "hoa rơi"], ["🎵 TikTok", "bóp còi"], ["💗 Tim", "tim bay"],
+  ["🎆 10+ xu", "pháo hoa"], ["🧧 30+ xu", "lì xì"], ["🏮 100+ xu", "đèn lồng"],
+];
 const GIFT_TIPS = [
   "🎁 🌹 Hoa hồng → hoa mai, đào rơi · 🎵 TikTok → xe bóp còi",
   "🎁 💗 Tim → tim bay · 🎆 10–29 xu → pháo hoa",
@@ -303,25 +309,35 @@ export class Hud {
     const s = this.state;
     if (!s) return;
     const riders = s.bus.seats.filter((x): x is NonNullable<typeof x> => !!x);
-    const others: FleetBus[] = (s.fleet ?? []).filter((b) => !b.featured);
+    const fleet: FleetBus[] = s.fleet ?? [];
+    // bảng góc phải luân phiên (rà soát 02/11: thêm bảng quà + danh sách MỌI xe kèm số khách, xe trống ghi rõ còn giường)
     const modes = [
       ...(s.queue?.length ? ["queue", "queue"] : []),
-      ...((s.fleet?.length ?? 0) > 1 ? ["fleet"] : []),
+      "fleet",
       ...(riders.length ? ["riders"] : []),
+      "gifts",
       "top",
     ];
     const mode = modes[this.boardTick % modes.length];
+    $("board").classList.toggle("gifts", mode === "gifts");
     if (mode === "queue") {
       setText("board-title", "⏳ Chờ xe sau");
       setHTML("board-list", s.queue.slice(0, QUEUE_ROWS).map((w) =>
         // số thứ tự đặt trước (float phải) để nằm cùng dòng; tên dài bị cắt «…», dòng không xuống hàng
         `<li><span>#${w.pos}</span>${w.arrow} ${esc(w.name)} <small>· ${esc(w.province)}</small></li>`).join(""));
-    } else if (mode === "fleet") {  // các xe khác đang ở đâu, bao lâu nữa tới điểm kế (PLAN-130)
-      setText("board-title", "🚌 Xe khác");
-      setHTML("board-list", others.slice(0, QUEUE_ROWS).map((b) => {
+    } else if (mode === "fleet") {  // mọi xe: số khách, đang ở đâu (PLAN-130); xe trống / đang đón ghi số giường còn
+      setText("board-title", `🚌 Các xe (${fleet.length})`);
+      setHTML("board-list", fleet.slice(0, QUEUE_ROWS).map((b) => {
         const where = FLEET_PHASE[b.phase]?.(b) ?? (b.next ? `→ ${esc(b.next)}` : "🏁 về bến");
-        return `<li><span>${b.in_s ? clock(b.in_s) : ""}</span>${b.arrow} số ${b.no} <small>${where}</small></li>`;
+        // đang đón: số giường đã có người / 24 (trống thì ghi «trống» — gõ tên tỉnh là lên); đang chạy: số khách
+        const load = b.phase === "BOARDING" ? (b.riders ? `${b.riders}/${SEATS_DEFAULT}` : "trống") : `${b.riders} khách`;
+        const on = b.featured ? "📺" : "";
+        return `<li><span>${load}</span>${on}${b.arrow}${b.no} <small>${where}</small></li>`;
       }).join(""));
+    } else if (mode === "gifts") {  // bảng quà → hiệu ứng (PLAN-142)
+      setText("board-title", "🎁 Quà tặng");
+      setHTML("board-list", GIFT_BOARD.map(([gift, fx]) => `<li><span>${fx}</span>${gift}</li>`).join("")
+        + "<li><small>Từ 18 tuổi</small></li>");
     } else if (mode === "riders") {
       setText("board-title", `🚌 Trên xe số ${s.bus.no}`);
       setHTML("board-list", riders.slice(-6).reverse()

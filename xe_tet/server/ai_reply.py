@@ -20,7 +20,8 @@ from .game.parser import normalize
 
 log = logging.getLogger("xe_tet.ai")
 ROOT = Path(__file__).resolve().parents[2]
-MODELS = ("gemini-3.5-flash-lite", "gemini-2.5-flash")
+# 02/11: gemini-2.5-flash bị Google ngừng cho người dùng mới (404) → dự phòng bằng 3.1 flash-lite (bản ổn định)
+MODELS = ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 TIMEOUT = 8.0
 MAX_CHARS = 180
@@ -123,11 +124,12 @@ async def ask(client: httpx.AsyncClient, key: str, name: str, question: str, ctx
     """Một câu trả lời (đã `clean`) hoặc None. Thử model nhanh trước; lỗi mạng / hết hạn mức thì lùi model sau."""
     body = {"systemInstruction": {"parts": [{"text": SYSTEM}]},
             "contents": [{"role": "user", "parts": [{"text": prompt(name, question, ctx)}]}],
-            "generationConfig": {"maxOutputTokens": 200, "temperature": 0.7, "thinkingConfig": {"thinkingBudget": 0}}}
+            # Gemini 3 bỏ «thinkingBudget: 0» (trả 400 «invalid argument», không nhắc chữ thinking) → dùng thinkingLevel
+            "generationConfig": {"maxOutputTokens": 200, "temperature": 0.7, "thinkingConfig": {"thinkingLevel": "minimal"}}}
     for model in MODELS:
         try:
             res = await client.post(URL.format(model=model), json=body, headers={"x-goog-api-key": key}, timeout=TIMEOUT)
-            if res.status_code == 400 and "thinking" in res.text.lower():  # model không cho tắt suy nghĩ: gửi lại không kèm
+            if res.status_code == 400:  # model không nhận tham số suy nghĩ: gửi lại không kèm
                 gen = {k: v for k, v in body["generationConfig"].items() if k != "thinkingConfig"}
                 res = await client.post(URL.format(model=model), json={**body, "generationConfig": gen},
                                         headers={"x-goog-api-key": key}, timeout=TIMEOUT)
