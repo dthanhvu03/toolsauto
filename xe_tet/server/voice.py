@@ -100,7 +100,9 @@ class Announcer:
             if names:
                 self.offer(line("dropoff", style=self.style(), prov=event["province"], names=names_phrase(names)),
                            DROPOFF)
-        elif kind == "ticket" and not event.get("changed"):
+        # chỉ đọc «lên xe» cho người có giường ngay trên xe đang đón — giữ chỗ chuyến sau (next) / hẹn bắt xe dọc đường (pickup)
+        # đã có câu riêng của lơ xe; đọc chung thì vừa «đợi chuyến sau» lại «lên xe» (anh báo 02/11)
+        elif kind == "ticket" and not event.get("changed") and not event.get("next") and not event.get("pickup"):
             if not self.boarding:
                 self.board_started = now
             self.boarding.append((event.get("name", ""), event.get("province", "")))

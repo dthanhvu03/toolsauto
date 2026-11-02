@@ -62,6 +62,20 @@ def test_boarding_names_are_batched_and_rate_limited():
     assert not a.queue
 
 
+def test_queued_and_pickup_tickets_are_not_read_as_boarding():
+    """Anh báo 02/11: lơ xe vừa «ai đi Cà Mau đợi chuyến sau» thì giọng đọc lại «… về Cà Mau, lên xe» — vé giữ chỗ chuyến
+    sau / hẹn bắt xe dọc đường không được đọc như lên xe."""
+    a = announcer()
+    a.observe({"type": "ticket", "name": "Út", "province": "Cà Mau", "next": True}, 0)
+    a.observe({"type": "ticket", "name": "Ba", "province": "Huế", "next": False, "pickup": "Quảng Nam"}, 0)
+    a.tick(4)
+    assert not a.queue
+    a.observe({"type": "ticket", "name": "An", "province": "Hà Nội", "next": False}, 5)
+    a.tick(9)
+    (said,) = texts(a)
+    assert "An" in said and "Út" not in said and "Ba" not in said
+
+
 def test_gift_thanks_once_per_cooldown_and_not_for_relief_gift():
     a = announcer()
     gift = {"type": "gift", "name": "Ba", "tier_up": True, "perk": "pháo hoa ngay"}
