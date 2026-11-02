@@ -224,6 +224,8 @@ class Hub:
                 self.handle(simulator.next_event(self.engine.phase))
                 next_sim = now + random.expovariate(self.sim_rate)
             self.engine.tick(now)
+            if self.engine.network.departure.key != self.settings["departure"]:  # người xem gọi xe ra bến khác (PLAN-136)
+                self.update_settings({"departure": self.engine.network.departure.key})
             self.engine.auto_feature(self.settings["auto_feature"], self.settings["rotate_seconds"])
             if self.settings["tiktok_auto"] and self.bridge.status["state"] in ("ended", "error"):
                 self.update_settings({"tiktok_auto": False})  # live đã hết / sai tài khoản: lần bật sau không tự nối

@@ -104,6 +104,30 @@ SPECIALTIES = {  # dự phòng theo vùng khi tỉnh chưa có trong PROVINCE_SP
 
 # Đặc sản nổi tiếng nhất của từng tỉnh — trạm dừng chân bán đúng đặc sản nơi xe đang nghỉ (Phú Yên không bán mè xửng Huế).
 # Chỉ ghi món ai cũng biết gắn với tỉnh đó; thêm / sửa thì sửa bảng này.
+
+# Tên thành phố tỉnh lỵ / nơi quen gọi (đã bỏ dấu) — người xem hay gõ tên thành phố thay tên tỉnh («Vinh», «Đồng Hới»,
+# «BMT»); anh dặn 02/11 nhận đủ 63 tỉnh. Cụm nhiều chữ khớp trong câu; cụm một chữ ngắn dễ trùng tên người («Vinh») vẫn
+# chỉ thành đặt vé khi phần còn lại của comment là chữ đệm («về Vinh», «Vinh nè»).
+CITY_ALIASES: dict[str, tuple[str, ...]] = {
+    "hanam": ("phu ly",), "namdinh": ("tp nam dinh",), "thaibinh": ("tp thai binh",), "haiduong": ("tp hai duong",),
+    "bacninh": ("tu son",), "bacgiang": ("tp bac giang",), "phutho": ("viet tri",), "vinhphuc": ("vinh yen",),
+    "hoabinh": ("tp hoa binh",), "sonla": ("tp son la", "moc chau"), "dienbien": ("dien bien phu",), "laichau": ("tp lai chau",),
+    "laocai": ("sa pa",), "yenbai": ("tp yen bai",), "hagiang": ("tp ha giang",), "tuyenquang": ("tp tuyen quang",),
+    "hungyen": ("pho hien",), "caobang": ("tp cao bang",), "backan": ("tp bac kan",), "thainguyen": ("tp thai nguyen",), "langson": ("tp lang son",),
+    "quangninh": ("cam pha", "mong cai", "uong bi"), "ninhbinh": ("tam diep", "trang an"), "thanhhoa": ("sam son",),
+    "nghean": ("vinh", "cua lo"), "hatinh": ("tp ha tinh",), "quangbinh": ("dong hoi",), "quangtri": ("dong ha",),
+    "hue": ("tt hue", "thua thien"), "quangnam": ("tam ky", "hoi an"), "quangngai": ("tp quang ngai",),
+    "binhdinh": ("quy nhon",), "phuyen": ("tuy hoa",), "khanhhoa": ("nha trang", "cam ranh"), "ninhthuan": ("phan rang",),
+    "binhthuan": ("phan thiet", "mui ne"), "kontum": ("tp kon tum",), "gialai": ("pleiku", "play cu"),
+    "daklak": ("buon ma thuot", "buon me thuot", "bmt"), "daknong": ("gia nghia",), "lamdong": ("da lat", "bao loc"),
+    "binhphuoc": ("dong xoai",), "tayninh": ("tp tay ninh",), "binhduong": ("thu dau mot", "di an", "thuan an"),
+    "dongnai": ("bien hoa", "long khanh"), "bariavungtau": ("vung tau", "ba ria"), "longan": ("tan an",),
+    "tiengiang": ("my tho",), "bentre": ("tp ben tre",), "travinh": ("tp tra vinh",), "vinhlong": ("tp vinh long",),
+    "dongthap": ("cao lanh", "sa dec"), "angiang": ("long xuyen", "chau doc"), "kiengiang": ("rach gia", "phu quoc", "ha tien"),
+    "cantho": ("ninh kieu",), "haugiang": ("vi thanh",), "soctrang": ("tp soc trang",), "baclieu": ("tp bac lieu",),
+    "camau": ("tp ca mau",),
+}
+
 PROVINCE_SPECIALTIES = {
     "hanoi": "bánh cốm · ô mai", "haiphong": "bánh đa cua · nem cua bể", "quangninh": "chả mực Hạ Long",
     "haiduong": "bánh đậu xanh · bánh gai", "hungyen": "nhãn lồng", "thaibinh": "bánh cáy",

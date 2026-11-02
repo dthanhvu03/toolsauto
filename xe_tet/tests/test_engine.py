@@ -509,14 +509,22 @@ def test_km_runs_after_big_gift_during_boarding():
     assert e.trip_km() > 0 and e.snapshot()["trip_km"] > 0
 
 
-def test_switching_lane_frees_seat_for_queue():
+def test_last_seconds_before_departure_nobody_gets_off():
+    """Anh dặn 02/11 «10s lên xe thì ko cho ai xuống hết»: BOARD_LOCK giây cuối giờ đón (xe đầy là đếm ngược 10 giây) khách đang
+    ngồi không đổi tỉnh / bỏ vé được; lơ xe nhắc. Còn sớm thì vẫn đổi được như cũ."""
     e = Engine(0.0)
     for i in range(SEATS):
         comment(e, f"K{i}", "Hà Nội", 1)
     comment(e, "Cho", "Hà Nội", 2)  # hàng chờ cùng làn
-    comment(e, "K0", "Cà Mau", 3)  # khách đang ngồi đổi sang hướng Nam
-    assert e.bus.seat_of("cho") is not None and len(e.bus.riders()) == SEATS
-    assert e.lane_of_uid("k0") == "south"
+    e.drain()
+    comment(e, "K0", "Cà Mau", 3)  # xe đầy → đang đếm ngược 10 giây: không xuống được
+    comment(e, "K1", "không về", 3)
+    assert e.bus.seat_of("k0") is not None and e.bus.seat_of("k1") is not None and e.lane_of_uid("cho")
+    assert any(ev["type"] == "loxe" for ev in e.drain())
+    early = Engine(0.0)
+    comment(early, "An", "Hà Nội", 1)
+    comment(early, "An", "Cà Mau", 2)  # còn lâu mới chạy: đổi được
+    assert early.bus.seat_of("an") is None or early.viewers["an"].province == "camau"
 
 
 def test_empty_bus_turns_to_lane_with_waiting_people():
@@ -1046,3 +1054,150 @@ def test_same_hometown_riders_are_paired():
     assert any(ev["type"] == "loxe" and "An" in ev["text"] and "Bình" in ev["text"] for ev in e.drain())
     comment(e, "Chi", "Nghệ An", 3)  # trong SAME_HOME_GAP: không ghép tiếp (lơ xe không nói liên tục)
     assert not any(ev["type"] == "loxe" and "Chi" in ev["text"] for ev in e.drain())
+
+
+# ---- PLAN-136: bắt xe dọc đường ------------------------------------------------
+
+def _driving_to_hanoi():
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 1)
+    e.drain()
+    return e, t
+
+
+def test_roadside_pickup_for_province_still_ahead():
+    """Quê còn ở phía trước trên đường xe đi, còn giường → đặt giường, hẹn ra điểm đón (~PICKUP_LEAD giây trước mặt xe),
+    xe tới thì «tấp vô đón», tới quê thì trả khách như mọi người."""
+    from xe_tet.server.game.engine import PICKUP_LEAD
+    e, t = _driving_to_hanoi()
+    key, odo = max(e.trip.via, key=lambda pv: pv[1])  # tỉnh đi qua xa nhất trước Hà Nội
+    comment(e, "Bình", BY_KEY[key].name, t)
+    ticket = next(ev for ev in e.drain() if ev["type"] == "ticket")
+    assert ticket["next"] is False and ticket["bus_no"] == e.bus.no and ticket["pickup"] and ticket["pickup_in"] >= PICKUP_LEAD - 1
+    assert e.bus.seat_of("bình") is not None and "bình" in e.pickups
+    assert any(leg.kind == "stop" and leg.target == key for leg in e.legs) and key not in [k for k, _ in e.trip.via]
+    where = e.ticket_of(e.viewers["bình"])
+    assert where["status"] == "seat" and where["pickup"] == ticket["pickup"]
+    picked = dropped = None
+    while e.phase != "FINISH" and t < 5000:
+        t += 0.5
+        e.tick(t)
+        for ev in e.drain():
+            if ev["type"] == "pickup" and ev["name"] == "Bình":
+                picked = t
+            if ev["type"] == "dropoff" and any(p["name"] == "Bình" for p in ev["people"]):
+                dropped = (t, ev["province"])
+    assert picked and dropped and picked < dropped[0] and dropped[1] == BY_KEY[key].name
+
+
+def test_province_already_passed_waits_for_next_bus():
+    e, t = _driving_to_hanoi()
+    while e.trip_km() < e.trip.via[0][1] + 1 and t < 5000:
+        t += 0.5
+        e.tick(t)
+    key = e.trip.via[0][0]  # tỉnh xe vừa chạy qua
+    e.drain()
+    comment(e, "Chi", BY_KEY[key].name, t)
+    events = e.drain()
+    ticket = next(ev for ev in events if ev["type"] == "ticket")
+    assert ticket["next"] is True and ticket["passed"] == BY_KEY[key].name and e.lane_of_uid("chi")
+    assert "chi" not in e.pickups and any(ev["type"] == "loxe" and "Chi" in ev["text"] for ev in events)
+
+
+def test_pickup_at_rest_stop_boards_right_there():
+    e, t = _driving_to_hanoi()
+    t = run_until(e, "REST", t)
+    ahead = [k for k, odo in e.trip.via if odo > e.trip_km()]
+    e.drain()
+    comment(e, "Dũng", BY_KEY[ahead[-1]].name, t)
+    events = e.drain()
+    assert any(ev["type"] == "pickup" and ev["name"] == "Dũng" for ev in events)
+    assert e.bus.seat_of("dũng") is not None and "dũng" not in e.pickups
+
+
+def test_detailed_address_still_books_the_province():
+    """Live 02/11: «qua hải phòng ngõ 174 phường Lê Thanh Nghị» gõ mãi không lên xe (bị coi là tán gẫu)."""
+    from xe_tet.server.game.parser import parse
+    for text, prov in (("qua hải phòng ngõ 174 phường Lê Thanh Nghị", "Hải Phòng"), ("ở Bình Dương", "Bình Dương"),
+                       ("Nghệ An, xã Diễn Châu huyện Diễn Châu", "Nghệ An"), ("về quê Thanh Hoá thôn 3", "Thanh Hóa")):
+        assert parse(text).kind == "province" and parse(text).province.name == prov, text
+    for text in ("đường về hà nội xa quá", "hải phòng đẹp quá"):
+        assert parse(text).kind == "chat", text
+    e = Engine(0.0)
+    comment(e, "Mimaro", "qua hải phòng ngõ 174 phường Lê Thanh Nghị", 1)
+    ticket = next(ev for ev in e.drain() if ev["type"] == "ticket")
+    assert ticket["province"] == "Hải Phòng" and "174" not in str(ticket)  # không hiện lại địa chỉ
+
+
+def test_viewers_call_the_bus_to_another_station():
+    """Live 02/11 «cho xe ra bến khác»: đủ STATION_VOTES người gọi «từ Hà Nội» / «bến Giáp Bát» → lần tới bến trống, xe ra
+    bến đó; chưa đủ phiếu / bến còn khách thì chưa đổi; phiếu hết hạn sau 15 phút."""
+    from xe_tet.server.game.engine import STATION_VOTE_TTL, STATION_VOTES
+    e = Engine(0.0)
+    assert e.network.departure.key == "hcm_miendong"
+    comment(e, "An", "Hà Nội", 1)  # xe đang có khách: chưa đổi được
+    for i, text in enumerate(["từ Hà Nội", "bến Giáp Bát", "cho xe ra bến Hà Nội"][:STATION_VOTES]):
+        comment(e, f"Người {i}", text, 2 + i)
+    votes = [ev for ev in e.drain() if ev["type"] == "station_vote"]
+    assert [v["votes"] for v in votes] == list(range(1, STATION_VOTES + 1)) and votes[-1]["station"] == "Bến xe Giáp Bát"
+    e.tick(10)
+    assert e.network.departure.key == "hcm_miendong" and e.snapshot()["stations"][0]["votes"] == STATION_VOTES
+    fresh = Engine(0.0)
+    for i in range(STATION_VOTES):
+        comment(fresh, f"Người {i}", "từ Hà Nội", 1 + i)
+    fresh.tick(5)
+    assert fresh.network.departure.key == "hn_giapbat"
+    assert any(ev["type"] == "station_switch" for ev in fresh.drain())
+    late = Engine(0.0)
+    for i in range(STATION_VOTES - 1):
+        comment(late, f"Người {i}", "từ Đà Nẵng", 1)
+    comment(late, "Muộn", "từ Đà Nẵng", 2 + STATION_VOTE_TTL)  # hai phiếu đầu đã hết hạn
+    late.tick(3 + STATION_VOTE_TTL)
+    assert late.network.departure.key == "hcm_miendong"
+    both = Engine(0.0)
+    comment(both, "Chi", "từ Hà Nội về Nghệ An", 1)  # gọi bến + đặt vé
+    assert both.viewers["chi"].province == "nghean" and both.station_votes["chi"][0] == "hn_giapbat"
+
+
+def test_just_home_and_back_at_the_station_gets_teased():
+    """Live 02/11: vừa được thả về quê, comment tiếp lại lên xe ở bến — vẫn cho đi (giữ người chơi), lơ xe trêu một lần,
+    vé ghi chuyến thứ 2."""
+    e = Engine(0.0)
+    comment(e, "An", "Nghệ An", 1)
+    t = run_until(e, "DROPOFF", 1)
+    t = run_until(e, "BOARDING", t)
+    e.drain()
+    comment(e, "An", "Hà Nội", t + 1)
+    events = e.drain()
+    ticket = next(ev for ev in events if ev["type"] == "ticket")
+    assert ticket["trip_no"] == 2 and any(ev["type"] == "loxe" and "An" in ev["text"] and "Nghệ An" in ev["text"] for ev in events)
+    comment(e, "An", "Huế", t + 30)  # đổi tỉnh: không trêu lại
+    assert not [ev for ev in e.drain() if ev["type"] == "loxe" and "Nghệ An" in ev.get("text", "")]
+
+
+def test_loxe_reminds_other_directions_to_wait():
+    """Anh dặn 02/11: xe đi Hà Nội mà người Cà Mau / Đồng Tháp / Bến Tre comment liên tục → lơ xe gom lại nói «đây là chuyến
+    đi …, ai đi … đợi chuyến sau» (tối đa OTHER_DIR_GAP giây / câu)."""
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    for i, prov in enumerate(["Cà Mau", "Đồng Tháp", "Bến Tre đi"]):
+        comment(e, f"Người {i}", prov, 2 + i)
+    e.drain()
+    e.tick(10)
+    said = [ev["text"] for ev in e.drain() if ev["type"] == "loxe"]
+    assert len(said) == 1 and all(p in said[0] for p in ("Cà Mau", "Đồng Tháp", "Bến Tre"))
+    comment(e, "Muộn", "Kiên Giang", 11)
+    e.tick(12)
+    assert not [ev for ev in e.drain() if ev["type"] == "loxe" and "Kiên Giang" in ev["text"]]
+
+
+def test_city_names_book_their_province():
+    """Đủ 63 tỉnh: gõ tên thành phố tỉnh lỵ / nơi quen gọi cũng lên xe (Vinh → Nghệ An, BMT → Đắk Lắk…)."""
+    from xe_tet.server.game.parser import parse
+    from xe_tet.server.game.provinces import CITY_ALIASES
+    assert len(CITY_ALIASES) == 59  # 63 tỉnh trừ Hà Nội, Hải Phòng, TP.HCM, Đà Nẵng (tên tỉnh = tên thành phố)
+    for text, prov in (("Vinh", "Nghệ An"), ("về Đồng Hới", "Quảng Bình"), ("Đông Hà", "Quảng Trị"), ("BMT", "Đắk Lắk"),
+                       ("Phủ Lý", "Hà Nam"), ("TT Huế", "Huế"), ("Phố Hiến", "Hưng Yên"), ("Rạch Giá", "Kiên Giang")):
+        assert parse(text).kind == "province" and parse(text).province.name == prov, text
+    assert parse("anh Vinh ơi đẹp quá").kind == "chat"

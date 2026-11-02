@@ -178,7 +178,7 @@ def test_every_talk_line_fills_its_fields():
     from xe_tet.server.game.talk import LINES, STYLES, TALK_STYLES, hours_phrase, line, options
     fields = dict(dest="Hà Nội", n=5, hours=hours_phrase(26.4), place="Phú Yên", specialty="cá ngừ, bánh hỏi",
                   prov="Nghệ An", station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình",
-                  lunar="26 Chạp", other="Bình")
+                  lunar="26 Chạp", other="Bình", need=3, others="Cà Mau, Đồng Tháp")
     kinds = set(LINES[STYLES[0]])
     assert all(set(LINES[style]) == kinds for style in STYLES)  # kiểu nào cũng đủ mọi tình huống
     for style in TALK_STYLES:

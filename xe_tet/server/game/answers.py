@@ -23,6 +23,7 @@ FAQ: tuple[tuple[str, tuple[str, ...]], ...] = (
                 "xe dung lam gi")),
     ("gift", ("tang qua", "qua de lam gi", "qua duoc gi")),
     ("newname", ("tinh moi", "ten moi", "sap nhap", "tinh cu")),
+    ("station", ("ben khac", "doi ben", "ben nao", "xuat ben o dau", "di tu dau")),
 )
 
 

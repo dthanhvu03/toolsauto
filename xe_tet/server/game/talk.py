@@ -19,6 +19,34 @@ TALK_STYLES = ("mix", *STYLES)
 LINES: dict[str, dict[str, tuple[str, ...]]] = {
     # ---- lơ xe bến xe ------------------------------------------------------------------------------
     "ben": {
+        "this_trip": (  # gom người khác hướng (anh dặn 02/11)
+            "Đây là chuyến đi {dest} nghe bà con, ai đi {others} thì đợi chuyến sau, Anh Tư giữ chỗ rồi.",
+            "Xe này chạy {dest}, mấy người {others} đứng chờ chuyến sau, hổng có quên đâu.",
+        ),
+        "board_lock": (  # 10 giây cuối giờ đón: không xuống / đổi tỉnh được nữa
+            "Sắp chạy rồi {name}, ngồi yên đó, hổng xuống được nữa đâu.",
+            "Đóng cửa rồi {name} ơi, giờ này hổng đổi được, ngồi yên.",
+        ),
+        "back_again": (  # vừa được thả về quê đã đặt vé tiếp (PLAN-136, live 02/11)
+            "Ủa {name} mới về {prov} đã quay ra bến nữa hả, quên đồ hay sao.",
+            "{name} về {prov} chưa nóng chỗ đã ra bến, chắc thương Anh Tư quá.",
+        ),
+        "station_vote": (  # gọi xe ra bến khác
+            "{name} gọi xe ra {station}, mới {n} trên {need} người, ai cũng muốn thì gõ theo.",
+            "Ghi nhận {name} gọi {station}, đủ {need} người là Anh Tư lái xe ra liền.",
+        ),
+        "pickup_wait": (  # bắt xe dọc đường (PLAN-136): hẹn ra điểm đón
+            "Được {name}, ra điểm đón ở {place} đứng chờ, Anh Tư tấp vô đón.",
+            "{name} ra điểm đón {place} chờ chút, xe tới liền, nhớ đứng trong lề.",
+        ),
+        "pickup": (
+            "Tấp vô điểm đón {place} rước {name}, lên lẹ cái coi.",
+            "Tới {place} rồi, {name} lên xe đi, Anh Tư xếp giường sẵn rồi.",
+        ),
+        "passed": (
+            "Xe qua {prov} rồi {name} ơi, giữ chỗ chuyến sau, hổng bỏ đâu.",
+            "Trễ rồi {name}, xe chạy qua {prov} mất rồi, chờ xe sau.",
+        ),
         "same_home": (  # lên xe gặp người cùng tỉnh (PLAN-134 D)
             "{name} với {other} cùng về {prov} kìa, đồng hương nằm gần nhau cho vui.",
             "Lại thêm một người {prov}, {name} ơi có {other} cùng quê trên xe đó.",
@@ -146,6 +174,34 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     # ---- gen Z -----------------------------------------------------------------------------------------
     "genz": {
+        "this_trip": (
+            "Chuyến này đi {dest} đó, ai đi {others} chờ chuyến sau, giữ chỗ rồi khỏi lo.",
+            "Xe này chạy {dest}, team {others} đợi chuyến sau, uy tín giữ chỗ.",
+        ),
+        "board_lock": (
+            "Sắp lăn bánh rồi {name}, khum xuống được nữa đâu.",
+            "Đóng cửa rồi {name}, ngồi yên tận hưởng chuyến đi.",
+        ),
+        "back_again": (
+            "{name} mới về {prov} đã comeback bến xe, nghiện đi xe Tết rồi đó.",
+            "Ơ {name} về {prov} rồi mà, quay xe ra bến chi vậy, thôi lên luôn.",
+        ),
+        "station_vote": (
+            "{name} vote xe ra {station}, {n} trên {need} rồi, team đó vào gõ đi.",
+            "Đủ {need} người gọi {station} là xe quay đầu liền, giờ mới {n}.",
+        ),
+        "pickup_wait": (
+            "Oke {name}, ra điểm đón {place} đứng chờ, xe tới đón liền, uy tín.",
+            "{name} ra điểm đón {place} đứng đợi, xe tới trong một nốt nhạc.",
+        ),
+        "pickup": (
+            "Tới điểm đón {place} rồi, {name} lên xe, gét gô.",
+            "Rước {name} ở {place} rồi nè, đỉnh nóc.",
+        ),
+        "passed": (
+            "Xe qua {prov} mất tiêu rồi {name}, quay xe chờ chuyến sau.",
+            "Toang, xe vừa qua {prov}, {name} giữ chỗ xe sau.",
+        ),
         "same_home": (
             "{name} với {other} cùng team {prov}, đồng hương gặp nhau trên xe, xịn xò.",
             "Hội {prov} có thêm {name}, {other} có bạn rồi nè.",
@@ -272,6 +328,34 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     # ---- gen Y -----------------------------------------------------------------------------------------
     "geny": {
+        "this_trip": (
+            "Đây là chuyến đi {dest}, ai về {others} vui lòng đợi chuyến sau, đã giữ chỗ.",
+            "Xe này đi {dest}, bà con {others} chờ chuyến sau nhé.",
+        ),
+        "board_lock": (
+            "Xe sắp chạy rồi {name}, giờ không đổi được nữa.",
+            "Chốt sổ rồi {name}, ngồi yên xe chạy.",
+        ),
+        "back_again": (
+            "{name} vừa về {prov} đã ra bến lại, chắc quên quà cho mẹ.",
+            "Mới về {prov} xong {name} lại ra bến, chăm đi xe ghê.",
+        ),
+        "station_vote": (
+            "{name} muốn xe ra {station}, đang {n} trên {need} người, ai cùng ý thì gõ theo.",
+            "Ghi nhận {name} gọi xe ra {station}, đủ {need} người là đi.",
+        ),
+        "pickup_wait": (
+            "{name} ra điểm đón {place} chờ, xe tới đón, chuẩn không cần chỉnh.",
+            "Ok {name}, đứng ở điểm đón {place}, xe ghé rước liền.",
+        ),
+        "pickup": (
+            "Ghé điểm đón {place} rước {name}, lên xe thôi.",
+            "{name} lên xe ở {place} rồi, đi tiếp.",
+        ),
+        "passed": (
+            "Xe qua {prov} rồi {name}, hẹn chuyến sau.",
+            "Tiếc ghê, xe vừa qua {prov}, {name} chờ xe sau nhé.",
+        ),
         "same_home": (
             "{name} với {other} cùng về {prov}, đồng hương chuẩn không cần chỉnh.",
             "Thêm {name} về {prov}, có {other} đi cùng cho đỡ buồn.",

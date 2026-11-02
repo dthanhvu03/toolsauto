@@ -234,6 +234,7 @@
     </div>
     <p class="hint" id="lanes-now"></p>
     <p class="hint">Chỉ đổi được khi xe đang đón, chưa ai lên xe và không ai giữ chỗ (tránh vé sai hướng).</p>
+    <p class="hint" id="station-votes"></p>
   </section>
 
   <section>
@@ -536,6 +537,13 @@ function setIfChanged(el, html) { if (el.dataset.html !== html) { el.innerHTML =
 // Màn hình game đang mở: chỉ một màn phát tiếng (mở trùng + thu tiếng máy = vang trên live). Mặc định màn mở sau cùng;
 // bấm để chọn màn khác — chọn màn «TikTok LIVE Studio» khi đang live.
 // Lơ xe trả lời câu hỏi (PLAN-135): câu hay gặp luôn trả lời sẵn; AI Gemini cho câu khác khi bật công tắc
+// Người xem gọi xe ra bến khác («từ Hà Nội», «bến Giáp Bát»): đủ phiếu thì lần tới bến trống xe tự ra bến đó (PLAN-136)
+function renderStations(s) {
+  const st = s.stations || [];
+  $("station-votes").textContent = st.length
+    ? "🚏 Người xem gọi bến: " + st.map((x) => `${x.name} ${x.votes}/${x.need}`).join(" · ") + " — đủ phiếu thì lần tới bến trống xe tự ra bến đó."
+    : "Người xem gõ «từ Hà Nội», «bến Đà Nẵng»… để gọi xe ra bến khác; đủ 3 người thì lần tới bến trống xe tự ra.";
+}
 function renderAi(s) {
   const ai = s.ai || {};
   const on = !!(s.control || {}).ai_reply;
@@ -684,6 +692,7 @@ async function refresh() {
     renderBuses(s);
     renderScreens(s);
     renderAi(s);
+    renderStations(s);
     renderFiles(s);
     renderVoices(s);
     $("s-next").textContent = s.waiting;

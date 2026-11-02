@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-from .provinces import PROVINCES, Province
+from .provinces import CITY_ALIASES, PROVINCES, Province
 
 
 def normalize(text: str) -> str:
@@ -16,16 +16,17 @@ def normalize(text: str) -> str:
 
 @dataclass(frozen=True)
 class Command:
-    kind: str  # province | stay | food | wc | gift_shop | where | chat
+    kind: str  # province | stay | food | wc | gift_shop | where | station | chat
     province: Province | None = None
     item: str = ""
+    station: str = ""  # gọi xe ra bến này («từ Hà Nội», «bến Giáp Bát») — đi kèm đặt vé nếu có cả tỉnh về
 
 
 def _build_phrases() -> tuple[list[tuple[str, Province]], dict[str, Province]]:
     phrases: list[tuple[str, Province]] = []
     exact: dict[str, Province] = {}
     for p in PROVINCES:
-        for phrase in {normalize(p.name), *p.aliases}:
+        for phrase in {normalize(p.name), *p.aliases, *CITY_ALIASES.get(p.key, ())}:
             phrases.append((phrase, p))
         for code in (*p.codes, *p.plates):
             exact[code] = p
@@ -41,7 +42,11 @@ _STAY = ("khong ve", "ko ve", "k ve", "kh ve", "hong ve", "hok ve", "chua ve", "
 # Comment chỉ được hiểu là đặt vé / không về khi phần còn lại toàn từ đệm — tránh «Hà Nội lạnh quá»,
 # «chị Huệ ơi» thành đặt vé, «mẹ chưa về à» / «ai ở lại không» thành huỷ vé.
 _BOOK_FILLER = {"ve", "di", "que", "toi", "minh", "nha", "nhe", "thoi", "nao", "day", "len", "xe", "ne",
-                "a", "voi", "luon", "nhaa", "lun", "dc", "duoc", "cho", "em", "anh"}
+                "a", "voi", "luon", "nhaa", "lun", "dc", "duoc", "cho", "em", "anh", "qua", "o", "tai", "den"}
+# Địa chỉ chi tiết sau tên tỉnh («qua hải phòng ngõ 174 phường Lê Thanh Nghị» — live 02/11, gõ mãi không lên xe vì bị coi là
+# tán gẫu): có chữ chỉ địa chỉ thì vẫn là đặt vé về tỉnh đó. Thẻ vé chỉ ghi tên tỉnh, không đọc / hiện lại địa chỉ.
+_ADDRESS = ("ngo", "ngach", "hem", "kiet", "phuong", "thon", "xom", "ap", "huyen", "quan", "thi tran", "thi xa", "khu pho",
+            "so nha", "khom", "tinh", "thanh pho", "tp")  # không tính «đường»: «đường về Hà Nội xa quá» không phải đặt vé
 _STAY_FILLER = {"nam", "nay", "duoc", "dc", "roi", "tet", "que", "nha", "minh", "toi", "em", "anh", "thoi",
                 "huhu", "buon", "qua", "lai", "lam", "nua", "oi", "a", "ve", "khong", "ko", "k", "kh", "hong",
                 "hok", "chua", "o"}
@@ -66,6 +71,25 @@ _WHERE = ("xe nao", "xe so may", "o xe nao", "toi o dau", "minh o dau", "em o da
           "toi noi chua", "tra ve", "check ve", "kiem tra ve", "con bao lau", "bao lau nua", "bao gio toi", "may gio toi",
           "khi nao toi", "bao gio den", "khi nao den")
 _TICKET_WORD = re.compile(r"(?<!\w)vé(?!\w)")
+
+
+# Gọi xe ra bến khác (PLAN-136, live 02/11 «cho xe ra bến khác»): chữ dẫn + tên bến / thành phố có bến. Chỉ «Hà Nội» trơn
+# vẫn là đặt vé về Hà Nội; phải có «từ / bến / ra bến / xuất bến…» mới là gọi bến.
+_STATION_LEAD = ("tu", "ben", "ben xe", "ra ben", "xuat ben", "chay tu", "di tu", "o ben", "don o", "don tu")
+_STATIONS = {
+    "hcm_miendong": ("sai gon", "sg", "hcm", "tp hcm", "tphcm", "ho chi minh", "mien dong", "mien dong moi"),
+    "hn_giapbat": ("ha noi", "hn", "giap bat"),
+    "dalat": ("da lat",),
+    "danang": ("da nang",),
+    "cantho": ("can tho",),
+}
+_STATION_PHRASES = sorted(((f"{lead} {alias}", key) for key, aliases in _STATIONS.items() for alias in aliases
+                           for lead in _STATION_LEAD), key=lambda pk: -len(pk[0]))
+
+
+def _station(norm: str) -> tuple[str, str] | None:
+    """(cụm gọi bến, khoá bến) hoặc None."""
+    return next(((phrase, key) for phrase, key in _STATION_PHRASES if _has(norm, phrase)), None)
 
 
 def _has(text: str, phrase: str) -> bool:
@@ -93,6 +117,13 @@ def parse(text: str, at_rest_stop: bool = False) -> Command:
     norm = normalize(text)
     if not norm:
         return Command("chat")
+    station = _station(norm)
+    if station:  # «từ Hà Nội» / «bến Giáp Bát»: gọi bến; «từ Hà Nội về Nghệ An»: gọi bến + đặt vé Nghệ An
+        rest = " ".join(_rest_words(norm, station[0]))
+        dest = _find_province(rest) if rest else None
+        if dest and (_only_filler(_rest_words(rest, dest[0]), _BOOK_FILLER) or rest in _EXACT):
+            return Command("province", dest[1], station=station[1])
+        return Command("station", station=station[1])
     found = _find_province(norm)
     stay = next((s for s in _STAY if _has(norm, s)), None)
     if stay:
@@ -114,5 +145,7 @@ def parse(text: str, at_rest_stop: bool = False) -> Command:
     if norm in _EXACT:
         return Command("province", _EXACT[norm])
     if found and _only_filler(_rest_words(norm, found[0]), _BOOK_FILLER):
+        return Command("province", found[1])
+    if found and any(_has(" ".join(_rest_words(norm, found[0])), a) for a in _ADDRESS):
         return Command("province", found[1])
     return Command("chat")

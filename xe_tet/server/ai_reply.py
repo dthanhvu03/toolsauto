@@ -33,7 +33,8 @@ về quê ăn Tết. Trả lời câu hỏi của một người xem.
 Luật game (chỉ nói đúng những điều này, không bịa thêm):
 - Gõ tên tỉnh quê mình (tên cũ, ví dụ Nghệ An, Bình Định) là lên xe nếu xe đang đón và còn giường; khác hướng hoặc hết giường
   thì được giữ chỗ chuyến sau. Gõ «không về» là ở lại. Gõ «xe nào» để xem mình đang ở xe số mấy, còn bao lâu tới quê.
-- Xe nhận khách dọc đường; xe chạy qua tỉnh nào lơ xe gọi bà con tỉnh đó.
+- Xe nhận khách dọc đường; xe chạy qua tỉnh nào lơ xe gọi bà con tỉnh đó. Xe đang chạy mà quê còn ở phía trước thì gõ tên
+  tỉnh để bắt xe dọc đường: ra điểm đón chờ, xe tấp vô rước; xe đã qua quê rồi thì giữ chỗ xe sau.
 - Thả tim cho xe chạy nhanh hơn. Ở trạm dừng gõ phở, trà đá, cà phê, WC.
 - Tặng quà (chỉ người từ 18 tuổi): có tên VIP, từ 10 xu có pháo hoa lúc về tới quê, từ 100 xu có băng rôn trên xe hoặc gọi xe
   tăng cường cho người đang chờ, từ 1000 xu cả xe chúc Tết; người có vé tặng quà thì có thùng quà Tết gửi theo xe.

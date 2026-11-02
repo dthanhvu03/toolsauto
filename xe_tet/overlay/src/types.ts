@@ -90,6 +90,7 @@ export interface State {
   delivered: number;
   days_to_tet: number;
   season?: { phase: string; lunar: string | null; days_to_tet: number };  // lịch mùa Tết (PLAN-134 C)
+  stations?: { key: string; name: string; votes: number; need: number }[];  // bến người xem đang gọi (PLAN-136)
   audio_screen?: number | null;  // số màn hình game được phát tiếng (các màn khác im)
   rush?: boolean; // giờ cao điểm: hàng chờ ≥ 1 xe, chuyến tự ngắn lại
   route?: Route;  // bảng chặng của xe đang chiếu (PLAN-130)
@@ -166,6 +167,13 @@ export interface GameEvent {
   // tra vé «xe nào / tới đâu rồi» (PLAN-134 B)
   status?: "seat" | "relief" | "queue" | "home" | "none";
   parcel?: boolean;  // quà vừa tặng thành thùng quà trên gầm xe (PLAN-134 C)
+  pickup?: string;  // bắt xe dọc đường (PLAN-136): tỉnh có điểm đón
+  pickup_in?: number;  // giây tới lúc xe tới điểm đón
+  passed?: string;  // xe đã qua quê người này → giữ chỗ xe sau
+  station?: string;  // gọi xe ra bến khác (PLAN-136)
+  votes?: number;
+  need?: number;
+  trip_no?: number;  // chuyến thứ mấy của người này
   trips?: number;  // khách quay lại: số chuyến đã về quê (PLAN-134 D)
   home?: string | null;
   days?: number;
