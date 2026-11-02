@@ -1228,3 +1228,32 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
     comment(e, "Đéo Biết", "Huế", 1)
     ticket = next(ev for ev in e.drain() if ev["type"] == "ticket")
     assert ticket["name"].startswith("Khách ") and "Đéo" not in str(ticket)  # tên bậy không hiện, không đọc lên sóng
+
+
+def test_fuel_and_wash_while_waiting_give_small_bonus():
+    """PLAN-137 (anh 02/11 «khúc đợi khách thêm đổ xăng rửa xe»): xe chạy hết xăng + bẩn dần; ở bến người xem «đổ xăng» /
+    «rửa xe» (mỗi người 10 giây); đầy bình + sạch lúc xuất bến chạy nhanh hơn chút; thiếu thì vẫn chạy, không chặn ai;
+    đang chạy gõ thì không có tác dụng."""
+    from xe_tet.server.game.engine import CARE_COOLDOWN, CLEAN_BONUS, FUEL_BONUS
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    t = run_until(e, "DRIVING", 1)
+    full, clean = e.fuel, e.dirt
+    assert e.trip_bonus == 1 + FUEL_BONUS + CLEAN_BONUS  # xe mới: đầy bình, sạch
+    comment(e, "Bình", "đổ xăng", t + 1)  # đang chạy: không đổ được
+    t = run_until(e, "BOARDING", t + 2, limit=6000)
+    assert e.fuel < full and e.dirt > clean
+    e.drain()
+    low_fuel, dirty = e.fuel, e.dirt
+    comment(e, "Bình", "đổ xăng", t + 1)
+    comment(e, "Bình", "đổ xăng", t + 2)  # trong 10 giây: không tính
+    comment(e, "Chi", "rửa xe đi anh tư", t + 3)
+    events = e.drain()
+    assert e.fuel == min(1.0, low_fuel + 0.2) and e.dirt == max(0.0, dirty - 0.25)
+    assert [ev["type"] for ev in events if ev["type"] in ("fuel", "wash")] == ["fuel", "wash"]
+    comment(e, "Bình", "đổ xăng", t + 3 + CARE_COOLDOWN)
+    assert e.fuel == min(1.0, low_fuel + 0.4)
+    e.fuel, e.dirt = 0.1, 0.9
+    comment(e, "Dũng", "Huế", t + 20)
+    run_until(e, "DRIVING", t + 20)
+    assert e.trip_bonus == 1.0  # thiếu xăng, bẩn: vẫn chạy, chỉ không có thưởng

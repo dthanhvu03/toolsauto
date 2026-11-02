@@ -225,9 +225,11 @@ export class Hud {
       + (s.bus.parcels ? `<span class="rush">📦 ${s.bus.parcels}</span>` : "");
     if (s.phase === "BOARDING" || !s.legs.length) {
       // bến nhiều làn: làn đang đón + làn có người giữ chỗ (đủ mọi làn đã có trên biển ở bến — BRD-tuyen-xe)
+      // xăng / độ sạch: người xem gõ «đổ xăng», «rửa xe» lúc chờ khách (PLAN-137)
+      const care = s.care ? `<span class="rush">⛽ ${Math.round(s.care.fuel * 100)}% · 🧽 ${Math.round((1 - s.care.dirt) * 100)}%</span>` : "";
       const lanes = s.lanes.filter((l) => l.current || l.waiting)
         .map((l) => `${l.arrow} ${esc(l.label.replace("Hướng ", ""))} ${l.current ? `${s.bus.riders}/${seatsOf(s)}` : `⏳${l.waiting}`}`);
-      return `${rush}${lanes.join(" · ")}`;
+      return `${rush}${care}${lanes.join(" · ")}`;
     }
     const route = this.trip(s);
     // đang qua địa phận tỉnh không ai xuống: vẫn gọi tên tỉnh đó (bà con quê đó đang xem thấy xe qua quê mình)
@@ -255,13 +257,14 @@ export class Hud {
     if (s.phase === "REST") {
       main = "💬 Gõ <b>PHỞ</b> · <b>TRÀ ĐÁ</b> · <b>WC</b>";
       tips = [`🎁 Gõ MUA QUÀ: ${esc(s.specialty)}`, "🧊 Tặng quà = bao cả xe trà đá · chỉ dành cho người từ 18 tuổi",
-        "🍜 Còn có BÁNH MÌ · CƠM · CÀ PHÊ"];
+        "🍜 Còn có BÁNH MÌ · CƠM · CÀ PHÊ", "⛽ Trạm có cây xăng: gõ ĐỔ XĂNG · 🧽 RỬA XE"];
     } else {
       main = "💬 Gõ <b>TÊN TỈNH</b> để lên xe";
       tips = ["Ví dụ: Nghệ An · 37 · Sài Gòn", "Năm nay ở lại? Gõ KHÔNG VỀ", "❤ Thả tim cho xe chạy nhanh hơn",
         "🚏 Muốn xe ra bến khác? Gõ «từ Hà Nội»"];
       if (s.phase === "BOARDING") {  // anh dặn 02/11: nói rõ chuyến này đi đâu, hướng khác đợi chuyến sau
         tips.unshift(`🚌 Chuyến này đi ${esc(s.bus.lane)} · hướng khác đợi chuyến sau`);
+        tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
       }
       if (s.next_lane) {  // ai chờ trước đi trước — nói rõ xe kế tiếp đi đâu để người chờ yên tâm
         tips.unshift(`⏳ Xe kế tiếp: ${s.next_lane.arrow} ${esc(s.next_lane.label)} · ~${s.next_lane.eta_min} phút`);
@@ -332,6 +335,12 @@ export class Hud {
         break;
       case "where":
         this.note(...whereText(e));
+        break;
+      case "fuel":  // đổ xăng / rửa xe lúc chờ khách (PLAN-137)
+        this.toast(`⛽ ${name} đổ xăng`, `Bình ${Math.round((e.level ?? 0) * 100)}% · đầy bình xe chạy nhanh hơn`);
+        break;
+      case "wash":
+        this.toast(`🧽 ${name} rửa xe`, `Sạch ${Math.round((e.level ?? 0) * 100)}% · xe sạch chạy nhanh hơn`);
         break;
       case "station_vote":  // gọi xe ra bến khác (PLAN-136)
         this.toast(`🚏 ${name} gọi xe ra ${esc(e.station ?? "")}`, `${e.votes}/${e.need} người · gõ «từ Hà Nội», «bến Đà Nẵng»…`);

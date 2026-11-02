@@ -91,6 +91,7 @@ export interface State {
   days_to_tet: number;
   season?: { phase: string; lunar: string | null; days_to_tet: number };  // lịch mùa Tết (PLAN-134 C)
   stations?: { key: string; name: string; votes: number; need: number }[];  // bến người xem đang gọi (PLAN-136)
+  care?: { fuel: number; dirt: number; bonus: number };  // xăng / độ bẩn (PLAN-137)
   audio_screen?: number | null;  // số màn hình game được phát tiếng (các màn khác im)
   rush?: boolean; // giờ cao điểm: hàng chờ ≥ 1 xe, chuyến tự ngắn lại
   route?: Route;  // bảng chặng của xe đang chiếu (PLAN-130)
@@ -174,6 +175,7 @@ export interface GameEvent {
   votes?: number;
   need?: number;
   trip_no?: number;  // chuyến thứ mấy của người này
+  level?: number;  // đổ xăng / rửa xe: mức sau khi làm (0 → 1)
   trips?: number;  // khách quay lại: số chuyến đã về quê (PLAN-134 D)
   home?: string | null;
   days?: number;

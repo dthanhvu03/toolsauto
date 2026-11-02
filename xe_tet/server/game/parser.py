@@ -16,7 +16,7 @@ def normalize(text: str) -> str:
 
 @dataclass(frozen=True)
 class Command:
-    kind: str  # province | stay | food | wc | gift_shop | where | station | chat
+    kind: str  # province | stay | food | wc | gift_shop | where | station | fuel | wash | chat
     province: Province | None = None
     item: str = ""
     station: str = ""  # gọi xe ra bến này («từ Hà Nội», «bến Giáp Bát») — đi kèm đặt vé nếu có cả tỉnh về
@@ -87,6 +87,11 @@ _STATION_PHRASES = sorted(((f"{lead} {alias}", key) for key, aliases in _STATION
                            for lead in _STATION_LEAD), key=lambda pk: -len(pk[0]))
 
 
+# Đổ xăng / rửa xe lúc chờ khách (PLAN-137, anh 02/11 «khúc đợi khách thêm đổ xăng rửa xe»). «rua» trơn trùng «rùa»: bỏ.
+_FUEL = ("do xang", "xang", "do dau", "bom xang", "do day binh", "do day xang", "xang dau")
+_WASH = ("rua xe", "lau xe", "tam xe", "xit nuoc", "xit xe", "rua xe di", "rua cho sach")
+
+
 def _station(norm: str) -> tuple[str, str] | None:
     """(cụm gọi bến, khoá bến) hoặc None."""
     return next(((phrase, key) for phrase, key in _STATION_PHRASES if _has(norm, phrase)), None)
@@ -117,6 +122,10 @@ def parse(text: str, at_rest_stop: bool = False) -> Command:
     norm = normalize(text)
     if not norm:
         return Command("chat")
+    if any(_has(norm, w) for w in _WASH) and not _find_province(norm):
+        return Command("wash")
+    if any(_has(norm, f) for f in _FUEL) and not _find_province(norm):
+        return Command("fuel")
     station = _station(norm)
     if station:  # «từ Hà Nội» / «bến Giáp Bát»: gọi bến; «từ Hà Nội về Nghệ An»: gọi bến + đặt vé Nghệ An
         rest = " ".join(_rest_words(norm, station[0]))

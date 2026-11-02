@@ -322,6 +322,7 @@ function ledTexture(text: string): THREE.CanvasTexture {
 export const BERTHS = 24;
 export const BERTHS_PER_FLOOR = BERTHS / 2;
 const RED = soft(0xc62828, 0.45);
+const MUD = new THREE.Color(0x7a6448);
 const CREAM = soft(0xfff3e0, 0.5);
 const GLASS = soft(0x1d3048, 0.12, 0.6);
 const RUBBER = soft(0x1c1c1e, 0.85);
@@ -357,12 +358,16 @@ export class Bus {
   banner: CSS2DObject;
   blossoms = new THREE.Group();
   windowSpots: THREE.Vector3[] = [];
+  // sơn riêng của xe (RED / CREAM dùng chung với biển hiệu…): xe bẩn ngả màu bùn mà không làm bẩn lây cả bến (PLAN-137)
+  private red = RED.clone();
+  private cream = CREAM.clone();
+  private dirt = -1;
 
   constructor() {
     const b = this.body;
     const shade = (m: THREE.Mesh) => { m.castShadow = true; m.receiveShadow = true; return m; };
-    b.add(shade(at(rounded(12, 1.8, 2.6, 0.32, RED), 0, 1.5, 0)));  // thân dưới đỏ
-    b.add(shade(at(rounded(11.9, 2.0, 2.56, 0.45, CREAM), 0, 3.3, 0)));  // thân trên kem
+    b.add(shade(at(rounded(12, 1.8, 2.6, 0.32, this.red), 0, 1.5, 0)));  // thân dưới đỏ
+    b.add(shade(at(rounded(11.9, 2.0, 2.56, 0.45, this.cream), 0, 3.3, 0)));  // thân trên kem
     b.add(at(box(12.06, 0.16, 2.64, 0xf4c04e), 0, 2.38, 0));  // chỉ vàng
     b.add(shade(at(rounded(10.6, 0.34, 2.2, 0.12, soft(0xe9e1d4, 0.6)), -0.3, 4.38, 0)));  // mui
     b.add(at(rounded(2.2, 0.36, 1.4, 0.1, soft(0xcfd6dd, 0.5)), -2.5, 4.68, 0));  // máy lạnh trên mui
@@ -484,6 +489,16 @@ export class Bus {
       const col = i % BERTHS_PER_FLOOR;
       this.windowSpots.push(new THREE.Vector3(-5.27 + col * 0.86, i < BERTHS_PER_FLOOR ? 3.05 : 4.3, 1.4));
     }
+  }
+
+  /** Độ bẩn 0 (sạch) → 1: thân xe ngả màu bùn (chạy mưa / đèo bẩn dần, người xem «rửa xe» ở bến cho sạch). */
+  setDirt(dirt: number): void {
+    const d = Math.round(Math.min(1, Math.max(0, dirt)) * 20) / 20;  // bước 5 %: khỏi đổi màu mỗi khung
+    if (d === this.dirt) return;
+    this.dirt = d;
+    this.red.color.setHex(0xc62828).lerp(MUD, d * 0.7);
+    this.cream.color.setHex(0xfff3e0).lerp(MUD, d * 0.75);
+    this.red.roughness = this.cream.roughness = 0.45 + d * 0.45;
   }
 
   /** Nghiêng theo cua (cộng thêm vào giảm xóc). */

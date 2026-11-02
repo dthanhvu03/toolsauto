@@ -341,6 +341,7 @@ export class World {
       this.refreshBerths(state.bus.seats);
     }
     this.bus.setBanner(state.bus.banner);
+    if (state.care) this.bus.setDirt(state.care.dirt);
     // bảng LED đầu xe: điểm trả cuối của CHUYẾN đang chạy (anh báo 02/11: xe đi Hải Phòng mà LED vẫn ghi điểm cuối của làn
     // «→ HÀ NỘI»); chưa xuất bến thì điểm cuối của làn
     const last = [...state.legs].reverse().find((l) => l.kind === "stop");
@@ -452,6 +453,19 @@ export class World {
         break;
       case "treat":
         this.fireworks(SHOW_SKY, 1);
+        break;
+      case "wash":  // rửa xe ở bến: nước xịt + bọt quanh thân xe (PLAN-137)
+        for (let i = 0; i < 14; i++) {
+          const side = i % 2 ? 1.5 : -1.5;
+          this.dust.emit(new THREE.Vector3(-5.5 + Math.random() * 11, 1 + Math.random() * 2.6, side),
+            new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 0.6, side * 0.5), 0xe3f4ff, 0.65, 1.3, 0.7);
+        }
+        break;
+      case "fuel":  // đổ xăng: tia sáng vàng ở nắp bình phía đuôi xe
+        for (let i = 0; i < 6; i++) {
+          this.dust.emit(new THREE.Vector3(-5.2, 1.2, 1.4), new THREE.Vector3((Math.random() - 0.5) * 0.8, 1 + Math.random(), 0.6),
+            0xffd23f, 0.8, 0.9, 0.35);
+        }
         break;
     }
   }

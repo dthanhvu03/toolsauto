@@ -86,6 +86,15 @@ WHERE_COOLDOWN = 15.0
 PICKUP_LEAD = 20.0  # giây: điểm đón cách xe chừng này — người xem kịp thấy «ra điểm đón chờ» rồi thấy xe tới
 PICKUP_MARGIN = 10.0  # giây: quê phải còn xa hơn điểm đón ít nhất chừng này (sắp qua thì hẹn xe sau)
 PICKUP_TALK_GAP = 8.0  # giây giữa hai câu lơ xe về đón dọc đường (phòng đông nhiều người cùng bắt xe)
+# Xăng / độ bẩn của xe (PLAN-137): chạy thì hết xăng + bẩn dần; ở bến / trạm người xem gõ «đổ xăng», «rửa xe».
+FUEL_RANGE_KM = 2500.0  # một bình chạy ~2.500 km
+DIRT_KM = 3000.0  # bẩn hẳn sau ~3.000 km (mưa phùn miền Bắc ×1,8)
+FUEL_PER = 0.2  # mỗi lần «đổ xăng»
+WASH_PER = 0.25  # mỗi lần «rửa xe»
+CARE_COOLDOWN = 10.0  # mỗi người 10 giây một lần
+CARE_TALK_GAP = 8.0
+FUEL_BONUS = 0.10  # xuất bến bình ≥ 80 %: chạy nhanh hơn 10 %
+CLEAN_BONUS = 0.05  # xe sạch (bẩn ≤ 20 %): thêm 5 % — thiếu thì vẫn chạy bình thường, không chặn ai
 BOARD_LOCK = 10.0  # giây cuối giờ đón: người đã ngồi không đổi tỉnh / bỏ vé được nữa (anh dặn 02/11 «10s lên xe thì ko cho
 # ai xuống hết»)
 OTHER_DIR_GAP = 20.0  # giây giữa hai lần lơ xe nhắc «đây là chuyến đi …, ai đi hướng khác đợi chuyến sau»
@@ -179,6 +188,7 @@ class Viewer:
     last_rest: float = -1e9
     last_where: float = -1e9
     last_ask: float = -1e9
+    last_care: float = -1e9
     home_now: bool = False  # buổi này vừa được thả về quê (đặt vé tiếp → lơ xe trêu «mới về đã quay ra bến»)
     parcels: int = 0  # thùng quà Tết đi theo vé (PLAN-134 C): tặng quà lúc có vé → lên gầm xe, tới quê ôm vào cổng
     # hồ sơ nhớ qua các buổi live (PLAN-134 D, store.py): quê đã về, tổng tim / xu / comment, ngày đầu / cuối gặp, số ngày ghé
@@ -276,6 +286,10 @@ class Engine:
         self.dirty: set[str] = set()  # người xem có hồ sơ đổi, chờ ghi
         self.last_welcome = -1e9
         self.last_same_home = -1e9
+        self.fuel = 1.0  # bình xăng 0 → 1 (PLAN-137)
+        self.dirt = 0.0  # độ bẩn 0 (sạch) → 1
+        self.trip_bonus = 1.0  # thưởng tốc độ chuyến này theo xăng / độ sạch lúc xuất bến
+        self.last_care_talk = -1e9
         self._snap_no = 0  # đếm snapshot: bảng chặng xe chính dựng một lần mỗi snapshot
         self._route_memo: tuple[int, dict] | None = None
         self.last_answer = -1e9
@@ -573,6 +587,8 @@ class Engine:
             self.board_avg += AVG_WEIGHT * (now - self.boarding_started - self.board_avg)
         self.trip_started = now
         self.clock0 = datetime.now(VN)
+        # thưởng tốc độ theo xăng / độ sạch lúc xuất bến (PLAN-137); thiếu thì vẫn chạy bình thường
+        self.trip_bonus = 1.0 + FUEL_BONUS * (self.fuel >= 0.8) + CLEAN_BONUS * (self.dirt <= 0.2)
         lane = net.lane_by_key[self.bus.lane]
         self.emit("depart", bus_no=self.bus.no, riders=len(self.bus.riders()), lane=lane.label,
                   stops=[BY_KEY[k].name for k in stops], km=round(total))
@@ -607,7 +623,8 @@ class Engine:
             return 1.0
         span = 2 * (TUNNEL_SPAN_KM if found.tunnel else PASS_SPAN_KM)
         seconds = TUNNEL_SECONDS if found.tunnel else PASS_SECONDS
-        return min(1.0, span / kmps / seconds)
+        # thưởng xăng / rửa xe (PLAN-137) không rút ngắn đèo / hầm: vẫn đủ PASS_SECONDS cho người xem kịp thấy
+        return min(1.0, span / kmps / seconds / self.trip_bonus)
 
     def rush(self) -> bool:
         """BR-9: cao điểm theo từng hướng — làn của xe này còn từ một xe khách chờ."""
@@ -885,6 +902,7 @@ class Engine:
                     if self.bus.riders():
                         self.talk("switch_lane", dest=self._dest(self.bus.lane))
         elif self.phase == "DRIVING":
+            km_before = self.trip_km()
             self.progress += (dt * self.speed() / self.leg_seconds
                               * self._pace(self.trip, self.trip_km(), self._kmps(self.trip.total)))
             if self.progress >= 1.0:
@@ -894,6 +912,7 @@ class Engine:
             else:
                 self._check_pickups()
                 self._watch_place(now)
+            self._wear(self.trip_km() - km_before)
         elif self.phase == "SPECIAL":
             if now >= self.phase_until:
                 phase, left = self.resume
@@ -913,7 +932,7 @@ class Engine:
                 self._enter_boarding(now)
 
     def speed(self) -> float:
-        return 1.0 + self.boost
+        return (1.0 + self.boost) * self.trip_bonus
 
     # ---- admin ---------------------------------------------------------
 
@@ -995,6 +1014,8 @@ class Engine:
                     self.talk("back_again", name=v.name, prov=BY_KEY[v.home].name)
         elif cmd.kind == "stay":
             self._stay(v)
+        elif cmd.kind in ("fuel", "wash"):
+            self._care(v, cmd.kind, now)
         elif cmd.kind == "where":
             if now - v.last_where >= WHERE_COOLDOWN:
                 v.last_where = now
@@ -1092,6 +1113,31 @@ class Engine:
             self.queues[lane].append(v.uid)
             self.queued_at[v.uid] = v.last_seen
             self._ticket(v, None, changed, passed=passed)
+
+    def _care(self, v: Viewer, kind: str, now: float) -> None:
+        """«đổ xăng» / «rửa xe» lúc xe đứng ở bến hoặc trạm dừng (đang chạy thì thôi): mỗi người CARE_COOLDOWN giây một lần."""
+        if self._phase_now() not in ("BOARDING", "REST") or now - v.last_care < CARE_COOLDOWN:
+            return
+        v.last_care = now
+        if kind == "fuel":
+            self.fuel = min(1.0, self.fuel + FUEL_PER)
+            level = self.fuel
+        else:
+            self.dirt = max(0.0, self.dirt - WASH_PER)
+            level = 1 - self.dirt
+        self.emit(kind, name=v.name, hue=v.hue, level=round(level, 2))
+        if now - self.last_care_talk >= CARE_TALK_GAP:
+            self.last_care_talk = now
+            self.talk("fuel" if kind == "fuel" else "wash", name=v.name, n=round(level * 100))
+
+    def _wear(self, km: float) -> None:
+        """Xe chính chạy `km`: hết xăng + bẩn dần (mưa phùn miền Bắc / đèo bẩn nhanh hơn)."""
+        if km <= 0 or self.trip is None:
+            return
+        self.fuel = max(0.0, self.fuel - km / FUEL_RANGE_KM)
+        place, terrain = self._road_at(self.trip, self.trip_km())
+        rate = (1.8 if BY_KEY[place].region == "bac" else 1.0) * (1.5 if terrain.get("pass") else 1.0)
+        self.dirt = min(1.0, self.dirt + km * rate / DIRT_KM)
 
     def _vote_station(self, v: Viewer, key: str, now: float) -> None:
         """Gọi xe ra bến khác («từ Hà Nội», «bến Giáp Bát»): đủ STATION_VOTES người trong 15 phút thì lần tới bến hiện tại
@@ -1676,6 +1722,7 @@ class Engine:
             "delivered": self.delivered,
             "days_to_tet": max(0, (season.TET_DAY - today).days),
             "season": season.view(today),
+            "care": {"fuel": round(self.fuel, 2), "dirt": round(self.dirt, 2), "bonus": round(self.trip_bonus, 2)},
             "stations": self.station_view(self.last_now),  # bến người xem đang gọi (PLAN-136)
             "rush": self.rush(),
             # xe chính cho trang admin (khi màn hình đang chiếu xe tăng cường thì các trường trên là của xe đó)

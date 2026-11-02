@@ -19,6 +19,14 @@ TALK_STYLES = ("mix", *STYLES)
 LINES: dict[str, dict[str, tuple[str, ...]]] = {
     # ---- lơ xe bến xe ------------------------------------------------------------------------------
     "ben": {
+        "fuel": (  # đổ xăng lúc chờ khách (PLAN-137)
+            "{name} đổ xăng cho xe, bình được {n} phần trăm rồi, đầy bình là chạy bon bon.",
+            "Cảm ơn {name} đổ xăng, {n} phần trăm, ai đổ tiếp cho đầy bình coi.",
+        ),
+        "wash": (
+            "{name} xịt nước rửa xe, sạch {n} phần trăm rồi, bóng loáng về quê cho đẹp.",
+            "Rửa xe nè, {name} chà kỹ ghê, xe sạch {n} phần trăm rồi.",
+        ),
         "this_trip": (  # gom người khác hướng (anh dặn 02/11)
             "Đây là chuyến đi {dest} nghe bà con, ai đi {others} thì đợi chuyến sau, Anh Tư giữ chỗ rồi.",
             "Xe này chạy {dest}, mấy người {others} đứng chờ chuyến sau, hổng có quên đâu.",
@@ -174,6 +182,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     # ---- gen Z -----------------------------------------------------------------------------------------
     "genz": {
+        "fuel": (
+            "{name} đổ xăng cho xe, bình {n} phần trăm, full bình là chạy như bay.",
+            "Xăng lên {n} phần trăm nhờ {name}, uy tín.",
+        ),
+        "wash": (
+            "{name} rửa xe sạch bong, {n} phần trăm rồi, xe xịn xò.",
+            "Xe được {name} tắm cho, sạch {n} phần trăm, đẹp trai hẳn.",
+        ),
         "this_trip": (
             "Chuyến này đi {dest} đó, ai đi {others} chờ chuyến sau, giữ chỗ rồi khỏi lo.",
             "Xe này chạy {dest}, team {others} đợi chuyến sau, uy tín giữ chỗ.",
@@ -328,6 +344,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
     },
     # ---- gen Y -----------------------------------------------------------------------------------------
     "geny": {
+        "fuel": (
+            "{name} đổ xăng, bình đầy {n} phần trăm, chuẩn không cần chỉnh.",
+            "Cảm ơn {name}, xăng lên {n} phần trăm rồi.",
+        ),
+        "wash": (
+            "{name} rửa xe, sạch {n} phần trăm, về quê cho bảnh.",
+            "Xe sạch {n} phần trăm nhờ {name}, bóng như mới.",
+        ),
         "this_trip": (
             "Đây là chuyến đi {dest}, ai về {others} vui lòng đợi chuyến sau, đã giữ chỗ.",
             "Xe này đi {dest}, bà con {others} chờ chuyến sau nhé.",
