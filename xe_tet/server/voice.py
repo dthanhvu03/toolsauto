@@ -110,7 +110,14 @@ class Announcer:
             name = event.get("name", "")
             if now - self.thanked.get(name, -1e9) >= GIFT_COOLDOWN:  # quà bao xe tăng cường: lơ xe đã nói rồi
                 self.thanked[name] = now
-                self.offer(line("gift", style=self.style(), name=spoken_name(name)), GIFT)
+                who = spoken_name(name)
+                if event.get("first_gift"):
+                    text = line("first_gift", style=self.style(), name=who, n=event.get("bus_no") or 1)
+                elif event.get("province"):
+                    text = line("gift_prov", style=self.style(), name=who, prov=event["province"])
+                else:
+                    text = line("gift", style=self.style(), name=who)
+                self.offer(text, GIFT)
 
     def tick(self, now: float) -> None:
         """Gom xong tên người lên xe (sau BOARD_WINDOW giây) thì soạn một câu."""

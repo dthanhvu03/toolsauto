@@ -8,17 +8,31 @@
 // Ngày Tết (PLAN-129): nhà treo cờ + đèn lồng, chậu mai / đào trước hiên, băng rôn chúc Tết, mai vàng xen cây ven đường.
 
 import * as THREE from "three";
-import { at, GEO, mat, noiseTexture, post, rounded, slab, soft } from "./art";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { at, blob, GEO, mat, noiseTexture, post, rounded, slab, soft } from "./art";
 import { strip } from "./bend";
-import { blossomTree, kumquatPot, lantern, makeTree, plasticStools, SignBoard } from "./props";
+import { BLENDER_MODELS } from "./models";
+import { blossomTree, kumquatPot, lantern, makeTree, plasticStools, SignBoard, tiledRoof } from "./props";
 import { Conveyor, WRAP } from "./road";
-import { blossomPot, DAO, flag, greetingBanner, MAI } from "./tet";
+import { blossomPot, chrysanthemumPot, DAO, flag, greetingBanner, MAI } from "./tet";
 import type { Region } from "./types";
 
-const GROUND: Record<Region, number> = { bac: 0x6f9b52, trung: 0xa9b26a, taynguyen: 0xa8603c, nam: 0x5fa04e };
+const GROUND: Record<Region, number> = { bac: 0x67944b, trung: 0x9aa65e, taynguyen: 0x9e5936, nam: 0x589847 };
 const FAR_SPAN = 220;
 const FACADES = [0xf6d36b, 0x8fd3c8, 0xf4a6a0, 0xb5d38a, 0xf7f1e3, 0x9fc3f0];
 const REGIONS: Region[] = ["bac", "trung", "taynguyen", "nam"];
+
+function paintGeo(geo: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone();
+  for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal") g.deleteAttribute(k);
+  const c = new THREE.Color(hex).convertSRGBToLinear();
+  const n = g.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) arr.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+const ARCH_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
 
 function rand(seed: number): () => number {
   let a = seed;
@@ -32,28 +46,132 @@ function rand(seed: number): () => number {
 
 // ---- nhà ven đường -------------------------------------------------------------------------
 
-/** Nhà ống mặt tiền nhiều màu, ban công, bồn nước inox trên nóc; vài căn có biển tạp hoá. Ngày Tết: cờ chĩa ra đường,
- * đôi đèn lồng trước cửa, chậu mai / đào / quất (`pot`) đặt ngoài hiên. */
+/** Nhà ống mặt tiền nhiều màu, ban công lan can, mái hiên tôn, bồn nước inox trên nóc — gộp khối kiến trúc để giảm draw calls. */
 function tubeHouse(color: number, floors: number, windows: THREE.Material, shop: string | null, pot: THREE.Object3D | null): THREE.Group {
   const g = new THREE.Group();
   const h = floors * 2.2;
-  g.add(at(rounded(3, h, 4, 0.08, soft(color, 0.85)), 0, h / 2, 0));
-  for (let f = 0; f < floors; f++) {
-    g.add(at(slab(2.2, 1.1, 0.06, windows), 0, 1.3 + f * 2.2, 2.02));
-    if (f > 0) g.add(at(slab(3.2, 0.1, 0.7, soft(0xe9e2d6, 0.8)), 0, f * 2.2, 2.3));  // ban công
+  const archParts: THREE.BufferGeometry[] = [
+    paintGeo(new THREE.BoxGeometry(3.04, h, 4.0).translate(0, h / 2, 0), color),
+    // Phào chỉ mái thượng + chân tường ốp đá
+    paintGeo(new THREE.BoxGeometry(3.22, 0.22, 4.16).translate(0, h + 0.1, 0), 0xe9e2d6),
+    paintGeo(new THREE.BoxGeometry(3.1, 0.35, 4.06).translate(0, 0.18, 0), 0x7a746c),
+    // Cửa cuốn / cửa chính tầng trệt + mái hiên che nắng
+    paintGeo(new THREE.BoxGeometry(2.1, 1.85, 0.08).translate(0, 0.95, 2.02), 0x455a64),
+    paintGeo(new THREE.BoxGeometry(3.16, 0.08, 1.1).rotateX(0.18).translate(0, 2.12, 2.42), 0xb71c1c),
+  ];
+  const winParts: THREE.BufferGeometry[] = [];
+  for (let f = 1; f < floors; f++) {
+    winParts.push(new THREE.BoxGeometry(1.9, 1.15, 0.08).translate(0, 1.2 + f * 2.2, 2.02));
+    // Ban công + tường lan can + thanh chắn
+    archParts.push(
+      paintGeo(new THREE.BoxGeometry(3.2, 0.12, 0.78).translate(0, f * 2.2, 2.34), 0xe9e2d6),
+      paintGeo(new THREE.BoxGeometry(3.16, 0.55, 0.08).translate(0, f * 2.2 + 0.3, 2.68), color),
+      paintGeo(new THREE.BoxGeometry(3.2, 0.06, 0.1).translate(0, f * 2.2 + 0.62, 2.68), 0xf4f1ea),
+    );
   }
-  const tank = at(new THREE.Mesh(GEO.cylSmooth, soft(0xdfe4ea, 0.25, 0.9)), 0.6, h + 0.55, -0.8);
-  tank.scale.set(0.45, 1.1, 0.45);
+  const archMesh = new THREE.Mesh(mergeGeometries(archParts)!, ARCH_MAT);
+  archMesh.castShadow = true;
+  archMesh.receiveShadow = true;
+  g.add(archMesh);
+  if (winParts.length) g.add(new THREE.Mesh(mergeGeometries(winParts)!, windows));
+
+  // Bồn nước inox Sơn Hà + chân đế trên sân thượng
+  const tank = at(new THREE.Mesh(GEO.cylSmooth, soft(0xdfe4ea, 0.2, 0.92)), 0.6, h + 0.68, -0.8);
+  tank.scale.set(0.45, 1.15, 0.45);
   tank.rotation.z = Math.PI / 2;
   g.add(tank);
-  if (shop) g.add(at(new SignBoard(shop, 2.8, 0.55, { bg: "#1e6fd9", fg: "#ffffff", rim: "#ffd23f" }).mesh, 0, 2.35, 2.05));
-  const pole = at(flag(1.5), 1.35, h - 0.9, 2.05);
+
+  if (shop) g.add(at(new SignBoard(shop, 2.8, 0.55, { bg: "#1e6fd9", fg: "#ffffff", rim: "#ffd23f" }).mesh, 0, 2.45, 2.15));
+  const pole = at(flag(1.5), 1.35, h - 0.8, 2.08);
   pole.rotation.x = 0.6;
   g.add(pole);
-  for (const x of [-1.1, 1.1]) g.add(at(lantern(0.7), x, 2.15, 2.3));
-  if (pot) g.add(at(pot, -1.0, 0, 2.7));
-  g.traverse((o) => { o.castShadow = true; });
+  for (const x of [-1.1, 1.1]) g.add(at(lantern(0.7), x, 2.05, 2.45));
+  if (pot) g.add(at(pot, -1.15, 0, 2.75));
+  g.add(blob(3.8, 4.6));
   return g;
+}
+
+/** Nhà ngói 3 gian truyền thống Việt Nam: ưu tiên nạp model Blender (.glb) mái ngói âm dương võng đầu đao + cột gỗ lim + cây rơm. */
+function villageTileHouse(windows: THREE.Material, pot: THREE.Object3D | null): THREE.Group {
+  const g = new THREE.Group();
+  if (BLENDER_MODELS.villageHouse) {
+    const glbHouse = BLENDER_MODELS.villageHouse.clone(true);
+    glbHouse.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    g.add(glbHouse);
+    const wins = mergeGeometries([
+      new THREE.BoxGeometry(0.95, 0.95, 0.08).translate(-1.65, 1.62, 1.24),
+      new THREE.BoxGeometry(0.95, 0.95, 0.08).translate(1.65, 1.62, 1.24),
+    ])!;
+    g.add(new THREE.Mesh(wins, windows));
+    const pole = at(flag(1.5), 0.95, 1.38, 3.35);
+    pole.rotation.x = 0.45;
+    g.add(pole);
+    for (const x of [-0.9, 0.9]) g.add(at(lantern(0.65), x, 2.35, 1.75));
+    if (pot) g.add(at(pot, -1.6, 0.04, 2.45));
+    g.add(at(chrysanthemumPot(), 1.5, 0.04, 2.55));
+    g.add(blob(6.5, 5.4));
+    return g;
+  }
+  const parts: THREE.BufferGeometry[] = [
+    // Nền tam cấp & thân nhà 3 gian tường vàng ấm
+    paintGeo(new THREE.BoxGeometry(5.6, 0.28, 4.2).translate(0, 0.14, 0), 0x8d8478),
+    paintGeo(new THREE.BoxGeometry(5.2, 2.45, 3.4).translate(0, 1.36, -0.2), 0xf5d061),
+    // Cửa gỗ 3 gian ở giữa + 4 cột hiên gỗ lim
+    paintGeo(new THREE.BoxGeometry(1.55, 1.95, 0.1).translate(0, 1.12, 1.52), 0x6d3b22),
+    paintGeo(new THREE.BoxGeometry(0.18, 2.35, 0.18).translate(-2.3, 1.3, 1.82), 0x5d341d),
+    paintGeo(new THREE.BoxGeometry(0.18, 2.35, 0.18).translate(-0.9, 1.3, 1.82), 0x5d341d),
+    paintGeo(new THREE.BoxGeometry(0.18, 2.35, 0.18).translate(0.9, 1.3, 1.82), 0x5d341d),
+    paintGeo(new THREE.BoxGeometry(0.18, 2.35, 0.18).translate(2.3, 1.3, 1.82), 0x5d341d),
+    // Sân gạch đỏ trước hiên + tường rào gạch thấp hai bên cổng
+    paintGeo(new THREE.BoxGeometry(5.4, 0.06, 1.8).translate(0, 0.04, 2.4), 0xb85538),
+    paintGeo(new THREE.BoxGeometry(1.9, 0.72, 0.18).translate(-1.85, 0.36, 3.25), 0xc87d4b),
+    paintGeo(new THREE.BoxGeometry(1.9, 0.72, 0.18).translate(1.85, 0.36, 3.25), 0xc87d4b),
+    paintGeo(new THREE.BoxGeometry(0.34, 1.15, 0.34).translate(-0.82, 0.58, 3.25), 0xd99b52),
+    paintGeo(new THREE.BoxGeometry(0.34, 1.15, 0.34).translate(0.82, 0.58, 3.25), 0xd99b52),
+  ];
+  const mesh = new THREE.Mesh(mergeGeometries(parts)!, ARCH_MAT);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh);
+
+  // Hai cửa sổ hai gian bên (sáng đèn ban đêm)
+  const wins = mergeGeometries([
+    new THREE.BoxGeometry(0.95, 0.95, 0.08).translate(-1.65, 1.48, 1.52),
+    new THREE.BoxGeometry(0.95, 0.95, 0.08).translate(1.65, 1.48, 1.52),
+  ])!;
+  g.add(new THREE.Mesh(wins, windows));
+
+  // Mái ngói đỏ truyền thống vươn che hiên
+  g.add(at(tiledRoof(5.8, 4.5, 1.35), 0, 2.55, 0.1));
+  const pole = at(flag(1.5), 0.85, 1.15, 3.25);
+  pole.rotation.x = 0.45;
+  g.add(pole);
+  for (const x of [-0.9, 0.9]) g.add(at(lantern(0.65), x, 2.25, 1.9));
+  if (pot) g.add(at(pot, -1.6, 0.04, 2.45));
+  g.add(at(chrysanthemumPot(), 1.5, 0.04, 2.55));
+  g.add(blob(6.2, 5.2));
+  return g;
+}
+
+/** Đống rơm vàng cạnh sân nhà quê Việt Nam (1 draw call). */
+let haystackGeo: THREE.BufferGeometry | null = null;
+function haystack(): THREE.Mesh {
+  if (!haystackGeo) {
+    const pole = paintGeo(new THREE.CylinderGeometry(0.07, 0.09, 2.4, 6).translate(0, 1.2, 0), 0x6b4a2b);
+    const lower = paintGeo(new THREE.SphereGeometry(1.05, 10, 8).scale(1, 0.85, 1).translate(0, 0.78, 0), 0xd4a843);
+    const upper = paintGeo(new THREE.ConeGeometry(0.98, 1.15, 10).translate(0, 1.55, 0), 0xe2b94e);
+    haystackGeo = mergeGeometries([pole, lower, upper])!;
+  }
+  const m = new THREE.Mesh(haystackGeo, ARCH_MAT);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
 }
 
 /** Quán cóc ven quốc lộ (PLAN-140): mái bạt, biển chữ, bàn nhựa thấp + ghế đỏ / xanh (ghế vẽ lặp một lượt). */
@@ -74,25 +192,35 @@ function roadStall(name: string, tarp: number): THREE.Group {
 
 function stiltHouse(): THREE.Group {
   const g = new THREE.Group();
-  for (const [x, z] of [[-1.3, -1], [1.3, -1], [-1.3, 1], [1.3, 1]]) g.add(at(post(0.1, 1.6, mat(0x6b4a2b)), x, 0.8, z));
-  g.add(at(rounded(3.2, 1.8, 2.6, 0.06, soft(0xc9a46a, 0.9)), 0, 2.5, 0));
-  const roof = at(new THREE.Mesh(GEO.cone, mat(0x8a6a3c)), 0, 3.9, 0);
-  roof.scale.set(2.6, 1.2, 2.2);
-  roof.rotation.y = Math.PI / 4;
-  g.add(roof);
+  const parts: THREE.BufferGeometry[] = [
+    paintGeo(new THREE.BoxGeometry(3.4, 1.85, 2.7).translate(0, 2.48, 0), 0xc9a46a),
+    paintGeo(new THREE.ConeGeometry(2.65, 1.35, 4).rotateY(Math.PI / 4).translate(0, 4.0, 0), 0x8a5a32),
+  ];
+  for (const [x, z] of [[-1.35, -1.05], [1.35, -1.05], [-1.35, 1.05], [1.35, 1.05]]) {
+    parts.push(paintGeo(new THREE.CylinderGeometry(0.11, 0.13, 1.65, 6).translate(x, 0.82, z), 0x6b4a2b));
+  }
+  const mesh = new THREE.Mesh(mergeGeometries(parts)!, ARCH_MAT);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh, blob(3.8, 3.2));
   return g;
 }
 
 // ---- đồng ruộng ----------------------------------------------------------------------------
 
-/** Ruộng bậc thang: các bậc xanh xếp chồng lùi dần. */
+/** Ruộng bậc thang: các bậc xanh xếp chồng lùi dần — gộp thành 1 khối duy nhất (1 draw call thay vì 5). */
 function terraces(rnd: () => number): THREE.Group {
   const g = new THREE.Group();
   const greens = [0x8bc34a, 0x9ccc65, 0x7cb342];
+  const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 5; i++) {
-    const step = at(rounded(12 - i * 1.4, 0.7, 3, 0.2, mat(greens[i % 3])), (rnd() - 0.5) * 1.5, 0.35 + i * 0.7, -i * 2.6);
-    g.add(step);
+    const step = new THREE.BoxGeometry(12 - i * 1.4, 0.72, 3.1);
+    step.translate((rnd() - 0.5) * 1.5, 0.36 + i * 0.7, -i * 2.6);
+    parts.push(paintGeo(step, greens[i % 3]));
   }
+  const m = new THREE.Mesh(mergeGeometries(parts)!, ARCH_MAT);
+  m.receiveShadow = true;
+  g.add(m);
   return g;
 }
 
@@ -112,24 +240,44 @@ function coffeeRows(rnd: () => number): THREE.InstancedMesh {
   return bushes;
 }
 
-/** Ruộng nước miền Tây: mặt nước loáng + bờ ruộng + mạ xanh. */
+/** Ruộng nước miền Tây / làng quê: mặt nước loáng phản chiếu bầu trời + bờ đê đất + hàng lúa non gộp 1 khối (2 draw calls thay vì 9). */
+let paddyBankGeo: THREE.BufferGeometry | null = null;
 function paddy(): THREE.Group {
   const g = new THREE.Group();
-  const water = new THREE.Mesh(strip(14, 8), new THREE.MeshStandardMaterial({ color: 0x7fb3c8, roughness: 0.08, metalness: 0.3 }));
+  const water = new THREE.Mesh(strip(14.4, 8.4), new THREE.MeshStandardMaterial({ color: 0x7cb6cf, roughness: 0.08, metalness: 0.35 }));
   water.rotation.x = -Math.PI / 2;
   g.add(at(water, 0, 0.04, 0));
-  for (const x of [-7, 7]) g.add(at(slab(0.5, 0.25, 8, mat(0x7a6a4a)), x, 0.12, 0));
-  for (let i = 0; i < 6; i++) g.add(at(slab(12, 0.18, 0.35, mat(0x9ccc65)), 0, 0.1, -3 + i * 1.2));
+  if (!paddyBankGeo) {
+    const parts: THREE.BufferGeometry[] = [
+      paintGeo(new THREE.BoxGeometry(0.55, 0.28, 8.6).translate(-7.1, 0.14, 0), 0x7a6848),
+      paintGeo(new THREE.BoxGeometry(0.55, 0.28, 8.6).translate(7.1, 0.14, 0), 0x7a6848),
+      paintGeo(new THREE.BoxGeometry(14.6, 0.26, 0.5).translate(0, 0.13, 4.2), 0x857250),
+      paintGeo(new THREE.BoxGeometry(14.6, 0.26, 0.5).translate(0, 0.13, -4.2), 0x857250),
+    ];
+    for (let i = 0; i < 6; i++) {
+      parts.push(paintGeo(new THREE.BoxGeometry(12.6, 0.22, 0.36).translate(0, 0.12, -3.1 + i * 1.24), i % 2 ? 0x9ccc65 : 0x8bc34a));
+    }
+    paddyBankGeo = mergeGeometries(parts)!;
+  }
+  const banks = new THREE.Mesh(paddyBankGeo, ARCH_MAT);
+  banks.receiveShadow = true;
+  g.add(banks);
   return g;
 }
 
+let casuarinaGeo: THREE.BufferGeometry | null = null;
 function casuarina(): THREE.Group {
+  if (!casuarinaGeo) {
+    casuarinaGeo = mergeGeometries([
+      paintGeo(new THREE.CylinderGeometry(0.08, 0.14, 3.0, 6).translate(0, 1.5, 0), 0x6b4a2b),
+      paintGeo(new THREE.ConeGeometry(0.95, 2.6, 7).translate(0, 3.4, 0), 0x356330),
+      paintGeo(new THREE.ConeGeometry(0.72, 2.2, 7).translate(0, 4.8, 0), 0x3f753a),
+    ])!;
+  }
   const g = new THREE.Group();
-  g.add(at(post(0.1, 3, mat(0x6b4a2b)), 0, 1.5, 0));
-  const crown = at(new THREE.Mesh(GEO.cone, mat(0x3f6e3a)), 0, 4.2, 0);
-  crown.scale.set(0.9, 4, 0.9);
-  g.add(crown);
-  g.traverse((o) => { o.castShadow = true; });
+  const m = new THREE.Mesh(casuarinaGeo, ARCH_MAT);
+  m.castShadow = true;
+  g.add(m, blob(2.1));
   return g;
 }
 
@@ -190,35 +338,23 @@ function paintTexture(kind: Paint, color: number, rnd: () => number): THREE.Canv
         g.fill();
       }
     });
-  } else if (kind === "palms") {  // hàng dừa miền Tây: thân cong, tàu lá rủ, dưới là dải cây bụi thấp
-    const line = ridgeLine(rnd, [3, 7, 13], 0.4);
+  } else if (kind === "palms") {  // chân trời miền Tây: đồi xanh thấp + bóng cây đa dạng (không vẽ rặng dừa thưa đều tăm tắp)
+    const line = ridgeLine(rnd, [2, 5, 9, 15], 0.45);
     g.beginPath();
     g.moveTo(0, H);
-    for (let x = 0; x <= PAINT_W; x += 8) g.lineTo(x, H - (0.12 + 0.1 * line(x)) * H);
+    for (let x = 0; x <= PAINT_W; x += 6) g.lineTo(x, H - (0.18 + 0.16 * line(x)) * H);
     g.lineTo(PAINT_W, H);
     g.fill();
-    g.strokeStyle = grad;
-    g.lineCap = "round";
-    const palms: [number, number, number][] = [];
-    for (let x = 10; x < PAINT_W; x += 26 + rnd() * 50) palms.push([x, 0.5 + rnd() * 0.45, (rnd() - 0.5) * 30]);
+    // Điểm xuyết các vòm cây làng quê tròn trịa to nhỏ khác nhau dọc đường chân trời
+    const groves: [number, number, number][] = [];
+    for (let x = 18; x < PAINT_W; x += 28 + rnd() * 55) {
+      groves.push([x, 18 + rnd() * 28, 0.24 + rnd() * 0.22]);
+    }
     wrap((dx) => {
-      for (const [x, h, lean] of palms) {
-        const tx = dx + x + lean;
-        const ty = H - h * H;
-        g.lineWidth = 4;
+      for (const [x, r, h] of groves) {
         g.beginPath();
-        g.moveTo(dx + x, H);
-        g.quadraticCurveTo(dx + x + lean * 0.2, H - h * H * 0.5, tx, ty);
-        g.stroke();
-        g.lineWidth = 3.5;
-        for (let i = 0; i < 7; i++) {
-          const a = (i / 7) * Math.PI * 2;
-          const len = 26 + rnd() * 10;
-          g.beginPath();
-          g.moveTo(tx, ty);
-          g.quadraticCurveTo(tx + Math.cos(a) * len * 0.6, ty - 10, tx + Math.cos(a) * len, ty + 8 + Math.abs(Math.sin(a)) * 10);
-          g.stroke();
-        }
+        g.arc(dx + x, H - h * H, r, 0, Math.PI * 2);
+        g.fill();
       }
     });
   } else {  // ridge: dãy núi dài; plateau: cao nguyên đỉnh bằng + vài núi lửa tắt; hills: đồi thấp, một ngọn đơn độc
@@ -266,18 +402,33 @@ function backdrop(kind: Paint, color: number, height: number, z: number, rnd: ()
 const blossomOf = (region: Region) => (region === "bac" ? DAO : MAI);
 
 function regionTree(region: Region, rnd: () => number): THREE.Group {
-  if (region === "bac") return rnd() < 0.45 ? blossomTree(DAO) : makeTree(rnd() < 0.6 ? "pine" : "round");
-  if (rnd() < 0.25) return blossomTree(MAI);
-  if (region === "trung") return casuarina();
-  if (region === "nam") return makeTree(rnd() < 0.7 ? "palm" : "bush");
-  return makeTree(rnd() < 0.6 ? "round" : "pine");
+  let g: THREE.Group;
+  if (region === "bac") {
+    const r = rnd();
+    g = r < 0.38 ? blossomTree(DAO) : r < 0.72 ? makeTree("round") : r < 0.9 ? makeTree("pine") : makeTree("bush");
+  } else if (region === "trung") {
+    const r = rnd();
+    g = r < 0.25 ? blossomTree(MAI) : r < 0.65 ? casuarina() : makeTree("round");
+  } else if (region === "nam") {
+    // Giảm tỷ lệ cây dừa đồng dạng: phối hợp cây thân gỗ làng quê (xoài/mít/bàng), cây mai vàng, khóm tre/bụi và dừa
+    const r = rnd();
+    g = r < 0.24 ? blossomTree(MAI) : r < 0.56 ? makeTree("round") : r < 0.80 ? makeTree("palm") : makeTree("bush");
+  } else {
+    const r = rnd();
+    g = r < 0.22 ? blossomTree(MAI) : r < 0.62 ? makeTree("pine") : makeTree("round");
+  }
+  // Xoay ngẫu nhiên góc Y và biến thiên tỷ lệ nhẹ để không có 2 cây nào trông giống hệt nhau
+  g.rotation.y = rnd() * Math.PI * 2;
+  const s = 0.88 + rnd() * 0.28;
+  g.scale.set(s, s * (0.92 + rnd() * 0.16), s);
+  return g;
 }
 
 /** Khoảnh đặc trưng vùng (16 × 10 đơn vị, toạ độ tương đối): ruộng bậc thang / đồi cà phê / ruộng nước / bãi cát. */
 function regionField(region: Region, rnd: () => number): { obj: THREE.Object3D; x: number; z: number }[] {
   if (region === "bac") return [{ obj: terraces(rnd), x: 0, z: -11 }];
   if (region === "taynguyen") return [{ obj: coffeeRows(rnd), x: 0, z: -11 }, { obj: makeTree("round"), x: 6, z: -19 }];
-  if (region === "nam") return [{ obj: paddy(), x: 0, z: -14 }, { obj: makeTree("palm"), x: -6, z: -10 }];
+  if (region === "nam") return [{ obj: paddy(), x: 0, z: -14.5 }, { obj: makeTree("round"), x: -6.2, z: -12.5 }];
   const sand = new THREE.Mesh(strip(15, 9), mat(0xe6d3a3));
   sand.rotation.x = -Math.PI / 2;
   sand.receiveShadow = true;
@@ -384,8 +535,8 @@ export class Landscape {
   }
 
   /**
-   * Dải sát đường (z -9…-20) là phần duy nhất camera rộng nhìn thấy dưới khung chữ, nên đặc trưng vùng phải nằm ở đây:
-   * xen kẽ một khoảnh ruộng / đồi theo vùng và một cụm nhà ống.
+   * Dải sát đường (z -10…-20) là phần trung cảnh chính phía sau xe khách:
+   * xen kẽ nhà ngói 3 gian truyền thống Việt Nam (villageTileHouse), cụm nhà ống phố huyện và đồng ruộng/đồi theo vùng.
    */
   private buildNear(region: Region, rnd: () => number, { near, belts: [belt] }: RegionLayer): void {
     const shops = ["TẠP HOÁ", "CƠM BÌNH DÂN", "SỬA XE", "BIA HƠI", "NHÀ NGHỈ", "RỬA XE", "BƠM VÁ XE"];
@@ -394,33 +545,51 @@ export class Landscape {
     for (let x = -WRAP; x < WRAP; x += 16, block++) {
       if (block % 2 === 0) {
         for (const item of regionField(region, rnd)) near.add(belt.add(at(item.obj, x + item.x, 0, item.z)));
-        if (block % 4 === 0) near.add(belt.add(at(greetingBanner(), x, 0, -8.6)));  // băng rôn chúc Tết đầu làng
-        else near.add(belt.add(at(roadStall(stalls[Math.floor(rnd() * stalls.length)], [0x1e6fd9, 0xd32f2f, 0x2e7d32][block % 3]), x + 3, 0, -8.2)));
+        if (block % 4 === 0) near.add(belt.add(at(greetingBanner(), x, 0, -9.2)));  // băng rôn chúc Tết đầu làng
+        else near.add(belt.add(at(roadStall(stalls[Math.floor(rnd() * stalls.length)], [0x1e6fd9, 0xd32f2f, 0x2e7d32][block % 3]), x + 3, 0, -9.0)));
+        near.add(belt.add(at(haystack(), x - 6.2, 0, -11.2)));
+        continue;
+      }
+      // Tăng tần suất Nhà ngói 3 gian truyền thống Việt Nam để luôn hiện diện rõ trên hành trình qua làng quê
+      if (block % 4 === 1 || block % 4 === 3) {
+        const pot = blossomPot(blossomOf(region));
+        near.add(belt.add(at(villageTileHouse(this.windows, pot), x - 1.8, 0, -11.6)));
+        near.add(belt.add(at(blossomTree(blossomOf(region)), x + 3.6, 0, -10.8)));
+        if (block % 4 === 3) {
+          const sign = shops[Math.floor(rnd() * shops.length)];
+          const house = tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 2, this.windows, sign, kumquatPot());
+          near.add(belt.add(at(house, x + 6.8, 0, -11.2)));
+        }
+        near.add(belt.add(at(regionTree(region, rnd), x - 6.0, 0, -15.5)));
         continue;
       }
       const houses = 1 + Math.floor(rnd() * 2);
       for (let h = 0; h < houses; h++) {
         const sign = rnd() < 0.5 ? shops[Math.floor(rnd() * shops.length)] : null;
         const roll = rnd();
-        const pot = roll < 0.4 ? blossomPot(blossomOf(region)) : roll < 0.65 ? kumquatPot() : null;
-        const house = region === "nam" && rnd() < 0.4 ? stiltHouse()
+        const pot = roll < 0.45 ? blossomPot(blossomOf(region)) : roll < 0.75 ? kumquatPot() : null;
+        const house = region === "nam" && rnd() < 0.35 ? stiltHouse()
           : tubeHouse(FACADES[Math.floor(rnd() * FACADES.length)], 1 + Math.floor(rnd() * 3), this.windows, sign, pot);
-        near.add(belt.add(at(house, x - 4 + h * 4.5, 0, -10.5 - rnd() * 1.5)));
+        near.add(belt.add(at(house, x - 4 + h * 4.5, 0, -11.0 - rnd() * 1.5)));
       }
       near.add(belt.add(at(regionTree(region, rnd), x + 5, 0, -16 - rnd() * 3)));
     }
   }
 
-  /** Hàng cây xa (thấy ở góc máy ngang / cận) + cây và ruộng phía camera làm tiền cảnh. */
+  /** Hàng cây xa (thấy ở góc máy ngang / cận) + bụi cỏ thấp phía camera (KHÔNG đặt cây cao ở z > 0 để tránh che khuất xe chính!). */
   private buildMid(region: Region, rnd: () => number, { mid, belts: [, belt] }: RegionLayer): void {
-    for (let x = -WRAP; x < WRAP; x += 5 + rnd() * 4) {
+    for (let x = -WRAP; x < WRAP; x += 6.5 + rnd() * 5.5) {
       const tree = regionTree(region, rnd);
-      tree.scale.setScalar(1 + rnd() * 0.5);
-      mid.add(belt.add(at(tree, x, 0, -26 - rnd() * 16)));
-      if (rnd() < 0.6) mid.add(belt.add(at(regionTree(region, rnd), x + rnd() * 3, 0, 8 + rnd() * 7)));
+      mid.add(belt.add(at(tree, x, 0, -25 - rnd() * 16)));
+      // Phía camera (z dương): chỉ đặt bụi cây thấp (bush) ở xa lề đường để tạo cảm giác tốc độ mà không bao giờ che thân xe
+      if (rnd() < 0.35) {
+        const lowBush = makeTree("bush");
+        lowBush.scale.setScalar(0.65 + rnd() * 0.25);
+        mid.add(belt.add(at(lowBush, x + rnd() * 3, 0, 9.5 + rnd() * 5)));
+      }
     }
     for (let x = -WRAP; x < WRAP; x += 40) {
-      if (region === "taynguyen") mid.add(belt.add(at(coffeeRows(rnd), x + 20, 0, 11)));
+      if (region === "taynguyen") mid.add(belt.add(at(coffeeRows(rnd), x + 20, 0, -28)));
       if (region === "nam") {  // mương nước + xuồng phía sau
         const canal = new THREE.Mesh(strip(40, 3), new THREE.MeshStandardMaterial({ color: 0x6aa3b8, roughness: 0.1, metalness: 0.3 }));
         canal.rotation.x = -Math.PI / 2;
@@ -434,10 +603,10 @@ export class Landscape {
     const { far, belts: [, , belt] } = layer;
     // [dáng, màu, cao, z, tốc độ trôi]: lớp gần đậm + trôi nhanh hơn, lớp xa nhạt + chậm (sương làm nhạt thêm)
     const plan: [Paint, number, number, number, number][] = {
-      bac: [["karst", 0x4f7a5a, 30, -95, 0.14], ["karst", 0x6f8f86, 40, -125, 0.1], ["ridge", 0x93a9a6, 46, -155, 0.07]],
-      trung: [["ridge", 0x6f8f86, 30, -175, 0.06]],
-      taynguyen: [["plateau", 0x5e7d4a, 18, -100, 0.13], ["ridge", 0x7e9670, 26, -135, 0.09]],
-      nam: [["palms", 0x3f6b3a, 12, -88, 0.16], ["hills", 0x86a88a, 16, -160, 0.06]],
+      bac: [["karst", 0x456e50, 38, -78, 0.16], ["karst", 0x62857b, 48, -110, 0.11], ["ridge", 0x869e9c, 58, -145, 0.07]],
+      trung: [["ridge", 0x5c7f76, 42, -135, 0.08], ["ridge", 0x7f9894, 54, -170, 0.05]],
+      taynguyen: [["plateau", 0x547342, 28, -82, 0.14], ["ridge", 0x748c66, 38, -120, 0.09]],
+      nam: [["palms", 0x3b6636, 22, -72, 0.18], ["hills", 0x6e9474, 30, -118, 0.09], ["ridge", 0x8ca894, 38, -155, 0.05]],
     }[region] as [Paint, number, number, number, number][];
     if (region === "trung") {
       const sea = new THREE.Mesh(strip(FAR_SPAN * 3, 200), new THREE.MeshStandardMaterial({ color: 0x3d8fd1, roughness: 0.15, metalness: 0.2 }));

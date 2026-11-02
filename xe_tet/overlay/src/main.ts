@@ -1,5 +1,6 @@
 import "./style.css";
 import { Hud } from "./hud";
+import { preloadBlenderModels } from "./models";
 import { H, W, World } from "./scene";
 import { Sound } from "./sound";
 import type { GameEvent, State } from "./types";
@@ -125,4 +126,4 @@ async function start(): Promise<void> {
   requestAnimationFrame(loop);
 }
 
-void fontsReady().then(start).catch((err) => console.error(err));
+void Promise.all([fontsReady(), preloadBlenderModels()]).then(start).catch((err) => console.error(err));

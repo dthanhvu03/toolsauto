@@ -6,8 +6,10 @@
 // camera nhìn từ z dương nên đồ cao (nhà, bảng hiệu) đặt phía sau (z nhỏ) để không che người.
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { at, GEO, makePerson, mat, PERSON_SCALE, post, rounded, slab, soft } from "./art";
 import { strip } from "./bend";
+import { BLENDER_MODELS } from "./models";
 import {
   bench, blossomTree, floor, kumquatPot, LanternString, luggage, patternTexture, plasticStools, plasticTable, SIGN_BLUE,
   SIGN_RED, SignBoard, Steam, teaGlasses, tiledRoof,
@@ -296,16 +298,29 @@ export class HomeSet implements StageSet {
       }
     }
 
-    // nhà: tường vàng, hiên cột, mái ngói, cửa gỗ, cửa sổ, câu đối, đèn lồng hiên
-    g.add(at(rounded(10, 3, 3.6, 0.1, soft(0xf6d36b, 0.85)), 1.5, 1.5, HOUSE_Z));
-    g.add(at(tiledRoof(11.4, 6.2, 1.8), 1.5, 3, HOUSE_Z + 0.6));
-    for (const x of [-3, 0, 3, 6]) g.add(at(rounded(0.3, 3, 0.3, 0.06, soft(0x8d5a3a, 0.7)), x, 1.5, HOUSE_Z + 2.6));
-    g.add(at(rounded(1.6, 2.2, 0.08, 0.04, soft(0x6d3b22, 0.6)), 1.5, 1.1, HOUSE_Z + 1.84));
-    for (const x of [-1.6, 4.6]) g.add(at(rounded(1.3, 1.0, 0.08, 0.04, soft(0x2c4a66, 0.2, 0.4)), x, 1.7, HOUSE_Z + 1.84));
+    // nhà: ưu tiên nạp model Nhà cổ 3 gian Việt Nam (village_house.glb) mái ngói âm dương cong đầu đao + cột gỗ lim,
+    // hoặc fallback khối nhà truyền thống khi chạy ?glb=0
+    if (BLENDER_MODELS.villageHouse) {
+      const glbHome = BLENDER_MODELS.villageHouse.clone(true);
+      glbHome.scale.set(1.55, 1.15, 1.25);
+      // Đặt tại (1.5, 0, HOUSE_Z + 0.3) để mặt tiền nhà (z + 1.25*1.25 ≈ HOUSE_Z + 1.86) khớp đúng vị trí cửa và câu đối
+      g.add(at(glbHome, 1.5, 0, HOUSE_Z + 0.3));
+      const wins = mergeGeometries([
+        new THREE.BoxGeometry(1.3, 1.0, 0.08).translate(-1.2, 1.7, HOUSE_Z + 1.86),
+        new THREE.BoxGeometry(1.3, 1.0, 0.08).translate(4.2, 1.7, HOUSE_Z + 1.86),
+      ])!;
+      g.add(new THREE.Mesh(wins, soft(0x2c4a66, 0.2, 0.4)));
+    } else {
+      g.add(at(rounded(10, 3, 3.6, 0.1, soft(0xf6d36b, 0.85)), 1.5, 1.5, HOUSE_Z));
+      g.add(at(tiledRoof(11.4, 6.2, 1.8), 1.5, 3, HOUSE_Z + 0.6));
+      for (const x of [-3, 0, 3, 6]) g.add(at(rounded(0.3, 3, 0.3, 0.06, soft(0x8d5a3a, 0.7)), x, 1.5, HOUSE_Z + 2.6));
+      g.add(at(rounded(1.6, 2.2, 0.08, 0.04, soft(0x6d3b22, 0.6)), 1.5, 1.1, HOUSE_Z + 1.84));
+      for (const x of [-1.6, 4.6]) g.add(at(rounded(1.3, 1.0, 0.08, 0.04, soft(0x2c4a66, 0.2, 0.4)), x, 1.7, HOUSE_Z + 1.84));
+    }
     for (const [x, text] of [[0.4, "PHÚC"], [2.6, "LỘC"]] as const) {
       const p = new SignBoard(text, 1.4, 0.45);
       p.mesh.rotation.z = Math.PI / 2;
-      g.add(at(p.mesh, x, 1.4, HOUSE_Z + 1.86));
+      g.add(at(p.mesh, x, 1.4, HOUSE_Z + 1.92));
     }
     this.lanterns = new LanternString(new THREE.Vector3(-3, 3, HOUSE_Z + 2.6), new THREE.Vector3(6, 3, HOUSE_Z + 2.6), 4, 0.2);
     g.add(this.lanterns.group);

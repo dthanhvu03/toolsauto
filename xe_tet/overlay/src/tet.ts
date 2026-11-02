@@ -3,14 +3,13 @@
 // vẽ một lần — đồ này lặp lại hàng trăm lần trong cảnh, mỗi cái chỉ thêm vài mesh, không thêm texture.
 
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { at, blob, GEO, mat, post, rounded, soft } from "./art";
 import { blossomTree, lantern, SignBoard } from "./props";
 
 export const MAI = 0xffd23f;
 export const DAO = 0xff8fb1;
 
-const POT = soft(0xa3301f, 0.6);
-const POT_RIM = soft(0xf4c04e, 0.4, 0.3);
 const STICK = soft(0x8d6e63, 0.7);
 
 // ---- năm âm lịch -------------------------------------------------------------------------------
@@ -30,12 +29,24 @@ export const GREETING = `CHÚC MỪNG NĂM MỚI · XUÂN ${lunarYear().toUpperC
 
 function pot(radius: number, height: number): THREE.Group {
   const g = new THREE.Group();
-  const body = at(new THREE.Mesh(GEO.cylSmooth, POT), 0, height / 2, 0);
-  body.scale.set(radius, height, radius);
-  body.castShadow = true;
-  const rim = at(new THREE.Mesh(GEO.cylSmooth, POT_RIM), 0, height, 0);
-  rim.scale.set(radius * 1.1, 0.08, radius * 1.1);
-  g.add(body, rim);
+  const body = new THREE.CylinderGeometry(radius, radius * 0.78, height, 12).translate(0, height / 2, 0);
+  const rim = new THREE.CylinderGeometry(radius * 1.1, radius * 1.08, 0.08, 12).translate(0, height, 0);
+  body.deleteAttribute("uv");
+  rim.deleteAttribute("uv");
+  const paint = (geo: THREE.BufferGeometry, hex: number) => {
+    const c = new THREE.Color(hex).convertSRGBToLinear();
+    const n = geo.attributes.position.count;
+    const arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) arr.set([c.r, c.g, c.b], i * 3);
+    geo.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+    return geo;
+  };
+  const m = new THREE.Mesh(
+    mergeGeometries([paint(body, 0xa3301f), paint(rim, 0xf4c04e)])!,
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }),
+  );
+  m.castShadow = true;
+  g.add(m);
   return g;
 }
 
@@ -43,28 +54,48 @@ function pot(radius: number, height: number): THREE.Group {
 export function blossomPot(color: number): THREE.Group {
   const g = pot(0.6, 0.8);
   const tree = blossomTree(color);
-  tree.scale.setScalar(0.62);
-  tree.position.y = 0.8;
+  tree.scale.setScalar(0.65);
+  tree.position.y = 0.78;
   g.add(tree);
   return g;
 }
 
-/** Chậu cúc vàng: chậu thấp + ụ hoa tròn. */
+let chrysGeo: THREE.BufferGeometry | null = null;
+const CHRYS_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65, flatShading: true });
+
+/** Chậu cúc mâm xôi vàng rực: gộp chậu + tán lá + 16 bông cúc thành 1 khối duy nhất (1 draw call). */
 export function chrysanthemumPot(): THREE.Group {
-  const g = pot(0.35, 0.45);
-  const leaves = at(new THREE.Mesh(GEO.sphere, soft(0x3e7a35, 0.9)), 0, 0.72, 0);
-  leaves.scale.set(0.45, 0.32, 0.45);
-  const flowers = new THREE.InstancedMesh(GEO.ball, mat(0xffc400), 12);
-  const m4 = new THREE.Matrix4();
-  for (let i = 0; i < 12; i++) {
-    const a = i * 2.4;
-    const r = i < 4 ? 0.12 : 0.36;
-    m4.compose(new THREE.Vector3(Math.cos(a) * r, 0.86 + (i < 4 ? 0.1 : 0), Math.sin(a) * r), new THREE.Quaternion(),
-      new THREE.Vector3(0.13, 0.11, 0.13));
-    flowers.setMatrixAt(i, m4);
+  if (!chrysGeo) {
+    const paint = (geo: THREE.BufferGeometry, hex: number) => {
+      const g = geo.index ? geo.toNonIndexed() : geo.clone();
+      for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal") g.deleteAttribute(k);
+      const c = new THREE.Color(hex).convertSRGBToLinear();
+      const n = g.attributes.position.count;
+      const arr = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) arr.set([c.r, c.g, c.b], i * 3);
+      g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+      return g;
+    };
+    const parts: THREE.BufferGeometry[] = [
+      paint(new THREE.CylinderGeometry(0.36, 0.28, 0.46, 10).translate(0, 0.23, 0), 0xa3301f),
+      paint(new THREE.CylinderGeometry(0.4, 0.4, 0.06, 10).translate(0, 0.46, 0), 0xf4c04e),
+      paint(new THREE.IcosahedronGeometry(0.46, 1).scale(1.1, 0.72, 1.1).translate(0, 0.7, 0), 0x3b7832),
+    ];
+    for (let i = 0; i < 16; i++) {
+      const a = i * 2.35;
+      const r = i < 5 ? 0.15 : 0.38;
+      const fl = new THREE.IcosahedronGeometry(0.13, 0);
+      fl.scale(1.1, 0.82, 1.1);
+      fl.translate(Math.cos(a) * r, 0.88 + (i < 5 ? 0.1 : 0), Math.sin(a) * r);
+      parts.push(paint(fl, i % 2 ? 0xffc400 : 0xffd740));
+    }
+    chrysGeo = mergeGeometries(parts)!;
+    for (const p of parts) p.dispose();
   }
-  leaves.castShadow = true;
-  g.add(leaves, flowers);
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(chrysGeo, CHRYS_MAT);
+  m.castShadow = true;
+  g.add(m);
   return g;
 }
 

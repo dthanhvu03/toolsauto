@@ -3,7 +3,8 @@
 
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { at, blob, GEO, mat, rounded, soft } from "./art";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { at, blob, GEO, rounded, soft } from "./art";
 import { strip } from "./bend";
 
 // ---- texture hoa văn vẽ bằng canvas ---------------------------------------------
@@ -149,115 +150,232 @@ export function tiledRoof(length: number, depth: number, rise: number): THREE.Gr
 
 type TreeKind = "round" | "pine" | "palm" | "bush";
 
-export function makeTree(kind: TreeKind): THREE.Group {
-  const g = new THREE.Group();
+const TREE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, flatShading: true });
+const TREE_GEOS = new Map<TreeKind, THREE.BufferGeometry>();
+
+function colorizeGeo(geo: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
+  const g = geo.index ? geo.toNonIndexed() : geo.clone();
+  for (const k of Object.keys(g.attributes)) if (k !== "position" && k !== "normal") g.deleteAttribute(k);
+  const c = new THREE.Color(hex).convertSRGBToLinear();
+  const n = g.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) arr.set([c.r, c.g, c.b], i * 3);
+  g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+
+function getTreeGeo(kind: TreeKind): THREE.BufferGeometry {
+  let geo = TREE_GEOS.get(kind);
+  if (geo) return geo;
+  const parts: THREE.BufferGeometry[] = [];
   if (kind === "pine") {
-    const trunk = new THREE.Mesh(GEO.box, mat(0x6b4a2b));
-    trunk.scale.set(0.3, 1.2, 0.3);
-    g.add(at(trunk, 0, 0.6, 0));
-    const c = new THREE.Mesh(GEO.cone, mat(0x2f5d34));
-    c.scale.set(1.4, 3.6, 1.4);
-    g.add(at(c, 0, 2.8, 0));
+    // Cây thông / tùng nhiều tầng tán xếp lớp có chiều sâu
+    const trunk = new THREE.CylinderGeometry(0.14, 0.24, 1.5, 7);
+    trunk.translate(0, 0.75, 0);
+    parts.push(colorizeGeo(trunk, 0x6b472a));
+    const tiers = [
+      { y: 1.9, r: 1.45, h: 1.7, c: 0x285830 },
+      { y: 2.95, r: 1.15, h: 1.55, c: 0x326b3a },
+      { y: 3.85, r: 0.82, h: 1.35, c: 0x3e7e44 },
+    ];
+    for (const t of tiers) {
+      const cone = new THREE.ConeGeometry(t.r, t.h, 8);
+      cone.translate(0, t.y, 0);
+      parts.push(colorizeGeo(cone, t.c));
+    }
   } else if (kind === "palm") {
-    const trunk = new THREE.Mesh(GEO.cyl, mat(0x8a6a44));
-    trunk.scale.set(0.18, 4.6, 0.18);
-    trunk.rotation.z = 0.12;
-    g.add(at(trunk, 0.25, 2.3, 0));
-    for (let i = 0; i < 5; i++) {
-      const leaf = new THREE.Mesh(GEO.box, mat(0x3d8a3a));
-      leaf.scale.set(2.6, 0.12, 0.5);
-      leaf.rotation.y = (i / 5) * Math.PI * 2;
-      leaf.rotation.z = -0.35;
-      g.add(at(leaf, 0.5, 4.6, 0));
+    // Cây dừa miền Nam / miền Trung: thân đốt cong tự nhiên, chùm quả dừa + 7 tàu lá uốn cong
+    const segs = 5;
+    for (let s = 0; s < segs; s++) {
+      const f = s / segs;
+      const r0 = 0.21 * (1 - f * 0.35);
+      const r1 = 0.21 * (1 - (f + 0.2) * 0.35);
+      const seg = new THREE.CylinderGeometry(r1, r0, 0.98, 7);
+      seg.rotateZ(-0.08 - f * 0.14);
+      seg.translate(f * f * 0.52, 0.48 + s * 0.9, 0);
+      parts.push(colorizeGeo(seg, s % 2 ? 0x856440 : 0x765636));
+    }
+    const topX = 0.42;
+    const topY = 4.65;
+    // Chùm dừa trên ngọn
+    for (let c = 0; c < 3; c++) {
+      const nut = new THREE.IcosahedronGeometry(0.18, 0);
+      const a = (c / 3) * Math.PI * 2;
+      nut.translate(topX + Math.cos(a) * 0.18, topY - 0.15, Math.sin(a) * 0.18);
+      parts.push(colorizeGeo(nut, 0x6e8c28));
+    }
+    // 7 tàu lá dừa uốn vòm
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const mid = new THREE.BoxGeometry(1.45, 0.08, 0.46);
+      mid.rotateZ(-0.22);
+      mid.translate(0.72, 0.08, 0);
+      mid.rotateY(a);
+      mid.translate(topX, topY, 0);
+      parts.push(colorizeGeo(mid, i % 2 ? 0x3b8538 : 0x499642));
+
+      const tip = new THREE.BoxGeometry(1.25, 0.06, 0.34);
+      tip.rotateZ(-0.62);
+      tip.translate(1.85, -0.36, 0);
+      tip.rotateY(a);
+      tip.translate(topX, topY, 0);
+      parts.push(colorizeGeo(tip, 0x52a148));
     }
   } else if (kind === "bush") {
-    const b = new THREE.Mesh(GEO.ball, mat(0x2e6b35));
-    b.scale.set(0.9, 0.7, 0.9);
-    g.add(at(b, 0, 0.6, 0));
+    // Khóm cây bụi / rặng tre xanh nhiều cụm tròn
+    const clusters: [number, number, number, number, number][] = [
+      [0, 0.58, 0, 0.85, 0x2f6c34],
+      [-0.55, 0.45, 0.25, 0.62, 0x3d7d3f],
+      [0.58, 0.48, -0.2, 0.66, 0x4a8e48],
+    ];
+    for (const [x, y, z, r, col] of clusters) {
+      const b = new THREE.IcosahedronGeometry(r, 1);
+      b.scale(1.1, 0.82, 1.1);
+      b.translate(x, y, z);
+      parts.push(colorizeGeo(b, col));
+    }
   } else {
-    const trunk = new THREE.Mesh(GEO.box, mat(0x6b4a2b));
-    trunk.scale.set(0.35, 1.6, 0.35);
-    g.add(at(trunk, 0, 0.8, 0));
-    for (let i = 0; i < 3; i++) {
-      const b = new THREE.Mesh(GEO.ball, mat(0x4c8c3f));
-      const s = 1.1 - i * 0.15;
-      b.scale.setScalar(s);
-      g.add(at(b, (i - 1) * 0.6, 2.2 + (i % 2) * 0.5, (i % 2) * 0.4));
+    // Cây thân gỗ làng quê (bàng / đa / xoài): gốc vững, cành chạc chữ Y, 5 vòm lá nhiều sắc độ xanh ấm
+    const trunk = new THREE.CylinderGeometry(0.18, 0.3, 1.75, 7);
+    trunk.translate(0, 0.85, 0);
+    parts.push(colorizeGeo(trunk, 0x68472b));
+    for (const side of [-1, 1]) {
+      const limb = new THREE.CylinderGeometry(0.09, 0.14, 1.1, 6);
+      limb.rotateZ(side * 0.55);
+      limb.translate(side * 0.35, 1.8, side * 0.12);
+      parts.push(colorizeGeo(limb, 0x68472b));
+    }
+    const crowns: [number, number, number, number, number][] = [
+      [0, 2.75, 0, 1.28, 0x3e7e38],
+      [-0.85, 2.32, 0.35, 0.96, 0x4b8f42],
+      [0.88, 2.4, -0.3, 1.02, 0x589e4b],
+      [0.25, 3.25, 0.28, 0.92, 0x68ad52],
+      [-0.3, 2.45, -0.65, 0.88, 0x366f31],
+    ];
+    for (const [x, y, z, r, col] of crowns) {
+      const b = new THREE.IcosahedronGeometry(r, 1);
+      b.scale(1.08, 0.86, 1.08);
+      b.translate(x, y, z);
+      parts.push(colorizeGeo(b, col));
     }
   }
-  g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
-  g.add(blob(kind === "bush" ? 1.8 : 2.6));
+  geo = mergeGeometries(parts)!;
+  for (const p of parts) p.dispose();
+  TREE_GEOS.set(kind, geo);
+  return geo;
+}
+
+export function makeTree(kind: TreeKind): THREE.Group {
+  const g = new THREE.Group();
+  const mesh = new THREE.Mesh(getTreeGeo(kind), TREE_MAT);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh, blob(kind === "bush" ? 1.9 : 2.8));
   return g;
 }
 
-/** Cây đào (hồng, miền Bắc) / mai (vàng): thân + cành + chùm hoa. */
+const BLOSSOM_GEOS = new Map<number, THREE.BufferGeometry>();
+
+/** Cây đào (hồng, miền Bắc) / mai (vàng): gốc + 5 cành uốn + tán hoa rực rỡ gộp 1 khối duy nhất (1 draw call thay vì 7). */
 export function blossomTree(color: number): THREE.Group {
-  const g = new THREE.Group();
-  const bark = mat(0x5b3a24);
-  const trunk = new THREE.Mesh(GEO.cyl, bark);
-  trunk.scale.set(0.22, 2.2, 0.22);
-  g.add(at(trunk, 0, 1.1, 0));
-  const flowers = new THREE.InstancedMesh(GEO.ball, mat(color), 26);
-  const m4 = new THREE.Matrix4();
-  let n = 0;
-  for (let b = 0; b < 5; b++) {
-    const angle = (b / 5) * Math.PI * 2;
-    const branch = new THREE.Mesh(GEO.cyl, bark);
-    branch.scale.set(0.08, 1.6, 0.08);
-    branch.position.set(Math.cos(angle) * 0.5, 2.6, Math.sin(angle) * 0.5);
-    branch.rotation.set(Math.sin(angle) * 0.7, 0, -Math.cos(angle) * 0.7);
-    g.add(branch);
-    for (let k = 0; k < 5; k++) {
-      const r = 0.6 + k * 0.25;
-      const s = 0.32 + ((k * 7 + b) % 3) * 0.06;
-      m4.compose(new THREE.Vector3(Math.cos(angle + k * 0.4) * r, 2.6 + k * 0.28, Math.sin(angle + k * 0.4) * r),
-        new THREE.Quaternion(), new THREE.Vector3(s, s, s));
-      flowers.setMatrixAt(n++, m4);
+  let geo = BLOSSOM_GEOS.get(color);
+  if (!geo) {
+    const parts: THREE.BufferGeometry[] = [];
+    const trunk = new THREE.CylinderGeometry(0.16, 0.28, 2.1, 7);
+    trunk.translate(0, 1.05, 0);
+    parts.push(colorizeGeo(trunk, 0x563620));
+    const budColor = new THREE.Color(color).offsetHSL(0, 0.08, 0.08).getHex();
+    for (let b = 0; b < 5; b++) {
+      const angle = (b / 5) * Math.PI * 2;
+      const branch = new THREE.CylinderGeometry(0.06, 0.11, 1.65, 6);
+      branch.rotateX(Math.sin(angle) * 0.68);
+      branch.rotateZ(-Math.cos(angle) * 0.68);
+      branch.translate(Math.cos(angle) * 0.48, 2.45, Math.sin(angle) * 0.48);
+      parts.push(colorizeGeo(branch, 0x563620));
+      for (let k = 0; k < 6; k++) {
+        const r = 0.55 + k * 0.24;
+        const s = 0.34 + ((k * 7 + b) % 3) * 0.07;
+        const fl = new THREE.IcosahedronGeometry(s, 1);
+        fl.scale(1.12, 0.85, 1.12);
+        fl.translate(
+          Math.cos(angle + k * 0.38) * r,
+          2.45 + k * 0.26,
+          Math.sin(angle + k * 0.38) * r,
+        );
+        parts.push(colorizeGeo(fl, k % 2 === 0 ? color : budColor));
+      }
     }
+    const topCrown = new THREE.IcosahedronGeometry(0.58, 1);
+    topCrown.scale(1.2, 0.8, 1.2);
+    topCrown.translate(0, 3.55, 0);
+    parts.push(colorizeGeo(topCrown, color));
+    geo = mergeGeometries(parts)!;
+    for (const p of parts) p.dispose();
+    BLOSSOM_GEOS.set(color, geo);
   }
-  flowers.count = n;
-  flowers.castShadow = true;
-  g.add(flowers, blob(3));
+  const g = new THREE.Group();
+  const mesh = new THREE.Mesh(geo, TREE_MAT);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh, blob(3.1));
   return g;
 }
 
-/** Chậu quất ngày Tết: chậu đỏ viền vàng + tán tròn + quả cam lấm tấm. */
+/** Chậu quất ngày Tết: chậu đỏ viền vàng + tán tròn + quả cam lấm tấm — gộp thành 1 khối duy nhất (1 draw call). */
+let kumquatGeo: THREE.BufferGeometry | null = null;
 export function kumquatPot(): THREE.Group {
-  const g = new THREE.Group();
-  const pot = at(new THREE.Mesh(GEO.cylSmooth, soft(0xa3301f, 0.6)), 0, 0.4, 0);
-  pot.scale.set(0.55, 0.8, 0.55);
-  const rim = at(new THREE.Mesh(GEO.cylSmooth, soft(0xf4c04e, 0.4, 0.3)), 0, 0.8, 0);
-  rim.scale.set(0.6, 0.08, 0.6);
-  const bush = at(new THREE.Mesh(GEO.sphere, soft(0x2f6b2f, 0.9)), 0, 1.55, 0);
-  bush.scale.set(0.85, 0.8, 0.85);
-  const fruit = new THREE.InstancedMesh(GEO.sphere, soft(0xff9a1f, 0.5), 14);
-  const m4 = new THREE.Matrix4();
-  for (let i = 0; i < 14; i++) {
-    const a = i * 2.4;
-    const y = 1.2 + (i % 5) * 0.16;
-    m4.compose(new THREE.Vector3(Math.cos(a) * 0.82, y, Math.sin(a) * 0.82), new THREE.Quaternion(), new THREE.Vector3(0.09, 0.09, 0.09));
-    fruit.setMatrixAt(i, m4);
+  if (!kumquatGeo) {
+    const parts: THREE.BufferGeometry[] = [
+      colorizeGeo(new THREE.CylinderGeometry(0.55, 0.42, 0.8, 12).translate(0, 0.4, 0), 0xa3301f),
+      colorizeGeo(new THREE.CylinderGeometry(0.6, 0.6, 0.08, 12).translate(0, 0.8, 0), 0xf4c04e),
+      colorizeGeo(new THREE.IcosahedronGeometry(0.85, 1).scale(1, 0.95, 1).translate(0, 1.55, 0), 0x2f6b2f),
+    ];
+    for (let i = 0; i < 16; i++) {
+      const a = i * 2.4;
+      const y = 1.18 + (i % 5) * 0.16;
+      const fr = new THREE.IcosahedronGeometry(0.095, 0);
+      fr.translate(Math.cos(a) * 0.82, y, Math.sin(a) * 0.82);
+      parts.push(colorizeGeo(fr, 0xff9a1f));
+    }
+    kumquatGeo = mergeGeometries(parts)!;
+    for (const p of parts) p.dispose();
   }
-  for (const m of [pot, bush]) m.castShadow = true;
-  g.add(pot, rim, bush, fruit, blob(1.6));
+  const g = new THREE.Group();
+  const mesh = new THREE.Mesh(kumquatGeo, TREE_MAT);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  g.add(mesh, blob(1.6));
   return g;
 }
 
 // ---- đèn lồng --------------------------------------------------------------------
 
-const LANTERN_BODY = soft(0xd32f2f, 0.5);
-const LANTERN_CAP = soft(0xf4c04e, 0.4, 0.4);
+let lanternGeo: THREE.BufferGeometry | null = null;
+const LANTERN_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, emissive: 0x3a0808 });
 
-/** Một đèn lồng đỏ (gốc ở móc treo) — dây đèn lồng, hiên nhà ống, cây nêu. */
+/** Một đèn lồng đỏ (gốc ở móc treo) — gộp vỏ đỏ + nắp vàng + tua rua thành 1 khối duy nhất (1 draw call thay vì 3). */
 export function lantern(scale = 1): THREE.Group {
+  if (!lanternGeo) {
+    const shell = new THREE.SphereGeometry(0.3, 12, 8);
+    shell.scale(1, 1.2, 1);
+    shell.translate(0, -0.42, 0);
+    const top = new THREE.CylinderGeometry(0.16, 0.16, 0.08, 10);
+    top.translate(0, -0.08, 0);
+    const bot = new THREE.CylinderGeometry(0.14, 0.14, 0.06, 10);
+    bot.translate(0, -0.76, 0);
+    const tassel = new THREE.CylinderGeometry(0.03, 0.04, 0.24, 6);
+    tassel.translate(0, -0.9, 0);
+    const parts = [
+      colorizeGeo(shell, 0xd82828),
+      colorizeGeo(top, 0xf4c04e),
+      colorizeGeo(bot, 0xf4c04e),
+      colorizeGeo(tassel, 0xf4c04e),
+    ];
+    lanternGeo = mergeGeometries(parts)!;
+    for (const p of parts) p.dispose();
+  }
   const l = new THREE.Group();
-  const shell = at(new THREE.Mesh(GEO.sphere, LANTERN_BODY), 0, -0.42, 0);
-  shell.scale.set(0.3, 0.36, 0.3);
-  const top = at(new THREE.Mesh(GEO.cylSmooth, LANTERN_CAP), 0, -0.08, 0);
-  top.scale.set(0.16, 0.08, 0.16);
-  const tassel = at(new THREE.Mesh(GEO.cyl, LANTERN_CAP), 0, -0.88, 0);
-  tassel.scale.set(0.03, 0.22, 0.03);
-  l.add(shell, top, tassel);
+  l.add(new THREE.Mesh(lanternGeo, LANTERN_MAT));
   l.scale.setScalar(scale);
   return l;
 }
