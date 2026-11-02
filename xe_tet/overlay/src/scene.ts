@@ -341,7 +341,10 @@ export class World {
       this.refreshBerths(state.bus.seats);
     }
     this.bus.setBanner(state.bus.banner);
-    this.bus.setRoute(`${state.departure.short} → ${state.bus.to}`);  // bảng LED đầu xe theo tuyến thật
+    // bảng LED đầu xe: điểm trả cuối của CHUYẾN đang chạy (anh báo 02/11: xe đi Hải Phòng mà LED vẫn ghi điểm cuối của làn
+    // «→ HÀ NỘI»); chưa xuất bến thì điểm cuối của làn
+    const last = [...state.legs].reverse().find((l) => l.kind === "stop");
+    this.bus.setRoute(`${state.departure.short} → ${last && state.phase !== "BOARDING" ? last.label : state.bus.to}`);
     this.ben.setStation(state.departure.name);
     this.ben.setLanes(state.lanes);
   }
