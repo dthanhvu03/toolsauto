@@ -11,17 +11,10 @@ interface Preset {
   drums: number;  // 0 → 1: trống / mõ thưa → dày
 }
 
-const BAC = [0, 2, 5, 7, 9];  // ngũ cung Bắc (vui, sáng)
-const OAN = [0, 3, 5, 7, 10];  // điệu oán (man mác, nhớ quê)
+export const BAC = [0, 2, 5, 7, 9];  // ngũ cung Bắc (vui, sáng)
+export const OAN = [0, 3, 5, 7, 10];  // điệu oán (man mác, nhớ quê)
 
-export const PRESETS: Preset[] = [
-  { seed: 11, bpm: 104, root: 62, scale: BAC, lead: "tranh", drums: 0.6 },  // Xuân về trên phố
-  { seed: 23, bpm: 84, root: 64, scale: BAC, lead: "tranh", drums: 0.25 },  // Đàn tranh mùa xuân
-  { seed: 37, bpm: 76, root: 67, scale: BAC, lead: "sao", drums: 0.15 },  // Sáo trúc đồng quê
-  { seed: 41, bpm: 120, root: 60, scale: BAC, lead: "tranh", drums: 1 },  // Trống hội làng
-  { seed: 53, bpm: 88, root: 65, scale: OAN, lead: "sao", drums: 0.35 },  // Đường xa về nhà
-  { seed: 67, bpm: 70, root: 62, scale: BAC, lead: "tranh", drums: 0.1 },  // Giao thừa bên bếp lửa
-];
+export const PRESETS: Preset[] = [];
 
 const STEPS_PER_PHRASE = 16;  // 2 ô nhịp 4/4, mỗi bước một móc đơn
 const PHRASES = 8;  // A A' B A'' × 2 đoạn (đoạn sau lên quãng tám) ≈ 30–55 giây rồi lặp lại

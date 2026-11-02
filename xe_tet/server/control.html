@@ -197,8 +197,7 @@
       <button id="music-upload" class="primary">⬆ Tải lên</button>
     </div>
     <ul id="music-files" class="files"></ul>
-    <p class="hint">Mỗi xe một bài riêng (chọn trong danh sách ở «Các chuyến xe»); tiếng theo xe đang chiếu. Nhạc có sẵn do máy tự sáng tác
-      (ngũ cung, đàn tranh, sáo, trống) — không vướng bản quyền TikTok. Bài anh tải lên (mp3 / ogg / m4a / wav, tối đa
+    <p class="hint">Mỗi xe một bài riêng (chọn trong danh sách ở «Các chuyến xe»); tiếng theo xe đang chiếu. Bài anh tải lên (mp3 / ogg / m4a / wav, tối đa
       200 MB / file) vào danh sách ngay — anh tự chịu trách nhiệm quyền dùng bài: nhạc có bản quyền có thể bị TikTok tắt
       tiếng. Màn hình live phải được bấm vào một lần mới phát tiếng (trình duyệt chặn tự phát).</p>
   </section>
@@ -503,7 +502,7 @@ function renderFiles(s) {
   const files = (s.music_tracks || []).filter((t) => t.id.startsWith("file:"));
   setIfChanged($("music-files"), files.length
     ? files.map((t) => `<li><span>🎵 ${esc(t.title)}</span><button data-del="${esc(t.id.slice(5))}">🗑</button></li>`).join("")
-    : `<li><span class="hint" style="margin:0">Chưa có bài nào — đang dùng 6 bài máy tự sáng tác</span></li>`);
+    : `<li><span class="hint" style="margin:0">Chưa có bài nào — hãy tải nhạc lên ở trên</span></li>`);
 }
 // mỗi xe một danh sách thả xuống: chọn đúng bài (máy sáng tác 🎼 / bài anh tải lên 🎵) + nút tắt / bật nhạc xe đó
 // Danh sách bài (chỉ đổi khi đổi bài / thêm bài) tách khỏi đồng hồ «còn m:ss» (đổi mỗi giây): vẽ lại cả khối mỗi giây là

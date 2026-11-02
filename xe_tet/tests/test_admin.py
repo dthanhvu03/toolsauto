@@ -165,7 +165,7 @@ def test_music_tracks_and_admin_controls(client, tmp_path, monkeypatch):
     monkeypatch.setattr(music, "MUSIC_DIR", tmp_path)
     monkeypatch.setattr(music, "_cache", (-1.0, []))
     (tmp_path / "Xuan_que_toi.mp3").write_bytes(b"x")
-    (tmp_path / "ghi chu.txt").write_text("không phải nhạc")
+    (tmp_path / "ghi chu.txt").write_text("không phải nhạc", encoding="utf-8")
     client.post("/api/admin", json={"action": "reset"})
     state = client.get("/api/state").json()
     ids = [t["id"] for t in state["music_tracks"]]

@@ -1,7 +1,5 @@
-"""Danh sách nhạc trong xe (PLAN-127): bài tự sinh + file anh thả vào thư mục.
+"""Danh sách nhạc trong xe (PLAN-127): file anh thả vào thư mục.
 
-- Bài tự sinh («gen:N»): overlay tự chơi bằng Web Audio (ngũ cung, đàn tranh / sáo / trống / mõ) — nhạc của mình, không
-  vướng bản quyền khi phát trên TikTok LIVE.
 - File của anh: mp3 / ogg / m4a / wav trong `storage/media/xe_tet/music/` (anh tự chịu trách nhiệm quyền dùng). Tải lên
   ngay trên /control (hoặc chép thẳng vào thư mục) là có trong danh sách, không cần khởi động lại server.
 """
@@ -20,15 +18,7 @@ EXTS = {".mp3", ".ogg", ".m4a", ".wav"}
 MAX_BYTES = 200 * 1024 * 1024  # một file tối đa 200 MB: đủ cho mix nhạc dài / WAV (ghi thẳng xuống đĩa, không giữ RAM)
 _UNSAFE = re.compile(r"[^\w\-. ()]+")  # giữ chữ (kể cả tiếng Việt), số, - . khoảng trắng, ngoặc
 
-# Thứ tự = số bài trong overlay (src/music.ts → PRESETS); thêm bài thì thêm cả hai chỗ.
-GENERATED = (
-    "Xuân về trên phố",
-    "Đàn tranh mùa xuân",
-    "Sáo trúc đồng quê",
-    "Trống hội làng",
-    "Đường xa về nhà",
-    "Giao thừa bên bếp lửa",
-)
+GENERATED: tuple[str, ...] = ()
 
 GENERATED_SECONDS = 150.0  # bài tự sinh lặp vô hạn: coi 2,5 phút là hết bài để tự qua bài
 UNKNOWN_SECONDS = 180.0  # file không đo được độ dài (ffprobe lỗi): coi như 3 phút

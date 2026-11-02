@@ -186,6 +186,7 @@ export class Sound {
       void audio.play().catch(() => undefined);  // chưa được phép phát: tự phát khi bấm mở khoá (ctx.resume)
       return { id, stop: () => { fadeOut(); window.setTimeout(() => release(audio, source), FADE * 1000); } };
     }
+    if (!PRESETS.length) return { id, stop: () => {} };
     const preset = PRESETS[Number(id.split(":")[1].split("|")[0]) % PRESETS.length];
     const song = new Song(this.ctx, g, preset);
     song.start(offset);
