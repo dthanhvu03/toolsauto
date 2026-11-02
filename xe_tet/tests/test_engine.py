@@ -1201,3 +1201,30 @@ def test_city_names_book_their_province():
                        ("Phủ Lý", "Hà Nam"), ("TT Huế", "Huế"), ("Phố Hiến", "Hưng Yên"), ("Rạch Giá", "Kiên Giang")):
         assert parse(text).kind == "province" and parse(text).province.name == prov, text
     assert parse("anh Vinh ơi đẹp quá").kind == "chat"
+
+
+def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
+    """Anh dặn 02/11: TikTok quét chữ trên live + giọng đọc — chặn từ tục (kể cả lách: không dấu, chấm giữa, chữ lặp, số thay
+    chữ), tên đặt tầm bậy, phân biệt vùng miền; không chặn nhầm chữ thường trùng khi bỏ dấu."""
+    import random
+    from xe_tet.server.game.moderation import clean_name, is_bad
+    from xe_tet.server.game.provinces import CITY_ALIASES
+    from xe_tet.server.game.talk import LINES, STYLES, line
+    for text in ("đm thằng này", "dit me", "đ.m", "d m", "dmmmm", "vcl", "v c l", "vãi lồn", "l0z", "Đéo Biết", "dkm xe chậm",
+                 "bắc kỳ", "bac ky ngu", "parky", "nam kì", "3 que", "tàu khựa", "óc chó", "súc vật", "đụ má", "djt", "c.c"):
+        assert is_bad(text), text
+    fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
+                  station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
+                  need=3, others="Cà Mau, Đồng Tháp")
+    talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
+    places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
+    innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
+                "cái lon bia", "còn các bạn", "giờ mới rõ", "đủ mà", "mẹ may áo", "Bắc Cực", "bộ đội cụ Hồ", "xoạc chân",
+                "đường Nam Kỳ Khởi Nghĩa", "chích ngừa", "buổi tối", "du lịch", "Vinh", "dân mới", "Đỗ Lăng", "Hà Nội 29"]
+    assert not [t for t in innocent + talk + places if is_bad(t)]
+    assert clean_name("Đéo Biết").startswith("Khách ") and clean_name("bắc kỳ 123").startswith("Khách ")
+    assert clean_name("Lan Anh") == "Lan Anh"
+    e = Engine(0.0)
+    comment(e, "Đéo Biết", "Huế", 1)
+    ticket = next(ev for ev in e.drain() if ev["type"] == "ticket")
+    assert ticket["name"].startswith("Khách ") and "Đéo" not in str(ticket)  # tên bậy không hiện, không đọc lên sóng

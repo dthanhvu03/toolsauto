@@ -276,6 +276,8 @@ class Engine:
         self.dirty: set[str] = set()  # người xem có hồ sơ đổi, chờ ghi
         self.last_welcome = -1e9
         self.last_same_home = -1e9
+        self._snap_no = 0  # đếm snapshot: bảng chặng xe chính dựng một lần mỗi snapshot
+        self._route_memo: tuple[int, dict] | None = None
         self.last_answer = -1e9
         self.other_dirs: list[str] = []  # tỉnh khác hướng vừa đặt vé (giữ chỗ xe sau) — lơ xe nhắc gộp
         self.last_other_talk = -1e9
@@ -1420,8 +1422,8 @@ class Engine:
     @staticmethod
     def _clock(clock0: datetime, hours: float) -> dict:
         """Đồng hồ trên xe: giờ trong ngày (trời sáng / tối theo giờ này), «HH:MM», ngày thứ mấy kể từ hôm xuất bến."""
-        at = clock0 + timedelta(hours=hours)
-        return {"hour": round(at.hour + at.minute / 60, 3), "time": at.strftime("%H:%M"),
+        at = clock0 + timedelta(hours=hours)  # «HH:MM» ghép tay: strftime gọi ~1 triệu lần / 30 phút phòng đông (đo 02/11)
+        return {"hour": round(at.hour + at.minute / 60, 3), "time": f"{at.hour:02d}:{at.minute:02d}",
                 "day": (at.date() - clock0.date()).days}
 
     def _route_view(self, stops: list[tuple[str, str, float]], arrivals: list[float | None], clock0: datetime | None,
@@ -1436,6 +1438,14 @@ class Engine:
         return out
 
     def _main_route(self) -> dict:
+        """Bảng chặng xe chính — snapshot cần hai lần (thẻ tuyến + bảng đội xe): dựng một lần mỗi snapshot."""
+        if self._route_memo is not None and self._route_memo[0] == self._snap_no:
+            return self._route_memo[1]
+        route = self._build_main_route()
+        self._route_memo = (self._snap_no, route)
+        return route
+
+    def _build_main_route(self) -> dict:
         legs = self.legs
         stops = [(leg.kind, f"Trạm {BY_KEY[leg.target].name}" if leg.kind == "rest" else BY_KEY[leg.target].name, leg.km)
                  for leg in legs]
@@ -1618,6 +1628,7 @@ class Engine:
         }
 
     def snapshot(self) -> dict:
+        self._snap_no += 1
         place, terrain = self._where()
         region = BY_KEY[place].region
         seats = self._seats_view(self.bus.seats)

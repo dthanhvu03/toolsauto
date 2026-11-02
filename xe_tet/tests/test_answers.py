@@ -69,6 +69,7 @@ def test_ai_answers_are_cleaned_to_the_loxe_voice():
 def test_hub_answers_in_background_and_survives_ai_failure(monkeypatch):
     hub = app_module.hub
     hub.engine = hub.new_engine()
+    hub.ai_cache.clear()
     hub.engine.ai_reply = True
     monkeypatch.setitem(hub.settings, "ai_reply", True)
     q = {"uid": "bình", "name": "Bình", "text": "xe có wifi không", "at": 0.0}
@@ -88,8 +89,33 @@ def test_hub_answers_in_background_and_survives_ai_failure(monkeypatch):
     assert any(ev["type"] == "loxe" and "wifi" in ev["text"] for ev in hub.engine.drain()) and seen["ctx"]["bus_no"]
     assert not hub.ai_busy and hub.ai_answered >= 1
     monkeypatch.setattr(ai_reply, "ask", broken_ask)
+    hub.ai_cache.clear()  # câu vừa trả lời đã được nhớ — xoá để lần này phải gọi AI (đang hỏng)
     asyncio.run(hub._answer(q))
     assert hub.ai_error and not hub.ai_busy  # AI lỗi: bỏ câu đó, game chạy tiếp
     monkeypatch.setattr(ai_reply, "api_key", lambda: "")
     asyncio.run(hub._answer(q))
     assert "GEMINI_API_KEY" in hub.ai_error and hub.ai_key is False
+
+
+def test_same_question_reuses_answer_without_calling_ai(monkeypatch):
+    """Anh hỏi 02/11: comment giống vậy nữa thì có cần gọi lại không → không: dùng lại câu trả lời (đổi tên người hỏi);
+    câu có số (xe số mấy, còn bao lâu) thì không dùng lại cho người khác."""
+    hub = app_module.hub
+    hub.engine = hub.new_engine()
+    hub.ai_cache.clear()
+    calls = []
+
+    async def fake_ask(client, key, name, question, ctx):
+        calls.append(question)
+        return f"Xe có wifi đó {name} ơi, cứ gõ tên tỉnh lên xe." if "wifi" in question else f"Xe số 2 đó {name}."
+
+    monkeypatch.setattr(ai_reply, "api_key", lambda: "khoa-gia")
+    monkeypatch.setattr(ai_reply, "ask", fake_ask)
+    hub.engine.drain()
+    asyncio.run(hub._answer({"uid": "bình", "name": "Bình", "text": "Anh Tư ơi xe có wifi không vậy", "at": 0.0}))
+    asyncio.run(hub._answer({"uid": "chi", "name": "Chi", "text": "xe có wifi không", "at": 0.0}))
+    said = [ev["text"] for ev in hub.engine.drain() if ev["type"] == "loxe"]
+    assert len(calls) == 1 and said == ["Xe có wifi đó Bình ơi, cứ gõ tên tỉnh lên xe.", "Xe có wifi đó Chi ơi, cứ gõ tên tỉnh lên xe."]
+    asyncio.run(hub._answer({"uid": "an", "name": "An", "text": "xe này xe số mấy", "at": 0.0}))
+    asyncio.run(hub._answer({"uid": "dung", "name": "Dũng", "text": "xe này xe số mấy", "at": 0.0}))
+    assert len(calls) == 3  # có số: hỏi lại AI

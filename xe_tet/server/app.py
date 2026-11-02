@@ -11,7 +11,7 @@ import logging
 import os
 import random
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from datetime import datetime
 from pathlib import Path
 
@@ -103,6 +103,8 @@ class Hub:
         self.ai_error: str | None = None
         self.ai_key = bool(ai_reply.api_key())
         self.ai_client: httpx.AsyncClient | None = None
+        self.ai_cache: OrderedDict[str, tuple[str, float]] = OrderedDict()  # câu hỏi → (câu trả lời mẫu, lúc lưu)
+        self.ai_cache_hits = 0
         self.sim_rate = 0.0  # sự kiện giả / giây, 0 = tắt
         self.pending_joins: list[str] = []
         self.last_join_flush = 0.0
@@ -141,12 +143,24 @@ class Hub:
             if not key:
                 self.ai_error = "chưa có GEMINI_API_KEY trong /home/vu/toolsauto/.env"
                 return
+            ctx = self.engine.ai_context(q["uid"])
+            ckey = ai_reply.cache_key(q["text"], ctx)
+            hit = self.ai_cache.get(ckey) if ckey else None
+            if hit and time.monotonic() - hit[1] <= ai_reply.CACHE_TTL:  # câu hỏi giống vừa trả lời: dùng lại, không gọi AI
+                self.ai_cache.move_to_end(ckey)
+                self.engine.loxe(ai_reply.from_template(hit[0], q["name"]))
+                self.ai_cache_hits += 1
+                return
             self.ai_client = self.ai_client or httpx.AsyncClient()
-            text = await ai_reply.ask(self.ai_client, key, q["name"], q["text"], self.engine.ai_context(q["uid"]))
+            text = await ai_reply.ask(self.ai_client, key, q["name"], q["text"], ctx)
             if text:
                 self.engine.loxe(text)
                 self.ai_answered += 1
                 self.ai_error = None
+                if ckey and ai_reply.cacheable(text, ctx):
+                    self.ai_cache[ckey] = (ai_reply.to_template(text, q["name"]), time.monotonic())
+                    while len(self.ai_cache) > ai_reply.CACHE_MAX:
+                        self.ai_cache.popitem(last=False)
             else:
                 self.ai_error = "AI không trả lời được câu vừa rồi (mạng / hạn mức / bị lọc) — bỏ qua"
         except Exception:
@@ -178,7 +192,7 @@ class Hub:
     def state_message(self) -> dict:
         return {"kind": "state", **self.engine.snapshot(), "control": self.settings, "sim_rate": self.sim_rate,
                 "screens": sorted(self.screens.values(), key=lambda sc: sc["id"]), "audio_screen": self.audio_screen(),
-                "ai": {"key": self.ai_key, "answered": self.ai_answered, "error": self.ai_error,
+                "ai": {"key": self.ai_key, "answered": self.ai_answered, "error": self.ai_error, "reused": self.ai_cache_hits,
                        "waiting": len(self.engine.questions)},
                 "tiktok": self.bridge.public(), "departures": DEPARTURE_LIST, "music_tracks": music.tracks(),
                 "voices": self.voice.voice_list}
