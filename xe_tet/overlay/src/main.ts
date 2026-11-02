@@ -20,6 +20,8 @@ fit();
 const FONT_WAIT_MS = 2500;
 // Vẽ tối đa 30 khung / giây — bằng tốc độ phát live, card đồ hoạ đỡ một nửa việc (học từ zane-tv/tiktok-live-temple-rpc).
 const FRAME_MS = 1000 / 30;
+const CONTEXT_WAIT_MS = 10_000;
+const RETRY_MS = 30_000;
 const FONT_SAMPLE = "Aa ẾẠỪẦĐĂƠƯỚỘ ếạừầđăơướộ 0123";
 const FONT_FACES = ['800 40px "Be Vietnam Pro"', '600 40px "Be Vietnam Pro"', '800 40px "Baloo 2"'];
 
@@ -31,11 +33,25 @@ function fontsReady(): Promise<unknown> {
 }
 
 async function start(): Promise<void> {
-  const world = new World(
-    document.getElementById("gl") as HTMLCanvasElement,
-    document.getElementById("labels") as HTMLElement,
-    document.getElementById("fade") as HTMLElement,
-  );
+  const canvas = document.getElementById("gl") as HTMLCanvasElement;
+  let world: World;
+  try {
+    world = new World(canvas, document.getElementById("labels") as HTMLElement, document.getElementById("fade") as HTMLElement);
+  } catch (err) {  // trình duyệt tạm chặn WebGL (mất ngữ cảnh nhiều lần liền): đợi rồi tải lại, không đứng màn đen cả buổi
+    console.error(err);
+    window.setTimeout(() => location.reload(), RETRY_MS);
+    return;
+  }
+  // Mất ngữ cảnh WebGL (driver card đồ hoạ khởi động lại, hết bộ nhớ GPU): three tự dựng lại khi trình duyệt trả ngữ cảnh →
+  // biên dịch lại shader trước khi vẽ tiếp; CONTEXT_WAIT_MS không trả thì tải lại trang (state lấy từ server, không mất gì).
+  let reloadTimer = 0;
+  canvas.addEventListener("webglcontextlost", () => {
+    reloadTimer = window.setTimeout(() => location.reload(), CONTEXT_WAIT_MS);
+  });
+  canvas.addEventListener("webglcontextrestored", () => {
+    window.clearTimeout(reloadTimer);
+    void world.warmUp().catch((err) => console.error(err));
+  });
   // biên dịch sẵn shader trước khi nhận state (state đổi ẩn / hiện bối cảnh) và trước vòng vẽ; lỗi thì vẫn chạy như cũ
   await world.warmUp().catch((err) => console.error(err));
   const hud = new Hud();
@@ -91,7 +107,7 @@ async function start(): Promise<void> {
   let due = last;
   function loop(now: number): void {
     requestAnimationFrame(loop);
-    if (now < due - 2) return;
+    if (now < due - FRAME_MS / 4) return;  // nới 8 ms: máy chủ tự gọi đúng 30 nhịp / giây hơi sớm thì vẫn vẽ, không bỏ khung
     due += FRAME_MS;
     if (now - due > FRAME_MS) due = now + FRAME_MS;
     const dt = Math.min(0.1, (now - last) / 1000);

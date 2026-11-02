@@ -9,9 +9,10 @@ import { Roadway } from "./road";
 import { bendTree, setBend } from "./bend";
 import { Fireworks, Puffs } from "./effects";
 import { BenSet, HomeSet, RestSet, type StageSet } from "./sets";
+import { DAO, MAI } from "./tet";
 import { Tunnel } from "./tunnel";
 import { Weather } from "./weather";
-import type { CamName, Control, GameEvent, Phase, Quality, Region, Seat, State } from "./types";
+import type { CamName, Control, GameEvent, Phase, Quality, Region, Route, Seat, State } from "./types";
 
 export const W = 1080;
 export const H = 1920;
@@ -71,6 +72,7 @@ const MAX_NUDGE = 140;  // px: đẩy xa hơn thì nhãn rời khỏi người c
 const NUDGE_EASE = 0.3;  // nhãn trượt tới chỗ mới (không nhảy giật khi người đi ngang nhau)
 const _vp = new THREE.Matrix4();
 const _lp = new THREE.Vector3();
+const _step = new THREE.Vector3();  // hướng đi của người đi bộ: dùng lại mỗi khung, không tạo vật mới (đỡ dọn rác bộ nhớ)
 
 interface LabelBox { el: HTMLElement; x0: number; x1: number; y0: number; y1: number }
 
@@ -149,6 +151,19 @@ interface Walker {
 
 // ---- thế giới ---------------------------------------------------------------
 
+/** Biển chỉ đường: các điểm sắp tới (điểm trả + tỉnh đi qua, bỏ trạm dừng), km còn lại tính từ xe. */
+function aheadRows(route: Route): { name: string; km: number }[] {
+  const next = [...route.stops.filter((x) => x.kind === "stop" && !x.done), ...(route.via ?? []).filter((v) => !v.done)]
+    .filter((x) => x.km > route.odo)
+    .sort((a, b) => a.km - b.km);
+  const rows: { name: string; km: number }[] = [];
+  for (const x of next) {
+    if (!rows.some((r) => r.name === x.name)) rows.push({ name: x.name, km: x.km - route.odo });
+    if (rows.length === 5) break;  // biển ở xa bỏ dòng đã qua, còn đủ 3 dòng
+  }
+  return rows;
+}
+
 export class World {
   private renderer: THREE.WebGLRenderer;
   private labels: CSS2DRenderer;
@@ -225,6 +240,8 @@ export class World {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.labels = new CSS2DRenderer({ element: labelsEl });
     this.labels.setSize(W, H);
+    // không xếp chồng nhãn theo độ sâu mỗi khung (duyệt cả cây cảnh + ghi zIndex từng nhãn); nhãn sinh sau nằm trên — đủ
+    this.labels.sortObjects = false;
 
     this.aimCamera(true);
     this.camIn.position.set(INSIDE_X, 66, 1);
@@ -280,6 +297,7 @@ export class World {
     this.weather.set(rain ? "drizzle" : "clear");
     this.road.setWet(rain);
     this.petals.setColor(region === "bac" ? 0xffa6c4 : 0xffd23f); // đào hồng miền Bắc, mai vàng nơi khác
+    this.road.setBlossom(region === "bac" ? DAO : MAI);
   }
 
   private buildInside(): void {
@@ -337,6 +355,10 @@ export class World {
     if (leg && state.phase === "DRIVING") {  // cột cây số: điểm tới + km còn lại (khớp số km trên bảng tuyến)
       this.road.setTarget(leg.kind === "rest" ? "TRẠM DỪNG" : leg.label, leg.km - state.trip_km);
     }
+    if (state.route && state.phase === "DRIVING") this.road.setAhead(aheadRows(state.route), state.route.odo);
+    // qua ranh tỉnh thật (cùng một xe đang chiếu, đang chạy): biển «TỈNH … Kính chào quý khách» hiện ra phía trước
+    if (prev && prev.phase === "DRIVING" && state.phase === "DRIVING" && prev.featured === state.featured
+      && state.place && state.place !== prev.place) this.road.welcome(state.place);
     const key = JSON.stringify(state.bus.seats);
     if (key !== this.seatsKey) {
       this.seatsKey = key;
@@ -815,7 +837,7 @@ export class World {
         }
         continue;
       }
-      const d = new THREE.Vector3().subVectors(dest, w.obj.position);
+      const d = _step.subVectors(dest, w.obj.position);
       d.y = 0;
       const dist = d.length();
       const step = w.speed * dt;

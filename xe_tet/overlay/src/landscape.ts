@@ -10,7 +10,7 @@
 import * as THREE from "three";
 import { at, GEO, mat, noiseTexture, post, rounded, slab, soft } from "./art";
 import { strip } from "./bend";
-import { blossomTree, kumquatPot, lantern, makeTree, SignBoard } from "./props";
+import { blossomTree, kumquatPot, lantern, makeTree, plasticStools, SignBoard } from "./props";
 import { Conveyor, WRAP } from "./road";
 import { blossomPot, DAO, flag, greetingBanner, MAI } from "./tet";
 import type { Region } from "./types";
@@ -53,6 +53,22 @@ function tubeHouse(color: number, floors: number, windows: THREE.Material, shop:
   for (const x of [-1.1, 1.1]) g.add(at(lantern(0.7), x, 2.15, 2.3));
   if (pot) g.add(at(pot, -1.0, 0, 2.7));
   g.traverse((o) => { o.castShadow = true; });
+  return g;
+}
+
+/** Quán cóc ven quốc lộ (PLAN-140): mái bạt, biển chữ, bàn nhựa thấp + ghế đỏ / xanh (ghế vẽ lặp một lượt). */
+function roadStall(name: string, tarp: number): THREE.Group {
+  const g = new THREE.Group();
+  const awning = at(slab(3.6, 0.08, 2.4, soft(tarp, 0.8)), 0, 2.2, 0);
+  awning.rotation.x = 0.12;
+  awning.castShadow = true;
+  g.add(awning);
+  for (const x of [-1.7, 1.7]) g.add(at(post(0.05, 2.2, soft(0x8a8f96, 0.5, 0.5)), x, 1.1, 1.1));
+  g.add(at(new SignBoard(name, 3.0, 0.5, { bg: "#d32f2f", fg: "#ffffff", rim: "#ffd23f" }).mesh, 0, 2.62, 1.22));
+  g.add(at(rounded(1.3, 0.08, 0.8, 0.04, soft(0x1e6fd9, 0.4)), 0, 0.52, 0.3));
+  g.add(at(slab(0.1, 0.5, 0.1, soft(0x1e6fd9, 0.4)), 0, 0.25, 0.3));
+  g.add(plasticStools([new THREE.Vector3(-0.9, 0, 0.3), new THREE.Vector3(0.9, 0, 0.3), new THREE.Vector3(-0.3, 0, 1.0),
+    new THREE.Vector3(0.4, 0, -0.4)]));
   return g;
 }
 
@@ -128,14 +144,120 @@ function basketBoat(): THREE.Group {
 
 // ---- núi nền xa ---------------------------------------------------------------------------------
 
-/** Một dãy núi: các đỉnh rải đều dải [-FAR_SPAN, FAR_SPAN); mỗi đỉnh là một vật riêng để tự quay vòng trên băng chuyền. */
-function ridge(rnd: () => number, color: number, count: number, height: number, z: number): THREE.Mesh[] {
-  return Array.from({ length: count }, (_, i) => {
-    const peak = new THREE.Mesh(GEO.cone, mat(color));
-    const s = height * (0.6 + rnd() * 0.7);
-    peak.scale.set(s * (1.2 + rnd() * 0.8), s, s);
-    return at(peak, -FAR_SPAN + (i / count) * FAR_SPAN * 2 + rnd() * 12, s * 0.42, z - rnd() * 12);
-  });
+// ---- phông núi vẽ tay bằng canvas (PLAN-140) ---------------------------------------------------------------------
+// Mỗi lớp xa là MỘT tấm phẳng dựng đứng, ảnh dáng núi vẽ bằng canvas (nền trong suốt) lặp liền mạch, trôi bằng dời ảnh
+// (offset) — thay 26–36 khối nón (26–36 lượt vẽ) bằng 2–3 lượt. Dáng theo vùng cho người xem nhận ra: núi đá vôi miền Bắc,
+// dãy Trường Sơn sau biển miền Trung, cao nguyên + núi lửa tắt Tây Nguyên, hàng dừa + núi thấp miền Tây. Sương (fog) của cảnh
+// làm lớp xa nhạt dần; vật liệu có ánh sáng nên đêm tự tối theo.
+const PAINT_W = 1024;
+const PAINT_H = 256;
+const PAINT_PERIOD = 110;  // một lần lặp ảnh = 110 đơn vị đường
+type Paint = "karst" | "ridge" | "plateau" | "palms" | "hills";
+
+/** Đường sống núi tuần hoàn (khớp hai mép ảnh): tổng vài sóng sin có số chu kỳ nguyên trên bề ngang. */
+function ridgeLine(rnd: () => number, waves: number[], rough: number): (x: number) => number {
+  const parts = waves.map((k) => ({ k, a: (0.4 + rnd() * 0.6) / k, ph: rnd() * Math.PI * 2 }));
+  const norm = parts.reduce((t, w) => t + w.a, 0);
+  return (x) => {
+    const u = (x / PAINT_W) * Math.PI * 2;
+    return 0.5 + (rough * parts.reduce((t, w) => t + w.a * Math.sin(w.k * u + w.ph), 0)) / norm;
+  };
+}
+
+function paintTexture(kind: Paint, color: number, rnd: () => number): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = PAINT_W;
+  c.height = PAINT_H;
+  const g = c.getContext("2d")!;
+  const base = new THREE.Color(color);
+  const grad = g.createLinearGradient(0, 0, 0, PAINT_H);  // đỉnh sáng hơn chân một chút: có khối, không phẳng lì
+  grad.addColorStop(0, `#${base.clone().offsetHSL(0, -0.05, 0.08).getHexString()}`);
+  grad.addColorStop(1, `#${base.clone().offsetHSL(0, 0, -0.06).getHexString()}`);
+  g.fillStyle = grad;
+  const H = PAINT_H;
+  // vẽ ba lần lệch ±W để hình ở mép ảnh nối liền khi lặp
+  const wrap = (draw: (dx: number) => void) => { for (const dx of [-PAINT_W, 0, PAINT_W]) draw(dx); };
+  if (kind === "karst") {  // núi đá vôi: khối dựng đứng, đỉnh tròn, chen nhau (Ninh Bình, Hạ Long)
+    const towers: [number, number, number][] = [];
+    for (let x = 0; x < PAINT_W; x += 34 + rnd() * 40) towers.push([x, 28 + rnd() * 46, 0.35 + rnd() * 0.6]);
+    wrap((dx) => {
+      for (const [x, w, h] of towers) {
+        const top = H - h * H;
+        g.beginPath();
+        g.moveTo(dx + x - w / 2, H);
+        g.bezierCurveTo(dx + x - w * 0.62, top + h * H * 0.35, dx + x - w * 0.45, top, dx + x, top);
+        g.bezierCurveTo(dx + x + w * 0.5, top, dx + x + w * 0.6, top + h * H * 0.4, dx + x + w / 2, H);
+        g.fill();
+      }
+    });
+  } else if (kind === "palms") {  // hàng dừa miền Tây: thân cong, tàu lá rủ, dưới là dải cây bụi thấp
+    const line = ridgeLine(rnd, [3, 7, 13], 0.4);
+    g.beginPath();
+    g.moveTo(0, H);
+    for (let x = 0; x <= PAINT_W; x += 8) g.lineTo(x, H - (0.12 + 0.1 * line(x)) * H);
+    g.lineTo(PAINT_W, H);
+    g.fill();
+    g.strokeStyle = grad;
+    g.lineCap = "round";
+    const palms: [number, number, number][] = [];
+    for (let x = 10; x < PAINT_W; x += 26 + rnd() * 50) palms.push([x, 0.5 + rnd() * 0.45, (rnd() - 0.5) * 30]);
+    wrap((dx) => {
+      for (const [x, h, lean] of palms) {
+        const tx = dx + x + lean;
+        const ty = H - h * H;
+        g.lineWidth = 4;
+        g.beginPath();
+        g.moveTo(dx + x, H);
+        g.quadraticCurveTo(dx + x + lean * 0.2, H - h * H * 0.5, tx, ty);
+        g.stroke();
+        g.lineWidth = 3.5;
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2;
+          const len = 26 + rnd() * 10;
+          g.beginPath();
+          g.moveTo(tx, ty);
+          g.quadraticCurveTo(tx + Math.cos(a) * len * 0.6, ty - 10, tx + Math.cos(a) * len, ty + 8 + Math.abs(Math.sin(a)) * 10);
+          g.stroke();
+        }
+      }
+    });
+  } else {  // ridge: dãy núi dài; plateau: cao nguyên đỉnh bằng + vài núi lửa tắt; hills: đồi thấp, một ngọn đơn độc
+    const shape = {
+      ridge: { waves: [2, 3, 5, 9, 17], rough: 0.9, low: 0.3, span: 0.62 },
+      plateau: { waves: [2, 4, 11], rough: 0.35, low: 0.42, span: 0.2 },
+      hills: { waves: [2, 5, 9], rough: 0.5, low: 0.12, span: 0.25 },
+    }[kind];
+    const line = ridgeLine(rnd, shape.waves, shape.rough);
+    const cones: [number, number, number][] = kind === "plateau" ? [[rnd() * PAINT_W, 120, 0.35], [rnd() * PAINT_W, 90, 0.25]]
+      : kind === "hills" ? [[rnd() * PAINT_W, 260, 0.55]] : [];
+    const heightAt = (x: number) => {
+      let y = shape.low + shape.span * line(x);
+      for (const [cx, w, h] of cones) {
+        for (const d of [x - cx, x - cx - PAINT_W, x - cx + PAINT_W]) {
+          if (Math.abs(d) < w / 2) y = Math.max(y, shape.low + h * (1 - Math.abs(d) / (w / 2)) ** 1.4 + 0.1);
+        }
+      }
+      return Math.min(0.98, y);
+    };
+    g.beginPath();
+    g.moveTo(0, H);
+    for (let x = 0; x <= PAINT_W; x += 4) g.lineTo(x, H - heightAt(x) * H);
+    g.lineTo(PAINT_W, H);
+    g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.repeat.x = (FAR_SPAN * 2) / PAINT_PERIOD;
+  return tex;
+}
+
+/** Một lớp phông: tấm đứng rộng 2 × FAR_SPAN, cao `height`, chân chìm dưới đất một chút. */
+function backdrop(kind: Paint, color: number, height: number, z: number, rnd: () => number): { mesh: THREE.Mesh; tex: THREE.CanvasTexture } {
+  const tex = paintTexture(kind, color, rnd);
+  const mesh = new THREE.Mesh(strip(FAR_SPAN * 2, height),
+    new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, roughness: 1 }));
+  return { mesh: at(mesh, 0, height / 2 - 1, z), tex };
 }
 
 // ---- chọn theo vùng --------------------------------------------------------------------------------
@@ -174,6 +296,7 @@ interface RegionLayer {
   mid: THREE.Group;
   far: THREE.Group;
   belts: [Conveyor, Conveyor, Conveyor];
+  paints: { tex: THREE.CanvasTexture; parallax: number }[];  // phông vẽ: trôi bằng dời ảnh, lớp xa chậm hơn
 }
 
 export class Landscape {
@@ -233,6 +356,7 @@ export class Landscape {
 
   advance(dx: number): void {
     for (const belt of this.current?.belts ?? []) belt.advance(dx);
+    for (const p of this.current?.paints ?? []) p.tex.offset.x += (dx * p.parallax) / PAINT_PERIOD;
     this.groundTex.offset.x += dx / (700 / 90);
   }
 
@@ -247,6 +371,7 @@ export class Landscape {
     const layer: RegionLayer = {
       near: new THREE.Group(), mid: new THREE.Group(), far: new THREE.Group(),
       belts: [new Conveyor(1), new Conveyor(1), new Conveyor(0.12, FAR_SPAN)],
+      paints: [],
     };
     const rnd = rand(31 + REGIONS.indexOf(region) * 977);  // mỗi vùng một hạt giống riêng, dựng lại vẫn y hệt
     this.buildNear(region, rnd, layer);
@@ -263,12 +388,14 @@ export class Landscape {
    * xen kẽ một khoảnh ruộng / đồi theo vùng và một cụm nhà ống.
    */
   private buildNear(region: Region, rnd: () => number, { near, belts: [belt] }: RegionLayer): void {
-    const shops = ["TẠP HOÁ", "CƠM BÌNH DÂN", "SỬA XE", "BIA HƠI"];
+    const shops = ["TẠP HOÁ", "CƠM BÌNH DÂN", "SỬA XE", "BIA HƠI", "NHÀ NGHỈ", "RỬA XE", "BƠM VÁ XE"];
+    const stalls = ["TRÀ ĐÁ", "CƠM PHỞ", "BƠM VÁ XE", "NƯỚC MÍA", "BÁNH MÌ"];
     let block = 0;
     for (let x = -WRAP; x < WRAP; x += 16, block++) {
       if (block % 2 === 0) {
         for (const item of regionField(region, rnd)) near.add(belt.add(at(item.obj, x + item.x, 0, item.z)));
         if (block % 4 === 0) near.add(belt.add(at(greetingBanner(), x, 0, -8.6)));  // băng rôn chúc Tết đầu làng
+        else near.add(belt.add(at(roadStall(stalls[Math.floor(rnd() * stalls.length)], [0x1e6fd9, 0xd32f2f, 0x2e7d32][block % 3]), x + 3, 0, -8.2)));
         continue;
       }
       const houses = 1 + Math.floor(rnd() * 2);
@@ -303,23 +430,26 @@ export class Landscape {
     }
   }
 
-  private buildFar(region: Region, rnd: () => number, { far, belts: [, , belt] }: RegionLayer): void {
-    const ridges = (items: THREE.Object3D[]) => { for (const o of items) far.add(belt.add(o)); };
+  private buildFar(region: Region, rnd: () => number, layer: RegionLayer): void {
+    const { far, belts: [, , belt] } = layer;
+    // [dáng, màu, cao, z, tốc độ trôi]: lớp gần đậm + trôi nhanh hơn, lớp xa nhạt + chậm (sương làm nhạt thêm)
+    const plan: [Paint, number, number, number, number][] = {
+      bac: [["karst", 0x4f7a5a, 30, -95, 0.14], ["karst", 0x6f8f86, 40, -125, 0.1], ["ridge", 0x93a9a6, 46, -155, 0.07]],
+      trung: [["ridge", 0x6f8f86, 30, -175, 0.06]],
+      taynguyen: [["plateau", 0x5e7d4a, 18, -100, 0.13], ["ridge", 0x7e9670, 26, -135, 0.09]],
+      nam: [["palms", 0x3f6b3a, 12, -88, 0.16], ["hills", 0x86a88a, 16, -160, 0.06]],
+    }[region] as [Paint, number, number, number, number][];
     if (region === "trung") {
       const sea = new THREE.Mesh(strip(FAR_SPAN * 3, 200), new THREE.MeshStandardMaterial({ color: 0x3d8fd1, roughness: 0.15, metalness: 0.2 }));
       sea.rotation.x = -Math.PI / 2;
-      far.add(at(sea, 0, 0.05, -150));  // biển đứng yên (trải rộng), thuyền + núi trôi
+      far.add(at(sea, 0, 0.05, -150));  // biển đứng yên (trải rộng), thuyền trôi
       for (let i = 0; i < 8; i++) far.add(belt.add(at(basketBoat(), -FAR_SPAN + i * 55 + rnd() * 20, -0.3, -62 - rnd() * 30)));
-      ridges(ridge(rnd, 0x6f8f86, 6, 14, -175));
-      return;
     }
-    if (region === "nam") {
-      ridges(ridge(rnd, 0x86a88a, 5, 8, -160));
-      return;
+    for (const [kind, color, height, z, parallax] of plan) {
+      const { mesh, tex } = backdrop(kind, color, height, z, rnd);
+      far.add(mesh);
+      layer.paints.push({ tex, parallax });
     }
-    // núi nhiều tầng: gần đậm, xa nhạt; Tây Bắc cao và dày hơn
-    const layers = region === "bac" ? [[0x4f7a5a, 14, 26, -95], [0x6f8f86, 12, 34, -125], [0x93a9a6, 10, 40, -155]]
-      : [[0x5e7d4a, 10, 16, -100], [0x7e9670, 8, 22, -135]];
-    for (const [color, count, height, z] of layers) ridges(ridge(rnd, color, count, height, z));
   }
+
 }

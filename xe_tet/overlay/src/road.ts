@@ -3,9 +3,9 @@
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { at, type Bump, GEO, post, rounded, slab, soft, type WheelSpot } from "./art";
+import { at, type Bump, GEO, makePerson, post, rounded, slab, soft, type WheelSpot } from "./art";
 import { strip } from "./bend";
-import { flag } from "./tet";
+import { blossomPot, DAO, flag, MAI } from "./tet";
 
 /** Vật cuộn trong dải x ∈ [-WRAP, WRAP) rồi quay vòng — đủ rộng để mép quay vòng nằm ngoài khung hình. */
 export const WRAP = 80;
@@ -137,6 +137,180 @@ class Milestone {
   }
 }
 
+// ---- biển chỉ dẫn quốc lộ (PLAN-140) -----------------------------------------------------------------
+// Biển chỉ dẫn trên quốc lộ VN nền xanh dương, chữ trắng, viền trắng; biển địa giới «TỈNH …» cũng nền xanh dương. Canvas chỉ vẽ
+// lại khi chữ đổi (lúc biển quay vòng ra phía trước / lúc xe vào tỉnh mới) — không tải lại ảnh lên GPU mỗi khung.
+
+const SIGN_BLUE = "#1452a6";
+const SIGN_FRESH_X = 30;
+const SIGN_POST = soft(0x9aa3ad, 0.4, 0.6);
+const SIGN_BACK = soft(0x8c939b, 0.5, 0.5);
+
+/** Bảng xanh hai cột: mặt chữ canvas (`draw` vẽ), lưng xám, đặt bên kia đường nhìn về phía camera. */
+class BlueBoard {
+  group = new THREE.Group();
+  readonly canvas = document.createElement("canvas");
+  private texture: THREE.CanvasTexture;
+  private drawn = "";
+
+  constructor(w: number, h: number, height: number, private draw: (g: CanvasRenderingContext2D, text: string[]) => void) {
+    this.canvas.width = 512;
+    this.canvas.height = Math.round(512 * (h / w));
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.colorSpace = THREE.SRGBColorSpace;
+    this.texture.anisotropy = 4;
+    const face = at(new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: this.texture })), 0, height, 0.06);
+    const back = at(slab(w + 0.08, h + 0.08, 0.1, SIGN_BACK), 0, height, 0);
+    this.group.add(face, back);
+    for (const x of [-w * 0.32, w * 0.32]) this.group.add(at(post(0.07, height, SIGN_POST), x, height / 2, -0.08));
+  }
+
+  set(text: string[]): void {
+    const key = text.join("|");
+    if (key === this.drawn) return;
+    this.drawn = key;
+    const g = this.canvas.getContext("2d")!;
+    const { width: w, height: h } = this.canvas;
+    g.fillStyle = SIGN_BLUE;
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = "#fff";
+    g.lineWidth = 10;
+    g.strokeRect(14, 14, w - 28, h - 28);
+    g.fillStyle = "#fff";
+    this.draw(g, text);
+    this.texture.needsUpdate = true;
+  }
+}
+
+/** Co chữ cho vừa bề ngang. */
+function fit(g: CanvasRenderingContext2D, text: string, size: number, max: number, weight = 800): void {
+  do {
+    g.font = `${weight} ${size}px 'Be Vietnam Pro', sans-serif`;
+    size -= 2;
+  } while (g.measureText(text).width > max && size > 10);
+}
+
+/** Biển chỉ đường: tối đa 3 dòng «Nghệ An ··· 120 km» — các điểm xe sắp tới, km thật trên bảng chặng. */
+function directionSign(): BlueBoard {
+  return new BlueBoard(4.8, 2.7, 3.3, (g, rows) => {
+    const { width: w, height: h } = g.canvas;
+    const lines = rows.length ? rows : ["QL1A|"];
+    const step = (h - 60) / 3;
+    lines.slice(0, 3).forEach((row, i) => {
+      const [name, km] = row.split("|");
+      const y = 30 + step * (i + 0.5);
+      g.textBaseline = "middle";
+      g.textAlign = "right";
+      fit(g, km, 52, 150, 700);
+      g.fillText(km, w - 40, y);
+      g.textAlign = "left";
+      fit(g, name, 58, w - 230);
+      g.fillText(name, 40, y);
+    });
+  });
+}
+
+/** Biển địa giới: «TỈNH NGHỆ AN» / «THÀNH PHỐ ĐÀ NẴNG» + «Kính chào quý khách». */
+function borderSign(): BlueBoard {
+  return new BlueBoard(6.2, 2.3, 3.4, (g, [title]) => {
+    const { width: w, height: h } = g.canvas;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    fit(g, title, 84, w - 70);
+    g.fillText(title, w / 2, h * 0.42);
+    fit(g, "Kính chào quý khách", 40, w - 120, 600);
+    g.fillText("Kính chào quý khách", w / 2, h * 0.75);
+  });
+}
+
+const CITIES = new Set(["Hà Nội", "Hải Phòng", "Đà Nẵng", "Cần Thơ", "Huế"]);
+
+/** Tên trên biển địa giới (tên 63 tỉnh cũ như cả game). */
+export function borderTitle(place: string): string {
+  if (place === "TP.HCM") return "TP. HỒ CHÍ MINH";
+  return `${CITIES.has(place) ? "THÀNH PHỐ" : "TỈNH"} ${place.toUpperCase()}`;
+}
+
+// ---- cọc tiêu, biển tốc độ, xe máy chở mai / đào (PLAN-140) -------------------------------------------------------
+
+/** Một hàng cọc tiêu trắng đầu đỏ dọc mép đường (khúc cua, đầu cầu): cả hàng một lượt vẽ (vẽ lặp + màu theo đỉnh). */
+const STAKE_GEO = (() => {
+  const paint = (g: THREE.BufferGeometry, hex: number) => {
+    const c = new THREE.Color(hex);
+    const n = g.attributes.position.count;
+    const colors = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) colors.set([c.r, c.g, c.b], i * 3);
+    g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    return g;
+  };
+  const body = new THREE.BoxGeometry(0.16, 0.7, 0.16).translate(0, 0.35, 0);
+  const band = new THREE.BoxGeometry(0.17, 0.18, 0.17).translate(0, 0.62, 0);
+  for (const g of [body, band]) g.deleteAttribute("uv");
+  return mergeGeometries([paint(body, 0xf4f1ea), paint(band, 0xc62828)])!;
+})();
+const STAKE_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
+
+function stakeRow(count: number, gap: number): THREE.InstancedMesh {
+  const row = new THREE.InstancedMesh(STAKE_GEO, STAKE_MAT, count);
+  const m4 = new THREE.Matrix4();
+  for (let i = 0; i < count; i++) row.setMatrixAt(i, m4.makeTranslation((i - (count - 1) / 2) * gap, 0, 0));
+  row.computeBoundingSphere();
+  return row;
+}
+
+/** Biển hạn chế tốc độ tròn viền đỏ (xe khách trên quốc lộ). */
+function speedSign(limit: number): THREE.Group {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  g.fillStyle = "#c62828";
+  g.beginPath();
+  g.arc(64, 64, 62, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#fff";
+  g.beginPath();
+  g.arc(64, 64, 46, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#1b1b1b";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = "800 52px 'Be Vietnam Pro', sans-serif";
+  g.fillText(String(limit), 64, 68);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Group();
+  sign.add(at(new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), new THREE.MeshBasicMaterial({ map: tex })), 0, 2.3, 0.05),
+    at(post(0.05, 2.3, SIGN_POST), 0, 1.15, 0));
+  return sign;
+}
+
+/** Xe máy chở chậu mai / đào về quê ăn Tết, chạy cùng chiều sát lề phía camera — xe khách vượt qua (làn ngược chiều nằm
+ * sau thân xe khách, góc cận không thấy). Người lái nằm trong đám đông vẽ lặp. */
+class Motorbike {
+  group = new THREE.Group();
+  readonly blossom: number;
+
+  constructor(blossom: number, hue: number) {
+    this.blossom = blossom;
+    const red = soft(0xb71c1c, 0.4, 0.2);
+    const tire = soft(0x1c1c1c, 0.9);
+    this.group.add(at(rounded(1.5, 0.42, 0.34, 0.12, red), 0, 0.62, 0));  // thân xe (dài theo trục x)
+    for (const x of [-0.62, 0.62]) {
+      const wheel = at(new THREE.Mesh(GEO.cyl, tire), x, 0.32, 0);
+      wheel.scale.set(0.32, 0.14, 0.32);
+      wheel.rotation.x = Math.PI / 2;
+      this.group.add(wheel);
+    }
+    const rider = makePerson(hue, undefined, false, 1.05);
+    rider.rotation.y = Math.PI / 2;  // nhìn về hướng xe chạy (+x)
+    this.group.add(at(rider, 0.05, 0.42, 0));
+    const pot = blossomPot(blossom);  // chậu buộc sau yên
+    pot.scale.setScalar(0.62);
+    this.group.add(at(pot, -0.78, 0.82, 0));
+    this.group.visible = false;
+  }
+}
+
 // ---- trụ điện ------------------------------------------------------------------------------
 
 const CONCRETE = soft(0xb9b5ad, 0.85);
@@ -200,6 +374,15 @@ export class Roadway {
   private holeInners: THREE.Mesh[] = [];
   private milestones: Milestone[] = [];
   private target = { name: "QL1A", km: "" };
+  private directions: BlueBoard[] = [];
+  private ahead: { name: string; km: number }[] = [];
+  private kmPerUnit = 0;  // km xe chạy ứng với một đơn vị đường trôi (chuyến bị nén nên lớn) — đo từ odo thật
+  private odo: number | null = null;
+  private rolled = 0;
+  private borders: BlueBoard[] = [borderSign(), borderSign()];  // hai tấm: tỉnh ngắn qua liền hai ranh vẫn không giật biển
+  private bikes = [new Motorbike(MAI, 30), new Motorbike(DAO, 210)];
+  private blossom = MAI;
+  private bikeGap = 40;
 
   constructor() {
     this.roadMat = new THREE.MeshStandardMaterial({ map: this.roadTex, roughness: 0.92 });
@@ -222,6 +405,22 @@ export class Roadway {
       const m = new Milestone();
       this.milestones.push(m);
       this.roadside.add(this.belt.add(at(m.group, x, 0, -ROAD_HALF - 1.1)));
+    }
+    for (const x of [-WRAP + 28, 28]) {  // biển chỉ đường: hai tấm trên dải 160 đơn vị, lệch cột cây số
+      const sign = directionSign();
+      sign.set([]);
+      this.directions.push(sign);
+      this.roadside.add(this.belt.add(at(sign.group, x, 0, -ROAD_HALF - 2.4)));
+    }
+    // cọc tiêu hai bên mép đường + biển tốc độ, trôi theo băng chuyền
+    for (const [x, z] of [[-60, -ROAD_HALF - 0.35], [-20, ROAD_HALF + 0.35], [52, -ROAD_HALF - 0.35]] as const) {
+      this.roadside.add(this.belt.add(at(stakeRow(7, 1.6), x, 0, z)));
+    }
+    this.roadside.add(this.belt.add(at(speedSign(60), -10, 0, -ROAD_HALF - 0.9)));
+    for (const bike of this.bikes) this.roadside.add(at(bike.group, -WRAP, 0, ROAD_HALF - 0.8));
+    for (const sign of this.borders) {
+      sign.group.visible = false;
+      this.roadside.add(at(sign.group, -WRAP, 0, -ROAD_HALF - 2.8));
     }
     this.group.add(this.roadside);
   }
@@ -258,6 +457,45 @@ export class Roadway {
     this.target = { name, km: `${Math.max(1, Math.round(km))}` };
   }
 
+  /** Các điểm sắp tới (km còn lại tính từ xe) + odo xe lúc này; biển ghi km tính từ CHỖ BIỂN ĐỨNG như biển thật. */
+  setAhead(rows: { name: string; km: number }[], odo: number): void {
+    this.ahead = rows;
+    if (this.odo !== null && odo >= this.odo && this.rolled > 1) {
+      const ratio = (odo - this.odo) / this.rolled;
+      this.kmPerUnit = this.kmPerUnit ? this.kmPerUnit * 0.7 + ratio * 0.3 : ratio;
+    } else if (this.odo !== null && odo < this.odo) {
+      this.kmPerUnit = 0;  // chuyến mới / đổi xe đang chiếu
+    }
+    if (this.odo === null || odo !== this.odo) {
+      this.odo = odo;
+      this.rolled = 0;
+    }
+  }
+
+  private signRows(x: number): string[] {
+    const rows: string[] = [];
+    for (const { name, km } of this.ahead) {
+      const left = Math.round(km - x * this.kmPerUnit);
+      if (left >= 1) rows.push(`${name}|${left.toLocaleString("vi-VN")} km`);
+      if (rows.length === 3) break;
+    }
+    return rows;
+  }
+
+  /** Xe vừa vào tỉnh mới: dựng biển địa giới ở phía trước (ngoài khung hình), trôi lại như mọi vật ven đường. */
+  welcome(place: string): void {
+    const sign = this.borders.find((b) => !b.group.visible)
+      ?? this.borders.reduce((a, b) => (a.group.position.x < b.group.position.x ? a : b));
+    sign.set([borderTitle(place)]);
+    sign.group.position.x = WRAP - 4;
+    sign.group.visible = true;
+  }
+
+  /** Hoa trên xe máy chở về quê: đào miền Bắc, mai nơi khác. */
+  setBlossom(color: number): void {
+    this.blossom = color;
+  }
+
   /** Mưa: mặt đường sẫm + bóng, ổ gà đọng nước. */
   setWet(wet: boolean): void {
     this.roadMat.roughness = wet ? 0.35 : 0.92;
@@ -275,6 +513,7 @@ export class Roadway {
   advance(dx: number, wheels: WheelSpot[]): Bump[] {
     const before = this.potholes.map((p) => p.mesh.position.x);
     this.belt.advance(dx);
+    this.rolled += dx;
     this.roadTex.offset.x += dx / TILE;
     this.gravelTex.offset.x += dx / 4;
     const bumps: Bump[] = [];
@@ -287,6 +526,35 @@ export class Roadway {
     });
     for (const m of this.milestones) {
       if (m.group.position.x > WRAP - 10) m.set(this.target.name, this.target.km);  // vừa quay vòng ra cuối dải
+    }
+    // biển chỉ đường vẽ lại ngay trước khi lọt vào khung hình (x < SIGN_FRESH_X): chuyến dài bị nén, vẽ lúc quay vòng thì
+    // tới lúc thấy xe đã qua tỉnh dòng đầu rồi; khung dọc 9:16 mọi góc máy chỉ thấy |x| < ~20
+    for (const d of this.directions) {
+      if (d.group.position.x > SIGN_FRESH_X) d.group.userData.fresh = false;
+      else if (!d.group.userData.fresh) {
+        d.group.userData.fresh = true;
+        d.set(this.signRows(d.group.position.x));
+      }
+    }
+    for (const b of this.borders) {
+      if (!b.group.visible) continue;
+      b.group.position.x -= dx;
+      if (b.group.position.x < -WRAP) b.group.visible = false;
+    }
+    // xe máy cùng chiều, chậm hơn xe khách: cứ 120–220 đơn vị đường một chiếc, hiện phía trước rồi bị vượt, lùi dần ra sau
+    for (const bike of this.bikes) {
+      if (!bike.group.visible) continue;
+      bike.group.position.x -= dx * 0.3;  // ~4 đơn vị / giây so với xe khách: trong khung ~7 giây
+      if (bike.group.position.x < -WRAP) bike.group.visible = false;
+    }
+    this.bikeGap -= dx;
+    if (this.bikeGap <= 0) {
+      this.bikeGap = 120 + Math.random() * 100;
+      const bike = this.bikes.find((b) => b.blossom === this.blossom && !b.group.visible);
+      if (bike) {
+        bike.group.position.x = SIGN_FRESH_X + 10;  // ngay ngoài khung phía trước: hiện sau vài giây
+        bike.group.visible = true;
+      }
     }
     return bumps;
   }
