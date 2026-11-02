@@ -16,7 +16,7 @@ def normalize(text: str) -> str:
 
 @dataclass(frozen=True)
 class Command:
-    kind: str  # province | stay | food | wc | gift_shop | where | station | fuel | wash | chat
+    kind: str  # province | board | stay | food | wc | gift_shop | where | station | fuel | wash | chat
     province: Province | None = None
     item: str = ""
     station: str = ""  # gọi xe ra bến này («từ Hà Nội», «bến Giáp Bát») — đi kèm đặt vé nếu có cả tỉnh về
@@ -42,7 +42,9 @@ _STAY = ("khong ve", "ko ve", "k ve", "kh ve", "hong ve", "hok ve", "chua ve", "
 # Comment chỉ được hiểu là đặt vé / không về khi phần còn lại toàn từ đệm — tránh «Hà Nội lạnh quá»,
 # «chị Huệ ơi» thành đặt vé, «mẹ chưa về à» / «ai ở lại không» thành huỷ vé.
 _BOOK_FILLER = {"ve", "di", "que", "toi", "minh", "nha", "nhe", "thoi", "nao", "day", "len", "xe", "ne",
-                "a", "voi", "luon", "nhaa", "lun", "dc", "duoc", "cho", "em", "anh", "qua", "o", "tai", "den"}
+                "a", "voi", "luon", "nhaa", "lun", "dc", "duoc", "cho", "em", "anh", "qua", "o", "tai", "den",
+                # câu đặt vé tự nhiên («cho em 1 vé về Thanh Hóa», «đặt vé đi Đà Nẵng» — rà soát 02/11)
+                "1", "mot", "dat", "xin", "mua", "giuong", "chuyen", "ah", "ak", "ha", "nhe", "vs", "zoi", "dk"}
 # Địa chỉ chi tiết sau tên tỉnh («qua hải phòng ngõ 174 phường Lê Thanh Nghị» — live 02/11, gõ mãi không lên xe vì bị coi là
 # tán gẫu): có chữ chỉ địa chỉ thì vẫn là đặt vé về tỉnh đó. Thẻ vé chỉ ghi tên tỉnh, không đọc / hiện lại địa chỉ.
 _ADDRESS = ("ngo", "ngach", "hem", "kiet", "phuong", "thon", "xom", "ap", "huyen", "quan", "thi tran", "thi xa", "khu pho",
@@ -50,7 +52,10 @@ _ADDRESS = ("ngo", "ngach", "hem", "kiet", "phuong", "thon", "xom", "ap", "huyen
 _STAY_FILLER = {"nam", "nay", "duoc", "dc", "roi", "tet", "que", "nha", "minh", "toi", "em", "anh", "thoi",
                 "huhu", "buon", "qua", "lai", "lam", "nua", "oi", "a", "ve", "khong", "ko", "k", "kh", "hong",
                 "hok", "chua", "o"}
-_MAX_EXTRA_WORDS = 4
+_MAX_EXTRA_WORDS = 6
+# Muốn lên xe mà không nói tỉnh («lên xe», «về quê», «cho đi với») — trước đây là tán gẫu, người xem không được phản hồi.
+_BOARD = ("len xe", "ve que", "di xe", "cho len", "cho di", "dat ve", "mua ve", "dang ky", "dang ki", "book ve", "len xe voi")
+_FUZZY_MIN = 5  # gõ sai một chữ («Nghe Ann», «nge an») chỉ xét tên ≥ 5 chữ cái — tên ngắn dễ trùng chữ thường
 
 # (cụm từ, món hiển thị) — cụm dài xếp trước để «banh mi» không bị «mi» ăn mất.
 # Món ở trạm dừng chân: (tên, emoji, cách gõ) — một bảng, thêm món là thêm một dòng. «mi» để cuối: «banh mi» khớp trước.
@@ -118,6 +123,35 @@ def _find_province(norm: str) -> tuple[str, Province] | None:
     return None
 
 
+def _edits(a: str, b: str) -> int:
+    """Số chữ phải sửa (thêm / bớt / đổi) để a thành b — chỉ cần biết ≤ 1."""
+    if abs(len(a) - len(b)) > 1:
+        return 2
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+_SQUASHED = {phrase.replace(" ", ""): prov for phrase, prov in _PHRASES}
+
+
+def _loose_province(norm: str) -> Province | None:
+    """Cả câu (bỏ từ đệm) là tên tỉnh viết liền («Hanoi», «nghệan») hoặc sai một chữ («Nghe Ann») — rà soát 02/11."""
+    core = "".join(w for w in norm.split() if w not in _BOOK_FILLER)
+    if not core:
+        return None
+    if core in _SQUASHED:
+        return _SQUASHED[core]
+    if len(core) < _FUZZY_MIN:
+        return None
+    near = {prov.key: prov for squashed, prov in _SQUASHED.items() if len(squashed) >= _FUZZY_MIN and _edits(core, squashed) <= 1}
+    return next(iter(near.values())) if len(near) == 1 else None  # gần hai tỉnh cùng lúc thì không đoán
+
+
 def parse(text: str, at_rest_stop: bool = False) -> Command:
     norm = normalize(text)
     if not norm:
@@ -157,4 +191,9 @@ def parse(text: str, at_rest_stop: bool = False) -> Command:
         return Command("province", found[1])
     if found and any(_has(" ".join(_rest_words(norm, found[0])), a) for a in _ADDRESS):
         return Command("province", found[1])
+    if not found and (loose := _loose_province(norm)):
+        return Command("province", loose)
+    board = next((b for b in _BOARD if _has(norm, b)), None)
+    if board and _only_filler(_rest_words(norm, board), _BOOK_FILLER):
+        return Command("board")
     return Command("chat")

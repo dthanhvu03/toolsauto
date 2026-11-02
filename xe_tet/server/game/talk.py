@@ -88,6 +88,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Luật dễ ẹc bà con, gõ tên tỉnh là lên xe, hổng về thì gõ không về, tặng quà là có hiệu ứng trên xe.",
             "Ai chưa biết chơi, gõ tên tỉnh quê vô bình luận, Anh Tư xếp giường, xe chạy tới quê là thả xuống đầu ngõ.",
         ),
+        "board_home": (  # «lên xe» không nói tỉnh, khách quen biết quê (rà soát 02/11)
+            "{name} về {prov} như bữa trước hả, Anh Tư xếp liền, quê khác thì gõ tên tỉnh.",
+            "Rồi {name}, về {prov} như lần trước, đổi quê thì gõ tên tỉnh khác.",
+        ),
+        "board_hint": (
+            "{name} muốn lên xe thì gõ tên tỉnh quê vô, ví dụ Nghệ An hay Cà Mau, Anh Tư xếp giường liền.",
+            "Lên xe thì gõ tên tỉnh {name} ơi, gõ Huế là về Huế, gõ Thanh Hóa là về Thanh Hóa.",
+        ),
         "parcels": (  # thùng quà Tết người tặng quà gửi theo xe, tới quê giao tận cổng (PLAN-134 C)
             "Bốc thùng quà của {names} xuống, Anh Tư bê tận cổng cho, khỏi lo.",
             "Thùng quà Tết của {names} tới nơi rồi, ra cổng nhận đi.",
@@ -279,6 +287,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Người mới vô gõ tên tỉnh quê là có giường, thả tim cho xe chạy nhanh, gõ xe nào để check vé, dễ ợt.",
             "Chơi sao hả, gõ tên tỉnh là lên xe, tặng quà là có hiệu ứng, gõ không về là ở lại, gét gô.",
         ),
+        "board_home": (
+            "{name} về {prov} như lần trước luôn, quê khác thì gõ tên tỉnh, uy tín.",
+            "Oke {name}, chốt {prov} như bữa trước, muốn đổi thì gõ tỉnh khác.",
+        ),
+        "board_hint": (
+            "{name} gõ tên tỉnh quê là lên xe liền, ví dụ Nghệ An, dễ ợt.",
+            "Muốn lên xe thì gõ tên tỉnh {name} ơi, gõ Huế là về Huế.",
+        ),
         "parcels": (
             "Ship tận cổng thùng quà của {names}, uy tín luôn.",
             "Thùng quà của {names} hạ cánh an toàn, chuẩn đét.",
@@ -468,6 +484,14 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "rules": (
             "Ai mới vào thì gõ tên tỉnh quê mình là lên xe, thả tim cho xe chạy nhanh, gõ xe nào để xem vé của mình.",
             "Luật đơn giản thôi, gõ tên tỉnh là có giường, tặng quà là có hiệu ứng, gõ không về nếu ở lại, chuẩn không cần chỉnh.",
+        ),
+        "board_home": (
+            "{name} về {prov} như lần trước, muốn đổi quê thì gõ tên tỉnh khác.",
+            "Ghi nhận {name} về {prov} như chuyến trước, chuẩn không cần chỉnh.",
+        ),
+        "board_hint": (
+            "{name} muốn lên xe thì gõ tên tỉnh quê mình, ví dụ Nghệ An, Cà Mau.",
+            "Lên xe đơn giản lắm {name}, gõ tên tỉnh quê vào bình luận là có giường.",
         ),
         "parcels": (
             "Giao tận cổng thùng quà Tết của {names}, chuẩn không cần chỉnh.",

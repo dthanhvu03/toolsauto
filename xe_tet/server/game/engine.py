@@ -1125,9 +1125,9 @@ class Engine:
         elif cmd.kind in ("fuel", "wash"):
             self._care(v, cmd.kind, now)
         elif cmd.kind == "where":
-            if now - v.last_where >= WHERE_COOLDOWN:
-                v.last_where = now
-                self.emit("where", name=v.name, hue=v.hue, **self.ticket_of(v))
+            self._show_ticket(v)
+        elif cmd.kind == "board":
+            self._board_intent(v, now)
         elif cmd.kind in ("food", "wc", "gift_shop"):
             if now - v.last_rest < REST_ACTION_COOLDOWN:
                 return
@@ -1151,6 +1151,29 @@ class Engine:
             v.last_chat = now
             self.emit("chat", name=v.name, seat=seat, hue=v.hue, text=text.strip()[:40])
 
+    def _show_ticket(self, v: Viewer) -> None:
+        """Thẻ vé của người này (như gõ «xe nào»); WHERE_COOLDOWN giây một lần."""
+        if v.last_seen - v.last_where >= WHERE_COOLDOWN:  # giờ của chính bình luận (nhịp game có thể chưa chạy tới)
+            v.last_where = v.last_seen
+            self.emit("where", name=v.name, hue=v.hue, **self.ticket_of(v))
+
+    def _board_intent(self, v: Viewer, now: float) -> None:
+        """«lên xe», «về quê», «cho đi với» mà không nói tỉnh (rà soát 02/11: trước đây im lặng). Có vé rồi → xem vé; khách
+        quen biết quê → đặt vé về quê cũ; còn lại → lơ xe chỉ cách gõ tên tỉnh."""
+        if v.province and not v.stay:
+            self._show_ticket(v)
+            return
+        if v.home in BY_KEY and self.network.lane_of(v.home) is not None:
+            self._book(v, v.home)
+            if now - self.last_answer >= ASK_GAP:
+                self.last_answer = now
+                self.talk("board_home", name=v.name, prov=BY_KEY[v.home].name)
+            return
+        if now - v.last_ask >= ASK_PER_VIEWER and now - self.last_answer >= ASK_GAP:
+            v.last_ask = now
+            self.last_answer = now
+            self.talk("board_hint", name=v.name)
+
     def _locked(self, v: Viewer) -> bool:
         """BOARD_LOCK giây cuối giờ đón: người đã ngồi không xuống / đổi tỉnh được nữa (lơ xe nhắc, 10 giây / câu)."""
         if self.bus.seat_of(v.uid) is None or not self.boarding_open():
@@ -1161,6 +1184,8 @@ class Engine:
         if self.last_now - self.last_lock_talk >= 10:
             self.last_lock_talk = self.last_now
             self.talk("board_lock", name=v.name, main=True)
+        else:
+            self._show_ticket(v)  # lơ xe vừa nhắc người khác: người này vẫn thấy vé mình đang giữ
         return True
 
     def _book(self, v: Viewer, key: str) -> None:
@@ -1170,7 +1195,8 @@ class Engine:
         if v.uid in self.staying:
             self.staying.remove(v.uid)
         if self.on_trip(v.uid):
-            return  # đang ngồi xe chạy: không đổi được
+            self._show_ticket(v)  # đang ngồi xe chạy: không đổi được — gõ lại tỉnh thì cho xem vé (rà soát 02/11)
+            return
         lane = self.network.lane_of(key)
         if lane is None:  # BR-5: tỉnh của bến đi — đang giữ giường / chỗ chờ thì bỏ vé (đã ở quê, không đi đâu nữa)
             self._release(v)
@@ -1180,7 +1206,8 @@ class Engine:
         queued = self.lane_of_uid(v.uid)
         changed = seat is not None or queued is not None
         if changed:
-            if v.province == key or v.switched:
+            if v.province == key or v.switched:  # gõ lại đúng tỉnh để xem mình lên chưa / đã đổi một lần: cho xem vé
+                self._show_ticket(v)
                 return
             v.switched = True
             if (self._fits(key) if seat is not None else lane == queued):  # xe vẫn chở được / cùng làn: giữ giường / chỗ chờ

@@ -521,8 +521,12 @@ export class Hud {
       for (const t of shown) this.namedAt.set(t.name, now);
       if (this.namedAt.size > NAMED_KEEP) this.namedAt.delete(this.namedAt.keys().next().value!);
       const names = shown.map((t) => esc(t.name)).join(", ");
-      big = `🎫 ${names} +${batch.length - 3} người lên xe!`;
-      small = [...new Set(batch.map((t) => t.province))].slice(0, 4).map(esc).join(" · ");
+      // thẻ gộp: người giữ chỗ chuyến sau không được ghi «lên xe» (rà soát 02/11 — vừa «đợi chuyến sau» lại «lên xe»)
+      const held = batch.filter((t) => t.next).length;
+      big = `🎫 ${names} +${batch.length - 3} người ${held ? "có vé" : "lên xe"}!`;
+      small = held
+        ? `${batch.length - held} lên xe · ${held} giữ chỗ chuyến sau · gõ XE NÀO xem vé của mình`
+        : [...new Set(batch.map((t) => t.province))].slice(0, 4).map(esc).join(" · ");
     } else {
       const t = this.tickets.shift()!;
       const route = `${esc(t.departure)} → ${esc(t.province)} · ${km(t.km)} km`;

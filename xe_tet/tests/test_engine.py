@@ -1018,6 +1018,45 @@ def test_each_gift_has_its_own_effect():
     assert ev["fx"] == "petals" and ev["fx_n"] == 3
 
 
+def test_parser_understands_natural_booking_and_typos_but_not_chat():
+    """Rà soát 02/11: câu đặt vé tự nhiên, tên viết liền, gõ sai một chữ đều lên xe; câu tán gẫu vẫn là tán gẫu."""
+    from xe_tet.server.game.parser import parse
+    ok = {"cho em 1 vé về Thanh Hóa": "Thanh Hóa", "1 vé Huế": "Huế", "đặt vé đi Đà Nẵng": "Đà Nẵng", "Hanoi": "Hà Nội",
+          "nghệan": "Nghệ An", "Nghe Ann": "Nghệ An", "nge an": "Nghệ An", "dac lak": "Đắk Lắk"}
+    for text, prov in ok.items():
+        cmd = parse(text)
+        assert cmd.kind == "province" and cmd.province.name == prov, text
+    for text in ("lên xe", "cho lên xe với", "về quê", "đăng ký"):
+        assert parse(text).kind == "board", text
+    for text in ("Hà Nội lạnh quá", "chị Huệ ơi", "anh vinh ơi đẹp quá", "mẹ chưa về à", "đường về Hà Nội xa quá", "hello",
+                 "cảm ơn", "Nghe nói", "nam ơi", "xin chao", "đi"):
+        assert parse(text).kind == "chat", text
+
+
+def test_every_booking_comment_gets_a_visible_answer():
+    """Rà soát 02/11: gõ lại đúng tỉnh, đổi tỉnh lần hai, đang trên xe chạy gõ tỉnh → thẻ vé (trước đây im lặng); «lên xe»
+    không nói tỉnh → khách quen về quê cũ, người mới được lơ xe chỉ cách gõ."""
+    e = Engine(0.0)
+    comment(e, "An", "Nghệ An", 1)
+    e.drain()
+    comment(e, "An", "Nghệ An", 30)
+    assert [ev["type"] for ev in e.drain()] == ["where"]
+    comment(e, "An", "Huế", 50)
+    e.drain()
+    comment(e, "An", "Quảng Bình", 70)  # đổi lần hai: không đổi nữa nhưng vẫn thấy vé
+    assert [ev["type"] for ev in e.drain()] == ["where"]
+    comment(e, "Bình", "lên xe", 71)
+    assert any(ev["type"] == "loxe" and "Bình" in ev["text"] for ev in e.drain())
+    e.viewer("chi", "Chi").home = "hue"
+    comment(e, "Chi", "về quê", 90)
+    assert e.viewers["chi"].province == "hue"
+    e.skip()
+    e.tick(100)
+    e.drain()
+    comment(e, "An", "Huế", 120)  # đang trên xe chạy
+    assert [ev["type"] for ev in e.drain()] == ["where"]
+
+
 # ---- PLAN-134 B: người xem biết mình ở xe nào --------------------------------
 
 def test_where_question_is_not_a_booking():
