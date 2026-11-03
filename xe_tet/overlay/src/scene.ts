@@ -30,7 +30,8 @@ const CAMS: Record<CamName, [number, number, number, number, number, number]> = 
 // đang chiếu video bảng quảng cáo: máy quay ngước lên khung bảng (sau xe), xe vẫn trong khung dưới
 const SHOW_CAM: [number, number, number, number, number, number] = [3.5, 8.5, 25, 0.5, 6.2, -8.5];
 const BOARD_H = 9.5;
-const RIDER_TAG_MAX = 24;  // cả xe 24 giường: hiện đủ tên (chữ nhỏ, xuống dòng)  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
+const RIDER_TAG_MAX = 24;
+const FOCUS_CAM = [2.2, 1.6, 8.5];  // máy quay đứng chéo trước cửa sổ khách đang focus (lệch về đầu xe, cao hơn chút)  // cả xe 24 giường: hiện đủ tên (chữ nhỏ, xuống dòng)  // chiều cao màn bảng quảng cáo (đơn vị cảnh)
 const URL_PARAMS = new URLSearchParams(location.search);
 // ?res=0.5: vẽ nửa độ phân giải (thử trên máy không GPU); chất lượng «thấp» trên /control hạ tiếp xuống tối đa 0,6
 // ?hour=10: ép giờ trong ngày khi thử (chụp ảnh ban ngày lúc nửa đêm); bỏ trống thì theo đồng hồ trên xe (PLAN-130:
@@ -217,6 +218,7 @@ export class World {
   private blockArm: THREE.Object3D | null = null;  // cần barie (mở khi góp đủ)
   private blockLeaving = false;
   private showCam = false;
+  private focusSeat = -1;
   private riderTag = label("", "lbl riders");  // bảng tên hành khách dưới thân xe (đủ tên dài)
   private windowTags: CSS2DObject[] = [];  // tên từng người ngay ô cửa sổ giường của mình (anh 03/11)
   private board: { group: THREE.Group; video: HTMLVideoElement; tex: THREE.VideoTexture; url: string } | null = null;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
@@ -428,6 +430,15 @@ export class World {
     // qua ranh tỉnh thật (cùng một xe đang chiếu, đang chạy): biển «TỈNH … Kính chào quý khách» hiện ra phía trước
     if (prev && prev.phase === "DRIVING" && state.phase === "DRIVING" && prev.featured === state.featured
       && state.place && state.place !== prev.place) this.road.welcome(state.place);
+    const fseat = state.focus?.seat ?? -1;
+    if (fseat !== this.focusSeat) {  // tên ở cửa sổ người được focus: to, đủ tên, phát sáng; giường trong xe cũng vậy
+      if (this.focusSeat >= 0) {
+        this.windowTags[this.focusSeat]?.element.classList.remove("focus");
+        this.berths[this.focusSeat]?.tag.element.classList.remove("focus");
+      }
+      this.focusSeat = fseat;
+      this.seatsKey = "";  // vẽ lại tên (người focus hiện đủ tên)
+    }
     const key = JSON.stringify(state.bus.seats);
     if (key !== this.seatsKey) {
       this.seatsKey = key;
@@ -451,10 +462,11 @@ export class World {
       const el = this.windowTags[i]?.element;
       if (!el) return;
       el.style.display = s ? "" : "none";
-      el.className = s?.vip ? "lbl win vip" : "lbl win";
+      el.className = (s?.vip ? "lbl win vip" : "lbl win") + (i === this.focusSeat ? " focus" : "");
       // cửa sổ hẹp: chữ đầu của tên (tối đa 7 ký tự, không «…») — người xem nhận ra mình; tên đủ ở bảng dưới thân xe
       const short = s ? [...(s.name.trim().split(/\s+/)[0] ?? "")].slice(0, 7).join("") : "";
-      el.textContent = s ? `${s.vip ? "⭐" : ""}${short}` : "";
+      el.textContent = s ? `${s.vip ? "⭐" : ""}${i === this.focusSeat ? s.name : short}` : "";
+      this.berths[i]?.tag.element.classList.toggle("focus", i === this.focusSeat && !!s);
     });
     const riders = seats.filter((x): x is Seat => !!x);
     const el = this.riderTag.element;
@@ -1221,15 +1233,21 @@ export class World {
     // góc nhìn do admin chọn (?view= trên URL ghi đè khi thử); camera trượt mượt tới góc mới
     const view: View = (URL_PARAMS.get("view") as View | null) ?? this.control.view;
     const showing = !!this.board && view === "outside";
+    const focus = this.state?.focus;
+    const focusing = !showing && view === "outside" && !!focus && !!this.bus.windowSpots[focus.seat];
     if (showing) {  // xem video: ngước máy quay lên bảng quảng cáo
       const [cx, cy, cz, lx, ly, lz] = SHOW_CAM;
       this.camLookTo.set(lx, ly, lz);
       this.camPosTo.set(cx, cy, cz);
+    } else if (focusing) {  // anh bấm vào một khách trên /control: zoom vào cửa sổ giường người đó
+      const at = this.bus.group.localToWorld(this.bus.windowSpots[focus!.seat].clone());
+      this.camLookTo.copy(at);
+      this.camPosTo.set(at.x + FOCUS_CAM[0], at.y + FOCUS_CAM[1], at.z + FOCUS_CAM[2]);
     } else if (this.showCam) {
-      this.aimCamera(false);  // hết video: về góc máy admin chọn
+      this.aimCamera(false);  // hết video / hết focus: về góc máy admin chọn
     }
-    this.showCam = showing;
-    const k = Math.min(1, dt * (showing ? 1.5 : 3));
+    this.showCam = showing || focusing;
+    const k = Math.min(1, dt * (showing || focusing ? 1.5 : 3));
     this.camPos.lerp(this.camPosTo, k);
     this.camLook.lerp(this.camLookTo, k);
     this.camOut.position.copy(this.camPos);

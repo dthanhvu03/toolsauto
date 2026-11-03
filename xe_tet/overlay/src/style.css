@@ -389,6 +389,10 @@ html, body {
 .lbl.win { font-size: 16px; font-weight: 700; max-width: 86px; padding: 1px 4px; border-radius: 6px; text-overflow: clip;
   background: rgba(255, 255, 255, 0.88); color: var(--ink); }
 .lbl.win.vip { background: linear-gradient(90deg, #f4c04e, #ffe7a8); }
+/* khách đang được focus (anh bấm trên /control): đủ tên, to, viền đỏ phát sáng */
+.lbl.win.focus, .lbl.berth.focus { font-size: 30px; max-width: 360px; padding: 4px 12px; z-index: 5; background: #fff;
+  border: 3px solid var(--red); box-shadow: 0 0 0 6px rgba(255, 210, 63, 0.7), 0 0 28px rgba(255, 210, 63, 0.9);
+  animation: pop 0.35s ease; }
 .lbl.berth { font-size: 26px; max-width: 150px; background: rgba(255, 255, 255, 0.94); color: var(--ink); }
 .lbl.berth.empty { background: rgba(255, 255, 255, 0.35); color: rgba(255, 255, 255, 0.9); font-weight: 400; }
 .lbl.berth.vip { background: linear-gradient(90deg, #f4c04e, #ffe7a8); }

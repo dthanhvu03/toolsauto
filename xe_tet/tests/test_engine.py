@@ -1798,3 +1798,23 @@ def test_first_booked_rides_first_only_gifts_jump_and_admin_picks_next_trip():
     assert e.snapshot()["upcoming"][0]["lane"] == bac and e.snapshot()["upcoming"][0]["chosen"]
     assert e._pick_lane() == bac and e.next_lane is None  # dùng một lần
     assert e._pick_lane() == nam
+
+
+def test_focus_on_a_rider_for_a_while():
+    """Anh 03/11: bấm vào khách trên /control → màn live zoom vào cửa sổ người đó (12 giây, xuống xe / bấm bỏ thì thôi)."""
+    import pytest
+    from xe_tet.server.game.engine import FOCUS_SECONDS, Refused
+    e = Engine(0.0)
+    comment(e, "An", "Hà Nội", 1)
+    comment(e, "Bình", "Hà Nội", 1)
+    seat = e.bus.seat_of("bình")
+    e.focus_seat(seat + 1)
+    f = e.snapshot()["focus"]
+    assert f["name"] == "Bình" and f["seat"] == seat and f["province"] == "Hà Nội"
+    with pytest.raises(Refused):
+        e.focus_seat(20)  # giường trống
+    e.tick(1 + FOCUS_SECONDS + 1)
+    assert e.snapshot()["focus"] is None
+    e.focus_seat(seat + 1)
+    e.focus_seat(0)
+    assert e.snapshot()["focus"] is None

@@ -191,7 +191,8 @@ RACE_LIKES_PER_POINT = 20
 RACE_PER_XU = 5
 RACE_TALK_GAP = 30.0
 # Bảng quảng cáo bên đường (anh 03/11): video anh tải lên; xe đang chạy dừng lại xem hết rồi chạy tiếp
-SHOW_LEG_WINDOW = (0.15, 0.8)  # chỉ dừng giữa chặng (không sát điểm thả khách / trạm)
+SHOW_LEG_WINDOW = (0.15, 0.8)
+FOCUS_SECONDS = 12.0  # /control bấm vào một khách: máy quay zoom vào cửa sổ giường người đó chừng này giây (anh 03/11)  # chỉ dừng giữa chặng (không sát điểm thả khách / trạm)
 BLOCK_KEEP_MIN = 0.3
 BLOCK_CLEAR_KM = 12.0  # điểm chặn không đặt sát điểm thả khách / trạm nghỉ
 BLOCK_GAP_KM = 40.0
@@ -401,6 +402,7 @@ class Engine:
         self.goal_round = 0
         self.money_log: list[tuple[float, int, str]] = []  # (giờ, xu, tên) quà trong MONEY_WINDOW giây
         self.started_at = now
+        self.focus: dict | None = None  # {uid, until}: máy quay đang zoom vào khách này
         self.race_on = False  # anh 03/11: tắt đua tỉnh — ai đặt trước lên trước, chỉ quà được ưu tiên
         self.next_lane: str | None = None  # anh chọn hướng cho chuyến kế tiếp trên /control
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
@@ -788,6 +790,30 @@ class Engine:
                 if lane not in first or key < first[lane]:
                     first[lane] = key
         return sorted(first, key=lambda lane: first[lane])
+
+    def focus_seat(self, seat: int) -> None:
+        """/control bấm vào khách trên xe (giường `seat`, đếm từ 1): màn live zoom vào cửa sổ người đó; 0 = bỏ."""
+        if seat <= 0:
+            self.focus = None
+            return
+        uid = self.bus.seats[seat - 1] if seat <= len(self.bus.seats) else None
+        if uid is None:
+            raise Refused("Giường này đang trống.")
+        self.focus = {"uid": uid, "until": self.last_now + FOCUS_SECONDS}
+
+    def _focus_view(self) -> dict | None:
+        f = self.focus
+        if not f:
+            return None
+        seat = self.bus.seat_of(f["uid"])
+        if seat is None or self.last_now >= f["until"]:  # đã xuống xe / hết giờ
+            self.focus = None
+            return None
+        v = self.viewers[f["uid"]]
+        t = self.ticket_of(v)
+        return {"seat": seat, "name": v.name, "vip": v.vip, "province": BY_KEY[v.province].name if v.province else "",
+                "stops_before": t.get("stops_before"), "in_s": t.get("in_s"), "trips": v.trips,
+                "left": round(f["until"] - self.last_now, 1)}
 
     def set_next_lane(self, lane: str) -> None:
         """/control «Chạy kế tiếp»: chuyến sau (hết chuyến đang chạy) đi hướng này; "" = bỏ chọn, về thứ tự đặt vé."""
@@ -2424,6 +2450,7 @@ class Engine:
                      "left": round(max(0.0, self.show["until"] - self.last_now), 1)} if self.show else None,
             "race": [{"province": BY_KEY[k].name, "points": p} for k, p in self.race.most_common(5) if p > 0],
             "upcoming": self.upcoming(),
+            "focus": self._focus_view(),
             "block": self._block_view(),
             "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,

@@ -132,6 +132,7 @@ export class Hud {
   }
 
   private giftsTimer = 0;
+  private focusName = "";
 
   private openGifts(ms: number): void {
     $("cta").classList.add("gifts-open");
@@ -339,6 +340,14 @@ export class Hud {
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
     this.renderBlock(s.block ?? null);
+    const f = s.focus;
+    if (f && f.name !== this.focusName) {  // anh bấm vào khách trên /control: thẻ giới thiệu người đó
+      const where = f.stops_before ? `còn ${f.stops_before} điểm nữa tới ${esc(f.province)}` : `điểm kế là ${esc(f.province)}`;
+      const eta = f.in_s != null ? ` · ~${clock(f.in_s)}` : "";
+      this.note(`🔍 ${f.vip ? "⭐ " : ""}${esc(f.name)} · giường ${f.seat + 1} ${floorName(f.seat, this.seats)}`,
+        s.phase === "BOARDING" ? `Về ${esc(f.province)} · xe sắp xuất bến` : `${where}${eta}${f.trips ? ` · lần về quê thứ ${f.trips + 1}` : ""}`);
+    }
+    this.focusName = f?.name ?? "";
     const g = s.goal;
     if (g) {
       const pct = Math.min(100, Math.round((g.xu / Math.max(1, g.goal)) * 100));

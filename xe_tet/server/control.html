@@ -71,6 +71,9 @@
   ol.pax { margin: 6px 0 10px; padding-left: 0; list-style: none; columns: 2; font-size: 14px; }
   ol.pax li { padding: 2px 6px; border-radius: 6px; break-inside: avoid; }
   ol.pax li.on { background: #ffe08a; font-weight: 700; }
+  ol.pax li.pick { cursor: pointer; }
+  ol.pax li.pick:hover { background: var(--soft); outline: 1px solid var(--gold); }
+  ol.pax li.focus { background: #ffd0c8; outline: 2px solid var(--red); font-weight: 700; }
   details summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
   /* xếp theo tần suất dùng khi live (anh 03/11): khối «Đang live» trên cùng, cài đặt gập lại phía dưới */
   .wide { grid-column: 1 / -1; }
@@ -185,6 +188,10 @@
     <h2>🧾 Hành khách — ai ở xe nào</h2>
     <div class="row">
       <input id="pax-q" type="search" placeholder="Tìm tên người xem…" aria-label="Tìm tên người xem" style="flex:1;min-width:200px">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span class="hint live-line" id="focus-now" style="flex:1;margin:0">Bấm 🔍 tên khách trên xe để màn live zoom vào người đó (12 giây).</span>
+      <button id="focus-stop">Bỏ focus</button>
     </div>
     <div id="pax-found" class="hint" style="margin:8px 0"></div>
     <div id="pax"></div>
@@ -539,6 +546,7 @@ function notice(text, ok = false) {
 // ---- thanh điều khiển nhanh (ghim đáy) ----
 const CAM_ORDER = ["wide", "high", "side", "close"];
 let lastShow = false;
+let focusSeat = 0;  // giường đang zoom trên live (đếm từ 1; 0 = không)
 $("q-pause").onclick = () => admin({ action: "pause", paused: !paused });
 $("q-skip").onclick = () => admin({ action: "skip" });
 $("q-cover").onclick = () => admin({ action: "cover" });
@@ -893,6 +901,13 @@ async function refresh() {
     renderFiles(s);
     renderVideos(s);
     renderUpcoming(s);
+    const f = s.focus;
+    $("focus-now").textContent = f ? `🔍 Đang zoom vào ${f.name} · giường ${f.seat + 1} · còn ${Math.round(f.left)} giây`
+      : "Bấm 🔍 tên khách trên xe để màn live zoom vào người đó (12 giây).";
+    $("focus-now").classList.toggle("alert", !!f);
+    $("focus-stop").disabled = !f;
+    const fs = f ? f.seat + 1 : 0;
+    if (fs !== focusSeat) { focusSeat = fs; renderPax(); }
     renderVoices(s);
     $("s-next").textContent = s.waiting;
     $("s-likes").textContent = s.trip_likes.toLocaleString("vi-VN");
@@ -973,7 +988,10 @@ function renderPax() {
       (b.sponsor ? ` · ${esc(b.sponsor)} bao xe` : "") + ` — ${b.riders.length} khách`;
     const rows = b.riders.map((p) => {
       if (hit(p)) found.push(`<b>${esc(p.name)}</b> → ${b.main ? `chuyến ${b.no}` : `xe tăng cường số ${b.no}`}${p.seat ? `, giường ${p.seat}` : ""}, về ${esc(p.province)}`);
-      return `<li class="${hit(p) ? "on" : ""}">${esc(p.name)} <small>· ${esc(p.province)}${p.seat ? ` · giường ${p.seat}` : ""}</small></li>`;
+      // xe chính: bấm vào khách → màn live zoom vào cửa sổ người đó (anh 03/11)
+      const cls = [hit(p) ? "on" : "", b.main && p.seat ? "pick" : "", b.main && p.seat === focusSeat ? "focus" : ""].join(" ");
+      return `<li class="${cls}"${b.main && p.seat ? ` data-seat="${p.seat}" title="Bấm để zoom vào khách này trên live"` : ""}>`
+        + `${b.main && p.seat ? "🔍 " : ""}${esc(p.name)} <small>· ${esc(p.province)}${p.seat ? ` · giường ${p.seat}` : ""}</small></li>`;
     }).join("");
     return `<details ${q || b.featured ? "open" : ""}><summary>${title}</summary><ol class="pax">${rows || "<li><small>trống</small></li>"}</ol></details>`;
   }).join("");
@@ -994,6 +1012,11 @@ async function refreshPax() {
   } catch { /* mất mạng một nhịp: lần sau lấy lại */ }
 }
 $("pax-q").oninput = renderPax;
+$("pax").onclick = (e) => {
+  const li = e.target.closest("li[data-seat]");
+  if (li) admin({ action: "focus", seat: +li.dataset.seat });
+};
+$("focus-stop").onclick = () => admin({ action: "focus", seat: 0 });
 setInterval(refreshPax, 2000);
 refreshPax();
 refresh();

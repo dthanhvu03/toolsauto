@@ -102,6 +102,7 @@ export interface State {
   halt?: { place: string; people: { name: string; hue: number; province: string }[]; left: number } | null;  // dừng đón bên đường (PLAN-145)
   turbo?: { left: number; by: string } | null;  // quà: xe chạy x2 còn bao nhiêu giây, ai tặng gần nhất
   block?: Block | null;
+  focus?: { seat: number; name: string; vip: boolean; province: string; stops_before: number | null; in_s: number | null; trips: number; left: number } | null;
   show?: { url: string; title: string; seconds: number; left: number } | null;  // đang dừng xem video bảng quảng cáo
   race?: { province: string; points: number }[];  // đua tỉnh vòng này
   videos?: { name: string; title: string; url: string; seconds: number }[];
