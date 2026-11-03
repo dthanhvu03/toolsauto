@@ -775,41 +775,65 @@ def wallet_admin_text(settings, totals, requests, notice: str = "", fund=None, g
 
 
 def wallet_owner_text(position) -> str:
-    """position: payouts.OwnerPosition. Tiền Shopee đã về tài khoản chủ bot, phần khách và phần anh."""
+    """position: payouts.OwnerPosition. Từ hoa hồng Shopee báo tới tiền thực nhận sau cùng của chủ bot."""
     lines = [_title("Ví khách", "Ví của anh").rstrip("\n"), ""]
     if not position.batches:
         lines.append("Chưa có kỳ Shopee nào đối soát khớp (tiền về tài khoản khớp báo cáo Shopee).")
     else:
+        bot_kept = position.bot_commission_vnd - position.customer_vnd
         lines += [
-            f"💼 Tiền của anh: <b>{format_vnd(position.owner_vnd)}</b>",
+            f"💼 <b>Thực nhận sau cùng: {format_vnd(position.owner_vnd)}</b>",
             "",
-            f"Từ {position.batches} kỳ Shopee đã về tài khoản, đã đối soát khớp:",
+            f"<b>1. Shopee trả</b> ({position.batches} kỳ đã về tài khoản, đối soát khớp)",
             _aligned([
-                ("Shopee đã chuyển", position.received_vnd, ""),
-                ("− Phần khách", position.customer_vnd, ""),
-                ("= Phần anh", position.owner_vnd, ""),
+                ("Hoa hồng Shopee báo", position.commission_vnd, ""),
+                ("− Phí dịch vụ", position.fee_vnd, ""),
+                ("− Thuế Shopee giữ", position.tax_vnd, "TNCN + VAT"),
+                ("= Về tài khoản anh", position.received_vnd, ""),
             ]),
-            "<b>Phần khách</b>",
+            "<b>2. Chia hoa hồng</b> (trước phí, thuế)",
+            _aligned([
+                ("Đơn qua bot", position.bot_commission_vnd, ""),
+                ("  Trả khách", position.customer_vnd, ""),
+                ("  Anh giữ lại", bot_kept, ""),
+                ("Đơn riêng của anh", position.own_orders_vnd, ""),
+            ]),
+            "<b>3. Thực nhận</b>",
+            _aligned([
+                ("Về tài khoản anh", position.received_vnd, ""),
+                ("− Trả khách", position.customer_vnd, ""),
+                ("= Thực nhận", position.owner_vnd, ""),
+            ]),
+            f"ⓘ = anh giữ lại {format_vnd(bot_kept)} + đơn riêng {format_vnd(position.own_orders_vnd)} − phí, thuế "
+            f"{format_vnd(position.costs_vnd)} (anh chịu cả phí, thuế của kỳ).",
+            "",
+            "<b>Tiền trả khách đang ở đâu</b>",
             _aligned([
                 ("Chờ đủ ngày giữ", position.waiting_vnd, ""),
                 ("Trong ví khách", position.in_wallet_vnd, ""),
                 ("Đang chờ chuyển", position.reserved_vnd, ""),
                 ("Đã chuyển khách", position.paid_vnd, ""),
             ]),
-            f"ⓘ Phần anh gồm đơn riêng của anh ({format_vnd(position.own_orders_vnd)} trước phí, thuế) và phần anh giữ "
-            f"lại từ đơn qua bot; đã trừ phí + thuế Shopee giữ cả kỳ ({format_vnd(position.costs_vnd)}).",
         ]
     if position.upcoming:
-        lines += ["", "⏳ <b>Sắp về</b> (chưa tính vào tiền của anh)"]
+        lines += ["", "⏳ <b>Sắp về</b> (chưa tính vào thực nhận)"]
         for item in position.upcoming:
+            head = f"• Kỳ {html.escape(item.period)}"
             if item.expected_vnd is None:
-                lines.append(f"• Kỳ {html.escape(item.period)}: Shopee chưa báo số · phần khách {format_vnd(item.customer_vnd)}")
+                lines.append(f"{head}: Shopee chưa báo số · trả khách {format_vnd(item.customer_vnd)}")
                 continue
+            parts = []
+            if item.commission_vnd is not None:
+                parts.append(f"hoa hồng {format_vnd(item.commission_vnd)}")
+            if item.fee_vnd is not None:
+                parts.append(f"phí {format_vnd(item.fee_vnd)}")
+            parts.append("thuế chưa rõ" if item.tax_vnd is None else f"thuế ~{format_vnd(item.tax_vnd)}")
             state = "đã về, chờ đối soát" if item.received else "chưa về"
-            lines.append(
-                f"• Kỳ {html.escape(item.period)}: {format_vnd(item.expected_vnd)} ({state}) · phần khách "
-                f"{format_vnd(item.customer_vnd)} · phần anh ~{format_vnd(item.expected_vnd - item.customer_vnd)}"
-            )
+            lines += [
+                f"{head} ({state}): " + " − ".join(parts) + f" = <b>{format_vnd(item.expected_vnd)}</b>",
+                f"  trả khách {format_vnd(item.customer_vnd)} · anh thực nhận "
+                f"~<b>{format_vnd(item.expected_vnd - item.customer_vnd)}</b>",
+            ]
     return "\n".join(lines)
 
 

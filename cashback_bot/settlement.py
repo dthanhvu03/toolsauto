@@ -566,6 +566,27 @@ class SettlementEngine:
                         "conversion_id": item["conversion_id"], "delta_vnd": int(item["adjustment_vnd"]), "item_id": item["id"]})
         return created
 
+    def resolve_adjustment(self, adjustment_id: int, actor: str) -> bool:
+        """Admin đánh dấu đã xử lý một điều chỉnh OPEN. Không đổi sổ ví: Shopee giảm hoa hồng thì ví khách đã tự
+        trừ lại (wallet.refresh); đóng chỉ gỡ chặn «còn điều chỉnh mở» của đơn. Trả False nếu không còn OPEN."""
+        with self.repo.connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT a.*, (SELECT batch_id FROM settlement_items WHERE conversion_id = a.conversion_id "
+                "ORDER BY id DESC LIMIT 1) AS item_batch FROM settlement_adjustments a WHERE a.id = ? AND a.status = 'OPEN'",
+                (adjustment_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            now = _stamp()
+            conn.execute(
+                "UPDATE settlement_adjustments SET status = 'RESOLVED', resolved_by = ?, resolved_at = ? WHERE id = ?",
+                (actor, now, adjustment_id),
+            )
+            self._audit(conn, row["original_batch_id"] or row["item_batch"], "adjustment_resolve", actor, {
+                "adjustment_id": adjustment_id, "conversion_id": row["conversion_id"], "delta_vnd": row["delta_vnd"]})
+        return True
+
     # --- Đọc cho màn admin ---------------------------------------------------------------------
 
     def batch(self, batch_id: int) -> sqlite3.Row | None:
