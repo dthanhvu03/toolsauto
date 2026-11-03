@@ -206,6 +206,8 @@ def source_text(text: str, conversion_id: str | None) -> str:
 # Phễu link → click thấp: khách hay xem số hoàn rồi mua thẳng trong app, mất ghi nhận (chủ bot duyệt 2026-10-26).
 BUY_HINT = "👉 Bấm <b>🛒 Mua trên Shopee</b> bên dưới rồi đặt hàng."
 TIKTOK_BUY_HINT = "👉 Bấm <b>🛒 Mua trên TikTok Shop</b> bên dưới rồi đặt hàng."
+# Chủ bot 2026-11-03: món đã nằm trong giỏ trước khi bấm link thì sàn không tính hoa hồng → nhắc ngay trên thẻ link.
+CART_HINT = "🛒 Món đã có trong giỏ: <b>xoá khỏi giỏ trước</b> rồi mới bấm link."
 # Trang 🛡️ Lưu ý (chủ bot 2026-10-31: thẻ link chỉ còn tên, giá, số hoàn, nút mua; mọi lưu ý gom về đây). Gửi thành tin
 # riêng, không đè thẻ link: popup Telegram tối đa 200 ký tự, không đủ chỗ.
 BUY_RULE = "• Bấm nút <b>🛒 Mua</b> của bot rồi đặt hàng. Mua thẳng trong app sẽ không được hoàn."
@@ -375,7 +377,8 @@ def _tip_data(v12: bool, tiktok: bool, capped: bool) -> str:
 
 def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: str, v12: bool = False,
                  tiktok: bool = False, extra_vnd: int = 0, capped: bool = False) -> BotReply:
-    """Thẻ link 4 dòng: tên, giá tham khảo, số hoàn, lời bấm nút ngay trên nút. Lưu ý ở nút 🛡️ (tip_reply)."""
+    """Thẻ link: tên, giá tham khảo, số hoàn, nhắc xoá món trong giỏ (khi có hoàn), lời bấm nút ngay trên nút.
+    Lưu ý khác ở nút 🛡️ (tip_reply)."""
     safe_name = html.escape(buyer_name(name))
     amount = (f"💰 <b>Hoàn dự kiến: khoảng</b> <b>{format_vnd(cashback_vnd)}</b>" + (EXTRA_NOTE if extra_vnd > 0 else "")
               if cashback_vnd > 0 else "💰 Món này hiện không có tiền hoàn.")
@@ -383,6 +386,7 @@ def _render_card(name: str, price_vnd: int, cashback_vnd: int, affiliate_url: st
         f"🛍️ <b>{safe_name}</b>" + (" · 🎵 TikTok Shop" if tiktok else ""),
         f"🏷️ Giá tham khảo: {format_vnd(price_vnd)}",
         amount,
+        *([CART_HINT] if cashback_vnd > 0 else []),
         TIKTOK_BUY_HINT if tiktok else BUY_HINT,
     ]
     keyboard = (((TIP_LABEL, _tip_data(v12, tiktok, capped and cashback_vnd > 0)),),) if cashback_vnd > 0 else None

@@ -16,7 +16,7 @@ from cashback_bot.admin_notify import AdminNotifier
 from cashback_bot.affiliate import build_an_redir, build_food_redir, is_valid_sub_id
 from cashback_bot.config import ConfigError, load_settings
 from cashback_bot.db import TrackingRepository
-from cashback_bot.messages import FOOD_BUTTON, STALE, tip_reply
+from cashback_bot.messages import CART_HINT, FOOD_BUTTON, STALE, tip_reply
 from cashback_bot.money import estimated_cashback
 from cashback_bot.product_data import ProductDataClient, ProductDataError, quote_from_payload
 from cashback_bot.service import CashbackService
@@ -815,7 +815,9 @@ def test_khuon_chu_khach_plan_060(tmp_path):
         assert text.count("<b>") == text.count("</b>")
     for text in cards:
         assert "hoa hồng" not in text
-        assert len(text.split("\n")) == 4, "thẻ link 4 dòng (chủ bot 2026-10-31)"
+        # Chủ bot 2026-10-31: thẻ 4 dòng; 2026-11-03 thêm dòng nhắc xoá món trong giỏ khi món có hoàn.
+        assert ("Hoàn dự kiến" in text) == (CART_HINT in text)
+        assert len(text.split("\n")) == 4 + (CART_HINT in text), "thẻ link 4 dòng + nhắc giỏ"
     for flags in ("u:tip", "u:tip:2"):
         assert "Chưa phải tiền có thể rút." in tip_reply(flags).text
     zero = render_success("Áo Polo Nam", 250_000, 0, "https://s.shopee.vn/x").text

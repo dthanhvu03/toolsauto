@@ -943,7 +943,7 @@ def test_the_link_4_dong_dieu_kien_o_trang_luu_y(tmp_path):
     card = reply.text
     assert "có thể cao hơn" in card and "thêm tới" not in card and "chắc chắn" not in card
     assert "voucher" not in card and "livestream" not in card and "ⓘ" not in card, "lưu ý ở trang 🛡️"
-    assert len(card.split("\n")) == 4
+    assert len(card.split("\n")) == 5 and "xoá khỏi giỏ trước" in card, "4 dòng + nhắc giỏ (chủ bot 2026-11-03)"
     tip = tip_reply(reply.inline_keyboard[-1][0][1]).text
     assert "• Dùng voucher, xu hoặc mua lúc giảm giá thì số hoàn giảm theo." in tip and tip.count("voucher") == 1
     assert "livestream" in tip and "khoảng 1 ngày" in tip and "bot không thu tiền gì" in tip
