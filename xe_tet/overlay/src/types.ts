@@ -167,7 +167,7 @@ export interface GameEvent {
   sponsor?: string | null;  // xe tăng cường do ai tặng quà gọi
   fx?: string;  // quà: hiệu ứng riêng của món (petals | honk | hearts | firework | lixi | lantern — PLAN-142)
   fx_n?: number;
-  giver?: string; label?: string; vehicle?: string; big?: boolean; xu?: number;  // ride_home / patron (PLAN-144)
+  xu?: number;  // patron (PLAN-144)
   promoted?: boolean;  // vé: người đang giữ chỗ vừa được xếp lên xe
   relief?: boolean;  // vé: lên xe tăng cường
   url?: string;  // speak: file giọng lơ xe đọc sẵn

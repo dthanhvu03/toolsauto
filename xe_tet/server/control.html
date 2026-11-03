@@ -239,7 +239,7 @@
     </div>
     <div id="pax-found" class="hint" style="margin:8px 0"></div>
     <div id="pax"></div>
-    <p class="hint">Mỗi xe: tên · tỉnh về · giường. Hàng chờ: thứ tự lên xe chuyến sau của từng làn. Cập nhật mỗi 2 giây.</p>
+    <p class="hint">Trên xe: tên · tỉnh về · giường. Hàng chờ: thứ tự lên chuyến sau của từng làn. Cập nhật mỗi 2 giây.</p>
   </section>
 
   <section>
@@ -616,7 +616,7 @@ function renderBuses(s) {
   const fleet = Object.fromEntries((s.fleet || []).map((b) => [b.no, b]));
   const buses = [{
     key: "main", no: 0, music: m.music, stops: stopsOf(fleet[m.no]),
-    info: `<b>Xe số ${m.no} · xe chính</b><small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${
+    info: `<b>Xe chính · chuyến ${m.no}</b><small>${PHASES[m.phase] || m.phase} · ${m.arrow} ${esc(m.lane)} · ${m.riders}/${seats} khách${
       m.km ? ` · ${m.trip_km}/${m.km} km` : ""}${clockOf(fleet[m.no])}</small>`,
     btns: many ? feature(0, s.featured == null) : "",
   }, ...(s.reliefs || []).map((r) => ({
@@ -757,10 +757,10 @@ function renderPax() {
   const hit = (p) => q && p.name.toLowerCase().includes(q);
   const found = [];
   const busHtml = pax.buses.map((b) => {
-    const title = `${b.featured ? "📺 " : ""}Xe số ${b.no} · ${b.main ? "xe chính" : "tăng cường"} ${b.arrow} ${esc(b.label)}` +
+    const title = `${b.featured ? "📺 " : ""}${b.main ? `Xe chính · chuyến ${b.no}` : `Xe tăng cường số ${b.no}`} ${b.arrow} ${esc(b.label)}` +
       (b.sponsor ? ` · ${esc(b.sponsor)} bao xe` : "") + ` — ${b.riders.length} khách`;
     const rows = b.riders.map((p) => {
-      if (hit(p)) found.push(`<b>${esc(p.name)}</b> → xe số ${b.no}${p.seat ? `, giường ${p.seat}` : ""}, về ${esc(p.province)}`);
+      if (hit(p)) found.push(`<b>${esc(p.name)}</b> → ${b.main ? `chuyến ${b.no}` : `xe tăng cường số ${b.no}`}${p.seat ? `, giường ${p.seat}` : ""}, về ${esc(p.province)}`);
       return `<li class="${hit(p) ? "on" : ""}">${esc(p.name)} <small>· ${esc(p.province)}${p.seat ? ` · giường ${p.seat}` : ""}</small></li>`;
     }).join("");
     return `<details ${q || b.featured ? "open" : ""}><summary>${title}</summary><ol class="pax">${rows || "<li><small>trống</small></li>"}</ol></details>`;

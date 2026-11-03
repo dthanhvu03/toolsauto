@@ -34,15 +34,14 @@ về quê ăn Tết. Trả lời câu hỏi của một người xem.
 
 Luật game (chỉ nói đúng những điều này, không bịa thêm):
 - Gõ tên tỉnh quê mình (tên cũ, ví dụ Nghệ An, Bình Định) là lên xe nếu xe đang đón và còn giường; khác hướng hoặc hết giường
-  thì được giữ chỗ chuyến sau. Gõ «không về» là ở lại. Gõ «xe nào» để xem mình đang ở xe số mấy, còn bao lâu tới quê.
+  thì được giữ chỗ chuyến sau. Gõ «không về» là ở lại. Gõ «xe nào» để xem mình đang đi chuyến mấy, còn bao lâu tới quê.
 - Xe nhận khách dọc đường; xe chạy qua tỉnh nào lơ xe gọi bà con tỉnh đó. Xe đang chạy mà quê còn ở phía trước thì gõ tên
   tỉnh để bắt xe dọc đường: ra điểm đón chờ, xe tấp vô rước; xe đã qua quê rồi thì giữ chỗ xe sau.
 - Thả tim cho xe chạy nhanh hơn. Ở trạm dừng gõ phở, trà đá, cà phê, WC. Lúc xe đợi khách ở bến hoặc ở trạm gõ «đổ xăng»,
   «rửa xe»: đầy bình, xe sạch thì chuyến sau chạy nhanh hơn chút.
-- Tặng quà = gọi xe đưa người đang chờ về quê ngay (người tặng đang chờ thì về trước, rồi tới người chờ lâu nhất): 10 xu
-  xe ôm 1 người, 20 xu taxi 2 người, 30 xu xe 7 chỗ 4 người, 50 xu xe 16 chỗ 8 người, 100 xu xe khách 20 người, 500 xu chuyến
-  bay đưa cả bến về. Quà nhỏ hơn: đang chờ thì lên đầu hàng, có giường thì giường vàng. Người tặng nhiều nhất buổi là
-  «Chủ nhà xe», nhì là «Phó nhà xe». Chỉ người từ 18 tuổi tặng quà. Không còn xe tăng cường.
+- Nhà xe chỉ có MỘT xe 24 giường, không có xe ôm, taxi, máy bay hay xe nào khác. Tặng quà: đang chờ chuyến sau thì lên
+  đầu hàng (tặng trước rồi gõ tỉnh cũng được), có giường thì giường vàng; 10 xu pháo hoa, 100 xu băng rôn tên mình trên xe,
+  1000 xu cả xe dừng chúc Tết. Người tặng nhiều nhất buổi là «Chủ nhà xe», nhì là «Phó nhà xe». Chỉ người từ 18 tuổi tặng.
 
 Cách nói: tiếng Việt đời thường của lơ xe bến xe, thân thiện, gọi tên người hỏi, MỘT câu ngắn dưới 30 chữ. Không dùng dấu
 chấm than, không dùng chữ «nha», không chửi thề, không emoji. Không xin quà, không hứa tiền hay phần thưởng ngoài luật trên.
@@ -88,13 +87,13 @@ def api_key() -> str:
 def prompt(name: str, question: str, ctx: dict) -> str:
     t = ctx.get("ticket") or {}
     ticket = {
-        "seat": f"đang ngồi xe số {t.get('bus_no')} về {t.get('province')}",
+        "seat": f"đang ngồi chuyến {t.get('bus_no')} về {t.get('province')}",
         "relief": f"đang ngồi xe tăng cường số {t.get('bus_no')} về {t.get('province')}",
-        "queue": f"đang giữ chỗ xe số {t.get('bus_no')} về {t.get('province')}, thứ {t.get('position')} trong hàng, "
+        "queue": f"đang giữ chỗ chuyến {t.get('bus_no')} về {t.get('province')}, thứ {t.get('position')} trong hàng, "
                  f"khoảng {t.get('eta_min')} phút nữa lên xe",
         "home": "đã về tới quê mùa này",
     }.get(t.get("status"), "chưa có vé")
-    return (f"Tình hình lúc này: xe số {ctx.get('bus_no')} ({ctx.get('lane')}, bến {ctx.get('departure')}) "
+    return (f"Tình hình lúc này: chuyến {ctx.get('bus_no')} ({ctx.get('lane')}, bến {ctx.get('departure')}) "
             f"{PHASES.get(ctx.get('phase'), 'đang chạy')}, {ctx.get('riders')}/24 khách"
             + (f", điểm kế: {ctx['next']}" if ctx.get("next") else "")
             + f"; {ctx.get('waiting')} người đang giữ chỗ chuyến sau; còn {ctx.get('days_to_tet')} ngày nữa là Tết.\n"

@@ -332,7 +332,7 @@ def test_gifts_add_up_within_trip():
         e.handle({"type": "gift", "name": "An", "diamonds": 1}, 2)
     gifts = [ev for ev in e.drain() if ev["type"] == "gift"]
     assert [g["tier"] for g in gifts][-1] == 2 and gifts[-1]["total"] == 10
-    assert "thêm 10 xu → 🚕 Taxi" in gifts[-1]["next_tier"]  # PLAN-144: gợi ý mốc xe kế tiếp (đang giữ 10 xu)
+    assert "thêm 90 xu → băng rôn" in gifts[-1]["next_tier"]
     assert "thêm 9 xu" in gifts[0]["next_tier"]
 
 
@@ -752,28 +752,21 @@ def test_relief_drops_everyone_with_names_and_counts(monkeypatch):
     assert e.delivered == SEATS and all(e.viewers[f"q{i}"].province is None for i in range(SEATS))
 
 
-def test_gift_rides_send_waiting_people_home_giver_first():
-    """PLAN-144 (anh 03/11: bỏ xe tăng cường): quà = xe đưa người đang chờ về quê ngay — người tặng đang chờ về trước, rồi
-    người chờ lâu nhất; xu cộng dồn (combo nhỏ cũng tới mốc); không ai chờ thì xu giữ lại; không sinh xe tăng cường."""
+def test_big_gift_sends_no_other_vehicle_only_one_bus():
+    """Anh 03/11 «mình làm gì có máy bay đâu, mình chỉ có 1 xe 24 chỗ»: quà lớn không đưa ai về quê bằng xe khác, không
+    sinh xe tăng cường — người tặng đang chờ thì lên đầu hàng; tặng trước rồi mới gõ tỉnh cũng được xếp đầu hàng."""
     e = Engine(0.0)
     comment(e, "An", "Hà Nội", 1)
     fill_lane(e, "Cà Mau", 5, 2)
-    comment(e, "Út", "Bạc Liêu", 3)  # cuối hàng
+    comment(e, "Út", "Bạc Liêu", 3)
     e.drain()
-    e.handle({"type": "gift", "name": "Út", "diamonds": 5}, 4)
-    e.handle({"type": "gift", "name": "Út", "diamonds": 15}, 5)  # cộng dồn 20 xu → taxi 2 người
+    e.handle({"type": "gift", "name": "Út", "diamonds": 500}, 4)
     events = e.drain()
-    (ride,) = [ev for ev in events if ev["type"] == "ride_home"]
-    assert ride["vehicle"] == "taxi" and ride["count"] == 2 and ride["people"][0]["name"] == "Út"
-    assert not e.reliefs and not [ev for ev in events if ev["type"] == "relief_depart"]
-    assert e.viewers["út"].home == "baclieu" and e.viewers["út"].trips == 1 and len(e.queues["south"]) == 4
-    e.handle({"type": "gift", "name": "Lạ", "diamonds": 500}, 6)  # chuyến bay: cả bến về
-    assert e.waiting() == 0
-    e.handle({"type": "gift", "name": "Khác", "diamonds": 10}, 7)  # không ai chờ: xu giữ lại
-    assert e.viewers["khác"].ride_credit == 10
-    comment(e, "Mới", "Cà Mau", 8)
-    e.handle({"type": "gift", "name": "Khác", "diamonds": 1}, 9)
-    assert e.viewers["mới"].home == "camau" and e.viewers["khác"].ride_credit == 1
+    assert not [ev for ev in events if ev["type"] in ("ride_home", "relief_depart")] and not e.reliefs
+    assert e.waiting() == 6 and e.queues["south"][0] == "út" and e.delivered == 0
+    e.handle({"type": "gift", "name": "Lạ", "diamonds": 1}, 5)  # chưa có vé
+    comment(e, "Lạ", "Cà Mau", 6)
+    assert e.queues["south"][:2] == ["út", "lạ"]
 
 
 def test_top_gifters_are_owner_and_deputy():

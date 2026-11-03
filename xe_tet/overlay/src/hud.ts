@@ -75,7 +75,7 @@ function whereText(e: GameEvent): [string, string] {
   const eta = e.in_s != null ? ` · ~${clock(e.in_s)}` : "";
   switch (e.status) {
     case "seat": {
-      const head = `🎫 ${name} · xe số ${e.bus_no} · giường ${(e.seat ?? 0) + 1}`;
+      const head = `🎫 ${name} · chuyến ${e.bus_no} · giường ${(e.seat ?? 0) + 1}`;
       if (e.phase === "BOARDING") return [head, `Đang đón khách · xuất bến sau ${clock(e.depart_in ?? 0)} · về ${province}`];
       if (e.phase === "FINISH") return [head, `Xe đang về bến`];
       if (e.pickup) return [head, `Ra điểm đón ${esc(e.pickup)} chờ${e.pickup_in ? ` · ~${clock(e.pickup_in)} xe tới` : ""} · về ${province}`];
@@ -86,8 +86,8 @@ function whereText(e: GameEvent): [string, string] {
       return [`🎫 ${name} · xe tăng cường số ${e.bus_no}`,
         `${e.stops_before ? `Còn ${e.stops_before} điểm nữa tới ${province}` : `Điểm kế là ${province}`}${eta}`];
     case "queue":
-      return [`⏳ ${name} giữ chỗ xe số ${e.bus_no} ${e.arrow ?? ""} ${esc(e.lane ?? "")}`,
-        `Thứ ${e.position} trong hàng · lên xe sau ~${e.eta_min} phút · về ${province}`];
+      return [`⏳ ${name} giữ chỗ chuyến ${e.bus_no} ${e.arrow ?? ""} ${esc(e.lane ?? "")}`,
+        `Thứ ${e.position} trong hàng · lên xe ~${e.eta_min} phút · về ${province}`];
     case "home":
       return [`🏠 ${name} đã về tới quê`, "Chúc cả nhà năm mới an khang"];
     default:
@@ -187,7 +187,7 @@ export class Hud {
       case "SPECIAL": return ["Cả xe dừng lại chúc Tết", ""];
       case "REST": return [`Nghỉ ở ${s.place}`, `còn ${clock(left)}`];
       case "DROPOFF": return [leg ? `Tới ${leg.label} rồi!` : "", ""];
-      case "FINISH": return [`Xe số ${s.bus.no} về bến`, ""];
+      case "FINISH": return [`Chuyến ${s.bus.no} xong · xe về bến đón tiếp`, ""];
     }
   }
 
@@ -284,7 +284,7 @@ export class Hud {
         tips.push("⛽ Gõ ĐỔ XĂNG · 🧽 Gõ RỬA XE · xe đầy xăng, sạch chạy nhanh hơn");
       }
       if (s.next_lane) {  // ai chờ trước đi trước — nói rõ xe kế tiếp đi đâu để người chờ yên tâm
-        tips.unshift(`⏳ Xe kế tiếp: ${s.next_lane.arrow} ${esc(s.next_lane.label)} · ~${s.next_lane.eta_min} phút`);
+        tips.unshift(`⏳ Chuyến sau: ${s.next_lane.arrow} ${esc(s.next_lane.label)} · ~${s.next_lane.eta_min} phút`);
       }
       if (s.rush) tips.push("⚡ Cao điểm: xe chạy nhanh, lên lẹ!");
     }
@@ -314,7 +314,7 @@ export class Hud {
     const mode = modes[this.boardTick % modes.length];
     $("board").classList.remove("gifts");
     if (mode === "queue") {
-      setText("board-title", "⏳ Chờ xe sau");
+      setText("board-title", "⏳ Chờ chuyến sau");
       setHTML("board-list", s.queue.slice(0, QUEUE_ROWS).map((w) =>
         // số thứ tự đặt trước (float phải) để nằm cùng dòng; tên dài bị cắt «…», dòng không xuống hàng
         `<li><span>#${w.pos}</span>${w.arrow} ${esc(w.name)} <small>· ${esc(w.province)}</small></li>`).join(""));
@@ -328,7 +328,7 @@ export class Hud {
         return `<li><span>${load}</span>${on}${b.arrow}${b.no} <small>${where}</small></li>`;
       }).join(""));
     } else if (mode === "riders") {
-      setText("board-title", `🚌 Trên xe số ${s.bus.no}`);
+      setText("board-title", `🚌 Trên chuyến ${s.bus.no}`);
       setHTML("board-list", riders.slice(-6).reverse()
         .map((r) => `<li>${r.vip ? "⭐ " : ""}${esc(r.name)} <small>· ${esc(r.province)}</small></li>`).join(""));
     } else {
@@ -382,19 +382,12 @@ export class Hud {
         break;
       }
       case "pickup":  // xe tấp vô điểm đón rước người bắt xe dọc đường (PLAN-136)
-        this.toast(`🚏 Xe số ${e.bus_no} đón ${name} ở ${esc(e.place ?? "")}`, e.province ? `Về ${esc(e.province)}` : "");
+        this.toast(`🚏 Xe đón ${name} ở ${esc(e.place ?? "")}`, e.province ? `Về ${esc(e.province)}` : "");
         break;
       case "on_air": {  // xe tăng cường lên sóng theo điểm quà / bình luận / tim của khách trên xe (PLAN-141)
         const owner = e.sponsor ? ` của ${esc(e.sponsor)}` : "";
         const who = (e.names ?? []).map(esc).join(", ");
         this.toast(`📺 Xe số ${e.bus_no}${owner} đang lên sóng`, who ? `Cảm ơn ${who} · ${esc(e.lane ?? "")}` : esc(e.lane ?? ""));
-        break;
-      }
-      case "ride_home": {  // quà = xe đưa người đang chờ về quê ngay (PLAN-144)
-        const who = (e.people ?? []).slice(0, 3).map((p) => esc(p.name)).join(", ");
-        const more = (e.count ?? 0) > 3 ? ` +${(e.count ?? 0) - 3} người` : "";
-        this.note(`${esc(e.label ?? "")} của ${esc(e.giver ?? "")} đưa ${who}${more} về quê!`,
-          `${e.count} người về tới quê ngay, khỏi chờ · cảm ơn ${esc(e.giver ?? "")}`);
         break;
       }
       case "patron":
@@ -404,7 +397,7 @@ export class Hud {
         this.toast(`🎉 ${name} quay lại`, e.trips && e.home ? `Đã về ${esc(e.home)} ${e.trips} chuyến` : `Ghé bến ngày thứ ${e.days ?? 2}`);
         break;
       case "via":  // xe chạy qua tỉnh không ai xuống: gọi bà con tỉnh đó (PLAN-134)
-        this.toast(`🛣 Xe số ${e.bus_no} đang qua ${esc(e.province ?? "")}`, `Bà con ${esc(e.province ?? "")} thả tim chào xe ❤`);
+        this.toast(`🛣 Xe đang qua ${esc(e.province ?? "")}`, `Bà con ${esc(e.province ?? "")} thả tim chào xe ❤`);
         break;
       case "stay":
         this.toast(`🏠 ${name} ở lại`, esc(e.text ?? ""), "stay");
@@ -435,7 +428,7 @@ export class Hud {
         break;
       }
       case "depart":
-        this.flash(`🚌 Xe số ${e.bus_no} xuất bến!`);
+        this.flash(`🚌 Chuyến ${e.bus_no} xuất bến!`);
         break;
       case "rest":
         this.flash(`☕ Trạm dừng chân ${e.place ?? ""}`);
@@ -489,7 +482,7 @@ export class Hud {
         const board = (e.board ?? []).slice(0, 3).map((b, i) => `<li><b>${i + 1}. ${esc(b.province)}</b> — ${b.count} người</li>`).join("");
         const top = e.top_liker ? `<p>❤ Phụ xe danh dự: <b>${esc(e.top_liker)}</b></p>` : "";
         const total = e.delivered_km ? ` · ${km(e.delivered_km)} km` : "";
-        this.banner(`<h2>Xe số ${e.bus_no} về bến!</h2><p>Đã đưa ${e.delivered} người về quê${total}</p><ul>${board}</ul>${top}`, 10);
+        this.banner(`<h2>Chuyến ${e.bus_no} xong, xe về bến!</h2><p>Đã đưa ${e.delivered} người về quê${total}</p><ul>${board}</ul>${top}`, 10);
         break;
       }
     }
@@ -553,22 +546,22 @@ export class Hud {
       const t = this.tickets.shift()!;
       const route = `${esc(t.departure)} → ${esc(t.province)} · ${km(t.km)} km`;
       if (t.next) {
-        big = `🎫 ${esc(t.name)} giữ chỗ xe số ${t.bus} ${t.arrow} ${esc(t.lane)}`;
+        big = `🎫 ${esc(t.name)} giữ chỗ chuyến ${t.bus} ${t.arrow} ${esc(t.lane)}`;
         small = t.passed
-          ? `Xe vừa qua ${esc(t.passed)} rồi · lên xe sau${t.eta ? ` ~${t.eta} phút` : ""}`
-          : `${route}${t.eta ? ` · lên xe sau ~${t.eta} phút` : ""} · 🎁 1 xu lên đầu hàng · 10 xu xe ôm về ngay`;
+          ? `Xe vừa qua ${esc(t.passed)} rồi · lên chuyến sau${t.eta ? ` ~${t.eta} phút` : ""}`
+          : `${route}${t.eta ? ` · lên xe sau ~${t.eta} phút` : ""} · 🎁 tặng 1 xu lên đầu hàng`;
       } else if (t.pickup) {  // bắt xe dọc đường: ra điểm đón chờ (PLAN-136)
-        big = `🚏 ${esc(t.name)} bắt xe số ${t.bus} dọc đường!`;
+        big = `🚏 ${esc(t.name)} bắt xe dọc đường!`;
         small = `Ra điểm đón ${esc(t.pickup)} chờ${t.pickupIn ? ` · ~${clock(t.pickupIn)} xe tới` : ""} · về ${esc(t.province)}`;
       } else if (t.relief) {  // từ hàng chờ lên xe tăng cường (rà soát live 02/11: trước chỉ đọc 3 tên đầu)
         big = `🎫 ${esc(t.name)} lên xe tăng cường số ${t.bus} về ${esc(t.province)}!`;
         small = `${route} · xe chạy ngay, hết chờ`;
       } else {
         big = t.promoted  // người đang giữ chỗ được xếp lên xe: phải báo, không thì thẻ cũ vẫn ghi «chuyến sau»
-          ? `🎫 ${esc(t.name)} hết chờ, lên xe số ${t.bus} về ${esc(t.province)}!`
-          : `🎫 ${esc(t.name)} lên xe số ${t.bus} về ${esc(t.province)}!`;
+          ? `🎫 ${esc(t.name)} hết chờ, lên xe chuyến ${t.bus} về ${esc(t.province)}!`
+          : `🎫 ${esc(t.name)} lên xe chuyến ${t.bus} về ${esc(t.province)}!`;
         small = `${route} · giường ${(t.seat ?? 0) + 1} ${floorName(t.seat ?? 0, this.seats)}`
-          + ((t.tripNo ?? 1) > 1 ? ` · chuyến thứ ${t.tripNo}` : "");
+          + ((t.tripNo ?? 1) > 1 ? ` · lần về quê thứ ${t.tripNo}` : "");
       }
     }
     el.innerHTML = `<div class="big">${big}</div><div class="small">${small}</div>`;

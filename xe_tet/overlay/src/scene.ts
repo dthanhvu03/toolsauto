@@ -204,6 +204,7 @@ export class World {
   private walkers: Walker[] = [];
   private wcLine: Walker[] = [];
   private boardLine: Walker[] = [];  // bến: hàng người có vé chờ bước lên xe (PLAN-145)
+  private roadside: Walker[] = [];  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
   private boardTimer = 0;
   private fx = new Fireworks();
   private dust = new Puffs(72);
@@ -463,6 +464,7 @@ export class World {
     for (const w of [...this.walkers]) this.removeWalker(w);
     this.wcLine = [];
     this.boardLine = [];
+    this.roadside = [];
     this.bus.group.position.set(0, 0, 0);
     const early = this.early;
     this.early = [];
@@ -514,9 +516,6 @@ export class World {
         if (e.tier_up && (e.tier ?? 0) >= 2) this.fireworks(SHOW_SKY, 2); // chỉ khi lên bậc
         this.giftFx(e.fx, e.fx_n ?? 1);
         break;
-      case "ride_home":  // quà đưa người chờ về quê: pháo hoa mừng (chuyến bay cả bến: nhiều quả)
-        this.fireworks(SHOW_SKY, e.big ? 4 : 1);
-        break;
       case "special":
         for (let i = 0; i < 6; i++) {
           window.setTimeout(() => this.fireworks(SHOW_SKY.clone().add(new THREE.Vector3(-6 + i * 2.4, (i % 2) * 1.5, 0)), 1), i * 600);
@@ -564,16 +563,18 @@ export class World {
 
   /** Dừng đón: người hẹn đứng ở lề (đường) / sân (trạm, đầu ngõ) cạnh cửa xe, có biển điểm đón; lần lượt bước lên. */
   private roadsidePickup(e: GameEvent): void {
-    const door = this.bus.doorSpot;
-    const curb = this.set === "road" ? -4.9 : -3.6;  // đường: đứng trên lề sỏi; trạm / đầu ngõ: ngoài sân
+    // đứng ở lề PHÍA CAMERA (anh 03/11: lề bên kia bị thân xe che hết) dọc thân xe, ngay dưới cửa trước; tới lượt thì bước sát
+    // hông xe ở cửa trước rồi khuất vào xe. Trạm / đầu ngõ cũng đứng phía này cho thấy rõ.
+    const curb = this.set === "road" ? 4.3 : 3.6;
+    const doorX = this.bus.doorSpot.x - 1.6;  // cửa trước ngay sau bánh trước
     (e.people ?? []).forEach((person, i) => {
       const p = makePerson(person.hue ?? 0, person.name);
-      // đứng dọc thân xe phía sau cửa (giữa khung dọc — phía trước đầu xe là mép khung, bị cắt)
-      p.position.set(door.x - 1.4 - (i % 6) * 0.8, 0.1, curb - Math.floor(i / 6) * 0.8);
-      this.addWalker(p, [new THREE.Vector3(door.x - 0.4, 0.1, door.z - 1.2), door.clone()], 3.2, undefined, 2 + i * PICKUP_STEP_S);
+      p.position.set(doorX - 0.6 - (i % 6) * 0.8, 0.1, curb + Math.floor(i / 6) * 0.8);
+      this.roadside.push(this.addWalker(p, [new THREE.Vector3(doorX, 0.1, 2.4), new THREE.Vector3(doorX, 0.1, 1.5)], 3.2,
+        undefined, 2 + i * PICKUP_STEP_S));
     });
     const sign = label(`🚏 ĐIỂM ĐÓN · ${e.place ?? ""}`, "lbl sign");
-    sign.position.set(door.x - 2.2, 2.6, curb - 0.4);
+    sign.position.set(doorX + 3.4, 1.1, curb + 0.6);  // bên phải nhóm người, thấp — không đè tên
     this.scene.add(sign);
     window.setTimeout(() => sign.removeFromParent(), Math.max(3000, (e.seconds ?? 4) * 1000));
   }
@@ -947,6 +948,10 @@ export class World {
     this.updateSky();
     const s = this.state;
     const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt;  // dừng đón bên đường: xe đứng yên
+    if (moving && this.roadside.length) {
+      this.roadside.forEach((w) => this.walkers.includes(w) && this.removeWalker(w));
+      this.roadside = [];
+    }
     const uphill = Math.max(0, this.shape.grade) / GRADE_PASS;  // leo dốc: cảnh trôi chậm lại (chỉ hình, km do server)
     const target = moving ? BASE_SPEED * (s?.speed ?? 1) * (1 - CLIMB_SLOW * uphill) : 0;
     this.speed += (target - this.speed) * Math.min(1, dt * 2);

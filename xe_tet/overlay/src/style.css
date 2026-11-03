@@ -148,7 +148,7 @@ html, body {
 .gift-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
 .gift-grid div { background: #fff; border: 2px solid #f1c56b; border-radius: 14px; padding: 6px 4px; display: grid;
   grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; text-align: left; }
-.gift-grid div.wide { grid-column: span 2; }
+.gift-grid div.wide { grid-column: span 3; }
 .gift-grid b { grid-column: 2; font-size: 28px; color: var(--red); line-height: 1.1; }
 .gift-grid i { grid-row: span 2; font-style: normal; font-size: 40px; line-height: 1; }
 .gift-grid span { grid-column: 2; font-size: 22px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden;

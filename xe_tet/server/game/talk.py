@@ -53,7 +53,7 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         ),
         "passed": (
             "Xe qua {prov} rồi {name} ơi, giữ chỗ chuyến sau, hổng bỏ đâu.",
-            "Trễ rồi {name}, xe chạy qua {prov} mất rồi, chờ xe sau.",
+            "Trễ rồi {name}, xe chạy qua {prov} mất rồi, chờ chuyến sau.",
         ),
         "same_home": (  # lên xe gặp người cùng tỉnh (PLAN-134 D)
             "{name} với {other} cùng về {prov} kìa, đồng hương nằm gần nhau cho vui.",
@@ -99,10 +99,6 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "priority": (  # người đang chờ tặng quà → lên đầu hàng (PLAN-144)
             "{name} tặng quà, Anh Tư cho lên đầu hàng xe {dest} liền, giờ thứ {pos} rồi đó.",
             "Cảm ơn {name}, chuyến {dest} kế tiếp {name} lên trước, thứ {pos} trong hàng.",
-        ),
-        "ride": (  # quà = xe đưa người đang chờ về quê ngay (PLAN-144)
-            "{name} gọi {label} đưa {names} về quê liền, khỏi chờ, cảm ơn {name}.",
-            "Có {label} của {name} tới rồi, chở {names} về nhà ăn Tết luôn.",
         ),
         "new_owner": (  # người tặng nhiều nhất buổi
             "{name} lên làm chủ nhà xe rồi bà con, {xu} xu, Anh Tư cúi đầu cảm ơn.",
@@ -225,8 +221,8 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} ở {prov} tặng quà tiếp xăng cho xe chạy lẹ, quý quá trời.",
         ),
         "first_gift": (
-            "{name} mở hàng chuyến xe số {n}, đỏ cả chuyến rồi, cảm ơn {name} nhiều.",
-            "Có {name} mở hàng xe số {n} rồi bà con, nổ pháo hoa lấy hên đầu chuyến.",
+            "{name} mở hàng chuyến thứ {n}, đỏ cả chuyến rồi, cảm ơn {name} nhiều.",
+            "Có {name} mở hàng chuyến {n} rồi bà con, nổ pháo hoa lấy hên đầu chuyến.",
         ),
     },
     # ---- gen Z -----------------------------------------------------------------------------------------
@@ -265,7 +261,7 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         ),
         "passed": (
             "Xe qua {prov} mất tiêu rồi {name}, quay xe chờ chuyến sau.",
-            "Toang, xe vừa qua {prov}, {name} giữ chỗ xe sau.",
+            "Toang, xe vừa qua {prov}, {name} giữ chỗ chuyến sau.",
         ),
         "same_home": (
             "{name} với {other} cùng team {prov}, đồng hương gặp nhau trên xe, xịn xò.",
@@ -310,10 +306,6 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "priority": (
             "{name} tặng quà nên được lên đầu hàng xe {dest}, thứ {pos}, uy tín.",
             "Cảm ơn {name}, vé ưu tiên xe {dest}, giờ đứng thứ {pos} rồi.",
-        ),
-        "ride": (
-            "{name} book {label} ship {names} về quê liền, uy tín.",
-            "{label} của {name} tới đón {names} rồi, về nhà ăn Tết thôi.",
         ),
         "new_owner": (
             "{name} chính thức làm chủ nhà xe, {xu} xu, đỉnh nóc kịch trần.",
@@ -435,7 +427,7 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Cảm ơn {name} quê {prov} bơm xăng cho xe phóng vèo vèo, đỉnh nóc.",
         ),
         "first_gift": (
-            "{name} mở bát chuyến xe số {n}, nổ pháo hoa khai xuân, uy tín luôn.",
+            "{name} mở bát chuyến thứ {n}, nổ pháo hoa khai xuân, uy tín luôn.",
             "Chuyến số {n} có {name} mở hàng rồi, vía tốt cả xe chạy mượt.",
         ),
     },
@@ -475,7 +467,7 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         ),
         "passed": (
             "Xe qua {prov} rồi {name}, hẹn chuyến sau.",
-            "Tiếc ghê, xe vừa qua {prov}, {name} chờ xe sau nhé.",
+            "Tiếc ghê, xe vừa qua {prov}, {name} chờ chuyến sau nhé.",
         ),
         "same_home": (
             "{name} với {other} cùng về {prov}, đồng hương chuẩn không cần chỉnh.",
@@ -520,10 +512,6 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "priority": (
             "Cảm ơn {name}, được lên đầu hàng chờ xe {dest}, hiện là thứ {pos}.",
             "{name} tặng quà, chuyến {dest} sau được lên trước, thứ {pos} trong hàng.",
-        ),
-        "ride": (
-            "Cảm ơn {name} gọi {label} đưa {names} về quê, khỏi phải chờ.",
-            "{name} bao {label}, {names} về nhà ăn Tết sớm, chuẩn không cần chỉnh.",
         ),
         "new_owner": (
             "Chúc mừng {name} lên làm chủ nhà xe với {xu} xu, cảm ơn nhiều.",
@@ -645,8 +633,8 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} ở {prov} tặng quà tiếp sức cho bác tài, chất như nước cất.",
         ),
         "first_gift": (
-            "{name} mở hàng chuyến xe số {n}, đầu xuôi đuôi lọt, cảm ơn {name}.",
-            "Chuyến xe số {n} được {name} mở hàng may mắn, chúc cả xe thượng lộ bình an.",
+            "{name} mở hàng chuyến thứ {n}, đầu xuôi đuôi lọt, cảm ơn {name}.",
+            "Chuyến thứ {n} được {name} mở hàng may mắn, chúc cả xe thượng lộ bình an.",
         ),
     },
 }
