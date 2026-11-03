@@ -44,7 +44,7 @@ def test_the_link_4_dong_luu_y_o_trang_rieng():
     card = render_success_v12("Áo thun cổ tròn", 250_000, 12_000, "https://s.shopee.vn/x", extra_vnd=1, capped=True)
     assert card.text.split("\n") == [
         "🛍️ <b>Áo thun cổ tròn</b>", "🏷️ Giá tham khảo: 250.000đ",
-        "💰 <b>Hoàn dự kiến: khoảng</b> <b>12.000đ</b> · <i>có thể cao hơn</i>", messages.BUY_HINT]
+        "💰 <b>Hoàn dự kiến: khoảng</b> <b>12.000đ</b> · <i>có thể cao hơn</i>", messages.CART_HINT, messages.BUY_HINT]
     [[(label, data)]] = card.inline_keyboard
     assert label == messages.TIP_LABEL and data == "u:tip:2c", "cờ V1.2 + món giá cao đi theo nút"
     tip = tip_reply(data).text
@@ -58,6 +58,7 @@ def test_the_link_4_dong_luu_y_o_trang_rieng():
     assert messages.TIKTOK_VOUCHER_RULE in tiktok.text and "TikTok xác nhận" in tiktok.text
     free = render_success("Son môi", 199_000, 0, "https://shopee.vn/x")
     assert "không có tiền hoàn" in free.text and free.inline_keyboard is None, "không có hoàn: không có trang lưu ý"
+    assert messages.CART_HINT not in free.text, "không có hoàn: không nhắc giỏ"
 
 
 def test_zalo_the_va_link_mua_mot_tin():
