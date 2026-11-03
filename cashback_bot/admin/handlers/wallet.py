@@ -18,6 +18,7 @@ from cashback_bot.admin.ui import (
     payout_text,
     wallet_admin_keyboard,
     wallet_admin_text,
+    wallet_owner_text,
     wallet_member_text,
     wallet_members_keyboard,
     wallet_members_text,
@@ -131,6 +132,10 @@ class WalletAdmin:
             return self._settings(self._change_limits(admin_id, now, min_vnd=amount))
         if (limit := _LIMIT.fullmatch(data)) is not None and int(limit.group(2)) in payouts.LIMIT_CHOICES[limit.group(1)]:
             return self._settings(self._change_limits(admin_id, now, **{_LIMIT_FIELDS[limit.group(1)]: int(limit.group(2))}))
+        if data == "c:wl:own":
+            with self.repo.connect() as conn:
+                position = payouts.owner_position(conn)
+            return BotReply(wallet_owner_text(position), inline_keyboard=(WALLET_ADMIN_BACK,))
         if data == "c:wl:members":
             members = self.wallet.members()
             return BotReply(wallet_members_text(members), inline_keyboard=wallet_members_keyboard(members))
