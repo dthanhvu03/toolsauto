@@ -127,6 +127,8 @@ def snack_of(text: str) -> str | None:
 QUIZ_GAP = 180.0  # giây giữa hai câu đố (admin đặt trên /control)
 QUIZ_SECONDS = 40.0  # giây người xem gõ A / B / C (lơ xe đọc câu hỏi đã mất ~10 giây — anh 03/11 «chưa đọc kịp»)
 QUIZ_RESULT_S = 12.0  # thẻ đáp án còn trên màn hình chừng này giây
+QUIZ_LEAD_S = 10.0  # câu đố tự bật chỉ khi còn ≥ giờ trả lời + đáp án + chừng này giây mới tới điểm dừng kế (anh 03/11:
+# «vừa bật câu đố lên thì nhảy» — băng «Về tới …» che mất)
 QUIZ_WINNERS = 3  # ba người trả lời đúng sớm nhất được đọc tên + điểm đua tỉnh
 QUIZ_RACE = 3
 QUIZ_RECENT = 12  # không đố lại tỉnh vừa đố
@@ -1724,12 +1726,14 @@ class Engine:
 
     def _quiz_ready(self) -> bool:
         return (self.quiz_on and self.phase == "DRIVING" and self.trip is not None and not self.block and not self.halt
-                and not self.show and not (self.vendor and self.vendor["stage"] == "stop"))
+                and not self.show and not (self.vendor and self.vendor["stage"] == "stop")
+                and (1 - self.progress) * self.leg_seconds >= QUIZ_SECONDS + QUIZ_RESULT_S + QUIZ_LEAD_S)
 
     def _quiz_tick(self, now: float, dt: float = 0.0) -> None:
         q = self.quiz
-        if q and not q["done"] and (self.block or self.show or (self.vendor and self.vendor["stage"] == "stop")):
-            q["until"] += dt  # anh bấm tay chặn xe / chiếu video giữa câu đố: thẻ câu hỏi bị thay → đồng hồ đứng chờ
+        if q and not q["done"] and (self.block or self.show or (self.vendor and self.vendor["stage"] == "stop")
+                                    or self.phase != "DRIVING"):
+            q["until"] += dt  # thẻ câu hỏi bị thay (anh bấm chặn xe / chiếu video, xe tới điểm thả / trạm nghỉ) → đồng hồ chờ
         if q and now >= q["until"]:
             if q["done"]:
                 self.quiz = None

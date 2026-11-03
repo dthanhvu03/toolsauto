@@ -2139,6 +2139,24 @@ def test_quiz_not_cut_off_by_toll_or_vendor():
     assert e2.quiz["until"] >= until + 29 and not e2.quiz["done"]
 
 
+def test_quiz_not_started_right_before_a_stop_and_waits_through_dropoff():
+    """Anh 03/11 «vừa bật câu đố lên thì nhảy»: sắp tới điểm thả thì không tự đố; lỡ tới điểm thả giữa câu đố thì đồng hồ
+    câu đố đứng chờ xe chạy tiếp (băng «Về tới …» che mất thẻ)."""
+    from xe_tet.server.game.engine import QUIZ_LEAD_S, QUIZ_RESULT_S, QUIZ_SECONDS
+    e, t = _driving_with_riders()
+    e.quiz_on = True
+    e.leg_seconds = 200.0
+    e.progress = 1 - (QUIZ_SECONDS + QUIZ_RESULT_S + QUIZ_LEAD_S - 5) / e.leg_seconds
+    assert not e._quiz_ready()
+    e.progress = 0.0
+    assert e._quiz_ready()
+    e.quiz_now()
+    until = e.quiz["until"]
+    e.phase = "DROPOFF"
+    e._quiz_tick(t + 20, 20.0)
+    assert e.quiz["until"] == until + 20 and not e.quiz["done"]
+
+
 def test_quiz_comes_by_itself_only_while_driving():
     e = Engine(0.0)
     e.quiz_on = True
