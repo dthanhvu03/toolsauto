@@ -127,7 +127,8 @@ def test_track_nhac_lap_tre_va_tron_khong_chuan_hoa_am_luong():
     i = plan.argv.index("/m/music.mp3")
     assert plan.argv[i - 3:i - 1] == ["-stream_loop", "-1"]
     assert "volume=0.12,adelay=1500|1500,atrim=0:20[t0]" in g
-    assert "amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]" in g
+    assert "amix=inputs=2:duration=first:dropout_transition=0:normalize=0[apre]" in g
+    assert "[apre]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]" in g  # PLAN-119: chuẩn hoá độ to sau khi trộn
 
 
 def test_track_khong_co_tieng_bao_loi():
@@ -284,3 +285,19 @@ def test_chon_bo_ma_hoa_theo_bien_moi_truong_va_nho_ket_qua_do(monkeypatch):
     monkeypatch.setenv("STUDIO_ENCODER", "x264")
     monkeypatch.setattr(encoder, "_cache", {"nvenc": True})
     assert encoder.pick("ffmpeg") == "libx264"
+
+
+
+def test_tat_chuan_hoa_do_to_va_tran_bitrate():
+    plan = _build({"clips": [{"asset": 1, "end": 5}], "audio": {"loudness": None}})
+    g = _graph(plan)
+    assert "loudnorm" not in g and "[acat]anull[aout]" in g
+    i = plan.argv.index("-maxrate")
+    assert plan.argv[i:i + 4] == ["-maxrate", "3M", "-bufsize", "6M"]
+
+
+def test_video_cam_khong_chuan_hoa_do_to():
+    """Toàn im lặng qua loudnorm ra NaN → aac hỏng cả bản render (PLAN-119, test render lại bắt được)."""
+    assert "loudnorm" not in _graph(_build({"clips": [{"asset": 2}]}))
+    assert "loudnorm" in _graph(_build({"clips": [{"asset": 2}], "audio": {"tracks": [{"asset": 4}]}}))  # có nhạc
+    assert "loudnorm" in _graph(_build({"clips": [{"asset": 2, "audio": [{"asset": 5}]}]}))  # có tiếng lồng

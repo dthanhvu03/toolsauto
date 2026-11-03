@@ -640,3 +640,21 @@ def test_ep_nvenc_ma_gpu_khong_dung_duoc_thi_render_lai_bang_cpu(db, media, monk
     assert seen == ["h264_nvenc", "libx264"]
     render = db.query(StudioTask).filter_by(stage="render").one()
     assert render.error.endswith("CPU") and encoder._cache["nvenc"] is False
+
+
+def test_loi_khong_phai_gpu_thi_khong_tat_nvenc(db, media, monkeypatch):
+    """Lỗi tiếng (vd NaN) khi chạy NVENC không phải lỗi GPU → không tắt NVENC cho cả worker, báo lỗi đúng (PLAN-119)."""
+    monkeypatch.setattr(encoder, "_cache", {"nvenc": True})
+    monkeypatch.setenv("STUDIO_ENCODER", "auto")
+    real_run = subprocess.run
+
+    def spy(cmd, *a, **kw):
+        if "-c:v" in cmd:
+            return subprocess.CompletedProcess(cmd, 234, "", "[aac @ 0x1] Input contains (near) NaN/+-Inf")
+        return real_run(cmd, *a, **kw)
+
+    monkeypatch.setattr("app.features.studio.render.subprocess.run", spy)
+    pipeline.start(db, "upload", payload={"path": str(media["clip"])})
+    _drain(db)
+    render = db.query(StudioTask).filter_by(stage="render").one()
+    assert "NaN" in (render.error or "") and encoder._cache["nvenc"] is True

@@ -85,6 +85,8 @@ class AudioTrack(_Strict):
 class Audio(_Strict):
     original: float = Field(1.0, ge=0, le=4)  # âm lượng tiếng gốc của các clip
     tracks: list[AudioTrack] = Field(default_factory=list)
+    # PLAN-119: chuẩn hoá độ to cả bài (LUFS, TikTok / Reels ~ -14). None = giữ nguyên như bản trộn.
+    loudness: float | None = Field(-14.0, ge=-30, le=-8)
 
 
 class Logo(_Strict):

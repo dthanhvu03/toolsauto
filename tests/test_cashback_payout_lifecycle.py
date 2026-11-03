@@ -549,7 +549,7 @@ def test_46_mot_khach_chi_mot_yeu_cau_mo(tmp_path):
 # --- An toàn (51–60) ----------------------------------------------------------------------------
 
 
-def test_51_52_production_van_khoa_va_quyet_dinh_khong_mo_khoa_cu(tmp_path):
+def test_51_52_du_quyet_dinh_ma_chua_co_ky_doi_soat_khop_van_khoa(tmp_path):
     bot = _bot(tmp_path)
     with bot.repo.connect() as conn:
         for topic in payouts.POLICY_TOPICS:
@@ -558,10 +558,14 @@ def test_51_52_production_van_khoa_va_quyet_dinh_khong_mo_khoa_cu(tmp_path):
                 "VALUES (?, 'APPROVED', 's', 'r', 'd', 'x', 'x')", (topic,)
             )
     reasons = bot.wallet.settings().locked_reasons
-    assert reasons[:2] == (REASON_SETTLEMENT, REASON_TAX), "duyệt quyết định không làm mất khoá cũ"
+    assert reasons[0] == REASON_SETTLEMENT and REASON_TAX not in reasons, "thuế đã duyệt; còn thiếu kỳ khớp"
     assert bot.wallet.settings().enabled is False
-    names = {r[0] for r in _rows(bot, "SELECT name FROM sqlite_master WHERE type = 'table'")}
-    assert "shopee_settlements" not in names and "payout_tax_policies" not in names
+    with bot.repo.connect() as conn, pytest.raises(sqlite3.IntegrityError, match="financial_lock"):
+        conn.execute(
+            "INSERT INTO cashback_payouts (telegram_user_id, amount_vnd, status, bank_code, account_no, account_name, "
+            "created_at) VALUES (?, 1, 'requested', 'VCB', '1', 'A', 'x')",
+            (USER,),
+        )
     with bot.repo.connect() as conn:
         conditions = {c.code: c.ok for c in payout_readiness.system_conditions(conn)}
     assert all(conditions[f"decision_{t}"] for t in payouts.POLICY_TOPICS) and not conditions["settlement_matched"]
@@ -573,8 +577,10 @@ def test_trigger_chan_buoc_chi_tien_khi_con_khoa(tmp_path):
     bot.refresh_wallet(T)
     bot.wallet.save_bank(USER, ACCOUNT, T)
     bot.wallet.request_payout(USER, T)
-    with bot.repo.connect() as conn:
-        conn.execute("DROP TABLE payout_tax_policies")
+    with bot.repo.connect() as conn:  # quyết định thuế bị thu hồi sau khi khách đã yêu cầu rút
+        conn.execute(
+            "INSERT INTO payout_policy_decisions (topic, status, summary, created_at) VALUES ('tax', 'REVOKED', 's', 'x')"
+        )
         for status in ("approved_for_payment", "processing", "sent_unconfirmed"):
             with pytest.raises(sqlite3.IntegrityError, match="financial_lock"):
                 conn.execute("UPDATE cashback_payouts SET status = ? WHERE id = 1", (status,))
