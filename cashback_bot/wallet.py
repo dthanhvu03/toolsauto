@@ -511,7 +511,7 @@ class Wallet:
         """Một bước duyệt / chuyển / xác nhận (PLAN-078). Không có đường requested → paid_confirmed.
 
         Bước đưa tiền ra kiểm lại: khoá tài chính (cũ + PLAN-078), điều khoản chi trả của khách, tài khoản đã
-        xác minh, quỹ có chứng từ, hạn mức; bước đã trả kiểm thêm quỹ cũ (shopee_settlements).
+        xác minh, quỹ có chứng từ, hạn mức; bước bắt đầu chuyển kiểm thêm quỹ (payout_gate.payout_headroom).
         """
 
         def money_out(conn: sqlite3.Connection, row: sqlite3.Row) -> str | None:

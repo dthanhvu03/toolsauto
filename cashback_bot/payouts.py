@@ -452,7 +452,7 @@ def create_request(
 ) -> tuple[sqlite3.Row | None, str]:
     """Trong một transaction BEGIN IMMEDIATE. Trả (yêu cầu, 'ok' | 'duplicate') hoặc (None, mã lỗi).
 
-    fund_check(conn, amount) → mã lỗi hoặc None: khoá tài chính cũ (shopee_settlements) do payout_gate cấp.
+    fund_check(conn, amount) → mã lỗi hoặc None: khoá tài chính và quỹ các kỳ MATCHED do payout_gate cấp.
     """
     conn.execute("BEGIN IMMEDIATE")
     try:

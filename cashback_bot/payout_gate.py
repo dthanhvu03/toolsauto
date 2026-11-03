@@ -2,13 +2,14 @@
 
 Không phát sinh nghĩa vụ chi trả khi chưa có bằng chứng Shopee đã duyệt và đã trả tiền:
 
-- `readiness`: điều kiện cả hệ thống. Cần bảng bằng chứng kỳ Shopee đã thanh toán và bảng chính sách
-  thuế người nhận đã duyệt, mỗi bảng ít nhất một dòng. Hai bảng này chưa có trên production
-  (DDL nháp ở `migrations/007_settlement_evidence.DRAFT.sql`), nên mặc định luôn KHOÁ.
-- `entry_payable`: điều kiện từng khoản. Không gian lận, có tháng duyệt, tháng đó đã nằm trong
-  một kỳ Shopee đã trả, và link có snapshot chính sách chứng minh được (PLAN-077: link `unresolved`
-  hoặc chưa có snapshot không bao giờ payable).
-- `payout_headroom`: tổng đã chi + đang yêu cầu không vượt tổng tiền Shopee đã trả.
+- `readiness`: điều kiện cả hệ thống, đọc dữ liệu thật: ít nhất một kỳ đối soát MATCHED (báo cáo Shopee
+  khớp tiền về ngân hàng, settlement.py) và quyết định thuế người nhận mới nhất APPROVED, cộng các điều kiện
+  PLAN-078 (payout_readiness). Trước 2026-11-03 hai điều kiện đầu đọc bảng nháp `shopee_settlements` /
+  `payout_tax_policies` (migration 007 không bao giờ chạy) nên khoá vĩnh viễn; chủ bot cho nối vào đối soát.
+- `entry_payable`: điều kiện từng khoản. Đơn nằm trong kỳ MATCHED (SETTLED: Shopee đã duyệt và đã trả đúng
+  đơn đó), không gian lận / bị từ chối, không có điều chỉnh mở, link có snapshot chính sách chứng minh được
+  (PLAN-077: link `unresolved` hoặc chưa có snapshot không bao giờ payable).
+- `payout_headroom`: quỹ chia được (phần đơn bot của các kỳ MATCHED trừ phí, thuế) − đang giữ − đã chi.
 
 Không có công tắc nào để admin bỏ qua. Trigger SQLite trong `db.SCHEMA` chặn thêm ở tầng DB.
 """
@@ -20,14 +21,12 @@ import sqlite3
 from dataclasses import dataclass
 
 from cashback_bot import payout_readiness, payouts
-from cashback_bot.commission_validation import APPROVED
+from cashback_bot.commission_validation import FRAUD, REJECTED
 from cashback_bot.db import TrackingRepository
-
-SETTLEMENT_TABLE = "shopee_settlements"
-TAX_POLICY_TABLE = "payout_tax_policies"
 
 REASON_SETTLEMENT = "Chưa có bằng chứng kỳ Shopee đã thanh toán hoa hồng (đối soát tiền về)."
 REASON_TAX = "Chưa chốt chính sách thuế cho người nhận tiền hoàn."
+_HEADLINE = {"settlement_matched": REASON_SETTLEMENT, "decision_tax": REASON_TAX}
 PROVEN_SNAPSHOTS = ("captured", "backfilled")
 
 
@@ -47,12 +46,6 @@ class Readiness:
 
 def _tables(conn: sqlite3.Connection) -> set[str]:
     return {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-
-
-def _has_rows(conn: sqlite3.Connection, table: str, tables: set[str]) -> bool:
-    if table not in tables:
-        return False
-    return conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone() is not None
 
 
 def proven_policy(conn: sqlite3.Connection, link_id: int | None) -> bool:
@@ -97,14 +90,13 @@ class FinancialGate:
         if conn is None:
             with self.repo.connect() as own:
                 return self.readiness(own)
-        tables = _tables(conn)
-        reasons = []
-        if not _has_rows(conn, SETTLEMENT_TABLE, tables):
-            reasons.append(REASON_SETTLEMENT)
-        if not _has_rows(conn, TAX_POLICY_TABLE, tables):
-            reasons.append(REASON_TAX)
-        # PLAN-078: cộng thêm điều kiện hệ thống mới (quyết định chính sách, hạn mức, kỳ đối soát khớp, backup).
-        reasons.extend(payout_readiness.system_reasons(conn))
+        failed = [item for item in payout_readiness.system_conditions(conn) if not item.ok]
+        codes = {item.code for item in failed}
+        # Hai lý do gốc đứng đầu (màn admin, khách), rồi danh sách chi tiết PLAN-078.
+        reasons = [_HEADLINE[code] for code in ("settlement_matched", "decision_tax") if code in codes]
+        if "schema" in codes:  # chưa có bảng PLAN-078: chưa đọc được kỳ đối soát hay quyết định thuế
+            reasons = [REASON_SETTLEMENT, REASON_TAX]
+        reasons += [f"Chưa đạt: {item.label}." for item in failed]
         return Readiness(not reasons, tuple(reasons))
 
     def entry_payable(
@@ -119,10 +111,12 @@ class FinancialGate:
     ) -> bool:
         """Khoản này đã được Shopee duyệt và trả chưa. Thiếu bất kỳ bằng chứng nào thì False.
 
-        PLAN-074: phải có validation_status = APPROVED (hiện chưa nguồn nào gán được). APPROVED vẫn chưa đủ:
-        còn cần kỳ Shopee đã trả (settlement, PLAN-075).
+        Báo cáo đơn Shopee không có trường nào chứng minh «đã duyệt» (commission_validation.py). Bằng chứng duyệt
+        là đơn nằm trong một kỳ thanh toán MATCHED: Shopee chỉ đưa vào hoá đơn đối soát đơn đã duyệt, và tiền kỳ
+        đó đã về ngân hàng. Vì vậy SETTLED thay cho APPROVED; đơn bị gắn gian lận / từ chối thì không bao giờ.
+        `validation_month` giữ trong chữ ký cho bên gọi cũ, không còn dùng.
         """
-        if validation_status != APPROVED:
+        if validation_status in (FRAUD, REJECTED):
             return False
         if not proven_policy(conn, link_id):
             return False
@@ -134,21 +128,11 @@ class FinancialGate:
             "SELECT 1 FROM settlement_adjustments WHERE conversion_id = ? AND status = 'OPEN'", (conversion_id,)
         ).fetchone():
             return False
-        if not self.readiness(conn).ok or not validation_month or is_fraud(raw_json):
-            return False
-        row = conn.execute(
-            f"SELECT 1 FROM {SETTLEMENT_TABLE} WHERE period >= ? LIMIT 1", (str(validation_month)[:7],)
-        ).fetchone()
-        return row is not None
+        return self.readiness(conn).ok and not is_fraud(raw_json)
 
     def payout_headroom(self, conn: sqlite3.Connection) -> int:
-        """Tiền Shopee đã trả − đã chi − đang yêu cầu. Chưa có bảng bằng chứng thì 0."""
-        if SETTLEMENT_TABLE not in _tables(conn):
-            return 0
-        settled = int(conn.execute(f"SELECT COALESCE(SUM(amount_vnd), 0) FROM {SETTLEMENT_TABLE}").fetchone()[0])
-        # PLAN-078: mọi trạng thái còn giữ tiền và đã trả, không chỉ 'requested' / 'paid' cũ.
-        reserved, paid = payouts.payout_totals(conn)
-        return settled - reserved - paid
+        """Quỹ chia được của các kỳ MATCHED (payouts.fund_position) − đang giữ cho yêu cầu rút − đã chi."""
+        return payouts.fund_position(conn).headroom_vnd
 
     def check_withdrawal(self, conn: sqlite3.Connection, amount_vnd: int) -> str | None:
         """None nếu được tạo yêu cầu rút. Ngược lại là mã lỗi: locked / fund."""

@@ -462,13 +462,21 @@ class TestFinancialLock:
     def test_settlement_only_or_tax_only_is_still_locked(self, tmp_path):
         bot = _bot(tmp_path)
         _financially_ready(bot)
-        with bot.repo.connect() as conn:
-            conn.execute("DELETE FROM payout_tax_policies")
-        assert bot.wallet.settings().locked_reasons == (REASON_TAX,)
-        with bot.repo.connect() as conn:
-            conn.execute("INSERT INTO payout_tax_policies (policy_ref, approved_by, approved_at) VALUES ('x', 1, 'y')")
-            conn.execute("DELETE FROM shopee_settlements")
-        assert bot.wallet.settings().locked_reasons == (REASON_SETTLEMENT,)
+        assert bot.wallet.settings().locked_reasons == ()
+        with bot.repo.connect() as conn:  # quyết định thuế mới nhất bị thu hồi
+            conn.execute(
+                "INSERT INTO payout_policy_decisions (topic, status, summary, created_at) VALUES ('tax', 'REVOKED', 's', 'x')"
+            )
+        reasons = bot.wallet.settings().locked_reasons
+        assert reasons[0] == REASON_TAX and REASON_SETTLEMENT not in reasons
+        with bot.repo.connect() as conn:  # duyệt lại thuế, nhưng kỳ đối soát không còn khớp
+            conn.execute(
+                "INSERT INTO payout_policy_decisions (topic, status, summary, reference, decided_by, decided_at, "
+                "created_at) VALUES ('tax', 'APPROVED', 's', 'r', 'd', 'x', 'x')"
+            )
+            conn.execute("UPDATE settlement_batches SET status = 'DISPUTED'")
+        reasons = bot.wallet.settings().locked_reasons
+        assert reasons[0] == REASON_SETTLEMENT and REASON_TAX not in reasons
 
     def test_direct_request_payout_refused_when_locked(self, tmp_path):
         bot = _bot(tmp_path)
@@ -501,7 +509,9 @@ class TestFinancialLock:
         _row, step = bot.wallet.advance(pid, "under_review", ADMIN, 1, NOW)
         assert step == "ok"
         with bot.repo.connect() as conn:
-            conn.execute("DELETE FROM payout_tax_policies")  # mất điều kiện thuế sau khi khách đã yêu cầu
+            conn.execute(  # mất điều kiện thuế sau khi khách đã yêu cầu
+                "INSERT INTO payout_policy_decisions (topic, status, summary, created_at) VALUES ('tax', 'REVOKED', 's', 'x')"
+            )
         _row, step = bot.wallet.advance(pid, "approved_for_payment", ADMIN, 2, NOW)
         assert step == "locked"
         reply = _callback(bot, ADMIN, f"c:wl:rq:{pid}")
@@ -520,16 +530,16 @@ class TestFinancialLock:
         for version, target in enumerate(("under_review", "approved_for_payment"), 1):
             assert bot.wallet.advance(pid, target, ADMIN, version, NOW)[1] == "ok"
         with bot.repo.connect() as conn:
-            conn.execute("UPDATE shopee_settlements SET amount_vnd = 1000")  # số Shopee trả được sửa lại thấp hơn
+            conn.execute("UPDATE settlement_items SET settled_vnd = 1000")  # số Shopee trả được sửa lại thấp hơn
         _row, step = bot.wallet.advance(pid, "processing", ADMIN, 3, NOW)
         assert step == "fund"
         assert bot.wallet.payout(pid)["status"] == "approved_for_payment"
         with bot.repo.connect() as conn:
-            conn.execute("UPDATE shopee_settlements SET amount_vnd = 14000")
+            conn.execute("UPDATE settlement_items SET settled_vnd = 14000")
         for version, target in enumerate(("processing", "sent_unconfirmed"), 3):
             assert bot.wallet.advance(pid, target, ADMIN, version, NOW)[1] == "ok"
         with bot.repo.connect() as conn:
-            conn.execute("UPDATE shopee_settlements SET amount_vnd = 1000")
+            conn.execute("UPDATE settlement_items SET settled_vnd = 1000")
         _row, step = bot.wallet.advance(pid, "paid_confirmed", ADMIN, 5, NOW, evidence="FT26102411111")
         assert step == "ok", "tiền đã đi: ghi đúng sự thật, không ép bấm «thất bại»"
 
