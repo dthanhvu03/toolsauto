@@ -2,7 +2,7 @@
 // ít chữ, chữ to, mỗi người tương tác đều thấy mình trên màn hình.
 
 import { BERTHS } from "./art";
-import type { FleetBus, GameEvent, Route, State } from "./types";
+import type { Block, FleetBus, GameEvent, Route, State } from "./types";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
@@ -144,7 +144,8 @@ export class Hud {
     setText("countdown", s.days_to_tet > 1
       ? `${lunar ? `${lunar} · c` : "C"}òn ${s.days_to_tet} ngày nữa là Tết`
       : lunar ?? "Chúc Mừng Năm Mới!");
-    setText("phase-pill", s.paused ? "Tạm dừng" : s.halt ? "Đón dọc đường" : PILL[s.phase]);
+    setText("phase-pill", s.paused ? "Tạm dừng" : s.block ? (s.block.kind === "toll" ? "Trạm thu phí" : "Công an")
+      : s.halt ? "Đón dọc đường" : PILL[s.phase]);
     // phần đầu được cắt «…» khi hẹp; phần đuôi (km còn lại, đếm ngược) không bao giờ bị cắt
     const [head, tail] = this.statusText(s);
     setHTML("phase-text", `<span class="head">${esc(head)}</span>${tail ? `<span class="tail">${esc(tail)}</span>` : ""}`);
@@ -160,7 +161,7 @@ export class Hud {
 
     const resting = s.phase === "REST";
     $("rest-card").classList.toggle("hidden", !resting);
-    $("board").classList.toggle("hidden", resting);
+    $("board").classList.toggle("hidden", resting || !!s.block);  // bị chặn: chừa góc phải cho barie / chú CSGT
     if (resting) {
       setHTML("rest-orders", s.rest.orders.length
         ? s.rest.orders.slice(0, 3).map((o) => `<div>${o.emoji} ${esc(o.item)} × ${o.count}</div>`).join("")
@@ -173,6 +174,8 @@ export class Hud {
   /** [phần đầu, phần đuôi] của dòng trạng thái. */
   private statusText(s: State): [string, string] {
     if (s.paused) return ["Xe dừng chờ xíu nha", ""];
+    if (s.block) return [s.block.kind === "toll" ? `🚧 Trạm thu phí ${s.block.place}` : `👮 ${s.block.reason}`,
+      `góp ${s.block.paid}/${s.block.goal} xu`];  // PLAN-148
     if (s.halt) return [`🚏 Dừng đón ở ${s.halt.place}`, `${s.halt.people.length} người lên`];  // PLAN-145
     const leg = s.legs[s.leg_index];
     const left = s.phase_left ?? 0;
@@ -294,9 +297,26 @@ export class Hud {
     const [owner, deputy] = s.patrons ?? [];
     const crown = owner ? ` · 👑 Chủ nhà xe <b>${esc(owner.name)}</b> ${owner.xu} xu` + (deputy ? ` · Phó ${esc(deputy.name)} ${deputy.xu}` : "") : "";
     const turbo = s.turbo ? ` · 🚀 x2 còn <b>${s.turbo.left}s</b> nhờ ${esc(s.turbo.by)}` : "";
-    setHTML("cta-foot", `⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
+    const thanks = s.block?.top.length  // đang bị chặn: chân bảng cảm ơn người góp
+      ? `🙏 Cảm ơn ${s.block.top.map((t) => `<b>${esc(t.name)}</b> ${t.xu}`).join(" · ")} · ` : "";
+    setHTML("cta-foot", `${thanks}⏳ <b>${s.waiting}</b> người đang chờ${turbo}${crown} · từ 18 tuổi`);
     setHTML("cta-main", main);
     setHTML("cta-sub", tips[this.ctaTick % tips.length]);
+    this.renderBlock(s.block ?? null);
+  }
+
+  /** Xe bị chặn (PLAN-148): thanh góp quà thay dòng «Gõ tên tỉnh» — ai cũng thấy còn thiếu bao nhiêu xu. */
+  private renderBlock(b: Block | null): void {
+    $("cta-block").classList.toggle("hidden", !b);
+    $("cta-main").classList.toggle("hidden", !!b);
+    $("cta-sub").classList.toggle("hidden", !!b);
+    if (!b) return;
+    // hai dòng (cao bằng «Gõ tên tỉnh» + dòng gợi ý): không đẩy bảng quà xuống đè lơ xe
+    const title = b.kind === "toll" ? `🚧 TRẠM THU PHÍ ${esc(b.place).toUpperCase()}`
+      : b.speeding ? "👮 QUÁ TỐC ĐỘ · CÔNG AN PHẠT" : `👮 CÔNG AN · ${esc(b.reason)}`;
+    const pct = Math.min(100, Math.round((b.paid / Math.max(1, b.goal)) * 100));
+    setHTML("cta-block", `<div class="blk-title">${title}</div>`
+      + `<div class="blk-bar"><i style="width:${pct}%"></i><span>${b.paid} / ${b.goal} xu · 🎁 tặng quà góp để xe đi tiếp</span></div>`);
   }
 
   // ---- bảng góc phải: luân phiên «người đang chờ xe sau», «ai đang trên xe», «tỉnh về đông» ----
@@ -377,6 +397,19 @@ export class Hud {
         break;
       case "station_switch":
         this.flash(`🚏 Xe ra ${esc(e.station ?? "")}`);
+        break;
+      case "block":  // trạm thu phí / công an chặn xe (PLAN-148)
+        this.flash(e.kind === "toll" ? "🚧 TRẠM THU PHÍ" : e.speeding ? "👮 QUÁ TỐC ĐỘ!" : "👮 CÔNG AN KIỂM TRA");
+        $("cta-block").classList.remove("alarm");
+        void ($("cta-block") as HTMLElement).offsetWidth;
+        $("cta-block").classList.add("alarm");
+        break;
+      case "block_end":
+        if (e.by === "cover") {
+          this.note(`💸 Anh Tư bù lỗ ${(e.goal ?? 0) - (e.paid ?? 0)} xu`, `${e.kind === "toll" ? "Qua trạm" : "Nộp phạt xong"} · xe đi tiếp`);
+        } else {
+          this.note(`✅ Góp đủ ${e.goal} xu · cảm ơn ${esc(e.name ?? "")}`, `${e.kind === "toll" ? "Barie mở" : "Nộp phạt xong"} · xe đi tiếp`);
+        }
         break;
       case "pickup_stop": {  // xe dừng hẳn bên lề đón người hẹn (PLAN-145): đọc tên ai lên
         const who = (e.people ?? []).slice(0, 4).map((p) => esc(p.name)).join(", ");

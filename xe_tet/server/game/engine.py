@@ -149,6 +149,20 @@ TURBO_MAX = 180.0
 TURBO_MULT = 2.0
 TURBO_SPEED_CAP = 4.0  # tim + xăng đầy + quà cùng lúc: không vượt x4 (cảnh trôi còn nhìn được)
 TURBO_TALK_GAP = 10.0
+# Trạm thu phí / công an (anh 03/11): xe bị chặn lại, người xem TẶNG QUÀ góp đủ xu thì xe đi tiếp — chỉ quà mới tính; chờ tới
+# khi đủ. Phòng ít quà thì admin bấm «Anh Tư bù lỗ» trên /control (hoặc đặt tự bù lỗ sau N giây) cho xe qua.
+TOLL_EVERY_KM = 350.0  # cứ chừng này km một trạm thu phí, tối đa TOLL_MAX trạm / chuyến
+TOLL_MAX = 2
+TOLL_MIN_KM = 120.0  # chuyến ngắn hơn: không qua trạm
+POLICE_CHANCE = 0.6  # chuyến từ POLICE_MIN_KM: khả năng bị công an kiểm tra một lần
+POLICE_MIN_KM = 150.0
+SPEEDING_SPEED = 2.0  # công an bắn tốc độ lúc xe đang chạy nhanh nhờ quà / tim → «quá tốc độ», phạt gấp SPEEDING_FACTOR
+SPEEDING_FACTOR = 3
+BLOCK_CLEAR_KM = 12.0  # điểm chặn không đặt sát điểm thả khách / trạm nghỉ
+BLOCK_GAP_KM = 40.0
+BLOCK_REMIND_GAP = 25.0  # đang bị chặn: lơ xe nhắc góp quà mỗi 25 giây
+POLICE_REASONS = ("kiểm tra giấy tờ, sổ đăng kiểm để quên ở bến", "tài xế quên mang bằng lái", "đèn hậu bị cháy",
+                  "chở hành lý cồng kềnh trên nóc xe", "chưa thắt dây an toàn cho khách")
 RULES_GAP = 180.0  # lơ xe đọc luật chơi mỗi 3 phút (anh báo 02/11: người xem chưa hiểu luật)
 RULES_MIN_GAP = 60.0  # có RULES_JOINS người mới vào phòng thì đọc sớm hơn, nhưng không dưới 1 phút
 RULES_JOINS = 3  # câu nhỏ của xe chính: xe chính không lên màn hình thì lơ xe khỏi nói
@@ -336,6 +350,14 @@ class Engine:
         self.turbo = 0.0  # giây xe còn chạy gấp đôi nhờ quà
         self.turbo_by = ""  # người tặng gần nhất
         self.last_turbo_talk = -1e9
+        self.block: dict | None = None  # xe đang bị chặn: trạm thu phí / công an (chờ góp quà)
+        self.block_plan: list[tuple[float, str]] = []  # (km, "toll" | "police") của chuyến này
+        self.blocks_on = False  # server bật theo cài đặt (mặc định bật); engine trần (test) không chặn xe
+        self.toll_xu = 20
+        self.fine_xu = 10
+        self.cover_seconds = 0.0  # 0: chờ tới khi góp đủ (admin bấm bù lỗ); > 0: tự bù lỗ sau chừng này giây
+        self.block_rng = random.Random()
+        self.last_block_remind = -1e9
         self.bus_counter = 0
         self.trip: Trip | None = None
         self.reliefs: list[Relief] = []
@@ -632,6 +654,8 @@ class Engine:
         self.trip, self.legs, self.leg_index, self.progress = None, [], 0, 0.0
         self.pickups = {}
         self.halt = None
+        self.block = None
+        self.block_plan = []
         self.trip_likes = 0
         self.trip_gifted = False
         for v in self.viewers.values():
@@ -713,6 +737,7 @@ class Engine:
             legs.insert(idx, Leg("rest", net.place_at(*trip.at(km)), km))
         self.legs = legs
         self.leg_index = 0
+        self.block_plan = self._plan_blocks(total)
         if self.boarding_started is not None:
             self.board_avg += AVG_WEIGHT * (now - self.boarding_started - self.board_avg)
         self.trip_started = now
@@ -1080,6 +1105,8 @@ class Engine:
                     self.phase_until = now + EMPTY_BOARD_RETRY
                     if self.bus.riders():
                         self.talk("switch_lane", dest=self._dest(self.bus.lane), main=True)
+        elif self.phase == "DRIVING" and self.block:
+            self._block_tick(now)  # bị chặn: đứng yên tới khi góp đủ quà / Anh Tư bù lỗ
         elif self.phase == "DRIVING" and self.halt and now < self.halt["until"]:
             pass  # đang dừng bên đường: người chờ lên từng người, xe đứng yên
         elif self.phase == "DRIVING":
@@ -1095,6 +1122,7 @@ class Engine:
             else:
                 self._check_pickups()
                 self._watch_place(now)
+                self._check_blocks(now)
             self._wear(self.trip_km() - km_before)
         elif self.phase == "SPECIAL":
             if now >= self.phase_until:
@@ -1114,6 +1142,106 @@ class Engine:
             if now >= self.phase_until:
                 self._enter_boarding(now)
 
+    # ---- trạm thu phí / công an: chặn xe, góp quà đi tiếp (anh 03/11) -----------------------------
+
+    def _plan_blocks(self, total: float) -> list[tuple[float, str]]:
+        """Chỗ xe bị chặn trong chuyến: trạm thu phí cứ ~TOLL_EVERY_KM một trạm, công an ngẫu nhiên; không sát điểm dừng."""
+        if not self.blocks_on:
+            return []
+        rng = self.block_rng
+        plan = []
+        if total >= TOLL_MIN_KM:
+            n = min(TOLL_MAX, max(1, int(total // TOLL_EVERY_KM)))
+            plan += [(total * (i + 1) / (n + 1) * rng.uniform(0.9, 1.1), "toll") for i in range(n)]
+        if total >= POLICE_MIN_KM and rng.random() < POLICE_CHANCE:
+            plan.append((total * rng.uniform(0.2, 0.85), "police"))
+        keep: list[tuple[float, str]] = []
+        for odo, kind in sorted(plan):
+            if (BLOCK_CLEAR_KM < odo < total - BLOCK_CLEAR_KM and all(abs(odo - leg.km) > BLOCK_CLEAR_KM for leg in self.legs)
+                    and all(abs(odo - o) > BLOCK_GAP_KM for o, _ in keep)):
+                keep.append((odo, kind))
+        return keep
+
+    def _check_blocks(self, now: float) -> None:
+        if self.block or self.halt or not self.block_plan or self.trip_km() < self.block_plan[0][0]:
+            return
+        _, kind = self.block_plan.pop(0)
+        self._start_block(kind, now)
+
+    def block_now(self, kind: str) -> None:
+        """Admin bấm «Trạm thu phí» / «Công an» trên /control: chặn xe ngay (xe phải đang chạy đường)."""
+        if kind not in ("toll", "police"):
+            raise ValueError(kind)
+        if self._phase_now() != "DRIVING" or self.block or self.halt:
+            raise Refused("Chỉ chặn được lúc xe đang chạy đường (không đang dừng đón / đang bị chặn).")
+        self._start_block(kind, self.last_now)
+
+    def _start_block(self, kind: str, now: float) -> None:
+        place = BY_KEY[self._where()[0]].name
+        speeding = False
+        if kind == "toll":
+            reason, goal = f"Trạm thu phí {place}", self.toll_xu
+        else:
+            speeding = self.turbo > 0 or self.speed() >= SPEEDING_SPEED
+            if speeding:
+                reason, goal = "chạy quá tốc độ", self.fine_xu * SPEEDING_FACTOR
+                self.turbo = 0.0  # bị bắn tốc độ: hết chạy nhanh
+            else:
+                reason, goal = self.block_rng.choice(POLICE_REASONS), self.fine_xu
+        self.block = {"kind": kind, "reason": reason, "goal": goal, "paid": 0, "givers": {}, "since": now,
+                      "place": place, "speeding": speeding}
+        self.last_block_remind = now
+        self.emit("block", kind=kind, reason=reason, goal=goal, place=place, speeding=speeding)
+        if kind == "toll":
+            self.talk("toll", place=place, goal=goal, main=True)
+        else:
+            self.talk("speeding" if speeding else "police", reason=reason, goal=goal, main=True)
+
+    def _block_tick(self, now: float) -> None:
+        b = self.block
+        if self.cover_seconds > 0 and now - b["since"] >= self.cover_seconds:
+            self.cover()
+        elif now - self.last_block_remind >= BLOCK_REMIND_GAP:
+            self.last_block_remind = now
+            self.talk("block_remind", left=b["goal"] - b["paid"], what="qua trạm" if b["kind"] == "toll" else "nộp phạt",
+                      main=True)
+
+    def _pay_block(self, v: Viewer, diamonds: int) -> str:
+        """Quà lúc xe đang bị chặn: góp vào phí / tiền phạt; đủ thì xe đi. Trả dòng cho thẻ quà (rỗng: không bị chặn)."""
+        b = self.block
+        if not b or self._phase_now() != "DRIVING":
+            return ""
+        b["paid"] += diamonds
+        b["givers"][v.name] = b["givers"].get(v.name, 0) + diamonds
+        what = "qua trạm" if b["kind"] == "toll" else "nộp phạt"
+        if b["paid"] < b["goal"]:
+            return f"🚧 góp {diamonds} xu {what} · {b['paid']}/{b['goal']}"
+        top = max(b["givers"].items(), key=lambda kv: kv[1])[0]
+        self.block = None
+        self.emit("block_end", kind=b["kind"], by="gifts", name=top, paid=b["paid"], goal=b["goal"])
+        self.talk("block_paid", name=top, what=what, main=True)
+        return f"🚧 góp đủ {b['goal']} xu, xe đi tiếp"
+
+    def cover(self) -> None:
+        """«Anh Tư bù lỗ»: góp chưa đủ mà phòng ít quà → nhà xe trả phần thiếu, xe đi tiếp (admin bấm / tự sau N giây)."""
+        b = self.block
+        if not b:
+            raise Refused("Xe đang không bị chặn.")
+        self.block = None
+        missing = b["goal"] - b["paid"]
+        self.emit("block_end", kind=b["kind"], by="cover", name="", paid=b["paid"], goal=b["goal"])
+        self.talk("block_cover", missing=missing, what="phí trạm" if b["kind"] == "toll" else "tiền phạt", main=True)
+
+    def _block_view(self) -> dict | None:
+        b = self.block
+        if not b:
+            return None
+        top = sorted(b["givers"].items(), key=lambda kv: -kv[1])[:3]
+        return {"kind": b["kind"], "reason": b["reason"], "goal": b["goal"], "paid": b["paid"], "place": b["place"],
+                "speeding": b["speeding"], "top": [{"name": n, "xu": x} for n, x in top],
+                "waited": round(self.last_now - b["since"]), "cover_in": round(max(0.0, self.cover_seconds - (
+                    self.last_now - b["since"]))) if self.cover_seconds > 0 else None}
+
     def speed(self) -> float:
         base = (1.0 + self.boost) * self.trip_bonus
         return min(base * TURBO_MULT, max(base, TURBO_SPEED_CAP)) if self.turbo > 0 else base
@@ -1123,6 +1251,7 @@ class Engine:
     def skip(self) -> None:
         if self.phase == "DRIVING":
             self.progress = 1.0
+            self.block = None
         self.phase_until = self.last_now
 
     def set_departure(self, key: str) -> None:
@@ -1854,6 +1983,7 @@ class Engine:
         relief = None  # PLAN-144 (anh 03/11): bỏ xe tăng cường; chỉ một xe 24 chỗ — quà không gọi xe nào khác
         ticketed = self.bus.seat_of(v.uid) is not None or queued is not None
         v.gift_session += diamonds
+        paid = self._pay_block(v, diamonds)
         added = min(TURBO_MAX, self.turbo + diamonds * TURBO_PER_XU) - self.turbo
         self.turbo += added
         self.turbo_by = v.name
@@ -1887,6 +2017,8 @@ class Engine:
                 self.talk("priority", name=v.name, dest=self._dest(queued), pos=moved)
         if added >= 1:
             perk = f"🚀 xe chạy x2 thêm {round(added)} giây · " + perk
+        if paid:
+            perk = paid + " · " + perk
             if not moved and self.last_now - self.last_turbo_talk >= TURBO_TALK_GAP:
                 self.last_turbo_talk = self.last_now
                 self.talk("turbo", name=v.name, secs=round(self.turbo))
@@ -2015,7 +2147,8 @@ class Engine:
             "terrain": terrain,
             "leg_index": self.leg_index,
             "progress": round(self.progress, 4),
-            "speed": 0.0 if self.halt else round(self.speed(), 3),
+            "speed": 0.0 if self.halt or self.block else round(self.speed(), 3),
+            "block": self._block_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,
             "halt": {"place": self.halt["place"], "people": self.halt["people"],
                      "left": round(max(0.0, self.halt["until"] - self.last_now), 1)} if self.halt else None,

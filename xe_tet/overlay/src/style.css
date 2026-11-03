@@ -153,6 +153,16 @@ html, body {
 .gift-grid i { grid-row: span 2; font-style: normal; font-size: 40px; line-height: 1; }
 .gift-grid span { grid-column: 2; font-size: 22px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
+/* xe bị chặn: thanh góp quà (PLAN-148) */
+.cta-block .blk-title { font-family: var(--display); font-size: 46px; font-weight: 800; color: var(--red-deep); line-height: 1.15;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cta-block .blk-bar { position: relative; height: 46px; margin: 4px 0 0; background: #fff; border: 3px solid var(--red);
+  border-radius: 999px; overflow: hidden; }
+.cta-block .blk-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #ffb300, #e53935);
+  transition: width 0.4s ease; }
+.cta-block .blk-bar span { position: relative; display: block; text-align: center; font-size: 28px; font-weight: 800; line-height: 40px;
+  color: var(--red-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 12px; }
+.cta-block.alarm { animation: pop 0.35s ease; }
 .cta-foot { margin-top: 8px; font-size: 26px; font-weight: 700; color: #6b4a33; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cta-foot b { color: var(--red); }
 

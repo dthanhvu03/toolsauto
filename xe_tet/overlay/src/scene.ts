@@ -208,7 +208,10 @@ export class World {
   private walkers: Walker[] = [];
   private wcLine: Walker[] = [];
   private boardLine: Walker[] = [];  // bến: hàng người có vé chờ bước lên xe (PLAN-145)
-  private roadside: Walker[] = [];  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
+  private roadside: Walker[] = [];
+  private blockProp: THREE.Group | null = null;  // trạm thu phí / chốt công an trước đầu xe (PLAN-148)
+  private blockArm: THREE.Object3D | null = null;  // cần barie (mở khi góp đủ)
+  private blockLeaving = false;  // người chờ ở điểm đón bên đường; xe chạy lại mà máy chậm chưa kịp bước thì coi như đã lên
   private boardTimer = 0;
   private fx = new Fireworks();
   private dust = new Puffs(72);
@@ -469,6 +472,7 @@ export class World {
     this.wcLine = [];
     this.boardLine = [];
     this.roadside = [];
+    this.dropBlock();
     this.bus.group.position.set(0, 0, 0);
     const early = this.early;
     this.early = [];
@@ -585,6 +589,58 @@ export class World {
     sign.position.set(doorX + 3.4, 1.1, curb + 0.6);  // bên phải nhóm người, thấp — không đè tên
     this.scene.add(sign);
     window.setTimeout(() => sign.removeFromParent(), Math.max(3000, (e.seconds ?? 4) * 1000));
+  }
+
+  /** Trạm thu phí (barie ngang làn + chòi) / chốt công an (chú CSGT + nón giao thông) ngay trước đầu xe, phía camera; góp đủ
+   * thì barie nhấc lên rồi dỡ cảnh. Dựng theo state (màn mở giữa lúc bị chặn vẫn thấy). */
+  private updateBlock(kind: string | null, dt: number): void {
+    if (kind && this.set === "road" && !this.blockProp) this.buildBlock(kind);
+    if (!kind && this.blockProp && !this.blockLeaving) {
+      this.blockLeaving = true;
+      window.setTimeout(() => this.dropBlock(), 1600);
+    }
+    if (this.blockArm) {
+      const want = this.blockLeaving ? 1.35 : 0;
+      this.blockArm.rotation.x += (want - this.blockArm.rotation.x) * Math.min(1, dt * 4);
+    }
+  }
+
+  private buildBlock(kind: string): void {
+    const g = new THREE.Group();
+    if (kind === "toll") {
+      g.add(at(box(1.6, 2.3, 1.6, 0x1e88e5), 8.6, 1.15, 4.0), at(box(2.4, 0.25, 2.2, 0xc62828), 8.6, 2.45, 4.0),
+        at(box(0.9, 0.7, 0.06, 0xbbdefb, 0x223344), 8.6, 1.6, 3.18), at(box(0.32, 1.1, 0.32, 0xffd23f), 7.3, 0.55, 3.0));
+      const arm = new THREE.Group();
+      arm.position.set(7.3, 1.05, 3.0);
+      for (let i = 0; i < 6; i++) arm.add(at(box(0.16, 0.16, 0.8, i % 2 ? 0xffffff : 0xe53935), 0, 0, -0.4 - i * 0.8));
+      g.add(arm);
+      this.blockArm = arm;
+      const sign = label("🚧 TRẠM THU PHÍ", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);  // lề phía camera, dưới thân xe: không bị mép khung cắt
+      g.add(sign);
+    } else {
+      const cop = makePerson(55, "👮 CSGT");
+      cop.position.set(7.0, 0.1, 2.6);
+      cop.rotation.y = -Math.PI / 2;  // quay mặt về đầu xe
+      g.add(cop);
+      for (const z of [0.4, 1.4, -0.6]) g.add(at(box(0.3, 0.55, 0.3, 0xff6d00), 7.8, 0.28, z));
+      const sign = label("👮 CHỐT CSGT · DỪNG XE", "lbl sign");
+      sign.position.set(4.6, 0.3, 4.6);
+      g.add(sign);
+    }
+    bendTree(g);
+    this.scene.add(g);
+    this.blockProp = g;
+    this.blockLeaving = false;
+  }
+
+  private dropBlock(): void {
+    if (!this.blockProp) return;
+    dropLabels(this.blockProp);
+    this.scene.remove(this.blockProp);
+    this.blockProp = null;
+    this.blockArm = null;
+    this.blockLeaving = false;
   }
 
   /** Bến: người có vé xếp hàng ở cửa xe, lơ xe đọc tới tên ai thì người đó bước lên (anh 03/11 «lên xe là phải xếp hàng lên
@@ -972,7 +1028,8 @@ export class World {
     this.t += dt;
     this.updateSky();
     const s = this.state;
-    const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt;  // dừng đón bên đường: xe đứng yên
+    const moving = s?.phase === "DRIVING" && this.set === "road" && !s?.halt && !s?.block;  // dừng đón / bị chặn: đứng yên
+    this.updateBlock(s?.block?.kind ?? null, dt);
     if (moving && this.roadside.length) {
       this.roadside.forEach((w) => this.walkers.includes(w) && this.removeWalker(w));
       this.roadside = [];

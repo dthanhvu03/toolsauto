@@ -51,6 +51,10 @@ DEFAULTS: dict = {
     "mix": "balanced",  # trộn tiếng: balanced | music (nhạc nổi) | voice (lơ xe nổi)
     "hud_scale": 0.8,  # cỡ chữ + khung trên live (PLAN-133): 0,6 nhỏ → 1,2 to
     "talk_style": "mix",  # kiểu nói lơ xe (PLAN-131): mix | ben (bến xe) | genz | geny
+    "blocks_on": True,  # trạm thu phí / công an chặn xe, góp quà đi tiếp (PLAN-148)
+    "toll_xu": 20,  # phí qua trạm (xu)
+    "fine_xu": 10,  # tiền phạt công an (xu); quá tốc độ phạt gấp 3
+    "cover_seconds": 0,  # 0: chờ tới khi góp đủ (admin bấm «Anh Tư bù lỗ»); > 0: tự bù lỗ sau chừng này giây
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
@@ -60,6 +64,8 @@ TRIP_RANGE = (3, 15)  # phút
 HUD_SCALE = (0.6, 1.2)
 ROTATE_RANGE = (20, 300)  # giây
 MIXES = ("balanced", "music", "voice")
+BLOCK_XU = (1, 1000)
+COVER_RANGE = (0, 600)
 log = logging.getLogger("xe_tet")
 
 
@@ -101,6 +107,10 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(BOARD_RANGE[1], max(BOARD_RANGE[0], float(value))))
         elif key == "rest_seconds":
             out[key] = int(min(REST_RANGE[1], max(REST_RANGE[0], float(value))))
+        elif key in ("toll_xu", "fine_xu"):
+            out[key] = int(min(BLOCK_XU[1], max(BLOCK_XU[0], float(value))))
+        elif key == "cover_seconds":
+            out[key] = int(min(COVER_RANGE[1], max(COVER_RANGE[0], float(value))))
         elif key == "tiktok_user":
             text = str(value or "")
             out[key] = text if re.fullmatch(r"[A-Za-z0-9._]{0,24}", text) else out[key]

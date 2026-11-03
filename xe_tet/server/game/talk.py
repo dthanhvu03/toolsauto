@@ -104,6 +104,30 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} tặng quà, Anh Tư đạp ga chạy gấp đôi, xe về bến sớm đón người chờ.",
             "Cảm ơn {name}, xe chạy nhanh gấp đôi thêm {secs} giây, chuyến sau tới sớm hơn.",
         ),
+        "toll": (  # trạm thu phí: góp quà qua trạm (anh 03/11)
+            "Tới {place} rồi bà con, phí qua trạm {goal} xu, ai thương xe tặng quà góp cho Anh Tư qua cái.",
+            "Trạm thu phí {place} chặn đầu, thiếu {goal} xu là chưa qua được, bà con góp quà giùm.",
+        ),
+        "police": (
+            "Chết, công an thổi còi, {reason}, phạt {goal} xu, bà con góp quà nộp phạt cho xe đi tiếp.",
+            "Công an kiểm tra giấy tờ, {reason}, bị phạt {goal} xu rồi, ai góp quà giúp Anh Tư với.",
+        ),
+        "speeding": (
+            "Thôi xong, chạy nhanh quá bị bắn tốc độ, phạt {goal} xu, bà con góp quà nộp phạt giùm.",
+            "Công an bắn tốc độ, xe chạy quá tốc độ rồi, phạt {goal} xu, góp quà cho xe đi tiếp.",
+        ),
+        "block_remind": (
+            "Còn thiếu {left} xu nữa là {what}, ai tặng quà góp thêm cho xe đi tiếp.",
+            "Xe đang đứng chờ, thiếu {left} xu {what}, bà con góp quà một chút.",
+        ),
+        "block_paid": (
+            "Đủ tiền rồi, cảm ơn {name} với bà con góp quà, xe {what} chạy tiếp.",
+            "Cảm ơn {name}, góp đủ rồi, Anh Tư {what} xong, lên đường.",
+        ),
+        "block_cover": (
+            "Thôi Anh Tư bù lỗ {missing} xu {what} cho xe đi, về quê ăn Tết quan trọng hơn.",
+            "Thiếu {missing} xu, Anh Tư móc túi bù lỗ luôn, xe đi tiếp bà con.",
+        ),
         "new_owner": (  # người tặng nhiều nhất buổi
             "{name} lên làm chủ nhà xe rồi bà con, {xu} xu, Anh Tư cúi đầu cảm ơn.",
             "Nhà xe có chủ mới, {name} với {xu} xu, chịu chơi số một.",
@@ -315,6 +339,30 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "{name} bơm xăng xịn, xe bay gấp đôi {secs} giây, chuyến sau tới sớm luôn.",
             "{name} tặng quà, xe chạy gấp đôi, người chờ sắp được lên rồi.",
         ),
+        "toll": (
+            "Tới trạm thu phí {place}, phí {goal} xu, ae tặng quà góp cho xe qua trạm cái.",
+            "Barie {place} hạ xuống rồi, cần {goal} xu qua trạm, góp quà đi ae.",
+        ),
+        "police": (
+            "Toang, công an tuýt còi, {reason}, phạt {goal} xu, ae góp quà nộp phạt giùm.",
+            "Bị kiểm tra giấy tờ, {reason}, phạt {goal} xu, ai góp quà là xe đi liền.",
+        ),
+        "speeding": (
+            "Bay quá bị bắn tốc độ luôn, phạt {goal} xu, ae góp quà nộp phạt thôi.",
+            "Quá tốc độ rồi ae, công an phạt {goal} xu, góp quà cho xe đi tiếp.",
+        ),
+        "block_remind": (
+            "Còn thiếu {left} xu là {what}, ae góp thêm chút quà.",
+            "Xe đứng im chờ ae, thiếu {left} xu {what}, góp quà đi.",
+        ),
+        "block_paid": (
+            "Đủ rồi, {name} với ae uy tín, xe {what} chạy tiếp.",
+            "{name} chốt đơn, góp đủ, {what} xong, lên đường.",
+        ),
+        "block_cover": (
+            "Thôi Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp, về quê là chính.",
+            "Thiếu {missing} xu, Anh Tư tự bù lỗ, đi tiếp thôi ae.",
+        ),
         "new_owner": (
             "{name} chính thức làm chủ nhà xe, {xu} xu, đỉnh nóc kịch trần.",
             "Chủ nhà xe mới là {name} đó mấy bồ, {xu} xu, xịn xò.",
@@ -524,6 +572,30 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "turbo": (
             "Cảm ơn {name}, xe chạy nhanh gấp đôi, ai đang chờ sắp tới lượt rồi.",
             "{name} tặng quà, xe tăng tốc thêm {secs} giây, về bến sớm đón bà con.",
+        ),
+        "toll": (
+            "Xe tới trạm thu phí {place}, phí {goal} xu, mọi người tặng quà góp để xe qua trạm.",
+            "Trạm thu phí {place} rồi, cần {goal} xu, ai góp quà là xe qua liền.",
+        ),
+        "police": (
+            "Công an ra hiệu dừng xe, {reason}, phạt {goal} xu, mọi người góp quà nộp phạt giúp.",
+            "Bị kiểm tra giấy tờ, {reason}, phạt {goal} xu, góp quà để xe đi tiếp.",
+        ),
+        "speeding": (
+            "Xe chạy quá tốc độ bị công an bắn tốc độ, phạt {goal} xu, mọi người góp quà giúp.",
+            "Quá tốc độ rồi, phạt {goal} xu, ai góp quà là xe đi tiếp.",
+        ),
+        "block_remind": (
+            "Còn thiếu {left} xu là {what}, mọi người góp thêm quà nhé.",
+            "Xe đang đứng chờ, thiếu {left} xu {what}.",
+        ),
+        "block_paid": (
+            "Cảm ơn {name} và mọi người, góp đủ rồi, xe {what} đi tiếp.",
+            "Đủ tiền rồi, cảm ơn {name}, xe {what} lên đường.",
+        ),
+        "block_cover": (
+            "Anh Tư bù lỗ {missing} xu {what}, xe đi tiếp cho kịp về quê.",
+            "Thiếu {missing} xu, Anh Tư bù lỗ, xe đi tiếp.",
         ),
         "new_owner": (
             "Chúc mừng {name} lên làm chủ nhà xe với {xu} xu, cảm ơn nhiều.",

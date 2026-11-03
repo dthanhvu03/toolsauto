@@ -277,6 +277,28 @@
   </section>
 
   <section>
+    <h2>🚧 Trạm thu phí & công an</h2>
+    <label class="toggle"><input type="checkbox" data-show="blocks_on"> Dọc đường gặp trạm thu phí / công an — xe đứng chờ người xem tặng quà góp đủ mới đi</label>
+    <div class="row" style="margin-top:8px">
+      <button data-block="toll">🚧 Trạm thu phí ngay</button>
+      <button data-block="police">👮 Công an ngay</button>
+      <button id="cover" class="primary">💸 Anh Tư bù lỗ (cho xe đi)</button>
+    </div>
+    <p class="hint" id="block-now">Xe đang không bị chặn.</p>
+    <div class="row">
+      <span>Phí trạm</span><input type="number" id="toll-xu" min="1" max="1000" step="1" aria-label="Phí qua trạm (xu)"><span>xu</span>
+      <span>Phạt</span><input type="number" id="fine-xu" min="1" max="1000" step="1" aria-label="Tiền phạt công an (xu)"><span>xu</span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span>Tự bù lỗ sau</span><input type="number" id="cover-seconds" min="0" max="600" step="10" aria-label="Tự bù lỗ sau (giây)">
+      <span>giây (0 = chờ tới khi góp đủ)</span>
+      <button id="save-blocks">Lưu</button>
+    </div>
+    <p class="hint">Chỉ quà mới tính vào tiền góp. Xe đang chạy nhanh nhờ quà / tim mà gặp công an thì «quá tốc độ», phạt gấp 3.
+      Phòng ít quà: bấm «Anh Tư bù lỗ», lơ xe nói bù phần thiếu rồi xe đi.</p>
+  </section>
+
+  <section>
     <h2>🖥 Màn hình</h2>
     <div class="row">
       <label class="toggle"><input type="checkbox" data-show="show_route"> Bảng tuyến đường</label>
@@ -655,6 +677,12 @@ $("save-times").onclick = () => {
     trip_minutes: +$("trip-minutes").value });
   log("Đã lưu thời gian đón khách / nghỉ trạm / chạy xe");
 };
+document.querySelectorAll("[data-block]").forEach((b) => b.onclick = () => admin({ action: "block", kind: b.dataset.block }));
+$("cover").onclick = () => admin({ action: "cover" });
+$("save-blocks").onclick = () => {
+  setControl({ toll_xu: +$("toll-xu").value, fine_xu: +$("fine-xu").value, cover_seconds: +$("cover-seconds").value });
+  log("Đã lưu phí trạm / tiền phạt / tự bù lỗ");
+};
 $("rotate-seconds").onchange = () => setControl({ rotate_seconds: +$("rotate-seconds").value });
 
 // ---- màn hình ----
@@ -738,12 +766,21 @@ async function refresh() {
       for (const d of s.departures || []) sel.append(new Option(d.name, d.key));
     }
     if (document.activeElement !== sel) sel.value = s.departure?.key || "";
+    const blk = s.block;
+    $("block-now").textContent = blk
+      ? `${blk.kind === "toll" ? "🚧 Đang ở trạm thu phí" : "👮 Công an đang chặn"} ${blk.place}: góp ${blk.paid}/${blk.goal} xu · chờ ${blk.waited} giây`
+        + (blk.cover_in != null ? ` · tự bù lỗ sau ${blk.cover_in} giây` : "")
+      : "Xe đang không bị chặn.";
+    $("cover").disabled = !blk;
     $("lanes-now").textContent = (s.lanes || []).map((l) => `${l.arrow} ${l.label}: ${l.current ? "đang đón" : `${l.waiting} chờ`}`).join(" · ");
     if (!timesLoaded) {  // không ghi đè khi admin đang gõ
       $("tt-user").value = control.tiktok_user ? "@" + control.tiktok_user : "";
       $("board-seconds").value = control.board_seconds ?? 180;
       $("rest-seconds").value = control.rest_seconds ?? 90;
       $("trip-minutes").value = control.trip_minutes ?? 8;
+      $("toll-xu").value = control.toll_xu ?? 20;
+      $("fine-xu").value = control.fine_xu ?? 10;
+      $("cover-seconds").value = control.cover_seconds ?? 0;
       timesLoaded = true;
     }
   } catch (e) { $("s-phase").textContent = "Mất kết nối"; }

@@ -124,7 +124,14 @@ class Hub:
         engine.talk_style = self.settings["talk_style"]
         engine.ai_reply = self.settings["ai_reply"]
         engine.recall = self.store.load
+        self.apply_blocks(engine)
         return engine
+
+    def apply_blocks(self, engine: Engine) -> None:
+        engine.blocks_on = self.settings["blocks_on"]
+        engine.toll_xu = self.settings["toll_xu"]
+        engine.fine_xu = self.settings["fine_xu"]
+        engine.cover_seconds = float(self.settings["cover_seconds"])
 
     def maybe_answer(self, now: float) -> None:
         """Lấy một câu hỏi chờ cho AI trả lời ở tác vụ nền (vòng game không chờ mạng)."""
@@ -224,6 +231,7 @@ class Hub:
         self.engine.trip_minutes = self.settings["trip_minutes"]
         self.engine.talk_style = self.settings["talk_style"]
         self.engine.ai_reply = self.settings["ai_reply"]
+        self.apply_blocks(self.engine)
         self.ai_key = bool(ai_reply.api_key())  # anh vừa thêm khoá vào .env: bật lại công tắc là nhận
         settings.save(self.settings)
 
@@ -438,6 +446,10 @@ async def _admin(body: dict) -> dict:
         engine.music_toggle(as_int(body.get("bus_no"), 0))
     elif action == "relief_next":  # xe tăng cường tới ngay điểm thả khách kế tiếp
         engine.relief_next_stop(as_int(body.get("bus_no"), 0))
+    elif action == "block":  # chặn xe ngay: trạm thu phí / công an (PLAN-148)
+        engine.block_now(str(body.get("kind") or ""))
+    elif action == "cover":  # «Anh Tư bù lỗ»: xe đang bị chặn đi tiếp luôn
+        engine.cover()
     elif action == "departure":
         hub.engine.set_departure(str(body.get("key") or ""))  # BR-8: bến chưa trống → ValueError → 400
         hub.update_settings({"departure": hub.engine.network.departure.key})

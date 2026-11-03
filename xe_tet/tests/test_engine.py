@@ -1504,7 +1504,8 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
         assert is_bad(text), text
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
-                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30)
+                  need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
+                  goal=20, reason="quên bằng lái", left=5, what="qua trạm", missing=5)
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",
@@ -1568,3 +1569,76 @@ def test_gift_makes_bus_run_twice_as_fast_for_seconds_per_xu():
     e._depart(5)
     e.tick(15)
     assert e.turbo == TURBO_MAX - 10
+
+
+def _driving(e, t=1.0):
+    comment(e, "An", "Hà Nội", t)
+    e.tick(t + 0.1)
+    e._depart(t + 0.2)
+    e.tick(t + 0.3)
+    e.drain()
+
+
+def test_toll_stops_bus_until_gifts_cover_fee_only_gifts_count():
+    """Anh 03/11: qua trạm thu phí / bị công an → xe đứng, chỉ QUÀ góp mới tính, chờ tới khi đủ thì đi tiếp."""
+    e = Engine(0.0)
+    e.blocks_on, e.toll_xu = True, 20
+    _driving(e)
+    e.block_now("toll")
+    (ev,) = [x for x in e.drain() if x["type"] == "block"]
+    assert ev["kind"] == "toll" and ev["goal"] == 20 and e.snapshot()["speed"] == 0.0
+    km = e.trip_km()
+    e.handle({"type": "like", "name": "Tim", "count": 500}, 2)
+    comment(e, "Bình", "góp", 3)
+    e.tick(400)  # chờ bao lâu cũng đứng
+    assert e.block and e.trip_km() == km
+    e.handle({"type": "gift", "name": "Cô Ba", "diamonds": 15}, 401)
+    gift = [x for x in e.drain() if x["type"] == "gift"][-1]
+    assert "15/20" in gift["perk"] and e.snapshot()["block"]["top"] == [{"name": "Cô Ba", "xu": 15}]
+    e.handle({"type": "gift", "name": "Út", "diamonds": 5}, 402)
+    (end,) = [x for x in e.drain() if x["type"] == "block_end"]
+    assert end["by"] == "gifts" and end["name"] == "Cô Ba" and e.block is None
+    e.tick(410)
+    assert e.trip_km() > km
+
+
+def test_police_speeding_fine_and_anh_tu_covers_the_loss():
+    """Đang chạy nhanh nhờ quà mà gặp công an → «quá tốc độ», phạt gấp 3, hết chạy nhanh; phòng ít quà admin bấm bù lỗ
+    (hoặc tự bù lỗ sau N giây)."""
+    import pytest
+    from xe_tet.server.game.engine import Refused, SPEEDING_FACTOR
+    e = Engine(0.0)
+    e.blocks_on, e.fine_xu = True, 10
+    _driving(e)
+    with pytest.raises(Refused):
+        e.cover()
+    e.handle({"type": "gift", "name": "Bé", "diamonds": 5}, 2)
+    e.block_now("police")
+    assert e.block["speeding"] and e.block["goal"] == 10 * SPEEDING_FACTOR and e.turbo == 0
+    e.cover()
+    (end,) = [x for x in e.drain() if x["type"] == "block_end"]
+    assert end["by"] == "cover" and e.block is None
+    e.cover_seconds = 30
+    e.block_now("police")
+    assert not e.block["speeding"] and e.block["goal"] == 10
+    e.tick(20)
+    assert e.block
+    e.tick(40)
+    assert e.block is None
+
+
+def test_blocks_planned_on_long_trips_away_from_stops():
+    from xe_tet.server.game.engine import BLOCK_CLEAR_KM
+    e = Engine(0.0)
+    e.blocks_on = True
+    e.block_rng.seed(1)
+    for i, prov in enumerate(("Hà Nội", "Nghệ An", "Huế")):
+        comment(e, f"K{i}", prov, 1 + i)
+    e._depart(5)
+    plan = e.block_plan
+    assert any(k == "toll" for _, k in plan)
+    assert all(abs(odo - leg.km) > BLOCK_CLEAR_KM for odo, _ in plan for leg in e.legs)
+    short = Engine(0.0)
+    comment(short, "A", "Hà Nội", 1)
+    short._depart(2)
+    assert short.block_plan == []  # engine trần (blocks_on tắt): không chặn
