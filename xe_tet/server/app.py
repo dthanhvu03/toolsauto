@@ -138,6 +138,9 @@ class Hub:
         engine.toll_xu = self.settings["toll_xu"]
         engine.fine_xu = self.settings["fine_xu"]
         engine.cover_seconds = float(self.settings["cover_seconds"]) if self.settings["cover_on"] else 0.0
+        engine.roll_on = self.settings["roll_on"]
+        engine.roll_idle = self.settings["roll_idle_min"] * 60.0
+        engine.roll_wait = float(self.settings["roll_wait_s"])
 
     def maybe_answer(self, now: float) -> None:
         """Lấy một câu hỏi chờ cho AI trả lời ở tác vụ nền (vòng game không chờ mạng)."""

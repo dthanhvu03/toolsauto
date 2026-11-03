@@ -290,6 +290,15 @@
       <span>Chuyến xa nhất chạy</span><input type="number" id="trip-minutes" min="3" max="15" step="0.5" aria-label="Phút chạy đường của chuyến xa nhất"><span>phút</span>
       <button id="save-times">Lưu</button>
     </div>
+    <h3>Điểm danh lúc lên xe</h3>
+    <label class="toggle"><input type="checkbox" data-show="roll_on"> Tới lượt lên xe mà im lặng lâu thì lơ xe gọi tên — thả tim / bình luận mới giữ giường</label>
+    <div class="row" style="margin-top:8px">
+      <span>Im lặng quá</span><input type="number" id="roll-idle" min="1" max="120" step="1" aria-label="Im lặng quá bao nhiêu phút thì điểm danh"><span>phút</span>
+      <span>Chờ trả lời</span><input type="number" id="roll-wait" min="15" max="180" step="5" aria-label="Giây chờ trả lời điểm danh"><span>giây</span>
+      <button id="save-roll">Lưu</button>
+    </div>
+    <p class="hint">Không trả lời: giường nhường người sau, người đó lùi xuống chuyến sau (vé vẫn giữ). Lỡ 2 lần mới bỏ vé.
+      Người đã lên xe luôn được chở tới nơi.</p>
     <p class="hint" id="trip-hint">Chuyến gần ngắn hơn theo km (không tỉ lệ thẳng). Lơ xe nói «chừng 26 tiếng» thì đồng hồ trên xe
       chạy đủ 26 tiếng trong mấy phút đó — trời sáng / tối theo đồng hồ xe.</p>
     <p class="hint">«+30 giây» chỉ áp cho lúc đón khách, nghỉ trạm, thả khách. Lúc đang chạy, tốc độ do tim quyết định.</p>
@@ -835,6 +844,10 @@ $("save-times").onclick = () => {
 };
 document.querySelectorAll("[data-block]").forEach((b) => b.onclick = () => admin({ action: "block", kind: b.dataset.block }));
 $("cover").onclick = () => admin({ action: "cover" });
+$("save-roll").onclick = () => {
+  setControl({ roll_idle_min: +$("roll-idle").value, roll_wait_s: +$("roll-wait").value });
+  log("Đã lưu điểm danh");
+};
 $("save-blocks").onclick = () => {
   setControl({ toll_xu: +$("toll-xu").value, fine_xu: +$("fine-xu").value, cover_seconds: +$("cover-seconds").value });
   log("Đã lưu phí trạm / tiền phạt / tự bù lỗ");
@@ -966,6 +979,8 @@ async function refresh() {
       $("toll-xu").value = control.toll_xu ?? 20;
       $("fine-xu").value = control.fine_xu ?? 10;
       $("cover-seconds").value = control.cover_seconds ?? 60;
+      $("roll-idle").value = control.roll_idle_min ?? 15;
+      $("roll-wait").value = control.roll_wait_s ?? 45;
       $("target-vnd").value = control.target_vnd ?? 100000;
       $("vnd-per-xu").value = control.vnd_per_xu ?? 100;
       $("goal-xu").value = control.goal_xu ?? 1000;

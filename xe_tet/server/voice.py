@@ -123,6 +123,10 @@ class Announcer:
             if not self.boarding:
                 self.board_started = now
             self.boarding.append((event.get("name", ""), event.get("province", "")))
+        elif kind == "rollcall":  # điểm danh: gọi tên người tới lượt lên xe — ưu tiên như đọc tên lên xe, không bị bỏ vì hàng đợi dài
+            names = event.get("names") or [event.get("name", "")]  # không gửi kèm names: gọi tên không phải lúc bước lên xe
+            self.offer(line("rollcall", style=self.style(), name=names_phrase(names, BOARD_NAMES),
+                            seconds=event.get("seconds", 45)), BOARD)
         elif kind == "depart":  # xe đã chạy: người chưa kịp đọc tên thì thôi (màn hình đã sang cảnh đường)
             self.boarding = []
         elif kind == "gift" and event.get("tier_up") and "xe tăng cường" not in (event.get("perk") or ""):

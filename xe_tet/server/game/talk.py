@@ -116,6 +116,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Thôi xong, chạy nhanh quá bị bắn tốc độ, phạt {goal} xu, bà con góp quà nộp phạt giùm.",
             "Công an bắn tốc độ, xe chạy quá tốc độ rồi, phạt {goal} xu, góp quà cho xe đi tiếp.",
         ),
+        "rollcall": (
+            "{name} còn ở đây không, thả tim hoặc bình luận trong {seconds} giây để giữ giường.",
+            "Tới lượt {name} lên xe rồi, còn xem thì thả cái tim cho Anh Tư biết, giường đang giữ.",
+        ),
+        "rollcall_ok": (
+            "{name} có mặt, mời lên giường.",
+            "Rồi, {name} còn đây, lên xe lẹ.",
+        ),
+        "rollcall_skip": (
+            "Gọi hoài không thấy {name}, giường này nhường người sau, {name} đi chuyến tới.",
+            "{name} chắc đang bận, vé vẫn giữ, lùi xuống chuyến sau.",
+        ),
+        "rollcall_drop": (
+            "Hai lần gọi không thấy {name}, Anh Tư nhả vé cho bà con khác, quay lại thì gõ tỉnh đặt lại.",
+            "{name} vắng hai chuyến rồi, vé nhường người khác, về lại thì gõ tỉnh là có vé.",
+        ),
         "block_remind": (
             "Còn thiếu {left} xu nữa là {what}, ai tặng quà góp thêm cho xe đi tiếp.",
             "Xe đang đứng chờ, thiếu {left} xu {what}, bà con góp quà một chút.",
@@ -371,6 +387,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
             "Bay quá bị bắn tốc độ luôn, phạt {goal} xu, ae góp quà nộp phạt thôi.",
             "Quá tốc độ rồi ae, công an phạt {goal} xu, góp quà cho xe đi tiếp.",
         ),
+        "rollcall": (
+            "{name} ơi còn online không, thả tim trong {seconds} giây để giữ giường.",
+            "Tới lượt {name} rồi, còn xem thì thả tim báo danh, giường đang giữ cho á.",
+        ),
+        "rollcall_ok": (
+            "{name} điểm danh rồi, lên giường liền.",
+            "{name} còn on, lên xe thôi.",
+        ),
+        "rollcall_skip": (
+            "{name} offline rồi hả, giường nhường người sau, {name} đi chuyến tới.",
+            "Gọi {name} không thấy rep, vé vẫn giữ, lùi chuyến sau.",
+        ),
+        "rollcall_drop": (
+            "{name} vắng hai chuyến, vé nhả cho ae khác, quay lại gõ tỉnh là có vé liền.",
+            "Hai lần không thấy {name}, nhường vé nhé ae, về lại gõ tỉnh đặt lại.",
+        ),
         "block_remind": (
             "Còn thiếu {left} xu là {what}, ae góp thêm chút quà.",
             "Xe đứng im chờ ae, thiếu {left} xu {what}, góp quà đi.",
@@ -624,6 +656,22 @@ LINES: dict[str, dict[str, tuple[str, ...]]] = {
         "speeding": (
             "Xe chạy quá tốc độ bị công an bắn tốc độ, phạt {goal} xu, mọi người góp quà giúp.",
             "Quá tốc độ rồi, phạt {goal} xu, ai góp quà là xe đi tiếp.",
+        ),
+        "rollcall": (
+            "{name} còn xem không, thả tim hoặc bình luận trong {seconds} giây để giữ giường.",
+            "Tới lượt {name} lên xe, còn ở đây thì thả tim cho Anh Tư biết.",
+        ),
+        "rollcall_ok": (
+            "{name} có mặt, mời lên xe.",
+            "Cảm ơn {name}, mời lên giường.",
+        ),
+        "rollcall_skip": (
+            "Chưa thấy {name} trả lời, giường nhường người sau, {name} đi chuyến tới.",
+            "{name} chưa có mặt, vé vẫn giữ, lùi xuống chuyến sau.",
+        ),
+        "rollcall_drop": (
+            "Hai lần gọi không thấy {name}, vé nhường người khác, quay lại thì gõ tỉnh để đặt lại.",
+            "{name} vắng hai chuyến, Anh Tư nhả vé, về lại gõ tỉnh là có vé.",
         ),
         "block_remind": (
             "Còn thiếu {left} xu là {what}, mọi người góp thêm quà nhé.",

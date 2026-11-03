@@ -82,6 +82,9 @@ RELIEF_MAX_GIFT = 6  # xe do quà được vượt mốc tự động
 RELIEF_GIFT_TIER = 3  # bậc băng rôn (100 xu): người đang giữ chỗ đạt bậc này → xe tăng cường chạy ngay làn của họ
 STAYING_KEEP = 30  # nhớ 30 người «ở lại» gần nhất
 SPECIALS_PER_GIFT = 3  # một lần tặng vượt nhiều mốc 1000 xu: tối đa 3 lần cả xe chúc Tết
+ROLL_IDLE = 15 * 60.0  # điểm danh (anh 03/11): tới lượt lên xe mà im lặng quá chừng này → lơ xe gọi tên trước khi xếp giường
+ROLL_WAIT = 45.0  # giây chờ người được gọi tên thả tim / bình luận; giường giữ cho họ trong lúc chờ
+ROLL_MISS_MAX = 2  # lỡ điểm danh chừng này lần thì bỏ vé (lần đầu chỉ lùi xuống chuyến sau)
 SPECIALS_QUEUE_MAX = 3  # cảnh chúc Tết chờ chiếu tối đa (quà to dồn dập không làm xe đứng hàng chục phút)
 BOOST_MAX = 2.0
 BOOST_PER_LIKE = 0.01
@@ -324,6 +327,8 @@ class Viewer:
     stage_comments: int = 0
     gift_session: int = 0  # xu tặng trong buổi (bảng «Chủ nhà xe»)
     prio_credit: bool = False  # tặng quà lúc chưa có vé → lần giữ chỗ kế tiếp được lên đầu hàng (một lần)
+    roll_missed: int = 0  # số lần lỡ điểm danh liên tiếp (có tương tác lại thì về 0)
+    roll_skip: int = -1  # lỡ điểm danh ở chuyến số này → chuyến đó không xếp giường nữa (lùi xuống chuyến sau)
     priority: bool = False  # đang chờ chuyến sau đã tặng quà → đã được lên đầu hàng (một lần tới khi lên xe — PLAN-144)
 
 
@@ -407,6 +412,10 @@ class Engine:
         self.race_on = False  # anh 03/11: tắt đua tỉnh — ai đặt trước lên trước, chỉ quà được ưu tiên
         self.next_lane: str | None = None  # anh chọn hướng cho chuyến kế tiếp trên /control
         self.ticket_idle = TICKET_IDLE
+        self.roll_on = True  # anh bật / tắt điểm danh trên /control
+        self.roll_idle = ROLL_IDLE
+        self.roll_wait = ROLL_WAIT
+        self.rollcalls: dict[str, float] = {}  # uid đang được gọi tên → hết giờ chờ lúc này
         self.race: Counter = Counter()  # điểm đua tỉnh vòng này (theo mã tỉnh)
         self.race_leader: str | None = None
         self.race_winner: str | None = None
@@ -655,6 +664,7 @@ class Engine:
             if uid in q:
                 q.remove(uid)
         self.queued_at.pop(uid, None)
+        self.rollcalls.pop(uid, None)
         if uid in self.viewers:
             self.viewers[uid].priority = False
 
@@ -744,8 +754,9 @@ class Engine:
             v.likes_trip = 0
             v.gift_trip = 0
             v.switched = False
-        self._fill_from_queue()
-        self._set_phase("BOARDING", now, self._board_time())
+        self._set_phase("BOARDING", now, 0.0)
+        self._fill_from_queue()  # sau khi vào pha đón: người im lặng lâu được điểm danh trước khi xếp giường
+        self.phase_until = now + self._board_time()  # giờ đón theo số giường còn trống sau khi xếp
         today = self._today()  # câu mời lên xe theo mùa: cao điểm 23–28 Chạp, giao thừa, ngày Tết (PLAN-134 C)
         kind = {season.PEAK: "boarding_peak", season.EVE: "boarding_eve", season.TET: "boarding_tet"}.get(
             season.phase(today), "boarding")
@@ -864,6 +875,16 @@ class Engine:
         return province is not None and province in self.network.serves(self.bus.lane)
 
     def _fill_from_queue(self) -> None:
+        called: list[str] = []
+        self._fill_seats(called)
+        if called:  # gọi tên một lượt (một câu) cho mọi người im lặng lâu vừa tới lượt
+            names = [self.viewers[u].name for u in called]
+            self.emit("rollcall", names=names, name=names[0], seconds=round(self.roll_wait))
+            who = ", ".join(names[:-1]) + f" và {names[-1]}" if len(names) > 1 else names[0]
+            self.talk("rollcall", speak=False, name=who if len(names) <= 4 else f"{', '.join(names[:3])} và {len(names) - 3} bạn nữa",
+                      seconds=round(self.roll_wait), main=True)
+
+    def _fill_seats(self, called: list[str]) -> None:
         """Lấy người chờ lên xe: hàng chờ làn của xe trước, rồi người chờ làn khác mà xe đi ngang quê họ — ai chờ lâu
         trước (PLAN-134 C: khách Huế chờ xe «Hướng Đà Nẵng» lên được xe «Hướng Hà Nội» còn giường)."""
         served = self.network.serves(self.bus.lane)
@@ -875,12 +896,63 @@ class Engine:
             if self._ghost(uid):  # vé ma: không chở người đã rời phòng
                 self._release(self.viewers[uid])
                 continue
+            if uid in self.rollcalls or self.viewers[uid].roll_skip == self.bus.no:
+                continue  # đang chờ trả lời điểm danh / đã lỡ điểm danh chuyến này
+            if self.bus.seats.count(None) <= self._held_seats():
+                return  # giường còn lại đang giữ cho người được gọi tên (gọi tên vừa đủ số giường trống)
+            if self._needs_roll(uid):
+                self.rollcalls[uid] = self.last_now + self.roll_wait
+                called.append(uid)
+                continue
             self._unqueue(uid)
             self.bus.seats[free] = uid
             self.seated_at.append(self.last_now)
             # báo người chờ là ĐÃ LÊN XE (rà soát live 02/11: 45 người giữ chỗ được xếp lên xe trong im lặng — thẻ vẫn ghi
             # «chuyến sau» dù đã nằm giường, có người về tới quê rồi)
             self._ticket(self.viewers[uid], free, changed=False, promoted=True)
+
+    def _needs_roll(self, uid: str) -> bool:
+        """Điểm danh chỉ lúc tới lượt xếp giường ở bến (xe chính đang đón), với người im lặng lâu — im lặng vẫn có thể đang xem."""
+        return (self.roll_on and self.boarding_open()
+                and self.last_now - self.viewers[uid].last_seen > self.roll_idle)
+
+    def _held_seats(self) -> int:
+        """Giường giữ cho người đang được gọi tên ở xe này (chỉ người cùng làn / xe đi ngang quê)."""
+        served = self.network.serves(self.bus.lane)
+        return sum(1 for uid in self.rollcalls if uid in self.queued_at and self.viewers[uid].province in served)
+
+    def _answer_roll(self, v: Viewer) -> None:
+        """Người được gọi tên thả tim / bình luận / tặng quà: giữ vé, lên giường đang giữ (còn đang đón)."""
+        v.roll_missed = 0
+        v.roll_skip = -1
+        if self.rollcalls.pop(v.uid, None) is None:
+            return
+        self.emit("rollcall_ok", name=v.name)
+        self.talk("rollcall_ok", name=v.name, main=True)
+        if self.boarding_open():
+            self._fill_from_queue()
+
+    def _expire_rolls(self) -> None:
+        """Hết giờ điểm danh không ai trả lời: lần đầu lùi xuống chuyến sau, lỡ ROLL_MISS_MAX lần thì bỏ vé; giường giữ trả lại."""
+        expired = [uid for uid, until in self.rollcalls.items() if self.last_now >= until]
+        for uid in expired:
+            del self.rollcalls[uid]
+            v = self.viewers[uid]
+            if uid not in self.queued_at:  # đã bỏ / đổi vé trong lúc chờ
+                continue
+            v.roll_missed += 1
+            if v.roll_missed >= ROLL_MISS_MAX:
+                v.roll_missed = 0
+                v.roll_skip = -1
+                self._release(v)
+                self.emit("rollcall_drop", name=v.name)
+                self.talk("rollcall_drop", name=v.name, main=True)
+            else:
+                v.roll_skip = self.bus.no
+                self.emit("rollcall_skip", name=v.name)
+                self.talk("rollcall_skip", name=v.name, main=True)
+        if expired and self.boarding_open():
+            self._fill_from_queue()
 
     def _depart(self, now: float) -> None:
         """BR-3: ghé theo đường thật (`Network.plan`); trạm nghỉ ở giữa quãng (chuyến dài: 2 trạm, chuyến ngắn: không),
@@ -1251,8 +1323,12 @@ class Engine:
                 self.show["started"] += dt  # tạm dừng không tính vào giờ chờ góp (không tự bù lỗ ngay khi bỏ tạm dừng)
             if self.halt:
                 self.halt["until"] += dt  # đang đón người ven đường: bỏ tạm dừng xong vẫn đủ giờ cho họ lên xe
+            for uid in self.rollcalls:
+                self.rollcalls[uid] += dt  # đang gọi tên: tạm dừng không ăn vào giờ trả lời
             return
         self._run_reliefs(dt)
+        if self.rollcalls:
+            self._expire_rolls()
         self._remind_direction(now)
         self._remind_rules(now)
         if self.specials and self.phase in SPECIAL_FROM:
@@ -1263,7 +1339,9 @@ class Engine:
 
         if self.phase == "BOARDING":
             self._maybe_switch_station(now)
-            if now >= self.phase_until:
+            if now >= self.phase_until and self._held_seats():
+                self.phase_until = min(self.rollcalls.values())  # đang chờ người được gọi tên: đợi hết giờ điểm danh rồi chạy
+            elif now >= self.phase_until:
                 if self.bus.riders():
                     self._depart(now)
                 else:  # xe trống: quay sang làn đang có người chờ (BR-4), cho họ lên rồi đón thêm một lúc
@@ -1577,6 +1655,8 @@ class Engine:
         v = self.viewer(uid, name)
         if kind != "join" or v.province:  # vào phòng chưa tính là đang xem (người lướt qua); người có vé quay lại thì tính
             v.last_seen = now
+            if v.roll_missed or v.uid in self.rollcalls:
+                self._answer_roll(v)
             self._seen_today(v, now)
         if kind == "comment":
             v.comments += 1
@@ -1731,7 +1811,8 @@ class Engine:
         if self.boarding_open() and not self.bus.riders() and not self._fits(v.province):
             self.bus.lane = lane  # BR-4: xe đang đón chưa có ai → quay đầu theo người đầu tiên
             self._fill_from_queue()
-        if self.boarding_open() and self._fits(v.province) and (free := self.bus.free_seat()) is not None:
+        if (self.boarding_open() and self._fits(v.province) and (free := self.bus.free_seat()) is not None
+                and self.bus.seats.count(None) > self._held_seats()):  # giường đang giữ cho người được gọi tên: không lấy
             self.bus.seats[free] = v.uid
             self.seated_at.append(self.last_now)
             v.prio_credit = False  # có giường ngay: suất «lên đầu hàng» đã dùng cho lần đặt vé này
@@ -2468,6 +2549,8 @@ class Engine:
             "block": self._block_view(),
             "goal": self._goal_view(),
             "turbo": {"left": round(self.turbo), "by": self.turbo_by} if self.turbo > 0 else None,
+            "rollcall": [{"name": self.viewers[u].name, "left": round(max(0.0, t - self.last_now))}
+                         for u, t in self.rollcalls.items()][:5],
             "halt": {"place": self.halt["place"], "people": self.halt["people"],
                      "left": round(max(0.0, self.halt["until"] - self.last_now), 1)} if self.halt else None,
             "leg_seconds": self.leg_seconds,

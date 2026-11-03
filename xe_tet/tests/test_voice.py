@@ -201,7 +201,7 @@ def test_every_talk_line_fills_its_fields():
     fields = dict(dest="Hà Nội", n=5, hours=hours_phrase(26.4), place="Phú Yên", specialty="cá ngừ, bánh hỏi",
                   prov="Nghệ An", station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình",
                   lunar="26 Chạp", other="Bình", need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết")
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45)
     kinds = set(LINES[STYLES[0]])
     assert all(set(LINES[style]) == kinds for style in STYLES)  # kiểu nào cũng đủ mọi tình huống
     for style in TALK_STYLES:
@@ -298,3 +298,11 @@ def test_vieneu_non_wav_body_falls_back_and_is_not_cached(tmp_path, monkeypatch)
 
     name, seconds = asyncio.run(scenario())
     assert name.endswith(".mp3") and seconds == 1.0 and not list(tmp_path.glob("*.wav"))
+
+
+def test_rollcall_read_as_one_priority_line_without_walking_people_on():
+    """Điểm danh: một câu gọi mọi tên, ưu tiên như đọc tên lên xe; không kèm names (overlay không cho ai bước lên xe)."""
+    a = announcer()
+    a.observe({"type": "rollcall", "names": ["Minh Anh", "Thu Hà"], "name": "Minh Anh", "seconds": 45}, 0.0)
+    (prio, _, text, names, _), = a.queue
+    assert prio == BOARD and names == [] and "Minh Anh" in text and "Thu Hà" in text

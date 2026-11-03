@@ -213,6 +213,10 @@ export class Hud {
     if (s.halt) return [`🚏 Dừng đón ở ${s.halt.place}`, `${s.halt.people.length} người lên`];  // PLAN-145
     const leg = s.legs[s.leg_index];
     const left = s.phase_left ?? 0;
+    if (s.rollcall?.length && s.phase === "BOARDING") {  // điểm danh: người im lặng lâu tới lượt lên xe
+      const who = s.rollcall.slice(0, 2).map((r) => r.name).join(", ") + (s.rollcall.length > 2 ? ` +${s.rollcall.length - 2}` : "");
+      return [`📣 Gọi ${who}`, `❤ giữ giường ${s.rollcall[0].left}s`];
+    }
     switch (s.phase) {
       case "BOARDING":  // bến đi đã ghi trên bảng LED và biển bến
         return [s.bus.riders >= seatsOf(s) ? "Đủ khách!" : `Đi ${s.bus.to}`, `chạy sau ${clock(left)}`];
@@ -477,6 +481,18 @@ export class Hud {
         this.note(`🚏 Xe dừng ở ${esc(e.place ?? "")} đón ${who}${more}`, "Đứng chờ sẵn bên đường · lên xe từng người");
         break;
       }
+      case "rollcall":
+        this.toast(`📣 Gọi ${(e.names ?? [e.name ?? ""]).slice(0, 3).map((n) => esc(n)).join(", ")}${(e.names?.length ?? 1) > 3 ? ` +${(e.names?.length ?? 1) - 3}` : ""}`, `Còn xem thì thả tim / bình luận trong ${e.seconds ?? 45}s để giữ giường`);
+        break;
+      case "rollcall_ok":
+        this.toast(`🙋 ${name} có mặt`, "Lên giường");
+        break;
+      case "rollcall_skip":
+        this.toast(`⏭ ${name} lùi chuyến sau`, "Vé vẫn giữ");
+        break;
+      case "rollcall_drop":
+        this.toast(`👋 ${name} nhường vé`, "Quay lại gõ tỉnh để đặt lại");
+        break;
       case "pickup":  // xe tấp vô điểm đón rước người bắt xe dọc đường (PLAN-136)
         this.toast(`🚏 Xe đón ${name} ở ${esc(e.place ?? "")}`, e.province ? `Về ${esc(e.province)}` : "");
         break;

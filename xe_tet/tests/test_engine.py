@@ -402,18 +402,64 @@ def test_idle_queued_ticket_expires_active_one_rides():
 
 
 
-def test_silent_watcher_keeps_ticket_by_default():
-    """Anh 03/11: im lặng vẫn là đang xem live — người chờ không bình luận gì cả tiếng vẫn giữ vé, tới lượt thì lên xe."""
+def _roll_setup():
+    """Xe 1 đầy 24 người Huế; «Im» (im lặng) và «Hai» (thả tim đều) giữ chỗ chuyến sau; chạy tới lúc xe 2 đón khách."""
     e = Engine(0.0)
+    e.roll_idle = 60.0
+    for i in range(24):
+        comment(e, f"K{i}", "Huế", 1)
+    comment(e, "Im", "Huế", 2)
+    comment(e, "Hai", "Huế", 3)
+    t = run_until(e, "DRIVING", 3)
+    while e.phase != "BOARDING":
+        t += 5
+        e.handle({"type": "like", "name": "Hai", "count": 1}, t)
+        e.tick(t)
+    return e, t
+
+
+def test_silent_watcher_is_called_by_name_and_keeps_bed_when_answering():
+    """Anh 03/11: im lặng vẫn có thể đang xem → không gạch vé; tới lượt lên xe thì lơ xe gọi tên, giữ giường chờ trả lời."""
+    e, t = _roll_setup()
+    assert e.bus.riders() == ["hai"] and "im" in e.rollcalls
+    out = e.drain()
+    assert any(ev["type"] == "rollcall" and ev["name"] == "Im" for ev in out)
+    assert e.snapshot()["rollcall"][0]["name"] == "Im"
+    e.handle({"type": "like", "name": "Im", "count": 1}, t + 10)
+    assert "im" in e.bus.riders() and not e.rollcalls and "rollcall_ok" in types(e.drain())
+
+
+def test_rollcall_holds_bed_and_departure_then_moves_to_next_trip_then_drops():
+    e, t = _roll_setup()
+    comment(e, "Moi", "Huế", t + 1)  # người mới: giường trống thứ 3, không lấy giường đang giữ cho Im
+    held_until = e.rollcalls["im"]
+    e.phase_until = t + 2  # hết giờ đón trong lúc đang gọi tên: xe chờ hết giờ điểm danh
+    e.tick(t + 3)
+    assert e.phase == "BOARDING" and e.phase_until == held_until
+    e.tick(held_until + 0.1)  # không ai trả lời: lùi xuống chuyến sau, vé vẫn giữ
+    assert "im" not in e.bus.riders() and "im" in e.queued_at and e.viewers["im"].roll_skip == e.bus.no
+    assert "rollcall_skip" in types(e.drain())
+    t = run_until(e, "DRIVING", held_until + 0.1)
+    while e.phase != "BOARDING":
+        t += 5
+        e.tick(t)
+    assert "im" in e.rollcalls  # chuyến sau gọi lại
+    e.tick(e.rollcalls["im"] + 0.1)
+    assert "im" not in e.queued_at and e.viewers["im"].province is None  # lỡ 2 lần: nhả vé
+    assert "rollcall_drop" in types(e.drain())
+
+
+def test_rollcall_off_seats_silent_people_directly():
+    e = Engine(0.0)
+    e.roll_on = False
+    e.roll_idle = 60.0
     for i in range(24):
         comment(e, f"K{i}", "Huế", 1)
     comment(e, "Im", "Huế", 2)
     t = run_until(e, "DRIVING", 3)
-    while e.phase != "FINISH":
-        t += 30
+    while e.phase != "BOARDING":
+        t += 5
         e.tick(t)
-    e.last_now = t = max(t, 2 * 3600)
-    run_until(e, "BOARDING", t)
     assert e.bus.riders() == ["im"]
 
 
@@ -1566,7 +1612,7 @@ def test_moderation_blocks_tricks_and_regional_slurs_but_not_innocent_text():
     fields = dict(dest="Hà Nội", n=5, hours="chừng 3 tiếng", place="Phú Yên", specialty="cá ngừ", prov="Nghệ An",
                   station="Bến xe Giáp Bát", total="1.000", name="Út", names="An và Bình", lunar="26 Chạp", other="Bình",
                   need=3, others="Cà Mau, Đồng Tháp", no=3, next="Huế", km="120", pos=2, xu=20, secs=30,
-                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết")
+                  goal=20, reason="quên bằng lái", label="mưa lì xì", left=5, what="qua trạm", missing=5, title="Video Tết", seconds=45)
     talk = [line(k, random.Random(i), st, **fields) for st in STYLES for k in LINES[st] for i in range(len(LINES[st][k]))]
     places = [p.name for p in PROVINCES] + [a for al in CITY_ALIASES.values() for a in al]
     innocent = ["đi về các bạn ơi", "lớn rồi", "đeo khẩu trang", "con chó nhà mình dễ thương", "đồ cho mẹ", "bộ máy",

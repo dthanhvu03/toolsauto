@@ -64,6 +64,9 @@ DEFAULTS: dict = {
     "fine_xu": 10,  # tiền phạt công an (xu); quá tốc độ phạt gấp 3
     "cover_on": True,  # tự bù lỗ: góp chưa đủ sau cover_seconds giây thì Anh Tư bù phần thiếu, xe đi (anh 03/11: 60 giây)
     "cover_seconds": 60,
+    "roll_on": True,  # điểm danh (anh 03/11): tới lượt lên xe mà im lặng lâu → gọi tên, chờ trả lời mới xếp giường
+    "roll_idle_min": 15,  # im lặng quá chừng này phút thì điểm danh
+    "roll_wait_s": 45,  # giây chờ người được gọi tên thả tim / bình luận
 }
 
 BOARD_RANGE = (20, 900)  # giây đón khách admin chỉnh được
@@ -128,6 +131,10 @@ def clean(changes: dict, current: dict | None = None) -> dict:
             out[key] = int(min(BLOCK_XU[1], max(BLOCK_XU[0], float(value))))
         elif key == "cover_seconds":  # bản trước: 0 = chờ tới khi đủ (giờ là công tắc cover_on) → về mặc định 60
             out[key] = int(min(COVER_RANGE[1], max(COVER_RANGE[0], float(value)))) if float(value) > 0 else DEFAULTS[key]
+        elif key == "roll_idle_min":
+            out[key] = int(min(120, max(1, float(value))))
+        elif key == "roll_wait_s":
+            out[key] = int(min(180, max(15, float(value))))
         elif key == "tiktok_user":
             text = str(value or "")
             out[key] = text if re.fullmatch(r"[A-Za-z0-9._]{0,24}", text) else out[key]
