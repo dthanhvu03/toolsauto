@@ -1,3 +1,12 @@
+## Phiên 2026-11-03 (xe-tet) — PLAN-144/145/146: chỉ một xe 24 giường, dừng đón thật bên đường, quà giúp chính người tặng
+
+- System State: nhánh `feat/xe-tet`, commit chưa push: a328185, eed586b, a503f0a, ccd5db4, 16c9042. 8810 vẫn chạy bản
+  PLAN-143 (chưa nạp code mới — chờ anh cho phép); overlay `dist` đã build bản mới nhất. 8811 đã tắt.
+- Done: PLAN-144 (quà lên đầu hàng / giường vàng, Chủ nhà xe, /control mục Hành khách), PLAN-145 (một xe; xe dừng hẳn bên
+  đường đón người hẹn, lên từng người đọc tên; bến xếp hàng lên từ từ; chọn tuyến đầy nhất, chờ >10 phút đi trước),
+  PLAN-146 (bỏ xe ôm/taxi/máy bay; «chuyến N»; người chờ bên đường đứng phía camera). Proof: pytest 165, ảnh 8811 trong PLAN.
+- Next Action: anh duyệt → khởi động lại 8810 (xem /api/state không đang live trước) + push `feat/xe-tet`.
+
 ## Phiên 2026-11-02 (buffer-chk3) — Báo cáo Buffer: 3/4 kênh đăng bài mất file từ 31/10 (chỉ đọc log + DB)
 
 - PM2: Maintenance, Web_Dashboard, 9Router_Gateway online từ 31/10 14:21Z (WSL khởi động lại, `pm2 resurrect` tự lên). Không gọi API Buffer.
