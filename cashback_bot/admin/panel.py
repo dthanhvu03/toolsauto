@@ -59,6 +59,8 @@ from cashback_bot.admin.ui import (
     FEE_KEYBOARD,
     GLOSSARY,
     MENU_KEYBOARD,
+    MONEY_MENU_KEYBOARD,
+    MORE_MENU_KEYBOARD,
     NAV_KEYBOARD,
     ORDERS_MENU_KEYBOARD,
     POLICY_KEYBOARD,
@@ -68,6 +70,8 @@ from cashback_bot.admin.ui import (
     fee_text,
     history_text,
     home_text,
+    money_text,
+    more_text,
     policy_text,
     rank_text,
     settings_text,
@@ -93,7 +97,7 @@ __all__ = [
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "migrations" / "004_admin_policy.sql"
 _SEARCH_COMMAND = re.compile(r"^/tim(?:@\w+)?(?:\s+(.*))?$", re.IGNORECASE | re.DOTALL)
-_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders|glossary)$")
+_MENU = re.compile(r"^c:menu:(home|policy|rank|fee|sim|hist|copy|settings|orders|glossary|money|more)$")
 
 
 def customer_policy_due(rows: list[dict], now: datetime) -> dict | None:
@@ -202,6 +206,16 @@ class AdminPanel:
             return BotReply(text, inline_keyboard=SETTINGS_MENU_KEYBOARD)
         if name == "orders":
             return BotReply(self._orders_text(), inline_keyboard=ORDERS_MENU_KEYBOARD)
+        if name == "money":
+            with self._connect() as conn:
+                position = payouts.owner_position(conn)
+                marks = ", ".join("?" for _ in payouts.OPEN)
+                requests = conn.execute(
+                    f"SELECT COUNT(*) FROM cashback_payouts WHERE status IN ({marks})", tuple(payouts.OPEN)
+                ).fetchone()[0]
+            return BotReply(money_text(position, int(requests)), inline_keyboard=MONEY_MENU_KEYBOARD)
+        if name == "more":
+            return BotReply(more_text(), inline_keyboard=MORE_MENU_KEYBOARD)
         if name == "glossary":
             return BotReply(GLOSSARY, inline_keyboard=((("◀️ Cài đặt", "c:menu:settings"),), BACK_HOME))
         if name == "policy":

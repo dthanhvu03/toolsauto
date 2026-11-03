@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from cashback_bot.admin.ui import (
+    MONEY_BACK,
     WALLET_ADMIN_BACK,
     WALLET_ENABLE_CONFIRM,
     WALLET_ENABLE_KEYBOARD,
@@ -135,7 +136,7 @@ class WalletAdmin:
         if data == "c:wl:own":
             with self.repo.connect() as conn:
                 position = payouts.owner_position(conn)
-            return BotReply(wallet_owner_text(position), inline_keyboard=(WALLET_ADMIN_BACK,))
+            return BotReply(wallet_owner_text(position), inline_keyboard=((MONEY_BACK[0], WALLET_ADMIN_BACK[0]),))
         if data == "c:wl:members":
             members = self.wallet.members()
             return BotReply(wallet_members_text(members), inline_keyboard=wallet_members_keyboard(members))

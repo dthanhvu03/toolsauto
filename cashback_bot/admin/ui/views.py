@@ -62,6 +62,39 @@ def home_text(
     return "\n".join(lines)
 
 
+def money_text(position, requests: int) -> str:
+    """Màn «💰 Tiền & ví»: tóm tắt tiền của anh, ví khách, yêu cầu rút. position: payouts.OwnerPosition."""
+    lines = ["⚙️ Quản trị › <b>Tiền &amp; ví</b>", ""]
+    if position.batches:
+        lines.append(f"💼 Anh thực nhận: <b>{format_vnd(position.owner_vnd)}</b> (sau phí, thuế, trả khách)")
+    else:
+        lines.append("💼 Anh thực nhận: chưa có kỳ Shopee nào đối soát khớp")
+    for item in position.upcoming:
+        if item.expected_vnd is not None:
+            lines.append(f"⏳ Sắp về kỳ {html.escape(item.period)}: {format_vnd(item.expected_vnd)} · "
+                         f"anh ~{format_vnd(item.expected_vnd - item.customer_vnd)}")
+    lines += [
+        f"👛 Khách: trong ví {format_vnd(position.in_wallet_vnd)} · chờ ngày giữ {format_vnd(position.waiting_vnd)}",
+        f"📤 Yêu cầu rút cần xử lý: <b>{requests}</b>",
+        "",
+        "• 💼 Ví của anh: hoa hồng → phí → thuế → trả khách → thực nhận.",
+        "• 👛 Ví khách: bật / tắt ví, duyệt yêu cầu rút, số dư từng khách.",
+        "• 💳 Đối soát Shopee: kỳ Shopee trả, xác nhận tiền về, khoản chênh lệch.",
+        "• 💹 Dòng tiền: hoa hồng, biên, chi phí theo kỳ.",
+    ]
+    return "\n".join(lines)
+
+
+def more_text() -> str:
+    return (
+        "⚙️ Quản trị › <b>Thêm</b>\n\n"
+        "• 📈 Tăng trưởng · 🎯 Mục tiêu · 🔍 Tìm khách / đơn\n"
+        "• 🛒 Shopee · 🎵 TikTok: kết nối, đồng bộ đơn\n"
+        "• 🛠 Vận hành: tình trạng bot, link giao khách\n"
+        "• ⚙️ Cài đặt: chính sách, thuế &amp; phí, điều khoản, thông báo"
+    )
+
+
 def settings_text(*, rate_percent: int, membership_on: bool, calculator: str, pending: int | None) -> str:
     v12 = calculator == "V1.2"
     pending_line = "không đọc được" if pending is None else str(pending)

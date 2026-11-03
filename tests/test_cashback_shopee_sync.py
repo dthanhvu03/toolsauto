@@ -280,9 +280,9 @@ class TestShopeeAdminUIAndCookieWorkflow:
         repo = _setup_repo(tmp_path)
         panel = AdminPanel(str(repo.path), frozenset({ADMIN_ID}), displayed_rate_percent=70)
         home = panel.menu(ADMIN_ID, NOW)
-        assert home.inline_keyboard is not None
-        button_targets = [data for row in home.inline_keyboard for _label, data in row]
-        assert "c:menu:shopee" in button_targets
+        assert "c:menu:more" in [data for row in home.inline_keyboard for _label, data in row]
+        more = panel.handle_callback(ADMIN_ID, "c:menu:more", "private", NOW)
+        assert "c:menu:shopee" in [data for row in more.inline_keyboard for _label, data in row]
 
     def test_shopee_screen_render_disconnected_and_connected(self, tmp_path):
         repo = _setup_repo(tmp_path)

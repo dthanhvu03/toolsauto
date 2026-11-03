@@ -283,7 +283,9 @@ def test_vi_mac_dinh_tat_khach_khong_thay_chi_tra(tmp_path):
     bot, _client = _bot(tmp_path)
     reply = bot.handle_text(ADMIN, "owner", "/admin", update_id=13, now=NOW)
     blob = " ".join(data for row in reply.inline_keyboard for _label, data in row)
-    assert "c:menu:wallet" in blob
+    assert "c:menu:money" in blob
+    money = bot.admin_panel.handle_callback(ADMIN, "c:menu:money", "private", NOW)
+    assert "c:menu:wallet" in str(money.inline_keyboard)
     assert "Ví khách: đang tắt" in reply.text
     assert bot.wallet.settings().enabled is False
     home = bot.handle_text(111, "khach", "/start", update_id=14, now=NOW)
