@@ -371,7 +371,7 @@ def _number(text: str, label: str) -> str:
 def test_vi_tren_zalo_khai_tai_khoan_va_rut(tmp_path):
     bot, say = _zalo_wallet(tmp_path, accepted=True)
     wallet = say(_number(say("menu"), "Ví của tôi"))
-    assert "Có thể rút: 70.000đ" in wallet and "Chưa khai tài khoản" in wallet
+    assert "Trong ví (rút được): 70.000đ" in wallet and "Chưa khai tài khoản" in wallet
     banks = say(_number(wallet, "Tài khoản nhận tiền"))
     assert "Gõ số để chọn ngân hàng" in banks
     say(_number(banks, "Vietcombank"))

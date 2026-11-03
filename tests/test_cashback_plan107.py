@@ -24,9 +24,11 @@ def _row(order_status="PENDING", validation="UNKNOWN", entry=None, **extra) -> d
 
 
 def test_thanh_tien_trinh_theo_du_lieu_san():
-    assert order_progress(_row()) == "✅ Đã mua › ⏳ Hoàn thành › ⚪ Sàn duyệt › ⚪ Vào ví"
-    assert order_progress(_row("COMPLETED")) == "✅ Đã mua › ✅ Hoàn thành › ⏳ Sàn duyệt › ⚪ Vào ví"
-    assert order_progress(_row("COMPLETED", "APPROVED")) == "✅ Đã mua › ✅ Hoàn thành › ✅ Sàn duyệt › ⏳ Vào ví"
+    assert order_progress(_row()) == "✅ Đã mua › ⏳ Hoàn thành › ⚪ Shopee trả › ⚪ Vào ví"
+    assert order_progress(_row("COMPLETED")) == "✅ Đã mua › ✅ Hoàn thành › ⏳ Shopee trả › ⚪ Vào ví"
+    assert order_progress(_row("COMPLETED", "APPROVED")) == "✅ Đã mua › ✅ Hoàn thành › ✅ Shopee trả › ⏳ Vào ví"
+    settled = _row("COMPLETED", "NEEDS_REVIEW", settlement_status="SETTLED")
+    assert order_progress(settled) == "✅ Đã mua › ✅ Hoàn thành › ✅ Shopee trả › ⏳ Vào ví", "kỳ khớp = Shopee đã trả"
     assert order_progress(_row("COMPLETED", "APPROVED", "available")).count("✅") == 4
     stats = {"total": 2, "waiting": 1, "approved": 0, "ineligible": 1, "estimated": 5_000}
     page = orders_summary_reply(stats, [_row(), _row("CANCELLED", conversion_id="c2")], 1, 1).text
@@ -74,3 +76,13 @@ def test_zalo_the_va_link_mua_mot_tin():
 def test_huong_dan_chia_se_thang_vao_bot():
     assert "Chọn Telegram rồi chọn bot này" in HUONGDAN and "Sao chép liên kết" in HUONGDAN
     assert "Shopee hoặc TikTok Shop" in with_tiktok(HUONGDAN), "câu gốc TikTok còn nguyên"
+
+
+def test_don_da_vao_vi_la_tien_hoan_khong_con_tam_tinh():
+    """Hoàn dự kiến → hoàn tạm tính → tiền hoàn (đã vào ví): cùng mô hình với admin (ADR-063)."""
+    row = _row("COMPLETED", "NEEDS_REVIEW", "available", settlement_status="SETTLED", cashback=12_157)
+    stats = {"total": 1, "waiting": 0, "approved": 1, "ineligible": 0, "estimated": 0, "available": 1, "in_wallet": 12_157}
+    page = orders_summary_reply(stats, [row], 1, 1).text
+    assert "✅ Tiền hoàn đã vào ví: <b>12.157đ</b>" in page and "✅ 1 Shopee đã trả" in page
+    assert "Hoàn tạm tính" not in page and "Số tạm tính" not in page
+    assert "✅ Đã mua › ✅ Hoàn thành › ✅ Shopee trả › ✅ Vào ví" in page

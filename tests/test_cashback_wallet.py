@@ -408,7 +408,7 @@ class TestPayout:
     def test_full_withdraw_flow(self, tmp_path):
         bot = self._ready(tmp_path)
         page = _callback(bot, USER, "u:p:wallet")
-        assert "Có thể rút: <b>14.000đ</b>" in page.text
+        assert "Trong ví (rút được): <b>14.000đ</b>" in page.text
         assert "u:w:out" not in _buttons(page)  # chưa khai ngân hàng
 
         assert "u:w:bk:MB" in _buttons(_callback(bot, USER, "u:w:bank"))
@@ -490,7 +490,7 @@ class TestSwitch:
         bot.refresh_wallet(datetime(2026, 10, 21, 11, tzinfo=timezone.utc))
         page = _callback(bot, USER, "u:p:wallet")
         assert "Chưa mở rút tiền: bot chỉ chi khi sàn đã duyệt và thanh toán hoa hồng" in page.text
-        assert "Có thể rút: <b>0đ</b>" in page.text and "Đang giữ, chờ đủ điều kiện: <b>7.000đ</b>" in page.text
+        assert "Trong ví (rút được): <b>0đ</b>" in page.text and "Chờ Shopee trả: <b>7.000đ</b>" in page.text
         assert "Áo Polo Nam" in page.text and "Nhận tiền" not in page.text and "tài khoản nhận tiền" not in page.text
         assert _buttons(page) == ["u:p:orders", "u:p:home"]
         assert bot.handle_text(USER, "buyer", "/vi", update_id=2, now=NOW).text == page.text

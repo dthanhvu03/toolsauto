@@ -69,17 +69,20 @@ def _view(conn: sqlite3.Connection, row) -> dict:
 
 def summary(conn: sqlite3.Connection, user_id: int) -> dict:
     rows = conn.execute(_SELECT, (user_id,)).fetchall()
-    stats = {"total": len(rows), "waiting": 0, "approved": 0, "ineligible": 0, "estimated": 0, "available": 0}
+    stats = {"total": len(rows), "waiting": 0, "approved": 0, "ineligible": 0, "estimated": 0, "available": 0,
+             "in_wallet": 0}
     for row in rows:
         if _cancelled(row) or row["validation_status"] in INELIGIBLE:
             stats["ineligible"] += 1
             continue
-        if row["validation_status"] == "APPROVED":
+        # Shopee đã trả: đơn trong kỳ thanh toán đã khớp (báo cáo đơn không có trường «đã duyệt», ADR-062).
+        if row["settlement_status"] == "SETTLED" or row["validation_status"] == "APPROVED":
             stats["approved"] += 1
         else:
             stats["waiting"] += 1
         if row["entry_status"] == "available":
             stats["available"] += 1
+            stats["in_wallet"] += int(row["entry_cashback"] or 0)
         elif row["entry_status"] in ("pending", "holding") and row["entry_cashback"] is not None:
             stats["estimated"] += int(row["entry_cashback"])
     return stats
